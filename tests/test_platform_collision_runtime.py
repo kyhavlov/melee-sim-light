@@ -105,7 +105,6 @@ ACT_FX_SPECIAL_AIR_N_START = 0x0158
 ACT_MISS_FOOT = 0x00FB
 
 MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY = 1 << 11
-MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM = 1 << 31
 MPCOLL_REJECT_ATTACKAIR_SINGLE_CREATE_NO_BOTTOM_OWNER = 1 << 35
 
 SM_WAIT1_0 = 2
@@ -6417,11 +6416,10 @@ def test_fd_damage_post_hitlag_carried_hard_floor_projects_airborne(
     assert int(restored_only_colldata["floor_result_valid"][p]) == 0
 
 
-def test_fd_attackair_carried_connected_hard_floor_root_projection_lands() -> None:
-    # AttackAir_Coll's ft_80082C74/mpColl_800471F8 floor owner can accept a connected hard-floor
-    # candidate even when the carried CollData.floor.index is the adjacent ledge-top segment. The
-    # source-owned proof is the generated MSLSTG01 segment graph plus mpColl_80044838_Floor root
-    # projection, not an FD coordinate band.
+def test_fd_attackair_requires_bottom_crossing_before_root_projection() -> None:
+    # AttackAir_Coll reaches mpColl_80044838_Floor only after mpColl_80044628_Floor accepts a
+    # callback-current ECB-bottom floor contact. A carried CollData.floor.index and previous-root
+    # packet do not prove that contact when both ECB bottoms are already below the floor.
     #
     # data/stages/bin/grnla.bin::MSLSTG01 segment links/fighter_solid flags
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
@@ -6441,95 +6439,95 @@ def test_fd_attackair_carried_connected_hard_floor_root_projection_lands() -> No
     seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(49.25)
     seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-14.0)
 
-    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
-
-    assert int(out["action_id"][p]) == ACT_LANDING_AIR_B
-    assert int(out["on_ground"][p]) == 1
-    assert int(out["ground_id"][p]) == 1
-    assert float(out["pos_y"][p]) == pytest.approx(0.0001, abs=1e-7)
-    assert int(colldata["floor_result_valid"][p]) == 1
-    assert int(colldata["floor_result_mode"][p]) == 2
-    assert int(colldata["floor_result_segment_id"][p]) == 1
-
-    # AttackAirB's first create_hitbox command is frame 4 in MSLFTSC1, and the source callback can
-    # observe that entry floor packet through the following map-callback tick. By action_frame=6, a
-    # carried hard-floor id plus mpCollPrev root packet is stale unless the normal floor producer
-    # accepts a fresh crossing.
-    sustained_stale = seed.copy()
-    sustained_stale["action_frame"][0, p] = np.int16(6)
-    sustained_stale["anim_frame_f32"][0, p] = np.float32(6.0)
-    sustained_stale_out, _contacts_sustained, sustained_colldata = (
-        _step_once_with_contacts_and_colldata(sustained_stale)
+    below_out, _contacts, below_colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(p, 49.25, -14.0, True)
     )
 
-    assert int(sustained_stale_out["action_id"][p]) == ACT_ATTACK_AIR_B
-    assert int(sustained_stale_out["on_ground"][p]) == 0
-    assert int(sustained_stale_out["ground_id"][p]) == 2
-    assert int(sustained_colldata["floor_result_valid"][p]) == 0
+    assert int(below_out["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(below_out["on_ground"][p]) == 0
+    assert int(below_out["ground_id"][p]) == 2
+    assert float(below_out["pos_y"][p]) < -16.0
+    assert int(below_colldata["floor_result_valid"][p]) == 0
 
-    no_carried_floor = seed.copy()
-    no_carried_floor["ground_id"][0, p] = np.uint16(0xFFFF)
-    no_carried_out, _contacts2, no_carried_colldata = _step_once_with_contacts_and_colldata(
-        no_carried_floor
+    crossing = seed.copy()
+    crossing["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-4.0)
+    crossing_out, _contacts2, crossing_colldata = _step_once_with_contacts_and_colldata(
+        crossing, floor_sweep_runtime=(p, 49.25, -4.0, True)
     )
 
-    assert int(no_carried_out["action_id"][p]) == ACT_ATTACK_AIR_B
-    assert int(no_carried_out["on_ground"][p]) == 0
-    assert int(no_carried_out["ground_id"][p]) == 0xFFFF
-    assert int(no_carried_colldata["floor_result_valid"][p]) == 0
-
-    # Stale/reseeded carried floor state is not enough: without the source-owned mpCollPrev
-    # previous-root packet, the carried hard floor must not publish.
-    restored_only = seed.copy()
-    restored_only["action_frame"][0, p] = np.int16(6)
-    restored_only["anim_frame_f32"][0, p] = np.float32(6.0)
-    restored_only["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(0)
-    restored_only_out, _contacts3, restored_only_colldata = _step_once_with_contacts_and_colldata(
-        restored_only
-    )
-
-    assert int(restored_only_out["action_id"][p]) == ACT_ATTACK_AIR_B
-    assert int(restored_only_out["on_ground"][p]) == 0
-    assert int(restored_only_out["ground_id"][p]) == 2
-    assert int(restored_only_colldata["floor_result_valid"][p]) == 0
+    assert int(crossing_out["action_id"][p]) == ACT_LANDING_AIR_B
+    assert int(crossing_out["on_ground"][p]) == 1
+    assert int(crossing_out["ground_id"][p]) == 1
+    assert float(crossing_out["pos_y"][p]) == pytest.approx(0.0001, abs=1e-7)
+    assert int(crossing_colldata["floor_result_valid"][p]) == 1
+    assert int(crossing_colldata["floor_result_mode"][p]) == FLOOR_MODE_BOTTOM_SWEEP
+    assert int(crossing_colldata["floor_result_segment_id"][p]) == 1
 
 
-def test_fd_attackair_entry_from_walljump_does_not_project_stale_hard_floor() -> None:
-    # Webplay walljump -> immediate aerial incident: PassiveWallJump can carry a hard-floor
-    # CollData.floor id while the root is far below that floor. Source AttackAir_Coll still runs
-    # ft_80082C74/mpColl_800471F8 after the aerial entry, but the carried-floor
-    # mpColl_80044838_Floor root projection belongs to sustained same-action AttackAir, not to a
-    # fresh handoff from PassiveWallJump. A real bottom sweep is still allowed elsewhere; this case
-    # has no previous/current ECB bottom crossing and must stay airborne instead of teleporting up.
+@pytest.mark.parametrize("char_id", [1, 2, 7, 18, 19, 22])
+@pytest.mark.parametrize(
+    ("attack_action", "attack_motion"),
+    [
+        (ACT_ATTACK_AIR_N, SM_ATTACK_AIR_N),
+        (ACT_ATTACK_AIR_F, SM_ATTACK_AIR_F),
+        (ACT_ATTACK_AIR_B, SM_ATTACK_AIR_B),
+        (ACT_ATTACK_AIR_HI, SM_ATTACK_AIR_HI),
+        (ACT_ATTACK_AIR_LW, SM_ATTACK_AIR_LW),
+    ],
+)
+@pytest.mark.parametrize(
+    ("stage_id", "ground_id", "x", "y", "prev_x", "prev_y"),
+    [
+        (STAGE_FD, 1, -73.245476, -32.706238, -71.875473, -35.416237),
+        (STAGE_FOD, 5, -16.096220, -80.392494, -14.726220, -83.102493),
+    ],
+)
+def test_sustained_attackair_below_stage_does_not_project_carried_floor(
+    char_id: int,
+    attack_action: int,
+    attack_motion: int,
+    stage_id: int,
+    ground_id: int,
+    x: float,
+    y: float,
+    prev_x: float,
+    prev_y: float,
+) -> None:
+    # Webplay walljump -> immediate aerial incidents reached the third AttackAir callback with both
+    # replay-visible previous-action lanes already promoted to AttackAir. Neither that provenance
+    # nor a carried floor id replaces mpColl_80044628_Floor's callback-current bottom contact.
+    # Cover every supported fighter and aerial on both static FD and transformed-stage FoD state.
     #
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,
     #   mpColl_80044838_Floor}
-    seed = _seed_base(STAGE_FD, ACT_ATTACK_AIR_HI, SM_ATTACK_AIR_HI, -71.30, -40.42)
+    seed = _seed_base(stage_id, attack_action, attack_motion, x, y)
     p = 0
-    seed["char_id"][0, p] = np.uint8(CHAR_FALCON)
+    seed["char_id"][0, p] = np.uint8(char_id)
     seed["on_ground"][0, p] = np.uint8(0)
-    seed["ground_id"][0, p] = np.uint16(1)
-    seed["action_frame"][0, p] = np.int16(1)
-    seed["anim_frame_f32"][0, p] = np.float32(1.0)
-    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_PASSIVE_WALL_JUMP)
+    seed["ground_id"][0, p] = np.uint16(ground_id)
+    seed["facing"][0, p] = np.uint8(0)
+    seed["action_frame"][0, p] = np.int16(2)
+    seed["anim_frame_f32"][0, p] = np.float32(2.0)
+    seed["seed_prev_action_id"][0, p] = np.uint16(attack_action)
     seed["seed_prev_action_frame"][0, p] = np.int16(1)
     seed["speed_air_x_self"][0, p] = np.float32(-1.37)
     seed["speed_y_self"][0, p] = np.float32(2.71)
     seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(1)
-    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(-71.30)
-    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-40.42)
+    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(prev_x)
+    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(prev_y)
 
     out, _contacts, colldata = _step_once_with_contacts_and_colldata(
-        seed, floor_sweep_runtime=(p, -71.30, -40.42, True),
-        prev_action_runtime=(p, ACT_PASSIVE_WALL_JUMP)
+        seed,
+        floor_sweep_runtime=(p, prev_x, prev_y, True),
+        prev_action_runtime=(p, attack_action),
     )
 
-    assert int(out["action_id"][p]) == ACT_ATTACK_AIR_HI
+    assert int(out["action_id"][p]) == attack_action
     assert int(out["on_ground"][p]) == 0
-    assert int(out["ground_id"][p]) == 1
-    assert float(out["pos_y"][p]) < -35.0
+    assert int(out["ground_id"][p]) == ground_id
+    assert 0.0 < float(out["pos_y"][p]) - y < 6.0
     assert int(colldata["floor_result_valid"][p]) == 0
     assert int(colldata["floor_result_mode"][p]) != FLOOR_MODE_ROOT_PROJECTION
 
@@ -7530,10 +7528,7 @@ def test_marth_attackairhi_hard_floor_root_projection_requires_bottom_owner() ->
     assert int(out["on_ground"][p]) == 0
     assert int(out["ground_id"][p]) == int(row["ref_t1"]["ground_id"][p])
     assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-6)
-    assert (
-        int(colldata["floor_probe_reject_bits"][p])
-        & MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM
-    )
+    assert int(colldata["floor_result_valid"][p]) == 0
 
 
 def test_fod_attackair_height_platform_no_current_source_stays_pending_replay_real() -> None:

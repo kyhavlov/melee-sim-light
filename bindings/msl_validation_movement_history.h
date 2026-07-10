@@ -19,6 +19,7 @@ PyObject* msl_derive_cliff_ledge_floor_segment_id_py(PyObject* self, PyObject* a
 PyObject* msl_derive_cliff_option_stick_latch_x8_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_match_flow_timer_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_passivewall_timer_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_walljump_used_seed_lanes_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_walljump_phase_seed_lanes_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_entry_end_fall_lock_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_jab_rapid_count_py(PyObject* self, PyObject* args);

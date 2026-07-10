@@ -946,16 +946,20 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll},
   refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C,ft_80081DD4},
   refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80046904,mpColl_80044838_Floor});
-- AttackAir carried hard-floor root projection (2026-07-09): the `mpColl_80044838_Floor`
-  projection slice under `AttackAir_Coll -> ft_80082C74 -> mpColl_800471F8` is a sustained
-  same-action owner. It may consume a carried static hard-floor `CollData.floor.index` only when
-  the previous callback action snapshot (`seed_prev_action_id`) is the same AttackAir action.
-  Fresh entries from `PassiveWallJump`, Fall, or JumpAerial must rely on a real
-  `mpColl_80044628_Floor` bottom sweep; visible `ground_id` plus root-below-floor state is not
-  enough and causes walljump -> aerial teleports to the floor above.
+- AttackAir floor projection (2026-07-10): under
+  `AttackAir_Coll -> ft_80082C74 -> mpColl_800471F8`, `mpColl_80046904` reaches
+  `mpColl_80044838_Floor` only after the same callback's `mpColl_80044628_Floor` accepts an
+  ECB-bottom floor contact (or the corresponding valid wall-adjacent contact path). A carried
+  `CollData.floor.index`, early hitbox-script phase, and same-action previous snapshot cannot
+  manufacture that prerequisite. In particular, the previous-action snapshot is promoted every
+  post-frame, so a `PassiveWallJump -> AttackAir` entry already appears sustained by its third map
+  callback. Treating those visible lanes as floor-contact authority projected fighters tens of
+  units upward from below FD and FoD. All AttackAir variants now require the normal callback-local
+  floor producer; real bottom crossings still land through the shared floor-sweep packet.
   (`src/mpcoll_ground.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll,
   refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C},
-  refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor});
+  refs/melee/src/melee/mp/mpcoll.c::{mpColl_80046904,mpColl_800471F8,
+  mpColl_80044628_Floor,mpColl_80044838_Floor});
 - Shared floor-sweep publication (2026-05-22): airborne and moving-platform floor contacts now
   flow through an explicit `MslMpcollFloorSweepResult` / callback-local floor result packet before
   late rejection and final writeback. This models the source order where `mpColl_80044628_Floor`
@@ -7129,6 +7133,26 @@ BODY collision-space residual split and rejected seed bridge:
   +/-1 before wall endpoint projection. `ftCommon_8007E2FC` clears both self velocity and attack
   knockback velocity on the same entry. DCC `4809/4810` locks the pre-Hug negative and the exact
   left-wall PassiveWall entry placement/velocity clear.
+- Ordinary walljumps carry a grounded-reset consecutive-use count. `ftWallJump_8008169C` passes
+  `fp->x1969_walljumpUsed` into `ftCo_800C1E64` as the active episode's vertical-velocity exponent,
+  then saturating-increments the count. On startup expiry, `ftCo_PassiveWall_Anim` multiplies the
+  character's vertical walljump velocity by
+  `powf(p_ftCommonData->passive_wall_vel_y_base, exponent)`; x778 extracts as
+  `0.9750000238418579`. `ftCommon_8007D6A4` resets the count on grounding, and
+  `Fighter_UnkInitReset_80067C98` clears it before Rebirth. DamageFly wall-tech entry instead passes
+  exponent zero and does not increment the count. Runtime and replay-prefix seed reconstruction
+  preserve those separate owners so a second ordinary walljump without grounding decays while wall
+  techs do not consume a use. Prefix ownership comes from generated collision-callback classes:
+  every common `ft_081B` callback that can reach `ftWallJump_8008169C` is distinct from the four
+  callbacks that call `ftCo_800C1D38`. A PassiveWall-family animation-frame reset proves an
+  ordinary re-entry; the frame-preserving `PassiveWall -> PassiveWallJump` startup latch carries the
+  existing episode. If landing and grounded ProcessHit occur in one frame, the paired
+  `x1968_jumpsUsed=0 -> 1` source writes recover the reset from the jumps-left edge after excluding
+  both aerial-jump input gates. Sources:
+  `refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C`,
+  `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4`,
+  `refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitReset_80067C98`, and
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64,ftCo_PassiveWall_Anim}`.
 - GuardSetOff active-hitlag shield SDI uses `ftCo_80093240` on every grounded GuardSetOff frame
   whose hitlag remains nonzero after the hitlag decrement. The callback consumes the current
   `Fighter_Spaghetti_8006AD10` X-stick timer window and displaces along the floor tangent by the

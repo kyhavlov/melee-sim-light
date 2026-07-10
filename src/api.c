@@ -2486,6 +2486,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.downwait_timer[idx] = seed->downwait_timer[p];
       batch->state.passivewall_timer[idx] = seed->passivewall_timer[p];
       batch->state.passivewall_jump_latch[idx] = 0u;
+      batch->state.walljump_used_count[idx] =
+          seed->on_ground[p] ? 0u : seed->walljump_used_count[p];
+      batch->state.passivewall_vel_y_exponent[idx] =
+          (seed->action_id[p] == (uint16_t)MSL_ACT_PASSIVE_WALL ||
+           seed->action_id[p] == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP)
+              ? seed->passivewall_vel_y_exponent[p]
+              : 0u;
       if ((seed->action_id[p] == (uint16_t)MSL_ACT_PASSIVE_WALL ||
            seed->action_id[p] == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
           seed->passivewall_timer[p] != 0u) {

@@ -42,7 +42,6 @@ enum {
   MSL_DAMAGE_POST_HITLAG_CB_NONE = 0,
   MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT = 1,
 };
-
 // -------------
 // Simulator core
 // -------------
@@ -965,6 +964,12 @@ typedef struct MslSeed {
   // PassiveWall / PassiveWallJump hidden startup timer (`fp->mv.co.passivewall.timer`).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
   uint8_t passivewall_timer[MSL_MAX_PLAYERS];
+  // Consecutive ordinary walljump count and the current PassiveWall entry exponent. Both are hidden
+  // from Slippi and reconstructed strictly from replay-prefix action/grounding history.
+  // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
+  uint8_t walljump_used_count[MSL_MAX_PLAYERS];
+  uint8_t passivewall_vel_y_exponent[MSL_MAX_PLAYERS];
   // Generic wall-jump hidden input phase (`fp->wall_jump_input_timer` and
   // `fp->x2110_walljumpWallSide`). Slippi does not expose CollData's persisted walljump phase, so
   // preprocessing seeds the minimal phase needed by ftWallJump_8008169C on one-step rows.

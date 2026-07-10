@@ -8,6 +8,7 @@
 #include "../src/ids.h"
 #include "../src/input_axis.h"
 #include "../src/move_tables.h"
+#include "../src/motion_state_owners.h"
 #include "../src/mpcoll_ecb_points.h"
 
 PyObject* msl_derive_guard_setoff_post_hitlag_owner_py(PyObject* self, PyObject* args) {
@@ -1446,27 +1447,174 @@ PyObject* msl_derive_passivewall_timer_py(PyObject* self, PyObject* args) {
   const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
   const int16_t* af = (const int16_t*)PyArray_DATA(frame);
   uint8_t* o = (uint8_t*)PyArray_DATA(out);
-  uint16_t prev = 0xFFFFu;
-  int run_len = 0;
+  int timer = 0;
+  uint8_t prev_passivewall = 0u;
   for (npy_intp i = 0; i < n; i++) {
     const uint16_t ai = a[i];
-    if (!((ai == 202u || ai == 203u) && af[i] == 0)) {
-      prev = ai;
-      run_len = 0;
+    const uint8_t passivewall = (uint8_t)(ai == 202u || ai == 203u);
+    if (passivewall == 0u) {
+      timer = 0;
+      prev_passivewall = 0u;
       continue;
     }
-    if (prev == ai) {
-      run_len += 1;
-    } else {
-      prev = ai;
-      run_len = 1;
+    const uint8_t proven_reentry = (uint8_t)(i > 0 && prev_passivewall != 0u && af[i] < af[i - 1]);
+    if (prev_passivewall == 0u || proven_reentry != 0u) {
+      timer = total;
+    } else if (timer > 0) {
+      timer--;
     }
-    int timer = total - run_len + 1;
-    if (timer < 0) timer = 0;
     if (timer > 255) timer = 255;
     o[i] = (uint8_t)timer;
+    prev_passivewall = 1u;
   }
   return (PyObject*)out;
+}
+
+PyObject* msl_derive_walljump_used_seed_lanes_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* char_obj = NULL;
+  PyObject* action_obj = NULL;
+  PyObject* frame_obj = NULL;
+  PyObject* on_ground_obj = NULL;
+  PyObject* jumps_left_obj = NULL;
+  PyObject* max_jumps_lut_obj = NULL;
+  PyObject* buttons_pressed_obj = NULL;
+  PyObject* stick_y_obj = NULL;
+  int button_mask_xy = 0;
+  double tap_jump_threshold = 0.0;
+  if (!PyArg_ParseTuple(args, "OOOOOOOOid", &char_obj, &action_obj, &frame_obj, &on_ground_obj,
+                        &jumps_left_obj, &max_jumps_lut_obj, &buttons_pressed_obj, &stick_y_obj,
+                        &button_mask_xy, &tap_jump_threshold)) {
+    return NULL;
+  }
+  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* frame = require_contiguous_array(frame_obj, NPY_INT16, 1, "action_frame_i16");
+  PyArrayObject* on_ground = require_contiguous_array(on_ground_obj, NPY_UINT8, 1, "on_ground_u8");
+  PyArrayObject* jumps_left =
+      require_contiguous_array(jumps_left_obj, NPY_UINT8, 1, "jumps_left_u8");
+  PyArrayObject* max_jumps_lut =
+      require_contiguous_array(max_jumps_lut_obj, NPY_UINT8, 1, "max_jumps_lut_u8");
+  PyArrayObject* buttons_pressed =
+      require_contiguous_array(buttons_pressed_obj, NPY_UINT16, 1, "buttons_pressed_u16");
+  PyArrayObject* stick_y = require_contiguous_array(stick_y_obj, NPY_FLOAT32, 1, "stick_y_f32");
+  if (chr == NULL || action == NULL || frame == NULL || on_ground == NULL || jumps_left == NULL ||
+      max_jumps_lut == NULL || buttons_pressed == NULL || stick_y == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_SIZE(action);
+  if (PyArray_SIZE(chr) != n || PyArray_SIZE(frame) != n || PyArray_SIZE(on_ground) != n ||
+      PyArray_SIZE(jumps_left) != n || PyArray_SIZE(buttons_pressed) != n ||
+      PyArray_SIZE(stick_y) != n || PyArray_SIZE(max_jumps_lut) < 256) {
+    PyErr_SetString(PyExc_ValueError, "walljump usage inputs must have equal lengths");
+    return NULL;
+  }
+  if (motion_state_owners_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "motion_state_owners_init failed");
+    return NULL;
+  }
+
+  npy_intp dims[1] = {n};
+  PyArrayObject* used = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  PyArrayObject* exponent = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  if (used == NULL || exponent == NULL) {
+    Py_XDECREF(used);
+    Py_XDECREF(exponent);
+    return NULL;
+  }
+
+  const uint8_t* c = (const uint8_t*)PyArray_DATA(chr);
+  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
+  const int16_t* af = (const int16_t*)PyArray_DATA(frame);
+  const uint8_t* ground = (const uint8_t*)PyArray_DATA(on_ground);
+  const uint8_t* jumps = (const uint8_t*)PyArray_DATA(jumps_left);
+  const uint8_t* max_jumps = (const uint8_t*)PyArray_DATA(max_jumps_lut);
+  const uint16_t* pressed = (const uint16_t*)PyArray_DATA(buttons_pressed);
+  const float* stick_y_p = (const float*)PyArray_DATA(stick_y);
+  uint8_t* used_out = (uint8_t*)PyArray_DATA(used);
+  uint8_t* exponent_out = (uint8_t*)PyArray_DATA(exponent);
+  uint8_t count = 0u;
+  uint8_t episode_exponent = 0u;
+  uint8_t episode_active = 0u;
+  for (npy_intp i = 0; i < n; i++) {
+    const uint16_t action_i = a[i];
+    const uint8_t passivewall = (action_i == (uint16_t)MSL_ACT_PASSIVE_WALL ||
+                                 action_i == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP)
+                                    ? 1u
+                                    : 0u;
+    const uint16_t prev_action = i > 0 ? a[i - 1] : UINT16_MAX;
+    const uint8_t prev_passivewall = (uint8_t)(prev_action == (uint16_t)MSL_ACT_PASSIVE_WALL ||
+                                               prev_action == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP);
+    const uint8_t action_entry = (uint8_t)(i > 0 && (action_i != prev_action || af[i] < af[i - 1]));
+    const uint8_t damage_processhit_output = msl_motion_state_class3_has(
+        c[i], action_i,
+        MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL | MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL |
+            MSL_MS_CLASS3_PHASE4_DAMAGE_FALL_COLL);
+    const uint8_t max_jumps_i = max_jumps[c[i]];
+    // x1968_jumpsUsed can also move 0 -> 1 through ftCo_JumpAerial_Enter_Basic. Excluding both
+    // source jump-input gates makes the remaining Damage-entry edge a grounded ftCommon bundle,
+    // rather than treating any jumps-left change as landing proof.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{ft_did_jump,
+    //   ftCo_JumpAerial_Enter_Basic}
+    const uint8_t aerial_jump_input = (uint8_t)(((pressed[i] & (uint16_t)button_mask_xy) != 0u) ||
+                                                stick_y_p[i] >= (float)tap_jump_threshold);
+    const uint8_t grounded_processhit_reset =
+        (uint8_t)(i > 0 && ground[i] == 0u && action_entry != 0u &&
+                  damage_processhit_output != 0u && max_jumps_i != 0u &&
+                  jumps[i] == (uint8_t)(max_jumps_i - 1u) && jumps[i - 1] != jumps[i] &&
+                  aerial_jump_input == 0u);
+    if (ground[i] != 0u || action_i == (uint16_t)MSL_ACT_REBIRTH ||
+        grounded_processhit_reset != 0u) {
+      // ftCommon_8007D6A4 resets x1969 on grounding; Fighter_UnkInitReset_80067C98 does the same
+      // before Rebirth entry. If ProcessHit launches a just-landed fighter before the post-frame
+      // row, ftCommon_8007D5D4's x1968_jumpsUsed=1 write leaves the source-owned replay signature
+      // jumps_left=max_jumps-1 even though the final row is airborne.
+      // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_8007D6A4}
+      count = 0u;
+      episode_exponent = 0u;
+      episode_active = 0u;
+    } else if (passivewall == 0u) {
+      episode_exponent = 0u;
+      episode_active = 0u;
+    } else if (episode_active == 0u || (prev_passivewall != 0u && af[i] < af[i - 1])) {
+      // Ordinary ftWallJump entry is the only producer that copies x1969 into the exponent and then
+      // increments it. DamageFly wall techs enter through ftCo_800C1D38 with exponent zero.
+      // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64}
+      const uint8_t ordinary_entry =
+          (uint8_t)(action_i == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP && i > 0 &&
+                    msl_motion_state_class3_has(c[i - 1], prev_action,
+                                                MSL_MS_CLASS3_ORDINARY_WALLJUMP_COLL) != 0u);
+      const uint8_t walltech_entry =
+          (uint8_t)(i > 0 && msl_motion_state_class3_has(c[i - 1], prev_action,
+                                                         MSL_MS_CLASS3_WALLTECH_COLL) != 0u);
+      if (ordinary_entry != 0u) {
+        episode_exponent = count;
+        if (count < UINT8_MAX) {
+          count++;
+        }
+      } else if (walltech_entry != 0u) {
+        episode_exponent = 0u;
+      } else {
+        // A prefix that begins inside PassiveWall has no producer row. Keep the source-neutral
+        // wall-tech value rather than inventing an ordinary use.
+        episode_exponent = 0u;
+      }
+      episode_active = 1u;
+    }
+    used_out[i] = count;
+    exponent_out[i] = passivewall ? episode_exponent : 0u;
+  }
+
+  PyObject* result = PyTuple_New(2);
+  if (result == NULL) {
+    Py_DECREF(used);
+    Py_DECREF(exponent);
+    return NULL;
+  }
+  PyTuple_SET_ITEM(result, 0, (PyObject*)used);
+  PyTuple_SET_ITEM(result, 1, (PyObject*)exponent);
+  return result;
 }
 
 PyObject* msl_derive_walljump_phase_seed_lanes_py(PyObject* self, PyObject* args) {

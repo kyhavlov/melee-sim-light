@@ -19,7 +19,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 21
+FORMAT_VERSION = 22
 HEADER_BYTES = 8 + 4 + 2 + 2 + 4 * 12
 U16_ABSENT = 0xFFFF
 
@@ -78,6 +78,59 @@ CLASS3_PHASE4_ESCAPE_AIR_COLL = 1 << 1
 CLASS3_PHASE4_DAMAGE_COMMON_COLL = 1 << 2
 CLASS3_PHASE4_DAMAGE_FLY_COLL = 1 << 3
 CLASS3_PHASE4_DAMAGE_FALL_COLL = 1 << 4
+CLASS3_ORDINARY_WALLJUMP_COLL = 1 << 5
+CLASS3_WALLTECH_COLL = 1 << 6
+
+# Collision callbacks whose source path reaches ftWallJump_8008169C through one of the common
+# ft_081B airborne wrappers. Keep this callback-owned: action families such as DamageFall and Pass
+# are ordinary walljump producers even though they are not members of the older common-air class.
+# refs/melee/src/melee/ft/ft_081B.c::{ft_80082F28,ft_800831CC,ft_80083318,ft_80083464,
+#   ft_800835B0,ft_8008370C,ft_80083910,ft_80083A48}
+ORDINARY_WALLJUMP_COLL_CBS = {
+    "ftCo_CatchCut_Coll",
+    "ftCo_CaptureCut_Coll",
+    "ftCo_CliffJump2_Coll",
+    "ftCo_DamageFall_Coll",
+    "ftCo_DamageIceJump_Coll",
+    "ftCo_FallAerial_Coll",
+    "ftCo_Fall_Coll",
+    "ftCo_ItemParasolDamageFall_Coll",
+    "ftCo_ItemParasolFallSpecial_Coll",
+    "ftCo_ItemParasolFall_Coll",
+    "ftCo_ItemParasolOpen_Coll",
+    "ftCo_ItemScrewAir_Coll",
+    "ftCo_ItemScrew_Coll",
+    "ftCo_JumpAerialF1_Coll",
+    "ftCo_JumpAerial_Coll",
+    "ftCo_Jump_Coll",
+    "ftCo_MissFoot_Coll",
+    "ftCo_PassiveCeil_Coll",
+    "ftCo_PassiveWall_Coll",
+    "ftCo_Pass_Coll",
+    "ftCo_StopCeil_Coll",
+    "ftLg_SpecialAirHi_Coll",
+    "ftLg_SpecialHi_Coll",
+    "ftMr_SpecialHi_Coll",
+    "ftMs_SpecialAirHi_Coll",
+    "ftMs_SpecialHi_Coll",
+    "ftPe_FloatFall_Coll",
+    "ftPe_Float_Coll",
+    "ftPe_SpecialAirHiEnd_Coll",
+    "ftPe_SpecialAirHiStart_Coll",
+    "ftPe_SpecialHiEnd_Coll",
+    "ftPe_SpecialHiStart_Coll",
+    "ftYs_SpecialAirHi_Coll",
+}
+
+# These four callback families enter PassiveWall/PassiveWallJump through ftCo_800C1D38. That
+# producer fixes vel_y_exponent at zero and does not increment x1969_walljumpUsed.
+# refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Damage.c,ftCo_DownDamage.c,ftCo_FlyReflect.c}
+WALLTECH_COLL_CBS = {
+    "ftCo_DamageFly_Coll",
+    "ftCo_DamageFlyRoll_Coll",
+    "ftCo_DownDamage_Coll",
+    "ftCo_FlyReflect_Coll",
+}
 
 # fx_special_kind (v18): per-(char, action) identity of the Fox/Falco bespoke special
 # MotionState rows, generated 1:1 from each row's ANIM callback symbol (unique per row).
@@ -857,6 +910,10 @@ def _class3_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         # Phase 4 DamageFall callback:
         # ftCo_DamageFall_Coll -> ft_8008370C -> mpColl_800473CC on ordinary airborne floor checks.
         bits |= CLASS3_PHASE4_DAMAGE_FALL_COLL
+    if coll_cb in ORDINARY_WALLJUMP_COLL_CBS:
+        bits |= CLASS3_ORDINARY_WALLJUMP_COLL
+    if coll_cb in WALLTECH_COLL_CBS:
+        bits |= CLASS3_WALLTECH_COLL
     return bits
 
 
@@ -1114,6 +1171,8 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "PHASE4_DAMAGE_FALL_COLL": CLASS3_PHASE4_DAMAGE_FALL_COLL,
         "PHASE4_DAMAGE_FLY_COLL": CLASS3_PHASE4_DAMAGE_FLY_COLL,
         "PHASE4_ESCAPE_AIR_COLL": CLASS3_PHASE4_ESCAPE_AIR_COLL,
+        "ORDINARY_WALLJUMP_COLL": CLASS3_ORDINARY_WALLJUMP_COLL,
+        "WALLTECH_COLL": CLASS3_WALLTECH_COLL,
     }
     fx_special_kinds = dict(FX_SPECIAL_KIND_VALUES)
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]

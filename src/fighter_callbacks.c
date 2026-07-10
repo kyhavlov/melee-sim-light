@@ -711,6 +711,20 @@ static void fighter_callbacks_collision_phase(MslBatch* batch) {
   locomotion_update_post_collision(batch);
   shine_update_post_collision(batch);
   sheik_specials_update_accessory4_phase(batch);
+
+  // ftCommon_8007D6A4 resets x1969_walljumpUsed during every air-to-ground conversion. Run this
+  // after collision callbacks and before combat so a same-frame grounded hit cannot preserve the
+  // pre-landing count when ProcessHit launches the fighter back into the air.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.on_ground[idx] != 0u && batch->state.walljump_used_count[idx] != 0u) {
+        batch->state.walljump_used_count[idx] = 0u;
+      }
+    }
+  }
 }
 
 static void fighter_callbacks_primitive_refresh_phase(MslBatch* batch, uint8_t run_combat) {

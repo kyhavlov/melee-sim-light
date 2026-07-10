@@ -52,11 +52,13 @@
     "WALK_ACTION": 64
   },
   "classes3": {
+    "ORDINARY_WALLJUMP_COLL": 32,
     "PHASE4_ATTACK_AIR_COLL": 1,
     "PHASE4_DAMAGE_COMMON_COLL": 4,
     "PHASE4_DAMAGE_FALL_COLL": 16,
     "PHASE4_DAMAGE_FLY_COLL": 8,
-    "PHASE4_ESCAPE_AIR_COLL": 2
+    "PHASE4_ESCAPE_AIR_COLL": 2,
+    "WALLTECH_COLL": 64
   },
   "fx_special_kinds": {
     "SPECIAL_AIR_HI": 16,
@@ -4925,5 +4927,5 @@
       "symbol": "ftpickupitem_Phys"
     }
   ],
-  "version": 21
+  "version": 22
 }

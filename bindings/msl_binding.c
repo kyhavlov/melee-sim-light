@@ -193,6 +193,8 @@ static PyMethodDef methods[] = {
      "bytes[1,sizeof(MslDebugDynamicPoseState)]"},
     {"debug_common_fall_blend_state", msl_debug_common_fall_blend_state_py, METH_VARARGS,
      "debug_common_fall_blend_state(handle, batch_index, player_index) -> (x4, msid)"},
+    {"debug_walljump_state", msl_debug_walljump_state_py, METH_VARARGS,
+     "debug_walljump_state(handle, batch_index, player_index) -> (used_count, exponent)"},
     {"debug_get_fighter_8006cda4_pre_gate_consume_count",
      msl_debug_get_fighter_8006cda4_pre_gate_consume_count_py, METH_VARARGS,
      "debug_get_fighter_8006cda4_pre_gate_consume_count(handle, batch_index, player_index) -> int"},
@@ -464,6 +466,10 @@ static PyMethodDef methods[] = {
      "derive_match_flow_timer(action, port0, common timers...) -> uint8[:]"},
     {"derive_passivewall_timer", msl_derive_passivewall_timer_py, METH_VARARGS,
      "derive_passivewall_timer(action, frame, total_frames) -> uint8[:]"},
+    {"derive_walljump_used_seed_lanes", msl_derive_walljump_used_seed_lanes_py, METH_VARARGS,
+     "derive_walljump_used_seed_lanes(char, action, frame, on_ground, jumps_left, max_jumps_lut, "
+     "buttons_pressed, stick_y, button_mask_xy, tap_jump_threshold) "
+     "-> (used_count, entry_exponent)"},
     {"derive_walljump_phase_seed_lanes", msl_derive_walljump_phase_seed_lanes_py, METH_VARARGS,
      "derive_walljump_phase_seed_lanes(action, frame, setup_x_delta, pos_x, pos_y, raw_main_x) -> "
      "(timer, side)"},

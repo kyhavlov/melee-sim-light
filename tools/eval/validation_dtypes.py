@@ -300,6 +300,10 @@ SEED_DTYPE = np.dtype(
         # PassiveWall / PassiveWallJump hidden startup timer (`fp->mv.co.passivewall.timer`).
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
         ("passivewall_timer", _arr("u1", MAX_PLAYERS)),
+        # Consecutive ordinary walljump count (`fp->x1969_walljumpUsed`) and the active entry's
+        # pre-increment vertical-velocity exponent (`fp->mv.co.passivewall.vel_y_exponent`).
+        ("walljump_used_count", _arr("u1", MAX_PLAYERS)),
+        ("passivewall_vel_y_exponent", _arr("u1", MAX_PLAYERS)),
         # Generic wall-jump hidden input phase (`fp->wall_jump_input_timer`,
         # `fp->x2110_walljumpWallSide`) consumed by ftWallJump_8008169C.
         ("walljump_input_timer", _arr("u1", MAX_PLAYERS)),

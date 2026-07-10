@@ -666,6 +666,11 @@ static inline uint8_t try_common_air_walljump_post_collision(MslBatch* batch,
   float outgoing_side_x = batch->state.pos_x[idx];
   const uint8_t have_outgoing_side =
       passivewalljump_outgoing_side_x(batch, idx, right_hug, left_hug, &outgoing_side_x);
+  // ftWallJump passes the pre-increment x1969 count into ftCo_800C1E64, then saturating-increments
+  // x1969 for the next ordinary walljump. Wall-tech entry is owned separately and does neither.
+  // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+  batch->state.passivewall_vel_y_exponent[idx] = batch->state.walljump_used_count[idx];
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_PASSIVE_WALL_JUMP;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -685,6 +690,9 @@ static inline uint8_t try_common_air_walljump_post_collision(MslBatch* batch,
     batch->state.facing[idx] = 0u;
   }
   batch->state.walljump_input_timer[idx] = 254u;
+  if (batch->state.walljump_used_count[idx] < UINT8_MAX) {
+    batch->state.walljump_used_count[idx]++;
+  }
   if (have_outgoing_side) {
     align_passivewalljump_entry_x(batch, idx, outgoing_side_x);
   }

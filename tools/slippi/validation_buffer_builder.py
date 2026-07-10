@@ -105,6 +105,7 @@ from tools.slippi.validation_buffer_seed import (  # noqa: F401
     _derive_cliff_option_stick_latch_x8,
     _derive_match_flow_timer,
     _derive_passivewall_timer,
+    _derive_walljump_used_seed_lanes,
     _derive_attackdash_x0_seed_lane,
     _derive_walljump_phase_seed_lanes,
     _derive_mpcoll_wall_seed_lanes,
@@ -496,6 +497,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     button_mask_dpad_up = 8
     button_mask_dpad_down = 4
     turn_frames_lut = _load_u8_character_attr_lut(data_root, 'turn_frames')
+    max_jumps_lut = _load_u8_character_attr_lut(data_root, 'max_jumps')
     reflector_release_lag_lut = np.zeros(256, dtype=np.uint8)
     reflector_release_lag_lut[np.uint8(1)] = np.uint8(_load_character_attrs(data_root, 'fox')['reflector_release_lag_frames'])
     reflector_release_lag_lut[np.uint8(22)] = np.uint8(_load_character_attrs(data_root, 'falco')['reflector_release_lag_frames'])
@@ -715,6 +717,9 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         frame_max = frame_max_lut[post_char]
         import msl_binding
         main_x_proc, main_y_proc, c_x_proc, c_y_proc, stick_x, stick_y, cstick_y, trigger_unit, buttons_pressed, lr_press_timer, lightshield_amount, guard_setoff_hitlag_exit_phase = msl_binding.validation_derive_guard_input_prefix(samples.seed_u8(), int(slot), pre_buttons_physical, pre_main_x, pre_main_y, pre_c_x, pre_c_y, pre_l, pre_r, post_char, post_state, post_state_age, post_dir, post_shield, post_hitlag, state_flags, neutral_frame, frame_max, int(ucf_enabled), int(ucf_cardinals_1_0_enabled), float(lstick_deadzone_x), float(lstick_deadzone_y), float(guard_stick_lerp_x44c), int(button_mask_lr), int(button_mask_z), float(common['trigger_deadzone']), int(common['guard_x10_init_frames']), int(act_guard_on), int(act_guard), int(act_guard_off), int(act_guard_reflect), int(act_guard_set_off), int(common['guard_special_enable_frames']), float(common['hitlag_dmg_mul']), float(common['hitlag_base']), int(common['powershield_reflect_frames']), int(common['powershield_reflect_total_frames']))
+        walljump_used_count, passivewall_vel_y_exponent = _derive_walljump_used_seed_lanes(char_id_u8=post_char, action_id_u16=post_state, action_frame_i16=post_state_age, on_ground_u8=post_on_ground, jumps_left_u8=post_jumps, max_jumps_lut_u8=max_jumps_lut, buttons_pressed_u16=buttons_pressed, stick_y_f32=stick_y, button_mask_xy=button_mask_xy, tap_jump_threshold=tap_jump_threshold)
+        samples['seed_t']['walljump_used_count'][:, slot] = walljump_used_count[:-1]
+        samples['seed_t']['passivewall_vel_y_exponent'][:, slot] = passivewall_vel_y_exponent[:-1]
         lightshield_amount_all[:, slot] = lightshield_amount
         frame_speed_mul = derive_frame_speed_mul_f32(state_age_f32=post_state_age_f32, action_id=post_state, hitlag=post_hitlag, char_id=post_char, animation_index=animation_index, lr_press_timer=lr_press_timer, shield_hp=post_shield, lightshield_amount=lightshield_amount, common_shield_hit_damage_mul=float(common['shield_hit_damage_mul']), common_shield_hit_damage_base=float(common['shield_hit_damage_base']), common_shield_hit_lightshield_min=float(common['shield_hit_lightshield_min']), common_shield_hit_lightshield_max=float(common['shield_hit_lightshield_max']), common_shield_stun_mul=float(common['shield_stun_mul']), common_shield_stun_base=float(common['shield_stun_base']), common_shield_stun_lightshield_min=float(common['shield_stun_lightshield_min']), common_shield_stun_lightshield_max=float(common['shield_stun_lightshield_max']), end_frames=end_frames, common_lcancel_window_frames=lcancel_window_frames, common_lcancel_lag_div=lcancel_lag_div, common_landing_fall_special_lag_frames=landing_fall_special_lag_frames, char_landing_air_lag_frames=char_landing_air_lag_frames, char_fallspecial_origin_lag=char_fallspecial_origin_lag)
         frame_speed_mul_all[:, slot] = frame_speed_mul

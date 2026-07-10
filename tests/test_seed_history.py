@@ -49,6 +49,7 @@ from tools.slippi.validation_buffer_items import derive_illusion_ghost_pos01, de
 from tools.slippi.validation_buffer_seed import _derive_attackdash_x0_seed_lane
 from tools.slippi.validation_buffer_seed import _derive_mpcoll_wall_seed_lanes
 from tools.slippi.validation_buffer_seed import _derive_passivewall_timer
+from tools.slippi.validation_buffer_seed import _derive_walljump_used_seed_lanes
 from tools.slippi.validation_buffer_stage import _derive_grounded_overlap_hidden_pos_z
 from tests.replay_buffers_loader import load_replay_buffers
 
@@ -469,6 +470,150 @@ def test_derive_passivewall_timer_tracks_hidden_startup_hold() -> None:
 
     assert got.dtype == np.uint8
     assert got.tolist() == [0, 5, 4, 3, 2, 1, 0, 0]
+
+
+def test_derive_passivewall_timer_preserves_latch_and_detects_proven_reentry() -> None:
+    action = np.array([88, 202, 202, 202, 202, 202, 203, 203, 203], dtype=np.uint16)
+    action_frame = np.array([8, 0, 0, 0, 0, 0, 0, 1, 0], dtype=np.int16)
+
+    got = _derive_passivewall_timer(
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        common={"passivewall_timer_frames": 5},
+    )
+
+    # PassiveWall_Anim's inlineA0 preserves the current animation frame when it latches into
+    # PassiveWallJump, so the 202 -> 203 row reaches timer zero. A later frame reset to zero proves
+    # a fresh ftCo_800C1E64 entry and restarts the timer.
+    assert got.tolist() == [0, 5, 4, 3, 2, 1, 0, 0, 5]
+
+
+def _derive_walljump_test_lanes(
+    action: list[int] | np.ndarray,
+    *,
+    action_frame: list[int] | np.ndarray | None = None,
+    on_ground: list[int] | np.ndarray | None = None,
+    jumps_left: list[int] | np.ndarray | None = None,
+    buttons_pressed: list[int] | np.ndarray | None = None,
+    stick_y: list[float] | np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    action_arr = np.asarray(action, dtype=np.uint16)
+    n = len(action_arr)
+    max_jumps_lut = np.zeros(256, dtype=np.uint8)
+    max_jumps_lut[1] = np.uint8(2)
+    return _derive_walljump_used_seed_lanes(
+        char_id_u8=np.ones(n, dtype=np.uint8),
+        action_id_u16=action_arr,
+        action_frame_i16=np.asarray(action_frame if action_frame is not None else np.zeros(n), dtype=np.int16),
+        on_ground_u8=np.asarray(on_ground if on_ground is not None else np.zeros(n), dtype=np.uint8),
+        jumps_left_u8=np.asarray(jumps_left if jumps_left is not None else np.full(n, 2), dtype=np.uint8),
+        max_jumps_lut_u8=max_jumps_lut,
+        buttons_pressed_u16=np.asarray(buttons_pressed if buttons_pressed is not None else np.zeros(n), dtype=np.uint16),
+        stick_y_f32=np.asarray(stick_y if stick_y is not None else np.zeros(n), dtype=np.float32),
+        button_mask_xy=0x0C00,
+        tap_jump_threshold=0.6625,
+    )
+
+
+@pytest.mark.parametrize("producer", [38, 204, 218, 229, 244, 250, 251, 261, 263])
+def test_derive_walljump_used_lanes_cover_every_common_ordinary_producer(producer: int) -> None:
+    used, exponent = _derive_walljump_test_lanes([producer, 203], action_frame=[4, 0])
+    assert used.tolist() == [0, 1]
+    assert exponent.tolist() == [0, 0]
+
+
+@pytest.mark.parametrize("producer", [88, 91, 185, 247])
+def test_derive_walljump_used_lanes_keep_walltech_producers_unscaled(producer: int) -> None:
+    used, exponent = _derive_walljump_test_lanes([29, 203, 29, producer, 203], action_frame=[4, 0, 4, 4, 0])
+    assert used.tolist() == [0, 1, 1, 1, 1]
+    assert exponent.tolist() == [0, 0, 0, 0, 0]
+
+
+def test_derive_walljump_used_lanes_separate_passivewall_latch_from_proven_reentry() -> None:
+    used, exponent = _derive_walljump_test_lanes(
+        [88, 202, 203, 203, 203],
+        action_frame=[6, 0, 0, 2, 0],
+    )
+
+    # DamageFly -> PassiveWall is a wall tech. The frame-preserving 202 -> 203 transition is
+    # inlineA0's latch, while 203 frame 2 -> frame 0 proves a new ordinary walljump produced by
+    # PassiveWall_Coll itself.
+    assert used.tolist() == [0, 0, 0, 0, 1]
+    assert exponent.tolist() == [0, 0, 0, 0, 0]
+
+
+def test_derive_walljump_used_lanes_reset_before_same_frame_grounded_processhit() -> None:
+    action = [29, 203, 29, 203, 29, 88, 29, 203]
+    action_frame = [4, 0, 4, 0, 4, 1, 4, 0]
+    jumps_left = [2, 2, 2, 2, 2, 1, 1, 1]
+    used, exponent = _derive_walljump_test_lanes(
+        action,
+        action_frame=action_frame,
+        jumps_left=jumps_left,
+    )
+
+    # The airborne DamageFly entry carries ftCommon_8007D5D4's jumpsUsed=1 signature after a
+    # collision-phase ftCommon_8007D6A4 reset. The next ordinary walljump therefore starts at zero.
+    assert used.tolist() == [0, 1, 1, 2, 2, 0, 0, 1]
+    assert exponent.tolist() == [0, 0, 0, 1, 0, 0, 0, 0]
+
+    for end in range(1, len(action) + 1):
+        prefix_used, prefix_exponent = _derive_walljump_test_lanes(
+            action[:end],
+            action_frame=action_frame[:end],
+            jumps_left=jumps_left[:end],
+        )
+        assert int(prefix_used[-1]) == int(used[end - 1])
+        assert int(prefix_exponent[-1]) == int(exponent[end - 1])
+
+
+def test_derive_walljump_used_lanes_do_not_reset_for_airborne_damage_without_source_edge() -> None:
+    used, exponent = _derive_walljump_test_lanes(
+        [29, 203, 29, 203, 29, 88, 29, 203],
+        action_frame=[4, 0, 4, 0, 4, 1, 4, 0],
+        jumps_left=[1] * 8,
+    )
+    assert int(used[-1]) == 3
+    assert int(exponent[-1]) == 2
+
+
+@pytest.mark.parametrize(
+    ("buttons_pressed", "stick_y"),
+    [([0, 0, 0, 0, 0, 0x0400, 0, 0], [0.0] * 8), ([0] * 8, [0.0] * 5 + [0.8, 0.0, 0.0])],
+)
+def test_derive_walljump_used_lanes_do_not_misclassify_airjump_then_hit_as_ground_reset(
+    buttons_pressed: list[int],
+    stick_y: list[float],
+) -> None:
+    used, exponent = _derive_walljump_test_lanes(
+        [29, 203, 29, 203, 29, 88, 29, 203],
+        action_frame=[4, 0, 4, 0, 4, 1, 4, 0],
+        jumps_left=[2, 2, 2, 2, 2, 1, 1, 1],
+        buttons_pressed=buttons_pressed,
+        stick_y=stick_y,
+    )
+    assert int(used[-1]) == 3
+    assert int(exponent[-1]) == 2
+
+
+def test_derive_walljump_used_lanes_reset_on_visible_ground_and_rebirth() -> None:
+    action = [29, 203, 29, 29, 203, 29, 12, 29, 203]
+    ground = [0, 0, 1, 0, 0, 0, 0, 0, 0]
+    used, exponent = _derive_walljump_test_lanes(action, on_ground=ground)
+    assert used.tolist() == [0, 1, 0, 0, 1, 1, 0, 0, 1]
+    assert exponent.tolist() == [0] * len(action)
+
+
+def test_derive_walljump_used_lane_saturates_without_wrapping() -> None:
+    ordinary_entries = 257
+    action = np.empty(ordinary_entries * 2, dtype=np.uint16)
+    action[0::2] = np.uint16(29)
+    action[1::2] = np.uint16(203)
+
+    used, exponent = _derive_walljump_test_lanes(action)
+
+    assert int(used[-1]) == 255
+    assert int(exponent[-1]) == 255
 
 
 def test_derive_mpcoll_wall_seed_lanes_are_fd_segment_and_phase_scoped() -> None:

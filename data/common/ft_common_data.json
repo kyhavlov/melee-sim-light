@@ -183,6 +183,7 @@
   "pass_stick_threshold": 0.6600000262260437,
   "pass_tilt_max_frames": 6,
   "pass_vel_y": -0.5,
+  "passive_wall_vel_y_base": 0.9750000238418579,
   "passivewall_timer_frames": 5,
   "phantom_overlap_max_x7a8": 0.009999999776482582,
   "platform_air_land_stick_y_threshold": -0.5600000023841858,

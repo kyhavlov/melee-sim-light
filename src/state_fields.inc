@@ -241,6 +241,8 @@ MSL_STATE_FIELD(magnify_damage_counter_x1910, uint16_t, bp, (size_t)MSL_MAX_PLAY
 MSL_STATE_FIELD(downwait_timer, int16_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(passivewall_timer, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(passivewall_jump_latch, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(walljump_used_count, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(passivewall_vel_y_exponent, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(walljump_input_timer, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(walljump_wall_side_i8, int8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(walljump_seed_phase_valid, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)

@@ -52,6 +52,10 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS3_PHASE4_DAMAGE_FALL_COLL,
     CLASS3_PHASE4_DAMAGE_FLY_COLL,
     CLASS3_PHASE4_ESCAPE_AIR_COLL,
+    CLASS3_ORDINARY_WALLJUMP_COLL,
+    CLASS3_WALLTECH_COLL,
+    ORDINARY_WALLJUMP_COLL_CBS,
+    WALLTECH_COLL_CBS,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS,
@@ -1166,9 +1170,13 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
             )
 
 
-def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actions() -> None:
+def test_motion_state_owner_class3_matches_source_callbacks_for_all_actions() -> None:
     fox = read_mslmso01_v1(FOX)
     falco = read_mslmso01_v1(FALCO)
+    marth = read_mslmso01_v1(MARTH)
+    falcon = read_mslmso01_v1(FALCON)
+    sheik = read_mslmso01_v1(SHEIK)
+    zelda = read_mslmso01_v1(Path("data/motion_state/owners/zelda.bin"))
     symbols = read_callback_manifest(MANIFEST)
 
     def expected_bits(coll_cb: str) -> int:
@@ -1183,18 +1191,29 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
             bits |= CLASS3_PHASE4_DAMAGE_FLY_COLL
         if coll_cb == "ftCo_DamageFall_Coll":
             bits |= CLASS3_PHASE4_DAMAGE_FALL_COLL
+        if coll_cb in ORDINARY_WALLJUMP_COLL_CBS:
+            bits |= CLASS3_ORDINARY_WALLJUMP_COLL
+        if coll_cb in WALLTECH_COLL_CBS:
+            bits |= CLASS3_WALLTECH_COLL
         return bits
 
-    # Exhaustive Phase 4 source-callback boundary. These are the later-owner families routed by
-    # src/mpcoll_ground.c; broad ft_80081D0C peers such as AirCatch, ItemThrowAir, Cargo, YoshiEgg,
-    # and Fox/Falco specials must stay out of this word.
+    # Exhaustive class3 source-callback boundary. The phase-4 bits route later floor owners, while
+    # the walljump bits classify the two PassiveWall entry producers across common and character
+    # callbacks.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
     #   ftCo_Damage_Coll,ftCo_DamageFly_Coll,ftCo_DamageFlyRoll_Coll}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_FlyReflect_Coll
-    for label, table in (("fox", fox), ("falco", falco)):
+    for label, table in (
+        ("fox", fox),
+        ("falco", falco),
+        ("marth", marth),
+        ("falcon", falcon),
+        ("sheik", sheik),
+        ("zelda", zelda),
+    ):
         for action_id in range(len(table.class3_bits)):
             coll_cb = symbols[int(table.coll_cb_id[action_id])]
             assert int(table.class3_bits[action_id]) == expected_bits(coll_cb), (
@@ -1213,6 +1232,12 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
     assert both_have3(0x0054, CLASS3_PHASE4_DAMAGE_COMMON_COLL)  # DamageAir1
     assert both_have3(0x005A, CLASS3_PHASE4_DAMAGE_FLY_COLL)  # DamageFlyTop
     assert both_have3(0x0026, CLASS3_PHASE4_DAMAGE_FALL_COLL)  # DamageFall
+    for action_id in (0x0026, 0x00CC, 0x00DA, 0x00E5, 0x00F4, 0x00FA, 0x00FB, 0x0105, 0x0107):
+        assert both_have3(action_id, CLASS3_ORDINARY_WALLJUMP_COLL)
+    for action_id in (0x0058, 0x005B, 0x00B9, 0x00F7):
+        assert both_have3(action_id, CLASS3_WALLTECH_COLL)
+    assert int(marth.class3_bits[367]) & CLASS3_ORDINARY_WALLJUMP_COLL
+    assert int(marth.class3_bits[368]) & CLASS3_ORDINARY_WALLJUMP_COLL
 
     excluded = [
         0x001D,  # Fall, Phase 3 common airborne
@@ -1227,8 +1252,20 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
         0x016D,  # Fox/Falco SpecialAirLwStart
     ]
     for action_id in excluded:
-        assert int(fox.class3_bits[action_id]) == 0
-        assert int(falco.class3_bits[action_id]) == 0
+        assert not int(fox.class3_bits[action_id]) & (
+            CLASS3_PHASE4_ATTACK_AIR_COLL
+            | CLASS3_PHASE4_ESCAPE_AIR_COLL
+            | CLASS3_PHASE4_DAMAGE_COMMON_COLL
+            | CLASS3_PHASE4_DAMAGE_FLY_COLL
+            | CLASS3_PHASE4_DAMAGE_FALL_COLL
+        )
+        assert not int(falco.class3_bits[action_id]) & (
+            CLASS3_PHASE4_ATTACK_AIR_COLL
+            | CLASS3_PHASE4_ESCAPE_AIR_COLL
+            | CLASS3_PHASE4_DAMAGE_COMMON_COLL
+            | CLASS3_PHASE4_DAMAGE_FLY_COLL
+            | CLASS3_PHASE4_DAMAGE_FALL_COLL
+        )
 
 
 def test_motion_state_owner_reader_rejects_stale_versions(tmp_path: Path) -> None:

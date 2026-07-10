@@ -241,6 +241,7 @@ typedef struct MslCommonParams {
   float walljump_stick_x_threshold;           // p_ftCommonData->x76C
   float walljump_tilt_x_max_frames;           // p_ftCommonData->x770
   uint16_t walljump_startup_timer_frames;     // p_ftCommonData->x774
+  float passive_wall_vel_y_base;              // p_ftCommonData->x778
   // Pokemon Stadium fighter x44 matrix scale source field.
   //
   // Decomp: `Fighter_80068E64` writes this to `fp->x34_scale.z` on internal stage 0x1B, and

@@ -1331,6 +1331,28 @@ PyObject* msl_debug_common_fall_blend_state_py(PyObject* self, PyObject* args) {
                        (unsigned int)h->batch->state.common_fall_blend_msid[idx]);
 }
 
+PyObject* msl_debug_walljump_state_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  if (!PyArg_ParseTuple(args, "Oii", &handle_obj, &batch_index, &player_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (batch_index < 0 || batch_index >= h->batch->batch_size || player_index < 0 ||
+      player_index >= MSL_MAX_PLAYERS) {
+    PyErr_SetString(PyExc_ValueError, "batch_index/player_index out of range");
+    return NULL;
+  }
+  const size_t idx = (size_t)batch_index * (size_t)MSL_MAX_PLAYERS + (size_t)player_index;
+  return Py_BuildValue("II", (unsigned int)h->batch->state.walljump_used_count[idx],
+                       (unsigned int)h->batch->state.passivewall_vel_y_exponent[idx]);
+}
+
 PyObject* msl_debug_get_fighter_8006cda4_pre_gate_consume_count_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;

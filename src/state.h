@@ -557,6 +557,12 @@ typedef struct MslStateSoA {
   // on timer expiry by re-entering PassiveWallJump through Fighter_ChangeMotionState.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_PassiveWall_IASA,inlineA0}
   uint8_t* passivewall_jump_latch;
+  // Consecutive ordinary walljump count (`fp->x1969_walljumpUsed`) and the pre-increment count
+  // copied into the active PassiveWall episode (`fp->mv.co.passivewall.vel_y_exponent`).
+  // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+  uint8_t* walljump_used_count;
+  uint8_t* passivewall_vel_y_exponent;
   // Generic wall-jump hidden input phase (`fp->wall_jump_input_timer`, `fp->x2110_walljumpWallSide`).
   // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
   uint8_t* walljump_input_timer;

@@ -26,6 +26,7 @@ PyObject* msl_debug_hurtcap_matrix_valid_py(PyObject* self, PyObject* args);
 PyObject* msl_debug_poison_hurtcap_matrix_py(PyObject* self, PyObject* args);
 PyObject* msl_debug_dynamic_pose_state_py(PyObject* self, PyObject* args);
 PyObject* msl_debug_common_fall_blend_state_py(PyObject* self, PyObject* args);
+PyObject* msl_debug_walljump_state_py(PyObject* self, PyObject* args);
 PyObject* msl_debug_get_fighter_8006cda4_pre_gate_consume_count_py(PyObject* self, PyObject* args);
 PyObject* msl_debug_get_sheik_needle_count_py(PyObject* self, PyObject* args);
 PyObject* msl_debug_attackairb_continuation_overlap_py(PyObject* self, PyObject* args);

@@ -88,6 +88,8 @@ enum {
   MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL = 1u << 2,
   MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL = 1u << 3,
   MSL_MS_CLASS3_PHASE4_DAMAGE_FALL_COLL = 1u << 4,
+  MSL_MS_CLASS3_ORDINARY_WALLJUMP_COLL = 1u << 5,
+  MSL_MS_CLASS3_WALLTECH_COLL = 1u << 6,
 };
 
 uint16_t msl_motion_state_submotion_id(uint8_t char_id, uint16_t action_id);
@@ -106,7 +108,7 @@ uint8_t msl_motion_state_class2_has(uint8_t char_id, uint16_t action_id, uint32_
 uint8_t msl_motion_state_cliff_hold_phys_snap(uint8_t char_id, uint16_t action_id);
 uint32_t msl_motion_state_class3_bits(uint8_t char_id, uint16_t action_id);
 
-// fx_special_kind (MSLMSO01 v21): per-(char, action) identity of the Fox/Falco bespoke
+// fx_special_kind (MSLMSO01 v22): per-(char, action) identity of the Fox/Falco bespoke
 // special MotionState rows, generated 1:1 from each row's ANIM callback symbol by
 // tools/extraction/extract_motion_state_owners.py (FX_SPECIAL_KIND_BY_ANIM_CB). This is
 // the migration target for `msl_char_id_is_spacie(c) && action_id == MSL_ACT_FX_*`

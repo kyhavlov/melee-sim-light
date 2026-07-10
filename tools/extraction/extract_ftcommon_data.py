@@ -179,6 +179,10 @@ def main() -> None:
         "walljump_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x76C)),
         "walljump_tilt_x_max_frames": float(_f32_be(buf, ft_common_abs + 0x770)),
         "walljump_startup_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x774))),
+        # Consecutive ordinary walljumps decay vertical launch by
+        # `powf(passive_wall_vel_y_base, fp->mv.co.passivewall.vel_y_exponent)`.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_Anim
+        "passive_wall_vel_y_base": float(_f32_be(buf, ft_common_abs + 0x778)),
         # Pokemon Stadium fighter root x44 matrix owner:
         # - Fighter_80068E64 writes fp->x34_scale.z = p_ftCommonData->x7E4_scaleZ only on internal
         #   stage 0x1B (Pokemon Stadium).

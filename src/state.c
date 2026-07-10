@@ -113,6 +113,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->match_flow_pending_rebirth_state_flags_2218, 0, sizeof(uint8_t) * bp);
   memset(state->magnify_damage_counter_x1910, 0, sizeof(uint16_t) * bp);
   memset(state->passivewall_jump_latch, 0, sizeof(uint8_t) * bp);
+  memset(state->walljump_used_count, 0, sizeof(uint8_t) * bp);
+  memset(state->passivewall_vel_y_exponent, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_state, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_frames, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_hold_frames_max, 0, sizeof(uint8_t) * bp);

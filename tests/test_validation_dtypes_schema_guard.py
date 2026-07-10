@@ -101,6 +101,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "camera_target_point_inside_stage_cam_bounds_u8" in SEED_DTYPE.fields
     assert "magnify_damage_counter_x1910" in SEED_DTYPE.fields
     assert "passivewall_timer" in SEED_DTYPE.fields
+    assert "walljump_used_count" in SEED_DTYPE.fields
+    assert "passivewall_vel_y_exponent" in SEED_DTYPE.fields
     assert "walljump_input_timer" in SEED_DTYPE.fields
     assert "walljump_wall_side_i8" in SEED_DTYPE.fields
     # Damage KB stacking window (fp->dmg.x18AC_time_since_hit).
@@ -893,6 +895,11 @@ def test_ft_common_data_exports_magnify_damage_source_constants() -> None:
     assert int(data["magnify_damage_interval_frames"]) == 60
     assert int(data["magnify_damage_percent_limit"]) == 150
     assert int(data["magnify_damage_amount"]) == 1
+
+
+def test_ft_common_data_exports_walljump_vertical_decay_source_constant() -> None:
+    data = json.loads(Path("data/common/ft_common_data.json").read_text())
+    assert float(data["passive_wall_vel_y_base"]) == pytest.approx(0.9750000238418579)
 
 
 def test_ft_common_data_exports_deadupfall_hitcamera_source_constants() -> None:
