@@ -517,3 +517,19 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   ecb_lock_bottom_rel_y derivation (valid=0 on these rows — maybe it should
   not be), and the desired-vs-current ECB handoff in mpColl_80047E14
   (LoadECB_inline mode 6) around the aerial->Fall anim switch.
+  ADDENDUM (same day): sub-shape (a) is NOT the SHFF lock after all — the
+  falco rec-168 and falcon rec-1061 witnesses jumped 12+ frames before
+  landing (locks legitimately expired; both initiate fastfall exactly 4
+  frames before the missed landing; ftCommon_FallFast does NOT touch the ECB
+  in source). Sharper falcon fact: falcon's Fall@0 pose bottom is 2.06, so
+  our own pose-bottom sweep (0.256+2.06 -> -3.244+2.06) CROSSES y=0, yet the
+  runtime still published airborne — the miss is a floor-ADMISSION rejection
+  on the wrapped-anim fastfall Fall row, not a bottom-value question. Both
+  witnesses also sit exactly on the Fall anim loop wrap (af 7 -> 0), so
+  ecb_frame/ecb_frame_prev biasing around AObj wrap is in play. Seed-lane
+  detail for whoever picks this up: derive_ecb_lock_bottom_rel_y publishes
+  valid=1 only for JumpAerialF/B lock episodes; ground-jump episodes track
+  desired_bottom=0 but never publish, and all these witness rows carry
+  valid=0, so the runtime is on its pose/admission path throughout. Bigger
+  owners remain first per the taxonomy: fox-laser item rows (~280) and the
+  match-start Fall->Wait pin (150).
