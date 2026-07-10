@@ -432,3 +432,30 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   DeadUpFallHitCamera drift (120 rows, cosmetic dead-state), CatchDash
   constant 1.016 (78 rows, dash-grab momentum), fox-laser +3% percent rows on
   KneeBend/Escape (missed weak-hit family), marth SpecialAirHi (marth lane).
+- 2026-07-10 (later): **Suite-wide discrete taxonomy round (Phase 5 gate):
+  3003 strict / 2324 normal events classified.** ~600 strict-only rows are
+  the ignored state_flags[4]&0x80 bit. Top normal owners, each probed to a
+  witness:
+  1. GuardSetOff floor-loss keep-motion (143 rows, ditto YS rec 760-761):
+     shield pushback slides past a platform edge; ftCo_GuardSetOff_Coll's
+     !allow_sdi branch (ft_800845B4) LEAVES the motion on floor loss — ref
+     stays in 183 airborne with y pinned (Phys ft_80084F3C has no gravity)
+     until anim end -> Fall; our sim stays grounded. Positions already exact;
+     only the grounding bit + downstream Fall-entry timing differ. SHARED
+     common owner (also in the falcon plan tail as "GuardSetOff shield
+     rows"); the allow_sdi-conditional wrapper choice is another
+     branch-shaped owner the static class table cannot carry.
+  2. Fox-laser item rows (~280 events, vs-fox BF game rec 1713): item lane
+     family in one game; not yet triaged beyond the bucket.
+  3. Match-start Fall->Wait pin (150 events, ditto rec 105+): pre-frame-0
+     rows where the replay has players already falling around, but our
+     match-flow pins p1 to spawn Wait at x=+28. Match-entry model gap.
+  4. Fall->Landing platform re-land from below (60 events, vs-fox BF rec
+     3696): fastfalling puff BELOW the side platform (root 26.1 < 27.2)
+     "lands" UP onto it — the posed Fall ECB bottom sits above the root, so
+     the bottom sweep crosses the platform from above while the ref (which
+     dropped through it earlier) passes through. Likely the drop-through
+     floor_skip lane not persisting into the post-Pass Fall rows.
+  5. Rung facing rows (45) — the documented turnaround reseed debt.
+  Everything else is a long tail of <=12-event buckets. Next round should
+  take owners 1 (shared, biggest) and 4 (platform correctness) first.
