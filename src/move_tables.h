@@ -295,6 +295,16 @@ uint8_t move_tables_state_flags_221c_y_at_frame(uint8_t char_id, uint16_t msid, 
 uint8_t move_tables_airborne_state_event_at_frame(uint8_t char_id, uint16_t msid, uint16_t frame,
                                                   uint8_t* out_state);
 
+// Returns whether the msid's command script holds an airborne latch at `frame`: the most recent
+// set_airborne_state event at or before `frame` dispatched a ground->air helper (state 1/2)
+// without a later state-0 re-ground.
+//
+// Decomp: ftAction_80071998 flips fp->ground_or_air outside any motion-state change, so per-frame
+// consumers (e.g. ftCo_DownBound_Coll's held floor) observe the latched value between events.
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
+// refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_8007D60C,ftCommon_8007D7FC}
+uint8_t move_tables_script_airborne_latch_at_frame(uint8_t char_id, uint16_t msid, uint16_t frame);
+
 // Returns whether a Special* command script crossed a cmd_var[2] set-to-1 pulse this frame.
 //
 // Decomp:

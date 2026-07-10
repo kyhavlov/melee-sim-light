@@ -2800,7 +2800,7 @@ overall.float_norm_mae_p95: 0.00038349
 Records: 8289  Players/scored per record: 2  Total player-frames: 16578
 mismatch.action_id: 16 / 16578 (0.000965)
 mismatch.action_frame: 19 / 16578 (0.001146)
-mismatch.on_ground: 13 / 16578 (0.000784)
+mismatch.on_ground: 11 / 16578 (0.000664)
 mismatch.facing: 3 / 16578 (0.000181)
 mismatch.stocks: 0 / 16578 (0.000000)
 mismatch.jumps_left: 11 / 16578 (0.000664)
@@ -2824,7 +2824,7 @@ mismatch.item_owner: 4 / 124335 (0.000032)
 mismatch.item_instance_id: 4 / 124335 (0.000032)
 ignored_mismatch.state_flags[4]&0x80: 93 / 16578 (0.005610)
 err.pos_x: mae=0.001004 p95=0.000000 max=3.061741
-err.pos_y: mae=0.004729 p95=0.000000 max=9.981231
+err.pos_y: mae=0.004634 p95=0.000000 max=9.981231
 err.speed_air_x_self: mae=0.000272 p95=0.000000 max=1.275000
 err.speed_ground_x_self: mae=0.000378 p95=0.000000 max=1.838750
 err.speed_y_self: mae=0.000103 p95=0.000000 max=0.670000
@@ -2836,10 +2836,10 @@ err.item_pos_x: mae=0.070544 p95=0.000000 max=51.454063
 err.item_pos_y: mae=0.041615 p95=0.000000 max=24.156263
 err.item_vel_x: mae=0.005721 p95=0.000000 max=2.828427
 err.item_vel_y: mae=0.011754 p95=0.000000 max=2.828428
-overall.discrete_mismatch: 184 / 1002969
-overall.strict_discrete_mismatch: 277 / 1002969
+overall.discrete_mismatch: 182 / 1002969
+overall.strict_discrete_mismatch: 275 / 1002969
 overall.ignored_discrete_mismatch: 93
-overall.float_norm_mae_p95: 0.00022686
+overall.float_norm_mae_p95: 0.00022672
 
 == replays/validation/sheik/UselessGlassLoris.slpz ==
 Records: 9911  Players/scored per record: 2  Total player-frames: 19822
@@ -3202,7 +3202,7 @@ overall.ignored_discrete_mismatch: 5
 overall.float_norm_mae_p95: 30.64353189
 
 == suite summary ==
-overall.discrete_mismatch: 6525 / 79185425
-overall.strict_discrete_mismatch: 10289 / 79185425
+overall.discrete_mismatch: 6523 / 79185425
+overall.strict_discrete_mismatch: 10287 / 79185425
 overall.ignored_discrete_mismatch: 3764
 overall.float_norm_mae_p95: 1.61881576

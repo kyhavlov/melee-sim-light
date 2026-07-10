@@ -876,6 +876,26 @@ uint8_t move_tables_airborne_state_event_at_frame(uint8_t char_id, uint16_t msid
   return 1u;
 }
 
+uint8_t move_tables_script_airborne_latch_at_frame(uint8_t char_id, uint16_t msid, uint16_t frame) {
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL) {
+    return 0u;
+  }
+  uint16_t last = frame;
+  if (last >= (uint16_t)MSL_MOVE_TABLE_FRAME_CAP) {
+    last = (uint16_t)(MSL_MOVE_TABLE_FRAME_CAP - 1u);
+  }
+  uint8_t latch = 0u;
+  for (uint16_t f = 0u; f <= last; f++) {
+    const uint8_t state = cache->airborne_state_event[f];
+    if (state == (uint8_t)MSL_MOVE_TABLE_NO_AIRBORNE_EVENT) {
+      continue;
+    }
+    latch = (state == 1u || state == 2u) ? 1u : 0u;
+  }
+  return latch;
+}
+
 uint8_t move_tables_special_cmd2_pulse_crossed(uint8_t char_id, uint16_t msid,
                                                float prev_anim_frame_f32, float cur_anim_frame_f32,
                                                int16_t* out_pulse_frame) {

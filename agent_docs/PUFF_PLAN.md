@@ -459,3 +459,61 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   5. Rung facing rows (45) — the documented turnaround reseed debt.
   Everything else is a long tail of <=12-event buckets. Next round should
   take owners 1 (shared, biggest) and 4 (platform correctness) first.
+- 2026-07-10 (later still): **Owner 1 landed — it was NOT GuardSetOff: action 183
+  is DownBoundU (missed-tech bounce), and the mechanism is the movescript.
+  Puff one-step 2324 -> 2162 (strict 3003 -> 2841); puff free-running rollout
+  first-mismatch 501 -> 375.** The previous entry's owner-1 attribution
+  (ftCo_GuardSetOff_Coll / ft_800845B4 keep-motion) is WRONG on both counts:
+  183 = DownBoundU, and ft_800845B4/DownBound_Coll DO enter Fall on floor
+  loss. The real mechanism: the DownBoundU/D subaction scripts carry opcode-25
+  set_airborne_state events (ftAction_80071998 -> ftCommon_8007D5D4/8007D7FC):
+  the bounce pops the fighter script-airborne mid-state (puff U@1/D@2 ->
+  reground @17; fox/falcon @4 -> @22; sheik @4 -> @23) with NO motion change —
+  that's the observed gnd 1->0 + jl 6->5 + y pinned (DownBound_Phys ft_80084F3C
+  has no gravity) while ftCo_DownBound_Coll's grounded mpColl core keeps
+  holding the floor line until the edge crossing enters Fall. Data + dispatch
+  already existed end-to-end (scripts/{ch}.bin MSLFTSC1 events; the opcode-25
+  dispatch in action_update_anim_callback_pre_input_fighter); the only gap was
+  mpcoll_ground re-grounding script-airborne rows at floor publication. Fix:
+  move_tables_script_airborne_latch_at_frame (last set_airborne_state event at
+  or before the anim frame) + a DownBound keep-airborne owner at the floor
+  publication flip in mpcoll_ground.c. The owner requires an ALREADY-airborne
+  fighter (batch on_ground==0): the ground->air flip itself belongs to the
+  pre-input dispatch, which keys on raw animation_index BEFORE mid-step
+  normalization — an initial force-flip variant broke puff's
+  test_downbound_to_downwait via the 0xFFFFFFFF-anim seed path (dispatch saw
+  invalid anim, coll saw normalized 183, flip without D5D4 side effects ->
+  spurious floor-loss Fall). Cross-suite: sheik 3406->3404, marth 1871->1870
+  (rollout ±1 streak wash), aggregate 6525->6523, doubles/fox-falco
+  byte-identical. FALCON ENV NOTE: local HEAD-vs-fix is byte-identical on
+  every falcon replay, but the committed falcon_one_step.txt (last written by
+  the falcon lane machine) does NOT reproduce here even at HEAD (jumps_left
+  13/12 committed vs 12/16 local on two replays) — this machine's known
+  compiler-FP baseline delta extends to DISCRETE lanes; do not chase falcon
+  deltas against the committed report, compare stash-HEAD vs fix locally.
+- 2026-07-10 (owner-4 recon, no fix yet): **The Fall->Landing family is an ECB
+  bottom-lane split, not floor_skip.** The previous entry's floor_skip
+  hypothesis is refuted at the source: Fighter_ChangeMotionState calls
+  mpClearFloorSkip on every state change, and ftCo_8009A228 (Pass entry)
+  re-arms it AFTER the change — the drop-through skip only survives within the
+  Pass state itself. Suite-wide collection (Fall(29) <-> Landing(42) action
+  flips, both directions, ~19 instances) splits cleanly in two:
+  (a) MISSED main-floor landings on short-hop-fastfall rows (falco
+  master-diamond rec 168: Fall@0, vy -3.5, root 0.425 -> ref lands 0.003; our
+  out falls through; falcon diamond-diamond 1061/1151, puff 3559): the source
+  10-frame CollData_X130 bottom lock from the jump's ftCommon_8007D5D4 is
+  still live, so the source sweep uses the LOCKED (jump-entry, ~= root)
+  bottom; our sweep used the aerial pose bottom (falco Fall pose ~4.02) and
+  missed the crossing entirely.
+  (b) ONE-FRAME-EARLY platform landings on long-airborne stale-pose rows (fox
+  vs-fox BF rec 3696: uair 40+ frames then Fall@4-5 fastfall past the BF side
+  plat at 27.2; ref passes 22.718 then lands UP at 27.200 the next step; our
+  out lands a frame early; also falco 5507/5508 implying an effective bottom
+  ~6 units above root): the ref's effective sweep bottom (>= 4.482) exceeds
+  EVERY pose-table value (Fall 4.02-4.07, uair tail 4.0-4.4) — mechanism not
+  pinned; locks are expired (10 frames << 40), stick was neutral (not the
+  ftCo_80096CC8 hold-down platform-drop gate), and mpCollInterpolateECB
+  resolves fully at steps=1. Suspects for next round: the seed-side
+  ecb_lock_bottom_rel_y derivation (valid=0 on these rows — maybe it should
+  not be), and the desired-vs-current ECB handoff in mpColl_80047E14
+  (LoadECB_inline mode 6) around the aerial->Fall anim switch.

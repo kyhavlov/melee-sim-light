@@ -6574,6 +6574,29 @@ void mpcoll_ground_apply(MslBatch* batch) {
             floor_publication.contact.normal_y);
       }
 
+      if (floor_publication.on_ground && action_is_down_bound(action_id) &&
+          batch->state.on_ground[idx] == 0u && anim <= 0xFFFFu &&
+          move_tables_script_airborne_latch_at_frame(char_id, (uint16_t)anim,
+                                                     mpcoll_ctx.ecb_frame)) {
+        // DownBound's command script pops the fighter airborne mid-state (set_airborne_state(1),
+        // the missed-tech bounce) and re-grounds it later (state 0). In between,
+        // ftCo_DownBound_Coll still runs the grounded mpColl core (ft_80082708 ->
+        // mpColl_8004B108), which keeps CollData floor contact and cur_pos on the line but never
+        // writes fp->ground_or_air: the source stays airborne with a held floor until the script
+        // re-grounds it or floor loss enters Fall. Keep the grounded sweep's floor/pos effects
+        // and flip only the published grounding (the airborne commit's DownBound floor-index
+        // refresh preserves the held ground id). Require an already-airborne fighter: the
+        // ground->air flip itself belongs to the opcode-25 dispatch (which keys on the same raw
+        // animation_index before any mid-step normalization); this owner only stops the grounded
+        // sweep from re-grounding it while the script latch is live.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+        floor_publication.airborne_ground_id = floor_publication.contact.ground_id;
+        floor_publication.on_ground = 0u;
+        floor_publication.result_mode = (uint8_t)MSL_MPCOLL_FLOOR_MODE_NONE;
+      }
       mpcoll_materialize_floor_publication_result(&mpcoll_ctx, &floor_publication);
       if ((floor_publication.on_ground &&
            (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR ||
