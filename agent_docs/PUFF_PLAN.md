@@ -533,3 +533,20 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   valid=0, so the runtime is on its pose/admission path throughout. Bigger
   owners remain first per the taxonomy: fox-laser item rows (~280) and the
   match-start Fall->Wait pin (150).
+- 2026-07-11: **Replay intake: three user-recorded YS/BF ditto sessions close the
+  remaining coverage gaps; suite 12 -> 15 replays, one-step baseline 2267 / 13814691
+  (strict 2988).** Registered in replays/suites/puff.json: rollout_ends_ys.slpz
+  (347 SpecialNStartL + 353 SpecialNEndL on both ports, multi-Turn budget-exhaust
+  chains, five platform/edge roll-offs into air release, long NHit segments),
+  rollout_air_bf.slpz (357 AirNFull, 361 AirNEndL twice — CONFIRMS the shared
+  90-frame budget exhausts airborne, ~100f total release before the end fires,
+  matching the modeled gate), wallbounce_teeter_ys.slpz (360 AirNEndR, two
+  air-release wall bounces off the YS side walls, isolated OttottoWait->Fall teeter
+  walk-off witness f3-101 on the left plat inner edge). ONLY remaining
+  zero-coverage state: 359 AirNTurn — unreachable in play (entered solely via
+  floor-loss during a >6.5-vel ground Turn; suite notes updated). New-coverage
+  taxonomy: almost all documented debt (NLoop->NFull charge reseed, one row per
+  NTurn exit, air natural-end reseed, mjump turnaround facing); wall bounce
+  produced NO mismatch family. Rollout baseline on the expanded suite:
+  first_mismatch_total 412 / seeded 277. New witnesses queued: the teeter
+  walk-off re-ground (rec 224) and more Fall->Landing owner-4 rows.
