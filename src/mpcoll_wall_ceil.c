@@ -12,7 +12,10 @@
 #include "anim_table.h"
 #include "char_params.h"
 #include "coll_env_flags.h"
+#include "grab_attachment.h"
+#include "input_axis.h"
 #include "match_flow.h"
+#include "mpcoll_ecb_pose.h"
 #include "mpcoll_ecb_points.h"
 #include "mpcoll_floor.h"
 #include "mpcoll_floor_skip.h"
@@ -398,7 +401,12 @@ static int grounded_left_wall_floor_adjacent_line_idx(const MslStageFloorGraph* 
 static inline float cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
 
 static inline uint8_t specialhi_launch_uses_runtime_xrotn_ecb(uint8_t char_id, uint16_t action_id) {
-  // Ownership from the extracted MotionState row identity (SpecialHi launch rows).
+  // Ownership from the extracted MotionState row identity (SpecialHi launch rows). This path is
+  // the Firefox/Firebird rotateModel/XRotN ECB owner; Falcon Dive reaches ft_CheckGroundAndLedge,
+  // but does not publish the same rotateModel packet and must not borrow this ceiling/wall envelope.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_RotateModel}
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doAirColl
   const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, action_id);
   return (uint8_t)(fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI ||
                    fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI);
@@ -487,20 +495,22 @@ static inline uint8_t specialhi_left_wall_endpoint_envelope_stale_from_callback_
   if (!(candidate_y >= envelope_line->y1 - k_line_axis_thresh)) {
     return 0u;
   }
+  if (envelope_line->joint_id != 0) {
+    return 1u;
+  }
   // Source `mpColl_80045B74_LeftWall` builds the candidate list from actual previous->current
   // ECB sweeps. Endpoint candidates are valid when the callback-entry root is still outside the
   // left wall and crosses into the endpoint envelope. If the callback already starts on/inside the
   // endpoint and self velocity moves away from the wall, the current-edge candidate is stale and
   // source leaves the root on its integrated path instead of re-clamping to the endpoint.
   //
-  // Nonzero MapJoint walls require the source JObj/transformed collision packet before a static
-  // endpoint candidate is authoritative. Keep those rejected here; the generic transformed wall
-  // packet is separate x44 debt, not a SpecialHi endpoint-envelope owner.
+  // Static stage-shell endpoints can still carry nonzero MapJoint ids. The lite envelope path does
+  // not yet model the source joint packet for those endpoint-only candidates, so keep the
+  // source-completion slice on base joint-0 wall chains.
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
-  if (envelope_line->joint_id != 0) {
-    return 1u;
-  }
+  // refs/melee/src/melee/mp/types.h::{MapLine,MapJoint}
+  // data/stages/bin/*.bin::MSLSTG01 segment.joint_id
   return (uint8_t)(callback_prev_x >= envelope_x - k_line_axis_thresh);
 }
 
@@ -612,21 +622,22 @@ static inline uint8_t mpcoll_action_uses_ft80081d0c_air_collision(uint8_t char_i
 
 static inline uint8_t mpcoll_action_uses_ft_check_ground_ledge_air_collision(uint8_t char_id,
                                                                              uint16_t action_id) {
-  // Fox/Falco aerial Side-B Start/Main/End, SpecialHiHoldAir, and SpecialHiFall call
+  // Character aerial Side-B Start/Main/End and SpecialHi owners call
   // `ft_CheckGroundAndLedge`, which loads the normal airborne ECB and calls `mpColl_800473CC` or
   // `mpColl_800471F8`. Both routes run the full `mpColl_80046904` airborne wall envelope before
-  // floor/ledge consumers. SpecialAirHi is also present in the generated class, but launch
-  // collision is the distinct live-JObj/XRotN owner handled by the dedicated helpers below;
-  // admitting launch through this generic fixed-ECB envelope overextends lip contacts that source
-  // keeps available for BODY hits.
+  // floor/ledge consumers. Fox/Falco SpecialAirHi launch is the distinct live-JObj/XRotN owner
+  // handled by the dedicated helpers below. Other generated SPECIALHI rows, including Falcon Dive,
+  // use the ordinary loaded CollData ECB and therefore belong to this full envelope rather than
+  // the point-local fallback.
   // These retained generic actions receive Push/Hug provenance from mpColl but have no
   // same-callback ftWallJump_8008169C consumer. The generated class also marks common `ft_80082F28`
   // wrappers such as MissFoot/Pass, but those are not retained by this wall-envelope slice.
-  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class_bits)
+  // data/motion_state/owners/*.bin (MSLMSO01 class_bits)
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
   //   ftFx_SpecialAirSStart_Coll,ftFx_SpecialAirS_Coll,ftFx_SpecialAirSEnd_Coll}
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
   //   ftFx_SpecialHiHoldAir_Coll,ftFx_SpecialHiFall_Coll}
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doAirColl
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_MissFoot_Coll
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_Pass_Coll
   // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
@@ -635,6 +646,10 @@ static inline uint8_t mpcoll_action_uses_ft_check_ground_ledge_air_collision(uin
   if (msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL) ==
       0u) {
     return 0u;
+  }
+  if (msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_SPECIALHI) != 0u &&
+      !specialhi_launch_uses_runtime_xrotn_ecb(char_id, action_id)) {
+    return 1u;
   }
   const uint16_t smid = msl_motion_state_submotion_id(char_id, action_id);
   return (uint8_t)((smid >= (uint16_t)MSL_SM_FX_SPECIAL_AIR_S_START &&
@@ -754,7 +769,7 @@ static inline uint8_t try_sample_jobj_ecb_points(MslEcbWorldPoints* out, const M
     x *= model_scale;
     y *= model_scale;
     z *= model_scale;
-    if (specialhi_launch_uses_runtime_xrotn_ecb(char_id, action_id)) {
+    if (msl_specialhi_rotate_model_action(char_id, action_id)) {
       (void)specialhi_rotate_collision_point_xrotn(batch, idx, char_id, msid, frame_u16, part_id,
                                                    facing_dir, model_scale, &x, &y, &z);
     }
@@ -783,28 +798,6 @@ static inline uint8_t try_sample_jobj_ecb_points(MslEcbWorldPoints* out, const M
     return 0u;
   }
 
-  // Decomp: mpColl_LoadECB_JObj compares the JObj horizontal span with
-  // `max(4.0f, ecb_source.x12C)`, where ft_80081B38 seeds x12C as `10.0f * fp->x34_scale.y`.
-  // If the span is smaller, it recenters the existing sampled span around zero before the final
-  // +/-2 clamp (`right_x = 0.5F * ABS(right_x - left_x)`). It does not expand the span to x12C.
-  // This matters for horizontal Firefox at the right wall: vanilla projects from the centered
-  // sampled half-width rather than the raw leftmost joint or an expanded x12C half-width.
-  // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
-  // refs/melee/src/melee/ft/ft_081B.c::ft_80081B38
-  const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
-  const float ecb_width = fabsf(max_x - min_x);
-  if (ecb_width < min_ecb_width) {
-    const float half_width = 0.5f * ecb_width;
-    max_x = half_width;
-    min_x = -half_width;
-  }
-
-  if (max_x < 2.0f) {
-    max_x = 2.0f;
-  }
-  if (min_x > -2.0f) {
-    min_x = -2.0f;
-  }
   if (min_y < 0.0f) {
     min_y = 0.0f;
   }
@@ -825,6 +818,7 @@ static inline uint8_t try_sample_jobj_ecb_points(MslEcbWorldPoints* out, const M
   out->left_y = pos_y + side_rel_y;
   out->right_x = pos_x + max_x;
   out->right_y = pos_y + side_rel_y;
+  mpcoll_ecb_points_apply_jobj_horizontal_normalization(batch, idx, out);
   return 1u;
 }
 
@@ -846,26 +840,7 @@ static inline void sample_collision_ecb_points(MslEcbWorldPoints* out, const Msl
   // source ECB shape consumed by mpColl_80044E10_RightWall / mpColl_80045B74_LeftWall.
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_LoadECB_inline}
   // refs/melee/src/melee/ft/ft_081B.c::ft_80081B38 (x12C = 10.0f * fp->x34_scale.y)
-  float left_rel_x = out->left_rel_x;
-  float right_rel_x = out->right_rel_x;
-  const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
-  const float ecb_width = fabsf(right_rel_x - left_rel_x);
-  if (ecb_width < min_ecb_width) {
-    const float half_width = 0.5f * ecb_width;
-    left_rel_x = -half_width;
-    right_rel_x = half_width;
-  }
-  if (right_rel_x < 2.0f) {
-    right_rel_x = 2.0f;
-  }
-  if (left_rel_x > -2.0f) {
-    left_rel_x = -2.0f;
-  }
-
-  out->left_rel_x = left_rel_x;
-  out->right_rel_x = right_rel_x;
-  out->left_x = pos_x + left_rel_x;
-  out->right_x = pos_x + right_rel_x;
+  mpcoll_ecb_points_apply_jobj_horizontal_normalization(batch, idx, out);
   (void)char_id;
   (void)anim;
   (void)frame_u16;
@@ -1286,11 +1261,11 @@ static inline void normal_from_line(float x0, float y0, float x1, float y1, floa
                                     float* ny_out) {
   float nx = -(y1 - y0);
   float ny = x1 - x0;
-  const float len = sqrtf(nx * nx + ny * ny);
-  if (len > 0.0f) {
-    nx /= len;
-    ny /= len;
-  } else {
+  // The mpLib ceiling/wall projection helpers obtain this through mpLineGetNormal, which calls
+  // PSVECNormalize rather than host sqrt/division.
+  // refs/melee/src/melee/mp/mplib.c::{mpLineGetNormal,mpLib_8004E090_Ceiling,
+  //   mpLib_8004E398_LeftWall,mpLib_8004E684_RightWall}
+  if (!msl_psvec2_normalize(nx, ny, &nx, &ny)) {
     nx = 0.0f;
     ny = 1.0f;
   }
@@ -1690,6 +1665,22 @@ static uint8_t wall_sweep_check(uint32_t stage_id, const MslStageWallGraph* g, u
   return 1;
 }
 
+uint8_t msl_mplib_check_left_wall(uint32_t stage_id, const MslStageWallGraph* graph, float ax,
+                                  float ay, float bx, float by, int16_t joint_id_skip,
+                                  int16_t joint_id_only) {
+  int line_idx = -1;
+  return wall_sweep_check(stage_id, graph, 1u, ax, ay, bx, by, -1, 1u, &line_idx, NULL, NULL, NULL,
+                          NULL, joint_id_skip, joint_id_only);
+}
+
+uint8_t msl_mplib_check_right_wall(uint32_t stage_id, const MslStageWallGraph* graph, float ax,
+                                   float ay, float bx, float by, int16_t joint_id_skip,
+                                   int16_t joint_id_only) {
+  int line_idx = -1;
+  return wall_sweep_check(stage_id, graph, 0u, ax, ay, bx, by, -1, 1u, &line_idx, NULL, NULL, NULL,
+                          NULL, joint_id_skip, joint_id_only);
+}
+
 static inline void right_wall_envelope_consider(float cand_x, int line_idx,
                                                 const MslStageWallGraph* g, float* io_best_x,
                                                 int* io_best_line_idx, float* io_best_nx,
@@ -1916,9 +1907,23 @@ static inline void left_wall_candidate_add(MslWallCandidateList* out, const MslS
   }
 }
 
-static inline void wall_candidate_list_remove_connected(MslWallCandidateList* out,
-                                                        const MslStageWallGraph* g,
-                                                        int excluded_line_idx) {
+static inline uint8_t wall_candidate_list_contains_exact(const MslWallCandidateList* candidates,
+                                                         int line_idx) {
+  if (candidates == NULL || line_idx < 0) {
+    return 0u;
+  }
+  for (uint8_t i = 0u; i < candidates->count; i++) {
+    if (candidates->line_idx[i] == line_idx) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static inline void wall_candidate_list_remove_floor_chain(MslWallCandidateList* out,
+                                                          const MslStageWallGraph* g,
+                                                          int excluded_line_idx,
+                                                          int retained_exact_line_idx) {
   if (out == NULL || g == NULL || excluded_line_idx < 0) {
     return;
   }
@@ -1926,8 +1931,9 @@ static inline void wall_candidate_list_remove_connected(MslWallCandidateList* ou
   uint8_t removed_hug = 0u;
   for (uint8_t read = 0u; read < out->count; read++) {
     const int line_idx = out->line_idx[read];
-    if (line_idx == excluded_line_idx ||
-        wall_lines_connected_prev_next(g, line_idx, excluded_line_idx)) {
+    if (line_idx != retained_exact_line_idx &&
+        (line_idx == excluded_line_idx ||
+         wall_lines_connected_prev_next(g, line_idx, excluded_line_idx))) {
       removed_hug = 1u;
       continue;
     }
@@ -1939,6 +1945,52 @@ static inline void wall_candidate_list_remove_connected(MslWallCandidateList* ou
     out->first_ix = 0.0f;
     out->first_iy = 0.0f;
   }
+}
+
+static int landing_floor_release_lower_wall_line(const MslBatch* batch, size_t idx,
+                                                 const MslStageFloorGraph* fg,
+                                                 const MslStageWallGraph* wall_graph,
+                                                 uint32_t stage_id,
+                                                 const MslEcbWorldPoints* cur_ecb,
+                                                 uint8_t wall_side, int floor_adjacent_wall_idx) {
+  if (batch == NULL || fg == NULL || fg->lines == NULL || wall_graph == NULL ||
+      wall_graph->lines == NULL || cur_ecb == NULL || floor_adjacent_wall_idx < 0 ||
+      (size_t)floor_adjacent_wall_idx >= wall_graph->line_count ||
+      !action_uses_landing_floor_release_coll(batch->state.action_id[idx])) {
+    return -1;
+  }
+
+  const int floor_line_idx =
+      stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+  if (floor_line_idx < 0 || (size_t)floor_line_idx >= fg->line_count) {
+    return -1;
+  }
+  const MslStageFloorLine* source_line = &fg->lines[(size_t)floor_line_idx];
+  MslStageFloorLine world = {0};
+  if (source_line->is_ledge == 0u ||
+      !stage_collision_floor_line_world(batch, (int)(idx / (size_t)MSL_MAX_PLAYERS), source_line,
+                                        &world)) {
+    return -1;
+  }
+
+  const float stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
+  const uint8_t facing_right = batch->state.facing[idx] ? 1u : 0u;
+  int lower_wall_idx = -1;
+  if (wall_side == (uint8_t)MSL_WALL_LEFT &&
+      source_line->adjacent_left_wall == floor_adjacent_wall_idx && facing_right != 0u &&
+      stick_x < 0.75f && cur_ecb->left_x <= world.x0 && batch->state.pos_x[idx] <= world.x1) {
+    lower_wall_idx = wall_graph->lines[(size_t)floor_adjacent_wall_idx].prev;
+  } else if (wall_side == (uint8_t)MSL_WALL_RIGHT &&
+             source_line->adjacent_right_wall == floor_adjacent_wall_idx && facing_right == 0u &&
+             stick_x > -0.75f && cur_ecb->right_x >= world.x1 &&
+             batch->state.pos_x[idx] >= world.x0) {
+    lower_wall_idx = wall_graph->lines[(size_t)floor_adjacent_wall_idx].next;
+  }
+  if (lower_wall_idx < 0 || (size_t)lower_wall_idx >= wall_graph->line_count ||
+      wall_graph->lines[(size_t)lower_wall_idx].fighter_solid == 0u) {
+    return -1;
+  }
+  return lower_wall_idx;
 }
 
 static inline void right_wall_candidate_sweep(MslWallCandidateList* out, uint32_t stage_id,
@@ -1975,7 +2027,7 @@ static inline void left_wall_candidate_sweep(MslWallCandidateList* out, uint32_t
 static inline void right_wall_candidate_quad(MslWallCandidateList* out, const MslStageWallGraph* g,
                                              float prev_a_x, float prev_a_y, float prev_b_x,
                                              float prev_b_y, float cur_a_x, float cur_a_y,
-                                             float cur_b_x, float cur_b_y) {
+                                             float cur_b_x, float cur_b_y, int excluded_line_idx) {
   if (out == NULL || g == NULL || g->lines == NULL) {
     return;
   }
@@ -1998,7 +2050,7 @@ static inline void right_wall_candidate_quad(MslWallCandidateList* out, const Ms
 
   for (size_t li = 0; li < g->line_count; li++) {
     const MslStageWallLine* l = &g->lines[li];
-    if (!l->fighter_solid) {
+    if (!l->fighter_solid || (int)li == excluded_line_idx) {
       continue;
     }
     if (wall_line_outside_box(l, sweep_min_x, sweep_max_x, sweep_min_y, sweep_max_y)) {
@@ -2047,7 +2099,7 @@ static inline void right_wall_candidate_quad(MslWallCandidateList* out, const Ms
 static inline void left_wall_candidate_quad(MslWallCandidateList* out, const MslStageWallGraph* g,
                                             float prev_a_x, float prev_a_y, float prev_b_x,
                                             float prev_b_y, float cur_a_x, float cur_a_y,
-                                            float cur_b_x, float cur_b_y) {
+                                            float cur_b_x, float cur_b_y, int excluded_line_idx) {
   if (out == NULL || g == NULL || g->lines == NULL) {
     return;
   }
@@ -2068,7 +2120,7 @@ static inline void left_wall_candidate_quad(MslWallCandidateList* out, const Msl
 
   for (size_t li = 0; li < g->line_count; li++) {
     const MslStageWallLine* l = &g->lines[li];
-    if (!l->fighter_solid) {
+    if (!l->fighter_solid || (int)li == excluded_line_idx) {
       continue;
     }
     if (wall_line_outside_box(l, sweep_min_x, sweep_max_x, sweep_min_y, sweep_max_y)) {
@@ -2637,6 +2689,86 @@ static inline void ecb_points_rebuild_y(MslEcbWorldPoints* ecb, float root_y) {
   ecb->right_y = root_y + ecb->side_rel_y;
 }
 
+static uint8_t mpcoll_raw_adjacent_ceiling_from_wall(uint32_t stage_id, uint8_t wall_kind,
+                                                     uint16_t wall_id,
+                                                     uint16_t* ceiling_segment_i_out) {
+  if (ceiling_segment_i_out == NULL || wall_id == 0xFFFFu) {
+    return 0u;
+  }
+
+  // Source `mpColl_80044AD8_Ceiling` calls mpLineNextNonLeftWall for left walls and
+  // mpLinePrevNonRightWall for right walls. Keep this to that source-named direction: the opposite
+  // endpoint can be another valid shell neighbor, but it belongs to the other wall/ledge traversal
+  // and can over-publish ceiling push at ledge corners.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044AD8_Ceiling
+  // refs/melee/src/melee/mp/mplib.c::{mpLineNextNonLeftWall,mpLinePrevNonRightWall}
+  MslStageRawLineKind out_kind = MSL_STAGE_RAW_LINE_UNKNOWN;
+  uint16_t ceiling_segment_i = 0xFFFFu;
+  if (wall_kind == MSL_WALL_LEFT) {
+    if (stage_collision_raw_line_next_non_kind(stage_id, wall_id, MSL_STAGE_RAW_LINE_LEFT_WALL,
+                                               &out_kind, &ceiling_segment_i) &&
+        out_kind == MSL_STAGE_RAW_LINE_CEILING) {
+      *ceiling_segment_i_out = ceiling_segment_i;
+      return 1u;
+    }
+    return 0u;
+  }
+  if (wall_kind == MSL_WALL_RIGHT) {
+    if (stage_collision_raw_line_prev_non_kind(stage_id, wall_id, MSL_STAGE_RAW_LINE_RIGHT_WALL,
+                                               &out_kind, &ceiling_segment_i) &&
+        out_kind == MSL_STAGE_RAW_LINE_CEILING) {
+      *ceiling_segment_i_out = ceiling_segment_i;
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static int ceiling_e090_project_adjacent_wall(const MslStageCeilingGraph* g, int line_idx,
+                                              uint16_t wall_id, float x_in, float y_in,
+                                              float* y_out, float* nx_out, float* ny_out) {
+  const int out_line_idx = ceiling_e090_project(g, line_idx, x_in, y_in, y_out, nx_out, ny_out);
+  if (out_line_idx >= 0) {
+    return out_line_idx;
+  }
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return -1;
+  }
+  const MslStageCeilingLine* line = &g->lines[(size_t)line_idx];
+  if (!line->fighter_solid) {
+    return -1;
+  }
+
+  float endpoint_x = 0.0f;
+  float endpoint_y = 0.0f;
+  if (line->raw_prev_id == (int16_t)wall_id) {
+    endpoint_x = line->x0;
+    endpoint_y = line->y0;
+  } else if (line->raw_next_id == (int16_t)wall_id) {
+    endpoint_x = line->x1;
+    endpoint_y = line->y1;
+  } else {
+    return -1;
+  }
+  if (fabsf(x_in - endpoint_x) > k_ed5c_extend) {
+    return -1;
+  }
+
+  // Adjacent wall->ceiling source paths arrive through the raw MapLine neighbor, so the connected
+  // ceiling endpoint remains projectable beyond the generic 0.1 horizontal clamp. This mirrors the
+  // same source endpoint-extension distance used by mpLib_8004ED5C without broadening ordinary
+  // ceiling persistence/sweep projection.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044AD8_Ceiling
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004ED5C
+  if (y_out != NULL) {
+    *y_out = endpoint_y - y_in;
+  }
+  if (nx_out != NULL && ny_out != NULL) {
+    normal_from_line(line->x0, line->y0, line->x1, line->y1, nx_out, ny_out);
+  }
+  return line_idx;
+}
+
 static uint8_t ceiling_try_adjacent_from_air_wall(MslBatch* batch, size_t idx, uint32_t stage_id,
                                                   const MslStageCeilingGraph* cg,
                                                   const MslEcbWorldPoints* ceiling_ecb) {
@@ -2649,23 +2781,9 @@ static uint8_t ceiling_try_adjacent_from_air_wall(MslBatch* batch, size_t idx, u
   // This catches underside shell corners even when the direct top-point sweep misses the ceiling
   // segment itself.
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044AD8_Ceiling
-  MslStageRawLineKind out_kind = MSL_STAGE_RAW_LINE_UNKNOWN;
   uint16_t ceiling_segment_i = 0xFFFFu;
-  if (batch->state.wall_kind[idx] == MSL_WALL_LEFT) {
-    if (!stage_collision_raw_line_next_non_kind(stage_id, batch->state.wall_id[idx],
-                                                MSL_STAGE_RAW_LINE_LEFT_WALL, &out_kind,
-                                                &ceiling_segment_i) ||
-        out_kind != MSL_STAGE_RAW_LINE_CEILING) {
-      return 0u;
-    }
-  } else if (batch->state.wall_kind[idx] == MSL_WALL_RIGHT) {
-    if (!stage_collision_raw_line_prev_non_kind(stage_id, batch->state.wall_id[idx],
-                                                MSL_STAGE_RAW_LINE_RIGHT_WALL, &out_kind,
-                                                &ceiling_segment_i) ||
-        out_kind != MSL_STAGE_RAW_LINE_CEILING) {
-      return 0u;
-    }
-  } else {
+  if (!mpcoll_raw_adjacent_ceiling_from_wall(stage_id, batch->state.wall_kind[idx],
+                                             batch->state.wall_id[idx], &ceiling_segment_i)) {
     return 0u;
   }
 
@@ -2678,8 +2796,8 @@ static uint8_t ceiling_try_adjacent_from_air_wall(MslBatch* batch, size_t idx, u
   float y_corr = 0.0f;
   float nx = 0.0f;
   float ny = -1.0f;
-  const int out_line_idx =
-      ceiling_e090_project(cg, ceiling_line_idx, cur_tx, cur_ty, &y_corr, &nx, &ny);
+  const int out_line_idx = ceiling_e090_project_adjacent_wall(
+      cg, ceiling_line_idx, batch->state.wall_id[idx], cur_tx, cur_ty, &y_corr, &nx, &ny);
   if (out_line_idx < 0 || !(y_corr < 0.0f)) {
     return 0u;
   }
@@ -2749,38 +2867,6 @@ static void mpcoll_squeeze_vertical(MslBatch* batch, size_t idx, MslEcbWorldPoin
   ecb_points_rebuild_y(cur_ecb, batch->state.pos_y[idx]);
 }
 
-static inline void ecb_points_apply_inline_horizontal_normalization(const MslBatch* batch,
-                                                                    size_t idx,
-                                                                    MslEcbWorldPoints* ecb) {
-  if (batch == NULL || ecb == NULL) {
-    return;
-  }
-  // Grounded ordered helpers consume the same CollData ECB loaded by mpColl_LoadECB_inline as the
-  // standalone wall/ceiling pass: narrow horizontal spans are recentered, then clamped to the
-  // source +/-2 minimum. `ecb->bottom_x` is the fighter root X because desired_ecb.bottom.x is 0.
-  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_LoadECB_JObj}
-  float left_rel_x = ecb->left_rel_x;
-  float right_rel_x = ecb->right_rel_x;
-  const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
-  const float ecb_width = fabsf(right_rel_x - left_rel_x);
-  if (ecb_width < min_ecb_width) {
-    const float half_width = 0.5f * ecb_width;
-    left_rel_x = -half_width;
-    right_rel_x = half_width;
-  }
-  if (right_rel_x < 2.0f) {
-    right_rel_x = 2.0f;
-  }
-  if (left_rel_x > -2.0f) {
-    left_rel_x = -2.0f;
-  }
-  const float root_x = ecb->bottom_x;
-  ecb->left_rel_x = left_rel_x;
-  ecb->right_rel_x = right_rel_x;
-  ecb->left_x = root_x + left_rel_x;
-  ecb->right_x = root_x + right_rel_x;
-}
-
 static uint8_t grounded_ordered_left_wall(MslBatch* batch, size_t idx, const MslStageFloorGraph* fg,
                                           const MslStageWallGraph* lwg,
                                           const MslEcbWorldPoints* prev_ecb,
@@ -2823,14 +2909,26 @@ static uint8_t grounded_ordered_left_wall(MslBatch* batch, size_t idx, const Msl
                             joint_id_skip, joint_id_only);
   left_wall_candidate_quad(&candidates, lwg, prev_ecb->bottom_x, prev_ecb->bottom_y,
                            prev_ecb->right_x, prev_ecb->right_y, cur_ecb->bottom_x,
-                           cur_ecb->bottom_y, cur_ecb->right_x, cur_ecb->right_y);
+                           cur_ecb->bottom_y, cur_ecb->right_x, cur_ecb->right_y,
+                           excluded_floor_wall);
   left_wall_candidate_sweep(&candidates, stage_id, lwg, cur_ecb->top_x, cur_ecb->top_y,
                             cur_ecb->right_x, cur_ecb->right_y, -1, 0u, -1, joint_id_skip,
                             joint_id_only);
   left_wall_candidate_quad(&candidates, lwg, prev_ecb->right_x, prev_ecb->right_y, prev_ecb->top_x,
                            prev_ecb->top_y, cur_ecb->right_x, cur_ecb->right_y, cur_ecb->top_x,
-                           cur_ecb->top_y);
-  wall_candidate_list_remove_connected(&candidates, lwg, excluded_floor_wall);
+                           cur_ecb->top_y, -1);
+  int retained_lower_wall = landing_floor_release_lower_wall_line(
+      batch, idx, fg, lwg, stage_id, cur_ecb, (uint8_t)MSL_WALL_LEFT, excluded_floor_wall);
+  if (!wall_candidate_list_contains_exact(&candidates, retained_lower_wall)) {
+    retained_lower_wall = -1;
+  }
+  // The compact candidate set deduplicates connected MapLines just like mpColl's source array.
+  // Preserve a lower wall only when a normal probe actually collected that exact line; nearby
+  // floor-adjacent geometry is not permission to substitute a connected segment.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80049778_LeftWall
+  // refs/melee/src/melee/mp/mplib.c::{mpLib_80053448_Floor,mpLib_800534FC_Floor}
+  wall_candidate_list_remove_floor_chain(&candidates, lwg, excluded_floor_wall,
+                                         retained_lower_wall);
   mpcoll_wall_probe_note_candidates(batch, idx, (uint8_t)MSL_WALL_LEFT, candidates.count);
 
   float envelope_x = 0.0f;
@@ -2930,16 +3028,24 @@ static uint8_t grounded_ordered_right_wall(MslBatch* batch, size_t idx,
   right_wall_candidate_sweep(&candidates, stage_id, rwg, cur_ecb->bottom_x, cur_ecb->bottom_y,
                              cur_ecb->left_x, cur_ecb->left_y, -1, 0u, excluded_floor_wall,
                              joint_id_skip, joint_id_only);
-  right_wall_candidate_quad(&candidates, rwg, prev_ecb->bottom_x, prev_ecb->bottom_y,
-                            prev_ecb->left_x, prev_ecb->left_y, cur_ecb->bottom_x,
-                            cur_ecb->bottom_y, cur_ecb->left_x, cur_ecb->left_y);
+  right_wall_candidate_quad(
+      &candidates, rwg, prev_ecb->bottom_x, prev_ecb->bottom_y, prev_ecb->left_x, prev_ecb->left_y,
+      cur_ecb->bottom_x, cur_ecb->bottom_y, cur_ecb->left_x, cur_ecb->left_y, excluded_floor_wall);
   right_wall_candidate_sweep(&candidates, stage_id, rwg, cur_ecb->top_x, cur_ecb->top_y,
                              cur_ecb->left_x, cur_ecb->left_y, -1, 0u, -1, joint_id_skip,
                              joint_id_only);
   right_wall_candidate_quad(&candidates, rwg, prev_ecb->left_x, prev_ecb->left_y, prev_ecb->top_x,
                             prev_ecb->top_y, cur_ecb->left_x, cur_ecb->left_y, cur_ecb->top_x,
-                            cur_ecb->top_y);
-  wall_candidate_list_remove_connected(&candidates, rwg, excluded_floor_wall);
+                            cur_ecb->top_y, -1);
+  int retained_lower_wall = landing_floor_release_lower_wall_line(
+      batch, idx, fg, rwg, stage_id, cur_ecb, (uint8_t)MSL_WALL_RIGHT, excluded_floor_wall);
+  if (!wall_candidate_list_contains_exact(&candidates, retained_lower_wall)) {
+    retained_lower_wall = -1;
+  }
+  wall_candidate_list_remove_floor_chain(&candidates, rwg, excluded_floor_wall,
+                                         retained_lower_wall);
+  // Symmetric probe-local exclusions are owned by `mpColl_80048AB0_RightWall`.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80048AB0_RightWall
   mpcoll_wall_probe_note_candidates(batch, idx, (uint8_t)MSL_WALL_RIGHT, candidates.count);
 
   float envelope_x = 0.0f;
@@ -3034,22 +3140,17 @@ uint8_t mpcoll_grounded_ceiling_ordered_retry(const MslMpcollContext* ctx,
     // Source `mpColl_80044AD8_Ceiling`: when the direct top sweep misses, same-frame wall side
     // bits can walk the raw MapLine graph from the contacted wall to an adjacent ceiling.
     // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044AD8_Ceiling
-    MslStageRawLineKind out_kind = MSL_STAGE_RAW_LINE_UNKNOWN;
     uint16_t ceiling_segment_i = 0xFFFFu;
-    if ((io->left_right_flags & 1u) != 0u && io->left_wall_id != 0xFFFFu &&
-        stage_collision_raw_line_next_non_kind(stage_id, io->left_wall_id,
-                                               MSL_STAGE_RAW_LINE_LEFT_WALL, &out_kind,
-                                               &ceiling_segment_i) &&
-        out_kind == MSL_STAGE_RAW_LINE_CEILING) {
+    if ((io->left_right_flags & 1u) != 0u &&
+        mpcoll_raw_adjacent_ceiling_from_wall(stage_id, MSL_WALL_LEFT, io->left_wall_id,
+                                              &ceiling_segment_i)) {
       hit_line_idx = stage_collision_ceiling_line_index(stage_id, ceiling_segment_i);
       hit_ceiling = (hit_line_idx >= 0) ? 1u : 0u;
       ix = cur_ecb->top_x;
       iy = cur_ecb->top_y;
-    } else if ((io->left_right_flags & 2u) != 0u && io->right_wall_id != 0xFFFFu &&
-               stage_collision_raw_line_prev_non_kind(stage_id, io->right_wall_id,
-                                                      MSL_STAGE_RAW_LINE_RIGHT_WALL, &out_kind,
-                                                      &ceiling_segment_i) &&
-               out_kind == MSL_STAGE_RAW_LINE_CEILING) {
+    } else if ((io->left_right_flags & 2u) != 0u &&
+               mpcoll_raw_adjacent_ceiling_from_wall(stage_id, MSL_WALL_RIGHT, io->right_wall_id,
+                                                     &ceiling_segment_i)) {
       hit_line_idx = stage_collision_ceiling_line_index(stage_id, ceiling_segment_i);
       hit_ceiling = (hit_line_idx >= 0) ? 1u : 0u;
       ix = cur_ecb->top_x;
@@ -3134,8 +3235,8 @@ void mpcoll_grounded_wall_ceil_ordered_begin(const MslMpcollContext* ctx,
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004ACE4
   MslEcbWorldPoints cur = *cur_ecb;
   MslEcbWorldPoints prev = *prev_ecb;
-  ecb_points_apply_inline_horizontal_normalization(batch, idx, &cur);
-  ecb_points_apply_inline_horizontal_normalization(batch, idx, &prev);
+  mpcoll_ecb_points_apply_jobj_horizontal_normalization(batch, idx, &cur);
+  mpcoll_ecb_points_apply_jobj_horizontal_normalization(batch, idx, &prev);
   if (swept_ecb_side_outside_wall_graph(lwg, prev.right_x, prev.right_y, cur.right_x, cur.right_y,
                                         prev.bottom_x, prev.bottom_y, cur.bottom_x, cur.bottom_y,
                                         prev.top_x, prev.top_y, cur.top_x, cur.top_y) &&
@@ -3211,6 +3312,9 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
 
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      if (!grab_attachment_map_callback_runs(batch, idx)) {
+        continue;
+      }
       mpcoll_wall_probe_clear(batch, idx);
       MslMpcollContext ctx = mpcoll_context_make(batch, bi, idx, stage_id, fg, cg, lwg, rwg);
       const uint16_t action_id = ctx.action_id;
@@ -3424,6 +3528,24 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       MslEcbWorldPoints prev_specialhi_wall_ecb = prev_ecb;
       const uint8_t use_common_air_walljump_callback =
           mpcoll_action_uses_common_air_walljump_callback(action_id);
+      const uint8_t passivewall_timer_collision =
+          (uint8_t)((action_id == (uint16_t)MSL_ACT_PASSIVE_WALL ||
+                     action_id == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
+                    batch->state.passivewall_timer[idx] != 0u);
+      if (passivewall_timer_collision) {
+        // ftCo_PassiveWall_Coll selects ft_80083318 while its startup timer is active. That wrapper
+        // still runs inline1 collision, but mpColl_80047F40 loads JObj ECB flags 0xA; bit 0x8
+        // forces the desired horizontal extent to [-1,+1]. Keep the full pass and use that source
+        // shape instead of suppressing wall/ceiling publication for the whole callback.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80083318
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047F40,mpColl_LoadECB_JObj}
+        cur_ecb.left_rel_x = -1.0f;
+        cur_ecb.right_rel_x = 1.0f;
+        ecb_points_rebuild_x(&cur_ecb, batch->state.pos_x[idx]);
+        cur_right_ecb = cur_ecb;
+        cur_specialhi_wall_ecb = cur_ecb;
+      }
       if (specialhi_launch_uses_runtime_xrotn_ecb(char_id, action_id)) {
         // SpecialHi uses a live JObj ECB source while the launch model rotates around XRotN.
         // The same sampled CollData.ecb feeds both wall sides; the right-wall path below was the
@@ -3599,10 +3721,11 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                                     left_cur_ecb->bottom_y, left_cur_ecb->right_x,
                                     left_cur_ecb->right_y, prefer_line_idx, 0u,
                                     grounded_left_floor_adj_line_idx, joint_id_skip, joint_id_only);
-          left_wall_candidate_quad(
-              &candidates, lwg, left_prev_ecb->bottom_x, left_prev_ecb->bottom_y,
-              left_prev_ecb->right_x, left_prev_ecb->right_y, left_cur_ecb->bottom_x,
-              left_cur_ecb->bottom_y, left_cur_ecb->right_x, left_cur_ecb->right_y);
+          left_wall_candidate_quad(&candidates, lwg, left_prev_ecb->bottom_x,
+                                   left_prev_ecb->bottom_y, left_prev_ecb->right_x,
+                                   left_prev_ecb->right_y, left_cur_ecb->bottom_x,
+                                   left_cur_ecb->bottom_y, left_cur_ecb->right_x,
+                                   left_cur_ecb->right_y, grounded_left_floor_adj_line_idx);
           left_wall_candidate_sweep(&candidates, stage_id, lwg, left_cur_ecb->top_x,
                                     left_cur_ecb->top_y, left_cur_ecb->right_x,
                                     left_cur_ecb->right_y, prefer_line_idx, 0u, -1, joint_id_skip,
@@ -3610,7 +3733,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           left_wall_candidate_quad(&candidates, lwg, left_prev_ecb->right_x, left_prev_ecb->right_y,
                                    left_prev_ecb->top_x, left_prev_ecb->top_y,
                                    left_cur_ecb->right_x, left_cur_ecb->right_y,
-                                   left_cur_ecb->top_x, left_cur_ecb->top_y);
+                                   left_cur_ecb->top_x, left_cur_ecb->top_y, -1);
 
           mpcoll_wall_probe_note_candidates(batch, idx, (uint8_t)MSL_WALL_LEFT, candidates.count);
           float envelope_x = 0.0f;
@@ -4216,10 +4339,11 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               &candidates, stage_id, rwg, right_cur_ecb->bottom_x, right_cur_ecb->bottom_y,
               right_cur_ecb->left_x, right_cur_ecb->left_y, prefer_line_idx, 0u,
               grounded_right_floor_adj_line_idx, joint_id_skip, joint_id_only);
-          right_wall_candidate_quad(
-              &candidates, rwg, right_prev_ecb->bottom_x, right_prev_ecb->bottom_y,
-              right_prev_ecb->left_x, right_prev_ecb->left_y, right_cur_ecb->bottom_x,
-              right_cur_ecb->bottom_y, right_cur_ecb->left_x, right_cur_ecb->left_y);
+          right_wall_candidate_quad(&candidates, rwg, right_prev_ecb->bottom_x,
+                                    right_prev_ecb->bottom_y, right_prev_ecb->left_x,
+                                    right_prev_ecb->left_y, right_cur_ecb->bottom_x,
+                                    right_cur_ecb->bottom_y, right_cur_ecb->left_x,
+                                    right_cur_ecb->left_y, grounded_right_floor_adj_line_idx);
           right_wall_candidate_sweep(&candidates, stage_id, rwg, right_cur_ecb->top_x,
                                      right_cur_ecb->top_y, right_cur_ecb->left_x,
                                      right_cur_ecb->left_y, prefer_line_idx, 0u, -1, joint_id_skip,
@@ -4227,7 +4351,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           right_wall_candidate_quad(
               &candidates, rwg, right_prev_ecb->left_x, right_prev_ecb->left_y,
               right_prev_ecb->top_x, right_prev_ecb->top_y, right_cur_ecb->left_x,
-              right_cur_ecb->left_y, right_cur_ecb->top_x, right_cur_ecb->top_y);
+              right_cur_ecb->left_y, right_cur_ecb->top_x, right_cur_ecb->top_y, -1);
 
           mpcoll_wall_probe_note_candidates(batch, idx, (uint8_t)MSL_WALL_RIGHT, candidates.count);
           float envelope_x = 0.0f;

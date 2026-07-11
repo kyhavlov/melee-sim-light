@@ -41,6 +41,8 @@ void mpcoll_bottom_world_point_from_rel(MslEcbBottomWorldPoint* out, float pos_x
 void mpcoll_ecb_world_points_from_rel(MslEcbWorldPoints* out, float pos_x, float pos_y,
                                       float bottom_rel_y, float top_rel_y, float left_rel_x,
                                       float right_rel_x, float side_rel_y, uint16_t frame_u16);
+void mpcoll_ecb_points_apply_jobj_horizontal_normalization(const MslBatch* batch, size_t idx,
+                                                           MslEcbWorldPoints* ecb);
 
 uint8_t mpcoll_state_current_ecb_points(const MslBatch* batch, size_t idx, MslEcbWorldPoints* out,
                                         float pos_x, float pos_y, uint16_t frame_u16);

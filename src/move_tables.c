@@ -43,6 +43,13 @@ typedef struct MslMoveTableCache {
   uint8_t cmd_var_value1_pulse_count[MSL_MOVE_TABLE_CMD_VAR_COUNT];
   uint16_t cmd_var_value0_pulses[MSL_MOVE_TABLE_CMD_VAR_COUNT][MSL_MOVE_TABLE_PULSE_CAP];
   uint8_t cmd_var_value0_pulse_count[MSL_MOVE_TABLE_CMD_VAR_COUNT];
+  // Every set_cmd_var pulse with its raw u8 value, in script order. The boolean value1/value0
+  // lanes above cannot represent multi-valued vars (Falcon SpecialAirN cmd1 steps 0->1->2);
+  // move_tables_special_cmd_var_u8_value_at_frame() consumes this lane instead.
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Phys
+  uint16_t cmd_var_valueu8_pulse_frames[MSL_MOVE_TABLE_CMD_VAR_COUNT][MSL_MOVE_TABLE_PULSE_CAP];
+  uint8_t cmd_var_valueu8_pulse_values[MSL_MOVE_TABLE_CMD_VAR_COUNT][MSL_MOVE_TABLE_PULSE_CAP];
+  uint8_t cmd_var_valueu8_pulse_count[MSL_MOVE_TABLE_CMD_VAR_COUNT];
   uint16_t throw_flags_pulses[MSL_MOVE_TABLE_THROW_HITBOX_CAP][MSL_MOVE_TABLE_PULSE_CAP];
   uint8_t throw_flags_pulse_count[MSL_MOVE_TABLE_THROW_HITBOX_CAP];
   uint16_t projectile_pulses[MSL_MOVE_TABLE_PULSE_CAP];
@@ -178,6 +185,16 @@ static void move_cache_build_for_msid(uint8_t char_id, uint16_t msid, MslMoveTab
             add_unique_pulse(cache->cmd_var_value0_pulses[idx],
                              &cache->cmd_var_value0_pulse_count[idx],
                              (uint8_t)MSL_MOVE_TABLE_PULSE_CAP, ev->frame);
+          }
+          // Raw-value lane (multi-valued vars): every pulse in script order, including values
+          // the boolean lanes cannot represent. Frame-0 value-0 entry initializers are dropped
+          // (the accessor's default is 0).
+          if ((ev->payload.cmd_var.value != 0u || ev->frame > 0u) &&
+              cache->cmd_var_valueu8_pulse_count[idx] < (uint8_t)MSL_MOVE_TABLE_PULSE_CAP) {
+            const uint8_t n = cache->cmd_var_valueu8_pulse_count[idx];
+            cache->cmd_var_valueu8_pulse_frames[idx][n] = ev->frame;
+            cache->cmd_var_valueu8_pulse_values[idx][n] = ev->payload.cmd_var.value;
+            cache->cmd_var_valueu8_pulse_count[idx] = (uint8_t)(n + 1u);
           }
         }
         break;
@@ -733,6 +750,11 @@ uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
   return 0u;
 }
 
+uint8_t move_tables_special_allow_interrupt_at_frame(uint8_t char_id, uint16_t msid,
+                                                     float cur_anim_frame_f32) {
+  return allow_interrupt_active(char_id, msid, cur_anim_frame_f32);
+}
+
 uint8_t move_tables_escapeair_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {
   return cmd_var_active(char_id, (uint16_t)MSL_SM_ESCAPE_AIR, 0u, 1u, cur_anim_frame_f32);
 }
@@ -986,6 +1008,29 @@ uint8_t move_tables_special_cmd_var_value_at_frame(uint8_t char_id, uint16_t msi
   return (last_on >= 0 && last_on >= last_off) ? 1u : 0u;
 }
 
+uint8_t move_tables_special_cmd_var_u8_value_at_frame(uint8_t char_id, uint16_t msid,
+                                                      uint8_t var_idx, float anim_frame_f32) {
+  // Raw script-owned cmd var value at a frame: the value of the latest set_cmd_var pulse at or
+  // before the frame (script order breaks same-frame ties; 0 before any pulse). Unlike the
+  // boolean helper above, this supports multi-valued vars such as Falcon SpecialAirN cmd1
+  // (0 -> 1 @50 -> 2 @65).
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Phys
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || var_idx >= (uint8_t)MSL_MOVE_TABLE_CMD_VAR_COUNT) {
+    return 0u;
+  }
+  int best_frame = -1;
+  uint8_t value = 0u;
+  for (uint8_t i = 0; i < cache->cmd_var_valueu8_pulse_count[var_idx]; i++) {
+    const int f = (int)cache->cmd_var_valueu8_pulse_frames[var_idx][i];
+    if ((float)f <= anim_frame_f32 && f >= best_frame) {
+      best_frame = f;
+      value = cache->cmd_var_valueu8_pulse_values[var_idx][i];
+    }
+  }
+  return value;
+}
+
 uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {
   return cmd_var_active(char_id, (uint16_t)MSL_SM_DASH, 0u, 1u, cur_anim_frame_f32);
 }
@@ -1029,6 +1074,27 @@ uint8_t move_tables_throw_has_release(uint8_t char_id, uint16_t throw_action_id)
   return (cache != NULL && cache->throw_flags_hit[0].loaded) ? 1u : 0u;
 }
 
+uint8_t move_tables_throw_release_is_first_timed_flag_event(uint8_t char_id,
+                                                            uint16_t throw_action_id) {
+  // 1 iff the set_throw_flags release (hit idx 0) is not preceded by the facing-flip flag event
+  // (hit idx 1). The movescript wait timer re-anchors at every executed event
+  // (ftAction_800718A4 async timers), so the release-edge f32 timer chain reconstruction in
+  // throw_flow.c is exact only when the release is the script's first timed flag event.
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80073354,ftAction_800718A4}
+  uint16_t msid = 0;
+  if (!throw_msid_from_action(throw_action_id, &msid)) {
+    return 0u;
+  }
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || !cache->throw_flags_hit[0].loaded) {
+    return 0u;
+  }
+  return (!cache->throw_flags_hit[1].loaded ||
+          cache->throw_flags_hit[1].start_af >= cache->throw_flags_hit[0].start_af)
+             ? 1u
+             : 0u;
+}
+
 uint8_t move_tables_throw_release_frame(uint8_t char_id, uint16_t throw_action_id,
                                         float* out_release_af) {
   if (out_release_af == NULL) {
@@ -1069,7 +1135,14 @@ uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_i
     return 0u;
   }
   uint16_t msid = 0;
-  if (!throw_msid_from_action(throw_action_id, &msid)) {
+  if (char_id == (uint8_t)MSL_CHAR_ID_FALCON &&
+      throw_action_id == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW) {
+    // Falcon Dive release: doCatchAnim enters SpecialHiThrow (msid 310) whose frame-0 script
+    // writes the set_throw_hitbox idx=0 release data the ftCo_800DDDE4 owner applies.
+    // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doCatchAnim
+    // data/moves/falcon.json::specials_by_msid.310 set_throw_hitbox(idx=0)@0
+    msid = 310u;
+  } else if (!throw_msid_from_action(throw_action_id, &msid)) {
     return 0u;
   }
   const MslMoveTableCache* cache = move_cache_get(char_id, msid);
@@ -1078,6 +1151,31 @@ uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_i
     return 0u;
   }
   *out = cache->throw_hitboxes[hit_idx].params;
+  return 1u;
+}
+
+uint8_t move_tables_falcon_dive_capture_break_hitbox_params(MslThrowHitboxParams* out) {
+  if (out == NULL) {
+    return 0u;
+  }
+  // Ground and air SpecialHi scripts install the same xDF4[1] payload. Require that parity at the
+  // runtime table boundary instead of silently choosing one row if generated data drifts.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c::ftCo_800DCFD4
+  // data/moves/falcon.json::specials_by_msid.307.events set_throw_hitbox(idx=1)
+  const MslMoveTableCache* ground = move_cache_get((uint8_t)MSL_CHAR_ID_FALCON, 307u);
+  const MslMoveTableCache* air = move_cache_get((uint8_t)MSL_CHAR_ID_FALCON, 308u);
+  if (ground == NULL || air == NULL || !ground->throw_hitboxes[1].loaded ||
+      !air->throw_hitboxes[1].loaded) {
+    return 0u;
+  }
+  const MslThrowHitboxParams* gp = &ground->throw_hitboxes[1].params;
+  const MslThrowHitboxParams* ap = &air->throw_hitboxes[1].params;
+  if (gp->damage != ap->damage || gp->angle != ap->angle || gp->kbg != ap->kbg ||
+      gp->wsk != ap->wsk || gp->bkb != ap->bkb || gp->element != ap->element ||
+      gp->sfx_kind != ap->sfx_kind || gp->sfx_severity != ap->sfx_severity) {
+    return 0u;
+  }
+  *out = *gp;
   return 1u;
 }
 

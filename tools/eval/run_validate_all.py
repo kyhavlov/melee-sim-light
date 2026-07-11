@@ -33,6 +33,7 @@ def main() -> None:
     ap.add_argument("--suite", required=True)
     ap.add_argument("--agg-suite", required=True)
     ap.add_argument("--doubles-suite", default="")
+    ap.add_argument("--falcon-suite", default="")
     ap.add_argument("--sheik-suite", default="")
     ap.add_argument("--chunk", type=int, default=64)
     ap.add_argument("--profile", default="rl1_gameplay", choices=validation_profile_names())
@@ -44,6 +45,8 @@ def main() -> None:
     ap.add_argument("--agg-rollout-out", default="reports/validation/aggregate_recent_rollout_suite_eval.txt")
     ap.add_argument("--doubles-one-step-out", default="reports/validation/doubles_recent_one_step_suite_eval.txt")
     ap.add_argument("--doubles-rollout-out", default="reports/validation/doubles_recent_rollout_suite_eval.txt")
+    ap.add_argument("--falcon-one-step-out", default="reports/validation/falcon_one_step.txt")
+    ap.add_argument("--falcon-rollout-out", default="reports/validation/falcon_rollout.txt")
     ap.add_argument("--sheik-one-step-out", default="reports/validation/sheik_one_step.txt")
     ap.add_argument("--sheik-rollout-out", default="reports/validation/sheik_rollout.txt")
     ap.add_argument("--workers", type=int, default=0, help="Parallel replay workers (0 = auto, capped at 16).")
@@ -64,6 +67,8 @@ def main() -> None:
     ]
     if args.sheik_suite:
         suite_specs.append((args.sheik_suite, args.sheik_one_step_out, args.sheik_rollout_out))
+    if args.falcon_suite:
+        suite_specs.append((args.falcon_suite, args.falcon_one_step_out, args.falcon_rollout_out))
     if args.doubles_suite:
         suite_specs.append((args.doubles_suite, args.doubles_one_step_out, args.doubles_rollout_out))
 

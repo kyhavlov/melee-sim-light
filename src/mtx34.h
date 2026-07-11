@@ -15,7 +15,7 @@ extern "C" {
 //       (m20 m21 m22 tz)   (z)
 //
 // Notes:
-// - This matches the SSANIM01 v4 pose matrix layout used by anim_pose_get_matrix(...).
+// - This matches the SSANIM01 v5 pose matrix layout used by anim_pose_get_matrix(...).
 // - Keep this inlined: hitbox/hurtcap refresh is on the per-frame hot path.
 static inline void msl_mtx34_mul_point(const float m[12], const float v[3], float* out_x,
                                        float* out_y, float* out_z) {

@@ -44,13 +44,13 @@ def _create_hitbox_event(frame: int, hitbox_id: int, damage: float) -> dict:
     }
 
 
-def _write_repeated_ssanim_v4(
+def _write_repeated_ssanim_v5(
     path: Path, *, msid: int, part_id: int, frame_count: int, mtx34: list[float]
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     buf = bytearray()
     buf += b"SSANIM01"
-    buf += struct.pack("<IHH", 4, 1, 1)
+    buf += struct.pack("<IHH", 5, 1, 1)
     buf += struct.pack("<B", int(part_id) & 0xFF)
     buf += struct.pack("<HH", int(msid) & 0xFFFF, int(frame_count) & 0xFFFF)
     for _ in range(frame_count):
@@ -101,6 +101,18 @@ def test_mslftsc1_encodes_set_hitbox_damage_payload() -> None:
     assert decoded["damage"] == 7.0
 
 
+def test_mslftsc1_encodes_set_hitbox_interaction_payload() -> None:
+    payload = _encode_payload("set_hitbox_interaction", {"idx": 2, "type": 0, "value": 0})
+
+    assert EVENT_IDS["set_hitbox_interaction"] == 4
+    assert len(payload) == 4
+    assert _decode_script_payload(EVENT_IDS["set_hitbox_interaction"], payload) == {
+        "idx": 2,
+        "type": 0,
+        "value": 0,
+    }
+
+
 def test_mslhitb1_folds_set_hitbox_damage_into_active_slot_record() -> None:
     records = _records_from_events(
         [
@@ -118,6 +130,34 @@ def test_mslhitb1_folds_set_hitbox_damage_into_active_slot_record() -> None:
     ]
     assert math.isclose(records[1].radius, records[0].radius)
     assert records[1].u16_tail == records[0].u16_tail
+
+
+def test_mslhitb1_folds_set_hitbox_interaction_into_active_slot_record() -> None:
+    records = _records_from_events(
+        [
+            _create_hitbox_event(frame=3, hitbox_id=2, damage=4.0),
+            {
+                "frame": 6,
+                "kind": "set_hitbox_interaction",
+                "data": {"idx": 2, "type": 0, "value": 0},
+            },
+            {
+                "frame": 7,
+                "kind": "set_hitbox_interaction",
+                "data": {"idx": 2, "type": 1, "value": 0},
+            },
+        ]
+    )
+
+    assert [(r.frame, r.kind, r.hitbox_id) for r in records] == [(3, 0, 2), (6, 3, 2), (7, 3, 2)]
+    create_flags = records[0].u16_tail[6]
+    fighter_off_flags = records[1].u16_tail[6]
+    both_off_flags = records[2].u16_tail[6]
+    assert create_flags & 0b111 == 0b111
+    assert fighter_off_flags & 0b111 == 0b110
+    assert both_off_flags & 0b111 == 0b100
+    assert records[1].damage == records[0].damage
+    assert records[1].radius == records[0].radius
 
 
 def test_runtime_set_hitbox_damage_does_not_create_edge() -> None:
@@ -138,8 +178,8 @@ def test_runtime_set_hitbox_damage_does_not_create_edge() -> None:
         _populate_data_dir(data_dir, exclude=exclude)
 
         ident = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
-        _write_repeated_ssanim_v4(data_dir / "anims/fox.bin", msid=0, part_id=0, frame_count=8, mtx34=ident)
-        _write_repeated_ssanim_v4(data_dir / "anims/falco.bin", msid=0, part_id=0, frame_count=8, mtx34=ident)
+        _write_repeated_ssanim_v5(data_dir / "anims/fox.bin", msid=0, part_id=0, frame_count=8, mtx34=ident)
+        _write_repeated_ssanim_v5(data_dir / "anims/falco.bin", msid=0, part_id=0, frame_count=8, mtx34=ident)
 
         records = [
             {
@@ -170,6 +210,22 @@ def test_runtime_set_hitbox_damage_does_not_create_edge() -> None:
                 "u16_0": 45,
                 "u16_1": 100,
                 "u16_3": 30,
+                "u16_7": 1 << 8,
+            },
+            {
+                "frame": 7,
+                "kind": 3,
+                "hitbox_id": 0,
+                "bone_part_id": 0,
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "radius": 4.0,
+                "damage": 9.0,
+                "u16_0": 45,
+                "u16_1": 100,
+                "u16_3": 30,
+                "u16_6": (1 << 2) | (1 << 1) | (1 << 10),
                 "u16_7": 1 << 8,
             },
         ]
@@ -211,6 +267,15 @@ def test_runtime_set_hitbox_damage_does_not_create_edge() -> None:
 
                 hitboxes, count = msl_binding.hitboxes_world(handle, 0, 0)
                 timing_raw = msl_binding.debug_hitbox_event_timing(handle, 0, 0, 0)
+
+                seed["action_frame"][0, :2] = np.int16(7)
+                seed["anim_frame_f32"][0, :2] = np.float32(7.0)
+                msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+                msl_binding.step_input(handle, prev_inp, inp)
+                interaction_hitboxes, interaction_count = msl_binding.hitboxes_world_full(
+                    handle, 0, 0
+                )
+                interaction_timing_raw = msl_binding.debug_hitbox_event_timing(handle, 0, 0, 0)
             finally:
                 msl_binding.destroy(handle)
         finally:
@@ -230,14 +295,25 @@ def test_runtime_set_hitbox_damage_does_not_create_edge() -> None:
     assert int(timing["enable_edge"]) == 0
     assert int(timing["last_affect_kind_eq"]) == 2
 
+    interaction_timing = interaction_timing_raw.reshape(-1).view(_DEBUG_HITBOX_EVENT_TIMING_DTYPE)[0]
+    assert int(interaction_count) == 1
+    assert int(interaction_hitboxes[0, 13]) & 0b111 == 0b110
+    assert int(interaction_timing["enabled_prev"]) == 1
+    assert int(interaction_timing["enabled_cur"]) == 1
+    assert int(interaction_timing["start_frame"]) == 3
+    assert int(interaction_timing["pose_create_count"]) == 0
+    assert int(interaction_timing["enable_edge"]) == 0
+    assert int(interaction_timing["last_affect_kind_eq"]) == 3
+
 
 def test_generated_script_manifests_have_no_runtime_owner_unsupported_events() -> None:
     root = Path(__file__).resolve().parents[1]
-    allowed_deferred = {"set_hitbox_size", "set_hitbox_interaction", "remove_hitbox"}
-    for char in ("fox", "falco"):
+    allowed_deferred = {"set_hitbox_size", "remove_hitbox"}
+    for char in ("fox", "falco", "marth", "falcon", "sheik", "zelda"):
         manifest = json.loads((root / "data" / "scripts" / f"{char}_manifest.json").read_text())
         unsupported = set((manifest.get("unsupported_event_counts") or {}).keys())
         assert "set_hitbox_damage" not in unsupported
+        assert "set_hitbox_interaction" not in unsupported
         assert unsupported <= allowed_deferred
 
 
@@ -248,7 +324,7 @@ def test_movescript_events_system_doc_is_closed_without_todo_rows() -> None:
 
     assert "| Movescript Events | CLOSED |" in progress
     assert "MSLFTSC1 extraction and binary schema" in doc
-    assert "Hitbox create/clear/damage lifecycle" in doc
+    assert "Hitbox create/clear/mutation lifecycle" in doc
     assert "Throw script flags, hitboxes, and projectile pulses" in doc
     assert "| TODO" not in doc
     assert "INVENTORY NEEDED" not in doc

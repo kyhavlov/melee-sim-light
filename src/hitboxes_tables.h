@@ -15,6 +15,9 @@ extern "C" {
 // checks in `src/combat.c`).
 int hitboxes_tables_init(void);
 
+// Binary artifact schema version expected by this runtime.
+uint32_t hitboxes_tables_format_version(void);
+
 // Test/debug helper: reset global hitbox tables so a subsequent hitboxes_tables_init() reloads from
 // the current MSL_DATA_DIR. This exists only for fast synthetic tests; it must not be used while
 // any live batches are depending on hitbox tables.
@@ -47,7 +50,7 @@ typedef struct MslHitboxEvent {
 
   // Remaining extracted u16 parameters (packed directly from the .bin record).
   // The exact semantics are decomp-first but not yet wired into gameplay logic.
-  // Layout (see agent_docs/DATA_CONTRACT.md `MSLHITB1 v1`):
+  // Layout (see agent_docs/DATA_CONTRACT.md `MSLHITB1 v2`):
   // - u16_0: angle
   // - u16_1: kbg
   // - u16_2: wsk
@@ -73,14 +76,22 @@ typedef enum MslHitboxEventKind {
   MSL_HITBOX_EVENT_CREATE = 0,
   MSL_HITBOX_EVENT_CLEAR = 1,
   MSL_HITBOX_EVENT_SET_DAMAGE = 2,
+  MSL_HITBOX_EVENT_SET_INTERACTION = 3,
 } MslHitboxEventKind;
 
-// MSLHITB1 v1 `u16_6` flag bits (see agent_docs/DATA_CONTRACT.md).
+// MSLHITB1 v2 `u16_6` flag bits (see agent_docs/DATA_CONTRACT.md).
 //
 // Source pointers:
 // - tools/extraction/extract_fighter_moves.py::_decode_create_hitbox (script opcode 11 decode)
 // - refs/melee/src/melee/ft/types.h (gmScriptEventDefault packing for spawn_hitbox_0 words)
 enum {
+  // Runtime HitCapsule interaction state. CREATE initializes both x42 bits to 1; interaction
+  // mutation records update them independently. VALID lets current synthetic/debug records omit
+  // the low bits while generated MSLHITB1 records carry the source-owned values.
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_8007121C,ftAction_80071708}
+  MSL_HITBOX_FLAG_X42_B5 = 1u << 0,
+  MSL_HITBOX_FLAG_X42_B7 = 1u << 1,
+  MSL_HITBOX_FLAG_X42_INTERACTION_VALID = 1u << 2,
   MSL_HITBOX_FLAG_HIT_GROUNDED = 1u << 9,
   MSL_HITBOX_FLAG_HIT_AERIAL = 1u << 10,
   MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION = 1u << 11,
@@ -89,6 +100,26 @@ enum {
   MSL_HITBOX_FLAG_CLANK = 1u << 14,
   MSL_HITBOX_FLAG_REBOUND = 1u << 15,
 };
+
+// x42_b5 is consumed by fighter-owned collision passes, including ftColl_8007925C's item
+// HitCapsule vs fighter HitCapsule branch. x42_b7 is consumed by the separate itColl fighter
+// HitCapsule vs item-hurtbox path. Name the helpers after the source fields because neither bit is
+// equivalent to a generic "fighter" or "item" interaction category.
+// refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+// refs/melee/src/melee/it/itcoll.c::it_8026D564
+static inline uint8_t msl_hitbox_x42_b5_enabled(uint16_t flags) {
+  return ((flags & (uint16_t)MSL_HITBOX_FLAG_X42_INTERACTION_VALID) == 0u ||
+          (flags & (uint16_t)MSL_HITBOX_FLAG_X42_B5) != 0u)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t msl_hitbox_x42_b7_enabled(uint16_t flags) {
+  return ((flags & (uint16_t)MSL_HITBOX_FLAG_X42_INTERACTION_VALID) == 0u ||
+          (flags & (uint16_t)MSL_HITBOX_FLAG_X42_B7) != 0u)
+             ? 1u
+             : 0u;
+}
 
 static inline uint8_t msl_hitbox_ignore_fighter_scale(uint16_t flags) {
   return (flags & (uint16_t)MSL_HITBOX_FLAG_IGNORE_FIGHTER_SCALE) != 0 ? 1u : 0u;

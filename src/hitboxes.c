@@ -1330,7 +1330,7 @@ static inline void hitboxes_apply_live_transn_tail(uint8_t char_id, uint16_t msi
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80085030,ft_800850E0}
   // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
   // data/anims/<char>.tracks.bin per-msid uses_root_motion / fp->x594_b0
-  // data/anims/<char>.bin SSANIM01 v4 TransN tail, read by anim_pose_get_transn()
+  // data/anims/<char>.bin SSANIM01 v5 TransN tail, read by anim_pose_get_transn()
   *io_x += transn[0] * model_scale;
   *io_y += transn[1] * model_scale;
   *io_z += transn[2] * model_scale;
@@ -2487,6 +2487,13 @@ void hitboxes_refresh(MslBatch* batch) {
             // HitCapsule, does not call ftColl_800768A0, and must not advance create-edge timing.
             // refs/melee/src/melee/ft/ftaction.c::ftAction_8007162C
             def_prev[ev->hitbox_id].damage = ev->damage;
+          } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_INTERACTION &&
+                     ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES && have_prev[ev->hitbox_id]) {
+            // ftAction_80071708 mutates only x42_b5/x42_b7 on an active HitCapsule. The
+            // extractor carries the resulting interaction bits in u16_6 without replaying a
+            // create edge or changing geometry/group state.
+            // refs/melee/src/melee/ft/ftaction.c::ftAction_80071708
+            def_prev[ev->hitbox_id].u16_6 = ev->u16_6;
           } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CREATE &&
                      ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
             def_prev[ev->hitbox_id] = *ev;
@@ -2675,6 +2682,12 @@ void hitboxes_refresh(MslBatch* batch) {
           stale_damage_valid[hb] = stale_owner;
           stale_damage_mul[hb] =
               stale_owner ? hitboxes_source_hitcapsule_stale_damage_mul(batch, idx) : 1.0f;
+        } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_INTERACTION &&
+                   ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES && have_def[ev->hitbox_id]) {
+          // Distinct active-slot mutation: preserve the live HitCapsule definition and all
+          // enable-edge/victim-list state while replacing the extracted x42 interaction bits.
+          // refs/melee/src/melee/ft/ftaction.c::ftAction_80071708
+          def[ev->hitbox_id].u16_6 = ev->u16_6;
         } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CREATE &&
                    ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
           const uint8_t hb = ev->hitbox_id;
@@ -3035,7 +3048,7 @@ void hitboxes_refresh(MslBatch* batch) {
         //   (ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir)),
         //    refs/melee/src/melee/ft/fighter.c:1180-1182).
         //
-        // Our SSANIM01 v4 pose matrices are extracted in a single canonical orientation and do
+        // Our SSANIM01 v5 pose matrices are extracted in a single canonical orientation and do
         // not include the runtime facing rotation or fp->x34_scale. We apply scale in pose space
         // and apply the same decomp-shaped root facing rotation used elsewhere in the sim
         // (mixing X/Z).

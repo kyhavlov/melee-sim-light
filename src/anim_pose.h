@@ -9,15 +9,20 @@ typedef struct MslBatch MslBatch;
 extern "C" {
 #endif
 
-// Init-time loader for SSANIM01 v4 animation matrix blobs:
+// Init-time loader for SSANIM01 v5 animation matrix blobs:
 // - data/anims/fox.bin (char_id=1)
 // - data/anims/falco.bin (char_id=22)
 //
 // Layout source pointers:
 // - tools/extraction/extract_ecb_bottom.py (header + payload walk)
 // - tools/extraction/extract_ecb_extents.py (matrix record layout)
-// - tools/extraction/extract_fighter_anims.py (writer: SSANIM01 v4 + per-frame TransN tail)
+// - tools/extraction/extract_fighter_anims.py (writer: SSANIM01 v5 + per-frame TransN tail)
 int anim_pose_init(void);
+
+// Semantic version for generated fighter animation data. This is surfaced through the top-level
+// data manifest because source-donor cross-bakes can change required pose rows without changing
+// the byte layout of SSANIM01 itself.
+uint32_t anim_pose_data_schema_version(void);
 
 // Test/debug helper: reset global pose tables so a subsequent anim_pose_init() reloads from the
 // current MSL_DATA_DIR. This exists only for fast synthetic tests; it must not be used while any
@@ -125,7 +130,7 @@ int anim_pose_get_transn(uint8_t char_id, uint16_t msid, uint16_t frame, float o
 // Float-frame TransN/root translation sampler.
 //
 // Uses the extracted SSANIMT1 FObj track stream for the live AObj/JObj local SRT owner. Falls back
-// to linear interpolation of the SSANIM01 v4 TransN tail when track data is unavailable.
+// to linear interpolation of the SSANIM01 v5 TransN tail when track data is unavailable.
 //
 // Decomp owner path:
 // - refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim

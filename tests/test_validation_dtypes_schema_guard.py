@@ -12,6 +12,7 @@ from tools.extraction.known_data_artifacts import (
     fountain_of_dreams_platform_motion_params,
 )
 from tools.slippi.validation_buffer_fighter import (
+    _derive_attack100_seed_latches,
     _derive_jab_rapid_count_seed_lane,
     _derive_landing_fallspecial_allow_interrupt_seed_lane,
     _derive_specialhi_rotate_model_seed_lane,
@@ -110,6 +111,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "magnify_damage_counter_x1910" in SEED_DTYPE.fields
     assert "match_flow_respawn_slot_cooldown" in SEED_DTYPE.fields
     assert "passivewall_timer" in SEED_DTYPE.fields
+    assert "walljump_used_count" in SEED_DTYPE.fields
+    assert "passivewall_vel_y_exponent" in SEED_DTYPE.fields
     assert "walljump_input_timer" in SEED_DTYPE.fields
     assert "walljump_wall_side_i8" in SEED_DTYPE.fields
     # Damage KB stacking window (fp->dmg.x18AC_time_since_hit).
@@ -135,7 +138,7 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "floor_sweep_prev_pos_y_f32" in SEED_DTYPE.fields
     assert "floor_sweep_prev_pos_valid_u8" in SEED_DTYPE.fields
     assert "ecb_lock_bottom_rel_y_f32" in SEED_DTYPE.fields
-    assert "ecb_lock_bottom_rel_y_valid_u8" in SEED_DTYPE.fields
+    assert "ecb_lock_bottom_owner_u8" in SEED_DTYPE.fields
     # mpColl persisted wall-side/index callback state for narrow DamageFlyTop wall contact rows.
     assert "mpcoll_wall_kind_seed_u8" in SEED_DTYPE.fields
     assert "mpcoll_wall_id_seed_u16" in SEED_DTYPE.fields
@@ -156,6 +159,12 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "specialhi_rotate_model_valid_u8" in SEED_DTYPE.fields
     # Attack100 rapid-jab counter (`fp+0x1A54`) for mid-jab teacher-forced seeds.
     assert "jab_rapid_count" in SEED_DTYPE.fields
+    # Attack100Loop hidden latches for mid-loop teacher-forced seeds.
+    assert "attack100_x0" in SEED_DTYPE.fields
+    assert "attack100_x4" in SEED_DTYPE.fields
+    # Grounded Falcon Kick deal_dmg_cb state for mid-action teacher-forced seeds.
+    assert "falcon_speciallw_hits" in SEED_DTYPE.fields
+    assert "falcon_speciallw_friction" in SEED_DTYPE.fields
     # Repeated-hit combo push timer (`fp->x2092`) for grounded attacker drift after x2090 reaches x4C4.
     assert "combo_push_timer_x2092" in SEED_DTYPE.fields
     # FoD current platform heights are causal current-stage state for transformed platform floors.
@@ -212,6 +221,179 @@ def test_native_dream_whispy_wind_derivation_rejects_short_rows() -> None:
             0.2,
             0.025,
         )
+
+
+def test_falcon_speciallw_seed_lanes_reconstruct_processhit_prefix() -> None:
+    import msl_binding
+
+    rows = np.zeros((22,), dtype=SEED_DTYPE)
+    processhit_x1914 = np.zeros((len(rows) + 1, 4), dtype=np.uint8)
+    rows["num_players"] = np.uint8(3)
+    rows["source_port0"][:, :3] = np.array([3, 0, 2], dtype=np.uint8)
+    rows["char_id"][:, 0] = np.uint8(2)  # Falcon is local slot 0 but raw controller port 3.
+    rows["char_id"][:, 1:3] = np.array([1, 0], dtype=np.uint8)
+    rows["action_id"][:, 0] = np.uint16(357)
+    rows["instance_id"][:, 0] = np.uint16(20)
+    rows["attack_id"][:, 0] = np.uint16(9)
+    rows["last_attack_landed"][:, 0] = np.uint8(9)
+    rows["action_id"][0, 0] = np.uint16(14)
+
+    # Ordinary vulnerable BODY hit has explicit source/instance provenance.
+    rows["percent"][2:, 1] = np.float32(10.0)
+    rows["last_hit_by"][2, 1] = np.uint8(3)
+    rows["instance_hit_by"][2, 1] = np.uint16(20)
+    rows["hitlag"][2, 0] = np.uint16(3)
+    rows["hitlag"][3, 0] = np.uint16(2)
+
+    # Two BODY victims plus another native producer still aggregate to one ProcessHit callback.
+    rows["percent"][5:, 1] = np.float32(15.0)
+    rows["percent"][5:, 2] = np.float32(7.0)
+    rows["last_hit_by"][5, 1:3] = np.uint8(3)
+    rows["instance_hit_by"][5, 1:3] = np.uint16(20)
+    rows["hitlag"][5, 0] = np.uint16(4)
+    processhit_x1914[5, 0] = np.uint8(1)
+
+    # Native geometry owns invincible BODY and fixed-item contacts that have no percent write.
+    rows["hurtbox_state"][7, 1] = np.uint8(1)
+    rows["hitlag"][7, 0] = np.uint16(3)
+    processhit_x1914[7, 0] = np.uint8(1)
+
+    # Item-only contact has an attributed native producer but no fighter-percent write.
+    rows["hitlag"][9, 0] = np.uint16(3)
+    processhit_x1914[9, 0] = np.uint8(1)
+
+    # Reciprocal incoming damage has higher ProcessHit priority and suppresses the pending outgoing
+    # BODY x1914 callback.
+    rows["percent"][11:, 0] = np.float32(8.0)
+    rows["percent"][11:, 1] = np.float32(20.0)
+    rows["last_hit_by"][11, 0] = np.uint8(0)
+    rows["instance_hit_by"][11, 0] = np.uint16(90)
+    rows["last_hit_by"][11, 1] = np.uint8(3)
+    rows["instance_hit_by"][11, 1] = np.uint16(20)
+    rows["hitlag"][11, 0] = np.uint16(4)
+    rows["hitstun"][11, 0] = np.uint16(6)
+    processhit_x1914[11, 0] = np.uint8(1)
+
+    # Hitlag without an attributed producer is not Falcon's x1914.
+    rows["hitlag"][13, 0] = np.uint16(3)
+
+    # Fighter collision continues while Falcon is frozen. A newly attributed victim on the 2 -> 1
+    # tail therefore increments; x0 <= hit_limit permits this final increment, then caps the next.
+    rows["hitlag"][14, 0] = np.uint16(2)
+    rows["percent"][15:, 2] = np.float32(11.0)
+    rows["last_hit_by"][15, 2] = np.uint8(3)
+    rows["instance_hit_by"][15, 2] = np.uint16(20)
+    rows["hitlag"][15, 0] = np.uint16(3)
+    rows["percent"][17:, 2] = np.float32(15.0)
+    rows["last_hit_by"][17, 2] = np.uint8(3)
+    rows["instance_hit_by"][17, 2] = np.uint16(20)
+    rows["hitlag"][17, 0] = np.uint16(3)
+
+    # SpecialLwEnd keeps consuming the entry-owned move union after the animation transition.
+    rows["action_id"][16:18, 0] = np.uint16(358)
+
+    # A new grounded-kick instance resets. Old-instance attribution cannot arm the new instance.
+    rows["instance_id"][18:20, 0] = np.uint16(21)
+    rows["percent"][19:, 1] = np.float32(24.0)
+    rows["last_hit_by"][19, 1] = np.uint8(3)
+    rows["instance_hit_by"][19, 1] = np.uint16(20)
+    rows["hitlag"][19, 0] = np.uint16(3)
+    rows["action_id"][20, 0] = np.uint16(14)
+
+    # A fresh later instance starts its own callback history.
+    rows["instance_id"][21, 0] = np.uint16(22)
+    rows["percent"][21, 1] = np.float32(30.0)
+    rows["last_hit_by"][21, 1] = np.uint8(3)
+    rows["instance_hit_by"][21, 1] = np.uint16(22)
+    rows["hitlag"][21, 0] = np.uint16(3)
+
+    original = rows.copy()
+    original_processhit_x1914 = processhit_x1914.copy()
+    seed_u8 = rows.view(np.uint8).reshape((len(rows), SEED_DTYPE.itemsize))
+    modifier = np.float32(0.6)
+    msl_binding.validation_derive_falcon_speciallw_seed_lanes(
+        seed_u8, processhit_x1914, 3, 2, 357, 358, 4, float(modifier)
+    )
+
+    assert rows["falcon_speciallw_hits"][:, 0].tolist() == [
+        0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 0, 0, 0, 1
+    ]
+    expected_friction = np.array(
+        [0.0, 1.0, 0.6, 0.6, 0.6, 0.36, 0.36, 0.216, 0.216, 0.1296, 0.1296,
+         0.1296, 0.1296, 0.1296, 0.1296, 0.07776, 0.07776, 0.07776, 1.0, 1.0,
+         0.0, 0.6],
+        dtype=np.float32,
+    )
+    assert rows["falcon_speciallw_friction"][:, 0] == pytest.approx(expected_friction, abs=1e-7)
+    assert np.count_nonzero(rows["falcon_speciallw_hits"][:, 1:]) == 0
+
+    # Every prefix produces the same terminal lane as the corresponding full-history row.
+    for end in range(1, len(rows) + 1):
+        prefix = original[:end].copy()
+        msl_binding.validation_derive_falcon_speciallw_seed_lanes(
+            prefix.view(np.uint8).reshape((end, SEED_DTYPE.itemsize)),
+            original_processhit_x1914[: end + 1],
+            3,
+            2,
+            357,
+            358,
+            4,
+            float(modifier),
+        )
+        assert int(prefix["falcon_speciallw_hits"][-1, 0]) == int(
+            rows["falcon_speciallw_hits"][end - 1, 0]
+        )
+        assert float(prefix["falcon_speciallw_friction"][-1, 0]) == pytest.approx(
+            float(rows["falcon_speciallw_friction"][end - 1, 0]), abs=1e-7
+        )
+
+
+@pytest.mark.parametrize(
+    ("priority_case", "expected_hits"),
+    (("magnify", 1), ("incoming", 0), ("phantom", 0)),
+)
+def test_falcon_speciallw_processhit_priority_distinguishes_postcombat_magnify(
+    priority_case: str, expected_hits: int
+) -> None:
+    import msl_binding
+
+    rows = np.zeros((2,), dtype=SEED_DTYPE)
+    processhit_x1914 = np.zeros((3, 4), dtype=np.uint8)
+    processhit_x1914[1, 0] = np.uint8(1)
+    rows["num_players"] = np.uint8(2)
+    rows["source_port0"][:, :2] = np.array([0, 1], dtype=np.uint8)
+    rows["char_id"][:, :2] = np.array([2, 1], dtype=np.uint8)
+    rows["action_id"][:, 0] = np.uint16(357)
+    rows["instance_id"][:, 0] = np.uint16(20)
+    rows["attack_id"][:, 0] = np.uint16(9)
+    rows["last_attack_landed"][:, 0] = np.uint8(9)
+
+    if priority_case == "magnify":
+        rows["magnify_damage_counter_x1910"][0, 0] = np.uint16(59)
+        rows["percent"][1, 0] = np.float32(1.0)
+    elif priority_case == "incoming":
+        rows["percent"][1, 0] = np.float32(1.0)
+        rows["last_hit_by"][1, 0] = np.uint8(1)
+        rows["instance_hit_by"][1, 0] = np.uint16(77)
+    else:
+        rows["phantom_damage_timer_x189c"][1, 0] = np.uint16(2)
+
+    msl_binding.validation_derive_falcon_speciallw_seed_lanes(
+        rows.view(np.uint8).reshape((len(rows), SEED_DTYPE.itemsize)),
+        processhit_x1914,
+        2,
+        2,
+        357,
+        358,
+        4,
+        0.6,
+    )
+
+    assert rows["falcon_speciallw_hits"][:, 0].tolist() == [0, expected_hits]
+    expected_friction = 0.6 if expected_hits else 1.0
+    assert float(rows["falcon_speciallw_friction"][1, 0]) == pytest.approx(
+        expected_friction, abs=1e-7
+    )
 
 
 def test_validation_dtype_sizes_match_c_structs() -> None:
@@ -730,6 +912,11 @@ def test_ft_common_data_exports_magnify_damage_source_constants() -> None:
     assert int(data["magnify_damage_amount"]) == 1
 
 
+def test_ft_common_data_exports_walljump_vertical_decay_source_constant() -> None:
+    data = json.loads(Path("data/common/ft_common_data.json").read_text())
+    assert float(data["passive_wall_vel_y_base"]) == pytest.approx(0.9750000238418579)
+
+
 def test_ft_common_data_exports_deadupfall_hitcamera_source_constants() -> None:
     # ftCo_DeadUpFall_Anim/Phys use p_ftCommonData x520 timers/vectors and x550/x554/x558/x55C
     # for the DeadUpFall -> HitCamera phase owner.
@@ -838,18 +1025,15 @@ def test_landing_fallspecial_allow_interrupt_lane_is_prefix_causal() -> None:
 
 
 def test_character_attrs_include_ordered_walljump_source_fields() -> None:
+    from tools.extraction.char_registry import CHARS
+
     root = Path(__file__).resolve().parents[1]
-    expected_can_walljump = {
-        "fox": True,
-        "falco": True,
-        "sheik": True,
-        "marth": False,
-        "zelda": False,
-    }
+    expected_can_walljump = {name: info.can_walljump for name, info in CHARS.items()}
     for character, can_walljump in expected_can_walljump.items():
         data = json.loads((root / "data" / "characters" / f"{character}.json").read_text())
         keys = list(data.keys())
         assert data["can_walljump"] is can_walljump
+        assert "escapeair_active_lock_requires_current_floor_owner" not in data
         assert data["walljump_setup_x_delta_threshold"] == 0.5
         assert keys.index("rebound_anim_numerator_frames") < keys.index("rapid_jab_window")
         assert keys.index("rapid_jab_window") < keys.index("wall_jump_horizontal_velocity")
@@ -884,26 +1068,112 @@ def test_runtime_hitbox_tables_export_attack100_loop_hitboxes() -> None:
 
 
 def test_jab_rapid_count_seed_lane_resets_on_attack11_entry_and_counts_iasa_frames() -> None:
-    # Action ids: Wait=14, Attack11=44, Attack12=45, Attack100Start=47.
-    action = np.array([14, 44, 44, 44, 45, 45, 47, 14, 44, 44], dtype=np.uint16)
-    held = np.array([0, 0x100, 0x100, 0, 0x100, 0, 0, 0, 0x100, 0], dtype=np.uint16)
-    prev_held = np.concatenate(([np.uint16(0)], held[:-1]))
-    released = prev_held & ~held
-    pressed = np.array([0, 0x100, 0, 0, 0x100, 0, 0, 0, 0x100, 0], dtype=np.uint16)
+    # Action ids: Wait=14, Attack11=44, Attack12=45, Attack13=46, Attack100Start=47.
+    action = np.array([14, 44, 44, 44, 45, 45, 46, 46, 47, 14, 44, 44], dtype=np.uint16)
+    hitlag = np.array([0, 0, 0, 3, 2, 1, 0, 0, 0, 0, 0, 0], dtype=np.uint8)
+    released = np.array([0, 0, 0x100, 0, 0x100, 0, 0x100, 0, 0, 0, 0, 0x100], dtype=np.uint16)
+    pressed = np.array([0, 0x100, 0, 0x100, 0, 0x100, 0, 0x100, 0, 0, 0x100, 0], dtype=np.uint16)
 
     got = _derive_jab_rapid_count_seed_lane(
         action_id_u16=action,
+        hitlag_u8=hitlag,
         buttons_released_u16=released,
         buttons_pressed_u16=pressed,
         button_mask_a=0x100,
     )
 
-    assert got.tolist() == [0, 0, 0, 1, 2, 3, 0, 0, 0, 1]
+    # Attack11 entry consumes its reset before the edge. No-hitlag, hit-start (0 -> N), and
+    # hitlag-exit (1 -> 0) frames run IASA; the two positive -> positive frozen frames do not.
+    assert got.tolist() == [0, 0, 1, 2, 2, 2, 3, 4, 0, 0, 0, 1]
+
+    for end in range(1, len(action) + 1):
+        prefix = _derive_jab_rapid_count_seed_lane(
+            action_id_u16=action[:end],
+            hitlag_u8=hitlag[:end],
+            buttons_released_u16=released[:end],
+            buttons_pressed_u16=pressed[:end],
+            button_mask_a=0x100,
+        )
+        assert int(prefix[-1]) == int(got[end - 1])
+
+
+def test_jab_rapid_count_consumes_edge_on_hitlag_exit_and_reentry() -> None:
+    got = _derive_jab_rapid_count_seed_lane(
+        action_id_u16=np.array([44, 44], dtype=np.uint16),
+        hitlag_u8=np.array([1, 4], dtype=np.uint8),
+        buttons_released_u16=np.zeros((2,), dtype=np.uint16),
+        buttons_pressed_u16=np.array([0, 0x100], dtype=np.uint16),
+        button_mask_a=0x100,
+    )
+
+    assert got.tolist() == [0, 1]
+
+
+def test_attack100_seed_latches_track_loop_checkpoint_and_iasa_edges() -> None:
+    # Action ids: Wait=14, Attack100Loop=48, Attack100End=49. Falcon's extracted rapid-jab script
+    # has set_throw_flags checkpoints at frames 6/14/...; x4 is consumed before same-frame IASA
+    # can latch a fresh A edge.
+    action = np.array([14, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 49], dtype=np.uint16)
+    char = np.full(action.shape, 2, dtype=np.uint8)  # Falcon
+    action_frame = np.array([0, 1, 1, 1, 1, 6, 14, 14, 39, 0, 5, 0], dtype=np.int16)
+    pressed = np.zeros(action.shape, dtype=np.uint16)
+    released = np.zeros(action.shape, dtype=np.uint16)
+    hitlag = np.array([0, 3, 2, 1, 0, 0, 3, 2, 0, 0, 0, 0], dtype=np.uint8)
+    pressed[2] = np.uint16(0x100)
+    pressed[4] = np.uint16(0x100)
+    released[5] = np.uint16(0x100)
+    pressed[6] = np.uint16(0x100)
+    released[7] = np.uint16(0x100)
+    released[10] = np.uint16(0x100)
+
+    x0, x4 = _derive_attack100_seed_latches(
+        char_id_u8=char,
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        hitlag_u8=hitlag,
+        buttons_released_u16=released,
+        buttons_pressed_u16=pressed,
+        button_mask_a=0x100,
+    )
+
+    # The frozen 3 -> 2 edge is ignored; 1 -> 0 and ordinary no-hitlag edges are consumed. At the
+    # frame-6 and frame-14 checkpoints, Anim clears x4 before same-frame IASA re-arms it, including
+    # the 0 -> 3 hit-start transition. The loop wrap preserves x0 ordering.
+    assert x0.tolist() == [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0]
+    assert x4.tolist() == [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0]
+
+    for end in range(1, len(action) + 1):
+        prefix_x0, prefix_x4 = _derive_attack100_seed_latches(
+            char_id_u8=char[:end],
+            action_id_u16=action[:end],
+            action_frame_i16=action_frame[:end],
+            hitlag_u8=hitlag[:end],
+            buttons_released_u16=released[:end],
+            buttons_pressed_u16=pressed[:end],
+            button_mask_a=0x100,
+        )
+        assert int(prefix_x0[-1]) == int(x0[end - 1])
+        assert int(prefix_x4[-1]) == int(x4[end - 1])
+
+
+def test_attack100_consumes_edge_on_hitlag_exit_and_reentry_after_checkpoint() -> None:
+    x0, x4 = _derive_attack100_seed_latches(
+        char_id_u8=np.full((2,), 2, dtype=np.uint8),
+        action_id_u16=np.full((2,), 48, dtype=np.uint16),
+        action_frame_i16=np.array([5, 6], dtype=np.int16),
+        hitlag_u8=np.array([1, 4], dtype=np.uint8),
+        buttons_released_u16=np.zeros((2,), dtype=np.uint16),
+        buttons_pressed_u16=np.array([0, 0x100], dtype=np.uint16),
+        button_mask_a=0x100,
+    )
+
+    assert x0.tolist() == [0, 0]
+    assert x4.tolist() == [0, 1]
 
 
 def test_walljump_phase_seed_lane_is_prefix_causal() -> None:
     action = np.array([27, 27, 27, 27, 0, 27, 27, 27], dtype=np.uint16)
-    action_frame = np.array([15, 16, 17, 18, 19, 11, 12, 13], dtype=np.int16)
+    action_frame = np.array([15, 16, 17, 18, 19, 18, 19, 20], dtype=np.int16)
     pos_x = np.array([86.0, 86.7, 87.0, 87.0, 0.0, -86.0, -86.7, -87.0], dtype=np.float32)
     pos_y = np.full(action.shape, -9.0, dtype=np.float32)
     # `raw_main_x[i + 1]` is the current one-step input for seed row i. The lane carries setup
@@ -919,8 +1189,8 @@ def test_walljump_phase_seed_lane_is_prefix_causal() -> None:
         pos_y_f32=pos_y,
         raw_main_x_i8=raw_main_x,
     )
-    assert timer.tolist() == [254, 254, 9, 254, 254, 254, 254, 254]
-    assert side.tolist() == [0, 0, -1, 0, 0, 0, 0, 0]
+    assert timer.tolist() == [254, 254, 9, 254, 254, 254, 11, 12]
+    assert side.tolist() == [0, 0, -1, 0, 0, 0, 1, 1]
 
     for end in range(2, action.shape[0] + 1):
         prefix_timer, prefix_side = _derive_walljump_phase_seed_lanes(

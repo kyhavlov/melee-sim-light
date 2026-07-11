@@ -11,7 +11,7 @@
 #include "alloc.h"
 
 enum {
-  MSLFTSC1_VERSION = 2,
+  MSLFTSC1_VERSION = 3,
   MSLFTSC1_HEADER_SIZE = 28,
   MSLFTSC1_INDEX_RECORD_SIZE = 12,
   MSLFTSC1_EVENT_HEADER_SIZE = 8,
@@ -32,6 +32,8 @@ typedef struct MslScriptTable {
 
 static MslScriptTable g_tables[256];
 static int g_loaded = 0;
+
+uint32_t script_events_format_version(void) { return (uint32_t)MSLFTSC1_VERSION; }
 
 static uint16_t read_le_u16(const uint8_t* p) {
   return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
@@ -92,6 +94,14 @@ static int decode_event_payload(MslScriptEvent* out, const uint8_t* payload, uin
       }
       out->payload.hitbox_damage.idx = payload[0];
       out->payload.hitbox_damage.damage = read_le_f32(payload + 4);
+      return 0;
+    case MSL_SCRIPT_EVENT_SET_HITBOX_INTERACTION:
+      if (len != 4u || payload[1] > 1u || payload[2] > 1u) {
+        return -1;
+      }
+      out->payload.hitbox_interaction.idx = payload[0];
+      out->payload.hitbox_interaction.type = payload[1];
+      out->payload.hitbox_interaction.value = payload[2];
       return 0;
     case MSL_SCRIPT_EVENT_SET_AIRBORNE_STATE:
     case MSL_SCRIPT_EVENT_SET_HIT_STATUS:

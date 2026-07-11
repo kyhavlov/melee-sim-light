@@ -41,16 +41,32 @@ def _f32_be(buf: bytes, off: int) -> float:
     return struct.unpack(">f", buf[off : off + 4])[0]
 
 
-def _source_can_walljump(character: str) -> bool:
-    info = CHARS.get(character)
-    if info is None:
-        return False
-    src_dir = Path("refs/melee/src/melee/ft/chara") / info.decomp_dir
+def _source_can_walljump(character: str, *, melee_decomp: Path) -> bool | None:
+    """Read the source assignment when a decomp checkout is available.
+
+    Returning ``None`` distinguishes an absent source tree from the source-backed false case.
+    The packaged registry supplies the audited value; a present checkout is an integrity check.
+    """
+    info = CHARS[character]
+    src_dir = melee_decomp / "src/melee/ft/chara" / info.decomp_dir
+    if not src_dir.is_dir():
+        return None
     for path in src_dir.glob("*.c"):
         text = path.read_text(encoding="utf-8", errors="ignore")
         if "can_walljump" in text and "can_walljump = true" in text:
             return True
     return False
+
+
+def _resolved_can_walljump(character: str, *, melee_decomp: Path) -> bool:
+    info = CHARS[character]
+    source_value = _source_can_walljump(character, melee_decomp=melee_decomp)
+    if source_value is not None and source_value != info.can_walljump:
+        raise RuntimeError(
+            f"{character}: registry can_walljump={info.can_walljump} disagrees with "
+            f"{melee_decomp / 'src/melee/ft/chara' / info.decomp_dir}"
+        )
+    return info.can_walljump
 
 
 def _rot_xyz_mul_vec(rx: float, ry: float, rz: float, x: float, y: float, z: float) -> tuple[float, float, float]:
@@ -709,6 +725,48 @@ SEAK_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
 ]
 
 
+# ftCaptain_DatAttrs layout (refs/melee/src/melee/ft/chara/ftCaptain/types.h). Key names mirror
+# the decomp field names (they are already consumer-semantic there); unknowns keep the decomp's
+# unk/x-offset names so runtime consumers can be renamed together with upstream decomp progress.
+CAPTAIN_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
+    ("falcon_specialn_stick_range_y_neg", 0x00, "f32"),
+    ("falcon_specialn_stick_range_y_pos", 0x04, "f32"),
+    ("falcon_specialn_angle_diff", 0x08, "f32"),
+    ("falcon_specialn_vel_x", 0x0C, "f32"),
+    ("falcon_specialn_vel_mul", 0x10, "f32"),
+    ("falcon_specials_gr_vel_x", 0x14, "f32"),
+    ("falcon_specials_grav", 0x18, "f32"),
+    ("falcon_specials_terminal_vel", 0x1C, "f32"),
+    ("falcon_specials_unk0", 0x20, "f32"),
+    ("falcon_specials_unk1", 0x24, "f32"),
+    ("falcon_specials_unk2", 0x28, "f32"),
+    ("falcon_specials_unk3", 0x2C, "f32"),
+    ("falcon_specials_unk4", 0x30, "f32"),
+    ("falcon_specials_unk5", 0x34, "f32"),
+    ("falcon_specials_miss_landing_lag", 0x38, "f32"),
+    ("falcon_specials_hit_landing_lag", 0x3C, "f32"),
+    ("falcon_specialhi_air_friction_mul", 0x40, "f32"),
+    ("falcon_specialhi_horz_vel", 0x44, "f32"),
+    ("falcon_specialhi_freefall_air_spd_mul", 0x48, "f32"),
+    ("falcon_specialhi_landing_lag", 0x4C, "f32"),
+    ("falcon_specialhi_unk0", 0x50, "f32"),
+    ("falcon_specialhi_unk1", 0x54, "f32"),
+    ("falcon_specialhi_input_var", 0x58, "f32"),
+    ("falcon_specialhi_unk2", 0x5C, "f32"),
+    ("falcon_specialhi_catch_grav", 0x60, "f32"),
+    ("falcon_specialhi_air_var", 0x64, "i32"),
+    ("falcon_ext_x68", 0x68, "f32"),
+    ("falcon_speciallw_unk1", 0x6C, "i32"),
+    ("falcon_speciallw_flame_particle_angle", 0x70, "f32"),
+    ("falcon_speciallw_on_hit_spd_modifier", 0x74, "f32"),
+    ("falcon_speciallw_unk2", 0x78, "i32"),
+    ("falcon_speciallw_ground_lag_mul", 0x7C, "f32"),
+    ("falcon_speciallw_landing_lag_mul", 0x80, "f32"),
+    ("falcon_speciallw_ground_traction", 0x84, "f32"),
+    ("falcon_speciallw_air_landing_traction", 0x88, "f32"),
+]
+
+
 ZELDA_SPECIAL_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
     ("zelda_nayru_air_gravity_delay_frames", 0x04, "i32"),
     ("zelda_nayru_air_vel_x_divisor", 0x08, "f32"),
@@ -885,6 +943,29 @@ def _extract_seak_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
     return out
 
 
+def _extract_captain_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
+    """Extract Falcon's ftData.x4 ftCaptain_DatAttrs block.
+
+    - refs/melee/src/melee/ft/chara/ftCaptain/types.h::ftCaptain_DatAttrs
+    - refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c (Falcon Punch x0..x10)
+    - refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c (Raptor Boost x14..x3C)
+    - refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c (Falcon Dive x40..x64)
+    - refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c (Falcon Kick x6C..x88)
+    """
+    out: dict = {}
+    ext_abs = arc.ptr32(ftdata_abs + 0x04)
+    if ext_abs == arc.data_base:
+        return out
+    for key, off, kind in CAPTAIN_SPECIAL_ATTRS_LAYOUT:
+        if kind == "i32":
+            out[key] = int(_i32_be(buf, ext_abs + off))
+        elif kind == "f32":
+            out[key] = float(_f32_be(buf, ext_abs + off))
+        else:  # pragma: no cover - layout table typo
+            raise ValueError(f"unknown layout kind {kind!r} for {key}")
+    return out
+
+
 def _extract_zelda_special_attrs(buf: bytes, arc, *, ftdata_abs: int) -> dict:
     """Extract Zelda's ftData.x4 `ftZelda_DatAttrs` special-move block.
 
@@ -971,19 +1052,22 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     # Probe-backed gameplay overlay:
     # ftCo_800DDDE4 always samples a selected capture/throw anchor, but the observed
     # mpColl_800471F8 floor-publication subset is not equivalent to the anchor part id.
-    # Marth ThrowF/ThrowLw and Sheik ThrowLw publish the floor-hit substep root before damage
-    # entry; Marth ThrowB and Fox/Falco controls do not. Keep the source-completion discriminator
-    # explicit so future characters with the same anchor id do not inherit this path accidentally.
+    # Marth ThrowF/ThrowLw, Sheik ThrowLw, and Falcon ThrowLw publish the floor-hit substep root
+    # before damage entry; Marth ThrowB and Fox/Falco controls do not. Keep the source-completion
+    # discriminator explicit so characters with the same anchor id do not inherit this path.
     # Bit order: ThrowF, ThrowB, ThrowHi, ThrowLw.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
     # refs/Ishiiruka engine-dump-v12-probes ftCo_800DDDE4 probe:
     #   IPW 1231..1233/10031, ParallelFamiliarZebra 1427..1429, FSP 9061..9067,
-    #   RuralReasonableRat 3168.
+    #   RuralReasonableRat 3168; Falcon-suite vanilla release rows including
+    #   Game_20260509T030948 375/2508/3019 and Game_20260505T215428 329/527.
     throw_release_mpcoll_floor_publication_mask = 0
     if ftdata_symbol == "ftDataMars":
         throw_release_mpcoll_floor_publication_mask = (1 << 0) | (1 << 3)
     if ftdata_symbol == "ftDataSeak":
+        throw_release_mpcoll_floor_publication_mask = 1 << 3
+    if ftdata_symbol == "ftDataCaptain":
         throw_release_mpcoll_floor_publication_mask = 1 << 3
     # Source-callsite gameplay overlay:
     # ftCo_80096900 stores arg1 into mv.co.fallspecial.xC. Marth Dolphin Slash calls it with
@@ -1008,7 +1092,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     #   ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
     common_fall_blended_ecb_seed_mask = 0
-    if ftdata_symbol == "ftDataMars":
+    if ftdata_symbol in ("ftDataMars", "ftDataCaptain"):
         common_fall_blended_ecb_seed_mask = 1 << 1
     if ftdata_symbol == "ftDataSeak":
         common_fall_blended_ecb_seed_mask = 1 << 0
@@ -1178,6 +1262,8 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     elif ext_attr_layout == "zelda_special":
         out.update(_extract_zelda_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
         out.update(_extract_zelda_din_article(buf, arc, ftdata_abs=ftdata_abs))
+    elif ext_attr_layout == "captain_special":
+        out.update(_extract_captain_special_attrs(buf, arc, ftdata_abs=ftdata_abs))
     if extract_fox_blaster:
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)
@@ -1354,6 +1440,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
     # consumers don't accidentally treat them as part of the contract.
     drop_keys = {
         "ecb_bone_indices",
+        "escapeair_active_lock_requires_current_floor_owner",
     }
     ordered_keys = [
         "walk_init_vel",
@@ -1555,10 +1642,10 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         elif k in existing:
             out[k] = existing[k]
     # Per-character special-attribute families (ext-attr layouts) use mechanic-position
-    # prefixes; carry every extracted special* / sheik_* / zelda_* key after the ordered common
-    # block.
+    # prefixes; carry every extracted special* / <char>_* key after the ordered common block.
+    ext_prefixes = ("special", "sheik_", "zelda_", "falcon_")
     for k in sorted(extracted):
-        if (k.startswith("special") or k.startswith("sheik_") or k.startswith("zelda_")) and k not in out:
+        if k.startswith(ext_prefixes) and k not in out:
             out[k] = extracted[k]
     for k, v in existing.items():
         if k in drop_keys:
@@ -1580,8 +1667,14 @@ def main() -> None:
     ap.add_argument(
         "--chars",
         type=str,
-        default="fox,falco,sheik,zelda,peach,marth,puff,falcon",
+        default=",".join(CHARS),
         help="comma-separated character set to extract",
+    )
+    ap.add_argument(
+        "--melee-decomp",
+        type=Path,
+        default=Path("refs/melee"),
+        help="optional doldecomp/melee checkout used to verify audited source flags",
     )
     args = ap.parse_args()
 
@@ -1592,16 +1685,16 @@ def main() -> None:
     # - "mars_sword": MarsAttributes (refs/melee/.../ftMars/types.h) - Marth (and Roy clone).
     # - "seak_special": ftSeakAttributes (refs/melee/.../ftSeak/types.h) - Sheik.
     # - "zelda_special": ftZelda_DatAttrs (refs/melee/.../ftZelda/types.h) - Zelda.
+    # - "captain_special": ftCaptain_DatAttrs (refs/melee/.../ftCaptain/types.h) - Falcon
+    #   (and Ganon clone).
     mapping = {
-        "fox": ("PlFx.dat", "ftDataFox", True, None),
-        "falco": ("PlFc.dat", "ftDataFalco", True, None),
-        "sheik": ("PlSk.dat", "ftDataSeak", False, "seak_special"),
-        "zelda": ("PlZd.dat", "ftDataZelda", False, "zelda_special"),
-        "peach": ("PlPe.dat", "ftDataPeach", False, None),
-        "marth": ("PlMs.dat", "ftDataMars", False, "mars_sword"),
-        "puff": ("PlPr.dat", "ftDataPurin", False, None),
-        "falcon": ("PlCa.dat", "ftDataCaptain", False, None),
+        name: (info.pl_dat, info.ftdata_symbol, info.extract_fox_blaster, info.special_attr_layout)
+        for name, info in CHARS.items()
     }
+    mapping.update({
+        "peach": ("PlPe.dat", "ftDataPeach", False, None),
+        "puff": ("PlPr.dat", "ftDataPurin", False, None),
+    })
     want = [c.strip() for c in args.chars.split(",") if c.strip()]
     for c in want:
         if c not in mapping:
@@ -1629,7 +1722,8 @@ def main() -> None:
 
         extracted = _extract_ftco_dattrs(pl_path, ftdata_symbol=sym, extract_fox_blaster=bool(blaster),
                                          ext_attr_layout=ext_layout)
-        extracted["can_walljump"] = bool(_source_can_walljump(name))
+        if name in CHARS:
+            extracted["can_walljump"] = _resolved_can_walljump(name, melee_decomp=args.melee_decomp)
         if blaster:
             # Decomp ownership: SpecialN spawn joint uses ftParts_GetBoneIndex(fp, FtPart_RThumbNb).
             # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint

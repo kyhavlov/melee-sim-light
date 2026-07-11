@@ -179,6 +179,10 @@ def main() -> None:
         "walljump_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x76C)),
         "walljump_tilt_x_max_frames": float(_f32_be(buf, ft_common_abs + 0x770)),
         "walljump_startup_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x774))),
+        # Consecutive ordinary walljumps decay vertical launch by
+        # `powf(passive_wall_vel_y_base, fp->mv.co.passivewall.vel_y_exponent)`.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_Anim
+        "passive_wall_vel_y_base": float(_f32_be(buf, ft_common_abs + 0x778)),
         # Pokemon Stadium fighter root x44 matrix owner:
         # - Fighter_80068E64 writes fp->x34_scale.z = p_ftCommonData->x7E4_scaleZ only on internal
         #   stage 0x1B (Pokemon Stadium).
@@ -381,6 +385,25 @@ def main() -> None:
         "capture_wait_jump_latch_window_frames": float(_f32_be(buf, ft_common_abs + 0x3AC)),
         "capture_wait_anim_rate_hold_frames": float(_f32_be(buf, ft_common_abs + 0x3B0)),
         "capture_wait_anim_rate": float(_f32_be(buf, ft_common_abs + 0x3B4)),
+        # DC920 connected-floor placement accepts corrections at or above this signed bound.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c::ftCo_800DC920
+        "capture_release_floor_tolerance": float(_f32_be(buf, ft_common_abs + 0x3BC)),
+        # ProcessHit linked-fighter low-damage gate (`inlineB1`).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{inlineB1,ftCo_8008EC90}
+        "capture_damage_release_threshold": int(_i32_be(buf, ft_common_abs + 0x3C0)),
+        # ftCo_800DE2F0's common capture-release hit descriptor. lbColl_80008D30 maps this
+        # nine-word source record directly onto HitCapsule state/damage/KB/element/SFX fields.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DE2F0
+        # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008D30
+        "capture_release_hit_state_x380": int(_u32_be(buf, ft_common_abs + 0x380)),
+        "capture_release_hit_damage_x384": int(_u32_be(buf, ft_common_abs + 0x384)),
+        "capture_release_hit_angle_x388": int(_u32_be(buf, ft_common_abs + 0x388)),
+        "capture_release_hit_kbg_x38c": int(_u32_be(buf, ft_common_abs + 0x38C)),
+        "capture_release_hit_wsk_x390": int(_u32_be(buf, ft_common_abs + 0x390)),
+        "capture_release_hit_bkb_x394": int(_u32_be(buf, ft_common_abs + 0x394)),
+        "capture_release_hit_element_x398": int(_u32_be(buf, ft_common_abs + 0x398)),
+        "capture_release_hit_sfx_severity_x39c": int(_i32_be(buf, ft_common_abs + 0x39C)),
+        "capture_release_hit_sfx_kind_x3a0": int(_u32_be(buf, ft_common_abs + 0x3A0)),
         # CapturePulledLw grounded-to-air handoff threshold:
         # ftCo_CapturePulledLw_Phys computes the hidden live-JObj capture-anchor dy and calls
         # fn_800DB230 when `dy > p_ftCommonData->x3C4 * fp->x34_scale.y`.

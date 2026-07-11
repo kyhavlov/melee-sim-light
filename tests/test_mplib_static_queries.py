@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import struct
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,10 @@ def _line_mid(seg) -> tuple[float, float]:
 def _kind_lines(stage_bin: str, kind_id: int):
     stage = read_mslstg01_v7(Path("data/stages/bin") / stage_bin)
     return [seg for seg in stage.segments if int(seg.kind_id) == kind_id and bool(seg.fighter_solid)]
+
+
+def _f32_bits(value: float) -> int:
+    return struct.unpack("<I", struct.pack("<f", value))[0]
 
 
 def test_static_floor_queries_cover_legal_stage_static_lines() -> None:
@@ -42,6 +47,36 @@ def test_static_floor_queries_cover_legal_stage_static_lines() -> None:
             assert int(hit["segment_i"]) == line_id
             assert int(hit["flags"]) == int(seg.lo_flags)
             assert int(hit["joint_id"]) == int(seg.joint_id)
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_static_floor_queries_publish_psvecnormalize_bits() -> None:
+    # mpCheckFloor publishes a literal normal for its horizontal branch and calls the SDK
+    # PSVECNormalize sequence for sloped lines. These bits distinguish both source paths from a
+    # generic host sqrt/division implementation.
+    # refs/melee/src/melee/mp/mplib.c::mpCheckFloor
+    # refs/melee/build/GALE01/asm/dolphin/mtx/vec.s::PSVECNormalize
+    import msl_binding
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        fd = msl_binding.stage_static_query(
+            32, CHECK_FLOOR, 0.0, 10.0, 0.0, -10.0, 65535, -1, -1
+        )
+        yoshi = msl_binding.stage_static_query(
+            8, CHECK_FLOOR, -48.0, 10.0, -48.0, -10.0, 65535, -1, -1
+        )
+        assert fd is not None
+        assert yoshi is not None
+        assert (_f32_bits(fd["normal_x"]), _f32_bits(fd["normal_y"])) == (
+            0x00000000,
+            0x3F800000,
+        )
+        assert (_f32_bits(yoshi["normal_x"]), _f32_bits(yoshi["normal_y"])) == (
+            0xBE50D961,
+            0x3F7A9E77,
+        )
     finally:
         msl_binding.destroy(handle)
 

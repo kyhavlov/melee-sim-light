@@ -1,8 +1,50 @@
 #include "combat_internal.h"
+#include "alloc.h"
+
+int combat_processhit_pair_scratch_init(MslBatch* batch) {
+  if (batch == NULL || batch->batch_size <= 0) {
+    return -1;
+  }
+  const size_t count = (size_t)batch->batch_size * (size_t)MSL_MAX_PLAYERS;
+  batch->dive_processhit_pending =
+      (MslCombatProcessHitResolved*)alloc_calloc(count, sizeof(MslCombatProcessHitResolved));
+  batch->dive_processhit_pending_valid = (uint8_t*)alloc_calloc(count, sizeof(uint8_t));
+  if (batch->dive_processhit_pending == NULL || batch->dive_processhit_pending_valid == NULL) {
+    combat_processhit_pair_scratch_free(batch);
+    return -1;
+  }
+  return 0;
+}
+
+void combat_processhit_pair_scratch_free(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  alloc_free(batch->dive_processhit_pending_valid);
+  alloc_free(batch->dive_processhit_pending);
+  batch->dive_processhit_pending_valid = NULL;
+  batch->dive_processhit_pending = NULL;
+  batch->dive_processhit_collecting = 0u;
+}
+
+void combat_processhit_pair_begin(MslBatch* batch) {
+  if (batch == NULL || batch->dive_processhit_pending == NULL ||
+      batch->dive_processhit_pending_valid == NULL) {
+    return;
+  }
+  const size_t count = (size_t)batch->batch_size * (size_t)MSL_MAX_PLAYERS;
+  memset(batch->dive_processhit_pending, 0, count * sizeof(MslCombatProcessHitResolved));
+  memset(batch->dive_processhit_pending_valid, 0, count * sizeof(uint8_t));
+  batch->dive_processhit_collecting = 1u;
+}
 
 static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_index, int attacker,
                                                   int defender, const MslThrowHitboxParams* p,
-                                                  uint8_t update_bookkeeping);
+                                                  uint8_t update_bookkeeping,
+                                                  uint8_t damage_state_uses_pre_release_ground,
+                                                  uint8_t stale_excludes_current_instance,
+                                                  uint8_t use_throw_weight,
+                                                  uint8_t apply_throw_release_di);
 static inline void combat_throw_release_integrate_position_now(MslBatch* batch, size_t owner_idx,
                                                                size_t victim_idx);
 static inline void combat_throw_release_apply_immediate_di(MslBatch* batch, size_t victim_idx,
@@ -300,6 +342,12 @@ void combat_apply_deal_hitlag_raw_damage(MslBatch* batch, size_t idx, int damage
     batch->state.hitlag[idx] = hl;
     combat_state_flags_set_is_hitlag(batch, idx, hl);
   }
+  // x1914 is also the sole gate for deal_dmg_cb. Keep callback ownership on this shared producer
+  // so fighter HitCapsule contacts against item hurtboxes and item HitCapsules cannot bypass
+  // character callbacks such as grounded Falcon Kick's cumulative slowdown.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/it/itcoll.c::{it_802703E8,it_8026D564}
+  falcon_specials_processhit_note_dealt_x1914(batch, idx);
 }
 
 void combat_apply_min_hitlag_frames(MslBatch* batch, size_t idx, uint16_t hitlag_frames) {
@@ -416,6 +464,9 @@ static inline uint8_t combat_source_order_earlier_body_hitcapsule_precedes_shiel
       continue;
     }
     const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+    if (!msl_hitbox_x42_b5_enabled(hb_flags)) {
+      continue;
+    }
     if (defender_on_ground) {
       if ((hb_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0) {
         continue;
@@ -1809,6 +1860,40 @@ static inline void combat_processhit_apply_resolved_damage(const MslCommonParams
     return;
   }
 
+  if (batch->dive_processhit_collecting != 0u && ev->kb_applied > 0.0f &&
+      batch->dive_processhit_pending != NULL && batch->dive_processhit_pending_valid != NULL) {
+    const size_t idx = ev->d_idx;
+    uint8_t is_reciprocal_dive_actor = 0u;
+    const uint8_t victim_p = batch->state.attached_victim_port[idx];
+    if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+        batch->state.action_id[idx] == (uint16_t)MSL_ACT_CA_SPECIAL_HI_CATCH && victim_p != 0xFFu &&
+        victim_p < batch->config.num_players && victim_p != (uint8_t)ev->defender) {
+      const size_t vidx = msl_idx_player(ev->bi, (int)victim_p);
+      is_reciprocal_dive_actor =
+          (batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN &&
+           batch->state.grab_owner_port[vidx] == (uint8_t)ev->defender)
+              ? 1u
+              : 0u;
+    } else {
+      const uint8_t owner_p = batch->state.grab_owner_port[idx];
+      if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN && owner_p != 0xFFu &&
+          owner_p < batch->config.num_players && owner_p != (uint8_t)ev->defender) {
+        const size_t oidx = msl_idx_player(ev->bi, (int)owner_p);
+        is_reciprocal_dive_actor =
+            (batch->state.char_id[oidx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+             batch->state.action_id[oidx] == (uint16_t)MSL_ACT_CA_SPECIAL_HI_CATCH &&
+             batch->state.attached_victim_port[oidx] == (uint8_t)ev->defender)
+                ? 1u
+                : 0u;
+      }
+    }
+    if (is_reciprocal_dive_actor != 0u) {
+      batch->dive_processhit_pending[ev->d_idx] = *ev;
+      batch->dive_processhit_pending_valid[ev->d_idx] = 1u;
+      return;
+    }
+  }
+
   // Decomp-shaped Fighter_ProcessHit consumer:
   // - collision/item/throw producers fill the source-specific lanes in `ev`;
   // - this helper owns the shared percent aftermath: no-KB cleanup, KB velocity/state entry,
@@ -1970,6 +2055,9 @@ static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
     batch->state.hitlag[a_idx] = a_hl;
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
   }
+  // Invincible BODY contact still sets fp->dmg.x1914 (ftColl_80076ED8 writes without applying
+  // percent/KB), so deal_dmg_cb owners fire here too.
+  falcon_specials_processhit_note_dealt_x1914(batch, a_idx);
 }
 
 // Marth Counter intercept (ftMs_SpecialLw): while the script-armed window is live
@@ -2301,6 +2389,7 @@ static inline uint8_t combat_item_damage_product_build(const MslBatch* batch, si
 static inline uint8_t combat_throw_damage_product_build(const MslBatch* batch, size_t a_idx,
                                                         const MslThrowHitboxParams* p,
                                                         uint16_t move_id,
+                                                        uint8_t exclude_current_instance,
                                                         MslCombatDamageProduct* out) {
   if (batch == NULL || p == NULL || out == NULL) {
     return 0u;
@@ -2322,8 +2411,14 @@ static inline uint8_t combat_throw_damage_product_build(const MslBatch* batch, s
   const uint16_t attack_instance = batch->state.attack_instance[a_idx];
   combat_damage_product_init(out, move_id, attack_instance, dmg_raw_i, dmg_raw_i);
   float dmg_f = p->damage;
-  const float stale_mult =
-      staling_multiplier_for_move_excluding_instance(batch, a_idx, move_id, attack_instance);
+  // Ordinary Throw* capsules are created before same-instance release contacts can update the stale
+  // queue, so they exclude their current instance. Falcon Dive release is different: the CATCH
+  // contact has already stale-queued the same move/instance before doCatchAnim creates Throw0's
+  // hit capsule, so that release damage must count the current queue entry.
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialLw_800E5128,doCatchAnim}
+  // refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071E04
+  const float stale_mult = staling_multiplier_for_move_excluding_instance(
+      batch, a_idx, move_id, exclude_current_instance ? attack_instance : 0u);
   if (stale_mult != 1.0f) {
     dmg_f *= stale_mult;
   }
@@ -2351,6 +2446,8 @@ static inline void combat_body_damage_producer_apply_attacker_side(
     batch->state.hitlag[a_idx] = a_hl;
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
   }
+  // deal_dmg_cb owners fire from the x1914 dealt-damage path once per frame (Fighter_ProcessHit).
+  falcon_specials_processhit_note_dealt_x1914(batch, a_idx);
 }
 
 static inline void combat_body_damage_log_entry_init(
@@ -2382,8 +2479,10 @@ static inline void combat_body_damage_log_entry_init(
   }
   const uint8_t d_grab_owner = batch->state.grab_owner_port[d_idx];
   e->attached_grabbed_victim =
-      (uint8_t)(d_grab_owner != 0xFFu && d_grab_owner == (uint8_t)attacker &&
-                msl_action_is_grabbed_victim(e->defender_motion_id));
+      (uint8_t)(d_grab_owner != 0xFFu && ((d_grab_owner == (uint8_t)attacker &&
+                                           msl_action_is_grabbed_victim(e->defender_motion_id)) ||
+                                          (d_grab_owner != (uint8_t)attacker &&
+                                           msl_action_is_thrown_victim(e->defender_motion_id))));
   e->attacker_attack_id = attacker_attack_id;
   e->attacker_instance_id = attacker_instance_id;
   e->hitbox_angle = batch->state.hitbox_angle[hb_i];
@@ -2430,6 +2529,7 @@ static inline uint8_t combat_body_damage_log_record(
   }
 
   batch->state.percent_temp[d_idx] += prod.applied_damage;
+  falcon_specials_processhit_note_higher_priority(batch, d_idx);
   if (prod.env_dmg > scratch->max_env_dmg) {
     scratch->max_env_dmg = prod.env_dmg;
   }
@@ -2784,6 +2884,7 @@ static inline void combat_body_damage_log_materialize_damageflyroll_zero_consume
 static inline uint8_t combat_attached_throw_body_hit_suppresses_victim_hitlag(
     const MslBatch* batch, const MslCombatBodyDamageLogEntry* e) {
   if (batch == NULL || e == NULL || e->attached_grabbed_victim == 0u ||
+      batch->state.grab_owner_port[e->d_idx] != (uint8_t)e->attacker ||
       !msl_action_is_throw_owner(e->attacker_motion_id)) {
     return 0u;
   }
@@ -2798,6 +2899,26 @@ static inline uint8_t combat_attached_throw_body_hit_suppresses_victim_hitlag(
   const float attacker_anim_frame =
       msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[e->a_idx]);
   return attacker_anim_frame < release_af ? 1u : 0u;
+}
+
+static inline uint8_t combat_attached_falcon_dive_catch_hit_suppresses_victim_hitlag(
+    const MslBatch* batch, const MslCombatBodyDamageLogEntry* e) {
+  // Falcon Dive hold: the SpecialHiCatch scripted BODY pulse damages the held CaptureCaptain
+  // victim without starting the victim's own x195C hitlag (Slippi victim hitlag stays 0 across
+  // the connect window). The victim's freeze instead rides the OWNER's hitlag through the
+  // recursive x2219_b5 propagation over the fp->x1A5C held-victim link (modeled by the
+  // CaptureCaptain owner-slaved gate in anim_timebase.c).
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkRecursiveFunc_8006D044,Fighter_8006D10C}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+  if (batch == NULL || e == NULL || e->attached_grabbed_victim == 0u) {
+    return 0u;
+  }
+  return (batch->state.grab_owner_port[e->d_idx] == (uint8_t)e->attacker &&
+          batch->state.char_id[e->a_idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+          e->attacker_motion_id == (uint16_t)MSL_ACT_CA_SPECIAL_HI_CATCH &&
+          batch->state.action_id[e->d_idx] == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN)
+             ? 1u
+             : 0u;
 }
 
 static inline uint8_t combat_attached_throw_body_pose_gap_admits_pre_release_contact(
@@ -2875,11 +2996,14 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   const uint16_t d_hl_prev = batch->state.hitlag[d_idx];
   const uint8_t d_hl_increased = (d_hl > d_hl_prev) ? 1u : 0u;
 
+  const uint8_t attachment_still_live =
+      (e->attached_grabbed_victim && batch->state.grab_owner_port[d_idx] != 0xFFu) ? 1u : 0u;
   MslCombatDamageApplyClass body_damage_class =
-      e->attached_grabbed_victim ? MSL_COMBAT_DAMAGE_ATTACHED_SUPPRESSED : MSL_COMBAT_DAMAGE_FULL;
+      attachment_still_live ? MSL_COMBAT_DAMAGE_ATTACHED_SUPPRESSED : MSL_COMBAT_DAMAGE_FULL;
   if (body_damage_class == MSL_COMBAT_DAMAGE_ATTACHED_SUPPRESSED) {
     const uint8_t pre_release_throw_body_hit =
-        combat_attached_throw_body_hit_suppresses_victim_hitlag(batch, e);
+        (uint8_t)(combat_attached_throw_body_hit_suppresses_victim_hitlag(batch, e) ||
+                  combat_attached_falcon_dive_catch_hit_suppresses_victim_hitlag(batch, e));
     if (d_hl_increased && pre_release_throw_body_hit == 0u) {
       batch->state.hitlag[d_idx] = d_hl;
       combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
@@ -3080,6 +3204,7 @@ static inline void combat_mutations_pass1_future_apply_body_phantom_hit(MslBatch
   batch->state.phantom_damage_timer_x189c[d_idx] = d_hl;
   batch->state.phantom_damage_source_port[d_idx] =
       (attacker >= 0 && attacker < (int)batch->config.num_players) ? (uint8_t)attacker : 0xFFu;
+  falcon_specials_processhit_note_higher_priority(batch, d_idx);
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
   msl_damage_source_write_direct(batch, d_idx,
                                  combat_source_port0_for_attacker(batch, a_idx, attacker));
@@ -3134,6 +3259,7 @@ void combat_apply_item_phantom_hit(MslBatch* batch, int batch_index, int attacke
       combat_damage_allow_sdi_set(batch, d_idx);
     }
   }
+  falcon_specials_processhit_note_higher_priority(batch, d_idx);
   batch->state.instance_hit_by[d_idx] = item_instance_id;
   msl_damage_source_write_direct(batch, d_idx,
                                  combat_source_port0_for_attacker(batch, a_idx, attacker));
@@ -3321,6 +3447,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // Percent-temp accumulation (BODY): fp->dmg.x1838_percentTemp.
   const float percent_pre = batch->state.percent[d_idx];
   batch->state.percent_temp[d_idx] += damage_product.applied_damage;
+  falcon_specials_processhit_note_higher_priority(batch, d_idx);
   const float dmg_temp = batch->state.percent_temp[d_idx];
 
   // Special-case: zero-KB laser hits.
@@ -3417,7 +3544,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     MslThrowHitboxParams throw_p = {0};
     if (move_tables_throw_hitbox_params(batch->state.char_id[a_idx], (uint16_t)MSL_ACT_THROW_LW,
                                         batch->state.throw_pending_hit_idx[a_idx], &throw_p) &&
-        combat_apply_throw_hit_core(batch, batch_index, attacker, defender, &throw_p, 0u)) {
+        combat_apply_throw_hit_core(batch, batch_index, attacker, defender, &throw_p, 0u, 0u, 1u,
+                                    1u, 1u)) {
       combat_throw_release_integrate_position_now(batch, a_idx, d_idx);
     }
   }
@@ -3788,7 +3916,11 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
 
 static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_index, int attacker,
                                                   int defender, const MslThrowHitboxParams* p,
-                                                  uint8_t update_bookkeeping) {
+                                                  uint8_t update_bookkeeping,
+                                                  uint8_t constrained_ground_to_air_preapplied,
+                                                  uint8_t stale_excludes_current_instance,
+                                                  uint8_t use_throw_weight,
+                                                  uint8_t apply_throw_release_di) {
   if (batch == NULL || p == NULL) {
     return 0;
   }
@@ -3809,27 +3941,17 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
     return 0;
   }
 
-  // Hit status / hurtbox-state eligibility gate (movescript-derived; opcode 26 + Slippi passthrough).
-  //
-  // Decomp pointers (GALE01):
-  // - set_throw_flags triggers throw hit application (ftCo_800DD724), which then gates the throw
-  //   damage float on ftColl_8007B868(victim):
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-  // - Intangible blocks hurtcapsule collision checks entirely:
-  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868 (guards the hurtcapsule loop on `x1988 != 2 && x198C != 2`)
-  // - Invincible still allows a "contact" that can contribute to attacker hitlag, but suppresses
-  //   defender damage/KB/state entry:
-  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
-  const uint8_t hit_status = combat_defender_hit_status_u8(batch, d_idx);
-  uint8_t hurt_state = batch->state.hurtbox_state[d_idx];
-  if (hit_status > hurt_state) {
-    hurt_state = hit_status;
-  }
-  if (hurt_state == 2u) {
-    return 0;
-  }
-  const uint8_t defender_no_damage = (hurt_state != 0u) ? 1u : 0u;
+  // Throw release has its own hit-status ordering, distinct from ordinary BODY admission:
+  // - ftCo_800DDDE4 first clears the victim's script-owned x1988 through ftColl_8007B62C(..., 0),
+  // - then ftColl_8007B868 tests the remaining x198C lane only and selects either hit damage or 0,
+  // - either way it continues through knockback, damage-state entry, detach, and D5D4 release.
+  // `hurtbox_state` is the replay-visible merged x1988/x198C lane; publish the exposed x198C value
+  // immediately so the cleared x1988 cannot leak into later same-frame owners.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B62C,ftColl_8007B868}
+  const uint8_t remaining_x198c = batch->state.colanim_hit_status_x198c[d_idx];
+  batch->state.hurtbox_state[d_idx] = remaining_x198c;
+  const uint8_t defender_no_damage = (remaining_x198c != 0u) ? 1u : 0u;
 
   // Throw-hit damage ownership:
   // - set_throw_hitbox writes HitCapsule.damage through ft_80089228(fp->x2068, fp->x206c, raw_damage).
@@ -3844,19 +3966,17 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   }
 
   MslCombatDamageProduct damage_product;
-  if (!combat_throw_damage_product_build(batch, a_idx, p, move_id, &damage_product)) {
-    return 0;
-  }
-
-  const MslCombatDamageApplyClass throw_damage_class =
-      defender_no_damage ? MSL_COMBAT_DAMAGE_REJECTED : MSL_COMBAT_DAMAGE_FULL;
-  if (throw_damage_class == MSL_COMBAT_DAMAGE_REJECTED) {
+  if (!combat_throw_damage_product_build(batch, a_idx, p, move_id, stale_excludes_current_instance,
+                                         &damage_product)) {
     return 0;
   }
 
   // Percent-temp accumulation (BODY): fp->dmg.x1838_percentTemp.
   const float percent_pre = batch->state.percent[d_idx];
-  batch->state.percent_temp[d_idx] += damage_product.applied_damage;
+  if (defender_no_damage == 0u) {
+    batch->state.percent_temp[d_idx] += damage_product.applied_damage;
+    falcon_specials_processhit_note_higher_priority(batch, d_idx);
+  }
   const float dmg_temp = batch->state.percent_temp[d_idx];
 
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
@@ -3870,15 +3990,21 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   // argument (instead of victim co_attrs.weight), then routes into ftCo_Damage_CalcKnockback.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0
-  if (c->throw_kb_weight_x10c > 0.0f) {
+  if (use_throw_weight != 0u && c->throw_kb_weight_x10c > 0.0f) {
     d_ch_throw.weight = c->throw_kb_weight_x10c;
   }
 
-  // Throw hits are treated as airborne damage entry (victim is detached from the throw joint).
-  // Decomp: throw release clears grounded state via ftCommon_8007D5D4 on the thrown fighter.
+  // ftCo_800DDDE4 applies ftCommon_8007D5D4 to fp4. Ordinarily fp4 is the thrown fighter; when the
+  // Falcon Dive x221B_b7 branch is live, fp4 is Falcon and the victim remains grounded until
+  // ftCo_8008DCE0 performs its floor-normal/KB-angle decision. Falcon Dive applies D5D4 to the
+  // selected constrained fighter before releasing x2226_b2 and running the release-local mpColl
+  // probe, so its wrapper always marks this source callback as already consumed.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-  combat_apply_ftCommon_8007D5D4_ground_to_air(batch, d_idx);
-  const uint8_t defender_on_ground = 0u;
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialLw_800E5128,doCatchAnim}
+  if (constrained_ground_to_air_preapplied == 0u) {
+    combat_apply_ftCommon_8007D5D4_ground_to_air(batch, d_idx);
+  }
+  const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
 
   // Knockback magnitude (ftColl_80079AB0) + damage angle (ftCo_Damage_CalcAngle).
   const size_t bi = a_idx / (size_t)MSL_MAX_PLAYERS;
@@ -3990,7 +4116,9 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   ev.kb_x = kb_x;
   ev.kb_y = kb_y;
   ev.defender_on_ground = defender_on_ground;
-  ev.apply_throw_release_di = 1u;
+  ev.use_grounded_kb = 1u;
+  ev.grounded_ecb_lock_owner = 1u;
+  ev.apply_throw_release_di = apply_throw_release_di;
   ev.hurt_height = hurt_height;
   ev.damage_state_raw_angle = p->angle;
   if (low_throw_damage_state_arg_owner != 0u) {
@@ -4026,7 +4154,211 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
 
 uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, int defender,
                                const MslThrowHitboxParams* p) {
-  return combat_apply_throw_hit_core(batch, batch_index, attacker, defender, p, 1u);
+  return combat_apply_throw_hit_core(batch, batch_index, attacker, defender, p, 1u, 0u, 1u, 1u, 1u);
+}
+
+uint8_t combat_apply_throw_hit_falcon_dive_release(MslBatch* batch, int batch_index, int attacker,
+                                                   int defender, const MslThrowHitboxParams* p,
+                                                   uint8_t constrained_ground_to_air_preapplied) {
+  return combat_apply_throw_hit_core(batch, batch_index, attacker, defender, p, 1u,
+                                     constrained_ground_to_air_preapplied, 0u, 1u, 1u);
+}
+
+typedef struct MslCaptureHitSource {
+  int attacker;
+  float attack_ratio;
+  float facing_dir_1;
+  uint16_t instance_hit_by;
+  uint16_t stale_move_id;
+  uint16_t stale_attack_instance;
+  uint16_t combo_attack_id;
+  uint8_t last_hit_by;
+  uint8_t update_bookkeeping;
+} MslCaptureHitSource;
+
+static uint8_t combat_capture_hit_event_build(MslBatch* batch, int bi, int defender,
+                                              const MslThrowHitboxParams* p,
+                                              const MslCaptureHitSource* source,
+                                              MslCombatProcessHitResolved* out) {
+  if (batch == NULL || p == NULL || source == NULL || out == NULL || bi < 0 ||
+      bi >= batch->batch_size || defender < 0 || defender >= (int)batch->config.num_players ||
+      source->attacker < 0 || source->attacker >= (int)batch->config.num_players) {
+    return 0u;
+  }
+  const MslCommonParams* c = msl_common_params();
+  const size_t a_idx = msl_idx_player(bi, source->attacker);
+  const size_t d_idx = msl_idx_player(bi, defender);
+  const MslCharParams* d_ch = msl_char_params_fast(batch->state.char_id[d_idx]);
+  if (c == NULL || d_ch == NULL) {
+    return 0u;
+  }
+
+  float coll_kb_mul = batch->state.match_damage_ratio[bi];
+  coll_kb_mul *= source->attack_ratio;
+  coll_kb_mul *= batch->state.defense_ratio[d_idx];
+  if (!(coll_kb_mul > 0.0f)) {
+    coll_kb_mul = 1.0f;
+  }
+  const float kb = combat_damage_calc_kb_applied(
+      c, d_ch, batch->state.action_id[d_idx], batch->state.percent[d_idx],
+      batch->state.percent_temp[d_idx], (int)p->damage, p->kbg, p->wsk, p->bkb, coll_kb_mul,
+      batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx],
+      batch->state.kb_smashcharge_active[d_idx]);
+  const uint8_t on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
+  const float angle = combat_damage_calc_angle_radians(c, p->angle, on_ground, kb);
+  float kb_vel = kb * c->kb_vel_mul;
+  if (!on_ground && combat_damage_check_air_motion_kb_mul(c, batch, d_idx)) {
+    kb_vel *= c->air_motion_kb_mul;
+  }
+  const float x = kb_vel * cosf(angle);
+  const float y = kb_vel * sinf(angle);
+
+  *out = (MslCombatProcessHitResolved){0};
+  out->bi = bi;
+  out->attacker = source->attacker;
+  out->defender = defender;
+  out->a_idx = a_idx;
+  out->d_idx = d_idx;
+  out->d_motion_id = batch->state.action_id[d_idx];
+  out->kb_applied = kb;
+  out->kb_angle_rad = angle;
+  out->kb_x = -x * source->facing_dir_1;
+  out->kb_y = y;
+  out->defender_on_ground = on_ground;
+  out->use_grounded_kb = 1u;
+  out->grounded_ecb_lock_owner = 1u;
+  out->hurt_height = 1u;
+  out->damage_state_raw_angle = p->angle;
+  out->instance_hit_by = source->instance_hit_by;
+  out->last_hit_by = source->last_hit_by;
+  out->source_write = MSL_PROCESS_HIT_SOURCE_WRITE_DIRECT;
+  out->update_bookkeeping = source->update_bookkeeping;
+  out->source_motion_id = batch->state.action_id[a_idx];
+  out->source_hitcapsule_int_dmg = (int)p->damage;
+  out->source_hitbox_angle = p->angle;
+  out->source_hitbox_kbg = p->kbg;
+  out->source_hitbox_bkb = p->bkb;
+  out->stale_move_id = source->stale_move_id;
+  out->stale_attack_instance = source->stale_attack_instance;
+  out->combo_attack_id = source->combo_attack_id;
+  return 1u;
+}
+
+uint8_t combat_apply_falcon_dive_capture_break_hit(MslBatch* batch, int bi, int falcon,
+                                                   int victim) {
+  MslThrowHitboxParams p = {0};
+  if (batch == NULL || !move_tables_falcon_dive_capture_break_hitbox_params(&p)) {
+    return 0u;
+  }
+  const size_t fidx = msl_idx_player(bi, falcon);
+  const size_t vidx = msl_idx_player(bi, victim);
+
+  // DCFD4 clears x1988, forces D5D4, computes ftColl_80079C70 from raw xDF4[1].unk_count before
+  // adding its creation-time stale-scaled damage, then enters Damage with no hitlag. It does not
+  // run DDDE4's remaining-x198C admission gate.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c::ftCo_800DCFD4
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007ABD0,ftColl_80079C70,ftColl_8007891C}
+  batch->state.hurtbox_state[vidx] = batch->state.colanim_hit_status_x198c[vidx];
+  combat_apply_ftCommon_8007D5D4_ground_to_air(batch, vidx);
+  const float falcon_facing = batch->state.facing[fidx] ? 1.0f : -1.0f;
+  const uint16_t move_id = batch->state.attack_id[fidx];
+  const uint16_t attack_instance = batch->state.attack_instance[fidx];
+  const MslCaptureHitSource source = {
+      .attacker = falcon,
+      .attack_ratio = batch->state.attack_ratio[fidx],
+      .facing_dir_1 = -falcon_facing,
+      .instance_hit_by = batch->state.instance_id[fidx],
+      .stale_move_id = move_id,
+      .stale_attack_instance = attack_instance,
+      .combo_attack_id = move_id,
+      .last_hit_by = combat_source_port0_for_attacker(batch, fidx, falcon),
+      .update_bookkeeping = 1u,
+  };
+  MslCombatProcessHitResolved ev = {0};
+  if (!combat_capture_hit_event_build(batch, bi, victim, &p, &source, &ev)) {
+    return 0u;
+  }
+  const float stale_mult =
+      staling_multiplier_for_move_excluding_instance(batch, fidx, move_id, attack_instance);
+  batch->state.percent_temp[vidx] += p.damage * stale_mult;
+  falcon_specials_processhit_note_higher_priority(batch, vidx);
+  combat_processhit_apply_resolved_damage(msl_common_params(), batch, &ev);
+  return 1u;
+}
+
+static uint8_t combat_falcon_dive_de854_stored_hit(MslBatch* batch, int bi, int falcon, int victim,
+                                                   MslCombatProcessHitResolved* out) {
+  MslThrowHitboxParams p = {0};
+  if (batch == NULL || out == NULL || !move_tables_falcon_dive_capture_break_hitbox_params(&p)) {
+    return 0u;
+  }
+  const size_t fidx = msl_idx_player(bi, falcon);
+  const size_t vidx = msl_idx_player(bi, victim);
+  const float falcon_facing = batch->state.facing[fidx] ? 1.0f : -1.0f;
+  const uint16_t move_id = batch->state.attack_id[fidx];
+  const uint16_t attack_instance = batch->state.attack_instance[fidx];
+  const MslCaptureHitSource source = {
+      .attacker = falcon,
+      .attack_ratio = batch->state.attack_ratio[fidx],
+      .facing_dir_1 = -falcon_facing,
+      .instance_hit_by = batch->state.instance_id[fidx],
+      .stale_move_id = move_id,
+      .stale_attack_instance = attack_instance,
+      .combo_attack_id = move_id,
+      .last_hit_by = combat_source_port0_for_attacker(batch, fidx, falcon),
+      .update_bookkeeping = 1u,
+  };
+  // DE854 computes xDF4[1] knockback from raw unk_count six against the direct incoming
+  // percentTemp, then adds the capsule's creation-time stale-scaled damage. It does not enter
+  // Damage or create hitlag; x1828 coordinates the later ProcessHit entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE854
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007ABD0,ftColl_80079C70,ftColl_8007891C}
+  if (!combat_capture_hit_event_build(batch, bi, victim, &p, &source, out)) {
+    return 0u;
+  }
+  const float stale_mult =
+      staling_multiplier_for_move_excluding_instance(batch, fidx, move_id, attack_instance);
+  batch->state.percent_temp[vidx] += p.damage * stale_mult;
+  falcon_specials_processhit_note_higher_priority(batch, vidx);
+  return 1u;
+}
+
+static uint8_t combat_falcon_dive_de2f0_release_hit(MslBatch* batch, int bi, int holder) {
+  const MslCommonParams* c = msl_common_params();
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const MslThrowHitboxParams p = {
+      .damage = (float)c->capture_release_hit_damage_x384,
+      .angle = c->capture_release_hit_angle_x388,
+      .kbg = c->capture_release_hit_kbg_x38c,
+      .wsk = c->capture_release_hit_wsk_x390,
+      .bkb = c->capture_release_hit_bkb_x394,
+      .element = (uint8_t)c->capture_release_hit_element_x398,
+      .sfx_kind = (uint8_t)c->capture_release_hit_sfx_kind_x3a0,
+      .sfx_severity = (uint8_t)c->capture_release_hit_sfx_severity_x39c,
+  };
+  const size_t hidx = msl_idx_player(bi, holder);
+  const float facing = batch->state.facing[hidx] ? 1.0f : -1.0f;
+  const MslCaptureHitSource source = {
+      .attacker = holder,
+      .attack_ratio = 1.0f,
+      .facing_dir_1 = facing,
+      .instance_hit_by = 0u,
+      .last_hit_by = 6u,
+      .update_bookkeeping = 0u,
+  };
+  MslCombatProcessHitResolved ev = {0};
+  if (!combat_capture_hit_event_build(batch, bi, holder, &p, &source, &ev)) {
+    return 0u;
+  }
+  // DE2F0 clears attack attribution, applies the extracted zero-damage/BKB-20 descriptor, and
+  // enters Damage without hitlag.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DE2F0
+  batch->state.instance_hit_by[hidx] = 0u;
+  msl_damage_source_write_direct(batch, hidx, 6u);
+  combat_processhit_apply_resolved_damage(c, batch, &ev);
+  return 1u;
 }
 
 static inline void combat_throw_release_integrate_position_now(MslBatch* batch, size_t owner_idx,
@@ -4141,6 +4473,7 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
   if (int_dmg <= 0) {
     return;
   }
+  falcon_specials_processhit_note_higher_priority(batch, d_idx);
 
   // Decomp item->shield path does not gate shieldDamageTaken on powershield-active
   // (`fp->x221C_b2`); ftColl_80077688 accumulates fp->x19A0 unconditionally, while the separate
@@ -4247,6 +4580,7 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(
   if (c == NULL) {
     return;
   }
+  falcon_specials_processhit_note_higher_priority(batch, d_idx);
 
   // Capture defender motion id before we transition into GuardSetOff.
   const uint16_t d_motion_id_pre = batch->state.action_id[d_idx];
@@ -4500,8 +4834,11 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
       continue;
     }
 
-    const uint16_t a_motion_id = batch->state.action_id[a_idx];
-    if (a_motion_id != (uint16_t)MSL_ACT_CATCH && a_motion_id != (uint16_t)MSL_ACT_CATCH_DASH) {
+    // ftColl_80078A2C consumes the descriptor kind installed by ftCommon_8007E2D0. The lane is
+    // refreshed from generated MotionState ownership before primitive collision; no character or
+    // action proxy belongs in this shared selection path.
+    const uint16_t catch_kind_x1a68 = batch->state.catch_kind_x1a68[a_idx];
+    if (catch_kind_x1a68 == 0u) {
       continue;
     }
 
@@ -4525,6 +4862,13 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
       if (batch->state.hitlag_started_frame[d_idx] != 0) {
         continue;
       }
+      // ftColl_80078A2C rejects the source x2224_b2 damage/catch-disabled target before capsule
+      // selection. This lane is already reconstructed explicitly; it applies equally to ordinary
+      // Catch and Falcon Dive kind 2.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+      if (batch->state.dmg_x2224_b2[d_idx] != 0u) {
+        continue;
+      }
       if (batch->state.grab_owner_port[d_idx] != 0xFFu) {
         continue;
       }
@@ -4539,18 +4883,11 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
         continue;
       }
-      // Decomp catch target mask:
-      // - Catch entry calls ftCommon_8007E2D0(fp, 1, ...), installing attacker fp->x1A68 = 1.
-      // - DownBound entry calls ftCommon_8007E2F4(fp, 0x1FF); DownBound/DownDamage -> DownWait
-      //   handoffs call ftCommon_8007E2F4(fp, 1).
-      // - ftColl_80078A2C rejects victims when `(victim_fp->x1A6A & this_fp->x1A68) != 0`,
-      //   before grabbable capsule overlap. This is why knocked-down victims are not catchable
-      //   even when their ordinary hurt capsules overlap the grab bubble.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8C54
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_8009794C,ftCo_80097E8C,ftCo_80097F38}
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
+      // Exact victim target-mask gate. x1A6A is written by source state-entry owners and blocks
+      // downed/ledge fighters, captured victims, and active carriers. In four-player order this
+      // must be observed immediately after an earlier attacker connects.
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
-      if (combat_defender_downed_catch_mask_blocks(batch->state.action_id[d_idx])) {
+      if ((batch->state.catch_target_mask_x1a6a[d_idx] & catch_kind_x1a68) != 0u) {
         continue;
       }
 
@@ -4923,6 +5260,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             // same-group victims for this collision pass.
             // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,inlineA0,inlineA1}
             const uint16_t f1 = batch->state.hitbox_flags[hb1_i];
+            if (!msl_hitbox_x42_b5_enabled(f1)) {
+              continue;
+            }
             if ((f1 & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0) {
               continue;
             }
@@ -4930,7 +5270,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               continue;
             }
             const uint8_t e1 = batch->state.hitbox_element[hb1_i];
-            if (e1 == (uint8_t)MSL_HIT_ELEMENT_INERT) {
+            if (e1 == (uint8_t)MSL_HIT_ELEMENT_INERT || e1 == (uint8_t)MSL_HIT_ELEMENT_CATCH) {
               continue;
             }
             const float d1 = combat_hitcapsule_collision_damage(batch, p1_idx, hb1_i);
@@ -4947,6 +5287,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                 continue;
               }
               const uint16_t f0 = batch->state.hitbox_flags[hb0_i];
+              if (!msl_hitbox_x42_b5_enabled(f0)) {
+                continue;
+              }
               if ((f0 & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0) {
                 continue;
               }
@@ -4954,7 +5297,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                 continue;
               }
               const uint8_t e0 = batch->state.hitbox_element[hb0_i];
-              if (e0 == (uint8_t)MSL_HIT_ELEMENT_INERT) {
+              if (e0 == (uint8_t)MSL_HIT_ELEMENT_INERT || e0 == (uint8_t)MSL_HIT_ELEMENT_CATCH) {
                 continue;
               }
               const float d0 = combat_hitcapsule_collision_damage(batch, p0_idx, hb0_i);
@@ -5244,11 +5587,22 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (!batch->state.hitbox_enabled[hb_i]) {
             continue;
           }
+          // Shield candidates exclude Catch element capsules (Falcon Dive's persistent grab
+          // bubbles must not poke shields when the catch mask rejects the victim). Unlike the
+          // BODY predicate, Inert stays admitted here: the Raptor Boost inert-detect flag is set
+          // from the shield-overlap path.
+          // refs/melee/src/melee/ft/ftcoll.c (shield candidate: element != Catch only)
+          if (batch->state.hitbox_element[hb_i] == (uint8_t)MSL_HIT_ELEMENT_CATCH) {
+            continue;
+          }
           if (clank_skip_hb[attacker][defender][hb_id]) {
             continue;
           }
 
           const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+          if (!msl_hitbox_x42_b5_enabled(hb_flags)) {
+            continue;
+          }
           const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1 : 0;
           if (defender_on_ground) {
             if ((hb_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0) {
@@ -5497,6 +5851,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                 d_idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
             batch->state.state_flags[d_flags_i] |=
                 (uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
+            // The same source branch writes the ATTACKER's fp->unk_gobj, so detect-driven
+            // specials (Raptor Boost) connect on shielding opponents too.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70 (HitElement_Inert shield branch)
+            falcon_specials_on_inert_shield_contact(batch, a_idx);
 
             // Decomp does not take the normal shield-hit path for inert hitboxes:
             // `if (hit->element != HitElement_Inert) ftColl_80076CBC(...); else victim_fp->x221C_b5=true`.
@@ -5770,6 +6128,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
 
           const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+          if (!msl_hitbox_x42_b5_enabled(hb_flags)) {
+            continue;
+          }
           const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1 : 0;
           if (defender_on_ground) {
             if ((hb_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0) {
@@ -5877,6 +6238,94 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       }
       const uint8_t defender_no_damage = (hurt_state != 0u) ? 1u : 0u;
 
+      // Inert BODY contacts share ftColl_80078C70's ordinary HitCapsule/hurtcapsule admission but
+      // do not enter ftColl_80076ED8's damage/hitlist mutation path. Publish only after x42,
+      // ground/air, shield-priority, hitlist, and lbColl_8000805C narrowphase have accepted the
+      // contact; Falcon's ProcessHit consumer later applies the unk_gobj callback branch.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70 (HitElement_Inert BODY branch)
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_8000ACFC}
+      for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
+        const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+        if (!batch->state.hitbox_enabled[hb_i] ||
+            batch->state.hitbox_element[hb_i] != (uint8_t)MSL_HIT_ELEMENT_INERT ||
+            clank_skip_hb[attacker][defender][hb_id]) {
+          continue;
+        }
+        const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+        if (!msl_hitbox_x42_b5_enabled(hb_flags) ||
+            !combat_hitbox_targets_fighter_ground_state(hb_flags,
+                                                        batch->state.on_ground[d_idx] ? 1u : 0u) ||
+            !hitlist_allows_fighter_live_collision(batch, bi, attacker, hb_id, defender,
+                                                   defender_iid)) {
+          continue;
+        }
+
+        const float hx = batch->state.hitbox_x[hb_i];
+        const float hy = batch->state.hitbox_y[hb_i];
+        const float hz = batch->state.hitbox_z[hb_i];
+        const float hr = batch->state.hitbox_radius[hb_i];
+        const uint8_t shield_seed_kind =
+            batch->state
+                .combat_shield_contact_hb_kind[idx_hitbox_victim(bi, attacker, hb_id, defender)];
+        uint8_t blocked_by_shield = 0u;
+        if (shield_active && shield_seed_kind == 2u) {
+          blocked_by_shield = 1u;
+        } else if (shield_active && shield_seed_kind != 1u && !guard_reflect_reflectdesc_only) {
+          blocked_by_shield = combat_shield_overlap_ftcoll_80007bcc(
+              batch, bi, attacker, defender, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
+              /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
+              shield_desc_envelope_ready, shield_extent_bridge_active, NULL);
+        }
+        if (blocked_by_shield) {
+          continue;
+        }
+
+        uint8_t detected = 0u;
+        for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
+          const size_t cap_i = idx_hurtcap(bi, defender, (int)cap_id);
+          float ax = 0.0f, ay = 0.0f, az = 0.0f;
+          float bx = 0.0f, by = 0.0f, bz = 0.0f;
+          float cr = 0.0f;
+          if (use_guard_family_body_fallback_caps) {
+            if (!combat_guard_family_body_hurtcap_world(batch, d_idx, &body_fallback_caps[cap_id],
+                                                        cap_id, body_fallback_count_u16, &ax, &ay,
+                                                        &az, &bx, &by, &bz, &cr)) {
+              continue;
+            }
+          } else {
+            if (!batch->state.hurtcap_enabled[cap_i]) {
+              continue;
+            }
+            ax = batch->state.hurtcap_a_x[cap_i];
+            ay = batch->state.hurtcap_a_y[cap_i];
+            az = batch->state.hurtcap_a_z[cap_i];
+            bx = batch->state.hurtcap_b_x[cap_i];
+            by = batch->state.hurtcap_b_y[cap_i];
+            bz = batch->state.hurtcap_b_z[cap_i];
+            cr = batch->state.hurtcap_radius[cap_i];
+          }
+          float overlap_amount = 0.0f;
+          uint8_t matrix_evaluated = 0u;
+          const uint8_t matrix_overlap = combat_body_overlap_lbColl_80006E58_matrix_radius(
+              batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az, bx, by,
+              bz, 0u, &overlap_amount, &matrix_evaluated);
+          const uint8_t baseline_overlap =
+              combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
+          const uint8_t guard_tilt_live_body_pose =
+              combat_guard_tilt_live_body_pose_owner(batch, d_idx);
+          const uint8_t overlaps = (matrix_evaluated && guard_tilt_live_body_pose == 0u)
+                                       ? matrix_overlap
+                                       : (uint8_t)(baseline_overlap || matrix_overlap);
+          if (overlaps) {
+            detected = 1u;
+            break;
+          }
+        }
+        if (detected) {
+          falcon_specials_on_inert_body_contact(batch, a_idx);
+        }
+      }
+
       // BODY contacts (pass 1): source order is HitCapsule id, then first overlapping hurt capsule.
       // A BODY contact does not terminate the attacker->defender pair; ftColl_80078C70 breaks the
       // hurt-capsule loop for that HitCapsule, registers the victim ring through ftColl_80076ED8,
@@ -5890,6 +6339,16 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         if (!batch->state.hitbox_enabled[hb_i]) {
           continue;
         }
+        // ftColl's fighter BODY-hit candidate predicate excludes Catch/Inert element capsules —
+        // those participate only in the catch-selection / inert-detect passes. Falcon Dive's
+        // persistent grab bubbles carry damage 1 and otherwise fall through here when the catch
+        // mask rejects the victim (witnessed: ledge-hanging CliffWait victim taking 1% instead
+        // of nothing).
+        // refs/melee/src/melee/ft/ftcoll.c (BODY candidate: element != Catch && != Inert)
+        if (batch->state.hitbox_element[hb_i] == (uint8_t)MSL_HIT_ELEMENT_CATCH ||
+            batch->state.hitbox_element[hb_i] == (uint8_t)MSL_HIT_ELEMENT_INERT) {
+          continue;
+        }
         if (combat_defer_late_slot_same_frame_speciallw_entry_hit(batch, bi, a_idx, d_idx, attacker,
                                                                   defender, hb_id)) {
           continue;
@@ -5899,6 +6358,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         }
 
         const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+        if (!msl_hitbox_x42_b5_enabled(hb_flags)) {
+          continue;
+        }
         const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1 : 0;
         if (defender_on_ground) {
           if ((hb_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0) {
@@ -6723,6 +7185,9 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
         }
 
         const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+        if (!msl_hitbox_x42_b5_enabled(hb_flags)) {
+          continue;
+        }
         const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1 : 0;
         if (defender_on_ground) {
           if ((hb_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0) {
@@ -7091,6 +7556,111 @@ static inline uint8_t combat_specialhi_frozen_guard_dense_seed_allows_live_shiel
   return 1u;
 }
 
+static void combat_processhit_apply_capture_low_event(MslBatch* batch,
+                                                      const MslCombatProcessHitResolved* ev) {
+  if (batch == NULL || ev == NULL) {
+    return;
+  }
+  if (ev->d_hl > ev->d_hl_prev) {
+    batch->state.hitlag[ev->d_idx] = ev->d_hl;
+    combat_state_flags_set_is_hitlag(batch, ev->d_idx, ev->d_hl);
+    if (ev->hitlag_sets_x221a != 0u) {
+      combat_state_flags_set_x221a_b3(batch, ev->d_idx);
+    }
+    if (ev->hitlag_allows_sdi != 0u) {
+      combat_damage_allow_sdi_set(batch, ev->d_idx);
+    }
+  }
+  combat_processhit_write_source(batch, ev);
+  combat_processhit_apply_bookkeeping(batch, ev);
+}
+
+static void combat_processhit_resolve_falcon_dive_pairs(
+    MslBatch* batch, int bi, MslCombatProcessHitResolved pending[MSL_MAX_PLAYERS],
+    const uint8_t valid[MSL_MAX_PLAYERS]) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int holder = 0; holder < num_players; holder++) {
+    const size_t hidx = msl_idx_player(bi, holder);
+    const uint8_t victim_u8 = batch->state.attached_victim_port[hidx];
+    if (batch->state.char_id[hidx] != (uint8_t)MSL_CHAR_ID_FALCON ||
+        batch->state.action_id[hidx] != (uint16_t)MSL_ACT_CA_SPECIAL_HI_CATCH ||
+        victim_u8 == 0xFFu || victim_u8 >= (uint8_t)num_players || victim_u8 == (uint8_t)holder) {
+      continue;
+    }
+    const int victim = (int)victim_u8;
+    const size_t vidx = msl_idx_player(bi, victim);
+    if (batch->state.action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_CAPTAIN ||
+        batch->state.grab_owner_port[vidx] != (uint8_t)holder) {
+      continue;
+    }
+
+    const uint8_t holder_hit = valid[holder] && pending[holder].kb_applied > 0.0f;
+    const uint8_t victim_hit = valid[victim] && pending[victim].kb_applied > 0.0f;
+    if (!holder_hit && !victim_hit) {
+      continue;
+    }
+    const size_t vflags = vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+    const uint8_t victim_low =
+        victim_hit && ((batch->state.state_flags[vflags] & (uint8_t)MSL_STATE_FLAG_221C_B0) != 0u ||
+                       batch->state.percent_temp[vidx] < (float)c->capture_damage_release_threshold)
+            ? 1u
+            : 0u;
+
+    // ftCo_8008EC90 owns this as a linked pair while both x1A5C pointers and hold poses remain
+    // live. Only the captured victim's inlineB1 predicate selects low/high behavior.
+    // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Damage.s::ftCo_8008EC90
+    if (holder_hit && !victim_hit) {
+      (void)combat_apply_falcon_dive_capture_break_hit(batch, bi, holder, victim);
+      grab_attachment_falcon_dive_damage_release_now(batch, bi, holder, victim);
+      combat_processhit_apply_resolved_damage(c, batch, &pending[holder]);
+      continue;
+    }
+
+    if (!holder_hit && victim_hit) {
+      if (victim_low) {
+        combat_processhit_apply_capture_low_event(batch, &pending[victim]);
+        uint16_t pair_hitlag = batch->state.hitlag[vidx];
+        if (batch->state.hitlag[hidx] > pair_hitlag) {
+          pair_hitlag = batch->state.hitlag[hidx];
+        }
+        batch->state.hitlag[hidx] = pair_hitlag;
+        batch->state.hitlag[vidx] = pair_hitlag;
+      } else {
+        grab_attachment_falcon_dive_damage_release_now(batch, bi, holder, victim);
+        combat_processhit_apply_resolved_damage(c, batch, &pending[victim]);
+        (void)combat_falcon_dive_de2f0_release_hit(batch, bi, holder);
+      }
+      continue;
+    }
+
+    if (victim_low) {
+      MslCombatProcessHitResolved stored = {0};
+      if (combat_falcon_dive_de854_stored_hit(batch, bi, holder, victim, &stored)) {
+        stored.d_hl = pending[victim].d_hl;
+        stored.d_hl_prev = pending[victim].d_hl_prev;
+        stored.hitlag_mode = pending[victim].hitlag_mode;
+        stored.hitlag_sets_x221a = pending[victim].hitlag_sets_x221a;
+        stored.hitlag_allows_sdi = pending[victim].hitlag_allows_sdi;
+        combat_processhit_apply_bookkeeping(batch, &pending[victim]);
+        grab_attachment_falcon_dive_damage_release_now(batch, bi, holder, victim);
+        combat_processhit_apply_resolved_damage(c, batch, &pending[holder]);
+        combat_processhit_apply_resolved_damage(c, batch, &stored);
+      }
+    } else {
+      grab_attachment_falcon_dive_damage_release_now(batch, bi, holder, victim);
+      combat_processhit_apply_resolved_damage(c, batch, &pending[holder]);
+      combat_processhit_apply_resolved_damage(c, batch, &pending[victim]);
+    }
+  }
+}
+
 void combat_resolve(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -7099,7 +7669,14 @@ void combat_resolve(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     combat_select_body_hits_one_mutating(batch, bi);
   }
-
+  batch->dive_processhit_collecting = 0u;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    MslCombatProcessHitResolved* pending =
+        &batch->dive_processhit_pending[(size_t)bi * (size_t)MSL_MAX_PLAYERS];
+    const uint8_t* valid =
+        &batch->dive_processhit_pending_valid[(size_t)bi * (size_t)MSL_MAX_PLAYERS];
+    combat_processhit_resolve_falcon_dive_pairs(batch, bi, pending, valid);
+  }
   // Consume fp->dmg.x1838_percentTemp into percent and reset it, matching the end-of-frame cleanup
   // in Fighter_ProcessHit_8006D1EC.
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (x1838_percentTemp reset)
@@ -7129,6 +7706,11 @@ void combat_resolve(MslBatch* batch) {
   }
 
   combat_preserve_fresh_air_damage_entry_root_y(batch);
+  // Resolve Falcon's accumulated ProcessHit packet after every item/fighter contact producer.
+  // Fighter_ProcessHit's strict branch ladder suppresses dealt-damage and inert-detect callbacks
+  // when a higher-priority shield/incoming-damage packet exists in the same frame.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  falcon_specials_processhit_consume(batch);
   // `combat_shield_contact_hb_kind` is one-step replay provenance for lbColl_80007BCC /
   // ftColl_80076CBC admission. It is authoritative for the frame seeded by replay validation, but
   // it is not live HitCapsule/ShieldDesc state and must not persist into the next rollout step.
@@ -7289,7 +7871,8 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
 
         const uint8_t enabled = batch->state.hitbox_enabled[hb_i] ? 1u : 0u;
         out->hitbox_enabled = enabled;
-        out->hb_flags = batch->state.hitbox_flags[hb_i];
+        const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+        out->hb_flags = hb_flags;
         out->element = batch->state.hitbox_element[hb_i];
         out->hitbox_damage = batch->state.hitbox_damage[hb_i];
         out->hitbox_x = batch->state.hitbox_x[hb_i];
@@ -7299,12 +7882,14 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
 
         uint8_t reason = (uint8_t)MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD;
 
-        if (!enabled) {
+        if (!enabled || !msl_hitbox_x42_b5_enabled(hb_flags)) {
+          // ftColl_80078C70 excludes fighter HitCapsules with x42_b5 clear before shield geometry.
+          // Use the existing candidate-disabled diagnostic reason for that source gate.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
           reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_HITBOX_DISABLED;
         } else {
           // Ground/air eligibility gate (decomp hitcapsule x40_b2/x40_b3).
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
-          const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
           if (defender_on_ground) {
             if ((hb_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0) {
               reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_GROUND_AIR_FLAGS;

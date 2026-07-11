@@ -15,6 +15,7 @@
 #include "common_params.h"
 #include "common_specials.h"
 #include "grab_flow.h"
+#include "fighter_callbacks.h"
 #include "ids.h"
 #include "locomotion.h"
 #include "move_tables.h"
@@ -1068,6 +1069,12 @@ void marth_specials_update_pre_physics(MslBatch* batch) {
       // air->ground stage transitions and ordinary landings).
       if (on_ground) {
         batch->state.specials_air_used[idx] = 0u;
+      }
+
+      const MslFighterCallbackContext callback_ctx = msl_fighter_callback_context_make(
+          batch, bi, p, num_players, MSL_FIGHTER_CALLBACK_PHASE_IASA);
+      if (!msl_fighter_callback_phase_runs(&callback_ctx)) {
+        continue;
       }
 
       if (marth_action_is_special(a)) {

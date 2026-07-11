@@ -8,12 +8,12 @@ import numpy as np
 import pytest
 
 from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
+from tools.extraction.extract_fighter_hitboxes import FORMAT_VERSION as HITBOX_VERSION
 
 from tests.test_anim_pose import _MAT_BYTES, _find_anim_base_offset, _read_header
 from tests.test_hurtboxes_pose import _mtx34_mul_point
 
 HITBOX_MAGIC = b"MSLHITB1"
-HITBOX_VERSION = 1
 _HITBOX_EVENT_BYTES = 44
 _HITBOX_INDEX_BYTES = 12
 
@@ -84,6 +84,7 @@ def _active_hitboxes_at_frame(events: list[dict], frame: int) -> dict[int, dict]
     # - kind=0: set slot=hitbox_id
     # - kind=1: clear (hitbox_id==0xFF => clear-all)
     # - kind=2: mutate active slot damage without create-edge side effects
+    # - kind=3: mutate active slot x42 interaction flags without create-edge side effects
     active: dict[int, dict] = {}
     for ev in events:
         if int(ev["frame"]) > int(frame):
@@ -98,6 +99,11 @@ def _active_hitboxes_at_frame(events: list[dict], frame: int) -> dict[int, dict]
             hb_id = int(ev["hitbox_id"])
             if hb_id in active:
                 active[hb_id] = {**active[hb_id], "damage": ev["damage"]}
+            continue
+        if int(ev["kind"]) == 3:
+            hb_id = int(ev["hitbox_id"])
+            if hb_id in active:
+                active[hb_id] = {**active[hb_id], "u16_6": ev["u16_6"]}
             continue
         hb_id = int(ev["hitbox_id"])
         if 0 <= hb_id < 4:

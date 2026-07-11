@@ -31,6 +31,16 @@ void mpcoll_wall_ceil_apply(MslBatch* batch);
 uint8_t msl_mplib_line_intersection(float x0, float y0, float x1, float y1, float ax, float ay,
                                     float bx, float by, float* ix_out, float* iy_out);
 
+// Source mpCheck{Left,Right}Wall segment queries, including raw wall endpoints, vertical-wall
+// direction gates, joint filters, and the local endpoint clamp.
+// refs/melee/src/melee/mp/mplib.c::{mpCheckLeftWall,mpCheckRightWall,mpLineIntersectionV}
+uint8_t msl_mplib_check_left_wall(uint32_t stage_id, const MslStageWallGraph* graph, float ax,
+                                  float ay, float bx, float by, int16_t joint_id_skip,
+                                  int16_t joint_id_only);
+uint8_t msl_mplib_check_right_wall(uint32_t stage_id, const MslStageWallGraph* graph, float ax,
+                                   float ay, float bx, float by, int16_t joint_id_skip,
+                                   int16_t joint_id_only);
+
 // Legal-stage portions of mpCollGetSpeedFloor/Ceiling and mpColl_IsOnPlatform.
 //
 // Source speed helpers call mpGetSpeed(surface.index, coll->ecb.top, out), which returns the

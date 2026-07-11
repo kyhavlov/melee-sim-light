@@ -169,6 +169,7 @@ uint8_t item_laser_fighter_hitcapsule_contact_mask_precedes_shield_body(
   // have fighter HitCapsule contact without entering the regular BODY damage-state path, while
   // Falco's nonzero-KB laser BODY rows must still apply their ordinary hit.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C (fighter HitCapsule x42_b5 gate)
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007AFC
   // data/items/lasers.bin::MSLLASR1 zero_kb_damage_class/state1_zero_kb_damage_class
   const uint8_t off_n =
@@ -180,7 +181,7 @@ uint8_t item_laser_fighter_hitcapsule_contact_mask_precedes_shield_body(
       continue;
     }
     const uint16_t flags = batch->state.hitbox_flags[hb_i];
-    if ((flags & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0u ||
+    if (!msl_hitbox_x42_b5_enabled(flags) || (flags & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0u ||
         (flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u) {
       continue;
     }

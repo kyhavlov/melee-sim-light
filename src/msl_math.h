@@ -26,6 +26,112 @@ static inline float msl_float_from_bits(uint32_t bits) {
   return v;
 }
 
+static inline uint64_t msl_double_bits(double v) {
+  uint64_t bits = 0u;
+  memcpy(&bits, &v, sizeof(bits));
+  return bits;
+}
+
+static inline double msl_double_from_bits(uint64_t bits) {
+  double v = 0.0;
+  memcpy(&v, &bits, sizeof(v));
+  return v;
+}
+
+// Gekko scalar-single multiply rounds its FC operand to a 25-bit significand before the multiply.
+// refs/Ishiiruka/Source/Core/Core/PowerPC/Interpreter/Interpreter_FPUtils.h::Force25Bit
+// refs/Ishiiruka/Source/Core/Core/PowerPC/Interpreter/Interpreter_FloatingPoint.cpp::fmulsx
+static inline double msl_ppc_force_25_bit(double value) {
+  uint64_t bits = msl_double_bits(value);
+  bits = (bits & UINT64_C(0xFFFFFFFFF8000000)) + (bits & UINT64_C(0x0000000008000000));
+  return msl_double_from_bits(bits);
+}
+
+// Gekko `frsqrte` estimate used by Dolphin SDK's PSVECNormalize.
+//
+// Melee does not normalize MapLine vectors with libm sqrt/division. `mpLineGetNormal` builds the
+// perpendicular and calls PSVECNormalize, whose paired-single implementation performs one
+// `frsqrte` estimate and one Newton step. The estimate table below is the instruction's specified
+// mantissa interpolation; keeping it here makes static and transformed stage normals bit-stable on
+// non-PPC hosts.
+// refs/melee/src/melee/mp/mplib.c::mpLineGetNormal
+// refs/melee/build/GALE01/asm/dolphin/mtx/vec.s::PSVECNormalize
+// refs/Ishiiruka/Source/Core/Common/MathUtil.cpp::ApproximateReciprocalSquareRoot
+static inline double msl_ppc_frsqrte(double value) {
+  static const int32_t k_base[32] = {
+      0x3ffa000, 0x3c29000, 0x38aa000, 0x3572000, 0x3279000, 0x2fb7000, 0x2d26000, 0x2ac0000,
+      0x2881000, 0x2665000, 0x2468000, 0x2287000, 0x20c1000, 0x1f12000, 0x1d79000, 0x1bf4000,
+      0x1a7e800, 0x17cb800, 0x1552800, 0x130c000, 0x10f2000, 0x0eff000, 0x0d2e000, 0x0b7c000,
+      0x09e5000, 0x0867000, 0x06ff000, 0x05ab800, 0x046a000, 0x0339800, 0x0218800, 0x0105800,
+  };
+  static const int32_t k_dec[32] = {
+      0x7a4, 0x700, 0x670, 0x5f2, 0x584, 0x524, 0x4cc, 0x47e, 0x43a, 0x3fa, 0x3c2,
+      0x38e, 0x35e, 0x332, 0x30a, 0x2e6, 0x568, 0x4f3, 0x48d, 0x435, 0x3e7, 0x3a2,
+      0x365, 0x32e, 0x2fc, 0x2d0, 0x2a8, 0x283, 0x261, 0x243, 0x226, 0x20b,
+  };
+  const uint64_t fraction_mask = (UINT64_C(1) << 52) - UINT64_C(1);
+  const uint64_t exponent_mask = UINT64_C(0x7FF) << 52;
+  const uint64_t sign_mask = UINT64_C(1) << 63;
+  const uint64_t implicit_bit = UINT64_C(1) << 52;
+
+  uint64_t bits = msl_double_bits(value);
+  uint64_t mantissa = bits & fraction_mask;
+  const uint64_t sign = bits & sign_mask;
+  int64_t exponent = (int64_t)(bits & exponent_mask);
+
+  if (mantissa == 0u && exponent == 0) {
+    return sign != 0u ? -INFINITY : INFINITY;
+  }
+  if ((uint64_t)exponent == exponent_mask) {
+    if (mantissa == 0u) {
+      return sign != 0u ? NAN : 0.0;
+    }
+    return 0.0 + value;
+  }
+  if (sign != 0u) {
+    return NAN;
+  }
+  if (exponent == 0) {
+    do {
+      exponent -= (int64_t)implicit_bit;
+      mantissa <<= 1;
+    } while ((mantissa & implicit_bit) == 0u);
+    mantissa &= fraction_mask;
+    exponent += (int64_t)implicit_bit;
+  }
+
+  const uint8_t odd_exponent = (exponent & (int64_t)implicit_bit) == 0 ? 1u : 0u;
+  exponent =
+      ((int64_t)(UINT64_C(0x3FF) << 52) - ((exponent - (int64_t)(UINT64_C(0x3FE) << 52)) / 2)) &
+      (int64_t)exponent_mask;
+  const uint32_t interpolation = (uint32_t)(mantissa >> 37);
+  const uint32_t table_index = interpolation / 2048u + (odd_exponent != 0u ? 16u : 0u);
+  const uint64_t estimate_fraction =
+      (uint64_t)(k_base[table_index] - k_dec[table_index] * (int32_t)(interpolation % 2048u)) << 26;
+  return msl_double_from_bits(sign | (uint64_t)exponent | estimate_fraction);
+}
+
+static inline uint8_t msl_psvec2_normalize(float x, float y, float* x_out, float* y_out) {
+  if (x_out == NULL || y_out == NULL) {
+    return 0u;
+  }
+  const float length_sq = (x * x) + (y * y);
+  if (!(length_sq > 0.0f) || !isfinite(length_sq)) {
+    return 0u;
+  }
+
+  const double estimate = msl_ppc_frsqrte((double)length_sq);
+  // `fmuls f6,f5,f5` rounds its FC operand through Force25Bit before multiplication.
+  // refs/melee/build/GALE01/asm/dolphin/mtx/vec.s::PSVECNormalize
+  const float estimate_sq = (float)(estimate * msl_ppc_force_25_bit(estimate));
+  const float estimate_half = (float)(estimate * 0.5);
+  const float correction = fmaf(-estimate_sq, length_sq, 3.0f);
+  const float inverse_length = correction * estimate_half;
+  *x_out = x * inverse_length;
+  *y_out = y * inverse_length;
+  return 1u;
+}
+
 static inline float msl_fnmsubs_f32(float a, float b, float c) { return c - (a * b); }
 
 // GALE01 single-precision atan approximation used by item laser angle writes.

@@ -223,6 +223,28 @@ def _derive_passivewall_timer(*, action_id_u16: np.ndarray, action_frame_i16: np
         raise RuntimeError('native msl_binding.derive_passivewall_timer is required; run `make build`') from exc
     return msl_binding.derive_passivewall_timer(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1), np.asarray(action_frame_i16, dtype=np.int16).reshape(-1), int(common['passivewall_timer_frames']))
 
+def _derive_walljump_used_seed_lanes(*, char_id_u8: np.ndarray, action_id_u16: np.ndarray, action_frame_i16: np.ndarray, on_ground_u8: np.ndarray, jumps_left_u8: np.ndarray, max_jumps_lut_u8: np.ndarray, buttons_pressed_u16: np.ndarray, stick_y_f32: np.ndarray, button_mask_xy: int, tap_jump_threshold: float) -> tuple[np.ndarray, np.ndarray]:
+    """Derive `x1969_walljumpUsed` and the active PassiveWall entry exponent.
+
+    Ordinary walljumps copy the current count into `mv.co.passivewall.vel_y_exponent`, then
+    saturating-increment the count. Wall-tech entry uses exponent zero without incrementing, and
+    `ftCommon_8007D6A4` resets the count on grounding, while Fighter_UnkInitReset_80067C98 resets it
+    before Rebirth. The native scan is prefix-causal and uses generated collision-callback owners
+    to distinguish every ordinary walljump producer from the four wall-tech producers. A grounded
+    ProcessHit that returns airborne in the same replay row is recovered from the paired source
+    x1968 write exposed by Slippi's jumps-left lane after excluding both aerial-jump input gates.
+
+    refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+    refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4
+    refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitReset_80067C98
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64}
+    """
+    try:
+        import msl_binding
+    except ImportError as exc:
+        raise RuntimeError('native msl_binding.derive_walljump_used_seed_lanes is required; run `make build`') from exc
+    return msl_binding.derive_walljump_used_seed_lanes(np.asarray(char_id_u8, dtype=np.uint8).reshape(-1), np.asarray(action_id_u16, dtype=np.uint16).reshape(-1), np.asarray(action_frame_i16, dtype=np.int16).reshape(-1), np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1), np.asarray(jumps_left_u8, dtype=np.uint8).reshape(-1), np.asarray(max_jumps_lut_u8, dtype=np.uint8).reshape(-1), np.asarray(buttons_pressed_u16, dtype=np.uint16).reshape(-1), np.asarray(stick_y_f32, dtype=np.float32).reshape(-1), int(button_mask_xy), float(tap_jump_threshold))
+
 def _derive_attackdash_x0_seed_lane(*, action_id_u16: np.ndarray, action_frame_i16: np.ndarray, misc_as_f32: np.ndarray, act_attack_dash: int, attackdash_x0_init_frames: int) -> np.ndarray:
     """
     Derive `fp->mv.co.attackdash.x0` for teacher-forced AttackDash reseeds.

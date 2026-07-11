@@ -1,6 +1,9 @@
 #include "msl_binding_data.h"
 #include "msl_binding_internal.h"
 
+#include "../src/ecb_tables.h"
+#include "../src/script_events.h"
+
 PyObject* msl_sizes(PyObject* self, PyObject* args) {
   (void)self;
   (void)args;
@@ -38,8 +41,12 @@ PyObject* msl_set_data_dir_py(PyObject* self, PyObject* args) {
 PyObject* msl_data_schema_versions(PyObject* self, PyObject* args) {
   (void)self;
   (void)args;
-  return Py_BuildValue("{s:I,s:I}", "attack_id_move_id", attack_id_tables_format_version(),
-                       "motion_state_owners", motion_state_owners_format_version());
+  return Py_BuildValue(
+      "{s:I,s:I,s:I,s:I,s:I,s:I,s:I}", "attack_id_move_id", attack_id_tables_format_version(),
+      "ecb_bottom", ecb_bottom_tables_format_version(), "ecb_extents",
+      ecb_extents_tables_format_version(), "fighter_anims", anim_pose_data_schema_version(),
+      "fighter_hitboxes", hitboxes_tables_format_version(), "fighter_scripts",
+      script_events_format_version(), "motion_state_owners", motion_state_owners_format_version());
 }
 
 PyObject* msl_alloc_reset(PyObject* self, PyObject* args) {

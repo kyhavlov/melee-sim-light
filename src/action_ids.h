@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "ids.h"
 #include "motion_state_owners.h"
 
 // GALE01 action ids (aka `FtMotionId` / `ftCommon_MotionState`) for common locomotion.
@@ -195,6 +196,11 @@ typedef enum MslActionId {
   MSL_ACT_APPEAL_SR = 0x0108,           // ftCo_MS_AppealSR (264)
   MSL_ACT_APPEAL_SL = 0x0109,           // ftCo_MS_AppealSL (265)
 
+  // Falcon Dive command-grab victim state (common id; the captor is char-specific).
+  // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c
+  MSL_ACT_CAPTURE_CAPTAIN = 0x0113,  // ftCo_MS_CaptureCaptain (275)
+
   // Match start entry states (ft_0C31.c / ftCo_Entry.c).
   MSL_ACT_ENTRY = 0x0142,        // ftCo_MS_Entry
   MSL_ACT_ENTRY_START = 0x0143,  // ftCo_MS_EntryStart
@@ -353,6 +359,30 @@ enum {
   MSL_ACT_MS_SPECIAL_LW_HIT = 0x0172,       // ftMs_MS_SpecialLwHit (370)
   MSL_ACT_MS_SPECIAL_AIR_LW = 0x0173,       // ftMs_MS_SpecialAirLw (371)
   MSL_ACT_MS_SPECIAL_AIR_LW_HIT = 0x0174,   // ftMs_MS_SpecialAirLwHit (372)
+
+  // Captain Falcon char-special action ids (per-character space above ftCo_MS_Count=341;
+  // consumers must gate on char_id == MSL_CHAR_ID_FALCON). 341..346 are the common item-swing
+  // states (ftCa_MS_SwordSwing4..LipstickSwing4). Submotion mapping is action-46 (301..314)
+  // except the LwEndAir crossover (361->316, 362->315) and SpecialHiThrow1 (363->317); see
+  // falcon_special_submotion().
+  // refs/melee/src/melee/ft/chara/ftCaptain/forward.h::ftCaptain_MotionState
+  MSL_ACT_CA_SPECIAL_N = 0x015B,               // ftCa_MS_SpecialN (347)
+  MSL_ACT_CA_SPECIAL_AIR_N = 0x015C,           // ftCa_MS_SpecialAirN (348)
+  MSL_ACT_CA_SPECIAL_S_START = 0x015D,         // ftCa_MS_SpecialSStart (349)
+  MSL_ACT_CA_SPECIAL_S = 0x015E,               // ftCa_MS_SpecialS (350)
+  MSL_ACT_CA_SPECIAL_AIR_S_START = 0x015F,     // ftCa_MS_SpecialAirSStart (351)
+  MSL_ACT_CA_SPECIAL_AIR_S = 0x0160,           // ftCa_MS_SpecialAirS (352)
+  MSL_ACT_CA_SPECIAL_HI = 0x0161,              // ftCa_MS_SpecialHi (353)
+  MSL_ACT_CA_SPECIAL_AIR_HI = 0x0162,          // ftCa_MS_SpecialAirHi (354)
+  MSL_ACT_CA_SPECIAL_HI_CATCH = 0x0163,        // ftCa_MS_SpecialHiCatch (355)
+  MSL_ACT_CA_SPECIAL_HI_THROW = 0x0164,        // ftCa_MS_SpecialHiThrow (356)
+  MSL_ACT_CA_SPECIAL_LW = 0x0165,              // ftCa_MS_SpecialLw (357)
+  MSL_ACT_CA_SPECIAL_LW_END = 0x0166,          // ftCa_MS_SpecialLwEnd (358)
+  MSL_ACT_CA_SPECIAL_AIR_LW = 0x0167,          // ftCa_MS_SpecialAirLw (359)
+  MSL_ACT_CA_SPECIAL_AIR_LW_END = 0x0168,      // ftCa_MS_SpecialAirLwEnd (360)
+  MSL_ACT_CA_SPECIAL_AIR_LW_END_AIR = 0x0169,  // ftCa_MS_SpecialAirLwEndAir (361)
+  MSL_ACT_CA_SPECIAL_LW_END_AIR = 0x016A,      // ftCa_MS_SpecialLwEndAir (362)
+  MSL_ACT_CA_SPECIAL_HI_THROW1 = 0x016B,       // ftCa_MS_SpecialHiThrow1 (363)
 
   MSL_ACT_FX_SPECIAL_N_START = 0x0155,      // ftFx_MS_SpecialNStart
   MSL_ACT_FX_SPECIAL_N_LOOP = 0x0156,       // ftFx_MS_SpecialNLoop
@@ -592,6 +622,7 @@ typedef enum MslSubmotionId {
   MSL_SM_THROWN_B = 263,           // ftCo_SM_ThrownB
   MSL_SM_THROWN_HI = 264,          // ftCo_SM_ThrownHi
   MSL_SM_THROWN_LW = 265,          // ftCo_SM_ThrownLw
+  MSL_SM_CAPTURE_CAPTAIN = 276,    // ftCo_SM_CaptureCaptain (Falcon Dive victim held pose)
 
   // Cliff / ledge (subset used by the FD suite).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
@@ -827,9 +858,23 @@ static inline uint8_t msl_action_allows_fastfall(uint8_t char_id, uint16_t actio
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Phys
       // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialN.c
       const uint8_t fx_kind = msl_motion_state_fx_special_kind_fast(char_id, action_id);
-      return (uint8_t)((fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_START &&
-                        fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END) ||
-                       fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL);
+      if ((fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_START &&
+           fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END) ||
+          fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL) {
+        return 1u;
+      }
+      // Falcon SpecialAirN (Falcon Punch, action 348): ftCa_SpecialAirN_Phys calls
+      // ft_80084DB0 only in its cmd_vars[1]==2 tail (script frame 65+). falcon_specials_phys
+      // owns the earlier cmd phases and only releases ownership to the generic air path (which
+      // consults this predicate) once that tail is reached, so this admission is
+      // phase-correct without a frame check here.
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Phys
+      // data/moves/falcon.json::specials_by_msid.302 set_cmd_var(idx=1,value=2)@65
+      if (char_id == (uint8_t)MSL_CHAR_ID_FALCON &&
+          action_id == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_N) {
+        return 1u;
+      }
+      return 0u;
     }
   }
 }
@@ -846,6 +891,11 @@ static inline uint8_t msl_action_is_grabbed_victim(uint16_t action_id) {
     case MSL_ACT_CAPTURE_DAMAGE_LW:
     case MSL_ACT_CAPTURE_NECK:
     case MSL_ACT_CAPTURE_FOOT:
+    // Falcon Dive victim hold: Anim/IASA/Phys are empty and the airborne victim hangs from the
+    // captor's grab anchor via accessory1 (ftCo_800DB464), same substrate as attached Thrown*.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800DB368,ftCo_800DB464}
+    case MSL_ACT_CAPTURE_CAPTAIN:
     case MSL_ACT_THROWN_F:
     case MSL_ACT_THROWN_B:
     case MSL_ACT_THROWN_HI:

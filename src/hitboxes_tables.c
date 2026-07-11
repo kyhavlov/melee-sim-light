@@ -13,9 +13,9 @@
 enum {
   HITBOXES_MAGIC_LEN = 8,
   HITBOXES_HDR_BYTES = 16,  // magic[8] + ver[u32] + entry_count[u32]
-  HITBOXES_VERSION_V1 = 1,
-  INDEX_REC_BYTES_V1 = 12,  // msid[u16] + rec_count[u16] + rec_bytes[u32] + payload_off[u32]
-  EVENT_REC_BYTES_V1 = 44,  // packed event record size
+  HITBOXES_VERSION_V2 = 2,
+  INDEX_REC_BYTES_V2 = 12,  // msid[u16] + rec_count[u16] + rec_bytes[u32] + payload_off[u32]
+  EVENT_REC_BYTES_V2 = 44,  // packed event record size; unchanged from v1
 };
 
 static const uint8_t k_magic[HITBOXES_MAGIC_LEN] = {'M', 'S', 'L', 'H', 'I', 'T', 'B', '1'};
@@ -33,6 +33,8 @@ typedef struct {
 
 static MslHitboxesTable g_table_by_char[256];
 static int g_loaded = 0;
+
+uint32_t hitboxes_tables_format_version(void) { return (uint32_t)HITBOXES_VERSION_V2; }
 
 static uint16_t canonical_hitbox_events_msid(uint16_t msid) {
   switch (msid) {
@@ -136,7 +138,7 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
     return -1;
   }
   const uint32_t ver = read_u32_le(buf + 8);
-  if (ver != (uint32_t)HITBOXES_VERSION_V1) {
+  if (ver != (uint32_t)HITBOXES_VERSION_V2) {
     alloc_free(buf);
     return -1;
   }
@@ -147,7 +149,7 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
   }
   const uint16_t entry_count = (uint16_t)entry_count_u32;
 
-  const size_t index_bytes = (size_t)entry_count * (size_t)INDEX_REC_BYTES_V1;
+  const size_t index_bytes = (size_t)entry_count * (size_t)INDEX_REC_BYTES_V2;
   const size_t index_end = (size_t)HITBOXES_HDR_BYTES + index_bytes;
   if (index_end > sz) {
     alloc_free(buf);
@@ -157,8 +159,8 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
   // Pre-count total event records and validate index entries.
   uint64_t total_events_u = 0;
   for (uint16_t i = 0; i < entry_count; i++) {
-    const size_t off = (size_t)HITBOXES_HDR_BYTES + (size_t)i * (size_t)INDEX_REC_BYTES_V1;
-    if (off + (size_t)INDEX_REC_BYTES_V1 > sz) {
+    const size_t off = (size_t)HITBOXES_HDR_BYTES + (size_t)i * (size_t)INDEX_REC_BYTES_V2;
+    if (off + (size_t)INDEX_REC_BYTES_V2 > sz) {
       alloc_free(buf);
       return -1;
     }
@@ -167,7 +169,7 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
     const uint16_t rec_count = read_u16_le(buf + off + 2);
     const uint32_t rec_bytes = read_u32_le(buf + off + 4);
     const uint32_t payload_off = read_u32_le(buf + off + 8);
-    if (rec_bytes != (uint32_t)rec_count * (uint32_t)EVENT_REC_BYTES_V1) {
+    if (rec_bytes != (uint32_t)rec_count * (uint32_t)EVENT_REC_BYTES_V2) {
       alloc_free(buf);
       return -1;
     }
@@ -202,7 +204,7 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
 
   uint32_t out_base = 0;
   for (uint16_t i = 0; i < entry_count; i++) {
-    const size_t off = (size_t)HITBOXES_HDR_BYTES + (size_t)i * (size_t)INDEX_REC_BYTES_V1;
+    const size_t off = (size_t)HITBOXES_HDR_BYTES + (size_t)i * (size_t)INDEX_REC_BYTES_V2;
     const uint16_t msid = read_u16_le(buf + off + 0);
     const uint16_t rec_count = read_u16_le(buf + off + 2);
     const uint32_t rec_bytes = read_u32_le(buf + off + 4);
@@ -231,7 +233,7 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
 
     // Decode records.
     const size_t base_off = (size_t)payload_off;
-    if ((size_t)rec_bytes != (size_t)rec_count * (size_t)EVENT_REC_BYTES_V1) {
+    if ((size_t)rec_bytes != (size_t)rec_count * (size_t)EVENT_REC_BYTES_V2) {
       alloc_free(have_msid);
       alloc_free(count_by_msid);
       alloc_free(base_index_by_msid);
@@ -240,11 +242,19 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
       return -1;
     }
     for (uint16_t ri = 0; ri < rec_count; ri++) {
-      const size_t roff = base_off + (size_t)ri * (size_t)EVENT_REC_BYTES_V1;
+      const size_t roff = base_off + (size_t)ri * (size_t)EVENT_REC_BYTES_V2;
       const uint8_t* r = buf + roff;
       const uint16_t frame = read_u16_le(r + 0);
       const uint8_t kind = r[2];
       const uint8_t hitbox_id = r[3];
+      if (kind > (uint8_t)MSL_HITBOX_EVENT_SET_INTERACTION) {
+        alloc_free(have_msid);
+        alloc_free(count_by_msid);
+        alloc_free(base_index_by_msid);
+        alloc_free(events);
+        alloc_free(buf);
+        return -1;
+      }
       const uint32_t bone_part_id_u32 = read_u32_le(r + 4);
       if (bone_part_id_u32 > 0xFFFFu) {
         alloc_free(have_msid);

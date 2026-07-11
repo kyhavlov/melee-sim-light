@@ -25,8 +25,23 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+def _fighter_anim_iso_inputs(chars: list[str]) -> list[Path]:
+    from tools.extraction.char_registry import CHARS
+    from tools.extraction.extract_fighter_anims import CAPTURE_CAPTAIN_ANIM_DONOR_CHARACTER
+
+    dat_names = ["PlCo.dat"]
+    for ch in chars:
+        info = CHARS[ch]
+        dat_names.extend((info.pl_dat, info.aj_dat, info.costume_dat))
+    donor = CHARS[CAPTURE_CAPTAIN_ANIM_DONOR_CHARACTER]
+    dat_names.extend((donor.pl_dat, donor.aj_dat))
+    return [ROOT / "_iso" / name for name in dict.fromkeys(dat_names)]
+
+
 def _ensure_ecb_bottom_tables() -> None:
-    for ch in ("fox", "falco"):
+    from tools.extraction.extract_ecb_bottom import ECB_VERSION
+
+    for ch in _data_manifest_chars():
         out = ROOT / "data" / "ecb" / f"{ch}_bottom.bin"
         if out.exists():
             try:
@@ -35,7 +50,7 @@ def _ensure_ecb_bottom_tables() -> None:
                     ver = int.from_bytes(f.read(4), "little", signed=False)
                     _anim_count = int.from_bytes(f.read(2), "little", signed=False)
                     stride = int.from_bytes(f.read(2), "little", signed=False)  # reserved in v2
-                if magic == b"MSLECB01" and ver == 3:
+                if magic == b"MSLECB01" and ver == ECB_VERSION:
                     # Bottom tables use reserved=0 for historical compatibility.
                     if stride == 0:
                         continue
@@ -66,7 +81,9 @@ def _ensure_ecb_bottom_tables() -> None:
 
 
 def _ensure_ecb_extents_tables() -> None:
-    for ch in ("fox", "falco"):
+    from tools.extraction.extract_ecb_extents import ECB_VERSION
+
+    for ch in _data_manifest_chars():
         out = ROOT / "data" / "ecb" / f"{ch}_extents.bin"
         if out.exists():
             try:
@@ -75,7 +92,7 @@ def _ensure_ecb_extents_tables() -> None:
                     ver = int.from_bytes(f.read(4), "little", signed=False)
                     _anim_count = int.from_bytes(f.read(2), "little", signed=False)
                     stride = int.from_bytes(f.read(2), "little", signed=False)
-                if magic == b"MSLECB01" and ver == 4 and stride == 16:
+                if magic == b"MSLECB01" and ver == ECB_VERSION and stride == 16:
                     continue
             except OSError:
                 pass
@@ -147,7 +164,7 @@ def _ensure_tracks_bins() -> None:
     # Some tests depend on SSANIMT1 end_frame values (e.g. landing anim-rate scaling). These
     # artifacts are generated from local `_iso/` extracts and may be gitignored.
     need_msids = {36, 73, 74, 75, 76, 77}  # LandingFallSpecial + LandingAir*
-    for ch, prefix in (("fox", "PlFx"), ("falco", "PlFc")):
+    for ch in ("fox", "falco"):
         tracks = ROOT / "data" / "anims" / f"{ch}.tracks.bin"
         if tracks.exists():
             try:
@@ -156,17 +173,12 @@ def _ensure_tracks_bins() -> None:
             except OSError:
                 pass
 
-        required = [
-            ROOT / "_iso" / "PlCo.dat",
-            ROOT / "_iso" / f"{prefix}.dat",
-            ROOT / "_iso" / f"{prefix}Nr.dat",
-            ROOT / "_iso" / f"{prefix}AJ.dat",
-        ]
+        required = _fighter_anim_iso_inputs([ch])
         missing_iso = [p for p in required if not p.exists()]
         if missing_iso:
             raise RuntimeError(
                 f"missing required tracks file for tests: {tracks} (and cannot rebuild due to missing _iso/ files: {missing_iso}). "
-                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`"
+                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop`"
             )
 
         subprocess.run(
@@ -251,15 +263,7 @@ def _ensure_dyn_bins() -> None:
     if not stale:
         return
 
-    required = [
-        ROOT / "_iso" / "PlCo.dat",
-        ROOT / "_iso" / "PlFx.dat",
-        ROOT / "_iso" / "PlFxNr.dat",
-        ROOT / "_iso" / "PlFxAJ.dat",
-        ROOT / "_iso" / "PlFc.dat",
-        ROOT / "_iso" / "PlFcNr.dat",
-        ROOT / "_iso" / "PlFcAJ.dat",
-    ]
+    required = _fighter_anim_iso_inputs(list(expected))
     missing_iso = [p for p in required if not p.exists()]
     if missing_iso:
         warnings.warn(
@@ -317,7 +321,7 @@ def _ensure_hurtcaps_bins() -> None:
         if missing_iso:
             raise RuntimeError(
                 f"missing required hurtcaps bin for tests: {out} (and cannot rebuild due to missing _iso/ files: {missing_iso}). "
-                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`"
+                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop`"
             )
 
         subprocess.run(
@@ -370,7 +374,7 @@ def _ensure_shield_tilt_bins() -> None:
         if missing_iso:
             raise RuntimeError(
                 f"missing required shield tilt bin for tests: {out} (and cannot rebuild due to missing _iso/ files: {missing_iso}). "
-                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`"
+                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop`"
             )
 
         subprocess.run(
@@ -404,8 +408,10 @@ def _motion_state_owner_manifest_current(path: Path) -> bool:
 
 
 def _ensure_motion_state_owner_bins() -> None:
+    from tools.extraction.char_registry import CHARS
+
     stale = False
-    for ch in ("fox", "falco"):
+    for ch in CHARS:
         out = ROOT / "data" / "motion_state" / "owners" / f"{ch}.bin"
         if out.exists():
             try:
@@ -436,7 +442,7 @@ def _ensure_motion_state_owner_bins() -> None:
             ],
             check=True,
         )
-    for ch in ("fox", "falco"):
+    for ch in CHARS:
         out = ROOT / "data" / "motion_state" / "owners" / f"{ch}.bin"
         if not out.exists():
             raise RuntimeError(f"failed to generate required MotionState owner table: {out}")
@@ -445,6 +451,12 @@ def _ensure_motion_state_owner_bins() -> None:
 
 
 def _ensure_known_data_artifacts() -> None:
+    from tools.extraction.build_data import DATA_SCHEMA_VERSIONS
+    from tools.extraction.char_registry import CHARS
+    from tools.extraction.extract_fighter_anims import SSANIM_VERSION
+    from tools.extraction.extract_fighter_hitboxes import FORMAT_VERSION as HITBOX_VERSION
+    from tools.extraction.known_data_artifacts import SCRIPT_MAGIC, SCRIPT_VERSION
+
     expected = [
         (ROOT / "data" / "stages" / "bin" / "grnla.bin", b"MSLSTG01", 10),
         (ROOT / "data" / "stages" / "bin" / "grnba.bin", b"MSLSTG01", 10),
@@ -455,11 +467,27 @@ def _ensure_known_data_artifacts() -> None:
         (ROOT / "data" / "model_parts" / "fox.bin", b"MSLPART1", 1),
         (ROOT / "data" / "model_parts" / "falco.bin", b"MSLPART1", 1),
         (ROOT / "data" / "items" / "articles" / "fox_falco.bin", b"MSLITAR1", 17),
-        (ROOT / "data" / "scripts" / "fox.bin", b"MSLFTSC1", 2),
-        (ROOT / "data" / "scripts" / "falco.bin", b"MSLFTSC1", 2),
     ]
+    for ch in CHARS:
+        expected.append((ROOT / "data" / "anims" / f"{ch}.bin", b"SSANIM01", SSANIM_VERSION))
+        expected.append((ROOT / "data" / "scripts" / f"{ch}.bin", SCRIPT_MAGIC, SCRIPT_VERSION))
+        expected.append((ROOT / "data" / "hitboxes" / f"{ch}.bin", b"MSLHITB1", HITBOX_VERSION))
 
     def artifacts_stale() -> bool:
+        try:
+            manifest = json.loads((ROOT / "data" / "manifest.json").read_text(encoding="utf-8"))
+            if not isinstance(manifest, dict) or not isinstance(manifest.get("schemas"), dict):
+                return True
+            schemas = {str(k): int(v) for k, v in manifest["schemas"].items()}
+            if (
+                manifest.get("magic") != "MSLDATA1"
+                or manifest.get("version") != 1
+                or manifest.get("chars") != list(CHARS)
+                or schemas != DATA_SCHEMA_VERSIONS
+            ):
+                return True
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            return True
         for path, magic, version in expected:
             if not path.exists():
                 return True
@@ -485,26 +513,20 @@ def _ensure_known_data_artifacts() -> None:
         if not artifacts_stale():
             return
 
-        missing_iso = [
-            p
-            for p in (
-                ROOT / "_iso" / "GrNLa.dat",
-                ROOT / "_iso" / "GrNBa.dat",
-                ROOT / "_iso" / "GrIz.dat",
-                ROOT / "_iso" / "GrPs.dat",
-                ROOT / "_iso" / "GrSt.dat",
-                ROOT / "_iso" / "GrOp.dat",
-                ROOT / "_iso" / "PlCo.dat",
-                ROOT / "_iso" / "PlFx.dat",
-                ROOT / "_iso" / "PlFc.dat",
-                ROOT / "_iso" / "PlMs.dat",
-                ROOT / "_iso" / "PlSk.dat",
-                ROOT / "_iso" / "PlZd.dat",
-                ROOT / "_iso" / "PlZdAJ.dat",
-                ROOT / "_iso" / "PlZdNr.dat",
+        required_iso = [
+            ROOT / "_iso" / name
+            for name in (
+                "GrNLa.dat",
+                "GrNBa.dat",
+                "GrIz.dat",
+                "GrPs.dat",
+                "GrSt.dat",
+                "GrOp.dat",
+                "ItCo.dat",
             )
-            if not p.exists()
         ]
+        required_iso.extend(_fighter_anim_iso_inputs(list(CHARS)))
+        missing_iso = [p for p in dict.fromkeys(required_iso) if not p.exists()]
         if missing_iso:
             raise RuntimeError(
                 "missing required known-data artifact(s), and cannot rebuild because _iso inputs are missing: "
@@ -519,6 +541,8 @@ def _ensure_known_data_artifacts() -> None:
                 str(ROOT / "_iso"),
                 "--stages",
                 "grnla,grnba,griz,grps,grst,grop",
+                "--chars",
+                ",".join(CHARS),
             ],
             check=True,
         )
@@ -528,6 +552,7 @@ def _ensure_known_data_artifacts() -> None:
 
 
 def pytest_sessionstart(session) -> None:  # type: ignore[no-untyped-def]
+    _ensure_known_data_artifacts()
     _ensure_motion_state_owner_bins()
     _ensure_dyn_bins()
     _ensure_tracks_bins()
@@ -535,4 +560,3 @@ def pytest_sessionstart(session) -> None:  # type: ignore[no-untyped-def]
     _ensure_ecb_extents_tables()
     _ensure_hurtcaps_bins()
     _ensure_shield_tilt_bins()
-    _ensure_known_data_artifacts()

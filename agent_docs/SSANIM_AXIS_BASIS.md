@@ -16,7 +16,7 @@ facing transform must be applied exactly once (runtime or bake), but enabling th
 
 - **World axes:** `X` = stage left/right, `Y` = up, `Z` = depth.
   - Stage collision is currently modeled in `X/Y` only (2.5D); we still carry `pos_z` and pose-derived `z` for combat geometry.
-- **Matrix layout:** SSANIM01 v4 joint matrices are **row-major 3x4** and applied as `out = M * [x y z 1]^T`.
+- **Matrix layout:** SSANIM01 v5 joint matrices are **row-major 3x4** and applied as `out = M * [x y z 1]^T`.
   - See `src/mtx34.h` (`msl_mtx34_mul_point`) and `tools/extraction/extract_ecb_extents.py` (layout comment).
 - **TransN handling:** `data/anims/<char>.bin` stores per-joint matrices with **TransN translation removed** (written separately as the v4 tail).
   - Extractor: `tools/extraction/extract_fighter_anims.py` and native bake path in `bindings/msl_binding_debug.c` (stores TransN, then zeroes its `cur_pos`).
@@ -49,7 +49,7 @@ already includes:
 
 ---
 
-## What we extract today (SSANIM01 v4 matrices)
+## What we extract today (SSANIM01 v5 matrices)
 
 `data/anims/<char>.bin` is produced by `tools/extraction/extract_fighter_anims.py` (or its native equivalent in `bindings/msl_binding_debug.c`), which:
 
@@ -66,7 +66,7 @@ For Fox/Falco, TopN (FtPart id `0`) is included and its matrix is the **identity
 
 If facing were already baked into SSANIM01, TopN could not be identity because decomp sets its Y rotation to `±π/2` from `fp->facing_dir`.
 
-**Therefore:** SSANIM01 v4 matrices in `data/anims/<char>.bin` are **facing-independent**.
+**Therefore:** SSANIM01 v5 matrices in `data/anims/<char>.bin` are **facing-independent**.
 
 ---
 
@@ -77,7 +77,7 @@ These tables are consumed as **bone-local offsets** which become fighter-local/w
 - **Hurtcaps**: `data/hurtcaps/<char>.bin` offsets are read directly from `ftHurtboxInit` layout in the fighter DAT and written out verbatim.
   - Extractor: `tools/extraction/extract_fighter_hurtcapsules.py` (`a_offset`/`b_offset`/`scale`).
 - **Hitboxes**: `data/hitboxes/<char>.bin` stores movescript-derived hitbox center offsets `(x,y,z)` keyed by msid + frame.
-  - Format is documented in `agent_docs/DATA_CONTRACT.md` (`MSLHITB1 v1`).
+  - Format is documented in `agent_docs/DATA_CONTRACT.md` (`MSLHITB1 v2`).
 - **Shields**: `data/shields/<char>.bin` stores guard-tilt bubble center offsets `(x,y,z)` sampled from msid 38 via the same SSANIM SRT evaluator.
   - Extractor: `tools/extraction/extract_shield_tilt_table.py`.
 

@@ -19,7 +19,8 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 20
+FORMAT_VERSION = 23
+HEADER_BYTES = 8 + 4 + 2 + 2 + 4 * 12
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -70,12 +71,114 @@ CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE = 1 << 11
 CLASS2_LANDING_ROOT_FLOOR_SNAP = 1 << 12
 CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST = 1 << 13
 CLASS2_CLIFF_HOLD_PHYS_SNAP = 1 << 14
+CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL = 1 << 15
+CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL = 1 << 16
+CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL = 1 << 17
 
 CLASS3_PHASE4_ATTACK_AIR_COLL = 1 << 0
 CLASS3_PHASE4_ESCAPE_AIR_COLL = 1 << 1
 CLASS3_PHASE4_DAMAGE_COMMON_COLL = 1 << 2
 CLASS3_PHASE4_DAMAGE_FLY_COLL = 1 << 3
 CLASS3_PHASE4_DAMAGE_FALL_COLL = 1 << 4
+CLASS3_ORDINARY_WALLJUMP_COLL = 1 << 5
+CLASS3_WALLTECH_COLL = 1 << 6
+CLASS3_CATCH_TARGET_MASK_1 = 1 << 7
+CLASS3_CATCH_TARGET_MASK_511 = 1 << 8
+CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED = 1 << 9
+CLASS3_CATCH_KIND_1 = 1 << 10
+CLASS3_CATCH_KIND_2 = 1 << 11
+
+CATCH_TARGET_MASK_1_MOTION_STATES = {
+    "ftCo_MS_DownWaitU",
+    "ftCo_MS_DownDamageU",
+    "ftCo_MS_DownWaitD",
+    "ftCo_MS_DownDamageD",
+}
+
+CATCH_TARGET_MASK_511_MOTION_STATES = {
+    "ftCo_MS_DownBoundU",
+    "ftCo_MS_DownBoundD",
+    "ftCo_MS_DownSpotU",
+    "ftCo_MS_DownSpotD",
+    "ftCo_MS_CliffCatch",
+    "ftCo_MS_CliffWait",
+    "ftCo_MS_CatchWait",
+    "ftCo_MS_CatchAttack",
+    "ftCo_MS_CapturePulledHi",
+    "ftCo_MS_CaptureWaitHi",
+    "ftCo_MS_CaptureDamageHi",
+    "ftCo_MS_CapturePulledLw",
+    "ftCo_MS_CaptureWaitLw",
+    "ftCo_MS_CaptureDamageLw",
+    "ftCo_MS_ThrownF",
+    "ftCo_MS_ThrownB",
+    "ftCo_MS_ThrownHi",
+    "ftCo_MS_ThrownLw",
+    "ftCo_MS_ThrownlwWomen",
+    "ftCo_MS_CaptureCaptain",
+    "ftCa_MS_SpecialHiCatch",
+}
+
+CATCH_TARGET_MASK_511_WHILE_ATTACHED_MOTION_STATES = {
+    "ftCo_MS_ThrowF",
+    "ftCo_MS_ThrowB",
+    "ftCo_MS_ThrowHi",
+    "ftCo_MS_ThrowLw",
+}
+
+CATCH_KIND_1_MOTION_STATES = {"ftCo_MS_Catch", "ftCo_MS_CatchDash"}
+CATCH_KIND_2_MOTION_STATES = {"ftCa_MS_SpecialHi", "ftCa_MS_SpecialAirHi"}
+
+# Collision callbacks whose source path reaches ftWallJump_8008169C through one of the common
+# ft_081B airborne wrappers. Keep this callback-owned: action families such as DamageFall and Pass
+# are ordinary walljump producers even though they are not members of the older common-air class.
+# refs/melee/src/melee/ft/ft_081B.c::{ft_80082F28,ft_800831CC,ft_80083318,ft_80083464,
+#   ft_800835B0,ft_8008370C,ft_80083910,ft_80083A48}
+ORDINARY_WALLJUMP_COLL_CBS = {
+    "ftCo_CatchCut_Coll",
+    "ftCo_CaptureCut_Coll",
+    "ftCo_CliffJump2_Coll",
+    "ftCo_DamageFall_Coll",
+    "ftCo_DamageIceJump_Coll",
+    "ftCo_FallAerial_Coll",
+    "ftCo_Fall_Coll",
+    "ftCo_ItemParasolDamageFall_Coll",
+    "ftCo_ItemParasolFallSpecial_Coll",
+    "ftCo_ItemParasolFall_Coll",
+    "ftCo_ItemParasolOpen_Coll",
+    "ftCo_ItemScrewAir_Coll",
+    "ftCo_ItemScrew_Coll",
+    "ftCo_JumpAerialF1_Coll",
+    "ftCo_JumpAerial_Coll",
+    "ftCo_Jump_Coll",
+    "ftCo_MissFoot_Coll",
+    "ftCo_PassiveCeil_Coll",
+    "ftCo_PassiveWall_Coll",
+    "ftCo_Pass_Coll",
+    "ftCo_StopCeil_Coll",
+    "ftLg_SpecialAirHi_Coll",
+    "ftLg_SpecialHi_Coll",
+    "ftMr_SpecialHi_Coll",
+    "ftMs_SpecialAirHi_Coll",
+    "ftMs_SpecialHi_Coll",
+    "ftPe_FloatFall_Coll",
+    "ftPe_Float_Coll",
+    "ftPe_SpecialAirHiEnd_Coll",
+    "ftPe_SpecialAirHiStart_Coll",
+    "ftPe_SpecialHiEnd_Coll",
+    "ftPe_SpecialHiStart_Coll",
+    "ftYs_SpecialAirHi_Coll",
+}
+
+# These four callback families enter PassiveWall/PassiveWallJump through ftCo_800C1D38. That
+# producer fixes vel_y_exponent at zero and does not increment x1969_walljumpUsed.
+# refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Damage.c,ftCo_DownDamage.c,ftCo_FlyReflect.c}
+WALLTECH_COLL_CBS = {
+    "ftCo_DamageFly_Coll",
+    "ftCo_DamageFlyRoll_Coll",
+    "ftCo_DownDamage_Coll",
+    "ftCo_FlyReflect_Coll",
+}
 
 # fx_special_kind (v18): per-(char, action) identity of the Fox/Falco bespoke special
 # MotionState rows, generated 1:1 from each row's ANIM callback symbol (unique per row).
@@ -282,6 +385,8 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
     if any(
         cb.startswith("ftFx_SpecialHi")
         or cb.startswith("ftFx_SpecialAirHi")
+        or cb.startswith("ftCa_SpecialHi")
+        or cb.startswith("ftCa_SpecialAirHi")
         or cb.startswith("ftMs_SpecialHi")
         or cb.startswith("ftMs_SpecialAirHi")
         for cb in callbacks
@@ -307,6 +412,7 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftCo_Jump_Coll",
         "ftCo_JumpAerial_Coll",
         "ftCo_Fall_Coll",
+        "ftCo_FallAerial_Coll",
         "ftCo_PassiveWall_Coll",
     }:
         # These callbacks route through `ft_800831CC` or `ft_80083318`, whose source path runs the
@@ -335,17 +441,33 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftSk_SpecialAirNStart_Coll",
         "ftSk_SpecialAirNLoop_Coll",
         "ftSk_SpecialAirNCancel_Coll",
+        "ftCa_SpecialAirN_Coll",
+        "ftCa_SpecialAirSStart_Coll",
+        "ftCa_SpecialAirS_Coll",
+        "ftCa_SpecialHiThrow0_Coll",
+        "ftCa_SpecialLw_Coll",
+        "ftCa_SpecialLwEnd_Coll",
+        "ftCa_SpecialLwEndAir_Coll",
+        "ftCa_SpecialAirLw_Coll",
+        "ftCa_SpecialAirLwEndAir_Coll",
     }:
         # These common Fox/Falco collision callbacks delegate through `ft_80082C74`, whose
         # `ft_80081D0C` helper loads the normal airborne ECB and runs `mpColl_800471F8`. That
         # source owner uses the full airborne wall/floor/ceiling collision callback without the
         # common-air walljump post-consumers.
-        # Sheik Chain aerial Start/Active/End and aerial Needle Start/Loop/Cancel call
-        # `ft_80081D0C` directly before their source state handoff.
+        # Sheik Chain/Needle aerial states and Falcon's direct or mixed ground/air special
+        # callbacks call `ft_80081D0C` before their source state handoff.
         # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialN.c::{
         #   ftSk_SpecialAirNStart_Coll,ftSk_SpecialAirNLoop_Coll,ftSk_SpecialAirNCancel_Coll}
         # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
         #   ftSk_SpecialAirSStart_Coll,ftSk_SpecialAirS_Coll,ftSk_SpecialAirSEnd_Coll}
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Coll
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+        #   ftCa_SpecialAirSStart_Coll,ftCa_SpecialAirS_Coll}
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHiThrow0_Coll
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+        #   ftCa_SpecialLw_Coll,ftCa_SpecialLwEnd_Coll,ftCa_SpecialLwEndAir_Coll,
+        #   ftCa_SpecialAirLw_Coll,ftCa_SpecialAirLwEndAir_Coll}
         bits |= CLASS_FT80081D0C_AIR_COLL
     if coll_cb in {
         "ftCo_Jump_Coll",
@@ -371,6 +493,8 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftFx_SpecialHiHoldAir_Coll",
         "ftFx_SpecialAirHi_Coll",
         "ftFx_SpecialHiFall_Coll",
+        "ftCa_SpecialHi_Coll",
+        "ftCa_SpecialAirHi_Coll",
         "ftSk_SpecialAirHiStart_0_Coll",
         "ftSk_SpecialAirHiStart_1_Coll",
         "ftSk_SpecialAirHi_Coll",
@@ -380,13 +504,16 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftCo_MissFoot_Coll",
         "ftCo_Pass_Coll",
     }:
-        # Fox/Falco aerial Side-B/SpecialHi{HoldAir,AirHi,Fall}, Sheik Vanish aerial
-        # Start0/Start1/End, Zelda Farore aerial Start0/Start1/End, and common MissFoot/Pass call
+        # Fox/Falco aerial Side-B/SpecialHi{HoldAir,AirHi,Fall}, Falcon Dive grounded/aerial
+        # callbacks on their airborne branch, Sheik Vanish aerial Start0/Start1/End, Zelda Farore
+        # aerial Start0/Start1/End, and common MissFoot/Pass collision callbacks call
         # ft_CheckGroundAndLedge directly (MissFoot/Pass through ft_80082F28), which snapshots
         # CollData and runs the airborne mpColl floor/wall/ceiling owner without the held-down
         # common-air platform rejection path.
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
         #   ftFx_SpecialHiHoldAir_Coll,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{
+        #   ftCa_SpecialHi_Coll,ftCa_SpecialAirHi_Coll}
         # refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
         #   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialAirHiStart_1_Coll,ftSk_SpecialAirHi_Coll}
         # refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialHi.c::{
@@ -512,12 +639,15 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftCo_DownAttack_Coll",
         "ftCo_PassiveStand_Coll",
         "ftFx_SpecialSEnd_Coll",
+        "ftCa_SpecialAirLwEnd_Coll",
     }:
         # These grounded collision callbacks route to `ft_800827A0`, directly or through
         # `ft_80084104` / `ft_800841B8`, and therefore consume `mpColl_8004B2DC`'s
         # `mpColl_8004A45C_Floor` endpoint snap fallback. Keep this as generated callback
         # ownership so runtime edge-snap admission does not maintain a parallel action-id list.
         #
+        # Falcon's grounded landing-skid state is the character-special direct wrapper case.
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialAirLwEnd_Coll
         # refs/melee/src/melee/ft/ft_081B.c::{ft_800827A0,ft_80084104,ft_800841B8}
         # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor}
         bits |= CLASS_FT800827A0_EDGE_SNAP_COLL
@@ -565,13 +695,22 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftMs_SpecialS4_Coll",
     }:
         bits |= CLASS_FT80081D0C_AIR_COLL
-    if coll_cb in {"ftFx_SpecialSStart_Coll", "ftFx_SpecialS_Coll"}:
-        # Grounded Fox/Falco Side-B Start/Main collision callbacks call ft_80082708, which routes to
-        # mpColl_8004B108. Aerial Side-B has separate ft_CheckGroundAndLedge ownership above.
+    if coll_cb in {"ftFx_SpecialSStart_Coll", "ftFx_SpecialS_Coll", "ftCa_SpecialS_Coll"}:
+        # Grounded Fox/Falco Side-B Start/Main and Falcon Raptor hit collision callbacks call
+        # ft_80082708, which routes to mpColl_8004B108. Aerial Side-B has separate
+        # ft_CheckGroundAndLedge ownership above.
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
         #   ftFx_SpecialSStart_Coll,ftFx_SpecialS_Coll}
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialS_Coll
         # refs/melee/src/melee/ft/ft_081B.c::ft_80082708
         bits |= CLASS_FX_SPECIALS_GROUND_B108_COLL
+    if coll_cb == "ftCa_SpecialSStart_Coll":
+        # Falcon Raptor start dynamically selects its collision helper from cmd_vars[2]:
+        # ft_80082708/B108 while the script window is live, otherwise ft_80084104/B2DC edge snap.
+        # Runtime narrows the selected phase from this static source-owner superset using the
+        # extracted cmd-var timeline.
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialSStart_Coll
+        bits |= CLASS_FX_SPECIALS_GROUND_B108_COLL | CLASS_FT800827A0_EDGE_SNAP_COLL
     if coll_cb in {
         "ftCo_Fall_Coll",
         "ftCo_FallAerial_Coll",
@@ -760,6 +899,27 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         # collision asks this generated owner bit instead of carrying callback-id literals.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffCatch.c::ftCo_CliffCatch_Phys
         bits |= CLASS2_CLIFF_HOLD_PHYS_SNAP
+    if coll_cb in {
+        "ftFx_SpecialAirHi_Coll",
+        "ftFx_SpecialHiFall_Coll",
+        "ftCa_SpecialHi_Coll",
+        "ftCa_SpecialAirHi_Coll",
+    }:
+        # The broader FT_CHECK_GROUND_LEDGE_AIR_COLL class also contains facing-specific Side-B,
+        # HoldAir, Sheik, MissFoot, and Pass callbacks. Keep the explicit CLIFFCATCH_BOTH argument
+        # as its own generated owner.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+        #   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doAirColl
+        bits |= CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL
+    if coll_cb == "ftCa_SpecialHiCatch_Coll":
+        # Map runs only while the Falcon is not the constrained side of a grounded-victim Dive.
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHiCatch_Coll
+        bits |= CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL
+    if coll_cb == "ftCo_CaptureCaptain_Coll":
+        # CaptureCaptain map runs only while XRotN is not constrained under Falcon's TransN2.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_CaptureCaptain_Coll
+        bits |= CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL
     if (
         anim_cb == "ftCo_Wait_Anim"
         or anim_cb == "ftCo_Landing_Anim"
@@ -785,7 +945,7 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
     return bits
 
 
-def _class3_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
+def _class3_bits_for_callbacks(callbacks: tuple[str, str, str, str, str], motion_symbol: str) -> int:
     bits = 0
     coll_cb = callbacks[3]
     if coll_cb == "ftCo_AttackAir_Coll":
@@ -811,6 +971,25 @@ def _class3_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         # Phase 4 DamageFall callback:
         # ftCo_DamageFall_Coll -> ft_8008370C -> mpColl_800473CC on ordinary airborne floor checks.
         bits |= CLASS3_PHASE4_DAMAGE_FALL_COLL
+    if coll_cb in ORDINARY_WALLJUMP_COLL_CBS:
+        bits |= CLASS3_ORDINARY_WALLJUMP_COLL
+    if coll_cb in WALLTECH_COLL_CBS:
+        bits |= CLASS3_WALLTECH_COLL
+    # Catch descriptor/target-mask ownership. These are MotionState-entry ledgers: the source entry
+    # functions write x1A68/x1A6A even when the rows share callbacks with states that do not. Throw*
+    # is distinct because release clears x1A6A while the action continues.
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E2D0,ftCommon_8007E2F4}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+    if motion_symbol in CATCH_TARGET_MASK_1_MOTION_STATES:
+        bits |= CLASS3_CATCH_TARGET_MASK_1
+    if motion_symbol in CATCH_TARGET_MASK_511_MOTION_STATES:
+        bits |= CLASS3_CATCH_TARGET_MASK_511
+    if motion_symbol in CATCH_TARGET_MASK_511_WHILE_ATTACHED_MOTION_STATES:
+        bits |= CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED
+    if motion_symbol in CATCH_KIND_1_MOTION_STATES:
+        bits |= CLASS3_CATCH_KIND_1
+    if motion_symbol in CATCH_KIND_2_MOTION_STATES:
+        bits |= CLASS3_CATCH_KIND_2
     return bits
 
 
@@ -879,7 +1058,7 @@ def _parse_motion_state_rows(
             cam_cb=callbacks[4],
             class_bits=_class_bits_for_callbacks(callbacks) | _class_bits_for_submotion(submotion_sym),
             class2_bits=_class2_bits_for_callbacks(callbacks),
-            class3_bits=_class3_bits_for_callbacks(callbacks),
+            class3_bits=_class3_bits_for_callbacks(callbacks, pending_symbol),
         )
         if row.action_id in out:
             raise RuntimeError(f"duplicate action id {row.action_id} in {src}")
@@ -926,7 +1105,7 @@ def _merge_rows(common: dict[int, MotionStateRow], self_rows: dict[int, MotionSt
 def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: dict[str, int]) -> None:
     max_action = max(rows.keys(), default=0)
     action_count = max_action + 1
-    hdr_bytes = 8 + 4 + 2 + 2 + 4 * 12
+    hdr_bytes = HEADER_BYTES
     submotion_off = hdr_bytes
     x4_flags_off = submotion_off + action_count * 2
     motion_word_off = x4_flags_off + action_count * 4
@@ -1060,6 +1239,9 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "LANDING_ROOT_FLOOR_SNAP": CLASS2_LANDING_ROOT_FLOOR_SNAP,
         "GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST": CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST,
         "CLIFF_HOLD_PHYS_SNAP": CLASS2_CLIFF_HOLD_PHYS_SNAP,
+        "FT_CHECK_GROUND_LEDGE_BOTH_COLL": CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL,
+        "FALCON_DIVE_OWNER_CONDITIONAL_COLL": CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL,
+        "CAPTURE_CONSTRAINT_CONDITIONAL_COLL": CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL,
     }
     classes3 = {
         "PHASE4_ATTACK_AIR_COLL": CLASS3_PHASE4_ATTACK_AIR_COLL,
@@ -1067,13 +1249,20 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "PHASE4_DAMAGE_FALL_COLL": CLASS3_PHASE4_DAMAGE_FALL_COLL,
         "PHASE4_DAMAGE_FLY_COLL": CLASS3_PHASE4_DAMAGE_FLY_COLL,
         "PHASE4_ESCAPE_AIR_COLL": CLASS3_PHASE4_ESCAPE_AIR_COLL,
+        "ORDINARY_WALLJUMP_COLL": CLASS3_ORDINARY_WALLJUMP_COLL,
+        "WALLTECH_COLL": CLASS3_WALLTECH_COLL,
+        "CATCH_TARGET_MASK_1": CLASS3_CATCH_TARGET_MASK_1,
+        "CATCH_TARGET_MASK_511": CLASS3_CATCH_TARGET_MASK_511,
+        "CATCH_TARGET_MASK_511_WHILE_ATTACHED": CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED,
+        "CATCH_KIND_1": CLASS3_CATCH_KIND_1,
+        "CATCH_KIND_2": CLASS3_CATCH_KIND_2,
     }
     fx_special_kinds = dict(FX_SPECIAL_KIND_VALUES)
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {
         "magic": FORMAT_MAGIC.decode("ascii"),
         "version": FORMAT_VERSION,
-        "id_policy": "0 is NULL; nonzero ids are sorted stable callback symbol names from decomp MotionState rows",
+        "id_policy": "0 is NULL; nonzero ids are sorted callback symbols from registry MotionState rows",
         "classes": classes,
         "classes2": classes2,
         "classes3": classes3,
@@ -1126,12 +1315,16 @@ def main() -> None:
         motion_flags_expr_by_name=motion_flags,
     )
 
+    for ch in chars:
+        if ch not in supported:
+            raise SystemExit(f"unsupported character for now: {ch}")
+
+    # Callback ids are one registry-wide namespace. Build it from every supported character even
+    # when a low-level debug extraction emits only a subset; build_data's packaged fallback bins use
+    # this same namespace.
     rows_by_char: dict[str, dict[int, MotionStateRow]] = {}
     all_callback_symbols = {"NULL"}
-    for ch in chars:
-        spec = supported.get(ch)
-        if spec is None:
-            raise SystemExit(f"unsupported character for now: {ch}")
+    for spec in supported.values():
         self_rows = _parse_motion_state_rows(
             spec.src,
             submotion_ids=submotion_ids,
@@ -1147,8 +1340,8 @@ def main() -> None:
     for i, sym in enumerate(sorted(s for s in all_callback_symbols if s != "NULL"), start=1):
         callback_ids[sym] = i
 
-    for rel_name, rows in rows_by_char.items():
-        _write_table(args.out_dir / f"{rel_name}.bin", rows, callback_ids)
+    for ch in chars:
+        _write_table(args.out_dir / f"{ch}.bin", rows_by_char[ch], callback_ids)
     _write_manifest(args.out_dir / "callback_symbols.json", callback_ids)
 
 

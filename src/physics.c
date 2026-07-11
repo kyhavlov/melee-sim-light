@@ -1,5 +1,6 @@
 #include "physics.h"
 #include "char_registry.h"
+#include "falcon_specials.h"
 #include "marth_specials.h"
 #include "sheik_specials.h"
 
@@ -15,6 +16,7 @@
 #include "input_axis.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
+#include "msl_math.h"
 #include "stage_collision.h"
 #include "specialhi_pose.h"
 #include "state_flags.h"
@@ -215,12 +217,13 @@ static inline uint8_t physics_try_stage_floor_normal_for_current_line(const MslB
   }
   const float dx = world.x1 - world.x0;
   const float dy = world.y1 - world.y0;
-  const float len = sqrtf(dx * dx + dy * dy);
-  if (len <= 0.000001f) {
+  float nx = -dy;
+  float ny = dx;
+  if (!msl_psvec2_normalize(nx, ny, &nx, &ny)) {
     return 0u;
   }
-  *nx_out = -dy / len;
-  *ny_out = dx / len;
+  *nx_out = nx;
+  *ny_out = ny;
   return 1u;
 }
 
@@ -524,10 +527,10 @@ static inline uint8_t physics_try_get_transn_delta_xyz(const MslCharParams* ch, 
   }
   const uint16_t msid = (uint16_t)msid_u32;
 
-  // Our ISO-derived SSANIM01 v4 artifacts store per-frame TransN translation as a tail (x,y,z);
+  // Our ISO-derived SSANIM01 v5 artifacts store per-frame TransN translation as a tail (x,y,z);
   // approximate the per-frame TransN offset as a finite difference between the previous and current
   // animation frames.
-  // - tools/extraction/extract_fighter_anims.py (SSANIM01 v4 + per-frame TransN tail)
+  // - tools/extraction/extract_fighter_anims.py (SSANIM01 v5 + per-frame TransN tail)
   // - refs/melee/src/melee/ft/ft_081B.c::ft_80085030 (consumer of fp->x6A4_transNOffset.{y,z})
   const uint16_t f_cur = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(anim_frame_f32));
   const uint16_t f_prev =
@@ -2042,6 +2045,7 @@ void physics_integrate(MslBatch* batch) {
       // integration below still runs.
       const uint8_t marth_special_owned_vel = marth_specials_phys(batch, idx);
       const uint8_t sheik_special_owned_vel = sheik_specials_phys(batch, idx);
+      const uint8_t falcon_special_owned_vel = falcon_specials_phys(batch, idx);
 
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1 : 0;
       const float vy_self_pre = batch->state.speed_y_self[idx];
@@ -2106,7 +2110,8 @@ void physics_integrate(MslBatch* batch) {
       // In GALE01, `fp->cur_pos` is then integrated using the updated self velocity in the same
       // proc. We therefore apply gravity/fastfall (and simplified EscapeAir decay) before
       // integrating `pos_*` so our one-step outputs are aligned with the in-engine ordering.
-      if (!on_ground && !marth_special_owned_vel && !sheik_special_owned_vel) {
+      if (!on_ground && !marth_special_owned_vel && !sheik_special_owned_vel &&
+          !falcon_special_owned_vel) {
         // Match-flow and cliff actions are treated as non-physical in this simplified core.
         if (!physics_is_match_flow_airborne(action_id)) {
           if (!physics_action_skip_common_air_helper_first_frame(
@@ -2464,6 +2469,8 @@ void physics_integrate(MslBatch* batch) {
           (uint8_t)(on_ground || downbound_ground_phys_before_floor_loss);
       float vx_self = ground_phys_for_frame ? batch->state.speed_ground_x_self[idx]
                                             : batch->state.speed_air_x_self[idx];
+      float grounded_self_vel_y_for_frame = 0.0f;
+      uint8_t use_grounded_self_vel_y_for_frame = 0u;
       if (ground_phys_for_frame) {
         // Grounded locomotion velocity update (single writer):
         // - Decomp: Phys callbacks like ft_80084F3C/ftWalkCommon_800E0060/ftCo_Dash_Phys/ftCo_Run_Phys
@@ -2623,6 +2630,79 @@ void physics_integrate(MslBatch* batch) {
             if ((int16_t)(batch->state.action_frame[idx] + 1) >=
                 (int16_t)ch->firefox_launch_reverse_accel_start_frames) {
               gr_vel += ground_friction_step_delta(gr_vel, ch->firefox_launch_reverse_accel);
+            }
+          } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                     (action_id >= (uint16_t)MSL_ACT_CA_SPECIAL_HI &&
+                      action_id <= (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW)) {
+            // Falcon Dive grounded rows (Special(Air)Hi wind-up before the script's
+            // set_airborne_state@14, plus transient HiCatch/Throw0 grounded frames): none of
+            // the source Phys callbacks touch gr_vel or the ground accel lanes, so NO ground
+            // friction applies. Special(Air)Hi_Phys additionally owns the frame's projected
+            // self velocity (TransN rebase + mv.ca.specialhi.vel), which the falcon phys hook
+            // has already written into the air-x lane.
+            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialHi_Phys,
+            //   ftCa_SpecialHiCatch_Phys,ftCa_SpecialHiThrow0_Phys}
+            if (action_id == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                action_id == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI) {
+              grounded_self_vel_for_frame = batch->state.speed_air_x_self[idx];
+              grounded_self_vel_y_for_frame = batch->state.speed_y_self[idx];
+              use_grounded_self_vel_for_frame = 1u;
+              use_grounded_self_vel_y_for_frame = 1u;
+            }
+          } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                     (action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW ||
+                      action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END ||
+                      action_id == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_LW_END ||
+                      action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END_AIR)) {
+            // Falcon Kick grounded Phys family. gr_vel stays unscaled (source
+            // Inline_Friction scales the frame's projected self_vel AFTER
+            // ApplyGroundMovement, not fp->gr_vel), so the on-hit slowdown rides
+            // grounded_self_vel_for_frame.
+            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+            //   ftCa_SpecialLw_Phys,ftCa_SpecialLwEnd_Phys,ftCa_SpecialAirLwEnd_Phys,
+            //   ftCa_SpecialLwEndAir_Phys,ftCa_Special_Inline_Friction}
+            // refs/melee/src/melee/ft/ft_084E.c::{ft_80085088,ft_800850E0,ft_80084F3C}
+            const uint16_t fc_msid = falcon_special_submotion(action_id);
+            const float fc_frame = physics_cur_anim_frame_f32(batch, idx);
+            uint8_t scaled = 0u;
+            if (action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW ||
+                action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END_AIR) {
+              // ft_80085088 -> ft_800850E0: TransN root motion when the extracted x10_b0 flag
+              // is set for the motion, plain gr_friction step otherwise (no high-speed mul).
+              float dxyz[3];
+              if (physics_action_anim_uses_root_motion(batch->state.char_id[idx],
+                                                       batch->state.animation_index[idx]) &&
+                  physics_try_get_transn_delta_xyz(
+                      ch, batch->state.char_id[idx], batch->state.animation_index[idx],
+                      physics_prev_anim_frame_f32(batch, idx), fc_frame, dxyz)) {
+                gr_vel = dxyz[2] * facing_dir;
+              } else {
+                gr_vel += ground_friction_step_delta(gr_vel, ch->gr_friction);
+              }
+              scaled = (uint8_t)(action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW);
+            } else {
+              // LwEnd (358) / AirLwEnd (360): the script's cmd_vars[2] window selects the
+              // per-family traction friction; otherwise ft_80084F3C (high-speed mul).
+              // data/moves/falcon.json::specials_by_msid.{312,314} set_cmd_var(idx=2)
+              if (move_tables_special_cmd_var_u8_value_at_frame(batch->state.char_id[idx], fc_msid,
+                                                                2u, fc_frame) != 0u) {
+                const float traction = (action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END)
+                                           ? ch->falcon_speciallw_ground_traction
+                                           : ch->falcon_speciallw_air_landing_traction;
+                gr_vel += ground_friction_step_delta(gr_vel, traction * ch->gr_friction);
+              } else {
+                float friction = ch->gr_friction;
+                if (msl_absf(gr_vel) > ch->walk_max_vel) {
+                  friction *= c->high_speed_friction_mul;
+                }
+                gr_vel += ground_friction_step_delta(gr_vel, friction);
+              }
+              scaled = (uint8_t)(action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END);
+            }
+            if (scaled) {
+              const float fc_f = batch->state.falcon_speciallw_friction[idx];
+              grounded_self_vel_for_frame = gr_vel * ((fc_f > 0.0f) ? fc_f : 1.0f);
+              use_grounded_self_vel_for_frame = 1u;
             }
           } else if (physics_action_uses_ft_80084FA8(action_id)) {
             // ft_80084FA8 grounded Phys family:
@@ -2897,7 +2977,8 @@ void physics_integrate(MslBatch* batch) {
           floor_ny = 1.0f;
         }
         const float vx_world = floor_ny * vx_self;
-        const float vy_world = -floor_nx * vx_self;
+        const float vy_world =
+            use_grounded_self_vel_y_for_frame ? grounded_self_vel_y_for_frame : -floor_nx * vx_self;
         batch->state.speed_air_x_self[idx] = vx_world;
         batch->state.speed_y_self[idx] = vy_world;
         vx_self = vx_world;
@@ -2975,6 +3056,18 @@ void physics_integrate(MslBatch* batch) {
                            (uint16_t)MSL_ACT_ZD_SPECIAL_HI_START_0))) &&
                     batch->state.frame_start_on_ground[idx] != 0u &&
                     sheik_vanish_start1_platform_entry != 0u);
+      // Grounded Falcon Dive wind-up publishes SpecialHi_Phys' world self_vel.y from the TransN
+      // root delta, but the grounded collision root stays floor-clamped until the script's
+      // set_airborne_state handoff. Do not integrate that visible Y lane into cur_pos while the
+      // fighter is still grounded.
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialHi_Phys,
+      //   ftCa_SpecialHi_Coll}
+      // data/moves/falcon.json::specials_by_msid.{307,308} set_airborne_state@14
+      const uint8_t falcon_specialhi_ground_vertical_defer =
+          (uint8_t)(batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                    (action_id == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                     action_id == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI) &&
+                    on_ground != 0u);
       // Position integration uses the (possibly-updated) self velocity plus the separate knockback
       // velocity term, matching GALE01 `Fighter_procUpdate` integration shape.
       // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
@@ -2982,11 +3075,13 @@ void physics_integrate(MslBatch* batch) {
       if (!damagefly_terminal_ledge_endpoint_owner) {
         batch->state.pos_x[idx] += vx_kb;
       }
-      if (!sheik_vanish_ground_start_to_air_travel_vertical_defer) {
+      if (!sheik_vanish_ground_start_to_air_travel_vertical_defer &&
+          !falcon_specialhi_ground_vertical_defer) {
         batch->state.pos_y[idx] += vy_self;
       }
       if (!damagefly_terminal_ledge_endpoint_owner &&
-          !sheik_vanish_ground_start_to_air_travel_vertical_defer) {
+          !sheik_vanish_ground_start_to_air_travel_vertical_defer &&
+          !falcon_specialhi_ground_vertical_defer) {
         batch->state.pos_y[idx] += vy_kb;
       }
       batch->state.pos_x[idx] += atk_shield_kb_x;

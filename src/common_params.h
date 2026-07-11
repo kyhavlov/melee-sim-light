@@ -130,6 +130,17 @@ typedef struct MslCommonParams {
   float capture_wait_jump_latch_window_frames;  // p_ftCommonData->x3AC
   float capture_wait_anim_rate_hold_frames;     // p_ftCommonData->x3B0
   float capture_wait_anim_rate;                 // p_ftCommonData->x3B4
+  float capture_release_floor_tolerance;        // p_ftCommonData->x3BC
+  int32_t capture_damage_release_threshold;     // p_ftCommonData->x3C0
+  uint16_t capture_release_hit_state_x380;
+  uint16_t capture_release_hit_damage_x384;
+  uint16_t capture_release_hit_angle_x388;
+  uint16_t capture_release_hit_kbg_x38c;
+  uint16_t capture_release_hit_wsk_x390;
+  uint16_t capture_release_hit_bkb_x394;
+  uint16_t capture_release_hit_element_x398;
+  uint16_t capture_release_hit_sfx_severity_x39c;
+  uint16_t capture_release_hit_sfx_kind_x3a0;
   // CapturePulledLw grounded-to-air handoff threshold.
   // Decomp: ftCo_CapturePulledLw_Phys compares hidden capture-anchor delta dy against
   // `p_ftCommonData->x3C4 * fp->x34_scale.y`.
@@ -241,6 +252,7 @@ typedef struct MslCommonParams {
   float walljump_stick_x_threshold;           // p_ftCommonData->x76C
   float walljump_tilt_x_max_frames;           // p_ftCommonData->x770
   uint16_t walljump_startup_timer_frames;     // p_ftCommonData->x774
+  float passive_wall_vel_y_base;              // p_ftCommonData->x778
   // Pokemon Stadium fighter x44 matrix scale source field.
   //
   // Decomp: `Fighter_80068E64` writes this to `fp->x34_scale.z` on internal stage 0x1B, and

@@ -6,6 +6,7 @@
 #include "anim_frame.h"
 #include "anim_timebase.h"
 #include "api.h"
+#include "ftcommon_ecb.h"
 #include "ids.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
@@ -400,7 +401,7 @@ void locomotion_enter_landing_action_from_air(MslBatch* batch, const MslCharPara
   batch->state.fall_fast[idx] = 0;
   // Decomp: grounding transitions clear ECB lock via ftCommon_UnlockECB.
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D6A4,ftCommon_UnlockECB}
-  batch->state.ecb_lock_timer[idx] = 0u;
+  msl_ftcommon_unlock_ecb(batch, idx);
 
   // Jump refresh is tied to explicit landing-enter transitions only (not raw on_ground flips).
   //
@@ -470,6 +471,34 @@ void locomotion_enter_landing_action_from_air(MslBatch* batch, const MslCharPara
       const MslCharParams* ms_ch = msl_char_params_fast(batch->state.char_id[idx]);
       const float ms_lag = (ms_ch != NULL) ? ms_ch->specialhi_landing_lag_frames : 0.0f;
       speed = (ms_lag > 0.0f && end_frame > 0.0f) ? ((end_frame + 0.1f) / ms_lag) : 1.0f;
+    } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+               (source_act == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                source_act == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI)) {
+      // Falcon Dive landing: doAirColl enters LandingFallSpecial with
+      // ftCaptainAttributes::specialhi_landing_lag.
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doAirColl
+      // data/characters/falcon.json::falcon_specialhi_landing_lag
+      const MslCharParams* fc_ch = msl_char_params_fast(batch->state.char_id[idx]);
+      const float fc_lag = (fc_ch != NULL) ? fc_ch->falcon_specialhi_landing_lag : 0.0f;
+      speed = (fc_lag > 0.0f && end_frame > 0.0f) ? ((end_frame + 0.1f) / fc_lag) : 1.0f;
+    } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+               source_act == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START) {
+      // Aerial Raptor Boost miss landing: ftCa_SpecialAirSStart_Coll enters LandingFallSpecial
+      // with ftCaptainAttributes::specials_miss_landing_lag.
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirSStart_Coll
+      // data/characters/falcon.json::falcon_specials_miss_landing_lag
+      const MslCharParams* fc_ch = msl_char_params_fast(batch->state.char_id[idx]);
+      const float fc_lag = (fc_ch != NULL) ? fc_ch->falcon_specials_miss_landing_lag : 0.0f;
+      speed = (fc_lag > 0.0f && end_frame > 0.0f) ? ((end_frame + 0.1f) / fc_lag) : 1.0f;
+    } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+               source_act == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S) {
+      // Aerial Raptor Boost hit landing: ftCa_SpecialAirS_Coll enters LandingFallSpecial with
+      // ftCaptainAttributes::specials_hit_landing_lag.
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirS_Coll
+      // data/characters/falcon.json::falcon_specials_hit_landing_lag
+      const MslCharParams* fc_ch = msl_char_params_fast(batch->state.char_id[idx]);
+      const float fc_lag = (fc_ch != NULL) ? fc_ch->falcon_specials_hit_landing_lag : 0.0f;
+      speed = (fc_lag > 0.0f && end_frame > 0.0f) ? ((end_frame + 0.1f) / fc_lag) : 1.0f;
     } else if (source_act == (uint16_t)MSL_ACT_FALL_SPECIAL ||
                source_act == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
                source_act == (uint16_t)MSL_ACT_FALL_SPECIAL_B) {

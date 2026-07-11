@@ -50,6 +50,16 @@ def test_aggregate_pokemon_stadium_entries_are_frozen() -> None:
         assert bool(game.start.get("is_frozen_ps")) is True
 
 
+def test_falcon_pokemon_stadium_entries_are_frozen() -> None:
+    suite = load_suite("replays/suites/falcon.json")
+    ps_replays = [replay for replay in suite.replays if int(replay.stage_id or -1) == 3]
+    assert ps_replays
+    for replay in ps_replays:
+        game = _read_replay(replay.replay)
+        assert int(game.start["stage"]) == 3
+        assert bool(game.start.get("is_frozen_ps")) is True
+
+
 def test_aggregate_derived_selfplay_stadium_fixture_is_frozen_without_transformations() -> None:
     replay = Path("replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slpz")
     game = _read_replay(replay)

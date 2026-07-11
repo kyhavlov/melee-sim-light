@@ -20,7 +20,10 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "combat_geom.h"
+#include "falcon_specials.h"
+#include "ftcommon_ecb.h"
 #include "guard_lifecycle.h"
+#include "grab_attachment.h"
 #include "common_params.h"
 #include "damage_terminal_owner.h"
 #include "damage_source.h"
@@ -415,7 +418,6 @@ uint8_t combat_catch_grabbable_dynamic_hurtcap_world(const MslBatch* batch, size
                                                      uint8_t cap_id, float* out_ax, float* out_ay,
                                                      float* out_az, float* out_bx, float* out_by,
                                                      float* out_bz, float* out_r);
-uint8_t combat_defender_downed_catch_mask_blocks(uint16_t action_id);
 uint8_t combat_guard_family_body_hurtcap_world(const MslBatch* batch, size_t d_idx,
                                                const MslHurtCap* cap, uint8_t cap_id,
                                                uint16_t cap_count, float* out_ax, float* out_ay,

@@ -23,6 +23,10 @@ from tools.modelplay.state_adapter import (
 )
 
 CHAR_FOX = 1
+CHAR_FALCON = 2
+CHAR_SHEIK = 7
+CHAR_MARTH = 18
+CHAR_ZELDA = 19
 CHAR_FALCO = 22
 SIM_INIT_OPENING_FRAME_ID = -122
 

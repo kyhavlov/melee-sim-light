@@ -103,6 +103,7 @@ MSL_STATE_FIELD(coll_escapeair_floor_producer_runtime, uint8_t, bp, (size_t)MSL_
 MSL_STATE_FIELD(coll_floor_result_valid, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_source, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_mode, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(coll_a678_edge_runtime, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_segment_id, uint16_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_contact_x, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_contact_y, float, bp, (size_t)MSL_MAX_PLAYERS)
@@ -210,6 +211,8 @@ MSL_STATE_FIELD(throw_pending_victim_port, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(throw_pending_hit_idx, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(attached_victim_port, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(grab_owner_port, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(catch_kind_x1a68, uint16_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(catch_target_mask_x1a6a, uint16_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(grab_mash_stick_x_sign, int8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(grab_mash_stick_y_sign, int8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(grab_offset_y, float, bp, (size_t)MSL_MAX_PLAYERS)
@@ -243,6 +246,8 @@ MSL_STATE_FIELD(magnify_damage_counter_x1910, uint16_t, bp, (size_t)MSL_MAX_PLAY
 MSL_STATE_FIELD(downwait_timer, int16_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(passivewall_timer, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(passivewall_jump_latch, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(walljump_used_count, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(passivewall_vel_y_exponent, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(walljump_input_timer, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(walljump_wall_side_i8, int8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(walljump_seed_phase_valid, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
@@ -338,6 +343,30 @@ MSL_STATE_FIELD(sheik_chain_pose_angle, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(sheik_chain_pose_mag, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(special_stick_angle, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(specials_air_used, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+// Falcon Kick hidden lanes (mv.ca.speciallw): x0 on-hit count and the cumulative on-hit
+// slowdown multiplier consumed by the SpecialLw/SpecialLwEnd Inline_Friction scaling. The
+// dealt_x1914 flag models deal_dmg_cb's once-per-Fighter_ProcessHit firing (cleared each
+// frame in the falcon action phase, set by the combat x1914 attacker paths).
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{ftCa_SpecialLw_Enter,
+//   ftCa_SpecialHi_800E400C,ftCa_Special_Inline_Friction}
+// refs/melee/src/melee/ft/fighter.c (fp->deal_dmg_cb under fp->dmg.x1914)
+MSL_STATE_FIELD(falcon_speciallw_hits, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(falcon_speciallw_friction, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(falcon_speciallw_dealt_x1914_frame, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+// Raptor Boost hidden lanes: mv.ca.specials.grav vertical accumulator (air start/hit phys)
+// and the per-frame fp->unk_gobj detect pending flag (inert hitbox contact -> OnDetect).
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c
+MSL_STATE_FIELD(falcon_specials_grav, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(falcon_detect_pending, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+// Falcon Dive hidden lanes: mv.ca.specialhi.vel accumulated velocity (SpecialHi_Phys carries
+// last frame's TransN + drift sum across frames) and the attacker x221B_b7 attach-mode flag
+// (grounded victim: attacker snaps to victim via accessory4; airborne victim: victim hangs from
+// the attacker anchor). x2_b0/x2_b1 ride the shared special_cmd0/special_cmd1 latches.
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c
+MSL_STATE_FIELD(falcon_specialhi_vel_x, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(falcon_specialhi_vel_y, float, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(falcon_specialhi_x221b_b7, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(grab_constraint_x2226_b2, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(fallspecial_mobility_mul, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_counter_window, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(speciallw_counter_hitlag_floor_active, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)

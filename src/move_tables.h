@@ -208,6 +208,14 @@ float move_tables_grounded_smash_charge_damage_mul(uint8_t char_id, uint16_t gro
 uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
                                            float cur_anim_frame_f32);
 
+// Returns whether an extracted character-special script emitted `allow_interrupt` at the given
+// submotion frame. This exposes the generic ftAction_80071950 command lane for character specials
+// whose IASA callback may ignore the bit while Slippi still publishes fp+0x2218_b0.
+//
+// Source of truth: data/moves/<char>.json specials_by_msid[msid].events allow_interrupt.
+uint8_t move_tables_special_allow_interrupt_at_frame(uint8_t char_id, uint16_t msid,
+                                                     float cur_anim_frame_f32);
+
 // Returns whether EscapeAir command-script cmd_var[0] is active at the given cur_anim_frame.
 //
 // Decomp:
@@ -242,6 +250,13 @@ uint8_t move_tables_special_throw_flags_window(uint8_t char_id, uint16_t msid,
                                                float anim_frame_f32);
 uint8_t move_tables_special_cmd_var_value_at_frame(uint8_t char_id, uint16_t msid, uint8_t var_idx,
                                                    float anim_frame_f32);
+
+// Raw u8 cmd var value at a frame (latest set_cmd_var pulse at or before the frame; 0 before
+// any pulse). Supports multi-valued vars the boolean helper cannot represent (Falcon
+// SpecialAirN cmd1 steps 0 -> 1 @50 -> 2 @65).
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Phys
+uint8_t move_tables_special_cmd_var_u8_value_at_frame(uint8_t char_id, uint16_t msid,
+                                                      uint8_t var_idx, float anim_frame_f32);
 
 // Returns the exact command-script cmd_var[0] window without the loop-repeat latch tail used by
 // move_tables_special_cmd0_active_at_frame().
@@ -428,6 +443,13 @@ uint8_t move_tables_catchattack_grabbed_hit_active(uint8_t char_id, float cur_an
 // Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
 uint8_t move_tables_throw_has_release(uint8_t char_id, uint16_t throw_action_id);
 
+// Returns 1 iff the set_throw_flags release (hit idx 0) is not preceded by the facing-flip flag
+// event (hit idx 1); gates the exact f32 wait-timer chain reconstruction of the release edge
+// (the movescript timer re-anchors at every executed event).
+// refs/melee/src/melee/ft/ftaction.c::{ftAction_80073354,ftAction_800718A4}
+uint8_t move_tables_throw_release_is_first_timed_flag_event(uint8_t char_id,
+                                                            uint16_t throw_action_id);
+
 // Returns 1 and outputs the parsed throw release action-frame threshold.
 //
 // Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
@@ -445,6 +467,10 @@ uint8_t move_tables_throw_release_hit_idx(uint8_t char_id, uint16_t throw_action
 // Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_hitbox.
 uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_id, uint8_t hit_idx,
                                         MslThrowHitboxParams* out);
+
+// Falcon Dive capture-break hit stored in Falcon's xDF4[1] by the SpecialHi scripts.
+// Source of truth: data/scripts/falcon.bin, msid 307/308 set_throw_hitbox(idx=1).
+uint8_t move_tables_falcon_dive_capture_break_hitbox_params(MslThrowHitboxParams* out);
 
 // Returns whether a live fighter HitCapsule matches an authored pre-release throw create_hitbox
 // payload. This is narrower than "throw has any create_hitbox before release": it ties consumers to

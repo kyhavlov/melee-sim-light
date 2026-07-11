@@ -5,6 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from tools.extraction.extract_fighter_hitboxes import FORMAT_VERSION as HITBOX_VERSION
+
 from tools.slippi.combat_history import (
     _localize_last_hit_by_for_native,
     derive_combat_hitlist_seed_fields,
@@ -47,6 +49,7 @@ from tools.slippi.validation_buffer_items import derive_illusion_ghost_pos01, de
 from tools.slippi.validation_buffer_seed import _derive_attackdash_x0_seed_lane
 from tools.slippi.validation_buffer_seed import _derive_mpcoll_wall_seed_lanes
 from tools.slippi.validation_buffer_seed import _derive_passivewall_timer
+from tools.slippi.validation_buffer_seed import _derive_walljump_used_seed_lanes
 from tools.slippi.validation_buffer_stage import _derive_grounded_overlap_hidden_pos_z
 from tests.replay_buffers_loader import load_replay_buffers
 
@@ -228,18 +231,19 @@ def test_derive_ecb_lock_bottom_rel_y_preserves_desired_bottom_during_lock() -> 
     on_ground = np.array([0, 0, 0, 0], dtype=np.uint8)
     lock = np.array([0, 9, 8, 7], dtype=np.uint8)
 
-    bottom, valid = derive_ecb_lock_bottom_rel_y(
+    bottom, owner = derive_ecb_lock_bottom_rel_y(
         char_id_u8=char,
         action_id_u16=action,
         animation_index_u32=anim,
         anim_frame_f32=anim_frame,
         on_ground_u8=on_ground,
         ecb_lock_timer_u8=lock,
+        ecb_lock_owner_u8=np.array([0, 1, 1, 1], dtype=np.uint8),
     )
 
     assert bottom.dtype == np.float32
-    assert valid.dtype == np.uint8
-    assert valid.tolist() == [0, 1, 1, 1]
+    assert owner.dtype == np.uint8
+    assert owner.tolist() == [0, 1, 1, 1]
     import msl_binding
 
     preserved = float(msl_binding.ecb_bottom_rel_y(1, 20, 5))
@@ -256,17 +260,61 @@ def test_derive_ecb_lock_bottom_rel_y_clears_on_grounded_rows() -> None:
     on_ground = np.array([0, 1, 0], dtype=np.uint8)
     lock = np.array([0, 9, 8], dtype=np.uint8)
 
-    bottom, valid = derive_ecb_lock_bottom_rel_y(
+    bottom, owner = derive_ecb_lock_bottom_rel_y(
         char_id_u8=char,
         action_id_u16=action,
         animation_index_u32=anim,
         anim_frame_f32=anim_frame,
         on_ground_u8=on_ground,
         ecb_lock_timer_u8=lock,
+        ecb_lock_owner_u8=np.array([0, 1, 1], dtype=np.uint8),
     )
 
-    assert valid.tolist() == [0, 0, 0]
+    assert owner.tolist() == [0, 0, 0]
     assert float(bottom[2]) == pytest.approx(0.0)
+
+
+def test_derive_ecb_lock_bottom_rel_y_carries_falcon_alt_helper_owner() -> None:
+    # ftCommon_8007D60C sets the same CollData_X130_Locked bit as the ten-frame helper, so aerial
+    # Raptor must preserve the pre-entry desired bottom through its five-frame lock.
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C
+    char = np.array([2, 2, 2, 2], dtype=np.uint8)
+    action = np.array([0x001D, 0x015F, 0x015F, 0x002B], dtype=np.uint16)
+    anim = np.array([20, 305, 305, 36], dtype=np.uint32)
+    anim_frame = np.array([5.0, 0.0, 1.0, 0.0], dtype=np.float32)
+    on_ground = np.zeros((4,), dtype=np.uint8)
+    lock = np.array([0, 4, 3, 4], dtype=np.uint8)
+
+    bottom, owner = derive_ecb_lock_bottom_rel_y(
+        char_id_u8=char,
+        action_id_u16=action,
+        animation_index_u32=anim,
+        anim_frame_f32=anim_frame,
+        on_ground_u8=on_ground,
+        ecb_lock_timer_u8=lock,
+        ecb_lock_owner_u8=np.array([0, 4, 4, 4], dtype=np.uint8),
+    )
+
+    import msl_binding
+
+    preserved = float(msl_binding.ecb_bottom_rel_y(2, 20, 5))
+    assert owner.tolist() == [0, 4, 4, 4]
+    assert np.allclose(bottom[1:], np.float32(preserved), atol=1e-6)
+
+
+def test_derive_ecb_lock_bottom_rel_y_keeps_seeded_owner_for_special_damage_output() -> None:
+    bottom, owner = derive_ecb_lock_bottom_rel_y(
+        char_id_u8=np.full((3,), 2, dtype=np.uint8),
+        action_id_u16=np.array([0x0165, 0x0058, 0x0058], dtype=np.uint16),
+        animation_index_u32=np.array([311, 20, 20], dtype=np.uint32),
+        anim_frame_f32=np.array([5.0, 0.0, 1.0], dtype=np.float32),
+        on_ground_u8=np.array([1, 0, 0], dtype=np.uint8),
+        ecb_lock_timer_u8=np.array([0, 10, 9], dtype=np.uint8),
+        ecb_lock_owner_u8=np.array([0, 1, 1], dtype=np.uint8),
+    )
+
+    assert owner.tolist() == [0, 1, 1]
+    assert bottom.tolist() == pytest.approx([0.0, 0.0, 0.0], abs=1e-6)
 
 
 def test_derive_instance_id_counter_prefix_invariant() -> None:
@@ -422,6 +470,150 @@ def test_derive_passivewall_timer_tracks_hidden_startup_hold() -> None:
 
     assert got.dtype == np.uint8
     assert got.tolist() == [0, 5, 4, 3, 2, 1, 0, 0]
+
+
+def test_derive_passivewall_timer_preserves_latch_and_detects_proven_reentry() -> None:
+    action = np.array([88, 202, 202, 202, 202, 202, 203, 203, 203], dtype=np.uint16)
+    action_frame = np.array([8, 0, 0, 0, 0, 0, 0, 1, 0], dtype=np.int16)
+
+    got = _derive_passivewall_timer(
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        common={"passivewall_timer_frames": 5},
+    )
+
+    # PassiveWall_Anim's inlineA0 preserves the current animation frame when it latches into
+    # PassiveWallJump, so the 202 -> 203 row reaches timer zero. A later frame reset to zero proves
+    # a fresh ftCo_800C1E64 entry and restarts the timer.
+    assert got.tolist() == [0, 5, 4, 3, 2, 1, 0, 0, 5]
+
+
+def _derive_walljump_test_lanes(
+    action: list[int] | np.ndarray,
+    *,
+    action_frame: list[int] | np.ndarray | None = None,
+    on_ground: list[int] | np.ndarray | None = None,
+    jumps_left: list[int] | np.ndarray | None = None,
+    buttons_pressed: list[int] | np.ndarray | None = None,
+    stick_y: list[float] | np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    action_arr = np.asarray(action, dtype=np.uint16)
+    n = len(action_arr)
+    max_jumps_lut = np.zeros(256, dtype=np.uint8)
+    max_jumps_lut[1] = np.uint8(2)
+    return _derive_walljump_used_seed_lanes(
+        char_id_u8=np.ones(n, dtype=np.uint8),
+        action_id_u16=action_arr,
+        action_frame_i16=np.asarray(action_frame if action_frame is not None else np.zeros(n), dtype=np.int16),
+        on_ground_u8=np.asarray(on_ground if on_ground is not None else np.zeros(n), dtype=np.uint8),
+        jumps_left_u8=np.asarray(jumps_left if jumps_left is not None else np.full(n, 2), dtype=np.uint8),
+        max_jumps_lut_u8=max_jumps_lut,
+        buttons_pressed_u16=np.asarray(buttons_pressed if buttons_pressed is not None else np.zeros(n), dtype=np.uint16),
+        stick_y_f32=np.asarray(stick_y if stick_y is not None else np.zeros(n), dtype=np.float32),
+        button_mask_xy=0x0C00,
+        tap_jump_threshold=0.6625,
+    )
+
+
+@pytest.mark.parametrize("producer", [38, 204, 218, 229, 244, 250, 251, 261, 263])
+def test_derive_walljump_used_lanes_cover_every_common_ordinary_producer(producer: int) -> None:
+    used, exponent = _derive_walljump_test_lanes([producer, 203], action_frame=[4, 0])
+    assert used.tolist() == [0, 1]
+    assert exponent.tolist() == [0, 0]
+
+
+@pytest.mark.parametrize("producer", [88, 91, 185, 247])
+def test_derive_walljump_used_lanes_keep_walltech_producers_unscaled(producer: int) -> None:
+    used, exponent = _derive_walljump_test_lanes([29, 203, 29, producer, 203], action_frame=[4, 0, 4, 4, 0])
+    assert used.tolist() == [0, 1, 1, 1, 1]
+    assert exponent.tolist() == [0, 0, 0, 0, 0]
+
+
+def test_derive_walljump_used_lanes_separate_passivewall_latch_from_proven_reentry() -> None:
+    used, exponent = _derive_walljump_test_lanes(
+        [88, 202, 203, 203, 203],
+        action_frame=[6, 0, 0, 2, 0],
+    )
+
+    # DamageFly -> PassiveWall is a wall tech. The frame-preserving 202 -> 203 transition is
+    # inlineA0's latch, while 203 frame 2 -> frame 0 proves a new ordinary walljump produced by
+    # PassiveWall_Coll itself.
+    assert used.tolist() == [0, 0, 0, 0, 1]
+    assert exponent.tolist() == [0, 0, 0, 0, 0]
+
+
+def test_derive_walljump_used_lanes_reset_before_same_frame_grounded_processhit() -> None:
+    action = [29, 203, 29, 203, 29, 88, 29, 203]
+    action_frame = [4, 0, 4, 0, 4, 1, 4, 0]
+    jumps_left = [2, 2, 2, 2, 2, 1, 1, 1]
+    used, exponent = _derive_walljump_test_lanes(
+        action,
+        action_frame=action_frame,
+        jumps_left=jumps_left,
+    )
+
+    # The airborne DamageFly entry carries ftCommon_8007D5D4's jumpsUsed=1 signature after a
+    # collision-phase ftCommon_8007D6A4 reset. The next ordinary walljump therefore starts at zero.
+    assert used.tolist() == [0, 1, 1, 2, 2, 0, 0, 1]
+    assert exponent.tolist() == [0, 0, 0, 1, 0, 0, 0, 0]
+
+    for end in range(1, len(action) + 1):
+        prefix_used, prefix_exponent = _derive_walljump_test_lanes(
+            action[:end],
+            action_frame=action_frame[:end],
+            jumps_left=jumps_left[:end],
+        )
+        assert int(prefix_used[-1]) == int(used[end - 1])
+        assert int(prefix_exponent[-1]) == int(exponent[end - 1])
+
+
+def test_derive_walljump_used_lanes_do_not_reset_for_airborne_damage_without_source_edge() -> None:
+    used, exponent = _derive_walljump_test_lanes(
+        [29, 203, 29, 203, 29, 88, 29, 203],
+        action_frame=[4, 0, 4, 0, 4, 1, 4, 0],
+        jumps_left=[1] * 8,
+    )
+    assert int(used[-1]) == 3
+    assert int(exponent[-1]) == 2
+
+
+@pytest.mark.parametrize(
+    ("buttons_pressed", "stick_y"),
+    [([0, 0, 0, 0, 0, 0x0400, 0, 0], [0.0] * 8), ([0] * 8, [0.0] * 5 + [0.8, 0.0, 0.0])],
+)
+def test_derive_walljump_used_lanes_do_not_misclassify_airjump_then_hit_as_ground_reset(
+    buttons_pressed: list[int],
+    stick_y: list[float],
+) -> None:
+    used, exponent = _derive_walljump_test_lanes(
+        [29, 203, 29, 203, 29, 88, 29, 203],
+        action_frame=[4, 0, 4, 0, 4, 1, 4, 0],
+        jumps_left=[2, 2, 2, 2, 2, 1, 1, 1],
+        buttons_pressed=buttons_pressed,
+        stick_y=stick_y,
+    )
+    assert int(used[-1]) == 3
+    assert int(exponent[-1]) == 2
+
+
+def test_derive_walljump_used_lanes_reset_on_visible_ground_and_rebirth() -> None:
+    action = [29, 203, 29, 29, 203, 29, 12, 29, 203]
+    ground = [0, 0, 1, 0, 0, 0, 0, 0, 0]
+    used, exponent = _derive_walljump_test_lanes(action, on_ground=ground)
+    assert used.tolist() == [0, 1, 0, 0, 1, 1, 0, 0, 1]
+    assert exponent.tolist() == [0] * len(action)
+
+
+def test_derive_walljump_used_lane_saturates_without_wrapping() -> None:
+    ordinary_entries = 257
+    action = np.empty(ordinary_entries * 2, dtype=np.uint16)
+    action[0::2] = np.uint16(29)
+    action[1::2] = np.uint16(203)
+
+    used, exponent = _derive_walljump_test_lanes(action)
+
+    assert int(used[-1]) == 255
+    assert int(exponent[-1]) == 255
 
 
 def test_derive_mpcoll_wall_seed_lanes_are_fd_segment_and_phase_scoped() -> None:
@@ -2390,7 +2582,7 @@ def _read_hitbox_msid_frames(path: str, *, limit: int = 512) -> list[tuple[int, 
     if len(buf) < 16 or buf[:8] != b"MSLHITB1":
         raise ValueError("bad MSLHITB1")
     ver = int.from_bytes(buf[8:12], "little", signed=False)
-    if ver != 1:
+    if ver != HITBOX_VERSION:
         raise ValueError("unsupported MSLHITB1 version")
     entry_count = int.from_bytes(buf[12:16], "little", signed=False)
     index_base = 16
@@ -2694,6 +2886,195 @@ def test_derive_combat_hitlist_seed_fields_per_hitbox_schema_shape() -> None:
     assert not bool(np.any(shield_contact_kind))
 
 
+def _derive_falcon_kick_processhit_producer(
+    *,
+    defender_x: float = 0.0,
+    defender_invincible: bool = False,
+    attacker_hitlag: tuple[int, int] = (0, 3),
+    defender_hitlag: tuple[int, int] = (0, 0),
+    attributed_damage_contact: bool | None = None,
+    item_x: float | None = None,
+    frame_count: int = 2,
+) -> np.ndarray:
+    from tools.eval.validation_dtypes import SEED_DTYPE
+
+    z_u8 = np.zeros((frame_count, 4), dtype=np.uint8)
+    z_u16 = np.zeros((frame_count, 4), dtype=np.uint16)
+    z_u32 = np.zeros((frame_count, 4), dtype=np.uint32)
+    z_i16 = np.zeros((frame_count, 4), dtype=np.int16)
+    z_f32 = np.zeros((frame_count, 4), dtype=np.float32)
+
+    char_id = z_u8.copy()
+    char_id[:, :2] = np.array([2, 1], dtype=np.uint8)
+    action_id = z_u16.copy()
+    action_id[:, :2] = np.array([357, 14], dtype=np.uint16)
+    action_frame = z_i16.copy()
+    action_frame[:, :2] = np.array([14, 0], dtype=np.int16)
+    animation_index = z_u32.copy()
+    animation_index[:, :2] = np.array([311, 14], dtype=np.uint32)
+    facing = np.ones((frame_count, 4), dtype=np.uint8)
+    on_ground = z_u8.copy()
+    on_ground[:, :2] = np.uint8(1)
+    pos_x = z_f32.copy()
+    pos_x[:, 1] = np.float32(defender_x)
+    stocks = z_u8.copy()
+    stocks[:, :2] = np.uint8(4)
+    hurtbox_state = z_u8.copy()
+    if defender_invincible:
+        hurtbox_state[1, 1] = np.uint8(1)
+    hitlag = z_u16.copy()
+    hitlag[:2, 0] = np.asarray(attacker_hitlag, dtype=np.uint16)
+    hitlag[:2, 1] = np.asarray(defender_hitlag, dtype=np.uint16)
+    instance_id = z_u16.copy()
+    instance_id[:, :2] = np.array([20, 30], dtype=np.uint16)
+    last_hit_by = z_u8.copy()
+    instance_hit_by = z_u16.copy()
+    percent = z_f32.copy()
+    if attributed_damage_contact is not None:
+        last_hit_by[1, 1] = np.uint8(0)
+        instance_hit_by[1, 1] = np.uint16(20 if attributed_damage_contact else 99)
+        if not attributed_damage_contact and frame_count > 2:
+            last_hit_by[2, 1] = np.uint8(0)
+            instance_hit_by[2, 1] = np.uint16(20)
+            hitlag[2, :2] = np.uint16(3)
+            percent[2, 1] = np.float32(6.0)
+
+    items = np.zeros((frame_count, 15), dtype=SEED_DTYPE["items"].base)
+    if item_x is not None:
+        # Yoshi's Story Heiho kind and hurtcaps are extracted into MSLSTIO1.
+        items["exists"][:, 0] = np.uint8(1)
+        items["type"][:, 0] = np.uint16(0xD2)
+        items["state"][:, 0] = np.uint16(1)
+        items["owner"][:, 0] = np.int8(-1)
+        items["instance_id"][:, 0] = np.uint16(70)
+        items["spawn_id"][:, 0] = np.uint32(700)
+        items["pos_x"][:, 0] = np.float32(item_x)
+        items["state"][1:, 0] = np.uint16(3)
+        items["damage"][1:, 0] = np.uint16(10)
+
+    out = derive_combat_hitlist_seed_fields(
+        num_players=2,
+        is_teams=False,
+        team_id=z_u8,
+        char_id=char_id,
+        action_id=action_id,
+        action_frame=action_frame,
+        animation_index=animation_index,
+        facing=facing,
+        on_ground=on_ground,
+        pos_x=pos_x,
+        pos_y=z_f32,
+        fighter_scale_y=np.ones((frame_count, 4), dtype=np.float32),
+        guard_tilt_x8=z_u16,
+        guard_tilt_x4=z_f32,
+        stocks=stocks,
+        shield_hp=z_f32,
+        hurtbox_state=hurtbox_state,
+        hitlag=hitlag,
+        last_hit_by=last_hit_by if attributed_damage_contact is not None else None,
+        instance_hit_by=instance_hit_by if attributed_damage_contact is not None else None,
+        instance_id=instance_id,
+        input_buttons=z_u16,
+        input_l=z_u8,
+        input_r=z_u8,
+        anim_frame_f32=action_frame.astype(np.float32),
+        percent=percent,
+        items=items,
+        include_per_hitbox=True,
+        include_processhit_producers=True,
+        include_replay_only_body_admission=True,
+        data_root="data",
+    )
+    assert len(out) == 7
+    return out[-1]
+
+
+def test_falcon_kick_processhit_producer_requires_native_contact_provenance() -> None:
+    # Falcon SpecialLw's frame-14 hitboxes come from data/hitboxes/falcon.bin::MSLHITB1.
+    invincible_near = _derive_falcon_kick_processhit_producer(defender_invincible=True)
+    invincible_far = _derive_falcon_kick_processhit_producer(
+        defender_x=1000.0, defender_invincible=True
+    )
+    item_near = _derive_falcon_kick_processhit_producer(defender_x=1000.0, item_x=0.0)
+    item_far = _derive_falcon_kick_processhit_producer(defender_x=1000.0, item_x=1000.0)
+
+    assert int(invincible_near[1, 0]) == 1
+    assert int(item_near[1, 0]) == 1
+    assert int(invincible_far[1, 0]) == 0
+    assert int(item_far[1, 0]) == 0
+
+
+@pytest.mark.parametrize(
+    ("producer_kwargs", "expected_hits"),
+    [
+        ({"defender_invincible": True}, 1),
+        ({"defender_x": 1000.0, "item_x": 0.0}, 1),
+        ({"defender_x": 1000.0, "defender_invincible": True}, 0),
+        ({"defender_x": 1000.0, "item_x": 1000.0}, 0),
+    ],
+)
+def test_falcon_kick_native_processhit_producer_drives_seed_lane(
+    producer_kwargs: dict[str, object], expected_hits: int
+) -> None:
+    import msl_binding
+
+    from tools.eval.validation_dtypes import SEED_DTYPE
+
+    processhit_x1914 = _derive_falcon_kick_processhit_producer(
+        **producer_kwargs, frame_count=3
+    )
+    rows = np.zeros((2,), dtype=SEED_DTYPE)
+    rows["num_players"] = np.uint8(2)
+    rows["source_port0"][:, :2] = np.array([0, 1], dtype=np.uint8)
+    rows["char_id"][:, :2] = np.array([2, 1], dtype=np.uint8)
+    rows["action_id"][:, 0] = np.uint16(357)
+    rows["instance_id"][:, 0] = np.uint16(20)
+    rows["attack_id"][:, 0] = np.uint16(9)
+    rows["last_attack_landed"][:, 0] = np.uint8(9)
+
+    msl_binding.validation_derive_falcon_speciallw_seed_lanes(
+        rows.view(np.uint8).reshape((len(rows), SEED_DTYPE.itemsize)),
+        processhit_x1914,
+        2,
+        2,
+        357,
+        358,
+        4,
+        0.6,
+    )
+
+    assert int(rows["falcon_speciallw_hits"][1, 0]) == expected_hits
+
+
+def test_falcon_kick_processhit_producer_accepts_new_victim_during_hitlag_tail() -> None:
+    got = _derive_falcon_kick_processhit_producer(
+        attacker_hitlag=(2, 1),
+        defender_hitlag=(0, 3),
+        attributed_damage_contact=True,
+    )
+
+    assert int(got[1, 0]) == 1
+
+
+def test_falcon_kick_processhit_producer_rejects_unattributed_defender_hitlag() -> None:
+    got = _derive_falcon_kick_processhit_producer(
+        attacker_hitlag=(2, 1),
+        defender_hitlag=(0, 3),
+        attributed_damage_contact=False,
+        frame_count=3,
+    )
+
+    assert int(got[1, 0]) == 0
+    assert int(got[2, 0]) == 1
+
+
+def test_falcon_kick_processhit_producer_is_prefix_causal() -> None:
+    prefix = _derive_falcon_kick_processhit_producer(defender_invincible=True, frame_count=2)
+    extended = _derive_falcon_kick_processhit_producer(defender_invincible=True, frame_count=3)
+
+    assert np.array_equal(prefix, extended[: len(prefix)])
+
+
 def test_last_hit_by_raw_port_mapping_keeps_ambiguous_local_slots() -> None:
     # Out-of-range raw controller ports prove source_port0 ownership only on a replay-visible
     # damage onset from a prior shield-family row that also names the attacker's live instance.
@@ -2842,7 +3223,7 @@ def test_derive_combat_hitlist_seed_fields_is_prefix_invariant_wrt_shield_inputs
     buf = hb_path.read_bytes()
     assert buf[:8] == b"MSLHITB1"
     ver = struct.unpack_from("<I", buf, 8)[0]
-    assert ver == 1
+    assert ver == HITBOX_VERSION
     # Table format: [u16 msid][u16 count] then count records (see tools/slippi/combat_history.py::_read_hitbox_events).
     off = 16
     msid = None

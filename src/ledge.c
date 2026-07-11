@@ -109,6 +109,15 @@ static inline uint8_t is_airborne_action_with_cliffcatch_check(uint8_t char_id, 
                       a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) &&
                      speed_y_self < 0.0f && special_cmd1 != 0u);
   }
+  // Falcon Dive (Special(Air)Hi): doAirColl runs ftCliffCommon_80081298 ONLY once the script's
+  // cmd_vars[0] IASA pulse armed mv.ca.specialhi.x2_b1 (the shared special_cmd1 latch); before
+  // that the airborne Coll is ft_80083B68 (no ledge). No descending requirement.
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doAirColl
+  if (char_id == (uint8_t)MSL_CHAR_ID_FALCON && a >= 341u && a <= 372u) {
+    return (uint8_t)((a == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                      a == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI) &&
+                     special_cmd1 != 0u);
+  }
   if (msl_motion_state_class_has(char_id, a, MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL) != 0u) {
     // Generated callback owner for actions whose Coll callback calls ft_CheckGroundAndLedge and
     // then ftCliffCommon_80081298 on the airborne path, including Zelda Farore's Wind aerial

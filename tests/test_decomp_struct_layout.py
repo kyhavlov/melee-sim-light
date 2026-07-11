@@ -27,16 +27,19 @@ from tools.extraction.decomp_struct_layout import (  # noqa: E402
     struct_size,
 )
 from tools.extraction.extract_character_attrs import (  # noqa: E402
+    CAPTAIN_SPECIAL_ATTRS_LAYOUT,
     MARS_SWORD_ATTRS_LAYOUT,
     SEAK_SPECIAL_ATTRS_LAYOUT,
 )
 
 MARS_TYPES = ROOT / "refs" / "melee" / "src" / "melee" / "ft" / "chara" / "ftMars" / "types.h"
 SEAK_TYPES = ROOT / "refs" / "melee" / "src" / "melee" / "ft" / "chara" / "ftSeak" / "types.h"
+CAPTAIN_TYPES = ROOT / "refs" / "melee" / "src" / "melee" / "ft" / "chara" / "ftCaptain" / "types.h"
 LB_TYPES = ROOT / "refs" / "melee" / "src" / "melee" / "lb" / "types.h"
 
 decomp_available = MARS_TYPES.exists() and LB_TYPES.exists()
 seak_decomp_available = SEAK_TYPES.exists()
+captain_decomp_available = CAPTAIN_TYPES.exists()
 
 
 @pytest.mark.skipif(not decomp_available, reason="decomp refs not available")
@@ -82,6 +85,25 @@ def test_sheik_special_attrs_layout_matches_parsed_struct() -> None:
         assert kind in {"f32", "i32"}
 
     last_key, last_off, last_kind = SEAK_SPECIAL_ATTRS_LAYOUT[-1]
+    assert last_off + 4 <= struct_size(fields)
+
+
+@pytest.mark.skipif(not captain_decomp_available, reason="decomp refs not available")
+def test_falcon_special_attrs_layout_matches_parsed_struct() -> None:
+    ca_text = CAPTAIN_TYPES.read_text(encoding="utf-8", errors="replace")
+    fields = parse_struct_layout(ca_text, "ftCaptain_DatAttrs")
+    field_offsets = {f.offset for f in fields}
+
+    for key, off, kind in CAPTAIN_SPECIAL_ATTRS_LAYOUT:
+        assert off in field_offsets, (
+            f"{key}: extractor offset 0x{off:X} is not a field boundary of the parsed "
+            "ftCaptain_DatAttrs layout - transcription error or decomp drift"
+        )
+        assert kind in {"f32", "i32"}
+
+    # Every parsed struct field must be transcribed (the block ends at x88).
+    assert len(CAPTAIN_SPECIAL_ATTRS_LAYOUT) == len(fields)
+    last_key, last_off, last_kind = CAPTAIN_SPECIAL_ATTRS_LAYOUT[-1]
     assert last_off + 4 <= struct_size(fields)
 
 

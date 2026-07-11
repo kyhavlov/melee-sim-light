@@ -35,6 +35,7 @@
 #include "ecb_pose.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
+#include "grab_flow.h"
 #include "sheik_specials.h"
 #include "msl_math.h"
 #include "hitboxes.h"
@@ -59,6 +60,7 @@
 #include "state.h"
 #include "state_flags.h"
 #include "step.h"
+#include "falcon_specials.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
 #include "locomotion.h"
@@ -240,12 +242,9 @@ static void seed_ground_normal_from_floor_id(MslBatch* batch, int bi, size_t idx
   }
   float nx = -(line.y1 - line.y0);
   float ny = line.x1 - line.x0;
-  const float len = sqrtf(nx * nx + ny * ny);
-  if (!(len > 0.0f)) {
+  if (!msl_psvec2_normalize(nx, ny, &nx, &ny)) {
     return;
   }
-  nx /= len;
-  ny /= len;
   batch->state.ground_normal_x[idx] = nx;
   batch->state.ground_normal_y[idx] = ny;
 }
@@ -749,6 +748,31 @@ static inline uint8_t seed_bridge_has_shine_start_x1988_masked_x198c(const MslSe
   return 1u;
 }
 
+static inline uint8_t seed_bridge_has_escapeair_x1988_masked_x198c(const MslSeed* seed, int p,
+                                                                   uint8_t seed_hurtbox_state,
+                                                                   uint8_t seed_x1988) {
+  if (seed == NULL || seed->action_id[p] != (uint16_t)MSL_ACT_ESCAPE_AIR) {
+    return 0u;
+  }
+  if (seed_hurtbox_state != 2u || seed_x1988 != 2u) {
+    return 0u;
+  }
+  if (seed->colanim_hit_status_x198c[p] != 1u || seed->colanim_timer_x1994[p] == 0u ||
+      seed->colanim_timer_x1990[p] != 0u || seed->colanim_lock_x2221_b0[p] != 0u) {
+    return 0u;
+  }
+  // EscapeAir uses movescript x1988=2 from frame 4 until frame 30 while source collision can enter
+  // LandingFallSpecial via ftCo_80099D70. Fighter_ChangeMotionState(..., Ft_MF_None) clears x1988,
+  // exposing the hidden x198C=1/x1994 lane that Slippi could not report while x1988 was nonzero.
+  // Admit only the replay-history-proven x1994 lane; this is seed reconstruction, not a new
+  // runtime landing side effect.
+  // data/scripts/{character}.bin::ftCo_SM_EscapeAir set_hit_status events
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{ftCo_EscapeAir_Coll,ftCo_80099D70}
+  return 1u;
+}
+
 static inline int throw_index_from_action_id(uint16_t action_id) {
   switch (action_id) {
     case (uint16_t)MSL_ACT_THROW_F:
@@ -823,6 +847,10 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   config_default(&batch->config, num_players);
 
   if (state_alloc(&batch->state, batch_size) != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  if (combat_processhit_pair_scratch_init(batch) != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }
@@ -1079,6 +1107,7 @@ void msl_batch_destroy(MslBatch* batch) {
   if (batch->debug_rng_trace_file != NULL) {
     (void)fclose((FILE*)batch->debug_rng_trace_file);
   }
+  combat_processhit_pair_scratch_free(batch);
   alloc_free(batch->rng_site_counts);
   alloc_free(batch->debug_rng_seed_out);
   alloc_free(batch->debug_rng_seed_in);
@@ -2278,6 +2307,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.coll_last_pos_x[idx] = seed->pos_x[p];
       batch->state.coll_last_pos_y[idx] = seed->pos_y[p];
       batch->state.coll_escapeair_floor_producer_runtime[idx] = 0u;
+      batch->state.coll_a678_edge_runtime[idx] = 0u;
       batch->state.mpcoll_joint_id_skip[idx] = -1;
       batch->state.mpcoll_joint_id_only[idx] = -1;
       batch->state.floor_sweep_seed_prev_pos_x[idx] = seed->floor_sweep_prev_pos_x_f32[p];
@@ -2480,6 +2510,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.downwait_timer[idx] = seed->downwait_timer[p];
       batch->state.passivewall_timer[idx] = seed->passivewall_timer[p];
       batch->state.passivewall_jump_latch[idx] = 0u;
+      batch->state.walljump_used_count[idx] =
+          seed->on_ground[p] ? 0u : seed->walljump_used_count[p];
+      batch->state.passivewall_vel_y_exponent[idx] =
+          (seed->action_id[p] == (uint16_t)MSL_ACT_PASSIVE_WALL ||
+           seed->action_id[p] == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP)
+              ? seed->passivewall_vel_y_exponent[p]
+              : 0u;
       if ((seed->action_id[p] == (uint16_t)MSL_ACT_PASSIVE_WALL ||
            seed->action_id[p] == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
           seed->passivewall_timer[p] != 0u) {
@@ -2540,6 +2577,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // powershield/reflect transfer.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
       //   ftCo_80091A4C,ftCo_8009370C,ftCo_8009388C}
+      batch->state.guard_on_entered_this_frame[idx] = 0u;
+      batch->state.guard_entry_via_wait_callback[idx] = 0u;
+      batch->state.guard_entry_via_dash_91ad8[idx] = 0u;
       batch->state.guard_on_entry_reflect_source_latch[idx] = 0u;
       batch->state.guard_reflect_entered_this_frame[idx] = 0u;
       batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
@@ -2721,8 +2761,19 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // Attack11/12/13 IASA path until the extracted rapid gate admits Attack100Start.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
       batch->state.jab_rapid_count[idx] = seed->jab_rapid_count[p];
-      batch->state.attack100_x0[idx] = 0u;
-      batch->state.attack100_x4[idx] = 0u;
+      // Attack100Loop hidden latches are needed for teacher-forced mid-loop seeds; live runtime
+      // owns them through Attack100Loop_Anim/IASA.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+      //   ftCo_Attack100Loop_Anim,ftCo_Attack100Loop_IASA}
+      batch->state.attack100_x0[idx] = seed->attack100_x0[p] ? 1u : 0u;
+      batch->state.attack100_x4[idx] = seed->attack100_x4[p] ? 1u : 0u;
+      // Grounded Falcon Kick's entry-owned hit count and cumulative deal-damage slowdown.
+      // Zero friction remains the neutral value for direct/manual seeds that predate the lane.
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+      //   ftCa_SpecialLw_Enter,ftCa_SpecialHi_800E400C}
+      batch->state.falcon_speciallw_hits[idx] = seed->falcon_speciallw_hits[p];
+      batch->state.falcon_speciallw_friction[idx] =
+          seed->falcon_speciallw_friction[p] > 0.0f ? seed->falcon_speciallw_friction[p] : 1.0f;
       batch->state.run_x0[idx] = seed->run_x0[p];
       batch->state.runbrake_cmd0[idx] = seed->runbrake_cmd0[p] ? 1u : 0u;
       batch->state.runbrake_freeze_x0[idx] = 0u;
@@ -2814,6 +2865,22 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
                      msl_motion_state_fx_special_kind(seed->char_id[p], src) ==
                          (uint8_t)MSL_FX_KIND_SPECIAL_HI_LANDING) {
             landing_lag = (float)phys->firefox_landing_lag_frames;
+          } else if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_FALCON) {
+            // Falcon freefall sources all pass their callsite lag through ftCo_80096900:
+            // Special(Air)Hi whiff, SpecialAirSStart (air Raptor miss), SpecialAirS (air hit).
+            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialHi_Anim,
+            //   ftCa_SpecialAirHi_Anim}
+            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+            //   ftCa_SpecialAirSStart_Anim,ftCa_SpecialAirS_Anim}
+            if (src == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                src == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI ||
+                src == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW) {
+              landing_lag = phys->falcon_specialhi_landing_lag;
+            } else if (src == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START) {
+              landing_lag = phys->falcon_specials_miss_landing_lag;
+            } else if (src == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S) {
+              landing_lag = phys->falcon_specials_hit_landing_lag;
+            }
           }
         }
         batch->state.fallspecial_landing_lag[idx] = landing_lag;
@@ -3050,6 +3117,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
             batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
           }
         }
+        if (seed_bridge_has_escapeair_x1988_masked_x198c(seed, p, seed_hurtbox_state, seed_x1988)) {
+          batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
+          batch->state.colanim_hit_status_x198c[idx] = 1u;
+        }
         // Narrow seed-bridge for x198C=2 timer ownership:
         // - Slippi exposes merged hurtbox_state but not x1990 remaining.
         // - When x1988 is absent and replay history derivation provides a nonzero x1990 hint
@@ -3214,9 +3285,11 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // refs/melee/src/melee/mp/mpcoll.c::{
         //   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80043754}
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        const uint8_t seed_locked_bottom_owner =
+            msl_escapeair_locked_bottom_owner_normalize(seed->ecb_lock_bottom_owner_u8[p]);
         const uint8_t seed_locked_bottom_valid =
             (seed->ecb_lock_timer[p] != 0u && seed->on_ground[p] == 0u &&
-             seed->ecb_lock_bottom_rel_y_valid_u8[p] != 0u)
+             msl_escapeair_locked_bottom_owner_any(seed_locked_bottom_owner))
                 ? 1u
                 : 0u;
         const uint8_t force_locked_bottom =
@@ -3267,7 +3340,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           }
         }
         reseed_store_colldata_ecb_desired(batch, idx, &desired_ecb);
-        batch->state.coll_desired_ecb_bottom_locked_owner[idx] = seed_locked_bottom_valid;
+        batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
+            seed_locked_bottom_valid ? seed_locked_bottom_owner
+                                     : (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_NONE;
         reseed_store_colldata_ecb_current(batch, idx, &prev_ecb);
         reseed_store_colldata_ecb_prev(batch, idx, &prev_ecb);
         // Frame-end converged bottom rel of the (reconstructed) previous frame: the seed's
@@ -3291,6 +3366,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // refs/melee/src/melee/mp/mpcoll.c::{inline0,mpColl_80044628_Floor,mpColl_80044948_Floor}
         batch->state.coll_damage_hitlag_floor_contact_runtime[idx] = 0u;
         batch->state.coll_escapeair_floor_producer_runtime[idx] = 0u;
+        batch->state.coll_a678_edge_runtime[idx] = 0u;
         MslEcbWorldPoints damage_hitlag_ecb = {0};
         if (reseed_damage_hitlag_ecb_points_from_seed(&damage_hitlag_ecb, seed, p)) {
           // Active Damage hitlag can keep the pre-hit JObj collision envelope live while the
@@ -3629,6 +3705,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
 
     // Compute decomp-shaped grab attachment offsets (fp->x1A70 analog) for any seeded victims.
     grab_attachment_reseed_init(batch, bi);
+    // Reconstruct hidden Falcon Dive lanes (mv.ca.specialhi.vel, x221B_b7) from visible seed
+    // lanes.
+    falcon_specials_reseed_init(batch, bi);
+    // ftCo_800DB368 constrains exactly one side of a live Falcon Dive hold. This source bit is
+    // reconstructed only after x221B_b7 establishes the fixed connect-time mode.
+    grab_attachment_falcon_dive_constraint_reseed_init(batch, bi);
+    grab_flow_refresh_catch_contract_for_batch_index(batch, bi);
 
     // Combat hitlist reseed generation:
     // - Seed carries a dense per-(attacker,hit_group,victim) snapshot, but runtime uses per-hitbox
@@ -3655,6 +3738,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     for (int it = 0; it < MSL_MAX_ITEMS; it++) {
       const size_t ii = msl_idx_item(bi, it);
       const MslItem* item = &seed->items[it];
+      items_reseed_clear_sheik_needle_hidden_slot(batch, ii);
       const MslItemArticleParams* sheik_ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
       const uint16_t sheik_chain_itkind = (sheik_ap != NULL) ? sheik_ap->sheik_chain_itkind : 0u;
       const uint8_t old_live_chain =
@@ -3938,30 +4022,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
     }
 
-    // Reconstruct the owner-side attached victim pointer (`fp->victim_gobj`) from the seeded
-    // victim-side owner links. Common Throw/Thrown logic keys several shared callbacks off the
-    // thrower's direct victim pointer rather than repeatedly searching from the victim side.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+    // Attachment links were reconstructed before the offset/constraint packet above. Rebuild the
+    // paired throw animation rate from that validated bidirectional link.
     const int num_players = (int)batch->config.num_players;
-    for (int owner = 0; owner < num_players; owner++) {
-      batch->state.attached_victim_port[msl_idx_player(bi, owner)] = 0xFFu;
-    }
-    for (int victim = 0; victim < num_players; victim++) {
-      const size_t v_idx = msl_idx_player(bi, victim);
-      const uint8_t owner = batch->state.grab_owner_port[v_idx];
-      if (owner == 0xFFu || owner >= (uint8_t)num_players) {
-        continue;
-      }
-      if (!msl_action_is_grabbed_victim(batch->state.action_id[v_idx])) {
-        continue;
-      }
-      const size_t o_idx = msl_idx_player(bi, (int)owner);
-      if (batch->state.attached_victim_port[o_idx] == 0xFFu ||
-          (uint8_t)victim < batch->state.attached_victim_port[o_idx]) {
-        batch->state.attached_victim_port[o_idx] = (uint8_t)victim;
-      }
-    }
     for (int p = 0; p < num_players; p++) {
       batch->state.throw_anim_rate_fp_q16_16[msl_idx_player(bi, p)] = 0;
     }
@@ -5318,6 +5381,20 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
       out->attached_victim_port[p] = batch->state.attached_victim_port[idx];
       out->dead_up_fall_offset_y[p] = batch->state.dead_up_fall_offset_y[idx];
       out->dead_up_fall_vel_y[p] = batch->state.dead_up_fall_vel_y[idx];
+      out->grab_owner_port[p] = batch->state.grab_owner_port[idx];
+      out->catch_kind_x1a68[p] = batch->state.catch_kind_x1a68[idx];
+      out->catch_target_mask_x1a6a[p] = batch->state.catch_target_mask_x1a6a[idx];
+      out->grab_constraint_x2226_b2[p] = batch->state.grab_constraint_x2226_b2[idx];
+      out->falcon_specialhi_x221b_b7[p] = batch->state.falcon_specialhi_x221b_b7[idx];
+      out->ecb_lock_timer[p] = batch->state.ecb_lock_timer[idx];
+      out->ecb_lock_owner[p] = batch->state.coll_desired_ecb_bottom_locked_owner[idx];
+      out->fall_fast[p] = batch->state.fall_fast[idx];
+      out->prev_pos_x[p] = batch->state.prev_pos_x[idx];
+      out->prev_pos_y[p] = batch->state.prev_pos_y[idx];
+      out->floor_sweep_prev_pos_x[p] = batch->state.floor_sweep_prev_pos_x[idx];
+      out->floor_sweep_prev_pos_y[p] = batch->state.floor_sweep_prev_pos_y[idx];
+      out->coll_last_pos_x[p] = batch->state.coll_last_pos_x[idx];
+      out->coll_last_pos_y[p] = batch->state.coll_last_pos_y[idx];
     }
   }
 
@@ -5605,7 +5682,7 @@ int msl_batch_debug_set_escapeair_floor_producer_runtime(MslBatch* batch, int ba
   if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
     return EINVAL;
   }
-  if (desired_owner > (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_JUMPAERIAL_HARD_FLOOR) {
+  if (desired_owner > (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_FTCOMMON) {
     return EINVAL;
   }
   const size_t idx = msl_idx_player(batch_index, player_index);
@@ -5915,6 +5992,12 @@ static inline void debug_hb_defs_apply_event(const MslHitboxEvent* ev,
     }
     return;
   }
+  if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_INTERACTION) {
+    if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES && have_def[ev->hitbox_id]) {
+      def[ev->hitbox_id].u16_6 = ev->u16_6;
+    }
+    return;
+  }
   if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
     have_def[ev->hitbox_id] = 1;
     def[ev->hitbox_id] = *ev;
@@ -6128,9 +6211,10 @@ int msl_batch_debug_hitbox_event_timing(const MslBatch* batch, int batch_index, 
       out_timing->last_affect_kind_le = 1u;
       out_timing->last_affect_frame_le = ev->frame;
       out_timing->last_affect_u16_7_le = 0;
-    } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE) {
+    } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE ||
+               ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_INTERACTION) {
       if (enabled_prev) {
-        out_timing->last_affect_kind_le = (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE;
+        out_timing->last_affect_kind_le = ev->kind;
         out_timing->last_affect_frame_le = ev->frame;
         out_timing->last_affect_u16_7_le = u16_7_prev;
       }
@@ -6192,12 +6276,13 @@ int msl_batch_debug_hitbox_event_timing(const MslBatch* batch, int batch_index, 
       out_timing->last_affect_kind_eq = 1u;
       out_timing->last_affect_frame_eq = ev->frame;
       out_timing->last_affect_u16_7_eq = 0;
-    } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE) {
+    } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE ||
+               ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_INTERACTION) {
       if (enabled_cur) {
-        out_timing->last_affect_kind_le = (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE;
+        out_timing->last_affect_kind_le = ev->kind;
         out_timing->last_affect_frame_le = ev->frame;
         out_timing->last_affect_u16_7_le = u16_7_cur;
-        out_timing->last_affect_kind_eq = (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE;
+        out_timing->last_affect_kind_eq = ev->kind;
         out_timing->last_affect_frame_eq = ev->frame;
         out_timing->last_affect_u16_7_eq = u16_7_cur;
       }
@@ -6697,6 +6782,9 @@ static int debug_combat_contacts_impl(const MslBatch* batch, int batch_index,
           // against victim_fp->ground_or_air.
           // refs/melee/src/melee/ft/ftcoll.c (HitCapsule eligibility checks).
           const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+          if (!msl_hitbox_x42_b5_enabled(hb_flags)) {
+            continue;
+          }
           const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1 : 0;
           if (defender_on_ground) {
             if ((hb_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0) {
@@ -6821,6 +6909,9 @@ static int debug_combat_contacts_classified_impl(const MslBatch* batch, int batc
           // against victim_fp->ground_or_air.
           // refs/melee/src/melee/ft/ftcoll.c (HitCapsule eligibility checks).
           const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+          if (!msl_hitbox_x42_b5_enabled(hb_flags)) {
+            continue;
+          }
           const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1 : 0;
           if (defender_on_ground) {
             if ((hb_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0) {
@@ -7637,6 +7728,7 @@ int msl_batch_debug_combat_resolve(MslBatch* batch) {
     return EINVAL;
   }
   combat_processhit_consume(batch);
+  combat_processhit_pair_begin(batch);
   combat_resolve(batch);
   return 0;
 }
@@ -7683,6 +7775,43 @@ int msl_batch_debug_hitlist_fighter_contains(const MslBatch* batch, int batch_in
   const uint8_t key =
       msl_hitlist_victim_pack((uint8_t)MSL_HITLIST_VICTIM_KIND_FIGHTER, (uint8_t)victim);
   const MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hl_i];
+  for (int i = 0; i < (int)MSL_HITLIST_VICTIM_CAP; i++) {
+    if (hit->victims_1[i].kind_slot == key) {
+      *out_present = 1;
+      break;
+    }
+  }
+  return 0;
+}
+
+int msl_batch_debug_hitlist_item_contains(const MslBatch* batch, int batch_index, int item_slot,
+                                          int hb_id, int victim, int* out_present) {
+  if (out_present == NULL) {
+    return EINVAL;
+  }
+  *out_present = 0;
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (item_slot < 0 || item_slot >= MSL_MAX_ITEMS) {
+    return EINVAL;
+  }
+  if (hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
+    return EINVAL;
+  }
+  if (victim < 0 || victim >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  const size_t hl_i =
+      ((size_t)batch_index * (size_t)MSL_MAX_ITEMS + (size_t)item_slot) * (size_t)MSL_MAX_HITBOXES +
+      (size_t)hb_id;
+  const uint8_t key =
+      msl_hitlist_victim_pack((uint8_t)MSL_HITLIST_VICTIM_KIND_FIGHTER, (uint8_t)victim);
+  const MslHitlistCapsule* hit = &batch->state.item_hitlist[hl_i];
   for (int i = 0; i < (int)MSL_HITLIST_VICTIM_CAP; i++) {
     if (hit->victims_1[i].kind_slot == key) {
       *out_present = 1;

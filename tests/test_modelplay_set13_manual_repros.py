@@ -22,7 +22,10 @@ def _root() -> Path:
 
 
 def _load_trace(name: str) -> dict[str, Any]:
-    trace = json.loads((_root() / SET13_DIR / name).read_text(encoding="utf-8"))
+    path = _root() / SET13_DIR / name
+    if not path.exists():
+        pytest.skip(f"missing local trace: {path}")
+    trace = json.loads(path.read_text(encoding="utf-8"))
     assert trace["format"] == "MSLTRACE1"
     assert trace["inputs"]["fields"] == ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"]
     return trace

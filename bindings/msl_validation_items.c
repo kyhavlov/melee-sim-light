@@ -616,6 +616,33 @@ PyObject* msl_validation_derive_item_hidden_callback_buffers_py(PyObject* self, 
           }
         }
       }
+      if (needle_state_uses_logic109_contact && si->state == 0u && !needle_player_contact &&
+          !needle_same_identity_in_ref) {
+        uint8_t unique_victim = 0xFFu;
+        for (int p = 0; p < players; p++) {
+          if (p == (int)si->owner || seed->hitlag[p] != 0u || ref->hitlag[p] == 0u ||
+              seed->percent[p] != ref->percent[p] || seed->action_id[p] != ref->action_id[p] ||
+              seed->hitstun[p] != ref->hitstun[p] || ref->instance_hit_by[p] == si->instance_id) {
+            continue;
+          }
+          if (unique_victim != 0xFFu) {
+            unique_victim = 0xFEu;
+            break;
+          }
+          unique_victim = (uint8_t)p;
+        }
+        if (unique_victim < 0xFEu) {
+          // A state-0 Needle disappearing while exactly one non-owner fighter enters hitlag with
+          // unchanged percent/action/hitstun and no item attribution exposes the otherwise hidden
+          // accepted BODY DmgLog plus Logic109 destroy callback. This is the damage-immunity form of
+          // the attributed DmgDealt packet above, not a geometry override for free-running play.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077C60
+          // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}
+          seed->item_hidden_body_hit_victim_port[it] = unique_victim;
+          seed->item_hidden_body_hit_hurt_height[it] = 1u;
+          needle_player_contact = true;
+        }
+      }
       if (needle_state_uses_logic109_contact && needle_player_contact && needle_ref == NULL &&
           !needle_same_identity_in_ref) {
         // Same Logic109 callback owner as the state-4 bounce bridge below, but the public next row

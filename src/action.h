@@ -8,15 +8,6 @@
 #include "common_params.h"
 #include "fighter_callbacks.h"
 
-enum {
-  // Decomp: ftCommon_8007D5D4 writes fp->ecb_lock = 10 on ground->air transition.
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
-  MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR = 10u,
-  // Decomp: ftCommon_8007D60C writes fp->ecb_lock = 5 on the alternate ground->air helper path.
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C
-  MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR_ALT = 5u,
-};
-
 // Action/state transitions + per-action callbacks (non-physics).
 // Called once per frame in the scheduler, before physics.
 void action_update(MslBatch* batch);

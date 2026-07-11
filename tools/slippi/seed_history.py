@@ -1008,7 +1008,7 @@ def derive_camera_target_world(
     - refs/melee/src/melee/ft/fighter.c (root facing rotation via ftPartSetRotY)
     - data/characters/<char>.json: camera_zoom_target_bone_part_id,
       camera_zoom_target_offset, camera_box_radius, model_scaling
-    - data/anims/<char>.bin (SSANIM01 v4 pose matrices)
+    - data/anims/<char>.bin (SSANIM01 v5 pose matrices)
     """
     char = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
     anim = np.asarray(animation_index_u32, dtype=np.uint32).reshape(-1)
@@ -1394,18 +1394,20 @@ def derive_shine_release_state(
     )
 
 
-def derive_ecb_lock_timer(
+def derive_ecb_lock_state(
     *,
     on_ground_u8: np.ndarray,
     action_id_u16: np.ndarray,
+    char_id_u8: np.ndarray | None = None,
+    action_frame_i16: np.ndarray | None = None,
     lock_frames_ground_to_air: int = 10,
     act_jump_f: int = 0x0019,
     act_jump_b: int = 0x001A,
     act_jump_aerial_f: int = 0x001B,
     act_jump_aerial_b: int = 0x001C,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Derive `fp->ecb_lock` per post-frame from replay grounding history.
+    Derive `fp->ecb_lock` and its CollData owner per post-frame from replay history.
 
     Decomp anchors:
     - ftCommon_8007D5D4 sets `fp->ecb_lock = 10` and enables CollData_X130_Locked on ground->air.
@@ -1416,25 +1418,71 @@ def derive_ecb_lock_timer(
       refs/melee/src/melee/ft/ftcommon.c::ftCommon_UnlockECB
     - Grounding transitions clear the lock via ftCommon_UnlockECB (called by ftCommon_8007D6A4).
       refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4
+    - Falcon's ftCommon_8007D60C owners refresh a five-frame lock from aerial Raptor entry/end and
+      every SpecialHiThrow0 Anim callback; grounded Raptor floor loss calls the same helper from the
+      collision callback after the ordinary map-phase decrement.
+      refs/melee/src/melee/ft/chara/ftCaptain/ftCa_Special{S,Hi}.c
 
     Representation:
-    - Return u8 post-frame countdown values (clamped to [0,255]).
+    - Return u8 post-frame countdown and owner values.
+    - Owner 1 is a generic replay-seeded lock; owner 4 proves a live Falcon ftCommon callback.
+      Ownership persists until refresh, landing/unlock, or countdown expiry.
     - On a detected post-frame grounded->air transition, write `(lock_frames_ground_to_air - 1)`
       for that frame to account for the same-frame procMap decrement.
     """
     try:
         import msl_binding  # type: ignore
     except ImportError as exc:
-        raise RuntimeError("native msl_binding.derive_ecb_lock_timer is required; run `make build`") from exc
-    return msl_binding.derive_ecb_lock_timer(
-        np.ascontiguousarray(on_ground_u8, dtype=np.uint8).reshape(-1),
-        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        raise RuntimeError("native msl_binding.derive_ecb_lock_state is required; run `make build`") from exc
+    ground = np.ascontiguousarray(on_ground_u8, dtype=np.uint8).reshape(-1)
+    action = np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    char = (
+        np.zeros(ground.shape, dtype=np.uint8)
+        if char_id_u8 is None
+        else np.ascontiguousarray(char_id_u8, dtype=np.uint8).reshape(-1)
+    )
+    action_frame = (
+        np.zeros(ground.shape, dtype=np.int16)
+        if action_frame_i16 is None
+        else np.ascontiguousarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    )
+    return msl_binding.derive_ecb_lock_state(
+        ground,
+        action,
+        char,
+        action_frame,
         int(lock_frames_ground_to_air),
         int(act_jump_f),
         int(act_jump_b),
         int(act_jump_aerial_f),
         int(act_jump_aerial_b),
     )
+
+
+def derive_ecb_lock_timer(
+    *,
+    on_ground_u8: np.ndarray,
+    action_id_u16: np.ndarray,
+    char_id_u8: np.ndarray | None = None,
+    action_frame_i16: np.ndarray | None = None,
+    lock_frames_ground_to_air: int = 10,
+    act_jump_f: int = 0x0019,
+    act_jump_b: int = 0x001A,
+    act_jump_aerial_f: int = 0x001B,
+    act_jump_aerial_b: int = 0x001C,
+) -> np.ndarray:
+    timer, _owner = derive_ecb_lock_state(
+        on_ground_u8=on_ground_u8,
+        action_id_u16=action_id_u16,
+        char_id_u8=char_id_u8,
+        action_frame_i16=action_frame_i16,
+        lock_frames_ground_to_air=lock_frames_ground_to_air,
+        act_jump_f=act_jump_f,
+        act_jump_b=act_jump_b,
+        act_jump_aerial_f=act_jump_aerial_f,
+        act_jump_aerial_b=act_jump_aerial_b,
+    )
+    return timer
 
 
 def derive_ecb_lock_bottom_rel_y(
@@ -1445,15 +1493,16 @@ def derive_ecb_lock_bottom_rel_y(
     anim_frame_f32: np.ndarray,
     on_ground_u8: np.ndarray,
     ecb_lock_timer_u8: np.ndarray,
+    ecb_lock_owner_u8: np.ndarray,
     act_jump_aerial_f: int = 0x001B,
     act_jump_aerial_b: int = 0x001C,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Derive CollData.desired_ecb.bottom.y while CollData_X130_Locked is live.
+    Derive CollData.desired_ecb.bottom.y and its owner while the lock is live.
 
     The native producer uses extracted ECB tables and replay-prefix grounding/lock history. It
-    preserves the prior desired bottom through air-jump-origin lock rows, matching the observed
-    mpColl_LoadECB_inline locked-bottom owner without per-frame Python loops in the seed path.
+    preserves the prior desired bottom through air-jump and Falcon-special lock rows, matching the
+    source mpColl_LoadECB_inline locked-bottom owner without per-frame Python loops in the seed path.
 
     Decomp anchors:
     - refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
@@ -1473,6 +1522,7 @@ def derive_ecb_lock_bottom_rel_y(
         np.ascontiguousarray(anim_frame_f32, dtype=np.float32).reshape(-1),
         np.ascontiguousarray(on_ground_u8, dtype=np.uint8).reshape(-1),
         np.ascontiguousarray(ecb_lock_timer_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(ecb_lock_owner_u8, dtype=np.uint8).reshape(-1),
         int(act_jump_aerial_f),
         int(act_jump_aerial_b),
     )
@@ -2080,6 +2130,7 @@ _ACT_CAPTURE_CUT = np.uint16(0x00E5)  # ftCo_MS_CaptureCut (229)
 _ACT_CAPTURE_JUMP = np.uint16(0x00E6)  # ftCo_MS_CaptureJump (230)
 _ACT_CAPTURE_NECK = np.uint16(0x00E7)  # ftCo_MS_CaptureNeck (231)
 _ACT_CAPTURE_FOOT = np.uint16(0x00E8)  # ftCo_MS_CaptureFoot (232)
+_ACT_CAPTURE_CAPTAIN = np.uint16(0x0113)  # ftCo_MS_CaptureCaptain (275, Falcon Dive victim)
 _ACT_THROWN_F = np.uint16(0x00EF)  # ftCo_MS_ThrownF (239)
 _ACT_THROWN_B = np.uint16(0x00F0)  # ftCo_MS_ThrownB (240)
 _ACT_THROWN_HI = np.uint16(0x00F1)  # ftCo_MS_ThrownHi (241)
@@ -2138,6 +2189,7 @@ def derive_grab_owner_port_2p(*, action_id_u16_2p: np.ndarray) -> np.ndarray:
         | (a == _ACT_CAPTURE_DAMAGE_LW)
         | (a == _ACT_CAPTURE_NECK)
         | (a == _ACT_CAPTURE_FOOT)
+        | (a == _ACT_CAPTURE_CAPTAIN)
         | (a == _ACT_THROWN_F)
         | (a == _ACT_THROWN_B)
         | (a == _ACT_THROWN_HI)

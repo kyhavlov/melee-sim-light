@@ -34,12 +34,13 @@ def _derive_landing_fallspecial_allow_interrupt_seed_lane(*, action_id_u16: np.n
     return msl_binding.derive_landing_fallspecial_allow_interrupt(_ascontiguousarray(action_id_u16, dtype=np.uint16), _ascontiguousarray(char_id_u8, dtype=np.uint8), origin_allow_by_char)
 
 
-def _derive_jab_rapid_count_seed_lane(*, action_id_u16: np.ndarray, buttons_released_u16: np.ndarray, buttons_pressed_u16: np.ndarray, button_mask_a: int) -> np.ndarray:
+def _derive_jab_rapid_count_seed_lane(*, action_id_u16: np.ndarray, hitlag_u8: np.ndarray, buttons_released_u16: np.ndarray, buttons_pressed_u16: np.ndarray, button_mask_a: int) -> np.ndarray:
     """Reconstruct fp+0x1A54 for teacher-forced mid-jab seeds.
 
     The counter is runtime-causal: checkAttack11 resets it on Attack11 entry, then
-    ftCo_Attack_800D6A50 increments once per Attack11/12/13 IASA frame when A is pressed or
-    released.
+    ftCo_Attack_800D6A50 increments once per non-hitlag Attack11/12/13 IASA frame when A is pressed
+    or released. Attack13 carries the same hidden counter from the contiguous jab sequence; it
+    does not reset on doAttack13 entry.
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::checkAttack11
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
     """
@@ -47,7 +48,30 @@ def _derive_jab_rapid_count_seed_lane(*, action_id_u16: np.ndarray, buttons_rele
         import msl_binding
     except ImportError as exc:
         raise RuntimeError('native msl_binding.derive_jab_rapid_count is required; run `make build`') from exc
-    return msl_binding.derive_jab_rapid_count(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1), np.asarray(buttons_released_u16, dtype=np.uint16).reshape(-1), np.asarray(buttons_pressed_u16, dtype=np.uint16).reshape(-1), int(button_mask_a))
+    return msl_binding.derive_jab_rapid_count(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1), np.asarray(hitlag_u8, dtype=np.uint8).reshape(-1), np.asarray(buttons_released_u16, dtype=np.uint16).reshape(-1), np.asarray(buttons_pressed_u16, dtype=np.uint16).reshape(-1), int(button_mask_a))
+
+
+def _derive_attack100_seed_latches(*, char_id_u8: np.ndarray, action_id_u16: np.ndarray, action_frame_i16: np.ndarray, hitlag_u8: np.ndarray, buttons_released_u16: np.ndarray, buttons_pressed_u16: np.ndarray, button_mask_a: int) -> tuple[np.ndarray, np.ndarray]:
+    """Reconstruct mv.co.attack100.x0/x4 for teacher-forced mid-loop rapid-jab seeds.
+
+    x0 is latched by Attack100Loop_Anim when the visible loop wraps back to frame 0 and persists
+    until the loop exits; x4 is latched by Attack100Loop_IASA from A press/release edges and
+    consumed at extracted set_throw_flags checkpoints.
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Attack100Loop_Anim,ftCo_Attack100Loop_IASA}
+    """
+    try:
+        import msl_binding
+    except ImportError as exc:
+        raise RuntimeError('native msl_binding.derive_attack100_seed_latches is required; run `make build`') from exc
+    return msl_binding.derive_attack100_seed_latches(
+        np.asarray(char_id_u8, dtype=np.uint8).reshape(-1),
+        np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        np.asarray(hitlag_u8, dtype=np.uint8).reshape(-1),
+        np.asarray(buttons_released_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(buttons_pressed_u16, dtype=np.uint16).reshape(-1),
+        int(button_mask_a),
+    )
 
 
 def _derive_walk_anim_source_vel_seed_lane(*, action_id_u16: np.ndarray, char_id_u8: np.ndarray, facing_dir1_i8: np.ndarray, frame_speed_mul_f32: np.ndarray, walk_divisors_by_char: dict[int, tuple[float, float, float]]) -> np.ndarray:

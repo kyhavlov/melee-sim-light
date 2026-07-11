@@ -1,5 +1,6 @@
 #include "locomotion.h"
 #include "char_registry.h"
+#include "falcon_specials.h"
 #include "marth_specials.h"
 
 #include <math.h>
@@ -23,6 +24,7 @@
 #include "deadupstar_rng.h"
 #include "escapeair_collision_owner.h"
 #include "grab_flow.h"
+#include "ftcommon_ecb.h"
 #include "input.h"
 #include "input_axis.h"
 #include "instance_id.h"
@@ -30,6 +32,7 @@
 #include "locomotion_landing.h"
 #include "move_tables.h"
 #include "motion_state_owners.h"
+#include "mpcoll_ecb_pose.h"
 #include "mpcoll_floor_skip.h"
 #include "mpcoll_ecb_points.h"
 #include "mpcoll_wall_ceil.h"
@@ -467,19 +470,14 @@ static inline uint8_t action_uses_common_air_walljump_callback(uint16_t a) {
   return msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_COMMON_AIR_WALLJUMP_COLL);
 }
 
-static inline void align_passivewalljump_entry_x(MslBatch* batch, size_t idx) {
+static inline float passivewalljump_entry_transn_z(const MslBatch* batch, size_t idx, uint8_t cid) {
   if (batch == NULL) {
-    return;
+    return 0.0f;
   }
-  const uint8_t cid = batch->state.char_id[idx];
-  const uint16_t ecb_frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
-  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-  MslEcbWorldPoints ecb = {0};
-  msl_ecb_world_points_sample(&ecb, cid, batch->state.animation_index[idx], ecb_frame, facing_dir,
-                              batch->state.pos_x[idx], batch->state.pos_y[idx], 0u);
-
+  enum { PASSIVEWALLJUMP_ENTRY_TRANSN_FRAME = 0u };
   float transn[3] = {0.0f, 0.0f, 0.0f};
-  if (anim_pose_get_transn(cid, (uint16_t)MSL_SM_PASSIVE_WALL_JUMP, 0u, transn) != 0) {
+  if (anim_pose_get_transn(cid, (uint16_t)MSL_SM_PASSIVE_WALL_JUMP,
+                           (uint16_t)PASSIVEWALLJUMP_ENTRY_TRANSN_FRAME, transn) != 0) {
     transn[2] = 0.0f;
   }
   const MslCharParams* ch = msl_char_params_fast(cid);
@@ -489,22 +487,71 @@ static inline void align_passivewalljump_entry_x(MslBatch* batch, size_t idx) {
   const float scale_y =
       (batch->state.fighter_scale_y[idx] > 0.0f) ? batch->state.fighter_scale_y[idx] : 1.0f;
   // ftCo_800C1E64 consumes fp->x68C_transNPos.z after Fighter_ChangeMotionState has run the
-  // TransN JObj through ftAnim_8006E054. That path scales raw TransN by ftCommon_GetModelScale
-  // before the wall-entry root snap.
+  // PassiveWallJump TransN JObj through the common-air walljump entry setup. This source path uses
+  // the initial target-motion TransN sample; the visible action then holds action_frame=0 during the
+  // startup timer.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
   // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E054
   // refs/melee/src/melee/ft/ftlib.c::ftLib_800869D4
-  const float transn_z = transn[2] * scale_y * model_scaling;
+  // data/anims/<char>.bin SSANIM01 TransN tail for ftCo_SM_PassiveWallJump
+  return transn[2] * scale_y * model_scaling;
+}
 
-  const uint32_t env = batch->state.coll_env_flags[idx];
-  if ((env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) != 0u) {
-    const float anchor_x =
-        (batch->state.wall_id[idx] != 0xFFFFu) ? batch->state.wall_contact_x[idx] : ecb.left_x;
-    batch->state.pos_x[idx] = anchor_x + transn_z * facing_dir;
-  } else if ((env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) != 0u) {
-    batch->state.pos_x[idx] = ecb.right_x + transn_z * facing_dir;
+static inline uint8_t passivewalljump_outgoing_side_x(const MslBatch* batch, size_t idx,
+                                                      uint8_t right_hug, uint8_t left_hug,
+                                                      float* out_x) {
+  if (batch == NULL || out_x == NULL || (!right_hug && !left_hug)) {
+    return 0u;
   }
+  const uint8_t cid = batch->state.char_id[idx];
+  const uint16_t ecb_frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  MslEcbWorldPoints ecb = {0};
+  uint16_t common_fall_neutral_msid = 0u;
+  uint16_t common_fall_forward_msid = 0u;
+  uint16_t common_fall_backward_msid = 0u;
+  const uint16_t action_id = batch->state.action_id[idx];
+  const uint8_t use_live_common_fall_side =
+      (batch->state.common_fall_blend_x4[idx] != 0.0f &&
+       !mpcoll_common_fall_blended_ecb_live_owner(batch, idx, action_id) &&
+       msl_action_common_fall_blend_msids(action_id, &common_fall_neutral_msid,
+                                          &common_fall_forward_msid, &common_fall_backward_msid) &&
+       mpcoll_common_fall_blended_ecb_points(&ecb, batch, idx, cid, common_fall_neutral_msid,
+                                             ecb_frame, facing_dir, batch->state.pos_x[idx],
+                                             batch->state.pos_y[idx]))
+          ? 1u
+          : 0u;
+  if (!use_live_common_fall_side &&
+      !mpcoll_state_current_ecb_points(batch, idx, &ecb, batch->state.pos_x[idx],
+                                       batch->state.pos_y[idx], ecb_frame)) {
+    msl_ecb_world_points_sample(&ecb, cid, batch->state.animation_index[idx], ecb_frame, facing_dir,
+                                batch->state.pos_x[idx], batch->state.pos_y[idx], 0u);
+  }
+  mpcoll_ecb_points_apply_jobj_horizontal_normalization(batch, idx, &ecb);
+  // ftCo_800C1E64 snapshots the outgoing CollData ECB side after the wall collision pass and
+  // before Fighter_ChangeMotionState. Common Fall's Anim callback first publishes its live blend;
+  // reconstruct that outgoing side only at this transition owner when CollData was not already
+  // supplied by the explicit seed provenance path. Candidate sweep intersections are diagnostic
+  // contacts, not the entry anchor; connected/sloped wall envelopes can move the final ECB side
+  // away from them.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Anim_Inner,ftCo_800CC988}
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FE9C
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80046224_LeftWall,mpColl_800454A4_RightWall}
+  *out_x = right_hug ? ecb.left_x : ecb.right_x;
+  return 1u;
+}
+
+static inline void align_passivewalljump_entry_x(MslBatch* batch, size_t idx,
+                                                 float outgoing_side_x) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t cid = batch->state.char_id[idx];
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  const float transn_z = passivewalljump_entry_transn_z(batch, idx, cid);
+  batch->state.pos_x[idx] = outgoing_side_x + transn_z * facing_dir;
 }
 
 static inline uint8_t try_common_air_walljump_post_collision(MslBatch* batch,
@@ -520,12 +567,21 @@ static inline uint8_t try_common_air_walljump_post_collision(MslBatch* batch,
   const uint32_t env = batch->state.coll_env_flags[idx];
   uint8_t right_hug = (env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) ? 1u : 0u;
   uint8_t left_hug = (env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) ? 1u : 0u;
+  const uint8_t live_wall_hug = (right_hug || left_hug) ? 1u : 0u;
+  const uint8_t seeded_colldata_wallhug =
+      (batch->state.coll_prev_env_flags[idx] &
+       ((uint32_t)MSL_COLLIDE_LEFT_WALL_HUG | (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG))
+          ? 1u
+          : 0u;
   const int8_t seeded_wall_side = batch->state.walljump_wall_side_i8[idx];
-  if (!right_hug && !left_hug && batch->state.walljump_seed_phase_valid[idx]) {
-    // One-step replay bridge only: Slippi exposes the hidden walljump timer/side but not all
-    // CollData wall-hug phase needed by the target callback. clear_seed_owned_transients_post_frame
-    // drops this authority after the reseeded step, so rollout carry still requires live WallHug.
+  if (!right_hug && !left_hug && batch->state.walljump_seed_phase_valid[idx] &&
+      seeded_colldata_wallhug != 0u) {
+    // One-step replay bridge only: a persisted mpColl wall seed can stand in for current CollData
+    // WallHug when replay seeding has the hidden walljump timer/side but live projection did not
+    // republish the contact. The walljump timer alone is not enough to synthesize the outer
+    // ftWallJump WallHug gate.
     // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+    // refs/melee/src/melee/lb/types.h::CollData
     if (seeded_wall_side < 0) {
       right_hug = 1u;
     } else if (seeded_wall_side > 0) {
@@ -580,13 +636,41 @@ static inline uint8_t try_common_air_walljump_post_collision(MslBatch* batch,
   batch->state.walljump_input_timer[idx] = input_timer;
   const float stick_x =
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float prev_stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
   const uint8_t stick_away = right_hug ? (uint8_t)(stick_x >= c->walljump_stick_x_threshold)
                                        : (uint8_t)(stick_x <= -c->walljump_stick_x_threshold);
-  if (!(input_timer < (uint8_t)c->walljump_input_window_frames) || !stick_away ||
-      !((float)batch->state.tilt_timer_x[idx] < c->walljump_tilt_x_max_frames)) {
+  // Teacher-forced walljump seed bridge: when preprocessing proves a carried WallHug phase but
+  // the public x670 timer is stale, let the current raw stick-away edge stand in for the hidden
+  // Fighter_Spaghetti freshness observed by ftWallJump_8008169C. Runtime-generated walljump phases
+  // still use the ordinary x670 timer.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
+  // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+  const uint8_t seed_phase_stick_away_edge =
+      (live_wall_hug != 0u && batch->state.walljump_seed_phase_valid[idx] != 0u &&
+       (right_hug ? (prev_stick_x < c->walljump_stick_x_threshold &&
+                     stick_x >= c->walljump_stick_x_threshold)
+                  : (prev_stick_x > -c->walljump_stick_x_threshold &&
+                     stick_x <= -c->walljump_stick_x_threshold)))
+          ? 1u
+          : 0u;
+  const uint8_t tilt_fresh =
+      ((float)batch->state.tilt_timer_x[idx] < c->walljump_tilt_x_max_frames ||
+       seed_phase_stick_away_edge != 0u)
+          ? 1u
+          : 0u;
+  if (!(input_timer < (uint8_t)c->walljump_input_window_frames) || !stick_away || !tilt_fresh) {
     return 0u;
   }
 
+  float outgoing_side_x = batch->state.pos_x[idx];
+  const uint8_t have_outgoing_side =
+      passivewalljump_outgoing_side_x(batch, idx, right_hug, left_hug, &outgoing_side_x);
+  // ftWallJump passes the pre-increment x1969 count into ftCo_800C1E64, then saturating-increments
+  // x1969 for the next ordinary walljump. Wall-tech entry is owned separately and does neither.
+  // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+  batch->state.passivewall_vel_y_exponent[idx] = batch->state.walljump_used_count[idx];
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_PASSIVE_WALL_JUMP;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -606,7 +690,12 @@ static inline uint8_t try_common_air_walljump_post_collision(MslBatch* batch,
     batch->state.facing[idx] = 0u;
   }
   batch->state.walljump_input_timer[idx] = 254u;
-  align_passivewalljump_entry_x(batch, idx);
+  if (batch->state.walljump_used_count[idx] < UINT8_MAX) {
+    batch->state.walljump_used_count[idx]++;
+  }
+  if (have_outgoing_side) {
+    align_passivewalljump_entry_x(batch, idx, outgoing_side_x);
+  }
   return 1u;
 }
 
@@ -1767,10 +1856,16 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, cons
     return 0u;
   }
   if (action_id_start != (uint16_t)MSL_ACT_ATTACK_11 &&
-      action_id_start != (uint16_t)MSL_ACT_ATTACK_12) {
+      action_id_start != (uint16_t)MSL_ACT_ATTACK_12 &&
+      action_id_start != (uint16_t)MSL_ACT_ATTACK_13) {
     return 0u;
   }
   if (action_id != (uint16_t)MSL_ACT_ATTACK_11 && action_id != (uint16_t)MSL_ACT_ATTACK_12) {
+    if (action_id != (uint16_t)MSL_ACT_ATTACK_13) {
+      return 0u;
+    }
+  }
+  if (action_id_start == (uint16_t)MSL_ACT_ATTACK_13 && action_id != (uint16_t)MSL_ACT_ATTACK_13) {
     return 0u;
   }
   // Decomp: Attack11_IASA and Attack12_IASA execute checkAttack12/checkAttack13 outside the
@@ -1791,7 +1886,7 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, cons
   // data/moves/{fox,falco}.json moves["ftCo_SM_Attack11"]["events"] set_jab_combo
   //
   // Rapid-jab pre-gate:
-  // - Attack11/12/13 IASA calls ftCo_Attack_800D6A50 before normal jab-chain checks.
+  // - Attack11/12/13 IASA call ftCo_Attack_800D6A50 before normal jab-chain/wait checks.
   // - That helper increments fp->x1A54 while A is pressed/released, then enters Attack100Start when
   //   x2218_b2 is active and the per-character co_attrs.rapid_jab_window threshold is reached.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{ftCo_Attack11_IASA,ftCo_Attack12_IASA}
@@ -1807,6 +1902,7 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, cons
       batch->state.jab_rapid_count[idx] < 255u) {
     batch->state.jab_rapid_count[idx] = (uint8_t)(batch->state.jab_rapid_count[idx] + 1u);
   }
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
   if (ch != NULL && ch->rapid_jab_window > 0u &&
       batch->state.jab_rapid_count[idx] >= ch->rapid_jab_window &&
       move_tables_jab_rapid_active(char_id, action_id, script_frame)) {
@@ -1815,7 +1911,6 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, cons
     batch->state.jab_x0[idx] = 0u;
     batch->state.attack100_x0[idx] = 0u;
     batch->state.attack100_x4[idx] = 0u;
-    const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
     batch->state.state_flags[flags_i] &=
         (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
                              MSL_STATE_FLAG_2218_B2);
@@ -1839,7 +1934,6 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, cons
 
   // doAttack12Normal/doAttack13 clear allow_interrupt and x2218_b1 on entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{doAttack12Normal,doAttack13}
-  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
   batch->state.state_flags[flags_i] &=
       (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1);
   batch->state.jab_x0[idx] = 0u;
@@ -2379,7 +2473,6 @@ static inline uint8_t ft80084280_ottotto_edge_admits(const MslBatch* batch,
   if ((batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_EDGE) == 0u) {
     return 0u;
   }
-
   // Decomp: ft_80084280 first routes inward xF8_playerNudgeVel through ft_800827A0 instead of
   // ft_80084280_inline. That branch uses mpColl_8004B2DC / mpColl_8004A45C_Floor, which does not
   // set Collide_Edge for ftCo_8009A3C8.
@@ -2414,6 +2507,36 @@ static inline uint8_t ft80084280_ottotto_edge_admits(const MslBatch* batch,
     return (uint8_t)(batch->state.pos_x[idx] >= line->x1 && stick_x < 0.75f);
   }
   return (uint8_t)(batch->state.pos_x[idx] <= line->x0 && stick_x > -0.75f);
+}
+
+static inline uint8_t ft80084280_ottotto_edge_admits_after_a678_snap(const MslBatch* batch,
+                                                                     const MslCommonParams* c,
+                                                                     int bi, int p,
+                                                                     uint16_t action_id) {
+  if (batch == NULL || c == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
+      p >= (int)batch->config.num_players || !action_uses_ottotto_edge_callback(action_id)) {
+    return 0u;
+  }
+  const size_t idx = msl_idx_player(bi, p);
+  if ((batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_EDGE) == 0u) {
+    return 0u;
+  }
+  if (batch->state.coll_a678_edge_runtime[idx] == 0u) {
+    return 0u;
+  }
+
+  const float nudge_x = ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
+  const float facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
+  if (nudge_x != 0.0f && nudge_x * facing_sign < 0.0f) {
+    return 0u;
+  }
+  // `mpColl_8004A678_Floor` has already applied its endpoint, facing, stick, and wall gates and
+  // snapped CollData.cur_pos inward by the time ftCo_8009A3C8 tests Collide_Edge. Consume that
+  // fresh result directly; re-testing the snapped root or floor topology here rejects source-valid
+  // connected endpoints.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor}
+  return 1u;
 }
 
 static inline uint8_t action_is_air_locomotion(uint16_t a) {
@@ -5243,7 +5366,8 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
             facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
           }
-          if (anim_finished(batch->state.char_id[idx], (uint16_t)anim,
+          if (batch->state.on_ground[idx] == 0u &&
+              anim_finished(batch->state.char_id[idx], (uint16_t)anim,
                             batch->state.anim_frame_f32[idx])) {
             // Decomp: ftCo_AttackAir_Anim enters Fall via ftCo_Fall_Enter (KeepFastFall set).
             // This anim owner is the airborne AttackAir path; grounded AttackAir continuation is
@@ -5699,6 +5823,11 @@ void locomotion_update_post_collision(MslBatch* batch) {
       if (!now_ground && sheik_special_try_vanish_travel_wallceil_end(batch, idx)) {
         continue;
       }
+      if (falcon_special_try_speciallw_wall_rebound(batch, idx)) {
+        // Falcon Kick wall rebound (both phases of the travel action can trigger it).
+        // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialLw_Coll
+        continue;
+      }
       if (!now_ground &&
           (batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_FLOOR_MASK) != 0u) {
         if (spacie_side_special_air_contact_to_ground(batch, ms, ch, idx, a)) {
@@ -5951,6 +6080,23 @@ void locomotion_update_post_collision(MslBatch* batch) {
         batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
         continue;
       }
+      if (was_ground && !now_ground && batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+          falcon_special_try_ground_to_air_swap(batch, idx)) {
+        // Falcon grounded specials either swap to an aerial variant through ftCommon_8007D5D4
+        // (copy gr_vel to self_vel.x here), enter FallSpecial for Raptor Boost, or enter Fall from
+        // SpecialAirLwEnd through ft_80084104 (the latter two have helper-owned velocity bundles).
+        // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialN_Coll
+        // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+        //   ftCa_SpecialSStart_Coll,ftCa_SpecialS_Coll}
+        // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialAirLwEnd_Coll
+        if (!(a == (uint16_t)MSL_ACT_CA_SPECIAL_S_START || a == (uint16_t)MSL_ACT_CA_SPECIAL_S ||
+              a == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_LW_END)) {
+          batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0u;
+        }
+        continue;
+      }
       if (was_ground && !now_ground &&
           (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK ||
            batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA)) {
@@ -6122,6 +6268,19 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.jumps_left[idx] = ch->max_jumps;
           batch->state.fall_fast[idx] = 0u;
           batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+          msl_ftcommon_unlock_ecb(batch, idx);
+          batch->state.pos_y[idx] =
+              locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
+          continue;
+        } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                   falcon_special_try_air_to_ground_swap(batch, idx)) {
+          // Falcon air special ground contact swaps to the grounded variant at the preserved
+          // animation frame (ftCommon_8007D7FC grounding bundle).
+          // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Coll
+          batch->state.jumps_left[idx] = ch->max_jumps;
+          batch->state.fall_fast[idx] = 0u;
+          batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+          msl_ftcommon_unlock_ecb(batch, idx);
           batch->state.pos_y[idx] =
               locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
           continue;
@@ -6151,6 +6310,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.jumps_left[idx] = ch->max_jumps;
           batch->state.fall_fast[idx] = 0u;
           batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+          msl_ftcommon_unlock_ecb(batch, idx);
           batch->state.pos_y[idx] =
               locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
           continue;
@@ -6238,7 +6398,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
 
         float ottotto_x = 0.0f;
         float ottotto_y = 0.0f;
-        if (ft80084280_ottotto_edge_admits(batch, c, bi, p, a) &&
+        if ((ft80084280_ottotto_edge_admits(batch, c, bi, p, a) ||
+             ft80084280_ottotto_edge_admits_after_a678_snap(batch, c, bi, p, a)) &&
             ottotto_edge_point_for_facing(batch, bi, batch->state.ground_id[idx],
                                           batch->state.facing[idx], &ottotto_x, &ottotto_y)) {
           // Ottotto (teeter) entry on common grounded edge walk-off:

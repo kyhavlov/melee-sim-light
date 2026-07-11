@@ -9,14 +9,15 @@ import numpy as np
 import json
 
 from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
+from tools.extraction.extract_fighter_hitboxes import FORMAT_VERSION as HITBOX_VERSION
 
 
-def _write_minimal_ssanim_v4(path: Path, *, msid: int, part_id: int, mtx34: list[float]) -> None:
-    # Format matches src/anim_pose.c (SSANIM01 v4).
+def _write_minimal_ssanim_v5(path: Path, *, msid: int, part_id: int, mtx34: list[float]) -> None:
+    # Format matches src/anim_pose.c (SSANIM01 v5).
     path.parent.mkdir(parents=True, exist_ok=True)
     buf = bytearray()
     buf += b"SSANIM01"
-    buf += struct.pack("<IHH", 4, 1, 1)  # ver=4, joint_count=1, anim_count=1
+    buf += struct.pack("<IHH", 5, 1, 1)  # ver=5, joint_count=1, anim_count=1
     buf += struct.pack("<B", int(part_id) & 0xFF)  # joint_parts[1]
     buf += struct.pack("<HH", int(msid) & 0xFFFF, 1)  # anim header: msid, frame_count=1
     buf += struct.pack("<12f", *[float(x) for x in mtx34])  # frame0/joint0 matrix
@@ -27,7 +28,7 @@ def _write_minimal_ssanim_v4(path: Path, *, msid: int, part_id: int, mtx34: list
 def _write_minimal_mslhitb1(
     path: Path, *, msid: int, records: list[dict]
 ) -> None:
-    # Format matches src/hitboxes_tables.c (MSLHITB1 v1).
+    # Format matches src/hitboxes_tables.c (MSLHITB1 v2).
     rec_bytes = 44
     idx_bytes = 12
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -39,7 +40,7 @@ def _write_minimal_mslhitb1(
 
     buf = bytearray()
     buf += b"MSLHITB1"
-    buf += struct.pack("<II", 1, entry_count)  # version, entry_count
+    buf += struct.pack("<II", HITBOX_VERSION, entry_count)  # version, entry_count
     buf += struct.pack("<HHII", int(msid) & 0xFFFF, len(records), payload_bytes, payload_off)
     for r in records:
         buf += struct.pack(
@@ -116,8 +117,8 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
 
         # Minimal identity pose for part_id=0 on msid=0, frame=0.
         ident = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
-        _write_minimal_ssanim_v4(data_dir / "anims/fox.bin", msid=0, part_id=0, mtx34=ident)
-        _write_minimal_ssanim_v4(data_dir / "anims/falco.bin", msid=0, part_id=0, mtx34=ident)
+        _write_minimal_ssanim_v5(data_dir / "anims/fox.bin", msid=0, part_id=0, mtx34=ident)
+        _write_minimal_ssanim_v5(data_dir / "anims/falco.bin", msid=0, part_id=0, mtx34=ident)
 
         # Two always-on hitboxes at frame 0:
         # - hb0: scales with fighter_scale_y

@@ -149,6 +149,7 @@ ext = Extension(
         "src/match_flow.c",
         "src/locomotion.c",
         "src/locomotion_landing.c",
+        "src/falcon_specials.c",
         "src/marth_specials.c",
         "src/sheik_specials.c",
         "src/zelda_specials.c",

@@ -76,15 +76,19 @@ def test_set_hitbox_damage_source_citation_is_not_scale_opcode():
         assert "ftAction_8007169C` set HitCapsule damage" not in text
 
 
-def test_supported_scripts_do_not_emit_deferred_hitbox_geometry_mutations():
-    deferred = {"set_hitbox_size", "set_hitbox_interaction"}
-    for char in ("fox", "falco"):
+def test_supported_scripts_do_not_emit_deferred_hitbox_size_mutations():
+    for char in ("fox", "falco", "marth", "falcon", "sheik", "zelda"):
         data = json.loads((ROOT / "data" / "moves" / f"{char}.json").read_text())
-        found = sorted(deferred.intersection(_walk_events(data)))
+        found = sorted({"set_hitbox_size"}.intersection(_walk_events(data)))
         assert not found, (
             f"{char} now emits deferred hitbox geometry mutations {found}; "
             "promote them to distinct MSLHITB1 active-slot mutation records."
         )
+
+
+def test_falcon_interaction_mutation_has_runtime_data_demand():
+    data = json.loads((ROOT / "data" / "moves" / "falcon.json").read_text())
+    assert "set_hitbox_interaction" in set(_walk_events(data))
 
 
 def test_hitbox_geometry_contract_uses_root_facing_rotation_not_mirror_proxy():

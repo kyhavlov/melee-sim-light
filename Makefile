@@ -1,10 +1,11 @@
-.PHONY: build build-native clean-native clean-native-shadow test test-parallel test-serial package-smoke slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-sheik validate-all validate-heldout rollout-summary rollout-diff build_data viewer-build viewer fmt fmt-check check dolphin-engine-dump dolphin-extract build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
+.PHONY: build build-native clean-native clean-native-shadow test test-parallel test-serial package-smoke slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-falcon validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-falcon validate-rollout-sheik validate-all validate-heldout rollout-summary rollout-diff build_data viewer-build viewer fmt fmt-check check dolphin-engine-dump dolphin-extract build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
 
 PY := uv run python
 SUITE ?= replays/suites/fox_falco_fd_ucf084_recent.json
 AGG_SUITE ?= replays/suites/aggregate_recent.json
 DOUBLES_SUITE ?= replays/suites/doubles_recent.json
 MARTH_SUITE ?= replays/suites/marth.json
+FALCON_SUITE ?= replays/suites/falcon.json
 SHEIK_SUITE ?= replays/suites/sheik.json
 HELDOUT_INDEX ?= replays/suites/heldout.json
 CHUNK ?= 64
@@ -17,6 +18,8 @@ DOUBLES_ONE_STEP_OUT ?= reports/validation/doubles_recent_one_step_suite_eval.tx
 DOUBLES_ROLLOUT_OUT ?= reports/validation/doubles_recent_rollout_suite_eval.txt
 MARTH_ONE_STEP_OUT ?= reports/validation/marth_one_step.txt
 MARTH_ROLLOUT_OUT ?= reports/validation/marth_rollout.txt
+FALCON_ONE_STEP_OUT ?= reports/validation/falcon_one_step.txt
+FALCON_ROLLOUT_OUT ?= reports/validation/falcon_rollout.txt
 SHEIK_ONE_STEP_OUT ?= reports/validation/sheik_one_step.txt
 SHEIK_ROLLOUT_OUT ?= reports/validation/sheik_rollout.txt
 HELDOUT_OUT_DIR ?= reports/validation/heldout
@@ -182,6 +185,12 @@ validate-marth: build
 validate-rollout-marth: build
 	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(MARTH_SUITE)" --out "$(MARTH_ROLLOUT_OUT)"
 
+validate-falcon: build
+	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(FALCON_SUITE)" --chunk "$(CHUNK)" --out "$(FALCON_ONE_STEP_OUT)"
+
+validate-rollout-falcon: build
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(FALCON_SUITE)" --out "$(FALCON_ROLLOUT_OUT)"
+
 validate-sheik: build
 	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SHEIK_SUITE)" --chunk "$(CHUNK)" --out "$(SHEIK_ONE_STEP_OUT)"
 
@@ -189,7 +198,7 @@ validate-rollout-sheik: build
 	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SHEIK_SUITE)" --out "$(SHEIK_ROLLOUT_OUT)"
 
 validate-all: build
-	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --doubles-suite "$(DOUBLES_SUITE)" --sheik-suite "$(SHEIK_SUITE)" --chunk "$(CHUNK)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)" --doubles-one-step-out "$(DOUBLES_ONE_STEP_OUT)" --doubles-rollout-out "$(DOUBLES_ROLLOUT_OUT)" --sheik-one-step-out "$(SHEIK_ONE_STEP_OUT)" --sheik-rollout-out "$(SHEIK_ROLLOUT_OUT)" --workers "$(VALIDATE_WORKERS)"
+	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --doubles-suite "$(DOUBLES_SUITE)" --falcon-suite "$(FALCON_SUITE)" --sheik-suite "$(SHEIK_SUITE)" --chunk "$(CHUNK)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)" --doubles-one-step-out "$(DOUBLES_ONE_STEP_OUT)" --doubles-rollout-out "$(DOUBLES_ROLLOUT_OUT)" --falcon-one-step-out "$(FALCON_ONE_STEP_OUT)" --falcon-rollout-out "$(FALCON_ROLLOUT_OUT)" --sheik-one-step-out "$(SHEIK_ONE_STEP_OUT)" --sheik-rollout-out "$(SHEIK_ROLLOUT_OUT)" --workers "$(VALIDATE_WORKERS)"
 
 validate-heldout: build
 	@$(PY) -m tools.eval.run_heldout_validation --index "$(HELDOUT_INDEX)" --chunk "$(CHUNK)" --out-dir "$(HELDOUT_OUT_DIR)" --summary-out "$(HELDOUT_SUMMARY_OUT)" --workers "$(HELDOUT_WORKERS)" --suite-workers "$(HELDOUT_SUITE_WORKERS)"

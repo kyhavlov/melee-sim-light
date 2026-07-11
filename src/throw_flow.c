@@ -332,21 +332,32 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
   // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
   uint8_t rel_hit_idx = 0xFFu;
   float rel_anim_frame = owner_af;
-  // 1-ulp release-edge reconstruction for attached weight-scaled throws: the source AObj
-  // accumulates the 1/(weight * x37C) rate in f32 and can sit one ulp BELOW the integer
-  // command frame while the Slippi-seeded/Q16.16 timebase reports it exactly (marth
-  // ThrowHi at internal 11.999999 vs seeded 12.000). Without this, released_prev reads
-  // "already past frame 12" on the crossing step and the set_throw_flags edge never
-  // fires (the victim holds ThrownHi one frame past truth). Same source model as the
-  // attached-window timebase snap (anim_timebase_non_low_throw_rate_snap_delta).
-  // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+  // Release-edge reconstruction for attached weight-scaled throws: the source set_throw_flags
+  // timing is NOT a cur_anim_frame comparison — the movescript owns a wait timer decremented by
+  // frame_speed_mul each frame (`ftCommand->timer -= fp->frame_speed_mul`, execute while
+  // timer <= 0), a chained f32 subtraction. At the weight-scaled 1/(weight * x37C) rate the
+  // chain can retain one ulp ABOVE zero on the step where the Q16.16/Slippi-seeded frame reads
+  // the command frame exactly, so the release fires one frame later than a frame comparison
+  // says (falcon ThrowLw vs fox: timer +2.4e-7 at the seeded-20.0 step, release on the next),
+  // and symmetrically it can be consumed on a step where the seeded frame still reads the
+  // command frame exactly (marth ThrowHi seeded 12.000, timer +2.4e-7 the step before).
+  // Rebuild the tick count from the Q16.16 timebase and replay the source f32 timer chain for
+  // both edge sides. Exact only while the release is the script's first timed flag event (the
+  // timer re-anchors at every executed event); other scripts keep the frame-comparison model.
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80073354,ftAction_800718A4}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD724}
-  float released_prev_af = owner_prev_af;
+  uint8_t released_prev =
+      move_tables_throw_release_hit_idx(owner_char, owner_act, owner_prev_af, NULL);
+  uint8_t released_cur =
+      move_tables_throw_release_hit_idx(owner_char, owner_act, owner_af, &rel_hit_idx);
   {
     const uint8_t victim_attached = batch->state.attached_victim_port[oidx];
     const int32_t rate_fp = batch->state.frame_speed_mul_fp_q16_16[oidx];
+    float release_af = 0.0f;
     if (victim_attached != 0xFFu && (int)victim_attached < num_players &&
-        (int)victim_attached != owner_p && rate_fp > 0 && rate_fp != (int32_t)MSL_Q16_16_ONE) {
+        (int)victim_attached != owner_p && rate_fp > 0 && rate_fp != (int32_t)MSL_Q16_16_ONE &&
+        move_tables_throw_release_is_first_timed_flag_event(owner_char, owner_act) &&
+        move_tables_throw_release_frame(owner_char, owner_act, &release_af)) {
       const size_t v_idx = msl_idx_player(bi, (int)victim_attached);
       const MslCommonParams* common = msl_common_params();
       const MslCharParams* owner_ch = msl_char_params(owner_char);
@@ -360,20 +371,23 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
         const int32_t owner_prev_fp_local =
             batch->state.anim_frame_fp_q16_16[oidx] - batch->state.frame_speed_mul_fp_q16_16[oidx];
         const int32_t n = (owner_prev_fp_local + rate_fp / 2) / rate_fp;
-        if (n > 0 && n <= 256) {
-          float src = 0.0f;
+        if (n >= 0 && n <= 256) {
+          // timer after k post-entry ticks = f32 chain of (release_af - k * rate); the async
+          // command anchored it to the command frame at the frame-0 event execution.
+          float timer = release_af;
           for (int32_t i = 0; i < n; i++) {
-            src += rate;
+            timer -= rate;
           }
-          released_prev_af = src;
+          released_prev = (uint8_t)(timer <= 0.0f);
+          timer -= rate;
+          released_cur = (uint8_t)(timer <= 0.0f);
+          if (released_cur) {
+            rel_hit_idx = 0u;
+          }
         }
       }
     }
   }
-  const uint8_t released_prev =
-      move_tables_throw_release_hit_idx(owner_char, owner_act, released_prev_af, NULL);
-  const uint8_t released_cur =
-      move_tables_throw_release_hit_idx(owner_char, owner_act, owner_af, &rel_hit_idx);
   if (released_cur && !released_prev) {
     // Find the grabbed victim owned by this thrower (decomp: fp->victim_gobj is a single pointer).
     // If a malformed seed contains multiple victims with the same grab_owner_port, choose the lowest

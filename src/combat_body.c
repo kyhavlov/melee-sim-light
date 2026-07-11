@@ -1830,20 +1830,6 @@ uint8_t combat_catch_grabbable_dynamic_hurtcap_world(const MslBatch* batch, size
   return (uint8_t)(*out_r > 0.0f);
 }
 
-uint8_t combat_defender_downed_catch_mask_blocks(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_DOWN_BOUND_U:
-    case MSL_ACT_DOWN_WAIT_U:
-    case MSL_ACT_DOWN_DAMAGE_U:
-    case MSL_ACT_DOWN_BOUND_D:
-    case MSL_ACT_DOWN_WAIT_D:
-    case MSL_ACT_DOWN_DAMAGE_D:
-      return 1u;
-    default:
-      return 0u;
-  }
-}
-
 uint8_t combat_guard_family_body_hurtcap_world(const MslBatch* batch, size_t d_idx,
                                                const MslHurtCap* cap, uint8_t cap_id,
                                                uint16_t cap_count, float* out_ax, float* out_ay,
@@ -2788,6 +2774,9 @@ uint8_t combat_hitcapsule_is_authored_same_group_primary(const MslBatch* batch, 
   if (!batch->state.hitbox_enabled[hb_i]) {
     return 0u;
   }
+  if (!msl_hitbox_x42_b5_enabled(batch->state.hitbox_flags[hb_i])) {
+    return 0u;
+  }
   const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
   if (hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
     return 0u;
@@ -2804,6 +2793,9 @@ uint8_t combat_hitcapsule_is_authored_same_group_primary(const MslBatch* batch, 
     }
     const size_t other_i = idx_hitbox(bi, attacker, other);
     if (!batch->state.hitbox_enabled[other_i]) {
+      continue;
+    }
+    if (!msl_hitbox_x42_b5_enabled(batch->state.hitbox_flags[other_i])) {
       continue;
     }
     if (hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[other_i]) != hit_group) {
@@ -2852,6 +2844,9 @@ uint8_t combat_primary_phantom_tiplog_allows_later_same_group_body(const MslBatc
       continue;
     }
     const uint16_t other_flags = batch->state.hitbox_flags[other_i];
+    if (!msl_hitbox_x42_b5_enabled(other_flags)) {
+      continue;
+    }
     if (defender_on_ground) {
       if ((other_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0u) {
         continue;
@@ -2946,6 +2941,9 @@ uint8_t combat_sheik_chain_same_frontier_later_hitbox_owns_body(
       continue;
     }
     const uint16_t other_flags = batch->state.hitbox_flags[other_i];
+    if (!msl_hitbox_x42_b5_enabled(other_flags)) {
+      continue;
+    }
     if (defender_on_ground != 0u) {
       if ((other_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0u) {
         continue;

@@ -12,6 +12,7 @@ from pathlib import Path
 def _run(argv: list[str], *, cwd: Path) -> str:
     env = os.environ.copy()
     env.pop("VIRTUAL_ENV", None)
+    env.pop("MSL_DATA_DIR", None)
     proc = subprocess.run(argv, cwd=cwd, env=env, check=True, text=True, capture_output=True)
     if proc.stdout:
         print(proc.stdout, end="")
@@ -57,6 +58,10 @@ def main() -> None:
 
         smoke = f"""
         import importlib.util
+        import shutil
+        import struct
+        from importlib import resources
+        from pathlib import Path
         import melee_sim as msl
         import msl_binding
         from melee_sim import _native as native
@@ -78,24 +83,55 @@ def main() -> None:
         if not hasattr(extract_fighter_anims, "extract_one_character"):
             raise SystemExit("fighter animation extractor did not import")
 
-        with msl.EnvBatch(batch_size=1, length=2, data_dir={str(repo / "data")!r}) as env:
-            buffers = env.allocate_buffers()
-            env.configure_match(
-                buffers,
-                stage=msl.Stage.FINAL_DESTINATION,
-                players=[
-                    msl.PlayerConfig(character=msl.Character.FOX),
-                    msl.PlayerConfig(character=msl.Character.FALCO),
-                ],
-            )
-            controller = msl.neutral_controller((env.length, env.batch_size))
-            msl.write_controller(buffers.controller_action_view, controller, player=0)
-            msl.write_controller(buffers.controller_action_view, controller, player=1)
-            env.bind(buffers)
-            env.reset_all()
-            env.step()
-            if int(buffers.gamestate_view[1]["frame_id"][0]) != -122:
-                raise SystemExit("EnvBatch did not step")
+        expected_chars = ("falco", "falcon", "fox", "marth", "sheik", "zelda")
+        artifact_root = resources.files("tools.extraction").joinpath("source_artifacts")
+        families = (
+            ("motion_state/owners", b"MSLMSO01", 23),
+            ("staling/move_id", b"MSLSTID1", 1),
+            ("attack_id/move_id", b"MSLACID1", 3),
+        )
+        for rel, magic, version in families:
+            family = artifact_root.joinpath(rel)
+            rows = tuple(sorted(p.name.removesuffix(".bin") for p in family.iterdir()
+                                if p.name.endswith(".bin")))
+            if rows != expected_chars:
+                raise SystemExit(f"installed {{rel}} registry rows mismatch: {{rows!r}}")
+            for char_name in expected_chars:
+                header = family.joinpath(f"{{char_name}}.bin").read_bytes()[:16]
+                if header[:8] != magic or struct.unpack_from("<I", header, 8)[0] != version:
+                    raise SystemExit(f"installed {{rel}}/{{char_name}}.bin header mismatch")
+                if struct.unpack_from("<H", header, 12)[0] <= 0:
+                    raise SystemExit(f"installed {{rel}}/{{char_name}}.bin has no rows")
+
+        # Use an isolated data root whose three full-registry families come from the installed
+        # wheel, not from the checkout. Other ISO-derived assets remain the normal smoke fixture.
+        overlay = Path.cwd() / "installed-resource-data"
+        shutil.copytree(Path({str(repo / "data")!r}), overlay)
+        for rel, _magic, _version in families:
+            target = overlay / rel
+            shutil.rmtree(target)
+            with resources.as_file(artifact_root.joinpath(rel)) as family_path:
+                shutil.copytree(family_path, target)
+
+        def reset_step(first, second):
+            with msl.EnvBatch(batch_size=1, length=2, data_dir=overlay) as env:
+                buffers = env.allocate_buffers()
+                env.configure_match(
+                    buffers,
+                    stage=msl.Stage.FINAL_DESTINATION,
+                    players=[msl.PlayerConfig(character=first), msl.PlayerConfig(character=second)],
+                )
+                controller = msl.neutral_controller((env.length, env.batch_size))
+                msl.write_controller(buffers.controller_action_view, controller, player=0)
+                msl.write_controller(buffers.controller_action_view, controller, player=1)
+                env.bind(buffers)
+                env.reset_all()
+                env.step()
+                if int(buffers.gamestate_view[1]["frame_id"][0]) != -122:
+                    raise SystemExit("EnvBatch did not step")
+
+        reset_step(msl.Character.FOX, msl.Character.FALCO)
+        reset_step(msl.Character.FALCON, msl.Character.FOX)
 
         print("package smoke passed")
         """

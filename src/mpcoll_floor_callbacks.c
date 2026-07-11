@@ -2638,8 +2638,9 @@ static uint8_t mpcoll_throw_release_root_floor_sweep_step(const MslBatch* batch,
   return 1u;
 }
 
-uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
-                                         MslMpcollFloorMaskResult* out) {
+static uint8_t mpcoll_floor_mask_probe_with_bottom_mode(const MslBatch* batch, size_t idx,
+                                                        uint8_t lock_bottom_to_zero,
+                                                        MslMpcollFloorMaskResult* out) {
   if (batch == NULL) {
     return 0u;
   }
@@ -2650,12 +2651,11 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
     return 0u;
   }
 
-  // ft_80082578 sets CollData.cur_pos from fp->cur_pos, then mpColl_800477E0 runs
-  // mpCollPrev + mpColl_LoadECB_inline(flags=6) and reports `env_flags & Collide_FloorMask`.
-  // Reconstruct only that floor-mask decision here; callers decide whether and how to apply the
-  // owning motion-state callback.
+  // Reconstruct the shared floor-mask decision after mpCollPrev + mpColl_LoadECB_inline. Flags=6
+  // retains the extracted ECB bottom (800477E0); flags=5 pins bottom.y to zero (80048654).
+  // Callers decide whether and how to apply the owning motion-state callback.
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80082578,ft_80083C00}
-  // refs/melee/src/melee/mp/mpcoll.c::mpColl_800477E0
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_800477E0,mpColl_80048654}
   const uint8_t char_id = batch->state.char_id[idx];
   const uint32_t anim = batch->state.animation_index[idx];
   const uint16_t ecb_frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
@@ -2664,10 +2664,10 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
   MslEcbBottomWorldPoint cur_bot = {0};
   MslEcbBottomWorldPoint prev_bot = {0};
   msl_ecb_bottom_world_point_sample(&cur_bot, char_id, anim, ecb_frame, batch->state.pos_x[idx],
-                                    batch->state.pos_y[idx], 0u);
+                                    batch->state.pos_y[idx], lock_bottom_to_zero);
   msl_ecb_bottom_world_point_sample(&prev_bot, char_id, anim, ecb_frame_prev,
                                     batch->state.floor_sweep_prev_pos_x[idx],
-                                    batch->state.floor_sweep_prev_pos_y[idx], 0u);
+                                    batch->state.floor_sweep_prev_pos_y[idx], lock_bottom_to_zero);
 
   const uint16_t skip_platform_segment_i = platform_floor_skip_segment_id(batch, idx, stage_id);
   const MslCommonParams* c = msl_common_params();
@@ -2724,6 +2724,16 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
   }
 
   return 0u;
+}
+
+uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
+                                         MslMpcollFloorMaskResult* out) {
+  return mpcoll_floor_mask_probe_with_bottom_mode(batch, idx, 0u, out);
+}
+
+uint8_t mpcoll_80048654_floor_mask_probe(const MslBatch* batch, size_t idx,
+                                         MslMpcollFloorMaskResult* out) {
+  return mpcoll_floor_mask_probe_with_bottom_mode(batch, idx, 1u, out);
 }
 
 uint8_t mpcoll_800477e0_capture_root_floor_mask_probe(const MslBatch* batch, size_t idx,
@@ -2867,6 +2877,65 @@ uint8_t mpcoll_800471f8_throw_release_root_floor_probe(const MslBatch* batch, si
     prev_root_y = cur_root_y;
   }
   return 0u;
+}
+
+uint8_t mpcoll_dc920_connected_floor_attempt(const MslBatch* batch, size_t constrained_idx,
+                                             uint16_t sample_owner_ground_id,
+                                             MslMpcollFloorMaskResult* out) {
+  if (batch == NULL || sample_owner_ground_id == 0xFFFFu) {
+    return 0u;
+  }
+  const int bi = (int)(constrained_idx / (size_t)MSL_MAX_PLAYERS);
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const MslCommonParams* c = msl_common_params();
+  const int source_line = stage_collision_floor_line_index(stage_id, sample_owner_ground_id);
+  if (g == NULL || g->lines == NULL || source_line < 0 || (size_t)source_line >= g->line_count ||
+      c == NULL) {
+    return 0u;
+  }
+
+  // mpLib_8005199C_Floor returns the first source-ordered floor below the point. DC920 checks
+  // connectivity only after that selection; it must not skip a disconnected first floor and hunt
+  // for a later connected candidate.
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8005199C_Floor
+  int candidate_line = -1;
+  for (size_t li = 0; li < g->line_count; li++) {
+    const uint16_t segment_i = g->lines[li].segment_i;
+    if (!stage_collision_floor_line_is_runtime_fighter_solid(stage_id, segment_i)) {
+      continue;
+    }
+    float floor_y = 0.0f;
+    if (!floor_line_y_at_x_for_env(batch, bi, g, (int)li, batch->state.pos_x[constrained_idx],
+                                   &floor_y) ||
+        batch->state.pos_y[constrained_idx] < floor_y) {
+      continue;
+    }
+    candidate_line = (int)li;
+    break;
+  }
+  if (candidate_line < 0 || !floor_lines_connected(g, source_line, candidate_line)) {
+    return 0u;
+  }
+
+  if (out != NULL) {
+    out->candidate_ground_id = g->lines[(size_t)candidate_line].segment_i;
+    out->candidate_published = 1u;
+  }
+
+  float correction = 0.0f;
+  const int projected_line =
+      msl_mplib_8004dd90_floor(batch, bi, g, candidate_line, batch->state.pos_x[constrained_idx],
+                               batch->state.pos_y[constrained_idx], &correction, NULL, NULL);
+  if (projected_line < 0 || correction < c->capture_release_floor_tolerance) {
+    return 0u;
+  }
+  if (out != NULL) {
+    out->ground_id = g->lines[(size_t)projected_line].segment_i;
+    out->corrected_pos_x = batch->state.pos_x[constrained_idx];
+    out->corrected_pos_y = batch->state.pos_y[constrained_idx] + correction;
+  }
+  return 1u;
 }
 
 // Ground collision is organized around the same source wrapper families used by the decomp:

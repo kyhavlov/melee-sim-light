@@ -268,6 +268,28 @@ int common_params_init(void) {
       json_get_f32(buf, "capture_wait_anim_rate_hold_frames",
                    &g_params.capture_wait_anim_rate_hold_frames) != 0 ||
       json_get_f32(buf, "capture_wait_anim_rate", &g_params.capture_wait_anim_rate) != 0 ||
+      json_get_f32(buf, "capture_release_floor_tolerance",
+                   &g_params.capture_release_floor_tolerance) != 0 ||
+      json_get_i32(buf, "capture_damage_release_threshold",
+                   &g_params.capture_damage_release_threshold) != 0 ||
+      json_get_u16(buf, "capture_release_hit_state_x380",
+                   &g_params.capture_release_hit_state_x380) != 0 ||
+      json_get_u16(buf, "capture_release_hit_damage_x384",
+                   &g_params.capture_release_hit_damage_x384) != 0 ||
+      json_get_u16(buf, "capture_release_hit_angle_x388",
+                   &g_params.capture_release_hit_angle_x388) != 0 ||
+      json_get_u16(buf, "capture_release_hit_kbg_x38c", &g_params.capture_release_hit_kbg_x38c) !=
+          0 ||
+      json_get_u16(buf, "capture_release_hit_wsk_x390", &g_params.capture_release_hit_wsk_x390) !=
+          0 ||
+      json_get_u16(buf, "capture_release_hit_bkb_x394", &g_params.capture_release_hit_bkb_x394) !=
+          0 ||
+      json_get_u16(buf, "capture_release_hit_element_x398",
+                   &g_params.capture_release_hit_element_x398) != 0 ||
+      json_get_u16(buf, "capture_release_hit_sfx_severity_x39c",
+                   &g_params.capture_release_hit_sfx_severity_x39c) != 0 ||
+      json_get_u16(buf, "capture_release_hit_sfx_kind_x3a0",
+                   &g_params.capture_release_hit_sfx_kind_x3a0) != 0 ||
       json_get_f32(buf, "capture_pulled_lw_air_delta_y", &g_params.capture_pulled_lw_air_delta_y) !=
           0 ||
       json_get_f32(buf, "fastfall_stick_threshold", &g_params.fastfall_stick_threshold) != 0 ||
@@ -353,6 +375,7 @@ int common_params_init(void) {
       json_get_f32(buf, "walljump_tilt_x_max_frames", &g_params.walljump_tilt_x_max_frames) != 0 ||
       json_get_u16(buf, "walljump_startup_timer_frames", &g_params.walljump_startup_timer_frames) !=
           0 ||
+      json_get_f32(buf, "passive_wall_vel_y_base", &g_params.passive_wall_vel_y_base) != 0 ||
       json_get_f32(buf, "pokemon_stadium_x34_scale_z", &g_params.pokemon_stadium_x34_scale_z) !=
           0) {
     alloc_free(buf);

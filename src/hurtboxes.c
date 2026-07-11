@@ -840,6 +840,21 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
           pose_frame = prev_frame;
         }
       }
+      if (action_id == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN &&
+          msl_anim_end_frame(char_id, pose_msid) <= 0.0f) {
+        // Falcon Dive victim pose donor fallback:
+        // - ftCo_8009CA0C enters CaptureCaptain with the ATTACKER's gobj as the figatree donor
+        //   (7th ChangeMotionState arg); the victim plays the attacker-file animation
+        //   (PlyTaro_Share_ACTION_TCaptainSpecialHi_figatree) — the victim's own subaction row
+        //   276 is null for every character.
+        // - This simulator's anim bake is per-(char, skeleton); a donor-skeleton bake is not
+        //   available, so sample the victim's hurtcaps at its own CapturePulledHi frame-0 pose
+        //   (a held pose extracted for all chars) for the short (~15 frame) hold window.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        pose_msid = (uint16_t)MSL_SM_CAPTURE_PULLED_HI;
+        pose_frame = 0u;
+      }
       if ((action_id == (uint16_t)MSL_ACT_ATTACK_AIR_N ||
            action_id == (uint16_t)MSL_ACT_ATTACK_AIR_F ||
            action_id == (uint16_t)MSL_ACT_ATTACK_AIR_B ||

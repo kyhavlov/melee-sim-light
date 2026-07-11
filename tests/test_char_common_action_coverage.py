@@ -189,6 +189,9 @@ def test_dash_to_run_terminal_velocity(char_name: str) -> None:
     # Decomp: ftCo_Run velocity converges to dash_run_terminal_velocity.
     a = _char_attrs(char_name)
     seed = _seed_base(char_name)
+    # 40 run frames need more runway than FD's half-width for the fastest runners
+    # (Falcon covers ~88 units from x=0 and would run off the +85.57 edge into Fall).
+    seed["pos_x"][0, 0] = np.float32(-60.0)
     inp = _mk_inputs(main_x=127)
     outs = _run(seed, [inp] * 40)
     v = float(outs[-1]["speed_ground_x_self"][0])
@@ -420,10 +423,15 @@ def test_guard_on_entry_and_shield_radius_scale(char_name: str) -> None:
             prev = hold
         bub = msl_binding.debug_shield_bubbles_world(handle, 0)
         r = float(bub[0][3])
+        ob = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+        msl_binding.write_compare(handle, ob)
+        hp = float(ob.view(COMPARE_DTYPE).reshape((1,))[0]["shield_hp"][0])
     finally:
         msl_binding.destroy(handle)
     # light = clamp01((200/255 - trigger_deadzone) / (1 - trigger_deadzone)); scale follows
     # inlineB0: ((1-min)*hp_ratio*lightscale + min). refs ftCo_Guard.c::inlineB0
+    # hp_ratio uses the measured post-drain shield hp: 12 held frames drain enough that a
+    # hp_ratio=1.0 expectation drifts past an absolute tolerance for large shields (Falcon).
     c = _common()
     dz = float(c.get("trigger_deadzone", 0.3))
     light = max(0.0, min(1.0, (200.0 / 255.0 - dz) / (1.0 - dz)))
@@ -431,8 +439,9 @@ def test_guard_on_entry_and_shield_radius_scale(char_name: str) -> None:
     ls_max = float(c.get("shield_size_lightshield_max", 0.5))
     light_scale = light * (ls_max - ls_min) + ls_min
     min_scale = float(c.get("shield_size_min_scale", 0.15))
-    expect = ((1.0 - min_scale) * 1.0 * light_scale + min_scale) * float(a["initial_shield_size"])
-    assert abs(r - expect) < 0.3, f"{char_name}: steady shield radius {r} vs {expect}"
+    hp_ratio = hp / 60.0
+    expect = ((1.0 - min_scale) * hp_ratio * light_scale + min_scale) * float(a["initial_shield_size"])
+    assert abs(r - expect) < 0.3, f"{char_name}: steady shield radius {r} vs {expect} (hp {hp})"
 
 
 @CHAR_PARAMS

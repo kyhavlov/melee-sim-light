@@ -193,6 +193,8 @@ static PyMethodDef methods[] = {
      "bytes[1,sizeof(MslDebugDynamicPoseState)]"},
     {"debug_common_fall_blend_state", msl_debug_common_fall_blend_state_py, METH_VARARGS,
      "debug_common_fall_blend_state(handle, batch_index, player_index) -> (x4, msid)"},
+    {"debug_walljump_state", msl_debug_walljump_state_py, METH_VARARGS,
+     "debug_walljump_state(handle, batch_index, player_index) -> (used_count, exponent)"},
     {"debug_get_fighter_8006cda4_pre_gate_consume_count",
      msl_debug_get_fighter_8006cda4_pre_gate_consume_count_py, METH_VARARGS,
      "debug_get_fighter_8006cda4_pre_gate_consume_count(handle, batch_index, player_index) -> int"},
@@ -319,6 +321,11 @@ static PyMethodDef methods[] = {
      msl_validation_derive_fighter_8006cda4_buffers_py, METH_VARARGS,
      "validation_derive_fighter_8006cda4_buffers(seed_u8, ref_u8, roll_prob, players, "
      "allow_grounded_kneebend) -> None"},
+    {"validation_derive_falcon_speciallw_seed_lanes",
+     msl_validation_derive_falcon_speciallw_seed_lanes_py, METH_VARARGS,
+     "validation_derive_falcon_speciallw_seed_lanes(seed_u8, processhit_x1914_u8, players, "
+     "falcon_char_id, speciallw_action, speciallw_end_action, hit_limit, friction_modifier) -> "
+     "None"},
     {"derive_staling_history", msl_derive_staling_history_py, METH_VARARGS,
      "derive_staling_history(src_ports, char_id, action_id, action_frame, animation_index, "
      "percent, stocks, instance_id, last_hit_by, last_hit_by_instance[, item_exists, item_owner, "
@@ -390,12 +397,12 @@ static PyMethodDef methods[] = {
      "uint8[:]"},
     {"derive_dash_x4", msl_derive_dash_x4_py, METH_VARARGS,
      "derive_dash_x4(action, action_frame, dash, turn) -> uint8[:]"},
-    {"derive_ecb_lock_timer", msl_derive_ecb_lock_timer_py, METH_VARARGS,
-     "derive_ecb_lock_timer(on_ground, action, lock_frames, jump_f, jump_b, aerial_f, aerial_b) -> "
-     "uint8[:]"},
+    {"derive_ecb_lock_state", msl_derive_ecb_lock_state_py, METH_VARARGS,
+     "derive_ecb_lock_state(on_ground, action, char, action_frame, lock_frames, jump_f, jump_b, "
+     "aerial_f, aerial_b) -> (timer, owner)"},
     {"derive_ecb_lock_bottom_rel_y", msl_derive_ecb_lock_bottom_rel_y_py, METH_VARARGS,
-     "derive_ecb_lock_bottom_rel_y(char, action, anim, anim_frame, on_ground, lock_timer) -> "
-     "(float32[:], uint8[:])"},
+     "derive_ecb_lock_bottom_rel_y(char, action, anim, anim_frame, on_ground, lock_timer, "
+     "lock_owner) -> (bottom, bottom_owner)"},
     {"derive_damage_hitlag_colldata_ecb", msl_derive_damage_hitlag_colldata_ecb_py, METH_VARARGS,
      "derive_damage_hitlag_colldata_ecb(char, action, anim, anim_frame, rate, facing, ground, "
      "hitlag) -> (bottom, top, left, right, side, valid)"},
@@ -465,13 +472,21 @@ static PyMethodDef methods[] = {
      "derive_match_flow_respawn_slot_cooldown(action[:, players], shared_platform) -> uint8[:,6]"},
     {"derive_passivewall_timer", msl_derive_passivewall_timer_py, METH_VARARGS,
      "derive_passivewall_timer(action, frame, total_frames) -> uint8[:]"},
+    {"derive_walljump_used_seed_lanes", msl_derive_walljump_used_seed_lanes_py, METH_VARARGS,
+     "derive_walljump_used_seed_lanes(char, action, frame, on_ground, jumps_left, max_jumps_lut, "
+     "buttons_pressed, stick_y, button_mask_xy, tap_jump_threshold) "
+     "-> (used_count, entry_exponent)"},
     {"derive_walljump_phase_seed_lanes", msl_derive_walljump_phase_seed_lanes_py, METH_VARARGS,
      "derive_walljump_phase_seed_lanes(action, frame, setup_x_delta, pos_x, pos_y, raw_main_x) -> "
      "(timer, side)"},
     {"derive_entry_end_fall_lock", msl_derive_entry_end_fall_lock_py, METH_VARARGS,
      "derive_entry_end_fall_lock(action, on_ground, entry_end, fall) -> uint8[:]"},
     {"derive_jab_rapid_count", msl_derive_jab_rapid_count_py, METH_VARARGS,
-     "derive_jab_rapid_count(action, buttons_released, buttons_pressed, a_mask) -> uint8[:]"},
+     "derive_jab_rapid_count(action, hitlag, buttons_released, buttons_pressed, a_mask) -> "
+     "uint8[:]"},
+    {"derive_attack100_seed_latches", msl_derive_attack100_seed_latches_py, METH_VARARGS,
+     "derive_attack100_seed_latches(char, action, action_frame, hitlag, buttons_released, "
+     "buttons_pressed, a_mask) -> (x0, x4)"},
     {"derive_walk_anim_source_vel", msl_derive_walk_anim_source_vel_py, METH_VARARGS,
      "derive_walk_anim_source_vel(action, char, facing_dir1, frame_speed, divisor LUTs) -> "
      "float32[:]"},
@@ -613,7 +628,8 @@ static PyMethodDef methods[] = {
     {"derive_illusion_ghost_pos012", msl_derive_illusion_ghost_pos012_py, METH_VARARGS,
      "derive_illusion_ghost_pos012(action_id, action_frame, pos_x, pos_y) -> six float32 arrays"},
     {"derive_combat_hitlist_seed_fields", msl_derive_combat_hitlist_seed_fields_py, METH_VARARGS,
-     "derive_combat_hitlist_seed_fields(...) -> (cd,iid,hb_valid,hb_cd,hb_iid,shield_kind)"},
+     "derive_combat_hitlist_seed_fields(...) -> "
+     "(cd,iid,hb_valid,hb_cd,hb_iid,shield_kind,processhit_x1914)"},
     {"ecb_bottom_rel_y", msl_ecb_bottom_rel_y_py, METH_VARARGS,
      "ecb_bottom_rel_y(char_id, animation_index, action_frame) -> float"},
     {"ecb_extents_rel", msl_ecb_extents_rel_py, METH_VARARGS,
@@ -683,6 +699,8 @@ static PyMethodDef methods[] = {
      "sizeof(MslDebugCombatContact)], count)"},
     {"debug_hitlist_fighter_contains", msl_debug_hitlist_fighter_contains_py, METH_VARARGS,
      "debug_hitlist_fighter_contains(handle, batch_index, attacker, hb_id, victim) -> 0/1"},
+    {"debug_hitlist_item_contains", msl_debug_hitlist_item_contains_py, METH_VARARGS,
+     "debug_hitlist_item_contains(handle, batch_index, item_slot, hb_id, victim) -> 0/1"},
     {"debug_hitlist_fighter_capsule", msl_debug_hitlist_fighter_capsule_py, METH_VARARGS,
      "debug_hitlist_fighter_capsule(handle, batch_index, attacker, hb_id) -> "
      "bytes[1,sizeof(MslDebugHitlistCapsule)]"},

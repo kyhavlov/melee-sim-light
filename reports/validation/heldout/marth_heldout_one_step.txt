@@ -53,8 +53,8 @@ overall.float_norm_mae_p95: 0.00018352
 
 == replays/heldout/marth/ClutteredSevereEchidna.slpz ==
 Records: 11827  Players/scored per record: 2  Total player-frames: 23654
-mismatch.action_id: 31 / 23654 (0.001311)
-mismatch.action_frame: 26 / 23654 (0.001099)
+mismatch.action_id: 21 / 23654 (0.000888)
+mismatch.action_frame: 16 / 23654 (0.000676)
 mismatch.on_ground: 7 / 23654 (0.000296)
 mismatch.facing: 2 / 23654 (0.000085)
 mismatch.stocks: 0 / 23654 (0.000000)
@@ -63,15 +63,15 @@ mismatch.is_dead: 0 / 23654 (0.000000)
 mismatch.hitlag: 2 / 23654 (0.000085)
 mismatch.hitstun: 4 / 23654 (0.000169)
 mismatch.l_cancel: 1 / 23654 (0.000042)
-mismatch.hurtbox_state: 3 / 23654 (0.000127)
+mismatch.hurtbox_state: 2 / 23654 (0.000085)
 mismatch.ground_id: 2 / 23654 (0.000085)
-mismatch.animation_index: 31 / 23654 (0.001311)
+mismatch.animation_index: 21 / 23654 (0.000888)
 mismatch.instance_hit_by: 1 / 23654 (0.000042)
-mismatch.instance_id: 23 / 23654 (0.000972)
+mismatch.instance_id: 13 / 23654 (0.000550)
 mismatch.last_attack_landed: 1 / 23654 (0.000042)
 mismatch.combo_count: 0 / 23654 (0.000000)
 mismatch.last_hit_by: 13 / 23654 (0.000550)
-mismatch.state_flags: 30 / 118270 (0.000254)
+mismatch.state_flags: 29 / 118270 (0.000245)
 mismatch.item_exists: 0 / 177405 (0.000000)
 mismatch.item_type: 0 / 177405 (0.000000)
 mismatch.item_state: 0 / 177405 (0.000000)
@@ -91,8 +91,8 @@ err.item_pos_x: mae=0.026986 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.005983 p95=0.000000 max=2.181103
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 184 / 1431067
-overall.strict_discrete_mismatch: 207 / 1431067
+overall.discrete_mismatch: 142 / 1431067
+overall.strict_discrete_mismatch: 165 / 1431067
 overall.ignored_discrete_mismatch: 23
 overall.float_norm_mae_p95: 0.00013147
 
@@ -184,7 +184,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
 overall.discrete_mismatch: 155 / 1337050
 overall.strict_discrete_mismatch: 245 / 1337050
 overall.ignored_discrete_mismatch: 90
-overall.float_norm_mae_p95: 0.00014190
+overall.float_norm_mae_p95: 0.00014189
 
 == replays/heldout/marth/EntireHardToFindSnail.slpz ==
 Records: 8450  Players/scored per record: 2  Total player-frames: 16900
@@ -288,7 +288,7 @@ mismatch.is_dead: 0 / 23646 (0.000000)
 mismatch.hitlag: 12 / 23646 (0.000507)
 mismatch.hitstun: 12 / 23646 (0.000507)
 mismatch.l_cancel: 11 / 23646 (0.000465)
-mismatch.hurtbox_state: 6 / 23646 (0.000254)
+mismatch.hurtbox_state: 5 / 23646 (0.000211)
 mismatch.ground_id: 12 / 23646 (0.000507)
 mismatch.animation_index: 33 / 23646 (0.001396)
 mismatch.instance_hit_by: 7 / 23646 (0.000296)
@@ -303,7 +303,7 @@ mismatch.item_state: 1 / 177345 (0.000006)
 mismatch.item_owner: 1 / 177345 (0.000006)
 mismatch.item_instance_id: 1 / 177345 (0.000006)
 ignored_mismatch.state_flags[4]&0x80: 77 / 23646 (0.003256)
-err.pos_x: mae=0.002435 p95=0.000000 max=4.884766
+err.pos_x: mae=0.002434 p95=0.000000 max=4.884766
 err.pos_y: mae=0.004750 p95=0.000000 max=7.314985
 err.speed_air_x_self: mae=0.002122 p95=0.000000 max=5.261856
 err.speed_ground_x_self: mae=0.000469 p95=0.000000 max=1.481250
@@ -316,8 +316,8 @@ err.item_pos_x: mae=0.091902 p95=0.000008 max=12.884533
 err.item_pos_y: mae=0.034101 p95=0.000000 max=8.614908
 err.item_vel_x: mae=0.000563 p95=0.000000 max=0.128738
 err.item_vel_y: mae=0.000773 p95=0.000000 max=0.174736
-overall.discrete_mismatch: 301 / 1430583
-overall.strict_discrete_mismatch: 378 / 1430583
+overall.discrete_mismatch: 300 / 1430583
+overall.strict_discrete_mismatch: 377 / 1430583
 overall.ignored_discrete_mismatch: 77
 overall.float_norm_mae_p95: 0.00028888
 
@@ -349,7 +349,7 @@ mismatch.item_owner: 1 / 169830 (0.000006)
 mismatch.item_instance_id: 1 / 169830 (0.000006)
 ignored_mismatch.state_flags[4]&0x80: 75 / 22644 (0.003312)
 err.pos_x: mae=0.002385 p95=0.000000 max=5.261864
-err.pos_y: mae=0.002734 p95=0.000000 max=8.979996
+err.pos_y: mae=0.002730 p95=0.000000 max=8.979996
 err.speed_air_x_self: mae=0.002549 p95=0.000000 max=5.261856
 err.speed_ground_x_self: mae=0.000156 p95=0.000000 max=0.555000
 err.speed_y_self: mae=0.001751 p95=0.000000 max=3.557000
@@ -364,12 +364,12 @@ err.item_vel_y: mae=0.000124 p95=0.000000 max=0.031715
 overall.discrete_mismatch: 266 / 1369962
 overall.strict_discrete_mismatch: 341 / 1369962
 overall.ignored_discrete_mismatch: 75
-overall.float_norm_mae_p95: 0.00035373
+overall.float_norm_mae_p95: 0.00035372
 
 == replays/heldout/marth/ParallelPoisedPorpoise.slpz ==
 Records: 11026  Players/scored per record: 2  Total player-frames: 22052
-mismatch.action_id: 26 / 22052 (0.001179)
-mismatch.action_frame: 25 / 22052 (0.001134)
+mismatch.action_id: 13 / 22052 (0.000590)
+mismatch.action_frame: 13 / 22052 (0.000590)
 mismatch.on_ground: 5 / 22052 (0.000227)
 mismatch.facing: 1 / 22052 (0.000045)
 mismatch.stocks: 0 / 22052 (0.000000)
@@ -380,20 +380,20 @@ mismatch.hitstun: 6 / 22052 (0.000272)
 mismatch.l_cancel: 1 / 22052 (0.000045)
 mismatch.hurtbox_state: 1 / 22052 (0.000045)
 mismatch.ground_id: 0 / 22052 (0.000000)
-mismatch.animation_index: 26 / 22052 (0.001179)
+mismatch.animation_index: 13 / 22052 (0.000590)
 mismatch.instance_hit_by: 3 / 22052 (0.000136)
-mismatch.instance_id: 20 / 22052 (0.000907)
+mismatch.instance_id: 8 / 22052 (0.000363)
 mismatch.last_attack_landed: 6 / 22052 (0.000272)
 mismatch.combo_count: 1 / 22052 (0.000045)
 mismatch.last_hit_by: 17 / 22052 (0.000771)
-mismatch.state_flags: 27 / 110260 (0.000245)
+mismatch.state_flags: 26 / 110260 (0.000236)
 mismatch.item_exists: 1 / 165390 (0.000006)
 mismatch.item_type: 1 / 165390 (0.000006)
 mismatch.item_state: 0 / 165390 (0.000000)
 mismatch.item_owner: 1 / 165390 (0.000006)
 mismatch.item_instance_id: 1 / 165390 (0.000006)
 ignored_mismatch.state_flags[4]&0x80: 73 / 22052 (0.003310)
-err.pos_x: mae=0.003725 p95=0.000000 max=7.288887
+err.pos_x: mae=0.003792 p95=0.000000 max=7.288887
 err.pos_y: mae=0.001143 p95=0.000000 max=3.170000
 err.speed_air_x_self: mae=0.000550 p95=0.000000 max=3.222631
 err.speed_ground_x_self: mae=0.000056 p95=0.000000 max=0.208327
@@ -406,10 +406,10 @@ err.item_pos_x: mae=0.057523 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.003439 p95=0.000000 max=0.731182
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000011
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000013
-overall.discrete_mismatch: 185 / 1334146
-overall.strict_discrete_mismatch: 258 / 1334146
+overall.discrete_mismatch: 134 / 1334146
+overall.strict_discrete_mismatch: 207 / 1334146
 overall.ignored_discrete_mismatch: 73
-overall.float_norm_mae_p95: 0.00016152
+overall.float_norm_mae_p95: 0.00016158
 
 == replays/heldout/marth/WorstUnsungSparrow.slpz ==
 Records: 10748  Players/scored per record: 2  Total player-frames: 21496
@@ -484,7 +484,7 @@ mismatch.item_owner: 0 / 116175 (0.000000)
 mismatch.item_instance_id: 0 / 116175 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 67 / 15490 (0.004325)
 err.pos_x: mae=0.003189 p95=0.000000 max=4.049999
-err.pos_y: mae=0.004977 p95=0.000000 max=9.233032
+err.pos_y: mae=0.005089 p95=0.000000 max=9.233032
 err.speed_air_x_self: mae=0.000844 p95=0.000000 max=2.151708
 err.speed_ground_x_self: mae=0.000321 p95=0.000000 max=1.168313
 err.speed_y_self: mae=0.002182 p95=0.000000 max=2.300000
@@ -499,7 +499,7 @@ err.item_vel_y: mae=0.000126 p95=0.000000 max=0.702896
 overall.discrete_mismatch: 177 / 937145
 overall.strict_discrete_mismatch: 244 / 937145
 overall.ignored_discrete_mismatch: 67
-overall.float_norm_mae_p95: 0.00023726
+overall.float_norm_mae_p95: 0.00023736
 
 == replays/heldout/marth/VigilantValuableGull.slpz ==
 Records: 9316  Players/scored per record: 2  Total player-frames: 18632
@@ -547,7 +547,7 @@ overall.ignored_discrete_mismatch: 57
 overall.float_norm_mae_p95: 0.00033919
 
 == suite summary ==
-overall.discrete_mismatch: 1992 / 14168979
-overall.strict_discrete_mismatch: 2626 / 14168979
+overall.discrete_mismatch: 1898 / 14168979
+overall.strict_discrete_mismatch: 2532 / 14168979
 overall.ignored_discrete_mismatch: 634
-overall.float_norm_mae_p95: 0.00024398
+overall.float_norm_mae_p95: 0.00024399
