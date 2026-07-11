@@ -93,6 +93,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->capture_wait_anim_rate_timer, 0, sizeof(float) * bp);
   memset(state->capture_wait_jump_latch, 0, sizeof(uint8_t) * bp);
   memset(state->capture_breakout_pending, 0, sizeof(uint8_t) * bp);
+  memset(state->grab_constraint_x2226_b2, 0, sizeof(uint8_t) * bp);
+  memset(state->catch_kind_x1a68, 0, sizeof(uint16_t) * bp);
+  memset(state->catch_target_mask_x1a6a, 0, sizeof(uint16_t) * bp);
   memset(state->guard_on_cliff_end_source, 0, sizeof(uint8_t) * bp);
   memset(state->guard_on_entry_reflect_source_latch, 0, sizeof(uint8_t) * bp);
   memset(state->guard_reflect_entry_dash_terminal_scalar, 0, sizeof(uint8_t) * bp);

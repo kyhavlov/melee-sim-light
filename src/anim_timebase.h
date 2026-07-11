@@ -349,6 +349,8 @@ static inline void msl_anim_timebase_set_rate(MslBatch* batch, size_t idx, float
 }
 
 void anim_timebase_update_pre_input(MslBatch* batch);
+uint8_t anim_timebase_effective_hitlag_frozen(const MslBatch* batch, int batch_index,
+                                              int player_index);
 void anim_timebase_seed_common_fall_blend(MslBatch* batch, size_t idx, int16_t action_frame);
 
 // Apply deferred "tick once" requests (see MslState::anim_defer_tick_once).

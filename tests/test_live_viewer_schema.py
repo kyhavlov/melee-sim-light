@@ -85,6 +85,31 @@ def _data_key_from_character_label(label: str) -> str:
     return label.lower().replace(" ", "_")
 
 
+def test_supported_character_registry_mirrors_are_exact() -> None:
+    import melee_sim as msl
+    from tools.extraction.char_registry import CHARS
+
+    root = Path(__file__).resolve().parents[1]
+    expected_internal = {name: info.internal_id for name, info in CHARS.items()}
+    assert {member.name.lower(): int(member) for member in msl.Character} == expected_internal
+
+    c_registry = (root / "src/char_registry.h").read_text(encoding="utf-8")
+    c_rows = {
+        name: symbol.lower()
+        for symbol, name in re.findall(
+            r"MSL_CHAR_ID_([A-Z0-9_]+),\s*\"([a-z0-9_]+)\"", c_registry
+        )
+    }
+    assert c_rows == {name: name for name in CHARS}
+
+    schema = (root / "tools/viewer/live/schema.js").read_text(encoding="utf-8")
+    viewer_rows = {
+        _data_key_from_character_label(label): internal_id
+        for internal_id, label in _live_supported_characters(schema)
+    }
+    assert viewer_rows == expected_internal
+
+
 def test_live_viewer_stage_state_schema_matches_native_binding() -> None:
     # Webplay passes STAGE_STATE_SIZE as the C out_stride for
     # msl_batch_debug_write_stage_state. If this gets stale, native returns ENOSPC (28) when the

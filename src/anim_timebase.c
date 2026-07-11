@@ -848,6 +848,44 @@ static inline uint8_t anim_timebase_try_landing_air_rate(uint16_t a, const MslCh
   return 1;
 }
 
+uint8_t anim_timebase_effective_hitlag_frozen(const MslBatch* batch, int bi, int p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
+      p >= (int)batch->config.num_players) {
+    return 0u;
+  }
+  const size_t idx = msl_idx_player(bi, p);
+  if (batch->state.hitlag_started_frame[idx] != 0u) {
+    return 1u;
+  }
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN) {
+    const uint8_t owner_p = batch->state.grab_owner_port[idx];
+    if (owner_p == 0xFFu || owner_p >= batch->config.num_players || owner_p == (uint8_t)p) {
+      return 0u;
+    }
+    const size_t owner_idx = msl_idx_player(bi, (int)owner_p);
+    if (batch->state.char_id[owner_idx] != (uint8_t)MSL_CHAR_ID_FALCON ||
+        batch->state.action_id[owner_idx] != (uint16_t)MSL_ACT_CA_SPECIAL_HI_CATCH ||
+        batch->state.attached_victim_port[owner_idx] != (uint8_t)p) {
+      return 0u;
+    }
+    return batch->state.hitlag_started_frame[owner_idx] != 0u ? 1u : 0u;
+  }
+  if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+      batch->state.action_id[idx] == (uint16_t)MSL_ACT_CA_SPECIAL_HI_CATCH) {
+    const uint8_t victim_p = batch->state.attached_victim_port[idx];
+    if (victim_p == 0xFFu || victim_p >= batch->config.num_players || victim_p == (uint8_t)p) {
+      return 0u;
+    }
+    const size_t victim_idx = msl_idx_player(bi, (int)victim_p);
+    if (batch->state.action_id[victim_idx] != (uint16_t)MSL_ACT_CAPTURE_CAPTAIN ||
+        batch->state.grab_owner_port[victim_idx] != (uint8_t)p) {
+      return 0u;
+    }
+    return batch->state.hitlag_started_frame[victim_idx] != 0u ? 1u : 0u;
+  }
+  return 0u;
+}
+
 void anim_timebase_update_pre_input(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -862,7 +900,7 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
 
       // Hitlag freezes animation advancement (decomp gate is fp->x2219_b5).
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      if (batch->state.hitlag_started_frame[idx] != 0) {
+      if (anim_timebase_effective_hitlag_frozen(batch, bi, p)) {
         // Keep derived fields coherent even when frozen.
         msl_anim_timebase_recompute_derived(batch, idx);
         continue;
@@ -878,14 +916,6 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkRecursiveFunc_8006D044,Fighter_8006D10C}
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
       if (a == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN) {
-        const uint8_t owner_p = batch->state.grab_owner_port[idx];
-        if (owner_p != 0xFFu && (int)owner_p < num_players && (int)owner_p != p) {
-          const size_t oidx = msl_idx_player(bi, (int)owner_p);
-          if (batch->state.hitlag_started_frame[oidx] != 0) {
-            msl_anim_timebase_recompute_derived(batch, idx);
-            continue;
-          }
-        }
         batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
       }
 

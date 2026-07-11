@@ -240,7 +240,7 @@ def test_rebound_anim_end_wait_syncs_ground_velocity_from_air_self_velocity() ->
     common = _common()
     air_x = 5.0
     old_ground_x = -1.75
-    expected_entry_ground_x = float(fox["ground_max_horizontal_velocity"])
+    expected_entry_ground_x = air_x
     expected_friction = float(fox["gr_friction"])
     if abs(expected_entry_ground_x) > float(fox["walk_max_vel"]):
         expected_friction *= float(common["high_speed_friction_mul"])
@@ -260,6 +260,9 @@ def test_rebound_anim_end_wait_syncs_ground_velocity_from_air_self_velocity() ->
 
     assert int(out["action_id"][0]) == ACT_WAIT
     assert int(out["on_ground"][0]) == 1
+    # ftCommon_8007D6A4 clamps the old gr_vel, then publishes gr_vel=self_vel.x. The following
+    # Wait Phys owns the only reduction visible on this frame.
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4
     assert float(out["speed_ground_x_self"][0]) == pytest.approx(
         expected_post_phys_ground_x, abs=2e-6
     )

@@ -41,16 +41,32 @@ def _f32_be(buf: bytes, off: int) -> float:
     return struct.unpack(">f", buf[off : off + 4])[0]
 
 
-def _source_can_walljump(character: str) -> bool:
-    info = CHARS.get(character)
-    if info is None:
-        return False
-    src_dir = Path("refs/melee/src/melee/ft/chara") / info.decomp_dir
+def _source_can_walljump(character: str, *, melee_decomp: Path) -> bool | None:
+    """Read the source assignment when a decomp checkout is available.
+
+    Returning ``None`` distinguishes an absent source tree from the source-backed false case.
+    The packaged registry supplies the audited value; a present checkout is an integrity check.
+    """
+    info = CHARS[character]
+    src_dir = melee_decomp / "src/melee/ft/chara" / info.decomp_dir
+    if not src_dir.is_dir():
+        return None
     for path in src_dir.glob("*.c"):
         text = path.read_text(encoding="utf-8", errors="ignore")
         if "can_walljump" in text and "can_walljump = true" in text:
             return True
     return False
+
+
+def _resolved_can_walljump(character: str, *, melee_decomp: Path) -> bool:
+    info = CHARS[character]
+    source_value = _source_can_walljump(character, melee_decomp=melee_decomp)
+    if source_value is not None and source_value != info.can_walljump:
+        raise RuntimeError(
+            f"{character}: registry can_walljump={info.can_walljump} disagrees with "
+            f"{melee_decomp / 'src/melee/ft/chara' / info.decomp_dir}"
+        )
+    return info.can_walljump
 
 
 def _rot_xyz_mul_vec(rx: float, ry: float, rz: float, x: float, y: float, z: float) -> tuple[float, float, float]:
@@ -1283,6 +1299,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
     # consumers don't accidentally treat them as part of the contract.
     drop_keys = {
         "ecb_bone_indices",
+        "escapeair_active_lock_requires_current_floor_owner",
     }
     ordered_keys = [
         "walk_init_vel",
@@ -1509,8 +1526,14 @@ def main() -> None:
     ap.add_argument(
         "--chars",
         type=str,
-        default="fox,falco,sheik,zelda,peach,marth,puff,falcon",
+        default=",".join(CHARS),
         help="comma-separated character set to extract",
+    )
+    ap.add_argument(
+        "--melee-decomp",
+        type=Path,
+        default=Path("refs/melee"),
+        help="optional doldecomp/melee checkout used to verify audited source flags",
     )
     args = ap.parse_args()
 
@@ -1524,15 +1547,13 @@ def main() -> None:
     # - "captain_special": ftCaptain_DatAttrs (refs/melee/.../ftCaptain/types.h) - Falcon
     #   (and Ganon clone).
     mapping = {
-        "fox": ("PlFx.dat", "ftDataFox", True, None),
-        "falco": ("PlFc.dat", "ftDataFalco", True, None),
-        "sheik": ("PlSk.dat", "ftDataSeak", False, "seak_special"),
-        "zelda": ("PlZd.dat", "ftDataZelda", False, "zelda_special"),
-        "peach": ("PlPe.dat", "ftDataPeach", False, None),
-        "marth": ("PlMs.dat", "ftDataMars", False, "mars_sword"),
-        "puff": ("PlPr.dat", "ftDataPurin", False, None),
-        "falcon": ("PlCa.dat", "ftDataCaptain", False, "captain_special"),
+        name: (info.pl_dat, info.ftdata_symbol, info.extract_fox_blaster, info.special_attr_layout)
+        for name, info in CHARS.items()
     }
+    mapping.update({
+        "peach": ("PlPe.dat", "ftDataPeach", False, None),
+        "puff": ("PlPr.dat", "ftDataPurin", False, None),
+    })
     want = [c.strip() for c in args.chars.split(",") if c.strip()]
     for c in want:
         if c not in mapping:
@@ -1560,7 +1581,8 @@ def main() -> None:
 
         extracted = _extract_ftco_dattrs(pl_path, ftdata_symbol=sym, extract_fox_blaster=bool(blaster),
                                          ext_attr_layout=ext_layout)
-        extracted["can_walljump"] = bool(_source_can_walljump(name))
+        if name in CHARS:
+            extracted["can_walljump"] = _resolved_can_walljump(name, melee_decomp=args.melee_decomp)
         if blaster:
             # Decomp ownership: SpecialN spawn joint uses ftParts_GetBoneIndex(fp, FtPart_RThumbNb).
             # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint

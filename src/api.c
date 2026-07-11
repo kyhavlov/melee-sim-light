@@ -33,6 +33,7 @@
 #include "ecb_pose.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
+#include "grab_flow.h"
 #include "sheik_specials.h"
 #include "msl_math.h"
 #include "hitboxes.h"
@@ -847,6 +848,10 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     msl_batch_destroy(batch);
     return NULL;
   }
+  if (combat_processhit_pair_scratch_init(batch) != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
 
   batch->match_init_seed_scratch = (MslSeed*)alloc_malloc(sizeof(MslSeed) * (size_t)batch_size);
   if (batch->match_init_seed_scratch == NULL) {
@@ -1100,6 +1105,7 @@ void msl_batch_destroy(MslBatch* batch) {
   if (batch->debug_rng_trace_file != NULL) {
     (void)fclose((FILE*)batch->debug_rng_trace_file);
   }
+  combat_processhit_pair_scratch_free(batch);
   alloc_free(batch->rng_site_counts);
   alloc_free(batch->debug_rng_seed_out);
   alloc_free(batch->debug_rng_seed_in);
@@ -2553,6 +2559,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // powershield/reflect transfer.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
       //   ftCo_80091A4C,ftCo_8009370C,ftCo_8009388C}
+      batch->state.guard_on_entered_this_frame[idx] = 0u;
+      batch->state.guard_entry_via_wait_callback[idx] = 0u;
+      batch->state.guard_entry_via_dash_91ad8[idx] = 0u;
       batch->state.guard_on_entry_reflect_source_latch[idx] = 0u;
       batch->state.guard_reflect_entered_this_frame[idx] = 0u;
       batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
@@ -3638,6 +3647,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     // Reconstruct hidden Falcon Dive lanes (mv.ca.specialhi.vel, x221B_b7) from visible seed
     // lanes.
     falcon_specials_reseed_init(batch, bi);
+    // ftCo_800DB368 constrains exactly one side of a live Falcon Dive hold. This source bit is
+    // reconstructed only after x221B_b7 establishes the fixed connect-time mode.
+    grab_attachment_falcon_dive_constraint_reseed_init(batch, bi);
+    grab_flow_refresh_catch_contract_for_batch_index(batch, bi);
 
     // Combat hitlist reseed generation:
     // - Seed carries a dense per-(attacker,hit_group,victim) snapshot, but runtime uses per-hitbox
@@ -3664,6 +3677,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     for (int it = 0; it < MSL_MAX_ITEMS; it++) {
       const size_t ii = msl_idx_item(bi, it);
       const MslItem* item = &seed->items[it];
+      items_reseed_clear_sheik_needle_hidden_slot(batch, ii);
       const MslItemArticleParams* sheik_ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
       const uint16_t sheik_chain_itkind = (sheik_ap != NULL) ? sheik_ap->sheik_chain_itkind : 0u;
       const uint8_t old_live_chain =
@@ -3831,30 +3845,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
     }
 
-    // Reconstruct the owner-side attached victim pointer (`fp->victim_gobj`) from the seeded
-    // victim-side owner links. Common Throw/Thrown logic keys several shared callbacks off the
-    // thrower's direct victim pointer rather than repeatedly searching from the victim side.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+    // Attachment links were reconstructed before the offset/constraint packet above. Rebuild the
+    // paired throw animation rate from that validated bidirectional link.
     const int num_players = (int)batch->config.num_players;
-    for (int owner = 0; owner < num_players; owner++) {
-      batch->state.attached_victim_port[msl_idx_player(bi, owner)] = 0xFFu;
-    }
-    for (int victim = 0; victim < num_players; victim++) {
-      const size_t v_idx = msl_idx_player(bi, victim);
-      const uint8_t owner = batch->state.grab_owner_port[v_idx];
-      if (owner == 0xFFu || owner >= (uint8_t)num_players) {
-        continue;
-      }
-      if (!msl_action_is_grabbed_victim(batch->state.action_id[v_idx])) {
-        continue;
-      }
-      const size_t o_idx = msl_idx_player(bi, (int)owner);
-      if (batch->state.attached_victim_port[o_idx] == 0xFFu ||
-          (uint8_t)victim < batch->state.attached_victim_port[o_idx]) {
-        batch->state.attached_victim_port[o_idx] = (uint8_t)victim;
-      }
-    }
     for (int p = 0; p < num_players; p++) {
       batch->state.throw_anim_rate_fp_q16_16[msl_idx_player(bi, p)] = 0;
     }
@@ -5068,6 +5061,20 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
       out->throw_pending_victim_port[p] = batch->state.throw_pending_victim_port[idx];
       out->throw_pending_hit_idx[p] = batch->state.throw_pending_hit_idx[idx];
       out->attached_victim_port[p] = batch->state.attached_victim_port[idx];
+      out->grab_owner_port[p] = batch->state.grab_owner_port[idx];
+      out->catch_kind_x1a68[p] = batch->state.catch_kind_x1a68[idx];
+      out->catch_target_mask_x1a6a[p] = batch->state.catch_target_mask_x1a6a[idx];
+      out->grab_constraint_x2226_b2[p] = batch->state.grab_constraint_x2226_b2[idx];
+      out->falcon_specialhi_x221b_b7[p] = batch->state.falcon_specialhi_x221b_b7[idx];
+      out->ecb_lock_timer[p] = batch->state.ecb_lock_timer[idx];
+      out->ecb_lock_owner[p] = batch->state.coll_desired_ecb_bottom_locked_owner[idx];
+      out->fall_fast[p] = batch->state.fall_fast[idx];
+      out->prev_pos_x[p] = batch->state.prev_pos_x[idx];
+      out->prev_pos_y[p] = batch->state.prev_pos_y[idx];
+      out->floor_sweep_prev_pos_x[p] = batch->state.floor_sweep_prev_pos_x[idx];
+      out->floor_sweep_prev_pos_y[p] = batch->state.floor_sweep_prev_pos_y[idx];
+      out->coll_last_pos_x[p] = batch->state.coll_last_pos_x[idx];
+      out->coll_last_pos_y[p] = batch->state.coll_last_pos_y[idx];
     }
   }
 
@@ -7401,6 +7408,7 @@ int msl_batch_debug_combat_resolve(MslBatch* batch) {
     return EINVAL;
   }
   combat_processhit_consume(batch);
+  combat_processhit_pair_begin(batch);
   combat_resolve(batch);
   return 0;
 }

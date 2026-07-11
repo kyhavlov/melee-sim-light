@@ -5,6 +5,9 @@
 #include "batch_internal.h"
 
 void combat_resolve(MslBatch* batch);
+int combat_processhit_pair_scratch_init(MslBatch* batch);
+void combat_processhit_pair_scratch_free(MslBatch* batch);
+void combat_processhit_pair_begin(MslBatch* batch);
 void combat_processhit_consume(MslBatch* batch);
 uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx);
 // Publish the fighter x1914 dealt-damage path: attacker hitlag plus any installed deal_dmg_cb.
@@ -43,7 +46,9 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
                                const MslThrowHitboxParams* p);
 uint8_t combat_apply_throw_hit_falcon_dive_release(MslBatch* batch, int batch_index, int attacker,
                                                    int defender, const MslThrowHitboxParams* p,
-                                                   uint8_t thrower_owns_ground_to_air);
+                                                   uint8_t constrained_ground_to_air_preapplied);
+uint8_t combat_apply_falcon_dive_capture_break_hit(MslBatch* batch, int batch_index, int falcon,
+                                                   int victim);
 
 // Apply a single item->fighter BODY hit using decomp-shaped damage/hitlag/hitstun/state-entry math.
 //

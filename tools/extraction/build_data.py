@@ -271,7 +271,16 @@ def main(argv: list[str] | None = None) -> None:
     # Character attrs (also contains key ECB/ledge snap params and laser special attrs).
     _run(
         "tools.extraction.extract_character_attrs",
-        ["--pl-dir", str(iso_dir), "--out-dir", str(out("characters")), "--chars", ",".join(chars)],
+        [
+            "--pl-dir",
+            str(iso_dir),
+            "--out-dir",
+            str(out("characters")),
+            "--chars",
+            ",".join(chars),
+            "--melee-decomp",
+            str(args.melee_decomp),
+        ],
     )
 
     # Laser item params (Fox/Falco blaster shot) as a compact binary table.

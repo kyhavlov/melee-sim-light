@@ -282,43 +282,7 @@ static inline void escape_enter_wait(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-}
-
-static inline float action_clamp_absf(float value, float max_abs) {
-  if (max_abs > 0.0f) {
-    if (value > max_abs) {
-      return max_abs;
-    }
-    if (value < -max_abs) {
-      return -max_abs;
-    }
-  }
-  return value;
-}
-
-static inline void action_apply_ftcommon_8007d7fc_air_to_ground(MslBatch* batch,
-                                                                const MslCharParams* ch, size_t idx,
-                                                                uint8_t clear_fastfall) {
-  float gr = batch->state.speed_air_x_self[idx];
-  if (ch != NULL) {
-    gr = action_clamp_absf(gr, ch->ground_max_horizontal_velocity);
-  }
-  // ftCommon_8007D7FC delegates to ftCommon_8007D6A4, which sets ground_or_air=GA_Ground,
-  // clamps gr_vel, writes gr_vel=self_vel.x, refreshes jumps, and unlocks ECB. MSL keeps the
-  // public air-X lane aligned with gr_vel after ground entry because grounded Fighter_procUpdate
-  // continuously syncs self_vel from gr_vel.
-  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  batch->state.on_ground[idx] = 1u;
-  batch->state.speed_ground_x_self[idx] = gr;
-  batch->state.speed_air_x_self[idx] = gr;
-  msl_ftcommon_unlock_ecb(batch, idx);
-  if (clear_fastfall) {
-    batch->state.fall_fast[idx] = 0u;
-  }
-  if (ch != NULL) {
-    batch->state.jumps_left[idx] = ch->max_jumps;
-  }
+  batch->state.fall_fast[idx] = 0u;
 }
 
 static inline void rebound_wait_restore_ground_from_carried_floor(MslBatch* batch, size_t idx) {
@@ -337,7 +301,7 @@ static inline void rebound_wait_restore_ground_from_carried_floor(MslBatch* batc
   // refs/melee/src/melee/ft/ft_0892.c::ft_8008A348
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
   const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
-  action_apply_ftcommon_8007d7fc_air_to_ground(batch, ch, idx, 1u);
+  msl_ftcommon_8007d6a4(batch, ch, idx);
 }
 
 static inline void enter_escape_n(MslBatch* batch, size_t idx) {
@@ -2225,7 +2189,7 @@ void action_update_anim_callback_pre_input_fighter(const MslFighterCallbackConte
           // refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
           // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
           // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-          action_apply_ftcommon_8007d7fc_air_to_ground(batch, ch, idx, 0u);
+          msl_ftcommon_8007d6a4(batch, ch, idx);
           if (ch == NULL) {
             batch->state.jumps_left[idx] = max_jumps;
           }

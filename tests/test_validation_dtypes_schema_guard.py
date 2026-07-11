@@ -279,6 +279,9 @@ def test_falcon_speciallw_seed_lanes_reconstruct_processhit_prefix() -> None:
     rows["instance_hit_by"][17, 2] = np.uint16(20)
     rows["hitlag"][17, 0] = np.uint16(3)
 
+    # SpecialLwEnd keeps consuming the entry-owned move union after the animation transition.
+    rows["action_id"][16:18, 0] = np.uint16(358)
+
     # A new grounded-kick instance resets. Old-instance attribution cannot arm the new instance.
     rows["instance_id"][18:20, 0] = np.uint16(21)
     rows["percent"][19:, 1] = np.float32(24.0)
@@ -299,7 +302,7 @@ def test_falcon_speciallw_seed_lanes_reconstruct_processhit_prefix() -> None:
     seed_u8 = rows.view(np.uint8).reshape((len(rows), SEED_DTYPE.itemsize))
     modifier = np.float32(0.6)
     msl_binding.validation_derive_falcon_speciallw_seed_lanes(
-        seed_u8, processhit_x1914, 3, 2, 357, 4, float(modifier)
+        seed_u8, processhit_x1914, 3, 2, 357, 358, 4, float(modifier)
     )
 
     assert rows["falcon_speciallw_hits"][:, 0].tolist() == [
@@ -323,6 +326,7 @@ def test_falcon_speciallw_seed_lanes_reconstruct_processhit_prefix() -> None:
             3,
             2,
             357,
+            358,
             4,
             float(modifier),
         )
@@ -370,6 +374,7 @@ def test_falcon_speciallw_processhit_priority_distinguishes_postcombat_magnify(
         2,
         2,
         357,
+        358,
         4,
         0.6,
     )
@@ -1010,18 +1015,15 @@ def test_landing_fallspecial_allow_interrupt_lane_is_prefix_causal() -> None:
 
 
 def test_character_attrs_include_ordered_walljump_source_fields() -> None:
+    from tools.extraction.char_registry import CHARS
+
     root = Path(__file__).resolve().parents[1]
-    expected_can_walljump = {
-        "fox": True,
-        "falco": True,
-        "sheik": True,
-        "marth": False,
-        "zelda": False,
-    }
+    expected_can_walljump = {name: info.can_walljump for name, info in CHARS.items()}
     for character, can_walljump in expected_can_walljump.items():
         data = json.loads((root / "data" / "characters" / f"{character}.json").read_text())
         keys = list(data.keys())
         assert data["can_walljump"] is can_walljump
+        assert "escapeair_active_lock_requires_current_floor_owner" not in data
         assert data["walljump_setup_x_delta_threshold"] == 0.5
         assert keys.index("rebound_anim_numerator_frames") < keys.index("rapid_jab_window")
         assert keys.index("rapid_jab_window") < keys.index("wall_jump_horizontal_velocity")

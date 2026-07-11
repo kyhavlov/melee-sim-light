@@ -19,7 +19,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 22
+FORMAT_VERSION = 23
 HEADER_BYTES = 8 + 4 + 2 + 2 + 4 * 12
 U16_ABSENT = 0xFFFF
 
@@ -72,6 +72,8 @@ CLASS2_LANDING_ROOT_FLOOR_SNAP = 1 << 12
 CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST = 1 << 13
 CLASS2_CLIFF_HOLD_PHYS_SNAP = 1 << 14
 CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL = 1 << 15
+CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL = 1 << 16
+CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL = 1 << 17
 
 CLASS3_PHASE4_ATTACK_AIR_COLL = 1 << 0
 CLASS3_PHASE4_ESCAPE_AIR_COLL = 1 << 1
@@ -80,6 +82,52 @@ CLASS3_PHASE4_DAMAGE_FLY_COLL = 1 << 3
 CLASS3_PHASE4_DAMAGE_FALL_COLL = 1 << 4
 CLASS3_ORDINARY_WALLJUMP_COLL = 1 << 5
 CLASS3_WALLTECH_COLL = 1 << 6
+CLASS3_CATCH_TARGET_MASK_1 = 1 << 7
+CLASS3_CATCH_TARGET_MASK_511 = 1 << 8
+CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED = 1 << 9
+CLASS3_CATCH_KIND_1 = 1 << 10
+CLASS3_CATCH_KIND_2 = 1 << 11
+
+CATCH_TARGET_MASK_1_MOTION_STATES = {
+    "ftCo_MS_DownWaitU",
+    "ftCo_MS_DownDamageU",
+    "ftCo_MS_DownWaitD",
+    "ftCo_MS_DownDamageD",
+}
+
+CATCH_TARGET_MASK_511_MOTION_STATES = {
+    "ftCo_MS_DownBoundU",
+    "ftCo_MS_DownBoundD",
+    "ftCo_MS_DownSpotU",
+    "ftCo_MS_DownSpotD",
+    "ftCo_MS_CliffCatch",
+    "ftCo_MS_CliffWait",
+    "ftCo_MS_CatchWait",
+    "ftCo_MS_CatchAttack",
+    "ftCo_MS_CapturePulledHi",
+    "ftCo_MS_CaptureWaitHi",
+    "ftCo_MS_CaptureDamageHi",
+    "ftCo_MS_CapturePulledLw",
+    "ftCo_MS_CaptureWaitLw",
+    "ftCo_MS_CaptureDamageLw",
+    "ftCo_MS_ThrownF",
+    "ftCo_MS_ThrownB",
+    "ftCo_MS_ThrownHi",
+    "ftCo_MS_ThrownLw",
+    "ftCo_MS_ThrownlwWomen",
+    "ftCo_MS_CaptureCaptain",
+    "ftCa_MS_SpecialHiCatch",
+}
+
+CATCH_TARGET_MASK_511_WHILE_ATTACHED_MOTION_STATES = {
+    "ftCo_MS_ThrowF",
+    "ftCo_MS_ThrowB",
+    "ftCo_MS_ThrowHi",
+    "ftCo_MS_ThrowLw",
+}
+
+CATCH_KIND_1_MOTION_STATES = {"ftCo_MS_Catch", "ftCo_MS_CatchDash"}
+CATCH_KIND_2_MOTION_STATES = {"ftCa_MS_SpecialHi", "ftCa_MS_SpecialAirHi"}
 
 # Collision callbacks whose source path reaches ftWallJump_8008169C through one of the common
 # ft_081B airborne wrappers. Keep this callback-owned: action families such as DamageFall and Pass
@@ -859,6 +907,14 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         #   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
         # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doAirColl
         bits |= CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL
+    if coll_cb == "ftCa_SpecialHiCatch_Coll":
+        # Map runs only while the Falcon is not the constrained side of a grounded-victim Dive.
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHiCatch_Coll
+        bits |= CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL
+    if coll_cb == "ftCo_CaptureCaptain_Coll":
+        # CaptureCaptain map runs only while XRotN is not constrained under Falcon's TransN2.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_CaptureCaptain_Coll
+        bits |= CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL
     if (
         anim_cb == "ftCo_Wait_Anim"
         or anim_cb == "ftCo_Landing_Anim"
@@ -884,7 +940,7 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
     return bits
 
 
-def _class3_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
+def _class3_bits_for_callbacks(callbacks: tuple[str, str, str, str, str], motion_symbol: str) -> int:
     bits = 0
     coll_cb = callbacks[3]
     if coll_cb == "ftCo_AttackAir_Coll":
@@ -914,6 +970,21 @@ def _class3_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         bits |= CLASS3_ORDINARY_WALLJUMP_COLL
     if coll_cb in WALLTECH_COLL_CBS:
         bits |= CLASS3_WALLTECH_COLL
+    # Catch descriptor/target-mask ownership. These are MotionState-entry ledgers: the source entry
+    # functions write x1A68/x1A6A even when the rows share callbacks with states that do not. Throw*
+    # is distinct because release clears x1A6A while the action continues.
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E2D0,ftCommon_8007E2F4}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+    if motion_symbol in CATCH_TARGET_MASK_1_MOTION_STATES:
+        bits |= CLASS3_CATCH_TARGET_MASK_1
+    if motion_symbol in CATCH_TARGET_MASK_511_MOTION_STATES:
+        bits |= CLASS3_CATCH_TARGET_MASK_511
+    if motion_symbol in CATCH_TARGET_MASK_511_WHILE_ATTACHED_MOTION_STATES:
+        bits |= CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED
+    if motion_symbol in CATCH_KIND_1_MOTION_STATES:
+        bits |= CLASS3_CATCH_KIND_1
+    if motion_symbol in CATCH_KIND_2_MOTION_STATES:
+        bits |= CLASS3_CATCH_KIND_2
     return bits
 
 
@@ -982,7 +1053,7 @@ def _parse_motion_state_rows(
             cam_cb=callbacks[4],
             class_bits=_class_bits_for_callbacks(callbacks) | _class_bits_for_submotion(submotion_sym),
             class2_bits=_class2_bits_for_callbacks(callbacks),
-            class3_bits=_class3_bits_for_callbacks(callbacks),
+            class3_bits=_class3_bits_for_callbacks(callbacks, pending_symbol),
         )
         if row.action_id in out:
             raise RuntimeError(f"duplicate action id {row.action_id} in {src}")
@@ -1164,6 +1235,8 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST": CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST,
         "CLIFF_HOLD_PHYS_SNAP": CLASS2_CLIFF_HOLD_PHYS_SNAP,
         "FT_CHECK_GROUND_LEDGE_BOTH_COLL": CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL,
+        "FALCON_DIVE_OWNER_CONDITIONAL_COLL": CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL,
+        "CAPTURE_CONSTRAINT_CONDITIONAL_COLL": CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL,
     }
     classes3 = {
         "PHASE4_ATTACK_AIR_COLL": CLASS3_PHASE4_ATTACK_AIR_COLL,
@@ -1173,13 +1246,18 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "PHASE4_ESCAPE_AIR_COLL": CLASS3_PHASE4_ESCAPE_AIR_COLL,
         "ORDINARY_WALLJUMP_COLL": CLASS3_ORDINARY_WALLJUMP_COLL,
         "WALLTECH_COLL": CLASS3_WALLTECH_COLL,
+        "CATCH_TARGET_MASK_1": CLASS3_CATCH_TARGET_MASK_1,
+        "CATCH_TARGET_MASK_511": CLASS3_CATCH_TARGET_MASK_511,
+        "CATCH_TARGET_MASK_511_WHILE_ATTACHED": CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED,
+        "CATCH_KIND_1": CLASS3_CATCH_KIND_1,
+        "CATCH_KIND_2": CLASS3_CATCH_KIND_2,
     }
     fx_special_kinds = dict(FX_SPECIAL_KIND_VALUES)
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {
         "magic": FORMAT_MAGIC.decode("ascii"),
         "version": FORMAT_VERSION,
-        "id_policy": "0 is NULL; nonzero ids are sorted stable callback symbol names from decomp MotionState rows",
+        "id_policy": "0 is NULL; nonzero ids are sorted callback symbols from registry MotionState rows",
         "classes": classes,
         "classes2": classes2,
         "classes3": classes3,

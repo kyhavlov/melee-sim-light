@@ -14,6 +14,7 @@
 #include "hurtboxes.h"
 #include "blaster.h"
 #include "grab_attachment.h"
+#include "grab_flow.h"
 #include "ids.h"
 #include "input.h"
 #include "input_axis.h"
@@ -699,6 +700,7 @@ static void fighter_callbacks_collision_phase(MslBatch* batch) {
   cache_collision_stage_prev_pos(batch);
   stage_collision_apply(batch);
   cache_collision_stage_cur_pos(batch);
+  grab_attachment_update_falcon_dive_accessory_phase(batch);
   // Collision environment flags (mpColl-shaped): owns Collide_LedgeGrabMask for scheduling ledge
   // catch after collision.
   mpcoll_env_update_ledge_grab(batch);
@@ -734,6 +736,7 @@ static void fighter_callbacks_primitive_refresh_phase(MslBatch* batch, uint8_t r
   // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
   // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
   anim_timebase_apply_deferred_tick_once_pre_collision(batch);
+  grab_flow_refresh_catch_contract(batch);
   // Fighter dynamic JObj chains update after animation/physics callbacks and before collision
   // primitive refresh, matching ftCo_8009DD94 feeding lb_8000B1CC consumers.
   // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
@@ -768,6 +771,9 @@ static void fighter_callbacks_item_collision_and_combat_phase(MslBatch* batch, u
   hitlist_tick(batch);
   shields_refresh(batch);
   reflector_bubbles_refresh(batch);
+  if (run_combat) {
+    combat_processhit_pair_begin(batch);
+  }
   items_update_collision_phase(batch);
   throw_flow_update_post_items(batch);
   if (run_combat) {

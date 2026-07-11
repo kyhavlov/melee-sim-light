@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "api.h"
+#include "motion_state_owners.h"
 
 // Captain Falcon (ftCa_*) character specials: Falcon Punch, Raptor Boost, Falcon Dive,
 // Falcon Kick. Decomp-first port of refs/melee/src/melee/ft/chara/ftCaptain/ftCa_Special{N,S,Hi,Lw}.c.
@@ -20,20 +21,12 @@ static inline uint8_t falcon_action_is_special(uint16_t action_id) {
   return (uint8_t)(action_id >= 347u && action_id <= 363u);
 }
 
-// Falcon special submotion ids from the generated MotionState table (MSLMSO01): actions
-// 347..360 are a fixed offset (-46) onto msids 301..314; the LwEndAir pair crosses over
-// (MS order AirLwEndAir(361)/LwEndAir(362) vs SM order LwEndAir(315)/AirLwEndAir(316));
-// SpecialHiThrow1(363) -> 317.
-// refs/melee/src/melee/ft/chara/ftCaptain/forward.h (ftCaptain_MotionState / ftCa_Submotion)
+// Falcon action -> submotion identity is generated from ftCa_Init_MotionStateTable. In particular,
+// SpecialAirLwEndAir/SpecialLwEndAir do not follow an arithmetic action-id offset, so the runtime
+// must consume MSLMSO01 instead of preserving a second hand-coded map.
+// refs/melee/src/melee/ft/chara/ftCaptain/ftCa_Init.c::ftCa_Init_MotionStateTable
 static inline uint16_t falcon_special_submotion(uint16_t action_id) {
-  switch (action_id) {
-    case 361u:
-      return 316u;  // SpecialAirLwEndAir
-    case 362u:
-      return 315u;  // SpecialLwEndAir
-    default:
-      return (uint16_t)(action_id - 46u);
-  }
+  return msl_motion_state_submotion_id((uint8_t)MSL_CHAR_ID_FALCON, action_id);
 }
 
 // Entry dispatch (B-press routing) + per-action Anim/IASA/transition logic. Runs in the
@@ -81,4 +74,5 @@ uint8_t falcon_special_try_speciallw_wall_rebound(MslBatch* batch, size_t idx);
 // accepted the contact; the ProcessHit consumer applies the source branch ladder afterward.
 // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialS_OnDetect
 void falcon_specials_on_inert_body_contact(MslBatch* batch, size_t a_idx);
+uint8_t falcon_specials_item_kind_eligible(uint16_t item_kind);
 void falcon_specials_on_inert_shield_contact(MslBatch* batch, size_t a_idx);

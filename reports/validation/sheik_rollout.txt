@@ -131,7 +131,7 @@ rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=2.04059 rec=3530 p=0 seed/ref/out=30.1602/31.5252/33.5658 actions=24/24/24 category=unclassified
   2. shield_hp max_err=0.00424194 rec=756 p=1 seed/ref/out=59.598/59.6106/59.6063 actions=178/180/180 category=unclassified
-  3. pos_y max_err=0.000100136 rec=4364 p=0 seed/ref/out=0.0001/0/0.000100136 actions=234/234/234 category=unclassified
+  3. pos_y max_err=0.0001 rec=4364 p=0 seed/ref/out=0.0001/0/0.0001 actions=234/234/234 category=unclassified
 
 == replays/validation/sheik/MixedAllQuetzal.slpz ==
 rollout.status: NOT-CLEAN

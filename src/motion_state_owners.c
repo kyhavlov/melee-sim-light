@@ -16,7 +16,7 @@ enum {
 };
 
 static const uint8_t k_magic[TABLE_MAGIC_LEN] = {'M', 'S', 'L', 'M', 'S', 'O', '0', '1'};
-static const uint32_t k_format_version = 22;
+static const uint32_t k_format_version = 23;
 
 typedef struct {
   uint8_t* buf;

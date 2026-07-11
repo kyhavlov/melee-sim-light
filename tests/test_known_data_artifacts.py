@@ -548,20 +548,26 @@ def test_stage_item_dream_whispy_known_rows() -> None:
 def test_fighter_part_metadata_known_anchors() -> None:
     fox = read_mslpart1_v1(Path("data/model_parts/fox.bin"))
     falco = read_mslpart1_v1(Path("data/model_parts/falco.bin"))
+    falcon = read_mslpart1_v1(Path("data/model_parts/falcon.bin"))
     assert fox.char_id == 2
     assert falco.char_id == 20
+    assert falcon.char_id == 0
     assert fox.local_part_count > 30
     assert falco.local_part_count > 30
     assert fox.anchor_count >= 10
     assert falco.anchor_count >= 10
     fox_anchors = {(a.kind, a.part_id) for a in fox.anchors}
     falco_anchors = {(a.kind, a.part_id) for a in falco.anchors}
+    falcon_anchors = {(a.kind, a.part_id) for a in falcon.anchors}
     assert (ANCHOR_IDS["ecb_joint"], 41) in fox_anchors
     assert (ANCHOR_IDS["laser_spawn_joint"], 67) in fox_anchors
     assert (ANCHOR_IDS["reflector_bone"], 1) in fox_anchors
     assert (ANCHOR_IDS["camera_zoom_target"], 22) in fox_anchors
     assert (ANCHOR_IDS["ecb_joint"], 39) in falco_anchors
     assert (ANCHOR_IDS["laser_spawn_joint"], 61) in falco_anchors
+    assert {(ANCHOR_IDS["ecb_joint"], p) for p in (39, 47, 25, 14, 8, 4)} <= falcon_anchors
+    assert (ANCHOR_IDS["camera_zoom_target"], 18) in falcon_anchors
+    assert (ANCHOR_IDS["grab_capture_anchor"], 61) in falcon_anchors
 
 
 @pytest.mark.integration
@@ -569,22 +575,29 @@ def test_runtime_char_part_anchors_match_mslpart1() -> None:
     import msl_binding
 
     cases = [
-        (1, Path("data/model_parts/fox.bin")),
-        (22, Path("data/model_parts/falco.bin")),
+        (1, Path("data/model_parts/fox.bin"), True, True),
+        (22, Path("data/model_parts/falco.bin"), True, True),
+        (2, Path("data/model_parts/falcon.bin"), False, False),
     ]
-    for sim_char, path in cases:
+    for sim_char, path, expects_laser, expects_reflector in cases:
         runtime = msl_binding.char_params_part_anchors(sim_char)
         parts = read_mslpart1_v1(path)
         anchors_by_kind: dict[int, list[int]] = {}
         for anchor in parts.anchors:
             anchors_by_kind.setdefault(anchor.kind, []).append(anchor.part_id)
         assert anchors_by_kind[ANCHOR_IDS["ecb_joint"]] == list(runtime["ecb_joints"])
-        assert anchors_by_kind[ANCHOR_IDS["laser_spawn_joint"]] == [
-            int(runtime["laser_spawn_joint_part_id"])
-        ]
-        assert anchors_by_kind[ANCHOR_IDS["reflector_bone"]] == [
-            int(runtime["reflector_bone_part_id"])
-        ]
+        if expects_laser:
+            assert anchors_by_kind[ANCHOR_IDS["laser_spawn_joint"]] == [
+                int(runtime["laser_spawn_joint_part_id"])
+            ]
+        else:
+            assert ANCHOR_IDS["laser_spawn_joint"] not in anchors_by_kind
+        if expects_reflector:
+            assert anchors_by_kind[ANCHOR_IDS["reflector_bone"]] == [
+                int(runtime["reflector_bone_part_id"])
+            ]
+        else:
+            assert ANCHOR_IDS["reflector_bone"] not in anchors_by_kind
         assert anchors_by_kind[ANCHOR_IDS["camera_zoom_target"]] == [
             int(runtime["camera_zoom_target_bone_part_id"])
         ]

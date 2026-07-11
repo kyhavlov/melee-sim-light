@@ -2011,6 +2011,20 @@ typedef struct MslDebugInternals {
   uint8_t throw_pending_victim_port[MSL_MAX_PLAYERS];
   uint8_t throw_pending_hit_idx[MSL_MAX_PLAYERS];
   uint8_t attached_victim_port[MSL_MAX_PLAYERS];
+  uint8_t grab_owner_port[MSL_MAX_PLAYERS];
+  uint16_t catch_kind_x1a68[MSL_MAX_PLAYERS];
+  uint16_t catch_target_mask_x1a6a[MSL_MAX_PLAYERS];
+  uint8_t grab_constraint_x2226_b2[MSL_MAX_PLAYERS];
+  uint8_t falcon_specialhi_x221b_b7[MSL_MAX_PLAYERS];
+  uint8_t ecb_lock_timer[MSL_MAX_PLAYERS];
+  uint8_t ecb_lock_owner[MSL_MAX_PLAYERS];
+  uint8_t fall_fast[MSL_MAX_PLAYERS];
+  float prev_pos_x[MSL_MAX_PLAYERS];
+  float prev_pos_y[MSL_MAX_PLAYERS];
+  float floor_sweep_prev_pos_x[MSL_MAX_PLAYERS];
+  float floor_sweep_prev_pos_y[MSL_MAX_PLAYERS];
+  float coll_last_pos_x[MSL_MAX_PLAYERS];
+  float coll_last_pos_y[MSL_MAX_PLAYERS];
 } MslDebugInternals;
 
 // Debug/test-only helper: write per-player stage collision contact metadata.

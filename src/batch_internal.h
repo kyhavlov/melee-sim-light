@@ -3,6 +3,8 @@
 #include "config.h"
 #include "state.h"
 
+typedef struct MslCombatProcessHitResolved MslCombatProcessHitResolved;
+
 enum {
   MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE = 1,
   MSL_RNG_SITE_FTCOLL_ELECTRIC_CLANK_SFX = 2,
@@ -64,6 +66,14 @@ struct MslBatch {
   int batch_size;
   MslConfig config;
   MslStateSoA state;
+
+  // Init-allocated, fixed-capacity scratch for batch-wide ProcessHit collection. A reciprocal
+  // Falcon Dive pair must select both incoming events before either Damage entry mutates the
+  // linked actors' source poses. Contents and the collection flag are frame-local; the storage is
+  // not serialized and keeps the runtime path allocation-free.
+  MslCombatProcessHitResolved* dive_processhit_pending;
+  uint8_t* dive_processhit_pending_valid;
+  uint8_t dive_processhit_collecting;
 
   // Episode/match init scratch, allocated with the batch so `msl_batch_init_match` can remain
   // allocation-free when used as an RL reset path.

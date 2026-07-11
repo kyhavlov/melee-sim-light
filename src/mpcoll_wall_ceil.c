@@ -12,6 +12,7 @@
 #include "anim_table.h"
 #include "char_params.h"
 #include "coll_env_flags.h"
+#include "grab_attachment.h"
 #include "input_axis.h"
 #include "match_flow.h"
 #include "mpcoll_ecb_pose.h"
@@ -1906,10 +1907,23 @@ static inline void left_wall_candidate_add(MslWallCandidateList* out, const MslS
   }
 }
 
-static inline void wall_candidate_list_remove_connected(MslWallCandidateList* out,
-                                                        const MslStageWallGraph* g,
-                                                        int excluded_line_idx,
-                                                        int retained_line_idx) {
+static inline uint8_t wall_candidate_list_contains_exact(const MslWallCandidateList* candidates,
+                                                         int line_idx) {
+  if (candidates == NULL || line_idx < 0) {
+    return 0u;
+  }
+  for (uint8_t i = 0u; i < candidates->count; i++) {
+    if (candidates->line_idx[i] == line_idx) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static inline void wall_candidate_list_remove_floor_chain(MslWallCandidateList* out,
+                                                          const MslStageWallGraph* g,
+                                                          int excluded_line_idx,
+                                                          int retained_exact_line_idx) {
   if (out == NULL || g == NULL || excluded_line_idx < 0) {
     return;
   }
@@ -1917,7 +1931,7 @@ static inline void wall_candidate_list_remove_connected(MslWallCandidateList* ou
   uint8_t removed_hug = 0u;
   for (uint8_t read = 0u; read < out->count; read++) {
     const int line_idx = out->line_idx[read];
-    if (line_idx != retained_line_idx &&
+    if (line_idx != retained_exact_line_idx &&
         (line_idx == excluded_line_idx ||
          wall_lines_connected_prev_next(g, line_idx, excluded_line_idx))) {
       removed_hug = 1u;
@@ -1933,34 +1947,12 @@ static inline void wall_candidate_list_remove_connected(MslWallCandidateList* ou
   }
 }
 
-static inline void wall_candidate_list_retain_connected(MslWallCandidateList* out,
-                                                        const MslStageWallGraph* g,
-                                                        int retained_line_idx) {
-  if (out == NULL || g == NULL || retained_line_idx < 0) {
-    return;
-  }
-  for (uint8_t i = 0u; i < out->count; i++) {
-    if (out->line_idx[i] == retained_line_idx) {
-      return;
-    }
-  }
-  for (uint8_t i = 0u; i < out->count; i++) {
-    if (wall_lines_connected_prev_next(g, out->line_idx[i], retained_line_idx)) {
-      // Candidate insertion deduplicates connected wall chains, but grounded A678 ordering needs
-      // the wall beyond the floor-adjacent segment. Replace the chain representative before the
-      // adjacent-wall exclusion so sweep insertion order cannot erase that source-owned candidate.
-      // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LeftWall_inline,mpColl_RightWall_inline,
-      //   mpColl_8004ACE4,mpColl_8004A678_Floor}
-      out->line_idx[i] = retained_line_idx;
-      return;
-    }
-  }
-}
-
-static int landing_floor_release_second_wall_candidate(
-    const MslBatch* batch, size_t idx, const MslStageFloorGraph* fg,
-    const MslStageWallGraph* wall_graph, uint32_t stage_id, const MslEcbWorldPoints* cur_ecb,
-    uint8_t wall_side, int floor_adjacent_wall_idx) {
+static int landing_floor_release_lower_wall_line(const MslBatch* batch, size_t idx,
+                                                 const MslStageFloorGraph* fg,
+                                                 const MslStageWallGraph* wall_graph,
+                                                 uint32_t stage_id,
+                                                 const MslEcbWorldPoints* cur_ecb,
+                                                 uint8_t wall_side, int floor_adjacent_wall_idx) {
   if (batch == NULL || fg == NULL || fg->lines == NULL || wall_graph == NULL ||
       wall_graph->lines == NULL || cur_ecb == NULL || floor_adjacent_wall_idx < 0 ||
       (size_t)floor_adjacent_wall_idx >= wall_graph->line_count ||
@@ -1968,7 +1960,6 @@ static int landing_floor_release_second_wall_candidate(
     return -1;
   }
 
-  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
   const int floor_line_idx =
       stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
   if (floor_line_idx < 0 || (size_t)floor_line_idx >= fg->line_count) {
@@ -1977,37 +1968,29 @@ static int landing_floor_release_second_wall_candidate(
   const MslStageFloorLine* source_line = &fg->lines[(size_t)floor_line_idx];
   MslStageFloorLine world = {0};
   if (source_line->is_ledge == 0u ||
-      !stage_collision_floor_line_world(batch, bi, source_line, &world)) {
+      !stage_collision_floor_line_world(batch, (int)(idx / (size_t)MSL_MAX_PLAYERS), source_line,
+                                        &world)) {
     return -1;
   }
 
   const float stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
   const uint8_t facing_right = batch->state.facing[idx] ? 1u : 0u;
-  int second_wall_idx = -1;
+  int lower_wall_idx = -1;
   if (wall_side == (uint8_t)MSL_WALL_LEFT &&
       source_line->adjacent_left_wall == floor_adjacent_wall_idx && facing_right != 0u &&
       stick_x < 0.75f && cur_ecb->left_x <= world.x0 && batch->state.pos_x[idx] <= world.x1) {
-    second_wall_idx = wall_graph->lines[(size_t)floor_adjacent_wall_idx].prev;
+    lower_wall_idx = wall_graph->lines[(size_t)floor_adjacent_wall_idx].prev;
   } else if (wall_side == (uint8_t)MSL_WALL_RIGHT &&
              source_line->adjacent_right_wall == floor_adjacent_wall_idx && facing_right == 0u &&
              stick_x > -0.75f && cur_ecb->right_x >= world.x1 &&
              batch->state.pos_x[idx] >= world.x0) {
-    second_wall_idx = wall_graph->lines[(size_t)floor_adjacent_wall_idx].next;
+    lower_wall_idx = wall_graph->lines[(size_t)floor_adjacent_wall_idx].next;
   }
-  if (second_wall_idx < 0 || (size_t)second_wall_idx >= wall_graph->line_count ||
-      wall_graph->lines[(size_t)second_wall_idx].fighter_solid == 0u) {
+  if (lower_wall_idx < 0 || (size_t)lower_wall_idx >= wall_graph->line_count ||
+      wall_graph->lines[(size_t)lower_wall_idx].fighter_solid == 0u) {
     return -1;
   }
-
-  // `mpCollFloorInline` can expose exactly the second wall below the floor-adjacent wall to
-  // Landing's flags=1 mpColl_8004A678 release check. Retaining the whole connected wall chain also
-  // admits the ordinary Yoshi's side walls and snaps unrelated LandingFallSpecial entries to +/-56.
-  // Match the same generated graph relation and the A678 side/facing/stick pre-gate here, then let
-  // the ordered wall solver prove whether that exact second wall was actually collected.
-  // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
-  // refs/melee/src/melee/mp/mpcoll.c::{mpCollFloorInline,mpColl_8004A678_Floor,mpColl_8004B4B0}
-  // data/stages/bin/*.bin::MSLSTG01 floor/wall raw links
-  return second_wall_idx;
+  return lower_wall_idx;
 }
 
 static inline void right_wall_candidate_sweep(MslWallCandidateList* out, uint32_t stage_id,
@@ -2934,11 +2917,18 @@ static uint8_t grounded_ordered_left_wall(MslBatch* batch, size_t idx, const Msl
   left_wall_candidate_quad(&candidates, lwg, prev_ecb->right_x, prev_ecb->right_y, prev_ecb->top_x,
                            prev_ecb->top_y, cur_ecb->right_x, cur_ecb->right_y, cur_ecb->top_x,
                            cur_ecb->top_y, -1);
-  const int retained_floor_release_wall = landing_floor_release_second_wall_candidate(
+  int retained_lower_wall = landing_floor_release_lower_wall_line(
       batch, idx, fg, lwg, stage_id, cur_ecb, (uint8_t)MSL_WALL_LEFT, excluded_floor_wall);
-  wall_candidate_list_retain_connected(&candidates, lwg, retained_floor_release_wall);
-  wall_candidate_list_remove_connected(&candidates, lwg, excluded_floor_wall,
-                                       retained_floor_release_wall);
+  if (!wall_candidate_list_contains_exact(&candidates, retained_lower_wall)) {
+    retained_lower_wall = -1;
+  }
+  // The compact candidate set deduplicates connected MapLines just like mpColl's source array.
+  // Preserve a lower wall only when a normal probe actually collected that exact line; nearby
+  // floor-adjacent geometry is not permission to substitute a connected segment.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80049778_LeftWall
+  // refs/melee/src/melee/mp/mplib.c::{mpLib_80053448_Floor,mpLib_800534FC_Floor}
+  wall_candidate_list_remove_floor_chain(&candidates, lwg, excluded_floor_wall,
+                                         retained_lower_wall);
   mpcoll_wall_probe_note_candidates(batch, idx, (uint8_t)MSL_WALL_LEFT, candidates.count);
 
   float envelope_x = 0.0f;
@@ -3047,11 +3037,15 @@ static uint8_t grounded_ordered_right_wall(MslBatch* batch, size_t idx,
   right_wall_candidate_quad(&candidates, rwg, prev_ecb->left_x, prev_ecb->left_y, prev_ecb->top_x,
                             prev_ecb->top_y, cur_ecb->left_x, cur_ecb->left_y, cur_ecb->top_x,
                             cur_ecb->top_y, -1);
-  const int retained_floor_release_wall = landing_floor_release_second_wall_candidate(
+  int retained_lower_wall = landing_floor_release_lower_wall_line(
       batch, idx, fg, rwg, stage_id, cur_ecb, (uint8_t)MSL_WALL_RIGHT, excluded_floor_wall);
-  wall_candidate_list_retain_connected(&candidates, rwg, retained_floor_release_wall);
-  wall_candidate_list_remove_connected(&candidates, rwg, excluded_floor_wall,
-                                       retained_floor_release_wall);
+  if (!wall_candidate_list_contains_exact(&candidates, retained_lower_wall)) {
+    retained_lower_wall = -1;
+  }
+  wall_candidate_list_remove_floor_chain(&candidates, rwg, excluded_floor_wall,
+                                         retained_lower_wall);
+  // Symmetric probe-local exclusions are owned by `mpColl_80048AB0_RightWall`.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80048AB0_RightWall
   mpcoll_wall_probe_note_candidates(batch, idx, (uint8_t)MSL_WALL_RIGHT, candidates.count);
 
   float envelope_x = 0.0f;
@@ -3318,6 +3312,9 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
 
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      if (!grab_attachment_map_callback_runs(batch, idx)) {
+        continue;
+      }
       mpcoll_wall_probe_clear(batch, idx);
       MslMpcollContext ctx = mpcoll_context_make(batch, bi, idx, stage_id, fg, cg, lwg, rwg);
       const uint16_t action_id = ctx.action_id;

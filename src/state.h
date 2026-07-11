@@ -469,8 +469,13 @@ typedef struct MslStateSoA {
   // - attached_victim_port is the owner-side `fp->victim_gobj` analog for the currently attached
   //   grabbed/thrown victim (0xFF = none).
   // - grab_offset_{y,z} store the decomp-shaped fp->x1A70.{y,z} (unscaled) inferred at reseed-time.
-  uint8_t* attached_victim_port;   // [batch * players]
-  uint8_t* grab_owner_port;        // [batch * players]
+  uint8_t* attached_victim_port;  // [batch * players]
+  uint8_t* grab_owner_port;       // [batch * players]
+  // ftColl catch contract: attacker descriptor kind (fp->x1A68) and victim rejection mask
+  // (fp->x1A6A). The latter also protects active carriers from third-party catches in doubles.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+  uint16_t* catch_kind_x1a68;
+  uint16_t* catch_target_mask_x1a6a;
   int8_t* grab_mash_stick_x_sign;  // [batch * players] fp->x1A50
   int8_t* grab_mash_stick_y_sign;  // [batch * players] fp->x1A51
   float* grab_offset_y;            // [batch * players]
@@ -913,10 +918,15 @@ typedef struct MslStateSoA {
   float* falcon_speciallw_friction;
   uint8_t* falcon_speciallw_dealt_x1914_frame;
   // Falcon Dive: mv.ca.specialhi.vel carried velocity + attacker x221B_b7 attach-mode flag.
+  // grab_constraint_x2226_b2 mirrors the constrained fighter's fp->x2226_b2 bit installed by
+  // ftCo_800DB368. Exactly one side of a live Dive hold owns it: Falcon for a grounded victim,
+  // CaptureCaptain for an airborne victim.
   // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
   float* falcon_specialhi_vel_x;
   float* falcon_specialhi_vel_y;
   uint8_t* falcon_specialhi_x221b_b7;
+  uint8_t* grab_constraint_x2226_b2;
   // Raptor Boost: mv.ca.specials.grav accumulator + fp->unk_gobj inert-contact detect flag.
   float* falcon_specials_grav;
   uint8_t* falcon_detect_pending;

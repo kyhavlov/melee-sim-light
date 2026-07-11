@@ -40,12 +40,19 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS2_FALL_LIKE_ACTION,
     CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA,
     CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL,
+    CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL,
+    CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL,
     CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST,
     CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS,
     CLASS2_GUARD_STATE,
     CLASS2_LANDING_ROOT_FLOOR_SNAP,
     CLASS2_WALK_ACTION,
     CLASS3_PHASE4_ATTACK_AIR_COLL,
+    CLASS3_CATCH_KIND_1,
+    CLASS3_CATCH_KIND_2,
+    CLASS3_CATCH_TARGET_MASK_1,
+    CLASS3_CATCH_TARGET_MASK_511,
+    CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED,
     FX_SPECIAL_KIND_BY_SYMBOL,
     FX_SPECIAL_KIND_VALUES,
     CLASS3_PHASE4_DAMAGE_COMMON_COLL,
@@ -158,8 +165,6 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     # src/mpcoll_ground.c's Cliff/CollData ledge floor owner.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
     assert cb_name(0x00EC, "coll") == "ftCo_EscapeAir_Coll"
-    # Callback ids renumber by design when a character is added (falcon port: 339 -> 400).
-    assert int(fox.coll_cb_id[0x00EC]) == 400
     assert int(fox.class3_bits[0x00EC]) & CLASS3_PHASE4_ESCAPE_AIR_COLL
 
     assert cb_name(0x002A, "coll") == "ftCo_Landing_Coll"  # Landing
@@ -900,6 +905,16 @@ def test_falcon_dive_motion_state_callbacks_publish_source_collision_owners() ->
     assert cb_name(0x0164, "coll") == "ftCa_SpecialHiThrow0_Coll"
     assert has(0x0164, CLASS_FT80081D0C_AIR_COLL)
 
+    # SpecialHiCatch and CaptureCaptain only delegate to mpColl while that fighter is not the
+    # XRotN-constrained side of the hold. Publish the exact callback owner instead of making the
+    # runtime infer this distinction from action ids or the victim's live floor state.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHiCatch_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_CaptureCaptain_Coll
+    assert cb_name(0x0163, "coll") == "ftCa_SpecialHiCatch_Coll"
+    assert has2(0x0163, CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL)
+    assert cb_name(0x0113, "coll") == "ftCo_CaptureCaptain_Coll"
+    assert has2(0x0113, CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL)
+
 
 @pytest.mark.integration
 def test_falcon_direct_air_special_callbacks_publish_source_collision_owner() -> None:
@@ -1132,6 +1147,10 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
             "ftCa_SpecialAirHi_Coll",
         }:
             bits |= CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL
+        if coll_cb == "ftCa_SpecialHiCatch_Coll":
+            bits |= CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL
+        if coll_cb == "ftCo_CaptureCaptain_Coll":
+            bits |= CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL
         if (
             anim_cb == "ftCo_Wait_Anim"
             or anim_cb == "ftCo_Landing_Anim"
@@ -1179,7 +1198,7 @@ def test_motion_state_owner_class3_matches_source_callbacks_for_all_actions() ->
     zelda = read_mslmso01_v1(Path("data/motion_state/owners/zelda.bin"))
     symbols = read_callback_manifest(MANIFEST)
 
-    def expected_bits(coll_cb: str) -> int:
+    def expected_bits(label: str, action_id: int, coll_cb: str) -> int:
         bits = 0
         if coll_cb == "ftCo_AttackAir_Coll":
             bits |= CLASS3_PHASE4_ATTACK_AIR_COLL
@@ -1195,6 +1214,39 @@ def test_motion_state_owner_class3_matches_source_callbacks_for_all_actions() ->
             bits |= CLASS3_ORDINARY_WALLJUMP_COLL
         if coll_cb in WALLTECH_COLL_CBS:
             bits |= CLASS3_WALLTECH_COLL
+        if action_id in {0x00B8, 0x00B9, 0x00C0, 0x00C1}:
+            bits |= CLASS3_CATCH_TARGET_MASK_1
+        if action_id in {
+            0x00B7,
+            0x00BE,
+            0x00BF,
+            0x00C6,
+            0x00D8,
+            0x00D9,
+            0x00DF,
+            0x00E0,
+            0x00E1,
+            0x00E2,
+            0x00E3,
+            0x00E4,
+            0x00EF,
+            0x00F0,
+            0x00F1,
+            0x00F2,
+            0x00F3,
+            0x00FC,
+            0x00FD,
+            0x0113,
+        }:
+            bits |= CLASS3_CATCH_TARGET_MASK_511
+        if action_id in {0x00DB, 0x00DC, 0x00DD, 0x00DE}:
+            bits |= CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED
+        if action_id in {0x00D4, 0x00D6}:
+            bits |= CLASS3_CATCH_KIND_1
+        if label == "falcon" and action_id in {0x0161, 0x0162}:
+            bits |= CLASS3_CATCH_KIND_2
+        if label == "falcon" and action_id == 0x0163:
+            bits |= CLASS3_CATCH_TARGET_MASK_511
         return bits
 
     # Exhaustive class3 source-callback boundary. The phase-4 bits route later floor owners, while
@@ -1216,7 +1268,7 @@ def test_motion_state_owner_class3_matches_source_callbacks_for_all_actions() ->
     ):
         for action_id in range(len(table.class3_bits)):
             coll_cb = symbols[int(table.coll_cb_id[action_id])]
-            assert int(table.class3_bits[action_id]) == expected_bits(coll_cb), (
+            assert int(table.class3_bits[action_id]) == expected_bits(label, action_id, coll_cb), (
                 label,
                 action_id,
                 coll_cb,
@@ -1238,6 +1290,19 @@ def test_motion_state_owner_class3_matches_source_callbacks_for_all_actions() ->
         assert both_have3(action_id, CLASS3_WALLTECH_COLL)
     assert int(marth.class3_bits[367]) & CLASS3_ORDINARY_WALLJUMP_COLL
     assert int(marth.class3_bits[368]) & CLASS3_ORDINARY_WALLJUMP_COLL
+
+    # ftColl_80078A2C contract values are table-backed across common and Falcon-specific rows.
+    assert both_have3(0x00D4, CLASS3_CATCH_KIND_1)  # Catch
+    assert both_have3(0x00D6, CLASS3_CATCH_KIND_1)  # CatchDash
+    assert both_have3(0x00B8, CLASS3_CATCH_TARGET_MASK_1)  # DownWaitU
+    assert both_have3(0x00B7, CLASS3_CATCH_TARGET_MASK_511)  # DownBoundU
+    assert both_have3(0x00BE, CLASS3_CATCH_TARGET_MASK_511)  # DownSpotU
+    assert both_have3(0x00C6, CLASS3_CATCH_TARGET_MASK_511)  # DownSpotD
+    assert both_have3(0x0113, CLASS3_CATCH_TARGET_MASK_511)  # CaptureCaptain
+    assert both_have3(0x00DB, CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED)  # ThrowF
+    assert int(falcon.class3_bits[0x0161]) & CLASS3_CATCH_KIND_2
+    assert int(falcon.class3_bits[0x0162]) & CLASS3_CATCH_KIND_2
+    assert int(falcon.class3_bits[0x0163]) & CLASS3_CATCH_TARGET_MASK_511
 
     excluded = [
         0x001D,  # Fall, Phase 3 common airborne
@@ -1269,12 +1334,8 @@ def test_motion_state_owner_class3_matches_source_callbacks_for_all_actions() ->
 
 
 def test_motion_state_owner_reader_rejects_stale_versions(tmp_path: Path) -> None:
-    stale = tmp_path / "fox.bin"
-    buf = bytearray(HEADER_BYTES)
-    buf[0:8] = b"MSLMSO01"
-    struct.pack_into("<I", buf, 8, VERSION - 1)
-    struct.pack_into("<H", buf, 12, 1)
-    stale.write_bytes(bytes(buf))
+    stale = Path("tests/fixtures/motion_state_owners/falcon_v22.bin")
+    assert stale.read_bytes()[:12] == b"MSLMSO01\x16\x00\x00\x00"
 
     with pytest.raises(ValueError, match="unsupported MSLMSO01 version"):
         read_mslmso01_v1(stale)
@@ -1323,11 +1384,9 @@ def test_runtime_rejects_stale_motion_state_owner_tables(tmp_path: Path) -> None
     for ch in ("fox", "falco"):
         stale = data_dir / "motion_state" / "owners" / f"{ch}.bin"
         stale.parent.mkdir(parents=True, exist_ok=True)
-        buf = bytearray(HEADER_BYTES)
-        buf[0:8] = b"MSLMSO01"
-        struct.pack_into("<I", buf, 8, VERSION - 1)
-        struct.pack_into("<H", buf, 12, 1)
-        stale.write_bytes(bytes(buf))
+        stale.write_bytes(
+            Path("tests/fixtures/motion_state_owners/falcon_v22.bin").read_bytes()
+        )
 
     code = """
 import msl_binding

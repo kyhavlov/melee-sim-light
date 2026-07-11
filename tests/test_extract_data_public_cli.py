@@ -151,6 +151,8 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
     assert (out_dir / "attack_id/move_id/zelda.bin").exists()
     assert (out_dir / "motion_state/owners/zelda.bin").exists()
     assert (out_dir / "motion_state/owners/callback_symbols.json").exists()
+    attrs_cmd = next(cmd for cmd in commands if cmd[0] == "tools.extraction.extract_character_attrs")
+    assert attrs_cmd[attrs_cmd.index("--melee-decomp") + 1] == str(missing_decomp)
     manifest = out_dir / "manifest.json"
     assert manifest.exists()
     from tools.extraction.extract_attack_id_move_id import FORMAT_VERSION as ATTACK_ID_MOVE_ID_VERSION

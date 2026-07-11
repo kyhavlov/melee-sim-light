@@ -14,6 +14,7 @@
 #include "common_specials.h"
 #include "dash_iasa.h"
 #include "grab_flow.h"
+#include "fighter_callbacks.h"
 #include "ids.h"
 #include "items.h"
 #include "locomotion.h"
@@ -1310,7 +1311,9 @@ void sheik_specials_update_pre_physics(MslBatch* batch) {
       if (ch == NULL || c == NULL) {
         continue;
       }
-      if (batch->state.hitlag[idx] != 0u) {
+      const MslFighterCallbackContext callback_ctx = msl_fighter_callback_context_make(
+          batch, bi, p, num_players, MSL_FIGHTER_CALLBACK_PHASE_IASA);
+      if (!msl_fighter_callback_phase_runs(&callback_ctx)) {
         // Sheik special timers and script-owned transitions below model Anim-callback work. Source
         // Fighter_8006A360 skips that callback phase while hitlag is active, so Chain x0, Needle
         // charge/release timers, and Vanish/Transform countdowns must freeze here rather than only

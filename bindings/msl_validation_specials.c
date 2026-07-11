@@ -109,10 +109,12 @@ PyObject* msl_validation_derive_falcon_speciallw_seed_lanes_py(PyObject* self, P
   int players = 0;
   int falcon_char_id = 0;
   int speciallw_action = 0;
+  int speciallw_end_action = 0;
   int hit_limit = 0;
   double friction_modifier_d = 0.0;
-  if (!PyArg_ParseTuple(args, "OOiiiid", &seed_obj, &processhit_x1914_obj, &players,
-                        &falcon_char_id, &speciallw_action, &hit_limit, &friction_modifier_d)) {
+  if (!PyArg_ParseTuple(args, "OOiiiiid", &seed_obj, &processhit_x1914_obj, &players,
+                        &falcon_char_id, &speciallw_action, &speciallw_end_action, &hit_limit,
+                        &friction_modifier_d)) {
     return NULL;
   }
   if (players < 0 || players > MSL_MAX_PLAYERS) {
@@ -120,7 +122,8 @@ PyObject* msl_validation_derive_falcon_speciallw_seed_lanes_py(PyObject* self, P
     return NULL;
   }
   if (falcon_char_id < 0 || falcon_char_id > UINT8_MAX || speciallw_action < 0 ||
-      speciallw_action > UINT16_MAX) {
+      speciallw_action > UINT16_MAX || speciallw_end_action < 0 ||
+      speciallw_end_action > UINT16_MAX) {
     PyErr_SetString(PyExc_ValueError, "Falcon SpecialLw character/action id out of range");
     return NULL;
   }
@@ -172,15 +175,19 @@ PyObject* msl_validation_derive_falcon_speciallw_seed_lanes_py(PyObject* self, P
       cur->falcon_speciallw_friction[p] = 0.0f;
     }
     for (int p = 0; p < players; p++) {
-      if (cur->char_id[p] != (uint8_t)falcon_char_id ||
-          cur->action_id[p] != (uint16_t)speciallw_action) {
+      const bool cur_is_speciallw = cur->action_id[p] == (uint16_t)speciallw_action;
+      const bool cur_is_consumer =
+          cur_is_speciallw || cur->action_id[p] == (uint16_t)speciallw_end_action;
+      if (cur->char_id[p] != (uint8_t)falcon_char_id || !cur_is_consumer) {
         continue;
       }
 
       uint8_t hits = 0u;
       float friction = 1.0f;
-      const bool same_instance = prev != NULL && prev->char_id[p] == (uint8_t)falcon_char_id &&
-                                 prev->action_id[p] == (uint16_t)speciallw_action &&
+      const bool prev_is_consumer =
+          prev != NULL && (prev->action_id[p] == (uint16_t)speciallw_action ||
+                           prev->action_id[p] == (uint16_t)speciallw_end_action);
+      const bool same_instance = prev_is_consumer && prev->char_id[p] == (uint8_t)falcon_char_id &&
                                  prev->instance_id[p] == cur->instance_id[p];
       if (same_instance) {
         hits = prev->falcon_speciallw_hits[p];
@@ -188,7 +195,11 @@ PyObject* msl_validation_derive_falcon_speciallw_seed_lanes_py(PyObject* self, P
           friction = prev->falcon_speciallw_friction[p];
         }
       }
-      if (prev != NULL &&
+      // Only SpecialLw owns deal_dmg_cb. SpecialLwEnd consumes the same move union and therefore
+      // carries its hit/friction history, but cannot produce another ProcessHit increment.
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+      //   ftCa_SpecialLw_Enter,ftCa_SpecialLw_Anim,ftCa_SpecialLwEnd_Phys}
+      if (cur_is_speciallw && prev != NULL &&
           vh_falcon_speciallw_processhit_callback(prev, cur, processhit_row[p] != 0u, players, p,
                                                   common) &&
           (int)hits <= hit_limit) {

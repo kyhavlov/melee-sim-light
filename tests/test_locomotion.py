@@ -148,6 +148,20 @@ INTERNALS_DTYPE = np.dtype(
         ("throw_pending_victim_port", ("u1", (MAX_PLAYERS,))),
         ("throw_pending_hit_idx", ("u1", (MAX_PLAYERS,))),
         ("attached_victim_port", ("u1", (MAX_PLAYERS,))),
+        ("grab_owner_port", ("u1", (MAX_PLAYERS,))),
+        ("catch_kind_x1a68", ("<u2", (MAX_PLAYERS,))),
+        ("catch_target_mask_x1a6a", ("<u2", (MAX_PLAYERS,))),
+        ("grab_constraint_x2226_b2", ("u1", (MAX_PLAYERS,))),
+        ("falcon_specialhi_x221b_b7", ("u1", (MAX_PLAYERS,))),
+        ("ecb_lock_timer", ("u1", (MAX_PLAYERS,))),
+        ("ecb_lock_owner", ("u1", (MAX_PLAYERS,))),
+        ("fall_fast", ("u1", (MAX_PLAYERS,))),
+        ("prev_pos_x", ("<f4", (MAX_PLAYERS,))),
+        ("prev_pos_y", ("<f4", (MAX_PLAYERS,))),
+        ("floor_sweep_prev_pos_x", ("<f4", (MAX_PLAYERS,))),
+        ("floor_sweep_prev_pos_y", ("<f4", (MAX_PLAYERS,))),
+        ("coll_last_pos_x", ("<f4", (MAX_PLAYERS,))),
+        ("coll_last_pos_y", ("<f4", (MAX_PLAYERS,))),
     ],
     align=False,
 )
@@ -3238,6 +3252,138 @@ def test_landing_a678_waits_for_carried_floor_projection_rejection() -> None:
     # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
     assert int(out["action_id"][0]) == ACT_LANDING_AIR_N
     assert int(out["on_ground"][0]) == 1
+
+
+@pytest.mark.parametrize("action_frame", [0, 1, 5])
+@pytest.mark.parametrize("side", [-1.0, 1.0])
+@pytest.mark.parametrize(
+    (
+        "stage_id",
+        "left_ground_id",
+        "right_ground_id",
+        "x_abs",
+        "start_y",
+        "speed_abs",
+        "expected_x_abs",
+        "expected_y",
+        "left_wall_id",
+        "right_wall_id",
+    ),
+    [
+        (STAGE_FD, 0, 2, 67.8157, -24.25, 16.0, 87.5656967163086, -3.8030765056610107, 13, 10),
+        (STAGE_YOSHIS, 2, 6, 55.75, -14.25, 0.1, 58.0, -7.30307674407959, 19, 16),
+    ],
+)
+def test_landing_lower_wall_root_write_rebases_before_disconnected_4a908_retry(
+    action_frame: int,
+    side: float,
+    stage_id: int,
+    left_ground_id: int,
+    right_ground_id: int,
+    x_abs: float,
+    start_y: float,
+    speed_abs: float,
+    expected_x_abs: float,
+    expected_y: float,
+    left_wall_id: int,
+    right_wall_id: int,
+) -> None:
+    import msl_binding
+
+    input_stride = int(msl_binding.sizes()["input"])
+    # Advancing the Landing pose changes the callback's root/ECB relationship. Keep each later-age
+    # seed on the same lower-wall -> disconnected-floor path instead of asserting against geometry
+    # that only exercises the entry pose.
+    if action_frame > 0 and stage_id == STAGE_FD:
+        start_y += 0.5
+        expected_y = -3.724076509475708 if action_frame == 1 else -3.743682861328125
+    elif action_frame > 0 and stage_id == STAGE_YOSHIS:
+        x_abs += 1.0
+        start_y += 3.5
+        expected_x_abs = 57.795921325683594 if action_frame == 1 else 57.807464599609375
+        expected_y = -10.75407886505127
+    seed = _seed_base()
+    ground_id = left_ground_id if side < 0.0 else right_ground_id
+    seed["stage_id"][0] = np.uint32(stage_id)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FOX)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(ground_id)
+    seed["facing"][0, 0] = np.uint8(1 if side < 0.0 else 0)
+    seed["facing_dir1"][0, 0] = np.int8(1 if side < 0.0 else -1)
+    seed["pos_x"][0, 0] = np.float32(side * x_abs)
+    seed["pos_y"][0, 0] = np.float32(start_y)
+    seed["speed_ground_x_self"][0, 0] = np.float32(side * speed_abs)
+    seed["action_id"][0, 0] = np.uint16(ACT_LANDING)
+    seed["animation_index"][0, 0] = np.uint32(35)
+    seed["action_frame"][0, 0] = np.int16(action_frame)
+    seed["anim_frame_f32"][0, 0] = np.float32(action_frame)
+
+    neutral = _mk_input_bytes(1, input_stride)
+    out, contacts = _step_once_with_collision_contacts(seed, neutral, neutral)
+
+    # The retained lower connected wall moves cur_pos first. Its freshly rebased ECB then feeds
+    # the disconnected 4A908 retry, which rejects support here and leaves the Landing callback's
+    # source Fall result. This locks flat and sloped ledges, both mirrors, and later callbacks.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80049778_LeftWall,
+    #   mpColl_80048AB0_RightWall,mpColl_8004ACE4,mpColl_8004A908_Floor}
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == ground_id
+    assert float(out["pos_x"][0]) == pytest.approx(side * expected_x_abs, abs=1e-5)
+    assert float(out["pos_y"][0]) == pytest.approx(expected_y, abs=1e-5)
+    assert int(contacts["wall_kind"][0]) == (1 if side < 0.0 else 2)
+    assert int(contacts["wall_id"][0]) == (left_wall_id if side < 0.0 else right_wall_id)
+    assert int(contacts["coll_env_flags"][0]) & (0x1 if side < 0.0 else 0x40)
+
+
+@pytest.mark.parametrize(("side", "ground_id"), [(-1.0, 2), (1.0, 6)])
+def test_landing_player_nudge_at_yoshis_slope_seam_keeps_ordered_floor_packet(
+    side: float, ground_id: int
+) -> None:
+    import msl_binding
+
+    input_stride = int(msl_binding.sizes()["input"])
+    seed = _seed_base()
+    seed["stage_id"][0] = np.uint32(STAGE_YOSHIS)
+    seed["char_id"][0, :2] = np.uint8(CHAR_FALCO)
+    seed["on_ground"][0, :2] = np.uint8(1)
+    seed["ground_id"][0, :2] = np.uint16(ground_id)
+    seed["facing"][0, :2] = np.uint8(1 if side < 0.0 else 0)
+    seed["facing_dir1"][0, :2] = np.int8(1 if side < 0.0 else -1)
+
+    # Both roots sit just inside the connected sloped-floor/flat-floor seam (x=+/-56), close
+    # enough for ftCommon_8007DD7C to push the Landing owner toward the seam by x450.
+    seed["pos_x"][0, 0] = np.float32(side * (56.0 - 2.7))
+    seed["pos_x"][0, 1] = np.float32(side * (56.0 - 1.3))
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, 0] = np.int16(4)
+    seed["anim_frame_f32"][0, 0] = np.float32(4.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
+    seed["action_id"][0, 1] = np.uint16(ACT_LANDING)
+    seed["action_frame"][0, 1] = np.int16(0)
+    seed["anim_frame_f32"][0, 1] = np.float32(0.0)
+    seed["animation_index"][0, 1] = np.uint32(35)
+    seed["pos_y"][0, 0] = np.float32(-msl_binding.ecb_bottom_rel_y(CHAR_FALCO, SM_WAIT1_0, 4))
+    seed["pos_y"][0, 1] = np.float32(-msl_binding.ecb_bottom_rel_y(CHAR_FALCO, 35, 0))
+
+    neutral = _mk_input_bytes(1, input_stride)
+    out, contacts = _step_once_with_collision_contacts(seed, neutral, neutral)
+
+    # Grounded inline2 excludes the carried floor's connected wall chain before resolving walls,
+    # then applies signed DD90 correction for Landing's frame-1 ECB. A semantic "second wall"
+    # reconstruction must not manufacture A678/Fall at this ordinary seam.
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004ACE4,mpColl_800488F4,
+    #   mpColl_8004A678_Floor,mpColl_8004A908_Floor}
+    p = 1
+    assert int(out["action_id"][p]) == ACT_LANDING
+    assert int(out["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == ground_id
+    assert int(contacts["wall_kind"][p]) == 0
+    assert not (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_EDGE)
+    expected_x = float(seed["pos_x"][0, p]) + side * _common_attr("player_nudge_x")
+    assert float(out["pos_x"][p]) == pytest.approx(expected_x, abs=1e-6)
+    assert float(out["pos_y"][p]) < float(seed["pos_y"][0, p])
 
 
 def test_walk_hard_out_edge_exit_falls_instead_of_teetering() -> None:

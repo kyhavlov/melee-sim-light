@@ -34,6 +34,10 @@ class CharInfo:
     submotion_prefix: str
     has_articles: bool  # source character spawns items/articles.
     exports_item_article_constants: bool  # supported by current compact MSLITAR1 exporter.
+    anim_table_count: int  # ftData_Table_Unk0[internal_id].count.
+    extract_fox_blaster: bool  # ftData.x4 uses the spacie special-attribute family.
+    special_attr_layout: str | None  # character-specific ftData.x4 decoder family.
+    can_walljump: bool  # audited ft*_Init.c assignment to Fighter.can_walljump.
 
 
 CHARS: dict[str, CharInfo] = {
@@ -52,6 +56,10 @@ CHARS: dict[str, CharInfo] = {
         submotion_prefix="ftFx_SM_",
         has_articles=True,
         exports_item_article_constants=True,
+        anim_table_count=327,
+        extract_fox_blaster=True,
+        special_attr_layout=None,
+        can_walljump=True,
     ),
     "falco": CharInfo(
         name="falco",
@@ -68,6 +76,10 @@ CHARS: dict[str, CharInfo] = {
         submotion_prefix="ftFx_SM_",
         has_articles=True,
         exports_item_article_constants=True,
+        anim_table_count=327,
+        extract_fox_blaster=True,
+        special_attr_layout=None,
+        can_walljump=True,
     ),
     "marth": CharInfo(
         name="marth",
@@ -84,6 +96,10 @@ CHARS: dict[str, CharInfo] = {
         submotion_prefix="ftMs_SM_",
         has_articles=False,
         exports_item_article_constants=False,
+        anim_table_count=327,
+        extract_fox_blaster=False,
+        special_attr_layout="mars_sword",
+        can_walljump=False,
     ),
     "falcon": CharInfo(
         name="falcon",
@@ -100,6 +116,10 @@ CHARS: dict[str, CharInfo] = {
         submotion_prefix="ftCa_SM_",
         has_articles=False,
         exports_item_article_constants=False,
+        anim_table_count=318,
+        extract_fox_blaster=False,
+        special_attr_layout="captain_special",
+        can_walljump=True,
     ),
     "sheik": CharInfo(
         name="sheik",
@@ -116,6 +136,10 @@ CHARS: dict[str, CharInfo] = {
         submotion_prefix="ftSk_SM_",
         has_articles=True,
         exports_item_article_constants=True,
+        anim_table_count=317,
+        extract_fox_blaster=False,
+        special_attr_layout="seak_special",
+        can_walljump=True,
     ),
     "zelda": CharInfo(
         name="zelda",
@@ -132,6 +156,10 @@ CHARS: dict[str, CharInfo] = {
         submotion_prefix="ftZd_SM_",
         has_articles=True,
         exports_item_article_constants=False,
+        anim_table_count=311,
+        extract_fox_blaster=False,
+        special_attr_layout="zelda_special",
+        can_walljump=False,
     ),
 }
 

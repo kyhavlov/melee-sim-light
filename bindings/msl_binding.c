@@ -322,7 +322,8 @@ static PyMethodDef methods[] = {
     {"validation_derive_falcon_speciallw_seed_lanes",
      msl_validation_derive_falcon_speciallw_seed_lanes_py, METH_VARARGS,
      "validation_derive_falcon_speciallw_seed_lanes(seed_u8, processhit_x1914_u8, players, "
-     "falcon_char_id, speciallw_action, hit_limit, friction_modifier) -> None"},
+     "falcon_char_id, speciallw_action, speciallw_end_action, hit_limit, friction_modifier) -> "
+     "None"},
     {"derive_staling_history", msl_derive_staling_history_py, METH_VARARGS,
      "derive_staling_history(src_ports, char_id, action_id, action_frame, animation_index, "
      "percent, stocks, instance_id, last_hit_by, last_hit_by_instance[, item_exists, item_owner, "

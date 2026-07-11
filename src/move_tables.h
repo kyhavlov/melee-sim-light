@@ -468,6 +468,10 @@ uint8_t move_tables_throw_release_hit_idx(uint8_t char_id, uint16_t throw_action
 uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_id, uint8_t hit_idx,
                                         MslThrowHitboxParams* out);
 
+// Falcon Dive capture-break hit stored in Falcon's xDF4[1] by the SpecialHi scripts.
+// Source of truth: data/scripts/falcon.bin, msid 307/308 set_throw_hitbox(idx=1).
+uint8_t move_tables_falcon_dive_capture_break_hitbox_params(MslThrowHitboxParams* out);
+
 // Returns whether a live fighter HitCapsule matches an authored pre-release throw create_hitbox
 // payload. This is narrower than "throw has any create_hitbox before release": it ties consumers to
 // the concrete hitbox id and payload decoded from the MSLFTSC1 script.

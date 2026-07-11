@@ -48,6 +48,7 @@ uint8_t sheik_chain_hitbox_stale_damage_mul(const MslBatch* batch, size_t fighte
 uint8_t sheik_chain_hitbox_reset_prev_active(const MslBatch* batch, size_t fighter_idx);
 void sheik_chain_clear_hitbox_reset_prev(MslBatch* batch, size_t fighter_idx);
 void items_reseed_clear_sheik_chain_hidden_slot(MslBatch* batch, size_t item_idx);
+void items_reseed_clear_sheik_needle_hidden_slot(MslBatch* batch, size_t item_idx);
 uint8_t items_spawn_sheik_vanish_smoke_article(MslBatch* batch, size_t owner_idx);
 void items_update_collision_phase(MslBatch* batch);
 

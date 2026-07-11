@@ -9,7 +9,7 @@ import numpy as np
 
 
 MAGIC = b"MSLMSO01"
-VERSION = 22
+VERSION = 23
 HEADER_BYTES = 8 + 4 + 2 + 2 + 4 * 12
 
 

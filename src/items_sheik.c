@@ -172,6 +172,23 @@ void items_reseed_clear_sheik_chain_hidden_slot(MslBatch* batch, size_t item_idx
   sheik_chain_hidden_clear_slot(batch, item_idx);
 }
 
+void items_reseed_clear_sheik_needle_hidden_slot(MslBatch* batch, size_t item_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Dropped/bounced Needle xDD8/xDDC/xDE0 are live article-union state. Slippi does not expose
+  // them, and replay-seeded state 1/4 deliberately uses the visible-velocity/table fallback in
+  // sheik_needle_motion_step. Never let an unrelated prior item occupying this batch lane turn
+  // that fallback into a stale valid hidden sample.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+  //   itSeakNeedleThrown_SetupDrop,itSeakNeedleThrown_SetupBounce,
+  //   itSeakneedlethrown_UnkMotion1_Phys,itSeakneedlethrown_UnkMotion4_Phys}
+  batch->state.item_sheik_needle_hidden_drop_valid[item_idx] = 0u;
+  batch->state.item_sheik_needle_hidden_drop_min_vel_y[item_idx] = 0.0f;
+  batch->state.item_sheik_needle_hidden_drop_gravity[item_idx] = 0.0f;
+  batch->state.item_sheik_needle_hidden_drop_vel_x[item_idx] = 0.0f;
+}
+
 static inline uint8_t action_is_sheik_needle_start(uint8_t char_id, uint16_t action_id_u16) {
   if (char_id != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;

@@ -3022,6 +3022,7 @@ def test_falcon_kick_native_processhit_producer_drives_seed_lane(
         2,
         2,
         357,
+        358,
         4,
         0.6,
     )

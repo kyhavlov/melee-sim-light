@@ -19,8 +19,7 @@ cd /path/to/melee-sim-light
 make viewer-build
 ```
 
-On the Marth/newchar branch, make sure the local data directory includes Marth
-before building:
+Build the full registry data root before building:
 
 ```bash
 uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop

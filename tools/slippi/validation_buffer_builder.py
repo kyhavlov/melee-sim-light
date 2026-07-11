@@ -1082,11 +1082,13 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         post_guard_tilt_x4[-1, :] = post_guard_tilt_x4[-2, :]
     hitlist_cd, hitlist_iid, hitlist_hb_valid, hitlist_hb_cd, hitlist_hb_iid, shield_contact_hb_kind, processhit_x1914 = derive_combat_hitlist_seed_fields(num_players=num_players, is_teams=bool(is_teams), team_id=post_team_id, char_id=post_char_id, action_id=post_action_id, action_frame=post_action_frame, animation_index=post_animation_index, facing=post_facing, on_ground=post_on_ground, pos_x=post_pos_x, pos_y=post_pos_y, fighter_scale_y=post_scale_y, guard_tilt_x8=post_guard_tilt_x8, guard_tilt_x4=post_guard_tilt_x4, stocks=post_stocks, percent=post_percent_all, shield_hp=post_shield_hp, hurtbox_state=post_hurtbox_state, hitlag=post_hitlag, last_hit_by=post_last_hit_by, source_port0=post_source_port0, instance_hit_by=post_instance_hit_by, instance_id=post_instance_id, input_buttons=pre_buttons, input_l=pre_l, input_r=pre_r, turn_has_turned=post_turn_has_turned_u8, anim_frame_f32=post_anim_frame, frame_speed_mul_f32=frame_speed_mul_all, specialhi_rotate_model_f32=specialhi_rotate_model_all, specialhi_rotate_model_valid_u8=specialhi_rotate_model_valid_all, items=items_fixed, include_per_hitbox=True, include_processhit_producers=True, include_replay_only_shield_admission=True, include_replay_only_body_admission=True, data_root='data')
     if falcon_attrs is not None:
-        # ftCa_MS_SpecialLw (357) installs deal_dmg_cb. The native combat-history pass above
-        # reconstructs the source-owned dmg.x1914 producers before ProcessHit priority is applied.
-        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialLw_Enter
+        # ftCa_MS_SpecialLw (357) installs deal_dmg_cb; ftCa_MS_SpecialLwEnd (358) keeps and
+        # consumes the same move union. The native combat-history pass above reconstructs the
+        # source-owned dmg.x1914 producers before ProcessHit priority is applied.
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+        #   ftCa_SpecialLw_Enter,ftCa_SpecialLw_Anim,ftCa_SpecialLwEnd_Phys}
         # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-        msl_binding.validation_derive_falcon_speciallw_seed_lanes(samples.seed_u8(), np.ascontiguousarray(processhit_x1914, dtype=np.uint8), int(num_players), falcon_char_id, 357, int(falcon_attrs['falcon_speciallw_unk2']), float(falcon_attrs['falcon_speciallw_on_hit_spd_modifier']))
+        msl_binding.validation_derive_falcon_speciallw_seed_lanes(samples.seed_u8(), np.ascontiguousarray(processhit_x1914, dtype=np.uint8), int(num_players), falcon_char_id, 357, 358, int(falcon_attrs['falcon_speciallw_unk2']), float(falcon_attrs['falcon_speciallw_on_hit_spd_modifier']))
     try:
         import msl_binding
     except ImportError as exc:

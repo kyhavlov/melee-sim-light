@@ -7657,3 +7657,49 @@ Falcon Kick jump refresh and down-throw release placement:
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0`
   - `data/moves/falcon.json::moves.ftCo_SM_ThrowLw`
+
+Captain Falcon special callback ownership:
+- Falcon Punch (`ftCa_SpecialN.c`) is an Anim/Phys/Coll state family. Its aerial command impulse
+  and angle callback consume the common processed/deadzoned stick lanes; hitlag freezes its Anim
+  and IASA work exactly like other fighter callbacks.
+- Raptor Boost (`ftCa_SpecialS.c`) keeps script `cmd0` inert-detect and `cmd2` collision ownership
+  distinct. Grounded `cmd2==0` floor loss takes ordinary `ftCo_Fall_Enter` plus the complete
+  `ftCommon_8007D5D4` packet; live `cmd2` uses the `ftCommon_8007D60C`/FallSpecial bundle. Both
+  grounded entry and detect run the complete shared `ftCommon_8007D7FC` reset. Inert contact covers
+  fighters, shields, and the source ItemKind-eligible item hurtbox family before the source
+  `Fighter_ProcessHit` priority ladder consumes the detect packet.
+- Falcon Dive (`ftCa_SpecialHi.c` plus `ftCo_CaptureCaptain.c`) uses explicit catch-kind/target-mask
+  state and a connect-time constraint bit. The constrained side is fixed at connect, so later live
+  ground-state changes cannot swap map/accessory ownership. Accessory 1/4 attachment runs after map;
+  release applies `ftCommon_8007D5D4` to the constrained fighter and performs its release-local
+  floor publication before the throw hit. Active carriers expose source `x1A6A=0x1FF` immunity in
+  the same four-player combat pass; release/orphan cleanup clears it.
+- Grounded Falcon Kick (`ftCa_SpecialLw.c`) installs the `Fighter_ProcessHit` deal-damage callback.
+  Its `mv.ca.speciallw.{x0,friction}` state is action-instance local, persists across the
+  `SpecialLw -> SpecialLwEnd` boundary, and is reconstructed only from source contact provenance.
+  Item-hurtbox and multi-victim contacts enter the same shared x1914 producer path.
+- Generated `MSLMSO01` callback classes own shared phase/collision distinctions; Falcon action ids
+  are not used as substitutes in core collision/capture code. Source anchors are the four
+  `refs/melee/src/melee/ft/chara/ftCaptain/ftCa_Special{N,S,Hi,Lw}.c` files,
+  `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`, and
+  `refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_8007D60C,ftCommon_8007D7FC}`.
+
+TODO — Marth prefix-owned special state is not batch deterministic:
+- Affected runtime lanes are `special_stick_angle` (`fp->lstick_angle`, consumed by Dolphin Slash
+  launch) and `specials_air_used` (`fv.ms.x222C`, consumed by aerial Dancing Blade entry).
+- Falcon-suite one-step validation currently reports 3,226 discrete mismatches at chunk 1 and
+  3,240 at chunk 64. Reproduce without overwriting committed reports with:
+  `uv run python -m tools.eval.run_one_step_suite_eval --suite replays/suites/falcon.json --chunk 1
+  --out reports/triage/falcon_chunk1.txt` and the same command with `--chunk 64 --out
+  reports/triage/falcon_chunk64.txt` (also audit chunks 256 and 4096).
+- Zeroing is not a correction: an active pre-launch `SpecialHi` may already own the maximum signed
+  stick angle accumulated by earlier IASA callbacks, and `x222C=1` suppresses the vertical hop on
+  every later aerial side-B before a source grounding/death reset.
+- The missing source-owner packet is native, prefix-causal reconstruction from action entry / last
+  grounding through the seed: input/timebase history for the `SpecialHi_IASA` maximum, plus Marth
+  collision-pose and ground/air callback history for `x222C`. Partial angle or airtime-only
+  reconstruction previously exposed rollout regressions in the incomplete collision-pose owner and
+  must not be retained independently.
+- Acceptance is byte-identical per-row output for chunks 1/64/256/4096 on fresh and reused handles
+  under lane permutations, with active-owner positive/negative tests and no one-step, rollout, or
+  held-out validation regression.

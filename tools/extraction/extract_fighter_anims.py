@@ -973,41 +973,29 @@ def _figatree_source_character(character: str, msid: int) -> str:
 
 def _ftkind(character: str) -> int:
     # From doldecomp `enum FighterKind` ids (see prior ModelDb code).
+    if character in CHARS:
+        return CHARS[character].internal_id
     return {
         "puff": 0x0F,
-        "fox": 0x01,
-        "falcon": 0x02,
-        "sheik": 0x07,
         "peach": 0x09,
-        "marth": 0x12,
-        "falco": 0x16,
-        "zelda": 0x13,
     }[character]
 
 
 def _fighter_prefix(character: str) -> str:
+    if character in CHARS:
+        return Path(CHARS[character].pl_dat).stem
     return {
-        "fox": "PlFx",
-        "falco": "PlFc",
-        "sheik": "PlSk",
         "peach": "PlPe",
-        "marth": "PlMs",
         "puff": "PlPr",
-        "falcon": "PlCa",
-        "zelda": "PlZd",
     }[character]
 
 
 def _ftdata_symbol(character: str) -> str:
+    if character in CHARS:
+        return CHARS[character].ftdata_symbol
     return {
-        "fox": "ftDataFox",
-        "falco": "ftDataFalco",
-        "sheik": "ftDataSeak",
         "peach": "ftDataPeach",
-        "marth": "ftDataMars",
         "puff": "ftDataPurin",
-        "falcon": "ftDataCaptain",
-        "zelda": "ftDataZelda",
     }[character]
 
 
@@ -1021,14 +1009,7 @@ def _ftdata_xc_count(character: str) -> int:
     # Values are ftData_Table_Unk0[internal_id].count from refs/melee/src/melee/ft/ftdata.c
     # (FTKIND_MAX rows indexed by FighterKind): fox=row 1, falcon=row 2, sheik=row 7,
     # marth=row 18, zelda=row 19, falco=row 22.
-    return {
-        "fox": 327,
-        "falcon": 318,
-        "sheik": 317,
-        "zelda": 311,
-        "falco": 327,
-        "marth": 327,
-    }[character]
+    return CHARS[character].anim_table_count
 
 
 def _write_anim_blend_data(character: str, out_dir: Path) -> Path:
