@@ -189,22 +189,6 @@ void items_reseed_clear_sheik_needle_hidden_slot(MslBatch* batch, size_t item_id
   batch->state.item_sheik_needle_hidden_drop_vel_x[item_idx] = 0.0f;
 }
 
-static inline uint8_t action_is_sheik_needle_start(uint8_t char_id, uint16_t action_id_u16) {
-  if (char_id != (uint8_t)MSL_CHAR_ID_SHEIK) {
-    return 0u;
-  }
-  return (uint8_t)(action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_N_START ||
-                   action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_N_START);
-}
-
-static inline uint8_t action_is_sheik_needle_loop(uint8_t char_id, uint16_t action_id_u16) {
-  if (char_id != (uint8_t)MSL_CHAR_ID_SHEIK) {
-    return 0u;
-  }
-  return (uint8_t)(action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_N_LOOP ||
-                   action_id_u16 == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_N_LOOP);
-}
-
 static inline uint8_t action_is_sheik_needle_cancel(uint8_t char_id, uint16_t action_id_u16) {
   if (char_id != (uint8_t)MSL_CHAR_ID_SHEIK) {
     return 0u;

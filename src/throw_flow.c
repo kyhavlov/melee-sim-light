@@ -255,16 +255,6 @@ static inline void throw_flow_commit_immediate_release_percent_temp(MslBatch* ba
   batch->state.percent_temp[victim_idx] = 0.0f;
 }
 
-static inline float throw_flow_owner_self_dx(const MslBatch* batch, size_t owner_idx,
-                                             size_t victim_idx) {
-  if (batch == NULL || owner_idx == victim_idx) {
-    return 0.0f;
-  }
-  const uint8_t owner_on_ground = batch->state.on_ground[owner_idx] ? 1u : 0u;
-  return owner_on_ground ? batch->state.speed_ground_x_self[owner_idx]
-                         : batch->state.speed_air_x_self[owner_idx];
-}
-
 void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owner_p) {
   if (batch == NULL) {
     return;

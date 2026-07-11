@@ -653,28 +653,6 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
                      : hurtboxes_player_has_contact_geometry_demand(batch, bi, p, num_players));
       batch->state.hurtcap_count[idx] = 0;
       batch->state.hurtcap_geometry_valid[idx] = 0u;
-      if (geometry_mode != 1u) {
-        // Clear fixed slots for stable debug readback (and to avoid stale values when pose lookups
-        // or script masks disable/skip specific capsules). The metadata-only pass below owns
-        // x1988/x198C hit-status and BODY eligibility metadata; endpoint arrays are rebuilt by the
-        // following contact-geometry pass before any runtime BODY/catch/item consumer observes
-        // them.
-        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B868,ftColl_80076ED8,ftColl_80078A2C}
-        for (int ci = 0; ci < MSL_MAX_HURTCAPS; ci++) {
-          const size_t hi = idx_hurtcap(bi, p, ci);
-          batch->state.hurtcap_enabled[hi] = 0;
-          batch->state.hurtcap_a_x[hi] = 0.0f;
-          batch->state.hurtcap_a_y[hi] = 0.0f;
-          batch->state.hurtcap_a_z[hi] = 0.0f;
-          batch->state.hurtcap_b_x[hi] = 0.0f;
-          batch->state.hurtcap_b_y[hi] = 0.0f;
-          batch->state.hurtcap_b_z[hi] = 0.0f;
-          batch->state.hurtcap_radius[hi] = 0.0f;
-          batch->hurtcap_matrix_valid[hi] = 0u;
-          batch->state.hurtcap_is_grabbable[hi] = 0;
-          batch->state.hurtcap_height[hi] = 0;
-        }
-      }
       const uint8_t char_id = batch->state.char_id[idx];
       const uint16_t action_id = batch->state.action_id[idx];
       const uint32_t anim_u32 = batch->state.animation_index[idx];
@@ -1154,6 +1132,7 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
           batch->state.hurtcap_radius[hi] = caps[ci].scale * model_scale;
           batch->state.hurtcap_is_grabbable[hi] = caps[ci].is_grabbable ? 1 : 0;
           batch->state.hurtcap_height[hi] = caps[ci].height;
+          batch->hurtcap_matrix_valid[hi] = 0u;
         }
         batch->state.hurtcap_count[idx] = (uint8_t)cap_count;
         continue;
@@ -1194,6 +1173,15 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
       }
       for (uint16_t ci = 0; ci < cap_count; ci++) {
         const size_t hi = idx_hurtcap(bi, p, (int)ci);
+        batch->state.hurtcap_enabled[hi] = 0u;
+        batch->state.hurtcap_a_x[hi] = 0.0f;
+        batch->state.hurtcap_a_y[hi] = 0.0f;
+        batch->state.hurtcap_a_z[hi] = 0.0f;
+        batch->state.hurtcap_b_x[hi] = 0.0f;
+        batch->state.hurtcap_b_y[hi] = 0.0f;
+        batch->state.hurtcap_b_z[hi] = 0.0f;
+        batch->state.hurtcap_radius[hi] = 0.0f;
+        batch->hurtcap_matrix_valid[hi] = 0u;
         batch->state.hurtcap_is_grabbable[hi] = caps[ci].is_grabbable ? 1 : 0;
         batch->state.hurtcap_height[hi] = caps[ci].height;
 

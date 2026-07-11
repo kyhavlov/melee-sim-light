@@ -476,16 +476,6 @@ static uint8_t mpcoll_ledge_obstruction_hit(uint32_t stage_id, uint32_t mpcheck_
   }
   return best_same_joint ? 0u : 1u;
 }
-static inline float clampf(float x, float lo, float hi) {
-  if (x < lo) {
-    return lo;
-  }
-  if (x > hi) {
-    return hi;
-  }
-  return x;
-}
-
 static inline uint8_t mplib_aabb_overlaps_line(float left, float bottom, float right, float top,
                                                float x0, float y0, float x1, float y1) {
   // Decomp: mpLib_80051BA8_Floor performs an AABB-vs-segment-bounds overlap check using midpoint

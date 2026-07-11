@@ -301,19 +301,6 @@ static inline uint8_t state_flags_camera_below_stage_cam_bounds(const MslBatch* 
   return (uint8_t)(batch->state.camera_target_world_y_f32[idx] < cam.bottom);
 }
 
-static inline uint8_t state_flags_root_outside_stage_cam_bounds(const MslBatch* batch, size_t idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  MslStageBounds cam = {0};
-  if (!stage_collision_get_cam_bounds_world(batch->state.stage_id[idx / MSL_MAX_PLAYERS], &cam)) {
-    return 0u;
-  }
-  const float x = batch->state.pos_x[idx];
-  const float y = batch->state.pos_y[idx];
-  return (uint8_t)(x < cam.left || x > cam.right || y < cam.bottom || y > cam.top);
-}
-
 static inline uint8_t state_flags_root_outside_stage_cam_horizontal_bounds(const MslBatch* batch,
                                                                            size_t idx) {
   if (batch == NULL) {

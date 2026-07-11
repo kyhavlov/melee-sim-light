@@ -349,55 +349,6 @@ static inline int pose_part_local_translation(float* out_x, float* out_y, float*
   return 0;
 }
 
-static inline int pose_part_local_point_world_facing_yrot90(
-    float* out_x, float* out_y, float* out_z, uint8_t char_id, uint32_t anim_u32,
-    float anim_frame_f32, uint16_t part_id, const float local_point[3], float fighter_pos_x,
-    float fighter_pos_y, float fighter_pos_z, float fighter_scale_y, uint8_t facing_u8) {
-  if (out_x == NULL || out_y == NULL || out_z == NULL || local_point == NULL) {
-    return -1;
-  }
-  if (anim_u32 > 0xFFFFu) {
-    return -1;
-  }
-  const uint16_t msid = (uint16_t)anim_u32;
-  const float f = msl_anim_frame_sanitize_f32(anim_frame_f32);
-  const float base_f = floorf(f);
-  const float frac = f - base_f;
-  const uint16_t frame0 = msl_anim_frame_floor_u16(f);
-  float m0[12];
-  if (anim_pose_get_matrix(char_id, msid, frame0, part_id, m0) != 0) {
-    return -1;
-  }
-  float lx0 = 0.0f, ly0 = 0.0f, lz0 = 0.0f;
-  msl_mtx34_mul_point(m0, local_point, &lx0, &ly0, &lz0);
-  float lx1 = lx0, ly1 = ly0, lz1 = lz0;
-  if (frac > 0.0f) {
-    const uint16_t frame1 = (uint16_t)(frame0 + 1u);
-    if (frame1 != 0) {
-      float m1[12];
-      if (anim_pose_get_matrix(char_id, msid, frame1, part_id, m1) == 0) {
-        msl_mtx34_mul_point(m1, local_point, &lx1, &ly1, &lz1);
-      }
-    }
-  }
-  const float a = (frac <= 0.0f) ? 0.0f : ((frac >= 1.0f) ? 1.0f : frac);
-  float lx = lx0 + (lx1 - lx0) * a;
-  float ly = ly0 + (ly1 - ly0) * a;
-  float lz = lz0 + (lz1 - lz0) * a;
-  const float facing_dir = facing_u8 ? 1.0f : -1.0f;
-  const float rx = facing_dir * lz;
-  const float rz = -facing_dir * lx;
-  lx = rx;
-  lz = rz;
-  lx *= fighter_scale_y;
-  ly *= fighter_scale_y;
-  lz *= fighter_scale_y;
-  *out_x = lx + fighter_pos_x;
-  *out_y = ly + fighter_pos_y;
-  *out_z = lz + fighter_pos_z;
-  return 0;
-}
-
 static inline float pose_model_scale_y(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 1.0f;

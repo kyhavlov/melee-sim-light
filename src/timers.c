@@ -313,21 +313,6 @@ static inline uint8_t timers_first_active_sdi_allows_radius_crossing(const MslBa
   return 1u;
 }
 
-static inline uint8_t damage_every_hitlag_sdi_timer_window_action(uint16_t a) {
-  switch (a) {
-    // DownDamageU/D re-enter ftCo_8008DCE0 via ftCo_8009F184 and own the same per-hitlag SDI
-    // callback, but it is not part of the common Damage* / DamageFly* action-id block above.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
-    //   ftCo_8009F184,ftCo_DownDamage_Phys}
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
-    case MSL_ACT_DOWN_DAMAGE_U:
-    case MSL_ACT_DOWN_DAMAGE_D:
-      return 1u;
-    default:
-      return 0u;
-  }
-}
-
 static inline uint8_t damage_timer_down_damage_action(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_DOWN_DAMAGE_U || a == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) ? 1u : 0u;
 }

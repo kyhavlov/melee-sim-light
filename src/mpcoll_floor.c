@@ -1601,20 +1601,6 @@ static inline int8_t platform_pass_current_raw_stick_y(const MslBatch* batch, si
   return batch->state.ucf_padbuf_stick_y[idx * (size_t)MSL_LOCAL_UCF_PADBUF_SIZE + (size_t)slot];
 }
 
-static inline uint8_t platform_pass_input_below_current_threshold(const MslBatch* batch, size_t idx,
-                                                                  const MslCommonParams* c) {
-  if (c == NULL) {
-    return 0u;
-  }
-  // Runtime source callbacks branch on callback-visible `fp->input.lstick.y`, which this simulator
-  // stores in the legalized [-80,80] input lane. Do not read the UCF raw pad buffer here: a prior
-  // down input must not keep the platform-pass owner alive after the current input releases.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procMap}
-  const int8_t stick_y_i8 = platform_pass_current_stick_y(batch, idx);
-  return (stick_i8_to_unit(stick_y_i8) <= c->platform_air_land_stick_y_threshold) ? 1u : 0u;
-}
-
 uint8_t platform_pass_input_below_raw_threshold(const MslBatch* batch, size_t idx,
                                                 const MslCommonParams* c) {
   if (c == NULL) {
@@ -2694,11 +2680,6 @@ MslAttackAirPlatformEcbOwner attackair_platform_ecb_owner(uint8_t char_id, uint1
 
 uint8_t action_uses_shallow_attackair_platform_ecb_owner(uint8_t char_id, uint16_t action_id) {
   return attackair_platform_ecb_owner(char_id, action_id).shallow;
-}
-
-static inline uint8_t action_uses_first_phase_attackair_platform_ecb_owner(uint8_t char_id,
-                                                                           uint16_t action_id) {
-  return attackair_platform_ecb_owner(char_id, action_id).first_phase;
 }
 
 uint8_t action_uses_late_attackair_platform_ecb_owner(uint8_t char_id, uint16_t action_id) {

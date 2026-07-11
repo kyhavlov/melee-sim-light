@@ -1150,12 +1150,6 @@ static inline void combat_damage_mark_entry_time_since_hit(MslBatch* batch, size
   batch->state.damage_time_since_hit_x18ac[d_idx] = 0;
 }
 
-static inline void combat_source_owner_clear_ftCommon_800804FC(MslBatch* batch, size_t d_idx) {
-  if (batch != NULL && batch->state.on_ground[d_idx] != 0u) {
-    msl_damage_source_clear(batch, d_idx);
-  }
-}
-
 static inline uint8_t combat_source_port0_for_attacker(const MslBatch* batch, size_t a_idx,
                                                        int attacker) {
   return msl_damage_source_port0_for_slot(batch, a_idx, attacker);

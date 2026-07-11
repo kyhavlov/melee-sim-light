@@ -44,13 +44,13 @@ class _BuildExt(build_ext):
         # GCC defaults `-ffp-contract=fast`; Clang generally supports this flag too.
         self._append_supported_compile_flag("-ffp-contract=off")
 
-        # Keep package/source-install artifacts portable by default. Perf runs can opt in with
-        # MSL_NATIVE_OPT=1, or through the Makefile's build-native / bench-sim-native targets.
+        # Keep direct package/source-install artifacts portable by default. The normal Make
+        # workflow builds locally for the target CPU and can override with NATIVE_OPT=0.
         if _env_flag("MSL_NATIVE_OPT", False):
             self._append_supported_compile_flag("-march=native")
 
-        # LTO is also opt-in: it improves throughput on local profiles, but increases build cost
-        # and can produce less portable artifacts.
+        # Direct source builds keep LTO opt-in. The Make workflow enables it by default for the
+        # simulator's normal high-throughput build and can still override with LTO=0.
         if _env_flag("MSL_LTO", False) and self._append_supported_compile_flag("-flto"):
             for ext in self.extensions:
                 ext.extra_link_args = list(ext.extra_link_args or [])
