@@ -2136,15 +2136,16 @@ PyObject* msl_derive_jab_combo_window_seed_lanes_py(PyObject* self, PyObject* ar
   // Post-frame jab-combo continuation lanes (fp->hitlag_mul reuse + fp->unk_msid):
   // - Attack11 entry arms jab_2_input_window and latches unk_msid = 44; Attack12 entry re-arms
   //   jab_3_input_window with unk_msid = 45; Attack13 entry zeroes the window (unk_msid = 46).
-  // - ftCo_Attack1_CheckInput decrements the window once per no-press call; it is reached from
-  //   the neutral IASA chains enumerated below (decomp caller list of ftCo_Attack1_CheckInput:
-  //   Wait/Walk/Turn/Squat/SquatWait/SquatRv/Ottotto/Landing/Guard/AppealS). Attack-family IASA
-  //   tails also reach it under allow_interrupt; those rows are left un-decremented for now —
-  //   the runtime consumer is parked until the true per-frame decrement census is pinned (see
-  //   the worklog item 6).
+  // - checkAttack12/checkAttack13 decrement once per non-frozen Attack11/12 IASA frame, and
+  //   ftCo_Attack1_CheckInput decrements once per no-press call from Wait/Walk rows.
+  // - Fighter_ChangeMotionState zeroes fp->hitlag_mul for every destination motion OUTSIDE
+  //   Wait/WalkSlow/WalkMiddle/WalkFast (0xE..0x11), so the window only survives inside the
+  //   jab family and Wait/Walk; any other state in the gap kills the continuation
+  //   (suite-census verified: 0/40 sequence misses).
   // - Hitlag-frozen frames (previous row's post hitlag != 0) hold.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack11,doAttack12Normal,
-  //   doAttack13,ftCo_Attack1_CheckInput}
+  //   doAttack13,checkAttack12,checkAttack13,ftCo_Attack1_CheckInput}
+  // refs/melee/src/melee/ft/fighter.c (hitlag_mul clear inside Fighter_ChangeMotionState)
   float window = 0.0f;
   uint16_t msid = 0u;
   for (npy_intp i = 0; i < n; i++) {
@@ -2161,32 +2162,21 @@ PyObject* msl_derive_jab_combo_window_seed_lanes_py(PyObject* self, PyObject* ar
           window = 0.0f;
         }
         msid = (uint16_t)cur;
+      } else if (!frozen && window > 0.0f) {
+        // checkAttack12/13: one decrement per jab IASA frame.
+        window -= 1.0f;
       }
-    } else if (!frozen && window > 0.0f) {
-      switch (cur) {
-        case 14:   // Wait
-        case 15:   // WalkSlow
-        case 16:   // WalkMiddle
-        case 17:   // WalkFast
-        case 18:   // Turn
-        case 29:   // Ottotto
-        case 39:   // Squat
-        case 40:   // SquatWait
-        case 41:   // SquatRv
-        case 42:   // Landing
-        case 178:  // GuardOn
-        case 179:  // Guard
-        case 180:  // GuardOff
-        case 187:  // AppealSL
-        case 188:  // AppealSR
-          window -= 1.0f;
-          if (window < 0.0f) {
-            window = 0.0f;
-          }
-          break;
-        default:
-          break;
+    } else if (cur >= 14 && cur <= 17) {
+      if (!frozen && window > 0.0f) {
+        // ftCo_Attack1_CheckInput no-press decrement (Wait/Walk callers).
+        window -= 1.0f;
       }
+    } else {
+      // Fighter_ChangeMotionState hitlag_mul clear: any non-Wait/Walk destination.
+      window = 0.0f;
+    }
+    if (window < 0.0f) {
+      window = 0.0f;
     }
     out_w[i] = window;
     out_m[i] = msid;

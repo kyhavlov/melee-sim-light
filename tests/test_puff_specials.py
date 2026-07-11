@@ -977,11 +977,6 @@ SM_ATTACK_12 = 45  # ftCo_SM_Attack12 (common submotion table id)
 BTN_A = 0x0100
 
 
-@pytest.mark.xfail(
-    reason="jab-combo continuation consumer reverted pending the true CheckInput decrement set; "
-    "see reports/triage/open_rollout_work_log.md item 6",
-    strict=True,
-)
 def test_jab_combo_window_continues_to_attack12_from_wait() -> None:
     # ftCo_Attack1_CheckInput: an A press from Wait while the jab window is live and x2218_b1 is
     # set continues to Attack12 keyed on unk_msid; a dead window restarts Attack11; a live window
@@ -1019,16 +1014,20 @@ def test_derive_jab_combo_window_recurrence() -> None:
     jab3 = np.zeros(256, dtype=np.float32)
     jab2[PUFF] = np.float32(a["jab_2_input_window"])
     jab3[PUFF] = np.float32(a["jab_3_input_window"])
-    action = np.array([14, 44, 44, 44, 14, 14, 29, 45, 45], dtype=np.uint16)
+    action = np.array([14, 44, 44, 44, 14, 14, 29, 14, 45, 45], dtype=np.uint16)
     char = np.full(action.size, PUFF, dtype=np.uint8)
     hitlag = np.zeros(action.size, dtype=np.uint16)
     w, m = msl_binding.derive_jab_combo_window_seed_lanes(action, char, hitlag, jab2, jab3)
     exp2 = float(a["jab_2_input_window"])
     assert float(w[1]) == exp2 and int(m[1]) == 44, "jab1 entry arms the window"
-    assert float(w[3]) == exp2, "jab rows themselves do not decrement"
-    assert float(w[4]) == exp2 - 1 and float(w[5]) == exp2 - 2, "Wait rows decrement"
-    assert float(w[6]) == exp2 - 3, "teeter rows decrement (CheckInput caller)"
-    assert float(w[7]) == float(a["jab_3_input_window"]) and int(m[7]) == 45
+    assert float(w[2]) == exp2 - 1 and float(w[3]) == exp2 - 2, (
+        "checkAttack12 decrements once per jab IASA frame"
+    )
+    assert float(w[4]) == exp2 - 3 and float(w[5]) == exp2 - 4, "Wait rows decrement"
+    assert float(w[6]) == 0.0, (
+        "a non-Wait/Walk destination (teeter) hits Fighter_ChangeMotionState's hitlag_mul clear"
+    )
+    assert float(w[8]) == float(a["jab_3_input_window"]) and int(m[8]) == 45
     # Hitlag hold on a Wait row.
     hitlag2 = hitlag.copy(); hitlag2[4] = 3
     w2, _ = msl_binding.derive_jab_combo_window_seed_lanes(action, char, hitlag2, jab2, jab3)

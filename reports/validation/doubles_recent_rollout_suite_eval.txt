@@ -106,12 +106,12 @@ rollout.streak_len.p90: 334
 rollout.streak_len.p95: 654
 rollout.streak_len.max: 898
 rollout.first_mismatch_total: 46
-rollout.first_mismatch_seeded_total: 29
+rollout.first_mismatch_seeded_total: 28
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_y max_err=59.8999 rec=6676 p=1 seed/ref/out=200.102/200.102/140.202 actions=7/7/7 category=unclassified
+  1. pos_y max_err=53.0999 rec=6676 p=1 seed/ref/out=200.102/200.102/147.002 actions=7/7/7 category=unclassified
   2. pos_x max_err=3.96001 rec=1576 p=2 seed/ref/out=52.3599/50.0579/54.0179 actions=181/181/181 category=unclassified
-  3. speed_y_self max_err=1.7 rec=6646 p=1 seed/ref/out=0/0/-1.7 actions=7/7/7 category=unclassified
+  3. speed_air_x_self max_err=3.36 rec=6639 p=3 seed/ref/out=-3.36/-3.36/-0 actions=45/45/45 category=unclassified
 rollout.float_top_downstream:
   1. percent max_err=18 rec=2594 p=0 seed/ref/out=36.2/54.2/36.2 actions=20/90/20 category=downstream_discrete_mismatch
   2. pos_x max_err=10.9067 rec=2645 p=0 seed/ref/out=-83.8614/-84.6875/-73.7808 actions=29/29/252 category=downstream_discrete_mismatch
@@ -478,11 +478,11 @@ overall.rollout.streak_len.p95: 510
 overall.rollout.streak_len.max: 1214
 overall.rollout.best_len.max: 1214
 overall.rollout.first_mismatch_total: 1255
-overall.rollout.first_mismatch_seeded_total: 800
+overall.rollout.first_mismatch_seeded_total: 799
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=75.1385 rec=3788 p=0 seed/ref/out=-64.0647/-64.728/-139.866 actions=29/29/29 category=unclassified
-  2. pos_y max_err=59.8999 rec=6676 p=1 seed/ref/out=200.102/200.102/140.202 actions=7/7/7 category=unclassified
+  2. pos_y max_err=53.0999 rec=6676 p=1 seed/ref/out=200.102/200.102/147.002 actions=7/7/7 category=unclassified
   3. shield_hp max_err=13.3 rec=200 p=1 seed/ref/out=54.7436/41.1636/27.8636 actions=179/181/181 category=unclassified
 overall.rollout.float_top_downstream:
   1. pos_y max_err=188.207 rec=7839 p=0 seed/ref/out=0/188.207/0 actions=0/12/0 category=downstream_discrete_mismatch

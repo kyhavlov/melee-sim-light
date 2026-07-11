@@ -1718,7 +1718,7 @@ overall.float_norm_mae_p95: 41.37391000
 
 == replays/validation/marth/RipeWealthySeahorse.slpz ==
 Records: 11820  Players/scored per record: 2  Total player-frames: 23640
-mismatch.action_id: 13 / 23640 (0.000550)
+mismatch.action_id: 12 / 23640 (0.000508)
 mismatch.action_frame: 8 / 23640 (0.000338)
 mismatch.on_ground: 1 / 23640 (0.000042)
 mismatch.facing: 1 / 23640 (0.000042)
@@ -1730,7 +1730,7 @@ mismatch.hitstun: 3 / 23640 (0.000127)
 mismatch.l_cancel: 0 / 23640 (0.000000)
 mismatch.hurtbox_state: 2 / 23640 (0.000085)
 mismatch.ground_id: 0 / 23640 (0.000000)
-mismatch.animation_index: 12 / 23640 (0.000508)
+mismatch.animation_index: 11 / 23640 (0.000465)
 mismatch.instance_hit_by: 4 / 23640 (0.000169)
 mismatch.instance_id: 7 / 23640 (0.000296)
 mismatch.last_attack_landed: 1 / 23640 (0.000042)
@@ -1756,8 +1756,8 @@ err.item_pos_x: mae=0.032595 p95=0.000000 max=52.248283
 err.item_pos_y: mae=0.011380 p95=0.000000 max=13.752838
 err.item_vel_x: mae=0.004521 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000007
-overall.discrete_mismatch: 116 / 1430220
-overall.strict_discrete_mismatch: 137 / 1430220
+overall.discrete_mismatch: 114 / 1430220
+overall.strict_discrete_mismatch: 135 / 1430220
 overall.ignored_discrete_mismatch: 21
 overall.float_norm_mae_p95: 0.00016920
 
@@ -2303,7 +2303,7 @@ overall.float_norm_mae_p95: 0.00023364
 
 == replays/validation/sheik/RuralReasonableRat.slpz ==
 Records: 9319  Players/scored per record: 2  Total player-frames: 18638
-mismatch.action_id: 17 / 18638 (0.000912)
+mismatch.action_id: 16 / 18638 (0.000858)
 mismatch.action_frame: 15 / 18638 (0.000805)
 mismatch.on_ground: 9 / 18638 (0.000483)
 mismatch.facing: 0 / 18638 (0.000000)
@@ -2315,7 +2315,7 @@ mismatch.hitstun: 4 / 18638 (0.000215)
 mismatch.l_cancel: 1 / 18638 (0.000054)
 mismatch.hurtbox_state: 3 / 18638 (0.000161)
 mismatch.ground_id: 1 / 18638 (0.000054)
-mismatch.animation_index: 17 / 18638 (0.000912)
+mismatch.animation_index: 16 / 18638 (0.000858)
 mismatch.instance_hit_by: 2 / 18638 (0.000107)
 mismatch.instance_id: 11 / 18638 (0.000590)
 mismatch.last_attack_landed: 2 / 18638 (0.000107)
@@ -2341,8 +2341,8 @@ err.item_pos_x: mae=0.033250 p95=0.000000 max=35.259308
 err.item_pos_y: mae=0.023790 p95=0.099998 max=28.543266
 err.item_vel_x: mae=0.003979 p95=0.000000 max=2.828427
 err.item_vel_y: mae=0.009254 p95=0.100000 max=4.928427
-overall.discrete_mismatch: 130 / 1127599
-overall.strict_discrete_mismatch: 172 / 1127599
+overall.discrete_mismatch: 128 / 1127599
+overall.strict_discrete_mismatch: 170 / 1127599
 overall.ignored_discrete_mismatch: 42
 overall.float_norm_mae_p95: 0.00014793
 
@@ -2573,7 +2573,7 @@ overall.float_norm_mae_p95: 0.00024498
 
 == replays/validation/sheik/GlaringRosyAlpaca.slpz ==
 Records: 9014  Players/scored per record: 2  Total player-frames: 18028
-mismatch.action_id: 12 / 18028 (0.000666)
+mismatch.action_id: 11 / 18028 (0.000610)
 mismatch.action_frame: 8 / 18028 (0.000444)
 mismatch.on_ground: 3 / 18028 (0.000166)
 mismatch.facing: 1 / 18028 (0.000055)
@@ -2585,7 +2585,7 @@ mismatch.hitstun: 5 / 18028 (0.000277)
 mismatch.l_cancel: 0 / 18028 (0.000000)
 mismatch.hurtbox_state: 2 / 18028 (0.000111)
 mismatch.ground_id: 0 / 18028 (0.000000)
-mismatch.animation_index: 11 / 18028 (0.000610)
+mismatch.animation_index: 10 / 18028 (0.000555)
 mismatch.instance_hit_by: 2 / 18028 (0.000111)
 mismatch.instance_id: 5 / 18028 (0.000277)
 mismatch.last_attack_landed: 2 / 18028 (0.000111)
@@ -2611,8 +2611,8 @@ err.item_pos_x: mae=0.034251 p95=0.000000 max=70.563423
 err.item_pos_y: mae=0.019781 p95=0.000000 max=27.116550
 err.item_vel_x: mae=0.001530 p95=0.000000 max=1.000000
 err.item_vel_y: mae=0.004044 p95=0.000000 max=2.600000
-overall.discrete_mismatch: 90 / 1090694
-overall.strict_discrete_mismatch: 127 / 1090694
+overall.discrete_mismatch: 88 / 1090694
+overall.strict_discrete_mismatch: 125 / 1090694
 overall.ignored_discrete_mismatch: 37
 overall.float_norm_mae_p95: 0.00011487
 
@@ -2933,7 +2933,7 @@ overall.float_norm_mae_p95: 0.00034429
 
 == replays/validation/sheik/TornEnchantingGiraffe.slpz ==
 Records: 9464  Players/scored per record: 2  Total player-frames: 18928
-mismatch.action_id: 18 / 18928 (0.000951)
+mismatch.action_id: 17 / 18928 (0.000898)
 mismatch.action_frame: 13 / 18928 (0.000687)
 mismatch.on_ground: 7 / 18928 (0.000370)
 mismatch.facing: 3 / 18928 (0.000158)
@@ -2945,7 +2945,7 @@ mismatch.hitstun: 11 / 18928 (0.000581)
 mismatch.l_cancel: 0 / 18928 (0.000000)
 mismatch.hurtbox_state: 2 / 18928 (0.000106)
 mismatch.ground_id: 4 / 18928 (0.000211)
-mismatch.animation_index: 18 / 18928 (0.000951)
+mismatch.animation_index: 17 / 18928 (0.000898)
 mismatch.instance_hit_by: 5 / 18928 (0.000264)
 mismatch.instance_id: 11 / 18928 (0.000581)
 mismatch.last_attack_landed: 9 / 18928 (0.000475)
@@ -2971,8 +2971,8 @@ err.item_pos_x: mae=0.051175 p95=0.000000 max=87.862862
 err.item_pos_y: mae=0.006568 p95=0.000000 max=6.929591
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 177 / 1145144
-overall.strict_discrete_mismatch: 271 / 1145144
+overall.discrete_mismatch: 175 / 1145144
+overall.strict_discrete_mismatch: 269 / 1145144
 overall.ignored_discrete_mismatch: 94
 overall.float_norm_mae_p95: 0.00019754
 
@@ -3202,7 +3202,7 @@ overall.ignored_discrete_mismatch: 5
 overall.float_norm_mae_p95: 30.64350316
 
 == suite summary ==
-overall.discrete_mismatch: 6172 / 79185425
-overall.strict_discrete_mismatch: 9936 / 79185425
+overall.discrete_mismatch: 6164 / 79185425
+overall.strict_discrete_mismatch: 9928 / 79185425
 overall.ignored_discrete_mismatch: 3764
 overall.float_norm_mae_p95: 0.95063212

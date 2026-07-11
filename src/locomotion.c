@@ -1295,9 +1295,30 @@ static inline uint8_t grounded_a_attack_try_enter_from_iasa(
     return 0;
   }
 
-  const uint16_t act = grounded_a_attack_select_action(
+  uint16_t act = grounded_a_attack_select_action(
       c, batch->state.char_id[idx], buttons_pressed, c_side_edge, c_up_edge, c_down_edge, stick_x,
       stick_y, tilt_timer_x, tilt_timer_y, facing_dir, allow_attack_dash, allow_tilts);
+  // Jab-combo continuation (ftCo_Attack1_CheckInput): an A press that resolved to the neutral
+  // jab while (hitlag_mul window > 0 && fp->x2218_b1) continues the combo keyed on fp->unk_msid
+  // (44 -> Attack12, 45 -> Attack13) instead of restarting Attack11. The window itself can only
+  // be live here out of Wait/Walk rows: Fighter_ChangeMotionState zeroes it for every other
+  // destination (see msl_motion_state_enter_side_effects), which matches the suite-wide census
+  // (gaps containing Turn or any non-Wait/Walk state always restart). Pika/Pichu's
+  // doAttack12Rapid variant re-enters Attack11 and is out of the current registry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{ftCo_Attack1_CheckInput,doAttack12,
+  //   doAttack12Normal,doAttack13}
+  // refs/melee/src/melee/ft/fighter.c (hitlag_mul clear inside Fighter_ChangeMotionState)
+  if (act == (uint16_t)MSL_ACT_ATTACK_11 && batch->state.jab_input_window[idx] > 0.0f) {
+    const size_t jab_flags_i =
+        idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+    if ((batch->state.state_flags[jab_flags_i] & (uint8_t)MSL_STATE_FLAG_2218_B1) != 0u) {
+      if (batch->state.jab_unk_msid[idx] == (uint16_t)MSL_ACT_ATTACK_11) {
+        act = (uint16_t)MSL_ACT_ATTACK_12;
+      } else if (batch->state.jab_unk_msid[idx] == (uint16_t)MSL_ACT_ATTACK_12) {
+        act = (uint16_t)MSL_ACT_ATTACK_13;
+      }
+    }
+  }
   const uint32_t sm = grounded_attack_submotion_from_action(batch->state.char_id[idx], act);
   if (sm == 0xFFFFFFFFu) {
     return 0;
@@ -1922,6 +1943,12 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, cons
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
   // data/characters/{fox,falco}.json::rapid_jab_window
   // data/moves/{fox,falco}.json moves["ftCo_SM_Attack12"]["events"] set_jab_rapid
+  // checkAttack12/checkAttack13 decrement the jab-combo continuation window once per
+  // Attack11/12 IASA frame (the window runs from jab entry, not from the jab's exit).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
+  if (batch->state.jab_input_window[idx] > 0.0f) {
+    batch->state.jab_input_window[idx] -= 1.0f;
+  }
   const uint16_t source_prev_buttons =
       source_x668_button_edges_with_z_a(batch->state.prev_input_buttons[idx]);
   const uint16_t source_buttons = source_x668_button_edges_with_z_a(buttons);

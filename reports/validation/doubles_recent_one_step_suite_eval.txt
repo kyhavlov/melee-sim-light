@@ -773,7 +773,7 @@ overall.float_norm_mae_p95: 0.00022105
 
 == replays/validation/doubles_recent/Game_20260704T005147.slpz ==
 Records: 7037  Players/scored per record: 4  Total player-frames: 28148
-mismatch.action_id: 26 / 28148 (0.000924)
+mismatch.action_id: 25 / 28148 (0.000888)
 mismatch.action_frame: 21 / 28148 (0.000746)
 mismatch.on_ground: 14 / 28148 (0.000497)
 mismatch.facing: 6 / 28148 (0.000213)
@@ -785,7 +785,7 @@ mismatch.hitstun: 13 / 28148 (0.000462)
 mismatch.l_cancel: 1 / 28148 (0.000036)
 mismatch.hurtbox_state: 2 / 28148 (0.000071)
 mismatch.ground_id: 4 / 28148 (0.000142)
-mismatch.animation_index: 25 / 28148 (0.000888)
+mismatch.animation_index: 24 / 28148 (0.000853)
 mismatch.instance_hit_by: 10 / 28148 (0.000355)
 mismatch.instance_id: 18 / 28148 (0.000639)
 mismatch.last_attack_landed: 5 / 28148 (0.000178)
@@ -811,8 +811,8 @@ err.item_pos_x: mae=0.011979 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000124
 err.item_vel_x: mae=0.000002 p95=0.000000 max=0.000234
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000078
-overall.discrete_mismatch: 257 / 1175179
-overall.strict_discrete_mismatch: 302 / 1175179
+overall.discrete_mismatch: 255 / 1175179
+overall.strict_discrete_mismatch: 300 / 1175179
 overall.ignored_discrete_mismatch: 45
 overall.float_norm_mae_p95: 0.00016342
 
@@ -952,7 +952,7 @@ overall.ignored_discrete_mismatch: 176
 overall.float_norm_mae_p95: 0.00039278
 
 == suite summary ==
-overall.discrete_mismatch: 8323 / 30724660
-overall.strict_discrete_mismatch: 10787 / 30724660
+overall.discrete_mismatch: 8321 / 30724660
+overall.strict_discrete_mismatch: 10785 / 30724660
 overall.ignored_discrete_mismatch: 2464
 overall.float_norm_mae_p95: 0.00037604

@@ -308,6 +308,20 @@ static inline void msl_motion_state_enter_side_effects(MslBatch* batch, size_t i
     batch->state.sheik_vanish_smoke_accessory_pending[idx] = 0u;
   }
 
+  if (batch != NULL) {
+    // Fighter_ChangeMotionState zeroes fp->hitlag_mul (reused as the jab-combo continuation
+    // window) unless the DESTINATION motion is Wait/WalkSlow/WalkMiddle/WalkFast (0xE..0x11).
+    // Jab entries (44..46) re-arm immediately after their ChangeMotionState (checkAttack11 /
+    // doAttack12Normal), so they are excluded here and own their arm value at the entry site.
+    // refs/melee/src/melee/ft/fighter.c (hitlag_mul clear inside Fighter_ChangeMotionState)
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack11,doAttack12Normal}
+    const uint16_t dest_action = batch->state.action_id[idx];
+    if (!(dest_action >= 14u && dest_action <= 17u) &&
+        !(dest_action >= 44u && dest_action <= 46u)) {
+      batch->state.jab_input_window[idx] = 0.0f;
+    }
+  }
+
   attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
 
   instance_id_on_motion_state_change_ft_800895E0(batch, idx);

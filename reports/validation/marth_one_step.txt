@@ -278,7 +278,7 @@ overall.float_norm_mae_p95: 41.37391000
 
 == replays/validation/marth/RipeWealthySeahorse.slpz ==
 Records: 11820  Players/scored per record: 2  Total player-frames: 23640
-mismatch.action_id: 13 / 23640 (0.000550)
+mismatch.action_id: 12 / 23640 (0.000508)
 mismatch.action_frame: 8 / 23640 (0.000338)
 mismatch.on_ground: 1 / 23640 (0.000042)
 mismatch.facing: 1 / 23640 (0.000042)
@@ -290,7 +290,7 @@ mismatch.hitstun: 3 / 23640 (0.000127)
 mismatch.l_cancel: 0 / 23640 (0.000000)
 mismatch.hurtbox_state: 2 / 23640 (0.000085)
 mismatch.ground_id: 0 / 23640 (0.000000)
-mismatch.animation_index: 12 / 23640 (0.000508)
+mismatch.animation_index: 11 / 23640 (0.000465)
 mismatch.instance_hit_by: 4 / 23640 (0.000169)
 mismatch.instance_id: 7 / 23640 (0.000296)
 mismatch.last_attack_landed: 1 / 23640 (0.000042)
@@ -316,8 +316,8 @@ err.item_pos_x: mae=0.032595 p95=0.000000 max=52.248283
 err.item_pos_y: mae=0.011380 p95=0.000000 max=13.752838
 err.item_vel_x: mae=0.004521 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000007
-overall.discrete_mismatch: 116 / 1430220
-overall.strict_discrete_mismatch: 137 / 1430220
+overall.discrete_mismatch: 114 / 1430220
+overall.strict_discrete_mismatch: 135 / 1430220
 overall.ignored_discrete_mismatch: 21
 overall.float_norm_mae_p95: 0.00016920
 
@@ -862,7 +862,7 @@ overall.ignored_discrete_mismatch: 51
 overall.float_norm_mae_p95: 0.00023364
 
 == suite summary ==
-overall.discrete_mismatch: 1856 / 21765722
-overall.strict_discrete_mismatch: 2999 / 21765722
+overall.discrete_mismatch: 1854 / 21765722
+overall.strict_discrete_mismatch: 2997 / 21765722
 overall.ignored_discrete_mismatch: 1143
 overall.float_norm_mae_p95: 2.05250186

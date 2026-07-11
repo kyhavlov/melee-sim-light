@@ -293,13 +293,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:622
 == replays/validation/marth/RipeWealthySeahorse.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1984
-rollout.streak_count: 26
+rollout.streak_count: 27
 rollout.streak_len.median: 259
 rollout.streak_len.p90: 1047
 rollout.streak_len.p95: 1194
 rollout.streak_len.max: 1984
-rollout.first_mismatch_total: 26
-rollout.first_mismatch_seeded_total: 14
+rollout.first_mismatch_total: 27
+rollout.first_mismatch_seeded_total: 13
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=37.675 rec=924 p=0 seed/ref/out=25.1379/22.9379/60.6129 actions=29/29/29 category=unclassified
@@ -421,14 +421,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1494
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == suite summary ==
-overall.rollout.streak_count: 470
+overall.rollout.streak_count: 471
 overall.rollout.streak_len.median: 239
 overall.rollout.streak_len.p90: 907
 overall.rollout.streak_len.p95: 1268
 overall.rollout.streak_len.max: 2354
 overall.rollout.best_len.max: 2354
-overall.rollout.first_mismatch_total: 462
-overall.rollout.first_mismatch_seeded_total: 187
+overall.rollout.first_mismatch_total: 463
+overall.rollout.first_mismatch_seeded_total: 186
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=159.875 rec=5010 p=1 seed/ref/out=-7.05318/-5.65008/-165.525 actions=7/7/7 category=unclassified
