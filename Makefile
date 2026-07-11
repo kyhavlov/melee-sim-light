@@ -1,4 +1,4 @@
-.PHONY: bootstrap build build-native clean-native clean-native-shadow test test-parallel test-serial package-smoke slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-falcon validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-falcon validate-rollout-sheik validate-all validate-heldout rollout-summary rollout-diff build_data viewer-build viewer fmt fmt-check check dolphin-engine-dump dolphin-extract build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
+.PHONY: bootstrap build build-native clean-native clean-native-shadow test test-parallel test-serial package-smoke slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-falcon validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-falcon validate-rollout-sheik validate-all validate-heldout rollout-summary rollout-diff build_data viewer-build viewer fmt fmt-check check dolphin-engine-dump dolphin-extract build-bench-sim build-bench-sim-native bench-sim bench-sim-native benchmark-report FORCE
 
 PY := uv run python
 SUITE ?= replays/suites/fox_falco_fd_ucf084_recent.json
@@ -38,10 +38,19 @@ HELDOUT_WORKERS ?= 0
 HELDOUT_SUITE_WORKERS ?= 0
 VERBOSE ?=
 CLANG_FORMAT ?= clang-format
-CC ?= cc
+# Clang 18 handles the simulator's large branch-heavy collision/combat translation units
+# materially better than GCC under the same native/LTO settings. Respect explicit environment or
+# command-line compiler choices, but use Clang for the normal local Make workflow.
+ifeq ($(origin CC),default)
+ifneq ($(shell command -v clang 2>/dev/null),)
+CC := clang
+else
+CC := cc
+endif
+endif
 CFLAGS ?= -O3 -Wall -Wextra -std=c11 -ffp-contract=off
-NATIVE_OPT ?= 0
-LTO ?= 0
+NATIVE_OPT ?= 1
+LTO ?= 1
 export MSL_NATIVE_OPT := $(strip $(NATIVE_OPT))
 export MSL_LTO := $(strip $(LTO))
 ifeq ($(strip $(NATIVE_OPT)),1)
@@ -51,6 +60,8 @@ ifeq ($(strip $(LTO)),1)
 CFLAGS += -flto
 endif
 BENCH_SIM ?= build/bench/bench_sim
+BENCHMARK_REPORT ?= reports/benchmarks/sim_benchmark.txt
+BENCHMARK_REPLAY_JSON ?= build/bench/validation_rollout_benchmark.json
 BENCH_SIM_SRCS := $(wildcard src/*.c) src/decomp/lb/lb_00ce.c tools/bench/bench_sim.c
 BUILD_FORCE ?= 0
 BUILD_STAMP ?= build/msl_binding.stamp
@@ -263,3 +274,44 @@ bench-sim: build-bench-sim
 
 bench-sim-native: build-bench-sim-native
 	@"$(BENCH_SIM)" $(ARGS)
+
+benchmark-report: build build-bench-sim-native
+	@mkdir -p "$(dir $(BENCHMARK_REPORT))" "$(dir $(BENCHMARK_REPLAY_JSON))"
+	@tmp="$(BENCHMARK_REPORT).tmp"; \
+	rm -f "$$tmp"; \
+	set -eu; \
+	trap 'rm -f "$$tmp"' 0 1 2 3 15; \
+	if [ -r /proc/cpuinfo ]; then \
+		cpu=$$(awk -F: '/model name/{sub(/^[ \t]+/, "", $$2); print $$2; exit}' /proc/cpuinfo); \
+	else \
+		cpu=$$(sysctl -n machdep.cpu.brand_string 2>/dev/null || uname -m); \
+	fi; \
+	logical_cpus=$$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo unknown); \
+	{ \
+		echo "# Generated benchmark report. Refresh with: make benchmark-report"; \
+		echo "# Optional for ordinary changes; refresh before committing likely performance-affecting changes."; \
+		echo; \
+		echo "generated_utc=$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
+		echo "git_base_revision=$$(git rev-parse HEAD)"; \
+		if git diff --quiet && git diff --cached --quiet; then echo "git_tree=clean"; else echo "git_tree=dirty"; fi; \
+		echo "system=$$(uname -srm)"; \
+		echo "cpu=$$cpu"; \
+		echo "logical_cpus=$$logical_cpus"; \
+		echo "compiler=$$($(CC) --version | head -n 1)"; \
+		echo "cflags=$(CFLAGS)"; \
+		echo; \
+		echo "[random_mixed]"; \
+		echo "command=make bench-sim-native"; \
+		"$(BENCH_SIM)"; \
+		echo; \
+		echo "[random_fox_falco]"; \
+		echo "command=make bench-sim-native ARGS='--matchups fox-falco'"; \
+		"$(BENCH_SIM)" --matchups fox-falco; \
+		echo; \
+		echo "[aggregate_replay]"; \
+		echo "command=$(PY) -m tools.eval.profile_validation_rollout_frames --max-records 3000 --repeat 10 --top 0"; \
+		$(PY) -m tools.eval.profile_validation_rollout_frames \
+			--max-records 3000 --repeat 10 --top 0 --out "$(BENCHMARK_REPLAY_JSON)"; \
+	} > "$$tmp"; \
+	mv "$$tmp" "$(BENCHMARK_REPORT)"; \
+	trap - 0 1 2 3 15

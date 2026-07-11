@@ -119,6 +119,8 @@ Current target domain:
 - Never hand-edit generator-owned validation reports.
 - Triage/debug outputs default under gitignored `reports/triage/`, not `/tmp`.
 - Never key gameplay behavior on dataset name or record id.
+- The committed benchmark report is optional for ordinary changes. Before committing a change
+  likely to noticeably affect simulator performance, refresh it with `make benchmark-report`.
 
 ### Native Extension Build
 

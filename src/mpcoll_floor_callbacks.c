@@ -3215,19 +3215,6 @@ uint8_t mpcoll_floor_contact_from_callback_result(const MslMpcollContext* ctx,
   return 1u;
 }
 
-void mpcoll_floor_reject_add_if_state(MslMpcollFloorRejectPacket* packet, uint8_t condition,
-                                      uint64_t bit, MslMpcollFloorRejectRestore restore,
-                                      uint32_t side_effects, uint32_t source_phases) {
-  if (packet != NULL && condition) {
-    packet->bits |= bit;
-    packet->side_effects |= side_effects;
-    packet->source_phases |= source_phases;
-    if (packet->restore == (uint8_t)MSL_MPCOLL_FLOOR_REJECT_RESTORE_NONE) {
-      packet->restore = (uint8_t)restore;
-    }
-  }
-}
-
 void mpcoll_floor_reject_add_escapeair_final_owners(
     MslMpcollFloorRejectPacket* packet, const MslEscapeAirFinalPublicationOwners* owners) {
   if (owners == NULL) {

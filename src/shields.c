@@ -254,7 +254,7 @@ void shields_refresh(MslBatch* batch) {
           // - refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FA58 and ::ftAnim_8006FB88 (inv-scale part x10)
           // - refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F6A4 (inverse model_scaling application)
           // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c (shield bone `fp->ft_data->x8->x11`)
-          MslShieldTiltTableView tv;
+          MslShieldTiltTableView tv = {0};
           const uint8_t has_tv = (msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) == 0 &&
                                   tv.xyz != NULL && tv.frame_count > 0)
                                      ? 1

@@ -130,18 +130,6 @@ static inline void shine_ground_start_platform_pass_enter(MslBatch* batch, const
   msl_anim_timebase_enter(batch, idx, anim_frame_f32, 1.0f);
 }
 
-static inline uint8_t shine_is_dash_flick(const MslCommonParams* c, float stick_x,
-                                          uint8_t tilt_timer_x) {
-  if (c == NULL) {
-    return 0u;
-  }
-  const float ax = msl_absf(stick_x);
-  // Decomp: Dash admission uses `ABS(lstick.x) >= p_ftCommonData->x3C` and
-  // `x670_timer_lstick_tilt_x < p_ftCommonData->x40`.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
-  return (ax >= c->dash_flick_abs && tilt_timer_x < c->dash_flick_tilt_max_frames) ? 1u : 0u;
-}
-
 static inline uint8_t action_allows_shine_entry_ground(const MslBatch* batch, size_t idx,
                                                        uint16_t action_id) {
   // Decomp: specials (including SpecialLw / shine) are dispatched from per-state IASA callbacks via
@@ -346,42 +334,6 @@ static inline void enter_fall(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-}
-
-static inline void enter_turn_smash_from_wait_iasa(MslBatch* batch, size_t idx, float facing_dir) {
-  // Decomp: ftCo_Wait_IASA reaches ftCo_Dash_CheckInput before ftCo_Turn_CheckInput; a dash-flick
-  // opposite facing calls ftCo_Turn_Enter_Smash, which initializes Turn with frames_to_turn=0 and
-  // ticks animation immediately.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
-  batch->state.turn_has_turned[idx] = 0u;
-  batch->state.turn_frames_to_turn[idx] = 0u;
-  batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
-  batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  msl_anim_timebase_tick_once(batch, idx);
-}
-
-static inline void enter_turn_basic_from_wait_iasa(MslBatch* batch, size_t idx,
-                                                   const MslCharParams* ch) {
-  if (batch == NULL || ch == NULL) {
-    return;
-  }
-  // Decomp: if Wait_IASA reaches ftCo_Turn_CheckInput, ftCo_Turn_Enter_Basic keeps
-  // frames_to_turn from character data and ticks animation immediately after ChangeMotionState.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{
-  //   ftCo_Turn_CheckInput,ftCo_Turn_Enter_Basic}
-  // data/characters/{fox,falco}.json::turn_frames
-  batch->state.turn_has_turned[idx] = 0u;
-  batch->state.turn_frames_to_turn[idx] = ch->turn_frames;
-  batch->state.turn_x8[idx] = 0;
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
-  batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  msl_anim_timebase_tick_once(batch, idx);
 }
 
 static inline uint16_t jump_aerial_action_from_stick(const MslCommonParams* c, float stick_x,

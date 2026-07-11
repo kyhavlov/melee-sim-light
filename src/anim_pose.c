@@ -111,12 +111,16 @@ typedef struct {
   uint16_t* track_part_to_index;               // [65536]
   uint16_t* track_msid_to_anim_index;          // [65536], 0xFFFF if missing
   uint32_t* track_part_record_off_by_anim_li;  // [track_anim_count * track_local_count]
+  uint32_t* exact_local_base_by_msid;          // [65536], float offset or UINT32_MAX
+  float* exact_integer_locals;                 // source-interpreted common-Fall local SRTs
 
   uint8_t have;
 } MslAnimPoseTable;
 
 static MslAnimPoseTable g_table_by_char[256];
 static int g_loaded = 0;
+
+static int build_exact_integer_local_cache(MslAnimPoseTable* t);
 
 uint32_t anim_pose_data_schema_version(void) { return 2u; }
 
@@ -587,6 +591,8 @@ static void free_table(MslAnimPoseTable* t) {
   alloc_free(t->track_part_to_index);
   alloc_free(t->track_msid_to_anim_index);
   alloc_free(t->track_part_record_off_by_anim_li);
+  alloc_free(t->exact_local_base_by_msid);
+  alloc_free(t->exact_integer_locals);
   alloc_free(t->buf);
   *t = (MslAnimPoseTable){0};
 }
@@ -1406,6 +1412,11 @@ static int load_pose_for_char(const char* data_dir, const char* rel_path, uint8_
       free_table(&next);
       return -1;
     }
+    if (track_status == 0 && build_exact_integer_local_cache(&next) != 0) {
+      fprintf(stderr, "msl: anim exact local cache build failed: %s/%s\n", data_dir, tracks_rel);
+      free_table(&next);
+      return -1;
+    }
   }
 
   // Replace any existing table for this character.
@@ -1556,9 +1567,10 @@ int anim_pose_get_local_translation(uint8_t char_id, uint16_t msid, uint16_t fra
   return 0;
 }
 
-static int local_srt_for_part_f32(const MslAnimPoseTable* t, uint16_t msid, float anim_frame,
-                                  uint16_t part_id, float rot[3], float pos[3], float scl[3],
-                                  uint32_t* out_flags, int16_t* out_parent) {
+static int local_srt_for_part_f32_uncached(const MslAnimPoseTable* t, uint16_t msid,
+                                           float anim_frame, uint16_t part_id, float rot[3],
+                                           float pos[3], float scl[3], uint32_t* out_flags,
+                                           int16_t* out_parent) {
   if (t == NULL || rot == NULL || pos == NULL || scl == NULL) {
     return -1;
   }
@@ -1644,6 +1656,93 @@ static int local_srt_for_part_f32(const MslAnimPoseTable* t, uint16_t msid, floa
     off += (size_t)length;
   }
   return 0;
+}
+
+static int build_exact_integer_local_cache(MslAnimPoseTable* t) {
+  if (t == NULL || t->track_buf == NULL || t->track_local_count == 0u ||
+      t->local_frame_count_by_msid == NULL) {
+    return 0;
+  }
+  enum { FIRST_MSID = MSL_SM_FALL, LAST_MSID = MSL_SM_FALL_SPECIAL_B, SRT_FLOATS = 9 };
+  uint64_t total_floats = 0u;
+  for (uint16_t msid = (uint16_t)FIRST_MSID; msid <= (uint16_t)LAST_MSID; msid++) {
+    total_floats += (uint64_t)t->local_frame_count_by_msid[msid] * (uint64_t)t->track_local_count *
+                    (uint64_t)SRT_FLOATS;
+  }
+  if (total_floats == 0u || total_floats > (uint64_t)UINT32_MAX) {
+    return 0;
+  }
+
+  uint32_t* base_by_msid = (uint32_t*)alloc_malloc(65536u * sizeof(uint32_t));
+  float* locals = (float*)alloc_malloc_uninit((size_t)total_floats * sizeof(float));
+  if (base_by_msid == NULL || locals == NULL) {
+    alloc_free(base_by_msid);
+    alloc_free(locals);
+    return -1;
+  }
+  memset(base_by_msid, 0xFF, 65536u * sizeof(uint32_t));
+
+  uint32_t base = 0u;
+  for (uint16_t msid = (uint16_t)FIRST_MSID; msid <= (uint16_t)LAST_MSID; msid++) {
+    const uint16_t frame_count = t->local_frame_count_by_msid[msid];
+    if (frame_count == 0u) {
+      continue;
+    }
+    base_by_msid[msid] = base;
+    uint8_t complete = 1u;
+    for (uint16_t frame = 0u; frame < frame_count && complete; frame++) {
+      for (uint16_t li = 0u; li < t->track_local_count; li++) {
+        const uint16_t part_id = (uint16_t)t->track_buf[ANIM_HDR_BASE_BYTES + (size_t)li];
+        float* out =
+            &locals[(size_t)base + ((size_t)frame * (size_t)t->track_local_count + (size_t)li) *
+                                       (size_t)SRT_FLOATS];
+        if (local_srt_for_part_f32_uncached(t, msid, (float)frame, part_id, out, out + 3, out + 6,
+                                            NULL, NULL) != 0) {
+          complete = 0u;
+          break;
+        }
+      }
+    }
+    if (!complete) {
+      base_by_msid[msid] = UINT32_MAX;
+    }
+    base +=
+        (uint32_t)((uint32_t)frame_count * (uint32_t)t->track_local_count * (uint32_t)SRT_FLOATS);
+  }
+  t->exact_local_base_by_msid = base_by_msid;
+  t->exact_integer_locals = locals;
+  return 0;
+}
+
+static int local_srt_for_part_f32(const MslAnimPoseTable* t, uint16_t msid, float anim_frame,
+                                  uint16_t part_id, float rot[3], float pos[3], float scl[3],
+                                  uint32_t* out_flags, int16_t* out_parent) {
+  if (t != NULL && t->exact_local_base_by_msid != NULL && t->exact_integer_locals != NULL &&
+      isfinite(anim_frame)) {
+    const uint16_t frame = msl_anim_frame_floor_u16(anim_frame);
+    const uint32_t base = t->exact_local_base_by_msid[msid];
+    const uint16_t li = t->local_part_to_index[part_id];
+    if (anim_frame == (float)frame && base != UINT32_MAX &&
+        frame < t->local_frame_count_by_msid[msid] && li != 0xFFFFu && li < t->track_local_count) {
+      enum { SRT_FLOATS = 9 };
+      const float* in =
+          &t->exact_integer_locals[(size_t)base +
+                                   ((size_t)frame * (size_t)t->track_local_count + (size_t)li) *
+                                       (size_t)SRT_FLOATS];
+      memcpy(rot, in, 3u * sizeof(float));
+      memcpy(pos, in + 3, 3u * sizeof(float));
+      memcpy(scl, in + 6, 3u * sizeof(float));
+      if (out_flags != NULL) {
+        *out_flags = t->local_flags_by_index[li];
+      }
+      if (out_parent != NULL) {
+        *out_parent = t->local_parent_part_by_index[li];
+      }
+      return 0;
+    }
+  }
+  return local_srt_for_part_f32_uncached(t, msid, anim_frame, part_id, rot, pos, scl, out_flags,
+                                         out_parent);
 }
 
 static void vec3_cross(const float a[3], const float b[3], float out[3]);
@@ -2509,6 +2608,8 @@ static int dynamic_matrix_from_locals(const MslBatch* batch, size_t player_idx,
   return 0;
 }
 
+static int local_parent_for_part(const MslAnimPoseTable* t, uint16_t part_id, int16_t* out_parent);
+
 static int matrix_from_locals_f32(const MslAnimPoseTable* t, uint16_t msid, float anim_frame,
                                   uint16_t part_id, float out_3x4[12]) {
   if (t == NULL || out_3x4 == NULL) {
@@ -2522,9 +2623,13 @@ static int matrix_from_locals_f32(const MslAnimPoseTable* t, uint16_t msid, floa
     if (count >= (uint16_t)MAX_PATH) {
       return -1;
     }
-    float rot[3], pos[3], scl[3];
     int16_t parent = -1;
-    if (local_srt_for_part_f32(t, msid, anim_frame, cur, rot, pos, scl, NULL, &parent) != 0) {
+    // Parent identity is invariant across animation frames and already extracted in SSANIML1.
+    // The old path interpreted every FObj track here only to discard its SRT, then interpreted the
+    // same chain again below to build the matrix. Keep the sole value-producing interpretation in
+    // the root-to-part pass and use the extracted hierarchy for this path discovery pass.
+    // data/anim/*.locals.bin::SSANIML1 local_parent
+    if (local_parent_for_part(t, cur, &parent) != 0) {
       return -1;
     }
     path[count++] = cur;

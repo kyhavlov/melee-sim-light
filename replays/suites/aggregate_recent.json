@@ -1,6 +1,6 @@
 {
   "name": "aggregate_recent",
-  "notes": "Mixed Fox/Fox, Fox/Falco, and Falco/Falco human replays across occupied port combinations and supported legal stages. Secondary aggregate suite; keep fox_falco_fd_ucf084_recent as the primary FD regression gate. Pokemon Stadium entries are frozen-stadium replays only. Excludes the MeatyExtraneousGoldfish outlier, de-duplicates the HungryImportantSnake/ElaborateEverlastingGerbil duplicate pair, and omits four-player local stage repros until 4p validation is in scope. Includes the marth suite replays (Marth vs Falco/Fox and Marth dittos across FoD/YS/BF/DL/FD) so validate-all covers Marth and Sheik suite replays so validate-all covers Sheik in aggregate.",
+  "notes": "Aggregate validation coverage for every supported singles character across the six legal stages. Includes the complete Marth, Sheik, Captain Falcon, and Zelda focused suites alongside the primary Fox/Falco controls. Pokemon Stadium entries are frozen-stadium replays only. Excludes the MeatyExtraneousGoldfish outlier, de-duplicates the HungryImportantSnake/ElaborateEverlastingGerbil duplicate pair, and omits four-player local stage repros until 4p validation is in scope.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -855,6 +855,318 @@
       ],
       "replay": "replays/validation/sheik/sheik_demo_game_2.slpz",
       "stage_id": 31
+    },
+    {
+      "replay": "replays/validation/falcon/Game_20260509T030948.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/Game_20260505T215428.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/Game_20260506T213015.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Marth",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/Game_20260501T233530.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/Game_20260509T035613.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/Game_20260509T034612.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/Game_20260509T040146.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/Game_20260505T114745.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Sheik"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/WrathfulIllFatedLocust.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Falco",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/FumblingSaneBeaver.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Fox",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/PrettyInfiniteCapybara.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/AmusingIncompleteCapybara.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/OddballCleanViper.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Zelda",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/RareIrritatingPanther.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Marth",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/LegitimateTemptingPanther.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Marth",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/StraightScratchyCheetah.slpz",
+      "ports": [
+        2,
+        4
+      ],
+      "stage_id": 8,
+      "characters": {
+        "2": "Sheik",
+        "4": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/GrowlingBogusAlbatross.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/LankyFreshGorilla.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Fox",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/FumblingProudPartridge.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Marth",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/EmotionalNaturalLemur.slpz",
+      "ports": [
+        1,
+        4
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Captain Falcon",
+        "4": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/falcon_demo.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/falcon_demo_2.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/zelda/zelda_demo_fd_v1.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Zelda",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/zelda/zelda_demo_fd_hits_v1.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Zelda",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/zelda/zelda_demo_bf_upb_v1.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Zelda",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/zelda/zelda_demo_fd_ledge_snap_v1.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Falco",
+        "2": "Zelda"
+      }
     }
   ]
 }

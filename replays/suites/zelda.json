@@ -1,6 +1,6 @@
 {
   "name": "zelda",
-  "notes": "Focused-only Zelda special-move coverage, not aggregate-promoted in this packet. Current rollout status has 24 first mismatches across the older demo replays; the repeated Farore ledge-snap replay is raw-clean.",
+  "notes": "Zelda special-move coverage promoted into the aggregate suite. Current rollout status has 24 first mismatches across the older demo replays; the repeated Farore ledge-snap replay is raw-clean.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [

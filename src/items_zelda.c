@@ -59,15 +59,6 @@ static inline uint8_t zd_din_targets_ground_state(uint32_t flags, uint8_t defend
              : ((flags & (uint32_t)MSL_ZELDA_DIN_HITBOX_FLAG_TARGET_AERIAL) != 0u ? 1u : 0u);
 }
 
-static inline float zd_din_fire_visual_scale(const MslItemArticleParams* ap, float charge) {
-  if (ap == NULL || !(ap->zelda_din_fire_charge_max_frames > 0.0f)) {
-    return 1.0f;
-  }
-  return charge * ((ap->zelda_din_fire_scale_max - ap->zelda_din_fire_scale_min) /
-                   ap->zelda_din_fire_charge_max_frames) +
-         ap->zelda_din_fire_scale_min;
-}
-
 static inline float zd_din_explode_visual_scale(const MslItemArticleParams* ap, float charge) {
   if (ap == NULL || !(ap->zelda_din_explode_charge_max_frames > 0.0f)) {
     return 1.0f;

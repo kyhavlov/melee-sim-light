@@ -1042,10 +1042,6 @@ static inline uint32_t grounded_attack_submotion_from_action(uint8_t char_id, ui
   return sm != 0xFFFFu ? (uint32_t)sm : 0xFFFFFFFFu;
 }
 
-static inline uint8_t action_is_attack_s3_family(uint16_t action_id) {
-  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_ATTACK_S3);
-}
-
 static inline uint8_t action_is_attack_s4_family(uint16_t action_id) {
   return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_ATTACK_S4);
 }
@@ -2022,21 +2018,6 @@ static inline uint8_t action_is_walk(uint16_t a) {
 
 static inline uint8_t action_is_fall_like(uint16_t a) {
   return msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_FALL_LIKE_ACTION);
-}
-
-static inline uint8_t action_is_phase3_common_grounded_collision_owner(uint16_t a) {
-  // Phase 3 common grounded Coll callbacks are generated from MotionState callback identity. Keep
-  // this gate narrow: grounded attacks, catch/throw/capture, downed/damage, item, and bespoke
-  // specials stay on their retained owners even when they share lower-level mpColl helpers.
-  // refs/melee/src/melee/ft/ft_081B.c common grounded wrappers
-  // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class2_bits
-  return (
-      uint8_t)(msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_COMMON_GROUNDED_COLL) ||
-               msl_motion_state_common_class2_has_fast(a,
-                                                       MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL) ||
-               msl_motion_state_common_class2_has_fast(a,
-                                                       MSL_MS_CLASS2_COMMON_GROUNDED_B2DC_COLL) ||
-               msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL));
 }
 
 static inline uint8_t action_is_ground_locomotion(uint16_t a) {
