@@ -89,14 +89,30 @@ typedef struct MslStateSoA {
   uint8_t* is_teams;                // [batch]
   uint8_t* team_id;                 // [batch * MSL_MAX_PLAYERS]
   uint8_t* char_id;                 // [batch * MSL_MAX_PLAYERS]
-  uint8_t* handicap;                // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetHandicap)
-  float* attack_ratio;              // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetAttackRatio)
-  float* defense_ratio;             // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetDefenseRatio)
+  // Live MotionState Coll callback lanes. The row callback is installed on motion entry and may
+  // subsequently be replaced by source callback writes; map dispatch never re-derives ownership
+  // from the current action id.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Escape.c,ftCo_ItemThrow.c}
+  uint16_t* live_coll_callback_id;
+  uint8_t* live_coll_handler_kind;
+  // Set when Fighter_procMap dispatched a migrated callback. A collision-owned motion change may
+  // install a legacy destination callback, but that destination must not run recursively in the
+  // same map phase.
+  uint8_t* live_coll_migrated_ran;
+  uint8_t* handicap;     // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetHandicap)
+  float* attack_ratio;   // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetAttackRatio)
+  float* defense_ratio;  // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetDefenseRatio)
 
   // Kinematics
   float* pos_x;
   float* pos_y;
   float* pos_z;
+  // Source xF8_playerNudgeVel.x, produced before Phys integration and consumed again by grounded
+  // map wrappers such as ft_80084280.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+  float* player_nudge_x;
   float* illusion_ghost_pos0_x;
   float* illusion_ghost_pos0_y;
   float* illusion_ghost_pos1_x;

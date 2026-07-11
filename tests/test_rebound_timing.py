@@ -9,10 +9,12 @@ import pytest
 from tools.eval.validation_dtypes import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 ACT_WAIT = 0x000E
+ACT_FALL = 0x001D
 ACT_ATTACK_HI4 = 0x003F
 ACT_REBOUND_STOP = 0x00ED
 ACT_REBOUND = 0x00EE
 SM_WAIT1_0 = 2
+SM_FALL = 20
 SM_ATTACK_HI4 = 66
 SM_REBOUND = 45
 
@@ -269,7 +271,7 @@ def test_rebound_anim_end_wait_syncs_ground_velocity_from_air_self_velocity() ->
     assert float(out["speed_air_x_self"][0]) == pytest.approx(expected_post_phys_ground_x, abs=2e-6)
 
 
-def test_rebound_anim_end_wait_does_not_publish_without_valid_carried_floor() -> None:
+def test_rebound_anim_end_wait_callback_falls_without_valid_carried_floor() -> None:
     seed = _seed_base()
     fox = _fox()
 
@@ -283,8 +285,12 @@ def test_rebound_anim_end_wait_does_not_publish_without_valid_carried_floor() ->
 
     out = _step_once(seed)
 
-    assert int(out["action_id"][0]) == ACT_WAIT
-    assert int(out["animation_index"][0]) == SM_WAIT1_0
+    # Rebound_Anim enters Wait, then the newly installed Wait_Coll runs in the same fighter proc
+    # and immediately takes ft_80084280's floor-loss handoff to Fall.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_Rebound_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Coll
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["animation_index"][0]) == SM_FALL
     assert int(out["on_ground"][0]) == 0
     assert int(out["ground_id"][0]) == 0xFFFF
 

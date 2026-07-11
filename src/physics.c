@@ -1152,9 +1152,17 @@ static inline uint8_t physics_action_uses_player_nudge_ft80083f88_ground_to_air_
         batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_N))
           ? 1u
           : 0u;
+  const uint8_t ottotto_source_squat =
+      (batch != NULL && action_id == (uint16_t)MSL_ACT_SQUAT &&
+       msl_motion_state_coll_handler_kind(batch->state.char_id[idx],
+                                          batch->state.frame_start_action_id[idx]) ==
+           (uint8_t)MSL_COLL_HANDLER_GROUND_OTTOTTO)
+          ? 1u
+          : 0u;
   const uint8_t audited_action =
       (uint8_t)(action_id == (uint16_t)MSL_ACT_KNEE_BEND || passive_source_squat ||
-                escape_n_terminal_source_squat || action_id == (uint16_t)MSL_ACT_PASSIVE ||
+                escape_n_terminal_source_squat || ottotto_source_squat ||
+                action_id == (uint16_t)MSL_ACT_PASSIVE ||
                 action_id == (uint16_t)MSL_ACT_DOWN_WAIT_U ||
                 action_id == (uint16_t)MSL_ACT_DOWN_WAIT_D ||
                 action_id == (uint16_t)MSL_ACT_DOWN_STAND_U ||
@@ -1257,18 +1265,19 @@ static inline uint16_t physics_common_overlap_nudge_source_action(const MslBatch
     return 0u;
   }
   const uint16_t action_id = batch->state.action_id[idx];
-  if (action_id == (uint16_t)MSL_ACT_GUARD_ON &&
-      batch->state.guard_entry_via_wait_callback[idx] != 0u) {
-    // Source order:
-    // - Fighter_8006A360 runs Anim callback, then ftCommon_8007E0E4 common overlap nudge.
-    // - Fighter_procUpdate runs the input/IASA callback later; a destination Wait row can then
-    //   enter GuardOn through ftCo_80091A4C after the nudge pass.
-    // Use the source-visible Wait callback owner for the overlap gate, while leaving the current
-    // action as GuardOn for the later Phys/Coll callbacks.
-    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
-    return (uint16_t)MSL_ACT_WAIT;
+  const uint16_t frame_start_action = batch->state.frame_start_action_id[idx];
+  if (action_id != frame_start_action &&
+      msl_motion_state_coll_handler_kind(batch->state.char_id[idx], frame_start_action) !=
+          (uint8_t)MSL_COLL_HANDLER_LEGACY) {
+    // Fighter_8006A360 runs the frame-start owner's Anim callback and common overlap nudge before
+    // Fighter_procUpdate can install an IASA destination. Use the generated frame-start callback
+    // owner for that xF8 nudge phase; the live destination still owns subsequent Phys/Coll.
+    // This subsumes the old Wait->GuardOn special case and also covers Ottotto->Squat/Dash and the
+    // other packet-1 same-proc transitions without another action-family list.
+    // data/motion_state/owners/*.bin::MSLMSO01 coll_handler_kind
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate,Fighter_procMap}
+    // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    return frame_start_action;
   }
   return action_id;
 }
@@ -1489,7 +1498,7 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
                                                           batch->state.pos_x[idx], nudge_x,
                                                           batch->state.facing[idx])) ||
                        (physics_action_uses_player_nudge_ft80083f88_ground_to_air_coll(
-                            batch, idx, source_action) &&
+                            batch, idx, batch->state.action_id[idx]) &&
                         (physics_nudge_reaches_facing_edge(floor_graph, self_line,
                                                            batch->state.pos_x[idx], nudge_x,
                                                            batch->state.facing[idx]) ||
@@ -2020,6 +2029,7 @@ void physics_integrate(MslBatch* batch) {
       batch->state.prev_on_ground[idx] = batch->state.on_ground[idx] ? 1 : 0;
 
       const float player_nudge_x = grounded_player_nudge_x[p] + guardsetoff_turnover_nudge_x[p];
+      batch->state.player_nudge_x[idx] = player_nudge_x;
       if (player_nudge_x != 0.0f) {
         batch->state.pos_x[idx] += player_nudge_x;
       }

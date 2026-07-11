@@ -3312,6 +3312,9 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
 
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.live_coll_migrated_ran[idx] != 0u) {
+        continue;
+      }
       if (!grab_attachment_map_callback_runs(batch, idx)) {
         continue;
       }

@@ -19,8 +19,8 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 23
-HEADER_BYTES = 8 + 4 + 2 + 2 + 4 * 12
+FORMAT_VERSION = 24
+HEADER_BYTES = 8 + 4 + 2 + 2 + 4 * 13
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -66,7 +66,7 @@ CLASS2_WALK_ACTION = 1 << 6
 CLASS2_FALL_LIKE_ACTION = 1 << 7
 CLASS2_GUARD_STATE = 1 << 8
 CLASS2_CATCH_START_FLOOR_LOSS = 1 << 9
-CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS = 1 << 10
+CLASS2_GROUND_FLOOR_LOSS_TO_FALL = 1 << 10
 CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE = 1 << 11
 CLASS2_LANDING_ROOT_FLOOR_SNAP = 1 << 12
 CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST = 1 << 13
@@ -87,6 +87,42 @@ CLASS3_CATCH_TARGET_MASK_511 = 1 << 8
 CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED = 1 << 9
 CLASS3_CATCH_KIND_1 = 1 << 10
 CLASS3_CATCH_KIND_2 = 1 << 11
+
+# Stable live Coll callback handlers. Unlike the registry-wide callback ids, these values are an
+# engine ABI and do not change when a new callback symbol is added alphabetically. Packet 1 only
+# assigns kinds to the complete common-grounded family it migrates; all other callbacks remain on
+# the explicit legacy dispatcher until their owner packet lands.
+# refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80084104,ft_80084280,ft_800844EC,ft_800845B4}
+COLL_HANDLER_LEGACY = 0
+COLL_HANDLER_GROUND_B108_FALL = 1
+COLL_HANDLER_GROUND_B2DC_FALL = 2
+COLL_HANDLER_GROUND_B4B0_TEETER = 3
+COLL_HANDLER_GROUND_RUN = 4
+COLL_HANDLER_GROUND_GUARD = 5
+COLL_HANDLER_GROUND_GUARD_SETOFF = 6
+COLL_HANDLER_GROUND_OTTOTTO = 7
+
+COLL_HANDLER_BY_SYMBOL = {
+    "ftCo_Turn_Coll": COLL_HANDLER_GROUND_B108_FALL,
+    "ftCo_KneeBend_Coll": COLL_HANDLER_GROUND_B108_FALL,
+    "ftCo_Squat_Coll": COLL_HANDLER_GROUND_B108_FALL,
+    "ftCo_SquatWait_Coll": COLL_HANDLER_GROUND_B108_FALL,
+    "ftCo_SquatRv_Coll": COLL_HANDLER_GROUND_B108_FALL,
+    "ftCo_TurnRun_Coll": COLL_HANDLER_GROUND_B2DC_FALL,
+    "ftCo_Wait_Coll": COLL_HANDLER_GROUND_B4B0_TEETER,
+    "ftCo_Walk_Coll": COLL_HANDLER_GROUND_B4B0_TEETER,
+    "ftCo_RunBrake_Coll": COLL_HANDLER_GROUND_B4B0_TEETER,
+    "ftCo_Dash_Coll": COLL_HANDLER_GROUND_RUN,
+    "ftCo_Run_Coll": COLL_HANDLER_GROUND_RUN,
+    "ftCo_RunDirect_Coll": COLL_HANDLER_GROUND_RUN,
+    "ftCo_GuardOn_Coll": COLL_HANDLER_GROUND_GUARD,
+    "ftCo_Guard_Coll": COLL_HANDLER_GROUND_GUARD,
+    "ftCo_GuardOff_Coll": COLL_HANDLER_GROUND_GUARD,
+    "ftCo_GuardReflect_Coll": COLL_HANDLER_GROUND_GUARD,
+    "ftCo_GuardSetOff_Coll": COLL_HANDLER_GROUND_GUARD_SETOFF,
+    "ftCo_Ottotto_Coll": COLL_HANDLER_GROUND_OTTOTTO,
+    "ftCo_OttottoWait_Coll": COLL_HANDLER_GROUND_OTTOTTO,
+}
 
 CATCH_TARGET_MASK_1_MOTION_STATES = {
     "ftCo_MS_DownWaitU",
@@ -879,11 +915,11 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         }
         or anim_cb == "ftCo_GuardReflect_Anim"
     ):
-        # Broad source floor-loss handoff gate used by locomotion's post-collision pass. It is
-        # still generated from MotionState callback ownership, but keeps later airborne/damage/item/
-        # catch owners out of the common grounded handoff.
-        # refs/melee/src/melee/ft/ft_081B.c common grounded callbacks
-        bits |= CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS
+        # MotionState owners whose grounded collision callback resolves loss of its carried floor
+        # by entering Fall. Packet 1 callbacks consume this outcome in the live handler; legacy
+        # callbacks retain the generated bit until their owner packet is migrated.
+        # refs/melee/src/melee/ft/ft_081B.c common grounded wrappers
+        bits |= CLASS2_GROUND_FLOOR_LOSS_TO_FALL
     if (
         anim_cb in {"ftCo_CliffCatch_Anim", "ftCo_CliffWait_Anim"}
         or (anim_cb == "ftCo_Fall_Anim" and iasa_cb == "ftCo_Fall_IASA")
@@ -1118,7 +1154,8 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
     class2_bits_off = class_bits_off + action_count * 4
     class3_bits_off = class2_bits_off + action_count * 4
     fx_special_kind_off = class3_bits_off + action_count * 4
-    file_bytes = fx_special_kind_off + action_count
+    coll_handler_kind_off = fx_special_kind_off + action_count
+    file_bytes = coll_handler_kind_off + action_count
 
     submotion = [U16_ABSENT] * action_count
     x4_flags = [0] * action_count
@@ -1132,6 +1169,7 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
     class2_bits = [0] * action_count
     class3_bits = [0] * action_count
     fx_special_kind = [0] * action_count
+    coll_handler_kind = [COLL_HANDLER_LEGACY] * action_count
     for action_id, row in rows.items():
         submotion[action_id] = row.submotion_id
         x4_flags[action_id] = row.x4_flags
@@ -1145,6 +1183,9 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
         class2_bits[action_id] = row.class2_bits
         class3_bits[action_id] = row.class3_bits
         fx_special_kind[action_id] = FX_SPECIAL_KIND_BY_SYMBOL.get(row.anim_cb, 0)
+        coll_handler_kind[action_id] = COLL_HANDLER_BY_SYMBOL.get(
+            row.coll_cb, COLL_HANDLER_LEGACY
+        )
 
     buf = bytearray()
     buf += FORMAT_MAGIC
@@ -1164,6 +1205,7 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
         class2_bits_off,
         class3_bits_off,
         fx_special_kind_off,
+        coll_handler_kind_off,
     ):
         buf += _u32_le(off)
     for value in submotion:
@@ -1181,6 +1223,8 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
     for value in class3_bits:
         buf += _u32_le(value)
     for value in fx_special_kind:
+        buf += bytes((value & 0xFF,))
+    for value in coll_handler_kind:
         buf += bytes((value & 0xFF,))
     if len(buf) != file_bytes:
         raise AssertionError((len(buf), file_bytes))
@@ -1234,7 +1278,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "FALL_LIKE_ACTION": CLASS2_FALL_LIKE_ACTION,
         "GUARD_STATE": CLASS2_GUARD_STATE,
         "CATCH_START_FLOOR_LOSS": CLASS2_CATCH_START_FLOOR_LOSS,
-        "GROUND_LOCOMOTION_FLOOR_LOSS": CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS,
+        "GROUND_FLOOR_LOSS_TO_FALL": CLASS2_GROUND_FLOOR_LOSS_TO_FALL,
         "CLIFF_LEDGE_FLOOR_PRESERVE": CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE,
         "LANDING_ROOT_FLOOR_SNAP": CLASS2_LANDING_ROOT_FLOOR_SNAP,
         "GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST": CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST,
@@ -1258,6 +1302,16 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "CATCH_KIND_2": CLASS3_CATCH_KIND_2,
     }
     fx_special_kinds = dict(FX_SPECIAL_KIND_VALUES)
+    coll_handler_kinds = {
+        "LEGACY": COLL_HANDLER_LEGACY,
+        "GROUND_B108_FALL": COLL_HANDLER_GROUND_B108_FALL,
+        "GROUND_B2DC_FALL": COLL_HANDLER_GROUND_B2DC_FALL,
+        "GROUND_B4B0_TEETER": COLL_HANDLER_GROUND_B4B0_TEETER,
+        "GROUND_RUN": COLL_HANDLER_GROUND_RUN,
+        "GROUND_GUARD": COLL_HANDLER_GROUND_GUARD,
+        "GROUND_GUARD_SETOFF": COLL_HANDLER_GROUND_GUARD_SETOFF,
+        "GROUND_OTTOTTO": COLL_HANDLER_GROUND_OTTOTTO,
+    }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {
         "magic": FORMAT_MAGIC.decode("ascii"),
@@ -1267,6 +1321,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "classes2": classes2,
         "classes3": classes3,
         "fx_special_kinds": fx_special_kinds,
+        "coll_handler_kinds": coll_handler_kinds,
         "symbols": symbols,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)

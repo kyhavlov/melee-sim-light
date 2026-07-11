@@ -13,12 +13,12 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 == replays/validation/falcon/AmusingIncompleteCapybara.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 2360
-rollout.streak_count: 11
+rollout.streak_count: 10
 rollout.streak_len.median: 742
 rollout.streak_len.p90: 1019
 rollout.streak_len.p95: 2360
 rollout.streak_len.max: 2360
-rollout.first_mismatch_total: 10
+rollout.first_mismatch_total: 9
 rollout.first_mismatch_seeded_total: 7
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -33,12 +33,12 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:214
 
 == replays/validation/falcon/EmotionalNaturalLemur.slpz ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1427
+rollout.best_len: 1428
 rollout.streak_count: 26
 rollout.streak_len.median: 301
 rollout.streak_len.p90: 673
 rollout.streak_len.p95: 1341
-rollout.streak_len.max: 1427
+rollout.streak_len.max: 1428
 rollout.first_mismatch_total: 28
 rollout.first_mismatch_seeded_total: 17
 rollout.float_status: NOT-CLEAN
@@ -86,7 +86,7 @@ rollout.first_mismatch_total: 21
 rollout.first_mismatch_seeded_total: 7
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_x max_err=3.96 rec=7390 p=1 seed/ref/out=7.74456/8.08304/12.043 actions=234/234/234 category=unclassified
+  1. pos_x max_err=3.95999 rec=7390 p=1 seed/ref/out=7.74456/8.08304/12.043 actions=234/234/234 category=unclassified
   2. percent max_err=3 rec=3437 p=1 seed/ref/out=0/0/3 actions=67/67/67 category=unclassified
   3. pos_y max_err=1.73307 rec=11383 p=1 seed/ref/out=-23.0962/-24.8293/-23.0962 actions=253/256/256 category=unclassified
 rollout.float_top_downstream:
@@ -107,7 +107,7 @@ rollout.first_mismatch_total: 31
 rollout.first_mismatch_seeded_total: 13
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_x max_err=15.7732 rec=7142 p=0 seed/ref/out=59.8677/59.3173/75.0904 actions=90/90/90 category=unclassified
+  1. pos_x max_err=15.7731 rec=7142 p=0 seed/ref/out=59.8677/59.3173/75.0904 actions=90/90/90 category=unclassified
   2. pos_y max_err=6.67218 rec=4154 p=1 seed/ref/out=0.00287533/6.67505/0.002875 actions=43/43/43 category=unclassified
   3. percent max_err=1.82 rec=2645 p=0 seed/ref/out=5.64/5.64/7.46 actions=90/90/90 category=unclassified
 rollout.float_top_downstream:
@@ -318,7 +318,7 @@ rollout.status: NOT-CLEAN
 rollout.best_len: 1430
 rollout.streak_count: 56
 rollout.streak_len.median: 154
-rollout.streak_len.p90: 470
+rollout.streak_len.p90: 439
 rollout.streak_len.p95: 659
 rollout.streak_len.max: 1430
 rollout.first_mismatch_total: 82
@@ -374,7 +374,7 @@ rollout.float_top_errors:
 rollout.float_top_downstream:
   1. pos_y max_err=12.8926 rec=3991 p=0 seed/ref/out=-10.8143/-12.8925/0.0001 actions=91/91/191 category=downstream_discrete_mismatch
   2. percent max_err=12 rec=1770 p=0 seed/ref/out=0/0/12 actions=15/15/79 category=downstream_discrete_mismatch
-  3. pos_x max_err=7.49998 rec=3557 p=0 seed/ref/out=-76.0844/-78.7603/-86.2603 actions=357/357/357 category=downstream_discrete_mismatch
+  3. pos_x max_err=7.49999 rec=3557 p=0 seed/ref/out=-76.0844/-78.7603/-86.2603 actions=357/357/357 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:178
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
@@ -433,13 +433,13 @@ rollout.first_mismatch_total: 18
 rollout.first_mismatch_seeded_total: 11
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_y max_err=35.8303 rec=5965 p=0 seed/ref/out=4.67208/1.17208/-34.6582 actions=28/28/28 category=unclassified
+  1. pos_y max_err=35.8303 rec=5962 p=0 seed/ref/out=11.7281/11.6721/-24.1582 actions=28/28/28 category=unclassified
   2. pos_x max_err=7.93882 rec=5946 p=0 seed/ref/out=69.4071/69.9877/62.0489 actions=28/28/28 category=unclassified
   3. shield_hp max_err=0.279999 rec=4808 p=0 seed/ref/out=59.72/59.51/59.79 actions=178/235/235 category=unclassified
 rollout.float_top_downstream:
   1. pos_y max_err=43.5595 rec=5968 p=0 seed/ref/out=-5.82792/0.000100136/-43.5594 actions=28/43/236 category=downstream_discrete_mismatch
   2. shield_hp max_err=8.4 rec=3277 p=1 seed/ref/out=59.44/59.16/50.76 actions=178/178/181 category=downstream_discrete_mismatch
-  3. pos_x max_err=7.93882 rec=5968 p=0 seed/ref/out=52.8577/50.8157/42.8769 actions=28/43/236 category=downstream_discrete_mismatch
+  3. pos_x max_err=7.93882 rec=5968 p=0 seed/ref/out=52.8577/50.8157/42.8768 actions=28/43/236 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:65
 
 == replays/validation/falcon/falcon_demo.slpz ==
@@ -483,13 +483,13 @@ rollout.float_top_errors:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:45
 
 == suite summary ==
-overall.rollout.streak_count: 563
+overall.rollout.streak_count: 562
 overall.rollout.streak_len.median: 203
 overall.rollout.streak_len.p90: 763
 overall.rollout.streak_len.p95: 1003
 overall.rollout.streak_len.max: 2710
 overall.rollout.best_len.max: 2710
-overall.rollout.first_mismatch_total: 597
+overall.rollout.first_mismatch_total: 596
 overall.rollout.first_mismatch_seeded_total: 353
 overall.rollout.approved_exception_total: 13
 overall.rollout.approved_exception_seeded_total: 13

@@ -213,6 +213,38 @@ typedef enum MslStageRawLineKind {
   MSL_STAGE_RAW_LINE_RIGHT_WALL = 4,
 } MslStageRawLineKind;
 
+// Immutable source-oriented MapLine view. This is the canonical line identity for new mpLib/mpColl
+// code; the typed floor/wall/ceiling graphs remain temporary compatibility views for callback
+// families not yet migrated by the core rewrite.
+// refs/melee/src/melee/mp/types.h::{MapLine,MapJoint}
+typedef struct MslStageMapLine {
+  float x0;
+  float y0;
+  float x1;
+  float y1;
+  float ground_friction_mul;
+  uint16_t segment_i;
+  int16_t prev_id;
+  int16_t next_id;
+  int16_t prev_alt_id;
+  int16_t next_alt_id;
+  int16_t joint_id;
+  uint16_t hi_flags;
+  uint16_t lo_flags;
+  uint8_t kind;
+  uint8_t fighter_solid;
+  uint8_t is_platform;
+  uint8_t is_ledge;
+  uint8_t stage_object_support_kind;
+  uint8_t platform_transform_kind;
+  uint8_t platform_transform_id;
+} MslStageMapLine;
+
+typedef struct MslStageMap {
+  const MslStageMapLine* lines;
+  size_t line_count;
+} MslStageMap;
+
 typedef enum MslStageObjectSupportKind {
   MSL_STAGE_OBJECT_SUPPORT_NONE = 0,
   MSL_STAGE_OBJECT_SUPPORT_YOSHI_SHYGUY = 1,
@@ -261,6 +293,11 @@ uint8_t stage_collision_require_stage(uint32_t stage_id);
 // loaded during initialization.
 uint8_t stage_collision_stage_registered(uint32_t stage_id);
 uint8_t stage_collision_stage_available(uint32_t stage_id);
+
+const MslStageMap* stage_collision_get_map(uint32_t stage_id);
+const MslStageMapLine* stage_collision_map_line(uint32_t stage_id, uint16_t segment_i);
+uint8_t stage_collision_map_line_world(const MslBatch* batch, int bi, const MslStageMapLine* line,
+                                       MslStageMapLine* out);
 
 void stage_collision_apply(MslBatch* batch);
 

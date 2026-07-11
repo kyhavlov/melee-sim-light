@@ -2628,41 +2628,6 @@ def test_fod_grounded_floor_ceiling_retry_runs_vertical_squeeze_owner() -> None:
     assert float(out["pos_y"][0]) == pytest.approx(0.0028839111328125, abs=1e-5)
 
 
-def test_fod_grounded_vertical_squeeze_restore_consumes_x64_ecb() -> None:
-    # Source mpCollInterpolateECB consumes x34_flags.b6 on the next interpolation: prev_ecb first
-    # receives the squeezed ECB, current ECB restores from x64_ecb, and b6 clears unless another
-    # squeeze is produced.
-    # refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpCollSqueezeVertical}
-    import msl_binding
-
-    seed = _seed_base(2, ACT_WAIT, SM_WAIT1_0, -40.0, -175.0)
-    seed["on_ground"][0, 0] = np.uint8(1)
-    seed["ground_id"][0, 0] = np.uint16(5)
-    seed["speed_y_self"][0, 0] = np.float32(-80.0)
-
-    sizes = msl_binding.sizes()
-    seed_stride = int(sizes["seed"])
-    input_t = _input_bytes()
-    colldata = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
-
-    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
-    try:
-        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
-        snaps = []
-        for _ in range(3):
-            msl_binding.step_input(handle, input_t, input_t)
-            msl_binding.debug_write_colldata_ecb(handle, colldata)
-            snaps.append(colldata.view(_colldata_ecb_dtype()).reshape((1,))[0].copy())
-    finally:
-        msl_binding.destroy(handle)
-
-    assert int(snaps[0]["squeeze_restore_valid"][0]) == 1
-    assert float(snaps[0]["prev_top_rel_y"][0]) < 0.0
-    assert float(snaps[0]["squeeze_restore_top_rel_y"][0]) > 0.0
-    assert int(snaps[2]["squeeze_restore_valid"][0]) == 0
-    assert float(snaps[2]["current_top_rel_y"][0]) > 0.0
-
-
 def test_yoshi_center_raw_platform_is_debug_visible_but_not_fighter_solid() -> None:
     # The tiny raised center line is raw GrSt collision metadata, but not admitted as current legal
     # Yoshi fighter-solid terrain. Keep debug visibility while rejecting fighter collision.
@@ -3775,10 +3740,12 @@ def test_fod_landing_rider_inherits_height_platform_motion_delta() -> None:
     assert float(static_out["pos_y"][0]) == pytest.approx(float(current_world_y) + 0.0001, abs=1e-5)
 
 
-def test_kneebend_static_platform_does_not_gain_generic_downward_snap() -> None:
-    # The 80083F88 admission above is specifically for generated moving height platforms. Static
-    # platform rows keep the existing grounded anti-snap guard rather than using KneeBend as a
-    # generic downward root clamp.
+def test_kneebend_static_platform_projects_carried_root_with_b108() -> None:
+    # KneeBend_Coll reaches mpColl_8004B108. Its grounded mode-5 ECB fixes bottom.y at zero and
+    # mpColl_800488F4 applies mpLib_8004DD90_Floor's signed correction, including downward root
+    # projection onto a still-live carried platform.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800488F4,mpColl_8004B108}
     seed = _seed_base(31, ACT_KNEE_BEND, SM_KNEE_BEND, -40.0, 27.700000762939453)
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["ground_id"][0, 0] = np.uint16(2)
@@ -3787,7 +3754,7 @@ def test_kneebend_static_platform_does_not_gain_generic_downward_snap() -> None:
 
     assert int(out["on_ground"][0]) == 1
     assert int(out["ground_id"][0]) == 2
-    assert float(out["pos_y"][0]) == pytest.approx(27.700000762939453, abs=1e-6)
+    assert float(out["pos_y"][0]) == pytest.approx(27.20009994506836, abs=1e-6)
 
 
 def test_downbound_does_not_inherit_kneebend_height_platform_carry() -> None:

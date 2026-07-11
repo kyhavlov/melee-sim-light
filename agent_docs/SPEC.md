@@ -7684,6 +7684,29 @@ Captain Falcon special callback ownership:
   `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`, and
   `refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_8007D60C,ftCommon_8007D7FC}`.
 
+Common grounded map-callback ownership (core-rewrite Packet 1):
+- `MSLMSO01` v24 carries a stable `coll_handler_kind` generated from each row's exact decomp Coll
+  symbol. Runtime motion entry installs both the raw callback identity and its stable handler kind;
+  explicit source callback overrides replace those live lanes. Core collision does not infer a
+  callback family from character or action id.
+- The migrated grounded handlers are B108, B2DC, B4B0, Run, Guard, GuardSetOff, and Ottotto. Their
+  19 exact callback identities cover 21 common action rows for each of Fox, Falco, Marth, Sheik,
+  Zelda, and Captain Falcon. A live migrated handler runs one direct grounded map callback and is
+  excluded from legacy ground, wall/ceiling, and locomotion collision passes.
+- Grounded collision retains current/previous/desired ECB state and its floor surface across
+  free-running callbacks. The direct wrapper owns bounded ECB interpolation, ordered wall/ceiling
+  and floor resolution, floor retry/carry, environment publication, and immediate collision-owned
+  motion entry. A destination callback installed by that entry does not run recursively in the same
+  map phase.
+- Replay one-step seeds expose the source previous root but not persistent CollData ECB. Only that
+  missing ECB packet is reconstructed from the live destination's preceding pose; free-running
+  gameplay never takes the reconstruction bridge.
+- Source anchors:
+  `refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_LoadECB_inline,mpCollInterpolateECB,
+  mpColl_8004A908_Floor,mpColl_8004B108,mpColl_8004B2DC,mpColl_8004B4B0}`,
+  `refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_procMap}`, and
+  `data/motion_state/owners/*.bin::MSLMSO01 coll_handler_kind`.
+
 TODO — Marth prefix-owned special state is not batch deterministic:
 - Affected runtime lanes are `special_stick_angle` (`fp->lstick_angle`, consumed by Dolphin Slash
   launch) and `specials_air_used` (`fv.ms.x222C`, consumed by aerial Dancing Blade entry).

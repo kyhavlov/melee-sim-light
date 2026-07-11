@@ -48,7 +48,7 @@
     "FRESH_GUARDON_ITEM_SHIELDDESC_IASA": 32,
     "FT_CHECK_GROUND_LEDGE_BOTH_COLL": 32768,
     "GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST": 8192,
-    "GROUND_LOCOMOTION_FLOOR_LOSS": 1024,
+    "GROUND_FLOOR_LOSS_TO_FALL": 1024,
     "GUARD_STATE": 256,
     "LANDING_ROOT_FLOOR_SNAP": 4096,
     "WALK_ACTION": 64
@@ -66,6 +66,16 @@
     "PHASE4_DAMAGE_FLY_COLL": 8,
     "PHASE4_ESCAPE_AIR_COLL": 2,
     "WALLTECH_COLL": 64
+  },
+  "coll_handler_kinds": {
+    "GROUND_B108_FALL": 1,
+    "GROUND_B2DC_FALL": 2,
+    "GROUND_B4B0_TEETER": 3,
+    "GROUND_GUARD": 5,
+    "GROUND_GUARD_SETOFF": 6,
+    "GROUND_OTTOTTO": 7,
+    "GROUND_RUN": 4,
+    "LEGACY": 0
   },
   "fx_special_kinds": {
     "SPECIAL_AIR_HI": 16,
@@ -4934,5 +4944,5 @@
       "symbol": "ftpickupitem_Phys"
     }
   ],
-  "version": 23
+  "version": 24
 }

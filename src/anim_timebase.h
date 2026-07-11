@@ -243,6 +243,10 @@ void attack_identity_on_motion_state_change_ft_800890D0(MslBatch* batch, size_t 
 // Defined in src/instance_id.c.
 void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx);
 
+// Defined in motion_state_runtime.c. Fighter_ChangeMotionState installs callback pointers before
+// later entry-side effects; keep the live callback lane on the same central entry boundary.
+void motion_state_install_live_callbacks(MslBatch* batch, size_t idx);
+
 static inline void msl_motion_state_enter_side_effects(MslBatch* batch, size_t idx) {
   // Decomp: Fighter_ChangeMotionState updates motion-state-owned identity/bookkeeping after
   // installing the destination motion. Some simulator paths intentionally delay only the animation
@@ -251,6 +255,7 @@ static inline void msl_motion_state_enter_side_effects(MslBatch* batch, size_t i
   // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
   // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
   if (batch != NULL) {
+    motion_state_install_live_callbacks(batch, idx);
     // Decomp: Fighter_UnkInitReset and Fighter_ChangeMotionState copy fp->facing_dir into
     // fp->facing_dir1 on motion-state entry. Root-motion helpers such as ft_80085030 consume
     // facing_dir1, so rollout entries must not inherit a stale prior state's sign.

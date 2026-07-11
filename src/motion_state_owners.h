@@ -24,6 +24,18 @@ enum {
 
 enum { MSL_MOTION_STATE_COMMON_ACTION_CAP = 1024 };
 
+typedef enum MslCollHandlerKind {
+  MSL_COLL_HANDLER_LEGACY = 0,
+  MSL_COLL_HANDLER_GROUND_B108_FALL = 1,
+  MSL_COLL_HANDLER_GROUND_B2DC_FALL = 2,
+  MSL_COLL_HANDLER_GROUND_B4B0_TEETER = 3,
+  MSL_COLL_HANDLER_GROUND_RUN = 4,
+  MSL_COLL_HANDLER_GROUND_GUARD = 5,
+  MSL_COLL_HANDLER_GROUND_GUARD_SETOFF = 6,
+  MSL_COLL_HANDLER_GROUND_OTTOTTO = 7,
+  MSL_COLL_HANDLER_COUNT = 8,
+} MslCollHandlerKind;
+
 enum {
   MSL_MS_CLASS_ATTACK_AIR = 1u << 0,
   MSL_MS_CLASS_ATTACK_S3 = 1u << 1,
@@ -70,7 +82,7 @@ enum {
   MSL_MS_CLASS2_FALL_LIKE_ACTION = 1u << 7,
   MSL_MS_CLASS2_GUARD_STATE = 1u << 8,
   MSL_MS_CLASS2_CATCH_START_FLOOR_LOSS = 1u << 9,
-  MSL_MS_CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS = 1u << 10,
+  MSL_MS_CLASS2_GROUND_FLOOR_LOSS_TO_FALL = 1u << 10,
   MSL_MS_CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE = 1u << 11,
   MSL_MS_CLASS2_LANDING_ROOT_FLOOR_SNAP = 1u << 12,
   MSL_MS_CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST = 1u << 13,
@@ -106,6 +118,7 @@ uint16_t msl_motion_state_anim_cb_id(uint8_t char_id, uint16_t action_id);
 uint16_t msl_motion_state_iasa_cb_id(uint8_t char_id, uint16_t action_id);
 uint16_t msl_motion_state_phys_cb_id(uint8_t char_id, uint16_t action_id);
 uint16_t msl_motion_state_coll_cb_id(uint8_t char_id, uint16_t action_id);
+uint8_t msl_motion_state_coll_handler_kind(uint8_t char_id, uint16_t action_id);
 uint16_t msl_motion_state_cam_cb_id(uint8_t char_id, uint16_t action_id);
 uint8_t msl_motion_state_has_motion_flag(uint8_t char_id, uint16_t action_id, uint32_t flag_mask);
 uint32_t msl_motion_state_class_bits(uint8_t char_id, uint16_t action_id);

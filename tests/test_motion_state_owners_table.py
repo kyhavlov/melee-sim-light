@@ -35,6 +35,7 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS2_COMMON_GROUNDED_B108_COLL,
     CLASS2_COMMON_GROUNDED_COLL,
     CLASS2_CATCH_START_FLOOR_LOSS,
+    CLASS2_GROUND_FLOOR_LOSS_TO_FALL,
     CLASS2_CLIFF_HOLD_PHYS_SNAP,
     CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE,
     CLASS2_FALL_LIKE_ACTION,
@@ -43,7 +44,6 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL,
     CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL,
     CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST,
-    CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS,
     CLASS2_GUARD_STATE,
     CLASS2_LANDING_ROOT_FLOOR_SNAP,
     CLASS2_WALK_ACTION,
@@ -74,6 +74,8 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_LANDING_COLL,
     CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL,
     CLASS_SPECIALHI,
+    COLL_HANDLER_BY_SYMBOL,
+    COLL_HANDLER_LEGACY,
 )
 from tools.slippi.motion_state_owners import (
     HEADER_BYTES,
@@ -725,12 +727,6 @@ def test_motion_state_owner_phase3_common_owner_classes_exclude_later_families()
     assert not both_have2(0x000E, CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST)  # Wait
     assert not both_have2(0x0030, CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST)  # Attack100Loop
 
-    for action_id in (0x000E, 0x000F, 0x002A, 0x0046, 0x002C, 0x003A, 0x003F, 0x00B6):
-        assert both_have2(action_id, CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS), hex(action_id)
-    assert not both_have2(0x0030, CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS)  # Attack100Loop
-    assert not both_have2(0x00D4, CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS)  # Catch
-    assert not both_have2(0x0041, CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS)  # AttackAirN
-
     # Phase 3 airborne common owners:
     # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}.
     assert both_have2(0x0019, CLASS2_COMMON_AIRBORNE_COLL)  # JumpF
@@ -1150,7 +1146,8 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
             )
             or coll_cb == "ftCo_LandingAir_Coll"
             or coll_cb in {"ftCo_EscapeF_Coll", "ftCo_EscapeB_Coll", "ftCo_EscapeN_Coll"}
-            or anim_cb in {
+            or anim_cb
+            in {
                 "ftCo_Attack11_Anim",
                 "ftCo_Attack12_Anim",
                 "ftCo_Attack13_Anim",
@@ -1164,7 +1161,7 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
             }
             or anim_cb == "ftCo_GuardReflect_Anim"
         ):
-            bits |= CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS
+            bits |= CLASS2_GROUND_FLOOR_LOSS_TO_FALL
         if (
             anim_cb in {"ftCo_CliffCatch_Anim", "ftCo_CliffWait_Anim"}
             or (anim_cb == "ftCo_Fall_Anim" and iasa_cb == "ftCo_Fall_IASA")
@@ -1446,6 +1443,19 @@ def test_motion_state_owner_source_artifacts_match_generated_data() -> None:
         assert (SOURCE_ARTIFACT_OWNERS / rel).read_bytes() == (
             Path("data/motion_state/owners") / rel
         ).read_bytes(), rel
+
+
+def test_coll_handler_kind_matches_source_callback_symbols_for_all_supported_chars() -> None:
+    # The live map dispatcher consumes this stable ABI byte, never the alphabetically assigned
+    # callback id. Exhaustive parity prevents a row from silently entering the wrong source owner.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_procMap}
+    symbols = read_callback_manifest(MANIFEST)
+    for char in _data_manifest_chars():
+        table = read_mslmso01_v1(Path("data/motion_state/owners") / f"{char}.bin")
+        for action_id, value in enumerate(table.coll_handler_kind):
+            coll_cb = symbols[int(table.coll_cb_id[action_id])]
+            expected = COLL_HANDLER_BY_SYMBOL.get(coll_cb, COLL_HANDLER_LEGACY)
+            assert int(value) == expected, (char, action_id, coll_cb)
 
 
 def test_fx_special_kind_matches_anim_callback_symbols() -> None:

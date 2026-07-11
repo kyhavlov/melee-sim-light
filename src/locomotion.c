@@ -1955,10 +1955,6 @@ static inline uint8_t action_is_fall_like(uint16_t a) {
   return msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_FALL_LIKE_ACTION);
 }
 
-static inline uint8_t action_is_ground_locomotion(uint16_t a) {
-  return msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS);
-}
-
 static inline uint8_t action_is_grounded_guard_state(uint16_t a) {
   return msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_GUARD_STATE);
 }
@@ -2048,73 +2044,6 @@ static inline uint8_t input_hsd_pad_lr_held_lane(const MslBatch* batch, const Ms
                        : 0u);
 }
 
-static inline uint8_t guard_floor_loss_should_missfoot(const MslBatch* batch, size_t idx,
-                                                       uint32_t stage_id) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const uint16_t ground_id = batch->state.ground_id[idx];
-  if (ground_id == 0xFFFFu) {
-    return 0u;
-  }
-  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
-  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
-  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
-    return 0u;
-  }
-  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
-  MslStageFloorLine world = {0};
-  (void)stage_collision_floor_line_world(batch, bi, &g->lines[(size_t)line_idx], &world);
-  const MslStageFloorLine* line = &world;
-  const float left = (line->x0 < line->x1) ? line->x0 : line->x1;
-  const float right = (line->x0 > line->x1) ? line->x0 : line->x1;
-  const float x = batch->state.pos_x[idx];
-  const uint8_t facing_right = batch->state.facing[idx] ? 1u : 0u;
-  // Decomp: GuardOn/Guard/GuardOff/GuardReflect Coll callbacks call ft_800845B4, which routes
-  // mpColl ledge-slip floor loss to ftCo_8009F39C only when the open endpoint is behind the
-  // fighter's facing direction; otherwise it falls normally.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-  //   ftCo_GuardOn_Coll,ftCo_Guard_Coll,ftCo_GuardOff_Coll,ftCo_GuardReflect_Coll}
-  // refs/melee/src/melee/ft/ft_081B.c::ft_800845B4
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_8009F39C
-  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
-  if (x < left && facing_right) {
-    return 1u;
-  }
-  if (x > right && !facing_right) {
-    return 1u;
-  }
-  return 0u;
-}
-
-static inline void enter_missfoot_from_ground_floor_loss(MslBatch* batch, const MslCharParams* ch,
-                                                         size_t idx) {
-  if (batch == NULL || ch == NULL) {
-    return;
-  }
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_MISS_FOOT;
-  batch->state.animation_index[idx] = (uint32_t)MSL_SM_MISS_FOOT;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  batch->state.on_ground[idx] = 0u;
-  batch->state.fall_fast[idx] = 0u;
-  batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0u;
-  batch->state.ecb_lock_timer[idx] = 10u;
-  batch->state.coll_desired_ecb_bottom_locked_owner[idx] = 0u;
-  // `ftCo_8009F39C` clears only fp->x8c_kb_vel.y before entering MissFoot. It preserves
-  // fp->self_vel.y, then, because the source caller is still GA_Ground, calls
-  // ftCommon_8007D5D4 to clear gr_vel and lock CollData. Grounded slope movement therefore carries
-  // the already-projected self-velocity into MissFoot while KB y is reset.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_8009F39C
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
-  batch->state.speed_y_attack[idx] = 0.0f;
-  if (batch->state.speed_air_x_self[idx] > ch->air_drift_max) {
-    batch->state.speed_air_x_self[idx] = ch->air_drift_max;
-  } else if (batch->state.speed_air_x_self[idx] < -ch->air_drift_max) {
-    batch->state.speed_air_x_self[idx] = -ch->air_drift_max;
-  }
-  batch->state.speed_ground_x_self[idx] = 0.0f;
-}
-
 static inline uint8_t ottotto_edge_matches_facing(const MslBatch* batch, int bi, uint16_t ground_id,
                                                   uint8_t facing, float pos_x) {
   const uint32_t stage_id = (batch != NULL && bi >= 0) ? batch->state.stage_id[(size_t)bi] : 0u;
@@ -2135,24 +2064,6 @@ static inline uint8_t ottotto_edge_matches_facing(const MslBatch* batch, int bi,
   // the opposite endpoint while facing away becomes the common Fall path instead of teeter.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_Coll
   return facing ? (uint8_t)(pos_x >= line->x1) : (uint8_t)(pos_x <= line->x0);
-}
-
-static inline uint8_t ottotto_position_past_facing_edge(const MslBatch* batch, int bi,
-                                                        uint16_t ground_id, uint8_t facing,
-                                                        float pos_x) {
-  const uint32_t stage_id = (batch != NULL && bi >= 0) ? batch->state.stage_id[(size_t)bi] : 0u;
-  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
-  if (line_idx < 0) {
-    return 0u;
-  }
-  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
-  if (g == NULL || (size_t)line_idx >= g->line_count) {
-    return 0u;
-  }
-  MslStageFloorLine world = {0};
-  (void)stage_collision_floor_line_world(batch, bi, &g->lines[(size_t)line_idx], &world);
-  const MslStageFloorLine* line = &world;
-  return facing ? (uint8_t)(pos_x > line->x1) : (uint8_t)(pos_x < line->x0);
 }
 
 static inline uint8_t ftco_ottotto_iasa_try_enter(MslBatch* batch, const MslCommonParams* c,
@@ -2261,29 +2172,6 @@ static inline uint8_t position_past_floor_span(const MslBatch* batch, int bi, ui
   const float lo = (world.x0 < world.x1) ? world.x0 : world.x1;
   const float hi = (world.x0 < world.x1) ? world.x1 : world.x0;
   return (uint8_t)(pos_x < lo || pos_x > hi);
-}
-
-static inline uint8_t dash_turn_floor_loss_is_source_facing_stage_ledge(const MslBatch* batch,
-                                                                        int bi, uint16_t ground_id,
-                                                                        uint8_t dash_source_facing,
-                                                                        float pos_x) {
-  if (batch == NULL || bi < 0) {
-    return 0u;
-  }
-  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
-  // The Turn_IASA -> Dash floor-loss carry is only needed when Dash_Coll is losing a stage ledge
-  // floor in the source-facing direction. Do not apply it to generic floor edges: those use the
-  // replay-visible facing after Turn has published, and widening this to all floor-loss rows
-  // changes existing Yoshi/Dream Land validation paths.
-  // data/stages/bin/*.bin::MSLSTG01 ledge floor ids
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_IASA,fn_800C9C2C}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Coll
-  const int ledge_side = dash_source_facing ? 1 : 0;
-  const MslStageFloorLine* ledge_floor = stage_collision_get_ledge_floor_line(stage_id, ledge_side);
-  if (ledge_floor == NULL || ledge_floor->segment_i != ground_id) {
-    return 0u;
-  }
-  return ottotto_edge_matches_facing(batch, bi, ground_id, dash_source_facing, pos_x);
 }
 
 static inline uint8_t ottotto_edge_point_for_facing(const MslBatch* batch, int bi,
@@ -5819,49 +5707,11 @@ void locomotion_update_post_collision(MslBatch* batch) {
         continue;
       }
 
-      if (was_ground && now_ground && a == (uint16_t)MSL_ACT_KNEE_BEND &&
-          (batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_XY) == 0u &&
-          did_tap_jump(c, stick_i8_to_unit(batch->state.input_main_y[idx]),
-                       batch->state.tilt_timer_y[idx]) &&
-          (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO ||
-           batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
-          ottotto_edge_matches_facing(batch, bi, batch->state.ground_id[idx],
-                                      batch->state.facing[idx], batch->state.pos_x[idx])) {
-        // Ottotto_IASA can enter KneeBend, but the new state's collision callback still owns the
-        // edge floor-loss handoff. KneeBend_Coll calls ft_80083F88, which routes through
-        // ft_80082708 and enters Fall when the allow-ground-to-air helper reports an edge exit.
-        // Keep this scoped to the immediate Ottotto/OttottoWait -> KneeBend edge row so ordinary
-        // grounded jump squat rows still remain grounded.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Coll
-        // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
-        const float nudge_x = ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
-        const float facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
-        if (nudge_x * facing_sign > 0.0f) {
-          batch->state.pos_x[idx] += nudge_x;
-        }
-        batch->state.on_ground[idx] = 0u;
-        enter_fall_from_grounded_floor_loss(batch, ch, idx);
-        continue;
-      }
-
-      if (!now_ground && action_is_grounded_guard_state(a)) {
-        // Guard Coll callbacks are grounded owners. If a replay-seeded or continuous rollout state
-        // reaches post-collision with no floor, the shield motion must not persist airborne.
-        //
-        // Decomp:
-        // - GuardOn/Guard/GuardOff/GuardReflect Coll call ft_800845B4.
-        // - GuardSetOff_Coll calls ft_800845B4, or ft_80084104 while shield SDI is allowed.
-        // - Both helpers leave the shield motion on floor loss and enter an airborne state.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-        //   ftCo_GuardOn_Coll,ftCo_Guard_Coll,ftCo_GuardOff_Coll,
-        //   ftCo_GuardSetOff_Coll,ftCo_GuardReflect_Coll}
-        // refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800845B4}
-        if (guard_floor_loss_should_missfoot(batch, idx, batch->state.stage_id[(size_t)bi])) {
-          enter_missfoot_from_ground_floor_loss(batch, ch, idx);
-          continue;
-        }
-        enter_fall_from_grounded_floor_loss(batch, ch, idx);
+      // Fighter_procMap already ran this live callback and applied any transition immediately.
+      // A destination installed by that callback belongs to later phases; the old global
+      // post-collision resolver must not reinterpret the same CollData result.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+      if (batch->state.live_coll_migrated_ran[idx] != 0u) {
         continue;
       }
 
@@ -5886,45 +5736,6 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B4B0
         enter_fall_from_grounded_floor_loss(batch, ch, idx);
         continue;
-      }
-
-      if (was_ground && now_ground && a == (uint16_t)MSL_ACT_WAIT &&
-          grounded_attack_submotion_from_action(batch->state.char_id[idx],
-                                                batch->state.prev_action_id[idx]) != 0xFFFFFFFFu &&
-          batch->state.action_frame[idx] <= 0 &&
-          ottotto_edge_matches_facing(batch, bi, batch->state.ground_id[idx],
-                                      batch->state.facing[idx], batch->state.pos_x[idx])) {
-        float ottotto_x = 0.0f;
-        float ottotto_y = 0.0f;
-        if (ottotto_edge_point_for_facing(batch, bi, batch->state.ground_id[idx],
-                                          batch->state.facing[idx], &ottotto_x, &ottotto_y)) {
-          const float nudge_x = ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
-          const float facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
-          if (!(nudge_x * facing_sign > 0.0f)) {
-            continue;
-          }
-          // Grounded Attack* anim-end can install Wait before the same frame's collision callback
-          // dispatch. Source then runs Wait_Coll -> ft_80084280 and admits Ottotto on Collide_Edge.
-          // Keep this scoped to rows where the source xF8_playerNudgeVel.x owner has an outward
-          // x450 overlap displacement at the edge. Without that provenance, already-offset
-          // grounded rows enter Wait first and take the normal Wait_Coll teeter path next frame.
-          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_Anim
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Coll
-          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
-          // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_8009A3C8
-          batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
-          batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;
-          batch->state.pos_x[idx] = ottotto_x;
-          batch->state.pos_y[idx] =
-              ottotto_edge_root_y_for_entry(batch, bi, idx, batch->state.ground_id[idx], ottotto_y);
-          batch->state.speed_air_x_self[idx] = 0.0f;
-          batch->state.speed_ground_x_self[idx] = 0.0f;
-          batch->state.speed_y_self[idx] = 0.0f;
-          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-          continue;
-        }
       }
 
       if (was_ground && now_ground && a == (uint16_t)MSL_ACT_LANDING &&
@@ -5971,84 +5782,6 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.speed_y_self[idx] = 0.0f;
           msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-          continue;
-        }
-      }
-
-      if (was_ground && now_ground && a == (uint16_t)MSL_ACT_SQUAT &&
-          (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO ||
-           batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
-          batch->state.action_frame[idx] <= 1) {
-        // Ottotto crouch IASA at the facing endpoint:
-        // - Fighter_8006A360 computes the common xF8 player-overlap displacement while the
-        //   frame-start action is still Ottotto/OttottoWait.
-        // - Fighter_procUpdate later runs ftCo_Ottotto_IASA, whose down-input branch calls
-        //   ftCo_800D5FB0 -> ftCo_Squat_Enter.
-        // - The same proc then runs Squat_Coll, which calls ft_80083F88 -> ft_80082708 and lets
-        //   mpColl_8004B108 consume the already-displaced root against the facing floor endpoint.
-        // Keep this to the first destination Squat frame and a generated floor endpoint overrun
-        // after the source xF8 nudge; ordinary center-stage Ottotto crouch rows stay grounded.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::{ftCo_800D5FB0,ftCo_Squat_Coll}
-        // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (xF8_playerNudgeVel add)
-        // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
-        // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
-        const float nudge_x = ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
-        const float facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
-        const uint8_t source_sweep_starts_at_root =
-            (!isfinite(batch->state.floor_sweep_prev_pos_x[idx]) ||
-             msl_absf(batch->state.floor_sweep_prev_pos_x[idx] - batch->state.pos_x[idx]) <=
-                 1.0e-5f)
-                ? 1u
-                : 0u;
-        const float source_x = (source_sweep_starts_at_root && nudge_x * facing_sign > 0.0f)
-                                   ? (batch->state.pos_x[idx] + nudge_x)
-                                   : batch->state.pos_x[idx];
-        if (ottotto_position_past_facing_edge(batch, bi, batch->state.ground_id[idx],
-                                              batch->state.facing[idx], source_x)) {
-          float ottotto_x = 0.0f;
-          float ottotto_y = 0.0f;
-          if (ottotto_edge_point_for_facing(batch, bi, batch->state.ground_id[idx],
-                                            batch->state.facing[idx], &ottotto_x, &ottotto_y)) {
-            const float callback_root_y = batch->state.pos_y[idx];
-            batch->state.pos_y[idx] = ottotto_y;
-            if (batch->state.prev_action_frame[idx] <= 0) {
-              // On the first Ottotto callback frame, ft_80084280/Ottotto entry has just published
-              // the callback-visible edge root. The same-proc Squat floor-loss handoff preserves
-              // that root Y while consuming the source xF8 nudge for X. Later steady Ottotto
-              // crouch rows use the raw checked endpoint from Squat_Coll.
-              // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_8009A410
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Coll
-              batch->state.pos_y[idx] = callback_root_y;
-            }
-          }
-          batch->state.pos_x[idx] = source_x;
-          enter_fall_from_grounded_floor_loss(batch, ch, idx);
-          continue;
-        }
-      }
-
-      if (was_ground && now_ground &&
-          (a == (uint16_t)MSL_ACT_OTTOTTO || a == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
-          ottotto_edge_matches_facing(batch, bi, batch->state.ground_id[idx],
-                                      batch->state.facing[idx], batch->state.pos_x[idx])) {
-        float ottotto_x = 0.0f;
-        float ottotto_y = 0.0f;
-        if (ottotto_edge_point_for_facing(batch, bi, batch->state.ground_id[idx],
-                                          batch->state.facing[idx], &ottotto_x, &ottotto_y)) {
-          // Ottotto_Coll/OttottoWait_Coll stay on the floor only while the facing endpoint remains
-          // the source edge; the collision pass owns the endpoint anchor after any pre-collision
-          // xF8 fighter-overlap displacement. Keep this limited to steady teeter states that are
-          // already on their facing endpoint.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
-          //   ftCo_Ottotto_Coll,ftCo_OttottoWait_Coll}
-          batch->state.pos_x[idx] = ottotto_x;
-          batch->state.pos_y[idx] =
-              ottotto_edge_root_y_for_entry(batch, bi, idx, batch->state.ground_id[idx], ottotto_y);
-          batch->state.speed_air_x_self[idx] = 0.0f;
-          batch->state.speed_ground_x_self[idx] = 0.0f;
-          batch->state.speed_y_self[idx] = 0.0f;
           continue;
         }
       }
@@ -6104,19 +5837,6 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
         //   ftCo_Catch_Coll,ftCo_CatchDash_Coll,fn_800D8E30}
         // refs/melee/src/melee/ft/ft_081B.c::ft_800841B8
-        enter_fall_from_grounded_floor_loss(batch, ch, idx);
-        continue;
-      }
-
-      if (!was_ground && !now_ground && action_is_ground_locomotion(a) &&
-          batch->state.seed_prev_action_id[idx] == a &&
-          batch->state.seed_prev_action_frame[idx] >= 0) {
-        // Runtime consistency repair for externally restored/training states that have already
-        // persisted as airborne grounded locomotion for at least one source snapshot. Normal source
-        // collision callbacks should prevent this state; require the strictly-causal same-action
-        // seed lane so ordinary public one-step seeds with omitted on_ground do not get rewritten.
-        // Once proven persistent, route through the existing floor-loss helper to keep batch
-        // stepping bounded.
         enter_fall_from_grounded_floor_loss(batch, ch, idx);
         continue;
       }
@@ -6404,97 +6124,37 @@ void locomotion_update_post_collision(MslBatch* batch) {
           continue;
         }
 
-        // Only force Ground->Air transitions for ground locomotion states for now.
-        // Many non-locomotion ground states transition into specific aerial variants (e.g. FallSpecial),
-        // which we do not model yet; forcing Fall here causes large action_id regressions.
-        if (!action_is_ground_locomotion(a)) {
-          if (spacie_side_special_ground_floor_loss_to_air(batch, ms, ch, idx, a)) {
-            continue;
-          }
-          // Decomp: grounded SpecialSEnd collision falls directly into Fall when ground is lost.
-          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSEnd_Coll
-          if (msl_motion_state_fx_special_kind(batch->state.char_id[idx], a) ==
-              (uint8_t)MSL_FX_KIND_SPECIAL_S_END) {
-            enter_fall_from_grounded_floor_loss(batch, ch, idx);
-            continue;
-          }
-          if (action_is_grounded_specialn_ft80083f88_floor_loss(batch->state.char_id[idx], a)) {
-            enter_fall_from_grounded_floor_loss(batch, ch, idx);
-            continue;
-          }
-          // Decomp: ftFx_SpecialHiLanding_Coll enters FallSpecial when no longer grounded.
-          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Coll
-          if (msl_motion_state_fx_special_kind(batch->state.char_id[idx], a) ==
-              (uint8_t)MSL_FX_KIND_SPECIAL_HI_LANDING) {
-            enter_fall_special_via_ftco_80096900(
-                batch, idx, 1u, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f, 1u);
-          }
+        if (msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_GROUND_FLOOR_LOSS_TO_FALL)) {
+          // Packet 1 live grounded callbacks have already returned above. Retain the generated
+          // source outcome for later callback families until their packets replace this legacy
+          // post-collision handoff.
+          // data/motion_state/owners/*.bin::MSLMSO01 class2_bits
+          // refs/melee/src/melee/ft/ft_081B.c common grounded wrappers
+          enter_fall_from_grounded_floor_loss(batch, ch, idx);
           continue;
         }
 
-        // Ottotto->Dash first-frame carry:
-        // - Ottotto_IASA can immediately route into Dash via ftCo_Dash_CheckInput.
-        // - The collision owner still keeps the fighter grounded at the edge on the first
-        //   Ottotto/OttottoWait -> Dash carry row instead of falling off.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
-        //   ftCo_Ottotto_IASA,ftCo_Ottotto_Coll,ftCo_OttottoWait_Coll}
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_CheckInput,ftCo_Dash_Enter}
-        if (a == (uint16_t)MSL_ACT_DASH &&
-            (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO ||
-             batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
-            batch->state.action_frame[idx] <= 1) {
-          batch->state.on_ground[idx] = 1u;
-          batch->state.pos_x[idx] = batch->state.prev_pos_x[idx];
-          batch->state.pos_y[idx] = batch->state.prev_pos_y[idx];
-          batch->state.speed_air_x_self[idx] = 0.0f;
-          batch->state.speed_y_self[idx] = 0.0f;
+        if (spacie_side_special_ground_floor_loss_to_air(batch, ms, ch, idx, a)) {
           continue;
         }
-
-        if (a == (uint16_t)MSL_ACT_OTTOTTO || a == (uint16_t)MSL_ACT_OTTOTTO_WAIT) {
-          // Source applies ftCommon_8007E0E4's grounded fighter-overlap x450 displacement before
-          // the current motion state's collision callback. The generic physics nudge keeps
-          // still-grounded Ottotto frames clamped to the floor endpoint, but if this same collision
-          // pass has already proven floor loss, preserve the source xF8_playerNudgeVel.x before
-          // entering Fall.
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
-          //   ftCo_Ottotto_Coll,ftCo_OttottoWait_Coll}
-          const float nudge_x = ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
-          const float facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
-          if (nudge_x * facing_sign > 0.0f) {
-            batch->state.pos_x[idx] += nudge_x;
-          }
+        // Decomp: grounded SpecialSEnd collision falls directly into Fall when ground is lost.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSEnd_Coll
+        if (msl_motion_state_fx_special_kind(batch->state.char_id[idx], a) ==
+            (uint8_t)MSL_FX_KIND_SPECIAL_S_END) {
+          enter_fall_from_grounded_floor_loss(batch, ch, idx);
+          continue;
         }
-
-        if (a == (uint16_t)MSL_ACT_DASH &&
-            batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_TURN &&
-            batch->state.action_frame[idx] <= 1 && batch->state.speed_air_x_self[idx] != 0.0f) {
-          const uint8_t dash_source_facing = batch->state.speed_air_x_self[idx] > 0.0f ? 1u : 0u;
-          if (dash_turn_floor_loss_is_source_facing_stage_ledge(
-                  batch, bi, batch->state.ground_id[idx], dash_source_facing,
-                  batch->state.pos_x[idx])) {
-            // Turn_IASA can route through its just-turned `x8/facing_after` lane into Dash, then
-            // Dash_Coll immediately leaves the floor through ft_800844EC. Preserve the Dash
-            // source-facing lane for the resulting Fall; otherwise the replay-visible Turn facing
-            // can make the later ledge pass test the stage ledge behind the source trajectory.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{
-            //   ftCo_Turn_IASA,fn_800C9C2C}
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Coll
-            // refs/melee/src/melee/ft/ft_081B.c::{ft_800844EC,ft_80082708}
-            batch->state.facing[idx] = dash_source_facing;
-          }
+        if (action_is_grounded_specialn_ft80083f88_floor_loss(batch->state.char_id[idx], a)) {
+          enter_fall_from_grounded_floor_loss(batch, ch, idx);
+          continue;
         }
-
-        // Ground locomotion -> Fall when no longer grounded.
-        // Decomp refs for the common collision helpers:
-        // - refs/melee/src/melee/ft/ft_081B.c:1066 (`ft_80084280`) (Wait/Walk/etc)
-        // - refs/melee/src/melee/ft/ft_081B.c:1114 (`ft_800844EC`) (Dash/Run) which may enter StopWall via
-        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_StopWall.c:20 (`ftCo_8009EDA4`)
-        //
-        // Note: we don't yet model wall hug / StopWall, so we conservatively enter Fall here.
-        enter_fall_from_grounded_floor_loss(batch, ch, idx);
+        // Decomp: ftFx_SpecialHiLanding_Coll enters FallSpecial when no longer grounded.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Coll
+        if (msl_motion_state_fx_special_kind(batch->state.char_id[idx], a) ==
+            (uint8_t)MSL_FX_KIND_SPECIAL_HI_LANDING) {
+          enter_fall_special_via_ftco_80096900(
+              batch, idx, 1u, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f, 1u);
+        }
       }
     }
   }

@@ -213,7 +213,7 @@ mismatch.item_state: 1 / 119325 (0.000008)
 mismatch.item_owner: 0 / 119325 (0.000000)
 mismatch.item_instance_id: 0 / 119325 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 59 / 15910 (0.003708)
-err.pos_x: mae=0.006630 p95=0.000000 max=6.589058
+err.pos_x: mae=0.006780 p95=0.000000 max=6.589058
 err.pos_y: mae=0.004052 p95=0.000000 max=11.778006
 err.speed_air_x_self: mae=0.000682 p95=0.000000 max=2.675863
 err.speed_ground_x_self: mae=0.000740 p95=0.000000 max=3.819937
@@ -229,7 +229,7 @@ err.item_vel_y: mae=0.001238 p95=0.000000 max=2.108688
 overall.discrete_mismatch: 127 / 962555
 overall.strict_discrete_mismatch: 186 / 962555
 overall.ignored_discrete_mismatch: 59
-overall.float_norm_mae_p95: 0.00030235
+overall.float_norm_mae_p95: 0.00030248
 
 == replays/validation/falcon/Game_20260509T034612.slpz ==
 Records: 7147  Players/scored per record: 2  Total player-frames: 14294
@@ -663,7 +663,7 @@ mismatch.item_state: 2 / 174570 (0.000011)
 mismatch.item_owner: 0 / 174570 (0.000000)
 mismatch.item_instance_id: 0 / 174570 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 86 / 23276 (0.003695)
-err.pos_x: mae=0.005621 p95=0.000000 max=7.574348
+err.pos_x: mae=0.005636 p95=0.000000 max=7.574348
 err.pos_y: mae=0.007486 p95=0.000000 max=13.809427
 err.speed_air_x_self: mae=0.002049 p95=0.000000 max=2.946439
 err.speed_ground_x_self: mae=0.001576 p95=0.000000 max=2.646826
@@ -679,7 +679,7 @@ err.item_vel_y: mae=0.001646 p95=0.000000 max=2.108688
 overall.discrete_mismatch: 465 / 1408198
 overall.strict_discrete_mismatch: 551 / 1408198
 overall.ignored_discrete_mismatch: 86
-overall.float_norm_mae_p95: 0.00050305
+overall.float_norm_mae_p95: 0.00050306
 
 == replays/validation/falcon/StraightScratchyCheetah.slpz ==
 Records: 7905  Players/scored per record: 2  Total player-frames: 15810
@@ -709,7 +709,7 @@ mismatch.item_owner: 1 / 118575 (0.000008)
 mismatch.item_instance_id: 1 / 118575 (0.000008)
 ignored_mismatch.state_flags[4]&0x80: 61 / 15810 (0.003858)
 err.pos_x: mae=0.021249 p95=0.000001 max=53.906933
-err.pos_y: mae=0.014531 p95=0.000000 max=38.499996
+err.pos_y: mae=0.014532 p95=0.000000 max=38.499996
 err.speed_air_x_self: mae=0.000384 p95=0.000000 max=1.777500
 err.speed_ground_x_self: mae=0.000579 p95=0.000000 max=2.413740
 err.speed_y_self: mae=0.000599 p95=0.000000 max=2.900000
@@ -1000,4 +1000,4 @@ overall.float_norm_mae_p95: 0.00000603
 overall.discrete_mismatch: 3143 / 22406659
 overall.strict_discrete_mismatch: 4376 / 22406659
 overall.ignored_discrete_mismatch: 1233
-overall.float_norm_mae_p95: 0.00024767
+overall.float_norm_mae_p95: 0.00024768

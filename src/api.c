@@ -23,6 +23,7 @@
 #include "combat_geom.h"
 #include "char_params.h"
 #include "coll_env_flags.h"
+#include "motion_state_runtime.h"
 #include "common_params.h"
 #include "damage_source.h"
 #include "deadupstar_rng.h"
@@ -2404,6 +2405,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.damage_hitlag_downward_sdi_consumed[idx] = 0u;
 
       batch->state.action_id[idx] = seed->action_id[p];
+      motion_state_install_live_callbacks(batch, idx);
       batch->state.specialhi_rotate_model_valid[idx] = 0u;
       batch->state.specialhi_rotate_model[idx] = 0.0f;
       if (msl_specialhi_rotate_model_action(seed->char_id[p], seed->action_id[p]) &&

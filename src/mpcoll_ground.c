@@ -25,6 +25,7 @@
 #include "mpcoll_floor_skip.h"
 #include "mpcoll_floor.h"
 #include "motion_state_owners.h"
+#include "motion_state_runtime.h"
 #include "mpcoll_wall_ceil.h"
 #include "move_tables.h"
 #include "msl_math.h"
@@ -440,6 +441,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
 
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.live_coll_migrated_ran[idx] != 0u) {
+        continue;
+      }
       const uint8_t run_state_map_callback = grab_attachment_map_callback_runs(batch, idx);
       MslMpcollContext mpcoll_ctx = mpcoll_context_make(batch, bi, idx, stage_id, g, cg, lwg, rwg);
       const uint16_t action_id = mpcoll_ctx.action_id;

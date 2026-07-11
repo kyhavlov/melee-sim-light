@@ -8,14 +8,16 @@ import pytest
 from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
 
 ACT_WAIT = 14
+ACT_FALL = 29
 ACT_DAMAGE_HI_1 = 85
 ACT_ATTACK_AIR_N = 65
 ACT_CATCH = 212
 ACT_CATCH_PULL = 213
-ACT_CAPTURE_PULLED_HI = 223
+ACT_CAPTURE_PULLED_LW = 226
 ACT_REBIRTH_WAIT = 13
 
 SM_WAIT1_0 = 2
+SM_FALL = 20
 SM_ATTACK_AIR_N = 68
 SM_CATCH = 242
 
@@ -45,6 +47,8 @@ def _base_seed() -> np.ndarray:
     seed["char_id"][0, :2] = np.uint8([CHAR_FOX, CHAR_FALCO])
     seed["action_id"][0, :2] = np.uint16([ACT_WAIT, ACT_WAIT])
     seed["animation_index"][0, :2] = np.uint32([SM_WAIT1_0, SM_WAIT1_0])
+    seed["on_ground"][0, :2] = np.uint8([1, 1])
+    seed["ground_id"][0, :2] = np.uint16([1, 1])
     seed["frame_speed_mul_f32"][0, :2] = np.float32([1.0, 1.0])
     seed["fighter_scale_y"][0, :2] = np.float32([1.0, 1.0])
     seed["facing"][0, :2] = np.uint8([1, 0])
@@ -94,8 +98,9 @@ def test_active_body_hitbox_demands_defender_geometry_and_hits() -> None:
     binding = pytest.importorskip("msl_binding")
 
     seed = _base_seed()
-    seed["action_id"][0, :2] = np.uint16([ACT_ATTACK_AIR_N, ACT_WAIT])
-    seed["animation_index"][0, :2] = np.uint32([SM_ATTACK_AIR_N, SM_WAIT1_0])
+    seed["action_id"][0, :2] = np.uint16([ACT_ATTACK_AIR_N, ACT_FALL])
+    seed["animation_index"][0, :2] = np.uint32([SM_ATTACK_AIR_N, SM_FALL])
+    seed["on_ground"][0, :2] = np.uint8([0, 0])
     seed["action_frame"][0, :2] = np.int16([3, 0])
     seed["anim_frame_f32"][0, :2] = np.float32([3.0, 0.0])
     seed["pos_x"][0, :2] = np.float32([0.0, 0.0])
@@ -133,7 +138,7 @@ def test_active_catch_hitbox_demands_defender_geometry_and_grabs() -> None:
         # clears the owner's outgoing HitCapsules in the same ProcessHit pass.
         assert int(hitbox_count) == 0
         assert int(compare["action_id"][0]) == ACT_CATCH_PULL
-        assert int(compare["action_id"][1]) == ACT_CAPTURE_PULLED_HI
+        assert int(compare["action_id"][1]) == ACT_CAPTURE_PULLED_LW
     finally:
         binding.destroy(handle)
 

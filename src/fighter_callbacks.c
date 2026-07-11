@@ -24,6 +24,7 @@
 #include "match_flow.h"
 #include "move_tables.h"
 #include "motion_state_owners.h"
+#include "motion_state_runtime.h"
 #include "knockdown.h"
 #include "physics.h"
 #include "shields.h"
@@ -698,6 +699,7 @@ static void fighter_callbacks_collision_phase(MslBatch* batch) {
   // - Thrown victims are still updated in a post-collision "accessory callback" style slot.
   grab_attachment_update_pre_collision(batch);
   cache_collision_stage_prev_pos(batch);
+  motion_state_finalize_seeded_coll_data_before_map(batch);
   stage_collision_apply(batch);
   cache_collision_stage_cur_pos(batch);
   grab_attachment_update_falcon_dive_accessory_phase(batch);

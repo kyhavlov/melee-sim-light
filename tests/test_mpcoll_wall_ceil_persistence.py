@@ -191,12 +191,12 @@ def test_wall_contact_persists_across_frames_on_fd() -> None:
     )
     assert int(CONTACTS_DTYPE.itemsize) == contacts_stride
 
-    # Choose Fox Wait so ECB tables are available and deterministic.
+    # Choose Fox Fall so the deliberately airborne seed uses its source airborne Coll callback.
     char_id = 1
-    msid_wait = 2
+    msid = SM_FALL
     af = 0
-    min_x, max_x, _min_y, max_y = msl_binding.ecb_extents_rel(char_id, msid_wait, af)
-    bottom_y = float(msl_binding.ecb_bottom_rel_y(char_id, msid_wait, af))
+    min_x, max_x, _min_y, max_y = msl_binding.ecb_extents_rel(char_id, msid, af)
+    bottom_y = float(msl_binding.ecb_bottom_rel_y(char_id, msid, af))
     top_y = float(max_y)
     # Facing right: left=min_x, right=max_x.
     left_x = float(min_x)
@@ -219,8 +219,8 @@ def test_wall_contact_persists_across_frames_on_fd() -> None:
     seed["num_players"][0] = np.uint8(2)
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(char_id)
-    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
-    seed["animation_index"][0, 0] = np.uint32(msid_wait)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(msid)
     seed["action_frame"][0, 0] = np.int16(af)
     seed["on_ground"][0, 0] = np.uint8(0)
     seed["facing"][0, 0] = np.uint8(1)  # right (matches ECB extents usage below)
@@ -283,10 +283,10 @@ def test_left_wall_contact_persists_across_frames_on_fd() -> None:
         pytest.skip(str(e))
 
     char_id = 1
-    msid_wait = 2
+    msid = SM_FALL
     af = 0
-    _min_x, max_x, _min_y, max_y = msl_binding.ecb_extents_rel(char_id, msid_wait, af)
-    bottom_y = float(msl_binding.ecb_bottom_rel_y(char_id, msid_wait, af))
+    _min_x, max_x, _min_y, max_y = msl_binding.ecb_extents_rel(char_id, msid, af)
+    bottom_y = float(msl_binding.ecb_bottom_rel_y(char_id, msid, af))
     side_y = _ecb_side_y_offset_for_char_id(char_id) + 0.5 * (float(max_y) + bottom_y)
 
     wall_y_mid = 0.5 * (float(wy0) + float(wy1))
@@ -299,8 +299,8 @@ def test_left_wall_contact_persists_across_frames_on_fd() -> None:
     seed["num_players"][0] = np.uint8(2)
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(char_id)
-    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
-    seed["animation_index"][0, 0] = np.uint32(msid_wait)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(msid)
     seed["action_frame"][0, 0] = np.int16(af)
     seed["on_ground"][0, 0] = np.uint8(0)
     seed["facing"][0, 0] = np.uint8(1)
@@ -592,10 +592,10 @@ def test_wall_contact_triggers_on_ecb_side_crossing_not_root_on_fd() -> None:
     assert int(CONTACTS_DTYPE.itemsize) == contacts_stride
 
     char_id = 1
-    msid_wait = 2
+    msid_fall = SM_FALL
     af = 0
-    min_x, _max_x, _min_y, max_y = msl_binding.ecb_extents_rel(char_id, msid_wait, af)
-    bottom_y = float(msl_binding.ecb_bottom_rel_y(char_id, msid_wait, af))
+    min_x, _max_x, _min_y, max_y = msl_binding.ecb_extents_rel(char_id, msid_fall, af)
+    bottom_y = float(msl_binding.ecb_bottom_rel_y(char_id, msid_fall, af))
     top_y = float(max_y)
     left_x = float(min_x)
     side_y = _ecb_side_y_offset_for_char_id(char_id) + 0.5 * (top_y + bottom_y)
@@ -622,8 +622,8 @@ def test_wall_contact_triggers_on_ecb_side_crossing_not_root_on_fd() -> None:
     seed["num_players"][0] = np.uint8(2)
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(char_id)
-    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
-    seed["animation_index"][0, 0] = np.uint32(msid_wait)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(msid_fall)
     seed["action_frame"][0, 0] = np.int16(af)
     seed["on_ground"][0, 0] = np.uint8(0)
     seed["facing"][0, 0] = np.uint8(1)  # right (matches ECB extents usage below)
