@@ -580,3 +580,46 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   Full pytest green modulo known environmental failures; standing puff reports
   regenerated. Free-running rollout on the 15-replay suite: first_mismatch_total
   412 -> 379, seeded 277 -> 244.
+- 2026-07-11 (later): **Floor-sweep-prev full-flip recon: the recalibration is
+  gated on the ECB lifecycle model (owner-4's project); flip PARKED after a full
+  A/B, narrow teeter gate retained.** Attempted the source-faithful convention
+  end-to-end: builder seeds floor_sweep_prev = pos[i] with a hitlag walk-back
+  (Coll runs on hitlag-free frames AND the fresh-hit frame — hit detection
+  follows Phys/Coll; continuing-hitlag frames are frozen and never become sweep
+  authority), runtime promotes coll_stage_cur_pos (the Coll-stage root; post-Coll
+  accessory movers write fp->cur_pos but not coll.cur_pos) with the same
+  continuing-hitlag hold, narrow endpoint gate removed as subsumed. Results:
+  puff 2267 -> 2041 (34 better than the shipped narrow gate), marth 1860 -> 1854,
+  doubles ~wash (9722), but fox_falco 30 -> 52, sheik 3128 -> 3180, aggregate
+  6212 -> 6564 (+352, scattered over ~35 replays; the hitlag hold moved almost
+  nothing vs the naive flip — the calibrated consumers are on NON-frozen rows).
+  Witness decomposition (all regressions probed):
+  1. Below-floor root projections (FD): QGD rec 9530/9531 — Fall under the deck,
+     ref pops up onto the floor exactly when the ECB BOTTOM (root + Fall pose rel
+     ~4.02) crosses below the line; the sim's owner instead keys
+     previous_below_source_floor_depth on the stale sweep-prev root and lands one
+     frame late-by-design; fresh prev inverts it to one frame early. Same family
+     inverted at PTE rec 276 (ref passes under, fresh prev admits a phantom
+     projection). The source-true gate is bottom-crossing-based, not
+     prev-root-window-based.
+  2. Razor-thin bottom misses (FoD/PS/DL/BF/YS, the bulk): PTE rec 4681 — Fall@1
+     root -0.925 -> -4.425 over FoD main floor y=0.0037; our fresh sweep bottom
+     ends at 0.0132 (pose-table rel 4.438) and misses by ~0.01 where ref lands.
+     Source sweeps from prev_pos + PREV_ECB.bottom (mpcoll.c:1377/1676) — the
+     PREVIOUS frame's FINAL interpolated ECB, not the current anim's pose at
+     ecb_frame_prev — and mpCollInterpolateECB(1/(steps-step)) only reaches the
+     desired ECB at the last substep when |movement| or |ECB delta| > 6 splits
+     the frame. Grounded LoadECB (flags&1) pins bottom to 0, so first-airborne
+     frames sweep from a rel-0 bottom. The stale one-frame-higher window was
+     compensating for all of this; removing it exposes the pose-vs-lifecycle
+     error directly.
+  3. Damage/hitlag-adjacent owners (marth DamageN-on-endpoint, sheik rows):
+     hitlag-exit ASDI keeps source-preserved sweep roots; owners consume the
+     stale lane inside their bounds and are calibrated to it.
+  VERDICT: the flip cannot ship incrementally (it is global; every family must
+  close first). Dependency order for the real fix: (a) model the CollData ECB
+  lifecycle — prev_ecb carry, grounded bottom=0 handoff, substep interpolation,
+  x130 lock unification — per owner-4; (b) migrate the raw bottom sweep and the
+  below-floor projection owners to bottom-crossing gates; (c) THEN flip the
+  sweep-prev lane and delete the compensating owners. The builder walk-back and
+  promotion rules above are validated and reusable verbatim when (a) lands.
