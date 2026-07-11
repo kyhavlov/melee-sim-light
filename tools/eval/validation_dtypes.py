@@ -502,6 +502,29 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
         #   ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim,ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
         ("speciallw_counter_hitlag_floor_active_u8", _arr("u1", MAX_PLAYERS)),
+        # Puff multi-jump turnaround window counter (`mv.co.jumpaerial.x0`), post-frame.
+        # Armed on ladder entry when the entry-frame stick reverses beyond x2D0->x4 against
+        # facing; ticks once per non-frozen frame; the facing flip fires at x2D0->x0 / 2.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+        #   ftCo_800D74A4,ftCo_JumpAerialF1_Anim}
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
+        ("puff_mjump_turn_timer_u8", _arr("u1", MAX_PLAYERS)),
+        # Puff Rollout hidden `mv.pr.specialn` block (post-frame): charge x2C, turn budget x0,
+        # roll angle x14, pre-turn velocity x10, roll direction x34.x, and the post-turn facing
+        # latch (mv facing_dir). valid=0 -> reseed keeps its single-row approximations.
+        # refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c
+        ("puff_rollout_seed_valid_u8", _arr("u1", MAX_PLAYERS)),
+        ("puff_rollout_charge_f32", _arr("<f4", MAX_PLAYERS)),
+        ("puff_rollout_turn_budget_i16", _arr("<i2", MAX_PLAYERS)),
+        ("puff_rollout_angle_f32", _arr("<f4", MAX_PLAYERS)),
+        ("puff_rollout_pre_turn_vel_f32", _arr("<f4", MAX_PLAYERS)),
+        ("puff_rollout_dir_i8", _arr("i1", MAX_PLAYERS)),
+        ("puff_rollout_facing_restore_i8", _arr("i1", MAX_PLAYERS)),
+        # Jab-combo continuation window (fp->hitlag_mul reuse) + previous jab msid
+        # (fp->unk_msid), post-frame; consumed by the Wait-family A-press jab continuation.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c
+        ("jab_input_window_f32", _arr("<f4", MAX_PLAYERS)),
+        ("jab_unk_msid_u16", _arr("<u2", MAX_PLAYERS)),
         ("attack_id", _arr("<u2", MAX_PLAYERS)),
         ("attack_instance", _arr("<u2", MAX_PLAYERS)),
         ("last_attack_landed", _arr("u1", MAX_PLAYERS)),

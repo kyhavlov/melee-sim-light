@@ -79,6 +79,14 @@ typedef struct MslCharParams {
   // Source of truth: ISO-extracted `data/characters/*.json` `rapid_jab_window`.
   uint8_t rapid_jab_window;
   uint8_t _pad_u8_rapid_jab_window[3];
+  // Jab-combo continuation input windows (ftCo_DatAttrs +0x7C/+0x80): checkAttack11 arms
+  // fp->hitlag_mul (reused as the window counter) with jab_2_input_window; doAttack12Normal
+  // re-arms with jab_3_input_window; ftCo_Attack1_CheckInput consumes/decrements the window
+  // from neutral IASA chains.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack11,doAttack12Normal,
+  //   ftCo_Attack1_CheckInput}
+  float jab_2_input_window;
+  float jab_3_input_window;
 
   // Wait idle sub-animation roulette (`ftCo_8008A7A8` / `getAnimID`).
   //

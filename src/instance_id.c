@@ -90,6 +90,14 @@ static inline void lower_bound_instance_id_counter(MslBatch* batch, int bi, uint
   }
 }
 
+void instance_id_bump_ft_80089824(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  batch->state.instance_id[idx] = inc_instance_id_plAttack_80037B08(batch, bi);
+}
+
 void instance_id_counter_consume_plAttack_80037B08(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;

@@ -94,6 +94,19 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "item_spawn_id_counter" in SEED_DTYPE.fields
     # Marth Counter descriptor x60 hitlag-floor provenance (`shield_unk0/1`).
     assert "speciallw_counter_hitlag_floor_active_u8" in SEED_DTYPE.fields
+    # Puff multi-jump turnaround window counter (`mv.co.jumpaerial.x0`), post-frame.
+    assert "puff_mjump_turn_timer_u8" in SEED_DTYPE.fields
+    # Puff Rollout hidden `mv.pr.specialn` block (post-frame).
+    assert "puff_rollout_seed_valid_u8" in SEED_DTYPE.fields
+    assert "puff_rollout_charge_f32" in SEED_DTYPE.fields
+    assert "puff_rollout_turn_budget_i16" in SEED_DTYPE.fields
+    assert "puff_rollout_angle_f32" in SEED_DTYPE.fields
+    assert "puff_rollout_pre_turn_vel_f32" in SEED_DTYPE.fields
+    assert "puff_rollout_dir_i8" in SEED_DTYPE.fields
+    assert "puff_rollout_facing_restore_i8" in SEED_DTYPE.fields
+    # Jab-combo continuation window + previous jab msid (fp->hitlag_mul reuse / fp->unk_msid).
+    assert "jab_input_window_f32" in SEED_DTYPE.fields
+    assert "jab_unk_msid_u16" in SEED_DTYPE.fields
     # Raw Slippi/controller source-owner domain for replay-facing last_hit_by parity.
     assert "source_port0" in SEED_DTYPE.fields
     # Hidden FallSpecial -> LandingFallSpecial interrupt carry bit.

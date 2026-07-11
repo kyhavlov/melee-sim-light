@@ -421,6 +421,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "firefox_bound_angle_degrees",
       "firefox_bound_delay_frames",
       "rapid_jab_window",
+      "jab_2_input_window",
+      "jab_3_input_window",
       "wait_anim_choice_msids",
       "wait_anim_choice_weights",
       "ecb_joints",
@@ -537,6 +539,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_u8(buf, "turn_frames", &out.turn_frames) != 0 ||
       json_get_f32(buf, "rebound_anim_numerator_frames", &out.rebound_anim_numerator_frames) != 0 ||
       json_get_u8(buf, "rapid_jab_window", &out.rapid_jab_window) != 0 ||
+      json_get_f32(buf, "jab_2_input_window", &out.jab_2_input_window) != 0 ||
+      json_get_f32(buf, "jab_3_input_window", &out.jab_3_input_window) != 0 ||
       json_get_u16_array(buf, "wait_anim_choice_msids", out.wait_anim_choice_msids,
                          sizeof(out.wait_anim_choice_msids) / sizeof(out.wait_anim_choice_msids[0]),
                          &wait_anim_choice_msid_count) != 0 ||

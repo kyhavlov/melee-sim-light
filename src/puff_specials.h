@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "api.h"
 #include "char_params.h"
 #include "state.h"
 
@@ -37,8 +38,10 @@ void puff_mjump_turn_tick(MslBatch* batch, const MslCharParams* ch, size_t idx);
 void puff_specials_update_pre_physics(MslBatch* batch);
 
 // Reseed reconstruction for hidden ladder state (the turnaround window counter) and the
-// Pound impulse consume-latch.
-void puff_specials_reseed_init(MslBatch* batch, int batch_index);
+// Pound impulse consume-latch. `seed` (may be NULL for legacy/synthetic paths) supplies the
+// builder-derived Rollout `mv.pr.specialn` lanes; invalid/missing lanes fall back to the
+// documented single-row approximations.
+void puff_specials_reseed_init(MslBatch* batch, int batch_index, const MslSeed* seed);
 
 // Char-special Phys ownership (Pound ground friction/root motion + the aerial cmd ladder's
 // pre-phase-2 phases). Returns 1 when this module owns the fighter's velocity update.

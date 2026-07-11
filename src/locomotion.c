@@ -1285,6 +1285,13 @@ static inline uint8_t grounded_a_attack_try_enter_from_iasa(
   const uint16_t attack_button_pressed_mask = (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_Z);
   if ((buttons_pressed & attack_button_pressed_mask) == 0 && c_side_edge == 0u && c_up_edge == 0u &&
       c_down_edge == 0u) {
+    // ftCo_Attack1_CheckInput decrements the jab-combo continuation window once per call when
+    // no A press is consumed; this helper is the sim's CheckInput admission for the same
+    // neutral IASA chains (Wait/Walk/Turn/Squat*/Ottotto/Landing/...).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack1_CheckInput
+    if (batch->state.jab_input_window[idx] > 0.0f) {
+      batch->state.jab_input_window[idx] -= 1.0f;
+    }
     return 0;
   }
 
@@ -1327,6 +1334,27 @@ static inline uint8_t grounded_a_attack_try_enter_from_iasa(
       act == (uint16_t)MSL_ACT_ATTACK_13) {
     batch->state.jab_x0[idx] = 0;
     batch->state.jab_rapid_count[idx] = 0;
+    // checkAttack11 / doAttack12Normal window arm + fp->unk_msid latch; doAttack13 leaves no
+    // further window. Both entries clear fp->allow_interrupt and fp->x2218_b1.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack11,doAttack12Normal,
+    //   doAttack13}
+    {
+      const MslCharParams* jab_ch = msl_char_params_fast(batch->state.char_id[idx]);
+      float jab_window = 0.0f;
+      if (jab_ch != NULL) {
+        if (act == (uint16_t)MSL_ACT_ATTACK_11) {
+          jab_window = jab_ch->jab_2_input_window;
+        } else if (act == (uint16_t)MSL_ACT_ATTACK_12) {
+          jab_window = jab_ch->jab_3_input_window;
+        }
+      }
+      batch->state.jab_input_window[idx] = jab_window;
+      batch->state.jab_unk_msid[idx] = act;
+      const size_t jab_flags_i =
+          idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+      batch->state.state_flags[jab_flags_i] &=
+          (uint8_t)~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1);
+    }
   } else if (act != (uint16_t)MSL_ACT_ATTACK_100_LOOP) {
     batch->state.attack100_x0[idx] = 0;
     batch->state.attack100_x4[idx] = 0;
@@ -1941,9 +1969,18 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, cons
   if (action_id == (uint16_t)MSL_ACT_ATTACK_11) {
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_12;
     batch->state.animation_index[idx] = (uint32_t)MSL_SM_ATTACK_12;
+    // doAttack12Normal re-arms the continuation window with jab_3_input_window and latches
+    // fp->unk_msid = Attack12.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::doAttack12Normal
+    batch->state.jab_input_window[idx] = (ch != NULL) ? ch->jab_3_input_window : 0.0f;
+    batch->state.jab_unk_msid[idx] = (uint16_t)MSL_ACT_ATTACK_12;
   } else {
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_13;
     batch->state.animation_index[idx] = (uint32_t)MSL_SM_ATTACK_13;
+    // doAttack13 leaves no further continuation window.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::doAttack13
+    batch->state.jab_input_window[idx] = 0.0f;
+    batch->state.jab_unk_msid[idx] = (uint16_t)MSL_ACT_ATTACK_13;
   }
   // doAttack12Normal/doAttack13 perform Fighter_ChangeMotionState only (no local ftAnim_8006EBA4),
   // so these transitions enter at frame 0 and do not take an immediate local anim tick.

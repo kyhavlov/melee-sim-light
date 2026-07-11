@@ -614,6 +614,17 @@ static PyMethodDef methods[] = {
      METH_VARARGS,
      "derive_grounded_overlap_hidden_pos_z(num_players, char, action, ground, stocks, pos_x, "
      "pos_z, facing, push_x_lut, push_y_lut, step, z_max) -> float32[:, :]"},
+    {"derive_puff_mjump_turn_timer", msl_derive_puff_mjump_turn_timer_py, METH_VARARGS,
+     "derive_puff_mjump_turn_timer(action, char, hitlag, facing, stick_x_unit, puff_char_id, "
+     "act_first, act_count, turn_frames, turn_threshold) -> uint8[:]"},
+    {"derive_jab_combo_window_seed_lanes", msl_derive_jab_combo_window_seed_lanes_py, METH_VARARGS,
+     "derive_jab_combo_window_seed_lanes(action, char, hitlag, jab2_lut, jab3_lut) -> "
+     "(window_f32, unk_msid_u16)"},
+    {"derive_puff_rollout_seed_lanes", msl_derive_puff_rollout_seed_lanes_py, METH_VARARGS,
+     "derive_puff_rollout_seed_lanes(action, char, hitlag, facing, gr_vel, air_vel, "
+     "puff_char_id, charge_init, charge_rate, charge_max, charge_decay, wall_bounce_decay, "
+     "budget_init, budget_hit_cost, loop_roll_rate_deg, release_roll_rate, turn_roll_rate, "
+     "roll_rate_scale) -> (valid, charge, budget, angle, pre_turn_vel, dir, latch)"},
     {"compute_fighter_stick_input_counters", msl_compute_fighter_stick_input_counters_py,
      METH_VARARGS,
      "compute_fighter_stick_input_counters(stick_x, stick_y, tilt_thresh_x, tilt_thresh_y, "

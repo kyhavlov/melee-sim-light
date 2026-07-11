@@ -225,8 +225,18 @@ def test_yoshi_grounded_throwf_uses_edge_snap_floor_owner() -> None:
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor}
     history = _run_case("ys_throwf_edge_snap")
 
+    # The fixture trace was recorded before the shared ftCo_800DD4B0 throw anim-rate applied on
+    # teacher-forced entry rows; at the true 1.25 rate (falco victim, weight 80) ThrowF finishes
+    # its animation at frame 8958 instead of running past the window. The edge-snap invariant
+    # this lock protects is unchanged: the whole grounded throw stays rooted at the platform
+    # endpoint (no hover/slide), and the anim-end exit stays grounded at the same spot.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_ThrowF_Coll}
+    last_throw = history[8957]
+    assert int(last_throw["action_id"][0]) == ACT_THROW_F
+    assert int(last_throw["on_ground"][0]) == 1
+    assert float(last_throw["pos_x"][0]) == pytest.approx(-59.5, abs=0.25)
+    assert float(last_throw["pos_y"][0]) == pytest.approx(23.4501, abs=1e-4)
     out = history[8958]
-    assert int(out["action_id"][0]) == ACT_THROW_F
     assert int(out["on_ground"][0]) == 1
     assert float(out["pos_x"][0]) == pytest.approx(-59.5, abs=0.25)
     assert float(out["pos_y"][0]) == pytest.approx(23.4501, abs=1e-4)

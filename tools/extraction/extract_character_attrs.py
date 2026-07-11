@@ -1288,6 +1288,15 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
         # refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x98)
         "rapid_jab_window": int(max(0, min(255, i(0x98)))),
+        # Jab-combo continuation input windows: checkAttack11 arms fp->hitlag_mul (reused as the
+        # window counter) with jab_2_input_window; doAttack12Normal re-arms with
+        # jab_3_input_window. ftCo_Attack1_CheckInput consumes the window from neutral IASA
+        # chains (A press while window > 0 and x2218_b1 continues the combo).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack11,
+        #   doAttack12Normal,ftCo_Attack1_CheckInput}
+        # refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x7C/+0x80)
+        "jab_2_input_window": f(0x7C),
+        "jab_3_input_window": f(0x80),
         "landing_lag_frames": int(max(1, landing_lag_frames)),
         "landing_airn_lag_frames": int(max(1, landing_airn_lag_frames)),
         "landing_airf_lag_frames": int(max(1, landing_airf_lag_frames)),
@@ -1561,6 +1570,8 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "turn_frames",
         "rebound_anim_numerator_frames",
         "rapid_jab_window",
+        "jab_2_input_window",
+        "jab_3_input_window",
         "jump_startup_frames",
         "jump_h_initial_velocity",
         "jump_v_initial_velocity",

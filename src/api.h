@@ -1630,6 +1630,52 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
   //   ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim,ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0}
   uint8_t speciallw_counter_hitlag_floor_active_u8[MSL_MAX_PLAYERS];
+  // Puff multi-jump turnaround window counter (`mv.co.jumpaerial.x0`; the multi-jump arming site
+  // stores through the shared mv slot).
+  //
+  // Decomp owner:
+  // - ftCo_800D74A4 arms x2D0->x0 frames when the entry-frame stick reverses beyond x2D0->x4
+  //   against facing, then applies the entry-frame ft_800CB6EC tick.
+  // - ftCo_JumpAerialF1_Anim ticks ft_800CB6EC once per non-frozen frame; the facing flip fires
+  //   when the counter crosses x2D0->x0 / 2.
+  //
+  // Seed representation: the post-frame counter value (0 = no pending window). Slippi does not
+  // expose mv.* unions; preprocessing reconstructs it prefix-causally from the ladder entry
+  // frame's processed stick, the pre-entry facing, and the post hitlag lane.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D74A4,ftCo_JumpAerialF1_Anim}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
+  uint8_t puff_mjump_turn_timer_u8[MSL_MAX_PLAYERS];
+  // Puff Rollout hidden `mv.pr.specialn` block (post-frame), reconstructed prefix-causally
+  // over the family 346..362 from replay-visible action/hitlag/velocity/facing history.
+  //
+  // Decomp owner (refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c):
+  // - x2C charge: xA0 at entry, += xA8 capped xA4 per Loop/Full Anim, -= xB4 per Release Phys,
+  //   *= xD4 (floor 0) on the Release Coll wall bounce.
+  // - x0 turn budget: x34 at entry, -1 per Release/Turn Anim, -x38 on the deal-damage NHit
+  //   handoff (ftPr_SpecialS_8013D764); Turn exhaustion flips the roll direction.
+  // - x14 roll angle: per-state deltas, normalized to [0, 2pi); gates the natural end-of-roll.
+  // - x10 pre-turn velocity: gr_vel at the Release->Turn entry; the Turn exit test compares
+  //   |gr_vel| against |x10 * xD0| after the sign crossing.
+  // - x34.x roll direction and the mv facing_dir post-turn facing latch.
+  //
+  // valid=0 (replay starts mid-roll, or pre-lane/synthetic seeds): reseed falls back to the
+  // documented single-row approximations in puff_specials_reseed_init.
+  uint8_t puff_rollout_seed_valid_u8[MSL_MAX_PLAYERS];
+  float puff_rollout_charge_f32[MSL_MAX_PLAYERS];
+  int16_t puff_rollout_turn_budget_i16[MSL_MAX_PLAYERS];
+  float puff_rollout_angle_f32[MSL_MAX_PLAYERS];
+  float puff_rollout_pre_turn_vel_f32[MSL_MAX_PLAYERS];
+  int8_t puff_rollout_dir_i8[MSL_MAX_PLAYERS];
+  int8_t puff_rollout_facing_restore_i8[MSL_MAX_PLAYERS];
+  // Jab-combo continuation window (fp->hitlag_mul reuse) and previous jab motion id
+  // (fp->unk_msid), post-frame. checkAttack11 arms co_attrs.jab_2_input_window at Attack11
+  // entry; doAttack12Normal re-arms jab_3_input_window; ftCo_Attack1_CheckInput consumes the
+  // window from neutral IASA chains (A press while window > 0 and x2218_b1 continues to
+  // Attack12/13 straight from Wait-family states) and decrements it once per no-press call.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack11,doAttack12Normal,
+  //   ftCo_Attack1_CheckInput}
+  float jab_input_window_f32[MSL_MAX_PLAYERS];
+  uint16_t jab_unk_msid_u16[MSL_MAX_PLAYERS];
   // Staling "attack id" (GALE01): fp->x2068_attackID.
   // Slippi post-frames do not expose fp->x2068 directly; preprocessing derives it causally from
   // replay history (see tools/slippi/staling_history.py).

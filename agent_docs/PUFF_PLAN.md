@@ -673,3 +673,46 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   interpolated-ECB carry lane; parked artifacts: the recurrence in
   tools-side prototype form, and the falco Growling rec 1622 marginal (carried-bottom
   crossing by 0.03 that source ignores — line-height or substep semantics still unpinned).
+- 2026-07-11 (evening session, uncommitted; worklog reports/triage/open_rollout_work_log.md):
+  **Three owners closed; puff one-step 1973 -> 1781 (strict 2694 -> 2502), rollout
+  first_mismatch 364 -> 351 (seeded 231 -> 224); every other suite byte-identical on this
+  machine.** (1) `puff_mjump_turn_timer_u8` seed lane: the multi-jump turnaround window
+  (mv.co.jumpaerial.x0) is now builder-derived prefix-causally from the ladder entry frame's
+  stick + pre-entry facing, replacing the documented reseed-zero approximation (-78; the
+  54-row mid-jump facing family). (2) `puff_rollout_*` seed lanes: the whole hidden
+  mv.pr.specialn block (charge x2C / turn budget x0 / roll angle x14 / pre-turn vel x10 /
+  dir / facing latch) reconstructed by a builder walk over ref lanes with per-state effects
+  applied from the frame's STARTING state; reseed consumes it when valid (-72 more; Loop->Full
+  cap timing, Turn->Release exits, natural end-of-roll rows). Also: in-family rollout
+  transitions now run the Fighter_ChangeMotionState identity bundle, and the Turn->Release
+  exit models the armed x21EC = ftPr_SpecialS_8013D8B0 hook (ft_80089824 + ft_800892A0) —
+  pinned from the witness plAttack counter lane; the family's shared x4 low byte (0x11,
+  data/attack_id/move_id/puff.bin) keeps ft_800895E0 quiet in-family. (3) A MIS-TRIAGED
+  "air rollout phantom hitlag" family turned out to be FOX SpecialAirHi (Firefox) vs shield:
+  the runtime dense-hitlist materializer required BODY attribution that shield hits never
+  write; fixed with a GuardSetOff-anchored shield-provenance gate + stale-iid rebind
+  (src/hitlist.c) and two frozen-anim seed-bridge gates (src/hitboxes.c). First attempt
+  (whole Guard family) regressed doubles by +16 and was narrowed to the GuardSetOff anchor.
+  NOTE for review: the seed schema grew twice (4671 -> 4695); test_validation_buffers_native
+  digest params need a reference-machine refresh (they were already env-failing here).
+- 2026-07-11 (evening session, item 4): **Throw-entry shared anim rate: teacher-forced entry
+  rows now restore the ftCo_800DD4B0 rate (1 / (victim_weight * x37C)) that Slippi's
+  frame_speed lane misses on the first post-entry snapshot; puff one-step 1973 -> 1755
+  cumulative (-218), plus cross-suite rollout improvements (sheik 472 -> 470, aggregate
+  1061 -> 1059, doubles 1257 -> 1256).** Puff, the lightest char, made the family loud
+  (rate 1.667 vs the seeded 1.0 on every throw entry row). The reseed attachment-pair rate
+  reconstruction already existed; the fix rides it for action_frame <= 1 rows. Locked with a
+  falco-throws-puff synthetic (fox was unusable: its ThrowF/Lw are weight-independent,
+  mask 9); the ys_throwf_edge_snap modelplay lock was re-anchored to the corrected timeline.
+- 2026-07-11 (evening session, items 5-6): **Item 5 recon-blocked (flags[0]&0x80 on grounded-jump
+  -> multijump chains: clean empirical predicate — carry + set-on-66/67-chain — but the x2218_b0
+  setter is invisible in decomp C and the extracted scripts; needs raw asm or a Dolphin probe;
+  NOT shipped as replay-fit).** **Item 6 (jab-combo continuation window, ftCo_Attack1_CheckInput)
+  built end-to-end — attrs extraction jab_2/jab_3_input_window, state+seed lanes, arm/decrement
+  sites, derive — but the Wait-side continuation consumer regressed aggregate/doubles/falcon
+  (+21 one-step each; the modeled decrement call-set undercounts source) and is PARKED with a
+  strict-xfail lock; the retained jab-entry allow_interrupt/x2218_b1 clears (checkAttack11
+  semantics) are themselves a small cross-suite IMPROVEMENT (aggregate one-step 6177 -> 6172,
+  aggregate rollout 1061 -> 1056, falcon/marth rollout rows improved).** Final session standing:
+  puff one-step 1973 -> 1755, puff rollout 364 -> 351; worklog items 1-6 in
+  reports/triage/open_rollout_work_log.md with per-item cumulative patches.

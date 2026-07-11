@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include "action_ids.h"
+#include "attack_identity.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
 #include "anim_table.h"
@@ -12,6 +13,7 @@
 #include "coll_env_flags.h"
 #include "common_params.h"
 #include "ids.h"
+#include "instance_id.h"
 #include "locomotion.h"
 #include "move_tables.h"
 #include "stage_collision.h"
@@ -548,8 +550,13 @@ static void pr_rollout_update(MslBatch* batch, const MslCommonParams* c, const M
         charge = ch->puff_rollout_charge_max;
         if (a == (uint16_t)MSL_ACT_PR_SPECIAL_N_LOOP) {
           pr_rollout_set_action(batch, idx, (uint16_t)MSL_ACT_PR_SPECIAL_N_FULL);
+          // Fighter_ChangeMotionState at the preserved frame still runs the identity bundle
+          // (ft_800890D0 / ft_800895E0) even though the anim clock carries over.
+          // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialNLoop_Anim
+          msl_motion_state_enter_side_effects(batch, idx);
         } else if (a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_N_CHARGE_LOOP) {
           pr_rollout_set_action(batch, idx, (uint16_t)MSL_ACT_PR_SPECIAL_AIR_N_CHARGE_FULL);
+          msl_motion_state_enter_side_effects(batch, idx);
         }
       }
       batch->state.puff_rollout_charge[idx] = charge;
@@ -568,6 +575,8 @@ static void pr_rollout_update(MslBatch* batch, const MslCommonParams* c, const M
         pr_rollout_set_action(batch, idx,
                               ground ? (uint16_t)MSL_ACT_PR_SPECIAL_N_RELEASE
                                      : (uint16_t)MSL_ACT_PR_SPECIAL_AIR_N_CHARGE_RELEASE);
+        // Preserved-frame Fighter_ChangeMotionState identity bundle (ft_800890D0/ft_800895E0).
+        msl_motion_state_enter_side_effects(batch, idx);
         if (ground) {
           batch->state.speed_ground_x_self[idx] = vel;
         } else {
@@ -617,6 +626,8 @@ static void pr_rollout_update(MslBatch* batch, const MslCommonParams* c, const M
             batch->state.puff_rollout_facing_restore[idx] = (int8_t)sdir;
             batch->state.puff_rollout_dir[idx] = (int8_t)-sdir;
             pr_rollout_set_action(batch, idx, (uint16_t)MSL_ACT_PR_SPECIAL_N_TURN);
+            // Preserved-frame Fighter_ChangeMotionState identity bundle.
+            msl_motion_state_enter_side_effects(batch, idx);
             const float gr_vel = batch->state.speed_ground_x_self[idx];
             batch->state.puff_rollout_pre_turn_vel[idx] = gr_vel;
             batch->state.puff_rollout_slope_lane[idx] = -0.05f * gr_vel;
@@ -927,6 +938,16 @@ uint8_t puff_specials_phys(MslBatch* batch, size_t idx) {
       if (((pre > 0.0f && v < 0.0f) || (pre <= 0.0f && v > 0.0f)) &&
           fabsf(v) >= fabsf(pre * ch->puff_rollout_turn_exit_vel_ratio)) {
         pr_rollout_set_action(batch, idx, (uint16_t)MSL_ACT_PR_SPECIAL_N_RELEASE);
+        // Preserved-frame Fighter_ChangeMotionState identity bundle.
+        msl_motion_state_enter_side_effects(batch, idx);
+        // The Turn exit arms fp->x21EC = ftPr_SpecialS_8013D8B0 immediately before the
+        // ChangeMotionState, so this one transition also runs ft_80089824 (unconditional
+        // fp->x2088 bump; the family's shared x4 low byte keeps ft_800895E0 quiet) and
+        // ft_800892A0 (fresh attack instance for the same move id).
+        // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::{ftPr_SpecialNTurn_Phys,
+        //   ftPr_SpecialS_8013D8B0}
+        instance_id_bump_ft_80089824(batch, idx);
+        attack_identity_restart_same_move_ft_800892A0(batch, idx);
         const int8_t latch = batch->state.puff_rollout_facing_restore[idx];
         if (latch != 0) {
           batch->state.puff_rollout_dir[idx] = latch;
@@ -1307,6 +1328,8 @@ uint8_t puff_rollout_try_floor_loss_swap(MslBatch* batch, size_t idx) {
       return 0u;
   }
   pr_rollout_set_action(batch, idx, dest);
+  // Preserved-frame Fighter_ChangeMotionState identity bundle.
+  msl_motion_state_enter_side_effects(batch, idx);
   batch->state.speed_ground_x_self[idx] = 0.0f;
   return 1u;
 }
@@ -1332,6 +1355,8 @@ uint8_t puff_rollout_air_release_land_or_bounce(MslBatch* batch, size_t idx) {
   if (vy_land < ch->puff_rollout_bounce_vy_threshold) {
     const float dir = (float)batch->state.puff_rollout_dir[idx];
     pr_rollout_set_action(batch, idx, (uint16_t)MSL_ACT_PR_SPECIAL_N_RELEASE);
+    // Preserved-frame Fighter_ChangeMotionState identity bundle.
+    msl_motion_state_enter_side_effects(batch, idx);
     batch->state.speed_air_x_self[idx] = fabsf(batch->state.speed_air_x_self[idx]) * dir;
     batch->state.speed_y_self[idx] = 0.0f;
     batch->state.puff_rollout_slope_lane[idx] = ch->puff_rollout_slope_lane_ground;
@@ -1487,7 +1512,7 @@ uint8_t puff_special_try_air_to_ground_swap(MslBatch* batch, size_t idx) {
   return 1u;
 }
 
-void puff_specials_reseed_init(MslBatch* batch, int batch_index) {
+void puff_specials_reseed_init(MslBatch* batch, int batch_index, const MslSeed* seed) {
   if (batch == NULL || batch_index < 0 || batch_index >= batch->batch_size) {
     return;
   }
@@ -1508,20 +1533,25 @@ void puff_specials_reseed_init(MslBatch* batch, int batch_index) {
           msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
     }
     // The turnaround window counter (mv.co.jumpaerial.x0) is hidden per-action state the replay
-    // does not carry. Reseed starts with no armed window: a reversed-jump seed row inside the
-    // ~turn_frames entry window will miss the pending mid-window facing flip (documented
-    // approximation; the flip itself is replay-visible one row later and self-corrects).
-    // Reconstructing the ladder from the CURRENT stick was tried and measured worse on the
-    // specials suite: entry-time arming is not derivable from the seeded row (released-stick
-    // armed windows miss, and post-entry stick reversals false-arm — 8 net new facing rows).
+    // does not carry directly; the reseed copy loop consumes the builder-derived
+    // `puff_mjump_turn_timer_u8` seed lane (reconstructed prefix-causally from the ladder entry
+    // frame's stick + pre-entry facing), so no reset is needed here. A runtime-side
+    // reconstruction from the CURRENT stick was tried before the lane existed and measured
+    // worse (released-stick armed windows miss, post-entry stick reversals false-arm).
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D74A4
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
-    batch->state.puff_mjump_turn_timer[idx] = 0u;
 
     // ---- Rollout lane reconstruction --------------------------------------
-    // The whole roll family runs with the anim frozen at frame 0 (state_age carries nothing),
-    // so the hidden lanes reconstruct from the seeded velocity where the Phys pins it to the
-    // charge formula, and fall back to documented approximations elsewhere:
+    // Primary owner: the builder-derived `puff_rollout_*` seed lanes reconstruct the hidden
+    // mv.pr.specialn block (charge x2C, turn budget x0, roll angle x14, pre-turn vel x10,
+    // roll direction x34.x, facing latch) prefix-causally from replay history; consume them
+    // whenever the valid bit is set.
+    // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c
+    //
+    // Fallback (valid=0: replay starts mid-roll, or pre-lane/synthetic seeds): the whole roll
+    // family runs with the anim frozen at frame 0 (state_age carries nothing), so the hidden
+    // lanes reconstruct from the seeded velocity where the Phys pins it to the charge formula,
+    // and fall back to documented approximations elsewhere:
     // - charge x2C: Release rows invert v = dir * xC0 * (x2C - xB8) * (1 +/- xC8|nx|); air
     //   rows add back the x58 decel. Full rows are exactly xA4; Loop rows are hidden (the
     //   elapsed hold does not reach the replay) and reseed at the xA0 entry value.
@@ -1532,11 +1562,43 @@ void puff_specials_reseed_init(MslBatch* batch, int batch_index) {
     // - x10/x1C (Turn): pre-turn vel approximates from the seeded gr_vel — exact before the
     //   zero crossing, and dir * 4x the crossed velocity after it (the true value is >= 4x by
     //   the un-met x10 * xD0 exit test), which fires the exit within ~a frame of source.
-    // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c
     const uint16_t a = batch->state.action_id[idx];
     if (puff_action_is_rollout(batch->state.char_id[idx], a)) {
       const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
       if (ch == NULL) {
+        continue;
+      }
+      if (seed != NULL && seed->puff_rollout_seed_valid_u8[p] != 0u) {
+        batch->state.puff_rollout_dir[idx] = seed->puff_rollout_dir_i8[p] >= 0 ? 1 : -1;
+        batch->state.puff_rollout_facing_restore[idx] = seed->puff_rollout_facing_restore_i8[p];
+        float seeded_charge = seed->puff_rollout_charge_f32[p];
+        if (seeded_charge > ch->puff_rollout_charge_max) {
+          seeded_charge = ch->puff_rollout_charge_max;
+        }
+        if (seeded_charge < 0.0f) {
+          seeded_charge = 0.0f;
+        }
+        batch->state.puff_rollout_charge[idx] = seeded_charge;
+        batch->state.puff_rollout_turn_budget[idx] = seed->puff_rollout_turn_budget_i16[p];
+        batch->state.puff_rollout_angle[idx] = seed->puff_rollout_angle_f32[p];
+        batch->state.puff_rollout_pre_turn_vel[idx] = seed->puff_rollout_pre_turn_vel_f32[p];
+        // x1C is consumed only by the grounded Turn Phys; it is -0.05 * x10 from the Turn
+        // entry. Other states keep the ground/air attr init (x44/x54).
+        batch->state.puff_rollout_slope_lane[idx] =
+            (a == (uint16_t)MSL_ACT_PR_SPECIAL_N_TURN)
+                ? -0.05f * seed->puff_rollout_pre_turn_vel_f32[p]
+                : (batch->state.on_ground[idx] ? ch->puff_rollout_slope_lane_ground
+                                               : ch->puff_rollout_slope_lane_air);
+        if (a != (uint16_t)MSL_ACT_PR_SPECIAL_N_START_R &&
+            a != (uint16_t)MSL_ACT_PR_SPECIAL_N_START_L &&
+            a != (uint16_t)MSL_ACT_PR_SPECIAL_AIR_N_START_R &&
+            a != (uint16_t)MSL_ACT_PR_SPECIAL_AIR_N_START_L &&
+            a != (uint16_t)MSL_ACT_PR_SPECIAL_N_END_R &&
+            a != (uint16_t)MSL_ACT_PR_SPECIAL_N_END_L &&
+            a != (uint16_t)MSL_ACT_PR_SPECIAL_AIR_N_END_R &&
+            a != (uint16_t)MSL_ACT_PR_SPECIAL_AIR_N_END_L) {
+          batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+        }
         continue;
       }
       const int8_t facing_dir1 = batch->state.facing[idx] ? 1 : -1;

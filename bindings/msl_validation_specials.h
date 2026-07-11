@@ -14,5 +14,8 @@ PyObject* msl_derive_hitbox_prev_centers_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_combo_push_timer_seed_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_throw_pulse_seed_lanes_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_grounded_overlap_hidden_pos_z_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_puff_mjump_turn_timer_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_puff_rollout_seed_lanes_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_jab_combo_window_seed_lanes_py(PyObject* self, PyObject* args);
 
 #endif

@@ -1469,6 +1469,16 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
   if (attacker < 0 || attacker >= (int)batch->config.num_players) {
     return;
   }
+  if (batch->state.frame_speed_mul_fp_q16_16[msl_idx_player(bi, attacker)] == 0) {
+    // Rate-0 (frozen-anim) script states hold a single create window open indefinitely — e.g.
+    // the Purin Rollout charge/roll family, where every internal ChangeMotionState passes anim
+    // rate 0 — so `pose_frame - def->frame` is not a valid active-window age and the
+    // early-window staleness proof below cannot apply. Keep the seeded suppression; source
+    // clear/copy edges still own real recreates.
+    // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c (rate-0 family transitions)
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+    return;
+  }
   if (hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
     return;
   }
@@ -2486,8 +2496,22 @@ void hitboxes_refresh(MslBatch* batch) {
           break;
         }
 
+        // Frozen-anim (rate-0) mid-state rows replay their script from the held frame every
+        // step, so a create event at exactly pose_frame is NOT a fresh ftAction_8007121C edge:
+        // the source consumed it at motion entry, and the capsule (plus its victims_1 list) has
+        // been live ever since — e.g. the Purin Rollout family, whose internal transitions all
+        // hold the anim at the create frame with rate 0. Classify such events into the
+        // pose_frame-1 snapshot so ftColl_800768A0 copy/clear does not re-run on every
+        // teacher-forced or sustained frozen row. True entry rows keep the fresh create edge.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+        // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c (rate-0 family transitions)
+        const uint8_t frozen_midstate_replay =
+            (motion_entered_this_frame == 0u && batch->state.frame_speed_mul_fp_q16_16[idx] == 0 &&
+             ev->kind == (uint8_t)MSL_HITBOX_EVENT_CREATE)
+                ? 1u
+                : 0u;
         // Apply all events strictly before pose_frame to build the state at pose_frame-1.
-        if (ev->frame < pose_frame) {
+        if (ev->frame < pose_frame || frozen_midstate_replay) {
           if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CLEAR) {
             if (ev->hitbox_id == 0xFFu) {
               for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {

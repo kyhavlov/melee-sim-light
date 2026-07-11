@@ -1783,3 +1783,413 @@ PyObject* msl_derive_grounded_overlap_hidden_pos_z_py(PyObject* self, PyObject* 
   }
   return (PyObject*)out;
 }
+
+PyObject* msl_derive_puff_mjump_turn_timer_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* action_obj = NULL;
+  PyObject* char_obj = NULL;
+  PyObject* hitlag_obj = NULL;
+  PyObject* facing_obj = NULL;
+  PyObject* stick_x_obj = NULL;
+  int puff_char_id = -1;
+  int act_first = 0;
+  int act_count = 0;
+  int turn_frames = 0;
+  double turn_threshold = 0.0;
+  if (!PyArg_ParseTuple(args, "OOOOOiiiid", &action_obj, &char_obj, &hitlag_obj, &facing_obj,
+                        &stick_x_obj, &puff_char_id, &act_first, &act_count, &turn_frames,
+                        &turn_threshold)) {
+    return NULL;
+  }
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
+  PyArrayObject* hitlag = require_contiguous_array(hitlag_obj, NPY_UINT16, 1, "hitlag_u16");
+  PyArrayObject* facing = require_contiguous_array(facing_obj, NPY_UINT8, 1, "facing_u8");
+  PyArrayObject* stick_x =
+      require_contiguous_array(stick_x_obj, NPY_FLOAT32, 1, "stick_x_unit_f32");
+  if (action == NULL || chr == NULL || hitlag == NULL || facing == NULL || stick_x == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_SIZE(action);
+  if (PyArray_SIZE(chr) != n || PyArray_SIZE(hitlag) != n || PyArray_SIZE(facing) != n ||
+      PyArray_SIZE(stick_x) != n) {
+    PyErr_SetString(PyExc_ValueError,
+                    "action_id/char_id/hitlag/facing/stick_x lanes must have the same length");
+    return NULL;
+  }
+  npy_intp dims[1] = {n};
+  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  if (out == NULL) return NULL;
+  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
+  const uint8_t* cid = (const uint8_t*)PyArray_DATA(chr);
+  const uint16_t* hl = (const uint16_t*)PyArray_DATA(hitlag);
+  const uint8_t* fac = (const uint8_t*)PyArray_DATA(facing);
+  const float* sx = (const float*)PyArray_DATA(stick_x);
+  uint8_t* out_p = (uint8_t*)PyArray_DATA(out);
+  if (turn_frames < 0) turn_frames = 0;
+  if (turn_frames > 255) turn_frames = 255;
+  // Post-frame `mv.co.jumpaerial.x0` (multi-jump chars reuse the mv slot; see the arming site
+  // storing through `mv.ca.specials.grav`) for the ladder states [act_first, act_first+act_count).
+  // Recurrence per contiguous ladder segment:
+  // - entry row (previous action differs): armed iff the entry frame's processed stick x reversed
+  //   beyond the x2D0->x4 threshold against the pre-flip facing (previous row's post facing);
+  //   ftCo_800D74A4 then applies the entry-frame ft_800CB6EC tick before serialization.
+  // - later rows: one ft_800CB6EC tick per non-frozen frame (ftCo_JumpAerialF1_Anim); frames the
+  //   fighter spent frozen under hitlag (previous row's post hitlag != 0, same convention as the
+  //   derive_run_x0 lane) do not tick.
+  // The facing flip itself (timer crossing x0/2) is replay-visible and needs no tracking here.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D74A4,ftCo_JumpAerialF1_Anim}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
+  int timer = 0;
+  for (npy_intp i = 0; i < n; i++) {
+    const int cur_a = (int)a[i];
+    const bool in_family = (int)cid[i] == puff_char_id && cur_a >= act_first &&
+                           cur_a < act_first + act_count && act_count > 0;
+    if (!in_family) {
+      timer = 0;
+      continue;
+    }
+    const bool entered = i == 0 || (int)a[i - 1] != cur_a;
+    if (entered) {
+      timer = 0;
+      if (i > 0 && turn_frames > 0) {
+        const float facing_dir = fac[i - 1] != 0u ? 1.0f : -1.0f;
+        if (sx[i] * facing_dir < -(float)turn_threshold) {
+          timer = turn_frames;
+        }
+      }
+      if (timer > 0) timer -= 1;
+    } else if (timer > 0 && hl[i - 1] == 0u) {
+      timer -= 1;
+    }
+    out_p[i] = (uint8_t)timer;
+  }
+  return (PyObject*)out;
+}
+
+PyObject* msl_derive_puff_rollout_seed_lanes_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* action_obj = NULL;
+  PyObject* char_obj = NULL;
+  PyObject* hitlag_obj = NULL;
+  PyObject* facing_obj = NULL;
+  PyObject* gr_vel_obj = NULL;
+  PyObject* air_vel_obj = NULL;
+  int puff_char_id = -1;
+  double charge_init = 0.0;
+  double charge_rate = 0.0;
+  double charge_max = 0.0;
+  double charge_decay = 0.0;
+  double wall_bounce_decay = 0.0;
+  int budget_init = 0;
+  int budget_hit_cost = 0;
+  double loop_roll_rate_deg = 0.0;
+  double release_roll_rate = 0.0;
+  double turn_roll_rate = 0.0;
+  double roll_rate_scale = 0.0;
+  if (!PyArg_ParseTuple(args, "OOOOOOidddddiidddd", &action_obj, &char_obj, &hitlag_obj,
+                        &facing_obj, &gr_vel_obj, &air_vel_obj, &puff_char_id, &charge_init,
+                        &charge_rate, &charge_max, &charge_decay, &wall_bounce_decay, &budget_init,
+                        &budget_hit_cost, &loop_roll_rate_deg, &release_roll_rate, &turn_roll_rate,
+                        &roll_rate_scale)) {
+    return NULL;
+  }
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
+  PyArrayObject* hitlag = require_contiguous_array(hitlag_obj, NPY_UINT16, 1, "hitlag_u16");
+  PyArrayObject* facing = require_contiguous_array(facing_obj, NPY_UINT8, 1, "facing_u8");
+  PyArrayObject* gr_vel =
+      require_contiguous_array(gr_vel_obj, NPY_FLOAT32, 1, "speed_ground_x_self_f32");
+  PyArrayObject* air_vel =
+      require_contiguous_array(air_vel_obj, NPY_FLOAT32, 1, "speed_air_x_self_f32");
+  if (action == NULL || chr == NULL || hitlag == NULL || facing == NULL || gr_vel == NULL ||
+      air_vel == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_SIZE(action);
+  if (PyArray_SIZE(chr) != n || PyArray_SIZE(hitlag) != n || PyArray_SIZE(facing) != n ||
+      PyArray_SIZE(gr_vel) != n || PyArray_SIZE(air_vel) != n) {
+    PyErr_SetString(PyExc_ValueError, "rollout seed lanes: input lanes must share one length");
+    return NULL;
+  }
+  npy_intp dims[1] = {n};
+  PyArrayObject* valid_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  PyArrayObject* charge_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
+  PyArrayObject* budget_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_INT16, 0);
+  PyArrayObject* angle_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
+  PyArrayObject* pre_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
+  PyArrayObject* dir_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_INT8, 0);
+  PyArrayObject* latch_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_INT8, 0);
+  if (valid_arr == NULL || charge_arr == NULL || budget_arr == NULL || angle_arr == NULL ||
+      pre_arr == NULL || dir_arr == NULL || latch_arr == NULL) {
+    Py_XDECREF(valid_arr);
+    Py_XDECREF(charge_arr);
+    Py_XDECREF(budget_arr);
+    Py_XDECREF(angle_arr);
+    Py_XDECREF(pre_arr);
+    Py_XDECREF(dir_arr);
+    Py_XDECREF(latch_arr);
+    return NULL;
+  }
+  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
+  const uint8_t* cid = (const uint8_t*)PyArray_DATA(chr);
+  const uint16_t* hl = (const uint16_t*)PyArray_DATA(hitlag);
+  const uint8_t* fac = (const uint8_t*)PyArray_DATA(facing);
+  const float* grv = (const float*)PyArray_DATA(gr_vel);
+  const float* airv = (const float*)PyArray_DATA(air_vel);
+  uint8_t* out_valid = (uint8_t*)PyArray_DATA(valid_arr);
+  float* out_charge = (float*)PyArray_DATA(charge_arr);
+  int16_t* out_budget = (int16_t*)PyArray_DATA(budget_arr);
+  float* out_angle = (float*)PyArray_DATA(angle_arr);
+  float* out_pre = (float*)PyArray_DATA(pre_arr);
+  int8_t* out_dir = (int8_t*)PyArray_DATA(dir_arr);
+  int8_t* out_latch = (int8_t*)PyArray_DATA(latch_arr);
+
+  // Post-frame reconstruction of the Rollout `mv.pr.specialn` hidden block over the family
+  // 346..362, walking replay-visible state with the ref action sequence as ground truth.
+  // Per-frame lane effects follow the state the frame STARTED in (prev row's action): source
+  // transitions fire mid-update inside the old state's callback, so a transition row carries
+  // the old state's charge/angle/budget effects plus the entry-side extras.
+  // - x2C charge: xA0 at family entry; += xA8 capped at xA4 per Loop/Full Anim; -= xB4 per
+  //   Release Phys (0 for Puff); *= xD4 floored at 0 on a Release wall bounce (detected as a
+  //   ref-velocity sign flip against the tracked roll direction on steady Release rows).
+  // - x0 budget: x34 at entry; -1 per Release/Turn Anim; -x38 on the deal-damage NHit handoff;
+  //   Turn exhaustion pins 0 and flips the roll direction before the End handoff.
+  // - x14 angle: per-state deltas (Loop/Full charge-scaled, Release 0.2*x98, Turn 0.2*x6C
+  //   unroll; air variants scale by xBC), normalized into [0, 2pi).
+  // - x10 pre-turn velocity: previous row's post gr_vel at the Release->Turn entry.
+  // - facing latch (mv facing_dir): armed -dir at Turn entry, consumed at the Turn->Release
+  //   exit (dir = latch), cleared on Release/NHit rows.
+  // Frames frozen under hitlag (previous row's post hitlag != 0) hold every lane.
+  // Segments that begin mid-family (replay starts inside a roll) are not reconstructable:
+  // the whole segment publishes valid=0 and reseed keeps its documented approximations.
+  // refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c
+  const float deg_to_rad = 0.017453292519943295f;
+  const float two_pi = 6.283185307179586f;
+  bool in_prev = false;
+  bool blind = false;
+  int8_t dir = 1;
+  int8_t latch = 0;
+  float charge = 0.0f;
+  int budget = 0;
+  float angle = 0.0f;
+  float pre = 0.0f;
+  for (npy_intp i = 0; i < n; i++) {
+    const int cur = (int)a[i];
+    const bool in_fam = (int)cid[i] == puff_char_id && cur >= 346 && cur <= 362;
+    if (!in_fam) {
+      in_prev = false;
+      continue;
+    }
+    const int prev_a = i > 0 ? (int)a[i - 1] : -1;
+    const bool frozen = i > 0 && hl[i - 1] != 0u;
+    if (!in_prev) {
+      blind = false;
+      latch = 0;
+      pre = 0.0f;
+      angle = 0.0f;
+      charge = (float)charge_init;
+      budget = budget_init;
+      if (cur == 346 || cur == 354) {
+        dir = 1;
+      } else if (cur == 347 || cur == 355) {
+        dir = -1;
+      } else {
+        // Mid-family cold start (replay begins inside the roll): no entry history to walk.
+        blind = true;
+        dir = fac[i] != 0u ? 1 : -1;
+      }
+    } else if (!frozen) {
+      const int eff = (prev_a >= 346 && prev_a <= 362) ? prev_a : cur;
+      switch (eff) {
+        case 348:
+        case 349:
+        case 356:
+        case 357: {
+          charge += (float)charge_rate;
+          if (charge >= (float)charge_max) {
+            charge = (float)charge_max;
+          }
+          angle += (float)dir * (charge * (deg_to_rad * (float)loop_roll_rate_deg));
+          break;
+        }
+        case 350:
+        case 358: {
+          latch = 0;
+          const float delta =
+              (eff == 358) ? (float)(0.2 * release_roll_rate) * (float)dir *
+                                 (deg_to_rad * charge * (float)roll_rate_scale)
+                           : deg_to_rad * charge * ((float)(0.2 * release_roll_rate) * (float)dir);
+          angle += delta;
+          budget -= 1;
+          charge -= (float)charge_decay;
+          break;
+        }
+        case 351:
+        case 359: {
+          float delta = (float)(0.2 * turn_roll_rate) * (float)-dir;
+          if (eff == 359) {
+            delta *= (float)roll_rate_scale;
+          }
+          angle += delta;
+          budget -= 1;
+          if (budget <= 0) {
+            budget = 0;
+            dir = (int8_t)-dir;
+          }
+          break;
+        }
+        default:
+          break;
+      }
+      angle = fmodf(angle, two_pi);
+      if (angle < 0.0f) {
+        angle += two_pi;
+      }
+      // Transition-row extras keyed on the CURRENT row's state.
+      if (cur != prev_a) {
+        if (cur == 351 && prev_a == 350) {
+          pre = i > 0 ? grv[i - 1] : 0.0f;
+          latch = (int8_t)-dir;
+        } else if (cur == 359 && (prev_a == 354 || prev_a == 355)) {
+          latch = (int8_t)-dir;
+        } else if (cur == 350 && prev_a == 351) {
+          if (latch != 0) {
+            dir = latch;
+          }
+          latch = 0;
+        } else if (cur == 362 &&
+                   (prev_a == 350 || prev_a == 351 || prev_a == 358 || prev_a == 359)) {
+          budget -= budget_hit_cost;
+          latch = 0;
+        }
+      } else if (cur == 350 || cur == 358) {
+        // Steady Release row: a post-velocity sign flip against the roll direction is the
+        // Release Coll wall bounce (x2C *= xD4 floored 0, direction from the reflected vel).
+        const float v = (cur == 350) ? grv[i] : airv[i];
+        if (v != 0.0f && ((v > 0.0f) != (dir > 0))) {
+          charge *= (float)wall_bounce_decay;
+          if (charge < 0.0f) {
+            charge = 0.0f;
+          }
+          dir = (v > 0.0f) ? 1 : -1;
+        }
+      }
+    }
+    if (budget < -32768 + budget_hit_cost) {
+      budget = -32768 + budget_hit_cost;
+    }
+    out_valid[i] = blind ? 0u : 1u;
+    out_charge[i] = charge;
+    out_budget[i] = (int16_t)budget;
+    out_angle[i] = angle;
+    out_pre[i] = pre;
+    out_dir[i] = dir;
+    out_latch[i] = latch;
+    in_prev = true;
+  }
+  return Py_BuildValue("(NNNNNNN)", valid_arr, charge_arr, budget_arr, angle_arr, pre_arr, dir_arr,
+                       latch_arr);
+}
+
+PyObject* msl_derive_jab_combo_window_seed_lanes_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* action_obj = NULL;
+  PyObject* char_obj = NULL;
+  PyObject* hitlag_obj = NULL;
+  PyObject* jab2_lut_obj = NULL;
+  PyObject* jab3_lut_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOOOO", &action_obj, &char_obj, &hitlag_obj, &jab2_lut_obj,
+                        &jab3_lut_obj)) {
+    return NULL;
+  }
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
+  PyArrayObject* hitlag = require_contiguous_array(hitlag_obj, NPY_UINT16, 1, "hitlag_u16");
+  PyArrayObject* jab2_lut = require_contiguous_array(jab2_lut_obj, NPY_FLOAT32, 1, "jab2_lut_f32");
+  PyArrayObject* jab3_lut = require_contiguous_array(jab3_lut_obj, NPY_FLOAT32, 1, "jab3_lut_f32");
+  if (action == NULL || chr == NULL || hitlag == NULL || jab2_lut == NULL || jab3_lut == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_SIZE(action);
+  if (PyArray_SIZE(chr) != n || PyArray_SIZE(hitlag) != n || PyArray_SIZE(jab2_lut) < 256 ||
+      PyArray_SIZE(jab3_lut) < 256) {
+    PyErr_SetString(PyExc_ValueError,
+                    "jab combo lanes: inputs must share one length; LUTs must be 256 wide");
+    return NULL;
+  }
+  npy_intp dims[1] = {n};
+  PyArrayObject* window_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
+  PyArrayObject* msid_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT16, 0);
+  if (window_arr == NULL || msid_arr == NULL) {
+    Py_XDECREF(window_arr);
+    Py_XDECREF(msid_arr);
+    return NULL;
+  }
+  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
+  const uint8_t* cid = (const uint8_t*)PyArray_DATA(chr);
+  const uint16_t* hl = (const uint16_t*)PyArray_DATA(hitlag);
+  const float* jab2 = (const float*)PyArray_DATA(jab2_lut);
+  const float* jab3 = (const float*)PyArray_DATA(jab3_lut);
+  float* out_w = (float*)PyArray_DATA(window_arr);
+  uint16_t* out_m = (uint16_t*)PyArray_DATA(msid_arr);
+  // Post-frame jab-combo continuation lanes (fp->hitlag_mul reuse + fp->unk_msid):
+  // - Attack11 entry arms jab_2_input_window and latches unk_msid = 44; Attack12 entry re-arms
+  //   jab_3_input_window with unk_msid = 45; Attack13 entry zeroes the window (unk_msid = 46).
+  // - ftCo_Attack1_CheckInput decrements the window once per no-press call; it is reached from
+  //   the neutral IASA chains enumerated below (decomp caller list of ftCo_Attack1_CheckInput:
+  //   Wait/Walk/Turn/Squat/SquatWait/SquatRv/Ottotto/Landing/Guard/AppealS). Attack-family IASA
+  //   tails also reach it under allow_interrupt; those rows are left un-decremented for now —
+  //   the runtime consumer is parked until the true per-frame decrement census is pinned (see
+  //   the worklog item 6).
+  // - Hitlag-frozen frames (previous row's post hitlag != 0) hold.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack11,doAttack12Normal,
+  //   doAttack13,ftCo_Attack1_CheckInput}
+  float window = 0.0f;
+  uint16_t msid = 0u;
+  for (npy_intp i = 0; i < n; i++) {
+    const int cur = (int)a[i];
+    const int prev = i > 0 ? (int)a[i - 1] : -1;
+    const uint8_t frozen = (i > 0 && hl[i - 1] != 0u) ? 1u : 0u;
+    if (cur == 44 || cur == 45 || cur == 46) {
+      if (prev != cur) {
+        if (cur == 44) {
+          window = jab2[cid[i]];
+        } else if (cur == 45) {
+          window = jab3[cid[i]];
+        } else {
+          window = 0.0f;
+        }
+        msid = (uint16_t)cur;
+      }
+    } else if (!frozen && window > 0.0f) {
+      switch (cur) {
+        case 14:   // Wait
+        case 15:   // WalkSlow
+        case 16:   // WalkMiddle
+        case 17:   // WalkFast
+        case 18:   // Turn
+        case 29:   // Ottotto
+        case 39:   // Squat
+        case 40:   // SquatWait
+        case 41:   // SquatRv
+        case 42:   // Landing
+        case 178:  // GuardOn
+        case 179:  // Guard
+        case 180:  // GuardOff
+        case 187:  // AppealSL
+        case 188:  // AppealSR
+          window -= 1.0f;
+          if (window < 0.0f) {
+            window = 0.0f;
+          }
+          break;
+        default:
+          break;
+      }
+    }
+    out_w[i] = window;
+    out_m[i] = msid;
+  }
+  return Py_BuildValue("(NN)", window_arr, msid_arr);
+}

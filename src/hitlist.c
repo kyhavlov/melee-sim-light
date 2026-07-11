@@ -1054,10 +1054,46 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
       // stay exact.
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
       // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
-      if (stored_iid == 0u || stored_iid != batch->state.instance_id[v_idx]) {
+      // Instance ids are a Slippi-visible proxy for decomp's stable HitVictim pointer; a
+      // same-frame GuardSetOff -> Guard motion change advances the proxy while the source
+      // pointer stays valid. Mirror hitlist_capsule_find_fighter_entry's rebind rule instead
+      // of over-rejecting on the exact id.
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+      //
+      // Provenance anchor: GuardSetOff exists ONLY after an accepted shield hit
+      // (ftCo_80093004 entry from ftColl_80076CBC), so a live or frame-start GuardSetOff
+      // victim proves the current guard session already absorbed this attacker's contact and
+      // the dense entry is that shield hit, not stale pre-shield BODY carry. Fresh GuardOn /
+      // idle Guard rows stay excluded: a stale dense entry there must not suppress the first
+      // legitimate shield hit of a new guard session (doubles witness: Fox Firefox vs a
+      // freshly raised shield).
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093004
+      const uint16_t v_action_specialhi = batch->state.action_id[v_idx];
+      const uint8_t guard_family_shield_provenance =
+          (v_action_specialhi == (uint16_t)MSL_ACT_GUARD_SET_OFF ||
+           batch->state.frame_start_action_id[v_idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF)
+              ? 1u
+              : 0u;
+      if (stored_iid == 0u) {
         continue;
       }
-      if (!msl_damage_source_victim_matches_attacker(batch, v_idx, a_idx, attacker)) {
+      if (stored_iid != batch->state.instance_id[v_idx] &&
+          !(guard_family_shield_provenance &&
+            !hitlist_victim_pointer_may_change(batch->state.stocks[v_idx], v_action_specialhi))) {
+        continue;
+      }
+      // Shield hits never write the BODY attribution lanes (`ftColl_80076CBC` applies shield
+      // damage/hitlag without touching ProcessHit's instance_hit_by/last_hit_by export), so the
+      // BODY same-source proof below cannot exist for a Guard-family victim. The shield contact
+      // itself still inserted the victim into the live HitCapsule victims_1 list, and the dense
+      // lane's current victim instance is the replay proof of that accepted contact (the
+      // GuardSetOff-onset derivation seeds it only from an observed shared-hitlag shield hit).
+      // Witness: Fox Firefox launch (SpecialAirHi) riding a shield — one shield hit, no re-hit
+      // for the rest of the launch window.
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808}
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+      if (!guard_family_shield_provenance &&
+          !msl_damage_source_victim_matches_attacker(batch, v_idx, a_idx, attacker)) {
         continue;
       }
     } else if (is_replay_rollout && !exact_replay_reseed && use_dense_seed) {

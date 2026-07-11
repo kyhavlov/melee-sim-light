@@ -105,3 +105,46 @@ def test_stale_damagefly_ground_id_without_release_colldata_last_pos_does_not_pu
     assert int(out["action_id"][1]) == ACT_DAMAGE_FLY_TOP
     assert int(out["on_ground"][1]) == 0
     assert float(out["pos_y"][1]) < 0.0
+
+
+def test_throw_entry_row_restores_shared_weight_anim_rate() -> None:
+    # ftCo_800DD398 enters thrower and victim with the shared ftCo_800DD4B0 anim speed
+    # (1 / (victim_weight * x37C)), but the replay's frame_speed lane on the first post-entry
+    # snapshot (action_frame 1) still carries the pre-throw 1.0. A teacher-forced entry row must
+    # restore the shared rate so the (already fractional) anim clock advances at source speed.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398}
+    import json
+    from pathlib import Path
+
+    puff_weight = float(json.loads(Path("data/characters/puff.json").read_text())["weight"])
+    x37c = float(
+        json.loads(Path("data/common/ft_common_data.json").read_text())[
+            "throw_anim_speed_weight_mul"
+        ]
+    )
+    rate = 1.0 / (puff_weight * x37c)
+    assert rate > 1.3, "puff must be light enough to make the throw rate visible"
+
+    seed = _base_seed()
+    # Falco (weight_independent_throws_mask 0) throws puff; Fox's ThrowF/Lw are
+    # weight-independent (mask bit set -> rate 1.0) and would not exercise the formula.
+    seed["char_id"][0, :2] = np.array([22, 15], dtype=np.uint8)
+    seed["action_id"][0, :2] = np.array([ACT_THROW_LW, ACT_THROWN_LW], dtype=np.uint16)
+    seed["animation_index"][0, :2] = np.array([SM_THROW_LW, SM_THROWN_LW], dtype=np.uint32)
+    seed["anim_frame_f32"][0, :2] = np.float32(rate)
+    seed["action_frame"][0, :2] = np.int16(1)
+    seed["grab_owner_port"][0, 1] = np.uint8(0)
+    seed["percent"][0, 1] = np.float32(20.0)
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)  # stale pre-throw lane
+
+    out = _step_seed(seed, steps=1)
+    expected_af = int(rate + rate)  # 1.667 + 1.667 -> 3
+    assert int(out["action_frame"][0]) == expected_af, "thrower entry row must advance at rate"
+    assert int(out["action_frame"][1]) == expected_af, "victim entry row must advance at rate"
+
+    # Mid-throw rows keep the seeded lane authoritative (no override).
+    seed["anim_frame_f32"][0, :2] = np.float32(10.0)
+    seed["action_frame"][0, :2] = np.int16(10)
+    out = _step_seed(seed, steps=1)
+    assert int(out["action_frame"][0]) == 11
+    assert int(out["action_frame"][1]) == 11

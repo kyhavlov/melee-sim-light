@@ -838,7 +838,13 @@ typedef struct MslStateSoA {
   // - incremented by ftCo_Attack_800D6A50 while A is pressed/released during Attack11/12/13.
   // - compared against co_attrs.rapid_jab_window when x2218_b2 is set.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
-  uint8_t* jab_rapid_count;  // [batch * players], clamped to 0..255
+  uint8_t* jab_rapid_count;
+  // Jab-combo continuation window (fp->hitlag_mul reused as counter) and the previous jab
+  // motion id (fp->unk_msid): armed by checkAttack11/doAttack12Normal, consumed and
+  // decremented by ftCo_Attack1_CheckInput from neutral IASA chains.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c
+  float* jab_input_window;
+  uint16_t* jab_unk_msid;  // [batch * players], clamped to 0..255
   // mv.co.attack100.x4 continue-loop latch, set by Attack100Loop_IASA and consumed by
   // Attack100Loop_Anim's throw_flags_b3 checkpoint.
   // mv.co.attack100.x0 loop-start latch, set by Attack100Loop_Anim before item pickup and

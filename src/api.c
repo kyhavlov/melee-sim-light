@@ -2793,6 +2793,16 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.dash_x4[idx] = seed->dash_x4[p];
       batch->state.shine_release_lag[idx] = seed->shine_release_lag[p];
       batch->state.shine_is_release[idx] = seed->shine_is_release[p];
+      // Puff multi-jump turnaround window (`mv.co.jumpaerial.x0`): builder-derived post-frame
+      // counter; zero is the neutral value for non-ladder rows and pre-lane seeds.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D74A4
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
+      batch->state.puff_mjump_turn_timer[idx] = seed->puff_mjump_turn_timer_u8[p];
+      // Jab-combo continuation lanes (fp->hitlag_mul reuse + fp->unk_msid); zero is the
+      // neutral value for pre-lane/synthetic seeds.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack1_CheckInput
+      batch->state.jab_input_window[idx] = seed->jab_input_window_f32[p];
+      batch->state.jab_unk_msid[idx] = seed->jab_unk_msid_u16[p];
       batch->state.ecb_lock_timer[idx] = seed->ecb_lock_timer[p];
       {
         uint8_t ledge_cd = seed->ledge_cooldown[p];
@@ -3709,7 +3719,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     // Reconstruct hidden Falcon Dive lanes (mv.ca.specialhi.vel, x221B_b7) from visible seed
     // lanes.
     falcon_specials_reseed_init(batch, bi);
-    puff_specials_reseed_init(batch, bi);
+    puff_specials_reseed_init(batch, bi, seed);
     // ftCo_800DB368 constrains exactly one side of a live Falcon Dive hold. This source bit is
     // reconstructed only after x221B_b7 establishes the fixed connect-time mode.
     grab_attachment_falcon_dive_constraint_reseed_init(batch, bi);
@@ -4052,6 +4062,20 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.throw_anim_rate_fp_q16_16[o_idx] = rate_fp;
       batch->state.throw_anim_rate_fp_q16_16[v_idx] = rate_fp;
+      // Throw-entry rate carry: ftCo_800DD398 enters both fighters with the shared
+      // ftCo_800DD4B0 anim speed, but Slippi's frame_speed lane on the first post-entry
+      // snapshot (action_frame 1) still publishes the pre-throw rate, so a teacher-forced
+      // entry row would advance its (already fractional) anim clock at the stale 1.0 for one
+      // step. Restore the shared rate on those entry rows; mid-throw rows already carry the
+      // observed rate in the seed lane.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398}
+      for (int side = 0; side < 2; side++) {
+        const size_t s_idx = side == 0 ? o_idx : v_idx;
+        if (batch->state.action_frame[s_idx] <= 1 && batch->state.hitlag[s_idx] == 0u &&
+            batch->state.hitlag_pre_timer[s_idx] == 0u) {
+          batch->state.frame_speed_mul_fp_q16_16[s_idx] = rate_fp;
+        }
+      }
     }
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);

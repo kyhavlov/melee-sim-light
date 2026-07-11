@@ -764,3 +764,272 @@ def test_dair_posed_ecb_bottom_below_root_does_not_land_early() -> None:
     outs = _run(dair_seed(0.5), [_mk_inputs()])
     assert int(outs[0]["action_id"][0]) == ACT_LANDING_AIR_LW
     assert int(outs[0]["on_ground"][0]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Multi-jump turnaround window seed lane (`puff_mjump_turn_timer_u8`)
+# ---------------------------------------------------------------------------
+
+
+def _mjump_midstate_seed(timer: int, frame: float = 4.0) -> np.ndarray:
+    seed = _seed(facing=1, jumps_left=4)
+    seed["action_id"][0, 0] = np.uint16(ACT_PR_F1)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_PR_F1)
+    seed["action_frame"][0, 0] = np.int16(int(frame))
+    seed["anim_frame_f32"][0, 0] = np.float32(frame)
+    seed["animation_index"][0, 0] = np.uint32(SM_PR_JUMP_F1)
+    seed["puff_mjump_turn_timer_u8"][0, 0] = np.uint8(timer)
+    return seed
+
+
+def test_mjump_turn_timer_seed_lane_flips_facing_mid_window() -> None:
+    # A teacher-forced row seeded mid-window (post-frame counter turn_frames/2 + 1) must flip
+    # facing on the very next tick, exactly like the free-running ladder.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
+    a = _attrs()
+    half = int(a["puff_mjump_turn_frames"]) // 2
+    outs = _run(_mjump_midstate_seed(half + 1), [_mk_inputs(main_x=-127)])
+    assert int(outs[0]["action_id"][0]) == ACT_PR_F1
+    assert int(outs[0]["facing"][0]) == 0, "seeded counter at half+1 must flip on the next tick"
+    # One tick earlier in the window (half + 2): no flip yet on this step.
+    outs = _run(_mjump_midstate_seed(half + 2), [_mk_inputs(main_x=-127)])
+    assert int(outs[0]["facing"][0]) == 1, "seeded counter at half+2 must not flip yet"
+
+
+def test_mjump_turn_timer_seed_lane_zero_is_neutral() -> None:
+    # Pre-lane seeds (and non-window rows) carry 0: no flip regardless of the current stick.
+    outs = _run(_mjump_midstate_seed(0), [_mk_inputs(main_x=-127)])
+    assert int(outs[0]["facing"][0]) == 1
+
+
+def test_derive_puff_mjump_turn_timer_recurrence() -> None:
+    # Builder recurrence over a synthetic ladder segment: armed entry publishes turn_frames - 1
+    # (the ftCo_800D74A4 entry tick), decrements once per non-frozen frame, holds across a
+    # hitlag-frozen frame (previous row's post hitlag != 0), and derives 0 for forward-stick
+    # entries and non-puff rows.
+    import msl_binding
+
+    a = _attrs()
+    tf = int(a["puff_mjump_turn_frames"])
+    thr = float(a["puff_mjump_turn_threshold"])
+    n = 10
+    action = np.full(n, ACT_PR_F1, dtype=np.uint16)
+    action[0] = ACT_FALL
+    char = np.full(n, PUFF, dtype=np.uint8)
+    hitlag = np.zeros(n, dtype=np.uint16)
+    facing = np.ones(n, dtype=np.uint8)
+    stick = np.full(n, -1.0, dtype=np.float32)
+
+    def run(**kw):
+        args = dict(action=action, char=char, hitlag=hitlag, facing=facing, stick=stick)
+        args.update(kw)
+        return msl_binding.derive_puff_mjump_turn_timer(
+            args["action"], args["char"], args["hitlag"], args["facing"], args["stick"],
+            PUFF, ACT_PR_F1, 5, tf, thr,
+        )
+
+    out = run()
+    assert int(out[0]) == 0
+    assert int(out[1]) == tf - 1, "armed entry row publishes the post-entry-tick counter"
+    assert [int(v) for v in out[1:8]] == [tf - 1 - i for i in range(7)]
+    # Hitlag hold: a frozen frame (previous row post hitlag != 0) does not tick.
+    hl = hitlag.copy()
+    hl[3] = 5
+    out = run(hitlag=hl)
+    assert int(out[4]) == int(out[3]), "frozen frame must hold the counter"
+    assert int(out[5]) == int(out[3]) - 1
+    # Forward stick at entry: never armed.
+    out = run(stick=np.full(n, 1.0, dtype=np.float32))
+    assert not out.any()
+    # Sub-threshold reversal at entry: not armed.
+    out = run(stick=np.full(n, -(thr * 0.5), dtype=np.float32))
+    assert not out.any()
+    # Non-puff rows never arm.
+    out = run(char=np.full(n, FOX, dtype=np.uint8))
+    assert not out.any()
+
+
+# ---------------------------------------------------------------------------
+# Rollout hidden `mv.pr.specialn` seed lanes (`puff_rollout_*`)
+# ---------------------------------------------------------------------------
+
+ACT_PR_N_LOOP = 348
+ACT_PR_N_FULL = 349
+ACT_PR_N_RELEASE_G = 350
+SM_PR_N_LOOP = 302
+SM_PR_N_FULL = 303
+
+
+def test_derive_puff_rollout_seed_lanes_charge_recurrence() -> None:
+    # Loop charge accrual: x2C = xA0 + xA8 per Loop/Full anim frame (cap xA4); Start rows do
+    # not accrue; budget decrements only in Release/Turn; mid-family cold starts are invalid.
+    import msl_binding
+
+    a = _attrs()
+    init = float(a["puff_rollout_charge_init"])
+    rate = float(a["puff_rollout_charge_rate"])
+    cmax = float(a["puff_rollout_charge_max"])
+    binit = int(a["puff_rollout_turn_budget_frames"])
+    n = 14
+    action = np.full(n, ACT_PR_N_LOOP, dtype=np.uint16)
+    action[0] = ACT_FALL
+    action[1] = 346  # StartR entry row
+    action[2] = 346
+    char = np.full(n, PUFF, dtype=np.uint8)
+    hitlag = np.zeros(n, dtype=np.uint16)
+    facing = np.ones(n, dtype=np.uint8)
+    grv = np.zeros(n, dtype=np.float32)
+    airv = np.zeros(n, dtype=np.float32)
+
+    def run(act):
+        return msl_binding.derive_puff_rollout_seed_lanes(
+            act, char, hitlag, facing, grv, airv, PUFF,
+            init, rate, cmax, float(a["puff_rollout_charge_decay"]),
+            float(a["puff_rollout_wall_bounce_decay"]), binit,
+            int(a["puff_rollout_turn_budget_hit_cost"]),
+            float(a["puff_rollout_loop_roll_rate_deg"]),
+            float(a["puff_rollout_release_roll_rate"]),
+            float(a["puff_rollout_turn_roll_rate"]),
+            float(a["puff_rollout_roll_rate_scale"]),
+        )
+
+    valid, charge, budget, angle, pre, dirs, latch = run(action)
+    assert int(valid[0]) == 0 and int(valid[1]) == 1
+    # Entry + Start rows publish the init charge; the Start->Loop transition row (rec 3, prev
+    # Start) still runs the Start handler (no accrual); later Loop rows accrue.
+    assert float(charge[1]) == init and float(charge[2]) == init and float(charge[3]) == init
+    assert float(charge[4]) == init + rate
+    assert float(charge[5]) == init + 2 * rate
+    assert int(budget[5]) == binit, "Loop rows must not consume turn budget"
+    assert int(dirs[1]) == 1
+    # Mid-family cold start (record 0 already in Loop): whole segment invalid.
+    cold = np.full(n, ACT_PR_N_LOOP, dtype=np.uint16)
+    valid2 = run(cold)[0]
+    assert not valid2.any()
+
+
+def test_rollout_loop_seeded_charge_fires_full_transition() -> None:
+    # A teacher-forced Loop row seeded one tick below the cap must enter SpecialNFull on the
+    # next frame, exactly like the source charge machine.
+    # refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialNLoop_Anim
+    a = _attrs()
+    cmax = float(a["puff_rollout_charge_max"])
+    rate = float(a["puff_rollout_charge_rate"])
+    seed = _ground_seed(facing=1, pos_x=0.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_PR_N_LOOP)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_PR_N_LOOP)
+    seed["animation_index"][0, 0] = np.uint32(SM_PR_N_LOOP)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(0.0)
+    seed["puff_rollout_seed_valid_u8"][0, 0] = np.uint8(1)
+    seed["puff_rollout_charge_f32"][0, 0] = np.float32(cmax - rate)
+    seed["puff_rollout_turn_budget_i16"][0, 0] = np.int16(90)
+    seed["puff_rollout_dir_i8"][0, 0] = np.int8(1)
+    b_held = _mk_inputs(buttons=0x0200)
+    outs = _run(seed, [b_held])
+    assert int(outs[0]["action_id"][0]) == ACT_PR_N_FULL, "cap-1 seeded charge must reach Full"
+    # One tick lower stays in Loop.
+    seed["puff_rollout_charge_f32"][0, 0] = np.float32(cmax - 2 * rate)
+    outs = _run(seed, [b_held])
+    assert int(outs[0]["action_id"][0]) == ACT_PR_N_LOOP
+    # valid=0 falls back to the entry-value approximation and must stay in Loop.
+    seed["puff_rollout_seed_valid_u8"][0, 0] = np.uint8(0)
+    seed["puff_rollout_charge_f32"][0, 0] = np.float32(cmax - rate)
+    outs = _run(seed, [b_held])
+    assert int(outs[0]["action_id"][0]) == ACT_PR_N_LOOP
+
+
+def test_rollout_turn_exit_bumps_instance_id_via_x21ec_hook() -> None:
+    # ftPr_SpecialNTurn_Phys arms fp->x21EC = ftPr_SpecialS_8013D8B0 before the Release
+    # ChangeMotionState: ft_80089824 bumps fp->x2088 unconditionally (the family's shared x4
+    # low byte keeps ft_800895E0 quiet across in-family transitions).
+    # refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::{ftPr_SpecialNTurn_Phys,
+    #   ftPr_SpecialS_8013D8B0}
+    seed = _ground_seed(facing=1, pos_x=0.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_PR_N_TURN)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_PR_N_TURN)
+    seed["animation_index"][0, 0] = np.uint32(SM_PR_N_TURN)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(0.0)
+    seed["instance_id"][0, 0] = np.uint16(100)
+    seed["instance_id_counter"][0] = np.uint32(200)
+    seed["puff_rollout_seed_valid_u8"][0, 0] = np.uint8(1)
+    seed["puff_rollout_charge_f32"][0, 0] = np.float32(120.0)
+    seed["puff_rollout_turn_budget_i16"][0, 0] = np.int16(60)
+    seed["puff_rollout_dir_i8"][0, 0] = np.int8(1)
+    seed["puff_rollout_facing_restore_i8"][0, 0] = np.int8(-1)
+    # Rolling right (dir +1), decelerating: seed gr_vel just below the crossing so one Turn
+    # Phys step flips the sign past |x10 * xD0| and exits to Release.
+    seed["puff_rollout_pre_turn_vel_f32"][0, 0] = np.float32(4.0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(-1.2)
+    outs = _run(seed, [_mk_inputs()])
+    assert int(outs[0]["action_id"][0]) == ACT_PR_N_RELEASE_G, "turn must exit to Release"
+    assert int(outs[0]["instance_id"][0]) == 200, "x21EC hook must consume the plAttack counter"
+
+
+# ---------------------------------------------------------------------------
+# Jab-combo continuation window (`ftCo_Attack1_CheckInput`; common mechanic)
+# ---------------------------------------------------------------------------
+
+ACT_ATTACK_11 = 44
+ACT_ATTACK_12 = 45
+SM_ATTACK_12 = 45  # ftCo_SM_Attack12 (common submotion table id)
+BTN_A = 0x0100
+
+
+@pytest.mark.xfail(
+    reason="jab-combo continuation consumer reverted pending the true CheckInput decrement set; "
+    "see reports/triage/open_rollout_work_log.md item 6",
+    strict=True,
+)
+def test_jab_combo_window_continues_to_attack12_from_wait() -> None:
+    # ftCo_Attack1_CheckInput: an A press from Wait while the jab window is live and x2218_b1 is
+    # set continues to Attack12 keyed on unk_msid; a dead window restarts Attack11; a live window
+    # with x2218_b1 clear restarts Attack11.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{ftCo_Attack1_CheckInput,doAttack12}
+    def wait_seed(window: float, msid: int, b1: bool) -> np.ndarray:
+        seed = _ground_seed(facing=1, pos_x=0.0)
+        seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+        seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_WAIT)
+        seed["animation_index"][0, 0] = np.uint32(SM_WAIT1)
+        seed["anim_frame_f32"][0, 0] = np.float32(3.0)
+        seed["action_frame"][0, 0] = np.int16(3)
+        seed["jab_input_window_f32"][0, 0] = np.float32(window)
+        seed["jab_unk_msid_u16"][0, 0] = np.uint16(msid)
+        if b1:
+            seed["state_flags"][0, 0, 0] = np.uint8(0x40)
+        return seed
+
+    outs = _run(wait_seed(20.0, ACT_ATTACK_11, True), [_mk_inputs(buttons=BTN_A)])
+    assert int(outs[0]["action_id"][0]) == ACT_ATTACK_12, "live window + b1 must continue to jab2"
+    outs = _run(wait_seed(0.0, ACT_ATTACK_11, True), [_mk_inputs(buttons=BTN_A)])
+    assert int(outs[0]["action_id"][0]) == ACT_ATTACK_11, "dead window must restart jab1"
+    outs = _run(wait_seed(20.0, ACT_ATTACK_11, False), [_mk_inputs(buttons=BTN_A)])
+    assert int(outs[0]["action_id"][0]) == ACT_ATTACK_11, "clear x2218_b1 must restart jab1"
+
+
+def test_derive_jab_combo_window_recurrence() -> None:
+    # Attack11 entry arms jab_2_input_window (post-frame value = the armed attr); neutral
+    # CheckInput states decrement once per frame; hitlag-frozen rows hold; Attack12 re-arms
+    # jab_3_input_window.
+    import msl_binding
+
+    a = _attrs()
+    jab2 = np.zeros(256, dtype=np.float32)
+    jab3 = np.zeros(256, dtype=np.float32)
+    jab2[PUFF] = np.float32(a["jab_2_input_window"])
+    jab3[PUFF] = np.float32(a["jab_3_input_window"])
+    action = np.array([14, 44, 44, 44, 14, 14, 29, 45, 45], dtype=np.uint16)
+    char = np.full(action.size, PUFF, dtype=np.uint8)
+    hitlag = np.zeros(action.size, dtype=np.uint16)
+    w, m = msl_binding.derive_jab_combo_window_seed_lanes(action, char, hitlag, jab2, jab3)
+    exp2 = float(a["jab_2_input_window"])
+    assert float(w[1]) == exp2 and int(m[1]) == 44, "jab1 entry arms the window"
+    assert float(w[3]) == exp2, "jab rows themselves do not decrement"
+    assert float(w[4]) == exp2 - 1 and float(w[5]) == exp2 - 2, "Wait rows decrement"
+    assert float(w[6]) == exp2 - 3, "teeter rows decrement (CheckInput caller)"
+    assert float(w[7]) == float(a["jab_3_input_window"]) and int(m[7]) == 45
+    # Hitlag hold on a Wait row.
+    hitlag2 = hitlag.copy(); hitlag2[4] = 3
+    w2, _ = msl_binding.derive_jab_combo_window_seed_lanes(action, char, hitlag2, jab2, jab3)
+    assert float(w2[5]) == float(w2[4]), "frozen row must hold the window"

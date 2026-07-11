@@ -2115,6 +2115,96 @@ def derive_downwait_timer(
     )
 
 
+def derive_puff_mjump_turn_timer(
+    *,
+    action_id_u16: np.ndarray,
+    char_id_u8: np.ndarray,
+    hitlag_u16: np.ndarray,
+    facing_u8: np.ndarray,
+    stick_x_unit_f32: np.ndarray,
+    puff_char_id: int,
+    act_first: int,
+    act_count: int,
+    turn_frames: int,
+    turn_threshold: float,
+) -> np.ndarray:
+    """
+    Derive the Puff multi-jump turnaround window counter (`mv.co.jumpaerial.x0`), post-frame.
+
+    Decomp:
+    - ftCo_800D74A4 arms x2D0->x0 frames on ladder entry when the entry frame's processed stick x
+      reverses beyond x2D0->x4 against the pre-entry facing, then applies the entry-frame
+      ft_800CB6EC tick.
+    - ftCo_JumpAerialF1_Anim runs ft_800CB6EC once per non-frozen frame; the facing flip fires
+      when the counter crosses x2D0->x0 / 2.
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D74A4,ftCo_JumpAerialF1_Anim}
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ft_800CB6EC
+
+    Slippi post-frames do not expose fp->mv.* union fields; this reconstructs the counter
+    prefix-causally so teacher-forced reseed rows inside the window keep the pending flip.
+    """
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_puff_mjump_turn_timer is required; run `make build`") from exc
+    return msl_binding.derive_puff_mjump_turn_timer(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(facing_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(stick_x_unit_f32, dtype=np.float32).reshape(-1),
+        int(puff_char_id),
+        int(act_first),
+        int(act_count),
+        int(turn_frames),
+        float(turn_threshold),
+    )
+
+
+def derive_puff_rollout_seed_lanes(
+    *,
+    action_id_u16: np.ndarray,
+    char_id_u8: np.ndarray,
+    hitlag_u16: np.ndarray,
+    facing_u8: np.ndarray,
+    speed_ground_x_self_f32: np.ndarray,
+    speed_air_x_self_f32: np.ndarray,
+    puff_char_id: int,
+    attrs: dict,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Derive the Puff Rollout hidden `mv.pr.specialn` block (post-frame) over the family 346..362:
+    (valid, charge x2C, turn budget x0, roll angle x14, pre-turn vel x10, roll dir x34.x,
+    facing latch). Segments that begin mid-family (replay starts inside a roll) publish valid=0.
+
+    refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c
+    """
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_puff_rollout_seed_lanes is required; run `make build`") from exc
+    return msl_binding.derive_puff_rollout_seed_lanes(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(facing_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(speed_ground_x_self_f32, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(speed_air_x_self_f32, dtype=np.float32).reshape(-1),
+        int(puff_char_id),
+        float(attrs["puff_rollout_charge_init"]),
+        float(attrs["puff_rollout_charge_rate"]),
+        float(attrs["puff_rollout_charge_max"]),
+        float(attrs["puff_rollout_charge_decay"]),
+        float(attrs["puff_rollout_wall_bounce_decay"]),
+        int(attrs["puff_rollout_turn_budget_frames"]),
+        int(attrs["puff_rollout_turn_budget_hit_cost"]),
+        float(attrs["puff_rollout_loop_roll_rate_deg"]),
+        float(attrs["puff_rollout_release_roll_rate"]),
+        float(attrs["puff_rollout_turn_roll_rate"]),
+        float(attrs["puff_rollout_roll_rate_scale"]),
+    )
+
+
 # Grab/throw victim attachment owner identity (seeded; suite-focused).
 #
 # Decomp source of truth for action ids:

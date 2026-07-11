@@ -25,3 +25,8 @@ void instance_id_counter_consume_plAttack_80037B08(MslBatch* batch, size_t idx);
 // Update fp->x2088 on true motion-state entry (subset of ft_800895E0 + ft_80089824 for SpecialN).
 // This is wired to msl_anim_timebase_enter() (the decomp-shaped Fighter_ChangeMotionState bundle).
 void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx);
+
+// Unconditional fp->x2088 bump (ft_80089824), for OnChangeAction hooks (fp->x21EC) armed at
+// specific callback sites (e.g. Purin's SpecialNTurn exit arming ftPr_SpecialS_8013D8B0).
+// refs/melee/build/GALE01/asm (ft_80089824: plAttack_80037B08 -> sth ..., 0x2088)
+void instance_id_bump_ft_80089824(MslBatch* batch, size_t idx);
