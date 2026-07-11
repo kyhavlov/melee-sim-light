@@ -653,3 +653,23 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   early" story is really the pose-vs-lifecycle bottom error; both suppressors become deletable
   once the carry lands (validated: full suppressor disable is puff -40 but fox_falco +22 /
   sheik +7 / aggregate +30 without the carry).
+- 2026-07-11 (later, owner-4 lane): **The exemption''s depth heuristic replaced by the true
+  mechanism — Coll-armed X130 lock off-by-one; falcon one-step 3125 -> 3117
+  (LankyFreshGorilla rec 6165, the seed-identical acceptance witness, now lands), every other
+  suite byte-identical.** Root cause chain: the seed ecb_lock_timer lane publishes
+  post-same-frame-decrement values (correct for IASA/Anim-armed jumps per the falcon refresh
+  helper''s convention), but Coll-armed floor-loss episodes (walk-off ground->air D5D4 inside
+  Fighter_procMap, AFTER that frame''s decrement) really end one Coll later: lane timer 1 =
+  source post-decrement 1, STILL LOCKED, sweep bottom = the preserved grounded 0 = the root.
+  All four Fall-wrap landing witnesses (falco 168, falcon 1061/1151/6165) are exactly that
+  final pinned row of a walk-off episode. A global lane fix (publishing the full 10 for
+  Coll-armed episodes) A/B''d as a broad regression — aggregate +225, doubles +200, marth +36,
+  sheik +44: every lock consumer is calibrated to the short window; PARKED as part of the
+  lifecycle recalibration, exactly like the sweep-prev flip. RETAINED surgical form: the
+  wrap-exemption''s corroboration is (pose bottom crossed) OR (ecb_lock_timer_seed == 1 &&
+  root crossed) — the latter encodes "last source-pinned Coll" without shifting the lane.
+  Reconstruction prototype (recurrence over ref lanes with grounded pin + lock hold +
+  source substep lerp) validated at all witnesses and is the seed for the eventual
+  interpolated-ECB carry lane; parked artifacts: the recurrence in
+  tools-side prototype form, and the falco Growling rec 1622 marginal (carried-bottom
+  crossing by 0.03 that source ignores — line-height or substep semantics still unpinned).

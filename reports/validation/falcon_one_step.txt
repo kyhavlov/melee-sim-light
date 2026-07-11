@@ -773,25 +773,25 @@ overall.float_norm_mae_p95: 0.00008980
 
 == replays/validation/falcon/LankyFreshGorilla.slpz ==
 Records: 6618  Players/scored per record: 2  Total player-frames: 13236
-mismatch.action_id: 13 / 13236 (0.000982)
-mismatch.action_frame: 13 / 13236 (0.000982)
-mismatch.on_ground: 6 / 13236 (0.000453)
+mismatch.action_id: 12 / 13236 (0.000907)
+mismatch.action_frame: 12 / 13236 (0.000907)
+mismatch.on_ground: 5 / 13236 (0.000378)
 mismatch.facing: 3 / 13236 (0.000227)
 mismatch.stocks: 0 / 13236 (0.000000)
-mismatch.jumps_left: 7 / 13236 (0.000529)
+mismatch.jumps_left: 6 / 13236 (0.000453)
 mismatch.is_dead: 0 / 13236 (0.000000)
 mismatch.hitlag: 2 / 13236 (0.000151)
 mismatch.hitstun: 3 / 13236 (0.000227)
 mismatch.l_cancel: 0 / 13236 (0.000000)
 mismatch.hurtbox_state: 4 / 13236 (0.000302)
-mismatch.ground_id: 8 / 13236 (0.000604)
-mismatch.animation_index: 13 / 13236 (0.000982)
+mismatch.ground_id: 7 / 13236 (0.000529)
+mismatch.animation_index: 12 / 13236 (0.000907)
 mismatch.instance_hit_by: 1 / 13236 (0.000076)
-mismatch.instance_id: 10 / 13236 (0.000756)
+mismatch.instance_id: 9 / 13236 (0.000680)
 mismatch.last_attack_landed: 2 / 13236 (0.000151)
 mismatch.combo_count: 1 / 13236 (0.000076)
 mismatch.last_hit_by: 8 / 13236 (0.000604)
-mismatch.state_flags: 10 / 66180 (0.000151)
+mismatch.state_flags: 9 / 66180 (0.000136)
 mismatch.item_exists: 0 / 99270 (0.000000)
 mismatch.item_type: 0 / 99270 (0.000000)
 mismatch.item_state: 0 / 99270 (0.000000)
@@ -799,9 +799,9 @@ mismatch.item_owner: 0 / 99270 (0.000000)
 mismatch.item_instance_id: 0 / 99270 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 54 / 13236 (0.004080)
 err.pos_x: mae=0.002265 p95=0.000000 max=3.127998
-err.pos_y: mae=0.002945 p95=0.000000 max=5.619544
+err.pos_y: mae=0.002910 p95=0.000000 max=5.619544
 err.speed_air_x_self: mae=0.000507 p95=0.000000 max=1.380000
-err.speed_ground_x_self: mae=0.000665 p95=0.000000 max=1.647467
+err.speed_ground_x_self: mae=0.000584 p95=0.000000 max=1.647467
 err.speed_y_self: mae=0.000830 p95=0.000000 max=3.300000
 err.speed_x_attack: mae=0.000087 p95=0.000000 max=0.677718
 err.speed_y_attack: mae=0.000747 p95=0.000000 max=3.843531
@@ -811,10 +811,10 @@ err.item_pos_x: mae=0.002683 p95=0.000000 max=0.706413
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000050
 err.item_vel_x: mae=0.000002 p95=0.000000 max=0.000214
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000027
-overall.discrete_mismatch: 104 / 800778
-overall.strict_discrete_mismatch: 158 / 800778
+overall.discrete_mismatch: 96 / 800778
+overall.strict_discrete_mismatch: 150 / 800778
 overall.ignored_discrete_mismatch: 54
-overall.float_norm_mae_p95: 0.00075923
+overall.float_norm_mae_p95: 0.00075460
 
 == replays/validation/falcon/FumblingProudPartridge.slpz ==
 Records: 12659  Players/scored per record: 2  Total player-frames: 25318
@@ -997,7 +997,7 @@ overall.ignored_discrete_mismatch: 12
 overall.float_norm_mae_p95: 0.00000603
 
 == suite summary ==
-overall.discrete_mismatch: 3125 / 22406659
-overall.strict_discrete_mismatch: 4358 / 22406659
+overall.discrete_mismatch: 3117 / 22406659
+overall.strict_discrete_mismatch: 4350 / 22406659
 overall.ignored_discrete_mismatch: 1233
-overall.float_norm_mae_p95: 0.00024851
+overall.float_norm_mae_p95: 0.00024836

@@ -6126,13 +6126,20 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.hitstun[idx] == 0u && batch->state.hitlag_pre_timer[idx] == 0u &&
              isfinite(batch->state.prev_pos_y[idx]) &&
              batch->state.prev_pos_y[idx] > (contact_y + k_floor_y_bias) &&
-             // Crossing corroboration: the source lands the wrap row only when the swept ECB
-             // bottom ends below the line (falcon 1061/1151, puff 3559) or the root passed a
-             // full ECB vertical unit under it (falco 168, whose 4.4 pose bottom stays above
-             // while the ref still lands); a marginal root dip with the bottom still above
-             // lands one frame later in source (falcon Game_20260506 rec 1625).
+             // Crossing corroboration: the source lands the wrap row only when its effective
+             // swept bottom ends below the line. Two source shapes: the pose bottom crossed
+             // (puff 3559, falcon 1061/1151 via the pinned sweep), or the row is the LAST
+             // source-pinned Coll of a Coll-armed floor-loss X130 episode and the root crossed
+             // (falco 168, falcon LankyFreshGorilla 6165). Coll-armed ftCommon_8007D5D4 runs
+             // inside Fighter_procMap AFTER the ecb_lock decrement, so its final pinned Coll is
+             // one row past the seeded lane window: seed timer 1 = source post-decrement 1,
+             // still locked, sweep bottom = the preserved grounded 0 = the root. A marginal
+             // root dip with an unpinned bottom still above lands one frame later in source
+             // (falcon Game_20260506 rec 1625: same geometry as 6165 but seed timer 0).
+             // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+             // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
              (cur_bottom_y < (contact_y - k_floor_y_bias) ||
-              (contact_y - y) > k_ecb_vertical_unit))
+              (ecb_lock_timer_seed == 1u && y < (contact_y - k_floor_y_bias))))
                 ? 1u
                 : 0u;
         const uint8_t suppress_fall_loop_wrap_stage_object_floor_to_hard_floor_land =
