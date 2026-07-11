@@ -550,3 +550,33 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   produced NO mismatch family. Rollout baseline on the expanded suite:
   first_mismatch_total 412 / seeded 277. New witnesses queued: the teeter
   walk-off re-ground (rec 224) and more Fall->Landing owner-4 rows.
+- 2026-07-11 (later): **Teeter walk-off platform endpoint phantom fixed; puff
+  one-step 2267 -> 2075 (strict 2988 -> 2796).**
+  BUG (user-reported: cannot walk off a platform while teetering; witness f3-101
+  wallbounce_teeter_ys): OttottoWait->Walk->Fall walk-off works, but the NEXT
+  frame's raw bottom sweep re-hit the plat and the mpColl_80044838_Floor platform
+  endpoint magnet snapped the fighter back to the endpoint into Wait —
+  free-running oscillates Fall/Wait at the edge forever. ROOT CAUSE (bigger than
+  the bug): the sim's floor-sweep prev endpoint is ONE FRAME STALER than source
+  mpCollPrev everywhere — source promotes coll.last_pos = coll.cur_pos (the
+  previous frame's Coll root, ft_80081DD4/ft_80081D0C), while the builder seeds
+  pos[i-1] and the runtime promotes the pre-Phys prev_pos (= post(N-2) at use
+  time). A fighter that left an endpoint last frame still sweeps FROM the
+  endpoint. A full convention flip (builder pos[i] + promoting
+  coll_stage_cur_pos) fixes puff (-226) but regresses fox_falco +22 / sheik +52 /
+  aggregate +326 — below-floor ledge-snap and damage owners are calibrated
+  against the stale prev (e.g. previous_below_source_floor_depth bounds) —
+  REVERTED; do not flip globally without re-calibrating those families.
+  RETAINED narrow owner (mpcoll_ground.c): the platform endpoint magnet re-runs
+  mpLineIntersectionH with the sweep start rebased onto the frame-start root
+  (prev_pos, same bottom offset) and only admits the snap when the fresh sweep
+  still hits the line; damage/hitlag rows are exempt (hitlag-exit ASDI keeps
+  source-preserved sweep roots; a marth DamageN-on-endpoint row regressed without
+  the exemption). Gates: fox_falco/marth one-step byte-identical, sheik/aggregate
+  discrete identical (one 4e-5 pos_x mae float shift on one sheik replay),
+  doubles 9727 -> 9702 (two replays improved), puff free-running teeter segment
+  now tracks ref exactly. Fix also cleared platform-endpoint phantom re-grounds
+  across the suite (biggest: Game_20260612T031848 PS -72, master-diamond -36).
+  Full pytest green modulo known environmental failures; standing puff reports
+  regenerated. Free-running rollout on the 15-replay suite: first_mismatch_total
+  412 -> 379, seeded 277 -> 244.

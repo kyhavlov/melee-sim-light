@@ -109,6 +109,42 @@ static inline void mpcoll_publish_direct_source_floor_hit_packet(const MslMpcoll
                                          hit->contact.normal_x, hit->contact.normal_y);
 }
 
+static inline uint8_t mpcoll_platform_endpoint_snap_fresh_sweep_hit(
+    const MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, int hit_line_idx,
+    float sweep_prev_x, float sweep_prev_y, float prev_bottom_x, float prev_bottom_y,
+    float cur_bottom_x, float cur_bottom_y) {
+  // Teeter walk-off phantom guard: the sim's floor-sweep prev endpoint is one frame staler than
+  // source mpCollPrev (source promotes coll.last_pos = coll.cur_pos, the PREVIOUS frame's Coll
+  // root; the sim's teacher-forced seed and post-frame promotion both carry the frame before
+  // that). A fighter that walked off a platform endpoint last frame still has the endpoint as
+  // its stale sweep start, so the raw bottom sweep "crosses" the platform at t~0 and
+  // mpColl_80044838_Floor's endpoint snap drags the fighter back onto the plat every frame
+  // (Ottotto walk-off oscillates between Fall and endpoint-snapped Wait). Source sweeps from the
+  // frame-start root and misses the segment entirely. Re-run mpLineIntersectionH with the sweep
+  // start rebased onto the frame-start root (prev_pos, same bottom offset) and only admit the
+  // platform endpoint snap when that fresh sweep still hits the line.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80081DD4,ft_80081D0C}
+  // refs/melee/src/melee/mp/mplib.c::{mpLineIntersectionH,mpCheckFloor}
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044838_Floor
+  if (batch == NULL || g == NULL || hit_line_idx < 0 || (size_t)hit_line_idx >= g->line_count) {
+    return 1u;
+  }
+  if (batch->state.hitlag[idx] != 0u || batch->state.hitstun[idx] != 0u ||
+      batch->state.hitlag_pre_timer[idx] != 0u) {
+    // Damage/hitlag episodes keep source-preserved sweep roots (ftCo_Damage_OnExitHitlag ASDI
+    // moves cur_pos before Phys while CollData.prev_pos stays pre-callback), so prev_pos is not
+    // the true coll prev there; leave those rows on the established magnet behavior.
+    return 1u;
+  }
+  const float fresh_prev_bottom_x = batch->state.prev_pos_x[idx] + (prev_bottom_x - sweep_prev_x);
+  const float fresh_prev_bottom_y = batch->state.prev_pos_y[idx] + (prev_bottom_y - sweep_prev_y);
+  const MslStageFloorLine world = floor_line_world_for_env(batch, bi, g, hit_line_idx);
+  float ix = 0.0f;
+  float iy = 0.0f;
+  return floor_intersect_horiz(world.x0, world.y0, world.x1, fresh_prev_bottom_x,
+                               fresh_prev_bottom_y, cur_bottom_x, cur_bottom_y, &ix, &iy);
+}
+
 void mpcoll_ground_apply(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -4724,6 +4760,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
               if (!suppress_active_damage_hitlag_land &&
                   !suppress_damageflyroll_hitlag_exit_floor_land &&
                   !suppress_damageflyroll_below_floor_active_hitlag_land &&
+                  mpcoll_platform_endpoint_snap_fresh_sweep_hit(
+                      batch, idx, bi, g, hit_line_idx, prev_x, prev_y, prev_bottom_x,
+                      prev_bottom_y, cur_bottom_x, cur_bottom_y) &&
                   msl_mpcoll_80044838_floor_edge_snap_from_bottom(
                       batch, bi, g, hit_line_idx, cur_bottom_x, cur_bottom_y, 0u, &ground_id,
                       &contact_x, &contact_y, &floor_nx, &floor_ny)) {
