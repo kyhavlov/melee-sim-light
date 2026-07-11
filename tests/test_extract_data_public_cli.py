@@ -14,9 +14,10 @@ from tools.slippi.motion_state_owners import read_callback_manifest, read_mslmso
 def test_extract_data_does_not_require_decomp_before_iso_extract(tmp_path, monkeypatch):
     iso = tmp_path / "GALE01.iso"
     iso.write_bytes(b"fake")
-    out_dir = tmp_path / "msl"
+    out_dir = tmp_path / "data"
     calls: list[list[str]] = []
 
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(extract_data, "_default_melee_decomp", lambda: None)
     monkeypatch.setattr(extract_data, "list_files", lambda _iso: object())
 
@@ -35,7 +36,7 @@ def test_extract_data_does_not_require_decomp_before_iso_extract(tmp_path, monke
     monkeypatch.setattr(extract_data, "extract_file", fake_extract_file)
     monkeypatch.setattr(extract_data.subprocess, "run", fake_run)
 
-    extract_data.main(["--iso", str(iso), "--out-dir", str(out_dir)])
+    extract_data.main(["--iso", str(iso)])
 
     assert (out_dir / "_iso" / "PlCo.dat").exists()
     assert calls

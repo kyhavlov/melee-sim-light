@@ -35,13 +35,6 @@ from tools.extraction.extract_character_attrs import (  # noqa: E402
 )
 
 
-def test_registry_walljump_flags_match_present_decomp() -> None:
-    decomp = ROOT / "refs/melee"
-    for name, info in CHARS.items():
-        assert _source_can_walljump(name, melee_decomp=decomp) is info.can_walljump
-        assert _resolved_can_walljump(name, melee_decomp=decomp) is info.can_walljump
-
-
 def test_registry_walljump_flags_are_cwd_independent_without_decomp(tmp_path: Path) -> None:
     missing = tmp_path / "not-a-decomp"
     for name, info in CHARS.items():

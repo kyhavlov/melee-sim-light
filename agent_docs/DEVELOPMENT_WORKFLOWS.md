@@ -5,17 +5,22 @@ This doc is the compact operator reference for common repo workflows. Keep
 
 ## Python / Build Setup
 
-Use `uv`, not bare `pip`.
+Use `uv`, not bare `pip`. A fresh checkout also needs Git LFS and a valid SSBM ISO.
 
 ```bash
-uv sync
-uv pip install -e python
+make bootstrap ISO=/path/to/SSBM.iso
 ```
 
-If the extension disappears after syncing, rerun:
+`make bootstrap` pulls the tracked validation replays, syncs the development environment,
+extracts the generated runtime data into `data/` (with source DATs under `_iso/`), and builds the
+native extension. Heldout replays and forensic/debug replay trees remain local-only and are not
+needed by `make test`.
+
+For an already-bootstrapped checkout, refresh dependencies and rebuild with:
 
 ```bash
-uv pip install -e python
+uv sync --dev
+make build
 ```
 
 `make build` is incremental by default. Use `make build BUILD_FORCE=1` only

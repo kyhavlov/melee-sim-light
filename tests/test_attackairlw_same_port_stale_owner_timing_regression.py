@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import subprocess
 import textwrap
@@ -176,15 +177,14 @@ def test_terminal_fall_from_damage_owner_does_not_require_concrete_cap(tmp_path:
             static uint8_t char_id[MSL_MAX_PLAYERS];
             static uint8_t hitbox_enable_edge[MSL_MAX_PLAYERS * MSL_MAX_HITBOXES];
 
-            uint8_t msl_motion_state_common_class_has(uint16_t action, uint32_t class_bit) {
-              if (class_bit != MSL_MS_CLASS_DAMAGE_FLY) {
-                return 0u;
-              }
-              return (action >= (uint16_t)MSL_ACT_DAMAGE_FLY_HI &&
-                      action <= (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL)
-                         ? 1u
-                         : 0u;
-            }
+            uint32_t msl_motion_state_common_class_bits_by_action
+                [MSL_MOTION_STATE_COMMON_ACTION_CAP] = {
+                    [MSL_ACT_DAMAGE_FLY_HI] = MSL_MS_CLASS_DAMAGE_FLY,
+                    [MSL_ACT_DAMAGE_FLY_N] = MSL_MS_CLASS_DAMAGE_FLY,
+                    [MSL_ACT_DAMAGE_FLY_LW] = MSL_MS_CLASS_DAMAGE_FLY,
+                    [MSL_ACT_DAMAGE_FLY_TOP] = MSL_MS_CLASS_DAMAGE_FLY,
+                    [MSL_ACT_DAMAGE_FLY_ROLL] = MSL_MS_CLASS_DAMAGE_FLY,
+                };
 
             static void bind_state(void) {
               memset(&batch, 0, sizeof(batch));
@@ -234,7 +234,15 @@ def test_terminal_fall_from_damage_owner_does_not_require_concrete_cap(tmp_path:
     )
 
     subprocess.run(
-        ["cc", "-std=c11", "-I", str(root / "src"), str(source), "-o", str(exe)],
+        [
+            os.environ.get("CC", "cc"),
+            "-std=c11",
+            "-I",
+            str(root / "src"),
+            str(source),
+            "-o",
+            str(exe),
+        ],
         check=True,
     )
     subprocess.run([str(exe)], check=True)

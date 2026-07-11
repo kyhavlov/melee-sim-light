@@ -1,4 +1,4 @@
-.PHONY: build build-native clean-native clean-native-shadow test test-parallel test-serial package-smoke slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-falcon validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-falcon validate-rollout-sheik validate-all validate-heldout rollout-summary rollout-diff build_data viewer-build viewer fmt fmt-check check dolphin-engine-dump dolphin-extract build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
+.PHONY: bootstrap build build-native clean-native clean-native-shadow test test-parallel test-serial package-smoke slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-falcon validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-falcon validate-rollout-sheik validate-all validate-heldout rollout-summary rollout-diff build_data viewer-build viewer fmt fmt-check check dolphin-engine-dump dolphin-extract build-bench-sim build-bench-sim-native bench-sim bench-sim-native FORCE
 
 PY := uv run python
 SUITE ?= replays/suites/fox_falco_fd_ucf084_recent.json
@@ -143,6 +143,15 @@ $(BUILD_STAMP): $(NATIVE_SO) $(BUILD_STAMP_DEPS)
 FORCE:
 
 -include $(NATIVE_OBJS:.o=.d)
+
+bootstrap:
+	@test -n "$(ISO)" || (echo "Usage: make bootstrap ISO=/path/to/SSBM.iso"; exit 2)
+	@git lfs version >/dev/null 2>&1 || (echo "Missing git-lfs. Install it before bootstrapping."; exit 2)
+	@git lfs install --local
+	@git lfs pull
+	@uv sync --dev
+	@$(PY) -m melee_sim.extract_data --iso "$(ISO)" --out-dir data --iso-dir _iso
+	@$(MAKE) --no-print-directory build
 
 test: build
 	@mkdir -p reports/triage

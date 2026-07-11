@@ -84,7 +84,7 @@ def _extract_glob(*, iso: Path, files, pattern: str, out_dir: Path, force: bool)
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Extract melee-sim-light data from an SSBM ISO.")
     ap.add_argument("--iso", type=Path, required=True, help="path to a valid SSBM ISO")
-    ap.add_argument("--out-dir", type=Path, default=Path(".msl"), help="generated data directory")
+    ap.add_argument("--out-dir", type=Path, default=Path("data"), help="generated data directory")
     ap.add_argument("--iso-dir", type=Path, default=None, help="directory for extracted source DAT files")
     ap.add_argument("--force", action="store_true", help="rewrite already-extracted source DAT files")
     ap.add_argument(

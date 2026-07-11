@@ -11,8 +11,9 @@ from tools.slippi.staling_history import derive_staling_history
 
 def test_staling_history_prefix_invariance() -> None:
     # Strict prefix invariance: derive(prefix) == derive(full)[:k] for many k.
-    path = "replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slp"
-    game = _read_slippi(path, False)
+    path = "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
+    with replay_path_for_peppi(path) as slp_path:
+        game = _read_slippi(str(slp_path), False)
     frames_all = game.frames
     assert frames_all is not None
 

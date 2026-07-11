@@ -22,12 +22,6 @@ DREAM_LAND_REPLAYS = (
     ("replays/suites/aggregate_recent.json", "MixedAllQuetzal.slpz"),
     ("replays/suites/aggregate_recent.json", "UnusedLivelyLouse.slpz"),
     ("replays/suites/aggregate_recent.json", "ToughOutlyingChicken.slpz"),
-    ("replays/suites/marth_heldout.json", "FavoriteInternationalEmu.slpz"),
-    ("replays/suites/marth_heldout.json", "SubstantialDefinitiveRam.slpz"),
-    ("replays/suites/sheik_heldout.json", "OldMagnificentFlamingo.slpz"),
-    ("replays/suites/sheik_heldout.json", "FrailGiganticCrow.slpz"),
-    ("replays/suites/spacies_heldout.json", "SizzlingSturdyMongoose.slpz"),
-    ("replays/suites/spacies_heldout.json", "AbandonedNoxiousButterfly.slpz"),
 )
 
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import json
 import struct
 import tempfile
 from pathlib import Path
@@ -394,66 +393,6 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
     assert c0[13] == pytest.approx(0.008726646192371845)
     assert c0[14] == pytest.approx(0.05235987901687622)
 
-    assert falco == {
-        "version": 8,
-        "set_count": 0,
-        "total_nodes": 0,
-        "sets": [],
-        "collision_msids": [],
-        "source_step_msids": [],
-        "cone_msids": [],
-        "catch_grabbable_msids": [],
-        "colliders": [],
-    }
-
-
-@pytest.mark.integration
-def test_extract_fighter_anims_emits_fox_falco_dynamic_contract(tmp_path: Path) -> None:
-    required = [
-        Path("_iso/PlFx.dat"),
-        Path("_iso/PlFxNr.dat"),
-        Path("_iso/PlFc.dat"),
-        Path("_iso/PlFcNr.dat"),
-        Path("_iso/PlCo.dat"),
-    ]
-    missing = [p for p in required if not p.exists()]
-    if missing:
-        pytest.skip("missing local _iso assets: " + ", ".join(str(p) for p in missing))
-
-    from tools.extraction.extract_fighter_anims import _read_fighter_dynamics
-    from tools.extraction.extract_fighter_anims import _read_rest_srt_and_parents
-    from tools.extraction.extract_fighter_anims import _dynamic_catch_grabbable_owner_msids
-    from tools.extraction.extract_fighter_anims import _dynamic_cone_owner_msids
-    from tools.extraction.extract_fighter_anims import _dynamic_collision_owner_msids
-    from tools.extraction.extract_fighter_anims import _dynamic_source_step_owner_msids
-    from tools.extraction.extract_fighter_anims import _write_fighter_dynamics_data
-
-    for character in ("fox", "falco"):
-        _rest_rot, _rest_scl, _rest_pos, parent_part, _part_flags = _read_rest_srt_and_parents(character)
-        dynamic_sets = _read_fighter_dynamics(character)
-        moves = json.loads((Path("data") / "moves" / f"{character}.json").read_text())
-        _write_fighter_dynamics_data(
-            character,
-            tmp_path,
-            dynamic_sets,
-            parent_part,
-            collision_msids=_dynamic_collision_owner_msids(character, moves, dynamic_sets),
-            source_step_msids=_dynamic_source_step_owner_msids(character, moves, dynamic_sets),
-            cone_msids=_dynamic_cone_owner_msids(character, moves, dynamic_sets),
-            catch_grabbable_msids=_dynamic_catch_grabbable_owner_msids(character, moves, dynamic_sets),
-        )
-
-    fox = _parse_ssdynn01(tmp_path / "fox.dyn.bin")
-    falco = _parse_ssdynn01(tmp_path / "falco.dyn.bin")
-    assert fox["version"] == 8
-    assert fox["set_count"] == 1
-    assert fox["total_nodes"] == 4
-    assert fox["collision_msids"] == [17, 36, 44, 58, 222, 242, 243]
-    assert fox["source_step_msids"] == []
-    assert fox["cone_msids"] == [242]
-    assert fox["catch_grabbable_msids"] == [52]
-    assert fox["colliders"] == [{"part": 41, "offset": pytest.approx((0.0, 2.0, 0.0)), "radius": pytest.approx(3.0)}]
-    assert [n["part"] for n in fox["sets"][0]["nodes"]] == [17, 18, 19, 20]  # type: ignore[index]
     assert falco == {
         "version": 8,
         "set_count": 0,

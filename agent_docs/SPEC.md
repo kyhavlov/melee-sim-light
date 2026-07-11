@@ -7600,11 +7600,11 @@ Manual set13 / character special-source fixes:
   generated endpoint wall that matches that floor's own endpoint. The older broad
   sustained/cardinal-stage handoff and the WIP `prev_action_id == EscapeAir` sustained right-wall
   owner are not retained. Pre/post sim probe evidence:
-  `manual_repros/set13/marth airdodge teleport.json` frame `1728 -> 1729` moved from
+  `tests/fixtures/modelplay/manual_repros/set13/marth airdodge teleport.json` frame `1728 -> 1729` moved from
   `x=47.945679` to `x=-85.565689` at `HEAD` (`dist=133.525943`), and now moves to `x=45.972851`
   (`dist=2.790000`).
 - Sheik ledgedash/air-dodge clip status: the exact user-reported pre-fix artifact/input is not
-  present in `manual_repros/set13/` or the checked-in repro fixtures, so this packet does not claim a
+  present in the checked-in repro fixtures, so this packet does not claim a
   real reported-clip fix. The deterministic live Sheik legal-stage ledgedash sweep is coverage only;
   it is not proof of the missing reported clip. The random Sheik/FD episode seed `1354821142` and
   Zelda/BF boundary cases `(1, 6, 'dj_dodge', 95, 2)` / `(1, 6, 'dj_dodge', 127, 2)` remain

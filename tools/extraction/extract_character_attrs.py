@@ -657,9 +657,8 @@ def _extract_wait_anim_choices(buf: bytes, wait_abs: int) -> dict:
 
 
 # MarsAttributes layout consumed by _extract_mars_sword_attrs: (key, offset, kind).
-# kind: "i32" | "f32" | "vec3" . Offsets verified against the parsed decomp struct
-# (refs/melee/src/melee/ft/chara/ftMars/types.h::_MarsAttributes) by
-# tests/test_decomp_struct_layout.py - transcription errors fail there, not at runtime.
+# kind: "i32" | "f32" | "vec3". Source layout:
+# refs/melee/src/melee/ft/chara/ftMars/types.h::_MarsAttributes.
 MARS_SWORD_ATTRS_LAYOUT: list[tuple[str, int, str]] = [
     ("specialn_charge_max_seconds", 0x00, "i32"),
     ("specialn_release_damage_base", 0x04, "i32"),

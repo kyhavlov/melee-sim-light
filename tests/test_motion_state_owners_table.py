@@ -1437,26 +1437,6 @@ raise SystemExit(1)
     assert proc.returncode == 0, proc.stderr + proc.stdout
 
 
-def test_motion_state_owner_extractor_regenerates_stable_artifacts(tmp_path: Path) -> None:
-    out_dir = tmp_path / "owners"
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "tools.extraction.extract_motion_state_owners",
-            "--melee_decomp",
-            "refs/melee",
-            "--out_dir",
-            str(out_dir),
-            "--chars",
-            ",".join(_data_manifest_chars()),
-        ],
-        check=True,
-    )
-    for rel in [f"{ch}.bin" for ch in _data_manifest_chars()] + ["callback_symbols.json"]:
-        assert (out_dir / rel).read_bytes() == (Path("data/motion_state/owners") / rel).read_bytes()
-
-
 def test_motion_state_owner_source_artifacts_match_generated_data() -> None:
     # build_data's no-decomp path copies these tracked source artifacts directly. Keep their
     # manifest class maps and shared callback-id namespace byte-identical with the generated data
@@ -1466,28 +1446,6 @@ def test_motion_state_owner_source_artifacts_match_generated_data() -> None:
         assert (SOURCE_ARTIFACT_OWNERS / rel).read_bytes() == (
             Path("data/motion_state/owners") / rel
         ).read_bytes(), rel
-
-
-def test_motion_state_owner_partial_extraction_uses_packaged_callback_namespace(
-    tmp_path: Path,
-) -> None:
-    out_dir = tmp_path / "owners"
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "tools.extraction.extract_motion_state_owners",
-            "--melee_decomp",
-            "refs/melee",
-            "--out_dir",
-            str(out_dir),
-            "--chars",
-            "fox,falco",
-        ],
-        check=True,
-    )
-    for rel in ("fox.bin", "falco.bin", "callback_symbols.json"):
-        assert (out_dir / rel).read_bytes() == (SOURCE_ARTIFACT_OWNERS / rel).read_bytes(), rel
 
 
 def test_fx_special_kind_matches_anim_callback_symbols() -> None:

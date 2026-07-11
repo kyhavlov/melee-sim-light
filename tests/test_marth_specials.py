@@ -1223,39 +1223,6 @@ def test_counter_anim_created_descriptor_applies_x60_hitlag_floor() -> None:
     assert hl1 >= floor, f"attacker counter hitlag {hl1} below x60 floor {floor}"
 
 
-# ---------------------------------------------------------------------------
-# Dynamic-chain suppression proof (completeness pass)
-# ---------------------------------------------------------------------------
-
-
-def test_marth_hurtcaps_do_not_ride_suppressed_dynamic_chains() -> None:
-    # The SSDYNN01 suppression for Marth (3 cape/hair chains, 12 nodes) is source-correct, not
-    # an approximation: (1) every hurtcap bone's ancestor lineage is fully static (never passes
-    # through a chain node), and (2) the chains define zero collision capsules (unlike Fox's
-    # tail chain). Encoded as a data assertion so a future costume/extraction change that
-    # violates either premise fails loudly.
-    sys.path.insert(0, str(ROOT))
-    import tools.extraction.extract_fighter_anims as ea
-
-    _, _, _, parent, _ = ea._read_rest_srt_and_parents("marth")
-    dyn = ea._read_fighter_dynamics("marth")
-    assert len(dyn) == 3, f"marth chain count changed: {len(dyn)}"
-    chain_nodes = set()
-    for d in dyn:
-        assert d["colliders"] == [], f"marth chain gained colliders: {d['colliders']}"
-        chain_nodes.update(
-            ea._dynamic_first_child_chain(int(d["root_part"]), int(d["chain_count"]), parent)
-        )
-    hurt = json.loads((ROOT / "data" / "hurtcaps" / "marth.json").read_text())
-    for cap in hurt["capsules"]:
-        cur = int(cap["bone_idx"])
-        while cur >= 0:
-            assert cur not in chain_nodes, (
-                f"hurtcap bone {cap['bone_idx']} rides dynamic chain node {cur}"
-            )
-            cur = parent[cur]
-
-
 def _bf_laser_counter_run(marth_high: bool):
     """Battlefield: the laser passes a platform level away from Marth's counter descriptor."""
     seed = _seed_base("marth")

@@ -10,12 +10,16 @@ NumPy API over native batch execution.
 
 Prerequisites:
 - `uv`
-- Python 3.10 or newer
+- Git LFS
+- Python 3.11 or newer
 - a C compiler available as `cc`
 
 Clone the repo:
 ```bash
 git clone https://github.com/kyhavlov/melee-sim-light
+cd melee-sim-light
+git lfs install
+git lfs pull
 ```
 
 From another project, install the local checkout with `uv`:

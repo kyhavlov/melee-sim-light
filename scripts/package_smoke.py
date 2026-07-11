@@ -31,7 +31,7 @@ def main() -> None:
                 [project]
                 name = "melee-sim-light-package-smoke"
                 version = "0.0.0"
-                requires-python = ">=3.10"
+                requires-python = ">=3.11"
                 dependencies = [
                   "melee-sim-light @ file://{repo}",
                 ]
