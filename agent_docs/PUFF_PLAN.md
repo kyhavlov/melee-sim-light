@@ -623,3 +623,33 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   below-floor projection owners to bottom-crossing gates; (c) THEN flip the
   sweep-prev lane and delete the compensating owners. The builder walk-back and
   promotion rules above are validated and reusable verbatim when (a) lands.
+- 2026-07-11 (post-merge, owner-4 lane): **Fall loop-wrap missed-landing family fixed via a
+  fresh-root crossing exemption on the two wrap-adjacent landing suppressors; puff one-step
+  2005 -> 1973 (strict 2726 -> 2694), rollout 368 -> 364 (seeded 235 -> 231), every other
+  suite byte-identical per-replay.** Probe recon (reseed_seed + step_input +
+  debug_write_colldata_ecb on the witness records): all four owner-4 missed-landing witnesses
+  (falco master-diamond 168, falcon diamond-diamond 1061/1151, puff master-diamond 3559) were
+  floor-probe PROJECTION rejections by the compensating suppressors — bit 18
+  (FALL_LOOP_WRAP_STAGE_OBJECT_FLOOR_TO_HARD_FLOOR) for the fastfall rows and bit 34
+  (FALL_STALE_PLATFORM_FIRST_HARD_FLOOR) for puff 3559 — not sweep-endpoint arithmetic. A
+  disable A/B mapped the families the suppressors legitimately protect: already-below roots
+  (falco FoD rows 1622/5960/5595: ref keeps falling under the deck; the STALE floor_sweep_prev
+  root stays "above" one frame longer and re-admits them) and non-wrap slope/moving-platform
+  rows (falco 2920/2853, fox DL 7169, falco 6345). The separator is the FRESH frame-start root
+  (batch prev_pos, the same lane as the teeter endpoint gate): source lands the wrap row iff
+  the frame-start root was above the candidate line and crossed it this frame, corroborated by
+  (swept bottom ends below the line) OR (root passed > k_ecb_vertical_unit under it — falco's
+  4.4 pose bottom stays above while ref still lands). Marginal root dips with the bottom still
+  above land one frame later (falcon Game_20260506 rec 1625 regressed under the uncorroborated
+  gate and is protected by the corroboration).
+  LIFECYCLE CASE (for the prev-ECB carry milestone): falcon LankyFreshGorilla rec 6165 and
+  falcon Game_20260506 rec 1625 are geometrically identical at seed level (fresh prev root
+  3.038/3.025, cur root -0.462/-0.475, pose bottom 2.08, same FoD line) with OPPOSITE ref
+  outcomes (6165 lands, 1625 lands one frame later). The distinguishing state is the source''s
+  history-dependent interpolated CollData ecb (mpCollInterpolateECB path dependence) — 
+  invisible to any pose-table gate. Closing it needs the owner-4 lifecycle: a builder-derived
+  seed lane reconstructing the interpolated ECB from trailing ref frames + the runtime carry.
+  6165 is the acceptance witness. Suppressor archaeology recorded: bit-18''s "one callback
+  early" story is really the pose-vs-lifecycle bottom error; both suppressors become deletable
+  once the carry lands (validated: full suppressor disable is puff -40 but fox_falco +22 /
+  sheik +7 / aggregate +30 without the carry).

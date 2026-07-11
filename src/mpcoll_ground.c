@@ -6103,6 +6103,38 @@ void mpcoll_ground_apply(MslBatch* batch) {
         const float fall_loop_end_frame = (action_id == (uint16_t)MSL_ACT_FALL && anim <= 0xFFFFu)
                                               ? msl_anim_end_frame(char_id, (uint16_t)anim)
                                               : 0.0f;
+        // Fresh-root crossing exemption for the two Fall loop-wrap-adjacent landing suppressors
+        // below: source LANDS on the row after the Fall loop wrap when the frame-start root was
+        // still above the candidate line and crossed it this frame (falco master-diamond rec 168,
+        // falcon diamond-diamond rec 1061/1151, puff master-diamond rec 3559). The suppressed
+        // phantom families keep firing on the rows the exemption leaves alone: already-below
+        // roots (fastfall under the deck keeps falling in source; the stale floor_sweep_prev
+        // root stays "above" one frame longer and would re-admit them) and non-wrap slope or
+        // moving-platform rows. Damage/hitlag episodes keep source-preserved sweep roots
+        // (hitlag-exit ASDI moves cur_pos while CollData.prev_pos stays pre-callback), so
+        // prev_pos is not the true coll prev there; leave those rows suppressed.
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80081DD4,ft_80081D0C}
+        // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBE8
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
+        const uint8_t fall_loop_wrap_fresh_root_crossed_land =
+            (action_id == (uint16_t)MSL_ACT_FALL &&
+             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_FALL &&
+             batch->state.seed_prev_action_frame[idx] >= 0 && fall_loop_end_frame > 0.0f &&
+             anim <= 0xFFFFu && msl_anim_is_looping(char_id, (uint16_t)anim) &&
+             ((float)batch->state.seed_prev_action_frame[idx] + 1.0f) >= fall_loop_end_frame &&
+             batch->state.action_frame[idx] <= 1 && batch->state.hitlag[idx] == 0u &&
+             batch->state.hitstun[idx] == 0u && batch->state.hitlag_pre_timer[idx] == 0u &&
+             isfinite(batch->state.prev_pos_y[idx]) &&
+             batch->state.prev_pos_y[idx] > (contact_y + k_floor_y_bias) &&
+             // Crossing corroboration: the source lands the wrap row only when the swept ECB
+             // bottom ends below the line (falcon 1061/1151, puff 3559) or the root passed a
+             // full ECB vertical unit under it (falco 168, whose 4.4 pose bottom stays above
+             // while the ref still lands); a marginal root dip with the bottom still above
+             // lands one frame later in source (falcon Game_20260506 rec 1625).
+             (cur_bottom_y < (contact_y - k_floor_y_bias) ||
+              (contact_y - y) > k_ecb_vertical_unit))
+                ? 1u
+                : 0u;
         const uint8_t suppress_fall_loop_wrap_stage_object_floor_to_hard_floor_land =
             // data/stages/bin/*.bin::MSLSTG01 platform transform records
             // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBE8
@@ -6121,6 +6153,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
              !(final_ground_line_idx >= 0 && (size_t)final_ground_line_idx < g->line_count &&
                g->lines[(size_t)final_ground_line_idx].is_ledge) &&
              ground_id != batch->state.ground_id[idx] && prev_y > (contact_y + k_floor_y_bias) &&
+             !fall_loop_wrap_fresh_root_crossed_land &&
              (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
                                        (size_t)MSL_STATE_FLAGS_2218_INDEX] &
               (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u)
@@ -6143,7 +6176,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
              ground_id != batch->state.ground_id[idx] && batch->state.speed_y_self[idx] < 0.0f &&
              prev_bottom_y > (contact_y + k_floor_y_bias) &&
              cur_bottom_y < (contact_y - k_floor_y_bias) &&
-             (contact_y - cur_bottom_y) < k_ecb_vertical_unit)
+             (contact_y - cur_bottom_y) < k_ecb_vertical_unit &&
+             !fall_loop_wrap_fresh_root_crossed_land)
                 ? 1u
                 : 0u;
         const uint8_t suppress_fall_shallow_terminal_hard_floor_land =
