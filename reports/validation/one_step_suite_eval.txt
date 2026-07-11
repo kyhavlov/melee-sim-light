@@ -123,7 +123,7 @@ mismatch.item_state: 0 / 153330 (0.000000)
 mismatch.item_owner: 0 / 153330 (0.000000)
 mismatch.item_instance_id: 0 / 153330 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 25 / 20444 (0.001223)
-err.pos_x: mae=0.000208 p95=0.000000 max=0.299999
+err.pos_x: mae=0.000207 p95=0.000000 max=0.299999
 err.pos_y: mae=0.000220 p95=0.000000 max=2.200000
 err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000059
 err.speed_ground_x_self: mae=0.000000 p95=0.000000 max=0.000059

@@ -535,8 +535,8 @@ static inline void enter_guard_on_from_cliff_end(MslBatch* batch, const MslCommo
   msl_anim_timebase_seed(batch, idx, -1.0f,
                          msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &=
-      (uint8_t)~(uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(
+      uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
   batch->state.guard_release_latched_xc[idx] = 0u;
   batch->state.guard_on_cliff_end_source[idx] = 1u;
   // Same no-submotion GuardOn entry surface as action.c::enter_guard_on and the cliff

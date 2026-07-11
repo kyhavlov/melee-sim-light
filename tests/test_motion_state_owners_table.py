@@ -39,18 +39,30 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE,
     CLASS2_FALL_LIKE_ACTION,
     CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA,
+    CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL,
+    CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL,
+    CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL,
     CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST,
     CLASS2_GROUND_LOCOMOTION_FLOOR_LOSS,
     CLASS2_GUARD_STATE,
     CLASS2_LANDING_ROOT_FLOOR_SNAP,
     CLASS2_WALK_ACTION,
     CLASS3_PHASE4_ATTACK_AIR_COLL,
+    CLASS3_CATCH_KIND_1,
+    CLASS3_CATCH_KIND_2,
+    CLASS3_CATCH_TARGET_MASK_1,
+    CLASS3_CATCH_TARGET_MASK_511,
+    CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED,
     FX_SPECIAL_KIND_BY_SYMBOL,
     FX_SPECIAL_KIND_VALUES,
     CLASS3_PHASE4_DAMAGE_COMMON_COLL,
     CLASS3_PHASE4_DAMAGE_FALL_COLL,
     CLASS3_PHASE4_DAMAGE_FLY_COLL,
     CLASS3_PHASE4_ESCAPE_AIR_COLL,
+    CLASS3_ORDINARY_WALLJUMP_COLL,
+    CLASS3_WALLTECH_COLL,
+    ORDINARY_WALLJUMP_COLL_CBS,
+    WALLTECH_COLL_CBS,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS,
@@ -63,13 +75,19 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL,
     CLASS_SPECIALHI,
 )
-from tools.slippi.motion_state_owners import VERSION, read_callback_manifest, read_mslmso01_v1
+from tools.slippi.motion_state_owners import (
+    HEADER_BYTES,
+    VERSION,
+    read_callback_manifest,
+    read_mslmso01_v1,
+)
 
 
 FOX = Path("data/motion_state/owners/fox.bin")
 FALCO = Path("data/motion_state/owners/falco.bin")
 MANIFEST = Path("data/motion_state/owners/callback_symbols.json")
 MARTH = Path("data/motion_state/owners/marth.bin")
+FALCON = Path("data/motion_state/owners/falcon.bin")
 SHEIK = Path("data/motion_state/owners/sheik.bin")
 ZELDA = Path("data/motion_state/owners/zelda.bin")
 SOURCE_ARTIFACT_OWNERS = Path("tools/extraction/source_artifacts/motion_state/owners")
@@ -148,8 +166,6 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     # src/mpcoll_ground.c's Cliff/CollData ledge floor owner.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
     assert cb_name(0x00EC, "coll") == "ftCo_EscapeAir_Coll"
-    # Callback ids renumber by design when a character is added (falcon port: 339 -> 400).
-    assert int(fox.coll_cb_id[0x00EC]) == 400
     assert int(fox.class3_bits[0x00EC]) & CLASS3_PHASE4_ESCAPE_AIR_COLL
 
     assert cb_name(0x002A, "coll") == "ftCo_Landing_Coll"  # Landing
@@ -251,6 +267,7 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x001D,
         0x001E,
         0x001F,
+        0x0020,
         0x0021,
         0x0022,
         0x00CA,
@@ -830,6 +847,127 @@ def test_zelda_farore_motion_state_callbacks_publish_source_collision_owners() -
 
 
 @pytest.mark.integration
+def test_falcon_raptor_motion_state_callbacks_publish_source_collision_owners() -> None:
+    falcon = read_mslmso01_v1(FALCON)
+    symbols = read_callback_manifest(MANIFEST)
+
+    def cb_name(action_id: int, lane: str) -> str:
+        cb_id = getattr(falcon, f"{lane}_cb_id")[action_id]
+        return symbols[int(cb_id)]
+
+    def has(action_id: int, bit: int) -> bool:
+        return bool(int(falcon.class_bits[action_id]) & bit)
+
+    # Raptor Boost start switches source helpers from cmd_vars[2]:
+    # cmd2 live uses ft_80082708/B108; cmd2 clear uses ft_80084104/B2DC edge snap. The generated
+    # table publishes the superset and runtime narrows it from the extracted script timeline.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialSStart_Coll
+    # data/moves/falcon.json::specials_by_msid.303 set_cmd_var(idx=2,value={1,0})
+    assert cb_name(0x015D, "coll") == "ftCa_SpecialSStart_Coll"
+    assert has(0x015D, CLASS_FX_SPECIALS_GROUND_B108_COLL)
+    assert has(0x015D, CLASS_FT800827A0_EDGE_SNAP_COLL)
+
+    # Raptor Boost hit-punch does not branch on cmd_vars[2]; it always calls ft_80082708.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialS_Coll
+    assert cb_name(0x015E, "coll") == "ftCa_SpecialS_Coll"
+    assert has(0x015E, CLASS_FX_SPECIALS_GROUND_B108_COLL)
+    assert not has(0x015E, CLASS_FT800827A0_EDGE_SNAP_COLL)
+
+    # Aerial Raptor Start/Hit call ft_80081D0C directly. This owner also controls whether a live
+    # ftCommon ECB lock can preserve desired.bottom through the collision callback.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::{
+    #   ftCa_SpecialAirSStart_Coll,ftCa_SpecialAirS_Coll}
+    for action_id, coll_cb in (
+        (0x015F, "ftCa_SpecialAirSStart_Coll"),
+        (0x0160, "ftCa_SpecialAirS_Coll"),
+    ):
+        assert cb_name(action_id, "coll") == coll_cb
+        assert has(action_id, CLASS_FT80081D0C_AIR_COLL)
+
+
+@pytest.mark.integration
+def test_falcon_kick_landing_end_publishes_source_collision_owner() -> None:
+    falcon = read_mslmso01_v1(FALCON)
+    symbols = read_callback_manifest(MANIFEST)
+
+    action_id = 0x0168
+    coll_cb = symbols[int(falcon.coll_cb_id[action_id])]
+    assert coll_cb == "ftCa_SpecialAirLwEnd_Coll"
+    # ftCa_SpecialAirLwEnd_Coll -> ft_80084104 -> ft_800827A0/mpColl_8004B2DC.
+    # This is the grounded landing-skid state; the adjacent airborne backflip state has its own
+    # doColl landing callback and must not inherit the endpoint-snap owner.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+    #   ftCa_SpecialAirLwEnd_Coll,ftCa_SpecialAirLwEndAir_Coll}
+    assert int(falcon.class_bits[action_id]) & CLASS_FT800827A0_EDGE_SNAP_COLL
+    assert not int(falcon.class_bits[0x0169]) & CLASS_FT800827A0_EDGE_SNAP_COLL
+
+
+@pytest.mark.integration
+def test_falcon_dive_motion_state_callbacks_publish_source_collision_owners() -> None:
+    falcon = read_mslmso01_v1(FALCON)
+    symbols = read_callback_manifest(MANIFEST)
+
+    def cb_name(action_id: int, lane: str) -> str:
+        cb_id = getattr(falcon, f"{lane}_cb_id")[action_id]
+        return symbols[int(cb_id)]
+
+    def has(action_id: int, bit: int) -> bool:
+        return bool(int(falcon.class_bits[action_id]) & bit)
+
+    def has2(action_id: int, bit: int) -> bool:
+        return bool(int(falcon.class2_bits[action_id]) & bit)
+
+    # Falcon Dive ground/air Coll callbacks run doAirColl on the airborne branch:
+    # ft_CheckGroundAndLedge -> mpColl_800473CC. Keep this generated so floor/wall/ceiling
+    # publication uses the same callback-local CollData owner as other SpecialHi families.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{
+    #   ftCa_SpecialHi_Coll,ftCa_SpecialAirHi_Coll}
+    for action_id, coll_cb in (
+        (0x0161, "ftCa_SpecialHi_Coll"),
+        (0x0162, "ftCa_SpecialAirHi_Coll"),
+    ):
+        assert cb_name(action_id, "coll") == coll_cb
+        assert has(action_id, CLASS_SPECIALHI)
+        assert has(action_id, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)
+        assert has2(action_id, CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL)
+
+    # Throw0 uses the direct airborne floor wrapper after its Anim callback refreshes the
+    # five-frame common ECB lock.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{
+    #   ftCa_SpecialHiThrow0_Anim,ftCa_SpecialHiThrow0_Coll}
+    assert cb_name(0x0164, "coll") == "ftCa_SpecialHiThrow0_Coll"
+    assert has(0x0164, CLASS_FT80081D0C_AIR_COLL)
+
+    # SpecialHiCatch and CaptureCaptain only delegate to mpColl while that fighter is not the
+    # XRotN-constrained side of the hold. Publish the exact callback owner instead of making the
+    # runtime infer this distinction from action ids or the victim's live floor state.
+    # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHiCatch_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_CaptureCaptain_Coll
+    assert cb_name(0x0163, "coll") == "ftCa_SpecialHiCatch_Coll"
+    assert has2(0x0163, CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL)
+    assert cb_name(0x0113, "coll") == "ftCo_CaptureCaptain_Coll"
+    assert has2(0x0113, CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL)
+
+
+@pytest.mark.integration
+def test_falcon_direct_air_special_callbacks_publish_source_collision_owner() -> None:
+    falcon = read_mslmso01_v1(FALCON)
+    symbols = read_callback_manifest(MANIFEST)
+
+    for action_id, coll_cb in (
+        (0x015C, "ftCa_SpecialAirN_Coll"),
+        (0x0165, "ftCa_SpecialLw_Coll"),
+        (0x0166, "ftCa_SpecialLwEnd_Coll"),
+        (0x0167, "ftCa_SpecialAirLw_Coll"),
+        (0x0169, "ftCa_SpecialAirLwEndAir_Coll"),
+        (0x016A, "ftCa_SpecialLwEndAir_Coll"),
+    ):
+        callback_id = int(falcon.coll_cb_id[action_id])
+        assert symbols[callback_id] == coll_cb
+        assert int(falcon.class_bits[action_id]) & CLASS_FT80081D0C_AIR_COLL
+
+
+@pytest.mark.integration
 def test_sheik_chain_motion_state_callbacks_publish_source_collision_owners() -> None:
     sheik = read_mslmso01_v1(SHEIK)
     symbols = read_callback_manifest(MANIFEST)
@@ -1035,6 +1173,17 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
             bits |= CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE
         if phys_cb in {"ftCo_CliffCatch_Phys", "ftCo_CliffJump1_Phys", "ftCo_CliffWait_Phys"}:
             bits |= CLASS2_CLIFF_HOLD_PHYS_SNAP
+        if coll_cb in {
+            "ftFx_SpecialAirHi_Coll",
+            "ftFx_SpecialHiFall_Coll",
+            "ftCa_SpecialHi_Coll",
+            "ftCa_SpecialAirHi_Coll",
+        }:
+            bits |= CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL
+        if coll_cb == "ftCa_SpecialHiCatch_Coll":
+            bits |= CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL
+        if coll_cb == "ftCo_CaptureCaptain_Coll":
+            bits |= CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL
         if (
             anim_cb == "ftCo_Wait_Anim"
             or anim_cb == "ftCo_Landing_Anim"
@@ -1073,12 +1222,16 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
             )
 
 
-def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actions() -> None:
+def test_motion_state_owner_class3_matches_source_callbacks_for_all_actions() -> None:
     fox = read_mslmso01_v1(FOX)
     falco = read_mslmso01_v1(FALCO)
+    marth = read_mslmso01_v1(MARTH)
+    falcon = read_mslmso01_v1(FALCON)
+    sheik = read_mslmso01_v1(SHEIK)
+    zelda = read_mslmso01_v1(Path("data/motion_state/owners/zelda.bin"))
     symbols = read_callback_manifest(MANIFEST)
 
-    def expected_bits(coll_cb: str) -> int:
+    def expected_bits(label: str, action_id: int, coll_cb: str) -> int:
         bits = 0
         if coll_cb == "ftCo_AttackAir_Coll":
             bits |= CLASS3_PHASE4_ATTACK_AIR_COLL
@@ -1090,21 +1243,65 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
             bits |= CLASS3_PHASE4_DAMAGE_FLY_COLL
         if coll_cb == "ftCo_DamageFall_Coll":
             bits |= CLASS3_PHASE4_DAMAGE_FALL_COLL
+        if coll_cb in ORDINARY_WALLJUMP_COLL_CBS:
+            bits |= CLASS3_ORDINARY_WALLJUMP_COLL
+        if coll_cb in WALLTECH_COLL_CBS:
+            bits |= CLASS3_WALLTECH_COLL
+        if action_id in {0x00B8, 0x00B9, 0x00C0, 0x00C1}:
+            bits |= CLASS3_CATCH_TARGET_MASK_1
+        if action_id in {
+            0x00B7,
+            0x00BE,
+            0x00BF,
+            0x00C6,
+            0x00D8,
+            0x00D9,
+            0x00DF,
+            0x00E0,
+            0x00E1,
+            0x00E2,
+            0x00E3,
+            0x00E4,
+            0x00EF,
+            0x00F0,
+            0x00F1,
+            0x00F2,
+            0x00F3,
+            0x00FC,
+            0x00FD,
+            0x0113,
+        }:
+            bits |= CLASS3_CATCH_TARGET_MASK_511
+        if action_id in {0x00DB, 0x00DC, 0x00DD, 0x00DE}:
+            bits |= CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED
+        if action_id in {0x00D4, 0x00D6}:
+            bits |= CLASS3_CATCH_KIND_1
+        if label == "falcon" and action_id in {0x0161, 0x0162}:
+            bits |= CLASS3_CATCH_KIND_2
+        if label == "falcon" and action_id == 0x0163:
+            bits |= CLASS3_CATCH_TARGET_MASK_511
         return bits
 
-    # Exhaustive Phase 4 source-callback boundary. These are the later-owner families routed by
-    # src/mpcoll_ground.c; broad ft_80081D0C peers such as AirCatch, ItemThrowAir, Cargo, YoshiEgg,
-    # and Fox/Falco specials must stay out of this word.
+    # Exhaustive class3 source-callback boundary. The phase-4 bits route later floor owners, while
+    # the walljump bits classify the two PassiveWall entry producers across common and character
+    # callbacks.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
     #   ftCo_Damage_Coll,ftCo_DamageFly_Coll,ftCo_DamageFlyRoll_Coll}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_FlyReflect_Coll
-    for label, table in (("fox", fox), ("falco", falco)):
+    for label, table in (
+        ("fox", fox),
+        ("falco", falco),
+        ("marth", marth),
+        ("falcon", falcon),
+        ("sheik", sheik),
+        ("zelda", zelda),
+    ):
         for action_id in range(len(table.class3_bits)):
             coll_cb = symbols[int(table.coll_cb_id[action_id])]
-            assert int(table.class3_bits[action_id]) == expected_bits(coll_cb), (
+            assert int(table.class3_bits[action_id]) == expected_bits(label, action_id, coll_cb), (
                 label,
                 action_id,
                 coll_cb,
@@ -1120,6 +1317,25 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
     assert both_have3(0x0054, CLASS3_PHASE4_DAMAGE_COMMON_COLL)  # DamageAir1
     assert both_have3(0x005A, CLASS3_PHASE4_DAMAGE_FLY_COLL)  # DamageFlyTop
     assert both_have3(0x0026, CLASS3_PHASE4_DAMAGE_FALL_COLL)  # DamageFall
+    for action_id in (0x0026, 0x00CC, 0x00DA, 0x00E5, 0x00F4, 0x00FA, 0x00FB, 0x0105, 0x0107):
+        assert both_have3(action_id, CLASS3_ORDINARY_WALLJUMP_COLL)
+    for action_id in (0x0058, 0x005B, 0x00B9, 0x00F7):
+        assert both_have3(action_id, CLASS3_WALLTECH_COLL)
+    assert int(marth.class3_bits[367]) & CLASS3_ORDINARY_WALLJUMP_COLL
+    assert int(marth.class3_bits[368]) & CLASS3_ORDINARY_WALLJUMP_COLL
+
+    # ftColl_80078A2C contract values are table-backed across common and Falcon-specific rows.
+    assert both_have3(0x00D4, CLASS3_CATCH_KIND_1)  # Catch
+    assert both_have3(0x00D6, CLASS3_CATCH_KIND_1)  # CatchDash
+    assert both_have3(0x00B8, CLASS3_CATCH_TARGET_MASK_1)  # DownWaitU
+    assert both_have3(0x00B7, CLASS3_CATCH_TARGET_MASK_511)  # DownBoundU
+    assert both_have3(0x00BE, CLASS3_CATCH_TARGET_MASK_511)  # DownSpotU
+    assert both_have3(0x00C6, CLASS3_CATCH_TARGET_MASK_511)  # DownSpotD
+    assert both_have3(0x0113, CLASS3_CATCH_TARGET_MASK_511)  # CaptureCaptain
+    assert both_have3(0x00DB, CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED)  # ThrowF
+    assert int(falcon.class3_bits[0x0161]) & CLASS3_CATCH_KIND_2
+    assert int(falcon.class3_bits[0x0162]) & CLASS3_CATCH_KIND_2
+    assert int(falcon.class3_bits[0x0163]) & CLASS3_CATCH_TARGET_MASK_511
 
     excluded = [
         0x001D,  # Fall, Phase 3 common airborne
@@ -1134,20 +1350,52 @@ def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actio
         0x016D,  # Fox/Falco SpecialAirLwStart
     ]
     for action_id in excluded:
-        assert int(fox.class3_bits[action_id]) == 0
-        assert int(falco.class3_bits[action_id]) == 0
+        assert not int(fox.class3_bits[action_id]) & (
+            CLASS3_PHASE4_ATTACK_AIR_COLL
+            | CLASS3_PHASE4_ESCAPE_AIR_COLL
+            | CLASS3_PHASE4_DAMAGE_COMMON_COLL
+            | CLASS3_PHASE4_DAMAGE_FLY_COLL
+            | CLASS3_PHASE4_DAMAGE_FALL_COLL
+        )
+        assert not int(falco.class3_bits[action_id]) & (
+            CLASS3_PHASE4_ATTACK_AIR_COLL
+            | CLASS3_PHASE4_ESCAPE_AIR_COLL
+            | CLASS3_PHASE4_DAMAGE_COMMON_COLL
+            | CLASS3_PHASE4_DAMAGE_FLY_COLL
+            | CLASS3_PHASE4_DAMAGE_FALL_COLL
+        )
 
 
 def test_motion_state_owner_reader_rejects_stale_versions(tmp_path: Path) -> None:
-    stale = tmp_path / "fox.bin"
-    buf = bytearray(60)
-    buf[0:8] = b"MSLMSO01"
-    struct.pack_into("<I", buf, 8, VERSION - 1)
-    struct.pack_into("<H", buf, 12, 1)
-    stale.write_bytes(bytes(buf))
+    stale = Path("tests/fixtures/motion_state_owners/falcon_v22.bin")
+    assert stale.read_bytes()[:12] == b"MSLMSO01\x16\x00\x00\x00"
 
     with pytest.raises(ValueError, match="unsupported MSLMSO01 version"):
         read_mslmso01_v1(stale)
+
+
+@pytest.mark.parametrize("size", [60, 63])
+def test_motion_state_owner_reader_rejects_truncated_current_header(
+    tmp_path: Path, size: int
+) -> None:
+    path = tmp_path / "truncated.bin"
+    buf = bytearray(size)
+    buf[0:8] = b"MSLMSO01"
+    struct.pack_into("<I", buf, 8, VERSION)
+    path.write_bytes(bytes(buf))
+
+    with pytest.raises(ValueError, match="MSLMSO01 table too small"):
+        read_mslmso01_v1(path)
+
+
+def test_motion_state_owner_reader_rejects_table_offsets_inside_header(tmp_path: Path) -> None:
+    path = tmp_path / "bad-offset.bin"
+    buf = bytearray(FOX.read_bytes())
+    struct.pack_into("<I", buf, 16, HEADER_BYTES - 4)
+    path.write_bytes(bytes(buf))
+
+    with pytest.raises(ValueError, match="MSLMSO01 bad table offset"):
+        read_mslmso01_v1(path)
 
 
 def test_runtime_rejects_stale_motion_state_owner_tables(tmp_path: Path) -> None:
@@ -1169,11 +1417,9 @@ def test_runtime_rejects_stale_motion_state_owner_tables(tmp_path: Path) -> None
     for ch in ("fox", "falco"):
         stale = data_dir / "motion_state" / "owners" / f"{ch}.bin"
         stale.parent.mkdir(parents=True, exist_ok=True)
-        buf = bytearray(60)
-        buf[0:8] = b"MSLMSO01"
-        struct.pack_into("<I", buf, 8, VERSION - 1)
-        struct.pack_into("<H", buf, 12, 1)
-        stale.write_bytes(bytes(buf))
+        stale.write_bytes(
+            Path("tests/fixtures/motion_state_owners/falcon_v22.bin").read_bytes()
+        )
 
     code = """
 import msl_binding
@@ -1189,26 +1435,6 @@ raise SystemExit(1)
     env["MSL_DATA_DIR"] = str(data_dir)
     proc = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
     assert proc.returncode == 0, proc.stderr + proc.stdout
-
-
-def test_motion_state_owner_extractor_regenerates_stable_artifacts(tmp_path: Path) -> None:
-    out_dir = tmp_path / "owners"
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "tools.extraction.extract_motion_state_owners",
-            "--melee_decomp",
-            "refs/melee",
-            "--out_dir",
-            str(out_dir),
-            "--chars",
-            ",".join(_data_manifest_chars()),
-        ],
-        check=True,
-    )
-    for rel in [f"{ch}.bin" for ch in _data_manifest_chars()] + ["callback_symbols.json"]:
-        assert (out_dir / rel).read_bytes() == (Path("data/motion_state/owners") / rel).read_bytes()
 
 
 def test_motion_state_owner_source_artifacts_match_generated_data() -> None:

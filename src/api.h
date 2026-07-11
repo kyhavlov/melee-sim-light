@@ -43,7 +43,6 @@ enum {
   MSL_DAMAGE_POST_HITLAG_CB_NONE = 0,
   MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT = 1,
 };
-
 // -------------
 // Simulator core
 // -------------
@@ -515,7 +514,8 @@ typedef struct MslSeed {
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
   // data/ecb/*
   float ecb_lock_bottom_rel_y_f32[MSL_MAX_PLAYERS];
-  uint8_t ecb_lock_bottom_rel_y_valid_u8[MSL_MAX_PLAYERS];
+  // 0 = unavailable, 1 = replay-seeded CollData owner, 4 = live ftCommon callback owner.
+  uint8_t ecb_lock_bottom_owner_u8[MSL_MAX_PLAYERS];
   // Hidden active-hitlag CollData ECB envelope.
   //
   // Damage entry can change the replay-visible action to DamageAir/DamageFly while the source JObj
@@ -801,6 +801,28 @@ typedef struct MslSeed {
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::checkAttack11 (entry reset)
   uint8_t jab_rapid_count[MSL_MAX_PLAYERS];
+  // mv.co.attack100.x0/x4 hidden latches for mid-rapid-jab-loop teacher-forced seeds.
+  //
+  // Producer:
+  // - runtime latches x0 in Attack100Loop_Anim when the visible loop wraps back to frame 0.
+  // - runtime latches x4 in Attack100Loop_IASA from A press/release edges, then Attack100Loop_Anim
+  //   consumes it at extracted set_throw_flags checkpoints.
+  // - preprocessing reconstructs these latches prefix-causally from visible action/input history.
+  //
+  // Decomp:
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //     ftCo_Attack100Loop_Anim,ftCo_Attack100Loop_IASA}
+  uint8_t attack100_x0[MSL_MAX_PLAYERS];
+  uint8_t attack100_x4[MSL_MAX_PLAYERS];
+  // Grounded Falcon Kick mv.ca.speciallw.{x0,friction} at the replay seed boundary.
+  // The source entry resets these lanes, and deal_dmg_cb advances them once per frame in which
+  // Fighter_ProcessHit observes dealt BODY damage. Validation preprocessing reconstructs the same
+  // action-instance-local history from the replay prefix.
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+  //   ftCa_SpecialLw_Enter,ftCa_SpecialHi_800E400C}
+  // refs/melee/src/melee/ft/fighter.c (deal_dmg_cb under fp->dmg.x1914)
+  uint8_t falcon_speciallw_hits[MSL_MAX_PLAYERS];
+  float falcon_speciallw_friction[MSL_MAX_PLAYERS];
   // Reseed-only match-flow countdown timer (teacher-forcing aid).
   // Used for match-start entry / KO / respawn states where Slippi post-frames do not expose a
   // useful per-frame counter (action_frame is often -1).
@@ -953,6 +975,12 @@ typedef struct MslSeed {
   // PassiveWall / PassiveWallJump hidden startup timer (`fp->mv.co.passivewall.timer`).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
   uint8_t passivewall_timer[MSL_MAX_PLAYERS];
+  // Consecutive ordinary walljump count and the current PassiveWall entry exponent. Both are hidden
+  // from Slippi and reconstructed strictly from replay-prefix action/grounding history.
+  // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
+  uint8_t walljump_used_count[MSL_MAX_PLAYERS];
+  uint8_t passivewall_vel_y_exponent[MSL_MAX_PLAYERS];
   // Generic wall-jump hidden input phase (`fp->wall_jump_input_timer` and
   // `fp->x2110_walljumpWallSide`). Slippi does not expose CollData's persisted walljump phase, so
   // preprocessing seeds the minimal phase needed by ftWallJump_8008169C on one-step rows.
@@ -2043,6 +2071,20 @@ typedef struct MslDebugInternals {
   uint8_t attached_victim_port[MSL_MAX_PLAYERS];
   float dead_up_fall_offset_y[MSL_MAX_PLAYERS];
   float dead_up_fall_vel_y[MSL_MAX_PLAYERS];
+  uint8_t grab_owner_port[MSL_MAX_PLAYERS];
+  uint16_t catch_kind_x1a68[MSL_MAX_PLAYERS];
+  uint16_t catch_target_mask_x1a6a[MSL_MAX_PLAYERS];
+  uint8_t grab_constraint_x2226_b2[MSL_MAX_PLAYERS];
+  uint8_t falcon_specialhi_x221b_b7[MSL_MAX_PLAYERS];
+  uint8_t ecb_lock_timer[MSL_MAX_PLAYERS];
+  uint8_t ecb_lock_owner[MSL_MAX_PLAYERS];
+  uint8_t fall_fast[MSL_MAX_PLAYERS];
+  float prev_pos_x[MSL_MAX_PLAYERS];
+  float prev_pos_y[MSL_MAX_PLAYERS];
+  float floor_sweep_prev_pos_x[MSL_MAX_PLAYERS];
+  float floor_sweep_prev_pos_y[MSL_MAX_PLAYERS];
+  float coll_last_pos_x[MSL_MAX_PLAYERS];
+  float coll_last_pos_y[MSL_MAX_PLAYERS];
 } MslDebugInternals;
 
 // Debug/test-only helper: write per-player stage collision contact metadata.
@@ -2738,6 +2780,8 @@ int msl_batch_debug_combat_contacts(const MslBatch* batch, int batch_index,
 // Current filters:
 // - Victim ground/air eligibility: HIT_GROUNDED / HIT_AERIAL from extracted hitbox flags
 //   (MSLHITB1 u16_6; decoded as state.hitbox_flags).
+// - Fighter contact eligibility: HitCapsule.x42_b5, initialized on create and mutable through
+//   ftAction_80071708 / MSLHITB1 kind 3.
 //
 // Deterministic ordering matches msl_batch_debug_combat_contacts; filters only skip/keep.
 int msl_batch_debug_combat_contacts_filtered(const MslBatch* batch, int batch_index,
@@ -2846,6 +2890,11 @@ int msl_batch_debug_combat_select_body_hits(MslBatch* batch, int batch_index,
 // Returns `*out_present = 1` if victim port is present in victims_1 for (attacker, hb_id), else 0.
 int msl_batch_debug_hitlist_fighter_contains(const MslBatch* batch, int batch_index, int attacker,
                                              int hb_id, int victim, int* out_present);
+
+// Debug/testing helper: inspect an item's decomp-shaped per-HitCapsule victims_1 list.
+// Returns `*out_present = 1` if victim port is present for (item_slot, hb_id), else 0.
+int msl_batch_debug_hitlist_item_contains(const MslBatch* batch, int batch_index, int item_slot,
+                                          int hb_id, int victim, int* out_present);
 
 // Debug/testing helper: dump a fighter hitbox slot's HitCapsule victim lists and ring indices.
 int msl_batch_debug_hitlist_fighter_capsule(const MslBatch* batch, int batch_index, int attacker,

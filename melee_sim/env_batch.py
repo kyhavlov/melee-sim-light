@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 from types import TracebackType
-from typing import Sequence, Self
+from typing import Self, Sequence
 
 import numpy as np
 

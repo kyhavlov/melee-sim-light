@@ -11,6 +11,7 @@
 #include "../src/common_params.h"
 #include "../src/hitboxes_tables.h"
 #include "../src/sheik_specials.h"
+#include "../src/staling.h"
 
 static float vh_randf_after_pre_gate(uint32_t seed_in, int stream_offset_steps, int consume_count) {
   uint32_t seed = seed_in;
@@ -26,6 +27,194 @@ static int vh_local_slot_from_source_port(const MslSeed* row, int players, int s
     if ((int)row->source_port0[p] == source_port0_raw) return p;
   }
   return -1;
+}
+
+static bool vh_falcon_speciallw_attack_identity_valid(const MslSeed* cur, int attacker) {
+  const uint16_t attack_id = cur->attack_id[attacker];
+  return attack_id != (uint16_t)MSL_FT_MOVE_ID_DEFAULT && attack_id != UINT16_MAX;
+}
+
+static bool vh_falcon_speciallw_body_x1914(const MslSeed* prev, const MslSeed* cur, int players,
+                                           int attacker) {
+  if (cur->last_attack_landed[attacker] != (uint8_t)cur->attack_id[attacker]) return false;
+  for (int victim = 0; victim < players; victim++) {
+    if (victim == attacker || !(cur->percent[victim] > prev->percent[victim])) {
+      continue;
+    }
+    if (cur->instance_hit_by[victim] != cur->instance_id[attacker]) {
+      continue;
+    }
+    const int source_attacker =
+        vh_local_slot_from_source_port(cur, players, (int)cur->last_hit_by[victim]);
+    if (source_attacker == attacker) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool vh_falcon_speciallw_magnify_tick(const MslSeed* prev, const MslSeed* cur, int attacker,
+                                             const MslCommonParams* common) {
+  if (common == NULL || common->magnify_damage_interval_frames == 0u ||
+      common->magnify_damage_amount == 0u) {
+    return false;
+  }
+  const float percent_delta = cur->percent[attacker] - prev->percent[attacker];
+  const uint16_t terminal_counter = (uint16_t)(common->magnify_damage_interval_frames - 1u);
+  // The post-combat magnify owner applies its exact extracted damage and wraps x1910 after
+  // Fighter_ProcessHit. Stable incoming attribution excludes an ordinary combat producer.
+  // src/fighter_callbacks.c::fighter_callbacks_post_frame_phase
+  // src/timers.c::timers_update_magnify_damage_post_frame
+  // data/common/ft_common_data.json::{magnify_damage_interval_frames,magnify_damage_amount}
+  return prev->magnify_damage_counter_x1910[attacker] == terminal_counter &&
+         cur->magnify_damage_counter_x1910[attacker] == 0u &&
+         fabsf(percent_delta - (float)common->magnify_damage_amount) <= 1e-4f &&
+         cur->instance_hit_by[attacker] == prev->instance_hit_by[attacker] &&
+         cur->last_hit_by[attacker] == prev->last_hit_by[attacker];
+}
+
+static bool vh_falcon_speciallw_higher_priority_incoming(const MslSeed* prev, const MslSeed* cur,
+                                                         int attacker,
+                                                         const MslCommonParams* common) {
+  // Fighter_ProcessHit consumes incoming KB and phantom damage before dmg.x1914. Percent and
+  // hitstun increases are replay-visible consequences of the KB branch; an increasing x189C timer
+  // is the explicit prefix-derived phantom owner. Magnify damage runs after ProcessHit and must not
+  // suppress the already-consumed outgoing x1914 callback.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  const bool percent_increase = cur->percent[attacker] > prev->percent[attacker];
+  return (percent_increase && !vh_falcon_speciallw_magnify_tick(prev, cur, attacker, common)) ||
+         cur->hitstun[attacker] > prev->hitstun[attacker] ||
+         cur->phantom_damage_timer_x189c[attacker] > prev->phantom_damage_timer_x189c[attacker];
+}
+
+static bool vh_falcon_speciallw_processhit_callback(const MslSeed* prev, const MslSeed* cur,
+                                                    bool native_x1914, int players, int attacker,
+                                                    const MslCommonParams* common) {
+  if (!vh_falcon_speciallw_attack_identity_valid(cur, attacker) ||
+      vh_falcon_speciallw_higher_priority_incoming(prev, cur, attacker, common)) {
+    return false;
+  }
+
+  // Accepted BODY and item-hurtbox contacts write fighter->dmg.x1914 before ProcessHit. Vulnerable
+  // BODY contact also has explicit percent/source provenance. The native producer lane reconstructs
+  // source-gated fighter/hurtbox and fixed-item geometry, including no-percent invincible BODY and
+  // item contacts; it does not infer ownership from hitlag onset or an unrelated item delta.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+  // refs/melee/src/melee/it/itcoll.c::it_802703E8
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  return native_x1914 || vh_falcon_speciallw_body_x1914(prev, cur, players, attacker);
+}
+
+PyObject* msl_validation_derive_falcon_speciallw_seed_lanes_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* seed_obj = NULL;
+  PyObject* processhit_x1914_obj = NULL;
+  int players = 0;
+  int falcon_char_id = 0;
+  int speciallw_action = 0;
+  int speciallw_end_action = 0;
+  int hit_limit = 0;
+  double friction_modifier_d = 0.0;
+  if (!PyArg_ParseTuple(args, "OOiiiiid", &seed_obj, &processhit_x1914_obj, &players,
+                        &falcon_char_id, &speciallw_action, &speciallw_end_action, &hit_limit,
+                        &friction_modifier_d)) {
+    return NULL;
+  }
+  if (players < 0 || players > MSL_MAX_PLAYERS) {
+    PyErr_SetString(PyExc_ValueError, "players out of range");
+    return NULL;
+  }
+  if (falcon_char_id < 0 || falcon_char_id > UINT8_MAX || speciallw_action < 0 ||
+      speciallw_action > UINT16_MAX || speciallw_end_action < 0 ||
+      speciallw_end_action > UINT16_MAX) {
+    PyErr_SetString(PyExc_ValueError, "Falcon SpecialLw character/action id out of range");
+    return NULL;
+  }
+  if (hit_limit < -1 || hit_limit >= UINT8_MAX) {
+    PyErr_SetString(PyExc_ValueError, "Falcon SpecialLw hit limit out of range");
+    return NULL;
+  }
+  const float friction_modifier = (float)friction_modifier_d;
+  if (!(friction_modifier > 0.0f) || !isfinite(friction_modifier)) {
+    PyErr_SetString(PyExc_ValueError, "Falcon SpecialLw friction modifier must be finite and > 0");
+    return NULL;
+  }
+  if (common_params_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "common params unavailable for Falcon SpecialLw history");
+    return NULL;
+  }
+  const MslCommonParams* common = msl_common_params();
+  if (common == NULL) {
+    PyErr_SetString(PyExc_RuntimeError, "common params unavailable for Falcon SpecialLw history");
+    return NULL;
+  }
+
+  PyArrayObject* seed_arr = require_contiguous_array(seed_obj, NPY_UINT8, 2, "seed_u8");
+  PyArrayObject* processhit_x1914 =
+      require_contiguous_array_readonly(processhit_x1914_obj, NPY_UINT8, 2, "processhit_x1914_u8");
+  if (seed_arr == NULL || processhit_x1914 == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_DIM(seed_arr, 0);
+  if (vh_seed_rows(seed_arr, n) != 0 || PyArray_DIM(processhit_x1914, 0) != n + 1 ||
+      PyArray_DIM(processhit_x1914, 1) != MSL_MAX_PLAYERS) {
+    if (!PyErr_Occurred()) {
+      PyErr_Format(PyExc_ValueError, "processhit_x1914_u8 must be uint8[%zd, %d]", n + 1,
+                   MSL_MAX_PLAYERS);
+    }
+    return NULL;
+  }
+  uint8_t* seed_u8 = (uint8_t*)PyArray_DATA(seed_arr);
+  const size_t seed_stride = (size_t)PyArray_STRIDE(seed_arr, 0);
+  const uint8_t* processhit_x1914_u8 = (const uint8_t*)PyArray_DATA(processhit_x1914);
+  const size_t processhit_x1914_stride = (size_t)PyArray_STRIDE(processhit_x1914, 0);
+
+  for (npy_intp i = 0; i < n; i++) {
+    MslSeed* cur = vh_seed_at(seed_u8, seed_stride, i);
+    const MslSeed* prev = i > 0 ? vh_seed_const_at(seed_u8, seed_stride, i - 1) : NULL;
+    const uint8_t* processhit_row = processhit_x1914_u8 + (size_t)i * processhit_x1914_stride;
+    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+      cur->falcon_speciallw_hits[p] = 0u;
+      cur->falcon_speciallw_friction[p] = 0.0f;
+    }
+    for (int p = 0; p < players; p++) {
+      const bool cur_is_speciallw = cur->action_id[p] == (uint16_t)speciallw_action;
+      const bool cur_is_consumer =
+          cur_is_speciallw || cur->action_id[p] == (uint16_t)speciallw_end_action;
+      if (cur->char_id[p] != (uint8_t)falcon_char_id || !cur_is_consumer) {
+        continue;
+      }
+
+      uint8_t hits = 0u;
+      float friction = 1.0f;
+      const bool prev_is_consumer =
+          prev != NULL && (prev->action_id[p] == (uint16_t)speciallw_action ||
+                           prev->action_id[p] == (uint16_t)speciallw_end_action);
+      const bool same_instance = prev_is_consumer && prev->char_id[p] == (uint8_t)falcon_char_id &&
+                                 prev->instance_id[p] == cur->instance_id[p];
+      if (same_instance) {
+        hits = prev->falcon_speciallw_hits[p];
+        if (prev->falcon_speciallw_friction[p] > 0.0f) {
+          friction = prev->falcon_speciallw_friction[p];
+        }
+      }
+      // Only SpecialLw owns deal_dmg_cb. SpecialLwEnd consumes the same move union and therefore
+      // carries its hit/friction history, but cannot produce another ProcessHit increment.
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+      //   ftCa_SpecialLw_Enter,ftCa_SpecialLw_Anim,ftCa_SpecialLwEnd_Phys}
+      if (cur_is_speciallw && prev != NULL &&
+          vh_falcon_speciallw_processhit_callback(prev, cur, processhit_row[p] != 0u, players, p,
+                                                  common) &&
+          (int)hits <= hit_limit) {
+        hits = (uint8_t)(hits + 1u);
+        friction *= friction_modifier;
+      }
+      cur->falcon_speciallw_hits[p] = hits;
+      cur->falcon_speciallw_friction[p] = friction;
+    }
+  }
+
+  Py_RETURN_NONE;
 }
 
 static int vh_f26_source_port_for_player(const MslSeed* seed, const MslCompare* ref, int players,

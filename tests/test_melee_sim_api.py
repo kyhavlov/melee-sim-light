@@ -71,7 +71,11 @@ def test_missing_default_data_dir_error_is_actionable(monkeypatch, tmp_path) -> 
 
 
 def test_data_manifest_schema_mismatch_error_is_actionable(tmp_path) -> None:
-    runtime = env_batch_module._native.data_schema_versions()
+    from tools.extraction.build_data import DATA_SCHEMA_VERSIONS
+
+    runtime = {str(k): int(v) for k, v in env_batch_module._native.data_schema_versions().items()}
+    assert runtime == DATA_SCHEMA_VERSIONS
+    assert len(runtime) == 7
     manifest = {
         "magic": "MSLDATA1",
         "version": 1,
@@ -198,6 +202,15 @@ def test_configure_match_populates_default_fox_falco_match() -> None:
         assert np.all(cfg["players"]["team_id"][:, 1] == 1)
         assert np.all(cfg["players"]["facing"][:, 0] == 1)
         assert np.all(cfg["players"]["facing"][:, 1] == 0)
+
+
+def test_character_enum_exposes_supported_registry_chars() -> None:
+    assert int(msl.Character.FOX) == 1
+    assert int(msl.Character.FALCON) == 2
+    assert int(msl.Character.SHEIK) == 7
+    assert int(msl.Character.MARTH) == 18
+    assert int(msl.Character.ZELDA) == 19
+    assert int(msl.Character.FALCO) == 22
 
 
 def test_configure_match_accepts_explicit_constants_and_seed() -> None:

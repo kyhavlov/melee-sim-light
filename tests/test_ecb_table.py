@@ -9,6 +9,8 @@ import tempfile
 from pathlib import Path
 
 from tests.test_anim_pose import _pick_first_nonempty_anim, _read_header
+from tools.extraction.extract_ecb_bottom import ECB_VERSION as ECB_BOTTOM_VERSION
+from tools.extraction.extract_ecb_extents import ECB_VERSION as ECB_EXTENTS_VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -71,25 +73,33 @@ def _pick_char_anim_from_local_anims() -> tuple[int, int, int]:
     return 1, int(msid), 0
 
 
-def test_runtime_rejects_stale_ecb_bottom_v2_table() -> None:
+def test_runtime_rejects_stale_ecb_bottom_table() -> None:
     build_dir = ROOT / "build"
     build_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="ecb-bottom-v2-stale-", dir=build_dir) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_overlay(data_dir)
-        _write_ecb_with_version(ROOT / "data/ecb/fox_bottom.bin", data_dir / "ecb/fox_bottom.bin", 2)
+        _write_ecb_with_version(
+            ROOT / "data/ecb/fox_bottom.bin",
+            data_dir / "ecb/fox_bottom.bin",
+            ECB_BOTTOM_VERSION - 1,
+        )
 
         proc = _run_ecb_loader(data_dir)
         assert proc.returncode != 0
 
 
-def test_runtime_rejects_stale_ecb_extents_v3_table() -> None:
+def test_runtime_rejects_stale_ecb_extents_table() -> None:
     build_dir = ROOT / "build"
     build_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="ecb-extents-v3-stale-", dir=build_dir) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_overlay(data_dir)
-        _write_ecb_with_version(ROOT / "data/ecb/fox_extents.bin", data_dir / "ecb/fox_extents.bin", 3)
+        _write_ecb_with_version(
+            ROOT / "data/ecb/fox_extents.bin",
+            data_dir / "ecb/fox_extents.bin",
+            ECB_EXTENTS_VERSION - 1,
+        )
 
         proc = _run_ecb_loader(data_dir)
         assert proc.returncode != 0

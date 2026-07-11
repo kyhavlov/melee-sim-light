@@ -750,6 +750,11 @@ uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
   return 0u;
 }
 
+uint8_t move_tables_special_allow_interrupt_at_frame(uint8_t char_id, uint16_t msid,
+                                                     float cur_anim_frame_f32) {
+  return allow_interrupt_active(char_id, msid, cur_anim_frame_f32);
+}
+
 uint8_t move_tables_escapeair_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {
   return cmd_var_active(char_id, (uint16_t)MSL_SM_ESCAPE_AIR, 0u, 1u, cur_anim_frame_f32);
 }
@@ -1166,6 +1171,31 @@ uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_i
     return 0u;
   }
   *out = cache->throw_hitboxes[hit_idx].params;
+  return 1u;
+}
+
+uint8_t move_tables_falcon_dive_capture_break_hitbox_params(MslThrowHitboxParams* out) {
+  if (out == NULL) {
+    return 0u;
+  }
+  // Ground and air SpecialHi scripts install the same xDF4[1] payload. Require that parity at the
+  // runtime table boundary instead of silently choosing one row if generated data drifts.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c::ftCo_800DCFD4
+  // data/moves/falcon.json::specials_by_msid.307.events set_throw_hitbox(idx=1)
+  const MslMoveTableCache* ground = move_cache_get((uint8_t)MSL_CHAR_ID_FALCON, 307u);
+  const MslMoveTableCache* air = move_cache_get((uint8_t)MSL_CHAR_ID_FALCON, 308u);
+  if (ground == NULL || air == NULL || !ground->throw_hitboxes[1].loaded ||
+      !air->throw_hitboxes[1].loaded) {
+    return 0u;
+  }
+  const MslThrowHitboxParams* gp = &ground->throw_hitboxes[1].params;
+  const MslThrowHitboxParams* ap = &air->throw_hitboxes[1].params;
+  if (gp->damage != ap->damage || gp->angle != ap->angle || gp->kbg != ap->kbg ||
+      gp->wsk != ap->wsk || gp->bkb != ap->bkb || gp->element != ap->element ||
+      gp->sfx_kind != ap->sfx_kind || gp->sfx_severity != ap->sfx_severity) {
+    return 0u;
+  }
+  *out = *gp;
   return 1u;
 }
 

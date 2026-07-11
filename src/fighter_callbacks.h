@@ -67,6 +67,26 @@ static inline MslFighterCallbackContext msl_fighter_callback_context_make(
   return ctx;
 }
 
+static inline uint8_t msl_fighter_callback_phase_runs(const MslFighterCallbackContext* ctx) {
+  if (ctx == NULL || ctx->batch == NULL) {
+    return 0u;
+  }
+  // Fighter_8006A360 freezes animation advancement and anim_cb while hitlag remains active;
+  // Fighter_procUpdate applies the same x2219_b5 gate to IASA and Phys. Map/Coll and ProcessHit
+  // remain live in their later source phases. Centralize that phase distinction so character
+  // modules cannot accidentally run procedural commands or terminal transitions while frozen.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate,Fighter_procMap,
+  //   Fighter_ProcessHit_8006D1EC}
+  switch (ctx->phase) {
+    case MSL_FIGHTER_CALLBACK_PHASE_PRE_INPUT_ANIM:
+    case MSL_FIGHTER_CALLBACK_PHASE_IASA:
+    case MSL_FIGHTER_CALLBACK_PHASE_PHYS:
+      return ctx->frozen_by_hitlag ? 0u : 1u;
+    default:
+      return 1u;
+  }
+}
+
 int fighter_callbacks_step_frame(MslBatch* batch, const uint8_t* prev_input_bytes,
                                  size_t prev_input_stride_bytes, const uint8_t* input_bytes,
                                  size_t input_stride_bytes, uint8_t run_combat);

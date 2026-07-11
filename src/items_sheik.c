@@ -74,7 +74,9 @@ static inline uint8_t sheik_vanish_fresh_smoke_hitcapsule_hit_by_fighter(
       continue;
     }
     const uint16_t flags = batch->state.hitbox_flags[hb_i];
-    if ((flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C (fighter HitCapsule x42_b5 gate)
+    if (!msl_hitbox_x42_b5_enabled(flags) ||
+        (flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
         (flags & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0u) {
       continue;
     }
@@ -168,6 +170,23 @@ void sheik_chain_hidden_clear_slot(MslBatch* batch, size_t ii) {
 
 void items_reseed_clear_sheik_chain_hidden_slot(MslBatch* batch, size_t item_idx) {
   sheik_chain_hidden_clear_slot(batch, item_idx);
+}
+
+void items_reseed_clear_sheik_needle_hidden_slot(MslBatch* batch, size_t item_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Dropped/bounced Needle xDD8/xDDC/xDE0 are live article-union state. Slippi does not expose
+  // them, and replay-seeded state 1/4 deliberately uses the visible-velocity/table fallback in
+  // sheik_needle_motion_step. Never let an unrelated prior item occupying this batch lane turn
+  // that fallback into a stale valid hidden sample.
+  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
+  //   itSeakNeedleThrown_SetupDrop,itSeakNeedleThrown_SetupBounce,
+  //   itSeakneedlethrown_UnkMotion1_Phys,itSeakneedlethrown_UnkMotion4_Phys}
+  batch->state.item_sheik_needle_hidden_drop_valid[item_idx] = 0u;
+  batch->state.item_sheik_needle_hidden_drop_min_vel_y[item_idx] = 0.0f;
+  batch->state.item_sheik_needle_hidden_drop_gravity[item_idx] = 0.0f;
+  batch->state.item_sheik_needle_hidden_drop_vel_x[item_idx] = 0.0f;
 }
 
 static inline uint8_t action_is_sheik_needle_start(uint8_t char_id, uint16_t action_id_u16) {
@@ -2096,6 +2115,8 @@ static inline void sheik_needle_clear_one_step_stage_hit_bridge(MslBatch* batch,
 static inline void sheik_needle_clear_one_step_contact_bridges(MslBatch* batch, size_t ii) {
   // These lanes are validation/reseed provenance only. Source-owned live itemVar state
   // (state-4 drift/terminal/gravity) is kept separately in item_sheik_needle_hidden_drop_*.
+  batch->state.item_hidden_body_hit_victim_port[ii] = 0xFFu;
+  batch->state.item_hidden_body_hit_hurt_height[ii] = 0u;
   sheik_needle_clear_one_step_callback_bridges(batch, ii);
   sheik_needle_clear_one_step_stage_hit_bridge(batch, ii);
 }
@@ -2261,7 +2282,9 @@ static uint8_t sheik_needle_try_fighter_hitbox_damage(MslBatch* batch, int bi, i
         continue;
       }
       const uint16_t flags = batch->state.hitbox_flags[hb_i];
-      if ((flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
+      // refs/melee/src/melee/it/itcoll.c::it_8026D564 (fighter HitCapsule x42_b7 item gate)
+      if (!msl_hitbox_x42_b7_enabled(flags) ||
+          (flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
           !sheik_needle_hitbox_targets_item_ground_state(flags, item_ga)) {
         continue;
       }
@@ -2731,7 +2754,9 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
           continue;
         }
         const uint16_t fflags = batch->state.hitbox_flags[fhb_i];
-        if ((fflags & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0u ||
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C (fighter HitCapsule x42_b5 gate)
+        if (!msl_hitbox_x42_b5_enabled(fflags) ||
+            (fflags & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0u ||
             (fflags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u) {
           continue;
         }
@@ -2778,7 +2803,25 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
       float body_overlap_amount = 0.0f;
       uint8_t body_exact_evaluated = 0u;
       float best_frozen_overlap = -1.0f;
-      for (uint8_t ci = 0; ci < cap_n; ci++) {
+      const uint8_t seeded_body_contact =
+          (batch->state.item_hidden_body_hit_victim_port[ii] == (uint8_t)def &&
+           (batch->state.item_hidden_callback_flags[ii] &
+            (uint8_t)(MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE |
+                      MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_DESTROY)) != 0u)
+              ? 1u
+              : 0u;
+      if (seeded_body_contact != 0u) {
+        // Slippi does not publish the item HitCapsule's accepted lbColl matrix or the defender's
+        // transient damage-immunity packet. Validation may reconstruct this DmgLog owner only when
+        // the same state-0 Needle vanishes and one non-owner fighter uniquely enters hitlag without
+        // percent/action/attribution movement. This restores the source contact packet at a reseed
+        // boundary; ordinary free-running geometry never sets the lane.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077C60
+        // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}
+        hurt_height = batch->state.item_hidden_body_hit_hurt_height[ii];
+        hit = 1u;
+      }
+      for (uint8_t ci = 0; ci < cap_n && hit == 0u; ci++) {
         if (sheik_needle_catchdash_entry_body_rejects_contact(batch, d_idx, ii, params)) {
           continue;
         }
@@ -2846,6 +2889,22 @@ static uint8_t sheik_needle_try_body_hit_fighter(MslBatch* batch, int bi, int it
       }
       if (hurt_height > 2u) {
         hurt_height = 1u;
+      }
+      if (seeded_body_contact != 0u) {
+        // The reconstructed packet is specifically the public damage-immunity form: victim
+        // hitlag plus the item's DmgDealt/Logic109 fate, without percent, damage-state, or attacker
+        // attribution. Do not route it through ordinary damage admission.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077C60
+        // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}
+        // Item_8026A294's item counter is decremented in the item phase; the fighter's accepted
+        // contact counter is published before its next frame decrement, hence the one-frame offset.
+        // refs/melee/src/melee/it/item.c::{checkHitLag,Item_802693E4,Item_8026A294}
+        const uint8_t item_hl = sheik_needle_item_common_hitlag_frames((int)ceilf(damage));
+        combat_apply_min_hitlag_frames(batch, d_idx, (uint16_t)item_hl + 1u);
+        hitlist_register_item_hitbox_fighter(batch, bi, item_slot, (int)hb, def, def_iid,
+                                             (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+        sheik_needle_bounce_or_destroy_callback(batch, bi, ii, params, (int)ceilf(damage));
+        return 1u;
       }
       const MslCommonParams* common = msl_common_params();
       if (common != NULL && body_exact_evaluated != 0u && batch->state.hitstun[d_idx] == 0u &&

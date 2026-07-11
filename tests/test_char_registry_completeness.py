@@ -29,6 +29,26 @@ import pytest
 
 from test_char_common_action_coverage import _mk_inputs, _seed_base  # noqa: E402
 from tools.extraction.char_registry import CHARS  # noqa: E402
+from tools.extraction.extract_character_attrs import (  # noqa: E402
+    _resolved_can_walljump,
+    _source_can_walljump,
+)
+
+
+def test_registry_walljump_flags_are_cwd_independent_without_decomp(tmp_path: Path) -> None:
+    missing = tmp_path / "not-a-decomp"
+    for name, info in CHARS.items():
+        assert _source_can_walljump(name, melee_decomp=missing) is None
+        assert _resolved_can_walljump(name, melee_decomp=missing) is info.can_walljump
+
+
+def test_registry_walljump_source_disagreement_is_loud(tmp_path: Path) -> None:
+    info = CHARS["marth"]
+    source_dir = tmp_path / "src/melee/ft/chara" / info.decomp_dir
+    source_dir.mkdir(parents=True)
+    (source_dir / "fake.c").write_text("fp->can_walljump = true;\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="registry can_walljump=False disagrees"):
+        _resolved_can_walljump("marth", melee_decomp=tmp_path)
 
 
 @pytest.mark.parametrize("char_name", sorted(CHARS))

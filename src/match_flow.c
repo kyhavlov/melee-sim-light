@@ -100,6 +100,8 @@ static inline void match_flow_identity_reset_Fighter_UnkInitReset_80067C98_subse
   batch->state.last_attack_landed[idx] = 0u;
   batch->state.combo_count[idx] = 0u;
   batch->state.combo_timer_x2098[idx] = 0u;
+  batch->state.walljump_used_count[idx] = 0u;
+  batch->state.passivewall_vel_y_exponent[idx] = 0u;
   // Decomp: Fighter_UnkInitReset also clears fp->x2094 (combo victim gobj).
   // Keep the simulator's victim latch aligned so ftColl_800764DC ownership starts from a clean lane.
   // refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitReset_80067C98

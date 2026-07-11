@@ -266,6 +266,11 @@ function rejectUpgrade(socket, statusCode, message) {
 }
 
 const server = http.createServer((req, res) => {
+  if (req.url === "/favicon.ico") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   if (req.url === "/status") {
     res.writeHead(200, {
       "content-type": "application/json",

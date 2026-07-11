@@ -250,19 +250,6 @@ uint8_t mpcoll_ground_try_sample_damageflyroll_jobj_ecb(
     return 0u;
   }
 
-  const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
-  const float ecb_width = fabsf(max_x - min_x);
-  if (ecb_width < min_ecb_width) {
-    const float half_width = 0.5f * min_ecb_width;
-    min_x = -half_width;
-    max_x = half_width;
-  }
-  if (max_x < 2.0f) {
-    max_x = 2.0f;
-  }
-  if (min_x > -2.0f) {
-    min_x = -2.0f;
-  }
   if (min_y < 0.0f) {
     min_y = 0.0f;
   }
@@ -282,6 +269,7 @@ uint8_t mpcoll_ground_try_sample_damageflyroll_jobj_ecb(
   out->left_y = pos_y + side_rel_y;
   out->right_x = pos_x + max_x;
   out->right_y = pos_y + side_rel_y;
+  mpcoll_ecb_points_apply_jobj_horizontal_normalization(batch, idx, out);
   return 1u;
 }
 
@@ -355,30 +343,6 @@ uint8_t mpcoll_ground_try_sample_specialhi_jobj_ecb(MslEcbWorldPoints* out, cons
     return 0u;
   }
 
-  // `mpColl_LoadECB_JObj` normalizes live JObj ECB points before floor checks. The current
-  // simulator only extracts the collision JObj origins for this SpecialHi floor path, so keep the
-  // normalized horizontal envelope bounded by the same mpColl-shaped source constants used by the
-  // retained wall/ledge owner:
-  // - +/-2.0f is mpColl's minimum side-span unit for narrowed ECB envelopes (4.0f full width).
-  // - 10.0f * fighter scale is the character-scale minimum body width used by the SpecialHi
-  //   JObj-ECB owner when collision joints collapse during XRotN rotation.
-  // These are source-geometry clamps for the callback-local ECB, not replay-row tolerances.
-  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80042384}
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFox_SpecialHi_RotateModel
-  const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
-  const float ecb_width = fabsf(max_x - min_x);
-  if (ecb_width < min_ecb_width) {
-    const float half_width = 0.5f * min_ecb_width;
-    min_x = -half_width;
-    max_x = half_width;
-  }
-  // Keep the final side extents at least +/-2.0f for the same mpColl minimum-width reason above.
-  if (max_x < 2.0f) {
-    max_x = 2.0f;
-  }
-  if (min_x > -2.0f) {
-    min_x = -2.0f;
-  }
   if (min_y < 0.0f) {
     min_y = 0.0f;
   }
@@ -398,6 +362,7 @@ uint8_t mpcoll_ground_try_sample_specialhi_jobj_ecb(MslEcbWorldPoints* out, cons
   out->left_y = pos_y + side_rel_y;
   out->right_x = pos_x + max_x;
   out->right_y = pos_y + side_rel_y;
+  mpcoll_ecb_points_apply_jobj_horizontal_normalization(batch, idx, out);
   return 1u;
 }
 
@@ -522,6 +487,41 @@ void mpcoll_ecb_world_points_from_rel(MslEcbWorldPoints* out, float pos_x, float
   out->left_y = pos_y + side_rel_y;
   out->right_x = pos_x + right_rel_x;
   out->right_y = pos_y + side_rel_y;
+}
+
+void mpcoll_ecb_points_apply_jobj_horizontal_normalization(const MslBatch* batch, size_t idx,
+                                                           MslEcbWorldPoints* ecb) {
+  if (batch == NULL || ecb == NULL) {
+    return;
+  }
+
+  // `mpColl_LoadECB_JObj` recenters a sampled horizontal span when it is narrower than
+  // max(4, x12C), then clamps the final sides to at least +/-2. ft_80081B38 initializes x12C to
+  // 10 * fighter scale. This is part of CollData.desired_ecb/current ecb construction, so consumers
+  // that snapshot CollData after interpolation (notably ftCo_800C1E64) must observe the normalized
+  // side rather than the raw extracted joint extent.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081B38
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpCollInterpolateECB}
+  float left_rel_x = ecb->left_rel_x;
+  float right_rel_x = ecb->right_rel_x;
+  const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
+  const float ecb_width = fabsf(right_rel_x - left_rel_x);
+  if (ecb_width < min_ecb_width) {
+    const float half_width = 0.5f * ecb_width;
+    left_rel_x = -half_width;
+    right_rel_x = half_width;
+  }
+  if (right_rel_x < 2.0f) {
+    right_rel_x = 2.0f;
+  }
+  if (left_rel_x > -2.0f) {
+    left_rel_x = -2.0f;
+  }
+
+  ecb->left_rel_x = left_rel_x;
+  ecb->right_rel_x = right_rel_x;
+  ecb->left_x = ecb->bottom_x + left_rel_x;
+  ecb->right_x = ecb->bottom_x + right_rel_x;
 }
 
 static inline uint8_t mpcoll_rel_ecb_is_finite(float bottom_rel_y, float top_rel_y,

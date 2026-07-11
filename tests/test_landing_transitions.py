@@ -23,6 +23,7 @@ SM_FALL = 20
 SM_LANDING = 35
 SM_LANDING_AIR_N = 73
 SM_LANDING_FALL_SPECIAL = 36
+SM_ESCAPE_AIR = 44
 SM_CLIFF_JUMP_QUICK2 = 228
 
 CHAR_FOX = 1
@@ -244,6 +245,30 @@ def test_escape_air_lands_enters_landing_fall_special_and_refreshes_jumps() -> N
     rate = (float(end_frame) + 0.1) / float(lag)
     assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == int(_fox_attr("max_jumps"))
+
+    # EscapeAir's movescript x1988=2 masks the hidden x198C=1 lane in Slippi. LandingFallSpecial
+    # entry clears x1988, so the entry frame exposes x198C=1.
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099D70
+    seed_masked = _seed_base()
+    seed_masked["on_ground"][0, 0] = np.uint8(0)
+    seed_masked["action_id"][0, 0] = np.uint16(ACT_ESCAPE_AIR)
+    seed_masked["action_frame"][0, 0] = np.int16(10)
+    seed_masked["anim_frame_f32"][0, 0] = np.float32(10.0)
+    seed_masked["animation_index"][0, 0] = np.uint32(SM_ESCAPE_AIR)
+    seed_masked["hurtbox_state"][0, 0] = np.uint8(2)
+    seed_masked["colanim_hit_status_x198c"][0, 0] = np.uint8(1)
+    seed_masked["colanim_timer_x1994"][0, 0] = np.uint16(60)
+    seed_masked["ground_id"][0, 0] = np.uint16(1)
+    bot0 = _fox_ecb_bottom_rel_y(SM_ESCAPE_AIR, 10)
+    bot1 = _fox_ecb_bottom_rel_y(SM_ESCAPE_AIR, 11)
+    seed_masked["pos_y"][0, 0] = np.float32(-bot0 + 0.10)
+    need_dy = np.float32(-(0.20 + (bot1 - bot0)))
+    seed_masked["speed_y_self"][0, 0] = np.float32(min(-0.05, need_dy / decay))
+    out_masked = _step_once(seed_masked, prev_inp, inp)
+    assert int(out_masked["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out_masked["hurtbox_state"][0]) == 1
 
 
 def test_cliffjumpquick2_floor_contact_enters_basic_landing() -> None:

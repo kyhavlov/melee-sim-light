@@ -9,15 +9,20 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "combat.h"
 #include "dash_iasa.h"
 #include "damage_terminal_owner.h"
 #include "falcon_specials.h"
+#include "ftcommon_ecb.h"
 #include "grab_attachment.h"
 #include "ids.h"
 #include "guard_lifecycle.h"
+#include "hitboxes.h"
 #include "input_axis.h"
 #include "mpcoll_ground.h"
 #include "move_tables.h"
+#include "motion_state_owners.h"
+#include "state_flags.h"
 #include "trigger_input.h"
 
 static inline void capturewait_anim_callback_apply(MslBatch* batch, const MslCommonParams* c,
@@ -45,19 +50,12 @@ static inline void catch_connect_apply_post_shield_release_recharge(MslBatch* ba
 }
 
 static inline void clear_outgoing_hitboxes_after_catch_connect(MslBatch* batch, int bi, int p) {
-  if (batch == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
-      p >= (int)batch->config.num_players) {
-    return;
-  }
-  const size_t idx = msl_idx_player(bi, p);
-  batch->state.hitbox_count[idx] = 0u;
-  for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
-    const size_t hb_i =
-        ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES + (size_t)hb;
-    batch->state.hitbox_enabled[hb_i] = 0u;
-    batch->state.hitbox_stale_damage_valid[hb_i] = 0u;
-    batch->state.hitbox_stale_damage_mul[hb_i] = 1.0f;
-  }
+  // Fighter_ChangeMotionState clears the complete x914 HitCapsule packet, including prior-sweep
+  // geometry and group/enable state. Reuse the canonical transition helper so Catch cannot leave
+  // a disabled-but-refreshable capsule behind.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AFF8
+  hitboxes_clear_player_active(batch, bi, p);
 }
 
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
@@ -242,8 +240,11 @@ static inline void maybe_enter_capture_wait_lw_grounded_handoff(MslBatch* batch,
       continue;
     }
 
-    MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx],
-                                             batch->state.pos_x[vidx]};
+    MslMpcollFloorMaskResult floor_result = {
+        .ground_id = 0xFFFFu,
+        .corrected_pos_y = batch->state.pos_y[vidx],
+        .corrected_pos_x = batch->state.pos_x[vidx],
+    };
     if (!mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result)) {
       continue;
     }
@@ -294,8 +295,11 @@ static inline void maybe_run_capture_pulled_hi_immediate_floor_callback(
     return;
   }
 
-  MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx],
-                                           batch->state.pos_x[vidx]};
+  MslMpcollFloorMaskResult floor_result = {
+      .ground_id = 0xFFFFu,
+      .corrected_pos_y = batch->state.pos_y[vidx],
+      .corrected_pos_x = batch->state.pos_x[vidx],
+  };
   uint8_t floor_mask = mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result);
   if (floor_mask == 0u && batch->state.ground_id[vidx] != 0xFFFFu &&
       batch->state.ecb_lock_timer[vidx] != 0u) {
@@ -955,7 +959,56 @@ static inline void enter_catch_motion_state(MslBatch* batch, size_t idx, uint16_
   // refs/melee/src/melee/ft/types.h::{x74_anim_vel,x8c_kb_vel}
   batch->state.action_id[idx] = action_id;
   batch->state.animation_index[idx] = submotion;
+  batch->state.catch_kind_x1a68[idx] = 1u;
+  batch->state.catch_target_mask_x1a6a[idx] = 0u;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+}
+
+void grab_flow_refresh_catch_contract_for_batch_index(MslBatch* batch, int batch_index) {
+  if (batch == NULL || batch_index < 0 || batch_index >= batch->batch_size) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int p = 0; p < num_players; p++) {
+    const size_t idx = msl_idx_player(batch_index, p);
+    const uint8_t char_id = batch->state.char_id[idx];
+    const uint16_t action_id = batch->state.action_id[idx];
+    const uint32_t classes = msl_motion_state_class3_bits(char_id, action_id);
+
+    uint16_t kind = 0u;
+    if ((classes & (uint32_t)MSL_MS_CLASS3_CATCH_KIND_1) != 0u) {
+      kind = 1u;
+    } else if ((classes & (uint32_t)MSL_MS_CLASS3_CATCH_KIND_2) != 0u) {
+      kind = 2u;
+    }
+
+    uint16_t target_mask = 0u;
+    if ((classes & (uint32_t)MSL_MS_CLASS3_CATCH_TARGET_MASK_1) != 0u) {
+      target_mask = 1u;
+    } else if ((classes & (uint32_t)MSL_MS_CLASS3_CATCH_TARGET_MASK_511) != 0u) {
+      target_mask = 0x1FFu;
+    } else if ((classes & (uint32_t)MSL_MS_CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED) != 0u) {
+      const uint8_t victim_p = batch->state.attached_victim_port[idx];
+      if (victim_p != 0xFFu && victim_p < (uint8_t)num_players && victim_p != (uint8_t)p) {
+        const size_t vidx = msl_idx_player(batch_index, (int)victim_p);
+        if (batch->state.grab_owner_port[vidx] == (uint8_t)p) {
+          target_mask = 0x1FFu;
+        }
+      }
+    }
+
+    batch->state.catch_kind_x1a68[idx] = kind;
+    batch->state.catch_target_mask_x1a6a[idx] = target_mask;
+  }
+}
+
+void grab_flow_refresh_catch_contract(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    grab_flow_refresh_catch_contract_for_batch_index(batch, bi);
+  }
 }
 
 uint8_t grab_flow_try_enter_catch_from_iasa(MslBatch* batch, const MslCommonParams* c, size_t idx) {
@@ -1359,6 +1412,20 @@ static void grab_flow_falcon_dive_catch_connect(MslBatch* batch, int bi, int own
   batch->state.special_cmd1[oidx] = 0u;
   batch->state.special_cmd2[oidx] = 0u;
   batch->state.falcon_specialhi_x221b_b7[oidx] = victim_on_ground;
+  batch->state.catch_kind_x1a68[oidx] = 0u;
+  batch->state.catch_target_mask_x1a6a[oidx] = 0x1FFu;
+  batch->state.catch_target_mask_x1a6a[vidx] = 0x1FFu;
+  batch->state.grab_constraint_x2226_b2[oidx] = victim_on_ground;
+  batch->state.grab_constraint_x2226_b2[vidx] = victim_on_ground ? 0u : 1u;
+  {
+    const size_t flags_i =
+        oidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+    if (victim_on_ground) {
+      batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_221B_B7;
+    } else {
+      batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_B7;
+    }
+  }
   // Both connect owners zero EVERY attacker velocity lane (self, anim, ground, kb, shield-kb)
   // through ftCommon_8007E2FC; SpecialHiCatch_Phys is empty, so the attacker hangs with zero
   // velocity until doCatchAnim's throw entry.
@@ -1383,14 +1450,31 @@ static void grab_flow_falcon_dive_catch_connect(MslBatch* batch, int bi, int own
   batch->state.speed_y_self[vidx] = 0.0f;
   batch->state.speed_x_attack[vidx] = 0.0f;
   batch->state.speed_y_attack[vidx] = 0.0f;
+  // Fighter_ChangeMotionState clears the connecting owner's outgoing Catch capsule before the
+  // later fighter collision pass. The victim transition likewise clears its prior primitives.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  clear_outgoing_hitboxes_after_catch_connect(batch, bi, owner_p);
   clear_outgoing_hitboxes_after_catch_connect(batch, bi, victim_p);
   batch->state.hitstun[vidx] = 0u;
   batch->state.instance_hit_by[vidx] = owner_instance_id_pre_connect;
   {
     const size_t flags_i =
         vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-    batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_B3;
-    batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
+    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+  }
+  {
+    // CaptureCaptain carries its own x221B_b7 connect-time grounded flag in addition to the
+    // captor's identically named bit. It controls accessory1 installation; x2226_b2 remains the
+    // separate joint-constraint authority.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+    const size_t flags_i =
+        vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+    if (victim_on_ground) {
+      batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_221B_B7;
+    } else {
+      batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_B7;
+    }
   }
   catch_connect_apply_post_shield_release_recharge(batch, msl_common_params(), vidx,
                                                    victim_pre_connect_action);
@@ -1460,6 +1544,9 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
   } else {
     return;
   }
+  batch->state.catch_kind_x1a68[oidx] = 0u;
+  batch->state.catch_target_mask_x1a6a[oidx] = 0u;
+  batch->state.catch_target_mask_x1a6a[vidx] = 0x1FFu;
   // Decomp: fn_800D9CE8 installs CatchPull/CatchDashPull with anim_start=fp->cur_anim_frame
   // (preserve current catch timeline instead of restarting from frame 0).
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800D9CE8
@@ -1522,6 +1609,7 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
   // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkProcessGrab_8006CA5C,Fighter_8006CB94}
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftColl_80078754}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAADC
+  clear_outgoing_hitboxes_after_catch_connect(batch, bi, owner_p);
   clear_outgoing_hitboxes_after_catch_connect(batch, bi, victim_p);
   // Decomp ownership: catch-connect callback fn_800DAADC installs CapturePulled* and calls
   // fn_800DAA10; this transition switches to non-Damage motion-state vars, so Damage* hitstun
@@ -1574,12 +1662,12 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
     const size_t flags_i =
         vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-    batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_B3;
+    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
   }
   catch_connect_apply_post_shield_release_recharge(batch, msl_common_params(), vidx,
                                                    victim_pre_connect_action);
   const size_t flags_i = vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 
   // Decomp has a single victim_gobj pointer per owner; keep exactly one attached victim link.
   for (int p = 0; p < num_players; p++) {

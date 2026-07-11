@@ -208,6 +208,14 @@ float move_tables_grounded_smash_charge_damage_mul(uint8_t char_id, uint16_t gro
 uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
                                            float cur_anim_frame_f32);
 
+// Returns whether an extracted character-special script emitted `allow_interrupt` at the given
+// submotion frame. This exposes the generic ftAction_80071950 command lane for character specials
+// whose IASA callback may ignore the bit while Slippi still publishes fp+0x2218_b0.
+//
+// Source of truth: data/moves/<char>.json specials_by_msid[msid].events allow_interrupt.
+uint8_t move_tables_special_allow_interrupt_at_frame(uint8_t char_id, uint16_t msid,
+                                                     float cur_anim_frame_f32);
+
 // Returns whether EscapeAir command-script cmd_var[0] is active at the given cur_anim_frame.
 //
 // Decomp:
@@ -469,6 +477,10 @@ uint8_t move_tables_throw_release_hit_idx(uint8_t char_id, uint16_t throw_action
 // Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_hitbox.
 uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_id, uint8_t hit_idx,
                                         MslThrowHitboxParams* out);
+
+// Falcon Dive capture-break hit stored in Falcon's xDF4[1] by the SpecialHi scripts.
+// Source of truth: data/scripts/falcon.bin, msid 307/308 set_throw_hitbox(idx=1).
+uint8_t move_tables_falcon_dive_capture_break_hitbox_params(MslThrowHitboxParams* out);
 
 // Returns whether a live fighter HitCapsule matches an authored pre-release throw create_hitbox
 // payload. This is narrower than "throw has any create_hitbox before release": it ties consumers to

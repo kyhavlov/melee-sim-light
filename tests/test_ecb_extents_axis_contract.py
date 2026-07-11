@@ -24,8 +24,8 @@ def test_ecb_extents_rel_matches_ssanim01_tz_ty_joint_extrema() -> None:
     """Locks down the ECB extents axis convention used across extraction + C-core consumers.
 
     Contract:
-    - extents X is extracted from SSANIM01 v4 matrix tz (float index 11)
-    - extents Y is extracted from SSANIM01 v4 matrix ty (float index 7)
+    - extents X is extracted from SSANIM01 v5 matrix tz (float index 11)
+    - extents Y is extracted from SSANIM01 v5 matrix ty (float index 7)
     over the 6 ECB joints listed in data/characters/<char>.json::ecb_joints.
     - returned extents are scaled by ftData/co_attrs model_scaling (data/characters/<char>.json::model_scaling)
     """

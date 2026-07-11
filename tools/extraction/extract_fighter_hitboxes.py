@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-`data/moves/<char>.json` → `data/hitboxes/<char>.bin` (MSLHITB1 v1).
+`data/moves/<char>.json` → `data/hitboxes/<char>.bin` (MSLHITB1 v2).
 
 This module is intentionally *not* ISO-direct: it compiles the already ISO-derived movescript event
 stream into a compact binary table for init-time C loading.
@@ -14,13 +14,14 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 
+FORMAT_VERSION = 2
 _REC_BYTES = 44
 
 
 @dataclass(frozen=True)
 class _Rec:
     frame: int
-    kind: int  # 0 = set/enable, 1 = clear, 2 = active-slot damage mutation
+    kind: int  # 0=create, 1=clear, 2=set damage, 3=set x42 interaction
     hitbox_id: int
     bone_part_id: int
     x: float
@@ -47,10 +48,14 @@ class _Rec:
 
 
 def _hit_flags_u16(hb: dict) -> int:
-    # src/hitboxes_tables.h: MSLHITB1 v1 u16_6 bit assignments
+    # src/hitboxes_tables.h: MSLHITB1 v2 u16_6 bit assignments
     # Decomp trail for the underlying bools:
     # - refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C (create_hitbox_3/create_hitbox_4)
-    flags = 0
+    # ftAction_8007121C initializes both runtime interaction gates after every create command.
+    # Bit 2 marks these low bits as present so current synthetic/debug records that omit them
+    # retain the source create default of both gates enabled.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    flags = (1 << 0) | (1 << 1) | (1 << 2)
     if hb.get("hit_grounded"):
         flags |= 1 << 9
     if hb.get("hit_aerial"):
@@ -156,6 +161,26 @@ def _records_from_events(events: list[dict]) -> list[_Rec]:
             rec = replace(active[idx], frame=frame, kind=2, damage=float(ev["data"]["damage"]))
             active[idx] = rec
             out.append(rec)
+        elif kind == "set_hitbox_interaction":
+            # ftAction_80071708 mutates x42_b5 (type 0) or x42_b7 (type 1) on an already-live
+            # HitCapsule. Preserve the active definition and emit a non-create mutation record.
+            # refs/melee/src/melee/ft/ftaction.c::ftAction_80071708
+            data = ev.get("data", {}) or {}
+            idx = int(data.get("idx", -1))
+            typ = int(data.get("type", -1))
+            value = int(data.get("value", 0))
+            if not (0 <= idx < 4) or idx not in active or typ not in (0, 1):
+                continue
+            tail = list(active[idx].u16_tail)
+            flag_bit = 1 << typ
+            tail[6] |= 1 << 2
+            if value:
+                tail[6] |= flag_bit
+            else:
+                tail[6] &= ~flag_bit
+            rec = replace(active[idx], frame=frame, kind=3, u16_tail=tuple(tail))
+            active[idx] = rec
+            out.append(rec)
         elif kind == "clear_hitboxes":
             active.clear()
             out.append(
@@ -220,10 +245,10 @@ def _msid_events_from_moves_json(moves_json: dict) -> dict[int, list[dict]]:
 
 def write_mslhitb1(*, moves_json_path: Path, out_path: Path) -> None:
     """
-    Build `data/hitboxes/<char>.bin` (MSLHITB1 v1) from ISO-derived `data/moves/<char>.json`.
+    Build `data/hitboxes/<char>.bin` (MSLHITB1 v2) from ISO-derived `data/moves/<char>.json`.
 
     Source pointers:
-    - Binary layout: agent_docs/DATA_CONTRACT.md (MSLHITB1 v1)
+    - Binary layout: agent_docs/DATA_CONTRACT.md (MSLHITB1 v2)
     - Move event extraction + create_hitbox decode:
       tools/extraction/extract_fighter_moves.py::_parse_subaction_events and ::_decode_create_hitbox
     - Decomp shape for create_hitbox (field meanings):
@@ -254,7 +279,7 @@ def write_mslhitb1(*, moves_json_path: Path, out_path: Path) -> None:
     header = b"".join(
         [
             b"MSLHITB1",
-            struct.pack("<I", 1),
+            struct.pack("<I", FORMAT_VERSION),
             struct.pack("<I", entry_count),
         ]
     )

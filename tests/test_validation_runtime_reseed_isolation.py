@@ -107,3 +107,31 @@ def test_one_step_reseed_clears_guard_reflect_entry_latches_between_chunks() -> 
     assert reused["items"][lane, 0]["instance_id"] == fresh["items"][lane, 0]["instance_id"]
     assert int(reused["items"][lane, 0]["owner"]) == int(ref_item["owner"])
     assert int(reused["items"][lane, 0]["instance_id"]) == int(ref_item["instance_id"])
+
+
+def _fresh_and_reused_lane(ds, *, target_row: int, prior_row: int, lane: int = 17):
+    capacity = 64
+    rows = np.full((capacity,), int(target_row), dtype=np.int64)
+    prior_rows = rows.copy()
+    prior_rows[int(lane)] = int(prior_row)
+    return int(lane), _run_one_step_rows(ds, rows), _run_one_step_rows(
+        ds, rows, prior_rows=prior_rows
+    )
+
+
+def test_guard_entry_transients_are_batch_history_independent() -> None:
+    """Out-of-band reseed invariant for callback-local GuardOn entry markers."""
+    ds = _replay_buffers("replays/validation/falcon/RareIrritatingPanther.slpz", (1, 2))
+    lane, fresh, reused = _fresh_and_reused_lane(ds, target_row=2870, prior_row=2806)
+    ref = ds.rows["ref_t1"][2870]
+
+    assert reused[lane].tobytes() == fresh[lane].tobytes()
+    assert reused["shield_hp"][lane, 0] == ref["shield_hp"][0]
+
+
+def test_sheik_needle_hidden_motion_is_batch_history_independent() -> None:
+    """Out-of-band reseed invariant for unobservable Needle xDD8/xDDC/xDE0 state."""
+    ds = _replay_buffers("replays/validation/falcon/Game_20260505T114745.slpz", (1, 2))
+    lane, fresh, reused = _fresh_and_reused_lane(ds, target_row=3914, prior_row=3850)
+
+    assert reused[lane].tobytes() == fresh[lane].tobytes()

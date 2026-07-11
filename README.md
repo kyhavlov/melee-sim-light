@@ -10,12 +10,16 @@ NumPy API over native batch execution.
 
 Prerequisites:
 - `uv`
-- Python 3.10 or newer
+- Git LFS
+- Python 3.11 or newer
 - a C compiler available as `cc`
 
 Clone the repo:
 ```bash
 git clone https://github.com/kyhavlov/melee-sim-light
+cd melee-sim-light
+git lfs install
+git lfs pull
 ```
 
 From another project, install the local checkout with `uv`:
@@ -300,7 +304,7 @@ arrays, struct-of-arrays wrappers, or padded records without runtime allocation.
 
 | field | type | values / range | meaning |
 | --- | --- | --- | --- |
-| `char_id` | `uint8_t` | `MSL_CHAR_ID_FOX=1`, `MSL_CHAR_ID_FALCO=22` | GALE01/Slippi character id |
+| `char_id` | `uint8_t` | `MSL_CHAR_ID_FOX=1`, `MSL_CHAR_ID_FALCON=2`, `MSL_CHAR_ID_SHEIK=7`, `MSL_CHAR_ID_MARTH=18`, `MSL_CHAR_ID_ZELDA=19`, `MSL_CHAR_ID_FALCO=22` | GALE01/Slippi character id |
 | `team_id` | `uint8_t` | `0=red, 1=blue, 2=green` | team assignment |
 | `facing` | `uint8_t` | `0` or `1` | `0` left, `1` right; neutral spawn facing is derived when unset |
 

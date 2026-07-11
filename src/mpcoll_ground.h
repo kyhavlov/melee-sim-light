@@ -20,13 +20,20 @@ void mpcoll_ground_refresh_grounded_root_floor_index(MslBatch* batch, int batch_
 
 typedef struct MslMpcollFloorMaskResult {
   uint16_t ground_id;
+  uint16_t candidate_ground_id;
   float corrected_pos_y;
   float corrected_pos_x;
+  uint8_t candidate_published;
 } MslMpcollFloorMaskResult;
 
 // Narrow `mpColl_800477E0` floor-mask predicate for callbacks that need the floor result before
 // the generic stage-collision pass mutates fighter state.
 uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
+                                         MslMpcollFloorMaskResult* out);
+
+// Narrow grounded `mpColl_80048654` floor-mask predicate. Unlike 800477E0, its ECB load uses
+// flags=5, which pins desired_ecb.bottom.y to the fighter root before the floor query.
+uint8_t mpcoll_80048654_floor_mask_probe(const MslBatch* batch, size_t idx,
                                          MslMpcollFloorMaskResult* out);
 
 // CapturePulled Lw->Hi immediate callback floor-mask subset:
@@ -45,3 +52,9 @@ uint8_t mpcoll_800477e0_capture_root_floor_mask_probe(const MslBatch* batch, siz
 uint8_t mpcoll_800471f8_throw_release_root_floor_probe(const MslBatch* batch, size_t idx,
                                                        float source_last_x, float source_last_y,
                                                        MslMpcollFloorMaskResult* out);
+
+// ftCo_800DC920's first release-placement branch: project the constrained fighter onto a floor
+// connected to the sample owner's carried floor, subject to p_ftCommonData->x3BC.
+uint8_t mpcoll_dc920_connected_floor_attempt(const MslBatch* batch, size_t constrained_idx,
+                                             uint16_t sample_owner_ground_id,
+                                             MslMpcollFloorMaskResult* out);

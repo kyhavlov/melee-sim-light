@@ -537,7 +537,8 @@ static inline uint8_t mplib_select_ledge_floor_contact(uint32_t stage_id, uint16
 
   const MslStageFloorLine* best = NULL;
   float best_x = (dir > 0) ? INFINITY : -INFINITY;
-  float best_y = 0.0f;
+  float best_world_x = 0.0f;
+  float best_world_y = 0.0f;
 
   const MslStageFloorLine* cands[1] = {cand0};
   for (int i = 0; i < 1; i++) {
@@ -555,13 +556,15 @@ static inline uint8_t mplib_select_ledge_floor_contact(uint32_t stage_id, uint16
       if (best_x > l->raw_x0) {
         best = l;
         best_x = l->raw_x0;
-        best_y = l->raw_y0;
+        best_world_x = l->x0;
+        best_world_y = l->y0;
       }
     } else if (dir < 0) {
       if (best_x < l->raw_x1) {
         best = l;
         best_x = l->raw_x1;
-        best_y = l->raw_y1;
+        best_world_x = l->x1;
+        best_world_y = l->y1;
       }
     }
   }
@@ -570,7 +573,12 @@ static inline uint8_t mplib_select_ledge_floor_contact(uint32_t stage_id, uint16
     return 0u;
   }
 
-  float cx = best_x;
+  // Raw v0/v1 selects the source endpoint orientation, but runtime collision and fighter poses are
+  // in world-scaled coordinates. Return the matching normalized world endpoint so the subsequent
+  // `contact - edge` and bottom-height gates compare like units.
+  // refs/melee/src/melee/mp/mplib.c::mpLib_80051BA8_Floor
+  // data/stages/bin/*.bin::MSLSTG01 raw_x*/x* endpoint contract
+  float cx = best_world_x;
   if (cx > right) {
     cx = right;
   } else if (cx < left) {
@@ -584,7 +592,7 @@ static inline uint8_t mplib_select_ledge_floor_contact(uint32_t stage_id, uint16
     *out_contact_x = cx;
   }
   if (out_contact_y) {
-    *out_contact_y = best_y;
+    *out_contact_y = best_world_y;
   }
   return 1u;
 }
@@ -592,8 +600,8 @@ static inline uint8_t mplib_select_ledge_floor_contact(uint32_t stage_id, uint16
 static inline uint32_t ledge_grab_flags_for_fighter(
     const MslBatch* batch, size_t idx, uint16_t action_id, uint32_t stage_id, float coll_prev_x,
     float coll_prev_y, float coll_cur_x, float coll_cur_y, float descent_prev_y,
-    float descent_cur_y, float facing_dir, uint8_t char_id, uint32_t animation_index,
-    float anim_frame_f32, float fighter_scale_y) {
+    float descent_cur_y, float ledge_check_dir, float model_facing_dir, uint8_t char_id,
+    uint32_t animation_index, float anim_frame_f32, float fighter_scale_y) {
   // Decomp gate: mpColl only attempts ledge-grab checks while moving downward.
   // Decomp: uses CollData.prev_pos.y / cur_pos.y as managed inside the collision substep loop
   // (mpColl_80043754), not previous-frame y.
@@ -623,13 +631,13 @@ static inline uint32_t ledge_grab_flags_for_fighter(
   // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
-  // mpCollSetFacingDir can write 0 for CLIFFCATCH_BOTH. The ledge side gates then test both
-  // sides, but mpColl_LoadECB_JObj's point mapping treats any non-+1 facing as the mirrored
-  // branch rather than multiplying extents by zero.
+  // mpCollSetFacingDir writes the requested ledge-check direction into CollData, but
+  // mpColl_LoadECB_JObj samples the fighter's already-faced JObj hierarchy. CLIFFCATCH_BOTH
+  // therefore changes only which ledge helpers run; it does not mirror or symmetrize the ECB.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
   // refs/melee/src/melee/mp/mpcoll.c::{mpCollSetFacingDir,mpColl_LoadECB_JObj}
-  const float ecb_facing_dir = (facing_dir == 0.0f) ? -1.0f : facing_dir;
-  msl_ecb_world_points_sample(&ecb, char_id, animation_index, ecb_frame, ecb_facing_dir, coll_cur_x,
-                              coll_cur_y,
+  msl_ecb_world_points_sample(&ecb, char_id, animation_index, ecb_frame, model_facing_dir,
+                              coll_cur_x, coll_cur_y,
                               /*lock_bottom_to_zero=*/0u);
   // The ledge AABB gates consume cd->ecb.bottom.x, but mpCollInterpolateECB runs with
   // time = 1/(steps-step), i.e. time=1.0 on the final (usually only) substep - cd->ecb
@@ -646,7 +654,7 @@ static inline uint32_t ledge_grab_flags_for_fighter(
       env_fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL) {
     (void)mpcoll_env_specialhi_try_sample_jobj_ecb_points(&ecb, batch, idx, char_id,
                                                           animation_index, ecb_frame,
-                                                          ecb_facing_dir, coll_cur_x, coll_cur_y);
+                                                          model_facing_dir, coll_cur_x, coll_cur_y);
   }
 
   // Data-contract guardrail: if ECB extents/bottom tables do not contain an entry for this
@@ -720,7 +728,7 @@ static inline uint32_t ledge_grab_flags_for_fighter(
   // Left ledge grab (must be facing toward +X / into stage).
   // Decomp: mpColl_80047E14 checks left ledge when facing_dir==1 (or 0).
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14
-  if (facing_dir >= 0.0f) {
+  if (ledge_check_dir >= 0.0f) {
     // Decomp AABB build (mpColl_80044164):
     // left = min(prev_x, cur_x)
     // right = ledge_snap_x + (max(prev_x, cur_x) + ecb.right.x)
@@ -776,7 +784,7 @@ static inline uint32_t ledge_grab_flags_for_fighter(
   // Right ledge grab (must be facing toward -X / into stage).
   // Decomp: mpColl_80047E14 checks right ledge when facing_dir==-1 (or 0).
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14
-  if (facing_dir <= 0.0f) {
+  if (ledge_check_dir <= 0.0f) {
     // Decomp AABB build (mpColl_800443C4), with snap_x negated:
     // right = max(prev_x, cur_x)
     // left = (-ledge_snap_x) + (min(prev_x, cur_x) + ecb.left.x)
@@ -884,21 +892,19 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_80043754
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
-      float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
-      // Fox/Falco SpecialAirHi and SpecialHiFall collision callbacks pass CLIFFCATCH_BOTH (0)
-      // into ft_CheckGroundAndLedge, which makes mpColl_80046904 test both ledge sides instead of
-      // only the fighter's current facing. This owns the vertical Firefox/Firebird case where the
-      // wall collision has turned the model away from stage but the recovery fall can still grab
-      // ledge after down-stick is released.
+      const float model_facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+      float ledge_check_dir = model_facing_dir;
+      // Source callbacks that pass CLIFFCATCH_BOTH (0) into ft_CheckGroundAndLedge make
+      // mpColl_80046904 test both ledge sides instead of only the fighter's current facing. The
+      // generated owner is callback-argument identity; ECB sampling still uses model_facing_dir.
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
       //   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
+      // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doAirColl
       // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046904
-      const uint8_t fd_fx_kind =
-          msl_motion_state_fx_special_kind(batch->state.char_id[idx], batch->state.action_id[idx]);
-      if (fd_fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI ||
-          fd_fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL) {
-        fd = 0.0f;
+      if (msl_motion_state_class2_has(batch->state.char_id[idx], batch->state.action_id[idx],
+                                      MSL_MS_CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL)) {
+        ledge_check_dir = 0.0f;
       }
       // Puff Coll direction modes: air Sing passes CLIFFCATCH_BOTH (0) into
       // ft_CheckGroundAndLedge, so both ledge sides are live regardless of facing; Rollout
@@ -909,9 +915,9 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
         const uint16_t pr_a = batch->state.action_id[idx];
         if (pr_a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_L ||
             pr_a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_HI_R) {
-          fd = 0.0f;
+          ledge_check_dir = 0.0f;
         } else if (pr_a == (uint16_t)MSL_ACT_PR_SPECIAL_AIR_N_CHARGE_RELEASE) {
-          fd = (batch->state.puff_rollout_dir[idx] < 0) ? -1.0f : 1.0f;
+          ledge_check_dir = (batch->state.puff_rollout_dir[idx] < 0) ? -1.0f : 1.0f;
         }
       }
       // Decomp: mpColl_80046904 runs inside the mpColl_80043754 substep loop, which updates:
@@ -940,8 +946,9 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       const float scale_y = batch->state.fighter_scale_y[idx];
       const uint32_t flags = ledge_grab_flags_for_fighter(
           batch, idx, batch->state.action_id[idx], stage_id, coll_prev_x, coll_prev_y, coll_cur_x,
-          coll_cur_y, descent_prev_y, descent_cur_y, fd, batch->state.char_id[idx],
-          batch->state.animation_index[idx], batch->state.anim_frame_f32[idx], scale_y);
+          coll_cur_y, descent_prev_y, descent_cur_y, ledge_check_dir, model_facing_dir,
+          batch->state.char_id[idx], batch->state.animation_index[idx],
+          batch->state.anim_frame_f32[idx], scale_y);
       batch->state.coll_env_flags[idx] |= flags;
     }
   }

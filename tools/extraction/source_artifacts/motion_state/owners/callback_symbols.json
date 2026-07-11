@@ -34,6 +34,7 @@
     "SPECIALHI": 128
   },
   "classes2": {
+    "CAPTURE_CONSTRAINT_CONDITIONAL_COLL": 131072,
     "CATCH_START_FLOOR_LOSS": 512,
     "CLIFF_HOLD_PHYS_SNAP": 16384,
     "CLIFF_LEDGE_FLOOR_PRESERVE": 2048,
@@ -42,8 +43,10 @@
     "COMMON_GROUNDED_B2DC_COLL": 8,
     "COMMON_GROUNDED_B4B0_COLL": 16,
     "COMMON_GROUNDED_COLL": 1,
+    "FALCON_DIVE_OWNER_CONDITIONAL_COLL": 65536,
     "FALL_LIKE_ACTION": 128,
     "FRESH_GUARDON_ITEM_SHIELDDESC_IASA": 32,
+    "FT_CHECK_GROUND_LEDGE_BOTH_COLL": 32768,
     "GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST": 8192,
     "GROUND_LOCOMOTION_FLOOR_LOSS": 1024,
     "GUARD_STATE": 256,
@@ -51,11 +54,18 @@
     "WALK_ACTION": 64
   },
   "classes3": {
+    "CATCH_KIND_1": 1024,
+    "CATCH_KIND_2": 2048,
+    "CATCH_TARGET_MASK_1": 128,
+    "CATCH_TARGET_MASK_511": 256,
+    "CATCH_TARGET_MASK_511_WHILE_ATTACHED": 512,
+    "ORDINARY_WALLJUMP_COLL": 32,
     "PHASE4_ATTACK_AIR_COLL": 1,
     "PHASE4_DAMAGE_COMMON_COLL": 4,
     "PHASE4_DAMAGE_FALL_COLL": 16,
     "PHASE4_DAMAGE_FLY_COLL": 8,
-    "PHASE4_ESCAPE_AIR_COLL": 2
+    "PHASE4_ESCAPE_AIR_COLL": 2,
+    "WALLTECH_COLL": 64
   },
   "fx_special_kinds": {
     "SPECIAL_AIR_HI": 16,
@@ -88,7 +98,7 @@
     "SPECIAL_S_END": 9,
     "SPECIAL_S_START": 7
   },
-  "id_policy": "0 is NULL; nonzero ids are sorted stable callback symbol names from decomp MotionState rows",
+  "id_policy": "0 is NULL; nonzero ids are sorted callback symbols from registry MotionState rows",
   "magic": "MSLMSO01",
   "symbols": [
     {
@@ -5244,5 +5254,5 @@
       "symbol": "ftpickupitem_Phys"
     }
   ],
-  "version": 20
+  "version": 23
 }

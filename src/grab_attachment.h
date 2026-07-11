@@ -6,6 +6,14 @@
 // Must be called after `batch->state` has been populated from `MslSeed`.
 void grab_attachment_reseed_init(MslBatch* batch, int batch_index);
 
+// Reconstruct the constrained fighter's fp->x2226_b2 bit after Falcon's x221B_b7 attach mode
+// has been recovered from the seed.
+void grab_attachment_falcon_dive_constraint_reseed_init(MslBatch* batch, int batch_index);
+
+// Whether the action's source map callback reaches mpColl this frame. Falcon Dive's owner and
+// CaptureCaptain callbacks return without calling mpColl while that fighter is constrained.
+uint8_t grab_attachment_map_callback_runs(const MslBatch* batch, size_t idx);
+
 // Recompute victim attachment offsets at Throw->Thrown entry without moving victim world position.
 //
 // Decomp-shaped usage:
@@ -58,6 +66,23 @@ void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int batch_index, i
 void grab_attachment_apply_thrown_release_anchor_now(MslBatch* batch, int batch_index, int victim_p,
                                                      int owner_p, float release_anim_frame,
                                                      uint8_t owner_pose_facing);
+
+// Falcon Dive grounded-victim release anchor helper.
+//
+// Decomp-shaped usage:
+// - When the Falcon Dive victim was grounded, ftCo_800DDDE4 treats Falcon as the constrained
+//   fighter (fp4) and the victim as the anchor owner (fp3), samples fp3 FtPart_TransN2, applies
+//   Falcon's static x1A70 offsets. The caller owns constraint clear, ECB unlock, and floor probe.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+void grab_attachment_apply_falcon_dive_ground_release_anchor_now(MslBatch* batch, int batch_index,
+                                                                 int falcon_p, int victim_p);
+// Airborne-victim counterpart: place the constrained CaptureCaptain from Falcon's TransN2 anchor.
+void grab_attachment_apply_falcon_dive_air_release_anchor_now(MslBatch* batch, int batch_index,
+                                                              int victim_p, int falcon_p);
+void grab_attachment_falcon_dive_release_floor_probe_now(MslBatch* batch, size_t constrained_idx,
+                                                         size_t sample_owner_idx);
+void grab_attachment_falcon_dive_damage_release_now(MslBatch* batch, int batch_index, int falcon_p,
+                                                    int victim_p);
 void grab_attachment_query_thrown_anchor_world(float* out_x, float* out_y, float* out_z,
                                                const MslBatch* batch, int batch_index, int victim_p,
                                                int owner_p);
@@ -70,6 +95,10 @@ void grab_attachment_query_thrown_anchor_world(float* out_x, float* out_y, float
 // - Call after action update and before physics integration and stage collision, matching the
 //   decomp callback ordering (Phys then integrate then Coll).
 void grab_attachment_update_pre_collision(MslBatch* batch);
+
+// Falcon Dive's accessory1/accessory4 position callbacks run after map collision and retain the
+// connect-time constraint mode even if either fighter's live floor state changes during the hold.
+void grab_attachment_update_falcon_dive_accessory_phase(MslBatch* batch);
 
 // Decomp-shaped "accessory callback"-style update: drive captured/thrown victim position from the
 // grab owner joint + per-victim offsets.

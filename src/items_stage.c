@@ -496,7 +496,9 @@ static uint8_t yoshi_shyguy_select_knocked_state_source_hitbox(MslBatch* batch, 
         continue;
       }
       const uint16_t flags = batch->state.hitbox_flags[hb_i];
-      if ((flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
+      // refs/melee/src/melee/it/itcoll.c::it_8026D564 (fighter HitCapsule x42_b7 item gate)
+      if (!msl_hitbox_x42_b7_enabled(flags) ||
+          (flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
           (flags & (uint16_t)MSL_HITBOX_FLAG_HIT_AERIAL) == 0u) {
         continue;
       }
@@ -707,7 +709,8 @@ static inline float yoshi_shyguy_item_kb_applied(const MslCommonParams* c,
 static inline void yoshi_shyguy_apply_damage_common(MslBatch* batch, size_t shy_idx,
                                                     const MslYoshiShyguyParams* params,
                                                     uint16_t angle, uint16_t kbg, uint16_t wsk,
-                                                    uint16_t bkb, float damage_f, float dir) {
+                                                    uint16_t bkb, float damage_f,
+                                                    float hitlag_damage_f, float dir) {
   const MslCommonParams* c = msl_common_params();
   int damage_i = (int)damage_f;
   if (damage_i < 0) {
@@ -749,7 +752,7 @@ static inline void yoshi_shyguy_apply_damage_common(MslBatch* batch, size_t shy_
   const MslItemCommonParams* item_common = msl_item_common_params();
   const float item_hitlag =
       (item_common != NULL)
-          ? (item_common->item_hitlag_base + item_common->item_hitlag_damage_mul * (float)damage_i)
+          ? (item_common->item_hitlag_base + item_common->item_hitlag_damage_mul * hitlag_damage_f)
           : 0.0f;
   if (item_hitlag > 0.0f) {
     const uint8_t frames = (uint8_t)item_hitlag;
@@ -787,7 +790,8 @@ static inline void yoshi_shyguy_apply_item_damage(MslBatch* batch, size_t shy_id
       (fabsf(laser_vx) < 0.0001f)
           ? ((batch->state.item_pos_x[shy_idx] > batch->state.item_pos_x[laser_idx]) ? -1.0f : 1.0f)
           : ((laser_vx < 0.0f) ? 1.0f : -1.0f);
-  yoshi_shyguy_apply_damage_common(batch, shy_idx, params, angle, kbg, wsk, bkb, damage_f, dir);
+  yoshi_shyguy_apply_damage_common(batch, shy_idx, params, angle, kbg, wsk, bkb, damage_f, damage_f,
+                                   dir);
 }
 
 static int yoshi_shyguy_laser_item_hit_deferred_to_throw_fighter_body(const MslBatch* batch, int bi,
@@ -960,6 +964,19 @@ static uint8_t yoshi_shyguy_try_fighter_hitbox_hit(MslBatch* batch, int bi, int 
     return 0u;
   }
 
+  typedef struct MslShyguyFighterHit {
+    uint16_t angle;
+    uint16_t kbg;
+    uint16_t wsk;
+    uint16_t bkb;
+    float dir;
+  } MslShyguyFighterHit;
+  MslShyguyFighterHit damage_hits[MSL_MAX_PLAYERS * MSL_MAX_HITBOXES] = {{0}};
+  uint8_t damage_hit_count = 0u;
+  float damage_total = 0.0f;
+  float max_damage = 0.0f;
+  uint8_t any_hit = 0u;
+
   for (int p = 0; p < (int)batch->config.num_players; p++) {
     const size_t p_idx = msl_idx_player(bi, p);
     for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
@@ -968,28 +985,35 @@ static uint8_t yoshi_shyguy_try_fighter_hitbox_hit(MslBatch* batch, int bi, int 
         continue;
       }
       const uint16_t flags = batch->state.hitbox_flags[hb_i];
-      if ((flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
+      // refs/melee/src/melee/it/itcoll.c::it_8026D564 (fighter HitCapsule x42_b7 item gate)
+      if (!msl_hitbox_x42_b7_enabled(flags) ||
+          (flags & (uint16_t)MSL_HITBOX_FLAG_ITEM_HIT_INTERACTION) == 0u ||
           (flags & (uint16_t)MSL_HITBOX_FLAG_HIT_AERIAL) == 0u) {
         continue;
       }
+      const uint8_t is_inert = batch->state.hitbox_element[hb_i] == (uint8_t)MSL_HIT_ELEMENT_INERT;
       if (batch->state.hitbox_element[hb_i] == (uint8_t)MSL_HIT_ELEMENT_CATCH ||
-          batch->state.hitbox_element[hb_i] == (uint8_t)MSL_HIT_ELEMENT_INERT ||
-          !(batch->state.hitbox_damage[hb_i] > 0.0f)) {
+          (!is_inert && !(batch->state.hitbox_damage[hb_i] > 0.0f))) {
         continue;
       }
-      const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
-      const uint8_t rehit_frames = hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
-      const uint8_t seed_rehit_suppresses =
-          yoshi_shyguy_seed_return_flight_same_action_rehit_suppresses(batch, p_idx, shy_idx, hb_i);
-      if (seed_rehit_suppresses) {
-        yoshi_shyguy_seed_return_flight_publish_fresh_prefix_velocity(batch, shy_idx, params);
-        hitlist_register_fighter_group_item(batch, bi, p, hit_group, shyguy_slot,
-                                            batch->state.item_spawn_id[shy_idx],
-                                            (int)MSL_LBCOLL_INSERT_FT_BODY, rehit_frames);
-      }
-      if (!hitlist_allows_fighter_item(batch, bi, p, hb, shyguy_slot,
-                                       batch->state.item_spawn_id[shy_idx])) {
-        continue;
+      uint8_t hit_group = 0u;
+      uint8_t rehit_frames = 0u;
+      if (!is_inert) {
+        hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+        rehit_frames = hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+        const uint8_t seed_rehit_suppresses =
+            yoshi_shyguy_seed_return_flight_same_action_rehit_suppresses(batch, p_idx, shy_idx,
+                                                                         hb_i);
+        if (seed_rehit_suppresses) {
+          yoshi_shyguy_seed_return_flight_publish_fresh_prefix_velocity(batch, shy_idx, params);
+          hitlist_register_fighter_group_item(batch, bi, p, hit_group, shyguy_slot,
+                                              batch->state.item_spawn_id[shy_idx],
+                                              (int)MSL_LBCOLL_INSERT_FT_BODY, rehit_frames);
+        }
+        if (!hitlist_allows_fighter_item(batch, bi, p, hb, shyguy_slot,
+                                         batch->state.item_spawn_id[shy_idx])) {
+          continue;
+        }
       }
 
       const float hx1 = batch->state.hitbox_x[hb_i];
@@ -1022,6 +1046,23 @@ static uint8_t yoshi_shyguy_try_fighter_hitbox_hit(MslBatch* batch, int bi, int 
           continue;
         }
 
+        if (is_inert) {
+          // it_802703E8's HitElement_Inert branch writes only fighter->unk_gobj: no item damage,
+          // hitlag, or victims_1 registration. Falcon's hurtbox_detect_cb then admits the source
+          // ItemKind families encoded in MSLITAR1.
+          // refs/melee/src/melee/it/itcoll.c::it_802703E8
+          // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialS_OnDetect
+          if (falcon_specials_item_kind_eligible(batch->state.item_type[shy_idx])) {
+            falcon_specials_on_inert_body_contact(batch, p_idx);
+            any_hit = 1u;
+            // it_802703E8 breaks only this item-hurtbox scan. The outer fighter/HitCapsule
+            // traversal continues, so a later ordinary capsule can still damage the same item.
+            // refs/melee/src/melee/it/itcoll.c::it_802703E8
+            break;
+          }
+          continue;
+        }
+
         // Fighter-hitbox vs item-hurtbox source path:
         // `it_802703E8` tests fighter HitCapsules with x42_b7 item interaction against enabled
         // item hurtboxes via `lbColl_8000805C`, records damage with `it_8026F9AC(type=1)`, then
@@ -1034,18 +1075,50 @@ static uint8_t yoshi_shyguy_try_fighter_hitbox_hit(MslBatch* batch, int bi, int 
         const int hit_damage_i = (int)hit_damage;
         const float dir =
             (batch->state.item_pos_x[shy_idx] > batch->state.pos_x[p_idx]) ? -1.0f : 1.0f;
-        yoshi_shyguy_apply_damage_common(
-            batch, shy_idx, params, batch->state.hitbox_angle[hb_i], batch->state.hitbox_kbg[hb_i],
-            batch->state.hitbox_wsk[hb_i], batch->state.hitbox_bkb[hb_i], hit_damage, dir);
+        if (damage_hit_count < (uint8_t)(MSL_MAX_PLAYERS * MSL_MAX_HITBOXES)) {
+          MslShyguyFighterHit* hit = &damage_hits[damage_hit_count++];
+          hit->angle = batch->state.hitbox_angle[hb_i];
+          hit->kbg = batch->state.hitbox_kbg[hb_i];
+          hit->wsk = batch->state.hitbox_wsk[hb_i];
+          hit->bkb = batch->state.hitbox_bkb[hb_i];
+          hit->dir = dir;
+          damage_total += hit_damage;
+          if (hit_damage > max_damage) {
+            max_damage = hit_damage;
+          }
+        }
         hitlist_register_fighter_group_item(batch, bi, p, hit_group, shyguy_slot,
                                             batch->state.item_spawn_id[shy_idx],
                                             (int)MSL_LBCOLL_INSERT_FT_BODY, rehit_frames);
         combat_apply_deal_hitlag_raw_damage(batch, p_idx, hit_damage_i);
-        return 1u;
+        any_hit = 1u;
+        break;
       }
     }
   }
-  return 0u;
+
+  if (damage_hit_count != 0u) {
+    const MslCommonParams* c = msl_common_params();
+    const int damage_i = (int)damage_total;
+    uint8_t selected = 0u;
+    float selected_kb = -1.0f;
+    for (uint8_t i = 0u; i < damage_hit_count; i++) {
+      const MslShyguyFighterHit* hit = &damage_hits[i];
+      const float kb =
+          yoshi_shyguy_item_kb_applied(c, params, hit->kbg, hit->wsk, hit->bkb, damage_i);
+      if (kb > selected_kb) {
+        selected = i;
+        selected_kb = kb;
+      }
+    }
+    const MslShyguyFighterHit* hit = &damage_hits[selected];
+    // it_802703E8 records every overlap into the fixed DmgLog; it_80270E30 then selects the
+    // highest-KB entry against aggregate xCA0 damage and runs Heiho's damage callback once.
+    // refs/melee/src/melee/it/itcoll.c::{it_802703E8,it_80270E30}
+    yoshi_shyguy_apply_damage_common(batch, shy_idx, params, hit->angle, hit->kbg, hit->wsk,
+                                     hit->bkb, damage_total, max_damage, hit->dir);
+  }
+  return any_hit;
 }
 
 void yoshi_shyguy_items_update(MslBatch* batch, int bi) {

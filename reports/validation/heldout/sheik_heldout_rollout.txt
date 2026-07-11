@@ -66,7 +66,7 @@ rollout.first_mismatch_total: 23
 rollout.first_mismatch_seeded_total: 14
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_x max_err=2.63153 rec=5386 p=0 seed/ref/out=-30.535/-30.1421/-32.7737 actions=16/16/16 category=unclassified
+  1. pos_x max_err=2.63152 rec=5386 p=0 seed/ref/out=-30.535/-30.1421/-32.7736 actions=16/16/16 category=unclassified
   2. percent max_err=1 rec=3417 p=1 seed/ref/out=119.1/119.1/118.1 actions=27/27/27 category=unclassified
   3. pos_y max_err=0.795462 rec=5547 p=0 seed/ref/out=-1.01016/-1.26317/-2.05863 actions=24/43/43 category=unclassified
 rollout.float_top_downstream:

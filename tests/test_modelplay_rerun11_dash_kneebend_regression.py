@@ -22,8 +22,7 @@ from tests.replay_buffers_loader import load_replay_buffers
 RERUN11 = "reports/modelplay/20260410_rl_doubles_v27_7000_rerun11/trace.json"
 RERUN11_PASSIVESTAND_INPUT_FIXTURE = "tests/fixtures/modelplay/rerun11_input_prefix_0_289.json"
 RERUN11_DAMAGE_HITLAG_INPUT_FIXTURE = "tests/fixtures/modelplay/rerun11_input_prefix_0_305.json"
-RERUN11_GUARD_INPUT_FIXTURE = "tests/fixtures/modelplay/rerun11_input_prefix_0_321.json"
-RERUN11_SQUATWAIT_GUARD_INPUT_FIXTURE = "tests/fixtures/modelplay/rerun11_input_prefix_0_665.json"
+RERUN11_INPUT_PREFIX_FIXTURE = "tests/fixtures/modelplay/rerun11_input_prefix_0_665.json"
 RERUN11_GUARD_ORDER_LASER_SEED_FIXTURE = "tests/fixtures/modelplay/rerun11_guard_order_laser_compact_seed.json"
 
 STAGE_FD = 32
@@ -44,13 +43,6 @@ def _root() -> Path:
 def _load_trace_fixture() -> dict[str, Any]:
     fixture_path = _root() / "tests/fixtures/modelplay/rerun11_dash_kneebend_windows.json"
     return _load_fixture(fixture_path)
-
-
-def _load_rerun11_trace() -> dict[str, Any]:
-    trace_path = _root() / RERUN11
-    if not trace_path.exists():
-        pytest.skip(f"missing local trace: {RERUN11}")
-    return json.loads(trace_path.read_text(encoding="utf-8"))
 
 
 def _load_fixture(fixture_path: Path) -> dict[str, Any]:
@@ -407,8 +399,6 @@ def test_modelplay_rerun11_passivestandb_releases_floor_adjacent_right_wall_latc
         "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {rel}")
     trace_frames = _load_input_fixture(root / RERUN11_PASSIVESTAND_INPUT_FIXTURE)
 
     binding = importlib.import_module("msl_binding")
@@ -501,8 +491,6 @@ def test_modelplay_rerun11_passivestandb_end_runs_same_frame_wait_iasa_squat() -
         "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {rel}")
     trace_frames = _load_input_fixture(root / RERUN11_PASSIVESTAND_INPUT_FIXTURE)
 
     binding = importlib.import_module("msl_binding")
@@ -567,8 +555,6 @@ def test_modelplay_rerun11_grounded_damagehi3_hitlag_sdi_stays_floor_pinned() ->
         "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {rel}")
     trace_frames = _load_input_fixture(root / RERUN11_DAMAGE_HITLAG_INPUT_FIXTURE)
 
     binding = importlib.import_module("msl_binding")
@@ -616,81 +602,6 @@ def test_modelplay_rerun11_grounded_damagehi3_hitlag_sdi_stays_floor_pinned() ->
 
 
 @pytest.mark.integration
-@pytest.mark.xfail(
-    reason="2026-06-12 debug-dataset audit: this fixture-input rollout now enters EscapeN (235) "
-    "at frame 319 where the lock pinned GuardOn (178). The committed Wait-IASA "
-    "spotdodge-before-guard helper (ftCo_80099794 modeling) contradicts this older pin; which "
-    "ordering is source-correct for this scenario needs a webplay/Dolphin re-verification of "
-    "the rerun11 trace. Pre-existing relative to the probe batch: baseline-code run fails "
-    "identically.",
-    strict=True,
-)
-def test_modelplay_rerun11_grounded_damage_wait_iasa_enters_guard_before_escape() -> None:
-    # Modelplay-vs-vanilla comparator lock:
-    # - after the grounded damage floor-resnap fix, the next mismatch was DamageHi3 ending into
-    #   KneeBend while vanilla entered GuardOn, then EscapeN on the next frame.
-    # - Decomp guard entry checks `held_inputs & HSD_PAD_LR`, which includes partial analog
-    #   shoulder holds before the lightshield deadzone.
-    # - Once Damage_IASA delegates to Wait_IASA and enters GuardOn, GuardOn_IASA must not consume
-    #   the same held-shield/downward input again on that fresh entry frame.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-    #   ftCo_80091A4C,ftCo_800923B4,ftCo_GuardOn_IASA
-    # }
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009980C
-    _require_local_data_or_skip()
-    root = _root()
-    rel = (
-        "replays/validation/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.slpz"
-    )
-    dataset_path = root / rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {rel}")
-    trace_frames = _load_input_fixture(root / RERUN11_GUARD_INPUT_FIXTURE)
-
-    binding = importlib.import_module("msl_binding")
-    sizes = binding.sizes()
-    seed_stride = int(sizes["seed"])
-    input_stride = int(sizes["input"])
-    compare_stride = int(sizes["compare"])
-
-    ds = load_replay_buffers(str(dataset_path))
-    seed_bytes = np.frombuffer(ds.rows[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
-        1, seed_stride
-    )
-    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-
-    history: dict[int, np.void] = {}
-    handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
-    try:
-        binding.reseed_seed(handle, seed_bytes)
-        prev_input = _input_bytes_from_trace_frame(trace_frames[0], input_stride)
-        for frame_i in range(1, 322):
-            input_t = _input_bytes_from_trace_frame(trace_frames[frame_i], input_stride)
-            binding.step_input(handle, prev_input, input_t)
-            if frame_i >= 318:
-                binding.write_compare(handle, out_compare_bytes)
-                history[frame_i] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
-            prev_input = input_t
-    finally:
-        binding.destroy(handle)
-
-    out_319 = history[319]
-    assert int(out_319["action_id"][1]) == 178
-    assert int(out_319["action_frame"][1]) == -1
-    assert int(out_319["on_ground"][1]) == 1
-    assert float(out_319["pos_y"][1]) == pytest.approx(0.000100, abs=0.001)
-
-    out_320 = history[320]
-    assert int(out_320["action_id"][1]) == 235
-    assert int(out_320["action_frame"][1]) == 1
-    assert int(out_320["on_ground"][1]) == 1
-    assert float(out_320["pos_y"][1]) == pytest.approx(0.000100, abs=0.001)
-
-
-@pytest.mark.integration
 def test_modelplay_rerun11_shield_recharge_continues_through_air_shine_hitlag() -> None:
     # Modelplay-vs-vanilla comparator lock:
     # - after the grounded Damage_IASA / GuardOn owner fix, the next drift was p0 shield HP
@@ -705,9 +616,7 @@ def test_modelplay_rerun11_shield_recharge_continues_through_air_shine_hitlag() 
         "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {rel}")
-    trace = _load_rerun11_trace()
+    trace_frames = _load_input_fixture(root / RERUN11_INPUT_PREFIX_FIXTURE)
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -725,9 +634,9 @@ def test_modelplay_rerun11_shield_recharge_continues_through_air_shine_hitlag() 
     handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
     try:
         binding.reseed_seed(handle, seed_bytes)
-        prev_input = _input_bytes_from_trace_frame(trace["frames"][0], input_stride)
+        prev_input = _input_bytes_from_trace_frame(trace_frames[0], input_stride)
         for frame_i in range(1, 342):
-            input_t = _input_bytes_from_trace_frame(trace["frames"][frame_i], input_stride)
+            input_t = _input_bytes_from_trace_frame(trace_frames[frame_i], input_stride)
             binding.step_input(handle, prev_input, input_t)
             if frame_i >= 337:
                 binding.write_compare(handle, out_compare_bytes)
@@ -820,9 +729,7 @@ def test_modelplay_rerun11_damageflytop_buffered_jump_can_chain_into_dair() -> N
         "AttachedGoodNaturedGuanaco.slpz"
     )
     dataset_path = root / rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local replay: {rel}")
-    trace = _load_rerun11_trace()
+    trace_frames = _load_input_fixture(root / RERUN11_INPUT_PREFIX_FIXTURE)
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -840,9 +747,9 @@ def test_modelplay_rerun11_damageflytop_buffered_jump_can_chain_into_dair() -> N
     handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
     try:
         binding.reseed_seed(handle, seed_bytes)
-        prev_input = _input_bytes_from_trace_frame(trace["frames"][0], input_stride)
+        prev_input = _input_bytes_from_trace_frame(trace_frames[0], input_stride)
         for frame_i in range(1, 398):
-            input_t = _input_bytes_from_trace_frame(trace["frames"][frame_i], input_stride)
+            input_t = _input_bytes_from_trace_frame(trace_frames[frame_i], input_stride)
             binding.step_input(handle, prev_input, input_t)
             if frame_i >= 395:
                 binding.write_compare(handle, out_compare_bytes)

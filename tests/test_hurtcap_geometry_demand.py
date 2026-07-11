@@ -129,7 +129,9 @@ def test_active_catch_hitbox_demands_defender_geometry_and_grabs() -> None:
     try:
         assert binding.debug_hurtcap_geometry_valid(handle, 0, 1) == 1
         _hitboxes, hitbox_count = binding.hitboxes_world_full(handle, 0, 0)
-        assert int(hitbox_count) > 0
+        # The active bubble had to demand defender geometry to connect; CatchPull entry then
+        # clears the owner's outgoing HitCapsules in the same ProcessHit pass.
+        assert int(hitbox_count) == 0
         assert int(compare["action_id"][0]) == ACT_CATCH_PULL
         assert int(compare["action_id"][1]) == ACT_CAPTURE_PULLED_HI
     finally:

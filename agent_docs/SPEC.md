@@ -946,6 +946,20 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll},
   refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C,ft_80081DD4},
   refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80046904,mpColl_80044838_Floor});
+- AttackAir floor projection (2026-07-10): under
+  `AttackAir_Coll -> ft_80082C74 -> mpColl_800471F8`, `mpColl_80046904` reaches
+  `mpColl_80044838_Floor` only after the same callback's `mpColl_80044628_Floor` accepts an
+  ECB-bottom floor contact (or the corresponding valid wall-adjacent contact path). A carried
+  `CollData.floor.index`, early hitbox-script phase, and same-action previous snapshot cannot
+  manufacture that prerequisite. In particular, the previous-action snapshot is promoted every
+  post-frame, so a `PassiveWallJump -> AttackAir` entry already appears sustained by its third map
+  callback. Treating those visible lanes as floor-contact authority projected fighters tens of
+  units upward from below FD and FoD. All AttackAir variants now require the normal callback-local
+  floor producer; real bottom crossings still land through the shared floor-sweep packet.
+  (`src/mpcoll_ground.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll,
+  refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C},
+  refs/melee/src/melee/mp/mpcoll.c::{mpColl_80046904,mpColl_800471F8,
+  mpColl_80044628_Floor,mpColl_80044838_Floor});
 - Shared floor-sweep publication (2026-05-22): airborne and moving-platform floor contacts now
   flow through an explicit `MslMpcollFloorSweepResult` / callback-local floor result packet before
   late rejection and final writeback. This models the source order where `mpColl_80044628_Floor`
@@ -2125,8 +2139,8 @@ Counts note:
 #### Unique `animation_index` set (seed_t + ref_t1)
 
 “Extracted tables” columns indicate whether we currently have ISO/movescript-derived artifacts keyed by this `animation_index` (msid):
-- Hitboxes: `data/hitboxes/{fox,falco}.bin` (`MSLHITB1 v1`)
-- Script owner events: `data/scripts/{fox,falco}.bin` (`MSLFTSC1 v2`), cached by
+- Hitboxes: `data/hitboxes/{fox,falco}.bin` (`MSLHITB1 v2`)
+- Script owner events: `data/scripts/{fox,falco}.bin` (`MSLFTSC1 v3`), cached by
   `src/move_tables.c` for hit status, hurtbox state masks, airborne-state events, x221C state
   flags, command-variable windows/pulses, and IASA/throw/script hitbox products.
 
@@ -2760,7 +2774,7 @@ GuardSetOff -> Guard overlap nudge:
 | Read first (decomp) | Data artifacts (ISO-derived) | Code owner / gaps |
 |---|---|---|
 | `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70` (fighter-vs-fighter collision pass) | `data/hurtcaps/{fox,falco}.bin` (`MSLHURT1 v1`) + `data/anims/{fox,falco}*.bin` (pose) | `src/hurtboxes.c`, `src/hurtcaps_tables.c`, `src/anim_pose.c` |
-| `refs/melee/src/melee/ft/ftaction.c::ftAction_80073240` (script timers use `cur_anim_frame`) | `data/hitboxes/{fox,falco}.bin` (`MSLHITB1 v1`) | `src/hitboxes.c`, `src/hitboxes_tables.c` |
+| `refs/melee/src/melee/ft/ftaction.c::ftAction_80073240` (script timers use `cur_anim_frame`) | `data/hitboxes/{fox,falco}.bin` (`MSLHITB1 v2`) | `src/hitboxes.c`, `src/hitboxes_tables.c` |
 | `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c` (shield bubble placement) | `data/shields/{fox,falco}.bin` (shield-tilt table) | `src/shields.c` (placement) |
 
 - Stopped non-loop fighter AObj terminal pose:
@@ -7119,6 +7133,26 @@ BODY collision-space residual split and rejected seed bridge:
   +/-1 before wall endpoint projection. `ftCommon_8007E2FC` clears both self velocity and attack
   knockback velocity on the same entry. DCC `4809/4810` locks the pre-Hug negative and the exact
   left-wall PassiveWall entry placement/velocity clear.
+- Ordinary walljumps carry a grounded-reset consecutive-use count. `ftWallJump_8008169C` passes
+  `fp->x1969_walljumpUsed` into `ftCo_800C1E64` as the active episode's vertical-velocity exponent,
+  then saturating-increments the count. On startup expiry, `ftCo_PassiveWall_Anim` multiplies the
+  character's vertical walljump velocity by
+  `powf(p_ftCommonData->passive_wall_vel_y_base, exponent)`; x778 extracts as
+  `0.9750000238418579`. `ftCommon_8007D6A4` resets the count on grounding, and
+  `Fighter_UnkInitReset_80067C98` clears it before Rebirth. DamageFly wall-tech entry instead passes
+  exponent zero and does not increment the count. Runtime and replay-prefix seed reconstruction
+  preserve those separate owners so a second ordinary walljump without grounding decays while wall
+  techs do not consume a use. Prefix ownership comes from generated collision-callback classes:
+  every common `ft_081B` callback that can reach `ftWallJump_8008169C` is distinct from the four
+  callbacks that call `ftCo_800C1D38`. A PassiveWall-family animation-frame reset proves an
+  ordinary re-entry; the frame-preserving `PassiveWall -> PassiveWallJump` startup latch carries the
+  existing episode. If landing and grounded ProcessHit occur in one frame, the paired
+  `x1968_jumpsUsed=0 -> 1` source writes recover the reset from the jumps-left edge after excluding
+  both aerial-jump input gates. Sources:
+  `refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C`,
+  `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4`,
+  `refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitReset_80067C98`, and
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64,ftCo_PassiveWall_Anim}`.
 - GuardSetOff active-hitlag shield SDI uses `ftCo_80093240` on every grounded GuardSetOff frame
   whose hitlag remains nonzero after the hitlag decrement. The callback consumes the current
   `Fighter_Spaghetti_8006AD10` X-stick timer window and displaces along the floor tangent by the
@@ -7566,11 +7600,11 @@ Manual set13 / character special-source fixes:
   generated endpoint wall that matches that floor's own endpoint. The older broad
   sustained/cardinal-stage handoff and the WIP `prev_action_id == EscapeAir` sustained right-wall
   owner are not retained. Pre/post sim probe evidence:
-  `manual_repros/set13/marth airdodge teleport.json` frame `1728 -> 1729` moved from
+  `tests/fixtures/modelplay/manual_repros/set13/marth airdodge teleport.json` frame `1728 -> 1729` moved from
   `x=47.945679` to `x=-85.565689` at `HEAD` (`dist=133.525943`), and now moves to `x=45.972851`
   (`dist=2.790000`).
 - Sheik ledgedash/air-dodge clip status: the exact user-reported pre-fix artifact/input is not
-  present in `manual_repros/set13/` or the checked-in repro fixtures, so this packet does not claim a
+  present in the checked-in repro fixtures, so this packet does not claim a
   real reported-clip fix. The deterministic live Sheik legal-stage ledgedash sweep is coverage only;
   it is not proof of the missing reported clip. The random Sheik/FD episode seed `1354821142` and
   Zelda/BF boundary cases `(1, 6, 'dj_dodge', 95, 2)` / `(1, 6, 'dj_dodge', 127, 2)` remain
@@ -7589,3 +7623,83 @@ Manual set13 / character special-source fixes:
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`
   - `refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904}`
   - `data/stages/bin/*.bin::MSLSTG01 floor adjacent_{left,right}_wall + ledge metadata`
+
+Falcon Kick jump refresh and down-throw release placement:
+- `ftCa_SpecialAirLw_Anim` calls `ftCommon_8007D5D4` before entering
+  `SpecialAirLwEndAir`. Because that common helper writes `x1968_jumpsUsed = 1`, an aerial
+  Falcon Kick restores Falcon's one aerial jump even when it was already spent. The same write
+  applies when a ground-started kick finishes airborne and when the kick enters its wall-rebound
+  state. Runtime now carries the complete common ground-to-air jump/ECB bundle at all three
+  callback sites. Falcon-suite vanilla transitions from `SpecialAirLw` to `SpecialAirLwEndAir`
+  independently show `jumps_left 0 -> 1`.
+- Grounded `SpecialLw -> SpecialLwEnd` completion calls `ftCommon_8007D7FC`, whose
+  `ftCommon_8007D6A4` tail writes `jumpsUsed = 0`, clears fastfall, and unlocks ECB before the
+  destination state. Runtime applies those absolute writes at the callback boundary rather than
+  depending on valid grounded seed invariants; a synthetic stale-lane test locks the repair.
+- The grounded `SpecialAirLwEnd` landing-skid state is not one of the same-action Falcon Kick
+  phase flips. Its `ftCa_SpecialAirLwEnd_Coll` callback delegates to `ft_80084104`, so an attached
+  floor is retained through the B2DC endpoint owner, while actual floor loss enters `Fall` through
+  `ftCo_Fall_Enter` and then applies the same absolute `jumpsUsed = 1` ground-to-air bundle. The
+  generated `MSLMSO01` `FT800827A0_EDGE_SNAP_COLL` class now carries that callback owner; focused
+  positive/negative tests lock both supported-floor persistence and absent-floor Fall entry.
+- Falcon `ThrowLw` uses the extracted `65` degree, `7` damage throw hit, but its attached victim
+  pose is below the floor at release. `ftCo_800DDDE4` publishes the selected release root through
+  `mpColl_800471F8` before `ftCo_800DE7C0` installs the upward launch. Falcon ThrowLw is therefore
+  included in the table-backed `throw_release_mpcoll_floor_publication_mask`; without that owner,
+  rollout integrated from the raw below-floor pose and falsely entered `DownBound` one frame later.
+  Falcon-suite release rows verify the floor-level launch followed by the ten-frame common ECB
+  lock, while the existing Fox/Falco downward-throw controls remain outside the publication mask.
+- Source anchors:
+  - `refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{ftCa_SpecialLw_Anim_inline,ftCa_SpecialAirLw_Anim,ftCa_SpecialLw_Coll,ftCa_SpecialAirLwEnd_Coll}`
+  - `refs/melee/src/melee/ft/ft_081B.c::ft_80084104`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter`
+  - `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0`
+  - `data/moves/falcon.json::moves.ftCo_SM_ThrowLw`
+
+Captain Falcon special callback ownership:
+- Falcon Punch (`ftCa_SpecialN.c`) is an Anim/Phys/Coll state family. Its aerial command impulse
+  and angle callback consume the common processed/deadzoned stick lanes; hitlag freezes its Anim
+  and IASA work exactly like other fighter callbacks.
+- Raptor Boost (`ftCa_SpecialS.c`) keeps script `cmd0` inert-detect and `cmd2` collision ownership
+  distinct. Grounded `cmd2==0` floor loss takes ordinary `ftCo_Fall_Enter` plus the complete
+  `ftCommon_8007D5D4` packet; live `cmd2` uses the `ftCommon_8007D60C`/FallSpecial bundle. Both
+  grounded entry and detect run the complete shared `ftCommon_8007D7FC` reset. Inert contact covers
+  fighters, shields, and the source ItemKind-eligible item hurtbox family before the source
+  `Fighter_ProcessHit` priority ladder consumes the detect packet.
+- Falcon Dive (`ftCa_SpecialHi.c` plus `ftCo_CaptureCaptain.c`) uses explicit catch-kind/target-mask
+  state and a connect-time constraint bit. The constrained side is fixed at connect, so later live
+  ground-state changes cannot swap map/accessory ownership. Accessory 1/4 attachment runs after map;
+  release applies `ftCommon_8007D5D4` to the constrained fighter and performs its release-local
+  floor publication before the throw hit. Active carriers expose source `x1A6A=0x1FF` immunity in
+  the same four-player combat pass; release/orphan cleanup clears it.
+- Grounded Falcon Kick (`ftCa_SpecialLw.c`) installs the `Fighter_ProcessHit` deal-damage callback.
+  Its `mv.ca.speciallw.{x0,friction}` state is action-instance local, persists across the
+  `SpecialLw -> SpecialLwEnd` boundary, and is reconstructed only from source contact provenance.
+  Item-hurtbox and multi-victim contacts enter the same shared x1914 producer path.
+- Generated `MSLMSO01` callback classes own shared phase/collision distinctions; Falcon action ids
+  are not used as substitutes in core collision/capture code. Source anchors are the four
+  `refs/melee/src/melee/ft/chara/ftCaptain/ftCa_Special{N,S,Hi,Lw}.c` files,
+  `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`, and
+  `refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_8007D60C,ftCommon_8007D7FC}`.
+
+TODO — Marth prefix-owned special state is not batch deterministic:
+- Affected runtime lanes are `special_stick_angle` (`fp->lstick_angle`, consumed by Dolphin Slash
+  launch) and `specials_air_used` (`fv.ms.x222C`, consumed by aerial Dancing Blade entry).
+- Falcon-suite one-step validation currently reports 3,226 discrete mismatches at chunk 1 and
+  3,240 at chunk 64. Reproduce without overwriting committed reports with:
+  `uv run python -m tools.eval.run_one_step_suite_eval --suite replays/suites/falcon.json --chunk 1
+  --out reports/triage/falcon_chunk1.txt` and the same command with `--chunk 64 --out
+  reports/triage/falcon_chunk64.txt` (also audit chunks 256 and 4096).
+- Zeroing is not a correction: an active pre-launch `SpecialHi` may already own the maximum signed
+  stick angle accumulated by earlier IASA callbacks, and `x222C=1` suppresses the vertical hop on
+  every later aerial side-B before a source grounding/death reset.
+- The missing source-owner packet is native, prefix-causal reconstruction from action entry / last
+  grounding through the seed: input/timebase history for the `SpecialHi_IASA` maximum, plus Marth
+  collision-pose and ground/air callback history for `x222C`. Partial angle or airtime-only
+  reconstruction previously exposed rollout regressions in the incomplete collision-pose owner and
+  must not be retained independently.
+- Acceptance is byte-identical per-row output for chunks 1/64/256/4096 on fresh and reused handles
+  under lane permutations, with active-owner positive/negative tests and no one-step, rollout, or
+  held-out validation regression.

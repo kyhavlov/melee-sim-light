@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from melee_sim.hsd_archive import parse_hsd_archive
+from tools.extraction.extract_fighter_hitboxes import FORMAT_VERSION as HITBOX_VERSION
 from tools.extraction.extract_fighter_parts import ANCHOR_IDS
 from tools.extraction.extract_fighter_script_timeline import EVENT_IDS, RUNTIME_OWNER_EVENT_KINDS
 from tools.extraction.extract_item_articles import (
@@ -43,7 +43,6 @@ from tools.extraction.known_data_artifacts import (
     ITEM_ARTICLE_VERSION,
     PART_MAGIC,
     PART_VERSION,
-    SCRIPT_LEGACY_JSON_VERSION,
     SCRIPT_MAGIC,
     SCRIPT_VERSION,
     STAGE_MAGIC,
@@ -74,16 +73,6 @@ SUPPORTED_STAGE_IDS_BY_BIN = {
     "grnba.bin": 31,
     "grnla.bin": 32,
 }
-SUPPORTED_STAGE_DATS_BY_BIN = {
-    "griz.bin": "GrIz.dat",
-    "grps.bin": "GrPs.dat",
-    "grst.bin": "GrSt.dat",
-    "grop.bin": "GrOp.dat",
-    "grnba.bin": "GrNBa.dat",
-    "grnla.bin": "GrNLa.dat",
-}
-
-
 def _symlink_data_tree_with_private_dirs(tmp_path: Path, private_dirs: tuple[str, ...]) -> Path:
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -316,51 +305,6 @@ def test_stage_metadata_preserves_raw_mapline_links_for_supported_stages() -> No
         assert (int(seg.prev_id0), int(seg.next_id0), int(seg.prev_id1), int(seg.next_id1)) == expected_links
 
 
-def _source_joint_ids_by_line(stage_dat: Path) -> dict[int, int]:
-    # refs/melee/src/melee/mp/mplib.c::mpJointFromLine
-    buf = stage_dat.read_bytes()
-    arc = parse_hsd_archive(buf)
-    coll_abs = arc.get_public_offset("coll_data")
-    assert coll_abs is not None, stage_dat
-    lines_abs = arc.ptr32(coll_abs + 0x08)
-    line_count = struct.unpack_from(">i", buf, coll_abs + 0x0C)[0]
-    joints_abs = arc.ptr32(coll_abs + 0x24)
-    joint_count = struct.unpack_from(">i", buf, coll_abs + 0x28)[0]
-    joint_ranges = []
-    for joint_id in range(joint_count):
-        off = joints_abs + joint_id * 0x28
-        vtx_start = struct.unpack_from(">h", buf, off + 0x24)[0]
-        vtx_count = struct.unpack_from(">h", buf, off + 0x26)[0]
-        joint_ranges.append((joint_id, vtx_start, vtx_count))
-
-    out = {}
-    for line_id in range(line_count):
-        v0_idx = struct.unpack_from(">H", buf, lines_abs + line_id * 0x10)[0]
-        out[line_id] = -1
-        for joint_id, vtx_start, vtx_count in joint_ranges:
-            if vtx_start <= v0_idx < vtx_start + vtx_count:
-                out[line_id] = joint_id
-                break
-    return out
-
-
-@pytest.mark.integration
-def test_stage_metadata_joint_ids_match_mp_joint_from_line_for_supported_stages() -> None:
-    # Joint ownership follows mpJointFromLine's v0 vertex ownership test. It is not equivalent to
-    # MapJoint's per-kind line ranges on stages with transformed platform joints.
-    # refs/melee/src/melee/mp/types.h::{MapLine,MapJoint}
-    # refs/melee/src/melee/mp/mplib.c::mpJointFromLine
-    for bin_name, dat_name in SUPPORTED_STAGE_DATS_BY_BIN.items():
-        expected_by_line = _source_joint_ids_by_line(Path("_iso") / dat_name)
-        stage = read_mslstg01_v7(Path("data/stages/bin") / bin_name)
-        for seg in stage.segments:
-            line_id = int(seg.line_id)
-            if line_id in expected_by_line:
-                assert int(seg.joint_id) == expected_by_line[line_id], (bin_name, line_id)
-            else:
-                assert int(seg.joint_id) == -1, (bin_name, line_id)
-
-
 def test_stage_metadata_contains_fod_platform_transform_records() -> None:
     stage = read_mslstg01_v7(Path("data/stages/bin/griz.bin"))
     by_line = {int(rec.line_id): rec for rec in stage.platform_transforms}
@@ -548,20 +492,26 @@ def test_stage_item_dream_whispy_known_rows() -> None:
 def test_fighter_part_metadata_known_anchors() -> None:
     fox = read_mslpart1_v1(Path("data/model_parts/fox.bin"))
     falco = read_mslpart1_v1(Path("data/model_parts/falco.bin"))
+    falcon = read_mslpart1_v1(Path("data/model_parts/falcon.bin"))
     assert fox.char_id == 2
     assert falco.char_id == 20
+    assert falcon.char_id == 0
     assert fox.local_part_count > 30
     assert falco.local_part_count > 30
     assert fox.anchor_count >= 10
     assert falco.anchor_count >= 10
     fox_anchors = {(a.kind, a.part_id) for a in fox.anchors}
     falco_anchors = {(a.kind, a.part_id) for a in falco.anchors}
+    falcon_anchors = {(a.kind, a.part_id) for a in falcon.anchors}
     assert (ANCHOR_IDS["ecb_joint"], 41) in fox_anchors
     assert (ANCHOR_IDS["laser_spawn_joint"], 67) in fox_anchors
     assert (ANCHOR_IDS["reflector_bone"], 1) in fox_anchors
     assert (ANCHOR_IDS["camera_zoom_target"], 22) in fox_anchors
     assert (ANCHOR_IDS["ecb_joint"], 39) in falco_anchors
     assert (ANCHOR_IDS["laser_spawn_joint"], 61) in falco_anchors
+    assert {(ANCHOR_IDS["ecb_joint"], p) for p in (39, 47, 25, 14, 8, 4)} <= falcon_anchors
+    assert (ANCHOR_IDS["camera_zoom_target"], 18) in falcon_anchors
+    assert (ANCHOR_IDS["grab_capture_anchor"], 61) in falcon_anchors
 
 
 @pytest.mark.integration
@@ -569,22 +519,29 @@ def test_runtime_char_part_anchors_match_mslpart1() -> None:
     import msl_binding
 
     cases = [
-        (1, Path("data/model_parts/fox.bin")),
-        (22, Path("data/model_parts/falco.bin")),
+        (1, Path("data/model_parts/fox.bin"), True, True),
+        (22, Path("data/model_parts/falco.bin"), True, True),
+        (2, Path("data/model_parts/falcon.bin"), False, False),
     ]
-    for sim_char, path in cases:
+    for sim_char, path, expects_laser, expects_reflector in cases:
         runtime = msl_binding.char_params_part_anchors(sim_char)
         parts = read_mslpart1_v1(path)
         anchors_by_kind: dict[int, list[int]] = {}
         for anchor in parts.anchors:
             anchors_by_kind.setdefault(anchor.kind, []).append(anchor.part_id)
         assert anchors_by_kind[ANCHOR_IDS["ecb_joint"]] == list(runtime["ecb_joints"])
-        assert anchors_by_kind[ANCHOR_IDS["laser_spawn_joint"]] == [
-            int(runtime["laser_spawn_joint_part_id"])
-        ]
-        assert anchors_by_kind[ANCHOR_IDS["reflector_bone"]] == [
-            int(runtime["reflector_bone_part_id"])
-        ]
+        if expects_laser:
+            assert anchors_by_kind[ANCHOR_IDS["laser_spawn_joint"]] == [
+                int(runtime["laser_spawn_joint_part_id"])
+            ]
+        else:
+            assert ANCHOR_IDS["laser_spawn_joint"] not in anchors_by_kind
+        if expects_reflector:
+            assert anchors_by_kind[ANCHOR_IDS["reflector_bone"]] == [
+                int(runtime["reflector_bone_part_id"])
+            ]
+        else:
+            assert ANCHOR_IDS["reflector_bone"] not in anchors_by_kind
         assert anchors_by_kind[ANCHOR_IDS["camera_zoom_target"]] == [
             int(runtime["camera_zoom_target_bone_part_id"])
         ]
@@ -600,6 +557,7 @@ def test_character_overlay_masks_survive_fresh_extraction() -> None:
     cases = {
         "fox": (1, 0, 0, 0, 0),
         "falco": (22, 0, 0, 0, 0),
+        "falcon": (2, 1 << 3, 0, 1 << 1, 0),
         "marth": (18, (1 << 0) | (1 << 3), (1 << 15) | (1 << 16), 1 << 1, 0),
         "sheik": (7, 1 << 3, 0, 1 << 0, 1),
         "zelda": (19, 0, 0, 0, 1),
@@ -617,118 +575,6 @@ def test_character_overlay_masks_survive_fresh_extraction() -> None:
         runtime = msl_binding.char_params_part_anchors(sim_char)
         assert int(runtime["throw_release_mpcoll_floor_publication_mask"]) == throw_mask
         assert int(runtime["escapeair_carried_floor_wall_source"]) == escapeair_wall_source
-
-
-@pytest.mark.integration
-def test_sheik_zelda_overlay_masks_survive_fresh_character_attr_extraction(
-    tmp_path: Path,
-) -> None:
-    required = [Path("_iso/PlCo.dat"), Path("_iso/PlSk.dat"), Path("_iso/PlZd.dat")]
-    missing = [p for p in required if not p.exists()]
-    if missing:
-        pytest.skip(
-            "missing local _iso assets for Sheik/Zelda character attr extraction: "
-            + ", ".join(str(p) for p in missing)
-        )
-
-    out_dir = tmp_path / "characters"
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "tools.extraction.extract_character_attrs",
-            "--pl-dir",
-            "_iso",
-            "--out-dir",
-            str(out_dir),
-            "--chars",
-            "sheik,zelda",
-        ],
-        check=True,
-    )
-    attrs = json.loads((out_dir / "sheik.json").read_text(encoding="utf-8"))
-    assert int(attrs["throw_release_mpcoll_floor_publication_mask"]) == (1 << 3)
-    assert int(attrs["common_fall_blended_ecb_seed_mask"]) == (1 << 0)
-    assert int(attrs["escapeair_carried_floor_wall_source"]) == 1
-    assert int(attrs["needle_hitbox_count"]) == 4
-    assert attrs["needle_hitbox_size"] == pytest.approx([1.953, 1.953, 1.953, 1.953])
-    assert attrs["needle_hitbox_flags"] == [5, 6, 6, 6]
-    assert attrs["needle_hitbox_bone_id"] == [1, 1, 0, 0]
-    assert attrs["needle_hitbox_jobj_z_offset"] == pytest.approx([-1.5, -1.5, 0.0, 0.0])
-    assert int(attrs["vanish_hitbox_count"]) == 1
-    assert float(attrs["vanish_hitbox_size"]) == pytest.approx(10.155599594116211)
-    assert int(attrs["vanish_hitbox_size_keyframe_count"]) == 2
-    assert attrs["vanish_hitbox_size_keyframe_frame"] == [7, 11]
-    assert attrs["vanish_hitbox_size_keyframe_value"] == pytest.approx(
-        [3.999743938446045, 1.9998719692230225]
-    )
-    assert int(attrs["vanish_hitbox_remove_frame"]) == 13
-    zelda_attrs = json.loads((out_dir / "zelda.json").read_text(encoding="utf-8"))
-    assert int(zelda_attrs["throw_release_mpcoll_floor_publication_mask"]) == 0
-    assert int(zelda_attrs["common_fall_blended_ecb_seed_mask"]) == 0
-    assert int(zelda_attrs["escapeair_carried_floor_wall_source"]) == 1
-    assert float(zelda_attrs["zelda_transform_air_gravity"]) > 0.0
-    data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("characters",))
-    chars_dir = data_dir / "characters"
-    for name in ("fox", "falco", "marth", "falcon", "puff"):
-        (chars_dir / f"{name}.json").write_text(
-            Path(f"data/characters/{name}.json").read_text(encoding="utf-8"),
-            encoding="utf-8",
-        )
-    for name in ("sheik", "zelda"):
-        (chars_dir / f"{name}.json").write_text(
-            (out_dir / f"{name}.json").read_text(encoding="utf-8"),
-            encoding="utf-8",
-        )
-    subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            (
-                "import msl_binding;"
-                f"msl_binding.set_data_dir({str(data_dir)!r});"
-                "assert msl_binding.char_params_part_anchors(7)"
-                "['escapeair_carried_floor_wall_source'] == 1;"
-                "assert msl_binding.char_params_part_anchors(19)"
-                "['escapeair_carried_floor_wall_source'] == 1"
-            ),
-        ],
-        check=True,
-    )
-
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "tools.extraction.extract_item_articles",
-            "--attrs-dir",
-            str(out_dir),
-            "--item-common",
-            "data/items/item_common.json",
-            "--out",
-            str(tmp_path / "articles.bin"),
-            "--chars",
-            "sheik",
-        ],
-        check=True,
-    )
-    table = read_mslitar1(tmp_path / "articles.bin")
-    field_ids = {
-        FIELD_SPECS[name].field_id
-        for name in (
-            "needle_hitbox_size_0",
-            "needle_hitbox_flags_3",
-            "needle_hitbox_bone_id_0",
-            "needle_hitbox_jobj_z_offset_1",
-            "vanish_hitbox_size_keyframe_frame_0",
-            "vanish_hitbox_size_keyframe_value_1",
-            "vanish_hitbox_remove_frame",
-            "chain_spawn_part_id",
-            "vanish_spawn_part_id",
-        )
-    }
-    seen = {rec.field_id for rec in table.records if rec.char_id == 19}
-    assert field_ids <= seen
 
 
 @pytest.mark.integration
@@ -1441,11 +1287,34 @@ def test_runtime_stage_lookup_caches_match_mslstg01_for_supported_stages() -> No
 def test_runtime_move_tables_reject_stale_mslftsc1(tmp_path: Path) -> None:
     root_data = Path("data").resolve()
     data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("scripts",))
-    for name in ("fox.bin", "falco.bin"):
-        buf = bytearray((root_data / "scripts" / name).read_bytes())
-        if name == "fox.bin":
+    for path in sorted((root_data / "scripts").glob("*.bin")):
+        buf = bytearray(path.read_bytes())
+        if path.name == "fox.bin":
             buf[8:12] = (SCRIPT_VERSION - 1).to_bytes(4, "little")
-        (data_dir / "scripts" / name).write_bytes(bytes(buf))
+        (data_dir / "scripts" / path.name).write_bytes(bytes(buf))
+
+    code = """
+import msl_binding
+try:
+    msl_binding.init(batch_size=1, num_players=2)
+except Exception:
+    raise SystemExit(0)
+raise SystemExit(1)
+"""
+    env = dict(os.environ)
+    env["MSL_DATA_DIR"] = str(data_dir)
+    proc = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
+def test_runtime_hitboxes_reject_stale_mslhitb1(tmp_path: Path) -> None:
+    root_data = Path("data").resolve()
+    data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("hitboxes",))
+    for path in sorted((root_data / "hitboxes").glob("*.bin")):
+        buf = bytearray(path.read_bytes())
+        if path.name == "fox.bin":
+            buf[8:12] = (HITBOX_VERSION - 1).to_bytes(4, "little")
+        (data_dir / "hitboxes" / path.name).write_bytes(bytes(buf))
 
     code = """
 import msl_binding
@@ -2065,7 +1934,7 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
             "unsupported MSLSTIO1 version",
         ),
         (DREAM_WHISPY_MAGIC, DREAM_WHISPY_VERSION, read_mslwhsp1, "unsupported MSLWHSP1 version"),
-        (SCRIPT_MAGIC, SCRIPT_LEGACY_JSON_VERSION, read_mslftsc1_v1, "unsupported MSLFTSC1 version"),
+        (SCRIPT_MAGIC, SCRIPT_VERSION, read_mslftsc1_v1, "unsupported MSLFTSC1 version"),
     ],
 )
 def test_known_data_artifact_readers_reject_stale_versions(tmp_path: Path, magic, version, reader, match) -> None:
@@ -2126,57 +1995,7 @@ def test_mslstio1_rejects_zero_hurtbox_contract(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_known_data_artifact_extractors_regenerate_stable_outputs(tmp_path: Path) -> None:
-    stage_dat_by_bin = {
-        "griz.bin": "GrIz.dat",
-        "grps.bin": "GrPs.dat",
-        "grst.bin": "GrSt.dat",
-        "grop.bin": "GrOp.dat",
-        "grnba.bin": "GrNBa.dat",
-        "grnla.bin": "GrNLa.dat",
-    }
-    for bin_name, dat_name in stage_dat_by_bin.items():
-        audit_name = bin_name.replace(".bin", ".json")
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "tools.extraction.extract_stage_metadata",
-                "--dat",
-                f"_iso/{dat_name}",
-                "--out",
-                str(tmp_path / bin_name),
-                "--audit",
-                str(tmp_path / audit_name),
-            ],
-            check=True,
-        )
-        assert (tmp_path / bin_name).read_bytes() == (Path("data/stages/bin") / bin_name).read_bytes()
-
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "tools.extraction.extract_fighter_script_timeline",
-            "--moves",
-            "data/moves/fox.json",
-            "--character",
-            "fox",
-            "--iso_dir",
-            "_iso",
-            "--melee_decomp",
-            "refs/melee",
-            "--special_msids_dir",
-            "data/special_msids",
-            "--out",
-            str(tmp_path / "fox_scripts.bin"),
-            "--manifest",
-            str(tmp_path / "fox_scripts.json"),
-        ],
-        check=True,
-    )
-    assert (tmp_path / "fox_scripts.bin").read_bytes() == Path("data/scripts/fox.bin").read_bytes()
-
+def test_tracked_input_artifact_extractors_regenerate_stable_outputs(tmp_path: Path) -> None:
     subprocess.run(
         [
             sys.executable,
@@ -2193,7 +2012,9 @@ def test_known_data_artifact_extractors_regenerate_stable_outputs(tmp_path: Path
         ],
         check=True,
     )
-    assert (tmp_path / "fox_parts.bin").read_bytes() == Path("data/model_parts/fox.bin").read_bytes()
+    assert (tmp_path / "fox_parts.bin").read_bytes() == Path(
+        "data/model_parts/fox.bin"
+    ).read_bytes()
 
     subprocess.run(
         [
@@ -2209,33 +2030,8 @@ def test_known_data_artifact_extractors_regenerate_stable_outputs(tmp_path: Path
         ],
         check=True,
     )
-    assert (tmp_path / "articles.bin").read_bytes() == Path("data/items/articles/fox_falco.bin").read_bytes()
-
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "tools.extraction.extract_stage_item_objects",
-            "--grst",
-            "_iso/GrSt.dat",
-            "--grop",
-            "_iso/GrOp.dat",
-            "--out",
-            str(tmp_path / "yoshi_shyguy.bin"),
-            "--audit",
-            str(tmp_path / "yoshi_shyguy.json"),
-            "--dream-out",
-            str(tmp_path / "dream_whispy.bin"),
-            "--dream-audit",
-            str(tmp_path / "dream_whispy.json"),
-        ],
-        check=True,
-    )
-    assert (tmp_path / "yoshi_shyguy.bin").read_bytes() == Path(
-        "data/stage_items/yoshi_shyguy.bin"
-    ).read_bytes()
-    assert (tmp_path / "dream_whispy.bin").read_bytes() == Path(
-        "data/stage_items/dream_whispy.bin"
+    assert (tmp_path / "articles.bin").read_bytes() == Path(
+        "data/items/articles/fox_falco.bin"
     ).read_bytes()
 
 

@@ -14,7 +14,7 @@ from tools.modelplay.sim_env import build_match_config_array
 ACT_ESCAPE_AIR = 236
 ACT_PASSIVE_WALL_JUMP = 203
 
-SET13_DIR = Path("manual_repros/set13")
+SET13_DIR = Path("tests/fixtures/modelplay/manual_repros/set13")
 
 
 def _root() -> Path:
@@ -22,7 +22,8 @@ def _root() -> Path:
 
 
 def _load_trace(name: str) -> dict[str, Any]:
-    trace = json.loads((_root() / SET13_DIR / name).read_text(encoding="utf-8"))
+    path = _root() / SET13_DIR / name
+    trace = json.loads(path.read_text(encoding="utf-8"))
     assert trace["format"] == "MSLTRACE1"
     assert trace["inputs"]["fields"] == ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"]
     return trace

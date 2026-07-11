@@ -1830,49 +1830,6 @@ uint8_t combat_catch_grabbable_dynamic_hurtcap_world(const MslBatch* batch, size
   return (uint8_t)(*out_r > 0.0f);
 }
 
-uint8_t combat_defender_downed_catch_mask_blocks(uint16_t action_id) {
-  // CliffCatch/CliffWait also write ftCommon_8007E2F4(fp, 0x1FF): a ledge-hanging victim is
-  // never catch-selectable (0x1FF masks every catch kind). The other Cliff* options write 0x20,
-  // which no catch kind carries.
-  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c
-  switch (action_id) {
-    case MSL_ACT_DOWN_BOUND_U:
-    case MSL_ACT_DOWN_WAIT_U:
-    case MSL_ACT_DOWN_DAMAGE_U:
-    case MSL_ACT_DOWN_BOUND_D:
-    case MSL_ACT_DOWN_WAIT_D:
-    case MSL_ACT_DOWN_DAMAGE_D:
-    case MSL_ACT_CLIFF_CATCH:
-    case MSL_ACT_CLIFF_WAIT:
-      return 1u;
-    default:
-      return 0u;
-  }
-}
-
-uint8_t combat_defender_downed_catch_mask_kind2_blocks(uint16_t action_id) {
-  // x1A68=2 (Falcon Dive) vs the downed x1A6A values: DownBound entry writes 0x1FF
-  // (0x1FF & 2 != 0 -> blocked); the DownBound/DownDamage -> DownWait handoffs and DownDamage
-  // entry write 1 (1 & 2 == 0 -> grabbable by the Dive, unlike ordinary kind-1 catches).
-  // CliffCatch/CliffWait write 0x1FF like DownBound and block kind 2 as well.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_8009794C,ftCo_80097E8C,
-  //   ftCo_80097F38}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
-  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
-  switch (action_id) {
-    case MSL_ACT_DOWN_BOUND_U:
-    case MSL_ACT_DOWN_BOUND_D:
-    case MSL_ACT_CLIFF_CATCH:
-    case MSL_ACT_CLIFF_WAIT:
-      return 1u;
-    default:
-      return 0u;
-  }
-}
-
 uint8_t combat_guard_family_body_hurtcap_world(const MslBatch* batch, size_t d_idx,
                                                const MslHurtCap* cap, uint8_t cap_id,
                                                uint16_t cap_count, float* out_ax, float* out_ay,
@@ -2817,6 +2774,9 @@ uint8_t combat_hitcapsule_is_authored_same_group_primary(const MslBatch* batch, 
   if (!batch->state.hitbox_enabled[hb_i]) {
     return 0u;
   }
+  if (!msl_hitbox_x42_b5_enabled(batch->state.hitbox_flags[hb_i])) {
+    return 0u;
+  }
   const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
   if (hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
     return 0u;
@@ -2833,6 +2793,9 @@ uint8_t combat_hitcapsule_is_authored_same_group_primary(const MslBatch* batch, 
     }
     const size_t other_i = idx_hitbox(bi, attacker, other);
     if (!batch->state.hitbox_enabled[other_i]) {
+      continue;
+    }
+    if (!msl_hitbox_x42_b5_enabled(batch->state.hitbox_flags[other_i])) {
       continue;
     }
     if (hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[other_i]) != hit_group) {
@@ -2881,6 +2844,9 @@ uint8_t combat_primary_phantom_tiplog_allows_later_same_group_body(const MslBatc
       continue;
     }
     const uint16_t other_flags = batch->state.hitbox_flags[other_i];
+    if (!msl_hitbox_x42_b5_enabled(other_flags)) {
+      continue;
+    }
     if (defender_on_ground) {
       if ((other_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0u) {
         continue;
@@ -2975,6 +2941,9 @@ uint8_t combat_sheik_chain_same_frontier_later_hitbox_owns_body(
       continue;
     }
     const uint16_t other_flags = batch->state.hitbox_flags[other_i];
+    if (!msl_hitbox_x42_b5_enabled(other_flags)) {
+      continue;
+    }
     if (defender_on_ground != 0u) {
       if ((other_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0u) {
         continue;

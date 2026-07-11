@@ -6,6 +6,11 @@ from enum import IntEnum
 
 class Character(IntEnum):
     FOX = 1
+    FALCON = 2
+    SHEIK = 7
+    PUFF = 15
+    MARTH = 18
+    ZELDA = 19
     FALCO = 22
 
 

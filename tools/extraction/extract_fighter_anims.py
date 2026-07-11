@@ -9,9 +9,13 @@ from pathlib import Path
 import numpy as np
 
 from melee_sim.hsd_archive import HsdArchive, parse_hsd_archive
+from tools.extraction.char_registry import CHARS
 
 ISO_DIR = Path("_iso")
 DATA_DIR = Path("data")
+DATA_SCHEMA_VERSION = 2
+SSANIM_VERSION = 5
+CAPTURE_CAPTAIN_ANIM_DONOR_CHARACTER = "falcon"
 
 F32 = np.float32
 
@@ -36,18 +40,17 @@ class _Timings:
 
     file_write_s: float = 0.0
 
-    def report(self, *, character: str, native: bool) -> str:
+    def report(self, *, character: str) -> str:
         total = max(self.msid_total_s, 1.0e-9)
         lines = []
-        lines.append(f"[timings] character={character} native={int(native)} msids={self.msid_count} total={total:.3f}s")
+        lines.append(f"[timings] character={character} msids={self.msid_count} total={total:.3f}s")
         lines.append(f"[timings] fobj_interpret={self.fobj_interpret_s:.3f}s ({100.0*self.fobj_interpret_s/total:.1f}%)")
         lines.append(
             f"[timings] mtx_srt={self.mtx_srt_s:.3f}s ({100.0*self.mtx_srt_s/total:.1f}%) "
             f"(trig={self.mtx_srt_trig_s:.3f}s)"
         )
         lines.append(f"[timings] mtx_concat={self.mtx_concat_s:.3f}s ({100.0*self.mtx_concat_s/total:.1f}%)")
-        if native:
-            lines.append(f"[timings] native_bake={self.native_bake_s:.3f}s ({100.0*self.native_bake_s/total:.1f}%)")
+        lines.append(f"[timings] native_bake={self.native_bake_s:.3f}s ({100.0*self.native_bake_s/total:.1f}%)")
         lines.append(f"[timings] file_writes={self.file_write_s:.3f}s ({100.0*self.file_write_s/total:.1f}%)")
         return "\n".join(lines)
 
@@ -960,45 +963,48 @@ def _is_multijump_ladder_anim_name(name: str) -> bool:
         return False
     j = i + len(marker)
     return j < len(name) and name[j].isdigit()
+def _figatree_source_character(character: str, msid: int) -> str:
+    """Return the fighter file whose FigaTree is applied to ``character``.
+
+    CaptureCaptain enters with Falcon's gobj as Fighter_ChangeMotionState's ``arg3`` animation
+    source. Vanilla therefore applies Falcon's TCaptainSpecialHi FigaTree to the captured fighter's
+    own skeleton. Cross-bake that donor tree into each target-character pose artifact so runtime
+    attachment and hurtbox queries consume the same source relation.
+
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+    refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    refs/melee/src/melee/ft/ftdata.c::ftData_80085CD8
+    """
+    if msid == 276:  # ftCo_SM_CaptureCaptain
+        return CAPTURE_CAPTAIN_ANIM_DONOR_CHARACTER
+    return character
 
 
 def _ftkind(character: str) -> int:
     # From doldecomp `enum FighterKind` ids (see prior ModelDb code).
+    if character in CHARS:
+        return CHARS[character].internal_id
     return {
         "puff": 0x0F,
-        "fox": 0x01,
-        "falcon": 0x02,
-        "sheik": 0x07,
         "peach": 0x09,
-        "marth": 0x12,
-        "falco": 0x16,
-        "zelda": 0x13,
     }[character]
 
 
 def _fighter_prefix(character: str) -> str:
+    if character in CHARS:
+        return Path(CHARS[character].pl_dat).stem
     return {
-        "fox": "PlFx",
-        "falco": "PlFc",
-        "sheik": "PlSk",
         "peach": "PlPe",
-        "marth": "PlMs",
         "puff": "PlPr",
-        "falcon": "PlCa",
-        "zelda": "PlZd",
     }[character]
 
 
 def _ftdata_symbol(character: str) -> str:
+    if character in CHARS:
+        return CHARS[character].ftdata_symbol
     return {
-        "fox": "ftDataFox",
-        "falco": "ftDataFalco",
-        "sheik": "ftDataSeak",
         "peach": "ftDataPeach",
-        "marth": "ftDataMars",
         "puff": "ftDataPurin",
-        "falcon": "ftDataCaptain",
-        "zelda": "ftDataZelda",
     }[character]
 
 
@@ -1011,16 +1017,8 @@ def _ftdata_xc_count(character: str) -> int:
     """
     # Values are ftData_Table_Unk0[internal_id].count from refs/melee/src/melee/ft/ftdata.c
     # (FTKIND_MAX rows indexed by FighterKind): fox=row 1, falcon=row 2, sheik=row 7,
-    # puff=row 15, marth=row 18, zelda=row 19, falco=row 22.
-    return {
-        "fox": 327,
-        "falcon": 318,
-        "sheik": 317,
-        "zelda": 311,
-        "falco": 327,
-        "marth": 327,
-        "puff": 327,
-    }[character]
+    # marth=row 18, zelda=row 19, falco=row 22.
+    return CHARS[character].anim_table_count
 
 
 def _write_anim_blend_data(character: str, out_dir: Path) -> Path:
@@ -1145,25 +1143,22 @@ def _default_costume_dat_and_joint(character: str) -> tuple[str, str]:
     `ft*Init_CostumeStrings` tables (e.g. ftFox/ftFx_Init.c).
     Runtime uses `CostumeListsForeachCharacter[fp->kind].costume_list[costume_id].joint`.
     """
+    info = CHARS.get(character)
+    if info is not None:
+        return info.costume_dat, info.costume_joint
     return {
-        "fox": ("PlFxNr.dat", "PlyFox5K_Share_joint"),
-        "falco": ("PlFcNr.dat", "PlyFalco5K_Share_joint"),
-        "sheik": ("PlSkNr.dat", "PlySeak5K_Share_joint"),
         "peach": ("PlPeNr.dat", "PlyPeach5K_Share_joint"),
-        "marth": ("PlMsNr.dat", "PlyMars5K_Share_joint"),
         "puff": ("PlPrNr.dat", "PlyPurin5K_Share_joint"),
-        "falcon": ("PlCaNr.dat", "PlyCaptain5K_Share_joint"),
-        "zelda": ("PlZdNr.dat", "PlyZelda5K_Share_joint"),
     }[character]
 
 
-def _load_parts_table(character: str) -> tuple[list[int], list[int], list[int]]:
+def _load_parts_table_for_ftkind(ftkind: int) -> tuple[list[int], list[int], list[int]]:
     """Return (part_to_joint, inserted_parts, joint_to_part).
 
     - `part_to_joint`: maps Fighter_Part ids to indices into fp->parts.
     - `inserted_parts`: indices into fp->parts that correspond to inserted joints
       (see `Fighter_804D6540` + `ftParts_8007506C`).
-    - `joint_to_part`: maps costume joint-tree indices (preorder traversal) to fp->parts indices.
+    - `joint_to_part`: maps indices into fp->parts back to semantic Fighter_Part ids.
     """
     plco = parse_hsd_archive((ISO_DIR / "PlCo.dat").read_bytes())
     ft_load_common = plco.get_public_offset("ftLoadCommonData")
@@ -1171,7 +1166,6 @@ def _load_parts_table(character: str) -> tuple[list[int], list[int], list[int]]:
         raise RuntimeError("PlCo.dat missing ftLoadCommonData")
     p_data = [_u32_be(plco.buf, ft_load_common + i * 4) for i in range(23)]
 
-    ftkind = _ftkind(character)
     ft_parts_table_abs = plco.data_base + p_data[4]
     ft_parts_tbl_ptr = _u32_be(plco.buf, ft_parts_table_abs + ftkind * 4)
     ft_parts_tbl_abs = plco.data_base + ft_parts_tbl_ptr
@@ -1201,6 +1195,10 @@ def _load_parts_table(character: str) -> tuple[list[int], list[int], list[int]]:
     inserted_parts = sorted(set(inserted_parts))
 
     return part_to_joint, inserted_parts, joint_to_part
+
+
+def _load_parts_table(character: str) -> tuple[list[int], list[int], list[int]]:
+    return _load_parts_table_for_ftkind(_ftkind(character))
 
 
 def _read_rest_srt_and_parents(character: str) -> tuple[
@@ -1338,7 +1336,9 @@ def _read_ftdata_x8_u8(character: str, rel_off: int) -> int:
     return int(arc.buf[off])
 
 
-def _msid_anim_entry(character: str, msid: int) -> tuple[str, int, int, int] | None:
+def _msid_anim_entry_full(
+    character: str, msid: int
+) -> tuple[str, int, int, int, int, int] | None:
     prefix = _fighter_prefix(character)
     base = ISO_DIR / f"{prefix}.dat"
     arc = parse_hsd_archive(base.read_bytes())
@@ -1363,7 +1363,22 @@ def _msid_anim_entry(character: str, msid: int) -> tuple[str, int, int, int] | N
     x4 = _u32_be(arc.buf, off + 0x04)
     x8 = _u32_be(arc.buf, off + 0x08)
     flags_u8 = int(arc.buf[off + 0x10])
-    return name, int(x4), int(x8), flags_u8
+    # Fighter_ChangeMotionState copies the full big-endian x10_animCurrFlags word to fp->x594.
+    # Its final byte's low six bits are fp->x597_bits, the FighterKind namespace used to map this
+    # FigaTree's nodes through ftPartsRemap. CaptureCaptain is the important cross-source case:
+    # Falcon supplies the animation archive, but x597 is FTKIND_NONE's canonical common skeleton.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006FE08,ftAnim_8006FCE4}
+    flags_word = _u32_be(arc.buf, off + 0x10)
+    source_part_bits = (flags_word >> 9) & 0x1FFF
+    source_ftkind = flags_word & 0x3F
+    return name, int(x4), int(x8), flags_u8, source_part_bits, source_ftkind
+
+
+def _msid_anim_entry(character: str, msid: int) -> tuple[str, int, int, int] | None:
+    """Return the legacy public animation-entry tuple used by sibling extractors."""
+    entry = _msid_anim_entry_full(character, msid)
+    return None if entry is None else entry[:4]
 
 
 def _collect_needed_parts_from_moves(character: str, moves_path: Path) -> tuple[list[int], list[int]]:
@@ -1709,13 +1724,22 @@ def _dynamic_catch_grabbable_owner_msids(
     return out
 
 
-def _node_mapping_for_parts(parts_num: int, skip_parts: list[int], fig: _FigaTree) -> tuple[list[int], list[int], list[int]]:
+def _node_mapping_for_parts(
+    parts_num: int,
+    inserted_parts: list[int],
+    fig: _FigaTree,
+    *,
+    enabled_inserted_bits: int = 0,
+) -> tuple[list[int], list[int], list[int]]:
     # Map FigaTree node indices onto part indices by skipping the same parts
-    # that are absent from the jobj traversal (ftParts_8007506C placeholders).
+    # that are absent from the JObj traversal. ftParts_8007506C returns one bit per inserted part;
+    # the part consumes a FigaTree node only when that bit is enabled in fp->x594_bits.
+    # refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FCE4
+    # refs/melee/src/melee/ft/ftparts.c::ftParts_8007506C
     is_skip = [False] * parts_num
-    for s in skip_parts:
-        if 0 <= s < parts_num:
-            is_skip[s] = True
+    for bit_i, part in enumerate(inserted_parts):
+        if 0 <= part < parts_num and (enabled_inserted_bits & (1 << bit_i)) == 0:
+            is_skip[part] = True
 
     node_to_part: list[int] = []
     p = 0
@@ -1740,15 +1764,62 @@ def _node_mapping_for_parts(parts_num: int, skip_parts: list[int], fig: _FigaTre
     return node_to_part, part_to_node, track_base_by_node
 
 
+def _remap_figatree_nodes_to_target_parts(
+    *, target_character: str, source_ftkind: int, source_part_bits: int, fig: _FigaTree
+) -> tuple[list[int], list[int]]:
+    """Return target raw-part -> source node and source node track offsets.
+
+    Vanilla applies a FigaTree through ``ftPartsRemap(target_kind, fp->x597_bits, source_part)``.
+    The source kind comes from the animation entry's full ``x10_animCurrFlags`` word, not
+    necessarily from the fighter file that supplied the archive. CaptureCaptain demonstrates the
+    distinction: Falcon supplies the FigaTree, while x597 selects FTKIND_NONE's canonical common
+    skeleton. Raw part indices are character-specific, so the source raw part must map to a
+    semantic ``Fighter_Part`` and then to the target raw part.
+
+    refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FCE4
+    refs/melee/src/melee/ft/ftparts.c::ftPartsRemap
+    """
+    target_part_to_joint, target_skip_parts, _target_joint_to_part = _load_parts_table(
+        target_character
+    )
+    if source_ftkind == _ftkind(target_character):
+        _node_to_part, part_to_node, track_base_by_node = _node_mapping_for_parts(
+            len(target_part_to_joint),
+            target_skip_parts,
+            fig,
+            enabled_inserted_bits=source_part_bits,
+        )
+        return part_to_node, track_base_by_node
+
+    source_part_to_joint, source_skip_parts, source_joint_to_part = _load_parts_table_for_ftkind(
+        source_ftkind
+    )
+    _source_node_to_part, source_part_to_node, track_base_by_node = _node_mapping_for_parts(
+        len(source_part_to_joint),
+        source_skip_parts,
+        fig,
+        enabled_inserted_bits=source_part_bits,
+    )
+    target_part_to_node = [-1] * len(target_part_to_joint)
+    for source_raw_part, node_i in enumerate(source_part_to_node):
+        if node_i < 0 or source_raw_part >= len(source_joint_to_part):
+            continue
+        semantic_part = int(source_joint_to_part[source_raw_part])
+        if semantic_part == 0xFF or semantic_part >= len(target_part_to_joint):
+            continue
+        target_raw_part = int(target_part_to_joint[semantic_part])
+        if target_raw_part == 0xFF or target_raw_part >= len(target_part_to_node):
+            continue
+        target_part_to_node[target_raw_part] = int(node_i)
+    return target_part_to_node, track_base_by_node
+
+
 def extract_one_character(
     *,
     character: str,
     moves_path: Path,
     out_dir: Path,
-    debug_msid: int | None = None,
-    debug_frame: int | None = None,
-    debug_part: int | None = None,
-    native: bool = True,
     timings: bool = False,
     msids: list[int] | None = None,
     add_msids: list[int] | None = None,
@@ -1763,6 +1834,8 @@ def extract_one_character(
         raise SystemExit(f"unsupported character {character!r}")
 
     needed_parts, max_frame_by_move = _collect_needed_parts_from_moves(character, moves_path)
+    part_to_joint, skip_parts, joint_to_part = _load_parts_table(character)
+    parts_num = len(part_to_joint)
     # Always include TopN and TransN so we can:
     # - reference a stable root joint for ECB/hurtcaps
     # - recover decomp-style root-motion offsets (x68C_transNPos) from TransN translation.
@@ -1771,7 +1844,8 @@ def extract_one_character(
             needed_parts = [part] + needed_parts
 
     # Grab/capture victim attachment needs additional common Fighter_Part joints even if they are
-    # not referenced by moves/hurtcaps:
+    # not referenced by moves/hurtcaps. SSANIM part ids are raw fp->parts indices, so map the
+    # semantic Fighter_Part ids through this character's extracted ftPartsTable first:
     # - Victim attachment uses FtPart_XRotN (2) (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB464).
     # - Grab/capture setup constrains the victim XRotN to the grab owner's FtPart_TransN2 (52)
     #   (refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800DB368).
@@ -1820,8 +1894,6 @@ def extract_one_character(
     part_rot, part_scl, part_pos, parent_part, part_flags = _read_rest_srt_and_parents(character)
     model_scaling, inv_scale_part = _read_model_scale_and_inv_part(character)
     inv_model_scale = 1.0 / model_scaling if abs(model_scaling) > 1.0e-6 else 1.0
-    part_to_joint, skip_parts, joint_to_part = _load_parts_table(character)
-    parts_num = len(part_to_joint)
     dynamic_sets = _read_fighter_dynamics(character)
     moves = json.loads(moves_path.read_text())
     # Runtime dynamic-pose state lanes (MSL_MAX_DYNAMIC_NODES per player) only carry chains that
@@ -1906,8 +1978,8 @@ def extract_one_character(
     aj_path = ISO_DIR / f"{prefix}AJ.dat"
     if not aj_path.exists():
         raise RuntimeError(f"missing animation DAT {aj_path} (extract from ISO first)")
-    aj_buf = aj_path.read_bytes()
-    aj_cache: dict[int, HsdArchive] = {}
+    aj_buf_by_character = {character: aj_path.read_bytes()}
+    aj_cache: dict[tuple[str, int], HsdArchive] = {}
 
     # Build anim data.
     joint_parts = needed_parts[:]  # store only the joints we directly need at runtime
@@ -1930,28 +2002,13 @@ def extract_one_character(
 
     order = sorted(closure_parts, key=lambda p: (depth(p), p))
 
-    if not native:
+    try:
+        from melee_sim import _native as msl
+    except Exception as exc:
         raise RuntimeError(
-            "pure-Python fighter animation extraction is disabled: never use this path. "
-            "Install/build melee_sim and use the native anim_bake_ssanim01 helper instead."
-        )
-    if debug_msid is not None or debug_frame is not None or debug_part is not None:
-        raise RuntimeError(
-            "debug fighter animation extraction would use the disabled pure-Python bake path. "
-            "Never use this for setup; install/build melee_sim and use native extraction instead."
-        )
-
-    # Native path uses fixed arrays.
-    use_native = bool(native) and debug_msid is None and debug_frame is None and debug_part is None
-    msl = None
-    if use_native:
-        try:
-            from melee_sim import _native as msl
-        except Exception as exc:
-            raise RuntimeError(
-                "melee_sim native bindings are required for fighter animation extraction. "
-                "Never use the pure-Python fallback; install/build melee_sim and rerun extraction."
-            ) from exc
+            "melee_sim native bindings are required for fighter animation extraction; "
+            "install/build melee_sim and rerun extraction."
+        ) from exc
 
     rest_rot_np = np.asarray(part_rot, dtype=np.float32)
     rest_pos_np = np.asarray(part_pos, dtype=np.float32)
@@ -1967,12 +2024,11 @@ def extract_one_character(
     out_path = out_dir / f"{character}.bin"
     locals_path = out_dir / f"{character}.locals.bin"
     tracks_path = out_dir / f"{character}.tracks.bin"
-    debug_done = False
     with out_path.open("wb") as f, locals_path.open("wb") as f_loc, tracks_path.open("wb") as f_tr:
         f.write(b"SSANIM01")
-        # v4 adds stopped non-loop AObj terminal values while preserving the per-frame TransN tail
-        # (ftAnim x68C_transNPos) after matrices.
-        f.write(struct.pack("<I", 4))
+        # v5 preserves the v4 byte layout and requires source-donor cross-bakes such as
+        # CaptureCaptain in addition to stopped non-loop AObj terminal values and the TransN tail.
+        f.write(struct.pack("<I", SSANIM_VERSION))
         f.write(struct.pack("<H", len(joint_parts)))
         f.write(struct.pack("<H", len(wanted_msids)))
         f.write(bytes([p & 0xFF for p in joint_parts]))
@@ -2031,7 +2087,8 @@ def extract_one_character(
 
         for msid in wanted_msids:
             t_msid0 = time.perf_counter() if _TIMINGS is not None else 0.0
-            entry = _msid_anim_entry(character, int(msid))
+            source_character = _figatree_source_character(character, int(msid))
+            entry = _msid_anim_entry_full(source_character, int(msid))
             if entry is None:
                 t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
                 f.write(struct.pack("<H", int(msid) & 0xFFFF))
@@ -2050,8 +2107,18 @@ def extract_one_character(
                     _TIMINGS.msid_count += 1
                 continue
 
-            sym, base_off, _size, msid_flags_u8 = entry
-            if base_off < 0 or base_off + 0x20 > len(aj_buf):
+            source_aj_buf = aj_buf_by_character.get(source_character)
+            if source_aj_buf is None:
+                source_aj_path = ISO_DIR / f"{_fighter_prefix(source_character)}AJ.dat"
+                if not source_aj_path.exists():
+                    raise RuntimeError(
+                        f"missing donor animation DAT {source_aj_path} (extract from ISO first)"
+                    )
+                source_aj_buf = source_aj_path.read_bytes()
+                aj_buf_by_character[source_character] = source_aj_buf
+
+            sym, base_off, _size, msid_flags_u8, source_part_bits, source_ftkind = entry
+            if base_off < 0 or base_off + 0x20 > len(source_aj_buf):
                 t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
                 f.write(struct.pack("<H", int(msid) & 0xFFFF))
                 f.write(struct.pack("<H", 0))
@@ -2069,10 +2136,11 @@ def extract_one_character(
                     _TIMINGS.msid_count += 1
                 continue
 
-            arc = aj_cache.get(base_off)
+            cache_key = (source_character, base_off)
+            arc = aj_cache.get(cache_key)
             if arc is None:
-                arc = parse_hsd_archive(aj_buf, base=base_off)
-                aj_cache[base_off] = arc
+                arc = parse_hsd_archive(source_aj_buf, base=base_off)
+                aj_cache[cache_key] = arc
 
             fig_off = arc.get_public_offset(sym)
             if fig_off is None:
@@ -2094,7 +2162,12 @@ def extract_one_character(
                 continue
 
             fig = _read_figatree(arc, fig_off)
-            node_to_part, part_to_node, track_base_by_node = _node_mapping_for_parts(parts_num, skip_parts, fig)
+            part_to_node, track_base_by_node = _remap_figatree_nodes_to_target_parts(
+                target_character=character,
+                source_ftkind=source_ftkind,
+                source_part_bits=source_part_bits,
+                fig=fig,
+            )
 
             # Emit raw fobj track data for float-frame evaluation.
             tracks_by_part: dict[int, list[_FigaTrack]] = {}
@@ -2162,303 +2235,71 @@ def extract_one_character(
             if _TIMINGS is not None:
                 _TIMINGS.file_write_s += time.perf_counter() - t_w0
 
-            if use_native and msl is not None:
-                update_parts_list: list[int] = []
-                fobj_starts_list: list[int] = [0]
-                fobj_desc_list: list[tuple[int, int, int]] = []
-                for part in closure_parts:
-                    ni = part_to_node[part]
-                    if ni < 0 or ni >= len(fig.nodes):
+            update_parts_list: list[int] = []
+            fobj_starts_list: list[int] = [0]
+            fobj_desc_list: list[tuple[int, int, int]] = []
+            for part in closure_parts:
+                ni = part_to_node[part]
+                if ni < 0 or ni >= len(fig.nodes):
+                    continue
+                nframes = int(fig.nodes[ni])
+                base = track_base_by_node[ni]
+                tracks = fig.tracks[base : base + nframes]
+                start_len = len(fobj_desc_list)
+                for t in tracks:
+                    if t.obj_type < 1 or t.obj_type > 10:
                         continue
-                    nframes = int(fig.nodes[ni])
-                    base = track_base_by_node[ni]
-                    tracks = fig.tracks[base : base + nframes]
-                    start_len = len(fobj_desc_list)
-                    for t in tracks:
-                        if t.obj_type < 1 or t.obj_type > 10:
-                            continue
-                        d0 = (int(t.obj_type) & 0xFF) | ((int(t.frac_value) & 0xFF) << 8) | ((int(t.frac_slope) & 0xFF) << 16)
-                        d1 = (int(t.startframe) & 0xFFFF) | ((int(t.length) & 0xFFFF) << 16)
-                        d2 = int(t.ad_abs) & 0xFFFF_FFFF
-                        fobj_desc_list.append((d0, d1, d2))
-                    if len(fobj_desc_list) != start_len:
-                        update_parts_list.append(int(part))
-                        fobj_starts_list.append(len(fobj_desc_list))
+                    d0 = (int(t.obj_type) & 0xFF) | ((int(t.frac_value) & 0xFF) << 8) | ((int(t.frac_slope) & 0xFF) << 16)
+                    d1 = (int(t.startframe) & 0xFFFF) | ((int(t.length) & 0xFFFF) << 16)
+                    d2 = int(t.ad_abs) & 0xFFFF_FFFF
+                    fobj_desc_list.append((d0, d1, d2))
+                if len(fobj_desc_list) != start_len:
+                    update_parts_list.append(int(part))
+                    fobj_starts_list.append(len(fobj_desc_list))
 
-                update_parts_np = np.asarray(update_parts_list, dtype=np.int32)
-                fobj_starts_np = np.asarray(fobj_starts_list, dtype=np.int32)
-                if fobj_desc_list:
-                    fobj_desc_np = np.asarray(fobj_desc_list, dtype=np.uint32)
-                    fobj_desc_np = fobj_desc_np.reshape((-1, 3))
-                else:
-                    fobj_desc_np = np.zeros((0, 3), dtype=np.uint32)
-
-                t_native0 = time.perf_counter() if _TIMINGS is not None else 0.0
-                mats_bytes, locals_bytes, transn_bytes = msl.anim_bake_ssanim01(
-                    rest_rot_np,
-                    rest_pos_np,
-                    rest_scl_np,
-                    parent_np,
-                    flags_np,
-                    order_np,
-                    local_parts_np,
-                    joint_parts_np,
-                    update_parts_np,
-                    fobj_starts_np,
-                    fobj_desc_np,
-                    arc.buf,
-                    int(frame_count),
-                    int(inv_scale_part),
-                    float(inv_model_scale),
-                    float(fig.frames),
-                    1 if (int(msid_flags_u8) & 0x40) != 0 else 0,
-                )
-                if _TIMINGS is not None:
-                    _TIMINGS.native_bake_s += time.perf_counter() - t_native0
-                t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
-                f_loc.write(locals_bytes)
-                f.write(mats_bytes)
-                f.write(transn_bytes)
-                if _TIMINGS is not None:
-                    _TIMINGS.file_write_s += time.perf_counter() - t_w0
+            update_parts_np = np.asarray(update_parts_list, dtype=np.int32)
+            fobj_starts_np = np.asarray(fobj_starts_list, dtype=np.int32)
+            if fobj_desc_list:
+                fobj_desc_np = np.asarray(fobj_desc_list, dtype=np.uint32)
+                fobj_desc_np = fobj_desc_np.reshape((-1, 3))
             else:
-                fobjs_by_part: dict[int, list[_FObj]] = {}
-                for part in closure_parts:
-                    ni = part_to_node[part]
-                    if ni < 0 or ni >= len(fig.nodes):
-                        continue
-                    nframes = int(fig.nodes[ni])
-                    base = track_base_by_node[ni]
-                    tracks = fig.tracks[base : base + nframes]
-                    fobjs: list[_FObj] = []
-                    for t in tracks:
-                        if t.obj_type < 1 or t.obj_type > 10:
-                            continue
-                        ad_start = t.ad_abs
-                        ad = memoryview(arc.buf)[ad_start : ad_start + t.length]
-                        fobj = _FObj(
-                            ad=ad,
-                            ad_head=0,
-                            length=t.length,
-                            startframe=t.startframe,
-                            obj_type=t.obj_type,
-                            frac_value=t.frac_value,
-                            frac_slope=t.frac_slope,
-                        )
-                        fobj.req_anim(0.0)
-                        fobjs.append(fobj)
-                    if fobjs:
-                        fobjs_by_part[part] = fobjs
+                fobj_desc_np = np.zeros((0, 3), dtype=np.uint32)
 
-                cur_rot = part_rot[:]
-                cur_scl = part_scl[:]
-                cur_pos = part_pos[:]
-                if 0 <= inv_scale_part < len(cur_scl):
-                    cur_scl[inv_scale_part] = (inv_model_scale, inv_model_scale, inv_model_scale)
-
-                world_mtx: list[tuple[float, ...]] = [
-                    (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
-                ] * parts_num
-                world_scl: list[tuple[float, float, float] | None] = [None] * parts_num
-                transn_xyz: list[tuple[float, float, float]] = []
-
-                for frame in range(frame_count):
-                    rate = 0.0 if frame == 0 else 1.0
-                    should_stop_aobj = (
-                        (int(msid_flags_u8) & 0x40) == 0 and float(fig.frames) > 0.0 and frame >= float(fig.frames)
-                    )
-
-                    t_fobj0 = time.perf_counter() if _TIMINGS is not None else 0.0
-                    for part, fobjs in fobjs_by_part.items():
-                        for fo in fobjs:
-                            vals = fo.interpret(rate)
-                            if not vals:
-                                continue
-                            v = float(vals[-1])
-                            if fo.obj_type == 1:
-                                rx, ry, rz = cur_rot[part]
-                                cur_rot[part] = (v, ry, rz)
-                            elif fo.obj_type == 2:
-                                rx, ry, rz = cur_rot[part]
-                                cur_rot[part] = (rx, v, rz)
-                            elif fo.obj_type == 3:
-                                rx, ry, rz = cur_rot[part]
-                                cur_rot[part] = (rx, ry, v)
-                            elif fo.obj_type == 5:
-                                px, py, pz = cur_pos[part]
-                                cur_pos[part] = (v, py, pz)
-                            elif fo.obj_type == 6:
-                                px, py, pz = cur_pos[part]
-                                cur_pos[part] = (px, v, pz)
-                            elif fo.obj_type == 7:
-                                px, py, pz = cur_pos[part]
-                                cur_pos[part] = (px, py, v)
-                            elif fo.obj_type == 8:
-                                sx, sy, sz = cur_scl[part]
-                                cur_scl[part] = (_f32(max(abs(v), 1.0e-3)), sy, sz)
-                            elif fo.obj_type == 9:
-                                sx, sy, sz = cur_scl[part]
-                                cur_scl[part] = (sx, _f32(max(abs(v), 1.0e-3)), sz)
-                            elif fo.obj_type == 10:
-                                sx, sy, sz = cur_scl[part]
-                                cur_scl[part] = (sx, sy, _f32(max(abs(v), 1.0e-3)))
-                        if should_stop_aobj:
-                            for fo in fobjs:
-                                vals = []
-                                if fo.state == FOBJ_LOAD_DATA and fo.pos - fo.ad_head >= fo.length:
-                                    vals = [fo.p1]
-                                elif getattr(fo, "op_intrp", 0) == HSD_A_OP_KEY:
-                                    vals = fo.interpret(1.0)
-                                if vals:
-                                    v = float(vals[-1])
-                                    if fo.obj_type == 1:
-                                        rx, ry, rz = cur_rot[part]
-                                        cur_rot[part] = (v, ry, rz)
-                                    elif fo.obj_type == 2:
-                                        rx, ry, rz = cur_rot[part]
-                                        cur_rot[part] = (rx, v, rz)
-                                    elif fo.obj_type == 3:
-                                        rx, ry, rz = cur_rot[part]
-                                        cur_rot[part] = (rx, ry, v)
-                                    elif fo.obj_type == 5:
-                                        px, py, pz = cur_pos[part]
-                                        cur_pos[part] = (v, py, pz)
-                                    elif fo.obj_type == 6:
-                                        px, py, pz = cur_pos[part]
-                                        cur_pos[part] = (px, v, pz)
-                                    elif fo.obj_type == 7:
-                                        px, py, pz = cur_pos[part]
-                                        cur_pos[part] = (px, py, v)
-                                    elif fo.obj_type == 8:
-                                        sx, sy, sz = cur_scl[part]
-                                        cur_scl[part] = (_f32(max(abs(v), 1.0e-3)), sy, sz)
-                                    elif fo.obj_type == 9:
-                                        sx, sy, sz = cur_scl[part]
-                                        cur_scl[part] = (sx, _f32(max(abs(v), 1.0e-3)), sz)
-                                    elif fo.obj_type == 10:
-                                        sx, sy, sz = cur_scl[part]
-                                        cur_scl[part] = (sx, sy, _f32(max(abs(v), 1.0e-3)))
-                                fo.state = 0
-                    if _TIMINGS is not None:
-                        _TIMINGS.fobj_interpret_s += time.perf_counter() - t_fobj0
-
-                    if 1 < len(cur_pos):
-                        tx, ty, tz = cur_pos[1]
-                        transn_xyz.append((float(tx), float(ty), float(tz)))
-                        cur_pos[1] = (0.0, 0.0, 0.0)
-
-                    if (
-                        not debug_done
-                        and debug_msid is not None
-                        and debug_frame is not None
-                        and debug_part is not None
-                        and int(msid) == int(debug_msid)
-                        and frame == int(debug_frame)
-                    ):
-                        chain: list[int] = []
-                        p = int(debug_part)
-                        seen = set()
-                        while 0 <= p < parts_num and p not in seen:
-                            chain.append(p)
-                            seen.add(p)
-                            p = parent_part[p]
-                        dbg = []
-                        for part in chain:
-                            dbg.append(
-                                {
-                                    "part": part,
-                                    "parent": parent_part[part],
-                                    "flags": int(part_flags[part]),
-                                    "rot": cur_rot[part],
-                                    "pos": cur_pos[part],
-                                    "scl": cur_scl[part],
-                                }
-                            )
-                        print(
-                            json.dumps(
-                                {
-                                    "debug": "locals",
-                                    "character": character,
-                                    "msid": int(msid),
-                                    "frame": int(frame),
-                                    "part_chain": dbg,
-                                }
-                            )
-                        )
-                        debug_done = True
-
-                    for part in order:
-                        p = parent_part[part]
-                        parent_m = (
-                            world_mtx[p]
-                            if p >= 0
-                            else (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
-                        )
-                        parent_s = world_scl[p] if p >= 0 else None
-                        t_srt0 = time.perf_counter() if _TIMINGS is not None else 0.0
-                        local = _mtx_srt(cur_scl[part], cur_rot[part], cur_pos[part], parent_s)
-                        if _TIMINGS is not None:
-                            _TIMINGS.mtx_srt_s += time.perf_counter() - t_srt0
-                        t_cat0 = time.perf_counter() if _TIMINGS is not None else 0.0
-                        world = _mtx_concat(parent_m, local)
-                        if _TIMINGS is not None:
-                            _TIMINGS.mtx_concat_s += time.perf_counter() - t_cat0
-                        world_mtx[part] = world
-                        if (int(part_flags[part]) & 8) != 0:
-                            world_scl[part] = parent_s if p >= 0 and parent_s is not None else None
-                        else:
-                            if p >= 0 and parent_s is not None:
-                                psx, psy, psz = parent_s
-                                sx, sy, sz = cur_scl[part]
-                                world_scl[part] = (
-                                    _f32_mul(sx, psx),
-                                    _f32_mul(sy, psy),
-                                    _f32_mul(sz, psz),
-                                )
-                            else:
-                                world_scl[part] = cur_scl[part]
-
-                    t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
-                    for part in local_parts:
-                        rx, ry, rz = cur_rot[part]
-                        px, py, pz = cur_pos[part]
-                        sx, sy, sz = cur_scl[part]
-                        f_loc.write(
-                            struct.pack(
-                                "<9f",
-                                float(rx),
-                                float(ry),
-                                float(rz),
-                                float(px),
-                                float(py),
-                                float(pz),
-                                float(sx),
-                                float(sy),
-                                float(sz),
-                            )
-                        )
-                    for part in joint_parts:
-                        m = world_mtx[part]
-                        f.write(struct.pack("<12f", *m))
-                    if _TIMINGS is not None:
-                        _TIMINGS.file_write_s += time.perf_counter() - t_w0
-
-                if len(transn_xyz) != frame_count:
-                    transn_xyz = transn_xyz[:frame_count] + [(0.0, 0.0, 0.0)] * max(
-                        0, frame_count - len(transn_xyz)
-                    )
-                t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
-                for (tx, ty, tz) in transn_xyz:
-                    f.write(struct.pack("<3f", float(tx), float(ty), float(tz)))
-                if _TIMINGS is not None:
-                    _TIMINGS.file_write_s += time.perf_counter() - t_w0
+            t_native0 = time.perf_counter() if _TIMINGS is not None else 0.0
+            mats_bytes, locals_bytes, transn_bytes = msl.anim_bake_ssanim01(
+                rest_rot_np,
+                rest_pos_np,
+                rest_scl_np,
+                parent_np,
+                flags_np,
+                order_np,
+                local_parts_np,
+                joint_parts_np,
+                update_parts_np,
+                fobj_starts_np,
+                fobj_desc_np,
+                arc.buf,
+                int(frame_count),
+                int(inv_scale_part),
+                float(inv_model_scale),
+                float(fig.frames),
+                1 if (int(msid_flags_u8) & 0x40) != 0 else 0,
+            )
+            if _TIMINGS is not None:
+                _TIMINGS.native_bake_s += time.perf_counter() - t_native0
+            t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
+            f_loc.write(locals_bytes)
+            f.write(mats_bytes)
+            f.write(transn_bytes)
+            if _TIMINGS is not None:
+                _TIMINGS.file_write_s += time.perf_counter() - t_w0
 
             if _TIMINGS is not None:
                 _TIMINGS.msid_total_s += time.perf_counter() - t_msid0
                 _TIMINGS.msid_count += 1
 
     if _TIMINGS is not None:
-        print(_TIMINGS.report(character=character, native=use_native))
+        print(_TIMINGS.report(character=character))
     _TIMINGS = prev_timings
     validate_ssanimt1_file(tracks_path)
     return out_path
@@ -2477,11 +2318,7 @@ def main() -> None:
         action="store_true",
         help="only write <character>.blend.bin (no matrix/local extraction)",
     )
-    ap.add_argument("--debug-msid", type=int, default=None, help="dump locals for this msid")
-    ap.add_argument("--debug-frame", type=int, default=None, help="dump locals for this frame")
-    ap.add_argument("--debug-part", type=int, default=None, help="dump locals for this part id and its ancestors")
     ap.add_argument("--timings", action="store_true", help="print wall-clock breakdown of extractor hot paths")
-    ap.add_argument("--no-native", action="store_true", help="disabled: pure-Python bake is too slow for setup")
     ap.add_argument("--msid", type=int, action="append", default=None, help="only extract these submotion ids (repeatable)")
     ap.add_argument(
         "--add-msid",
@@ -2510,10 +2347,6 @@ def main() -> None:
             character=args.character,
             moves_path=moves,
             out_dir=args.out_dir,
-            debug_msid=args.debug_msid,
-            debug_frame=args.debug_frame,
-            debug_part=args.debug_part,
-            native=not bool(args.no_native),
             timings=bool(args.timings),
             msids=args.msid,
             add_msids=args.add_msid,

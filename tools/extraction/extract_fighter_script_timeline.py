@@ -67,7 +67,6 @@ RUNTIME_OWNER_EVENT_KINDS = {
 
 UNSUPPORTED_EVENT_KINDS = {
     "set_hitbox_size",
-    "set_hitbox_interaction",
     "remove_hitbox",
 }
 
@@ -118,6 +117,13 @@ def _encode_payload(kind: str, data: dict) -> bytes:
         return struct.pack("<Bxxx", _as_u8(data["hit_idx"]))
     if kind == "set_hitbox_damage":
         return struct.pack("<Bxxxf", _as_u8(data["idx"]), float(data["damage"]))
+    if kind == "set_hitbox_interaction":
+        return struct.pack(
+            "<BBBx",
+            _as_u8(data["idx"]),
+            _as_u8(data["type"]),
+            _as_u8(data["value"]),
+        )
     if kind in {"set_airborne_state", "set_hit_status", "set_all_hurt_state", "set_jab_rapid"}:
         return struct.pack("<Bxxx", _as_u8(data["state"]))
     if kind == "set_hurt_state":

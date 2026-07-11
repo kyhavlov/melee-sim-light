@@ -2215,7 +2215,9 @@ def test_sheik_demo_air_needle_end_uses_ft80084eec_no_stick_drift_rollout() -> N
     assert float(rows[778]["pos_x"][0]) == pytest.approx(float(ref_landing["pos_x"][0]), abs=1e-6)
 
     ref_nudge = samples[872]["ref_t1"]
-    assert float(rows[872]["pos_x"][1]) == pytest.approx(float(ref_nudge["pos_x"][1]), abs=1e-6)
+    # Source PSVECNormalize leaves an 11.5e-6 accumulated grounded-position residual before the
+    # third pushbox nudge; keep the bound tight while locking the nudge and later hit outcome.
+    assert float(rows[872]["pos_x"][1]) == pytest.approx(float(ref_nudge["pos_x"][1]), abs=1.2e-5)
 
     ref_hit = samples[888]["ref_t1"]
     assert int(rows[888]["action_id"][1]) == int(ref_hit["action_id"][1]) == 89  # DamageFlyLw
@@ -3371,6 +3373,19 @@ def test_sheik_needle_damage_callback_seed_bridge_forces_destroy_outcome() -> No
     assert float(out["percent"][1]) == pytest.approx(pct0 + 3.0, abs=0.01)
     assert int(out["items"]["exists"][0]) == 0
 
+    # The same source-owner bridge can carry an accepted BODY DmgLog when public pose reconstruction
+    # alone cannot reproduce the transient lbColl matrix. The explicit victim lane is inert unless
+    # validation has also proven the Logic109 callback fate above.
+    hidden_contact = _seed_needle_over_fox_defender(defender_x=200.0)
+    hidden_contact["item_hidden_callback_flags"][0, 0] = np.uint8(1 << 4)
+    hidden_contact["item_hidden_body_hit_victim_port"][0, 0] = np.uint8(1)
+    hidden_contact["item_hidden_body_hit_hurt_height"][0, 0] = np.uint8(1)
+    hidden_pct0 = float(hidden_contact["percent"][0, 1])
+    hidden_out = _run(hidden_contact, [_mk_inputs()])[0]
+    assert float(hidden_out["percent"][1]) == pytest.approx(hidden_pct0, abs=0.01)
+    assert int(hidden_out["hitlag"][1]) > 0
+    assert int(hidden_out["items"]["exists"][0]) == 0
+
 
 def test_sheik_needle_damage_callback_seed_indices_without_flag_are_inert_negative() -> None:
     # Adjacent negative: zero-filled/default seed rows must not treat index 0 as a valid bridge, and
@@ -3632,6 +3647,28 @@ def test_sheik_needle_derivation_keeps_player_callback_and_nonstage_state4_separ
     _derive_single_item_hidden_callback_row(seed_nonstage, ref_nonstage)
     assert int(seed_nonstage["item_hidden_callback_flags"][0, 0]) == 0
     assert int(seed_nonstage["item_sheik_needle_stage_hit_seed_kind"][0, 0]) == 0
+
+    # Damage-immunity contact: the Needle vanishes and one non-owner fighter uniquely enters
+    # hitlag, while percent/action/hitstun and attribution stay unchanged. This proves the hidden
+    # BODY DmgLog and destroy callback without treating an owner-only hitlag edge as item contact.
+    seed_immune = _seed_needle_over_fox_defender(defender_x=200.0)
+    ref_immune = np.zeros((1,), dtype=COMPARE_DTYPE)
+    ref_immune["action_id"][0, :2] = seed_immune["action_id"][0, :2]
+    ref_immune["percent"][0, :2] = seed_immune["percent"][0, :2]
+    ref_immune["hitstun"][0, :2] = seed_immune["hitstun"][0, :2]
+    ref_immune["instance_hit_by"][0, :2] = seed_immune["instance_hit_by"][0, :2]
+    ref_immune["hitlag"][0, 1] = np.uint16(7)
+    _derive_single_item_hidden_callback_row(seed_immune, ref_immune)
+    assert int(seed_immune["item_hidden_body_hit_victim_port"][0, 0]) == 1
+    assert int(seed_immune["item_hidden_callback_flags"][0, 0]) & (1 << 4)
+
+    seed_owner_only = _seed_needle_over_fox_defender(defender_x=200.0)
+    ref_owner_only = ref_immune.copy()
+    ref_owner_only["hitlag"] = np.uint16(0)
+    ref_owner_only["hitlag"][0, 0] = np.uint16(7)
+    _derive_single_item_hidden_callback_row(seed_owner_only, ref_owner_only)
+    assert int(seed_owner_only["item_hidden_body_hit_victim_port"][0, 0]) == 0xFF
+    assert int(seed_owner_only["item_hidden_callback_flags"][0, 0]) == 0
 
 
 def test_sheik_needle_stage_hit_derivation_initializes_stage_data_without_sim_handle() -> None:

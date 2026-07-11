@@ -18,6 +18,7 @@
 #include "char_params.h"
 #include "dash_iasa.h"
 #include "escapeair_collision_owner.h"
+#include "ftcommon_ecb.h"
 #include "input_axis.h"
 #include "locomotion.h"
 #include "motion_state_owners.h"
@@ -282,43 +283,7 @@ static inline void escape_enter_wait(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-}
-
-static inline float action_clamp_absf(float value, float max_abs) {
-  if (max_abs > 0.0f) {
-    if (value > max_abs) {
-      return max_abs;
-    }
-    if (value < -max_abs) {
-      return -max_abs;
-    }
-  }
-  return value;
-}
-
-static inline void action_apply_ftcommon_8007d7fc_air_to_ground(MslBatch* batch,
-                                                                const MslCharParams* ch, size_t idx,
-                                                                uint8_t clear_fastfall) {
-  float gr = batch->state.speed_air_x_self[idx];
-  if (ch != NULL) {
-    gr = action_clamp_absf(gr, ch->ground_max_horizontal_velocity);
-  }
-  // ftCommon_8007D7FC delegates to ftCommon_8007D6A4, which sets ground_or_air=GA_Ground,
-  // clamps gr_vel, writes gr_vel=self_vel.x, refreshes jumps, and unlocks ECB. MSL keeps the
-  // public air-X lane aligned with gr_vel after ground entry because grounded Fighter_procUpdate
-  // continuously syncs self_vel from gr_vel.
-  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  batch->state.on_ground[idx] = 1u;
-  batch->state.speed_ground_x_self[idx] = gr;
-  batch->state.speed_air_x_self[idx] = gr;
-  batch->state.ecb_lock_timer[idx] = 0u;
-  if (clear_fastfall) {
-    batch->state.fall_fast[idx] = 0u;
-  }
-  if (ch != NULL) {
-    batch->state.jumps_left[idx] = ch->max_jumps;
-  }
+  batch->state.fall_fast[idx] = 0u;
 }
 
 static inline void rebound_wait_restore_ground_from_carried_floor(MslBatch* batch, size_t idx) {
@@ -337,7 +302,7 @@ static inline void rebound_wait_restore_ground_from_carried_floor(MslBatch* batc
   // refs/melee/src/melee/ft/ft_0892.c::ft_8008A348
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
   const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
-  action_apply_ftcommon_8007d7fc_air_to_ground(batch, ch, idx, 1u);
+  msl_ftcommon_8007d6a4(batch, ch, idx);
 }
 
 static inline void enter_escape_n(MslBatch* batch, size_t idx) {
@@ -857,8 +822,8 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0
   // refs/melee/src/melee/ft/types.h (fp+0x221C bitfield mapping)
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &=
-      (uint8_t)~(uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(
+      uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
   batch->state.guard_on_entered_this_frame[idx] = 1u;
   // Keep the entry-family marker through the entry callback row and its immediate frozen
   // GuardOn_IASA handoff, then consume it below. The two ticks are runtime-only hidden source
@@ -991,7 +956,7 @@ static inline void enter_shield_break_fly(MslBatch* batch, const MslCharParams* 
   batch->state.jumps_left[idx] =
       (ch != NULL && ch->max_jumps > 0u) ? (uint8_t)(ch->max_jumps - 1u) : 0u;
   batch->state.hurtbox_state[idx] = 2u;
-  batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR;
+  msl_ftcommon_lock_ecb_8007d5d4(batch, idx);
   batch->state.speed_air_x_self[idx] = 0.0f;
   batch->state.speed_ground_x_self[idx] = 0.0f;
   batch->state.speed_x_attack[idx] = 0.0f;
@@ -1316,7 +1281,7 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
         const size_t flags_i =
             idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-        batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_B1;
+        batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
       }
       uint8_t t18 = batch->state.guard_reflect_timer_x18[idx];
       if (t18 > 0) {
@@ -1328,7 +1293,7 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
           const size_t flags_i =
               idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-          batch->state.state_flags[flags_i] &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_B2;
+          batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
         }
       }
     }
@@ -2301,7 +2266,7 @@ void action_update_anim_callback_pre_input_fighter(const MslFighterCallbackConte
           // refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
           // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
           // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-          action_apply_ftcommon_8007d7fc_air_to_ground(batch, ch, idx, 0u);
+          msl_ftcommon_8007d6a4(batch, ch, idx);
           if (ch == NULL) {
             batch->state.jumps_left[idx] = max_jumps;
           }
@@ -2310,13 +2275,13 @@ void action_update_anim_callback_pre_input_fighter(const MslFighterCallbackConte
           batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.jumps_left[idx] = (max_jumps > 0u) ? (uint8_t)(max_jumps - 1u) : 0u;
-          batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR;
+          msl_ftcommon_lock_ecb_8007d5d4(batch, idx);
         } else if (air_state == 2u) {
           batch->state.on_ground[idx] = 0u;
           batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.jumps_left[idx] = 0u;
-          batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR_ALT;
+          msl_ftcommon_lock_ecb_8007d60c(batch, idx);
         }
       }
     }

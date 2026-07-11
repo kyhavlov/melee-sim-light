@@ -106,6 +106,7 @@ from tools.slippi.validation_buffer_seed import (  # noqa: F401
     _derive_cliff_option_stick_latch_x8,
     _derive_match_flow_timer,
     _derive_passivewall_timer,
+    _derive_walljump_used_seed_lanes,
     _derive_attackdash_x0_seed_lane,
     _derive_walljump_phase_seed_lanes,
     _derive_mpcoll_wall_seed_lanes,
@@ -154,6 +155,7 @@ from tools.slippi.validation_buffer_fighter import (  # noqa: F401
     _to_numpy,
     _derive_landing_fallspecial_allow_interrupt_seed_lane,
     _derive_jab_rapid_count_seed_lane,
+    _derive_attack100_seed_latches,
     _derive_walk_anim_source_vel_seed_lane,
     _derive_walk_retarget_tick_source_vel_seed_lane,
     _derive_run_anim_source_vel_seed_lane,
@@ -219,7 +221,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     from tools.slippi.combat_history import derive_combat_hitlist_seed_fields, derive_hitbox_prev_center_seed_fields
     from tools.slippi.damage_history import derive_damage_time_since_hit_x18ac
     from tools.slippi.anim_timebase import derive_frame_speed_mul_f32, load_end_frame_tables
-    from tools.slippi.seed_history import derive_instance_id_counter, derive_instance_id_x2073, derive_item_spawn_id_counter, derive_colanim_internals, derive_downwait_timer, derive_damage_jump_buffer_x14, derive_damage_meteor_cancel_x1a, derive_damage_entry_tilt_timer_reset_post_mask, derive_damage_hitlag_sdi_reset_post_mask, derive_damage_post_hitlag_cb_kind, derive_camera_box_visible_x221f_b0, derive_camera_target_point_inside_stage_cam_bounds, derive_camera_target_world, derive_magnify_damage_counter_x1910, derive_rebirth_camera_anchor_y, derive_capture_mash_buttons_pressed, derive_capture_grab_hidden_post, derive_grab_mash_stick_sign_post, derive_grab_owner_port, derive_grab_owner_port_2p, derive_seed_prev_action_post, derive_dash_x4, derive_runbrake_cmd0, derive_shine_release_state, derive_run_x0, derive_ecb_lock_timer, derive_ecb_lock_bottom_rel_y, derive_damage_hitlag_colldata_ecb, load_shield_tilt_table_meta, process_stick_i8_units
+    from tools.slippi.seed_history import derive_instance_id_counter, derive_instance_id_x2073, derive_item_spawn_id_counter, derive_colanim_internals, derive_downwait_timer, derive_damage_jump_buffer_x14, derive_damage_meteor_cancel_x1a, derive_damage_entry_tilt_timer_reset_post_mask, derive_damage_hitlag_sdi_reset_post_mask, derive_damage_post_hitlag_cb_kind, derive_camera_box_visible_x221f_b0, derive_camera_target_point_inside_stage_cam_bounds, derive_camera_target_world, derive_magnify_damage_counter_x1910, derive_rebirth_camera_anchor_y, derive_capture_mash_buttons_pressed, derive_capture_grab_hidden_post, derive_grab_mash_stick_sign_post, derive_grab_owner_port, derive_grab_owner_port_2p, derive_seed_prev_action_post, derive_dash_x4, derive_runbrake_cmd0, derive_shine_release_state, derive_run_x0, derive_ecb_lock_state, derive_ecb_lock_bottom_rel_y, derive_damage_hitlag_colldata_ecb, load_shield_tilt_table_meta, process_stick_i8_units
     with replay_path_for_peppi(args.slp) as peppi_path:
         game = _read_slippi(str(peppi_path), False)
     frames_all = game.frames
@@ -363,6 +365,8 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     stale_weights = struct.unpack_from('<' + 'f' * stale_weight_count, stale_weights_buf, 20)
     manifest_tables = _manifest_preprocess_tables(_path_cache_key(data_root))
     manifest_chars = manifest_tables.manifest_chars
+    falcon_char_id = next((int(cid) for cid, name in manifest_chars if name == 'falcon'), -1)
+    falcon_attrs = _load_character_attrs(data_root, 'falcon') if falcon_char_id >= 0 else None
     char_landing_air_lag_frames = manifest_tables.char_landing_air_lag_frames
     char_fallspecial_origin_lag = manifest_tables.char_fallspecial_origin_lag
     char_fallspecial_origin_allow_interrupt = manifest_tables.char_fallspecial_origin_allow_interrupt
@@ -502,6 +506,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     button_mask_dpad_down = 4
     turn_frames_lut = _load_u8_character_attr_lut(data_root, 'turn_frames')
     multijump_first_lut, multijump_count_lut = _multijump_ladder_lut(data_root)
+    max_jumps_lut = _load_u8_character_attr_lut(data_root, 'max_jumps')
     reflector_release_lag_lut = np.zeros(256, dtype=np.uint8)
     reflector_release_lag_lut[np.uint8(1)] = np.uint8(_load_character_attrs(data_root, 'fox')['reflector_release_lag_frames'])
     reflector_release_lag_lut[np.uint8(22)] = np.uint8(_load_character_attrs(data_root, 'falco')['reflector_release_lag_frames'])
@@ -655,7 +660,12 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         jab_mask = (post_state == np.uint16(act_attack_11)) | (post_state == np.uint16(act_attack_12)) | (post_state == np.uint16(act_attack_13))
         post_jab_x0[jab_mask] = (post_misc_as[jab_mask] > 0.0).astype(np.uint8)
         samples['seed_t']['jab_x0'][:, slot] = post_jab_x0[:-1]
-        samples['seed_t']['jab_rapid_count'][:, slot] = _derive_jab_rapid_count_seed_lane(action_id_u16=post_state, buttons_released_u16=np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1])) & ~pre_buttons_physical, buttons_pressed_u16=pre_buttons_physical & ~np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1])), button_mask_a=button_mask_a)[:-1]
+        buttons_released_physical = np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1])) & ~pre_buttons_physical
+        buttons_pressed_physical = pre_buttons_physical & ~np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1]))
+        samples['seed_t']['jab_rapid_count'][:, slot] = _derive_jab_rapid_count_seed_lane(action_id_u16=post_state, hitlag_u8=post_hitlag, buttons_released_u16=buttons_released_physical, buttons_pressed_u16=buttons_pressed_physical, button_mask_a=button_mask_a)[:-1]
+        attack100_x0, attack100_x4 = _derive_attack100_seed_latches(char_id_u8=post_char, action_id_u16=post_state, action_frame_i16=post_state_age, hitlag_u8=post_hitlag, buttons_released_u16=buttons_released_physical, buttons_pressed_u16=buttons_pressed_physical, button_mask_a=button_mask_a)
+        samples['seed_t']['attack100_x0'][:, slot] = attack100_x0[:-1]
+        samples['seed_t']['attack100_x4'][:, slot] = attack100_x4[:-1]
         port0 = int(src_ports[slot]) - 1
         match_flow_timer = _derive_match_flow_timer(action_id_u16=post_state, port0=port0, common=common)
         match_flow_timer_u8_all[:, slot] = match_flow_timer
@@ -717,6 +727,9 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         frame_max = frame_max_lut[post_char]
         import msl_binding
         main_x_proc, main_y_proc, c_x_proc, c_y_proc, stick_x, stick_y, cstick_y, trigger_unit, buttons_pressed, lr_press_timer, lightshield_amount, guard_setoff_hitlag_exit_phase = msl_binding.validation_derive_guard_input_prefix(samples.seed_u8(), int(slot), pre_buttons_physical, pre_main_x, pre_main_y, pre_c_x, pre_c_y, pre_l, pre_r, post_char, post_state, post_state_age, post_dir, post_shield, post_hitlag, state_flags, neutral_frame, frame_max, int(ucf_enabled), int(ucf_cardinals_1_0_enabled), float(lstick_deadzone_x), float(lstick_deadzone_y), float(guard_stick_lerp_x44c), int(button_mask_lr), int(button_mask_z), float(common['trigger_deadzone']), int(common['guard_x10_init_frames']), int(act_guard_on), int(act_guard), int(act_guard_off), int(act_guard_reflect), int(act_guard_set_off), int(common['guard_special_enable_frames']), float(common['hitlag_dmg_mul']), float(common['hitlag_base']), int(common['powershield_reflect_frames']), int(common['powershield_reflect_total_frames']))
+        walljump_used_count, passivewall_vel_y_exponent = _derive_walljump_used_seed_lanes(char_id_u8=post_char, action_id_u16=post_state, action_frame_i16=post_state_age, on_ground_u8=post_on_ground, jumps_left_u8=post_jumps, max_jumps_lut_u8=max_jumps_lut, buttons_pressed_u16=buttons_pressed, stick_y_f32=stick_y, button_mask_xy=button_mask_xy, tap_jump_threshold=tap_jump_threshold)
+        samples['seed_t']['walljump_used_count'][:, slot] = walljump_used_count[:-1]
+        samples['seed_t']['passivewall_vel_y_exponent'][:, slot] = passivewall_vel_y_exponent[:-1]
         lightshield_amount_all[:, slot] = lightshield_amount
         frame_speed_mul = derive_frame_speed_mul_f32(state_age_f32=post_state_age_f32, action_id=post_state, hitlag=post_hitlag, char_id=post_char, animation_index=animation_index, lr_press_timer=lr_press_timer, shield_hp=post_shield, lightshield_amount=lightshield_amount, common_shield_hit_damage_mul=float(common['shield_hit_damage_mul']), common_shield_hit_damage_base=float(common['shield_hit_damage_base']), common_shield_hit_lightshield_min=float(common['shield_hit_lightshield_min']), common_shield_hit_lightshield_max=float(common['shield_hit_lightshield_max']), common_shield_stun_mul=float(common['shield_stun_mul']), common_shield_stun_base=float(common['shield_stun_base']), common_shield_stun_lightshield_min=float(common['shield_stun_lightshield_min']), common_shield_stun_lightshield_max=float(common['shield_stun_lightshield_max']), end_frames=end_frames, common_lcancel_window_frames=lcancel_window_frames, common_lcancel_lag_div=lcancel_lag_div, common_landing_fall_special_lag_frames=landing_fall_special_lag_frames, char_landing_air_lag_frames=char_landing_air_lag_frames, char_fallspecial_origin_lag=char_fallspecial_origin_lag)
         frame_speed_mul_all[:, slot] = frame_speed_mul
@@ -758,11 +771,11 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         shine_release_lag, shine_is_release = derive_shine_release_state(action_id_u16=post_state, action_frame_i16=post_state_age, buttons_held_u16=pre_buttons_physical, hitlag_u16=post_hitlag, release_lag_init_u8=reflector_release_lag_lut[post_char], button_mask_b=button_mask_b)
         samples['seed_t']['shine_release_lag'][:, slot] = shine_release_lag[:-1]
         samples['seed_t']['shine_is_release'][:, slot] = shine_is_release[:-1]
-        ecb_lock_timer = derive_ecb_lock_timer(on_ground_u8=post_on_ground, action_id_u16=post_state, lock_frames_ground_to_air=10)
+        ecb_lock_timer, ecb_lock_owner = derive_ecb_lock_state(on_ground_u8=post_on_ground, action_id_u16=post_state, char_id_u8=post_char, action_frame_i16=post_state_age, lock_frames_ground_to_air=10)
         samples['seed_t']['ecb_lock_timer'][:, slot] = ecb_lock_timer[:-1]
-        ecb_lock_bottom_rel_y, ecb_lock_bottom_rel_y_valid = derive_ecb_lock_bottom_rel_y(char_id_u8=post_char, action_id_u16=post_state, animation_index_u32=animation_index, anim_frame_f32=post_anim_frame_f32, on_ground_u8=post_on_ground, ecb_lock_timer_u8=ecb_lock_timer, act_jump_aerial_f=act_jump_aerial_f, act_jump_aerial_b=act_jump_aerial_b)
+        ecb_lock_bottom_rel_y, ecb_lock_bottom_owner = derive_ecb_lock_bottom_rel_y(char_id_u8=post_char, action_id_u16=post_state, animation_index_u32=animation_index, anim_frame_f32=post_anim_frame_f32, on_ground_u8=post_on_ground, ecb_lock_timer_u8=ecb_lock_timer, ecb_lock_owner_u8=ecb_lock_owner, act_jump_aerial_f=act_jump_aerial_f, act_jump_aerial_b=act_jump_aerial_b)
         samples['seed_t']['ecb_lock_bottom_rel_y_f32'][:, slot] = ecb_lock_bottom_rel_y[:-1]
-        samples['seed_t']['ecb_lock_bottom_rel_y_valid_u8'][:, slot] = ecb_lock_bottom_rel_y_valid[:-1]
+        samples['seed_t']['ecb_lock_bottom_owner_u8'][:, slot] = ecb_lock_bottom_owner[:-1]
         damage_hitlag_ecb_bottom, damage_hitlag_ecb_top, damage_hitlag_ecb_left, damage_hitlag_ecb_right, damage_hitlag_ecb_side, damage_hitlag_ecb_valid = derive_damage_hitlag_colldata_ecb(char_id_u8=post_char, action_id_u16=post_state, animation_index_u32=animation_index, anim_frame_f32=post_anim_frame_f32, frame_speed_mul_f32=frame_speed_mul, facing_u8=post_dir, on_ground_u8=post_on_ground, hitlag_u16=post_hitlag)
         samples['seed_t']['damage_hitlag_ecb_bottom_rel_y_f32'][:, slot] = damage_hitlag_ecb_bottom[:-1]
         samples['seed_t']['damage_hitlag_ecb_top_rel_y_f32'][:, slot] = damage_hitlag_ecb_top[:-1]
@@ -1085,7 +1098,15 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         post_guard_tilt_x8[-1, :] = post_guard_tilt_x8[-2, :]
         post_guard_tilt_x4[:-1, :] = samples['seed_t']['guard_tilt_x4'][:, :]
         post_guard_tilt_x4[-1, :] = post_guard_tilt_x4[-2, :]
-    hitlist_cd, hitlist_iid, hitlist_hb_valid, hitlist_hb_cd, hitlist_hb_iid, shield_contact_hb_kind = derive_combat_hitlist_seed_fields(num_players=num_players, is_teams=bool(is_teams), team_id=post_team_id, char_id=post_char_id, action_id=post_action_id, action_frame=post_action_frame, animation_index=post_animation_index, facing=post_facing, on_ground=post_on_ground, pos_x=post_pos_x, pos_y=post_pos_y, fighter_scale_y=post_scale_y, guard_tilt_x8=post_guard_tilt_x8, guard_tilt_x4=post_guard_tilt_x4, stocks=post_stocks, percent=post_percent_all, shield_hp=post_shield_hp, hurtbox_state=post_hurtbox_state, hitlag=post_hitlag, last_hit_by=post_last_hit_by, source_port0=post_source_port0, instance_hit_by=post_instance_hit_by, instance_id=post_instance_id, input_buttons=pre_buttons, input_l=pre_l, input_r=pre_r, turn_has_turned=post_turn_has_turned_u8, anim_frame_f32=post_anim_frame, frame_speed_mul_f32=frame_speed_mul_all, specialhi_rotate_model_f32=specialhi_rotate_model_all, specialhi_rotate_model_valid_u8=specialhi_rotate_model_valid_all, include_per_hitbox=True, include_replay_only_shield_admission=True, include_replay_only_body_admission=True, data_root='data')
+    hitlist_cd, hitlist_iid, hitlist_hb_valid, hitlist_hb_cd, hitlist_hb_iid, shield_contact_hb_kind, processhit_x1914 = derive_combat_hitlist_seed_fields(num_players=num_players, is_teams=bool(is_teams), team_id=post_team_id, char_id=post_char_id, action_id=post_action_id, action_frame=post_action_frame, animation_index=post_animation_index, facing=post_facing, on_ground=post_on_ground, pos_x=post_pos_x, pos_y=post_pos_y, fighter_scale_y=post_scale_y, guard_tilt_x8=post_guard_tilt_x8, guard_tilt_x4=post_guard_tilt_x4, stocks=post_stocks, percent=post_percent_all, shield_hp=post_shield_hp, hurtbox_state=post_hurtbox_state, hitlag=post_hitlag, last_hit_by=post_last_hit_by, source_port0=post_source_port0, instance_hit_by=post_instance_hit_by, instance_id=post_instance_id, input_buttons=pre_buttons, input_l=pre_l, input_r=pre_r, turn_has_turned=post_turn_has_turned_u8, anim_frame_f32=post_anim_frame, frame_speed_mul_f32=frame_speed_mul_all, specialhi_rotate_model_f32=specialhi_rotate_model_all, specialhi_rotate_model_valid_u8=specialhi_rotate_model_valid_all, items=items_fixed, include_per_hitbox=True, include_processhit_producers=True, include_replay_only_shield_admission=True, include_replay_only_body_admission=True, data_root='data')
+    if falcon_attrs is not None:
+        # ftCa_MS_SpecialLw (357) installs deal_dmg_cb; ftCa_MS_SpecialLwEnd (358) keeps and
+        # consumes the same move union. The native combat-history pass above reconstructs the
+        # source-owned dmg.x1914 producers before ProcessHit priority is applied.
+        # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::{
+        #   ftCa_SpecialLw_Enter,ftCa_SpecialLw_Anim,ftCa_SpecialLwEnd_Phys}
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        msl_binding.validation_derive_falcon_speciallw_seed_lanes(samples.seed_u8(), np.ascontiguousarray(processhit_x1914, dtype=np.uint8), int(num_players), falcon_char_id, 357, 358, int(falcon_attrs['falcon_speciallw_unk2']), float(falcon_attrs['falcon_speciallw_on_hit_spd_modifier']))
     try:
         import msl_binding
     except ImportError as exc:

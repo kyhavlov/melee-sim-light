@@ -18,6 +18,7 @@
 #include "common_params.h"
 #include "damage_terminal_owner.h"
 #include "damage_source.h"
+#include "falcon_specials.h"
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"

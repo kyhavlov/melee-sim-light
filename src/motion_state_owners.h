@@ -75,6 +75,13 @@ enum {
   MSL_MS_CLASS2_LANDING_ROOT_FLOOR_SNAP = 1u << 12,
   MSL_MS_CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST = 1u << 13,
   MSL_MS_CLASS2_CLIFF_HOLD_PHYS_SNAP = 1u << 14,
+  // Collision callbacks that pass CLIFFCATCH_BOTH (0) to ft_CheckGroundAndLedge.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
+  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doAirColl
+  MSL_MS_CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL = 1u << 15,
+  MSL_MS_CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL = 1u << 16,
+  MSL_MS_CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL = 1u << 17,
 };
 
 enum {
@@ -83,6 +90,13 @@ enum {
   MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL = 1u << 2,
   MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL = 1u << 3,
   MSL_MS_CLASS3_PHASE4_DAMAGE_FALL_COLL = 1u << 4,
+  MSL_MS_CLASS3_ORDINARY_WALLJUMP_COLL = 1u << 5,
+  MSL_MS_CLASS3_WALLTECH_COLL = 1u << 6,
+  MSL_MS_CLASS3_CATCH_TARGET_MASK_1 = 1u << 7,
+  MSL_MS_CLASS3_CATCH_TARGET_MASK_511 = 1u << 8,
+  MSL_MS_CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED = 1u << 9,
+  MSL_MS_CLASS3_CATCH_KIND_1 = 1u << 10,
+  MSL_MS_CLASS3_CATCH_KIND_2 = 1u << 11,
 };
 
 uint16_t msl_motion_state_submotion_id(uint8_t char_id, uint16_t action_id);
@@ -101,7 +115,7 @@ uint8_t msl_motion_state_class2_has(uint8_t char_id, uint16_t action_id, uint32_
 uint8_t msl_motion_state_cliff_hold_phys_snap(uint8_t char_id, uint16_t action_id);
 uint32_t msl_motion_state_class3_bits(uint8_t char_id, uint16_t action_id);
 
-// fx_special_kind (MSLMSO01 v20): per-(char, action) identity of the Fox/Falco bespoke
+// fx_special_kind (MSLMSO01 v18): per-(char, action) identity of the Fox/Falco bespoke
 // special MotionState rows, generated 1:1 from each row's ANIM callback symbol by
 // tools/extraction/extract_motion_state_owners.py (FX_SPECIAL_KIND_BY_ANIM_CB). This is
 // the migration target for `msl_char_id_is_spacie(c) && action_id == MSL_ACT_FX_*`

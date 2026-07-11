@@ -44,7 +44,7 @@ required_data=(
   "$DATA_DIR/staling/weights.bin"
 )
 
-viewer_chars=(fox falco marth sheik zelda falcon puff)
+viewer_chars=(fox falco marth falcon sheik zelda puff)
 for char in "${viewer_chars[@]}"; do
   required_data+=(
     "$DATA_DIR/characters/$char.json"

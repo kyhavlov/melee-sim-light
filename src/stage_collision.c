@@ -14,6 +14,7 @@
 #include "mpcoll_env.h"
 #include "mpcoll_ground.h"
 #include "mpcoll_wall_ceil.h"
+#include "msl_math.h"
 #include "stage_item_params.h"
 
 typedef struct {
@@ -2249,11 +2250,7 @@ static inline void stage_collision_floor_surface_normal(float x0, float y0, floa
                                                         float* nx_out, float* ny_out) {
   float nx = -(y1 - y0);
   float ny = x1 - x0;
-  const float len = sqrtf(nx * nx + ny * ny);
-  if (len > 0.0f) {
-    nx /= len;
-    ny /= len;
-  } else {
+  if (!msl_psvec2_normalize(nx, ny, &nx, &ny)) {
     nx = 0.0f;
     ny = 1.0f;
   }
@@ -2851,11 +2848,10 @@ static inline void stage_static_normal(float x0, float y0, float x1, float y1, f
                                        float* ny_out) {
   float nx = -(y1 - y0);
   float ny = x1 - x0;
-  const float len = sqrtf((nx * nx) + (ny * ny));
-  if (len > 0.0f) {
-    nx /= len;
-    ny /= len;
-  }
+  // mpLineGetNormal constructs this perpendicular and normalizes it with PSVECNormalize.
+  // refs/melee/src/melee/mp/mplib.c::mpLineGetNormal
+  // refs/melee/build/GALE01/asm/dolphin/mtx/vec.s::PSVECNormalize
+  (void)msl_psvec2_normalize(nx, ny, &nx, &ny);
   *nx_out = nx;
   *ny_out = ny;
 }
@@ -2939,7 +2935,14 @@ uint8_t stage_collision_static_query(uint32_t stage_id, uint32_t checks, float x
         continue;
       }
       float nx = 0.0f, ny = 0.0f;
-      stage_static_normal(lx0, ly0, lx1, ly1, &nx, &ny);
+      if (fabsf(ly0 - ly1) > 0.0001f) {
+        stage_static_normal(lx0, ly0, lx1, ly1, &nx, &ny);
+      } else {
+        // mpCheckFloor's horizontal branch publishes the literal normal without PSVECNormalize.
+        // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
+        nx = 0.0f;
+        ny = 1.0f;
+      }
       (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_FLOOR, (int32_t)i,
                                       line->segment_i, line->joint_id, line->lo_flags, nx, ny,
                                       &best_dist2, out);
@@ -2968,7 +2971,13 @@ uint8_t stage_collision_static_query(uint32_t stage_id, uint32_t checks, float x
         continue;
       }
       float nx = 0.0f, ny = 0.0f;
-      stage_static_normal(lx0, ly0, lx1, ly1, &nx, &ny);
+      if (fabsf(ly0 - ly1) > 0.0001f) {
+        stage_static_normal(lx0, ly0, lx1, ly1, &nx, &ny);
+      } else {
+        // refs/melee/src/melee/mp/mplib.c::mpCheckCeiling
+        nx = 0.0f;
+        ny = -1.0f;
+      }
       (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_CEILING, (int32_t)i,
                                       line->segment_i, line->joint_id, line->lo_flags, nx, ny,
                                       &best_dist2, out);
@@ -2995,7 +3004,13 @@ uint8_t stage_collision_static_query(uint32_t stage_id, uint32_t checks, float x
         continue;
       }
       float nx = 0.0f, ny = 0.0f;
-      stage_static_normal(line->x0, line->y0, line->x1, line->y1, &nx, &ny);
+      if (fabsf(line->x0 - line->x1) > 0.0001f) {
+        stage_static_normal(line->x0, line->y0, line->x1, line->y1, &nx, &ny);
+      } else {
+        // refs/melee/src/melee/mp/mplib.c::mpCheckLeftWall
+        nx = -1.0f;
+        ny = 0.0f;
+      }
       (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_LEFT_WALL, (int32_t)i,
                                       line->segment_i, line->joint_id, line->lo_flags, nx, ny,
                                       &best_dist2, out);
@@ -3022,7 +3037,13 @@ uint8_t stage_collision_static_query(uint32_t stage_id, uint32_t checks, float x
         continue;
       }
       float nx = 0.0f, ny = 0.0f;
-      stage_static_normal(line->x0, line->y0, line->x1, line->y1, &nx, &ny);
+      if (fabsf(line->x0 - line->x1) > 0.0001f) {
+        stage_static_normal(line->x0, line->y0, line->x1, line->y1, &nx, &ny);
+      } else {
+        // refs/melee/src/melee/mp/mplib.c::mpCheckRightWall
+        nx = 1.0f;
+        ny = 0.0f;
+      }
       (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_RIGHT_WALL, (int32_t)i,
                                       line->segment_i, line->joint_id, line->lo_flags, nx, ny,
                                       &best_dist2, out);

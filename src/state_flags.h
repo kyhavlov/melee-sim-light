@@ -39,6 +39,7 @@ enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
 enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
 enum { MSL_STATE_FLAG_221B_B1 = 0x40 };
 enum { MSL_STATE_FLAG_221B_B5 = 0x04 };
+enum { MSL_STATE_FLAG_221B_B7 = 0x01 };
 
 // fp+0x221C.
 // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm

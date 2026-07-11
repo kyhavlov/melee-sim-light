@@ -204,6 +204,12 @@ typedef struct MslStateSoA {
   uint8_t* coll_floor_result_valid;
   uint8_t* coll_floor_result_source;
   uint8_t* coll_floor_result_mode;
+  // Runtime-only proof that the current map callback took mpColl_8004A678_Floor's edge-release
+  // branch. The wrapper consumes its floor result before locomotion resolves Ottotto, so carry this
+  // one callback result explicitly instead of reconstructing it from replay/history state.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004A678_Floor,mpColl_8004B4B0}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+  uint8_t* coll_a678_edge_runtime;
   uint16_t* coll_floor_result_segment_id;
   float* coll_floor_result_contact_x;
   float* coll_floor_result_contact_y;
@@ -466,8 +472,13 @@ typedef struct MslStateSoA {
   // - attached_victim_port is the owner-side `fp->victim_gobj` analog for the currently attached
   //   grabbed/thrown victim (0xFF = none).
   // - grab_offset_{y,z} store the decomp-shaped fp->x1A70.{y,z} (unscaled) inferred at reseed-time.
-  uint8_t* attached_victim_port;   // [batch * players]
-  uint8_t* grab_owner_port;        // [batch * players]
+  uint8_t* attached_victim_port;  // [batch * players]
+  uint8_t* grab_owner_port;       // [batch * players]
+  // ftColl catch contract: attacker descriptor kind (fp->x1A68) and victim rejection mask
+  // (fp->x1A6A). The latter also protects active carriers from third-party catches in doubles.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+  uint16_t* catch_kind_x1a68;
+  uint16_t* catch_target_mask_x1a6a;
   int8_t* grab_mash_stick_x_sign;  // [batch * players] fp->x1A50
   int8_t* grab_mash_stick_y_sign;  // [batch * players] fp->x1A51
   float* grab_offset_y;            // [batch * players]
@@ -554,6 +565,12 @@ typedef struct MslStateSoA {
   // on timer expiry by re-entering PassiveWallJump through Fighter_ChangeMotionState.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_PassiveWall_IASA,inlineA0}
   uint8_t* passivewall_jump_latch;
+  // Consecutive ordinary walljump count (`fp->x1969_walljumpUsed`) and the pre-increment count
+  // copied into the active PassiveWall episode (`fp->mv.co.passivewall.vel_y_exponent`).
+  // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+  uint8_t* walljump_used_count;
+  uint8_t* passivewall_vel_y_exponent;
   // Generic wall-jump hidden input phase (`fp->wall_jump_input_timer`, `fp->x2110_walljumpWallSide`).
   // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
   uint8_t* walljump_input_timer;
@@ -905,7 +922,11 @@ typedef struct MslStateSoA {
   float* falcon_speciallw_friction;
   uint8_t* falcon_speciallw_dealt_x1914_frame;
   // Falcon Dive: mv.ca.specialhi.vel carried velocity + attacker x221B_b7 attach-mode flag.
+  // grab_constraint_x2226_b2 mirrors the constrained fighter's fp->x2226_b2 bit installed by
+  // ftCo_800DB368. Exactly one side of a live Dive hold owns it: Falcon for a grounded victim,
+  // CaptureCaptain for an airborne victim.
   // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
   float* falcon_specialhi_vel_x;
   float* falcon_specialhi_vel_y;
   uint8_t* falcon_specialhi_x221b_b7;
@@ -921,6 +942,7 @@ typedef struct MslStateSoA {
   float* puff_rollout_pre_turn_vel;
   int8_t* puff_rollout_dir;
   int8_t* puff_rollout_facing_restore;
+  uint8_t* grab_constraint_x2226_b2;
   // Raptor Boost: mv.ca.specials.grav accumulator + fp->unk_gobj inert-contact detect flag.
   float* falcon_specials_grav;
   uint8_t* falcon_detect_pending;
