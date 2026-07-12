@@ -72,8 +72,8 @@ def _tracks_end_frame(path: Path, msid: int) -> float:
     raise KeyError(f"msid {msid} not found in {path}")
 
 
-def _attackair_allow_interrupt_frame(move_key: str) -> int:
-    d = json.loads(Path("data/moves/fox.json").read_text())
+def _attackair_allow_interrupt_frame(move_key: str, char: str = "fox") -> int:
+    d = json.loads(Path(f"data/moves/{char}.json").read_text())
     events = d["moves"][move_key]["events"]
     for e in events:
         if e["kind"] == "allow_interrupt":
@@ -336,6 +336,59 @@ def test_attackair_iasa_can_enter_fresh_attackair_before_double_jump() -> None:
     assert int(out["animation_index"][0]) == SM_ATTACK_AIR_B
     assert int(out["action_frame"][0]) == 1
     assert int(out["jumps_left"][0]) == 2
+
+
+def test_attackair_iasa_double_jump_carries_allow_interrupt_flag() -> None:
+    # AttackAir -> JumpAerial command-bit carry (fp+0x2218 bit0 / Slippi state_flags[0]&0x80):
+    # the outgoing AttackAir script fires allow_interrupt on the IASA-exit row and no jump entry
+    # clears the bit, so the double-jump destination publishes it post-frame.
+    # Witness: puff AttackAirF@34 -> ftPr JumpAerialF2 (Game_20250705T002244 rec 9243), confirmed
+    # by a Dolphin PC-trace on ftAction_80071950 attributing the sole op-23 execution of the
+    # window to the transitioning fighter with the script cursor inside AttackAirF's subaction.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    # Fox nair IASA -> JumpAerialF carries the bit.
+    iasa_frame = _attackair_allow_interrupt_frame("ftCo_SM_AttackAirN")
+    seed = _seed_air_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_N)
+    seed["action_frame"][0, 0] = np.int16(iasa_frame - 1)
+    seed["anim_frame_f32"][0, 0] = np.float32(iasa_frame - 1)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_AIR_N)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_JUMP_AERIAL_F
+    assert int(out["state_flags"][0, 0] & np.uint8(0x80)) != 0
+
+    # Puff fair IASA -> multijump (ftPr JumpAerialF1..F5, actions 341..345) carries the bit.
+    iasa_frame = _attackair_allow_interrupt_frame("ftCo_SM_AttackAirF", char="puff")
+    seed = _seed_air_base()
+    seed["char_id"][0, :2] = np.uint8(15)  # puff
+    seed["action_id"][0, 0] = np.uint16(0x0042)  # ftCo_MS_AttackAirF
+    seed["action_frame"][0, 0] = np.int16(iasa_frame - 1)
+    seed["anim_frame_f32"][0, 0] = np.float32(iasa_frame - 1)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(69)  # ftCo_SM_AttackAirF
+    seed["jumps_left"][0, 0] = np.uint8(5)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert 341 <= int(out["action_id"][0]) <= 345
+    assert int(out["state_flags"][0, 0] & np.uint8(0x80)) != 0
 
 
 def test_attackairb_allow_interrupt_probe_clamps_at_entry_frame() -> None:

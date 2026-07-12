@@ -100,13 +100,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == replays/validation/sheik/GlaringRosyAlpaca.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1487
-rollout.streak_count: 24
-rollout.streak_len.median: 335
+rollout.streak_count: 23
+rollout.streak_len.median: 339
 rollout.streak_len.p90: 640
 rollout.streak_len.p95: 650
 rollout.streak_len.max: 1487
-rollout.first_mismatch_total: 24
-rollout.first_mismatch_seeded_total: 12
+rollout.first_mismatch_total: 23
+rollout.first_mismatch_seeded_total: 11
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=132.896 rec=3639 p=0 seed/ref/out=11.2125/6.1412/139.037 actions=7/7/7 category=unclassified
@@ -309,13 +309,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 == replays/validation/sheik/UnusedLivelyLouse.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 880
-rollout.streak_count: 20
-rollout.streak_len.median: 195
-rollout.streak_len.p90: 596
-rollout.streak_len.p95: 722
+rollout.streak_count: 19
+rollout.streak_len.median: 326
+rollout.streak_len.p90: 722
+rollout.streak_len.p95: 880
 rollout.streak_len.max: 880
-rollout.first_mismatch_total: 19
-rollout.first_mismatch_seeded_total: 6
+rollout.first_mismatch_total: 18
+rollout.first_mismatch_seeded_total: 5
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=21.811 rec=5557 p=1 seed/ref/out=81.6101/81.6027/103.414 actions=90/90/90 category=unclassified
@@ -430,14 +430,14 @@ rollout.float_top_errors:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:54
 
 == suite summary ==
-overall.rollout.streak_count: 462
-overall.rollout.streak_len.median: 264
+overall.rollout.streak_count: 460
+overall.rollout.streak_len.median: 268
 overall.rollout.streak_len.p90: 934
 overall.rollout.streak_len.p95: 1216
 overall.rollout.streak_len.max: 3169
 overall.rollout.best_len.max: 3169
-overall.rollout.first_mismatch_total: 468
-overall.rollout.first_mismatch_seeded_total: 260
+overall.rollout.first_mismatch_total: 466
+overall.rollout.first_mismatch_seeded_total: 258
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=132.896 rec=3639 p=0 seed/ref/out=11.2125/6.1412/139.037 actions=7/7/7 category=unclassified

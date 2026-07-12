@@ -609,13 +609,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:231
 == replays/validation/marth/FemaleWorthyAlpaca.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 995
-rollout.streak_count: 33
-rollout.streak_len.median: 178
+rollout.streak_count: 32
+rollout.streak_len.median: 154
 rollout.streak_len.p90: 595
 rollout.streak_len.p95: 780
 rollout.streak_len.max: 995
-rollout.first_mismatch_total: 34
-rollout.first_mismatch_seeded_total: 17
+rollout.first_mismatch_total: 33
+rollout.first_mismatch_seeded_total: 16
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=11.3508 rec=3330 p=1 seed/ref/out=54.1063/54.0113/42.6605 actions=35/0/0 category=unclassified
@@ -1011,13 +1011,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == replays/validation/sheik/GlaringRosyAlpaca.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1487
-rollout.streak_count: 24
-rollout.streak_len.median: 335
+rollout.streak_count: 23
+rollout.streak_len.median: 339
 rollout.streak_len.p90: 640
 rollout.streak_len.p95: 650
 rollout.streak_len.max: 1487
-rollout.first_mismatch_total: 24
-rollout.first_mismatch_seeded_total: 12
+rollout.first_mismatch_total: 23
+rollout.first_mismatch_seeded_total: 11
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=132.896 rec=3639 p=0 seed/ref/out=11.2125/6.1412/139.037 actions=7/7/7 category=unclassified
@@ -1220,13 +1220,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 == replays/validation/sheik/UnusedLivelyLouse.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 880
-rollout.streak_count: 20
-rollout.streak_len.median: 195
-rollout.streak_len.p90: 596
-rollout.streak_len.p95: 722
+rollout.streak_count: 19
+rollout.streak_len.median: 326
+rollout.streak_len.p90: 722
+rollout.streak_len.p95: 880
 rollout.streak_len.max: 880
-rollout.first_mismatch_total: 19
-rollout.first_mismatch_seeded_total: 6
+rollout.first_mismatch_total: 18
+rollout.first_mismatch_seeded_total: 5
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=21.811 rec=5557 p=1 seed/ref/out=81.6101/81.6027/103.414 actions=90/90/90 category=unclassified
@@ -1414,14 +1414,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:522
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == suite summary ==
-overall.rollout.streak_count: 1086
-overall.rollout.streak_len.median: 269
+overall.rollout.streak_count: 1083
+overall.rollout.streak_len.median: 270
 overall.rollout.streak_len.p90: 1134
 overall.rollout.streak_len.p95: 1666
 overall.rollout.streak_len.max: 12475
 overall.rollout.best_len.max: 12475
-overall.rollout.first_mismatch_total: 1057
-overall.rollout.first_mismatch_seeded_total: 499
+overall.rollout.first_mismatch_total: 1054
+overall.rollout.first_mismatch_seeded_total: 496
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=159.875 rec=5010 p=1 seed/ref/out=-7.05318/-5.65008/-165.525 actions=7/7/7 category=unclassified

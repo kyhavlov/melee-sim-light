@@ -206,7 +206,7 @@ mismatch.instance_id: 13 / 12400 (0.001048)
 mismatch.last_attack_landed: 3 / 12400 (0.000242)
 mismatch.combo_count: 2 / 12400 (0.000161)
 mismatch.last_hit_by: 6 / 12400 (0.000484)
-mismatch.state_flags: 12 / 62000 (0.000194)
+mismatch.state_flags: 11 / 62000 (0.000177)
 mismatch.item_exists: 0 / 93000 (0.000000)
 mismatch.item_type: 0 / 93000 (0.000000)
 mismatch.item_state: 1 / 93000 (0.000011)
@@ -226,8 +226,8 @@ err.item_pos_x: mae=0.000005 p95=0.000000 max=0.005753
 err.item_pos_y: mae=0.009944 p95=0.099998 max=1.500001
 err.item_vel_x: mae=0.001623 p95=0.000000 max=1.000000
 err.item_vel_y: mae=0.009529 p95=0.100000 max=2.120000
-overall.discrete_mismatch: 107 / 750200
-overall.strict_discrete_mismatch: 162 / 750200
+overall.discrete_mismatch: 106 / 750200
+overall.strict_discrete_mismatch: 161 / 750200
 overall.ignored_discrete_mismatch: 55
 overall.float_norm_mae_p95: 0.00045509
 
@@ -296,7 +296,7 @@ mismatch.instance_id: 5 / 18028 (0.000277)
 mismatch.last_attack_landed: 2 / 18028 (0.000111)
 mismatch.combo_count: 2 / 18028 (0.000111)
 mismatch.last_hit_by: 2 / 18028 (0.000111)
-mismatch.state_flags: 11 / 90140 (0.000122)
+mismatch.state_flags: 10 / 90140 (0.000111)
 mismatch.item_exists: 1 / 135210 (0.000007)
 mismatch.item_type: 1 / 135210 (0.000007)
 mismatch.item_state: 3 / 135210 (0.000022)
@@ -316,8 +316,8 @@ err.item_pos_x: mae=0.034251 p95=0.000000 max=70.563423
 err.item_pos_y: mae=0.019781 p95=0.000000 max=27.116550
 err.item_vel_x: mae=0.001530 p95=0.000000 max=1.000000
 err.item_vel_y: mae=0.004044 p95=0.000000 max=2.600000
-overall.discrete_mismatch: 80 / 1090694
-overall.strict_discrete_mismatch: 117 / 1090694
+overall.discrete_mismatch: 79 / 1090694
+overall.strict_discrete_mismatch: 116 / 1090694
 overall.ignored_discrete_mismatch: 37
 overall.float_norm_mae_p95: 0.00011487
 
@@ -907,7 +907,7 @@ overall.ignored_discrete_mismatch: 5
 overall.float_norm_mae_p95: 30.64350316
 
 == suite summary ==
-overall.discrete_mismatch: 2994 / 22125334
-overall.strict_discrete_mismatch: 4120 / 22125334
+overall.discrete_mismatch: 2992 / 22125334
+overall.strict_discrete_mismatch: 4118 / 22125334
 overall.ignored_discrete_mismatch: 1126
 overall.float_norm_mae_p95: 1.39424751

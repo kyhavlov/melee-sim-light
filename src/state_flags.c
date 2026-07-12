@@ -16,6 +16,7 @@
 #include "marth_specials.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
+#include "puff_specials.h"
 #include "stage_collision.h"
 
 static inline uint8_t state_flags_2218_allow_interrupt_attackair_action(uint16_t action_id) {
@@ -876,19 +877,31 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
       }
       const uint16_t prev_action_2218 = batch->state.prev_action_id[idx];
-      if ((action_id == (uint16_t)MSL_ACT_LANDING || action_id == (uint16_t)MSL_ACT_FALL) &&
+      const uint8_t attackair_jump_exit_2218 =
+          (uint8_t)(action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                    action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
+                    puff_action_is_multijump(batch->state.char_id[idx], action_id));
+      if ((action_id == (uint16_t)MSL_ACT_LANDING || action_id == (uint16_t)MSL_ACT_FALL ||
+           attackair_jump_exit_2218 != 0u) &&
           action_id != prev_action_2218 && batch->state.prev_action_frame[idx] >= 0 &&
           state_flags_2218_allow_interrupt_attackair_action(prev_action_2218)) {
-        // AttackAir -> Landing/Fall command-bit carry:
+        // AttackAir -> Landing/Fall/JumpAerial command-bit carry:
         // AttackAir's script may set fp+0x2218_b0 before the same fighter proc leaves AttackAir.
-        // The Coll callback can enter Landing, while AttackAir_Anim can enter Fall when animation
-        // frames run out. Neither destination synthesizes this raw bit; publish the source script
-        // result for the interrupted AttackAir frame instead of stale replay seed history.
+        // The Coll callback can enter Landing, AttackAir_Anim can enter Fall when animation
+        // frames run out, and the post-IASA interrupt lane can enter JumpAerialF/B (or the puff
+        // multijump family) on a double-jump input. None of these destinations synthesizes or
+        // clears this raw bit (the full GALE01 store sweep over fp+0x2218 has no jump-entry
+        // writer); publish the source script result for the interrupted AttackAir frame instead
+        // of stale replay seed history. Witness: puff AttackAirF@34 -> ftPr JumpAerialF2, where a
+        // Dolphin PC-trace on ftAction_80071950 shows the fair script's allow_interrupt@35 firing
+        // on the exit row for the transitioning fighter (port-attributed, script cursor inside
+        // the PlPr.dat AttackAirF subaction).
         // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::{
-        //   ftCo_AttackAir_Anim,ftCo_AttackAir_Coll}
+        //   ftCo_AttackAir_Anim,ftCo_AttackAir_Coll,ftCo_AttackAir_EnterFromMsid}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
+        // refs/melee/build/GALE01/asm/melee/ft/*.s (stb/rlwimi sweep over 0x2218)
         // data/scripts/{fox,falco,sheik}.bin AttackAir* events allow_interrupt
         const float source_frame = (float)(batch->state.prev_action_frame[idx] + 1);
         if (move_tables_attackair_allow_interrupt(batch->state.char_id[idx], prev_action_2218,

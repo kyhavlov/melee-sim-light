@@ -34,13 +34,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:214
 == replays/validation/falcon/EmotionalNaturalLemur.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1427
-rollout.streak_count: 26
+rollout.streak_count: 24
 rollout.streak_len.median: 301
-rollout.streak_len.p90: 673
+rollout.streak_len.p90: 946
 rollout.streak_len.p95: 1341
 rollout.streak_len.max: 1427
-rollout.first_mismatch_total: 28
-rollout.first_mismatch_seeded_total: 17
+rollout.first_mismatch_total: 26
+rollout.first_mismatch_seeded_total: 15
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=15.2669 rec=5992 p=0 seed/ref/out=70.7253/70.1378/54.8709 actions=90/90/90 category=unclassified
@@ -315,13 +315,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:485
 == replays/validation/falcon/LegitimateTemptingPanther.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1430
-rollout.streak_count: 57
+rollout.streak_count: 56
 rollout.streak_len.median: 148
 rollout.streak_len.p90: 470
-rollout.streak_len.p95: 659
+rollout.streak_len.p95: 660
 rollout.streak_len.max: 1430
-rollout.first_mismatch_total: 83
-rollout.first_mismatch_seeded_total: 57
+rollout.first_mismatch_total: 82
+rollout.first_mismatch_seeded_total: 56
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=23.9605 rec=10281 p=0 seed/ref/out=25.5113/25.4072/1.44674 actions=69/69/69 category=unclassified
@@ -483,14 +483,14 @@ rollout.float_top_errors:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:45
 
 == suite summary ==
-overall.rollout.streak_count: 556
+overall.rollout.streak_count: 553
 overall.rollout.streak_len.median: 209
-overall.rollout.streak_len.p90: 771
+overall.rollout.streak_len.p90: 775
 overall.rollout.streak_len.p95: 1016
 overall.rollout.streak_len.max: 2710
 overall.rollout.best_len.max: 2710
-overall.rollout.first_mismatch_total: 590
-overall.rollout.first_mismatch_seeded_total: 348
+overall.rollout.first_mismatch_total: 587
+overall.rollout.first_mismatch_seeded_total: 345
 overall.rollout.approved_exception_total: 13
 overall.rollout.approved_exception_seeded_total: 13
 overall.rollout.status: NOT-CLEAN

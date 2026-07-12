@@ -739,3 +739,29 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   therefore still has no static setter; the remaining probe is a Dolphin write-watch on
   fp+0x2218 during the witness jump chain (Slippi Dolphin.app installed;
   tools/dolphin/dolphin_engine_dump.py supports probe patches).
+- 2026-07-12 (item 5 RESOLVED via Dolphin PC-trace; AttackAir->jump 0x2218_b0 carry landed):
+  **the "jump-chain flags[0]&0x80" family was a misread — seed action 66 is ftCo AttackAirF
+  (fair), and the family is aerial IASA-exit -> double jump.** With the newly provisioned refs
+  (refs/slippi-ssbm-asm confirms flags[0] = lbz 0x2218; the BUILT decomp asm confirms all
+  0x2218 stores are byte-width with op 23 the only 0x80 setter) and the mainline-based probe
+  Dolphin (~/Repos/slippi-dolphin build-engine-dump), a PC-trace on ftAction_80071950 over the
+  witness window (Game_20250705T002244, frames 9117-9124) found exactly ONE op-23 execution, on
+  the rise row, attributed to the transitioning puff (port/fp/pre-store-byte dumped by an
+  extended trace probe) with the script cursor at PlPr.dat offset 0x49C0 — inside AttackAirF's
+  subaction, at its allow_interrupt@35 event. Mechanism: the outgoing aerial's script fires
+  allow_interrupt on the IASA-exit row (transition-frame prev-script, same as the falcon jab
+  witness) and no jump entry clears fp+0x2218_b0, so the bit publishes from JumpAerialF/B and
+  the puff multijump family. Cross-suite censuses: rises 100% explained wherever script data
+  exists; false positives are exactly fresh-hitlag freezes and IASA-exits into attack states
+  whose doEnter clears the bit. Landed by widening the existing AttackAir -> Landing/Fall carry
+  in src/state_flags.c to MSL_ACT_JUMP_AERIAL_F/B + puff_action_is_multijump(341-345); lock in
+  tests/test_attackair.py (fox nair->JumpAerialF, puff fair->multijump). Puff census
+  state_flags[0] 55 -> 5 with no other field moved; the 3 stale-baseline rollout reds were
+  isolated via stash-rebuild-rerun as pre-existing (identical without the change). Residual 5
+  rows are script-data coverage (angled S3Hi/Lw + S4Hi/Lw submotions absent from the
+  data/moves want-list; falcon 347 / sheik 363 specials) — an extractor/data growth item.
+  Probe tooling notes for reuse: the repo helper's Dolphin.ini values are Ishiiruka-era —
+  CPUCore must be 4 (ARM64 JIT) on this machine and the null audio backend is named
+  "No Audio Output" in mainline; run nogui with `-p headless` (macOS defaults to a windowed
+  platform); Binaries/Contents/Resources/Sys must exist (symlink to Binaries/Sys) or boot
+  fails the Melee GameSettings check.
