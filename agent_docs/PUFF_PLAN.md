@@ -792,3 +792,16 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   local SRT of the arm chain, and the implementation plan are in the worklog (item 7 recon).
   This also plausibly covers the item-9 "laser-vs-roll hurtcap pose" family if rolls inherit
   the same guard-arm override.
+- 2026-07-12 (item 7 root cause FINAL, probe-proven): **the dair-vs-guard phantom capsule is a
+  ftDynamics-driven bone (fox bone 18 = tail), not the shield arm.** A new JObj-blend trace
+  probe (logs entries into the lb SRT copy/blend helpers) shows the only write to that bone's
+  jobj at the witness frame is lb_8000B6A4 from the guard x20-tree walk — and that helper
+  copies scale+translate ONLY; flags_b0 (set by ftdynamics.c) marks the bone's rotation as
+  owned by the spring-physics dynamics update. No figatree animates it (the sim's bake holds
+  the reference pose, y~7, where puff's dair clips it; the game's physics tail hangs low at
+  y~3.8 behind fox). Guard-arm/tilt/entry-pose hypotheses all disproven by direct pose
+  comparison. Owner: a ftDynamics model (extract ftData->x2C chains/params; implement the
+  decomp spring update driven by fighter motion; prefix-causal dynamics-state seed lanes —
+  in-memory-each-frame state, so modeling is sanctioned per the project rule). This class
+  plausibly also covers item 9 (laser-vs-roll hurtcap pose) and the puff census
+  instance_hit_by seedact=24/42 buckets. Full evidence + implementation plan in the worklog.
