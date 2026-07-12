@@ -765,3 +765,17 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   "No Audio Output" in mainline; run nogui with `-p headless` (macOS defaults to a windowed
   platform); Binaries/Contents/Resources/Sys must exist (symlink to Binaries/Sys) or boot
   fails the Melee GameSettings check.
+- 2026-07-12 (item 11, set-only same-row damage carry): **AttackAir/AttackHi3 ->
+  Damage* allow_interrupt carry landed after isolating why the broad version regressed.** The
+  broad extension of modeled_damage_entry_flag_owner introduced exactly one red row
+  (MetallicUniqueGrouse rec 3354: marth fair@30 -> DamageFlyRoll, stale 0x84 dropped to 0x04 by
+  the game and already correctly produced by the old code), while the true mechanism per the
+  witnesses is same-row-only: the outgoing attack's script crosses its allow_interrupt frame on
+  the hit row itself (puff bair@30, T=31 -> DamageAir3/DamageFlyHi keep 0x84; utilt witness
+  ditto). Decoded ftColl_CreateReflectHit/CreateAbsorbHit (the 8007B250-8007B2E4 stores) to
+  confirm being-hit never clears b0. Landed as a new set-only block (fires only on
+  at_frame(prev_af+1) && !at_frame(prev_af); never clears). Puff census state_flags[0] 5 -> 2;
+  doubles -2 / falcon -1 one-step plus rollout seeded gains, zero reds. Lock in
+  tests/test_attackair.py. Also this session: slippi-dolphin added as refs/ submodule (https
+  URL), probe commit bcea9cc7e6 in ~/Repos/slippi-dolphin; angled S3/S4 item closed as a
+  verified non-item (empty/goto stub scripts; marth/sheik never enter angled states).

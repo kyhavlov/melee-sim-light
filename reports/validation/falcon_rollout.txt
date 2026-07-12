@@ -337,13 +337,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == replays/validation/falcon/OddballCleanViper.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1016
-rollout.streak_count: 33
+rollout.streak_count: 32
 rollout.streak_len.median: 212
 rollout.streak_len.p90: 744
 rollout.streak_len.p95: 936
 rollout.streak_len.max: 1016
-rollout.first_mismatch_total: 32
-rollout.first_mismatch_seeded_total: 8
+rollout.first_mismatch_total: 31
+rollout.first_mismatch_seeded_total: 7
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=10.8109 rec=1971 p=0 seed/ref/out=-80.6232/-79.8287/-69.0178 actions=354/354/354 category=unclassified
@@ -483,14 +483,14 @@ rollout.float_top_errors:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:45
 
 == suite summary ==
-overall.rollout.streak_count: 553
+overall.rollout.streak_count: 552
 overall.rollout.streak_len.median: 209
 overall.rollout.streak_len.p90: 775
 overall.rollout.streak_len.p95: 1016
 overall.rollout.streak_len.max: 2710
 overall.rollout.best_len.max: 2710
-overall.rollout.first_mismatch_total: 587
-overall.rollout.first_mismatch_seeded_total: 345
+overall.rollout.first_mismatch_total: 586
+overall.rollout.first_mismatch_seeded_total: 344
 overall.rollout.approved_exception_total: 13
 overall.rollout.approved_exception_seeded_total: 13
 overall.rollout.status: NOT-CLEAN

@@ -1055,6 +1055,29 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
       }
       if (state_flags_is_damage_action(action_id) && action_id != prev_action &&
           batch->state.prev_action_frame[idx] >= 0 &&
+          (state_flags_2218_allow_interrupt_attackair_action(prev_action) ||
+           prev_action == (uint16_t)MSL_ACT_ATTACK_HI3)) {
+        // AttackAir/AttackHi3 -> Damage* same-row command carry (set-only): when the hit lands
+        // on exactly the row where the outgoing attack's script crosses its allow_interrupt
+        // frame, the victim's anim update fires the event before ProcessHit switches state and
+        // the damage entry publishes the fresh bit (puff AttackAirB@30 -> DamageAir3/DamageFlyHi,
+        // Game_20260318T101341 rec 3459/6456; AttackHi3 witness Game_20260612T031848 rec 9837).
+        // A bit that was already set on an EARLIER source frame does not survive the same
+        // transition (marth AttackAirF@30 -> DamageFlyRoll, MetallicUniqueGrouse rec 3354 drops
+        // 0x80), so this owner never sets from stale history and never force-clears.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        const float source_prev = (float)batch->state.prev_action_frame[idx];
+        const float source_next = source_prev + 1.0f;
+        if (state_flags_action_allow_interrupt_at_frame(batch->state.char_id[idx], prev_action,
+                                                        source_next) &&
+            !state_flags_action_allow_interrupt_at_frame(batch->state.char_id[idx], prev_action,
+                                                         source_prev)) {
+          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+        }
+      }
+      if (state_flags_is_damage_action(action_id) && action_id != prev_action &&
+          batch->state.prev_action_frame[idx] >= 0 &&
           (prev_action == (uint16_t)MSL_ACT_ATTACK_11 ||
            prev_action == (uint16_t)MSL_ACT_ATTACK_12)) {
         // ProcessHit can interrupt Attack11/12 after the current source frame's command script has

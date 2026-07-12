@@ -391,6 +391,47 @@ def test_attackair_iasa_double_jump_carries_allow_interrupt_flag() -> None:
     assert int(out["state_flags"][0, 0] & np.uint8(0x80)) != 0
 
 
+def test_attackair_damage_entry_same_row_allow_interrupt_carry() -> None:
+    # AttackAir -> Damage* same-row command carry (set-only): the hit lands on exactly the row
+    # where the outgoing aerial's script crosses its allow_interrupt frame, so the victim's
+    # damage-entry row publishes the fresh bit. Witness: puff AttackAirB@30 (allow_interrupt@31)
+    # -> DamageAir3 with flags[0] 0x04 -> 0x84 (Game_20260318T101341 rec 3459). A bit set on an
+    # EARLIER source frame does not survive the same transition (MetallicUniqueGrouse rec 3354),
+    # so this must stay set-only for the same-row crossing.
+    import msl_binding
+
+    from tests.replay_buffers_loader import load_replay_buffers
+
+    loaded = load_replay_buffers(
+        "replays/validation/puff/Game_20260318T101341.slpz", ports=[1, 2]
+    )
+    rec, p = 3459, 1
+    seed = loaded.rows.seed_t
+    ref = loaded.rows.ref_t1
+    assert int(seed["action_id"][rec, p]) == ACT_ATTACK_AIR_B
+    assert int(ref["state_flags"][rec, p, 0]) & 0x80
+
+    sizes = msl_binding.sizes()
+    handle = msl_binding.init(batch_size=1, num_players=loaded.num_players,
+                              ucf_enabled=1, ucf_cardinals_1_0_enabled=0)
+    try:
+        out = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+        msl_binding.reseed_seed(handle, loaded.buffers.seed_u8()[rec:rec + 1])
+        msl_binding.step_input(
+            handle,
+            loaded.buffers.prev_input_u8()[rec:rec + 1],
+            loaded.buffers.input_u8()[rec:rec + 1],
+        )
+        msl_binding.write_compare(handle, out)
+    finally:
+        msl_binding.destroy(handle)
+    from tools.eval.validation_dtypes import COMPARE_DTYPE
+
+    row = out.view(COMPARE_DTYPE).reshape(())
+    assert int(row["action_id"][p]) == int(ref["action_id"][rec, p])
+    assert int(row["state_flags"][p][0]) & 0x80
+
+
 def test_attackairb_allow_interrupt_probe_clamps_at_entry_frame() -> None:
     # Underflow guard lock for state_flags[0] allow_interrupt snapshot probe:
     # entry frame has anim_frame_f32==0.0, so probe must clamp (no negative-frame read).

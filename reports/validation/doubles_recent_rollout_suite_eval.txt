@@ -99,14 +99,14 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:11
 
 == replays/validation/doubles_recent/Game_20260704T005147.slpz ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 898
+rollout.best_len: 1042
 rollout.streak_count: 45
 rollout.streak_len.median: 73
 rollout.streak_len.p90: 334
 rollout.streak_len.p95: 654
-rollout.streak_len.max: 898
+rollout.streak_len.max: 1042
 rollout.first_mismatch_total: 46
-rollout.first_mismatch_seeded_total: 28
+rollout.first_mismatch_seeded_total: 27
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=53.0999 rec=6676 p=1 seed/ref/out=200.102/200.102/147.002 actions=7/7/7 category=unclassified
@@ -166,13 +166,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 == replays/validation/doubles_recent/Game_20260704T010509.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 805
-rollout.streak_count: 53
+rollout.streak_count: 52
 rollout.streak_len.median: 122
 rollout.streak_len.p90: 345
 rollout.streak_len.p95: 547
 rollout.streak_len.max: 805
-rollout.first_mismatch_total: 56
-rollout.first_mismatch_seeded_total: 30
+rollout.first_mismatch_total: 55
+rollout.first_mismatch_seeded_total: 29
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=47.3897 rec=5591 p=2 seed/ref/out=-47.3808/-49.5108/-2.1211 actions=86/86/86 category=unclassified
@@ -471,14 +471,14 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:338
 
 == suite summary ==
-overall.rollout.streak_count: 1164
+overall.rollout.streak_count: 1163
 overall.rollout.streak_len.median: 95
 overall.rollout.streak_len.p90: 396
 overall.rollout.streak_len.p95: 510
 overall.rollout.streak_len.max: 1214
 overall.rollout.best_len.max: 1214
-overall.rollout.first_mismatch_total: 1250
-overall.rollout.first_mismatch_seeded_total: 794
+overall.rollout.first_mismatch_total: 1249
+overall.rollout.first_mismatch_seeded_total: 792
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=75.1385 rec=3788 p=0 seed/ref/out=-64.0647/-64.728/-139.866 actions=29/29/29 category=unclassified
