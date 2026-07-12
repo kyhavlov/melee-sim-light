@@ -25,13 +25,15 @@ from tools.slippi.validation_buffer_common import (  # noqa: F401
     read_mslstg01_v7,
     stage_metadata_path_for_stage_id,
     yoshi_shyguy_metadata,
-    read_callback_manifest,
     read_mslmso01_v1,
     finalized_frame_indices,
     replay_path_for_peppi,
     read_mslftsc1_v1,
     team_attack_on_from_start,
     MSL_MS_CLASS_ATTACK_AIR,
+    MSL_MS_CLASS3_JUMP_COLL,
+    MSL_MS_CLASS3_FALL_COLL,
+    MSL_COLL_HANDLER_AIR_ESCAPE,
     FOD_SKIP_ECB_VERTICAL_UNIT,
     FOD_TRANSFORMED_PLATFORM_SKIP_LOOKUP_SLOP,
     FOD_FLOOR_X_END_CLAMP,
@@ -87,7 +89,7 @@ def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dic
     return list(_load_stage_segments_for_seed_cached(int(stage_id), _path_cache_key(data_root)))
 
 @functools.cache
-def _motion_state_owner_actions_by_char(data_root_text: str, *, class_bit: int=0, coll_callbacks: tuple[str, ...]=(), submotion_move_names: tuple[str, ...]=()) -> dict[int, frozenset[int]]:
+def _motion_state_owner_actions_by_char(data_root_text: str, *, class_bit: int=0, class3_bit: int=0, coll_handler_kind: int=-1, submotion_move_names: tuple[str, ...]=()) -> dict[int, frozenset[int]]:
     """Return PER-CHAR action-id sets from the generated MSLMSO01 owner rows.
 
     Replaces the old fox/falco INTERSECTION helper: the intersection was consumed
@@ -97,8 +99,6 @@ def _motion_state_owner_actions_by_char(data_root_text: str, *, class_bit: int=0
     instead of local replay-shaped action-id lists.
     """
     owner_dir = Path(data_root_text) / 'motion_state' / 'owners'
-    manifest = read_callback_manifest(owner_dir / 'callback_symbols.json')
-    wanted_callbacks = set(coll_callbacks)
     out: dict[int, frozenset[int]] = {}
     for cid, ch in manifest_registry_chars(Path(data_root_text)):
         owners = read_mslmso01_v1(owner_dir / f'{ch}.bin')
@@ -107,7 +107,9 @@ def _motion_state_owner_actions_by_char(data_root_text: str, *, class_bit: int=0
         for action_id in range(len(owners.submotion_id)):
             if class_bit and int(owners.class_bits[action_id]) & int(class_bit) == 0:
                 continue
-            if wanted_callbacks and manifest.get(int(owners.coll_cb_id[action_id])) not in wanted_callbacks:
+            if class3_bit and int(owners.class3_bits[action_id]) & int(class3_bit) == 0:
+                continue
+            if coll_handler_kind >= 0 and int(owners.coll_handler_kind[action_id]) != coll_handler_kind:
                 continue
             if wanted_submotions and int(owners.submotion_id[action_id]) not in wanted_submotions:
                 continue
@@ -269,9 +271,9 @@ def _derive_fod_floor_skip_segments(*, action_id_u16: np.ndarray, action_frame_u
     attackair_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, class_bit=MSL_MS_CLASS_ATTACK_AIR)
     shallow_attackair_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, class_bit=MSL_MS_CLASS_ATTACK_AIR, submotion_move_names=('ftCo_SM_AttackAirN', 'ftCo_SM_AttackAirHi', 'ftCo_SM_AttackAirLw'))
     attackair_first_phase_by_char_action = _attackair_first_hitbox_phase_by_char_action(data_root_text)
-    escapeair_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, coll_callbacks=('ftCo_EscapeAir_Coll',))
-    jump_skip_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, coll_callbacks=('ftCo_Jump_Coll',))
-    fall_skip_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, coll_callbacks=('ftCo_Fall_Coll',))
+    escapeair_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, coll_handler_kind=MSL_COLL_HANDLER_AIR_ESCAPE)
+    jump_skip_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, class3_bit=MSL_MS_CLASS3_JUMP_COLL)
+    fall_skip_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, class3_bit=MSL_MS_CLASS3_FALL_COLL)
     active_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 127.0))
     jump_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 80.0))
     segment_y_by_line = {int(seg.line_id): float(seg.y0) for seg in stage.segments}

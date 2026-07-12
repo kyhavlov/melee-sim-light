@@ -196,23 +196,7 @@ setup(
         "melee_sim",
         "tools",
         "tools.extraction",
-        # Data-only directories under tools/extraction: no .py files, but setuptools'
-        # editable-install package discovery flags any undeclared directory containing
-        # files as an ambiguous implicit namespace package unless listed here.
-        "tools.extraction.source_artifacts",
-        "tools.extraction.source_artifacts.attack_id.move_id",
-        "tools.extraction.source_artifacts.motion_state.owners",
-        "tools.extraction.source_artifacts.staling.move_id",
     ],
-    package_data={
-        "tools.extraction": [
-            "source_artifacts/*.json",
-            "source_artifacts/attack_id/move_id/*.bin",
-            "source_artifacts/motion_state/owners/*.bin",
-            "source_artifacts/motion_state/owners/*.json",
-            "source_artifacts/staling/move_id/*.bin",
-        ],
-    },
     py_modules=["msl_binding"],
     ext_modules=[ext],
     cmdclass={"build_ext": _BuildExt, "build_py": _BuildPy},

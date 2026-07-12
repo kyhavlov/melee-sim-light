@@ -8,10 +8,8 @@ import shutil
 import subprocess
 import sys
 import time
-from importlib import resources
 from pathlib import Path
 
-from tools.extraction.extract_attack_id_move_id import FORMAT_VERSION as ATTACK_ID_MOVE_ID_VERSION
 from tools.extraction.extract_ecb_bottom import ECB_VERSION as ECB_BOTTOM_VERSION
 from tools.extraction.extract_ecb_extents import ECB_VERSION as ECB_EXTENTS_VERSION
 from tools.extraction.extract_fighter_anims import (
@@ -19,7 +17,10 @@ from tools.extraction.extract_fighter_anims import (
     DATA_SCHEMA_VERSION as FIGHTER_ANIMS_VERSION,
 )
 from tools.extraction.extract_fighter_hitboxes import FORMAT_VERSION as FIGHTER_HITBOXES_VERSION
-from tools.extraction.extract_motion_state_owners import FORMAT_VERSION as MOTION_STATE_OWNERS_VERSION
+from tools.extraction.extract_motion_state_tables import (
+    ATTACK_FORMAT_VERSION as ATTACK_ID_MOVE_ID_VERSION,
+    OWNER_FORMAT_VERSION as MOTION_STATE_OWNERS_VERSION,
+)
 from tools.extraction.known_data_artifacts import SCRIPT_VERSION as FIGHTER_SCRIPTS_VERSION
 
 
@@ -64,15 +65,6 @@ def _copy_anim_outputs(character: str, *, src_dir: Path, out_dir: Path) -> None:
         src = src_dir / f"{character}{suffix}"
         if src.exists():
             shutil.copyfile(src, out_dir / f"{character}{suffix}")
-
-
-def _copy_source_artifact(rel: str, out_path: Path) -> None:
-    src = resources.files("tools.extraction").joinpath("source_artifacts", rel)
-    if not src.is_file():
-        raise SystemExit(f"missing packaged source-derived artifact: {rel}")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with src.open("rb") as f:
-        out_path.write_bytes(f.read())
 
 
 def _write_data_manifest(out_root: Path, *, chars: list[str], stages: list[str]) -> None:
@@ -122,7 +114,6 @@ def main(argv: list[str] | None = None) -> None:
 
     iso_dir = args.iso_dir
     out_root = args.out_dir
-    has_melee_decomp = args.melee_decomp.exists()
 
     def out(rel: str) -> Path:
         return out_root / rel
@@ -145,11 +136,12 @@ def main(argv: list[str] | None = None) -> None:
     chars = registry_chars
     timings: list[tuple[str, float]] | None = [] if args.timings else None
     _RUN_TIMINGS = timings
-    melee_decomp_args = ["--melee_decomp", str(args.melee_decomp)] if has_melee_decomp else []
-    if not has_melee_decomp:
-        print("using packaged source-derived artifacts; refs/melee is not required", flush=True)
 
     # Sources we need in _iso.
+    _require(
+        iso_dir / "main.dol",
+        "uv run python -m melee_sim.extract_data --iso SSBM.iso --out-dir data --iso-dir _iso",
+    )
     _require(
         iso_dir / "PlCo.dat",
         "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*PlCo.dat' --out-dir _iso",
@@ -343,7 +335,8 @@ def main(argv: list[str] | None = None) -> None:
         [
             "--iso_dir",
             str(iso_dir),
-            *melee_decomp_args,
+            "--dol",
+            str(iso_dir / "main.dol"),
             "--out_dir",
             str(out("moves")),
             "--special_msids_dir",
@@ -352,57 +345,17 @@ def main(argv: list[str] | None = None) -> None:
             ",".join(chars),
         ],
     )
-    if has_melee_decomp:
-        _run(
-            "tools.extraction.extract_staling_move_id",
-            [
-                "--melee_decomp",
-                str(args.melee_decomp),
-                "--out_dir",
-                str(out("staling/move_id")),
-                "--chars",
-                ",".join(chars),
-            ],
-        )
-        _run(
-            "tools.extraction.extract_attack_id_move_id",
-            [
-                "--melee_decomp",
-                str(args.melee_decomp),
-                "--out_dir",
-                str(out("attack_id/move_id")),
-                "--chars",
-                ",".join(chars),
-            ],
-        )
-    else:
-        for ch in chars:
-            _copy_source_artifact(f"staling/move_id/{ch}.bin", out(f"staling/move_id/{ch}.bin"))
-            _copy_source_artifact(f"attack_id/move_id/{ch}.bin", out(f"attack_id/move_id/{ch}.bin"))
-    # The MSLACID1 binary is the data contract for move_id, x4_flags, and MotionState +0x8/x9
-    # lanes. Debug JSON from extract_attack_id_move_id is optional inspection output only and is
-    # intentionally not produced by build_data.
-    if has_melee_decomp:
-        _run(
-            "tools.extraction.extract_motion_state_owners",
-            [
-                "--melee_decomp",
-                str(args.melee_decomp),
-                "--out_dir",
-                str(out("motion_state/owners")),
-                "--chars",
-                ",".join(chars),
-            ],
-        )
-    else:
-        for ch in chars:
-            _copy_source_artifact(f"motion_state/owners/{ch}.bin", out(f"motion_state/owners/{ch}.bin"))
-        _copy_source_artifact(
-            "motion_state/owners/callback_symbols.json",
-            out("motion_state/owners/callback_symbols.json"),
-        )
-    # The MSLMSO01 binary is the MotionState owner/callback contract. Its callback_symbols.json
-    # manifest is review/debug metadata mapping generated callback ids back to decomp symbols.
+    _run(
+        "tools.extraction.extract_motion_state_tables",
+        [
+            "--dol",
+            str(iso_dir / "main.dol"),
+            "--out-root",
+            str(out_root),
+            "--chars",
+            ",".join(chars),
+        ],
+    )
 
     for ch in chars:
         _run(
@@ -414,7 +367,8 @@ def main(argv: list[str] | None = None) -> None:
                 ch,
                 "--iso_dir",
                 str(iso_dir),
-                *melee_decomp_args,
+                "--dol",
+                str(iso_dir / "main.dol"),
                 "--special_msids_dir",
                 str(out("special_msids")),
                 "--out",

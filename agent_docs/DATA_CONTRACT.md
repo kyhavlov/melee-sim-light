@@ -1365,7 +1365,7 @@ Characters (Fox/Falco/Falcon/Marth/Sheik/Zelda):
     - Sources/proof:
       `refs/melee/src/melee/ft/chara/ftSeak/types.h::ftSeakAttributes` and
       `refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c`.
-- `data/attack_id/move_id/<char>.bin` (per-supported-character MotionState tables; decomp-first,
+- `data/attack_id/move_id/<char>.bin` (per-supported-character MotionState tables; ISO-derived,
   compact binary)
   - Purpose:
     - Drive fighter attack identity parity (`fp->x2068_attackID` / `fp->x206C_attack_instance`) from real
@@ -1375,6 +1375,8 @@ Characters (Fox/Falco/Falcon/Marth/Sheik/Zelda):
     - Drive source-owner clear seed reconstruction from MotionState `x9_b1`
       (`Fighter_ChangeMotionState` seeds `dmg.x18C8` under grounded + `x9_b1`).
   - Sources:
+    - `_iso/main.dol` GALE01 `ftData_MotionStateList` at `0x803C2800`
+    - `_iso/main.dol` GALE01 `ftData_CharacterStateTables` at `0x803C12E0`
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList` (common motion states)
     - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable` (Fox self states)
     - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable` (Falco self states)
@@ -1393,9 +1395,7 @@ Characters (Fox/Falco/Falcon/Marth/Sheik/Zelda):
     - `u32 motion_state_word[action_count]` (decomp MotionState +0x8 word: `move_id` in the high
       byte plus x9 bitfields; preprocessing derives `x9_b1` from bit 22)
   - Older `MSLACID1` v1/v2 tables are stale and must be rejected by readers; regenerate with
-    `uv run python -m tools.extraction.extract_attack_id_move_id --melee_decomp refs/melee --out_dir data/attack_id/move_id --chars <manifest-character-list>`.
-    The extractor's `--debug-json` output is optional human-readable inspection data and is not part
-    of the runtime or preprocessing contract.
+    `make bootstrap ISO=/path/to/SSBM.iso`.
   - Runtime update rule:
     - `Fighter_ChangeMotionState` calls `ft_800890D0(fp, new_motion_state->move_id)`.
       Decomp: `refs/melee/src/melee/ft/fighter.c`, `refs/melee/src/melee/ft/ft_0881.c::ft_800890D0`.
@@ -1404,13 +1404,13 @@ Characters (Fox/Falco/Falcon/Marth/Sheik/Zelda):
     - `Fighter_ChangeMotionState` reads `new_motion_state->x9_b1` for source-owner clear timer setup.
       Decomp: `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`.
 - `data/motion_state/owners/<char>.bin` (per-supported-character MotionState owner/callback tables;
-  decomp-first, compact binary)
+  ISO-derived, compact binary)
   - Purpose:
     - Expose stable, generated MotionState owner lanes for runtime/tooling predicates without adding
       new local action-family lists.
-    - Store callback IDs generated from decomp symbol names; raw function pointers are not part of
-      the contract.
-    - Store explicit class bits only when backed by MotionState callback symbol names. Current
+    - Store callback IDs interned by retail callback pointer identity; pointer values themselves are
+      not serialized and gameplay never depends on the diagnostic ID number.
+    - Store explicit class bits backed by MotionState callback pointer equivalence. Current
       classes cover `ftCo_AttackAir_*`, `ftCo_AttackS3_*`, `ftCo_AttackS4_*`,
       `ftCo_Damage*`, `ftCo_DownDamage*`, `ftCo_DamageFly*`, `ftCo_FlyReflect*`,
       `ftCo_LandingAir*`, `ftCo_Jump*`, `ftCo_JumpAerial*`, `ftCo_Fall*`,
@@ -1432,6 +1432,8 @@ Characters (Fox/Falco/Falcon/Marth/Sheik/Zelda):
       classifications only; procedural behavior such as edge-snap branch results, ledge
       eligibility, or hidden descriptor provenance is not inferred by this artifact.
   - Sources:
+    - `_iso/main.dol` GALE01 `ftData_MotionStateList` at `0x803C2800`
+    - `_iso/main.dol` GALE01 `ftData_CharacterStateTables` at `0x803C12E0`
     - `refs/melee/src/melee/ft/types.h::MotionState`
     - `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList`
@@ -1441,15 +1443,15 @@ Characters (Fox/Falco/Falcon/Marth/Sheik/Zelda):
     - `refs/melee/src/melee/ft/chara/ftCaptain/ftCa_Init.c::ftCa_Init_MotionStateTable`
     - `refs/melee/src/melee/ft/chara/ftSeak/ftSk_Init.c::ftSk_Init_MotionStateTable`
     - `refs/melee/src/melee/ft/chara/ftZelda/ftZd_Init.c::ftZd_Init_MotionStateTable`
-  - Binary layout: `MSLMSO01` v23 (little-endian, dense tables indexed by GALE01 `action_id`)
+  - Binary layout: `MSLMSO01` v26 (little-endian, dense tables indexed by GALE01 `action_id`)
     - `u8  magic[8] = "MSLMSO01"`
-    - `u32 version = 23`
+    - `u32 version = 26`
     - `u16 action_count`
     - `u16 reserved = 0`
     - `u32` offsets for `submotion_id`, `x4_flags`, `motion_state_word`, `anim_cb_id`,
       `iasa_cb_id`, `phys_cb_id`, `coll_cb_id`, `cam_cb_id`, `class_bits`, `class2_bits`,
-      `class3_bits`, and `fx_special_kind`
-    - The fixed header is 64 bytes; every table offset must be at least 64.
+      `class3_bits`, `fx_special_kind`, and `coll_handler_kind`
+    - The fixed header is 68 bytes; every table offset must be at least 68.
     - `u16 submotion_id[action_count]` (`0xFFFF` = unknown/absent)
     - `u32 x4_flags[action_count]`
     - `u32 motion_state_word[action_count]`
@@ -1458,10 +1460,10 @@ Characters (Fox/Falco/Falcon/Marth/Sheik/Zelda):
     - `u32 class2_bits[action_count]`
     - `u32 class3_bits[action_count]`
     - `u8 fx_special_kind[action_count]`
-  - `data/motion_state/owners/callback_symbols.json` is review/debug metadata mapping callback IDs
-    back to decomp symbol names. Runtime loads only the binary tables. Callback IDs are one
-    full-registry namespace, so low-level `--chars` subset extraction remains byte-compatible with
-    packaged full-registry tables.
+    - `u8 coll_handler_kind[action_count]`
+  - Callback IDs are one full-registry namespace, interned by ascending retail pointer address.
+    Human-readable callback names are deliberately not an extraction or runtime artifact because
+    the retail DOL does not contain them.
   - Class-bit examples:
     - `COMMON_AIR_WALLJUMP_COLL` is keyed to source collision helper identity, not generic Phys
       ownership. It includes Jump/Fall callbacks and `ftCo_PassiveWall_Coll`, because
@@ -1506,17 +1508,18 @@ Characters (Fox/Falco/Falcon/Marth/Sheik/Zelda):
       routing. Broad peers that share wrapper helpers, including AirCatch, ItemThrowAir,
       cargo/capture, item, and Fox/Falco bespoke special callbacks, remain excluded from
       this word. Catch kind and target-mask bits are keyed to the source MotionState entry that
-      writes `x1A68`/`x1A6A`; they are not inferred from callback-symbol equivalence.
+      writes `x1A68`/`x1A6A`; they are not inferred from callback-pointer equivalence.
     - `fx_special_kind` (v18) is the per-(char, action) identity of the Fox/Falco bespoke
-      special MotionState rows, generated 1:1 from each row's ANIM callback symbol
-      (`FX_SPECIAL_KIND_BY_ANIM_CB` in the extractor; values dense 1..29 in table order, 0 =
-      none, mirrored by `MslMsFxSpecialKind` and the `fx_special_kinds` manifest object,
+      special MotionState rows, generated 1:1 from each row's ANIM callback pointer
+      (values dense 1..29 in table order, 0 = none, mirrored by `MslMsFxSpecialKind` and
       parity-locked by tests). It replaces runtime
       `msl_char_id_is_spacie && action_id == MSL_ACT_FX_*` predicate gates in generic engine
       code (`tests/test_action_id_dispatch_ratchet.py` enforces the counts down-only): a new
       character's same-numbered actions carry its own callbacks and stay kind 0. Per-family
       kind ranges are contiguous by table order, so family checks are range checks.
-  - Stale/non-v23 `MSLMSO01` tables must be rejected. Version 23 adds conditional Falcon
+  - Stale/non-v26 `MSLMSO01` tables must be rejected. Version 26 changes callback ids from
+    decomp-symbol ordering to retail-pointer ordering and adds explicit Jump, Fall, and Falcon
+    SpecialHiThrow0 owner bits for preprocessing consumers. Version 23 adds conditional Falcon
     Dive/CaptureCaptain collision owners plus source MotionState-entry ledgers for catch kind and
     target masks. Version 22 adds ordinary/wall-tech walljump ownership. Version 21 adds
     `FT_CHECK_GROUND_LEDGE_BOTH_COLL` class2 ownership for direct `CLIFFCATCH_BOTH` callbacks and
@@ -1538,8 +1541,7 @@ Characters (Fox/Falco/Falcon/Marth/Sheik/Zelda):
     `ftCo_Throw*` callbacks to `GROUNDED_STAGE_OBJECT_CARRY_COLL` so grounded B2DC
     floor-persistence rows can consume connected legal-stage slope/flat floor handoffs without
     local action lists.
-    Regenerate with
-    `uv run python -m tools.extraction.extract_motion_state_owners --melee_decomp refs/melee --out_dir data/motion_state/owners --chars fox,falco,marth,falcon,sheik,zelda`.
+    Regenerate with `make bootstrap ISO=/path/to/SSBM.iso`.
 - `data/stages/bin/{grnla,grnba,griz,grps,grst,grop}.bin` (stage collision/metadata; decomp-first, compact binary)
   - Purpose:
     - Pack the stable, source-backed stage data currently emitted by

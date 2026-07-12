@@ -2100,7 +2100,7 @@ def test_fx_kind_lane_is_one_to_one_and_spacie_reverse_matches_legacy_ids() -> N
     # NO rows for the spacie illusion/firefox kinds.
     from pathlib import Path as _Path
 
-    from tools.extraction.extract_motion_state_owners import FX_SPECIAL_KIND_VALUES
+    from tools.extraction.extract_motion_state_tables import FX_SPECIAL_KIND_VALUES
     from tools.slippi.motion_state_owners import read_mslmso01_v1
 
     root = _Path("data/motion_state/owners")
@@ -2148,7 +2148,7 @@ def test_machine_admitted_chars_own_their_full_writable_kind_surface() -> None:
     from pathlib import Path as _Path
 
     from tools.extraction.char_registry import CHARS as _CHARS
-    from tools.extraction.extract_motion_state_owners import FX_SPECIAL_KIND_VALUES as _K
+    from tools.extraction.extract_motion_state_tables import FX_SPECIAL_KIND_VALUES as _K
     from tools.slippi.motion_state_owners import read_mslmso01_v1
 
     surfaces = {

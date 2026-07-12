@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import struct
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,7 +8,7 @@ import numpy as np
 
 
 MAGIC = b"MSLMSO01"
-VERSION = 25
+VERSION = 26
 HEADER_BYTES = 8 + 4 + 2 + 2 + 4 * 13
 
 
@@ -79,10 +78,3 @@ def read_mslmso01_v1(path: Path) -> MotionStateOwners:
         fx_special_kind=arr(fx_special_kind_off, "u1", 1),
         coll_handler_kind=arr(coll_handler_kind_off, "u1", 1),
     )
-
-
-def read_callback_manifest(path: Path) -> dict[int, str]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("magic") != "MSLMSO01" or int(payload.get("version", -1)) != VERSION:
-        raise ValueError(f"bad MSLMSO01 callback manifest header: {path}")
-    return {int(row["id"]): str(row["symbol"]) for row in payload["symbols"]}

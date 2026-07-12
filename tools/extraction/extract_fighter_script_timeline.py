@@ -10,7 +10,7 @@ from pathlib import Path
 from tools.extraction.extract_fighter_moves import (
     _load_fighter_dat,
     _load_special_msids,
-    _parse_ftco_submotion_enum,
+    _load_ftco_submotion_ids,
     _parse_subaction_events,
     _read_s_temp4_subaction_ptr,
 )
@@ -218,7 +218,7 @@ def _iter_entries_from_iso(
     *,
     character: str,
     iso_dir: Path,
-    melee_decomp: Path,
+    dol: Path,
     special_msids_dir: Path,
     max_frames: int,
     max_steps_per_frame: int,
@@ -227,10 +227,10 @@ def _iter_entries_from_iso(
     if character not in char_to_dat:
         raise RuntimeError(f"unknown character {character!r}")
 
-    enum_map = _parse_ftco_submotion_enum(melee_decomp)
+    enum_map = _load_ftco_submotion_ids(dol)
     ftco_sm_count = int(enum_map.get("ftCo_SM_Count", 0))
     if ftco_sm_count <= 0:
-        raise RuntimeError("missing ftCo_SM_Count from decomp ftCo_Submotion enum")
+        raise RuntimeError("missing common submotion domain from main.dol")
     name_by_msid = {int(v): k for k, v in enum_map.items() if k.startswith("ftCo_SM_")}
 
     dat_name, sym = char_to_dat[character]
@@ -267,7 +267,7 @@ def main() -> None:
     ap.add_argument("--moves", type=Path, default=None)
     ap.add_argument("--character", type=str, default=None)
     ap.add_argument("--iso_dir", type=Path, default=Path("_iso"))
-    ap.add_argument("--melee_decomp", type=Path, default=Path("refs/melee"))
+    ap.add_argument("--dol", type=Path, default=Path("_iso/main.dol"))
     ap.add_argument("--special_msids_dir", type=Path, default=Path("data/special_msids"))
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--manifest", type=Path, default=None)
@@ -280,7 +280,7 @@ def main() -> None:
         entries = _iter_entries_from_iso(
             character=str(args.character),
             iso_dir=args.iso_dir,
-            melee_decomp=args.melee_decomp,
+            dol=args.dol,
             special_msids_dir=args.special_msids_dir,
             max_frames=int(args.max_frames),
             max_steps_per_frame=int(args.max_steps_per_frame),

@@ -14,8 +14,7 @@ def test_attack_id_move_id_tables_exist_and_cover_fox_falco_specialn() -> None:
     falco_path = Path("data/attack_id/move_id/falco.bin")
     assert fox_path.exists() and falco_path.exists(), (
         "missing MSLACID1 attack_id/move_id tables; generate them with:\n"
-        "  uv run python -m tools.extraction.extract_attack_id_move_id "
-        "--melee_decomp refs/melee --out_dir data/attack_id/move_id --chars fox,falco"
+        "  make bootstrap ISO=/path/to/SSBM.iso"
     )
 
     # Fox/Falco SpecialNStart action id is ftFx_MS_SpecialNStart = 0x0155 (341).

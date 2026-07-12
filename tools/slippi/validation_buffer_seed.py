@@ -25,7 +25,6 @@ from tools.slippi.validation_buffer_common import (  # noqa: F401
     read_mslstg01_v7,
     stage_metadata_path_for_stage_id,
     yoshi_shyguy_metadata,
-    read_callback_manifest,
     read_mslmso01_v1,
     finalized_frame_indices,
     replay_path_for_peppi,

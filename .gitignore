@@ -54,6 +54,7 @@ reports/marth_port/
 reports/bench/
 reports/modelplay/
 manual_repros/
+tools/extraction/source_artifacts/
 !tests/fixtures/modelplay/manual_repros/
 !tests/fixtures/modelplay/manual_repros/*.json
 !tests/fixtures/modelplay/manual_repros/**/

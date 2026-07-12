@@ -4,7 +4,6 @@ import argparse
 import json
 import struct
 from dataclasses import dataclass
-from importlib import resources
 from pathlib import Path
 
 from melee_sim.hsd_archive import HsdArchive, _u32_be, parse_hsd_archive
@@ -664,51 +663,10 @@ def _parse_subaction_events(
     return out
 
 
-def _parse_ftco_submotion_enum(melee_decomp_root: Path) -> dict[str, int]:
-    header = melee_decomp_root / "src" / "melee" / "ft" / "chara" / "ftCommon" / "forward.h"
-    if not header.exists():
-        with resources.files("tools.extraction").joinpath(
-            "source_artifacts/ftco_submotion_ids.json"
-        ).open("r", encoding="utf-8") as f:
-            raw = json.load(f)
-        return {str(k): int(v) for k, v in raw.items()}
-    txt = header.read_text(encoding="utf-8", errors="replace").splitlines()
+def _load_ftco_submotion_ids(dol_path: Path) -> dict[str, int]:
+    from tools.extraction.extract_motion_state_tables import common_submotion_ids
 
-    in_enum = False
-    value = None
-    out: dict[str, int] = {}
-    for line in txt:
-        if "typedef enum ftCo_Submotion" in line:
-            in_enum = True
-            continue
-        if not in_enum:
-            continue
-        if "} ftCo_Submotion;" in line:
-            break
-
-        # Strip comments and whitespace.
-        s = line.split("//", 1)[0].strip()
-        if not s or not s.startswith("ftCo_SM_"):
-            continue
-        s = s.rstrip(",")
-
-        if "=" in s:
-            name, rhs = [x.strip() for x in s.split("=", 1)]
-            try:
-                value = int(rhs, 0)
-            except ValueError:
-                continue
-            out[name] = value
-        else:
-            if value is None:
-                value = 0
-            else:
-                value += 1
-            out[s] = value
-
-    if not out:
-        raise RuntimeError(f"failed to parse ftCo_Submotion enum from {header}")
-    return out
+    return common_submotion_ids(dol_path)
 
 
 def _load_fighter_dat(iso_dir: Path, dat_name: str) -> HsdArchive:
@@ -762,7 +720,7 @@ def _load_special_msids(special_msids_dir: Path, character: str) -> list[int]:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Extract fighter hitbox command timelines from Pl*.dat")
     ap.add_argument("--iso_dir", type=Path, default=Path("_iso"))
-    ap.add_argument("--melee_decomp", type=Path, default=Path("refs/melee"))
+    ap.add_argument("--dol", type=Path, default=Path("_iso/main.dol"))
     ap.add_argument("--out_dir", type=Path, default=Path("data/moves"))
     ap.add_argument(
         "--special_msids_dir",
@@ -791,7 +749,7 @@ def main() -> None:
         "zelda": ("PlZd.dat", "ftDataZelda"),
     }
 
-    enum_map = _parse_ftco_submotion_enum(args.melee_decomp)
+    enum_map = _load_ftco_submotion_ids(args.dol)
     want = [
         # Grounded locomotion: needed for Dash IASA (cmd_var[0] gating) parity.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA

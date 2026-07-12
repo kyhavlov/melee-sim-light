@@ -141,6 +141,9 @@ enum {
   MSL_MS_CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED = 1u << 9,
   MSL_MS_CLASS3_CATCH_KIND_1 = 1u << 10,
   MSL_MS_CLASS3_CATCH_KIND_2 = 1u << 11,
+  MSL_MS_CLASS3_JUMP_COLL = 1u << 12,
+  MSL_MS_CLASS3_FALL_COLL = 1u << 13,
+  MSL_MS_CLASS3_FALCON_SPECIALHI_THROW0_COLL = 1u << 14,
 };
 
 uint16_t msl_motion_state_submotion_id(uint8_t char_id, uint16_t action_id);
@@ -171,13 +174,12 @@ uint8_t msl_motion_state_cliff_hold_phys_snap(uint8_t char_id, uint16_t action_i
 uint32_t msl_motion_state_class3_bits(uint8_t char_id, uint16_t action_id);
 
 // fx_special_kind (MSLMSO01 v18): per-(char, action) identity of the Fox/Falco bespoke
-// special MotionState rows, generated 1:1 from each row's ANIM callback symbol by
-// tools/extraction/extract_motion_state_owners.py (FX_SPECIAL_KIND_BY_ANIM_CB). This is
+// special MotionState rows, generated 1:1 from each row's ANIM callback pointer by
+// tools/extraction/extract_motion_state_tables.py. This is
 // the migration target for `msl_char_id_is_spacie(c) && action_id == MSL_ACT_FX_*`
 // predicate gates in generic engine code: ownership comes from extracted MotionState
 // callback data, and a new character's same-numbered actions stay MSL_FX_KIND_NONE.
-// Values are parity-locked to the extractor table and callback_symbols.json by
-// tests/test_motion_state_owners_table.py.
+// Values are parity-locked to the extractor table by tests/test_motion_state_owners_table.py.
 typedef enum MslMsFxSpecialKind {
   MSL_FX_KIND_NONE = 0,
   MSL_FX_KIND_SPECIAL_N_START = 1,

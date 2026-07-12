@@ -111,3 +111,31 @@ def extract_file(iso_path: Path, entry: IsoFile, out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_bytes(read_file_bytes(iso_path, entry))
 
+
+def extract_main_dol(iso_path: Path, out_path: Path) -> None:
+    """Extract the executable, which is addressed separately from the ISO FST."""
+    with iso_path.open("rb") as f:
+        disc_header = _read_exact(f, 8)
+        if disc_header[:6] != b"GALE01" or disc_header[7] != 2:
+            game_id = disc_header[:6].decode("ascii", errors="replace")
+            raise ValueError(
+                "MotionState extraction requires an NTSC-U SSBM 1.02 ISO "
+                f"(GALE01 revision 2); got {game_id!r} revision {disc_header[7]}"
+            )
+        f.seek(0x420)
+        dol_offset = _u32_be(_read_exact(f, 4), 0)
+        if dol_offset <= 0:
+            raise ValueError("invalid main.dol offset")
+        f.seek(dol_offset)
+        header = _read_exact(f, 0xD8)
+        file_offsets = tuple(_u32_be(header, i * 4) for i in range(18))
+        sizes = tuple(_u32_be(header, 0x90 + i * 4) for i in range(18))
+        dol_size = max(
+            (offset + size for offset, size in zip(file_offsets, sizes)), default=0
+        )
+        if dol_size < len(header):
+            raise ValueError("invalid main.dol section table")
+        f.seek(dol_offset)
+        data = _read_exact(f, dol_size)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(data)

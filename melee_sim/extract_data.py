@@ -11,7 +11,7 @@ from urllib.parse import urlparse, unquote
 
 from tools.extraction.char_registry import CHARS
 
-from .iso import extract_file, find_files, list_files
+from .iso import extract_file, extract_main_dol, find_files, list_files
 
 
 _STAGE_DAT_BY_KEY = {
@@ -126,6 +126,13 @@ def main(argv: list[str] | None = None) -> None:
 
     iso_dir.mkdir(parents=True, exist_ok=True)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    dol_path = iso_dir / "main.dol"
+    if not dol_path.exists() or args.force:
+        extract_main_dol(iso, dol_path)
+        print(f"wrote {dol_path} ({dol_path.stat().st_size} bytes)")
+    else:
+        print(f"exists {dol_path}; skipping")
 
     files = list_files(iso)
     for pattern in ("*PlCo.dat", "*ItCo.dat"):

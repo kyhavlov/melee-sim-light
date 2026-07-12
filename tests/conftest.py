@@ -22,7 +22,6 @@ _COMMON_DATA_FILES = (
     "stage_items/yoshi_shyguy.bin",
     "stage_items/dream_whispy.bin",
     "staling/weights.bin",
-    "motion_state/owners/callback_symbols.json",
     "stages/bin/grnla.bin",
     "stages/bin/grnba.bin",
     "stages/bin/griz.bin",

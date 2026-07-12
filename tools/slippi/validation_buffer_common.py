@@ -14,12 +14,16 @@ from tools.slippi.action_state_tables import load_action_state_tables  # noqa: F
 from tools.slippi.hitstun import hitstun_u16_from_misc_as_and_state_flags3  # noqa: F401
 from tools.slippi.item_article_data import item_article_kind_set, item_article_values_by_sim_char  # noqa: F401
 from tools.extraction.known_data_artifacts import STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT, dream_whispy_metadata, fountain_of_dreams_default_platform_heights, fountain_of_dreams_platform_motion_params, read_mslstg01_v7, stage_metadata_path_for_stage_id, yoshi_shyguy_metadata  # noqa: F401
-from tools.slippi.motion_state_owners import read_callback_manifest, read_mslmso01_v1  # noqa: F401
+from tools.slippi.motion_state_owners import read_mslmso01_v1  # noqa: F401
 from tools.slippi.rollback import finalized_frame_indices  # noqa: F401
 from tools.slippi.slpz import replay_path_for_peppi  # noqa: F401
 from tools.extraction.known_data_artifacts import read_mslftsc1_v1  # noqa: F401
 from tools.slippi.suite_io import team_attack_on_from_start  # noqa: F401
 MSL_MS_CLASS_ATTACK_AIR = 1 << 0
+MSL_MS_CLASS3_JUMP_COLL = 1 << 12
+MSL_MS_CLASS3_FALL_COLL = 1 << 13
+MSL_MS_CLASS3_FALCON_SPECIALHI_THROW0_COLL = 1 << 14
+MSL_COLL_HANDLER_AIR_ESCAPE = 10
 FOD_SKIP_ECB_VERTICAL_UNIT = 1.0
 FOD_TRANSFORMED_PLATFORM_SKIP_LOOKUP_SLOP = 2.0 * FOD_SKIP_ECB_VERTICAL_UNIT
 FOD_FLOOR_X_END_CLAMP = 0.1
@@ -244,7 +248,7 @@ def _manifest_preprocess_tables(data_root_text: str) -> _ManifestPreprocessTable
         origin_allow_interrupt: dict[int, tuple[int, int]] = {}
         owners_tbl = read_mslmso01_v1(data_root / 'motion_state' / 'owners' / f'{key}.bin')
         if 'illusion_landing_lag_frames' in attrs or 'firefox_landing_lag_frames' in attrs:
-            from tools.extraction.extract_motion_state_owners import FX_SPECIAL_KIND_VALUES
+            from tools.extraction.extract_motion_state_tables import FX_SPECIAL_KIND_VALUES
             illusion_kind = FX_SPECIAL_KIND_VALUES['SPECIAL_AIR_S_END']
             firefox_kinds = {FX_SPECIAL_KIND_VALUES['SPECIAL_AIR_HI'], FX_SPECIAL_KIND_VALUES['SPECIAL_HI_FALL'], FX_SPECIAL_KIND_VALUES['SPECIAL_HI_BOUND']}
             for a in range(len(owners_tbl.fx_special_kind)):
@@ -294,13 +298,8 @@ def _manifest_preprocess_tables(data_root_text: str) -> _ManifestPreprocessTable
                 # its submotion through the generated callback owner instead of duplicating the
                 # character's raw MotionState/submotion ids in preprocessing.
                 # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHiThrow0_Coll
-                callback_symbols = read_callback_manifest(data_root / 'motion_state' / 'owners' / 'callback_symbols.json')
-                throw0_coll_ids = {callback_id for callback_id, symbol in callback_symbols.items() if symbol == 'ftCa_SpecialHiThrow0_Coll'}
-                if len(throw0_coll_ids) != 1:
-                    raise ValueError(f'expected one ftCa_SpecialHiThrow0_Coll callback id, got {sorted(throw0_coll_ids)}')
-                throw0_coll_id = next(iter(throw0_coll_ids))
-                for action_id, coll_cb_id in enumerate(owners_tbl.coll_cb_id):
-                    if int(coll_cb_id) == int(throw0_coll_id):
+                for action_id, class3_bits in enumerate(owners_tbl.class3_bits):
+                    if int(class3_bits) & MSL_MS_CLASS3_FALCON_SPECIALHI_THROW0_COLL:
                         lag_by_msid[int(owners_tbl.submotion_id[action_id])] = float(attrs['falcon_specialhi_landing_lag'])
                 for m in _msids('side_air', 'start'):
                     lag_by_msid[m] = float(attrs['falcon_specials_miss_landing_lag'])

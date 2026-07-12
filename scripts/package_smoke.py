@@ -59,14 +59,13 @@ def main() -> None:
         smoke = f"""
         import importlib.util
         import shutil
-        import struct
-        from importlib import resources
         from pathlib import Path
         import melee_sim as msl
         import msl_binding
         from melee_sim import _native as native
         import tools.extraction.known_data_artifacts as artifacts
         import tools.extraction.extract_fighter_anims as extract_fighter_anims
+        import tools.extraction.extract_motion_state_tables as motion_state_tables
 
         if importlib.util.find_spec("tools.slippi") is not None:
             raise SystemExit("tools.slippi should not be installed in the public package")
@@ -82,36 +81,13 @@ def main() -> None:
             raise SystemExit("packaged native extension did not resolve")
         if not hasattr(extract_fighter_anims, "extract_one_character"):
             raise SystemExit("fighter animation extractor did not import")
+        if motion_state_tables.OWNER_FORMAT_MAGIC != b"MSLMSO01":
+            raise SystemExit("ISO MotionState extractor did not import")
+        if importlib.util.find_spec("tools.extraction.source_artifacts") is not None:
+            raise SystemExit("generated source_artifacts package should not be installed")
 
-        expected_chars = ("falco", "falcon", "fox", "marth", "sheik", "zelda")
-        artifact_root = resources.files("tools.extraction").joinpath("source_artifacts")
-        families = (
-            ("motion_state/owners", b"MSLMSO01", 23),
-            ("staling/move_id", b"MSLSTID1", 1),
-            ("attack_id/move_id", b"MSLACID1", 3),
-        )
-        for rel, magic, version in families:
-            family = artifact_root.joinpath(rel)
-            rows = tuple(sorted(p.name.removesuffix(".bin") for p in family.iterdir()
-                                if p.name.endswith(".bin")))
-            if rows != expected_chars:
-                raise SystemExit(f"installed {{rel}} registry rows mismatch: {{rows!r}}")
-            for char_name in expected_chars:
-                header = family.joinpath(f"{{char_name}}.bin").read_bytes()[:16]
-                if header[:8] != magic or struct.unpack_from("<I", header, 8)[0] != version:
-                    raise SystemExit(f"installed {{rel}}/{{char_name}}.bin header mismatch")
-                if struct.unpack_from("<H", header, 12)[0] <= 0:
-                    raise SystemExit(f"installed {{rel}}/{{char_name}}.bin has no rows")
-
-        # Use an isolated data root whose three full-registry families come from the installed
-        # wheel, not from the checkout. Other ISO-derived assets remain the normal smoke fixture.
         overlay = Path.cwd() / "installed-resource-data"
         shutil.copytree(Path({str(repo / "data")!r}), overlay)
-        for rel, _magic, _version in families:
-            target = overlay / rel
-            shutil.rmtree(target)
-            with resources.as_file(artifact_root.joinpath(rel)) as family_path:
-                shutil.copytree(family_path, target)
 
         def reset_step(first, second):
             with msl.EnvBatch(batch_size=1, length=2, data_dir=overlay) as env:

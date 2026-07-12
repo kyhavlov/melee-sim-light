@@ -82,15 +82,13 @@ Collect before writing any code:
      make sure that bone is in the extracted pose set (Marth: 22 joints).
    - `extract_fighter_moves.py` + `extract_fighter_script_timeline.py` —
      movescripts; allow_interrupt frames feed the IASA dispatch later.
-   - `extract_attack_id_move_id.py` — per-char MF namespaces are merged; verify
-     no id collisions in the merged table.
-   - `extract_motion_state_owners.py` — registry specs + submotion enums.
-     **Callback ids renumber by design** when a char is added; the manifest
-     regen in `tests/conftest.py` handles it — expect motion-state-owner test
-     churn, not breakage.
+   - `extract_motion_state_tables.py` — reads the common and per-character
+     MotionState tables from `main.dol` and emits attack-id, staling, and owner
+     tables. Add the character to the pointer-owner anchors only for genuinely
+     new callback families. Callback ids are registry-wide, address-interned
+     diagnostics; gameplay consumes the explicit owner lanes.
    - `extract_special_msids.py`, `extract_shield_tilt_table.py`,
-     `extract_staling_move_id.py`, staling weights — straightforward registry
-     loops.
+     staling weights — straightforward registry loops.
    - `extract_item_articles.py` — skipped for article-less chars.
 3. **C loaders**: all loop `MSL_CHAR_REGISTRY` (anim_pose, anim_table,
    hitboxes_tables, hurtcaps_tables, shield_tilt_table, char_params,
