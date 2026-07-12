@@ -691,13 +691,10 @@ PyObject* msl_derive_damage_hitlag_colldata_ecb_py(PyObject* self, PyObject* arg
   uint8_t prev_active = 0u;
   for (npy_intp i = 0; i < n; i++) {
     const uint16_t action = action_p[i];
+    const uint8_t coll_handler = msl_motion_state_coll_handler_kind(char_p[i], action);
     const uint8_t active =
-        (ground_p[i] == 0u && hitlag_p[i] != 0u &&
-         msl_motion_state_class_has(char_p[i], action,
-                                    MSL_MS_CLASS_DAMAGE_COMMON_COLL | MSL_MS_CLASS_DAMAGE_FLY_COLL |
-                                        MSL_MS_CLASS_DAMAGE_FALL_COLL))
-            ? 1u
-            : 0u;
+        (ground_p[i] == 0u && hitlag_p[i] != 0u && msl_coll_handler_is_damage(coll_handler)) ? 1u
+                                                                                             : 0u;
     if (!active) {
       frozen_valid = 0u;
       prev_active = 0u;
@@ -707,10 +704,8 @@ PyObject* msl_derive_damage_hitlag_colldata_ecb_py(PyObject* self, PyObject* arg
       frozen_valid = 0u;
       if (i > 0) {
         const uint16_t prev_action = action_p[i - 1];
-        const uint8_t prev_damage_collision = msl_motion_state_class_has(
-            char_p[i - 1], prev_action,
-            MSL_MS_CLASS_DAMAGE_COMMON_COLL | MSL_MS_CLASS_DAMAGE_FLY_COLL |
-                MSL_MS_CLASS_DAMAGE_FALL_COLL);
+        const uint8_t prev_damage_collision = msl_coll_handler_is_damage(
+            msl_motion_state_coll_handler_kind(char_p[i - 1], prev_action));
         const uint8_t prev_attackair =
             msl_motion_state_class_has(char_p[i - 1], prev_action, MSL_MS_CLASS_ATTACK_AIR);
         if (!prev_damage_collision && prev_attackair) {
@@ -1600,10 +1595,11 @@ PyObject* msl_derive_walljump_used_seed_lanes_py(PyObject* self, PyObject* args)
     const uint8_t prev_passivewall = (uint8_t)(prev_action == (uint16_t)MSL_ACT_PASSIVE_WALL ||
                                                prev_action == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP);
     const uint8_t action_entry = (uint8_t)(i > 0 && (action_i != prev_action || af[i] < af[i - 1]));
-    const uint8_t damage_processhit_output = msl_motion_state_class3_has(
-        c[i], action_i,
-        MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL | MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL |
-            MSL_MS_CLASS3_PHASE4_DAMAGE_FALL_COLL);
+    const uint8_t coll_handler = msl_motion_state_coll_handler_kind(c[i], action_i);
+    const uint8_t damage_processhit_output =
+        (uint8_t)(coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_COMMON ||
+                  coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FLY ||
+                  coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FALL);
     const uint8_t max_jumps_i = max_jumps[c[i]];
     // x1968_jumpsUsed can also move 0 -> 1 through ftCo_JumpAerial_Enter_Basic. Excluding both
     // source jump-input gates makes the remaining Damage-entry edge a grounded ftCommon bundle,

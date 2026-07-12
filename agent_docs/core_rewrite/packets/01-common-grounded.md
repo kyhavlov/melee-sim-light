@@ -1,6 +1,6 @@
 # Packet 1: Common Grounded Map Callbacks
 
-Status: complete, uncommitted, awaiting review.
+Status: complete; committed as `452a143f`.
 
 Baseline: `a293980533bd` (`Improve and benchmark simulator performance`).
 

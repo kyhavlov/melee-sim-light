@@ -5,7 +5,7 @@ the generated `MSLMSO01` artifact remains the executable action-to-callback sour
 
 ## Packet 1 — common grounded wrappers
 
-Status: complete, awaiting review.
+Status: complete; committed as `452a143f`.
 
 The v24 artifact maps 19 extracted Coll callback identities to seven stable runtime handler kinds.
 Those identities cover the same 21 common rows for Fox, Falco, Marth, Sheik, Zelda, and Captain
@@ -27,20 +27,21 @@ migrated handler, so the two implementations cannot run for the same callback.
 
 ## Packet 2 — common air and landing
 
-Status: next.
+Status: exact-owner cutover complete; direct geometry cutover open.
 
-Migrate common airborne wrappers, AttackAir, EscapeAir, Landing/LandingAir, and their complete
-floor-loss/ground-to-air handoff. This packet should make the persistent CollData ECB and surface
-state authoritative across both sides of the ground/air boundary and delete the corresponding
-generic floor-probe/reject families.
+Stable live handlers, low-level phase selection, landing transitions, and redundant semantic-class
+deletion are complete. A standalone air kernel and direct Landing reuse were rejected by aggregate
+validation. The persistent CollData geometry must be cut over in place inside the proven
+coordinator. See [packets/02-common-air-landing.md](packets/02-common-air-landing.md).
 
 ## Packet 3 — damage, knockdown, and passive
 
-Status: pending.
+Status: exact-owner and transition consolidation complete; direct geometry cutover open.
 
-Migrate Damage, DamageFly, DamageFall, Down/Passive/tech collision identities and their wall,
-ceiling, floor, and landing transitions. Bounded RNG sites remain separately owned; this packet is
-about deterministic collision and transition order.
+Damage, DamageFly, DamageFall, DownDamage, DownReflect, Down/Passive/tech callback identities and
+their deterministic transition ladders now consume exact handlers. Their retained shared geometry
+still prevents marking the callbacks fully migrated. See
+[packets/03-damage-down-passive.md](packets/03-damage-down-passive.md).
 
 ## Packet 4 — cliff, special, and capture
 

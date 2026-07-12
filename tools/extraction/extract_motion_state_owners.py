@@ -19,7 +19,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 24
+FORMAT_VERSION = 25
 HEADER_BYTES = 8 + 4 + 2 + 2 + 4 * 13
 U16_ABSENT = 0xFFFF
 
@@ -32,13 +32,6 @@ CLASS_LANDING_AIR = 1 << 5
 CLASS_COMMON_FALL = 1 << 6
 CLASS_SPECIALHI = 1 << 7
 CLASS_COMMON_AIR_PHYS = 1 << 8
-CLASS_COMMON_AIR_COLL = 1 << 9
-CLASS_COMMON_AIR_WALLJUMP_COLL = 1 << 10
-CLASS_LANDING_COLL = 1 << 11
-CLASS_LANDING_AIR_COLL = 1 << 12
-CLASS_DAMAGE_COMMON_COLL = 1 << 13
-CLASS_DAMAGE_FLY_COLL = 1 << 14
-CLASS_DAMAGE_FALL_COLL = 1 << 15
 CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL = 1 << 16
 CLASS_GROUNDED_ATTACK = 1 << 17
 CLASS_GUARDON_FRAME_START_X672_IASA = 1 << 18
@@ -52,15 +45,10 @@ CLASS_DAMAGE_GROUND = 1 << 25
 CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS = 1 << 26
 CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION = 1 << 27
 CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD = 1 << 28
-CLASS_ESCAPE_AIR_COLL = 1 << 29
 CLASS_FX_SPECIALS_GROUND_B108_COLL = 1 << 30
 CLASS_FT80082B1C_BASIC_LANDING_COLL = 1 << 31
 
-CLASS2_COMMON_GROUNDED_COLL = 1 << 0
-CLASS2_COMMON_GROUNDED_B108_COLL = 1 << 1
 CLASS2_COMMON_AIRBORNE_COLL = 1 << 2
-CLASS2_COMMON_GROUNDED_B2DC_COLL = 1 << 3
-CLASS2_COMMON_GROUNDED_B4B0_COLL = 1 << 4
 CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA = 1 << 5
 CLASS2_WALK_ACTION = 1 << 6
 CLASS2_FALL_LIKE_ACTION = 1 << 7
@@ -75,11 +63,6 @@ CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL = 1 << 15
 CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL = 1 << 16
 CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL = 1 << 17
 
-CLASS3_PHASE4_ATTACK_AIR_COLL = 1 << 0
-CLASS3_PHASE4_ESCAPE_AIR_COLL = 1 << 1
-CLASS3_PHASE4_DAMAGE_COMMON_COLL = 1 << 2
-CLASS3_PHASE4_DAMAGE_FLY_COLL = 1 << 3
-CLASS3_PHASE4_DAMAGE_FALL_COLL = 1 << 4
 CLASS3_ORDINARY_WALLJUMP_COLL = 1 << 5
 CLASS3_WALLTECH_COLL = 1 << 6
 CLASS3_CATCH_TARGET_MASK_1 = 1 << 7
@@ -89,9 +72,10 @@ CLASS3_CATCH_KIND_1 = 1 << 10
 CLASS3_CATCH_KIND_2 = 1 << 11
 
 # Stable live Coll callback handlers. Unlike the registry-wide callback ids, these values are an
-# engine ABI and do not change when a new callback symbol is added alphabetically. Packet 1 only
-# assigns kinds to the complete common-grounded family it migrates; all other callbacks remain on
-# the explicit legacy dispatcher until their owner packet lands.
+# engine ABI and do not change when a new callback symbol is added alphabetically. Packets 1-3
+# assign kinds to the bounded common-ground, common-air, landing, damage, down, and passive
+# callback families; all other callbacks remain on the explicit legacy dispatcher until their
+# owner packet lands.
 # refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80084104,ft_80084280,ft_800844EC,ft_800845B4}
 COLL_HANDLER_LEGACY = 0
 COLL_HANDLER_GROUND_B108_FALL = 1
@@ -101,6 +85,24 @@ COLL_HANDLER_GROUND_RUN = 4
 COLL_HANDLER_GROUND_GUARD = 5
 COLL_HANDLER_GROUND_GUARD_SETOFF = 6
 COLL_HANDLER_GROUND_OTTOTTO = 7
+COLL_HANDLER_AIR_COMMON = 8
+COLL_HANDLER_AIR_ATTACK = 9
+COLL_HANDLER_AIR_ESCAPE = 10
+COLL_HANDLER_DAMAGE_COMMON = 11
+COLL_HANDLER_DAMAGE_FLY = 12
+COLL_HANDLER_DAMAGE_FALL = 13
+COLL_HANDLER_DOWN_BOUND = 14
+COLL_HANDLER_DOWN_B108 = 15
+COLL_HANDLER_DOWN_B2DC = 16
+COLL_HANDLER_PASSIVE_B108 = 17
+COLL_HANDLER_PASSIVE_B2DC = 18
+COLL_HANDLER_PASSIVE_WALL = 19
+COLL_HANDLER_PASSIVE_CEIL = 20
+COLL_HANDLER_AIR_FALL_SPECIAL = 21
+COLL_HANDLER_GROUND_LANDING = 22
+COLL_HANDLER_GROUND_LANDING_AIR = 23
+COLL_HANDLER_DOWN_REFLECT = 24
+COLL_HANDLER_DOWN_DAMAGE = 25
 
 COLL_HANDLER_BY_SYMBOL = {
     "ftCo_Turn_Coll": COLL_HANDLER_GROUND_B108_FALL,
@@ -122,6 +124,32 @@ COLL_HANDLER_BY_SYMBOL = {
     "ftCo_GuardSetOff_Coll": COLL_HANDLER_GROUND_GUARD_SETOFF,
     "ftCo_Ottotto_Coll": COLL_HANDLER_GROUND_OTTOTTO,
     "ftCo_OttottoWait_Coll": COLL_HANDLER_GROUND_OTTOTTO,
+    "ftCo_Fall_Coll": COLL_HANDLER_AIR_COMMON,
+    "ftCo_FallAerial_Coll": COLL_HANDLER_AIR_COMMON,
+    "ftCo_Jump_Coll": COLL_HANDLER_AIR_COMMON,
+    "ftCo_JumpAerial_Coll": COLL_HANDLER_AIR_COMMON,
+    "ftCo_FallSpecial_Coll": COLL_HANDLER_AIR_FALL_SPECIAL,
+    "ftCo_AttackAir_Coll": COLL_HANDLER_AIR_ATTACK,
+    "ftCo_EscapeAir_Coll": COLL_HANDLER_AIR_ESCAPE,
+    "ftCo_Landing_Coll": COLL_HANDLER_GROUND_LANDING,
+    "ftCo_LandingAir_Coll": COLL_HANDLER_GROUND_LANDING_AIR,
+    "ftCo_Damage_Coll": COLL_HANDLER_DAMAGE_COMMON,
+    "ftCo_DownDamage_Coll": COLL_HANDLER_DOWN_DAMAGE,
+    "ftCo_DamageFly_Coll": COLL_HANDLER_DAMAGE_FLY,
+    "ftCo_DamageFlyRoll_Coll": COLL_HANDLER_DAMAGE_FLY,
+    "ftCo_FlyReflect_Coll": COLL_HANDLER_DAMAGE_FLY,
+    "ftCo_DamageFall_Coll": COLL_HANDLER_DAMAGE_FALL,
+    "ftCo_DownBound_Coll": COLL_HANDLER_DOWN_BOUND,
+    "ftCo_DownWait_Coll": COLL_HANDLER_DOWN_B108,
+    "ftCo_DownStand_Coll": COLL_HANDLER_DOWN_B108,
+    "ftCo_DownSpot_Coll": COLL_HANDLER_DOWN_B108,
+    "ftCo_Down_Coll": COLL_HANDLER_DOWN_B2DC,
+    "ftCo_DownAttack_Coll": COLL_HANDLER_DOWN_B2DC,
+    "ftCo_DownReflect_Coll": COLL_HANDLER_DOWN_REFLECT,
+    "ftCo_Passive_Coll": COLL_HANDLER_PASSIVE_B108,
+    "ftCo_PassiveStand_Coll": COLL_HANDLER_PASSIVE_B2DC,
+    "ftCo_PassiveWall_Coll": COLL_HANDLER_PASSIVE_WALL,
+    "ftCo_PassiveCeil_Coll": COLL_HANDLER_PASSIVE_CEIL,
 }
 
 CATCH_TARGET_MASK_1_MOTION_STATES = {
@@ -437,29 +465,7 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
     }:
         bits |= CLASS_COMMON_AIR_PHYS
     if coll_cb in {
-        "ftCo_Jump_Coll",
-        "ftCo_JumpAerial_Coll",
-        "ftCo_Fall_Coll",
-        "ftCo_FallAerial_Coll",
-        "ftCo_FallSpecial_Coll",
-    }:
-        bits |= CLASS_COMMON_AIR_COLL
-    if coll_cb in {
-        "ftCo_Jump_Coll",
-        "ftCo_JumpAerial_Coll",
-        "ftCo_Fall_Coll",
-        "ftCo_FallAerial_Coll",
-        "ftCo_PassiveWall_Coll",
-    }:
-        # These callbacks route through `ft_800831CC` or `ft_80083318`, whose source path runs the
-        # airborne wall envelope and then the common walljump/ledge consumers when no floor
-        # callback fires. PassiveWall{Jump} shares that collision helper even though its Phys
-        # callback is not the generic common-air Phys family.
-        bits |= CLASS_COMMON_AIR_WALLJUMP_COLL
-    if coll_cb in {
-        "ftCo_AttackAir_Coll",
         "ftCo_AirCatch_Coll",
-        "ftCo_EscapeAir_Coll",
         "ftCo_ItemThrowAir_Coll",
         "ftCo_ShieldBreakFall_Coll",
         "ftCo_ShieldBreakFly_Coll",
@@ -506,19 +512,10 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         #   ftCa_SpecialAirLw_Coll,ftCa_SpecialAirLwEndAir_Coll}
         bits |= CLASS_FT80081D0C_AIR_COLL
     if coll_cb in {
-        "ftCo_Jump_Coll",
-        "ftCo_JumpAerial_Coll",
-        "ftCo_Fall_Coll",
-        "ftCo_FallAerial_Coll",
-        "ftCo_FallSpecial_Coll",
         "ftCo_CliffJump2_Coll",
-        "ftCo_PassiveWall_Coll",
-        "ftCo_PassiveCeil_Coll",
     }:
-        # These source callbacks route their floor check through ft_80083090/ft_800831CC/
-        # ft_800835B0 with ftCo_80096CC8 as the platform callback. The callback accepts hard
-        # floors and rejects passable platforms when held down, so gameplay should ask this
-        # generated owner instead of maintaining local common-air action lists.
+        # CliffJump2 remains a later-packet callback that passes ftCo_80096CC8. Packet 2/3 common
+        # air and passive callbacks use stable coll_handler_kind identities instead.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
         # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090_inline,ft_800831CC,ft_800835B0}
         bits |= CLASS_FT80083090_PLATFORM_PASS_COLL
@@ -555,30 +552,7 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         # refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialHi.c::{
         #   ftZd_SpecialAirHiStart_0_Coll,ftZd_SpecialAirHiStart_1_Coll,ftZd_SpecialAirHi_Coll}
         bits |= CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
-    if coll_cb == "ftCo_Landing_Coll":
-        bits |= CLASS_LANDING_COLL
-    if coll_cb == "ftCo_LandingAir_Coll":
-        bits |= CLASS_LANDING_AIR_COLL
-    if coll_cb in {"ftCo_Damage_Coll", "ftCo_DownDamage_Coll"}:
-        bits |= CLASS_DAMAGE_COMMON_COLL
-    if coll_cb in {"ftCo_DamageFly_Coll", "ftCo_DamageFlyRoll_Coll", "ftCo_FlyReflect_Coll"}:
-        bits |= CLASS_DAMAGE_FLY_COLL
-    if coll_cb == "ftCo_DamageFall_Coll":
-        bits |= CLASS_DAMAGE_FALL_COLL
     if coll_cb in {
-        "ftCo_Wait_Coll",
-        "ftCo_Walk_Coll",
-        "ftCo_Turn_Coll",
-        "ftCo_TurnRun_Coll",
-        "ftCo_Dash_Coll",
-        "ftCo_Run_Coll",
-        "ftCo_RunDirect_Coll",
-        "ftCo_RunBrake_Coll",
-        "ftCo_Squat_Coll",
-        "ftCo_SquatWait_Coll",
-        "ftCo_SquatRv_Coll",
-        "ftCo_Landing_Coll",
-        "ftCo_LandingAir_Coll",
         "ftCo_Attack11_Coll",
         "ftCo_Attack100Start_Coll",
         "ftCo_Attack100Loop_Coll",
@@ -590,11 +564,6 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftCo_AttackS4_Coll",
         "ftCo_AttackHi4_Coll",
         "ftCo_AttackLw4_Coll",
-        "ftCo_GuardOn_Coll",
-        "ftCo_Guard_Coll",
-        "ftCo_GuardOff_Coll",
-        "ftCo_GuardSetOff_Coll",
-        "ftCo_GuardReflect_Coll",
         "ftCo_Catch_Coll",
         "ftCo_CatchDash_Coll",
         "ftCo_CatchPull_Coll",
@@ -606,9 +575,6 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftCo_ThrowB_Coll",
         "ftCo_ThrowHi_Coll",
         "ftCo_ThrowLw_Coll",
-        "ftCo_Down_Coll",
-        "ftCo_DownAttack_Coll",
-        "ftCo_PassiveStand_Coll",
     }:
         # These grounded callbacks keep an attached floor through the common map-collision owner
         # paths (`ft_80084280`, `ft_800844EC`, `ft_80084104`, `ft_800841B8`, or adjacent guarded
@@ -620,17 +586,7 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         # callbacks that may land this frame rather than persist an existing moving-floor attachment.
         bits |= CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
     if coll_cb in {
-        "ftCo_KneeBend_Coll",
-        "ftCo_Squat_Coll",
-        "ftCo_SquatWait_Coll",
-        "ftCo_SquatRv_Coll",
-        "ftCo_Turn_Coll",
         "ftCo_Rebound_Coll",
-        "ftCo_DownBound_Coll",
-        "ftCo_DownWait_Coll",
-        "ftCo_DownStand_Coll",
-        "ftCo_DownSpot_Coll",
-        "ftCo_Passive_Coll",
         "ftCo_ShieldBreakDown_Coll",
         "ftCo_ShieldBreakStand_Coll",
         "ftCo_Furafura_Coll",
@@ -671,9 +627,6 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftCo_ThrowB_Coll",
         "ftCo_ThrowHi_Coll",
         "ftCo_ThrowLw_Coll",
-        "ftCo_Down_Coll",
-        "ftCo_DownAttack_Coll",
-        "ftCo_PassiveStand_Coll",
         "ftFx_SpecialSEnd_Coll",
         "ftCa_SpecialAirLwEnd_Coll",
     }:
@@ -687,8 +640,6 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         # refs/melee/src/melee/ft/ft_081B.c::{ft_800827A0,ft_80084104,ft_800841B8}
         # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor}
         bits |= CLASS_FT800827A0_EDGE_SNAP_COLL
-    if coll_cb == "ftCo_EscapeAir_Coll":
-        bits |= CLASS_ESCAPE_AIR_COLL
     if coll_cb in {
         # Character-special collision callbacks that call ft_800827A0 (StopAtLedge) on the
         # grounded branch. The Marth Dancing Blade stage callbacks are shared by ground and air
@@ -776,6 +727,7 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
     iasa_cb = callbacks[1]
     phys_cb = callbacks[2]
     coll_cb = callbacks[3]
+    coll_handler = COLL_HANDLER_BY_SYMBOL.get(coll_cb, COLL_HANDLER_LEGACY)
     if iasa_cb in {
         "ftCo_Wait_IASA",
         "ftCo_Walk_IASA",
@@ -795,78 +747,13 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80092450,ftCo_80093694}
         bits |= CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA
     if coll_cb in {
-        "ftCo_Wait_Coll",
-        "ftCo_Walk_Coll",
-        "ftCo_Turn_Coll",
-        "ftCo_TurnRun_Coll",
-        "ftCo_Dash_Coll",
-        "ftCo_Run_Coll",
-        "ftCo_RunDirect_Coll",
-        "ftCo_RunBrake_Coll",
-        "ftCo_Squat_Coll",
-        "ftCo_SquatWait_Coll",
-        "ftCo_SquatRv_Coll",
-        "ftCo_Landing_Coll",
-        "ftCo_GuardOn_Coll",
-        "ftCo_Guard_Coll",
-        "ftCo_GuardOff_Coll",
-        "ftCo_GuardSetOff_Coll",
-        "ftCo_Ottotto_Coll",
-        "ftCo_OttottoWait_Coll",
-    }:
-        # Phase 3 common grounded owner. This intentionally excludes grounded attacks,
-        # catch/throw/capture, item/lift/hammer, damage/downed, and character-special callbacks.
-        # refs/melee/src/melee/ft/ft_081B.c common grounded wrappers
-        bits |= CLASS2_COMMON_GROUNDED_COLL
-    if coll_cb in {
-        "ftCo_KneeBend_Coll",
-        "ftCo_Turn_Coll",
-        "ftCo_Dash_Coll",
-        "ftCo_Run_Coll",
-        "ftCo_RunDirect_Coll",
-        "ftCo_Squat_Coll",
-        "ftCo_SquatWait_Coll",
-        "ftCo_SquatRv_Coll",
-        "ftCo_GuardOn_Coll",
-        "ftCo_Guard_Coll",
-        "ftCo_GuardOff_Coll",
-        "ftCo_GuardSetOff_Coll",
-    }:
-        # Narrow Phase 3 ft_80082708/mpColl_8004B108 grounded floor-loss owner. The legacy
-        # FT80083F88 bit covers only the direct wrapper and also includes downed/passive and
-        # character-special callbacks; this word follows common source wrappers that reach B108.
-        # refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_800844EC,ft_800845B4,ft_80082708}
-        bits |= CLASS2_COMMON_GROUNDED_B108_COLL
-    if coll_cb in {
-        "ftCo_TurnRun_Coll",
-        "ftCo_Ottotto_Coll",
-        "ftCo_OttottoWait_Coll",
-    }:
-        # Narrow Phase 3 ft_800827A0/mpColl_8004B2DC grounded endpoint owner.
-        # refs/melee/src/melee/ft/ft_081B.c::{ft_800827A0,ft_80084104}
-        bits |= CLASS2_COMMON_GROUNDED_B2DC_COLL
-    if coll_cb in {
-        "ftCo_Wait_Coll",
-        "ftCo_Walk_Coll",
-        "ftCo_RunBrake_Coll",
-        "ftCo_Landing_Coll",
-    }:
-        # Narrow Phase 3 ft_80084280/mpColl_8004B4B0 grounded floor-release/teeter owner.
-        # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
-        bits |= CLASS2_COMMON_GROUNDED_B4B0_COLL
-    if coll_cb in {
-        "ftCo_Fall_Coll",
-        "ftCo_FallAerial_Coll",
-        "ftCo_FallSpecial_Coll",
-        "ftCo_Jump_Coll",
-        "ftCo_JumpAerial_Coll",
         "ftCo_CliffJump2_Coll",
         "ftCo_MissFoot_Coll",
         "ftCo_Pass_Coll",
     }:
-        # Phase 3 common airborne owner. This intentionally excludes AttackAir, EscapeAir, Damage,
-        # item/projectile, catch/throw/capture, and Fox/Falco bespoke special callbacks.
-        # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}
+        # Later-packet common airborne callbacks retain one compatibility class until their exact
+        # live handler kinds are assigned. Packet 2 common-air callbacks use coll_handler_kind.
+        # refs/melee/src/melee/ft/chara/ftCommon::{ftCo_CliffJump.c,ftCo_MissFoot.c,ftCo_Pass.c}
         bits |= CLASS2_COMMON_AIRBORNE_COLL
     if anim_cb == "ftCo_Walk_Anim" and iasa_cb == "ftCo_Walk_IASA" and coll_cb == "ftCo_Walk_Coll":
         # WalkSlow/Middle/Fast are one source action family; runtime should consume the generated
@@ -897,9 +784,8 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Catch.c
         bits |= CLASS2_CATCH_START_FLOOR_LOSS
     if (
-        (bits & (CLASS2_COMMON_GROUNDED_COLL | CLASS2_COMMON_GROUNDED_B108_COLL |
-                 CLASS2_COMMON_GROUNDED_B2DC_COLL | CLASS2_COMMON_GROUNDED_B4B0_COLL)) != 0
-        or coll_cb == "ftCo_LandingAir_Coll"
+        COLL_HANDLER_GROUND_B108_FALL <= coll_handler <= COLL_HANDLER_GROUND_OTTOTTO
+        or coll_handler in {COLL_HANDLER_GROUND_LANDING, COLL_HANDLER_GROUND_LANDING_AIR}
         or coll_cb in {"ftCo_EscapeF_Coll", "ftCo_EscapeB_Coll", "ftCo_EscapeN_Coll"}
         or anim_cb in {
             "ftCo_Attack11_Anim",
@@ -984,29 +870,6 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
 def _class3_bits_for_callbacks(callbacks: tuple[str, str, str, str, str], motion_symbol: str) -> int:
     bits = 0
     coll_cb = callbacks[3]
-    if coll_cb == "ftCo_AttackAir_Coll":
-        # Phase 4 later-owner airborne attack callback:
-        # ftCo_AttackAir_Coll -> ft_80082C74 -> ft_80081D0C -> mpColl_800471F8.
-        # This deliberately excludes AirCatch, ItemThrowAir, capture/cargo, item, and special
-        # callbacks that share the older broad FT80081D0C wrapper class.
-        bits |= CLASS3_PHASE4_ATTACK_AIR_COLL
-    if coll_cb == "ftCo_EscapeAir_Coll":
-        # Phase 4 EscapeAir callback:
-        # ftCo_EscapeAir_Coll -> ft_80082C74 -> ft_80081D0C -> mpColl_800471F8.
-        bits |= CLASS3_PHASE4_ESCAPE_AIR_COLL
-    if coll_cb in {"ftCo_Damage_Coll", "ftCo_DownDamage_Coll"}:
-        # Phase 4 common Damage / DownDamage callback:
-        # airborne path reaches ft_80081DD4; active-SDI rows select mpColl_800477E0.
-        bits |= CLASS3_PHASE4_DAMAGE_COMMON_COLL
-    if coll_cb in {"ftCo_DamageFly_Coll", "ftCo_DamageFlyRoll_Coll", "ftCo_FlyReflect_Coll"}:
-        # Phase 4 DamageFly / FlyReflect callback family. Ordinary DamageFly selects
-        # ft_80081DD4 -> mpColl_800473CC; FlyReflect uses adjacent damage wrappers, but remains a
-        # source DamageFly collision callback owner and is intentionally separate from common air.
-        bits |= CLASS3_PHASE4_DAMAGE_FLY_COLL
-    if coll_cb == "ftCo_DamageFall_Coll":
-        # Phase 4 DamageFall callback:
-        # ftCo_DamageFall_Coll -> ft_8008370C -> mpColl_800473CC on ordinary airborne floor checks.
-        bits |= CLASS3_PHASE4_DAMAGE_FALL_COLL
     if coll_cb in ORDINARY_WALLJUMP_COLL_CBS:
         bits |= CLASS3_ORDINARY_WALLJUMP_COLL
     if coll_cb in WALLTECH_COLL_CBS:
@@ -1243,13 +1106,6 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "COMMON_FALL": CLASS_COMMON_FALL,
         "SPECIALHI": CLASS_SPECIALHI,
         "COMMON_AIR_PHYS": CLASS_COMMON_AIR_PHYS,
-        "COMMON_AIR_COLL": CLASS_COMMON_AIR_COLL,
-        "COMMON_AIR_WALLJUMP_COLL": CLASS_COMMON_AIR_WALLJUMP_COLL,
-        "LANDING_COLL": CLASS_LANDING_COLL,
-        "LANDING_AIR_COLL": CLASS_LANDING_AIR_COLL,
-        "DAMAGE_COMMON_COLL": CLASS_DAMAGE_COMMON_COLL,
-        "DAMAGE_FLY_COLL": CLASS_DAMAGE_FLY_COLL,
-        "DAMAGE_FALL_COLL": CLASS_DAMAGE_FALL_COLL,
         "GROUNDED_STAGE_OBJECT_CARRY_COLL": CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL,
         "GROUNDED_ATTACK": CLASS_GROUNDED_ATTACK,
         "GUARDON_FRAME_START_X672_IASA": CLASS_GUARDON_FRAME_START_X672_IASA,
@@ -1263,17 +1119,12 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "GROUNDED_ATTACK_WAIT_IASA_SPECIALS": CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS,
         "GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION": CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION,
         "GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD": CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD,
-        "ESCAPE_AIR_COLL": CLASS_ESCAPE_AIR_COLL,
         "FX_SPECIALS_GROUND_B108_COLL": CLASS_FX_SPECIALS_GROUND_B108_COLL,
         "FT80082B1C_BASIC_LANDING_COLL": CLASS_FT80082B1C_BASIC_LANDING_COLL,
     }
     classes2 = {
         "COMMON_AIRBORNE_COLL": CLASS2_COMMON_AIRBORNE_COLL,
         "FRESH_GUARDON_ITEM_SHIELDDESC_IASA": CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA,
-        "COMMON_GROUNDED_B2DC_COLL": CLASS2_COMMON_GROUNDED_B2DC_COLL,
-        "COMMON_GROUNDED_B4B0_COLL": CLASS2_COMMON_GROUNDED_B4B0_COLL,
-        "COMMON_GROUNDED_B108_COLL": CLASS2_COMMON_GROUNDED_B108_COLL,
-        "COMMON_GROUNDED_COLL": CLASS2_COMMON_GROUNDED_COLL,
         "WALK_ACTION": CLASS2_WALK_ACTION,
         "FALL_LIKE_ACTION": CLASS2_FALL_LIKE_ACTION,
         "GUARD_STATE": CLASS2_GUARD_STATE,
@@ -1288,11 +1139,6 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "CAPTURE_CONSTRAINT_CONDITIONAL_COLL": CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL,
     }
     classes3 = {
-        "PHASE4_ATTACK_AIR_COLL": CLASS3_PHASE4_ATTACK_AIR_COLL,
-        "PHASE4_DAMAGE_COMMON_COLL": CLASS3_PHASE4_DAMAGE_COMMON_COLL,
-        "PHASE4_DAMAGE_FALL_COLL": CLASS3_PHASE4_DAMAGE_FALL_COLL,
-        "PHASE4_DAMAGE_FLY_COLL": CLASS3_PHASE4_DAMAGE_FLY_COLL,
-        "PHASE4_ESCAPE_AIR_COLL": CLASS3_PHASE4_ESCAPE_AIR_COLL,
         "ORDINARY_WALLJUMP_COLL": CLASS3_ORDINARY_WALLJUMP_COLL,
         "WALLTECH_COLL": CLASS3_WALLTECH_COLL,
         "CATCH_TARGET_MASK_1": CLASS3_CATCH_TARGET_MASK_1,
@@ -1311,6 +1157,24 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "GROUND_GUARD": COLL_HANDLER_GROUND_GUARD,
         "GROUND_GUARD_SETOFF": COLL_HANDLER_GROUND_GUARD_SETOFF,
         "GROUND_OTTOTTO": COLL_HANDLER_GROUND_OTTOTTO,
+        "AIR_COMMON": COLL_HANDLER_AIR_COMMON,
+        "AIR_ATTACK": COLL_HANDLER_AIR_ATTACK,
+        "AIR_ESCAPE": COLL_HANDLER_AIR_ESCAPE,
+        "DAMAGE_COMMON": COLL_HANDLER_DAMAGE_COMMON,
+        "DAMAGE_FLY": COLL_HANDLER_DAMAGE_FLY,
+        "DAMAGE_FALL": COLL_HANDLER_DAMAGE_FALL,
+        "DOWN_BOUND": COLL_HANDLER_DOWN_BOUND,
+        "DOWN_B108": COLL_HANDLER_DOWN_B108,
+        "DOWN_B2DC": COLL_HANDLER_DOWN_B2DC,
+        "PASSIVE_B108": COLL_HANDLER_PASSIVE_B108,
+        "PASSIVE_B2DC": COLL_HANDLER_PASSIVE_B2DC,
+        "PASSIVE_WALL": COLL_HANDLER_PASSIVE_WALL,
+        "PASSIVE_CEIL": COLL_HANDLER_PASSIVE_CEIL,
+        "AIR_FALL_SPECIAL": COLL_HANDLER_AIR_FALL_SPECIAL,
+        "GROUND_LANDING": COLL_HANDLER_GROUND_LANDING,
+        "GROUND_LANDING_AIR": COLL_HANDLER_GROUND_LANDING_AIR,
+        "DOWN_REFLECT": COLL_HANDLER_DOWN_REFLECT,
+        "DOWN_DAMAGE": COLL_HANDLER_DOWN_DAMAGE,
     }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {

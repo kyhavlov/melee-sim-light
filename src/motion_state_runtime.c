@@ -23,7 +23,7 @@ void motion_state_finalize_seeded_coll_data_before_map(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      if (batch->state.live_coll_handler_kind[idx] == (uint8_t)MSL_COLL_HANDLER_LEGACY ||
+      if (!msl_coll_handler_is_source_ground(batch->state.live_coll_handler_kind[idx]) ||
           batch->state.floor_sweep_prev_source_owned[idx] == 0u ||
           batch->state.floor_sweep_prev_runtime_owned[idx] != 0u) {
         continue;

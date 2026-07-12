@@ -401,8 +401,7 @@ MslMpcoll800471F8EscapeAirPacket msl_mpcoll_800471f8_escapeair_packet(const MslM
           ? 1u
           : 0u;
   const uint8_t use_frame_start_last_pos =
-      ((msl_motion_state_class3_has(ctx->char_id, action_id,
-                                    MSL_MS_CLASS3_PHASE4_ESCAPE_AIR_COLL) &&
+      ((msl_motion_state_coll_handler_is(ctx->char_id, action_id, MSL_COLL_HANDLER_AIR_ESCAPE) &&
         !ecb_lock_active && ecb_lock_timer_seed == 0u) ||
        (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
         (frame_start_jumpaerial_owner != 0u || late_jump_fresh_edge_owner != 0u)))

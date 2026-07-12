@@ -1081,7 +1081,10 @@ static inline uint8_t physics_floor_line_contains_or_connects_to_nudged_x(
 }
 
 static inline uint8_t physics_action_uses_generated_b2dc_edge_snap_callback(uint16_t action_id) {
-  if (msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_FT800827A0_EDGE_SNAP_COLL)) {
+  const uint8_t handler = msl_motion_state_coll_handler_kind((uint8_t)MSL_CHAR_ID_FOX, action_id);
+  if (handler == (uint8_t)MSL_COLL_HANDLER_DOWN_B2DC ||
+      handler == (uint8_t)MSL_COLL_HANDLER_PASSIVE_B2DC ||
+      msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_FT800827A0_EDGE_SNAP_COLL)) {
     // Generated MSLMSO01 owner for grounded callbacks that route to `ft_800827A0`, directly or
     // through wrappers such as `ft_80084104` / `ft_800841B8`. Common player nudge runs before
     // Fighter_procUpdate and the Coll callback, so these actions may consume an outward x450 nudge
@@ -1095,7 +1098,8 @@ static inline uint8_t physics_action_uses_generated_b2dc_edge_snap_callback(uint
 }
 
 static inline uint8_t physics_action_uses_ft80084280_ottotto_edge_callback(uint16_t action_id) {
-  if (msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_LANDING_AIR_COLL)) {
+  const uint8_t handler = msl_motion_state_coll_handler_kind((uint8_t)MSL_CHAR_ID_FOX, action_id);
+  if (msl_coll_handler_is_landing(handler)) {
     return 1u;
   }
   switch (action_id) {
@@ -1167,8 +1171,12 @@ static inline uint8_t physics_action_uses_player_nudge_ft80083f88_ground_to_air_
                 action_id == (uint16_t)MSL_ACT_DOWN_WAIT_D ||
                 action_id == (uint16_t)MSL_ACT_DOWN_STAND_U ||
                 action_id == (uint16_t)MSL_ACT_DOWN_STAND_D);
-  return (uint8_t)(audited_action && msl_motion_state_common_class_has_fast(
-                                         action_id, MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL));
+  const uint8_t handler = msl_motion_state_coll_handler_kind((uint8_t)MSL_CHAR_ID_FOX, action_id);
+  return (uint8_t)(audited_action && (handler == (uint8_t)MSL_COLL_HANDLER_GROUND_B108_FALL ||
+                                      handler == (uint8_t)MSL_COLL_HANDLER_DOWN_B108 ||
+                                      handler == (uint8_t)MSL_COLL_HANDLER_PASSIVE_B108 ||
+                                      msl_motion_state_common_class_has_fast(
+                                          action_id, MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL)));
 }
 
 static inline uint8_t physics_action_uses_common_damage_floor_loss_nudge(uint16_t action_id) {
@@ -1267,8 +1275,8 @@ static inline uint16_t physics_common_overlap_nudge_source_action(const MslBatch
   const uint16_t action_id = batch->state.action_id[idx];
   const uint16_t frame_start_action = batch->state.frame_start_action_id[idx];
   if (action_id != frame_start_action &&
-      msl_motion_state_coll_handler_kind(batch->state.char_id[idx], frame_start_action) !=
-          (uint8_t)MSL_COLL_HANDLER_LEGACY) {
+      msl_coll_handler_is_source_ground(
+          msl_motion_state_coll_handler_kind(batch->state.char_id[idx], frame_start_action))) {
     // Fighter_8006A360 runs the frame-start owner's Anim callback and common overlap nudge before
     // Fighter_procUpdate can install an IASA destination. Use the generated frame-start callback
     // owner for that xF8 nudge phase; the live destination still owns subsequent Phys/Coll.

@@ -448,6 +448,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       MslMpcollContext mpcoll_ctx = mpcoll_context_make(batch, bi, idx, stage_id, g, cg, lwg, rwg);
       const uint16_t action_id = mpcoll_ctx.action_id;
       const uint16_t prev_action_id = mpcoll_ctx.prev_action_id;
+      const uint8_t coll_handler = batch->state.live_coll_handler_kind[idx];
       MslMpcollSourcePhases source_phases = mpcoll_source_phases_for_motion_state(
           mpcoll_ctx.char_id, action_id,
           mpcoll_ft_check_ground_ledge_uses_no_ledge_path(batch, idx));
@@ -790,7 +791,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const uint8_t live_ftcommon_air_collision_uses_locked_ecb_bottom =
           (msl_escapeair_locked_bottom_owner_is_live_ftcommon(
                batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
-           (msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_FT80081D0C_AIR_COLL) ||
+           (coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_ATTACK ||
+            coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_ESCAPE ||
+            msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_FT80081D0C_AIR_COLL) ||
             msl_motion_state_class_has(char_id, action_id,
                                        MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)))
               ? 1u
@@ -807,8 +810,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
             action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
             action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
             (action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] != 0u) ||
-            is_attackair_action(action_id) ||
-            msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_COMMON_AIR_COLL)))
+            is_attackair_action(action_id) || msl_coll_handler_is_common_air(coll_handler)))
               ? 1u
               : 0u;
       uint8_t use_locked_desired_ecb_bottom = 0u;
@@ -1416,7 +1418,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const uint8_t cliff_ledge_floor_owner_active =
           (cliff_ledge_floor_owner_selected || cliff_ledge_floor_owner_live_current_line) ? 1u : 0u;
       const MslEscapeAirCollEpisode escapeair_episode = msl_escapeair_coll_episode_make(
-          msl_motion_state_class3_has(char_id, action_id, MSL_MS_CLASS3_PHASE4_ESCAPE_AIR_COLL),
+          msl_motion_state_coll_handler_is(char_id, action_id, MSL_COLL_HANDLER_AIR_ESCAPE),
           action_id, batch->state.seed_prev_action_id[idx], ecb_lock_active);
       const uint8_t escapeair_locked = escapeair_episode.locked;
       uint8_t deep_lock_penetration = 0u;
@@ -1613,7 +1615,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const uint8_t common_damage_post_unlock_pose_bottom_owner =
           // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
           // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80044628_Floor}
-          // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 DAMAGE_GROUND + DAMAGE_COMMON_COLL
+          // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 DAMAGE_GROUND + coll_handler_kind
           (is_common_damage_ground_pose_ecb_action(action_id) &&
            batch->state.on_ground[idx] == 0u && batch->state.hitlag[idx] == 0u &&
            batch->state.hitstun[idx] != 0u && ecb_lock_timer == 0u &&
@@ -3667,7 +3669,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         if (!on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
             escapeair_no_lock_jumpaerial_entry && !ecb_lock_active && ecb_lock_timer_seed == 0u &&
             fabsf(batch->state.speed_y_self[idx]) <= k_floor_horiz_dy_thresh) {
-          // data/motion_state/owners/*.bin::MSLMSO01 PHASE4_ESCAPE_AIR_COLL
+          // data/motion_state/owners/*.bin::MSLMSO01 coll_handler_kind=AIR_ESCAPE
           // data/stages/bin/*.bin::MSLSTG01 fighter_solid/platform_transform metadata
           // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
           // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
@@ -6944,7 +6946,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
            action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
            action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
            (action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] != 0u) ||
-           msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_COMMON_AIR_COLL)) &&
+           msl_coll_handler_is_common_air(coll_handler)) &&
           batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
           (msl_escapeair_locked_bottom_owner_any(
                batch->state.coll_desired_ecb_bottom_locked_owner[idx]) ||

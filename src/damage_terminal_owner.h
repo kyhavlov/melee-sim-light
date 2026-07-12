@@ -29,16 +29,16 @@ static inline uint8_t msl_damage_owner_is_damage_ground_action(uint16_t action_i
 }
 
 static inline uint8_t msl_damage_owner_is_damage_collision_landing_action(uint16_t action_id) {
-  return (uint8_t)(msl_motion_state_common_class3_has_fast(
-                       action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL) ||
-                   msl_motion_state_common_class3_has_fast(action_id,
-                                                           MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL) ||
-                   msl_motion_state_common_class3_has_fast(action_id,
-                                                           MSL_MS_CLASS3_PHASE4_DAMAGE_FALL_COLL));
+  const uint8_t handler = msl_motion_state_coll_handler_kind((uint8_t)MSL_CHAR_ID_FOX, action_id);
+  return (uint8_t)(handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_COMMON ||
+                   handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FLY ||
+                   handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FALL ||
+                   handler == (uint8_t)MSL_COLL_HANDLER_DOWN_DAMAGE ||
+                   handler == (uint8_t)MSL_COLL_HANDLER_DOWN_REFLECT);
 }
 
 static inline uint8_t msl_damage_owner_is_damagefly_collision_action(uint16_t action_id) {
-  return msl_motion_state_common_class3_has_fast(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL);
+  return msl_motion_state_common_coll_handler_is(action_id, MSL_COLL_HANDLER_DAMAGE_FLY);
 }
 
 static inline uint8_t msl_source_clear_terminal_is_downed_recovery_park_action(uint16_t action_id) {

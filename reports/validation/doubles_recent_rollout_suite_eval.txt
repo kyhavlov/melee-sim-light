@@ -369,8 +369,8 @@ rollout.streak_len.median: 63
 rollout.streak_len.p90: 216
 rollout.streak_len.p95: 397
 rollout.streak_len.max: 694
-rollout.first_mismatch_total: 58
-rollout.first_mismatch_seeded_total: 37
+rollout.first_mismatch_total: 57
+rollout.first_mismatch_seeded_total: 36
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=14.0303 rec=2822 p=0 seed/ref/out=-34.1405/-34.5581/-48.5884 actions=90/90/90 category=unclassified
@@ -477,8 +477,8 @@ overall.rollout.streak_len.p90: 396
 overall.rollout.streak_len.p95: 510
 overall.rollout.streak_len.max: 1214
 overall.rollout.best_len.max: 1214
-overall.rollout.first_mismatch_total: 1253
-overall.rollout.first_mismatch_seeded_total: 800
+overall.rollout.first_mismatch_total: 1252
+overall.rollout.first_mismatch_seeded_total: 799
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=75.1385 rec=3788 p=0 seed/ref/out=-64.0647/-64.728/-139.866 actions=29/29/29 category=unclassified

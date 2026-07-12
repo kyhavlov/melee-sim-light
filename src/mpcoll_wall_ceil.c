@@ -515,7 +515,7 @@ static inline uint8_t specialhi_left_wall_endpoint_envelope_stale_from_callback_
 }
 
 static inline uint8_t mpcoll_damagefly_wall_asdi_latch_action(uint16_t action_id) {
-  return msl_motion_state_common_class3_has_fast(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL);
+  return msl_motion_state_common_coll_handler_is(action_id, MSL_COLL_HANDLER_DAMAGE_FLY);
 }
 
 static inline uint8_t mpcoll_wall_asdi_producer_action(uint8_t char_id, uint16_t action_id) {
@@ -586,15 +586,16 @@ static inline uint8_t mpcoll_action_uses_common_air_walljump_callback(uint16_t a
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
   // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
   // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
-  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_COMMON_AIR_WALLJUMP_COLL);
+  const uint8_t handler = msl_motion_state_coll_handler_kind((uint8_t)MSL_CHAR_ID_FOX, action_id);
+  return (uint8_t)(handler == (uint8_t)MSL_COLL_HANDLER_AIR_COMMON ||
+                   handler == (uint8_t)MSL_COLL_HANDLER_PASSIVE_WALL);
 }
 
 static inline uint8_t mpcoll_action_uses_phase4_ft80081d0c_air_collision(uint8_t char_id,
                                                                          uint16_t action_id) {
-  return (uint8_t)(msl_motion_state_class3_has(char_id, action_id,
-                                               MSL_MS_CLASS3_PHASE4_ATTACK_AIR_COLL) ||
-                   msl_motion_state_class3_has(char_id, action_id,
-                                               MSL_MS_CLASS3_PHASE4_ESCAPE_AIR_COLL));
+  const uint8_t handler = msl_motion_state_coll_handler_kind(char_id, action_id);
+  return (uint8_t)(handler == (uint8_t)MSL_COLL_HANDLER_AIR_ATTACK ||
+                   handler == (uint8_t)MSL_COLL_HANDLER_AIR_ESCAPE);
 }
 
 static inline uint8_t mpcoll_action_uses_retained_ft80081d0c_air_collision(uint8_t char_id,
@@ -603,10 +604,9 @@ static inline uint8_t mpcoll_action_uses_retained_ft80081d0c_air_collision(uint8
   // `mpColl_800471F8`; that source path runs the full `mpColl_80046904` airborne wall envelope on
   // both sides, but unlike common Jump/Fall callbacks it does not immediately call the walljump or
   // cliff post-consumers.
-  // AttackAir and EscapeAir route through the narrow Phase 4 class3 word before this retained
-  // broad wrapper fallback. The fallback preserves non-Phase-4 owners that share ft_80081D0C but
-  // are not accepted as Phase 4-complete behavior.
-  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class3 PHASE4_*_COLL)
+  // AttackAir and EscapeAir route through exact handlers before this retained later-packet
+  // fallback for callbacks that also share ft_80081D0C.
+  // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 coll_handler_kind
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80046904}
   return (

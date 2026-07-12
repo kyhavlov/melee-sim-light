@@ -399,6 +399,7 @@ uint8_t combat_defer_late_slot_same_frame_speciallw_entry_hit(const MslBatch* ba
     return 0u;
   }
   const uint16_t defender_action = batch->state.action_id[d_idx];
+  const uint8_t defender_coll_handler = batch->state.live_coll_handler_kind[d_idx];
   const uint16_t attacker_prev_action = batch->state.prev_action_id[a_idx];
   const uint8_t attacker_squat_family_platform_pass_source =
       (batch->state.frame_start_on_ground[a_idx] != 0u &&
@@ -410,8 +411,8 @@ uint8_t combat_defer_late_slot_same_frame_speciallw_entry_hit(const MslBatch* ba
   if (action_fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START &&
       attacker_squat_family_platform_pass_source && batch->state.on_ground[d_idx] == 0u &&
       batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] != 0u &&
-      (msl_motion_state_common_class_has_fast(defender_action, MSL_MS_CLASS_DAMAGE_FLY_COLL) ||
-       msl_motion_state_common_class_has_fast(defender_action, MSL_MS_CLASS_DAMAGE_COMMON_COLL))) {
+      (defender_coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FLY ||
+       defender_coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_COMMON)) {
     // Fighter BODY pair-order + active airborne damage collision owner:
     // - A frame-start grounded Squat-family state can enter grounded Reflector and immediately
     //   platform-pass into SpecialAirLwStart, preserving the ground-start submotion/hitbox while
@@ -425,7 +426,7 @@ uint8_t combat_defer_late_slot_same_frame_speciallw_entry_hit(const MslBatch* ba
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
     //   ftFx_SpecialLwStart_Pass,ftFx_SpecialAirLw_Enter}
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
-    // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 DAMAGE_*_COLL classes)
+    // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 coll_handler_kind
     return 1u;
   }
   if (!batch->state.on_ground[d_idx] || batch->state.hitlag[d_idx] != 0u ||

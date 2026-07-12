@@ -4611,10 +4611,9 @@ static uint8_t msl_replay_fod_sparse_velocity_has_floor_callback_owner(const Msl
   }
   for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
     const uint16_t action = seed->action_id[p];
-    const uint8_t landing_entry =
-        (uint8_t)((msl_motion_state_common_class_has_fast(action, MSL_MS_CLASS_LANDING_COLL) ||
-                   msl_motion_state_common_class_has_fast(action, MSL_MS_CLASS_LANDING_AIR_COLL)) &&
-                  seed->seed_prev_action_id[p] != action);
+    const uint8_t coll_handler = msl_motion_state_coll_handler_kind(seed->char_id[p], action);
+    const uint8_t landing_entry = (uint8_t)(msl_coll_handler_is_landing(coll_handler) &&
+                                            seed->seed_prev_action_id[p] != action);
     const uint8_t damage_air =
         (uint8_t)(msl_motion_state_common_class_has_fast(action, MSL_MS_CLASS_DAMAGE_AIR) &&
                   seed->hitlag[p] == 0u && seed->hitstun[p] != 0u);

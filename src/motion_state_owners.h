@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#include "ids.h"
+
 // Decomp: Fighter_ChangeMotionState copies MotionState callback pointers and raw flags into the
 // live fighter state from the selected motion-state row.
 // refs/melee/src/melee/ft/types.h::MotionState
@@ -33,8 +35,55 @@ typedef enum MslCollHandlerKind {
   MSL_COLL_HANDLER_GROUND_GUARD = 5,
   MSL_COLL_HANDLER_GROUND_GUARD_SETOFF = 6,
   MSL_COLL_HANDLER_GROUND_OTTOTTO = 7,
-  MSL_COLL_HANDLER_COUNT = 8,
+  MSL_COLL_HANDLER_AIR_COMMON = 8,
+  MSL_COLL_HANDLER_AIR_ATTACK = 9,
+  MSL_COLL_HANDLER_AIR_ESCAPE = 10,
+  MSL_COLL_HANDLER_DAMAGE_COMMON = 11,
+  MSL_COLL_HANDLER_DAMAGE_FLY = 12,
+  MSL_COLL_HANDLER_DAMAGE_FALL = 13,
+  MSL_COLL_HANDLER_DOWN_BOUND = 14,
+  MSL_COLL_HANDLER_DOWN_B108 = 15,
+  MSL_COLL_HANDLER_DOWN_B2DC = 16,
+  MSL_COLL_HANDLER_PASSIVE_B108 = 17,
+  MSL_COLL_HANDLER_PASSIVE_B2DC = 18,
+  MSL_COLL_HANDLER_PASSIVE_WALL = 19,
+  MSL_COLL_HANDLER_PASSIVE_CEIL = 20,
+  MSL_COLL_HANDLER_AIR_FALL_SPECIAL = 21,
+  MSL_COLL_HANDLER_GROUND_LANDING = 22,
+  MSL_COLL_HANDLER_GROUND_LANDING_AIR = 23,
+  MSL_COLL_HANDLER_DOWN_REFLECT = 24,
+  MSL_COLL_HANDLER_DOWN_DAMAGE = 25,
+  MSL_COLL_HANDLER_COUNT = 26,
 } MslCollHandlerKind;
+
+static inline uint8_t msl_coll_handler_source_ground_mode(uint8_t handler) {
+  if (handler >= (uint8_t)MSL_COLL_HANDLER_GROUND_B108_FALL &&
+      handler <= (uint8_t)MSL_COLL_HANDLER_GROUND_OTTOTTO) {
+    return handler;
+  }
+  return (uint8_t)MSL_COLL_HANDLER_LEGACY;
+}
+
+static inline uint8_t msl_coll_handler_is_source_ground(uint8_t handler) {
+  return (uint8_t)(msl_coll_handler_source_ground_mode(handler) !=
+                   (uint8_t)MSL_COLL_HANDLER_LEGACY);
+}
+
+static inline uint8_t msl_coll_handler_is_common_air(uint8_t handler) {
+  return (uint8_t)(handler == (uint8_t)MSL_COLL_HANDLER_AIR_COMMON ||
+                   handler == (uint8_t)MSL_COLL_HANDLER_AIR_FALL_SPECIAL);
+}
+
+static inline uint8_t msl_coll_handler_is_landing(uint8_t handler) {
+  return (uint8_t)(handler == (uint8_t)MSL_COLL_HANDLER_GROUND_LANDING ||
+                   handler == (uint8_t)MSL_COLL_HANDLER_GROUND_LANDING_AIR);
+}
+
+static inline uint8_t msl_coll_handler_is_damage(uint8_t handler) {
+  return (uint8_t)((handler >= (uint8_t)MSL_COLL_HANDLER_DAMAGE_COMMON &&
+                    handler <= (uint8_t)MSL_COLL_HANDLER_DAMAGE_FALL) ||
+                   handler == (uint8_t)MSL_COLL_HANDLER_DOWN_DAMAGE);
+}
 
 enum {
   MSL_MS_CLASS_ATTACK_AIR = 1u << 0,
@@ -46,13 +95,6 @@ enum {
   MSL_MS_CLASS_COMMON_FALL = 1u << 6,
   MSL_MS_CLASS_SPECIALHI = 1u << 7,
   MSL_MS_CLASS_COMMON_AIR_PHYS = 1u << 8,
-  MSL_MS_CLASS_COMMON_AIR_COLL = 1u << 9,
-  MSL_MS_CLASS_COMMON_AIR_WALLJUMP_COLL = 1u << 10,
-  MSL_MS_CLASS_LANDING_COLL = 1u << 11,
-  MSL_MS_CLASS_LANDING_AIR_COLL = 1u << 12,
-  MSL_MS_CLASS_DAMAGE_COMMON_COLL = 1u << 13,
-  MSL_MS_CLASS_DAMAGE_FLY_COLL = 1u << 14,
-  MSL_MS_CLASS_DAMAGE_FALL_COLL = 1u << 15,
   MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL = 1u << 16,
   MSL_MS_CLASS_GROUNDED_ATTACK = 1u << 17,
   MSL_MS_CLASS_GUARDON_FRAME_START_X672_IASA = 1u << 18,
@@ -66,17 +108,12 @@ enum {
   MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS = 1u << 26,
   MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION = 1u << 27,
   MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD = 1u << 28,
-  MSL_MS_CLASS_ESCAPE_AIR_COLL = 1u << 29,
   MSL_MS_CLASS_FX_SPECIALS_GROUND_B108_COLL = 1u << 30,
   MSL_MS_CLASS_FT80082B1C_BASIC_LANDING_COLL = 1u << 31,
 };
 
 enum {
-  MSL_MS_CLASS2_COMMON_GROUNDED_COLL = 1u << 0,
-  MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL = 1u << 1,
   MSL_MS_CLASS2_COMMON_AIRBORNE_COLL = 1u << 2,
-  MSL_MS_CLASS2_COMMON_GROUNDED_B2DC_COLL = 1u << 3,
-  MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL = 1u << 4,
   MSL_MS_CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA = 1u << 5,
   MSL_MS_CLASS2_WALK_ACTION = 1u << 6,
   MSL_MS_CLASS2_FALL_LIKE_ACTION = 1u << 7,
@@ -97,11 +134,6 @@ enum {
 };
 
 enum {
-  MSL_MS_CLASS3_PHASE4_ATTACK_AIR_COLL = 1u << 0,
-  MSL_MS_CLASS3_PHASE4_ESCAPE_AIR_COLL = 1u << 1,
-  MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL = 1u << 2,
-  MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL = 1u << 3,
-  MSL_MS_CLASS3_PHASE4_DAMAGE_FALL_COLL = 1u << 4,
   MSL_MS_CLASS3_ORDINARY_WALLJUMP_COLL = 1u << 5,
   MSL_MS_CLASS3_WALLTECH_COLL = 1u << 6,
   MSL_MS_CLASS3_CATCH_TARGET_MASK_1 = 1u << 7,
@@ -119,6 +151,16 @@ uint16_t msl_motion_state_iasa_cb_id(uint8_t char_id, uint16_t action_id);
 uint16_t msl_motion_state_phys_cb_id(uint8_t char_id, uint16_t action_id);
 uint16_t msl_motion_state_coll_cb_id(uint8_t char_id, uint16_t action_id);
 uint8_t msl_motion_state_coll_handler_kind(uint8_t char_id, uint16_t action_id);
+static inline uint8_t msl_motion_state_coll_handler_is(uint8_t char_id, uint16_t action_id,
+                                                       MslCollHandlerKind handler) {
+  return (uint8_t)(msl_motion_state_coll_handler_kind(char_id, action_id) == (uint8_t)handler);
+}
+static inline uint8_t msl_motion_state_common_coll_handler_is(uint16_t action_id,
+                                                              MslCollHandlerKind handler) {
+  // Common MotionState rows share one exact callback identity across supported characters.
+  // data/motion_state/owners/*.bin::MSLMSO01 coll_handler_kind
+  return msl_motion_state_coll_handler_is((uint8_t)MSL_CHAR_ID_FOX, action_id, handler);
+}
 uint16_t msl_motion_state_cam_cb_id(uint8_t char_id, uint16_t action_id);
 uint8_t msl_motion_state_has_motion_flag(uint8_t char_id, uint16_t action_id, uint32_t flag_mask);
 uint32_t msl_motion_state_class_bits(uint8_t char_id, uint16_t action_id);

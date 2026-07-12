@@ -467,7 +467,9 @@ static inline uint8_t action_uses_common_air_walljump_callback(uint16_t a) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
   // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
-  return msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_COMMON_AIR_WALLJUMP_COLL);
+  const uint8_t handler = msl_motion_state_coll_handler_kind((uint8_t)MSL_CHAR_ID_FOX, a);
+  return (uint8_t)(handler == (uint8_t)MSL_COLL_HANDLER_AIR_COMMON ||
+                   handler == (uint8_t)MSL_COLL_HANDLER_PASSIVE_WALL);
 }
 
 static inline float passivewalljump_entry_transn_z(const MslBatch* batch, size_t idx, uint8_t cid) {
@@ -2311,20 +2313,13 @@ static inline float ottotto_floor_loss_player_nudge_x(const MslBatch* batch,
 }
 
 static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
-  if (msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL)) {
-    // Phase 3 common ft_80084280/mpColl_8004B4B0 owner. The generated callback bit covers Wait,
-    // Walk*, RunBrake, Landing, and LandingFallSpecial without a local action-id scan.
+  const uint8_t handler = msl_motion_state_coll_handler_kind((uint8_t)MSL_CHAR_ID_FOX, a);
+  if (handler == (uint8_t)MSL_COLL_HANDLER_GROUND_B4B0_TEETER ||
+      msl_coll_handler_is_landing(handler)) {
+    // Exact ft_80084280/mpColl_8004B4B0 callback handlers cover Wait, Walk*, RunBrake, and the
+    // Landing families without a local action-id scan.
     // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
     // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class2_bits
-    return 1u;
-  }
-  if (msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_LANDING_AIR_COLL)) {
-    // Decomp: ftCo_LandingAir_Coll delegates to ftCo_Landing_Coll, which calls ft_80084280.
-    // That common collision callback lets ftCo_8009A3C8 consume Collide_Edge and enter Ottotto
-    // before the generic Fall handoff.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
-    // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
     return 1u;
   }
   return 0u;
@@ -2409,15 +2404,15 @@ static inline uint8_t ft80084280_ottotto_edge_admits_after_a678_snap(const MslBa
 }
 
 static inline uint8_t action_is_air_locomotion(uint16_t a) {
+  const uint8_t handler = msl_motion_state_coll_handler_kind((uint8_t)MSL_CHAR_ID_FOX, a);
+  if (msl_coll_handler_is_common_air(handler) || handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FALL) {
+    return 1u;
+  }
   if (msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_COMMON_AIRBORNE_COLL)) {
-    // Phase 3 common airborne Coll callbacks: Fall/FallSpecial/Jump/JumpAerial/Pass/MissFoot and
-    // CliffJump2 route through the generated common owner. AttackAir, EscapeAir, damage, item, and
-    // bespoke specials remain explicit retained owners.
+    // CliffJump2/Pass/MissFoot remain later-packet compatibility identities. Packet 2 common-air
+    // callbacks return through exact handlers above.
     // refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}
     // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class2_bits
-    return 1;
-  }
-  if (msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_DAMAGE_FALL_COLL)) {
     return 1;
   }
   return 0;
@@ -5524,6 +5519,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
       }
 
       const uint16_t a = batch->state.action_id[idx];
+      const uint8_t coll_handler = batch->state.live_coll_handler_kind[idx];
       const uint8_t frame_start_ft80083f88_floor_loss =
           // Source grounded collision callbacks such as SquatRv_Coll are selected from the
           // frame-start grounded action and call ft_80083F88. If Phys/edge handling clears MSL's
@@ -5535,12 +5531,19 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
           // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class FT80083F88_GROUND_TO_AIR_COLL)
           (batch->state.frame_start_on_ground[idx] != 0u && was_ground == 0u &&
-           msl_motion_state_class_has(batch->state.char_id[idx], a,
-                                      MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL))
+           (coll_handler == (uint8_t)MSL_COLL_HANDLER_GROUND_B108_FALL ||
+            coll_handler == (uint8_t)MSL_COLL_HANDLER_GROUND_RUN ||
+            coll_handler == (uint8_t)MSL_COLL_HANDLER_GROUND_GUARD ||
+            coll_handler == (uint8_t)MSL_COLL_HANDLER_GROUND_GUARD_SETOFF ||
+            coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_BOUND ||
+            coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_B108 ||
+            coll_handler == (uint8_t)MSL_COLL_HANDLER_PASSIVE_B108 ||
+            msl_motion_state_class_has(batch->state.char_id[idx], a,
+                                       MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL)))
               ? 1u
               : 0u;
       if (batch->state.hitlag_started_frame[idx] != 0) {
-        if (!was_ground && now_ground && action_is_attackair(a)) {
+        if (!was_ground && now_ground && coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_ATTACK) {
           const uint16_t land = locomotion_attackair_landing_action_for_contact(batch, idx, a);
           if (land != 0u) {
             locomotion_enter_landing_action_from_air(batch, ch, idx, (size_t)bi, a, land);
@@ -5554,15 +5557,15 @@ void locomotion_update_post_collision(MslBatch* batch) {
                                               ? batch->state.floor_skip_segment_id[idx]
                                               : 0xFFFFu;
       const uint8_t keep_attackair_transformed_platform_floor_skip =
-          (floor_skip_segment != 0xFFFFu && action_is_attackair(a) && now_ground == 0u &&
+          (floor_skip_segment != 0xFFFFu && coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_ATTACK &&
+           now_ground == 0u &&
            stage_collision_floor_line_has_height_platform_transform(stage_id, floor_skip_segment))
               ? 1u
               : 0u;
       const uint8_t keep_common_air_transformed_platform_floor_skip =
           (floor_skip_segment != 0xFFFFu && now_ground == 0u &&
            stage_collision_floor_line_has_height_platform_transform(stage_id, floor_skip_segment) &&
-           batch->state.prev_action_id[idx] == a &&
-           msl_motion_state_common_class_has_fast(a, MSL_MS_CLASS_COMMON_AIR_COLL))
+           batch->state.prev_action_id[idx] == a && msl_coll_handler_is_common_air(coll_handler))
               ? 1u
               : 0u;
       const uint8_t keep_shine_platform_pass_floor_skip =
@@ -5872,7 +5875,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
                   ? 1u
                   : 0u;
           const uint8_t delayed_attackair_pending =
-              (jumpaerial_source && !action_is_attackair(a) &&
+              (jumpaerial_source && coll_handler != (uint8_t)MSL_COLL_HANDLER_AIR_ATTACK &&
                (batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) == 0u &&
                locomotion_attackair_iasa_target(batch, c, idx, NULL, NULL))
                   ? 1u
@@ -5910,7 +5913,9 @@ void locomotion_update_post_collision(MslBatch* batch) {
               // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_800835B0}
               // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800471F8,
               //   mpColl_80047E14,mpColl_80044628_Floor}
-              (!was_ground && now_ground && (action_is_attackair(a) || delayed_attackair_pending) &&
+              (!was_ground && now_ground &&
+               (coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_ATTACK ||
+                delayed_attackair_pending) &&
                jumpaerial_source && floor_result_bottom_sweep && floor_segment != 0xFFFFu &&
                isfinite(prev_bottom_y) && isfinite(cur_bottom_y) &&
                prev_bottom_y < (batch->state.ground_contact_y[idx] - floor_bias) &&
@@ -5949,7 +5954,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // This sim derives cmd_vars[0] from extracted command-script timelines:
         // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAir*"]["events"] set_cmd_var(idx=0).
         uint16_t land = 0;
-        if (action_is_attackair(a)) {
+        if (coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_ATTACK) {
           land = locomotion_attackair_landing_action_for_contact(batch, idx, a);
         } else if (spacie_side_special_air_contact_to_ground(batch, ms, ch, idx, a)) {
           continue;
@@ -6015,7 +6020,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.pos_y[idx] =
               locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
           continue;
-        } else if (a == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+        } else if (coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_ESCAPE) {
           // EscapeAir: EscapeAir_Coll -> ft_80082C74(..., ftCo_80099D70) -> ftCo_LandingFallSpecial_Enter(..., x344)
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
           land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
@@ -6081,13 +6086,15 @@ void locomotion_update_post_collision(MslBatch* batch) {
             !action_is_air_locomotion(a)) {
           land = locomotion_ft80082b1c_basic_landing_action(batch, c, idx, a);
         }
-        // Locomotion-only fallback: fall states land into Landing/LandingFallSpecial.
-        if (land == 0 && action_is_air_locomotion(a)) {
+        if (land == 0 && coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_FALL_SPECIAL) {
+          land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
+        } else if (land == 0 && coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_COMMON) {
           land = locomotion_ft80082b1c_basic_landing_action(batch, c, idx, a);
-          if (a == MSL_ACT_FALL_SPECIAL || a == MSL_ACT_FALL_SPECIAL_F ||
-              a == MSL_ACT_FALL_SPECIAL_B || a == MSL_ACT_LANDING_FALL_SPECIAL) {
-            land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
-          }
+        } else if (land == 0 && coll_handler == (uint8_t)MSL_COLL_HANDLER_LEGACY &&
+                   action_is_air_locomotion(a)) {
+          // CliffJump2/MissFoot/Pass remain later-packet callback identities, but their retained
+          // ft_80082B1C landing result still shares the common-air destination selector.
+          land = locomotion_ft80082b1c_basic_landing_action(batch, c, idx, a);
         }
 
         // Only refresh jumps / enter a landing action when we actually take a landing transition.

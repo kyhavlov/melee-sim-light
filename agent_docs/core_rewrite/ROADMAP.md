@@ -85,9 +85,10 @@ reviewable.
 1. **Common grounded wrappers — complete.** `B108`, `B2DC`, `B4B0`, Run, Guard,
    GuardSetOff, and Ottotto identities now use the live table-selected source path for all six
    characters. See [packets/01-common-grounded.md](packets/01-common-grounded.md).
-2. **Common air/landing — next.** Common airborne, AttackAir, EscapeAir, Landing, and complete
-   ground-to-air/floor-loss handoff.
-3. **Damage/passive.** Damage, DamageFly, DamageFall, passive/tech, and knockdown collision owners.
+2. **Common air/landing — owner cutover complete, geometry open.** Exact handlers and transitions
+   are installed; the retained coordinator geometry must be rewritten in place.
+3. **Damage/passive — owner cutover complete, geometry open.** Exact handlers and transition
+   ladders are consolidated; the same coordinator boundary remains.
 4. **Cliff/special/capture.** CliffCatch and simultaneous ledge ownership plus supported special and
    capture collision identities.
 5. **Remainder/deletion.** Migrate or prove out of scope every remaining supported-domain identity,

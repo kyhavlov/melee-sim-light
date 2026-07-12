@@ -12,17 +12,11 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_ATTACK_AIR,
     CLASS_ATTACK_S3,
     CLASS_ATTACK_S4,
-    CLASS_COMMON_AIR_COLL,
     CLASS_COMMON_AIR_PHYS,
-    CLASS_COMMON_AIR_WALLJUMP_COLL,
     CLASS_DAMAGE_AIR,
     CLASS_DAMAGE_COMMON,
-    CLASS_DAMAGE_COMMON_COLL,
-    CLASS_DAMAGE_FALL_COLL,
     CLASS_DAMAGE_FLY,
-    CLASS_DAMAGE_FLY_COLL,
     CLASS_DAMAGE_GROUND,
-    CLASS_ESCAPE_AIR_COLL,
     CLASS_GUARDON_FRAME_START_X672_IASA,
     CLASS_FT80081D0C_AIR_COLL,
     CLASS_FT800827A0_EDGE_SNAP_COLL,
@@ -30,10 +24,6 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_FT80082B1C_BASIC_LANDING_COLL,
     CLASS_FT80083F88_GROUND_TO_AIR_COLL,
     CLASS2_COMMON_AIRBORNE_COLL,
-    CLASS2_COMMON_GROUNDED_B2DC_COLL,
-    CLASS2_COMMON_GROUNDED_B4B0_COLL,
-    CLASS2_COMMON_GROUNDED_B108_COLL,
-    CLASS2_COMMON_GROUNDED_COLL,
     CLASS2_CATCH_START_FLOOR_LOSS,
     CLASS2_GROUND_FLOOR_LOSS_TO_FALL,
     CLASS2_CLIFF_HOLD_PHYS_SNAP,
@@ -47,7 +37,6 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS2_GUARD_STATE,
     CLASS2_LANDING_ROOT_FLOOR_SNAP,
     CLASS2_WALK_ACTION,
-    CLASS3_PHASE4_ATTACK_AIR_COLL,
     CLASS3_CATCH_KIND_1,
     CLASS3_CATCH_KIND_2,
     CLASS3_CATCH_TARGET_MASK_1,
@@ -55,10 +44,6 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED,
     FX_SPECIAL_KIND_BY_SYMBOL,
     FX_SPECIAL_KIND_VALUES,
-    CLASS3_PHASE4_DAMAGE_COMMON_COLL,
-    CLASS3_PHASE4_DAMAGE_FALL_COLL,
-    CLASS3_PHASE4_DAMAGE_FLY_COLL,
-    CLASS3_PHASE4_ESCAPE_AIR_COLL,
     CLASS3_ORDINARY_WALLJUMP_COLL,
     CLASS3_WALLTECH_COLL,
     ORDINARY_WALLJUMP_COLL_CBS,
@@ -70,8 +55,6 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_GROUNDED_ATTACK,
     CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL,
     CLASS_LANDING_AIR,
-    CLASS_LANDING_AIR_COLL,
-    CLASS_LANDING_COLL,
     CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL,
     CLASS_SPECIALHI,
     COLL_HANDLER_BY_SYMBOL,
@@ -125,8 +108,7 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     assert cb_name(0x0041, "iasa") == "ftCo_AttackAirN_IASA"
     assert cb_name(0x0041, "coll") == "ftCo_AttackAir_Coll"
     assert int(fox.class_bits[0x0041]) & CLASS_ATTACK_AIR
-    assert int(fox.class_bits[0x0041]) & CLASS_FT80081D0C_AIR_COLL
-    assert int(fox.class3_bits[0x0041]) & CLASS3_PHASE4_ATTACK_AIR_COLL
+    assert int(fox.coll_handler_kind[0x0041]) == COLL_HANDLER_BY_SYMBOL["ftCo_AttackAir_Coll"]
 
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
     assert cb_name(0x0163, "anim") == "ftFx_SpecialHi_Anim"
@@ -146,19 +128,13 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     assert cb_name(0x0019, "phys") == "ftCo_Jump_Phys"  # JumpF
     assert cb_name(0x0019, "coll") == "ftCo_Jump_Coll"
     assert int(fox.class_bits[0x0019]) & CLASS_COMMON_AIR_PHYS
-    assert int(fox.class_bits[0x0019]) & CLASS_COMMON_AIR_COLL
-    assert int(fox.class_bits[0x0019]) & CLASS_COMMON_AIR_WALLJUMP_COLL
 
     assert cb_name(0x00CA, "coll") == "ftCo_PassiveWall_Coll"
     assert cb_name(0x00CB, "coll") == "ftCo_PassiveWall_Coll"
-    assert int(fox.class_bits[0x00CA]) & CLASS_COMMON_AIR_WALLJUMP_COLL
-    assert int(fox.class_bits[0x00CB]) & CLASS_COMMON_AIR_WALLJUMP_COLL
 
     assert cb_name(0x0023, "phys") == "ftCo_FallSpecial_Phys"  # FallSpecial
     assert cb_name(0x0023, "coll") == "ftCo_FallSpecial_Coll"
     assert int(fox.class_bits[0x0023]) & CLASS_COMMON_AIR_PHYS
-    assert int(fox.class_bits[0x0023]) & CLASS_COMMON_AIR_COLL
-    assert not int(fox.class_bits[0x0023]) & CLASS_COMMON_AIR_WALLJUMP_COLL
     assert int(fox.class_bits[0x0023]) & CLASS_FT80082B1C_BASIC_LANDING_COLL
     assert cb_name(0x00FB, "coll") == "ftCo_MissFoot_Coll"
     assert int(fox.class_bits[0x00FB]) & CLASS_FT80082B1C_BASIC_LANDING_COLL
@@ -168,28 +144,19 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     # src/mpcoll_ground.c's Cliff/CollData ledge floor owner.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
     assert cb_name(0x00EC, "coll") == "ftCo_EscapeAir_Coll"
-    assert int(fox.class3_bits[0x00EC]) & CLASS3_PHASE4_ESCAPE_AIR_COLL
 
     assert cb_name(0x002A, "coll") == "ftCo_Landing_Coll"  # Landing
-    assert int(fox.class_bits[0x002A]) & CLASS_LANDING_COLL
-    assert int(fox.class_bits[0x002A]) & CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
     assert cb_name(0x0046, "coll") == "ftCo_LandingAir_Coll"  # LandingAirN
     assert int(fox.class_bits[0x0046]) & CLASS_LANDING_AIR
-    assert int(fox.class_bits[0x0046]) & CLASS_LANDING_AIR_COLL
-    assert int(fox.class_bits[0x0046]) & CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
     assert cb_name(0x00B8, "coll") == "ftCo_DownWait_Coll"
     assert not int(fox.class_bits[0x00B8]) & CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
     assert cb_name(0x00C7, "coll") == "ftCo_Passive_Coll"
     assert not int(fox.class_bits[0x00C7]) & CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
-    assert int(fox.class_bits[0x00C7]) & CLASS_FT80083F88_GROUND_TO_AIR_COLL
+    assert int(fox.coll_handler_kind[0x00C7]) == COLL_HANDLER_BY_SYMBOL["ftCo_Passive_Coll"]
     assert cb_name(0x0018, "coll") == "ftCo_KneeBend_Coll"
-    assert int(fox.class_bits[0x0018]) & CLASS_FT80083F88_GROUND_TO_AIR_COLL
+    assert int(fox.coll_handler_kind[0x0018]) == COLL_HANDLER_BY_SYMBOL["ftCo_KneeBend_Coll"]
     assert cb_name(0x0026, "coll") == "ftCo_DamageFall_Coll"  # DamageFall
-    assert int(fox.class_bits[0x0026]) & CLASS_DAMAGE_FALL_COLL
-    assert int(fox.class3_bits[0x0026]) & CLASS3_PHASE4_DAMAGE_FALL_COLL
     assert cb_name(0x005B, "coll") == "ftCo_DamageFlyRoll_Coll"  # DamageFlyRoll
-    assert int(fox.class_bits[0x005B]) & CLASS_DAMAGE_FLY_COLL
-    assert int(fox.class3_bits[0x005B]) & CLASS3_PHASE4_DAMAGE_FLY_COLL
 
     # GuardOn carries x9_b1 in the raw MotionState +0x8 word, matching MSLACID1 continuity.
     # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
@@ -260,54 +227,8 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0024,
         0x0025,
     }
-    common_air_coll = set(common_air_phys)
-    common_air_walljump_coll = {
-        0x0019,
-        0x001A,
-        0x001B,
-        0x001C,
-        0x001D,
-        0x001E,
-        0x001F,
-        0x0020,
-        0x0021,
-        0x0022,
-        0x00CA,
-        0x00CB,
-    }
-    landing_coll = {0x002A, 0x002B}
-    damagefall_coll = {0x0026}
     grounded_stage_object_carry = {
-        0x000E,
-        0x000F,
-        0x0010,
-        0x0011,
-        0x0012,
-        0x0013,
-        0x0014,
-        0x0015,
-        0x0016,
-        0x0017,
-        0x0027,
-        0x0028,
-        0x0029,
-        0x002A,
-        0x002B,
         *range(0x002C, 0x0041),
-        *range(0x0046, 0x004B),
-        0x00B2,
-        0x00B3,
-        0x00B4,
-        0x00B5,
-        0x00B6,
-        0x00BB,
-        0x00BC,
-        0x00BD,
-        0x00C3,
-        0x00C4,
-        0x00C5,
-        0x00C8,
-        0x00C9,
         0x00D4,
         0x00D5,
         0x00D6,
@@ -367,10 +288,8 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x002B,
     }
     ft80081d0c_air_coll = {
-        *range(0x0041, 0x0046),
         0x00CD,
         0x00CE,
-        0x00EC,
         0x0115,
         0x0137,
         0x013A,
@@ -389,20 +308,6 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0166,
     }
     ft80083f88_ground_to_air_coll = {
-        0x0012,
-        0x0018,
-        0x0027,
-        0x0028,
-        0x0029,
-        0x00B7,
-        0x00B8,
-        0x00BA,
-        0x00BE,
-        0x00BF,
-        0x00C0,
-        0x00C2,
-        0x00C6,
-        0x00C7,
         0x00CF,
         0x00D0,
         0x00D1,
@@ -414,22 +319,6 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0157,
     }
     ft80083090_platform_pass_coll = {
-        0x0019,
-        0x001A,
-        0x001B,
-        0x001C,
-        0x001D,
-        0x001E,
-        0x001F,
-        0x0020,
-        0x0021,
-        0x0022,
-        0x0023,
-        0x0024,
-        0x0025,
-        0x00CA,
-        0x00CB,
-        0x00CC,
         0x0105,
         0x0107,
     }
@@ -457,14 +346,6 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
     }
     ft800827a0_edge_snap_coll = {
         *range(0x002C, 0x0041),
-        0x00BB,
-        0x00BC,
-        0x00BD,
-        0x00C3,
-        0x00C4,
-        0x00C5,
-        0x00C8,
-        0x00C9,
         0x00D4,
         0x00D5,
         0x00D6,
@@ -483,7 +364,6 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0109,
         0x015D,
     }
-    escape_air_coll = {0x00EC}
     fx_specials_ground_b108_coll = {0x015B, 0x015C}
 
     for action_id in range(max_action):
@@ -499,15 +379,6 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         assert both_have(action_id, CLASS_DAMAGE_FLY) == (action_id in damage_fly)
         assert both_have(action_id, CLASS_LANDING_AIR) == (action_id in landing_air)
         assert both_have(action_id, CLASS_COMMON_AIR_PHYS) == (action_id in common_air_phys)
-        assert both_have(action_id, CLASS_COMMON_AIR_COLL) == (action_id in common_air_coll)
-        assert both_have(action_id, CLASS_COMMON_AIR_WALLJUMP_COLL) == (
-            action_id in common_air_walljump_coll
-        )
-        assert both_have(action_id, CLASS_LANDING_COLL) == (action_id in landing_coll)
-        assert both_have(action_id, CLASS_LANDING_AIR_COLL) == (action_id in landing_air)
-        assert both_have(action_id, CLASS_DAMAGE_COMMON_COLL) == (action_id in common_damage)
-        assert both_have(action_id, CLASS_DAMAGE_FLY_COLL) == (action_id in damage_fly)
-        assert both_have(action_id, CLASS_DAMAGE_FALL_COLL) == (action_id in damagefall_coll)
         assert both_have(action_id, CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL) == (
             action_id in grounded_stage_object_carry
         )
@@ -546,7 +417,6 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         assert both_have(action_id, CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD) == (
             action_id in grounded_attack_wait_iasa_catch_guard
         )
-        assert both_have(action_id, CLASS_ESCAPE_AIR_COLL) == (action_id in escape_air_coll)
         assert both_have(action_id, CLASS_FX_SPECIALS_GROUND_B108_COLL) == (
             action_id in fx_specials_ground_b108_coll
         )
@@ -563,14 +433,17 @@ def test_stage_object_carry_class_tracks_grounded_floor_persistence_owner() -> N
     def coll_name(action_id: int) -> str:
         return symbols[int(fox.coll_cb_id[action_id])]
 
+    def handler_matches(action_id: int) -> bool:
+        return int(fox.coll_handler_kind[action_id]) == COLL_HANDLER_BY_SYMBOL[coll_name(action_id)]
+
     # Landing/LandingAir share the floor-persistence owner that should inherit Randall's stage
     # object motion while already attached to its moving floor.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
     assert coll_name(0x002A) == "ftCo_Landing_Coll"
     assert coll_name(0x0046) == "ftCo_LandingAir_Coll"
-    assert has_carry(0x002A)
-    assert has_carry(0x0046)
+    assert handler_matches(0x002A)
+    assert handler_matches(0x0046)
 
     # These downed/passive-family callbacks route through ft_80084104 like grounded attacks, so they
     # should inherit the same attached-floor stage-object carry.
@@ -580,9 +453,9 @@ def test_stage_object_carry_class_tracks_grounded_floor_persistence_owner() -> N
     assert coll_name(0x00BC) == "ftCo_Down_Coll"
     assert coll_name(0x00BB) == "ftCo_DownAttack_Coll"
     assert coll_name(0x00C8) == "ftCo_PassiveStand_Coll"
-    assert has_carry(0x00BC)
-    assert has_carry(0x00BB)
-    assert has_carry(0x00C8)
+    assert handler_matches(0x00BC)
+    assert handler_matches(0x00BB)
+    assert handler_matches(0x00C8)
 
     # Catch-family grounded callbacks use ft_800841B8 -> ft_800827A0 -> mpColl_8004B2DC, so they
     # share the same attached-floor persistence owner as other B2DC grounded states.
@@ -657,24 +530,19 @@ def test_mpcoll_wrapper_phase_classes_cover_source_phase_overlaps() -> None:
     # refs/melee/src/melee/ft/ft_081B.c
     # refs/melee/src/melee/mp/mpcoll.c::{
     #   mpColl_800471F8,mpColl_800473CC,mpColl_800477E0,mpColl_8004B108,mpColl_8004B2DC}
-    assert both_have(0x0019, CLASS_FT80083090_PLATFORM_PASS_COLL)  # JumpF
-    assert both_have(0x0023, CLASS_FT80083090_PLATFORM_PASS_COLL)  # FallSpecial
+    assert not both_have(0x0019, CLASS_FT80083090_PLATFORM_PASS_COLL)  # JumpF: exact handler
+    assert both_have(0x0105, CLASS_FT80083090_PLATFORM_PASS_COLL)  # CliffJump2
     assert not both_have(0x0041, CLASS_FT80083090_PLATFORM_PASS_COLL)  # AttackAirN
 
-    assert both_have(0x0041, CLASS_FT80081D0C_AIR_COLL)  # AttackAirN
-    assert both_have(0x00EC, CLASS_FT80081D0C_AIR_COLL)  # EscapeAir
+    assert not both_have(0x0041, CLASS_FT80081D0C_AIR_COLL)  # AttackAirN: exact handler
+    assert not both_have(0x00EC, CLASS_FT80081D0C_AIR_COLL)  # EscapeAir: exact handler
     assert not both_have(0x0019, CLASS_FT80081D0C_AIR_COLL)  # JumpF
 
     assert both_have(0x015E, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)  # SpecialAirSStart
     assert both_have(0x0166, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)  # SpecialHiFall
     assert not both_have(0x0041, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)  # AttackAirN
 
-    assert both_have(0x004B, CLASS_DAMAGE_COMMON_COLL)  # DamageHi1
-    assert both_have(0x005B, CLASS_DAMAGE_FLY_COLL)  # DamageFlyRoll
-    assert both_have(0x0026, CLASS_DAMAGE_FALL_COLL)  # DamageFall
-    assert not both_have(0x0041, CLASS_DAMAGE_COMMON_COLL)  # AttackAirN
-
-    assert both_have(0x0018, CLASS_FT80083F88_GROUND_TO_AIR_COLL)  # KneeBend
+    assert not both_have(0x0018, CLASS_FT80083F88_GROUND_TO_AIR_COLL)  # exact handler
     assert both_have(0x015B, CLASS_FX_SPECIALS_GROUND_B108_COLL)  # SpecialSStart
     assert not both_have(0x002A, CLASS_FT80083F88_GROUND_TO_AIR_COLL)  # Landing
 
@@ -694,29 +562,13 @@ def test_motion_state_owner_phase3_common_owner_classes_exclude_later_families()
             int(falco.class2_bits[action_id]) & bit
         )
 
-    # Phase 3 grounded common owners:
-    # refs/melee/src/melee/ft/ft_081B.c common grounded wrappers and ft_80083F88.
-    assert both_have2(0x000E, CLASS2_COMMON_GROUNDED_COLL)  # Wait
-    assert both_have2(0x000F, CLASS2_COMMON_GROUNDED_COLL)  # WalkSlow
     assert both_have2(0x000F, CLASS2_WALK_ACTION)
     assert both_have2(0x0010, CLASS2_WALK_ACTION)
     assert both_have2(0x0011, CLASS2_WALK_ACTION)
-    assert both_have2(0x0014, CLASS2_COMMON_GROUNDED_COLL)  # Dash
-    assert both_have2(0x0014, CLASS2_COMMON_GROUNDED_B108_COLL)
-    assert both_have2(0x0018, CLASS2_COMMON_GROUNDED_B108_COLL)  # KneeBend
-    assert both_have2(0x0027, CLASS2_COMMON_GROUNDED_COLL)  # Squat
-    assert both_have2(0x0027, CLASS2_COMMON_GROUNDED_B108_COLL)
-    assert both_have2(0x002A, CLASS2_COMMON_GROUNDED_COLL)  # Landing
-    assert both_have2(0x002A, CLASS2_COMMON_GROUNDED_B4B0_COLL)
     assert both_have2(0x000E, CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA)  # Wait IASA
     assert both_have2(0x002A, CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA)  # Landing IASA
-    assert not both_have2(0x002A, CLASS2_COMMON_GROUNDED_B108_COLL)
-    assert both_have2(0x00B3, CLASS2_COMMON_GROUNDED_COLL)  # Guard
-    assert both_have2(0x00B3, CLASS2_COMMON_GROUNDED_B108_COLL)
     assert both_have2(0x00B2, CLASS2_GUARD_STATE)  # GuardOn
     assert both_have2(0x00B6, CLASS2_GUARD_STATE)  # GuardReflect
-    assert both_have2(0x00F5, CLASS2_COMMON_GROUNDED_COLL)  # Ottotto
-    assert both_have2(0x00F5, CLASS2_COMMON_GROUNDED_B2DC_COLL)
     assert both_have2(0x00D4, CLASS2_CATCH_START_FLOOR_LOSS)  # Catch
     assert both_have2(0x00D6, CLASS2_CATCH_START_FLOOR_LOSS)  # CatchDash
     assert not both_have2(0x00D5, CLASS2_CATCH_START_FLOOR_LOSS)  # CatchPull
@@ -727,15 +579,11 @@ def test_motion_state_owner_phase3_common_owner_classes_exclude_later_families()
     assert not both_have2(0x000E, CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST)  # Wait
     assert not both_have2(0x0030, CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST)  # Attack100Loop
 
-    # Phase 3 airborne common owners:
-    # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}.
-    assert both_have2(0x0019, CLASS2_COMMON_AIRBORNE_COLL)  # JumpF
-    assert both_have2(0x001B, CLASS2_COMMON_AIRBORNE_COLL)  # JumpAerialF
-    assert both_have2(0x001D, CLASS2_COMMON_AIRBORNE_COLL)  # Fall
+    # Remaining later-packet airborne compatibility owners. Packet 2 common air uses exact live
+    # handler kinds instead of this class word.
     assert both_have2(0x001D, CLASS2_FALL_LIKE_ACTION)  # Fall
     assert both_have2(0x0020, CLASS2_FALL_LIKE_ACTION)  # FallAerial
     assert not both_have2(0x0023, CLASS2_FALL_LIKE_ACTION)  # FallSpecial
-    assert both_have2(0x0023, CLASS2_COMMON_AIRBORNE_COLL)  # FallSpecial
     assert both_have2(0x00F4, CLASS2_COMMON_AIRBORNE_COLL)  # Pass
     assert both_have2(0x00FB, CLASS2_COMMON_AIRBORNE_COLL)  # MissFoot
     assert both_have2(0x0105, CLASS2_COMMON_AIRBORNE_COLL)  # CliffJump2Slow1
@@ -766,10 +614,6 @@ def test_motion_state_owner_phase3_common_owner_classes_exclude_later_families()
         0x016D,  # Fox/Falco SpecialAirLwStart
     ]
     for action_id in excluded:
-        assert not both_have2(action_id, CLASS2_COMMON_GROUNDED_COLL)
-        assert not both_have2(action_id, CLASS2_COMMON_GROUNDED_B108_COLL)
-        assert not both_have2(action_id, CLASS2_COMMON_GROUNDED_B2DC_COLL)
-        assert not both_have2(action_id, CLASS2_COMMON_GROUNDED_B4B0_COLL)
         assert not both_have2(action_id, CLASS2_COMMON_AIRBORNE_COLL)
         assert not both_have2(action_id, CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA)
 
@@ -1036,56 +880,27 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
     symbols = read_callback_manifest(MANIFEST)
 
     common_grounded = {
-        "ftCo_Wait_Coll",
-        "ftCo_Walk_Coll",
-        "ftCo_Turn_Coll",
-        "ftCo_TurnRun_Coll",
-        "ftCo_Dash_Coll",
-        "ftCo_Run_Coll",
-        "ftCo_RunDirect_Coll",
-        "ftCo_RunBrake_Coll",
-        "ftCo_Squat_Coll",
-        "ftCo_SquatWait_Coll",
-        "ftCo_SquatRv_Coll",
-        "ftCo_Landing_Coll",
-        "ftCo_GuardOn_Coll",
-        "ftCo_Guard_Coll",
-        "ftCo_GuardOff_Coll",
-        "ftCo_GuardSetOff_Coll",
-        "ftCo_Ottotto_Coll",
-        "ftCo_OttottoWait_Coll",
-    }
-    common_grounded_b108 = {
         "ftCo_KneeBend_Coll",
+        "ftCo_Wait_Coll",
+        "ftCo_Walk_Coll",
         "ftCo_Turn_Coll",
+        "ftCo_TurnRun_Coll",
         "ftCo_Dash_Coll",
         "ftCo_Run_Coll",
         "ftCo_RunDirect_Coll",
+        "ftCo_RunBrake_Coll",
         "ftCo_Squat_Coll",
         "ftCo_SquatWait_Coll",
         "ftCo_SquatRv_Coll",
+        "ftCo_Landing_Coll",
         "ftCo_GuardOn_Coll",
         "ftCo_Guard_Coll",
         "ftCo_GuardOff_Coll",
         "ftCo_GuardSetOff_Coll",
-    }
-    common_grounded_b2dc = {
-        "ftCo_TurnRun_Coll",
         "ftCo_Ottotto_Coll",
         "ftCo_OttottoWait_Coll",
-    }
-    common_grounded_b4b0 = {
-        "ftCo_Wait_Coll",
-        "ftCo_Walk_Coll",
-        "ftCo_RunBrake_Coll",
-        "ftCo_Landing_Coll",
     }
     common_airborne = {
-        "ftCo_Fall_Coll",
-        "ftCo_FallAerial_Coll",
-        "ftCo_FallSpecial_Coll",
-        "ftCo_Jump_Coll",
-        "ftCo_JumpAerial_Coll",
         "ftCo_CliffJump2_Coll",
         "ftCo_MissFoot_Coll",
         "ftCo_Pass_Coll",
@@ -1108,14 +923,6 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
         bits = 0
         if iasa_cb in fresh_guardon_item_shielddesc_iasa:
             bits |= CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA
-        if coll_cb in common_grounded:
-            bits |= CLASS2_COMMON_GROUNDED_COLL
-        if coll_cb in common_grounded_b108:
-            bits |= CLASS2_COMMON_GROUNDED_B108_COLL
-        if coll_cb in common_grounded_b2dc:
-            bits |= CLASS2_COMMON_GROUNDED_B2DC_COLL
-        if coll_cb in common_grounded_b4b0:
-            bits |= CLASS2_COMMON_GROUNDED_B4B0_COLL
         if coll_cb in common_airborne:
             bits |= CLASS2_COMMON_AIRBORNE_COLL
         if anim_cb == "ftCo_Walk_Anim" and iasa_cb == "ftCo_Walk_IASA" and coll_cb == "ftCo_Walk_Coll":
@@ -1137,13 +944,7 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
         }:
             bits |= CLASS2_CATCH_START_FLOOR_LOSS
         if (
-            bits
-            & (
-                CLASS2_COMMON_GROUNDED_COLL
-                | CLASS2_COMMON_GROUNDED_B108_COLL
-                | CLASS2_COMMON_GROUNDED_B2DC_COLL
-                | CLASS2_COMMON_GROUNDED_B4B0_COLL
-            )
+            coll_cb in common_grounded
             or coll_cb == "ftCo_LandingAir_Coll"
             or coll_cb in {"ftCo_EscapeF_Coll", "ftCo_EscapeB_Coll", "ftCo_EscapeN_Coll"}
             or anim_cb
@@ -1230,16 +1031,6 @@ def test_motion_state_owner_class3_matches_source_callbacks_for_all_actions() ->
 
     def expected_bits(label: str, action_id: int, coll_cb: str) -> int:
         bits = 0
-        if coll_cb == "ftCo_AttackAir_Coll":
-            bits |= CLASS3_PHASE4_ATTACK_AIR_COLL
-        if coll_cb == "ftCo_EscapeAir_Coll":
-            bits |= CLASS3_PHASE4_ESCAPE_AIR_COLL
-        if coll_cb in {"ftCo_Damage_Coll", "ftCo_DownDamage_Coll"}:
-            bits |= CLASS3_PHASE4_DAMAGE_COMMON_COLL
-        if coll_cb in {"ftCo_DamageFly_Coll", "ftCo_DamageFlyRoll_Coll", "ftCo_FlyReflect_Coll"}:
-            bits |= CLASS3_PHASE4_DAMAGE_FLY_COLL
-        if coll_cb == "ftCo_DamageFall_Coll":
-            bits |= CLASS3_PHASE4_DAMAGE_FALL_COLL
         if coll_cb in ORDINARY_WALLJUMP_COLL_CBS:
             bits |= CLASS3_ORDINARY_WALLJUMP_COLL
         if coll_cb in WALLTECH_COLL_CBS:
@@ -1309,11 +1100,6 @@ def test_motion_state_owner_class3_matches_source_callbacks_for_all_actions() ->
             int(falco.class3_bits[action_id]) & bit
         )
 
-    assert both_have3(0x0041, CLASS3_PHASE4_ATTACK_AIR_COLL)  # AttackAirN
-    assert both_have3(0x00EC, CLASS3_PHASE4_ESCAPE_AIR_COLL)  # EscapeAir
-    assert both_have3(0x0054, CLASS3_PHASE4_DAMAGE_COMMON_COLL)  # DamageAir1
-    assert both_have3(0x005A, CLASS3_PHASE4_DAMAGE_FLY_COLL)  # DamageFlyTop
-    assert both_have3(0x0026, CLASS3_PHASE4_DAMAGE_FALL_COLL)  # DamageFall
     for action_id in (0x0026, 0x00CC, 0x00DA, 0x00E5, 0x00F4, 0x00FA, 0x00FB, 0x0105, 0x0107):
         assert both_have3(action_id, CLASS3_ORDINARY_WALLJUMP_COLL)
     for action_id in (0x0058, 0x005B, 0x00B9, 0x00F7):
@@ -1333,35 +1119,6 @@ def test_motion_state_owner_class3_matches_source_callbacks_for_all_actions() ->
     assert int(falcon.class3_bits[0x0161]) & CLASS3_CATCH_KIND_2
     assert int(falcon.class3_bits[0x0162]) & CLASS3_CATCH_KIND_2
     assert int(falcon.class3_bits[0x0163]) & CLASS3_CATCH_TARGET_MASK_511
-
-    excluded = [
-        0x001D,  # Fall, Phase 3 common airborne
-        0x002A,  # Landing, Phase 3 common grounded
-        0x00CD,  # AirCatch
-        0x0115,  # ItemThrowAirF
-        0x0137,  # HammerFall
-        0x013A,  # CargoFall
-        0x013C,  # CargoThrowF
-        0x0140,  # YoshiEgg
-        0x015E,  # Fox/Falco SpecialAirSStart
-        0x016D,  # Fox/Falco SpecialAirLwStart
-    ]
-    for action_id in excluded:
-        assert not int(fox.class3_bits[action_id]) & (
-            CLASS3_PHASE4_ATTACK_AIR_COLL
-            | CLASS3_PHASE4_ESCAPE_AIR_COLL
-            | CLASS3_PHASE4_DAMAGE_COMMON_COLL
-            | CLASS3_PHASE4_DAMAGE_FLY_COLL
-            | CLASS3_PHASE4_DAMAGE_FALL_COLL
-        )
-        assert not int(falco.class3_bits[action_id]) & (
-            CLASS3_PHASE4_ATTACK_AIR_COLL
-            | CLASS3_PHASE4_ESCAPE_AIR_COLL
-            | CLASS3_PHASE4_DAMAGE_COMMON_COLL
-            | CLASS3_PHASE4_DAMAGE_FLY_COLL
-            | CLASS3_PHASE4_DAMAGE_FALL_COLL
-        )
-
 
 def test_motion_state_owner_reader_rejects_stale_versions(tmp_path: Path) -> None:
     stale = Path("tests/fixtures/motion_state_owners/falcon_v22.bin")

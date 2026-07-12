@@ -278,6 +278,7 @@ static void run_handler_transition(MslBatch* batch, int bi, int p, uint8_t handl
 
 static void source_ground_callback(MslBatch* batch, int bi, int p, uint8_t handler_kind) {
   const size_t idx = msl_idx_player(bi, p);
+  handler_kind = msl_coll_handler_source_ground_mode(handler_kind);
   if (handler_kind == (uint8_t)MSL_COLL_HANDLER_GROUND_B4B0_TEETER) {
     const float facing = batch->state.facing[idx] ? 1.0f : -1.0f;
     if (batch->state.player_nudge_x[idx] != 0.0f &&
@@ -523,7 +524,7 @@ void mpcoll_source_ground_apply(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       batch->state.live_coll_migrated_ran[idx] = 0u;
       const uint8_t handler = batch->state.live_coll_handler_kind[idx];
-      if (handler == (uint8_t)MSL_COLL_HANDLER_LEGACY) {
+      if (!msl_coll_handler_is_source_ground(handler)) {
         continue;
       }
       batch->state.live_coll_migrated_ran[idx] = 1u;

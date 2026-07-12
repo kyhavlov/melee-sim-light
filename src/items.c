@@ -377,9 +377,9 @@ uint32_t items_next_spawn_id(MslBatch* batch, int bi) {
 }
 
 uint8_t items_action_is_damage_family(uint16_t action_id_u16) {
-  // Generated MSLMSO01 Damage/DamageFly/DamageFall collision classes cover the same damage exit
-  // callback family this item stale-owner clear follows.
-  // data/motion_state/owners/{fox,falco}.bin (DAMAGE_*_COLL classes)
+  // Exact MSLMSO01 collision handlers cover the same damage exit callback family this item
+  // stale-owner clear follows.
+  // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 coll_handler_kind
   return msl_damage_owner_is_damage_collision_landing_action(action_id_u16);
 }
 

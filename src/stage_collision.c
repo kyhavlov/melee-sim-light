@@ -3949,12 +3949,8 @@ static void stage_collision_apply_dream_whispy_wind(MslBatch* batch, uint8_t mig
     const int num_players = (int)batch->config.num_players;
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      const uint8_t migrated =
-          msl_motion_state_coll_handler_kind(batch->state.char_id[idx],
-                                             batch->state.frame_start_action_id[idx]) !=
-                  (uint8_t)MSL_COLL_HANDLER_LEGACY
-              ? 1u
-              : 0u;
+      const uint8_t migrated = msl_coll_handler_is_source_ground(msl_motion_state_coll_handler_kind(
+          batch->state.char_id[idx], batch->state.frame_start_action_id[idx]));
       if (migrated != migrated_phase) {
         continue;
       }
