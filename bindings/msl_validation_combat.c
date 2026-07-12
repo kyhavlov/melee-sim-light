@@ -3966,9 +3966,11 @@ PyObject* msl_derive_source_clear_timer_py(PyObject* self, PyObject* args) {
   PyObject* flags_obj = NULL;
   PyObject* src_obj = NULL;
   PyObject* x9_obj = NULL;
+  PyObject* hitlag_obj = NULL;
+  PyObject* hitstun_obj = NULL;
   int init_frames = 0;
-  if (!PyArg_ParseTuple(args, "OOOOOOi", &action_obj, &char_obj, &ground_obj, &flags_obj, &src_obj,
-                        &x9_obj, &init_frames)) {
+  if (!PyArg_ParseTuple(args, "OOOOOOOOi", &action_obj, &char_obj, &ground_obj, &flags_obj,
+                        &src_obj, &x9_obj, &hitlag_obj, &hitstun_obj, &init_frames)) {
     return NULL;
   }
   PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
@@ -3977,13 +3979,16 @@ PyObject* msl_derive_source_clear_timer_py(PyObject* self, PyObject* args) {
   PyArrayObject* flags = require_contiguous_array(flags_obj, NPY_UINT8, 2, "state_flags_u8");
   PyArrayObject* src = require_contiguous_array(src_obj, NPY_UINT8, 1, "last_hit_by_u8");
   PyArrayObject* x9 = require_contiguous_array(x9_obj, NPY_UINT8, 2, "x9_b1_lut");
+  PyArrayObject* hitlag = require_contiguous_array(hitlag_obj, NPY_UINT16, 1, "hitlag_u16");
+  PyArrayObject* hitstun = require_contiguous_array(hitstun_obj, NPY_UINT16, 1, "hitstun_u16");
   if (action == NULL || chr == NULL || ground == NULL || flags == NULL || src == NULL ||
-      x9 == NULL) {
+      x9 == NULL || hitlag == NULL || hitstun == NULL) {
     return NULL;
   }
   const npy_intp n = PyArray_SIZE(action);
   if (PyArray_SIZE(chr) != n || PyArray_SIZE(ground) != n || PyArray_SIZE(src) != n ||
-      PyArray_DIM(flags, 0) != n || PyArray_DIM(flags, 1) < 5 || PyArray_DIM(x9, 0) < 256) {
+      PyArray_SIZE(hitlag) != n || PyArray_SIZE(hitstun) != n || PyArray_DIM(flags, 0) != n ||
+      PyArray_DIM(flags, 1) < 5 || PyArray_DIM(x9, 0) < 256) {
     PyErr_SetString(PyExc_ValueError, "source clear timer inputs have incompatible shapes");
     return NULL;
   }
@@ -4005,6 +4010,8 @@ PyObject* msl_derive_source_clear_timer_py(PyObject* self, PyObject* args) {
   const npy_intp sf_w = PyArray_DIM(flags, 1);
   const uint8_t* source = (const uint8_t*)PyArray_DATA(src);
   const uint8_t* x9p = (const uint8_t*)PyArray_DATA(x9);
+  const uint16_t* hl_p = (const uint16_t*)PyArray_DATA(hitlag);
+  const uint16_t* hs_p = (const uint16_t*)PyArray_DATA(hitstun);
   uint8_t* timer_o = (uint8_t*)PyArray_DATA(out_timer);
   uint8_t* phase_o = (uint8_t*)PyArray_DATA(out_phase);
   int timer = -1;
@@ -4013,6 +4020,22 @@ PyObject* msl_derive_source_clear_timer_py(PyObject* self, PyObject* args) {
   for (npy_intp i = 0; i < n; i++) {
     const uint16_t cur_a = a[i];
     const uint8_t cur_src = source[i];
+    // ftColl_8007861C retires the running countdown when the fighter takes a hit (x18C8 = -1):
+    // the owner then persists until the next grounded x9_b1 motion entry re-arms it. Detect the
+    // fresh-damage edge from hitlag onset with hitstun provenance (shield stun carries neither
+    // hitstun nor the x221C hitstun flag and does not retire).
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007861C
+    {
+      const uint8_t in_hitstun_flag = (sf[(i * sf_w) + 3] & 0x02u) != 0u ? 1u : 0u;
+      const uint8_t fresh_damage =
+          (i > 0 && hl_p[i - 1] == 0u && hl_p[i] > 0u && (hs_p[i] > 0u || in_hitstun_flag != 0u))
+              ? 1u
+              : 0u;
+      if (fresh_damage != 0u) {
+        timer = -1;
+        phase_active = 0u;
+      }
+    }
     if (i > 0 && source[i - 1] == 6u && cur_src != 6u) edge_pending = 1u;
     if (i > 0 && cur_a != a[i - 1]) {
       uint8_t x9_b1 = 0u;

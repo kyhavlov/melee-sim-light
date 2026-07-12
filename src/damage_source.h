@@ -145,6 +145,20 @@ static inline void msl_damage_source_write_direct(MslBatch* batch, size_t victim
   batch->state.last_hit_by[victim_idx] = source_port0;
 }
 
+static inline void msl_damage_source_write_hit_ftcoll_8007861c(MslBatch* batch, size_t victim_idx,
+                                                               uint8_t source_port0) {
+  if (batch == NULL) {
+    return;
+  }
+  // ftColl_8007861C (the hit-time attribution writer) sets victim->dmg.x18C8 = -1 alongside
+  // x18C4_source_ply: being hit RETIRES any running source-clear countdown, and the owner then
+  // persists until the next grounded x9_b1 motion entry re-arms the timer.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007861C
+  // refs/melee/src/melee/ft/fighter.c (x18C8 arm inside Fighter_ChangeMotionState)
+  batch->state.last_hit_by[victim_idx] = source_port0;
+  batch->state.source_clear_timer_x18c8[victim_idx] = 0u;
+}
+
 static inline void msl_damage_source_commit_processhit(MslBatch* batch, size_t victim_idx,
                                                        uint8_t source_port0) {
   if (batch == NULL) {
@@ -158,5 +172,5 @@ static inline void msl_damage_source_commit_processhit(MslBatch* batch, size_t v
     msl_damage_source_clear(batch, victim_idx);
     return;
   }
-  msl_damage_source_write_direct(batch, victim_idx, source_port0);
+  msl_damage_source_write_hit_ftcoll_8007861c(batch, victim_idx, source_port0);
 }

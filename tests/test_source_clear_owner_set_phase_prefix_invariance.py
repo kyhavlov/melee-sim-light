@@ -29,6 +29,8 @@ def test_source_clear_owner_set_phase_prefix_invariance_suffix_mutation() -> Non
         on_ground_u8=on_ground,
         state_flags_u8=state_flags,
         last_hit_by_u8=last_hit_by,
+        hitlag_u16=np.zeros(n, dtype=np.uint16),
+        hitstun_u16=np.zeros(n, dtype=np.uint16),
         x9_b1_by_char={1: x9_b1_tbl},
         source_clear_init_frames=60,
     )
@@ -53,6 +55,8 @@ def test_source_clear_owner_set_phase_prefix_invariance_suffix_mutation() -> Non
         on_ground_u8=mut_on_ground,
         state_flags_u8=mut_state_flags,
         last_hit_by_u8=mut_last_hit_by,
+        hitlag_u16=np.zeros(n, dtype=np.uint16),
+        hitstun_u16=np.zeros(n, dtype=np.uint16),
         x9_b1_by_char={1: x9_b1_tbl, 22: x9_b1_tbl},
         source_clear_init_frames=60,
     )

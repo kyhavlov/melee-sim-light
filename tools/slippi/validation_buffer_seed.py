@@ -547,7 +547,7 @@ def _load_action_x9_b1_tables(*, data_root) -> dict[int, np.ndarray]:
     """
     return {char_id: table.x9_b1 for char_id, table in load_action_state_tables(str(data_root)).items()}
 
-def _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(*, action_id_u16: np.ndarray, char_id_u8: np.ndarray, on_ground_u8: np.ndarray, state_flags_u8: np.ndarray, last_hit_by_u8: np.ndarray, x9_b1_by_char: dict[int, np.ndarray], source_clear_init_frames: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(*, action_id_u16: np.ndarray, char_id_u8: np.ndarray, on_ground_u8: np.ndarray, state_flags_u8: np.ndarray, last_hit_by_u8: np.ndarray, hitlag_u16: np.ndarray, hitstun_u16: np.ndarray, x9_b1_by_char: dict[int, np.ndarray], source_clear_init_frames: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Derive strictly-causal x18C8 countdown + owner-set phase lane.
 
     Decomp ownership:
@@ -584,7 +584,7 @@ def _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(*, action_id_u16
         import msl_binding
     except ImportError as exc:
         raise RuntimeError('native msl_binding.derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes is required; run `make build`') from exc
-    return msl_binding.derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1), np.asarray(char_id_u8, dtype=np.uint8).reshape(-1), np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1), _ascontiguousarray(state_flags_u8, dtype=np.uint8), np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1), x9_lut, int(source_clear_init_frames))
+    return msl_binding.derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1), np.asarray(char_id_u8, dtype=np.uint8).reshape(-1), np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1), _ascontiguousarray(state_flags_u8, dtype=np.uint8), np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1), x9_lut, np.ascontiguousarray(hitlag_u16, dtype=np.uint16).reshape(-1), np.ascontiguousarray(hitstun_u16, dtype=np.uint16).reshape(-1), int(source_clear_init_frames))
 
 def _derive_source_clear_grounded_damage_clear_phase_seed_lane(*, action_id_u16: np.ndarray, action_frame_i16: np.ndarray, on_ground_u8: np.ndarray, hitlag_u16: np.ndarray, hitstun_u16: np.ndarray, combo_count_u8: np.ndarray, source_clear_timer_x18c8_u8: np.ndarray, source_clear_owner_set_phase_u8: np.ndarray, state_flags_u8: np.ndarray, last_hit_by_u8: np.ndarray) -> np.ndarray:
     """Derive one-step grounded source-owner clear phase bridge.

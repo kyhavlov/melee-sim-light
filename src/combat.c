@@ -1806,7 +1806,7 @@ static inline void combat_processhit_write_source(MslBatch* batch,
   if (ev->source_write == MSL_PROCESS_HIT_SOURCE_WRITE_COMMIT_OWNER) {
     combat_processhit_commit_source_owner(batch, ev->d_idx, ev->last_hit_by);
   } else {
-    msl_damage_source_write_direct(batch, ev->d_idx, ev->last_hit_by);
+    msl_damage_source_write_hit_ftcoll_8007861c(batch, ev->d_idx, ev->last_hit_by);
   }
 }
 
@@ -3296,8 +3296,8 @@ static inline void combat_mutations_pass1_future_apply_body_phantom_hit(MslBatch
       (attacker >= 0 && attacker < (int)batch->config.num_players) ? (uint8_t)attacker : 0xFFu;
   falcon_specials_processhit_note_higher_priority(batch, d_idx);
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-  msl_damage_source_write_direct(batch, d_idx,
-                                 combat_source_port0_for_attacker(batch, a_idx, attacker));
+  msl_damage_source_write_hit_ftcoll_8007861c(
+      batch, d_idx, combat_source_port0_for_attacker(batch, a_idx, attacker));
 }
 
 void combat_apply_item_phantom_hit(MslBatch* batch, int batch_index, int attacker, int defender,
@@ -3351,8 +3351,8 @@ void combat_apply_item_phantom_hit(MslBatch* batch, int batch_index, int attacke
   }
   falcon_specials_processhit_note_higher_priority(batch, d_idx);
   batch->state.instance_hit_by[d_idx] = item_instance_id;
-  msl_damage_source_write_direct(batch, d_idx,
-                                 combat_source_port0_for_attacker(batch, a_idx, attacker));
+  msl_damage_source_write_hit_ftcoll_8007861c(
+      batch, d_idx, combat_source_port0_for_attacker(batch, a_idx, attacker));
 }
 
 void combat_apply_item_phantom_attribution(MslBatch* batch, int batch_index, int attacker,
@@ -3368,8 +3368,8 @@ void combat_apply_item_phantom_attribution(MslBatch* batch, int batch_index, int
   const size_t a_idx = msl_idx_player(batch_index, attacker);
   const size_t d_idx = msl_idx_player(batch_index, defender);
   batch->state.instance_hit_by[d_idx] = item_instance_id;
-  msl_damage_source_write_direct(batch, d_idx,
-                                 combat_source_port0_for_attacker(batch, a_idx, attacker));
+  msl_damage_source_write_hit_ftcoll_8007861c(
+      batch, d_idx, combat_source_port0_for_attacker(batch, a_idx, attacker));
 }
 
 MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
