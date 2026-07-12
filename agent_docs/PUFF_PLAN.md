@@ -725,3 +725,17 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   rollout seeded 231 -> 220. Recon items parked in the worklog: flags[0]&0x80 on jump chains
   (needs asm/Dolphin probe), puff-DAIR shield-poke band timing (ShieldDesc/hurtbox boundary
   geometry class).
+- 2026-07-11 (item-5 recon, dol-level): **flags[0] byte identity settled and the setter set
+  proven from main.dol (SSBM.iso is available locally at /Users/vlad/SSBM/SSBM.iso).** An
+  exhaustive scan of every store to fp+0x2218 (74 byte stores, no half/word stores) shows
+  ftAction_80071950 (script op 23) is the game's ONLY allow_interrupt setter; CMS touches
+  masks 0x10/0x02 only. The falcon jab witness (Game_20260509T034612 rec 467-489) confirms
+  flags[0] = fp+0x2218: 0x40 rises exactly at set_jab_combo(disabled=0)@9 and 0x80 exactly on
+  the jab->Turn transition row where allow_interrupt@16 fires before the IASA exit (the
+  transition-frame prev-script mechanism). A competing x2219_b0 GFX-latch reading (set by
+  ftPr_Init_8013C94C and ~60 effect spawners) is ruled out by that trace. Puff's JumpF/JumpB
+  and multijump subactions were RAW-decoded from PlPr.dat past the extractor's whitelist/halt
+  behaviors: SFX + GFX + cmd0@28 only — no op 23. The grounded-jump -> multijump 0x80 rise
+  therefore still has no static setter; the remaining probe is a Dolphin write-watch on
+  fp+0x2218 during the witness jump chain (Slippi Dolphin.app installed;
+  tools/dolphin/dolphin_engine_dump.py supports probe patches).
