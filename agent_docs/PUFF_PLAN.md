@@ -716,3 +716,12 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   aggregate rollout 1061 -> 1056, falcon/marth rollout rows improved).** Final session standing:
   puff one-step 1973 -> 1755, puff rollout 364 -> 351; worklog items 1-6 in
   reports/triage/open_rollout_work_log.md with per-item cumulative patches.
+- 2026-07-11 (late session, committed a6595ddd/b5d73a24/8a8ac2bd): **jab-combo continuation
+  re-landed on its exact owners (checkAttack12/13 per-IASA-frame decrement + the
+  Fighter_ChangeMotionState hitlag_mul clear that only spares Wait/Walk destinations;
+  0/40-miss census fit), and the ftColl_8007861C hit-retire of the x18C8 source-clear timer
+  landed — one-step improved EVERY suite (aggregate -361, doubles -289, marth -107, falcon
+  -106, sheik -99, puff -41, primary 30 -> 21).** Puff standing: one-step 1973 -> 1714,
+  rollout seeded 231 -> 220. Recon items parked in the worklog: flags[0]&0x80 on jump chains
+  (needs asm/Dolphin probe), puff-DAIR shield-poke band timing (ShieldDesc/hurtbox boundary
+  geometry class).
