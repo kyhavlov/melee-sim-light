@@ -7,6 +7,7 @@ _iso/
 refs/**
 !refs/README.md
 !refs/Ishiiruka
+!refs/slippi-dolphin
 
 # Dolphin artifacts / user dirs
 .local_dolphin/

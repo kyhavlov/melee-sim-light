@@ -12,6 +12,7 @@ The contents are gitignored but should be present locally.
 | `slippi-ssbm-asm/` | https://github.com/project-slippi/slippi-ssbm-asm | Slippi ASM modifications - includes UCF and other gameplay-affecting changes |
 | `slippi-wiki/` | https://github.com/project-slippi/slippi-wiki | Slippi replay format specification |
 | `Ishiiruka/` | git submodule | Pinned Slippi Dolphin fork with local engine-dump probe support |
+| `slippi-dolphin/` | git submodule | Mainline-based Slippi Dolphin (project-slippi/dolphin `engine-dump` port) with the same MSL_* interpreter probes; builds on modern macOS/ARM64 where Ishiiruka does not |
 | `ucf/` | https://github.com/AltimorTASDK/UCF | UCF source code (pad buffer / 1.0 cardinals logic, etc.) |
 | `melee-disc/` | Extracted from SSBM.iso | Game filesystem (files/, sys/) - raw .dat file access |
 | `datasheet/` | slippi-wiki ID spreadsheet | Local export of character/stage/item IDs, action states, struct offsets, character attributes |
@@ -32,10 +33,11 @@ git clone https://github.com/frankborden/slippilab.git
 git clone https://github.com/project-slippi/slippi-ssbm-asm.git
 ```
 
-Initialize the pinned Ishiiruka probe checkout through git submodules:
+Initialize the pinned Dolphin probe checkouts through git submodules:
 
 ```bash
 git submodule update --init refs/Ishiiruka
+git submodule update --init refs/slippi-dolphin
 ```
 
 Or if you have existing non-submodule checkouts for the other references,
@@ -138,6 +140,21 @@ uv run python -m tools.dolphin.dolphin_engine_dump --help
 uv run python -m tools.dolphin.extract_engine_dump_rows --help
 uv run python -m tools.dolphin.slp_scenario_probe --help
 ```
+
+On modern macOS/ARM64 use the mainline-based port instead (same MSL_* probe env
+vars, plus an extended `MSL_PROBE_PC_TRACE` that dumps caller registers and
+script bytes at the range-start PC):
+
+```bash
+git submodule update --init refs/slippi-dolphin
+# see refs/slippi-dolphin/build-mac.sh; binary lands in build-engine-dump/Binaries/dolphin-emu-nogui
+```
+
+macOS/ARM64 driver quirks (the tools/dolphin ini helper predates this port):
+run `dolphin-emu-nogui` with `-p headless` (default opens a window), set
+`CPUCore = 4` (ARM64 JIT; the helper writes 1 = x86-64), the null audio backend
+is named `No Audio Output` (not `NullSound`), and `Binaries/Contents/Resources/Sys`
+must exist (symlink to `Binaries/Sys`) or boot fails the Melee GameSettings check.
 
 Probe outputs should stay under `reports/triage/`. Do not add new process-memory
 probe scripts; the old live-memory path was deleted in favor of replay playback
