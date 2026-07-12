@@ -779,3 +779,16 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   tests/test_attackair.py. Also this session: slippi-dolphin added as refs/ submodule (https
   URL), probe commit bcea9cc7e6 in ~/Repos/slippi-dolphin; angled S3/S4 item closed as a
   verified non-item (empty/goto stub scripts; marth/sheik never enter angled states).
+- 2026-07-12 (item 7 recon, probe-verified root cause): **the puff-dair-vs-guard phantom-hit
+  family is a single-bone pose error: fox's SHIELD ARM hurtcap.** A Dolphin collision-probe run
+  over the witness window (Game_20260313T121034 frames 1996-2002) shows every game-side
+  capsule check missing while the sim phantom-pokes; comparing geometry, the sim matches the
+  game bit-for-bit on the dair hit capsules and to ~mm on 12 of 13 fox hurtcaps — the one
+  divergence is the shield-arm capsule (game bone 18): the game holds it LOW near the shield
+  (y 3.4-4.8) while the sim's figatree bake has it raised (y 6.3-7.5) at every frame of the
+  Guard anim, and the engine dump confirms both use the same anim 40 @ f32 13.862. So the game
+  poses the shield arm outside the figatree during guard states (procedural shield-hold/tilt
+  or RObj constraint) and the sim's hurt pose does not. Full evidence, the probe-captured
+  local SRT of the arm chain, and the implementation plan are in the worklog (item 7 recon).
+  This also plausibly covers the item-9 "laser-vs-roll hurtcap pose" family if rolls inherit
+  the same guard-arm override.
