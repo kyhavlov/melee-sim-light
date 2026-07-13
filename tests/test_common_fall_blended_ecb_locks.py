@@ -87,8 +87,8 @@ def test_falcon_fall_blended_ecb_bottom_delays_edge_landing_one_frame() -> None:
     # Falcon mask bit 1<<0: probe witness MSL_FALL_FLOOR_PROBE on FumblingSaneBeaver p1 (port 2)
     # frames 5050-5057 -- Fall entry ramps mv.co.fall.x4 0.44 -> 0.755 (smid 22) and the CollData
     # bottom rises 1.998 -> 3.677; the game lands at frame 5057 where the unblended table lands
-    # earlier. (The companion frame-5056 row rec 5178 stays on the blend-pose fidelity ledger:
-    # the sim's blended bottom is ~0.12 low against a 0.03 game margin.)
+    # earlier. (The companion frame-5056 margin row rec 5178 is locked separately below via the
+    # +1 alternate-frame witness.)
     out_act, ref_act = _one_step_action(
         "replays/validation/falcon/FumblingSaneBeaver.slpz", [1, 2], 7030, 1)
     assert ref_act == 29
@@ -105,3 +105,26 @@ def test_fox_blended_shallow_fastfall_landing_lands_like_source() -> None:
         "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz", [1, 2], 5965, 0)
     assert ref_act == 42
     assert out_act == 42
+
+
+def test_fox_blended_hurt_pose_alt_frame_keeps_illusion_clean_hit() -> None:
+    # The alternate FallF/FallB skeleton runs one frame ahead of the base cur_anim_frame
+    # (ftAnim_8006EDD0 reload + one advance per HSD_JObjAnimAll call; see
+    # anim_pose.c::common_fall_blend_alt_anim_frame). JObj blend probe witnesses:
+    # PutridJoyousOryx f5257 alt evals 1.0/2.0 on the reload frame and f5263 alt 0.0 vs base 7.0.
+    # With the alternate pose sampled at base frame the blended leg capsule drops the game's
+    # clean Illusion hit into the phantom sliver (x7A8=0.01, game overlap 0.122).
+    out_act, ref_act = _one_step_action(
+        "replays/validation/aggregate_recent/PutridJoyousOryx.slpz", [1, 2], 5385, 0)
+    assert ref_act == 90
+    assert out_act == 90
+
+
+def test_falcon_blended_ecb_alt_frame_owns_edge_margin() -> None:
+    # Same +1 alternate frame in the CollData ECB bottoms: FumblingSaneBeaver f5056 alt aobj 3.0
+    # vs base 2.0 (probe); sampling the alternate at the base frame leaves the blended bottom
+    # ~0.12 low against the game's 0.027 airborne margin and lands a frame early.
+    out_act, ref_act = _one_step_action(
+        "replays/validation/falcon/FumblingSaneBeaver.slpz", [1, 2], 5178, 1)
+    assert ref_act == 29
+    assert out_act == 29

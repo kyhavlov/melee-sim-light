@@ -819,3 +819,15 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   bottoms-margin) — next owner: HSD track-space blending (ftAnim_8006FE9C from FtPart_TransN),
   equipment MSL_PROBE_JOBJ_BLEND_TRACE vs anim_pose_common_fall_blend_matrix. Same
   project-scale tier as the ftDynamics item above.
+- 2026-07-13 (blend pose fidelity round 1, committed): the CommonFall alternate submotion
+  (FallF/FallB) runs one frame AHEAD of the base cur_anim_frame -- ftAnim_8006EDD0 reloads it at
+  the switch-time frame and every HSD_JObjAnimAll evaluate-then-advances it (two passes on the
+  reload frame), wrapping at the AObj loop end. Probe-proven via the extended JObj blend trace
+  (per-jobj SRT + AObj curr/end): Oryx f5257/f5263, Termite f5843, Beaver f5055/f5056. Modeled
+  statelessly in anim_pose.c::common_fall_blend_alt_anim_frame (+1 with loop rewind); TransN and
+  part 0x35 are flags_b4 lbCopyJObjSRT full-copies, folded into the target-only branch.
+  PutridJoyousOryx rec 5385 and FumblingSaneBeaver rec 5178 heal; falcon -63 / aggregate -14 /
+  sheik -3 one-step vs the previous commit. Remaining ledger: PaleMajorEchidna +9, Hyena +12
+  (falco laser graze), doubles 005918 +5, small rollout streak flips -- all sub-0.1-margin;
+  next candidates in the worklog (laser probe, sheik phantom probe, flags_b0 dynamics
+  exclusion shared with items 7/9).

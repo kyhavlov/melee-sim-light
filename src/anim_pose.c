@@ -2708,23 +2708,54 @@ static int local_parent_for_part(const MslAnimPoseTable* t, uint16_t part_id, in
   return 0;
 }
 
+// Alternate-submotion frame consumed by the CommonFall blend. ftAnim_8006EDD0 loads the
+// FallF/FallB skeleton at the switch-time cur_anim_frame, and each HSD_JObjAnimAll evaluates it
+// then advances its AObj by 1 with the loop rewind (frame >= end -> frame -= end): twice on the
+// smid-switch frame (ftCo_Fall_Anim_Inner + ftCo_800CC988), once per frame afterwards. Relative
+// to the base cur_anim_frame (which advances on the same 0..end-1 cycle) this is a constant +1
+// offset. JObj blend probes: PutridJoyousOryx f5257 alt evals 1.0/2.0 (reload) and f5263 alt 0.0
+// vs base 7.0; ElatedWearyTermite f5843 alt 5.0 vs base 4.0; FumblingSaneBeaver f5055 alt evals
+// 1.0/2.0 (reload) and f5056 alt 3.0 vs base 2.0.
+// refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006EDD0,ftAnim_8006FE9C,ftAnim_8006FF74}
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Anim_Inner,ftCo_800CC988}
+static float common_fall_blend_alt_anim_frame(const MslAnimPoseTable* t, uint16_t target_msid,
+                                              float anim_frame) {
+  float alt = anim_frame + 1.0f;
+  if (t != NULL && t->local_have_msid != NULL && t->local_frame_count_by_msid != NULL &&
+      t->local_have_msid[target_msid]) {
+    const uint16_t fc = t->local_frame_count_by_msid[target_msid];
+    if (fc > 1u) {
+      const float end = (float)(fc - 1u);
+      if (alt >= end) {
+        alt -= end;
+      }
+    }
+  }
+  return alt;
+}
+
 static int common_fall_blended_local_matrix(const MslAnimPoseTable* t, uint16_t neutral_msid,
                                             uint16_t target_msid, float anim_frame,
                                             uint16_t part_id, float weight, const float* parent_scl,
                                             float out[12], float out_scl[3], uint32_t* out_flags,
                                             int16_t* out_parent) {
+  const float alt_frame = common_fall_blend_alt_anim_frame(t, target_msid, anim_frame);
   if (out_flags == NULL || out_parent == NULL) {
     return -1;
   }
-  enum { MSL_FTPART_TRANSN = 1 };
-  if (part_id < (uint16_t)MSL_FTPART_TRANSN) {
+  enum { MSL_FTPART_TRANSN = 1, MSL_FTPART_FLAGS_B4_COPY = 0x35 };
+  if (part_id <= (uint16_t)MSL_FTPART_TRANSN || part_id == (uint16_t)MSL_FTPART_FLAGS_B4_COPY) {
     // ftAnim_8006FE9C starts at FtPart_TransN. Ancestors such as TopN keep the active selected
-    // submotion JObj written by ftAnim_8006EDD0 / HSD_JObjAnimAll; only TransN and descendants are
-    // overwritten by lb_8000C490.
+    // submotion JObj written by ftAnim_8006EDD0 / HSD_JObjAnimAll, and ftParts marks TransN and
+    // part 0x35 flags_b4, which routes them through lbCopyJObjSRT (a weight-independent full
+    // copy of the alternate pose) instead of the lb_8000C490 blend (JObj blend probe: exactly
+    // two lbCopyJObjSRT calls per blend pass on PutridJoyousOryx f5263).
     // refs/melee/src/melee/ft/forward.h::{FtPart_TopN,FtPart_TransN}
+    // refs/melee/src/melee/ft/ftparts.c::ftParts_80074148 (flags_b4 init)
     // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FE9C
+    // refs/melee/src/melee/lb/lb_00B0.c::lbCopyJObjSRT
     float rot[3], pos[3], scl[3];
-    if (local_srt_for_part_f32(t, target_msid, anim_frame, part_id, rot, pos, scl, out_flags,
+    if (local_srt_for_part_f32(t, target_msid, alt_frame, part_id, rot, pos, scl, out_flags,
                                out_parent) != 0) {
       return -1;
     }
@@ -2740,8 +2771,8 @@ static int common_fall_blended_local_matrix(const MslAnimPoseTable* t, uint16_t 
   uint32_t target_flags = 0u;
   if (local_srt_for_part_f32(t, neutral_msid, anim_frame, part_id, neutral_rot, neutral_pos,
                              neutral_scl, &neutral_flags, &neutral_parent) != 0 ||
-      local_srt_for_part_f32(t, target_msid, anim_frame, part_id, target_rot, target_pos,
-                             target_scl, &target_flags, &target_parent) != 0 ||
+      local_srt_for_part_f32(t, target_msid, alt_frame, part_id, target_rot, target_pos, target_scl,
+                             &target_flags, &target_parent) != 0 ||
       neutral_parent != target_parent || neutral_flags != target_flags) {
     return -1;
   }
@@ -2773,10 +2804,13 @@ static int matrix_from_common_fall_blended_locals(const MslAnimPoseTable* t, uin
                                                   float out_3x4[12]) {
   if (weight == 1.0f) {
     // ftCo_Fall_Anim_Inner calls ftAnim_8006FF74, not ftAnim_8006FE9C, once x4 reaches 1.0.
-    // That path copies the selected FallF/FallB submotion pose instead of running lb_8000C490.
+    // That path copies the selected FallF/FallB submotion pose instead of running lb_8000C490,
+    // still at the alternate skeleton's own (+1 offset) frame.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
     // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FF74
-    return matrix_from_locals_f32(t, target_msid, anim_frame, part_id, out_3x4);
+    return matrix_from_locals_f32(t, target_msid,
+                                  common_fall_blend_alt_anim_frame(t, target_msid, anim_frame),
+                                  part_id, out_3x4);
   }
   if (weight == 0.0f) {
     return matrix_from_locals_f32(t, neutral_msid, anim_frame, part_id, out_3x4);

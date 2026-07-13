@@ -191,9 +191,18 @@ def test_commonfall_blend_x4_one_matches_target_submotion_matrix() -> None:
                         buf=buf, joint_count=joint_count, anim_count=anim_count, msid=target_msid
                     )
                     frame = min(3, frame_count - 1)
+                    # The alternate submotion skeleton runs one frame ahead of the base
+                    # cur_anim_frame (ftAnim_8006EDD0 reload + per-call HSD_JObjAnimAll advance;
+                    # see common_fall_blend_alt_anim_frame), so the w=1.0 copy path publishes the
+                    # target pose at frame+1 (wrapped at the loop end). The w=0.0 reference call
+                    # samples its neutral msid (== target here) at the passed frame directly.
+                    alt = float(frame + 1)
+                    end = float(frame_count - 1)
+                    if frame_count > 1 and alt >= end:
+                        alt -= end
                     for part_id in part_ids:
                         target = msl_binding.anim_pose_common_fall_blend_matrix(
-                            char_id, target_msid, target_msid, float(frame), part_id, 0.0
+                            char_id, target_msid, target_msid, alt, part_id, 0.0
                         )
                         blended = msl_binding.anim_pose_common_fall_blend_matrix(
                             char_id, neutral_msid, target_msid, float(frame), part_id, 1.0

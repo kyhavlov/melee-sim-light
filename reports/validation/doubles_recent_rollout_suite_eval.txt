@@ -210,12 +210,12 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:7
 == replays/validation/doubles_recent/Game_20260704T012105.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 781
-rollout.streak_count: 39
-rollout.streak_len.median: 196
-rollout.streak_len.p90: 617
-rollout.streak_len.p95: 740
+rollout.streak_count: 40
+rollout.streak_len.median: 183
+rollout.streak_len.p90: 527
+rollout.streak_len.p95: 643
 rollout.streak_len.max: 781
-rollout.first_mismatch_total: 39
+rollout.first_mismatch_total: 40
 rollout.first_mismatch_seeded_total: 25
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -471,13 +471,13 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:338
 
 == suite summary ==
-overall.rollout.streak_count: 1150
+overall.rollout.streak_count: 1151
 overall.rollout.streak_len.median: 95
 overall.rollout.streak_len.p90: 399
 overall.rollout.streak_len.p95: 527
 overall.rollout.streak_len.max: 1214
 overall.rollout.best_len.max: 1214
-overall.rollout.first_mismatch_total: 1236
+overall.rollout.first_mismatch_total: 1237
 overall.rollout.first_mismatch_seeded_total: 776
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
