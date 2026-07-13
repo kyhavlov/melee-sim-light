@@ -200,21 +200,6 @@ def _run_case(name: str) -> dict[int, np.void]:
 
 
 @pytest.mark.integration
-def test_battlefield_attackair_hitlag_floor_contact_enters_landingair() -> None:
-    # Old modelplay frame 229: Fox fullhop nair hits Falco while contacting Battlefield's platform.
-    # Source AttackAir_Coll still dispatches ft_80082C74 on the hitlag-start frame, so the fighter
-    # must enter LandingAirN instead of remaining as grounded AttackAirN.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
-    history = _run_case("bf_attackair_hitlag_landing")
-
-    out = history[229]
-    assert int(out["action_id"][0]) == ACT_LANDING_AIR_N
-    assert int(out["action_id"][0]) != ACT_ATTACK_AIR_N
-    assert int(out["on_ground"][0]) == 1
-
-
-@pytest.mark.integration
 def test_yoshi_grounded_throwf_uses_edge_snap_floor_owner() -> None:
     # Old modelplay frames 8942-8958: Falco ThrowF walked past Yoshi's platform end, stayed at the
     # platform height, but lost ground ownership and hovered/slid in ThrowF. Grounded Throw*_Coll

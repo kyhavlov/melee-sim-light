@@ -84,25 +84,30 @@ The directly contact-shaped public fields contain at least:
 Contact also causes Damage/Guard/Rebound motion changes and raw flag changes, so this is a lower
 bound on its potential leverage.
 
-## Rewrite gates
+## Validation protocol for source rewrites
 
 Every behavior-changing cutover must:
 
-1. run focused source-owner tests;
-2. refresh all four required validation reports;
-3. pass the repository validation diff with no hard red and no new replay-level regression;
-4. show improvement in both one-step and rollout-derived metrics for the migrated owner;
-5. keep mature Fox/Falco controls green;
-6. run random and replay-derived performance gates when the hot path changed materially.
+1. declare the complete gameplay-relevant source boundary and explicit exclusions;
+2. run focused source-owner positive/negative tests;
+3. delete the displaced runtime path and compatibility ownership;
+4. refresh all required validation reports;
+5. investigate broad regressions and any mismatch that disproves the claimed source boundary;
+6. record other movements as evidence for the source owner that will naturally consume them;
+7. run random and replay-derived performance gates when the hot path changed materially.
 
-An unchanged aggregate total is not automatically failure if the packet source-completes a bounded
-owner and deletes incorrect machinery. However, a major rewrite should not expand into the next
-owner family until it demonstrates some validation leverage.
+Improved one-step and rollout metrics are strong supporting evidence, especially in mature
+Fox/Falco controls, but neither improvement nor zero replay-level reds defines source completion.
+An unchanged or locally worse metric can accompany a correct source cutover when old compensations
+are removed or connected owners remain unported. Do not keep or reintroduce those compensations to
+make the report green.
 
 ## What not to do with this baseline
 
 - Do not choose a replay name or record ID as a runtime predicate.
 - Do not infer exact causal counts by summing correlated fields.
+- Do not turn the largest replay regressions into the implementation queue. Map them to source
+  ownership and work from the source inventory.
 - Do not preserve an old bridge merely because a teacher-forced row currently needs it. Determine
   whether native reseed preprocessing should initialize real hidden state instead.
 - Do not weaken the validation profile to make a rewrite appear successful.

@@ -55,10 +55,6 @@ static PyMethodDef methods[] = {
     {"debug_set_mpcoll_joint_filters", msl_debug_set_mpcoll_joint_filters_py, METH_VARARGS,
      "debug_set_mpcoll_joint_filters(handle, batch_index, player_index, joint_skip, joint_only) -> "
      "DEBUG-ONLY. Override CollData joint filters (-1 disables each)."},
-    {"debug_set_escapeair_floor_producer_runtime",
-     msl_debug_set_escapeair_floor_producer_runtime_py, METH_VARARGS,
-     "debug_set_escapeair_floor_producer_runtime(handle, batch_index, player_index, authority, "
-     "desired_owner) -> DEBUG-ONLY. Override EscapeAir floor-producer authority for tests."},
     {"debug_set_floor_sweep_prev_runtime", msl_debug_set_floor_sweep_prev_runtime_py, METH_VARARGS,
      "debug_set_floor_sweep_prev_runtime(handle, batch_index, player_index, x, y, authority) -> "
      "DEBUG-ONLY. Override runtime floor-sweep provenance for tests."},
@@ -510,6 +506,9 @@ static PyMethodDef methods[] = {
      "release_min) -> (x0,latch)"},
     {"derive_zelda_twin_state_flags_2218", msl_derive_zelda_twin_state_flags_2218_py, METH_VARARGS,
      "derive_zelda_twin_state_flags_2218(char, state_flags, zelda_id) -> uint8[:]"},
+    {"derive_teleport_travel_timer", msl_derive_teleport_travel_timer_py, METH_VARARGS,
+     "derive_teleport_travel_timer(char, action, hitlag, sheik_id, sheik_frames, zelda_id, "
+     "zelda_frames) -> uint8[:,players]"},
     {"derive_marth_counter_hitlag_floor_active", msl_derive_marth_counter_hitlag_floor_active_py,
      METH_VARARGS,
      "derive_marth_counter_hitlag_floor_active(char, action, state_flags) -> uint8[:]"},

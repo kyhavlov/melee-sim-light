@@ -1,7 +1,7 @@
 # Candidate: Motion-State Execution Kernel
 
-Verdict: required governing architecture; introduce it through a vertical owner rewrite rather than
-as a standalone scheduler packet.
+Verdict: required governing architecture. Phase 1 introduced the Coll slice; Phase 2 completes it
+through the causal fighter-execution/contact chain rather than a standalone scheduler packet.
 
 ## Source contract
 
@@ -159,13 +159,13 @@ For each vertical family:
 2. route its entry and callbacks through the kernel;
 3. make old passes explicitly skip migrated owners;
 4. delete the old branch, fresh-entry markers, semantic classes, and bridge lanes;
-5. prove validation and performance before expanding.
+5. run focused locks and diagnostic validation, then continue through the connected source family.
 
-The first family is map collision. Collision-owned transitions will use the central entry path and
-the live Coll callback. Phase 1 must also include the causal AObj/script/HitCapsule entry semantics
-needed by every migrated transition destination; a collision-only partial entry helper would repeat
-the present fault. Full contact traversal and ProcessHit can still follow in Phase 2. Anim/IASA/Phys
-conversion can then expand through common locomotion and defense without redoing the map owner.
+Map collision is the first architectural cutover and is complete. It proves live Coll ownership but
+does not complete the Anim/IASA/Phys or contact chain. Phase 2 must finish the causal entry,
+AObj/script/HitCapsule, priority-9 primitive, priority-12/13 selection, and priority-14 ProcessHit
+surface together. It may expand through any connected common or character callback required to
+make that source chain real; it must not preserve a partial lifecycle behind compatibility lanes.
 
 ## Expected deletion
 

@@ -730,8 +730,6 @@ PyObject* msl_validation_fill_visible_player_py(PyObject* self, PyObject* args) 
   const float* speed_y_v = (const float*)PyArray_DATA(speed_y);
   const float* speed_x_attack_v = (const float*)PyArray_DATA(speed_x_attack);
   const float* speed_y_attack_v = (const float*)PyArray_DATA(speed_y_attack);
-  const uint32_t stage_id = (uint32_t)stage_id_ul;
-
   for (npy_intp i = 0; i < n_samples; i++) {
     MslSeed* seed = (MslSeed*)(void*)(seed_u8 + (size_t)i * seed_stride);
     MslInput* prev = (MslInput*)(void*)(prev_u8 + (size_t)i * prev_stride);
@@ -822,16 +820,8 @@ PyObject* msl_validation_fill_visible_player_py(PyObject* self, PyObject* args) 
     seed->ground_friction_mul[slot] = 1.0f;
 
     // Teacher-forced floor sweeps seed CollData.prev_pos from the previous replay-visible row.
-    // FoD sustained DamageFly keeps callback-current root instead, matching ft_80081DD4's
-    // coll.last_pos=coll.cur_pos handoff before mpColl_800473CC.
     float floor_prev_x = pos_x_v[i == 0 ? 0 : i - 1];
     float floor_prev_y = pos_y_v[i == 0 ? 0 : i - 1];
-    if (stage_id == 2u && i > 0 && action_v[i] >= 0x0057u && action_v[i] <= 0x005Bu &&
-        on_ground_v[i] == 0 && hitlag_v[i] == 0 && hitstun_v[i] > 0 &&
-        action_v[i] == action_v[i - 1]) {
-      floor_prev_x = pos_x_v[i];
-      floor_prev_y = pos_y_v[i];
-    }
     seed->floor_sweep_prev_pos_x_f32[slot] = floor_prev_x;
     seed->floor_sweep_prev_pos_y_f32[slot] = floor_prev_y;
     seed->floor_sweep_prev_pos_valid_u8[slot] = 1;

@@ -31,9 +31,6 @@ Oracle (every supported stage, from data/stages/*.json segment graphs):
 Usage:
   python -m tools.eval.fuzz_live_clip --mode sweep --char marth --stage fd
   python -m tools.eval.fuzz_live_clip --mode sweep --matrix          # all chars x stages
-  python -m tools.eval.fuzz_live_clip --repro sheik_fd_seed_1354821142 \
-    --save-trace reports/triage/sheik_fd_seed_1354821142.json
-
 This tool deliberately reuses the test suite's seed/step helpers via a tests/ path import -
 it is a triage/eval harness, not runtime code. If these helpers gain a second durable
 consumer, move them into a tools/eval utility module instead.
@@ -478,23 +475,6 @@ def script_rle(script: list) -> list[dict]:
     return out
 
 
-def sheik_fd_seed_1354821142_repro() -> ClipRepro:
-    rng = random.Random(1354821142)
-    start_x = rng.choice((55.0, 70.0, 78.0, 83.0, -70.0, -83.0))
-    # Prefix reduced from the random policy episode, plus a neutral resolution tail so the oracle
-    # sees a persistent interior run instead of a truncated in-hull frame.
-    script = _policy_script(rng, 180)[:92] + [_mk_inputs()] * 20
-    return ClipRepro(
-        name="sheik_fd_seed_1354821142",
-        char="sheik",
-        stage="fd",
-        start_x=start_x,
-        rng_seed=1354821142,
-        case=("random-policy-prefix",),
-        script=script,
-    )
-
-
 def zelda_bf_boundary_escapeair_repro(drift: int) -> ClipRepro:
     if drift not in (95, 127):
         raise ValueError("supported Zelda/BF boundary repro drift values are 95 and 127")
@@ -561,7 +541,6 @@ def sheik_fod_random_648177039_regression_lock() -> ClipRepro:
 
 def clip_repro_cases() -> dict[str, ClipRepro]:
     cases = [
-        sheik_fd_seed_1354821142_repro(),
         random_policy_clip_repro("sheik", "dl", 856430243),
         random_policy_clip_repro("sheik", "ps", 856430243),
         sheik_fod_random_648177039_regression_lock(),
@@ -572,8 +551,6 @@ def clip_repro_cases() -> dict[str, ClipRepro]:
 
 
 def seed_for_repro(repro: ClipRepro) -> np.ndarray:
-    if repro.name == "sheik_fd_seed_1354821142":
-        return _base_seed(repro.char, repro.stage, pos_x=repro.start_x, pos_y=0.0)
     if repro.case and repro.case[0] == "random-policy" and repro.stage != "fd":
         seed, _settle = _settled_ground_seed(repro.char, repro.stage, repro.start_x)
         return seed
@@ -710,7 +687,6 @@ def _trace_frame_dict(frame: int, inp: np.ndarray, cmp_row, col_row, contact_row
             "valid": int(col_row["floor_probe_valid"][p]),
             "owner": int(col_row["floor_probe_owner"][p]),
             "reject_reason": int(col_row["floor_probe_reject_reason"][p]),
-            "reject_bits": int(col_row["floor_probe_reject_bits"][p]),
             "raw_bottom_sweep_hit": int(col_row["floor_probe_raw_bottom_sweep_hit"][p]),
             "projection_hit": int(col_row["floor_probe_projection_hit"][p]),
             "carried_source_owned": int(col_row["floor_probe_carried_source_owned"][p]),
@@ -807,7 +783,6 @@ def _source_owner_diagnosis(repro: ClipRepro, first_violation: dict | None) -> d
         "observed_publication": {
             "floor_reject_kind": floor_probe.get("reject_kind"),
             "floor_reject_reason": floor_probe.get("reject_reason"),
-            "floor_reject_bits": floor_probe.get("reject_bits"),
             "wall_candidate_count": wall_probe.get("candidate_count"),
             "wall_commit_kind": wall_probe.get("commit_kind_name"),
         },

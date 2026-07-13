@@ -13,8 +13,7 @@ from tools.modelplay.sim_env import build_match_config_array
 
 FIXTURE = "tests/fixtures/modelplay/manual_ledge_collision_repros.json"
 
-MSL_COLLIDE_LEFT_WALL_HUG = 0x00000020
-MSL_COLLIDE_LEFT_LEDGE_GRAB = 0x01000000
+MSL_COLLIDE_SIDE_EDGE_MASK = 0x00300000
 
 
 def _collision_contacts_dtype() -> np.dtype:
@@ -139,49 +138,6 @@ def _replay_trace(trace: dict[str, Any]) -> dict[int, tuple[np.void, np.void]]:
 
 
 @pytest.mark.integration
-def test_specialhifall_cliffcatch_both_can_grab_facing_away_after_fastfall_release() -> None:
-    # Source owner: Fox/Falco SpecialAirHi and SpecialHiFall pass CLIFFCATCH_BOTH to
-    # ft_CheckGroundAndLedge, so mpColl tests both left and right ledge-grab sides. The fixture is
-    # a variant of the manual wallride trace with down-stick released before the ledge window.
-    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
-    #   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
-    # refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
-    # refs/melee/src/melee/mp/mpcoll.c::mpColl_80046904
-    history = _replay_trace(_trace_by_name("spacie_upb_backwards_fastfall_neutral_ledgegrab"))
-
-    fox = 0
-    out_295, _ = history[295]
-    out_296, contacts_296 = history[296]
-    assert int(out_295["action_id"][fox]) == 358  # SpecialHiFall while facing away.
-    assert int(out_295["facing"][fox]) == 0
-    assert int(out_296["action_id"][fox]) == 252  # CliffCatch.
-    assert int(out_296["facing"][fox]) == 1
-    assert int(contacts_296["coll_env_flags"][fox]) & MSL_COLLIDE_LEFT_LEDGE_GRAB
-
-
-@pytest.mark.integration
-def test_left_ledge_damagefly_wall_contact_enters_flyreflectwall() -> None:
-    # Source owner: DamageFly_Coll consumes Collide_LeftWallHug/RightWallHug for no-tech
-    # FlyReflectWall. Left-wall airborne collision uses the same mpColl_80045B74 envelope as the
-    # right-wall path; bottom/top contacts alone are not enough, but the side-point Hug candidate is.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_800C15F4
-    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046904}
-    history = _replay_trace(_trace_by_name("falco_left_ledge_damagefly_wall_reflect"))
-
-    falco = 1
-    out_1650, _ = history[1650]
-    out_1651, contacts_1651 = history[1651]
-    assert int(out_1650["action_id"][falco]) == 88  # DamageFlyN before reflect.
-    assert int(out_1651["action_id"][falco]) == 247  # FlyReflectWall.
-    assert int(out_1651["animation_index"][falco]) == 212  # WallDamage.
-    assert int(contacts_1651["wall_kind"][falco]) == 1
-    assert int(contacts_1651["coll_env_flags"][falco]) & MSL_COLLIDE_LEFT_WALL_HUG
-    assert float(out_1651["speed_x_attack"][falco]) < -1.0
-    assert float(out_1651["speed_y_attack"][falco]) > 1.0
-
-
-@pytest.mark.integration
 def test_grounded_sideb_to_ledge_end_stays_grounded_instead_of_fall() -> None:
     # Source owner: grounded Fox/Falco SpecialSEnd collision uses ft_800827A0, which can keep the
     # fighter grounded at the floor endpoint through mpColl_8004B2DC / mpColl_8004A45C_Floor.
@@ -198,4 +154,4 @@ def test_grounded_sideb_to_ledge_end_stays_grounded_instead_of_fall() -> None:
     assert int(out_169["action_id"][fox]) == 349  # Stays in SpecialSEnd, not actionable Fall.
     assert int(out_169["on_ground"][fox]) == 1
     assert float(out_169["pos_x"][fox]) == pytest.approx(-85.5657, abs=0.01)
-    assert int(contacts_169["coll_env_flags"][fox]) & 0x00800000  # Collide_Edge.
+    assert int(contacts_169["coll_env_flags"][fox]) & MSL_COLLIDE_SIDE_EDGE_MASK

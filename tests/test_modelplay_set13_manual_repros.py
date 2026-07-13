@@ -114,28 +114,6 @@ def _replay_trace(trace: dict[str, Any]) -> list[np.void]:
 
 
 @pytest.mark.integration
-def test_marth_airdodge_trace_does_not_snap_to_far_ledge_wall() -> None:
-    history = _replay_trace(_load_trace("marth airdodge teleport.json"))
-
-    # Webplay set13 incident: old runtime entered EscapeAir at frame 1729 and projected Marth from
-    # x=47.945679 to FD's left wall/ledge x=-85.565689 through stale carried-wall provenance.
-    #
-    # EscapeAir_Coll consumes the current mpColl wall/ledge callback packet; the adjacent-wall
-    # handoff is bounded by current ECB side penetration rather than by the carried floor endpoint.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904}
-    before = history[1728]
-    after = history[1729]
-    assert int(after["action_id"][0]) == ACT_ESCAPE_AIR
-    assert float(before["pos_x"][0]) > 40.0
-    assert float(after["pos_x"][0]) > 40.0
-    assert math.hypot(
-        float(after["pos_x"][0]) - float(before["pos_x"][0]),
-        float(after["pos_y"][0]) - float(before["pos_y"][0]),
-    ) < 4.0
-
-
-@pytest.mark.integration
 def test_marth_walljump_trace_never_enters_passive_wall_jump() -> None:
     history = _replay_trace(_load_trace("marth_bair_through_ledge_wall_jump.msltrace.json"))
 

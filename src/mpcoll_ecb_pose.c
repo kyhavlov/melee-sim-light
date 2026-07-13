@@ -35,8 +35,8 @@ uint8_t mpcoll_ground_specialhi_uses_jobj_ecb(uint8_t char_id, uint16_t action_i
   if (chp == NULL || !(chp->firefox_bound_angle_degrees > 0.0f)) {
     return 0u;
   }
-  // Ownership from FireFox/FireBird's extracted special-hi bound-angle data. Those launch rows
-  // rotate XRotN and branch through ftFox_SpecialHi_IsBound before their floor collision result.
+  // Ownership from FireFox/FireBird's extracted special-hi bound-angle data. Only the launch rows
+  // rotate XRotN; Landing/Fall/Bound load fresh unrotated poses through a flags=0 state change.
   // Sheik/Zelda Vanish end uses a different source owner: ftSk/ftZd_SpecialAirHi_Coll calls
   // ft_CheckGroundAndLedge directly and enters LandingFallSpecial on any accepted floor/ledge.
   // Do not apply the FireFox JObj/bound-angle ECB owner to generic SpecialAirHi rows.
@@ -414,11 +414,7 @@ uint8_t mpcoll_common_fall_blended_ecb_live_owner(const MslBatch* batch, size_t 
     return 0u;
   }
   const uint8_t bit = mpcoll_common_fall_blended_ecb_seed_bit(action_id);
-  if (bit == 0u) {
-    return 0u;
-  }
-  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
-  return (ch != NULL && (ch->common_fall_blended_ecb_seed_mask & bit) != 0u) ? 1u : 0u;
+  return bit != 0u ? 1u : 0u;
 }
 
 uint8_t mpcoll_common_fall_blended_ecb_points(MslEcbWorldPoints* out, const MslBatch* batch,
@@ -602,4 +598,29 @@ void mpcoll_store_desired_ecb_points(MslBatch* batch, size_t idx, const MslEcbWo
   batch->state.coll_desired_ecb_left_rel_x[idx] = ecb->left_rel_x;
   batch->state.coll_desired_ecb_right_rel_x[idx] = ecb->right_rel_x;
   batch->state.coll_desired_ecb_side_rel_y[idx] = ecb->side_rel_y;
+}
+
+void mpcoll_store_squeeze_restore_ecb_points(MslBatch* batch, size_t idx,
+                                             const MslEcbWorldPoints* ecb) {
+  if (batch == NULL || ecb == NULL) {
+    return;
+  }
+  batch->state.coll_squeeze_restore_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
+  batch->state.coll_squeeze_restore_ecb_top_rel_y[idx] = ecb->top_rel_y;
+  batch->state.coll_squeeze_restore_ecb_left_rel_x[idx] = ecb->left_rel_x;
+  batch->state.coll_squeeze_restore_ecb_right_rel_x[idx] = ecb->right_rel_x;
+  batch->state.coll_squeeze_restore_ecb_side_rel_y[idx] = ecb->side_rel_y;
+  batch->state.coll_squeeze_restore_ecb_valid[idx] = 1u;
+}
+
+void mpcoll_clear_current_ecb_packet(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslEcbWorldPoints zero = {0};
+  mpcoll_store_current_ecb_points(batch, idx, &zero);
+  mpcoll_store_prev_ecb_points(batch, idx, &zero);
+  batch->state.coll_ecb_bottom_valid[idx] = 1u;
+  batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
+  batch->state.coll_squeeze_restore_ecb_valid[idx] = 0u;
 }

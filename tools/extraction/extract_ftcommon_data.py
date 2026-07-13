@@ -658,6 +658,9 @@ def main() -> None:
         "knockback_frame_decay": float(_f32_be(buf, ft_common_abs + 0x204)),
         # Ledge regrab cooldown (fighter.c / ftCo_Cliff*)
         "ledge_cooldown_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x498))),
+        # Ordinary Damage collision temporarily scales the JObj ledge-catch height.
+        # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+        "damage_ledge_snap_height_mul": float(_f32_be(buf, ft_common_abs + 0x1CC)),
         # Collision hit-status timers (x198C path).
         #
         # Decomp:

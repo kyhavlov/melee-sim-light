@@ -12,7 +12,31 @@ void motion_state_install_live_callbacks(MslBatch* batch, size_t idx) {
   const uint8_t char_id = batch->state.char_id[idx];
   const uint16_t action_id = batch->state.action_id[idx];
   batch->state.live_coll_callback_id[idx] = msl_motion_state_coll_cb_id(char_id, action_id);
+  batch->state.live_coll_callback_action_id[idx] = action_id;
   batch->state.live_coll_handler_kind[idx] = msl_motion_state_coll_handler_kind(char_id, action_id);
+  batch->state.live_coll_wrapper_selector_kind[idx] =
+      msl_motion_state_coll_wrapper_selector_kind(char_id, action_id);
+  batch->state.live_coll_source_plan[idx] = msl_motion_state_coll_source_plan(char_id, action_id);
+}
+
+void motion_state_install_live_callbacks_before_map(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      // Fighter_ChangeMotionState installs the destination callbacks once; later source overrides
+      // remain live until another motion entry. Most simulator entries already install through
+      // msl_anim_timebase_enter(). This compatibility boundary catches older direct action writes
+      // without rebuilding the callback every frame and erasing a persistent override.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_procMap}
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.live_coll_callback_action_id[idx] != batch->state.action_id[idx]) {
+        motion_state_install_live_callbacks(batch, idx);
+      }
+    }
+  }
 }
 
 void motion_state_finalize_seeded_coll_data_before_map(MslBatch* batch) {
@@ -49,12 +73,15 @@ void motion_state_finalize_seeded_coll_data_before_map(MslBatch* batch) {
 }
 
 void motion_state_override_live_coll_callback(MslBatch* batch, size_t idx, uint16_t callback_id,
-                                              uint8_t handler_kind) {
+                                              uint8_t handler_kind, uint8_t selector_kind,
+                                              uint32_t source_plan) {
   if (batch == NULL) {
     return;
   }
   batch->state.live_coll_callback_id[idx] = callback_id;
   batch->state.live_coll_handler_kind[idx] = handler_kind;
+  batch->state.live_coll_wrapper_selector_kind[idx] = selector_kind;
+  batch->state.live_coll_source_plan[idx] = source_plan;
 }
 
 void motion_state_change(MslBatch* batch, int bi, int p, uint16_t action_id,

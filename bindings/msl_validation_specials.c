@@ -869,6 +869,87 @@ static inline uint8_t msl_py_action_is_teleport_air_start1(uint8_t char_id, uint
   return 0u;
 }
 
+static inline uint8_t msl_py_action_is_teleport_start1(uint8_t char_id, uint16_t action) {
+  if (char_id == (uint8_t)MSL_CHAR_ID_SHEIK) {
+    return (uint8_t)(action == (uint16_t)MSL_ACT_SK_SPECIAL_HI_START_1 ||
+                     action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI_START_1);
+  }
+  if (char_id == (uint8_t)MSL_CHAR_ID_ZELDA) {
+    return (uint8_t)(action == (uint16_t)MSL_ACT_ZD_SPECIAL_HI_START_1 ||
+                     action == (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_HI_START_1);
+  }
+  return 0u;
+}
+
+PyObject* msl_derive_teleport_travel_timer_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* char_obj = NULL;
+  PyObject* action_obj = NULL;
+  PyObject* hitlag_obj = NULL;
+  int sheik_id = -1;
+  int sheik_frames = 0;
+  int zelda_id = -1;
+  int zelda_frames = 0;
+  if (!PyArg_ParseTuple(args, "OOOiiii", &char_obj, &action_obj, &hitlag_obj, &sheik_id,
+                        &sheik_frames, &zelda_id, &zelda_frames)) {
+    return NULL;
+  }
+  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 2, "char_id_u8");
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 2, "action_id_u16");
+  PyArrayObject* hitlag = require_contiguous_array(hitlag_obj, NPY_UINT16, 2, "hitlag_u16");
+  if (chr == NULL || action == NULL || hitlag == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_DIM(chr, 0);
+  const npy_intp width = PyArray_DIM(chr, 1);
+  if (require_exact_2d_shape(action, n, width, "action_id_u16") < 0 ||
+      require_exact_2d_shape(hitlag, n, width, "hitlag_u16") < 0) {
+    return NULL;
+  }
+  npy_intp dims[2] = {n, width};
+  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(2, dims, NPY_UINT8, 0);
+  if (out == NULL) {
+    return NULL;
+  }
+  const uint8_t* ch = (const uint8_t*)PyArray_DATA(chr);
+  const uint16_t* act = (const uint16_t*)PyArray_DATA(action);
+  const uint16_t* hl = (const uint16_t*)PyArray_DATA(hitlag);
+  uint8_t* timer_out = (uint8_t*)PyArray_DATA(out);
+  for (npy_intp p = 0; p < width; p++) {
+    uint8_t timer = 0u;
+    uint8_t active = 0u;
+    for (npy_intp frame = 0; frame < n; frame++) {
+      const npy_intp idx = frame * width + p;
+      const uint8_t char_id = ch[idx];
+      const uint8_t travel = msl_py_action_is_teleport_start1(char_id, act[idx]);
+      int frames = 0;
+      if (char_id == (uint8_t)sheik_id) {
+        frames = sheik_frames;
+      } else if (char_id == (uint8_t)zelda_id) {
+        frames = zelda_frames;
+      }
+      if (!travel || frames <= 0) {
+        timer = 0u;
+        active = 0u;
+        continue;
+      }
+      if (!active) {
+        timer = (uint8_t)(frames > 255 ? 255 : frames);
+        active = 1u;
+      } else if (hl[idx] == 0u && timer > 1u) {
+        // ftSk/ftZd Special{Air}HiStart_1_Anim owns the decrement. Fighter_8006A360 skips that
+        // callback in hitlag, so the hidden timer freezes while the visible travel action remains.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+        //   ftSk_SpecialHiStart_1_Anim,ftSk_SpecialAirHiStart_1_Anim}
+        timer--;
+      }
+      timer_out[idx] = timer;
+    }
+  }
+  return (PyObject*)out;
+}
+
 PyObject* msl_derive_sheik_vanish_floor_skip_segments_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* char_obj = NULL;

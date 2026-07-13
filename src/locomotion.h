@@ -24,7 +24,14 @@ void locomotion_update_anim_callbacks_pre_input(MslBatch* batch);
 // shaped IASA ladders.
 uint8_t locomotion_attackair_try_enter_from_air_iasa(MslBatch* batch, const MslCommonParams* c,
                                                      size_t idx);
+
+// Run the source MotionState Coll callback's ordinary floor-contact transition immediately after
+// the mpColl wrapper reports a floor. Returns nonzero when this owner consumed the contact.
+uint8_t locomotion_source_air_floor_contact(MslBatch* batch, int bi, size_t idx,
+                                            uint8_t coll_handler);
 void locomotion_update_post_collision(MslBatch* batch);
+// Installed Coll callback continuation: runs after its mpColl result and before cliff catch.
+uint8_t locomotion_try_installed_walljump_post_collision(MslBatch* batch, size_t idx);
 
 uint8_t locomotion_grounded_a_attack_try_enter_from_wait_iasa(
     MslBatch* batch, const MslCommonParams* c, size_t idx, uint16_t buttons_pressed, float stick_x,

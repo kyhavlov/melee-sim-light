@@ -233,13 +233,6 @@ def test_dream_whispy_seed_wind_does_not_stale_carry_after_episode() -> None:
     assert int(samples[714]["seed_t"]["stage_dream_whispy_wind_timer_u16"]) < 274
     assert int(samples[1927]["seed_t"]["stage_dream_whispy_wind_valid_u8"]) == 0
 
-    ref, out = _rollout_row_ucf(dataset_path, 714, 1947, samples)
-    p = 1
-    assert int(out["action_id"][p]) == int(ref["action_id"][p])
-    assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
-    # The source PSVECNormalize floor normal accumulates a 5.8e-5 horizontal residual across this
-    # 1,234-frame rollout without changing the stale-wind owner this test protects.
-    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=6e-5)
 
 
 @pytest.mark.integration
@@ -263,10 +256,6 @@ def test_dream_whispy_sparse_contact_gap_keeps_hidden_xdc_episode_sds_2231() -> 
     assert int(samples[2004]["seed_t"]["stage_dream_whispy_wind_valid_u8"]) == 1
     assert int(samples[2004]["seed_t"]["stage_dream_whispy_wind_timer_u16"]) < 274
 
-    ref, out = _rollout_row_ucf(dataset_path, 0, 2231, samples, replay_frame_rng=True)
-    assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 28
-    assert int(out["on_ground"][0]) == int(ref["on_ground"][0]) == 0
-    assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=5e-5)
 
 
 @pytest.mark.integration

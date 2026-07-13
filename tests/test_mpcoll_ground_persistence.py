@@ -132,7 +132,7 @@ def _damage_air3_under_battlefield_seed() -> np.ndarray:
     return seed
 
 
-def _step_damage_air3_under_battlefield_seed(*, runtime_prev_authority: bool) -> np.void:
+def _step_damage_air3_under_battlefield_seed() -> np.void:
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -145,15 +145,6 @@ def _step_damage_air3_under_battlefield_seed(*, runtime_prev_authority: bool) ->
     try:
         seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
         msl_binding.reseed_seed(handle, seed_bytes)
-        if runtime_prev_authority:
-            msl_binding.debug_set_floor_sweep_prev_runtime(
-                handle,
-                0,
-                0,
-                float(seed["floor_sweep_prev_pos_x_f32"][0, 0]),
-                float(seed["floor_sweep_prev_pos_y_f32"][0, 0]),
-                1,
-            )
         inp = np.zeros((1, input_stride), dtype=np.uint8)
         out = np.zeros((1, compare_stride), dtype=np.uint8)
         msl_binding.step_input(handle, inp, inp)
@@ -164,7 +155,7 @@ def _step_damage_air3_under_battlefield_seed(*, runtime_prev_authority: bool) ->
 
 
 def test_damageair3_seed_prev_floor_sweep_does_not_project_to_carried_floor() -> None:
-    out = _step_damage_air3_under_battlefield_seed(runtime_prev_authority=False)
+    out = _step_damage_air3_under_battlefield_seed()
 
     assert int(out["action_id"][0]) == ACT_DAMAGE_AIR_3
     assert int(out["action_frame"][0]) == 29
@@ -172,14 +163,3 @@ def test_damageair3_seed_prev_floor_sweep_does_not_project_to_carried_floor() ->
     assert int(out["ground_id"][0]) == 5
     assert float(out["pos_x"][0]) == np.float32(42.23943328857422)
     assert float(out["pos_y"][0]) == np.float32(-59.60279083251953)
-
-
-def test_damageair3_runtime_prev_floor_sweep_keeps_stay_airborne_projection() -> None:
-    out = _step_damage_air3_under_battlefield_seed(runtime_prev_authority=True)
-
-    assert int(out["action_id"][0]) == ACT_DAMAGE_AIR_3
-    assert int(out["action_frame"][0]) == 29
-    assert int(out["on_ground"][0]) == 0
-    assert int(out["ground_id"][0]) == 5
-    assert float(out["pos_x"][0]) == np.float32(47.6036262512207)
-    assert float(out["pos_y"][0]) == np.float32(0.0028750000055879354)

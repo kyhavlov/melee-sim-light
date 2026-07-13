@@ -170,14 +170,7 @@ typedef struct MslCharParams {
   //
   // Source of truth: ISO-extracted `data/characters/*.json` `grab_capture_anchor_part_id`.
   uint16_t grab_capture_anchor_part_id;
-  // Explicit overlay for the ftCo_800DDDE4 -> mpColl_800471F8 release-local floor publication
-  // subset. Bit order matches throw action order: ThrowF, ThrowB, ThrowHi, ThrowLw.
-  //
-  // This is probe-backed rather than inferred from the anchor part id: Marth ThrowF/ThrowLw publish
-  // the floor-hit substep root, Marth ThrowB and Fox/Falco controls do not.
-  // Source/probe: refs/Ishiiruka engine-dump-v12-probes ftCo_800DDDE4 probe on IPW/PFZ/FSP rows.
-  uint8_t throw_release_mpcoll_floor_publication_mask;
-  uint8_t _pad_u8_grab_0[3];
+  uint8_t _pad_u8_grab_0[4];
 
   // Explicit overlay for source callsites that enter common FallSpecial through
   // ftCo_80096900 with xC=0. Bits are keyed by MslMsFxSpecialKind: 1u << fx_kind.
@@ -189,11 +182,6 @@ typedef struct MslCharParams {
   // Source controls: refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c
   uint32_t fallspecial_xc0_source_fx_kind_mask;
 
-  // Seed-only CommonFall CollData ECB reconstruction mask.
-  // Bit order: Fall, FallAerial, FallSpecial. This is a replay seed/provenance overlay for
-  // hidden CollData ECB bottom state, not a free-running mpColl branch.
-  uint8_t common_fall_blended_ecb_seed_mask;
-
   // Explicit overlay for sustained EscapeAir_Coll carried ledge-floor wall publication. This is a
   // character-data gate for the CollData/mpColl owner family, not a generic EscapeAir property.
   //
@@ -202,7 +190,7 @@ typedef struct MslCharParams {
   // - refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
   // - refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904,mpColl_80044628_Floor}
   uint8_t escapeair_carried_floor_wall_source;
-  uint8_t _pad_u8_common_fall_ecb_seed[2];
+  uint8_t _pad_u8_escapeair_wall_source[3];
 
   // Fox/Falco side special (Illusion/Phantasm) start/end-state velocities + friction.
   //

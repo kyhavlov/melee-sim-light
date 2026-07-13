@@ -19,9 +19,10 @@
 #include "guard_lifecycle.h"
 #include "hitboxes.h"
 #include "input_axis.h"
-#include "mpcoll_ground.h"
 #include "move_tables.h"
 #include "motion_state_owners.h"
+#include "motion_state_runtime.h"
+#include "mpcoll_source_air.h"
 #include "state_flags.h"
 #include "trigger_input.h"
 
@@ -216,96 +217,16 @@ static inline uint8_t capture_pre_connect_action_is_damagefly(uint16_t action_id
   return msl_damage_owner_is_damagefly_action(action_id);
 }
 
-static inline void maybe_enter_capture_wait_lw_grounded_handoff(MslBatch* batch, int bi,
-                                                                int owner_p, size_t oidx) {
-  if (batch == NULL) {
-    return;
-  }
-  if (batch->state.action_id[oidx] != (uint16_t)MSL_ACT_CATCH_WAIT ||
-      !action_is_catch_pull_state(batch->state.prev_action_id[oidx])) {
-    return;
-  }
-  if ((batch->state.input_buttons[oidx] & (uint16_t)MSL_BUTTON_A) != 0u ||
-      batch->state.on_ground[oidx] == 0u || batch->state.hitlag_started_frame[oidx] != 0u) {
-    return;
-  }
-
-  const int num_players = (int)batch->config.num_players;
-  for (int victim_p = 0; victim_p < num_players; victim_p++) {
-    const size_t vidx = msl_idx_player(bi, victim_p);
-    if ((int)batch->state.grab_owner_port[vidx] != owner_p ||
-        batch->state.action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_WAIT_HI ||
-        batch->state.prev_action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_PULLED_HI ||
-        batch->state.hitlag_started_frame[vidx] != 0u) {
-      continue;
-    }
-
-    MslMpcollFloorMaskResult floor_result = {
-        .ground_id = 0xFFFFu,
-        .corrected_pos_y = batch->state.pos_y[vidx],
-        .corrected_pos_x = batch->state.pos_x[vidx],
-    };
-    if (!mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result)) {
-      continue;
-    }
-
-    // Grounded CatchPull -> CatchWait handoff:
-    // - fn_800DA1D8 drives victim fn_800DB6C8 into CaptureWaitHi/Lw in the owner callback.
-    // - CaptureWaitHi_Coll calls ft_80083C00, which runs ft_80082578/mpColl_800477E0 and only
-    //   invokes fn_800DBAC4 -> fn_800DBBF8 when CollData.env_flags has a floor-mask result.
-    // - fn_800DBBF8 calls ftCommon_8007D7FC before entering CaptureWaitLw, so the same owned
-    //   handoff also refreshes x1968_jumpsUsed (Slippi jumps_left=max_jumps).
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
-    //   fn_800DA1D8,ftCo_CaptureWaitHi_Coll,fn_800DBAC4,fn_800DBBF8
-    // }
-    // refs/melee/src/melee/ft/ft_081B.c::{ft_80083C00,ft_80082578}
-    // refs/melee/src/melee/mp/mpcoll.c::mpColl_800477E0
-    // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
-    const float cur_anim = batch->state.anim_frame_f32[vidx];
-    const float cur_rate = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[vidx]);
-    batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_WAIT_LW;
-    batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_WAIT_LW;
-    msl_anim_timebase_enter(batch, vidx, cur_anim, cur_rate);
-    batch->state.on_ground[vidx] = 1u;
-    if (floor_result.ground_id != 0xFFFFu) {
-      batch->state.ground_id[vidx] = floor_result.ground_id;
-    }
-    batch->state.pos_y[vidx] = floor_result.corrected_pos_y;
-    const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[vidx]);
-    if (ch != NULL) {
-      batch->state.jumps_left[vidx] = ch->max_jumps;
-    }
-  }
-}
-
 static inline void maybe_run_capture_pulled_hi_immediate_floor_callback(
     MslBatch* batch, size_t vidx, uint16_t victim_pre_connect_action) {
   if (batch == NULL || batch->state.action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_PULLED_HI ||
       batch->state.on_ground[vidx] != 0u || batch->state.hitlag_started_frame[vidx] != 0u) {
     return;
   }
-  if (capture_pre_connect_action_is_damagefly(victim_pre_connect_action) ||
-      capture_pre_connect_action_is_damagefly(batch->state.prev_action_id[vidx]) ||
-      capture_pre_connect_action_is_damagefly(batch->state.seed_prev_action_id[vidx])) {
-    // DamageFly collision/ECB ownership remains with the damage family until CapturePulled entry;
-    // stale floor ids on these airborne victims are not proof for the immediate capture-root floor
-    // callback.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CapturePulledHi_Coll
-    return;
-  }
-
-  MslMpcollFloorMaskResult floor_result = {
-      .ground_id = 0xFFFFu,
-      .corrected_pos_y = batch->state.pos_y[vidx],
-      .corrected_pos_x = batch->state.pos_x[vidx],
-  };
-  uint8_t floor_mask = mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result);
-  if (floor_mask == 0u && batch->state.ground_id[vidx] != 0xFFFFu &&
-      batch->state.ecb_lock_timer[vidx] != 0u) {
-    floor_mask = mpcoll_800477e0_capture_root_floor_mask_probe(batch, vidx, &floor_result);
-  }
-  if (floor_mask == 0u) {
+  const int bi = (int)(vidx / (size_t)MSL_MAX_PLAYERS);
+  const int victim_p = (int)(vidx % (size_t)MSL_MAX_PLAYERS);
+  motion_state_install_live_callbacks(batch, vidx);
+  if (!mpcoll_source_air_run_installed_callback(batch, bi, victim_p)) {
     return;
   }
 
@@ -314,10 +235,8 @@ static inline void maybe_run_capture_pulled_hi_immediate_floor_callback(
   //   CapturePulledHi anchor delta, then calls the victim's collision callback through fp+0x21A8.
   // - ftCo_CapturePulledHi_Coll -> ft_80083C00 -> fn_800DAECC/fn_800DAEEC lands the victim into
   //   CapturePulledLw when mpColl_800477E0 produces a floor-mask result.
-  // - Same-frame airborne captures can carry a locked current CollData floor index into this
-  //   callback before the capture anchor delta settles the victim; require the data-backed
-  //   `ecb_lock` owner with the floor id so stale airborne floor ids from other motion owners do not
-  //   force a landing.
+  // The same installed callback now owns ECB interpolation, line admission, projection, and
+  // CollData publication. Do not reproduce that work through a second root/floor probe.
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
   //   ftCo_CapturePulledHi_Coll,fn_800DAECC,fn_800DAEEC}
@@ -328,14 +247,11 @@ static inline void maybe_run_capture_pulled_hi_immediate_floor_callback(
   batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_PULLED_LW;
   msl_anim_timebase_enter(batch, vidx, cur_anim, 1.0f);
   batch->state.on_ground[vidx] = 1u;
-  if (floor_result.ground_id != 0xFFFFu) {
-    batch->state.ground_id[vidx] = floor_result.ground_id;
-  }
-  batch->state.pos_y[vidx] = floor_result.corrected_pos_y;
   const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[vidx]);
   if (ch != NULL) {
     batch->state.jumps_left[vidx] = ch->max_jumps;
   }
+  (void)victim_pre_connect_action;
 }
 
 static inline uint8_t capturewait_grab_mash_active(MslBatch* batch, const MslCommonParams* c,
@@ -1307,6 +1223,8 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
 
   batch->state.action_id[oidx] = throw_action;
   batch->state.animation_index[oidx] = owner_sm;
+  batch->state.throw_coll_x4[oidx] = 0u;
+  batch->state.throw_coll_x8[oidx] = 0u;
   msl_anim_timebase_enter(batch, oidx, 0.0f, throw_anim_speed);
   batch->state.frame_speed_mul_fp_q16_16[oidx] = throw_anim_speed_fp;
   batch->state.throw_anim_rate_fp_q16_16[oidx] = throw_anim_speed_fp;
@@ -1331,6 +1249,14 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
   batch->state.action_id[vidx] = thrown_action;
   batch->state.animation_index[vidx] = victim_sm;
+  // ftCo_800DE3FC enters every ordinary Thrown* motion through ftCo_800DB368, which reparents the
+  // victim XRotN and sets x2226_b2. ftCo_800DDDE4 later uses this exact lifetime to unparent and
+  // publish the release-local CollData packet. Keep runtime entry and replay reseed on the same
+  // explicit constraint owner.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  batch->state.grab_constraint_x2226_b2[vidx] = 1u;
   // Decomp: Thrown entry copies victim facing from thrower before installing/accessing the
   // per-frame thrown accessory callback.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
@@ -1944,8 +1870,6 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
         (void)enter_throw_from_wait(batch, bi, owner_p, oidx, throw_action);
         continue;
       }
-
-      maybe_enter_capture_wait_lw_grounded_handoff(batch, bi, owner_p, oidx);
     }
   }
 }

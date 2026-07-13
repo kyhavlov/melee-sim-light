@@ -94,7 +94,6 @@ def _colldata_ecb_dtype() -> np.dtype:
             ("floor_result_source", ("u1", (4,))),
             ("floor_result_mode", ("u1", (4,))),
             ("damage_hitlag_floor_contact_runtime", ("u1", (4,))),
-            ("escapeair_floor_producer_runtime", ("u1", (4,))),
             ("floor_probe_valid", ("u1", (4,))),
             ("floor_probe_owner", ("u1", (4,))),
             ("floor_probe_reject_reason", ("u1", (4,))),
@@ -114,7 +113,6 @@ def _colldata_ecb_dtype() -> np.dtype:
             ("specialhi_rotate_model_valid", ("u1", (4,))),
             ("specialhi_rotate_model_action", ("u1", (4,))),
             ("specialhi_collision_ecb_valid", ("u1", (4,))),
-            ("floor_probe_reject_bits", ("<u8", (4,))),
             ("floor_probe_source_phases", ("<u4", (4,))),
             ("floor_result_segment_id", ("<u2", (4,))),
             ("cliff_ledge_floor_segment_id", ("<u2", (4,))),
@@ -592,7 +590,7 @@ def _read_colldata(handle: object) -> np.void:
     return colldata.view(dtype).reshape((1,))[0].copy()
 
 
-def test_reseed_initializes_current_prev_desired_ecb_from_current_and_prev_pose() -> None:
+def test_reseed_initializes_completed_current_prev_desired_ecb_from_live_pose() -> None:
     seed = _seed_base(STAGE_FD, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, 0.0, 45.0)
     seed["action_frame"][0, 0] = np.int16(4)
     seed["anim_frame_f32"][0, 0] = np.float32(4.0)
@@ -600,18 +598,18 @@ def test_reseed_initializes_current_prev_desired_ecb_from_current_and_prev_pose(
     seed["seed_prev_action_frame"][0, 0] = np.int16(7)
 
     snap = _read_colldata_after_reseed(seed)
-    prev_expected = _ecb_rel_points(SM_FALL, 7)
+    current_expected = _ecb_rel_points(SM_ESCAPE_AIR, 4)
     desired_expected = _ecb_rel_points(SM_ESCAPE_AIR, 4)
 
     assert int(snap["current_valid"][0]) == 1
     assert int(snap["prev_valid"][0]) == 1
     assert int(snap["desired_valid"][0]) == 1
     for prefix in ("current", "prev"):
-        assert float(snap[f"{prefix}_bottom_rel_y"][0]) == pytest.approx(prev_expected["bottom"])
-        assert float(snap[f"{prefix}_top_rel_y"][0]) == pytest.approx(prev_expected["top"])
-        assert float(snap[f"{prefix}_left_rel_x"][0]) == pytest.approx(prev_expected["left"])
-        assert float(snap[f"{prefix}_right_rel_x"][0]) == pytest.approx(prev_expected["right"])
-        assert float(snap[f"{prefix}_side_rel_y"][0]) == pytest.approx(prev_expected["side"])
+        assert float(snap[f"{prefix}_bottom_rel_y"][0]) == pytest.approx(current_expected["bottom"])
+        assert float(snap[f"{prefix}_top_rel_y"][0]) == pytest.approx(current_expected["top"])
+        assert float(snap[f"{prefix}_left_rel_x"][0]) == pytest.approx(current_expected["left"])
+        assert float(snap[f"{prefix}_right_rel_x"][0]) == pytest.approx(current_expected["right"])
+        assert float(snap[f"{prefix}_side_rel_y"][0]) == pytest.approx(current_expected["side"])
     assert float(snap["desired_bottom_rel_y"][0]) == pytest.approx(desired_expected["bottom"])
     assert float(snap["desired_top_rel_y"][0]) == pytest.approx(desired_expected["top"])
     assert float(snap["desired_left_rel_x"][0]) == pytest.approx(desired_expected["left"])
@@ -646,7 +644,7 @@ def test_reseed_ecb_facing_mirrors_left_right_without_changing_vertical_points()
     )
 
 
-def test_reseed_locked_bottom_applies_to_desired_not_seeded_previous_ecb() -> None:
+def test_reseed_locked_bottom_applies_to_desired_not_current_ecb() -> None:
     import msl_binding
 
     seed = _seed_base(STAGE_FD, ACT_FALL, SM_FALL, 0.0, 45.0)
@@ -660,7 +658,7 @@ def test_reseed_locked_bottom_applies_to_desired_not_seeded_previous_ecb() -> No
 
     assert float(snap["desired_bottom_rel_y"][0]) == pytest.approx(0.0)
     assert float(snap["current_bottom_rel_y"][0]) == pytest.approx(
-        float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, SM_FALL, 5))
+        float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, SM_FALL, 6))
     )
 
 
@@ -684,16 +682,15 @@ def test_reseed_locked_desired_ecb_bottom_lane_preserves_source_bottom() -> None
         _ecb_rel_points(SM_ESCAPE_AIR, 2)["top"]
     )
     assert float(snap["current_bottom_rel_y"][0]) == pytest.approx(
-        float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, SM_ESCAPE_AIR, 1))
+        preserved
     )
 
 
-def test_jumpaerial_advances_current_ecb_while_preserving_locked_desired_bottom() -> None:
+def test_jumpaerial_preserves_locked_bottom_across_current_and_desired_ecb() -> None:
     import msl_binding
 
-    # mpColl_LoadECB_inline preserves only desired_ecb.bottom while CollData_X130_Locked is set;
-    # mpCollInterpolateECB still advances the independent current/previous objects. This distinction
-    # is required for a subsequent EscapeAir callback to sweep from the real JumpAerial bottom.
+    # mpColl_LoadECB_inline preserves CollData_X130_Locked across the callback's current and desired
+    # ECB objects. Previous remains the pre-callback object copied by mpCollInterpolateECB.
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
     seed = _seed_base(STAGE_FD, ACT_JUMP_AERIAL_B, SM_JUMP_AERIAL_B, 0.0, 100.0)
@@ -713,11 +710,8 @@ def test_jumpaerial_advances_current_ecb_while_preserving_locked_desired_bottom(
     assert float(after["prev_bottom_rel_y"][0]) == pytest.approx(
         float(before["current_bottom_rel_y"][0])
     )
-    assert float(after["current_bottom_rel_y"][0]) == pytest.approx(
-        float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, SM_JUMP_AERIAL_B, 7))
-    )
+    assert float(after["current_bottom_rel_y"][0]) == pytest.approx(preserved)
     assert float(after["desired_bottom_rel_y"][0]) == pytest.approx(preserved)
-    assert float(after["current_bottom_rel_y"][0]) != pytest.approx(preserved)
 
 
 def test_reseed_floor_skip_debug_exposes_only_source_platform_skip() -> None:
@@ -832,36 +826,6 @@ def test_mp_coll_interpolate_promotion_copies_current_to_prev_then_desired_to_cu
     )
 
 
-def test_mp_coll_interpolate_multisubstep_prev_ecb_is_penultimate_step() -> None:
-    seed = _seed_base(STAGE_FD, ACT_FALL, SM_FALL, 0.0, 80.0)
-    seed["action_frame"][0, 0] = np.int16(6)
-    seed["anim_frame_f32"][0, 0] = np.float32(6.0)
-    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_FALL)
-    seed["seed_prev_action_frame"][0, 0] = np.int16(5)
-    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(0.0)
-    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(96.0)
-    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
-
-    before = _read_colldata_after_reseed(seed)
-    compare, after = _step_with_colldata(seed)
-
-    max_delta = abs(float(compare["pos_y"][0]) - 96.0)
-    for field in ("bottom_rel_y", "top_rel_y", "left_rel_x", "right_rel_x", "side_rel_y"):
-        max_delta = max(
-            max_delta,
-            abs(float(after[f"current_{field}"][0]) - float(before[f"current_{field}"][0])),
-        )
-    steps = int(max_delta / 6.0) + 1 if max_delta > 6.0 else 1
-    assert steps > 1
-    factor = float(steps - 1) / float(steps)
-
-    for field in ("bottom_rel_y", "top_rel_y", "left_rel_x", "right_rel_x", "side_rel_y"):
-        initial = float(before[f"current_{field}"][0])
-        current = float(after[f"current_{field}"][0])
-        expected_prev = initial + (current - initial) * factor
-        assert float(after[f"prev_{field}"][0]) == pytest.approx(expected_prev)
-
-
 def test_callback_local_floor_result_is_stable_for_fd_hard_floor() -> None:
     bottom = _fox_ecb_bottom_rel_y(SM_FALL, 0)
     seed = _seed_base(STAGE_FD, ACT_FALL, SM_FALL, 0.0, -bottom + 0.10)
@@ -881,7 +845,7 @@ def test_callback_local_floor_result_is_stable_for_fd_hard_floor() -> None:
         float(compare["pos_y"][0]) - 0.0001,
         abs=1e-5,
     )
-    assert float(snap["substep_prev_pos_y"][0]) == pytest.approx(-bottom + 2.0)
+    assert float(snap["substep_prev_pos_y"][0]) == pytest.approx(-bottom + 0.10)
 
 
 def test_callback_local_floor_result_is_stable_for_platform_floor() -> None:
@@ -924,7 +888,7 @@ def test_callback_local_floor_result_records_direct_publication_mode() -> None:
     assert int(snap["floor_result_segment_id"][0]) == int(compare["ground_id"][0])
 
 
-def test_callback_local_floor_result_records_edge_snap_mode() -> None:
+def test_callback_local_floor_result_records_edge_contact() -> None:
     seed = _seed_base(STAGE_FD, ACT_ATTACK_11, SM_ATTACK_11, 85.0, 0.0001)
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["ground_id"][0, 0] = np.uint16(1)
@@ -934,31 +898,8 @@ def test_callback_local_floor_result_records_edge_snap_mode() -> None:
 
     assert int(compare["on_ground"][0]) == 1
     assert int(snap["floor_result_valid"][0]) == 1
-    assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_DIRECT
-    assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_EDGE_SNAP
     assert int(snap["floor_result_segment_id"][0]) == int(compare["ground_id"][0])
     assert float(snap["floor_result_contact_x"][0]) == pytest.approx(75.0, abs=1e-6)
-
-
-def test_callback_local_floor_result_records_root_projection_mode() -> None:
-    seed = _seed_base(STAGE_FD, ACT_FALL, SM_FALL, 0.0, -0.2)
-    seed["on_ground"][0, 0] = np.uint8(0)
-    seed["ground_id"][0, 0] = np.uint16(1)
-    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_DAMAGE_FLY_N)
-    seed["seed_prev_action_frame"][0, 0] = np.int16(3)
-    seed["speed_y_self"][0, 0] = np.float32(-0.1)
-    seed["speed_y_attack"][0, 0] = np.float32(-1.0)
-    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(0.0)
-    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-0.15)
-    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
-
-    compare, snap = _step_with_colldata(seed)
-
-    assert int(compare["on_ground"][0]) == 1
-    assert int(snap["floor_result_valid"][0]) == 1
-    assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_DIRECT
-    assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_ROOT_PROJECTION
-    assert int(snap["floor_result_segment_id"][0]) == int(compare["ground_id"][0])
 
 
 def test_callback_local_floor_result_records_stage_object_carry_mode() -> None:
@@ -978,53 +919,6 @@ def test_callback_local_floor_result_records_stage_object_carry_mode() -> None:
     assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_DIRECT
     assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_STAGE_OBJECT_CARRY
     assert int(snap["floor_result_segment_id"][0]) == 0
-
-
-def test_callback_local_4a908_retry_result_is_retained_consumer() -> None:
-    seed = _seed_base(STAGE_BATTLEFIELD, ACT_WAIT, SM_WAIT1_0, 30.0, -6.0)
-    seed["on_ground"][0, 0] = np.uint8(1)
-    seed["ground_id"][0, 0] = np.uint16(3)
-    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(30.0)
-    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-5.0)
-    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
-
-    compare, snap = _step_with_colldata(seed)
-
-    assert int(compare["on_ground"][0]) == 1
-    assert int(compare["ground_id"][0]) == 1
-    assert int(snap["floor_result_valid"][0]) == 1
-    assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_GROUNDED_4A908_RETRY
-    assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_4A908_RETRY
-    assert int(snap["floor_result_segment_id"][0]) == 1
-    assert float(snap["floor_result_contact_y"][0]) == pytest.approx(float(compare["pos_y"][0]))
-
-
-def test_callback_local_4a908_retry_respects_floor_skip_without_stale_floor_result() -> None:
-    seed = _seed_base(STAGE_BATTLEFIELD, ACT_WAIT, SM_WAIT1_0, -40.0, 25.0)
-    seed["on_ground"][0, 0] = np.uint8(1)
-    seed["ground_id"][0, 0] = np.uint16(3)
-    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-40.0)
-    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(26.0)
-    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
-
-    compare, snap = _step_with_colldata(seed)
-    assert int(compare["on_ground"][0]) == 1
-    assert int(compare["ground_id"][0]) == 2
-    assert int(snap["floor_result_valid"][0]) == 1
-    assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_GROUNDED_4A908_RETRY
-    assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_4A908_RETRY
-    assert int(snap["floor_result_segment_id"][0]) == 2
-
-    seed["floor_skip_segment_id_u16"][0, 0] = np.uint16(2)
-    seed["floor_skip_segment_valid_u8"][0, 0] = np.uint8(1)
-    compare_skip, snap_skip = _step_with_colldata(seed)
-
-    assert int(compare_skip["on_ground"][0]) == 0
-    assert int(compare_skip["ground_id"][0]) == 3
-    assert int(snap_skip["floor_skip_valid"][0]) == 0
-    assert int(snap_skip["floor_skip_segment_id"][0]) == 0xFFFF
-    assert int(snap_skip["floor_result_valid"][0]) == 0
-    assert int(snap_skip["floor_result_source"][0]) == FLOOR_RESULT_NONE
 
 
 def test_floor_skip_written_by_platform_pass_and_cleared_after_other_floor() -> None:
@@ -1287,7 +1181,7 @@ def test_colldata_last_pos_initializes_from_root_without_action_routing() -> Non
         msl_binding.destroy(handle)
 
 
-def test_colldata_debug_exports_cliff_and_specialhi_source_provenance() -> None:
+def test_colldata_debug_exports_cliff_and_clears_stale_specialhi_rotation() -> None:
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -1318,24 +1212,22 @@ def test_colldata_debug_exports_cliff_and_specialhi_source_provenance() -> None:
         )
         msl_binding.debug_write_colldata_ecb(handle, out)
         snap = out.view(dtype).reshape((1,))[0]
-        assert int(snap["specialhi_rotate_model_action"][0]) == 1
-        assert int(snap["specialhi_rotate_model_valid"][0]) == 1
-        assert float(snap["specialhi_rotate_model"][0]) == pytest.approx(-0.75)
-        assert int(snap["specialhi_collision_ecb_valid"][0]) == 1
-        assert float(snap["specialhi_ecb_bottom_y"][0]) >= -20.0
+        assert int(snap["specialhi_rotate_model_action"][0]) == 0
+        assert int(snap["specialhi_rotate_model_valid"][0]) == 0
+        assert int(snap["specialhi_collision_ecb_valid"][0]) == 0
         unrot_left, unrot_right, _unrot_min_y, unrot_top = msl_binding.ecb_extents_rel(
             CHAR_FOX, SM_FX_SPECIAL_HI_FALL, 10
         )
         unrot_bottom = msl_binding.ecb_bottom_rel_y(CHAR_FOX, SM_FX_SPECIAL_HI_FALL, 10)
-        # Source `mpColl_LoadECB_JObj` consumes SpecialHi's live FtPart_XRotN/JObj collision ECB,
-        # not public root or fixed ECB extents. The debug packet must expose that hidden collision
-        # body so scanner root-depth rows cannot be recategorized from action id alone.
-        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFox_SpecialHi_RotateModel
-        # refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
-        assert float(snap["current_left_rel_x"][0]) != pytest.approx(float(unrot_left))
-        assert float(snap["current_right_rel_x"][0]) != pytest.approx(float(unrot_right))
-        assert float(snap["current_bottom_rel_y"][0]) != pytest.approx(float(unrot_bottom))
-        assert float(snap["current_top_rel_y"][0]) != pytest.approx(float(unrot_top))
+        # SpecialHiFall enters through Fighter_ChangeMotionState(flags=0), loads its unrotated
+        # animation pose, and never reapplies SpecialHi's launch-only RotateModel owner. A stale
+        # replay seed lane must therefore be ignored rather than kept as hidden collision state.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+        #   ftFox_SpecialHi_RotateModel,ftFx_SpecialHiFall_AirToGround}
+        assert float(snap["current_left_rel_x"][0]) == pytest.approx(float(unrot_left))
+        assert float(snap["current_right_rel_x"][0]) == pytest.approx(float(unrot_right))
+        assert float(snap["current_bottom_rel_y"][0]) == pytest.approx(float(unrot_bottom))
+        assert float(snap["current_top_rel_y"][0]) == pytest.approx(float(unrot_top))
     finally:
         msl_binding.destroy(handle)
 

@@ -1608,10 +1608,9 @@ typedef struct MslSeed {
   // Seed representation:
   // - valid=1: x4_f32/msid_u16 are the replay-prefix hidden values for this seed frame.
   // - valid=0: fallback to deterministic action-frame reconstruction for older/debug seeds.
-  // Runtime consumes this lane only for data-marked CommonFall blended-ECB seed owners; free-run
-  // still advances this hidden state from live velocity. This lane fixes teacher-forced reseed
-  // rows whose drift history is not reconstructable from one visible row.
-  // data/characters/<char>.json::common_fall_blended_ecb_seed_mask
+  // Runtime consumes this lane for CommonFall-family owners; free-run still advances this hidden
+  // state from live velocity. This lane fixes teacher-forced reseed rows whose drift history is
+  // not reconstructable from one visible row.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
   uint8_t common_fall_blend_valid_u8[MSL_MAX_PLAYERS];
   float common_fall_blend_x4_f32[MSL_MAX_PLAYERS];
@@ -2126,7 +2125,6 @@ typedef struct MslDebugCollDataEcb {
   // bottom sweep, root projection, edge snap, stage-object carry, 4A908 retry, etc.
   uint8_t floor_result_mode[MSL_MAX_PLAYERS];
   uint8_t damage_hitlag_floor_contact_runtime[MSL_MAX_PLAYERS];
-  uint8_t escapeair_floor_producer_runtime[MSL_MAX_PLAYERS];
   uint8_t floor_probe_valid[MSL_MAX_PLAYERS];
   uint8_t floor_probe_owner[MSL_MAX_PLAYERS];
   uint8_t floor_probe_reject_reason[MSL_MAX_PLAYERS];
@@ -2151,7 +2149,6 @@ typedef struct MslDebugCollDataEcb {
   uint8_t specialhi_rotate_model_action[MSL_MAX_PLAYERS];
   uint8_t specialhi_collision_ecb_valid[MSL_MAX_PLAYERS];
 
-  uint64_t floor_probe_reject_bits[MSL_MAX_PLAYERS];
   uint32_t floor_probe_source_phases[MSL_MAX_PLAYERS];
   uint16_t floor_result_segment_id[MSL_MAX_PLAYERS];
   uint16_t cliff_ledge_floor_segment_id[MSL_MAX_PLAYERS];
@@ -2636,13 +2633,6 @@ int msl_batch_debug_set_coll_env_flags(MslBatch* batch, int batch_index, int pla
 // Pass -1 to disable each filter.
 int msl_batch_debug_set_mpcoll_joint_filters(MslBatch* batch, int batch_index, int player_index,
                                              int joint_id_skip, int joint_id_only);
-
-// Debug-only helper: arm the runtime EscapeAir floor-producer authority lane for a single fighter
-// (test-only). `desired_owner` uses MslEscapeAirLockedBottomOwner values; normal reseed/step paths
-// remain the source owner for gameplay.
-int msl_batch_debug_set_escapeair_floor_producer_runtime(MslBatch* batch, int batch_index,
-                                                         int player_index, uint8_t authority,
-                                                         uint8_t desired_owner);
 
 // Debug-only helper: arm runtime-produced floor-sweep provenance for hard-floor source-owner tests.
 // Normal gameplay writes this lane from Fighter_procMap/post-frame CollData promotion.

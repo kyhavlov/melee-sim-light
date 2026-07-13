@@ -16,11 +16,11 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "dash_iasa.h"
-#include "escapeair_collision_owner.h"
 #include "ftcommon_ecb.h"
 #include "input_axis.h"
 #include "locomotion.h"
 #include "motion_state_owners.h"
+#include "motion_state_runtime.h"
 #include "move_tables.h"
 #include "trigger_input.h"
 #include "jump_input.h"
@@ -53,54 +53,6 @@ static inline void enter_fall_special(MslBatch* batch, const MslCommonParams* c,
   batch->state.fallspecial_landing_lag[idx] =
       (c != NULL) ? c->landing_fall_special_lag_frames : 0.0f;
   batch->state.landing_fallspecial_allow_interrupt[idx] = 0u;
-}
-
-static inline uint8_t action_floor_line_y_at_x(const MslBatch* batch, size_t idx, uint32_t stage_id,
-                                               uint16_t floor_id, float x, float* y_out,
-                                               uint8_t* x_within_out) {
-  if (batch == NULL || y_out == NULL) {
-    return 0u;
-  }
-  if (x_within_out != NULL) {
-    *x_within_out = 0u;
-  }
-  const int line_idx = stage_collision_floor_line_index(stage_id, floor_id);
-  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
-  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
-    return 0u;
-  }
-  MslStageFloorLine line = {0};
-  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
-  if (!stage_collision_floor_line_world(batch, bi, &g->lines[(size_t)line_idx], &line)) {
-    return 0u;
-  }
-  if (x_within_out != NULL) {
-    const float min_x = line.x0 < line.x1 ? line.x0 : line.x1;
-    const float max_x = line.x0 > line.x1 ? line.x0 : line.x1;
-    *x_within_out = (x >= min_x - 0.0001f && x <= max_x + 0.0001f) ? 1u : 0u;
-  }
-  const float dx = line.x1 - line.x0;
-  if (fabsf(dx) <= 1e-6f) {
-    *y_out = line.y0;
-    return 1u;
-  }
-  const float t = (x - line.x0) / dx;
-  *y_out = line.y0 + t * (line.y1 - line.y0);
-  return 1u;
-}
-
-static inline uint8_t action_stage_has_soft_platform_floor(uint32_t stage_id) {
-  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
-  if (g == NULL) {
-    return 0u;
-  }
-  for (size_t i = 0; i < g->line_count; i++) {
-    if (g->lines[i].is_platform ||
-        stage_collision_floor_line_has_platform_transform(stage_id, g->lines[i].segment_i)) {
-      return 1u;
-    }
-  }
-  return 0u;
 }
 
 uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommonParams* c,
@@ -145,112 +97,17 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
     vy = c->escapeair_force * sinf(ang);
   }
 
-  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
-  const uint16_t source_action_id = batch->state.action_id[idx];
-  const uint16_t floor_id = batch->state.ground_id[idx];
-  MslStageFloorLineCaps source_floor_caps = {0};
-  const uint8_t source_floor_has_caps =
-      (floor_id != 0xFFFFu &&
-       stage_collision_floor_line_caps(stage_id, floor_id, &source_floor_caps))
-          ? 1u
-          : 0u;
-  const uint8_t source_floor_is_platform =
-      (source_floor_has_caps && source_floor_caps.is_platform) ? 1u : 0u;
-  const uint8_t source_floor_has_platform_transform =
-      (source_floor_has_caps && source_floor_caps.platform_transform_kind != 0u) ? 1u : 0u;
-  const uint8_t source_is_jumpaerial = (source_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
-                                        source_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
-                                           ? 1u
-                                           : 0u;
-  float source_floor_y = 0.0f;
-  uint8_t source_floor_x_within = 0u;
-  const uint8_t source_floor_y_valid =
-      action_floor_line_y_at_x(batch, idx, stage_id, floor_id, batch->state.pos_x[idx],
-                               &source_floor_y, &source_floor_x_within);
-  const uint8_t source_floor_carries_locked_ecb =
-      (floor_id != 0xFFFFu && (!source_floor_is_platform || source_floor_has_platform_transform))
-          ? 1u
-          : 0u;
-  const uint8_t source_floor_is_offspan_ordinary_platform =
-      (source_floor_is_platform && source_floor_has_platform_transform == 0u &&
-       source_floor_x_within == 0u)
-          ? 1u
-          : 0u;
-  const float escapeair_entry_next_root_y = batch->state.pos_y[idx] + vy;
-  const uint8_t source_floor_is_offspan_transform =
-      (source_floor_has_platform_transform && source_floor_y_valid != 0u &&
-       source_floor_x_within == 0u)
-          ? 1u
-          : 0u;
-  const uint8_t source_floor_is_offspan_sloped_ledge_main_floor =
-      (source_floor_y_valid != 0u && source_floor_x_within == 0u &&
-       source_floor_is_platform == 0u && source_floor_has_platform_transform == 0u &&
-       stage_collision_floor_line_is_flat_between_sloped_ledges(stage_id, floor_id) &&
-       batch->state.seed_prev_action_frame[idx] >= 3)
-          ? 1u
-          : 0u;
-  const uint8_t stage_has_sloped_ledge_main_floor =
-      stage_collision_stage_has_flat_between_sloped_ledges(stage_id);
-  const uint8_t escapeair_entry_bottom_sweep_still_above_floor =
-      (source_floor_is_offspan_transform || source_floor_is_offspan_sloped_ledge_main_floor ||
-       (source_floor_y_valid &&
-        (escapeair_entry_next_root_y + batch->state.coll_desired_ecb_bottom_rel_y[idx]) >
-            (source_floor_y + 0.0001f)))
-          ? 1u
-          : 0u;
-  if (batch->state.ecb_lock_timer[idx] != 0u &&
-      batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-      batch->state.coll_desired_ecb_bottom_rel_y[idx] > 0.0001f && source_is_jumpaerial &&
-      batch->state.action_frame[idx] >= 1 &&
-      (escapeair_entry_bottom_sweep_still_above_floor ||
-       (!source_floor_carries_locked_ecb && stage_has_sloped_ledge_main_floor))) {
-    // Runtime EscapeAir entry can happen during JumpAerial IASA before Fighter_procMap.
-    // Pass-through from a source floor-domain line still carries CollData_X130_Locked when source
-    // `ftCo_EscapeAir_Coll` calls `mpColl_LoadECB_inline`, preserving the pre-entry
-    // desired_ecb.bottom for the first EscapeAir callback only while the frame-start provenance is
-    // still sustained JumpAerial. On generated sloped-ledge/main-floor shells, a stale visible
-    // platform floor id can be off-domain while the following `EscapeAir_Coll` floor search is about
-    // to cross a static source floor; the preserved desired bottom still belongs to CollData_X130
-    // rather than to that stale visible floor id. On FoD, a height-transform platform floor is also
-    // a source floor-domain line: the platform object owns the moving floor and the same CollData lock
-    // handoff, unlike ordinary soft-platform candidates.
-    // If the fighter has already moved off that transformed platform's horizontal span, do not use
-    // the stale platform height to clear CollData ownership; the following EscapeAir_Coll floor
-    // search owns the adjacent hard-floor handoff. Fresh cliff-jump chains, ordinary non-transform
-    // platform air dodges, and zero-bottom air-dodge entries keep their ordinary EscapeAir floor
-    // handoff; if the entered EscapeAir root is already deep enough that bottom.y crosses the floor
-    // this frame, the normal floor publication path owns the immediate LandingFallSpecial
-    // transition instead. Later EscapeAir_Coll callbacks still must consume a real
-    // desired-bottom crossing before publishing LandingFallSpecial.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
-    //   ftCo_80099A58,ftCo_EscapeAir_Coll}
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
-    // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
-    batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
-        msl_escapeair_locked_bottom_owner_for_live_jumpaerial_entry(
-            source_floor_is_offspan_ordinary_platform
-                ? 0u
-                : action_stage_has_soft_platform_floor(stage_id));
-  } else if (source_is_jumpaerial) {
-    // Other JumpAerial -> EscapeAir entries use the freshly loaded EscapeAir floor handoff. Clear
-    // the runtime JumpAerial desired-bottom owner so platform-origin and zero-bottom air-dodges do
-    // not inherit the narrower soft-platform pass-through path above. Already-seeded EscapeAir rows
-    // bypass this entry callback and keep their explicit one-step seed lane.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-    batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
-        (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_NONE;
-  }
-
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_ESCAPE_AIR;
-  batch->state.animation_index[idx] = (uint32_t)MSL_SM_ESCAPE_AIR;
-  // Decomp: EscapeAir entry calls ftAnim_8006EBA4 immediately after ChangeMotionState.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A9C
-  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
   batch->state.speed_air_x_self[idx] = vx;
   batch->state.speed_y_self[idx] = vy;
-  // Decomp: EscapeAir enters without KeepFastFall; treat EscapeAir as a self-velocity-controlled
-  // state and clear any prior fall-fast latch.
-  batch->state.fall_fast[idx] = 0;
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  const int p = (int)(idx % (size_t)MSL_MAX_PLAYERS);
+  // ftCo_80099A9C enters through Fighter_ChangeMotionState with no preservation flags and then
+  // advances the destination animation immediately. The central entry boundary owns the complete
+  // source side-effect bundle; EscapeAir has no stage- or prior-action-specific entry path.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A9C
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  motion_state_change(batch, bi, p, (uint16_t)MSL_ACT_ESCAPE_AIR, (uint32_t)MSL_SM_ESCAPE_AIR, 0u,
+                      0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
   return 1;
 }
 

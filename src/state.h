@@ -16,7 +16,8 @@ typedef struct MslStateSoA {
   // Meta
   int32_t* frame_id;
   uint32_t* frame_pre_random_seed;
-  uint32_t* stage_id;  // [batch]
+  uint32_t* stage_id;                             // [batch]
+  uint32_t* stage_collision_geometry_generation;  // [batch]
   // Fountain of Dreams dynamic platform heights, one pair per environment.
   // Platform id domain matches Slippi/grIzumi: 0=right, 1=left.
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
@@ -95,11 +96,15 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Escape.c,ftCo_ItemThrow.c}
   uint16_t* live_coll_callback_id;
+  uint16_t* live_coll_callback_action_id;
   uint8_t* live_coll_handler_kind;
-  // Set when Fighter_procMap dispatched a migrated callback. A collision-owned motion change may
-  // install a legacy destination callback, but that destination must not run recursively in the
-  // same map phase.
-  uint8_t* live_coll_migrated_ran;
+  uint8_t* live_coll_wrapper_selector_kind;
+  uint32_t* live_coll_source_plan;
+  // Set when Fighter_procMap dispatched one of the direct grounded wrappers. A collision-owned
+  // motion change may install a different destination callback, but that destination must not run
+  // recursively in the same map phase.
+  uint8_t* live_coll_callback_ran;
+  uint32_t* coll_geometry_generation;
   uint8_t* handicap;     // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetHandicap)
   float* attack_ratio;   // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetAttackRatio)
   float* defense_ratio;  // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetDefenseRatio)
@@ -186,6 +191,7 @@ typedef struct MslStateSoA {
   uint8_t* coll_desired_ecb_bottom_valid;
   uint8_t* coll_desired_ecb_bottom_locked_owner;
   uint8_t* coll_common_fall_blended_ecb_seed_valid;
+  uint8_t* coll_common_fall_blended_ecb_runtime_owned;
   // Current CollData ECB is a frozen active-hitlag Damage envelope rather than the replay-visible
   // Damage pose. Runtime writes this on live Damage entry; replay reseed initializes it from
   // MslSeed::damage_hitlag_ecb_*.
@@ -204,14 +210,6 @@ typedef struct MslStateSoA {
   // coll_damage_hitlag_ecb_valid, this is not initialized from teacher-forced seed rows; reseed
   // rows may seed the hidden ECB envelope but not runtime-produced floor contact authority.
   uint8_t* coll_damage_hitlag_floor_contact_runtime;
-  // Runtime-only EscapeAir floor producer authority. Source writes this only when the live
-  // `EscapeAir_Coll -> ft_80082C74 -> ft_80081D0C -> mpColl_800471F8` floor path accepts the
-  // current carried floor; teacher-forced/reseed rows may restore CollData.floor/ECB state but
-  // cannot seed this callback-local authority.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
-  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
-  uint8_t* coll_escapeair_floor_producer_runtime;
   // Callback-local floor result scratch from the latest mpColl-shaped map callback. Source
   // `mpColl_80043754` owns this as per-callback state: it interpolates ECB/root substeps, calls a
   // floor helper, then the wrapper callback consumes the result immediately.
@@ -241,7 +239,6 @@ typedef struct MslStateSoA {
   uint8_t* coll_floor_probe_projection_hit;
   uint8_t* coll_floor_probe_carried_source_owned;
   uint8_t* coll_floor_probe_carried_runtime_owned;
-  uint64_t* coll_floor_probe_reject_bits;
   uint32_t* coll_floor_probe_source_phases;
   uint16_t* coll_floor_probe_carried_segment_id;
   uint16_t* coll_floor_probe_candidate_segment_id;
@@ -412,6 +409,15 @@ typedef struct MslStateSoA {
   // rollout can carry the same throw-side pulse ownership that one-step seeds expose directly.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
   uint8_t* throw_pulse_crossed_curr_frame;
+  // Common Throw motion vars. x4 is the script-command hold; x8 records that an airborne throw
+  // has already completed its floor handoff. They select the installed Throw Coll callback's
+  // three source paths and persist independently of public ground_or_air.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD398,ftCo_800DD724,
+  //   ftCo_ThrowF_Coll,ftCo_ThrowB_Coll,ftCo_ThrowHi_Coll,ftCo_ThrowLw_Coll}
+  uint8_t* throw_coll_x4;
+  uint8_t* throw_coll_x8;
+  uint8_t* thrown_pause_active;
+  float* thrown_pause_anim_timer;
   // Runtime-only source marker for same-step SpecialN gun creation. Fighter Anim callbacks can
   // enter SpecialN and create the attached gun before a later item/combat pass damages the owner
   // out of the action; post-combat gun lifetime must then see the same ftFx_SpecialN_Enter article
@@ -508,6 +514,14 @@ typedef struct MslStateSoA {
   uint8_t* thrown_attached_prev_on_ground;   // [batch * players]
   uint16_t* thrown_attached_prev_ground_id;  // [batch * players]
   uint8_t* match_flow_timer;
+  // Entry's saved ftCollisionBox (`mv.co.entry.x2C`). ftCo_800C61B0 copies the complete live ECB
+  // once; EntryStart/EntryEnd replace only its bottom before custom air/ground wrappers.
+  // refs/melee/src/melee/ft/ft_0C31.c::{ftCo_800C61B0,ftCo_EntryStart_Coll,ftCo_EntryEnd_Coll}
+  float* entry_saved_ecb_top_rel_y;
+  float* entry_saved_ecb_left_rel_x;
+  float* entry_saved_ecb_right_rel_x;
+  float* entry_saved_ecb_side_rel_y;
+  uint8_t* entry_saved_ecb_valid;
   uint8_t* match_flow_pending_rebirth_char_id;
   // Hidden fp+0x2218 byte preserved while team stock-share exposes a zeroed DeadDown slot.
   // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B918

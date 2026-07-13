@@ -419,6 +419,13 @@ static inline void promote_floor_sweep_prev_pos_post_frame(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      const uint8_t damage_hitlag_sdi_floor_publication =
+          (uint8_t)(batch->state.live_coll_callback_ran[idx] != 0u &&
+                    batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
+                    batch->state.damage_hitlag_downward_sdi_consumed[idx] != 0u &&
+                    batch->state.coll_floor_result_valid[idx] != 0u &&
+                    msl_damage_owner_is_damage_collision_landing_action(
+                        batch->state.action_id[idx]));
       const uint8_t preserve_active_damage_hitlag_ecb_sweep =
           // Frozen Damage hitlag can carry a hidden `CollData.ecb` packet while a same-callback
           // floor probe rejects. Source keeps the previous mpCollPrev root for the next callback;
@@ -436,7 +443,19 @@ static inline void promote_floor_sweep_prev_pos_post_frame(MslBatch* batch) {
            msl_damage_owner_is_damage_collision_landing_action(batch->state.action_id[idx]))
               ? 1u
               : 0u;
-      if (!preserve_active_damage_hitlag_ecb_sweep) {
+      if (damage_hitlag_sdi_floor_publication) {
+        // ftCo_Damage_OnEveryHitlag moves Fighter.cur_pos before ft_80081DD4. When the stay-airborne
+        // collision callback then projects that downward SDI back to a floor, its final
+        // CollData.cur_pos is the next mpCollPrev root; carrying the displaced pre-collision root
+        // starts the following sweep below the floor and loses the FloorHug continuation.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+        // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80044948_Floor}
+        batch->state.floor_sweep_prev_pos_x[idx] = batch->state.pos_x[idx];
+        batch->state.floor_sweep_prev_pos_y[idx] = batch->state.pos_y[idx];
+        batch->state.floor_sweep_prev_source_owned[idx] = 1u;
+        batch->state.floor_sweep_prev_runtime_owned[idx] = 1u;
+      } else if (!preserve_active_damage_hitlag_ecb_sweep) {
         batch->state.floor_sweep_prev_pos_x[idx] = batch->state.prev_pos_x[idx];
         batch->state.floor_sweep_prev_pos_y[idx] = batch->state.prev_pos_y[idx];
         batch->state.floor_sweep_prev_source_owned[idx] = 1u;
@@ -699,6 +718,7 @@ static void fighter_callbacks_collision_phase(MslBatch* batch) {
   // - Thrown victims are still updated in a post-collision "accessory callback" style slot.
   grab_attachment_update_pre_collision(batch);
   cache_collision_stage_prev_pos(batch);
+  motion_state_install_live_callbacks_before_map(batch);
   motion_state_finalize_seeded_coll_data_before_map(batch);
   stage_collision_apply(batch);
   cache_collision_stage_cur_pos(batch);

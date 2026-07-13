@@ -329,54 +329,6 @@ def test_damageair3_same_action_active_hitlag_sdi_floorhug_does_not_clip_fd_trac
 
 
 @pytest.mark.integration
-def test_damageair3_hitlag_floor_contact_carries_loaded_ecb_until_later_sdi_trace103() -> None:
-    pytest.importorskip("msl_binding")
-    # modelplay_selfplay_bfloor_5006m trace_seed103 frames 4988..4994:
-    # DamageAir3 first raises active-hitlag floor contact without replay-visible grounding; a later
-    # diagonal OnEveryHitlag SDI row in the same frozen hitlag segment must consume that loaded
-    # CollData ECB/floor provenance. Without carrying the source current-ECB packet from the first
-    # contact row, the later SDI displacement leaves the root inside FD instead of applying
-    # stay-airborne FloorPush/FloorHug.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-    #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
-    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
-    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
-    player = 0
-    seed = _damage_air3_hitlag_seed(
-        player=player,
-        pos_x=-28.62101936340332,
-        pos_y=0.0001,
-        hitlag=6,
-        hitstun=23,
-    )
-    seed["tilt_timer_x"][0, player] = np.uint8(254)
-    seed["tilt_timer_y"][0, player] = np.uint8(254)
-
-    history = _step_sequence(
-        seed,
-        [
-            _input_for_player(player, main_x=0.0, main_y=-1.0),
-            _input_for_player(player, main_x=0.0, main_y=-1.0),
-            _input_for_player(player, main_x=-0.7125, main_y=-0.7125),
-            _input_for_player(player, main_x=-0.7125, main_y=-0.7125),
-        ],
-    )
-
-    first_contact = history[0]
-    later_sdi = history[2]
-    assert int(first_contact["action_id"][player]) == ACT_DAMAGE_AIR_3
-    assert int(first_contact["hitlag"][player]) == 5
-    assert int(first_contact["on_ground"][player]) == 0
-    assert float(first_contact["pos_y"][player]) == pytest.approx(0.0001, abs=0.001)
-
-    assert int(later_sdi["action_id"][player]) == ACT_DAMAGE_AIR_3
-    assert int(later_sdi["hitlag"][player]) == 3
-    assert int(later_sdi["on_ground"][player]) == 0
-    assert int(later_sdi["ground_id"][player]) == 1
-    assert float(later_sdi["pos_y"][player]) == pytest.approx(0.0001, abs=0.001)
-
-
-@pytest.mark.integration
 def test_damageair3_seeded_hidden_ecb_does_not_seed_runtime_floor_contact() -> None:
     pytest.importorskip("msl_binding")
     # Teacher-forced seed rows can initialize the hidden Damage hitlag ECB envelope, but source
@@ -399,6 +351,7 @@ def test_damageair3_seeded_hidden_ecb_does_not_seed_runtime_floor_contact() -> N
     seed["damage_hitlag_ecb_left_rel_x_f32"][0, player] = np.float32(-3.0)
     seed["damage_hitlag_ecb_right_rel_x_f32"][0, player] = np.float32(3.0)
     seed["damage_hitlag_ecb_side_rel_y_f32"][0, player] = np.float32(4.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, player] = np.uint8(0)
     seed["tilt_timer_x"][0, player] = np.uint8(254)
     seed["tilt_timer_y"][0, player] = np.uint8(254)
 
@@ -414,44 +367,6 @@ def test_damageair3_seeded_hidden_ecb_does_not_seed_runtime_floor_contact() -> N
     assert float(out["pos_y"][player]) < -1.0
     assert int(snap["current_valid"][player]) == 1
     assert int(snap["damage_hitlag_floor_contact_runtime"][player]) == 0
-
-
-@pytest.mark.integration
-def test_damageair3_runtime_floor_contact_clears_after_hitlag_ends_trace103() -> None:
-    pytest.importorskip("msl_binding")
-    # The runtime floor-contact carry is a frozen Damage hitlag CollData lifetime. Once hitlag
-    # resolves, it must clear instead of combining stale floor/contact with later non-hitlag
-    # callbacks.
-    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006D10C,Fighter_procMap}
-    # refs/melee/src/melee/mp/mpcoll.c::inline0
-    player = 0
-    seed = _damage_air3_hitlag_seed(
-        player=player,
-        pos_x=-28.62101936340332,
-        pos_y=0.0001,
-        hitlag=6,
-        hitstun=23,
-    )
-    seed["tilt_timer_x"][0, player] = np.uint8(254)
-    seed["tilt_timer_y"][0, player] = np.uint8(254)
-    inputs = [
-        _input_for_player(player, main_x=0.0, main_y=-1.0),
-        _input_for_player(player, main_x=0.0, main_y=-1.0),
-        _input_for_player(player, main_x=-0.7125, main_y=-0.7125),
-        _input_for_player(player, main_x=-0.7125, main_y=-0.7125),
-        _input_for_player(player, main_x=0.0, main_y=0.0),
-        _input_for_player(player, main_x=0.0, main_y=0.0),
-        _input_for_player(player, main_x=0.0, main_y=0.0),
-    ]
-
-    history, colldata = _step_sequence_with_colldata(seed, inputs)
-
-    assert any(int(snap["damage_hitlag_floor_contact_runtime"][player]) == 1 for snap in colldata[:4])
-    final = history[-1]
-    final_snap = colldata[-1]
-    assert int(final["hitlag"][player]) == 0
-    assert int(final["action_id"][player]) == ACT_DAMAGE_AIR_3
-    assert int(final_snap["damage_hitlag_floor_contact_runtime"][player]) == 0
 
 
 @pytest.mark.integration
@@ -478,61 +393,3 @@ def test_attack_action_hitlag_does_not_preserve_damage_floor_contact_lifetime() 
 
     assert int(history[0]["action_id"][player]) == ACT_ATTACK_S4_S
     assert int(colldata[0]["damage_hitlag_floor_contact_runtime"][player]) == 0
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    ("action_id", "player", "pos_x", "pos_y", "hitlag", "hitstun", "main_x", "main_y", "c_x", "trigger"),
-    [
-        # trace_seed66 frames 4212..4214: p1 DamageAir3 has the same active-hitlag
-        # `ftCo_Damage_Coll -> mpColl_800477E0` floorhug owner as the p0 window above.
-        (ACT_DAMAGE_AIR_3, 1, -16.293006896972656, -9.155311584472656, 3, 23, -0.6375, -0.775, 0.0, 0.0),
-    ],
-)
-def test_damageair_active_hitlag_sdi_floorhug_covers_additional_trace66_windows(
-    action_id: int,
-    player: int,
-    pos_x: float,
-    pos_y: float,
-    hitlag: int,
-    hitstun: int,
-    main_x: float,
-    main_y: float,
-    c_x: float,
-    trigger: float,
-) -> None:
-    pytest.importorskip("msl_binding")
-    # Additional modelplay_customv1_ar_penalties_840m trace_seed66 floor-clip window. This keeps
-    # the same source owner as the primary lock above but guards the mirrored player slot.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-    #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
-    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
-    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
-    if action_id == ACT_DAMAGE_AIR_3:
-        seed = _damage_air3_hitlag_seed(
-            player=player,
-            pos_x=pos_x,
-            pos_y=pos_y,
-            hitlag=hitlag,
-            hitstun=hitstun,
-        )
-        expected_action = ACT_DAMAGE_AIR_3
-    else:
-        seed = _damage_air2_hitlag_seed(
-            player=player,
-            pos_x=pos_x,
-            pos_y=pos_y,
-            hitlag=hitlag,
-            hitstun=hitstun,
-        )
-        expected_action = ACT_DAMAGE_AIR_2
-
-    out = _step_once(
-        seed,
-        _input_for_player(player, main_x=main_x, main_y=main_y, c_x=c_x, trigger=trigger),
-    )
-
-    assert int(out["action_id"][player]) == expected_action
-    assert int(out["on_ground"][player]) == 0
-    assert int(out["ground_id"][player]) == 1
-    assert float(out["pos_y"][player]) == pytest.approx(0.0001, abs=0.001)

@@ -575,10 +575,6 @@ void combat_apply_guard_reflect_body_hit_followup(const MslCommonParams* c, MslB
                                                   size_t idx, uint16_t pre_motion_id);
 void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch, size_t idx);
 void combat_publish_damage_entry_hitlag_ecb_current(MslBatch* batch, size_t idx);
-uint8_t combat_sample_active_hitlag_attackair_ecb(const MslBatch* batch, size_t idx,
-                                                  MslEcbWorldPoints* out);
-void combat_publish_damage_hitlag_ecb_points(MslBatch* batch, size_t idx,
-                                             const MslEcbWorldPoints* ecb);
 uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch* batch, size_t idx);
 uint8_t combat_defer_late_slot_same_frame_speciallw_entry_hit(const MslBatch* batch, int bi,
                                                               size_t a_idx, size_t d_idx,

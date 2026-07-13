@@ -1,6 +1,5 @@
 #include "knockdown.h"
 
-#include <float.h>
 #include <limits.h>
 #include <math.h>
 
@@ -24,7 +23,7 @@
 #include "ecb_tables.h"
 #include "mpcoll_ecb_pose.h"
 #include "mpcoll_ecb_points.h"
-#include "mpcoll_ground.h"
+#include "mpcoll_callback_queries.h"
 #include "mtx34.h"
 #include "msl_math.h"
 #include "stage_collision.h"
@@ -46,17 +45,6 @@ static inline float knockdown_clamp_absf(float value, float max_abs) {
 
 static inline uint8_t is_down_bound(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_DOWN_BOUND_U || a == (uint16_t)MSL_ACT_DOWN_BOUND_D) ? 1u : 0u;
-}
-static inline uint8_t down_bound_floor_loss_after_damagefly_entry(const MslBatch* batch,
-                                                                  size_t idx) {
-  return (is_down_bound(batch->state.action_id[idx]) &&
-          batch->state.frame_start_on_ground[idx] != 0u && batch->state.ground_id[idx] != 0xFFFFu &&
-          is_down_bound(batch->state.seed_prev_action_id[idx]) &&
-          batch->state.seed_prev_action_frame[idx] == 0 &&
-          fabsf(batch->state.speed_x_attack[idx]) <= FLT_EPSILON &&
-          fabsf(batch->state.speed_y_attack[idx]) <= FLT_EPSILON)
-             ? 1u
-             : 0u;
 }
 static inline uint8_t is_down_wait(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_DOWN_WAIT_U || a == (uint16_t)MSL_ACT_DOWN_WAIT_D) ? 1u : 0u;
@@ -268,7 +256,16 @@ static inline void snap_root_y_to_ground_line_on_damage_land(MslBatch* batch, si
   if (fabsf(line->x1 - line->x0) > 0.0001f) {
     y = ((line->y1 - line->y0) * (x - line->x0) / (line->x1 - line->x0)) + line->y0;
   }
-  batch->state.pos_y[idx] = y + 0.0001f;
+  const float published_y = y + 0.0001f;
+  batch->state.pos_y[idx] = published_y;
+  // ft_081B copies CollData.cur_pos back to Fighter.cur_pos before the Damage collision callback,
+  // and the DownBound/Passive entry callbacks do not create a second root. This simulator's
+  // floor-line publication above is the equivalent boundary, so keep persistent CollData on the
+  // same root instead of leaving the next callback to start from the pre-publication endpoint.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
+  batch->state.coll_last_pos_y[idx] = published_y;
+  batch->state.coll_substep_cur_pos_y[idx] = published_y;
 }
 
 static inline uint8_t damagefly_frame_start_locked_carried_floor_contact_source(
@@ -1949,265 +1946,6 @@ static inline uint32_t submotion_for_damage_ground_action(uint16_t a) {
   }
 }
 
-static inline uint8_t down_bound_airborne_ledge_cross_to_fall(const MslBatch* batch, size_t idx,
-                                                              uint32_t stage_id) {
-  const uint16_t ground_id = batch->state.ground_id[idx];
-  if (ground_id != 0xFFFFu && stage_collision_floor_line_is_platform(stage_id, ground_id)) {
-    // Decomp: ftCo_DownBound_Coll delegates to ft_80082708/mpColl_8004B108 for the active
-    // CollData.floor line. Platform lines are not owned by the stage side-ledge helper below; their
-    // contact/endpoint transitions use platform line geometry and stage-object transforms.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
-    // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
-    // data/stages/bin/*.bin::MSLSTG01 segment platform flags
-    return 0u;
-  }
-  float vx = batch->state.speed_x_attack[idx];
-  if (!(vx > 0.0f || vx < 0.0f)) {
-    // Decomp shape: ft_80082708 -> mpColl_8004B108 evaluates the active floor-contact motion
-    // segment. In grounded DownBound rows where attack KB has already been consumed into
-    // self/ground velocity ownership, use grounded horizontal velocity for the edge-cross test.
-    // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
-    // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
-    vx = batch->state.speed_ground_x_self[idx];
-  }
-  if (!(vx > 0.0f || vx < 0.0f)) {
-    return 0u;
-  }
-  // Decomp shape:
-  // - ftCo_DownBound_Coll uses ft_80082708 (allow-ground-to-air path).
-  // - ft_80082708 delegates to mpColl_8004B108, which resolves ground->air by evaluating floor edge
-  //   ownership against the motion segment on the active floor line.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
-  // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
-  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
-  const int side = (vx > 0.0f) ? 1 : 0;
-  const MslStageFloorLine* ledge = stage_collision_get_ledge_floor_line(stage_id, side);
-  if (ledge == NULL) {
-    return 0u;
-  }
-
-  const float edge_x = (side == 1) ? ((ledge->x0 > ledge->x1) ? ledge->x0 : ledge->x1)
-                                   : ((ledge->x0 < ledge->x1) ? ledge->x0 : ledge->x1);
-  // Use the current-step motion segment start (`prev_pos_x`) with callback-owned post-physics
-  // horizontal velocity to match the mpColl allow-ground-to-air floor-edge test shape.
-  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
-  const float next_x = batch->state.prev_pos_x[idx] + vx;
-  // mpLib floor projection keeps a small endpoint clamp before reporting off-floor. DownBound uses
-  // the allow-ground-to-air mpColl path, so preserve DownBound while the motion endpoint is still
-  // inside that clamp instead of immediately entering Fall at the mathematical edge.
-  // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-  enum { MSL_DOWNBOUND_FLOOR_ENDPOINT_CLAMP_MILLI = 100 };
-  const float endpoint_clamp = (float)MSL_DOWNBOUND_FLOOR_ENDPOINT_CLAMP_MILLI * 0.001f;
-  return (side == 1) ? (next_x > edge_x + endpoint_clamp ? 1u : 0u)
-                     : (next_x < edge_x - endpoint_clamp ? 1u : 0u);
-}
-
-static inline uint8_t down_bound_airborne_stage_object_endpoint_cross_to_fall(const MslBatch* batch,
-                                                                              size_t idx, size_t bi,
-                                                                              uint32_t stage_id) {
-  if (batch == NULL || batch->state.ground_id[idx] == 0xFFFFu ||
-      fabsf(batch->state.speed_y_self[idx]) > 0.0001f) {
-    return 0u;
-  }
-  const uint16_t ground_id = batch->state.ground_id[idx];
-  if (!stage_collision_floor_line_has_platform_transform(stage_id, ground_id)) {
-    return 0u;
-  }
-  if (stage_collision_floor_line_has_height_platform_transform(stage_id, ground_id) &&
-      !stage_collision_floor_line_height_platform_state_is_source_trusted(batch, (int)bi,
-                                                                          ground_id)) {
-    return 0u;
-  }
-
-  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
-  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
-  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
-    return 0u;
-  }
-  MslStageFloorLine world = {0};
-  if (!stage_collision_floor_line_world(batch, (int)bi, &g->lines[(size_t)line_idx], &world)) {
-    return 0u;
-  }
-  const float left = (world.x0 < world.x1) ? world.x0 : world.x1;
-  const float right = (world.x0 > world.x1) ? world.x0 : world.x1;
-  const float prev_x = batch->state.prev_pos_x[idx];
-  const float cur_x = batch->state.pos_x[idx];
-  if (prev_x >= left && prev_x <= right && (cur_x < left || cur_x > right)) {
-    // DownBound_Coll uses ft_80082708 -> mpColl_8004B108. For generated stage-object floor lines
-    // (FoD static top platform and source-trusted height platforms), crossing out of the persisted
-    // platform span means the allow-ground-to-air helper reports the floor loss and source
-    // immediately enters Fall while preserving airborne ground_or_air. Keep this out of generic
-    // hard-floor endpoint rows: those remain covered by the explicit ledge-cross helper above and
-    // its endpoint clamp controls.
-    //
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
-    // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
-    // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
-    // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-    // data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=static_y,height)
-    return 1u;
-  }
-  return 0u;
-}
-
-static inline uint8_t down_bound_airborne_static_platform_endpoint_cross_to_fall(
-    const MslBatch* batch, size_t idx, size_t bi, uint32_t stage_id) {
-  if (batch == NULL || batch->state.ground_id[idx] == 0xFFFFu ||
-      fabsf(batch->state.speed_y_self[idx]) > 0.0001f) {
-    return 0u;
-  }
-  const uint16_t ground_id = batch->state.ground_id[idx];
-  if (!stage_collision_floor_line_is_platform(stage_id, ground_id) ||
-      stage_collision_floor_line_has_platform_transform(stage_id, ground_id)) {
-    return 0u;
-  }
-
-  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
-  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
-  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
-    return 0u;
-  }
-  MslStageFloorLine world = {0};
-  if (!stage_collision_floor_line_world(batch, (int)bi, &g->lines[(size_t)line_idx], &world)) {
-    return 0u;
-  }
-  const float left = (world.x0 < world.x1) ? world.x0 : world.x1;
-  const float right = (world.x0 > world.x1) ? world.x0 : world.x1;
-  const float prev_x = isfinite(batch->state.floor_sweep_prev_pos_x[idx])
-                           ? batch->state.floor_sweep_prev_pos_x[idx]
-                           : batch->state.prev_pos_x[idx];
-  const float cur_x = batch->state.pos_x[idx];
-  enum { MSL_DOWNBOUND_FLOOR_ENDPOINT_CLAMP_MILLI = 100 };
-  const float endpoint_clamp = (float)MSL_DOWNBOUND_FLOOR_ENDPOINT_CLAMP_MILLI * 0.001f;
-  const uint8_t prev_in_span =
-      (prev_x >= left - endpoint_clamp && prev_x <= right + endpoint_clamp) ? 1u : 0u;
-  if (!prev_in_span) {
-    return 0u;
-  }
-  // DownBound_Coll uses ft_80082708 -> mpColl_8004B108 for its active CollData.floor line. Static
-  // soft platforms use the same source floor-span test as generated stage-object platforms; once
-  // the current floor-sweep/root segment exits the carried platform span, the helper reports
-  // GA_Ground and DownBound_Coll immediately enters Fall.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
-  // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
-  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
-  // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-  // data/stages/bin/*.bin::MSLSTG01 segment platform flags
-  return (uint8_t)((cur_x < left - endpoint_clamp || cur_x > right + endpoint_clamp) ? 1u : 0u);
-}
-
-static inline uint8_t down_bound_grounded_overlap_nudge_crosses_ledge(const MslBatch* batch,
-                                                                      const MslCommonParams* c,
-                                                                      size_t bi, int p,
-                                                                      uint32_t stage_id,
-                                                                      float* out_nudge_x) {
-  if (batch == NULL || c == NULL || out_nudge_x == NULL) {
-    return 0u;
-  }
-  *out_nudge_x = 0.0f;
-
-  const size_t idx = msl_idx_player((int)bi, p);
-  if (!is_down_bound(batch->state.action_id[idx]) || batch->state.stocks[idx] == 0u ||
-      batch->state.on_ground[idx] == 0u || batch->state.hitlag_started_frame[idx] != 0u) {
-    return 0u;
-  }
-
-  const MslStageFloorGraph* floor_graph = stage_collision_get_floor_graph(stage_id);
-  if (floor_graph == NULL) {
-    return 0u;
-  }
-  const int self_line = stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
-  if (self_line < 0 || (size_t)self_line >= floor_graph->line_count) {
-    return 0u;
-  }
-  const MslStageFloorLine* line = &floor_graph->lines[(size_t)self_line];
-  if (line->is_ledge == 0u) {
-    return 0u;
-  }
-
-  const MslCharParams* self = msl_char_params_fast(batch->state.char_id[idx]);
-  if (self == NULL) {
-    return 0u;
-  }
-
-  float nudge_x = 0.0f;
-  const int num_players = (int)batch->config.num_players;
-  const float self_center_x =
-      batch->state.pos_x[idx] + self->pushbox_x * (float)batch->state.facing_dir1[idx];
-  for (int q = 0; q < num_players; q++) {
-    if (q == p) {
-      continue;
-    }
-
-    const size_t oidx = msl_idx_player((int)bi, q);
-    if (batch->state.stocks[oidx] == 0u || batch->state.on_ground[oidx] == 0u ||
-        batch->state.hitlag_started_frame[oidx] != 0u) {
-      continue;
-    }
-    if (msl_action_is_grabbed_victim(batch->state.action_id[oidx])) {
-      continue;
-    }
-
-    const int other_line = stage_collision_floor_line_index(stage_id, batch->state.ground_id[oidx]);
-    if (other_line < 0 || (size_t)other_line >= floor_graph->line_count) {
-      continue;
-    }
-    const MslStageFloorLine* self_floor = &floor_graph->lines[(size_t)self_line];
-    if (!(other_line == self_line || self_floor->prev == other_line ||
-          self_floor->next == other_line)) {
-      continue;
-    }
-
-    const MslCharParams* other = msl_char_params_fast(batch->state.char_id[oidx]);
-    if (other == NULL) {
-      continue;
-    }
-    const float other_center_x =
-        batch->state.pos_x[oidx] + other->pushbox_x * (float)batch->state.facing_dir1[oidx];
-    const float delta_x = self_center_x - other_center_x;
-    if (msl_absf(delta_x) >= self->pushbox_y + other->pushbox_y) {
-      continue;
-    }
-
-    // Decomp owner:
-    // - Fighter_8006A360 runs ftCommon_8007E0E4 before Fighter_procUpdate.
-    // - ftCommon_8007DD7C writes +/-p_ftCommonData->x450 into xF8_playerNudgeVel.x on grounded
-    //   fighter-overlap, and Fighter_procUpdate applies it before the later Coll callback.
-    // - DownBound_Coll then uses ft_80082708 -> mpColl_8004B108, so a same-frame ledge-floor
-    //   contact that is pushed outside the ledge must be consumed before selecting Fall.
-    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-    // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
-    if (delta_x < 0.0f) {
-      nudge_x -= c->player_nudge_x;
-    } else if (delta_x > 0.0f) {
-      nudge_x += c->player_nudge_x;
-    } else if (q < p) {
-      nudge_x -= c->player_nudge_x;
-    } else {
-      nudge_x += c->player_nudge_x;
-    }
-  }
-
-  if (!(nudge_x > 0.0f || nudge_x < 0.0f)) {
-    return 0u;
-  }
-
-  const float edge_x = (nudge_x > 0.0f) ? ((line->x0 > line->x1) ? line->x0 : line->x1)
-                                        : ((line->x0 < line->x1) ? line->x0 : line->x1);
-  enum { MSL_DOWNBOUND_FLOOR_ENDPOINT_CLAMP_MILLI = 100 };
-  const float endpoint_clamp = (float)MSL_DOWNBOUND_FLOOR_ENDPOINT_CLAMP_MILLI * 0.001f;
-  const float nudged_x = batch->state.pos_x[idx] + nudge_x;
-  const uint8_t crosses = (nudge_x > 0.0f) ? (nudged_x > edge_x + endpoint_clamp ? 1u : 0u)
-                                           : (nudged_x < edge_x - endpoint_clamp ? 1u : 0u);
-  if (crosses == 0u) {
-    return 0u;
-  }
-
-  *out_nudge_x = nudge_x;
-  return 1u;
-}
-
 static inline uint8_t damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0u;
@@ -2515,7 +2253,6 @@ static inline void transfer_air_to_ground_on_land(MslBatch* batch, const MslChar
   }
   batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
   batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
-  batch->state.fall_fast[idx] = 0;
   batch->state.jumps_left[idx] = ch->max_jumps;
 }
 
@@ -3219,6 +2956,7 @@ static inline void enter_passive_from_damage_land(MslBatch* batch, const MslChar
   }
   batch->state.action_id[idx] = passive_act;
   batch->state.animation_index[idx] = submotion_for_down_action(passive_act);
+  batch->state.fall_fast[idx] = 0u;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   // Decomp ownership: hitstun lives in the Damage motion-var lane (x2340). Entering Passive from
   // ftCo_80090184 switches to a non-Damage motion state, so Slippi post hitstun becomes 0.
@@ -3291,6 +3029,7 @@ static inline void enter_down_bound_from_damage_land(MslBatch* batch, const MslC
   damage_land_project_kb_to_ground_tangent(batch, idx);
   batch->state.action_id[idx] = bound_act;
   batch->state.animation_index[idx] = submotion_for_down_action(bound_act);
+  batch->state.fall_fast[idx] = 0u;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   // Decomp ownership: ftCo_80097D40 enters DownBound from ftCo_80090184 and writes to the
   // non-Damage motion-var lane; Damage hitstun (x2340) is no longer the active state var.
@@ -3337,7 +3076,8 @@ static inline void enter_damagefly_ground_contact_followup(MslBatch* batch,
 }
 
 void knockdown_try_throw_release_damage_floor_contact(MslBatch* batch, size_t bi, size_t idx,
-                                                      uint16_t prev_action_id) {
+                                                      uint16_t prev_action_id,
+                                                      uint8_t release_floor_published) {
   if (batch == NULL) {
     return;
   }
@@ -3363,15 +3103,26 @@ void knockdown_try_throw_release_damage_floor_contact(MslBatch* batch, size_t bi
   }
 
   MslMpcollFloorMaskResult floor_result = {0};
-  if (!mpcoll_800477e0_floor_mask_probe(batch, idx, &floor_result)) {
-    return;
+  if (release_floor_published) {
+    // ftCo_800DDDE4 has already completed its 471F8 callback and published the corrected root and
+    // floor.index. Re-probing from that post-collision root asks for a second downward crossing and
+    // loses valid low ThrowLw contacts.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpCollEnd}
+    floor_result.ground_id = batch->state.ground_id[idx];
+    floor_result.corrected_pos_x = batch->state.pos_x[idx];
+    floor_result.corrected_pos_y = batch->state.pos_y[idx];
+  } else {
+    if (!msl_mpcoll_query_477e0_floor_mask(batch, idx, &floor_result)) {
+      return;
+    }
   }
 
   // Decomp release-frame owner:
   // - ftCo_800DDDE4 places the detached fighter, calls mpColl_800471F8, then DamageFly_Coll can
   //   enter ftCo_80090184 on the same fighter callback frame.
-  // - This sim defers the throw hit until after the normal stage-collision pass, so run only the
-  //   release-local floor probe and existing DamageFly floor-contact ladder here.
+  // - This sim defers the throw hit until after the normal stage-collision pass, so consume the
+  //   release-local callback's published floor packet through the DamageFly contact ladder here.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
@@ -3405,19 +3156,20 @@ static void enter_common_damage_ground_contact_followup(MslBatch* batch, const M
     transfer_air_to_ground_on_land(batch, ch, bi, idx, source_action);
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING;
     batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING;
+    batch->state.fall_fast[idx] = 0u;
     msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
     damage_clear_terminal_post_hitlag_buffers(batch, idx);
     return;
   }
-  if (batch->state.hitstun[idx] > 0u) {
-    transfer_air_to_ground_on_land(batch, ch, bi, idx, source_action);
-  } else if (msl_damage_owner_is_damage_air_action(source_action)) {
-    batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
-    batch->state.jumps_left[idx] = ch->max_jumps;
-  }
+  // The low-KB branch is ftCommon_8007D7FC for every common Damage motion. It is not gated by
+  // hitstun and does not special-case DamageAir: the helper performs the full air-to-ground state
+  // transfer, including jump refresh and self-velocity publication.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+  transfer_air_to_ground_on_land(batch, ch, bi, idx, source_action);
 }
 
-void knockdown_update_post_collision(MslBatch* batch) {
+void knockdown_update_post_collision_one(MslBatch* batch, int bi, int p) {
   if (batch == NULL) {
     return;
   }
@@ -3426,206 +3178,135 @@ void knockdown_update_post_collision(MslBatch* batch) {
     return;
   }
 
-  const int num_players = (int)batch->config.num_players;
+  if (bi < 0 || bi >= batch->batch_size || p < 0 || p >= (int)batch->config.num_players) {
+    return;
+  }
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  // Retain one structured scope so the callback ladder's early `continue` exits stay explicit.
+  for (int once = 0; once < 1; once++) {
+    const size_t idx = msl_idx_player(bi, p);
+    const uint16_t a0 = batch->state.action_id[idx];
+    const uint8_t coll_handler = batch->state.live_coll_handler_kind[idx];
+    const uint8_t was_ground = batch->state.prev_on_ground[idx] ? 1u : 0u;
+    const uint8_t now_ground = batch->state.on_ground[idx] ? 1u : 0u;
+
+    const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+    if (ch == NULL) {
+      continue;
+    }
+
+    if (batch->state.coll_floor_result_valid[idx] != 0u &&
+        (coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_COMMON ||
+         coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FLY ||
+         coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FALL ||
+         coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_DAMAGE) &&
+        damage_landing_action_owns_root_floor_snap(a0)) {
+      // Floor publication belongs to the live Damage Coll callback, including 477E0's
+      // stay-airborne FloorMask result and one-step seeds whose previous replay row was grounded.
+      // Those flags only control the followup ladder below; they must not suppress mpLib's
+      // callback-local floor root publication.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+      // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+      // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+      snap_root_y_to_ground_line_on_damage_land(batch, (size_t)bi, idx);
+    }
+
+    if (!was_ground && !now_ground &&
+        (coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FLY ||
+         coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_DAMAGE) &&
+        tech_is_available(batch, c, idx) &&
+        (batch->state.coll_env_flags[idx] &
+         ((uint32_t)MSL_COLLIDE_LEFT_WALL_HUG | (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG)) != 0u) {
+      const uint16_t wall_action = passivewall_prefers_jump(batch, c, idx)
+                                       ? (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP
+                                       : (uint16_t)MSL_ACT_PASSIVE_WALL;
+      enter_passive_wall_from_damage_air(batch, idx, a0, wall_action);
+      continue;
+    }
+
+    // Ceiling tech entry: checked after wall tech, before fly reflect.
+    // Decomp: ftCo_DamageFly_Coll calls ftCo_800C23A0 after ftCo_800C1D38 (wall tech) and before
+    // ftCo_800C17CC (fly reflect). Floor contact is checked earlier and takes priority.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveCeil.c::ftCo_800C23A0
+    if (!was_ground && !now_ground && coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FLY &&
+        tech_is_available(batch, c, idx) &&
+        (batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_CEILING_HUG) != 0u) {
+      enter_passive_ceil_from_damage_air(batch, idx, ch, a0);
+      continue;
+    }
+
+    if (!was_ground && !now_ground && coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FLY &&
+        damagefly_try_enter_flyreflect(batch, c, idx)) {
+      continue;
+    }
+
+    if (!was_ground && !now_ground && coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_DAMAGE &&
+        (batch->state.coll_env_flags[idx] &
+         ((uint32_t)MSL_COLLIDE_LEFT_WALL_HUG | (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG)) != 0u &&
+        damagefly_try_enter_flyreflect(batch, c, idx)) {
+      continue;
+    }
+
+    if (!was_ground && now_ground) {
+      // Landing transitions into DownBound from tumble-style damage states.
+      //
+      // Decomp entry points:
+      // - Damage: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+      // - DamageFly: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+      if (coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FLY) {
+        enter_damagefly_ground_contact_followup(batch, c, ch, (size_t)bi, idx, a0);
+        continue;
+      }
+
+      if (coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FALL) {
+        enter_damagefly_ground_contact_followup(batch, c, ch, (size_t)bi, idx, a0);
+        continue;
+      }
+
+      if (coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_COMMON) {
+        enter_common_damage_ground_contact_followup(batch, c, ch, (size_t)bi, idx, a0);
+        continue;
+      }
+
+      if (coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_DAMAGE) {
+        // DownDamage collision can preserve the downed damage motion while applying the same
+        // ground-transfer bookkeeping as other air->ground contact paths. Keep this scoped to rows
+        // where mpColl has already reported ground; rows that miss `now_ground` remain floor
+        // contact substrate, not a bookkeeping fix.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c
+        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+        transfer_air_to_ground_on_land(batch, ch, (size_t)bi, idx, a0);
+        continue;
+      }
+
+      if (coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_REFLECT) {
+        // DownReflect_Coll uses the same DownBound entry core without DownSpot's extra mv.x4
+        // clear. The simulator does not expose that motion-var lane, so the public transition is
+        // the shared source DownBound entry.
+        // refs/melee/src/melee/ft/ftCo_800C7CA0.c::ftCo_DownReflect_Coll
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097D88
+        enter_down_bound_from_damage_land(batch, ch, (size_t)bi, idx, a0);
+        continue;
+      }
+    }
+    if (was_ground && !now_ground && coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_COMMON &&
+        common_damage_ground_floor_loss_should_missfoot(batch, idx, stage_id)) {
+      enter_missfoot_from_damage_floor_loss(batch, ch, idx);
+    }
+  }
+}
+
+void knockdown_update_post_collision(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
-    const uint32_t stage_id = batch->state.stage_id[bi];
-    for (int p = 0; p < num_players; p++) {
+    for (int p = 0; p < players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      const uint16_t a0 = batch->state.action_id[idx];
-      const uint8_t coll_handler = batch->state.live_coll_handler_kind[idx];
-      const uint8_t was_ground = batch->state.prev_on_ground[idx] ? 1u : 0u;
-      const uint8_t now_ground = batch->state.on_ground[idx] ? 1u : 0u;
-
-      const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
-      if (ch == NULL) {
-        continue;
-      }
-
-      if (!was_ground && !now_ground &&
-          (coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FLY ||
-           coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_DAMAGE) &&
-          tech_is_available(batch, c, idx) &&
-          (batch->state.coll_env_flags[idx] &
-           ((uint32_t)MSL_COLLIDE_LEFT_WALL_HUG | (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG)) != 0u) {
-        const uint16_t wall_action = passivewall_prefers_jump(batch, c, idx)
-                                         ? (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP
-                                         : (uint16_t)MSL_ACT_PASSIVE_WALL;
-        enter_passive_wall_from_damage_air(batch, idx, a0, wall_action);
-        continue;
-      }
-
-      // Ceiling tech entry: checked after wall tech, before fly reflect.
-      // Decomp: ftCo_DamageFly_Coll calls ftCo_800C23A0 after ftCo_800C1D38 (wall tech) and before
-      // ftCo_800C17CC (fly reflect). Floor contact is checked earlier and takes priority.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveCeil.c::ftCo_800C23A0
-      if (!was_ground && !now_ground && coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FLY &&
-          tech_is_available(batch, c, idx) &&
-          (batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_CEILING_HUG) != 0u) {
-        enter_passive_ceil_from_damage_air(batch, idx, ch, a0);
-        continue;
-      }
-
-      if (!was_ground && !now_ground && coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FLY &&
-          damagefly_try_enter_flyreflect(batch, c, idx)) {
-        continue;
-      }
-
-      if (!was_ground && !now_ground && coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_DAMAGE &&
-          (batch->state.coll_env_flags[idx] &
-           ((uint32_t)MSL_COLLIDE_LEFT_WALL_HUG | (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG)) != 0u &&
-          damagefly_try_enter_flyreflect(batch, c, idx)) {
-        continue;
-      }
-
-      if (now_ground && coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_BOUND &&
-          batch->state.frame_start_on_ground[idx] == 0u) {
-        float nudge_x = 0.0f;
-        if (down_bound_grounded_overlap_nudge_crosses_ledge(batch, c, (size_t)bi, p, stage_id,
-                                                            &nudge_x)) {
-          // Source applies the common grounded overlap displacement before DownBound_Coll's
-          // allow-ground-to-air test. Consume only the ledge-crossing slice here; ordinary
-          // non-edge DownBound floor contacts keep the existing collision result.
-          batch->state.pos_x[idx] += nudge_x;
-          batch->state.on_ground[idx] = 0u;
-          batch->state.fall_fast[idx] = 0;
-          batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
-          batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
-          batch->state.speed_ground_x_self[idx] = 0.0f;
-          batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-          batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-          enter_fall_colldata_lock_from_ground(batch, idx);
-          continue;
-        }
-      }
-
-      if (!was_ground && now_ground) {
-        // Landing transitions into DownBound from tumble-style damage states.
-        //
-        // Decomp entry points:
-        // - Damage: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
-        // - DamageFly: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
-        if (coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FLY) {
-          enter_damagefly_ground_contact_followup(batch, c, ch, (size_t)bi, idx, a0);
-          continue;
-        }
-
-        if (coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FALL) {
-          enter_damagefly_ground_contact_followup(batch, c, ch, (size_t)bi, idx, a0);
-          continue;
-        }
-
-        if (coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_COMMON) {
-          enter_common_damage_ground_contact_followup(batch, c, ch, (size_t)bi, idx, a0);
-          continue;
-        }
-
-        if (coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_DAMAGE) {
-          // DownDamage collision can preserve the downed damage motion while applying the same
-          // ground-transfer bookkeeping as other air->ground contact paths. Keep this scoped to rows
-          // where mpColl has already reported ground; rows that miss `now_ground` remain floor
-          // contact substrate, not a bookkeeping fix.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c
-          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
-          transfer_air_to_ground_on_land(batch, ch, (size_t)bi, idx, a0);
-          continue;
-        }
-
-        if (coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_REFLECT) {
-          // DownReflect_Coll uses the same DownBound entry core without DownSpot's extra mv.x4
-          // clear. The simulator does not expose that motion-var lane, so the public transition is
-          // the shared source DownBound entry.
-          // refs/melee/src/melee/ft/ftCo_800C7CA0.c::ftCo_DownReflect_Coll
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097D88
-          enter_down_bound_from_damage_land(batch, ch, (size_t)bi, idx, a0);
-          continue;
-        }
-      } else if (!now_ground && coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_BOUND &&
-                 (down_bound_airborne_ledge_cross_to_fall(batch, idx, stage_id) ||
-                  down_bound_airborne_stage_object_endpoint_cross_to_fall(batch, idx, (size_t)bi,
-                                                                          stage_id) ||
-                  down_bound_airborne_static_platform_endpoint_cross_to_fall(batch, idx, (size_t)bi,
-                                                                             stage_id))) {
-        // Decomp: DownBound_Coll immediately enters Fall when the allow-ground-to-air helper reports
-        // a floor-contact result for this collision step. The helper above covers ordinary ledge
-        // edge exit; the stage-object branch covers generated FoD platform endpoint exits; and the
-        // static-platform branch covers ordinary legal-stage soft platform endpoint exits that
-        // remain replay-visible as airborne CollData floor ownership.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
-        batch->state.fall_fast[idx] = 0;
-        batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
-        batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
-        batch->state.speed_ground_x_self[idx] = 0.0f;
-        batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-        batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-        enter_fall_colldata_lock_from_ground(batch, idx);
-        if (batch->state.action_frame[idx] == 0 &&
-            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
-            stage_collision_floor_line_is_platform(stage_id, batch->state.ground_id[idx]) &&
-            !stage_collision_floor_line_has_platform_transform(stage_id,
-                                                               batch->state.ground_id[idx])) {
-          // First DownBound frame after a terminal DamageFlyTop soft-platform contact:
-          // DamageFly_Coll enters DownBound through ftCo_80090184, then DownBound_Coll reaches
-          // ft_80082708 -> mpColl_8004B108 on the same source callback. For this carried
-          // soft-platform floor-loss result, the published Fall root is the callback-local contact
-          // substep rather than the fully integrated public KB endpoint. Keep the correction on the
-          // DownBound floor-loss branch itself; sustained DownBound, hard ledges, transformed
-          // platforms, and non-Top DamageFly entries keep ordinary Fighter_procUpdate KB
-          // integration.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-          //   ftCo_DamageFly_Coll,ftCo_80090184}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
-          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpCollPrev,mpColl_8004ACE4}
-          // data/stages/bin/*.bin::MSLSTG01 segment platform flags
-          batch->state.pos_x[idx] =
-              (float)(batch->state.prev_pos_x[idx] + (0.5f * batch->state.speed_x_attack[idx]));
-        }
-      } else if (!now_ground && down_bound_floor_loss_after_damagefly_entry(batch, idx)) {
-        // First DownBound floor-loss publication after DamageFly_Coll entry:
-        // DownBound_Coll calls ft_80082708/mpColl_8004B108 after the DownBound Phys tick. When
-        // that callback-local allow-ground-to-air publication keeps the DownBound motion visible,
-        // source does not carry the just-consumed ground velocity into an airborne self velocity.
-        // Preserve the callback-local root and clear the downed velocity bundle.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-        //   ftCo_DamageFly_Coll,ftCo_80090184}
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
-        //   ftCo_DownBound_Phys,ftCo_DownBound_Coll}
-        // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
-        batch->state.pos_x[idx] = batch->state.prev_pos_x[idx];
-        batch->state.speed_air_x_self[idx] = 0.0f;
-        batch->state.speed_ground_x_self[idx] = 0.0f;
-        batch->state.speed_y_self[idx] = 0.0f;
-        batch->state.speed_x_attack[idx] = 0.0f;
-        batch->state.speed_y_attack[idx] = 0.0f;
-      } else if (was_ground && !now_ground) {
-        if (coll_handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_COMMON &&
-            common_damage_ground_floor_loss_should_missfoot(batch, idx, stage_id)) {
-          enter_missfoot_from_damage_floor_loss(batch, ch, idx);
-          continue;
-        }
-
-        // Downed ground -> air fallback: enter Fall.
-        // Decomp: DownBound_Coll/DownStand_Coll/DownWait_Coll/DownAttack_Coll select common ground
-        // collision helpers which transition into Fall when no longer grounded.
-        if (coll_handler != (uint8_t)MSL_COLL_HANDLER_DOWN_BOUND &&
-            coll_handler != (uint8_t)MSL_COLL_HANDLER_DOWN_B108 &&
-            coll_handler != (uint8_t)MSL_COLL_HANDLER_DOWN_B2DC &&
-            coll_handler != (uint8_t)MSL_COLL_HANDLER_PASSIVE_B108 &&
-            coll_handler != (uint8_t)MSL_COLL_HANDLER_PASSIVE_B2DC) {
-          continue;
-        }
-
-        batch->state.fall_fast[idx] = 0;
-        batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
-        batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
-        batch->state.speed_ground_x_self[idx] = 0.0f;
-        batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-        batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-        enter_fall_colldata_lock_from_ground(batch, idx);
+      if (batch->state.live_coll_callback_ran[idx] == 0u) {
+        knockdown_update_post_collision_one(batch, bi, p);
       }
     }
   }

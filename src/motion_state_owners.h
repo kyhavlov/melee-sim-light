@@ -27,7 +27,7 @@ enum {
 enum { MSL_MOTION_STATE_COMMON_ACTION_CAP = 1024 };
 
 typedef enum MslCollHandlerKind {
-  MSL_COLL_HANDLER_LEGACY = 0,
+  MSL_COLL_HANDLER_NONE = 0,
   MSL_COLL_HANDLER_GROUND_B108_FALL = 1,
   MSL_COLL_HANDLER_GROUND_B2DC_FALL = 2,
   MSL_COLL_HANDLER_GROUND_B4B0_TEETER = 3,
@@ -61,12 +61,11 @@ static inline uint8_t msl_coll_handler_source_ground_mode(uint8_t handler) {
       handler <= (uint8_t)MSL_COLL_HANDLER_GROUND_OTTOTTO) {
     return handler;
   }
-  return (uint8_t)MSL_COLL_HANDLER_LEGACY;
+  return (uint8_t)MSL_COLL_HANDLER_NONE;
 }
 
 static inline uint8_t msl_coll_handler_is_source_ground(uint8_t handler) {
-  return (uint8_t)(msl_coll_handler_source_ground_mode(handler) !=
-                   (uint8_t)MSL_COLL_HANDLER_LEGACY);
+  return (uint8_t)(msl_coll_handler_source_ground_mode(handler) != (uint8_t)MSL_COLL_HANDLER_NONE);
 }
 
 static inline uint8_t msl_coll_handler_is_common_air(uint8_t handler) {
@@ -95,55 +94,34 @@ enum {
   MSL_MS_CLASS_COMMON_FALL = 1u << 6,
   MSL_MS_CLASS_SPECIALHI = 1u << 7,
   MSL_MS_CLASS_COMMON_AIR_PHYS = 1u << 8,
-  MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL = 1u << 16,
   MSL_MS_CLASS_GROUNDED_ATTACK = 1u << 17,
   MSL_MS_CLASS_GUARDON_FRAME_START_X672_IASA = 1u << 18,
-  MSL_MS_CLASS_FT80081D0C_AIR_COLL = 1u << 19,
-  MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL = 1u << 20,
-  MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL = 1u << 21,
-  MSL_MS_CLASS_FT80083090_PLATFORM_PASS_COLL = 1u << 22,
-  MSL_MS_CLASS_FT800827A0_EDGE_SNAP_COLL = 1u << 23,
   MSL_MS_CLASS_DAMAGE_AIR = 1u << 24,
   MSL_MS_CLASS_DAMAGE_GROUND = 1u << 25,
   MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS = 1u << 26,
   MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION = 1u << 27,
   MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD = 1u << 28,
-  MSL_MS_CLASS_FX_SPECIALS_GROUND_B108_COLL = 1u << 30,
-  MSL_MS_CLASS_FT80082B1C_BASIC_LANDING_COLL = 1u << 31,
 };
 
 enum {
-  MSL_MS_CLASS2_COMMON_AIRBORNE_COLL = 1u << 2,
   MSL_MS_CLASS2_FRESH_GUARDON_ITEM_SHIELDDESC_IASA = 1u << 5,
   MSL_MS_CLASS2_WALK_ACTION = 1u << 6,
   MSL_MS_CLASS2_FALL_LIKE_ACTION = 1u << 7,
   MSL_MS_CLASS2_GUARD_STATE = 1u << 8,
-  MSL_MS_CLASS2_CATCH_START_FLOOR_LOSS = 1u << 9,
-  MSL_MS_CLASS2_GROUND_FLOOR_LOSS_TO_FALL = 1u << 10,
   MSL_MS_CLASS2_CLIFF_LEDGE_FLOOR_PRESERVE = 1u << 11,
   MSL_MS_CLASS2_LANDING_ROOT_FLOOR_SNAP = 1u << 12,
   MSL_MS_CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST = 1u << 13,
   MSL_MS_CLASS2_CLIFF_HOLD_PHYS_SNAP = 1u << 14,
-  // Collision callbacks that pass CLIFFCATCH_BOTH (0) to ft_CheckGroundAndLedge.
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
-  //   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
-  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doAirColl
-  MSL_MS_CLASS2_FT_CHECK_GROUND_LEDGE_BOTH_COLL = 1u << 15,
-  MSL_MS_CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL = 1u << 16,
-  MSL_MS_CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL = 1u << 17,
 };
 
 enum {
-  MSL_MS_CLASS3_ORDINARY_WALLJUMP_COLL = 1u << 5,
-  MSL_MS_CLASS3_WALLTECH_COLL = 1u << 6,
   MSL_MS_CLASS3_CATCH_TARGET_MASK_1 = 1u << 7,
   MSL_MS_CLASS3_CATCH_TARGET_MASK_511 = 1u << 8,
   MSL_MS_CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED = 1u << 9,
   MSL_MS_CLASS3_CATCH_KIND_1 = 1u << 10,
   MSL_MS_CLASS3_CATCH_KIND_2 = 1u << 11,
-  MSL_MS_CLASS3_JUMP_COLL = 1u << 12,
-  MSL_MS_CLASS3_FALL_COLL = 1u << 13,
-  MSL_MS_CLASS3_FALCON_SPECIALHI_THROW0_COLL = 1u << 14,
+  MSL_MS_CLASS3_JUMP_FLOOR_SKIP = 1u << 12,
+  MSL_MS_CLASS3_FALL_FLOOR_SKIP = 1u << 13,
 };
 
 uint16_t msl_motion_state_submotion_id(uint8_t char_id, uint16_t action_id);
@@ -154,6 +132,63 @@ uint16_t msl_motion_state_iasa_cb_id(uint8_t char_id, uint16_t action_id);
 uint16_t msl_motion_state_phys_cb_id(uint8_t char_id, uint16_t action_id);
 uint16_t msl_motion_state_coll_cb_id(uint8_t char_id, uint16_t action_id);
 uint8_t msl_motion_state_coll_handler_kind(uint8_t char_id, uint16_t action_id);
+typedef enum MslCollWrapperSelectorKind {
+  MSL_COLL_SELECTOR_NONE = 0,
+  MSL_COLL_SELECTOR_GROUND_B108 = 1,
+  MSL_COLL_SELECTOR_GROUND_B2DC = 2,
+  MSL_COLL_SELECTOR_GROUND_B4B0_NUDGE = 3,
+  MSL_COLL_SELECTOR_GROUND_STOPWALL_B5C4 = 4,
+  MSL_COLL_SELECTOR_AIR_471F8 = 5,
+  MSL_COLL_SELECTOR_AIR_LEDGE_FACING = 6,
+  MSL_COLL_SELECTOR_AIR_LEDGE_BOTH = 7,
+  MSL_COLL_SELECTOR_AIR_DAMAGE = 8,
+  MSL_COLL_SELECTOR_AIR_CALLBACK_LEDGE = 9,
+  MSL_COLL_SELECTOR_AIR_PASSIVEWALL_TIMER = 10,
+  MSL_COLL_SELECTOR_AIR_STOPCEIL = 11,
+  MSL_COLL_SELECTOR_AIR_FLYREFLECT = 12,
+  MSL_COLL_SELECTOR_AIR_48160 = 13,
+  MSL_COLL_SELECTOR_AIR_477E0_CONSTRAINED = 14,
+  MSL_COLL_SELECTOR_GROUND_B108_CONSTRAINED = 15,
+  MSL_COLL_SELECTOR_GA_DAMAGE = 16,
+  MSL_COLL_SELECTOR_GUARD_SETOFF_ALLOW_SDI = 17,
+  MSL_COLL_SELECTOR_GA_CAPTURECUT = 18,
+  MSL_COLL_SELECTOR_GA_CATCHCUT = 19,
+  MSL_COLL_SELECTOR_GA_CLIFF_ACTION = 20,
+  MSL_COLL_SELECTOR_GA_THROW = 21,
+  MSL_COLL_SELECTOR_GA_ENTRY_CUSTOM = 22,
+  MSL_COLL_SELECTOR_MATCH_REBIRTH = 23,
+  MSL_COLL_SELECTOR_MATCH_REBIRTH_WAIT = 24,
+  MSL_COLL_SELECTOR_GA_B108_AIR471 = 25,
+  MSL_COLL_SELECTOR_GA_B2DC_AIR471 = 26,
+  MSL_COLL_SELECTOR_GA_B108_AIR_LEDGE_BOTH = 27,
+  MSL_COLL_SELECTOR_FALCON_LW_END = 28,
+  MSL_COLL_SELECTOR_FALCON_S_START = 29,
+  MSL_COLL_SELECTOR_MARS_HI = 30,
+  MSL_COLL_SELECTOR_FALCON_HICATCH_CONDITIONAL = 31,
+  MSL_COLL_SELECTOR_COUNT = 32,
+} MslCollWrapperSelectorKind;
+// Exclusive source map-callback family (MSLMSO01 v28). Dynamic families select their concrete
+// low-level wrapper from live Fighter state inside the callback owner.
+uint8_t msl_motion_state_coll_wrapper_selector_kind(uint8_t char_id, uint16_t action_id);
+typedef enum MslCollSourcePlan {
+  MSL_COLL_SOURCE_CLIFF_CATCH = 1u << 0,
+  MSL_COLL_SOURCE_CLIFF_CATCH_CMD1 = 1u << 1,
+  MSL_COLL_SOURCE_WALLJUMP = 1u << 2,
+  MSL_COLL_SOURCE_WALLTECH = 1u << 3,
+  MSL_COLL_SOURCE_BASIC_LANDING = 1u << 4,
+  MSL_COLL_SOURCE_FLOOR_CALLBACK_PLATFORM_PASS = 1u << 5,
+  MSL_COLL_SOURCE_FALCON_SPECIALHI_THROW0 = 1u << 6,
+  MSL_COLL_SOURCE_FLOOR_LOSS_TO_FALL = 1u << 7,
+  MSL_COLL_SOURCE_CATCH_START_FLOOR_LOSS = 1u << 8,
+  MSL_COLL_SOURCE_GROUND_TO_AIR = 1u << 9,
+  MSL_COLL_SOURCE_FX_GROUND_TO_AIR_PAIR = 1u << 10,
+} MslCollSourcePlan;
+// Exact installed Coll callback's post-geometry policy recipe (MSLMSO01 v28).
+// refs/melee/src/melee/ft/ft_081B.c
+uint32_t msl_motion_state_coll_source_plan(uint8_t char_id, uint16_t action_id);
+static inline uint8_t msl_coll_source_plan_has(uint32_t plan, MslCollSourcePlan bit) {
+  return (uint8_t)((plan & (uint32_t)bit) != 0u);
+}
 static inline uint8_t msl_motion_state_coll_handler_is(uint8_t char_id, uint16_t action_id,
                                                        MslCollHandlerKind handler) {
   return (uint8_t)(msl_motion_state_coll_handler_kind(char_id, action_id) == (uint8_t)handler);

@@ -14,6 +14,7 @@ ACT_FX_SPECIAL_AIR_HI = 0x0164
 SM_WAIT = 2
 SM_FX_SPECIAL_HI = 309
 STAGE_FD = 32
+STAGE_DREAM_LAND = 28
 CHAR_FOX = 1
 
 
@@ -92,3 +93,61 @@ def test_specialairhi_reverse_accel_starts_at_x70_threshold() -> None:
     assert int(out["action_id"][0]) == ACT_FX_SPECIAL_AIR_HI
     assert abs(float(out["speed_air_x_self"][0]) - (launch_speed - reverse_accel)) <= 1e-4
     assert abs(float(out["speed_y_self"][0])) <= 1e-4
+
+
+@pytest.mark.parametrize(("root_offset", "touches_platform"), [(-4.21, True), (8.0, False)])
+def test_specialairhi_stay_airborne_positive_bottom_projects_from_root(
+    root_offset: float, touches_platform: bool
+) -> None:
+    binding = pytest.importorskip("msl_binding")
+    platform = binding.stage_floor_segment(STAGE_DREAM_LAND, 0)
+    platform_y = float(platform["y0"])
+
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(STAGE_DREAM_LAND)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["char_id"][0, :2] = np.uint8(CHAR_FOX)
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_AIR_HI)
+    seed["animation_index"][0, 0] = np.uint32(SM_FX_SPECIAL_HI)
+    seed["action_frame"][0, 0] = np.int16(19)
+    seed["anim_frame_f32"][0, 0] = np.float32(19.0)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(4)
+    seed["pos_x"][0, 0] = np.float32(-56.15)
+    seed["pos_y"][0, 0] = np.float32(platform_y + root_offset)
+    seed["speed_air_x_self"][0, 0] = np.float32(2.3)
+
+    sizes = binding.sizes()
+    seed_bytes = seed.view(np.uint8).reshape((1, int(sizes["seed"])))
+    prev_input = np.zeros((1,), dtype=INPUT_DTYPE)
+    input_t = np.zeros((1,), dtype=INPUT_DTYPE)
+    prev_input_bytes = prev_input.view(np.uint8).reshape((1, int(sizes["input"])))
+    input_bytes = input_t.view(np.uint8).reshape((1, int(sizes["input"])))
+    out_bytes = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=2)
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_bytes)
+    finally:
+        binding.destroy(handle)
+    out = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+
+    # SpecialAirHi uses the stay-airborne mpColl continuation. With a positive live ECB bottom,
+    # mpColl_80044948_Floor projects the fighter root—not the lifted bottom—to the platform before
+    # ftFox_SpecialHi_IsBound consumes the soft floor through ftCo_8009A134. The adjacent high-root
+    # case proves this is collision admission rather than an unconditional Fire Fox snap.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044948_Floor,mpColl_80046904}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFox_SpecialHi_IsBound,
+    #   ftFx_SpecialAirHi_Coll}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_AIR_HI
+    assert int(out["on_ground"][0]) == 0
+    if touches_platform:
+        assert float(out["pos_y"][0]) == pytest.approx(platform_y + 0.0001, abs=1e-5)
+    else:
+        assert float(out["pos_y"][0]) > platform_y + 7.0

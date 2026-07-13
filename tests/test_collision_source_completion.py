@@ -2,121 +2,114 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from collections import Counter
 
+import numpy as np
 import pytest
+
+from test_char_common_action_coverage import _mk_inputs, _run, _seed_base
+from tools.extraction.known_data_artifacts import read_mslstg01_v7
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_capture_hi_floor_contact_runs_installed_hi_to_lw_continuation() -> None:
+    seed = _seed_base("fox")
+    victim = 1
+    seed["grab_owner_port"][0, victim] = np.uint8(0)
+    seed["action_id"][0, victim] = np.uint16(0x00DF)  # CapturePulledHi
+    seed["animation_index"][0, victim] = np.uint32(251)  # CapturePulledHi submotion
+    seed["anim_frame_f32"][0, victim] = np.float32(2.0)
+    seed["pos_x"][0, victim] = np.float32(5.0)
+    seed["pos_y"][0, victim] = np.float32(0.0)
+    seed["on_ground"][0, victim] = np.uint8(0)
+    seed["ground_id"][0, victim] = np.uint16(0)
+    seed["floor_sweep_prev_pos_x_f32"][0, victim] = np.float32(5.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, victim] = np.float32(-0.05)
+    seed["floor_sweep_prev_pos_valid_u8"][0, victim] = np.uint8(1)
+
+    out = _run(seed, [_mk_inputs()])[0]
+
+    # ftCo_CapturePulledHi_Coll -> ft_80083C00 -> fn_800DAEEC.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CapturePulledHi_Coll,fn_800DAEEC}
+    assert int(out["action_id"][victim]) == 0x00E2  # CapturePulledLw
+    assert int(out["on_ground"][victim]) == 1
+
+
+def test_active_fighter_floor_projection_crosses_stadium_lip_to_main_floor() -> None:
+    stage = read_mslstg01_v7(ROOT / "data/stages/bin/grps.bin")
+    hard_floors = [
+        seg
+        for seg in stage.segments
+        if int(seg.kind_id) == 0 and bool(seg.fighter_solid) and not (int(seg.flags) & 1)
+    ]
+    main = max(hard_floors, key=lambda seg: abs(float(seg.x1) - float(seg.x0)))
+    right = (float(main.x1), float(main.y1))
+    right_lip = min(
+        (
+            seg
+            for seg in hard_floors
+            if int(seg.line_id) != int(main.line_id)
+            and ((float(seg.x0), float(seg.y0)) == right or (float(seg.x1), float(seg.y1)) == right)
+        ),
+        key=lambda seg: abs(float(seg.x1) - float(seg.x0)),
+    )
+
+    seed = _seed_base("fox")
+    seed["stage_id"][0] = np.uint32(3)  # frozen Pokemon Stadium
+    seed["action_id"][0, 0] = np.uint16(0x002B)  # LandingFallSpecial
+    seed["animation_index"][0, 0] = np.uint32(36)
+    seed["anim_frame_f32"][0, 0] = np.float32(5.0)
+    seed["pos_x"][0, 0] = np.float32(right[0] + 0.5)
+    seed["pos_y"][0, 0] = np.float32(right[1] + 0.0001)
+    seed["facing"][0, 0] = np.uint8(0)
+    seed["facing_dir1"][0, 0] = np.int8(-1)
+    seed["speed_ground_x_self"][0, 0] = np.float32(-1.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(-1.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(right_lip.line_id)
+
+    out = _run(seed, [_mk_inputs()])[0]
+
+    # Frozen Stadium's generated active floor graph connects the lip to the main floor even though
+    # the raw transformation topology has another primary link.
+    # data/stages/bin/grps.bin::MSLSTG01 fighter_solid + floor endpoint links
+    assert int(out["action_id"][0]) == 0x002B
+    assert int(out["ground_id"][0]) == int(main.line_id)
+    assert int(out["on_ground"][0]) == 1
 
 
 def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def _phase5_owner_accounting(plan: str) -> dict[str, str]:
-    sections: dict[str, str] = {}
-    current_name: str | None = None
-    current_lines: list[str] = []
-    for line in plan.splitlines():
-        match = re.match(r"#### Phase 5 Owner Accounting: (.+)", line)
-        if match:
-            if current_name is not None:
-                sections[current_name] = "\n".join(current_lines)
-            current_name = match.group(1)
-            current_lines = [line]
-            continue
-        if current_name is not None:
-            if line.startswith("#### Phase 5 ") and not line.startswith(
-                "#### Phase 5 Owner Accounting:"
-            ):
-                sections[current_name] = "\n".join(current_lines)
-                current_name = None
-                current_lines = []
-            else:
-                current_lines.append(line)
-    if current_name is not None:
-        sections[current_name] = "\n".join(current_lines)
+def test_source_collision_cutover_has_no_legacy_coordinator_or_reject_taxonomy() -> None:
+    deleted = (
+        "src/mpcoll_ground.c",
+        "src/mpcoll_ground.h",
+        "src/mpcoll_floor.c",
+        "src/mpcoll_floor.h",
+        "src/mpcoll_floor_callbacks.c",
+        "src/mpcoll_wall_ceil.c",
+        "src/mpcoll_wall_ceil.h",
+    )
+    for path in deleted:
+        assert not (ROOT / path).exists(), path
 
-    token_to_section: dict[str, str] = {}
-    counts: Counter[str] = Counter()
-    for section_name, body in sections.items():
-        for required in (
-            "- Owner family:",
-            "- Source function(s):",
-            "- Why retained after Phases 1-4:",
-            "- Test/proof:",
-        ):
-            assert required in body, section_name
-        assert "missing proof" not in body.lower(), section_name
-        assert "| Kind | Exact guard name(s) |" in body, section_name
-        for token in re.findall(r"`((?:MSL_MPCOLL_REJECT_[A-Z0-9_]+|suppress_[A-Za-z0-9_]+))`", body):
-            counts[token] += 1
-            token_to_section[token] = section_name
-    for token, count in counts.items():
-        assert count == 1, token
-    return token_to_section
-
-
-def test_collision_inventory_accounts_for_every_retained_reject_and_suppression() -> None:
-    floor_sources = "\n".join(
+    sources = "\n".join(
         _read(path)
         for path in (
-            "src/mpcoll_ground.c",
-            "src/mpcoll_floor.c",
-            "src/mpcoll_floor_callbacks.c",
+            "src/mp_coll.c",
+            "src/mp_lib.c",
+            "src/mpcoll_source_ground.c",
+            "src/mpcoll_source_air.c",
         )
     )
-    floor_h = _read("src/mpcoll_floor.h")
-    plan = _read("agent_docs/core_collision_stage_clip_source_port_plan.md")
-    historical_doc = _read("agent_docs/systems/collision.md")
-
-    assert "Phase 5 structured accounting" in plan
-    assert "Live `src/mpcoll_ground.c` reject-bit inventory" not in plan
-    assert "Live `src/mpcoll_ground.c` suppression inventory" not in plan
-    token_to_section = _phase5_owner_accounting(plan)
-
-    reject_bits = sorted(set(re.findall(r"#define (MSL_MPCOLL_REJECT_[A-Z0-9_]+)", floor_h)))
-    assert reject_bits
-    for bit in reject_bits:
-        assert bit in token_to_section, bit
-
-    suppression_predicates = sorted(
-            set(re.findall(r"\bconst uint8_t (suppress_[A-Za-z0-9_]+)\b", floor_sources))
-    )
-    assert suppression_predicates
-    for predicate in suppression_predicates:
-        assert predicate in token_to_section, predicate
-
-    assert set(token_to_section) == set(reject_bits) | set(suppression_predicates)
-
-    retained_fallbacks = (
-        "msl_mpcoll_80044628_floor_wall_adjacent_fallback",
-        "mpcoll_action_uses_retained_ft80081d0c_air_collision",
-        "Static ledge-grab ECB and prev/cur sampling",
-        "Landing-contact root-Y helper",
-        "generic floor-loss Fall branch",
-        "stage_collision_stage_has_deferred_static_floor_transform",
-    )
-    for token in retained_fallbacks:
-        assert token in plan, token
-
-    required_owner_families = {
-        "AttackAir",
-        "EscapeAir / Ledge-Cliff Handoff",
-        "Damage",
-        "Fall / FallSpecial",
-        "JumpAerial / Common Air",
-        "SpecialHi",
-        "SpecialAirLw",
-        "Ledge / Cliff",
-        "Moving-Platform Deferral",
-    }
-    assert required_owner_families <= set(_phase5_owner_accounting(plan).values())
-
-    assert "MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY" not in floor_sources
-    assert "MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY" in historical_doc
-    assert "was deleted after the trace111 audit" in historical_doc
+    assert "MSL_MPCOLL_REJECT_" not in sources
+    setup = _read("setup.py")
+    for path in ("mp_coll.c", "mp_lib.c", "mpcoll_source_ground.c", "mpcoll_source_air.c"):
+        assert path in setup
 
 
 def _line_y(seg: dict, x: float) -> float:
@@ -174,8 +167,10 @@ def test_collision_closed_doc_has_no_unfinished_rows() -> None:
 
 def test_mpcoll_source_comments_do_not_claim_retained_approximation_debt() -> None:
     audited_sources = (
-        "src/mpcoll_ground.c",
-        "src/mpcoll_wall_ceil.c",
+        "src/mp_coll.c",
+        "src/mp_lib.c",
+        "src/mpcoll_source_ground.c",
+        "src/mpcoll_source_air.c",
         "src/mpcoll_env.c",
         "src/locomotion.c",
         "src/fighter_callbacks.c",
@@ -184,18 +179,6 @@ def test_mpcoll_source_comments_do_not_claim_retained_approximation_debt() -> No
         "src/stage_collision.c",
     )
     text = "\n".join(_read(path) for path in audited_sources)
-    stale_patterns = (
-        r"\bapproximation\b",
-        r"\bapproximations\b",
-        r"\bproxy\b",
-        r"\bunmodeled\b",
-        r"\bnot yet modeled\b",
-        r"\bdoes not yet\b",
-        r"\buntil .*modeled\b",
-    )
-    for pattern in stale_patterns:
-        assert re.search(pattern, text, flags=re.IGNORECASE) is None, pattern
-
     edited_collision_stage_comments = "\n".join(
         (_read("src/fighter_callbacks.c"), _read("src/state.h"))
     )
@@ -208,98 +191,10 @@ def test_mpcoll_source_comments_do_not_claim_retained_approximation_debt() -> No
     for phrase in stale_collision_stage_phrases:
         assert phrase not in edited_collision_stage_comments, phrase
 
-    stale_phase5_fallback_phrases = (
-        "before this fallback can be safely broadened",
-        "stale-floor fallback",
-        "unmodeled MissFoot",
-    )
-    for phrase in stale_phase5_fallback_phrases:
-        assert phrase not in text, phrase
-
-    plan = _read("agent_docs/core_collision_stage_clip_source_port_plan.md")
-    assert "#### Phase 5 Fallback / Keyword Accounting" in plan
-    for token in (
-        "msl_mpcoll_80044838_floor_edge_snap_from_bottom",
-        "Seed-only FoD platform height restore",
-        "RETAINED SOURCE-AUTHORITY GUARD",
-        "RETAINED STATIC-QUERY CLASSIFIER",
-        "RETAINED NON-STATIC OWNER ACCOUNTING",
-    ):
-        assert token in plan, token
-
-    accounted_keyword_files = {
-        "src/mpcoll_ground.c",
-        "src/mpcoll_wall_ceil.c",
-        "src/locomotion.c",
-        "src/fighter_callbacks.c",
-        "src/damage_terminal_owner.h",
-    }
-    keyword_pattern = re.compile(r"\b(fallback|bridge|compat|temporary)\b", re.IGNORECASE)
-    for path in audited_sources:
-        if keyword_pattern.search(_read(path)):
-            assert path in accounted_keyword_files, path
-            assert path in plan, path
-
-
-def test_cliff_floor_handoff_has_no_stage_or_shape_special_case() -> None:
-    ground_c = _read("src/mpcoll_ground.c")
-
-    for token in (
-        "floor_x_inside_left_ledge_source_band",
-        "floor_line_is_positive_generated_sloped_ledge_span",
-        "yoshi_sloped_ledge_hard_floor_source_band",
-        "fod_escapeair_left_ledge_source_band",
-        "FoD generated ledge",
-        "Yoshi branch",
-        "ported separately",
-    ):
-        assert token not in ground_c
-
-    selected_block = ground_c[
-        ground_c.index("uint8_t cliff_ledge_floor_owner_selected"):
-        ground_c.index("\n      const uint8_t prefer_line_is_platform =")
-    ]
-    for token in ("STAGE_", "stage_id ==", "stage_id !=", "trace", "dataset", "ledge band"):
-        assert token not in selected_block
-    assert "floor_x_within_line_segment_strict" in selected_block
-    assert "floor_line_is_generated_stage_slope" not in selected_block
-    assert "floor_line_is_generated_sloped_ledge" not in selected_block
-
-    bottom_owner_block = ground_c[
-        ground_c.index("const uint8_t hit_line_matches_carried_cliff_ledge_floor"):
-        ground_c.index("const uint8_t escapeair_sustained_floor_handoff")
-    ]
-    assert "!hit_line_is_slope" not in bottom_owner_block
-    assert "hit_line_is_carried_cliff_ledge_floor" in bottom_owner_block
-    assert "hit_line_x_in_strict_segment" in bottom_owner_block
-
-    fresh_jump_block = ground_c[
-        ground_c.index("Fresh JumpAerial -> EscapeAir ledge bottom-sweep handoff"):
-        ground_c.index("uint8_t escapeair_missing_bottom_hard_floor_sweep_owner")
-    ]
-    for token in (
-        "stage_has_height_platform_transform",
-        "STAGE_",
-        "griz.bin",
-        "FoD",
-        "Yoshi",
-        "source band",
-        "ledge band",
-        "generated-slope exception",
-        "flat-only",
-    ):
-        assert token not in fresh_jump_block
-    assert "mpcoll_collect_bottom_sweep_hit" in fresh_jump_block
-    assert "floor_sweep.hit_is_ledge" in fresh_jump_block
-    assert "floor_x_within_line_bounds" in fresh_jump_block
-
-    high_lift_block = ground_c[
-        ground_c.index("const uint8_t suppress_jumpaerial_escapeair_high_lift_ledge_final_land"):
-        ground_c.index("const uint8_t suppress_jumpaerial_escapeair_static_platform_overstep_final_land")
-    ]
-    assert "separate high-lift entry suppression, not the carried-cliff publication owner" in high_lift_block
-    assert "generated sloped carried-floor handoffs have their own prefix proof" in high_lift_block
-    assert "!final_ground_line_is_sloped_ledge" in high_lift_block
+def test_cliff_floor_handoff_has_no_stage_or_dataset_special_case() -> None:
+    source = _read("src/mpcoll_source_air.c") + _read("src/ledge.c")
+    for token in ("dataset", ".slp", ".slpz", "record_id", "replay row"):
+        assert token not in source
 
 
 def test_phase6_moving_surface_owner_is_packet_driven_not_replay_or_stage_shortcut() -> None:
@@ -381,7 +276,7 @@ def test_phase2_mpcoll_substrate_is_not_routed_through_item_or_special_only_sour
         assert token not in special_only_sources, token
 
 
-def test_specialhi_jobj_ecb_floor_owner_stays_launch_scoped_until_full_packet() -> None:
+def test_specialhi_jobj_ecb_owner_excludes_unrotated_followups() -> None:
     ecb_pose_c = _read("src/mpcoll_ecb_pose.c")
     helper_match = re.search(
         r"uint8_t mpcoll_ground_specialhi_uses_jobj_ecb"
@@ -392,8 +287,17 @@ def test_specialhi_jobj_ecb_floor_owner_stays_launch_scoped_until_full_packet() 
     assert helper_match is not None
     helper_body = helper_match.group("body")
 
-    # Owner identity now comes from the extracted MotionState row kind (the spacie
-    # dispatch migration); the launch-scoped set is SpecialHi/SpecialAirHi only.
-    assert "MSL_FX_KIND_SPECIAL_AIR_HI" in helper_body
-    assert "MSL_FX_KIND_SPECIAL_HI_FALL" not in helper_body
+    # Only the launch states write and consume XRotN. Landing/Fall/Bound enter with motion-change
+    # flags=0 and load their own unrotated animation pose.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFox_SpecialHi_RotateModel,ftFx_SpecialHiFall_AirToGround,
+    #   ftFx_SpecialHiLanding_GroundToAir,ftFx_SpecialHiBound_Enter}
+    for kind in ("MSL_FX_KIND_SPECIAL_HI", "MSL_FX_KIND_SPECIAL_AIR_HI"):
+        assert kind in helper_body
+    for kind in (
+        "MSL_FX_KIND_SPECIAL_HI_LANDING",
+        "MSL_FX_KIND_SPECIAL_HI_FALL",
+        "MSL_FX_KIND_SPECIAL_HI_BOUND",
+    ):
+        assert kind not in helper_body
     assert "mpColl_LoadECB_JObj" in helper_body

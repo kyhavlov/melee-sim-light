@@ -55,3 +55,11 @@ uint8_t mpcoll_state_desired_ecb_points(const MslBatch* batch, size_t idx, MslEc
 void mpcoll_store_current_ecb_points(MslBatch* batch, size_t idx, const MslEcbWorldPoints* ecb);
 void mpcoll_store_prev_ecb_points(MslBatch* batch, size_t idx, const MslEcbWorldPoints* ecb);
 void mpcoll_store_desired_ecb_points(MslBatch* batch, size_t idx, const MslEcbWorldPoints* ecb);
+void mpcoll_store_squeeze_restore_ecb_points(MslBatch* batch, size_t idx,
+                                             const MslEcbWorldPoints* ecb);
+
+// Materialize the CollData_X130_Clear effect at a source callback boundary where no intervening
+// map callback can observe the flag. The next LoadECB starts interpolation from a zero current
+// packet, exactly as the source flag consumer does.
+// refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043670,mpColl_80043680,mpColl_LoadECB_inline}
+void mpcoll_clear_current_ecb_packet(MslBatch* batch, size_t idx);

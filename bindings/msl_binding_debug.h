@@ -9,7 +9,6 @@ PyObject* msl_debug_step_input_pre_combat(PyObject* self, PyObject* args);
 PyObject* msl_debug_knockdown_update_pre_physics(PyObject* self, PyObject* args);
 PyObject* msl_debug_set_coll_env_flags_py(PyObject* self, PyObject* args);
 PyObject* msl_debug_set_mpcoll_joint_filters_py(PyObject* self, PyObject* args);
-PyObject* msl_debug_set_escapeair_floor_producer_runtime_py(PyObject* self, PyObject* args);
 PyObject* msl_debug_set_floor_sweep_prev_runtime_py(PyObject* self, PyObject* args);
 PyObject* msl_debug_set_wall_ceil_prev_runtime_py(PyObject* self, PyObject* args);
 PyObject* msl_debug_set_player_root_py(PyObject* self, PyObject* args);

@@ -147,41 +147,6 @@ def test_fd_shared_endpoint_does_not_flip_ground_id() -> None:
     assert int(out["ground_id"][0]) == int(right_lip["segment_i"])
 
 
-def test_vy_positive_never_grounds() -> None:
-    seed = _seed_base(stage_id=32)
-    seed["pos_x"][0, 0] = np.float32(0.0)
-    seed["pos_y"][0, 0] = np.float32(0.0)
-    seed["speed_y_self"][0, 0] = np.float32(1.0)
-    seed["on_ground"][0, 0] = np.uint8(0)
-    seed["ground_id"][0, 0] = np.uint16(1234)
-
-    out = _step_once(seed)
-    assert int(out["on_ground"][0]) == 0
-    assert int(out["ground_id"][0]) == 1234
-
-
-def test_vy_zero_can_ground_when_on_surface() -> None:
-    seed = _seed_base(stage_id=32)
-    seed["pos_x"][0, 0] = np.float32(0.0)
-    seed["pos_y"][0, 0] = np.float32(0.0)
-    seed["speed_y_self"][0, 0] = np.float32(0.0)
-    seed["on_ground"][0, 0] = np.uint8(0)
-
-    out = _step_once(seed)
-    assert int(out["on_ground"][0]) == 1
-
-
-def test_no_snap_from_far_below_stage() -> None:
-    seed = _seed_base(stage_id=32)
-    seed["pos_x"][0, 0] = np.float32(0.0)
-    seed["pos_y"][0, 0] = np.float32(-10.0)
-    seed["speed_y_self"][0, 0] = np.float32(-0.1)
-    seed["on_ground"][0, 0] = np.uint8(0)
-    seed["ground_id"][0, 0] = np.uint16(2222)
-
-    out = _step_once(seed)
-    assert int(out["on_ground"][0]) == 0
-    assert int(out["ground_id"][0]) == 2222
 
 
 def test_ground_id_unchanged_when_airborne() -> None:

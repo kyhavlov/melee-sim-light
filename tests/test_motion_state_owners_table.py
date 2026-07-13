@@ -17,27 +17,33 @@ from tools.extraction.extract_motion_state_tables import (
     CLASS_DAMAGE_COMMON,
     CLASS_DAMAGE_FLY,
     CLASS_DAMAGE_GROUND,
-    CLASS_FT80081D0C_AIR_COLL,
-    CLASS_FT800827A0_EDGE_SNAP_COLL,
-    CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL,
     CLASS_GROUNDED_ATTACK,
     CLASS_LANDING_AIR,
-    CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL,
-    CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL,
     CLASS3_CATCH_KIND_1,
     CLASS3_CATCH_KIND_2,
     CLASS3_CATCH_TARGET_MASK_1,
     CLASS3_CATCH_TARGET_MASK_511,
     CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED,
-    CLASS3_FALCON_SPECIALHI_THROW0_COLL,
-    CLASS3_FALL_COLL,
-    CLASS3_JUMP_COLL,
+    CLASS3_FALL_FLOOR_SKIP,
+    CLASS3_JUMP_FLOOR_SKIP,
     COLL_HANDLER_AIR_ATTACK,
     COLL_HANDLER_AIR_ESCAPE,
     COLL_HANDLER_DAMAGE_COMMON,
     COLL_HANDLER_DAMAGE_FLY,
     COLL_HANDLER_GROUND_LANDING,
     COLL_HANDLER_GROUND_LANDING_AIR,
+    COLL_SOURCE_CATCH_START_FLOOR_LOSS,
+    COLL_SOURCE_FALCON_SPECIALHI_THROW0,
+    COLL_SOURCE_FLOOR_LOSS_TO_FALL,
+    COLL_SOURCE_FX_GROUND_TO_AIR_PAIR,
+    COLL_SELECTOR_AIR_471F8,
+    COLL_SELECTOR_AIR_477E0_CONSTRAINED,
+    COLL_SELECTOR_AIR_LEDGE_FACING,
+    COLL_SELECTOR_FALCON_HICATCH_CONDITIONAL,
+    COLL_SELECTOR_GA_B108_AIR471,
+    COLL_SELECTOR_GA_B2DC_AIR471,
+    COLL_SELECTOR_GROUND_B108,
+    COLL_SELECTOR_GROUND_B108_CONSTRAINED,
     FX_SPECIAL_KIND_VALUES,
     load_motion_state_rows,
 )
@@ -110,45 +116,83 @@ def test_coll_handler_kinds_are_explicit_and_stable() -> None:
 
 
 def test_character_special_collision_owners_are_pointer_derived() -> None:
+    fox = _table("fox")
+    falco = _table("falco")
     marth = _table("marth")
     falcon = _table("falcon")
     sheik = _table("sheik")
     zelda = _table("zelda")
 
     for action in (0x015D, 0x015E, 0x0160, 0x0163):
-        assert int(marth.class_bits[action]) & CLASS_FT80081D0C_AIR_COLL
-        assert int(marth.class_bits[action]) & CLASS_FT800827A0_EDGE_SNAP_COLL
+        assert int(marth.coll_wrapper_selector_kind[action]) == COLL_SELECTOR_GA_B2DC_AIR471
+    for action in range(0x0155, 0x0159):
+        assert int(marth.coll_wrapper_selector_kind[action]) == COLL_SELECTOR_GROUND_B108
     for action in (0x0166, 0x0167, 0x0168):
-        assert int(sheik.class_bits[action]) & CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
+        assert int(sheik.coll_wrapper_selector_kind[action]) == COLL_SELECTOR_AIR_LEDGE_FACING
     for action in (0x0160, 0x0161, 0x0162):
-        assert int(zelda.class_bits[action]) & CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
+        assert int(zelda.coll_wrapper_selector_kind[action]) == COLL_SELECTOR_AIR_LEDGE_FACING
 
-    assert int(falcon.class2_bits[0x0163]) & CLASS2_FALCON_DIVE_OWNER_CONDITIONAL_COLL
-    assert int(falcon.class3_bits[0x0164]) & CLASS3_FALCON_SPECIALHI_THROW0_COLL
-    assert (
-        int(_table("fox").class2_bits[0x0113])
-        & CLASS2_CAPTURE_CONSTRAINT_CONDITIONAL_COLL
-    )
+    assert int(falcon.coll_wrapper_selector_kind[0x0163]) == COLL_SELECTOR_FALCON_HICATCH_CONDITIONAL
+    for table, ground_actions, air_actions in (
+        (sheik, (0x0169, 0x016A), (0x016B, 0x016C)),
+        (zelda, (0x0163, 0x0164), (0x0165, 0x0166)),
+    ):
+        for action in ground_actions:
+            assert int(table.coll_wrapper_selector_kind[action]) == COLL_SELECTOR_GROUND_B108
+        for action in air_actions:
+            assert int(table.coll_wrapper_selector_kind[action]) == COLL_SELECTOR_AIR_471F8
+    assert int(falcon.coll_source_plan[0x0164]) & COLL_SOURCE_FALCON_SPECIALHI_THROW0
+    assert int(_table("fox").coll_wrapper_selector_kind[0x0113]) == COLL_SELECTOR_AIR_477E0_CONSTRAINED
+    for table in (fox, falco, marth, falcon, sheik, zelda):
+        for action in (0x00DF, 0x00E0, 0x00E1):
+            assert int(table.coll_wrapper_selector_kind[action]) == COLL_SELECTOR_AIR_477E0_CONSTRAINED
+        for action in (0x00E2, 0x00E3, 0x00E4):
+            assert int(table.coll_wrapper_selector_kind[action]) == COLL_SELECTOR_GROUND_B108_CONSTRAINED
+    ground_shine_kinds = {
+        FX_SPECIAL_KIND_VALUES[name]
+        for name in (
+            "SPECIAL_LW_START",
+            "SPECIAL_LW_LOOP",
+            "SPECIAL_LW_HIT",
+            "SPECIAL_LW_END",
+            "SPECIAL_LW_TURN",
+        )
+    }
+    for table in (fox, falco):
+        actions = [
+            action
+            for action, kind in enumerate(table.fx_special_kind)
+            if int(kind) in ground_shine_kinds
+        ]
+        assert len(actions) == 5
+        for action in actions:
+            assert int(table.coll_wrapper_selector_kind[action]) == COLL_SELECTOR_GROUND_B108
+            assert int(table.coll_source_plan[action]) & COLL_SOURCE_FX_GROUND_TO_AIR_PAIR
 
 
 def test_preprocessing_callback_consumers_have_explicit_owner_bits() -> None:
     for char in CHARS:
         table = _table(char)
-        assert _actions_with(table, "class3_bits", CLASS3_JUMP_COLL) == {0x0019, 0x001A}
-        assert _actions_with(table, "class3_bits", CLASS3_FALL_COLL) == {
-            0x001D,
-            0x001E,
-            0x001F,
-            0x0021,
-            0x0022,
-        }
+        assert int(table.coll_wrapper_selector_kind[0x0019]) != 0
+        assert int(table.coll_wrapper_selector_kind[0x001D]) != 0
     assert _actions_with(
-        _table("falcon"), "class3_bits", CLASS3_FALCON_SPECIALHI_THROW0_COLL
+        _table("falcon"), "coll_source_plan", COLL_SOURCE_FALCON_SPECIALHI_THROW0
     ) == {0x0164}
     for char in ("fox", "falco", "marth", "sheik", "zelda"):
         assert not _actions_with(
-            _table(char), "class3_bits", CLASS3_FALCON_SPECIALHI_THROW0_COLL
+            _table(char), "coll_source_plan", COLL_SOURCE_FALCON_SPECIALHI_THROW0
         )
+
+
+def test_remaining_common_collision_effects_are_pointer_owned() -> None:
+    expected = {
+        COLL_SOURCE_CATCH_START_FLOOR_LOSS: {0x00D4, 0x00D6},
+    }
+    for char in CHARS:
+        table = _table(char)
+        for bit, actions in expected.items():
+            assert _actions_with(table, "coll_source_plan", bit) == actions
+        assert _actions_with(table, "coll_source_plan", COLL_SOURCE_FLOOR_LOSS_TO_FALL)
 
 
 def test_motion_state_entry_ledgers_remain_action_owned() -> None:
@@ -156,6 +200,8 @@ def test_motion_state_entry_ledgers_remain_action_owned() -> None:
         CLASS3_CATCH_TARGET_MASK_1: {0x00B8, 0x00B9, 0x00C0, 0x00C1},
         CLASS3_CATCH_TARGET_MASK_511_WHILE_ATTACHED: set(range(0x00DB, 0x00DF)),
         CLASS3_CATCH_KIND_1: {0x00D4, 0x00D6},
+        CLASS3_JUMP_FLOOR_SKIP: {0x0019, 0x001A},
+        CLASS3_FALL_FLOOR_SKIP: {0x001D, 0x001E, 0x001F, 0x0021, 0x0022},
     }
     for char in CHARS:
         table = _table(char)
@@ -207,11 +253,13 @@ def test_motion_state_semantic_lanes_match_reviewed_digest() -> None:
             "class3_bits",
             "fx_special_kind",
             "coll_handler_kind",
+            "coll_wrapper_selector_kind",
+            "coll_source_plan",
         ):
             digest.update(getattr(table, lane).tobytes())
     assert (
         digest.hexdigest()
-        == "aa92ff31ffe2bf8aa3ceb5aa22ee57b1e75cf038b6afff452eb0c08625f7cf66"
+        == "b95b749a0d8a79c010f9b92b7af4ff6ae95d1961add9908562e497321296609c"
     )
 
 
@@ -233,6 +281,8 @@ def test_iso_motion_state_extractor_matches_generated_semantic_lanes() -> None:
             assert row.class3_bits == int(table.class3_bits[index])
             assert row.fx_special_kind == int(table.fx_special_kind[index])
             assert row.coll_handler_kind == int(table.coll_handler_kind[index])
+            assert row.coll_wrapper_selector_kind == int(table.coll_wrapper_selector_kind[index])
+            assert row.coll_source_plan == int(table.coll_source_plan[index])
 
 
 def test_motion_state_owner_reader_rejects_stale_versions(tmp_path: Path) -> None:

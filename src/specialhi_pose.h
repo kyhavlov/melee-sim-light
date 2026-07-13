@@ -15,15 +15,12 @@ static inline uint8_t msl_specialhi_rotate_model_action(uint8_t char_id, uint16_
   switch (msl_motion_state_fx_special_kind_fast(char_id, action_id)) {
     case MSL_FX_KIND_SPECIAL_HI:
     case MSL_FX_KIND_SPECIAL_AIR_HI:
-    case MSL_FX_KIND_SPECIAL_HI_LANDING:
-    case MSL_FX_KIND_SPECIAL_HI_FALL:
-    case MSL_FX_KIND_SPECIAL_HI_BOUND:
-      // `mv.fx.SpecialHi.rotateModel` is written by SpecialHi launch/collision callbacks. The
-      // Landing/Fall/Bound callbacks do not rewrite FtPart_XRotN, so the live JObj pose can persist
-      // into those followups until a non-Firefox motion state owns the model again.
+      // `mv.fx.SpecialHi.rotateModel` is written and applied to FtPart_XRotN only by the launch
+      // states. Landing/Fall/Bound enter through Fighter_ChangeMotionState with flags=0 and load
+      // their own unrotated animation pose; none of those callbacks reapplies RotateModel.
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
-      //   ftFox_SpecialHi_RotateModel,ftFx_SpecialHiLanding_Anim,ftFx_SpecialHiFall_Anim,
-      //   ftFx_SpecialHiBound_Enter}
+      //   ftFox_SpecialHi_RotateModel,ftFx_SpecialHiFall_AirToGround,
+      //   ftFx_SpecialHiLanding_GroundToAir,ftFx_SpecialHiBound_Enter}
       return 1u;
     default:
       return 0u;

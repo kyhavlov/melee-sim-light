@@ -7,39 +7,17 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "combat.h"
+#include "combat_internal.h"
 #include "damage_terminal_owner.h"
 #include "ecb_tables.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
-#include "mpcoll_ground.h"
+#include "locomotion.h"
+#include "mpcoll_ecb_pose.h"
+#include "mpcoll_source_air.h"
 #include "move_tables.h"
 
 #include <math.h>
-
-static inline uint8_t throw_release_mpcoll_floor_publication_bit(uint16_t action_id_u16) {
-  switch (action_id_u16) {
-    case (uint16_t)MSL_ACT_THROW_F:
-      return (uint8_t)(1u << 0);
-    case (uint16_t)MSL_ACT_THROW_B:
-      return (uint8_t)(1u << 1);
-    case (uint16_t)MSL_ACT_THROW_HI:
-      return (uint8_t)(1u << 2);
-    case (uint16_t)MSL_ACT_THROW_LW:
-      return (uint8_t)(1u << 3);
-    default:
-      return 0u;
-  }
-}
-
-static inline uint8_t throw_release_publishes_mpcoll_floor(const MslCharParams* owner_ch,
-                                                           uint16_t action_id_u16) {
-  if (owner_ch == NULL) {
-    return 0u;
-  }
-  const uint8_t bit = throw_release_mpcoll_floor_publication_bit(action_id_u16);
-  return (bit != 0u && (owner_ch->throw_release_mpcoll_floor_publication_mask & bit) != 0u) ? 1u
-                                                                                            : 0u;
-}
 
 static inline uint8_t throw_flow_action_is_damage_family(uint16_t action_id_u16) {
   // Throw release enters the same common Damage* aftermath subset as regular ProcessHit:
@@ -65,6 +43,8 @@ static inline uint8_t throw_anim_finished(uint8_t char_id, uint16_t msid, float 
   return msl_anim_frame_sanitize_f32(anim_frame_f32) >= end;
 }
 
+static inline void throw_enter_fall_via_ftco_fall_enter(MslBatch* batch, size_t idx);
+
 static inline void enter_wait_or_fall_from_throw_end(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -75,11 +55,10 @@ static inline void enter_wait_or_fall_from_throw_end(MslBatch* batch, size_t idx
   if (batch->state.on_ground[idx] != 0) {
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
     batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   } else {
-    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-    batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+    throw_enter_fall_via_ftco_fall_enter(batch, idx);
   }
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
 static inline void enter_fall_release(MslBatch* batch, size_t idx) {
@@ -97,6 +76,61 @@ static inline void enter_fall_release(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
   msl_anim_timebase_restart(batch, idx, 0.0f, 1.0f);
+}
+
+static inline void throw_enter_fall_via_ftco_fall_enter(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t was_grounded = batch->state.on_ground[idx] ? 1u : 0u;
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+  msl_locomotion_enter_fall_via_ftco_fall_enter(batch, ch, idx);
+  if (was_grounded) {
+    combat_apply_ftCommon_8007D5D4_ground_to_air(batch, idx);
+  }
+  // fn_800DD684 calls the ordinary ftCo_Fall_Enter for each detached fighter. Motion entry and
+  // ClampAirDrift precede the grounded D5D4 transfer; this is not DDDE4's compatibility cleanup.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::fn_800DD684
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+}
+
+void throw_flow_ground_loss_release(MslBatch* batch, int bi, int owner_p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || owner_p < 0 ||
+      owner_p >= (int)batch->config.num_players) {
+    return;
+  }
+  const size_t oidx = msl_idx_player(bi, owner_p);
+  const uint8_t victim_p = batch->state.attached_victim_port[oidx];
+  if (victim_p != 0xFFu && victim_p < batch->config.num_players && victim_p != (uint8_t)owner_p) {
+    const size_t vidx = msl_idx_player(bi, (int)victim_p);
+    // fn_800DD684 first runs the complete DC920 release-placement owner, including constrained
+    // XRotN sampling, connected-floor tolerance, and fallback map collision.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::fn_800DD684
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c::ftCo_800DC920
+    grab_attachment_dc920_release_now(batch, bi, owner_p, (int)victim_p, 0u);
+    throw_enter_fall_via_ftco_fall_enter(batch, vidx);
+  }
+  batch->state.throw_coll_x4[oidx] = 0u;
+  batch->state.throw_coll_x8[oidx] = 0u;
+  throw_enter_fall_via_ftco_fall_enter(batch, oidx);
+}
+
+void throw_flow_resume_attached_victim_after_hold(MslBatch* batch, int bi, int owner_p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || owner_p < 0 ||
+      owner_p >= (int)batch->config.num_players) {
+    return;
+  }
+  const size_t oidx = msl_idx_player(bi, owner_p);
+  const uint8_t victim_p = batch->state.attached_victim_port[oidx];
+  if (victim_p == 0xFFu || victim_p >= batch->config.num_players || victim_p == (uint8_t)owner_p) {
+    return;
+  }
+  const size_t vidx = msl_idx_player(bi, (int)victim_p);
+  batch->state.thrown_pause_active[vidx] = 0u;
+  batch->state.thrown_pause_anim_timer[vidx] = 0.0f;
+  batch->state.frame_speed_mul_fp_q16_16[vidx] = (int32_t)MSL_Q16_16_ONE;
+  msl_anim_timebase_tick_once(batch, vidx);
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE974
 }
 
 static inline void throw_release_source_colldata_last_pos(float* out_x, float* out_y,
@@ -281,7 +315,20 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
   }
 
   const uint16_t owner_act = batch->state.action_id[oidx];
+  if (msl_action_is_thrown_victim(owner_act) && batch->state.thrown_pause_active[oidx] != 0u &&
+      batch->state.thrown_pause_anim_timer[oidx] != 0.0f &&
+      batch->state.thrown_pause_anim_timer[oidx] == batch->state.anim_frame_f32[oidx]) {
+    batch->state.frame_speed_mul_fp_q16_16[oidx] = 0;
+    batch->state.thrown_pause_anim_timer[oidx] = 0.0f;
+    // ftCommon_8007E3EC also filters the held fighter's internal part-4 JObj translation. The
+    // simulator's attachment owner publishes the represented fighter root directly; there is no
+    // independent part-4 mutable JObj lane to update here.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE5A4
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E3EC
+  }
   if (!msl_action_is_throw_owner(owner_act)) {
+    batch->state.throw_coll_x4[oidx] = 0u;
+    batch->state.throw_coll_x8[oidx] = 0u;
     return;
   }
 
@@ -412,8 +459,21 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
       float source_release_last_pos_y = release_sweep_root_y;
       throw_release_source_colldata_last_pos(&source_release_last_pos_x, &source_release_last_pos_y,
                                              batch, oidx);
+      // ftCo_800DDDE4 installs this sample-owner midpoint as the input endpoint for its immediate
+      // 471F8 call. It is not the endpoint of the later Damage map callback: the ft_081B wrapper
+      // starts that callback from the cur_pos published by this release-local collision pass.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+      // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043670,mpCollPrev,mpColl_800471F8}
+      batch->state.coll_last_pos_x[vidx] = source_release_last_pos_x;
+      batch->state.coll_last_pos_y[vidx] = source_release_last_pos_y;
       grab_attachment_apply_thrown_release_anchor_now(batch, bi, victim_p, owner_p, rel_anim_frame,
                                                       owner_pose_facing_before_throw_flags);
+      const uint8_t release_was_constrained = batch->state.grab_constraint_x2226_b2[vidx];
+      // DDDE4 unparents the victim and consumes x2226_b2 as part of the same release packet. The
+      // attachment helper samples the represented constrained world first; clearing afterward is
+      // the equivalent lifetime boundary in this non-JObj runtime.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+      batch->state.grab_constraint_x2226_b2[vidx] = 0u;
       if (isfinite(release_sweep_root_x) && isfinite(release_sweep_root_y)) {
         // Release floor-sweep root ownership:
         // - ftCo_800DD724 samples the attached victim root before detach/damage entry.
@@ -438,26 +498,17 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
       // - The same callback publication must happen in free-running rollout, not only as a
       //   next-frame seed endpoint, otherwise the release hit integrates from the raw below-floor
       //   x1A70 point and can falsely downbound on the following frame.
-      // Source/probe basis:
-      // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-      // - refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
-      // - Dolphin ftCo_800DDDE4 probe on Marth ThrowF/CaptureCut rows shows TransN2 remap, XRotN
-      //   part 2, x2226_b2 clear, and floor-level CollData.cur_pos/root before damage entry.
-      // - The character-data publication mask is intentionally explicit: Marth ThrowB shares the
-      //   anchor part but vanilla returns the raw target, and Fox/Falco controls do not publish.
-      const MslCharParams* release_owner_ch = msl_char_params_fast(owner_char);
-      MslMpcollFloorMaskResult release_floor = {0};
-      if (throw_release_publishes_mpcoll_floor(release_owner_ch, owner_act) &&
-          isfinite(source_release_last_pos_x) && isfinite(source_release_last_pos_y) &&
-          mpcoll_800471f8_throw_release_root_floor_probe(
-              batch, vidx, source_release_last_pos_x, source_release_last_pos_y, &release_floor)) {
-        batch->state.floor_sweep_prev_pos_x[vidx] = source_release_last_pos_x;
-        batch->state.floor_sweep_prev_pos_y[vidx] = source_release_last_pos_y;
-        batch->state.floor_sweep_prev_source_owned[vidx] = 1u;
-        batch->state.floor_sweep_prev_runtime_owned[vidx] = 1u;
-        batch->state.pos_x[vidx] = release_floor.corrected_pos_x;
-        batch->state.pos_y[vidx] = release_floor.corrected_pos_y;
-        batch->state.ground_id[vidx] = release_floor.ground_id;
+      uint8_t release_floor_published = 0u;
+      combat_apply_ftCommon_8007D5D4_ground_to_air(batch, vidx);
+      if (release_was_constrained) {
+        // Source has exactly one admission gate: live x2226_b2. Character/action identity does not
+        // decide which releases run collision. Clearing the constraint also unlocks the ECB before
+        // the complete 471F8 wall/ceiling/floor kernel runs.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
+        msl_ftcommon_unlock_ecb(batch, vidx);
+        release_floor_published = mpcoll_source_air_run_release_471f8(
+            batch, bi, victim_p, source_release_last_pos_x, source_release_last_pos_y);
       }
 
       // Detach immediately. If the throw hit is suppressed by hurt status, keep the victim in a
@@ -481,13 +532,40 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
             msl_anim_timebase_defer_tick_once(batch, vidx);
             throw_flow_apply_post_release_damage_callback_phase(batch, vidx);
           }
-          if (owner_act == (uint16_t)MSL_ACT_THROW_LW) {
-            knockdown_try_throw_release_damage_floor_contact(batch, (size_t)bi, vidx,
-                                                             (uint16_t)MSL_ACT_DAMAGE_FLY_TOP);
-          }
+          // The release-local 471F8 callback publishes CollData before the throw hit, but it does
+          // not run the newly entered DamageFly collision callback. The victim still receives its
+          // DamageFly Phys callback before Coll consumes this floor packet and enters DownBound.
+          // Let the normal source collision phase below own that transition; entering DownBound
+          // here makes Fighter_procUpdate decay the fresh throw KB as grounded.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Phys,ftCo_DamageFly_Coll}
+          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+          (void)release_floor_published;
         }
       }
       break;
+    }
+  }
+
+  if (batch->state.throw_coll_x4[oidx] == 0u &&
+      move_tables_special_cmd_var_value_at_frame(owner_char, batch->state.animation_index[oidx], 0u,
+                                                 owner_af) != 0u) {
+    // DD724 consumes throw flags first, then cmd_vars[0] into x4 and freezes AObj playback.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+    batch->state.throw_coll_x4[oidx] = 1u;
+    batch->state.special_cmd0[oidx] = 0u;
+    batch->state.frame_speed_mul_fp_q16_16[oidx] = 0;
+    const uint8_t victim_p = batch->state.attached_victim_port[oidx];
+    if (victim_p != 0xFFu && victim_p < batch->config.num_players && victim_p != (uint8_t)owner_p) {
+      const size_t vidx = msl_idx_player(bi, (int)victim_p);
+      batch->state.thrown_pause_active[vidx] = 1u;
+      if (batch->state.anim_frame_f32[vidx] == owner_af) {
+        batch->state.frame_speed_mul_fp_q16_16[vidx] = 0;
+        batch->state.thrown_pause_anim_timer[vidx] = 0.0f;
+      } else {
+        batch->state.thrown_pause_anim_timer[vidx] = owner_af;
+      }
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE920
     }
   }
 
@@ -603,7 +681,7 @@ void throw_flow_update_post_items(MslBatch* batch) {
         if (throw_action == (uint16_t)MSL_ACT_THROW_LW &&
             throw_flow_action_is_damage_family(batch->state.action_id[vidx])) {
           knockdown_try_throw_release_damage_floor_contact(batch, (size_t)bi, vidx,
-                                                           (uint16_t)MSL_ACT_DAMAGE_FLY_TOP);
+                                                           (uint16_t)MSL_ACT_DAMAGE_FLY_TOP, 0u);
         }
         if (throw_action == (uint16_t)MSL_ACT_THROW_F) {
           // ThrowF release-position ownership:

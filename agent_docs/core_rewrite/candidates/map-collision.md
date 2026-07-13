@@ -1,6 +1,11 @@
 # Candidate: Source-Shaped Map Collision
 
-Verdict: recommended first vertical rewrite.
+Verdict: completed as Phase 1 packets 1–5.
+
+Outcome: the predicted 12–18k runtime deletion landed at approximately 17,979 net `src/` lines.
+Aggregate one-step and rollout improve by 15.3% and 19.7%, and both performance gates pass. The
+design/inventory below is retained as the pre-implementation rationale; final coverage is in the
+packet docs and residual validation ledger.
 
 ## Boundary
 
@@ -53,7 +58,7 @@ Relevant source is about 9-10k LOC, including behavior outside the simulator's d
 A plausible final implementation is 8-12k LOC, implying 12-18k net deletion. This is an estimate,
 not a completion gate.
 
-## Evidence of split ownership
+## Pre-rewrite evidence of split ownership (historical)
 
 - Ground collision runs globally, followed by a separate wall/ceiling pass.
 - Ledge mask publication and CliffCatch consumption run later as separate global passes.
@@ -61,7 +66,8 @@ not a completion gate.
   post-collision modules.
 - Floor sweep roots, wall roots, stage roots, callback-result packets, desired ECB packets,
   publication modes, provenance flags, and restore packets model pieces of one source `CollData`.
-- `mpcoll_floor.h` defines 41 `MSL_MPCOLL_REJECT_*` bits and explicitly says they should disappear
+- Packet 5 deleted the former 41-name `MSL_MPCOLL_REJECT_*` diagnostic taxonomy; the remaining
+  admission predicates still need to become direct CollData consequences
   under a shared CollData phase model.
 - The collision surface contains more than 100 `suppress_*` predicates and hundreds of
   seed/reseed/history references.
@@ -154,14 +160,12 @@ flags from the source callback. They must not return a fact for a later global m
 
 ## Callback ledger and cutovers
 
-The live status is maintained in [../callback-ledger.md](../callback-ledger.md). Packet 1 is
-complete: 19 extracted callback identities covering 21 common action rows per character (126 rows
-total) now use the source-grounded path.
+The final status is maintained in [../callback-ledger.md](../callback-ledger.md). All five packets
+are complete.
 
-The six supported artifacts contain roughly 302 distinct non-null Coll callback identities. Phase 1
-must maintain an explicit ledger classifying every supported-domain identity as migrated,
-intentionally out of RL scope, or still legacy. Legacy dispatch may exist temporarily only for
-unmigrated identities; old and new behavior must never run for the same live callback.
+The six supported artifacts contain 302 distinct non-null Coll callback identities. Every identity
+is classified as migrated or intentionally outside the RL map-collision scope; no legacy dispatch
+remains.
 
 Reviewable packets should cut over exact shared callback families across all supported characters,
 each deleting its old path:

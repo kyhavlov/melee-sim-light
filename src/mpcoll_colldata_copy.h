@@ -69,6 +69,8 @@ static inline void msl_mpcoll_copy_colldata_lane(MslBatch* batch, size_t dst, si
       batch->state.coll_desired_ecb_bottom_locked_owner[src];
   batch->state.coll_common_fall_blended_ecb_seed_valid[dst] =
       batch->state.coll_common_fall_blended_ecb_seed_valid[src];
+  batch->state.coll_common_fall_blended_ecb_runtime_owned[dst] =
+      batch->state.coll_common_fall_blended_ecb_runtime_owned[src];
   batch->state.coll_squeeze_restore_ecb_valid[dst] =
       batch->state.coll_squeeze_restore_ecb_valid[src];
   batch->state.coll_damage_hitlag_ecb_valid[dst] = batch->state.coll_damage_hitlag_ecb_valid[src];

@@ -1295,21 +1295,12 @@ Characters (Fox/Falco/Falcon/Marth/Sheik/Zelda):
     Decomp: `ft_80081B38` calls `mpColl_SetECBSource_JObj(..., bones[temp_r29->unk*].joint, ...)`.
   - `firefox_bound_angle_degrees`: `ftFox_DatAttrs.x94_FOX_FIREFOX_BOUND_ANGLE`, consumed by
     `ftFx_SpecialAirHi_Coll` collision-facing / bound-angle checks.
-  - `throw_release_mpcoll_floor_publication_mask`: runtime-required character attr loaded by
-    `src/char_params.c` from `data/characters/<char>.json`.
-    - Bit order is common throw action order: bit 0 = ThrowF, bit 1 = ThrowB, bit 2 = ThrowHi,
-      bit 3 = ThrowLw.
-    - Current values: Fox/Falco/Zelda `0`; Falcon/Sheik `ThrowLw` (`0b1000` / `8`);
-      Marth `ThrowF | ThrowLw` (`0b1001` / `9`).
-    - This is a probe-backed overlay for `ftCo_800DDDE4 -> mpColl_800471F8` release-local floor
-      publication, not an inference from `grab_capture_anchor_part_id`. The anchor part can explain
-      which JObj is sampled, but it is not the gameplay owner for whether the release publishes the
-      floor-hit substep root.
-    - Sources/proof: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4`,
-      `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}`, and the pushed
-      `refs/Ishiiruka` `engine-dump-v12-probes` throw-release probe. Confirmed witness rows
-      include Marth `InternalPowerlessWallaby` / `ParallelFamiliarZebra`, Sheik
-      `RuralReasonableRat:3168`, and Falcon `Game_20260509T030948:{375,2508,3019}`.
+  - Throw release has no per-character collision-publication field. `ftCo_800DDDE4` uses the live
+    `x2226_b2` constraint as its only admission gate, clears the ECB packet, and runs the common
+    `mpColl_800471F8` wall/ceiling/floor callback. `grab_capture_anchor_part_id` selects attachment
+    placement only; it does not select collision behavior.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4` and
+    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043670,mpColl_800471F8}`.
   - `fallspecial_xc0_source_fx_kind_mask`: runtime-required character attr loaded by
     `src/char_params.c` from `data/characters/<char>.json`.
     - Bit domain is `MslMsFxSpecialKind`: set `1 << fx_kind` for source MotionState callsites that

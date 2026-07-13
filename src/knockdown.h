@@ -21,10 +21,15 @@ void knockdown_update_pre_physics(MslBatch* batch);
 // - grounded->air fallback for downed states (Down*_Coll paths)
 void knockdown_update_post_collision(MslBatch* batch);
 
+// Run the installed Damage/Down/Passive Coll callback continuation for one fighter immediately
+// after its source-shaped map callback publishes CollData.
+void knockdown_update_post_collision_one(MslBatch* batch, int bi, int p);
+
 // Narrow post-release callback used when a throw hit is deferred past the generic collision pass:
 // probe the release-frame floor contact and run the same DamageFly floor-contact ladder if present.
 void knockdown_try_throw_release_damage_floor_contact(MslBatch* batch, size_t bi, size_t idx,
-                                                      uint16_t prev_action_id);
+                                                      uint16_t prev_action_id,
+                                                      uint8_t release_floor_published);
 
 // Post-combat knockdown updates:
 // - finalize DamageAir anim-end exits after combat has had a chance to overwrite state via hits.

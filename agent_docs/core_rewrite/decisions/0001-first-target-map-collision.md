@@ -1,6 +1,6 @@
 # Decision 0001: First Target Is the Fighter Map-Collision Owner
 
-Status: accepted; Packet 1 complete
+Status: accepted; Phase 1 architectural cutover complete.
 
 Date: 2026-07-11
 
@@ -90,17 +90,23 @@ The first reviewable packet must include:
 It may be developed through smaller internal steps, but a bare data/map or CollData substrate is not
 a sufficient checkpoint.
 
-## Exit criteria
+## Original exit criteria and superseding policy
 
-Before expanding to fighter contact:
+The original plan used zero hard validation regression as a strict exit criterion. During the full
+cutover, that gate proved capable of preserving the very compensating machinery the rewrite was
+meant to delete. [Decision 0002](0002-source-completion-first.md) supersedes that validation policy.
 
-- no hard validation regression;
-- evidence for the hypothesis of material `on_ground`/`ground_id` and rollout improvement;
-- improvement in rollout first breaks attributable to migrated callbacks;
-- no new Fox/Falco control regressions;
+The retained exit criteria are:
+
+- the declared map-collision architecture has one source-shaped runtime;
+- all supported callback identities are migrated or explicitly outside the declared boundary;
+- displaced collision coordinators and gameplay bridges are deleted;
 - no runtime allocation or evaluator-state branch;
-- gains or at least no meaningful loss in both random and replay performance gates;
-- substantial net deletion and one gameplay path for migrated owners.
+- no meaningful loss in random and replay performance gates;
+- validation is regenerated and any result disproving the architectural claim is resolved.
+
+Packets 1–5 meet this architectural boundary. Semantic source completion continues as the branch
+ports the MotionState and contact owners that feed and consume collision state.
 
 ## Revisit conditions
 

@@ -1239,8 +1239,14 @@ PyObject* msl_derive_fod_platform_motion_with_ground_contact_py(PyObject* self, 
   PyObject* next_on_ground_obj = NULL;
   PyObject* next_ground_id_obj = NULL;
   PyObject* next_pos_y_obj = NULL;
+  PyObject* next_action_obj = NULL;
+  PyObject* next_hitlag_obj = NULL;
+  PyObject* next_pos_x_obj = NULL;
+  PyObject* damage_owner_lut_obj = NULL;
   PyObject* line_id_obj = NULL;
   PyObject* platform_id_obj = NULL;
+  PyObject* x0_obj = NULL;
+  PyObject* x1_obj = NULL;
   PyObject* height_coeff_obj = NULL;
   PyObject* local_y_obj = NULL;
   int use_motion_params = 0;
@@ -1249,11 +1255,13 @@ PyObject* msl_derive_fod_platform_motion_with_ground_contact_py(PyObject* self, 
   double min_visible_d = 0.0;
   double hidden_d = 0.0;
   int return_source = 0;
-  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOOiddddi", &heights_obj, &valid_obj, &event_fresh_obj,
-                        &on_ground_obj, &ground_id_obj, &pos_y_obj, &next_on_ground_obj,
-                        &next_ground_id_obj, &next_pos_y_obj, &line_id_obj, &platform_id_obj,
-                        &height_coeff_obj, &local_y_obj, &use_motion_params, &home_d, &max_h_d,
-                        &min_visible_d, &hidden_d, &return_source)) {
+  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOOOOOOOOiddddi", &heights_obj, &valid_obj,
+                        &event_fresh_obj, &on_ground_obj, &ground_id_obj, &pos_y_obj,
+                        &next_on_ground_obj, &next_ground_id_obj, &next_pos_y_obj, &next_action_obj,
+                        &next_hitlag_obj, &next_pos_x_obj, &damage_owner_lut_obj, &line_id_obj,
+                        &platform_id_obj, &x0_obj, &x1_obj, &height_coeff_obj, &local_y_obj,
+                        &use_motion_params, &home_d, &max_h_d, &min_visible_d, &hidden_d,
+                        &return_source)) {
     return NULL;
   }
 
@@ -1274,6 +1282,10 @@ PyObject* msl_derive_fod_platform_motion_with_ground_contact_py(PyObject* self, 
   PyArrayObject* next_on_ground = NULL;
   PyArrayObject* next_ground_id = NULL;
   PyArrayObject* next_pos_y = NULL;
+  PyArrayObject* next_action = NULL;
+  PyArrayObject* next_hitlag = NULL;
+  PyArrayObject* next_pos_x = NULL;
+  PyArrayObject* damage_owner_lut = NULL;
   const int has_next = next_on_ground_obj != Py_None;
   if ((next_on_ground_obj == Py_None) != (next_ground_id_obj == Py_None) ||
       (next_on_ground_obj == Py_None) != (next_pos_y_obj == Py_None)) {
@@ -1289,10 +1301,34 @@ PyObject* msl_derive_fod_platform_motion_with_ground_contact_py(PyObject* self, 
     next_pos_y =
         require_contiguous_array_readonly(next_pos_y_obj, NPY_FLOAT32, 2, "next_pos_y_f32");
   }
+  const int has_next_air = next_action_obj != Py_None;
+  if ((next_action_obj == Py_None) != (next_hitlag_obj == Py_None) ||
+      (next_action_obj == Py_None) != (next_pos_x_obj == Py_None)) {
+    PyErr_SetString(PyExc_ValueError,
+                    "FoD next-post airborne-contact arrays must be supplied together");
+    return NULL;
+  }
+  if (has_next_air) {
+    if (!has_next) {
+      PyErr_SetString(PyExc_ValueError,
+                      "FoD airborne-contact derivation requires next-post contact arrays");
+      return NULL;
+    }
+    next_action =
+        require_contiguous_array_readonly(next_action_obj, NPY_UINT16, 2, "next_action_u16");
+    next_hitlag =
+        require_contiguous_array_readonly(next_hitlag_obj, NPY_UINT16, 2, "next_hitlag_u16");
+    next_pos_x =
+        require_contiguous_array_readonly(next_pos_x_obj, NPY_FLOAT32, 2, "next_pos_x_f32");
+    damage_owner_lut = require_contiguous_array_readonly(damage_owner_lut_obj, NPY_UINT8, 1,
+                                                         "damage_owner_lut_u8");
+  }
   PyArrayObject* line_id =
       require_contiguous_array_readonly(line_id_obj, NPY_UINT16, 1, "fod_line_ids_u16");
   PyArrayObject* platform_id =
       require_contiguous_array_readonly(platform_id_obj, NPY_UINT8, 1, "fod_platform_ids_u8");
+  PyArrayObject* x0 = require_contiguous_array_readonly(x0_obj, NPY_FLOAT64, 1, "fod_x0_f64");
+  PyArrayObject* x1 = require_contiguous_array_readonly(x1_obj, NPY_FLOAT64, 1, "fod_x1_f64");
   PyArrayObject* height_coeff =
       require_contiguous_array_readonly(height_coeff_obj, NPY_FLOAT64, 1, "fod_height_coeff_f64");
   PyArrayObject* local_y =
@@ -1301,7 +1337,10 @@ PyObject* msl_derive_fod_platform_motion_with_ground_contact_py(PyObject* self, 
   if (heights == NULL || valid == NULL || (event_fresh_obj != Py_None && event_fresh == NULL) ||
       on_ground == NULL || ground_id == NULL || pos_y == NULL ||
       (has_next && (next_on_ground == NULL || next_ground_id == NULL || next_pos_y == NULL)) ||
-      line_id == NULL || platform_id == NULL || height_coeff == NULL || local_y == NULL) {
+      (has_next_air && (next_action == NULL || next_hitlag == NULL || next_pos_x == NULL ||
+                        damage_owner_lut == NULL)) ||
+      line_id == NULL || platform_id == NULL || x0 == NULL || x1 == NULL || height_coeff == NULL ||
+      local_y == NULL) {
     return NULL;
   }
 
@@ -1318,9 +1357,15 @@ PyObject* msl_derive_fod_platform_motion_with_ground_contact_py(PyObject* self, 
       (has_next && require_exact_2d_shape(next_on_ground, n, players, "next_on_ground_u8") < 0) ||
       (has_next && require_exact_2d_shape(next_ground_id, n, players, "next_ground_id_u16") < 0) ||
       (has_next && require_exact_2d_shape(next_pos_y, n, players, "next_pos_y_f32") < 0) ||
-      PyArray_NDIM(line_id) != 1 || PyArray_NDIM(platform_id) != 1 ||
-      PyArray_NDIM(height_coeff) != 1 || PyArray_NDIM(local_y) != 1 ||
-      PyArray_DIM(platform_id, 0) != n_transforms || PyArray_DIM(height_coeff, 0) != n_transforms ||
+      (has_next_air && require_exact_2d_shape(next_action, n, players, "next_action_u16") < 0) ||
+      (has_next_air && require_exact_2d_shape(next_hitlag, n, players, "next_hitlag_u16") < 0) ||
+      (has_next_air && require_exact_2d_shape(next_pos_x, n, players, "next_pos_x_f32") < 0) ||
+      (has_next_air &&
+       (PyArray_NDIM(damage_owner_lut) != 1 || PyArray_DIM(damage_owner_lut, 0) != 65536)) ||
+      PyArray_NDIM(line_id) != 1 || PyArray_NDIM(platform_id) != 1 || PyArray_NDIM(x0) != 1 ||
+      PyArray_NDIM(x1) != 1 || PyArray_NDIM(height_coeff) != 1 || PyArray_NDIM(local_y) != 1 ||
+      PyArray_DIM(platform_id, 0) != n_transforms || PyArray_DIM(x0, 0) != n_transforms ||
+      PyArray_DIM(x1, 0) != n_transforms || PyArray_DIM(height_coeff, 0) != n_transforms ||
       PyArray_DIM(local_y, 0) != n_transforms) {
     PyErr_SetString(PyExc_ValueError, "FoD platform-motion inputs have incompatible shapes");
     return NULL;
@@ -1356,6 +1401,8 @@ PyObject* msl_derive_fod_platform_motion_with_ground_contact_py(PyObject* self, 
   }
   const uint16_t* line_idp = (const uint16_t*)PyArray_DATA(line_id);
   const uint8_t* platform_idp = (const uint8_t*)PyArray_DATA(platform_id);
+  const double* x0p = (const double*)PyArray_DATA(x0);
+  const double* x1p = (const double*)PyArray_DATA(x1);
   const double* coeffp = (const double*)PyArray_DATA(height_coeff);
   const double* local_yp = (const double*)PyArray_DATA(local_y);
   for (npy_intp i = 0; i < n_transforms; i++) {
@@ -1372,8 +1419,8 @@ PyObject* msl_derive_fod_platform_motion_with_ground_contact_py(PyObject* self, 
     transforms[i].platform_id = platform_idp[i];
     transforms[i].height_coeff = coeffp[i];
     transforms[i].local_y = local_yp[i];
-    transforms[i].x0 = 0.0;
-    transforms[i].x1 = 0.0;
+    transforms[i].x0 = x0p[i];
+    transforms[i].x1 = x1p[i];
   }
 
   float* out_hp = (float*)PyArray_DATA(out_h);
@@ -1389,6 +1436,11 @@ PyObject* msl_derive_fod_platform_motion_with_ground_contact_py(PyObject* self, 
   const uint8_t* next_on_groundp = has_next ? (const uint8_t*)PyArray_DATA(next_on_ground) : NULL;
   const uint16_t* next_ground_idp = has_next ? (const uint16_t*)PyArray_DATA(next_ground_id) : NULL;
   const float* next_pos_yp = has_next ? (const float*)PyArray_DATA(next_pos_y) : NULL;
+  const uint16_t* next_actionp = has_next_air ? (const uint16_t*)PyArray_DATA(next_action) : NULL;
+  const uint16_t* next_hitlagp = has_next_air ? (const uint16_t*)PyArray_DATA(next_hitlag) : NULL;
+  const float* next_pos_xp = has_next_air ? (const float*)PyArray_DATA(next_pos_x) : NULL;
+  const uint8_t* damage_owner_lutp =
+      has_next_air ? (const uint8_t*)PyArray_DATA(damage_owner_lut) : NULL;
 
   float cur[2] = {n > 0 ? out_hp[0] : 0.0f, n > 0 ? out_hp[1] : 0.0f};
   uint8_t cur_valid[2] = {0u, 0u};
@@ -1550,6 +1602,47 @@ PyObject* msl_derive_fod_platform_motion_with_ground_contact_py(PyObject* self, 
         has_obs[platform] = 1u;
         contact_owned[platform] = 1u;
         source_this_frame[platform] |= SOURCE_NEXT_CONTACT;
+      }
+    }
+
+    if (has_next_air) {
+      for (npy_intp slot = 0; slot < players; slot++) {
+        const npy_intp idx = fi * players + slot;
+        if (next_on_groundp[idx] != 0u || next_hitlagp[idx] == 0u ||
+            damage_owner_lutp[next_actionp[idx]] == 0u || !isfinite(next_pos_xp[idx]) ||
+            !isfinite(next_pos_yp[idx])) {
+          continue;
+        }
+        for (npy_intp ti = 0; ti < n_transforms; ti++) {
+          const MslPyFodLineTransform* rec = &transforms[ti];
+          const int platform = (int)rec->platform_id;
+          if (rec->height_coeff == 0.0 || cur_valid[platform] == 0u) {
+            continue;
+          }
+          const double min_x = fmin(rec->x0, rec->x1) - 0.1;
+          const double max_x = fmax(rec->x0, rec->x1) + 0.1;
+          const double px = (double)next_pos_xp[idx];
+          if (px < min_x || px > max_x) {
+            continue;
+          }
+          const double line_y = rec->local_y + (double)cur[platform] * rec->height_coeff;
+          if (fabs((double)next_pos_yp[idx] - (line_y + (double)fod_floor_y_bias)) > 1.0e-3) {
+            continue;
+          }
+
+          // Active Damage hitlag can expose a same-step stay-airborne platform contact only in the
+          // next Slippi post-frame: ftCo_Damage_OnEveryHitlag moves the root, then ft_80081DD4 and
+          // mpColl_80044948_Floor project it to the already-updated grIzumi line. Promote exactly
+          // that line/height as the hidden current-stage owner; ordinary free-running stage state
+          // never enters this replay preprocessing path.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnEveryHitlag,
+          //   ftCo_Damage_Coll}
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+          // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044948_Floor
+          // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+          contact_owned[platform] = 1u;
+          source_this_frame[platform] |= SOURCE_NEXT_CONTACT;
+        }
       }
     }
 

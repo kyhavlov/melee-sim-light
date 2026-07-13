@@ -1,7 +1,8 @@
 # Candidate: Stateful Fighter Contact Engine
 
-Verdict: recommended second vertical rewrite; highest eventual combat payoff, but broader and more
-ordering-sensitive than map collision.
+Verdict: required next source-completion program, coupled to the causal MotionState execution
+kernel. It is broader and more ordering-sensitive than map collision and should be allowed to
+expand accordingly.
 
 ## Boundary
 
@@ -18,9 +19,10 @@ causal MSLFTSC1 execution
 ```
 
 Items, throws, and character-specific contacts must enter the same source pending-field/aftermath
-ordering where source does. A temporary adapter packet is acceptable during cutover, but a generic
-persistent packet queue is not the final source shape. DamageFlyRoll RNG policy remains a separable
-site and should not distort the deterministic contact architecture.
+ordering where source does. An adapter may exist only as internal construction scaffolding and must
+be gone at the coherent program review boundary; a generic persistent packet queue is not the final
+source shape. DamageFlyRoll RNG policy remains a separable site and should not distort the
+deterministic contact architecture.
 
 ## Current scale
 
@@ -111,8 +113,9 @@ not know that a replay seeded it.
 ## Target design
 
 1. Complete and audit the MSLFTSC1 payload contract, then execute every supported
-   contact-producing motion's script incrementally into live command and HitCapsule state. This
-   coverage is required even when that motion's Anim/IASA/Phys callbacks migrate later in Phase 3.
+   contact-producing motion's script incrementally into live command and HitCapsule state. Port the
+   MotionState entry and callbacks required to make that state causal in the same program rather
+   than deferring them behind a bridge.
 2. Refresh ordinary HitCapsule endpoints at the source-equivalent priority and model lazy
    hurt/shield/reflect geometry, or prove an eager cache equivalent.
 3. Port the bounded `lbColl` overlap and victim-list functions with source field order.
@@ -122,7 +125,8 @@ not know that a replay seeded it.
 6. Collapse selected results into persistent fighter pending fields, then run the priority-14
    ProcessHit precedence ladder.
 7. Convert item, ordinary throw, scripted throw, thrown-body, shield, reflector, and special
-   producers to that shared source ordering. Temporary adapters must disappear with each cutover.
+   producers to that shared source ordering. Internal adapters must disappear by the coherent
+   program cutover.
 8. Delete snapshot rebuilding, pairwise clank approximation, geometry bridges, and delayed special
    aftermath as their source owners land.
 
@@ -137,13 +141,20 @@ The live fighter capsule inventory must distinguish:
 
 Thrown-body versus thrown-body collision also has its own priority-13 slot (`ft_8007C4BC`).
 
-## First reviewable cutover
+## Internal cutover sequence
 
-Cover ordinary fighter BODY, shield, and clank contact through priority-13 pending-field selection
-and priority-14 ProcessHit. Cut over priority-12 catch separately while reusing the same live
-HitCapsule/geometry substrate. Route existing item and throw damage producers through temporary
-adapters into the correct pending-field order if their full source traversal lands in the following
-pending-field path. The migrated ordinary path must not fall back to old selection.
+Implement sequentially where useful, but review the chain at a boundary where the source owner is
+whole and displaced selection/aftermath code can be deleted:
+
+1. causal motion entry, scripts, and persistent HitCapsules;
+2. priority-9 primitive refresh and source `lbColl` geometry;
+3. priority-12 catch and priority-13 BODY/shield/clank traversal;
+4. persistent pending fields and priority-14 ProcessHit;
+5. item, throw, thrown-body, reflector, absorb, and special producers;
+6. deletion of snapshot rebuilding, distributed aftermath, queues, and compatibility ownership.
+
+Ordinary fighter contact is a useful first internal slice, not permission to return with only that
+slice or retain fallbacks for the rest of the supported source chain.
 
 Synthetic locks should cover:
 
@@ -162,11 +173,12 @@ Synthetic locks should cover:
   reflect/absorb, and detect callbacks;
 - ordinary, scripted-throw, and thrown-body capsule separation.
 
-## Expected validation leverage
+## Validation evidence
 
 Directly contact-shaped one-step fields contain more than 2,500 correlated mismatch observations,
-before counting Damage, Guard, Rebound, action, animation, and state-flag consequences. They are a
-strong leverage signal, not 2,500 distinct causal defects.
+before counting Damage, Guard, Rebound, action, animation, and state-flag consequences. This is
+evidence that the owner matters, not a list of defects or the reason to stop porting when those rows
+turn green.
 
 ## Why it follows map collision
 

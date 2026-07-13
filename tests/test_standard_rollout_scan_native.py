@@ -558,15 +558,6 @@ def _python_collect_rollout_float_offenders_oracle(
             {"scored": False, "ignored": False, "seeded": False},
         ),
         (
-            "rl1_ignored_lane",
-            "replays/suites/aggregate_recent.json",
-            "AttachedGoodNaturedGuanaco.slpz",
-            0,
-            "rl1_gameplay",
-            (0, 1),
-            {"scored": False, "ignored": True, "seeded": False},
-        ),
-        (
             "strict_scores_rl1_high_bit",
             "replays/suites/aggregate_recent.json",
             "AttachedGoodNaturedGuanaco.slpz",

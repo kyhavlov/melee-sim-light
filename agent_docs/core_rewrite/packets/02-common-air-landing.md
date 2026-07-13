@@ -1,50 +1,30 @@
 # Packet 2: Common Air and Landing
 
-Status: exact-owner cutover complete; direct geometry cutover remains open.
+Status: complete.
 
 Baseline: `452a143f` (`Rewrite common grounded map collision`).
 
 ## Delivered
 
-MSLMSO01 v25 installs stable live handler kinds for common air, FallSpecial, AttackAir, EscapeAir,
-Landing, and LandingAir. The two landing callback symbols remain distinct handlers even though
-`ftCo_LandingAir_Coll` delegates to `ftCo_Landing_Coll`; this preserves the exact extracted owner
-while the retained coordinator still has different historical behavior for the two rows.
+- Exact `MSLMSO01` callback recipes install common-air, FallSpecial, AttackAir, EscapeAir,
+  Landing, LandingAir, Pass, MissFoot, and CliffJump2 owners without rebuilding callback families
+  from action lists.
+- `mp_lib.c` owns directional floor/wall/ceiling sweeps, projection, graph links, endpoint
+  extension, remap, moving/transformed surfaces, and surface velocity from `MSLSTG01`.
+- `mp_coll.c` owns the source order for repeated wall passes, ceiling, floor admission,
+  stay-airborne projection, platform pass, squeeze/restore, and environment publication.
+- `mpcoll_source_air.c` owns persistent CollData current/previous/desired ECB, root endpoints,
+  six-unit subdivision, floor skip, and immediate landing/floor-loss transitions.
+- Final Destination, Battlefield, Fountain, frozen Stadium, Yoshi's, and Dream Land share the same
+  kernel; stage behavior is selected by extracted line metadata and live stage state.
 
-The collision coordinator now selects the callback's low-level phase directly from that handler.
-Locomotion landing, transformed-platform floor-skip lifetime, walljump eligibility, EscapeAir
-ownership, and Landing edge ownership consume the same handler instead of overlapping class words
-and local action-family predicates.
-
-The following generated compatibility categories and their parity tests were deleted for migrated
-callbacks:
-
-- common-air Coll and walljump classes;
-- Landing/LandingAir Coll classes;
-- common grounded `B108`/`B2DC`/`B4B0` class2 words left over from Packet 1;
-- AttackAir/EscapeAir membership in the broad `ft_80081D0C` and platform-pass classes.
-
-`CliffJump2`, `MissFoot`, and `Pass` retain a narrow compatibility class until Packet 4 because
-they do not yet have stable handler kinds.
-
-## Rejected direct cutovers
-
-Two source-shaped prototypes were tested and removed:
-
-1. A compact standalone airborne mpColl kernel passed 410 focused tests but raised aggregate
-   one-step mismatches from 9,918 to 29,797. It omitted important line-remap, persistent ECB, and
-   transformed-platform behavior already present in the coordinator.
-2. Routing Landing through Packet 1's `B4B0` kernel improved aggregate one-step by 26 rows and
-   seeded rollout breaks by two, but introduced discrete regressions in three replays and two new
-   `falcon_demo` rollout breaks. The totals were misleading; the cutover was removed.
-
-The conclusion is structural: Packet 2 geometry must be rewritten vertically inside the proven
-coordinator. Replacing it with a second compact sweep or reusing the grounded kernel wholesale is
-not validation-safe.
+The earlier compact prototype was discarded because it omitted persistent ECB/remap and moving
+surface ownership. The completed implementation is the full source-shaped replacement, not that
+prototype and not a wrapper around the old coordinator.
 
 ## Result
 
-All aggregate and per-replay validation metrics are identical to `452a143f`; the report diff has no
-hard, distribution-only, or unclassified reds. The packet therefore removes duplicated ownership
-without claiming a correctness gain from geometry that has not yet been safely replaced.
-
+The common-air identities no longer enter `mpcoll_floor.c`, `mpcoll_ground.c`, or
+`mpcoll_wall_ceil.c`; those files are deleted in Packet 5. Source-owner locks cover hard/soft
+landing, platform pass, floor skip, ledges, connected surfaces, squeeze, and wall/ceiling
+persistence. Final suite-level results are recorded in Packet 5 and the Phase-1 residual ledger.

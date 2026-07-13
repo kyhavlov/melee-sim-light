@@ -12,11 +12,11 @@
 
 enum {
   TABLE_MAGIC_LEN = 8,
-  TABLE_HDR_BYTES = 8 + 4 + 2 + 2 + 4 * 13,
+  TABLE_HDR_BYTES = 8 + 4 + 2 + 2 + 4 * 15,
 };
 
 static const uint8_t k_magic[TABLE_MAGIC_LEN] = {'M', 'S', 'L', 'M', 'S', 'O', '0', '1'};
-static const uint32_t k_format_version = 26;
+static const uint32_t k_format_version = 28;
 
 typedef struct {
   uint8_t* buf;
@@ -35,6 +35,8 @@ typedef struct {
   uint8_t* class3_bits_by_action;
   uint8_t* fx_special_kind_by_action;
   uint8_t* coll_handler_kind_by_action;
+  uint8_t* coll_wrapper_selector_kind_by_action;
+  uint8_t* coll_source_plan_by_action;
   // Reverse identity: per-char action id owning each fx_special_kind (1..MSL_FX_KIND_COUNT-1),
   // built at load from the 1:1 kind lane. 0xFFFF = this char owns no row for the kind.
   uint16_t action_by_fx_kind[MSL_FX_KIND_COUNT];
@@ -215,7 +217,9 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
   const uint32_t class3_bits_off = read_u32_le(buf + 56);
   const uint32_t fx_special_kind_off = read_u32_le(buf + 60);
   const uint32_t coll_handler_kind_off = read_u32_le(buf + 64);
-  const uint64_t file_bytes = (uint64_t)coll_handler_kind_off + (uint64_t)action_count;
+  const uint32_t coll_wrapper_selector_kind_off = read_u32_le(buf + 68);
+  const uint32_t coll_source_plan_off = read_u32_le(buf + 72);
+  const uint64_t file_bytes = (uint64_t)coll_source_plan_off + (uint64_t)action_count * 4u;
 
   if (file_bytes != (uint64_t)sz) {
     fprintf(stderr,
@@ -235,14 +239,18 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
       class_bits_off < (uint32_t)TABLE_HDR_BYTES || class2_bits_off < (uint32_t)TABLE_HDR_BYTES ||
       class3_bits_off < (uint32_t)TABLE_HDR_BYTES ||
       fx_special_kind_off < (uint32_t)TABLE_HDR_BYTES || !range_ok(submotion_off, u16_bytes, sz) ||
-      coll_handler_kind_off < (uint32_t)TABLE_HDR_BYTES || !range_ok(x4_flags_off, u32_bytes, sz) ||
+      coll_handler_kind_off < (uint32_t)TABLE_HDR_BYTES ||
+      coll_wrapper_selector_kind_off < (uint32_t)TABLE_HDR_BYTES ||
+      coll_source_plan_off < (uint32_t)TABLE_HDR_BYTES || !range_ok(x4_flags_off, u32_bytes, sz) ||
       !range_ok(motion_word_off, u32_bytes, sz) || !range_ok(anim_cb_off, u16_bytes, sz) ||
       !range_ok(iasa_cb_off, u16_bytes, sz) || !range_ok(phys_cb_off, u16_bytes, sz) ||
       !range_ok(coll_cb_off, u16_bytes, sz) || !range_ok(cam_cb_off, u16_bytes, sz) ||
       !range_ok(class_bits_off, u32_bytes, sz) || !range_ok(class2_bits_off, u32_bytes, sz) ||
       !range_ok(class3_bits_off, u32_bytes, sz) ||
       !range_ok(fx_special_kind_off, (uint32_t)action_count, sz) ||
-      !range_ok(coll_handler_kind_off, (uint32_t)action_count, sz)) {
+      !range_ok(coll_handler_kind_off, (uint32_t)action_count, sz) ||
+      !range_ok(coll_wrapper_selector_kind_off, (uint32_t)action_count, sz) ||
+      !range_ok(coll_source_plan_off, u32_bytes, sz)) {
     fprintf(stderr, "msl: motion-state owner table bad offsets for char_id=%u: %s\n",
             (unsigned)char_id, path);
     print_generate_hint(data_dir);
@@ -266,6 +274,8 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
   out->class3_bits_by_action = buf + class3_bits_off;
   out->fx_special_kind_by_action = buf + fx_special_kind_off;
   out->coll_handler_kind_by_action = buf + coll_handler_kind_off;
+  out->coll_wrapper_selector_kind_by_action = buf + coll_wrapper_selector_kind_off;
+  out->coll_source_plan_by_action = buf + coll_source_plan_off;
   for (size_t k = 0; k < (size_t)MSL_FX_KIND_COUNT; k++) {
     out->action_by_fx_kind[k] = 0xFFFFu;
   }
@@ -377,7 +387,20 @@ uint16_t msl_motion_state_coll_cb_id(uint8_t char_id, uint16_t action_id) {
 uint8_t msl_motion_state_coll_handler_kind(uint8_t char_id, uint16_t action_id) {
   const MslMotionStateOwnerTable* t = table_for_char(char_id);
   return in_range(t, action_id) ? t->coll_handler_kind_by_action[action_id]
-                                : (uint8_t)MSL_COLL_HANDLER_LEGACY;
+                                : (uint8_t)MSL_COLL_HANDLER_NONE;
+}
+
+uint8_t msl_motion_state_coll_wrapper_selector_kind(uint8_t char_id, uint16_t action_id) {
+  const MslMotionStateOwnerTable* t = table_for_char(char_id);
+  return in_range(t, action_id) ? t->coll_wrapper_selector_kind_by_action[action_id]
+                                : (uint8_t)MSL_COLL_SELECTOR_NONE;
+}
+
+uint32_t msl_motion_state_coll_source_plan(uint8_t char_id, uint16_t action_id) {
+  const MslMotionStateOwnerTable* t = table_for_char(char_id);
+  return in_range(t, action_id)
+             ? read_u32_le(t->coll_source_plan_by_action + (size_t)action_id * 4u)
+             : 0u;
 }
 
 uint16_t msl_motion_state_cam_cb_id(uint8_t char_id, uint16_t action_id) {

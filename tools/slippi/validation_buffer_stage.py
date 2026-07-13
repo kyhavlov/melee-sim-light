@@ -31,8 +31,8 @@ from tools.slippi.validation_buffer_common import (  # noqa: F401
     read_mslftsc1_v1,
     team_attack_on_from_start,
     MSL_MS_CLASS_ATTACK_AIR,
-    MSL_MS_CLASS3_JUMP_COLL,
-    MSL_MS_CLASS3_FALL_COLL,
+    MSL_MS_CLASS3_JUMP_FLOOR_SKIP,
+    MSL_MS_CLASS3_FALL_FLOOR_SKIP,
     MSL_COLL_HANDLER_AIR_ESCAPE,
     FOD_SKIP_ECB_VERTICAL_UNIT,
     FOD_TRANSFORMED_PLATFORM_SKIP_LOOKUP_SLOP,
@@ -89,7 +89,7 @@ def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dic
     return list(_load_stage_segments_for_seed_cached(int(stage_id), _path_cache_key(data_root)))
 
 @functools.cache
-def _motion_state_owner_actions_by_char(data_root_text: str, *, class_bit: int=0, class3_bit: int=0, coll_handler_kind: int=-1, submotion_move_names: tuple[str, ...]=()) -> dict[int, frozenset[int]]:
+def _motion_state_owner_actions_by_char(data_root_text: str, *, class_bit: int=0, class3_bit: int=0, coll_source_bit: int=0, coll_handler_kind: int=-1, submotion_move_names: tuple[str, ...]=()) -> dict[int, frozenset[int]]:
     """Return PER-CHAR action-id sets from the generated MSLMSO01 owner rows.
 
     Replaces the old fox/falco INTERSECTION helper: the intersection was consumed
@@ -108,6 +108,8 @@ def _motion_state_owner_actions_by_char(data_root_text: str, *, class_bit: int=0
             if class_bit and int(owners.class_bits[action_id]) & int(class_bit) == 0:
                 continue
             if class3_bit and int(owners.class3_bits[action_id]) & int(class3_bit) == 0:
+                continue
+            if coll_source_bit and int(owners.coll_source_plan[action_id]) & int(coll_source_bit) == 0:
                 continue
             if coll_handler_kind >= 0 and int(owners.coll_handler_kind[action_id]) != coll_handler_kind:
                 continue
@@ -221,8 +223,8 @@ def _fod_platform_heights_from_frames(frames, n_frames: int, *, default_heights:
         valid[fi, :] = cur_valid
     return (heights, valid, fresh)
 
-def _fod_platform_height_transform_records(data_root: Path | str=Path('data')) -> dict[int, tuple[int, float, float]]:
-    """Return FoD platform line -> (platform id, height coeff, local y) from MSLSTG01.
+def _fod_platform_height_transform_records(data_root: Path | str=Path('data')) -> dict[int, tuple[int, float, float, float, float]]:
+    """Return FoD platform line -> (platform id, height coeff, local y, x0, x1) from MSLSTG01.
 
     refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
     refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
@@ -239,7 +241,7 @@ def _fod_platform_height_transform_records(data_root: Path | str=Path('data')) -
             continue
         if 0 <= int(rec.platform_id) < 2 and float(rec.height_coeff) != 0.0:
             line_id = int(rec.line_id)
-            out[line_id] = (int(rec.platform_id), float(rec.height_coeff), float(segment_y_by_line.get(line_id, 0.0)))
+            out[line_id] = (int(rec.platform_id), float(rec.height_coeff), float(segment_y_by_line.get(line_id, 0.0)), float(rec.x0), float(rec.x1))
     return out
 
 def _derive_fod_floor_skip_segments(*, action_id_u16: np.ndarray, action_frame_u16: np.ndarray, char_id_u8: np.ndarray, on_ground_u8: np.ndarray, pos_x_f32: np.ndarray, pos_y_f32: np.ndarray, speed_y_self_f32: np.ndarray, speed_y_attack_f32: np.ndarray, prev_main_y_i8: np.ndarray, main_y_i8: np.ndarray, platform_height_f32: np.ndarray, platform_height_valid_u8: np.ndarray, platform_air_land_stick_y_threshold: float, floor_skip_frames: int, data_root: Path | str=Path('data')) -> np.ndarray:
@@ -271,15 +273,14 @@ def _derive_fod_floor_skip_segments(*, action_id_u16: np.ndarray, action_frame_u
     attackair_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, class_bit=MSL_MS_CLASS_ATTACK_AIR)
     shallow_attackair_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, class_bit=MSL_MS_CLASS_ATTACK_AIR, submotion_move_names=('ftCo_SM_AttackAirN', 'ftCo_SM_AttackAirHi', 'ftCo_SM_AttackAirLw'))
     attackair_first_phase_by_char_action = _attackair_first_hitbox_phase_by_char_action(data_root_text)
-    escapeair_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, coll_handler_kind=MSL_COLL_HANDLER_AIR_ESCAPE)
-    jump_skip_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, class3_bit=MSL_MS_CLASS3_JUMP_COLL)
-    fall_skip_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, class3_bit=MSL_MS_CLASS3_FALL_COLL)
+    jump_skip_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, class3_bit=MSL_MS_CLASS3_JUMP_FLOOR_SKIP)
+    fall_skip_actions_by_char = _motion_state_owner_actions_by_char(data_root_text, class3_bit=MSL_MS_CLASS3_FALL_FLOOR_SKIP)
     active_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 127.0))
     jump_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 80.0))
     segment_y_by_line = {int(seg.line_id): float(seg.y0) for seg in stage.segments}
     hard_floor_segments = [seg for seg in stage.segments if int(seg.kind_id) == 0 and bool(seg.fighter_solid) and (not bool(int(seg.flags) & 1))]
     max_action = int(np.max(action_id_u16, initial=0))
-    for by_char in (attackair_actions_by_char, shallow_attackair_actions_by_char, escapeair_actions_by_char, jump_skip_actions_by_char, fall_skip_actions_by_char, attackair_first_phase_by_char_action):
+    for by_char in (attackair_actions_by_char, shallow_attackair_actions_by_char, jump_skip_actions_by_char, fall_skip_actions_by_char, attackair_first_phase_by_char_action):
         for inner in by_char.values():
             if inner:
                 max_action = max(max_action, max((int(a) for a in inner)))
@@ -307,7 +308,16 @@ def _derive_fod_floor_skip_segments(*, action_id_u16: np.ndarray, action_frame_u
         import msl_binding
     except ImportError as exc:
         raise RuntimeError('native msl_binding.derive_fod_floor_skip_segments is required; run `make build`') from exc
-    return msl_binding.derive_fod_floor_skip_segments(_ascontiguousarray(action_id_u16, dtype=np.uint16), _ascontiguousarray(action_frame_u16, dtype=np.uint16), _ascontiguousarray(char_id_u8, dtype=np.uint8), _ascontiguousarray(on_ground_u8, dtype=np.uint8), _ascontiguousarray(pos_x_f32, dtype=np.float32), _ascontiguousarray(pos_y_f32, dtype=np.float32), _ascontiguousarray(speed_y_self_f32, dtype=np.float32), _ascontiguousarray(speed_y_attack_f32, dtype=np.float32), _ascontiguousarray(prev_main_y_i8, dtype=np.int8), _ascontiguousarray(main_y_i8, dtype=np.int8), _ascontiguousarray(platform_height_f32, dtype=np.float32), _ascontiguousarray(platform_height_valid_u8, dtype=np.uint8), np.array([int(rec.line_id) for rec in transforms], dtype=np.uint16), np.array([int(rec.platform_id) for rec in transforms], dtype=np.uint8), np.array([float(rec.x0) for rec in transforms], dtype=np.float64), np.array([float(rec.x1) for rec in transforms], dtype=np.float64), np.array([float(rec.height_coeff) for rec in transforms], dtype=np.float64), np.array([float(segment_y_by_line.get(int(rec.line_id), 0.0)) for rec in transforms], dtype=np.float64), np.array([float(seg.x0) for seg in hard_floor_segments], dtype=np.float64), np.array([float(seg.y0) for seg in hard_floor_segments], dtype=np.float64), np.array([float(seg.x1) for seg in hard_floor_segments], dtype=np.float64), np.array([float(seg.y1) for seg in hard_floor_segments], dtype=np.float64), _lut_from_actions(attackair_actions_by_char, escapeair_actions_by_char), _lut_from_actions(attackair_actions_by_char), _lut_from_actions(jump_skip_actions_by_char, fall_skip_actions_by_char), _lut_from_actions(shallow_attackair_actions_by_char), phase_start, phase_stop, active_down_threshold_i8, jump_down_threshold_i8, int(floor_skip_frames))
+    # EscapeAir uses ft_80082C74 -> ft_80081D0C -> mpColl_800471F8. Its motion entry clears
+    # CollData.floor_skip and that callback has no platform-pass predicate or mpUpdateFloorSkip
+    # call, so replay preprocessing must not synthesize a new skip from down input while the air
+    # dodge is active. The active LUT is restricted to source owners that can actually write the
+    # field; common jump/fall owners only carry an already-live skip for their bounded lifetime.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80081D0C,ft_80082C74}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpClearFloorSkip,mpUpdateFloorSkip}
+    return msl_binding.derive_fod_floor_skip_segments(_ascontiguousarray(action_id_u16, dtype=np.uint16), _ascontiguousarray(action_frame_u16, dtype=np.uint16), _ascontiguousarray(char_id_u8, dtype=np.uint8), _ascontiguousarray(on_ground_u8, dtype=np.uint8), _ascontiguousarray(pos_x_f32, dtype=np.float32), _ascontiguousarray(pos_y_f32, dtype=np.float32), _ascontiguousarray(speed_y_self_f32, dtype=np.float32), _ascontiguousarray(speed_y_attack_f32, dtype=np.float32), _ascontiguousarray(prev_main_y_i8, dtype=np.int8), _ascontiguousarray(main_y_i8, dtype=np.int8), _ascontiguousarray(platform_height_f32, dtype=np.float32), _ascontiguousarray(platform_height_valid_u8, dtype=np.uint8), np.array([int(rec.line_id) for rec in transforms], dtype=np.uint16), np.array([int(rec.platform_id) for rec in transforms], dtype=np.uint8), np.array([float(rec.x0) for rec in transforms], dtype=np.float64), np.array([float(rec.x1) for rec in transforms], dtype=np.float64), np.array([float(rec.height_coeff) for rec in transforms], dtype=np.float64), np.array([float(segment_y_by_line.get(int(rec.line_id), 0.0)) for rec in transforms], dtype=np.float64), np.array([float(seg.x0) for seg in hard_floor_segments], dtype=np.float64), np.array([float(seg.y0) for seg in hard_floor_segments], dtype=np.float64), np.array([float(seg.x1) for seg in hard_floor_segments], dtype=np.float64), np.array([float(seg.y1) for seg in hard_floor_segments], dtype=np.float64), _lut_from_actions(attackair_actions_by_char), _lut_from_actions(attackair_actions_by_char), _lut_from_actions(jump_skip_actions_by_char, fall_skip_actions_by_char), _lut_from_actions(shallow_attackair_actions_by_char), phase_start, phase_stop, active_down_threshold_i8, jump_down_threshold_i8, int(floor_skip_frames))
 
 def _derive_sheik_vanish_floor_skip_segments(*, stage_id: int, action_id_u16: np.ndarray, char_id_u8: np.ndarray, on_ground_u8: np.ndarray, ground_id_u16: np.ndarray, vanish_travel_timer_u8: np.ndarray, pos_x_f32: np.ndarray, pos_y_f32: np.ndarray, sheik_internal_id: int | None, travel_frames: int, ground_contact_min_frames: float, data_root: Path | str=Path('data')) -> np.ndarray:
     """Derive hidden CollData.floor_skip for Sheik Vanish Start1 platform pass-through.
@@ -342,7 +352,7 @@ def _fod_platform_heights_with_ground_contact(heights: np.ndarray, valid: np.nda
     out_h, out_v, _, _ = _fod_platform_motion_with_ground_contact(heights, valid, post_on_ground_u8=post_on_ground_u8, post_ground_id_u16=post_ground_id_u16, post_pos_y_f32=post_pos_y_f32, line_transforms=line_transforms)
     return (out_h, out_v)
 
-def _fod_platform_motion_with_ground_contact(heights: np.ndarray, valid: np.ndarray, *, event_fresh_u8: np.ndarray | None=None, post_on_ground_u8: np.ndarray, post_ground_id_u16: np.ndarray, post_pos_y_f32: np.ndarray, next_post_on_ground_u8: np.ndarray | None=None, next_post_ground_id_u16: np.ndarray | None=None, next_post_pos_y_f32: np.ndarray | None=None, line_transforms: dict[int, tuple[int, float, float]], motion_params: dict[str, float] | None=None, return_source: bool=False) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _fod_platform_motion_with_ground_contact(heights: np.ndarray, valid: np.ndarray, *, event_fresh_u8: np.ndarray | None=None, post_on_ground_u8: np.ndarray, post_ground_id_u16: np.ndarray, post_pos_y_f32: np.ndarray, next_post_on_ground_u8: np.ndarray | None=None, next_post_ground_id_u16: np.ndarray | None=None, next_post_pos_y_f32: np.ndarray | None=None, next_post_action_id_u16: np.ndarray | None=None, next_post_hitlag_u16: np.ndarray | None=None, next_post_pos_x_f32: np.ndarray | None=None, damage_collision_action_lut_u8: np.ndarray | None=None, line_transforms: dict[int, tuple[int, float, float] | tuple[int, float, float, float, float]], motion_params: dict[str, float] | None=None, return_source: bool=False) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Promote current FoD platform height from grounded replay-prefix contact.
 
     Some Slippi files lack the `fod_platform` event stream or have sparse current-height events.
@@ -385,6 +395,20 @@ def _fod_platform_motion_with_ground_contact(heights: np.ndarray, valid: np.ndar
             raise ValueError('FoD next-post grounded-contact arrays must have matching shapes')
         if next_on_ground.shape != on_ground.shape:
             raise ValueError('FoD next-post grounded-contact arrays must match seed frame shape')
+    next_action = None if next_post_action_id_u16 is None else _ascontiguousarray(next_post_action_id_u16, dtype=np.uint16)
+    next_hitlag = None if next_post_hitlag_u16 is None else _ascontiguousarray(next_post_hitlag_u16, dtype=np.uint16)
+    next_pos_x = None if next_post_pos_x_f32 is None else _ascontiguousarray(next_post_pos_x_f32, dtype=np.float32)
+    if (next_action is None) != (next_hitlag is None) or (next_action is None) != (next_pos_x is None):
+        raise ValueError('FoD next-post airborne-contact arrays must be supplied together')
+    if next_action is not None:
+        if next_on_ground is None:
+            raise ValueError('FoD airborne-contact derivation requires next-post contact arrays')
+        if next_action.shape != on_ground.shape or next_hitlag.shape != on_ground.shape or next_pos_x.shape != on_ground.shape:
+            raise ValueError('FoD next-post airborne-contact arrays must match seed frame shape')
+    damage_collision_lut = None if damage_collision_action_lut_u8 is None else _ascontiguousarray(damage_collision_action_lut_u8, dtype=np.uint8)
+    if next_action is not None:
+        if damage_collision_lut is None or damage_collision_lut.shape != (65536,):
+            raise ValueError('FoD airborne-contact derivation requires a uint8[65536] damage-owner LUT')
     try:
         import msl_binding
     except ImportError as exc:
@@ -395,17 +419,21 @@ def _fod_platform_motion_with_ground_contact(heights: np.ndarray, valid: np.ndar
         platform_ids = np.array([rec[0] for _, rec in items], dtype=np.uint8)
         height_coeff = np.array([rec[1] for _, rec in items], dtype=np.float64)
         local_y = np.array([rec[2] for _, rec in items], dtype=np.float64)
+        x0 = np.array([rec[3] if len(rec) >= 5 else 0.0 for _, rec in items], dtype=np.float64)
+        x1 = np.array([rec[4] if len(rec) >= 5 else 0.0 for _, rec in items], dtype=np.float64)
     else:
         line_ids = np.zeros(0, dtype=np.uint16)
         platform_ids = np.zeros(0, dtype=np.uint8)
         height_coeff = np.zeros(0, dtype=np.float64)
         local_y = np.zeros(0, dtype=np.float64)
+        x0 = np.zeros(0, dtype=np.float64)
+        x1 = np.zeros(0, dtype=np.float64)
     use_motion_params = motion_params is not None
     home = float(0.0 if motion_params is None else motion_params['home_height'])
     max_h = float(0.0 if motion_params is None else motion_params['max_height'])
     min_visible = float(0.0 if motion_params is None else motion_params['min_visible_height'])
     hidden = float(0.0 if motion_params is None else motion_params['hidden_target_height'])
-    return msl_binding.derive_fod_platform_motion_with_ground_contact(heights_arr, valid_arr, None if event_fresh is None else event_fresh, on_ground, ground_id, pos_y, None if next_on_ground is None else next_on_ground, None if next_ground_id is None else next_ground_id, None if next_pos_y is None else next_pos_y, line_ids, platform_ids, height_coeff, local_y, int(use_motion_params), home, max_h, min_visible, hidden, int(return_source))
+    return msl_binding.derive_fod_platform_motion_with_ground_contact(heights_arr, valid_arr, None if event_fresh is None else event_fresh, on_ground, ground_id, pos_y, None if next_on_ground is None else next_on_ground, None if next_ground_id is None else next_ground_id, None if next_pos_y is None else next_pos_y, None if next_action is None else next_action, None if next_hitlag is None else next_hitlag, None if next_pos_x is None else next_pos_x, None if damage_collision_lut is None else damage_collision_lut, line_ids, platform_ids, x0, x1, height_coeff, local_y, int(use_motion_params), home, max_h, min_visible, hidden, int(return_source))
 
 def _fod_hidden_return_timers(heights: np.ndarray, valid: np.ndarray, *, motion_params: dict[str, float] | None) -> tuple[np.ndarray, np.ndarray]:
     """Derive hidden grIzumi return countdowns for replay rollout seeds.

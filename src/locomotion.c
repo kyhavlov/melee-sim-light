@@ -35,7 +35,8 @@
 #include "mpcoll_ecb_pose.h"
 #include "mpcoll_floor_skip.h"
 #include "mpcoll_ecb_points.h"
-#include "mpcoll_wall_ceil.h"
+#include "mp_coll.h"
+#include "mp_lib.h"
 #include "msl_math.h"
 #include "physics.h"
 #include "shine.h"
@@ -460,18 +461,6 @@ uint8_t msl_locomotion_run_fall_iasa_non_special_tail(MslBatch* batch, const Msl
   return 0u;
 }
 
-static inline uint8_t action_uses_common_air_walljump_callback(uint16_t a) {
-  // These common air states route their Coll callbacks through ft_081B helpers that call
-  // ftWallJump_8008169C after the floor callback declines.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
-  // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
-  const uint8_t handler = msl_motion_state_coll_handler_kind((uint8_t)MSL_CHAR_ID_FOX, a);
-  return (uint8_t)(handler == (uint8_t)MSL_COLL_HANDLER_AIR_COMMON ||
-                   handler == (uint8_t)MSL_COLL_HANDLER_PASSIVE_WALL);
-}
-
 static inline float passivewalljump_entry_transn_z(const MslBatch* batch, size_t idx, uint8_t cid) {
   if (batch == NULL) {
     return 0.0f;
@@ -556,14 +545,18 @@ static inline void align_passivewalljump_entry_x(MslBatch* batch, size_t idx,
   batch->state.pos_x[idx] = outgoing_side_x + transn_z * facing_dir;
 }
 
-static inline uint8_t try_common_air_walljump_post_collision(MslBatch* batch,
-                                                             const MslCommonParams* c,
-                                                             const MslCharParams* ch, size_t idx,
-                                                             uint16_t a) {
+uint8_t locomotion_try_installed_walljump_post_collision(MslBatch* batch, size_t idx) {
+  const MslCommonParams* c = msl_common_params();
+  const MslCharParams* ch = batch != NULL ? msl_char_params_fast(batch->state.char_id[idx]) : NULL;
   if (batch == NULL || c == NULL || ch == NULL) {
     return 0u;
   }
-  if (!action_uses_common_air_walljump_callback(a)) {
+  // The exact installed Coll callback owns whether ftWallJump_8008169C runs after mpColl. Do not
+  // reconstruct that call graph from a common-action or handler subset.
+  // data/motion_state/owners/*.bin::MSLMSO01 coll_source_plan
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_80083464,ft_800835B0,ft_8008370C}
+  if (!msl_coll_source_plan_has(batch->state.live_coll_source_plan[idx],
+                                MSL_COLL_SOURCE_WALLJUMP)) {
     return 0u;
   }
   const uint32_t env = batch->state.coll_env_flags[idx];
@@ -2319,7 +2312,7 @@ static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
     // Exact ft_80084280/mpColl_8004B4B0 callback handlers cover Wait, Walk*, RunBrake, and the
     // Landing families without a local action-id scan.
     // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
-    // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class2_bits
+    // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 coll_source_plan
     return 1u;
   }
   return 0u;
@@ -2408,9 +2401,11 @@ static inline uint8_t action_is_air_locomotion(uint16_t a) {
   if (msl_coll_handler_is_common_air(handler) || handler == (uint8_t)MSL_COLL_HANDLER_DAMAGE_FALL) {
     return 1u;
   }
-  if (msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_COMMON_AIRBORNE_COLL)) {
-    // CliffJump2/Pass/MissFoot remain later-packet compatibility identities. Packet 2 common-air
-    // callbacks return through exact handlers above.
+  const uint8_t selector = msl_motion_state_coll_wrapper_selector_kind((uint8_t)MSL_CHAR_ID_FOX, a);
+  if (selector == (uint8_t)MSL_COLL_SELECTOR_AIR_CALLBACK_LEDGE ||
+      selector == (uint8_t)MSL_COLL_SELECTOR_AIR_LEDGE_FACING) {
+    // Distinct CliffJump2/Pass/MissFoot callback identities share the source airborne recipe
+    // without pretending they are the same transition callback.
     // refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}
     // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class2_bits
     return 1;
@@ -2419,7 +2414,8 @@ static inline uint8_t action_is_air_locomotion(uint16_t a) {
 }
 
 static inline uint8_t action_is_catch_start_floor_loss(uint16_t a) {
-  return msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_CATCH_START_FLOOR_LOSS);
+  return msl_coll_source_plan_has(msl_motion_state_coll_source_plan((uint8_t)MSL_CHAR_ID_FOX, a),
+                                  MSL_COLL_SOURCE_CATCH_START_FLOOR_LOSS);
 }
 
 static inline void enter_fall_from_grounded_floor_loss(MslBatch* batch, const MslCharParams* ch,
@@ -2494,8 +2490,8 @@ static inline uint8_t action_is_grounded_specialn_ft80083f88_floor_loss(uint8_t 
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
   // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class FT80083F88_GROUND_TO_AIR_COLL)
   // data/attack_id/move_id/{fox,falco}.bin (MotionState.move_id == FtMoveId_SpecialN)
-  return (uint8_t)(msl_motion_state_class_has(char_id, action_id,
-                                              MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL) &&
+  return (uint8_t)(msl_coll_source_plan_has(msl_motion_state_coll_source_plan(char_id, action_id),
+                                            MSL_COLL_SOURCE_GROUND_TO_AIR) &&
                    attack_id_move_id_from_action(char_id, action_id) ==
                        (uint16_t)MSL_FT_MOVE_ID_SPECIAL_N);
 }
@@ -5494,6 +5490,144 @@ void locomotion_update_pre(MslBatch* batch) {
   }
 }
 
+uint8_t locomotion_source_air_floor_contact(MslBatch* batch, int bi, size_t idx,
+                                            uint8_t coll_handler) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+  const MslCommonParams* c = msl_common_params();
+  if (ch == NULL || c == NULL) {
+    return 0u;
+  }
+
+  const uint16_t source_action = batch->state.action_id[idx];
+  const uint8_t fx_kind =
+      msl_motion_state_fx_special_kind(batch->state.char_id[idx], source_action);
+  if (fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_START &&
+      fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_LW_TURN) {
+    // Every aerial Reflector callback enters its paired grounded state immediately after 471F8
+    // reports a floor. Keep this continuation inside the installed Coll callback rather than the
+    // later global collision cleanup pass.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::*SpecialAirLw*_Coll
+    const MslCharParams* shine_ch = msl_char_params_fast(batch->state.char_id[idx]);
+    msl_ftcommon_8007d6a4(batch, shine_ch, idx);
+    return shine_air_to_ground_collision(batch, idx);
+  }
+  const MslSpecialMsids* ms = msl_special_msids(batch->state.char_id[idx]);
+  if (fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_START ||
+      fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S) {
+    return spacie_side_special_air_contact_to_ground(batch, ms, ch, idx, source_action);
+  }
+  if (fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI) {
+    spacie_enter_specialhi_bound_from_airhi_collision(batch, ch, idx);
+    return 1u;
+  }
+  if (fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_FALL) {
+    const float landing_self_vel_x = batch->state.speed_air_x_self[idx];
+    batch->state.action_id[idx] =
+        spacie_fx_kind_action(batch->state.char_id[idx], (uint8_t)MSL_FX_KIND_SPECIAL_HI_LANDING);
+    batch->state.animation_index[idx] =
+        msl_motion_state_submotion_id(batch->state.char_id[idx], batch->state.action_id[idx]);
+    batch->state.speed_ground_x_self[idx] = landing_self_vel_x;
+    batch->state.speed_air_x_self[idx] = landing_self_vel_x;
+    batch->state.jumps_left[idx] = ch->max_jumps;
+    batch->state.fall_fast[idx] = 0u;
+    batch->state.pos_y[idx] =
+        locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
+    msl_anim_timebase_enter_with_policy(batch, idx, 13.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+    return 1u;
+  }
+
+  if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+      (source_action == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
+       source_action == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI)) {
+    // Dolphin Slash's descending air callback owns LandingFallSpecial directly.
+    // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
+    locomotion_enter_landing_action_from_air(batch, ch, idx, (size_t)bi, source_action,
+                                             (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL);
+    return 1u;
+  }
+  if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+      marth_special_try_air_to_ground_swap(batch, idx)) {
+    // refs/melee/src/melee/ft/chara/ftMars/ftMs_Special{N,S,Lw}.c::*Air*_Coll
+    batch->state.jumps_left[idx] = ch->max_jumps;
+    batch->state.fall_fast[idx] = 0u;
+    batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+    msl_ftcommon_unlock_ecb(batch, idx);
+    batch->state.pos_y[idx] =
+        locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
+    return 1u;
+  }
+  if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+      falcon_special_try_air_to_ground_swap(batch, idx)) {
+    // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_Special{N,S,Lw}.c::*Air*_Coll
+    batch->state.jumps_left[idx] = ch->max_jumps;
+    batch->state.fall_fast[idx] = 0u;
+    batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+    msl_ftcommon_unlock_ecb(batch, idx);
+    batch->state.pos_y[idx] =
+        locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
+    return 1u;
+  }
+  if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+      source_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_S &&
+      sheik_special_try_air_to_ground_swap(batch, idx)) {
+    // Active Chain enters aerial retract on floor contact; the retract callback owns the later
+    // ground transfer. refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
+    // ftSk_SpecialAirS_Coll,ftSk_SpecialAirSEnd_Coll}
+    batch->state.on_ground[idx] = 0u;
+    batch->state.ground_id[idx] = 0xFFFFu;
+    batch->state.speed_ground_x_self[idx] = 0.0f;
+    batch->state.pos_y[idx] =
+        locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
+    return 1u;
+  }
+  if ((batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK ||
+       batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_ZELDA) &&
+      sheik_special_try_air_to_ground_swap(batch, idx)) {
+    // refs/melee/src/melee/ft/chara/ftSeak/ftSk_Special{N,S,Hi,Lw}.c::*Air*_Coll
+    // refs/melee/src/melee/ft/chara/ftZelda/ftZd_Special{N,S,Hi,Lw}.c::*Air*_Coll
+    batch->state.jumps_left[idx] = ch->max_jumps;
+    batch->state.fall_fast[idx] = 0u;
+    batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+    msl_ftcommon_unlock_ecb(batch, idx);
+    batch->state.pos_y[idx] =
+        locomotion_landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi, 0u);
+    return 1u;
+  }
+  uint16_t landing_action = 0u;
+  if (fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_START &&
+      fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_END) {
+    landing_action = locomotion_ft80082b1c_basic_landing_action(batch, c, idx, source_action);
+  } else if (fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END) {
+    landing_action = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
+  } else if (coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_ATTACK) {
+    landing_action = locomotion_attackair_landing_action_for_contact(batch, idx, source_action);
+  } else if (coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_ESCAPE ||
+             coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_FALL_SPECIAL) {
+    landing_action = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
+  } else if (coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_COMMON ||
+             msl_coll_source_plan_has(batch->state.live_coll_source_plan[idx],
+                                      MSL_COLL_SOURCE_BASIC_LANDING)) {
+    landing_action = locomotion_ft80082b1c_basic_landing_action(batch, c, idx, source_action);
+  } else {
+    return 0u;
+  }
+
+  if (landing_action == 0u) {
+    return 0u;
+  }
+  // Source Coll callbacks invoke their landing continuation inside Fighter_procMap, immediately
+  // after mpColl publishes the floor result. Do not defer this to a frame-history comparison: a
+  // same-proc Ground->Air motion entry already changed fp->ground_or_air before the callback ran.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ft_80082C74}
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackAir.c,ftCo_EscapeAir.c,ftCo_Fall.c}
+  locomotion_enter_landing_action_from_air(batch, ch, idx, (size_t)bi, source_action,
+                                           landing_action);
+  return 1u;
+}
+
 void locomotion_update_post_collision(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -5538,8 +5672,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
             coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_BOUND ||
             coll_handler == (uint8_t)MSL_COLL_HANDLER_DOWN_B108 ||
             coll_handler == (uint8_t)MSL_COLL_HANDLER_PASSIVE_B108 ||
-            msl_motion_state_class_has(batch->state.char_id[idx], a,
-                                       MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL)))
+            msl_coll_source_plan_has(batch->state.live_coll_source_plan[idx],
+                                     MSL_COLL_SOURCE_GROUND_TO_AIR)))
               ? 1u
               : 0u;
       if (batch->state.hitlag_started_frame[idx] != 0) {
@@ -5700,21 +5834,16 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialLw_Coll
         continue;
       }
-      if (!now_ground &&
-          (batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_FLOOR_MASK) != 0u) {
-        if (spacie_side_special_air_contact_to_ground(batch, ms, ch, idx, a)) {
-          continue;
-        }
-      }
-      if (!now_ground && try_common_air_walljump_post_collision(batch, c, ch, idx, a)) {
+      if (batch->state.live_coll_callback_ran[idx] == 0u && !now_ground &&
+          (batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_FLOOR_MASK) != 0u &&
+          spacie_side_special_air_contact_to_ground(batch, ms, ch, idx, a)) {
         continue;
       }
-
       // Fighter_procMap already ran this live callback and applied any transition immediately.
       // A destination installed by that callback belongs to later phases; the old global
       // post-collision resolver must not reinterpret the same CollData result.
       // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
-      if (batch->state.live_coll_migrated_ran[idx] != 0u) {
+      if (batch->state.live_coll_callback_ran[idx] != 0u) {
         continue;
       }
 
@@ -6090,10 +6219,12 @@ void locomotion_update_post_collision(MslBatch* batch) {
           land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
         } else if (land == 0 && coll_handler == (uint8_t)MSL_COLL_HANDLER_AIR_COMMON) {
           land = locomotion_ft80082b1c_basic_landing_action(batch, c, idx, a);
-        } else if (land == 0 && coll_handler == (uint8_t)MSL_COLL_HANDLER_LEGACY &&
+        } else if (land == 0 &&
+                   msl_coll_source_plan_has(batch->state.live_coll_source_plan[idx],
+                                            MSL_COLL_SOURCE_BASIC_LANDING) &&
                    action_is_air_locomotion(a)) {
-          // CliffJump2/MissFoot/Pass remain later-packet callback identities, but their retained
-          // ft_80082B1C landing result still shares the common-air destination selector.
+          // Distinct callbacks that call ft_80082B1C share its data-backed landing effect while
+          // retaining their exact live callback identity.
           land = locomotion_ft80082b1c_basic_landing_action(batch, c, idx, a);
         }
 
@@ -6131,11 +6262,13 @@ void locomotion_update_post_collision(MslBatch* batch) {
           continue;
         }
 
-        if (msl_motion_state_common_class2_has_fast(a, MSL_MS_CLASS2_GROUND_FLOOR_LOSS_TO_FALL)) {
-          // Packet 1 live grounded callbacks have already returned above. Retain the generated
-          // source outcome for later callback families until their packets replace this legacy
-          // post-collision handoff.
-          // data/motion_state/owners/*.bin::MSLMSO01 class2_bits
+        if (msl_coll_source_plan_has(
+                msl_motion_state_coll_source_plan(batch->state.char_id[idx], a),
+                MSL_COLL_SOURCE_FLOOR_LOSS_TO_FALL)) {
+          // The current destination's exact Coll pointer selects this shared source effect. This
+          // resolver runs after earlier collision callbacks may have entered a destination, so it
+          // must not consume the source state's now-displaced live callback.
+          // data/motion_state/owners/*.bin::MSLMSO01 coll_source_plan
           // refs/melee/src/melee/ft/ft_081B.c common grounded wrappers
           enter_fall_from_grounded_floor_loss(batch, ch, idx);
           continue;

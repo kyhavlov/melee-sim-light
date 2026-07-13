@@ -1082,9 +1082,12 @@ static inline uint8_t physics_floor_line_contains_or_connects_to_nudged_x(
 
 static inline uint8_t physics_action_uses_generated_b2dc_edge_snap_callback(uint16_t action_id) {
   const uint8_t handler = msl_motion_state_coll_handler_kind((uint8_t)MSL_CHAR_ID_FOX, action_id);
+  const uint8_t selector =
+      msl_motion_state_coll_wrapper_selector_kind((uint8_t)MSL_CHAR_ID_FOX, action_id);
   if (handler == (uint8_t)MSL_COLL_HANDLER_DOWN_B2DC ||
       handler == (uint8_t)MSL_COLL_HANDLER_PASSIVE_B2DC ||
-      msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_FT800827A0_EDGE_SNAP_COLL)) {
+      selector == (uint8_t)MSL_COLL_SELECTOR_GROUND_B2DC ||
+      selector == (uint8_t)MSL_COLL_SELECTOR_GA_CLIFF_ACTION) {
     // Generated MSLMSO01 owner for grounded callbacks that route to `ft_800827A0`, directly or
     // through wrappers such as `ft_80084104` / `ft_800841B8`. Common player nudge runs before
     // Fighter_procUpdate and the Coll callback, so these actions may consume an outward x450 nudge
@@ -1172,11 +1175,13 @@ static inline uint8_t physics_action_uses_player_nudge_ft80083f88_ground_to_air_
                 action_id == (uint16_t)MSL_ACT_DOWN_STAND_U ||
                 action_id == (uint16_t)MSL_ACT_DOWN_STAND_D);
   const uint8_t handler = msl_motion_state_coll_handler_kind((uint8_t)MSL_CHAR_ID_FOX, action_id);
-  return (uint8_t)(audited_action && (handler == (uint8_t)MSL_COLL_HANDLER_GROUND_B108_FALL ||
-                                      handler == (uint8_t)MSL_COLL_HANDLER_DOWN_B108 ||
-                                      handler == (uint8_t)MSL_COLL_HANDLER_PASSIVE_B108 ||
-                                      msl_motion_state_common_class_has_fast(
-                                          action_id, MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL)));
+  return (uint8_t)(audited_action &&
+                   (handler == (uint8_t)MSL_COLL_HANDLER_GROUND_B108_FALL ||
+                    handler == (uint8_t)MSL_COLL_HANDLER_DOWN_B108 ||
+                    handler == (uint8_t)MSL_COLL_HANDLER_PASSIVE_B108 ||
+                    msl_coll_source_plan_has(
+                        msl_motion_state_coll_source_plan((uint8_t)MSL_CHAR_ID_FOX, action_id),
+                        MSL_COLL_SOURCE_GROUND_TO_AIR)));
 }
 
 static inline uint8_t physics_action_uses_common_damage_floor_loss_nudge(uint16_t action_id) {
@@ -1751,7 +1756,8 @@ void physics_apply_attackdash_downbound_overlap_nudge_post_collision(MslBatch* b
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       if (batch->state.stocks[idx] == 0u || batch->state.on_ground[idx] == 0u ||
-          batch->state.hitlag_started_frame[idx] != 0u) {
+          batch->state.hitlag_started_frame[idx] != 0u ||
+          batch->state.hitlag_pre_timer[idx] != 0u) {
         continue;
       }
 
@@ -1774,7 +1780,8 @@ void physics_apply_attackdash_downbound_overlap_nudge_post_collision(MslBatch* b
 
         const size_t oidx = msl_idx_player(bi, q);
         if (batch->state.stocks[oidx] == 0u || batch->state.on_ground[oidx] == 0u ||
-            batch->state.hitlag_started_frame[oidx] != 0u) {
+            batch->state.hitlag_started_frame[oidx] != 0u ||
+            batch->state.hitlag_pre_timer[oidx] != 0u) {
           continue;
         }
         if (!physics_action_is_attackdash_knockdown_overlap_owner(batch->state.action_id[idx],

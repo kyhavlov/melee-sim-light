@@ -20,7 +20,7 @@
 #include "locomotion.h"
 #include "motion_state_owners.h"
 #include "mpcoll_floor_skip.h"
-#include "mpcoll_wall_ceil.h"
+#include "mp_coll.h"
 #include "msl_math.h"
 #include "move_tables.h"
 #include "stage_collision.h"
@@ -1130,34 +1130,6 @@ uint8_t sheik_special_vanish_air_start1_platform_pass_active(const MslBatch* bat
 static void sk_update_speciallw(MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch,
                                 size_t idx, uint16_t a) {
   switch (a) {
-    case MSL_ACT_SK_SPECIAL_LW:
-    case MSL_ACT_SK_SPECIAL_AIR_LW:
-      if (sk_anim_finished(batch, idx, a)) {
-        const MslCharParams* zd = msl_char_params_fast((uint8_t)MSL_CHAR_ID_ZELDA);
-        if (zd == NULL) {
-          return;
-        }
-        // Source Sheik transform installs `fn_8011412C`, which calls ftCommon_8007EFC8 into
-        // Zelda's twin entity and then `ftZd_SpecialLw_8013B4D8` enters Zelda's finish action. The
-        // lite runtime has one entity per player, so the source-owned visible handoff is modeled by
-        // swapping the live `char_id` and preserving all state lanes on the same player.
-        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::{ftSk_SpecialLw_Anim,fn_8011412C}
-        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B4D8
-        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
-        batch->state.char_id[idx] = (uint8_t)MSL_CHAR_ID_ZELDA;
-        sk_enter(batch, idx,
-                 batch->state.on_ground[idx] ? (uint16_t)MSL_ACT_ZD_SPECIAL_LW_2
-                                             : (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_LW_2,
-                 zd->zelda_transform_finish_start_frame, 1.0f);
-        // Source transform activates Zelda's hidden twin through ftCommon_8007EFC8, then enters
-        // AS_ZeldaFinishTransformation on that twin. Restore the cached raw fp+0x2218 byte instead
-        // of synthesizing an interrupt bit from the outgoing visible Sheik.
-        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::{ftSk_SpecialLw_Anim,fn_8011412C}
-        // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B4D8
-        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007EFC8
-        sk_transform_set_live_2218(batch, idx, batch->state.zelda_twin_state_flags_2218[idx]);
-      }
-      break;
     case MSL_ACT_SK_SPECIAL_LW_2:
       if (sk_anim_finished(batch, idx, a)) {
         sk_enter_wait(batch, idx);
@@ -1254,6 +1226,32 @@ void sheik_specials_update_accessory4_phase(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      zelda_specials_update_transform_accessory4_for_fighter(batch, idx);
+
+      if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK) {
+        const uint16_t a = batch->state.action_id[idx];
+        if ((a == (uint16_t)MSL_ACT_SK_SPECIAL_LW || a == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_LW) &&
+            sk_anim_finished(batch, idx, a) && batch->state.frame_start_action_id[idx] == a) {
+          // Like Zelda's inverse path, the Anim callback schedules fn_8011412C and the actual
+          // ftCommon_8007EFC8 twin activation runs from accessory4 after collision. Ground/air
+          // collision swaps overwrite accessory4, represented by the frame-start action guard.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate,
+          //   Fighter_procMap,Fighter_8006C80C}
+          // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c::{ftSk_SpecialLw_Anim,
+          //   ftSk_SpecialAirLw_Anim,fn_8011412C,ftSk_SpecialLw_8011444C,
+          //   ftSk_SpecialLw_801144B8}
+          const MslCharParams* zd = msl_char_params_fast((uint8_t)MSL_CHAR_ID_ZELDA);
+          if (zd != NULL) {
+            batch->state.char_id[idx] = (uint8_t)MSL_CHAR_ID_ZELDA;
+            sk_enter(batch, idx,
+                     batch->state.on_ground[idx] ? (uint16_t)MSL_ACT_ZD_SPECIAL_LW_2
+                                                 : (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_LW_2,
+                     zd->zelda_transform_finish_start_frame, 1.0f);
+            sk_transform_set_live_2218(batch, idx, batch->state.zelda_twin_state_flags_2218[idx]);
+          }
+        }
+      }
+
       if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_SHEIK ||
           batch->state.sheik_vanish_smoke_accessory_pending[idx] == 0u) {
         continue;

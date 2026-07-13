@@ -8,8 +8,8 @@ import numpy as np
 
 
 MAGIC = b"MSLMSO01"
-VERSION = 26
-HEADER_BYTES = 8 + 4 + 2 + 2 + 4 * 13
+VERSION = 28
+HEADER_BYTES = 8 + 4 + 2 + 2 + 4 * 15
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,8 @@ class MotionStateOwners:
     class3_bits: np.ndarray
     fx_special_kind: np.ndarray
     coll_handler_kind: np.ndarray
+    coll_wrapper_selector_kind: np.ndarray
+    coll_source_plan: np.ndarray
 
 
 def read_mslmso01_v1(path: Path) -> MotionStateOwners:
@@ -52,8 +54,10 @@ def read_mslmso01_v1(path: Path) -> MotionStateOwners:
         class3_bits_off,
         fx_special_kind_off,
         coll_handler_kind_off,
-    ) = struct.unpack_from("<IIIIIIIIIIIII", b, 16)
-    file_bytes = coll_handler_kind_off + action_count
+        coll_wrapper_selector_kind_off,
+        coll_source_plan_off,
+    ) = struct.unpack_from("<IIIIIIIIIIIIIII", b, 16)
+    file_bytes = coll_source_plan_off + action_count * 4
     if file_bytes != len(b):
         raise ValueError(f"MSLMSO01 size mismatch in {path}: header-derived {file_bytes} != {len(b)}")
 
@@ -77,4 +81,6 @@ def read_mslmso01_v1(path: Path) -> MotionStateOwners:
         class3_bits=arr(class3_bits_off, "<u4", 4),
         fx_special_kind=arr(fx_special_kind_off, "u1", 1),
         coll_handler_kind=arr(coll_handler_kind_off, "u1", 1),
+        coll_wrapper_selector_kind=arr(coll_wrapper_selector_kind_off, "u1", 1),
+        coll_source_plan=arr(coll_source_plan_off, "<u4", 4),
     )

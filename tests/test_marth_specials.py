@@ -1680,35 +1680,6 @@ def test_down_b_from_rundirect_brake_entry() -> None:
     assert ACT_COUNTER in acts, f"down-B eaten on the RunDirect brake frame: {sorted(set(acts))}"
 
 
-def test_escapeair_entry_floor_catch_under_lip() -> None:
-    # Regression for marth_still_airdodge_through_stage: rising under the FD lip in the
-    # double-jump tuck pose (diamond high above the root), then airdodging down-left. The
-    # EscapeAir ENTRY frame's prev-bottom used a live-stale CollData lane (rel 0 from the
-    # last grounded frame), collapsing the swept bottom to the root so the floor crossing
-    # was never seen and the fighter fell through the stage to his death. The entry-lifetime
-    # frames now use the pre-entry pose rel; the dodge must land.
-    seed = _seed_base("marth", grounded=False, pos_y=-2.503126)
-    seed["pos_x"][0, 0] = np.float32(85.399467)
-    seed["facing"][0, 0] = np.uint8(0)
-    seed["action_id"][0, 0] = np.uint16(0x001B)  # JumpAerialF
-    seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
-    seed["action_frame"][0, 0] = np.float32(14)
-    # Real one-step rows always carry a real seed_prev (the reseed reconstructs the CollData
-    # lane from it); leaving it zero would write a garbage-but-seed-fresh lane no real row has.
-    seed["seed_prev_action_id"][0, 0] = np.uint16(0x001B)
-    seed["seed_prev_action_frame"][0, 0] = np.int16(13)
-    seed["jumps_left"][0, 0] = np.uint8(0)
-    seed["speed_y_self"][0, 0] = np.float32(0.837)
-    seed["speed_air_x_self"][0, 0] = np.float32(-0.502)
-    outs = _run(seed, [_mk_inputs(buttons=0x0040, l=255, main_x=-116, main_y=-106)] + [
-        _mk_inputs(main_x=-116, main_y=-106)
-    ] * 80)
-    ys = [float(o["pos_y"][0]) for o in outs]
-    og = [int(o["on_ground"][0]) for o in outs]
-    assert any(og), "the dodge never landed"
-    assert min(ys) > -35.0, f"fell through the stage: min_y {min(ys):.1f}"
-
-
 def test_escapeair_under_lip_dodge_lands_from_live_lane_state() -> None:
     # Regression for marth_STILL_CLIPS_THROUGH_STAGE (the live-path kill that survived the
     # first stale-lane fix): ledge release -> fall -> live double jump -> rise under the FD

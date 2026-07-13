@@ -13,10 +13,14 @@ ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
 ACT_CLIFF_CATCH = 0x00FC
 ACT_CLIFF_WAIT = 0x00FD
+ACT_FX_SPECIAL_HI_FALL = 0x0166
+ACT_PASS = 0x00F4
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
 SM_FALL = 20
+SM_FX_SPECIAL_HI_FALL = 311
+SM_PASS = 209
 
 STAGE_FD = 32
 CHAR_FOX = 1
@@ -152,6 +156,48 @@ def test_ledge_catch_requires_facing_and_outside() -> None:
     out = _step_once(seed)
     assert int(out["action_id"][0]) != ACT_CLIFF_CATCH
 
+
+def test_specialhi_fall_cliffcatch_both_can_grab_facing_away() -> None:
+    # Fox/Falco SpecialHiFall passes CLIFFCATCH_BOTH to ft_CheckGroundAndLedge, so the same source
+    # ledge box that rejects ordinary Fall while facing away admits this callback owner.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+    (lx, ly), _ = _fd_ledge_points()
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_HI_FALL)
+    seed["action_frame"][0, 0] = np.int16(10)
+    seed["anim_frame_f32"][0, 0] = np.float32(10.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FX_SPECIAL_HI_FALL)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["facing"][0, 0] = np.uint8(0)
+    seed["pos_x"][0, 0] = np.float32(lx - 1.0)
+    seed["pos_y"][0, 0] = np.float32(ly - 10.0)
+    seed["speed_y_self"][0, 0] = np.float32(-1.0)
+
+    out = _step_once(seed)
+    assert int(out["action_id"][0]) == ACT_CLIFF_CATCH
+
+
+def test_pass_cliffcatch_respects_down_release_gate() -> None:
+    # Pass_Coll runs ft_80082F28's common cliff-catch owner before Pass animates into Fall.
+    # Releasing down admits the ledge; continuing to hold down is rejected by ftCliffCommon.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_Pass_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082F28
+    (lx, ly), _ = _fd_ledge_points()
+    _, snap_y, _ = _fox_ledge_params()
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_PASS)
+    seed["animation_index"][0, 0] = np.uint32(SM_PASS)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(lx - 1.0)
+    seed["pos_y"][0, 0] = np.float32(ly - snap_y)
+    seed["speed_y_self"][0, 0] = np.float32(-1.0)
+
+    assert int(_step_once(seed)["action_id"][0]) == ACT_CLIFF_CATCH
+    held_down = np.zeros((1,), dtype=INPUT_DTYPE)
+    held_down["p"]["main_y"][0, 0] = np.int8(-80)
+    assert int(_step_once_with_inputs(seed, inp=held_down)["action_id"][0]) != ACT_CLIFF_CATCH
 
 def test_ledge_catch_disabled_by_hold_down() -> None:
     (lx, ly), _ = _fd_ledge_points()

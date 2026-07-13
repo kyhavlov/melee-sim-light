@@ -195,6 +195,7 @@ typedef struct MslCommonParams {
   float cliff_wait_frames_low_percent;   // p_ftCommonData->x48C
   float cliff_wait_frames_high_percent;  // p_ftCommonData->x490
   float cliff_option_stick_threshold;    // p_ftCommonData->x494
+  float damage_ledge_snap_height_mul;    // p_ftCommonData->x1CC (ft_80081DD4)
   uint16_t ledge_cooldown_frames;        // p_ftCommonData->ledge_cooldown (x498)
   // Collision hit-status timers (x198C path).
   // Decomp:

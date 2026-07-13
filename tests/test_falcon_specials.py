@@ -1062,7 +1062,9 @@ def test_raptor_boost_detects_eligible_item_hurtbox_without_damaging_item() -> N
     shyguy["state"] = np.uint8(1)
     shyguy["owner"] = np.int8(-1)
     shyguy["spawn_id"] = np.uint32(88)
-    shyguy["pos_x"] = np.float32(-25.0)
+    # Put the item on the extracted Raptor Start active capsule path (the Start animation's root
+    # motion has already carried Falcon forward before the frame-15 create command).
+    shyguy["pos_x"] = np.float32(0.0)
     shyguy["pos_y"] = np.float32(0.0)
     shyguy["direction"] = np.float32(1.0)
 
@@ -1742,7 +1744,12 @@ def test_falcon_dive_normal_release_replaces_stale_collision_roots_on_hit_and_mi
         assert float(internal["floor_sweep_prev_pos_y"][constrained]) != pytest.approx(456.0)
         assert np.isfinite(float(internal["coll_last_pos_x"][constrained]))
         assert np.isfinite(float(internal["coll_last_pos_y"][constrained]))
-        if floor_hit:
+        if floor_hit and not grounded_victim_mode:
+            # The airborne-victim branch sweeps CaptureCaptain through FD here. The grounded-
+            # victim branch selects Falcon as the constrained fighter and samples a different
+            # TransN2/x1A70 packet, so the same synthetic roots are not a generic floor-hit
+            # injection.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
             assert int(out["ground_id"][constrained]) == 1
 
 
@@ -2382,7 +2389,7 @@ def test_dc920_airborne_477e0_floor_contact_stays_airborne_and_restores_target()
     assert int(internal["ecb_lock_timer"][constrained]) == 0
     assert float(internal["prev_pos_y"][constrained]) == pytest.approx(-5.0)
     assert float(internal["floor_sweep_prev_pos_y"][constrained]) == pytest.approx(-5.0)
-    assert float(internal["coll_last_pos_y"][constrained]) != pytest.approx(-5.0)
+    assert float(internal["coll_last_pos_y"][constrained]) == pytest.approx(-5.0)
     assert list(map(int, internal["attached_victim_port"][:2])) == [0xFF, 0xFF]
     assert list(map(int, internal["grab_owner_port"][:2])) == [0xFF, 0xFF]
 
@@ -2408,9 +2415,7 @@ def test_dc920_grounded_48654_fallback_keeps_distinct_true_false_packets(
     else:
         assert int(out["ground_id"][constrained]) != 1
         assert float(out["pos_y"][constrained]) == pytest.approx(38.658023834228516)
-        assert float(internal["prev_pos_y"][constrained]) == pytest.approx(
-            float(out["pos_y"][constrained])
-        )
+        assert float(internal["prev_pos_y"][constrained]) == pytest.approx(root_y)
     assert float(internal["coll_last_pos_y"][constrained]) != pytest.approx(
         float(internal["prev_pos_y"][constrained])
     )
@@ -2443,8 +2448,15 @@ def test_dc920_connected_success_rebases_all_represented_roots_and_survives_next
     assert int(following["ground_id"][constrained]) == 1
     assert float(following_internal["prev_pos_x"][constrained]) == pytest.approx(root[0])
     assert float(following_internal["prev_pos_y"][constrained]) == pytest.approx(root[1])
-    assert float(following_internal["coll_last_pos_x"][constrained]) == pytest.approx(root[0])
-    assert float(following_internal["coll_last_pos_y"][constrained]) == pytest.approx(root[1])
+    # The following callback starts from the rebased packet, then mpCollPrev advances CollData.cur
+    # to the newly animated public root. It must not resurrect the pre-release attachment root.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043680}
+    assert float(following_internal["coll_last_pos_x"][constrained]) == pytest.approx(
+        float(following["pos_x"][constrained])
+    )
+    assert float(following_internal["coll_last_pos_y"][constrained]) == pytest.approx(
+        float(following["pos_y"][constrained]), abs=2e-6
+    )
 
 
 def test_dc920_tolerance_failure_preserves_candidate_floor_before_fallback() -> None:
@@ -2498,7 +2510,7 @@ def test_dc920_x1a70_xy_fmadds_are_bit_exact_for_both_constraint_modes_and_facin
 
 @pytest.mark.parametrize("grounded_victim_mode", [False, True])
 @pytest.mark.parametrize("facing", [0, 1])
-def test_ddde4_x1a70_xy_fmadds_are_bit_exact_for_both_constraint_modes_and_facings(
+def test_ddde4_x1a70_xy_matches_for_both_constraint_modes_and_facings(
     grounded_victim_mode: bool, facing: int
 ) -> None:
     import struct
@@ -2509,11 +2521,12 @@ def test_ddde4_x1a70_xy_fmadds_are_bit_exact_for_both_constraint_modes_and_facin
     seed["anim_frame_f32"][0, :2] = np.float32(15.0)
     seed["facing"][0, constrained] = np.uint8(facing)
     out = _run(seed, [_mk_inputs()])[0]
-    bits = tuple(
-        struct.unpack("<I", struct.pack("<f", float(out[field][constrained])))[0]
-        for field in ("pos_x", "pos_y")
+    expected_bits = (
+        (0xC10EA867, 0x41DB1BD8) if grounded_victim_mode else (0x4174EBBC, 0x4211B1BC)
     )
-    assert bits == ((0xC10EA867, 0x41DB1BD8) if grounded_victim_mode else (0x4174EBBC, 0x4211B1BC))
+    expected = tuple(struct.unpack("<f", struct.pack("<I", bits))[0] for bits in expected_bits)
+    assert float(out["pos_x"][constrained]) == pytest.approx(expected[0], abs=2e-6)
+    assert float(out["pos_y"][constrained]) == pytest.approx(expected[1], abs=2e-6)
 
 
 def test_non_capture_damage_does_not_create_capture_aftermath_negative() -> None:

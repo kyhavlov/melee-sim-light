@@ -8,6 +8,7 @@ PyObject* msl_validation_derive_falcon_speciallw_seed_lanes_py(PyObject* self, P
 PyObject* msl_derive_sheik_needle_seed_lanes_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_sheik_chain_seed_lanes_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_zelda_twin_state_flags_2218_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_teleport_travel_timer_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_sheik_vanish_floor_skip_segments_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_camera_target_world_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_hitbox_prev_centers_py(PyObject* self, PyObject* args);

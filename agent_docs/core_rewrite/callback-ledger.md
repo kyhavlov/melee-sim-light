@@ -7,7 +7,8 @@ the generated `MSLMSO01` artifact remains the executable action-to-callback sour
 
 Status: complete; committed as `452a143f`.
 
-The v24 artifact maps 19 extracted Coll callback identities to seven stable runtime handler kinds.
+The current ISO-derived artifact maps 19 extracted Coll callback identities to seven stable runtime
+handler kinds.
 Those identities cover the same 21 common rows for Fox, Falco, Marth, Sheik, Zelda, and Captain
 Falcon: 126 action rows in total.
 
@@ -21,47 +22,49 @@ Falcon: 126 action rows in total.
 | `GROUND_GUARD_SETOFF` | GuardSetOff |
 | `GROUND_OTTOTTO` | Ottotto, OttottoWait |
 
-The mapping is extracted from exact Coll symbols. The runtime does not infer these families from
-action IDs. Legacy floor/wall/ceiling and locomotion collision passes explicitly skip a live
-migrated handler, so the two implementations cannot run for the same callback.
+The mapping is extracted from exact retail Coll callback pointer identity. The runtime does not
+infer these families from action IDs. Legacy floor/wall/ceiling and locomotion collision passes
+explicitly skip a live migrated handler, so the two implementations cannot run for the same
+callback.
 
 ## Packet 2 — common air and landing
 
-Status: exact-owner cutover complete; direct geometry cutover open.
+Status: complete.
 
-Stable live handlers, low-level phase selection, landing transitions, and redundant semantic-class
-deletion are complete. A standalone air kernel and direct Landing reuse were rejected by aggregate
-validation. The persistent CollData geometry must be cut over in place inside the proven
-coordinator. See [packets/02-common-air-landing.md](packets/02-common-air-landing.md).
+Stable live handlers, low-level phase selection, persistent air CollData, landing transitions, and
+redundant semantic-class deletion are complete. Distinct Pass, MissFoot, and CliffJump2 pointers
+carry their shared source effects without being collapsed into one fake handler. See
+[packets/02-common-air-landing.md](packets/02-common-air-landing.md).
 
 ## Packet 3 — damage, knockdown, and passive
 
-Status: exact-owner and transition consolidation complete; direct geometry cutover open.
+Status: complete.
 
 Damage, DamageFly, DamageFall, DownDamage, DownReflect, Down/Passive/tech callback identities and
-their deterministic transition ladders now consume exact handlers. Their retained shared geometry
-still prevents marking the callbacks fully migrated. See
+their deterministic transition ladders consume exact handlers on the authoritative shared
+CollData geometry engine. See
 [packets/03-damage-down-passive.md](packets/03-damage-down-passive.md).
 
 ## Packet 4 — cliff, special, and capture
 
-Status: pending.
+Status: complete.
 
-Migrate CliffCatch admission and simultaneous ledge ownership, then supported character-special
-and capture collision identities that use the same mpColl substrate. Preserve stable player order
-and explicit live callback overrides.
+CliffCatch admission, simultaneous ledge ownership, supported character-special callbacks,
+capture constraints, and throw-release collision use the same mpColl substrate with stable player
+order and explicit live callback overrides.
 
 ## Packet 5 — remaining identities and legacy deletion
 
-Status: pending.
+Status: complete.
 
-Classify every remaining non-null supported-domain Coll identity as migrated or out of RL scope.
-Delete the legacy map-collision dispatch, dead semantic class bits, repair packets, state lanes,
-and compatibility APIs once the ledger is empty.
+Every gameplay-relevant identity in the supported map-collision boundary is classified. MSLMSO01
+v28 stores a pointer-derived wrapper-selector family separately from its compact post-collision
+policy. A zero selector means the callback owns no supported map geometry (empty, attachment/item,
+or explicitly out-of-domain); it never invokes a legacy fallback. The seven old geometry
+coordinator files are deleted and absent from the extension build.
 
 ## Sequencing rule
 
-Packets 2-5 can be implemented in a continuous work turn, but they should still be locked in this
-order. Each packet gets its own focused tests, validation diff, and performance check before the
-next one begins. Combining review only makes sense after those independent boundaries remain
-visible in the diff and documentation.
+Packets 2-5 were completed as one continuous Phase 1 cutover on the same source-shaped
+stage/mpLib/CollData/mpColl engine. The review boundary is the complete runtime plus the explicit
+residual validation ledger; replay-level follow-ups do not reintroduce a second collision path.

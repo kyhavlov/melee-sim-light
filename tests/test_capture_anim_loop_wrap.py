@@ -128,6 +128,7 @@ def test_capture_anim_loop_wrap_applies_before_delta() -> None:
         seed["stage_id"][0] = np.uint32(STAGE_FD)
         seed["num_players"][0] = np.uint8(2)
         seed["stocks"][0, :2] = np.uint8(4)
+        seed["ground_id"][0, :2] = np.uint16(0xFFFF)
 
         # Owner (p0): stable Wait, frozen anim clock.
         seed["char_id"][0, 0] = np.uint8(CHAR_FOX)

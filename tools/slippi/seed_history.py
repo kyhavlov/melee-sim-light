@@ -1427,8 +1427,9 @@ def derive_ecb_lock_state(
     - Return u8 post-frame countdown and owner values.
     - Owner 1 is a generic replay-seeded lock; owner 4 proves a live Falcon ftCommon callback.
       Ownership persists until refresh, landing/unlock, or countdown expiry.
-    - On a detected post-frame grounded->air transition, write `(lock_frames_ground_to_air - 1)`
-      for that frame to account for the same-frame procMap decrement.
+    - Pre-map jump/entry owners publish `(lock_frames_ground_to_air - 1)` after the same-frame
+      procMap decrement. Common floor-loss and post-map ProcessHit destinations publish the full
+      value because they call the lock helper after that decrement.
     """
     try:
         import msl_binding  # type: ignore
@@ -1548,9 +1549,9 @@ def derive_damage_hitlag_colldata_ecb(
     - `mpColl_LoadECB_inline` consumes the currently loaded CollData ECB, which may still be the
       pre-Damage action pose on the first visible Damage hitlag row.
 
-    The native producer samples that previous pose from extracted ECB tables once per Damage
-    hitlag episode and carries it while hitlag remains active. It is seed reconstruction for
-    CollData state, not a replay output clamp.
+    On the first active row, the native producer samples the previous extracted map-callback pose
+    as hidden CollData.current/prev. The Damage callback separately loads its visible destination
+    pose into desired_ecb and converges on the first map call, so later hitlag rows need no bridge.
     """
     try:
         import msl_binding  # type: ignore

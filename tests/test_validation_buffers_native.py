@@ -16,7 +16,7 @@ _REPLAYS = (
         ("item_shield_bounce_valid", "guard_setoff_hitlag_damage_min", "combat_hitlist_cd"),
         (7295, 2),
         {
-            "seed_t": "f5c0fc90e00f788becd61ccdc3c1b55b",
+            "seed_t": "b21d5754cd14aea7e5947002d49a97d6",
             "prev_input_t": "2b6be58ab8bb6987eb8c70e192e1e061",
             "input_t": "17d7d3a24676270a1df7a6d7a4af4b74",
             "ref_t1": "1d2cdd0e1dd7bdb540b67c918faaf77f",
@@ -27,7 +27,7 @@ _REPLAYS = (
         ("capture_grab_timer_f32", "guard_reflect_timer_x14", "stale_attack_instance"),
         (9679, 2),
         {
-            "seed_t": "22302dd00276133d5420a17b2ce1553c",
+            "seed_t": "b699ff4e5c532706c32e8fe66f9b5db9",
             "prev_input_t": "4c534a65894eed17f4d032806450576b",
             "input_t": "5ce03af38ee16f0157b7d9731f1df95b",
             "ref_t1": "d8dd448157d008e114bcb5f584b4c129",
@@ -38,7 +38,7 @@ _REPLAYS = (
         ("stage_dream_whispy_wind_valid_u8", "stage_dream_whispy_wind_timer_u16"),
         (12471, 2),
         {
-            "seed_t": "656c25309087bd4dc7958c22153a245a",
+            "seed_t": "c8fc9e2240521a9454071592f61b21a5",
             "prev_input_t": "bb15583915bccdc23fe0a4643014264b",
             "input_t": "dcfe3ac41d3a21c8eb1b1f96709503c6",
             "ref_t1": "82e62c74248a30d99839446ab6f7cb9a",
@@ -49,7 +49,7 @@ _REPLAYS = (
         ("stage_dream_whispy_wind_valid_u8", "guard_special_enable_timer_x1c"),
         (13272, 2),
         {
-            "seed_t": "0761fb4eb3f8338a2ba196abab00f9a2",
+            "seed_t": "0c8e09017d5c83f46bdb132b5f10bbf5",
             "prev_input_t": "c94a05b021295bc217b2779b0ac6da71",
             "input_t": "4ed5701d19a0bef1936e321cdd1b80a4",
             "ref_t1": "6f355c0c0455ea73fbdd9ea8524dadb9",
@@ -60,7 +60,7 @@ _REPLAYS = (
         ("stage_fod_platform_height_valid_u8", "floor_skip_segment_valid_u8"),
         (5921, 2),
         {
-            "seed_t": "70a220c9b9ddbe4d4864882a0b3f03af",
+            "seed_t": "9ea5da23fa4d24a8e3029332c59c26ae",
             "prev_input_t": "664369b710a4411fa8377c0a58b37340",
             "input_t": "025ee4e26f59fbabae08972ec2b6f3e2",
             "ref_t1": "dc8978204b6216f86a65ffcecdc72816",
@@ -71,7 +71,7 @@ _REPLAYS = (
         ("item_hidden_callback_flags", "item_reflect_transfer_iid"),
         (11918, 2),
         {
-            "seed_t": "17cc1e59b50d49917c788459ee0a9437",
+            "seed_t": "80634e9892eced3d20f4a8c814dab254",
             "prev_input_t": "93de41527f0d482497cbde739960759d",
             "input_t": "959d3abc039a38e5fd3cc1e96f2be8a6",
             "ref_t1": "44699d3fa431d07288fdeeef53a82d69",
@@ -82,7 +82,7 @@ _REPLAYS = (
         ("stage_yoshi_shyguy_valid_u8", "item_shyguy_hitlag_valid_u8"),
         (8459, 2),
         {
-            "seed_t": "d048ae9647e1dc5ba84aea5e3ec5559c",
+            "seed_t": "0995f75e77715df0e605c7f8ec208681",
             "prev_input_t": "dcf01da1e89a5602394152b388b867f2",
             "input_t": "7a68112375241015539bc07f88509cd1",
             "ref_t1": "ca0776567391b30dfdf3f0e492c97c28",
@@ -93,7 +93,7 @@ _REPLAYS = (
         ("item_hitlist_victim_iid", "item_hitlist_victim_hitbox_mask"),
         (9439, 2),
         {
-            "seed_t": "524366be96c99b5755a7cc8f2c435f29",
+            "seed_t": "6dd51bd688eebab22835fd1d3b6d77f1",
             "prev_input_t": "64c0dff19de83308cecd727461f8d09c",
             "input_t": "cbda5bc05c9f40ddbf347b823063ba7f",
             "ref_t1": "f39d1318101d1a93aa0e30d8eb8212da",
@@ -104,7 +104,7 @@ _REPLAYS = (
         ("guard_x10", "combat_hitlist_hb_valid"),
         (9560, 4),
         {
-            "seed_t": "d863167163a8c5026ec720acd3984c91",
+            "seed_t": "bf19cb7f5525a8e160003529723a365f",
             "prev_input_t": "46e7df1f24b517cdce48f7e8eeab9213",
             "input_t": "d633bfc4ccf8f861f85f9fc330d39450",
             "ref_t1": "cd15eed0977cd64b023ba057e3e4ac9a",

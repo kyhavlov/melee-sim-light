@@ -316,6 +316,8 @@ int common_params_init(void) {
                    &g_params.cliff_wait_frames_high_percent) != 0 ||
       json_get_f32(buf, "cliff_option_stick_threshold", &g_params.cliff_option_stick_threshold) !=
           0 ||
+      json_get_f32(buf, "damage_ledge_snap_height_mul", &g_params.damage_ledge_snap_height_mul) !=
+          0 ||
       json_get_u16(buf, "ledge_cooldown_frames", &g_params.ledge_cooldown_frames) != 0 ||
       json_get_u16(buf, "colanim_throw_x1994_frames", &g_params.colanim_throw_x1994_frames) != 0 ||
       json_get_u16(buf, "colanim_cliff_x1990_frames", &g_params.colanim_cliff_x1990_frames) != 0 ||

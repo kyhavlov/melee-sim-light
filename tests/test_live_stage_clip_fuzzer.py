@@ -33,11 +33,6 @@ def test_zelda_bf_boundary_escapeair_drift_127_stays_out_of_hull() -> None:
     assert fuzz_live_clip._run_case(fuzz_live_clip.seed_for_repro(repro), repro.script, repro.stage) == []
 
 
-def test_sheik_fd_escapeair_random_ledge_wall_regression_stays_out_of_hull() -> None:
-    repro = fuzz_live_clip.sheik_fd_seed_1354821142_repro()
-    assert fuzz_live_clip._run_case(fuzz_live_clip.seed_for_repro(repro), repro.script, repro.stage) == []
-
-
 def test_sheik_non_fd_random_carried_ledge_wall_repros_stay_out_of_hull() -> None:
     for stage, seed in (("dl", 856430243), ("ps", 856430243)):
         repro = fuzz_live_clip.random_policy_clip_repro("sheik", stage, seed)

@@ -284,93 +284,17 @@ void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch, size_t idx) {
 }
 
 void combat_publish_damage_entry_hitlag_ecb_current(MslBatch* batch, size_t idx) {
-  if (batch == NULL || batch->state.animation_index[idx] > 0xFFFFu) {
+  if (batch == NULL || batch->state.coll_ecb_bottom_valid[idx] == 0u ||
+      batch->state.coll_desired_ecb_bottom_valid[idx] == 0u) {
     return;
   }
-  // Damage-entry active-hitlag CollData ECB owner:
-  // ftCo_8008DCE0 calls Fighter_ChangeMotionState into Damage* after ftCommon_8007D5D4 clears
-  // ground_or_air and locks desired.bottom. The following Damage hitlag map callbacks observe the
-  // entered Damage pose as CollData current/prev while desired.bottom remains the locked ground-to-air
-  // value. Publish that hidden current/prev packet for source-owned ground-to-air damage entries
-  // instead of carrying the pre-hit grounded ECB through the whole hitlag segment.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-  //   ftCo_8008DCE0,ftCo_DamageFly_Coll}
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_procMap}
+  // Fighter_ProcessHit runs after Fighter_procMap. Entering Damage during hitlag changes the
+  // MotionState row but does not run the destination Anim callback, so the next Damage map callback
+  // consumes the outgoing callback's already-published CollData ECB. Preserve that live packet;
+  // sampling the visible Damage animation here invents geometry that source has not evaluated.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_procMap,Fighter_ProcessHit_8006D1EC}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
-  const uint8_t char_id = batch->state.char_id[idx];
-  const uint32_t anim = batch->state.animation_index[idx];
-  const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
-  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-  MslEcbWorldPoints ecb = {0};
-  msl_ecb_world_points_sample(&ecb, char_id, anim, frame, facing_dir, batch->state.pos_x[idx],
-                              batch->state.pos_y[idx], 0u);
-  batch->state.coll_ecb_bottom_rel_y[idx] = ecb.bottom_rel_y;
-  batch->state.coll_ecb_top_rel_y[idx] = ecb.top_rel_y;
-  batch->state.coll_ecb_left_rel_x[idx] = ecb.left_rel_x;
-  batch->state.coll_ecb_right_rel_x[idx] = ecb.right_rel_x;
-  batch->state.coll_ecb_side_rel_y[idx] = ecb.side_rel_y;
-  batch->state.coll_ecb_bottom_valid[idx] = 1u;
-  batch->state.coll_prev_ecb_bottom_rel_y[idx] = ecb.bottom_rel_y;
-  batch->state.coll_prev_ecb_top_rel_y[idx] = ecb.top_rel_y;
-  batch->state.coll_prev_ecb_left_rel_x[idx] = ecb.left_rel_x;
-  batch->state.coll_prev_ecb_right_rel_x[idx] = ecb.right_rel_x;
-  batch->state.coll_prev_ecb_side_rel_y[idx] = ecb.side_rel_y;
-  batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
-  batch->state.coll_damage_hitlag_ecb_valid[idx] = 1u;
-  batch->state.coll_damage_hitlag_ecb_source_kind[idx] = MSL_DAMAGE_HITLAG_ECB_SOURCE_NONE;
-}
-
-uint8_t combat_sample_active_hitlag_attackair_ecb(const MslBatch* batch, size_t idx,
-                                                  MslEcbWorldPoints* out) {
-  if (batch == NULL || out == NULL || batch->state.animation_index[idx] > 0xFFFFu) {
-    return 0u;
-  }
-  const uint16_t action = batch->state.action_id[idx];
-  if (!msl_motion_state_class_has(batch->state.char_id[idx], action, MSL_MS_CLASS_ATTACK_AIR)) {
-    return 0u;
-  }
-
-  // Active Damage-hitlag CollData ECB owner:
-  // The seed extractor's `derive_damage_hitlag_colldata_ecb` mirrors source by sampling the
-  // pre-Damage AttackAir CollData pose on the first airborne Damage hitlag row and freezing it
-  // across the hitlag episode. Runtime reaches ProcessHit after the AttackAir Anim/Hit callbacks
-  // have already advanced `cur_anim_frame`, so the current live AttackAir frame is the same source
-  // frame that the extractor sees as previous-row `anim_frame + frame_speed`. Publish that packet
-  // before Fighter_ChangeMotionState replaces the visible action with Damage*.
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A360}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_Damage_Coll}
-  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
-  const uint8_t char_id = batch->state.char_id[idx];
-  const uint32_t anim = batch->state.animation_index[idx];
-  const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
-  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-  msl_ecb_world_points_sample(out, char_id, anim, frame, facing_dir, batch->state.pos_x[idx],
-                              batch->state.pos_y[idx], 0u);
-  if (!isfinite(out->bottom_rel_y) || !isfinite(out->top_rel_y) || !isfinite(out->left_rel_x) ||
-      !isfinite(out->right_rel_x) || !isfinite(out->side_rel_y) ||
-      out->top_rel_y <= out->bottom_rel_y || out->right_rel_x <= out->left_rel_x) {
-    return 0u;
-  }
-  return 1u;
-}
-
-void combat_publish_damage_hitlag_ecb_points(MslBatch* batch, size_t idx,
-                                             const MslEcbWorldPoints* ecb) {
-  if (batch == NULL || ecb == NULL) {
-    return;
-  }
-  batch->state.coll_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
-  batch->state.coll_ecb_top_rel_y[idx] = ecb->top_rel_y;
-  batch->state.coll_ecb_left_rel_x[idx] = ecb->left_rel_x;
-  batch->state.coll_ecb_right_rel_x[idx] = ecb->right_rel_x;
-  batch->state.coll_ecb_side_rel_y[idx] = ecb->side_rel_y;
-  batch->state.coll_ecb_bottom_valid[idx] = 1u;
-  batch->state.coll_prev_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
-  batch->state.coll_prev_ecb_top_rel_y[idx] = ecb->top_rel_y;
-  batch->state.coll_prev_ecb_left_rel_x[idx] = ecb->left_rel_x;
-  batch->state.coll_prev_ecb_right_rel_x[idx] = ecb->right_rel_x;
-  batch->state.coll_prev_ecb_side_rel_y[idx] = ecb->side_rel_y;
-  batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
   batch->state.coll_damage_hitlag_ecb_valid[idx] = 1u;
   batch->state.coll_damage_hitlag_ecb_source_kind[idx] = MSL_DAMAGE_HITLAG_ECB_SOURCE_NONE;
 }

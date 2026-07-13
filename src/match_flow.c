@@ -10,8 +10,11 @@
 #include "char_params.h"
 #include "combat.h"
 #include "common_params.h"
+#include "ftcommon_ecb.h"
 #include "input_axis.h"
 #include "instance_id.h"
+#include "mp_coll.h"
+#include "mpcoll_ecb_pose.h"
 #include "stage_collision.h"
 #include "state_flags.h"
 #include "staling.h"
@@ -257,6 +260,13 @@ static inline void enter_entry_start(MslBatch* batch, size_t idx, const MslCommo
     return;
   }
   const int n = (int)c->entry_start_frames;
+  if (batch->state.coll_ecb_bottom_valid[idx] != 0u) {
+    batch->state.entry_saved_ecb_top_rel_y[idx] = batch->state.coll_ecb_top_rel_y[idx];
+    batch->state.entry_saved_ecb_left_rel_x[idx] = batch->state.coll_ecb_left_rel_x[idx];
+    batch->state.entry_saved_ecb_right_rel_x[idx] = batch->state.coll_ecb_right_rel_x[idx];
+    batch->state.entry_saved_ecb_side_rel_y[idx] = batch->state.coll_ecb_side_rel_y[idx];
+    batch->state.entry_saved_ecb_valid[idx] = 1u;
+  }
   const uint8_t start_timer = (uint8_t)((n > 1) ? (n - 1) : 0);
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_ENTRY_START;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_ENTRY_START;
@@ -329,6 +339,62 @@ static inline void enter_entry_end(MslBatch* batch, size_t idx, const MslCommonP
 static inline uint8_t match_flow_resolve_respawn_platform(MslBatch* batch, int bi,
                                                           uint32_t stage_id, int port0,
                                                           MslStagePoint2* out_respawn);
+
+static inline void match_flow_rebirth_reset_colldata(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const size_t bi = idx / (size_t)MSL_MAX_PLAYERS;
+  const float x = batch->state.pos_x[idx];
+  const float y = batch->state.pos_y[idx];
+  const MslEcbWorldPoints initial_ecb = {
+      .bottom_rel_y = 0.0f,
+      .top_rel_y = 8.0f,
+      .left_rel_x = -4.0f,
+      .right_rel_x = 4.0f,
+      .side_rel_y = 4.0f,
+  };
+
+  // Fighter_UnkProcessDeath reinitializes CollData at the newly loaded player coordinate before
+  // Rebirth is entered. ft_80081B38 publishes cur/prev/last at that root, runs CollDataInit, and
+  // installs the JObj source's initial 8x8 ECB. This must happen at the teleport boundary: doing
+  // it after Rebirth_Coll lets 478F4 sweep from the previous stock's blastzone endpoint.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081B38
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80041EE4,mpColl_SetECBSource_JObj}
+  batch->state.prev_pos_x[idx] = x;
+  batch->state.prev_pos_y[idx] = y;
+  batch->state.floor_sweep_prev_pos_x[idx] = x;
+  batch->state.floor_sweep_prev_pos_y[idx] = y;
+  batch->state.floor_sweep_prev_source_owned[idx] = 1u;
+  batch->state.floor_sweep_prev_runtime_owned[idx] = 1u;
+  batch->state.coll_last_pos_x[idx] = x;
+  batch->state.coll_last_pos_y[idx] = y;
+  batch->state.coll_substep_prev_pos_x[idx] = x;
+  batch->state.coll_substep_prev_pos_y[idx] = y;
+  batch->state.coll_substep_cur_pos_x[idx] = x;
+  batch->state.coll_substep_cur_pos_y[idx] = y;
+  batch->state.coll_wall_ceil_prev_pos_valid[idx] = 0u;
+
+  mpcoll_store_current_ecb_points(batch, idx, &initial_ecb);
+  mpcoll_store_prev_ecb_points(batch, idx, &initial_ecb);
+  batch->state.coll_ecb_bottom_valid[idx] = 1u;
+  batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
+  batch->state.coll_desired_ecb_bottom_valid[idx] = 0u;
+  batch->state.coll_desired_ecb_bottom_locked_owner[idx] = 0u;
+  batch->state.coll_squeeze_restore_ecb_valid[idx] = 0u;
+  batch->state.coll_damage_hitlag_ecb_valid[idx] = 0u;
+  batch->state.coll_damage_hitlag_floor_contact_runtime[idx] = 0u;
+
+  batch->state.coll_env_flags[idx] = 0u;
+  batch->state.coll_prev_env_flags[idx] = 0u;
+  batch->state.floor_skip_segment_id[idx] = 0xFFFFu;
+  batch->state.mpcoll_joint_id_skip[idx] = -1;
+  batch->state.coll_floor_result_valid[idx] = 0u;
+  batch->state.coll_floor_result_segment_id[idx] = 0xFFFFu;
+  batch->state.coll_geometry_generation[idx] = batch->state.stage_collision_geometry_generation[bi];
+  msl_mpcoll_clear_wall_ceiling(batch, idx);
+}
 
 static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonParams* c,
                                  uint32_t stage_id, int port0, MslStagePoint2* out_respawn) {
@@ -447,6 +513,8 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   const float rebirth_start_y =
       (stage_id == (uint32_t)MSL_STAGE_ID_POKEMON_STADIUM) ? 120.0f : cam.top;
   batch->state.pos_y[idx] = rebirth_start_y;
+  batch->state.facing_dir1[idx] = batch->state.facing[idx];
+  match_flow_rebirth_reset_colldata(batch, idx);
 
   // Rebirth fall speed is source-derived: ftCo_Rebirth_Phys computes velocity from the
   // Fighter_UnkInitReset-loaded start coordinate toward Player_GetSpawnPlatformPos over the
@@ -1000,6 +1068,10 @@ void match_flow_update_pre_anim(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t a = batch->state.action_id[idx];
 
+      if (!match_flow_is_entry_action(a)) {
+        batch->state.entry_saved_ecb_valid[idx] = 0u;
+      }
+
       if (batch->state.stocks[idx] == 0u && batch->state.char_id[idx] == 0u &&
           batch->state.match_flow_pending_rebirth_char_id[idx] != 0u &&
           a == (uint16_t)MSL_ACT_DEAD_DOWN) {
@@ -1384,11 +1456,115 @@ uint8_t match_flow_should_stage_collide(uint16_t action_id) {
   //   refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Coll
   //   refs/melee/src/melee/ft/ft_0C31.c::ftCo_EntryStart_Coll
   //
-  // Until those match-flow collision paths (respawn platform, special ECB gates) are modeled, skip
-  // the generic stage collision pass for these actions to avoid double-colliding.
-  return (uint8_t)(!(match_flow_is_dead_action(action_id) ||
-                     match_flow_is_respawn_action(action_id) ||
-                     match_flow_is_entry_action(action_id)));
+  return (uint8_t)(!match_flow_is_dead_action(action_id) && action_id != (uint16_t)MSL_ACT_ENTRY);
+}
+
+uint8_t match_flow_rebirth_stage_collision_runs(const MslBatch* batch, int bi) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+  // Player.unk4E starts at -1. fn_8016719C overwrites it only when stage_info.unk8C.b5 is clear;
+  // every supported legal stage sets that bit, so Rebirth_Coll always runs ft_80083DCC here.
+  // Shared spawn coordinates belong to placement and are not the x2135 collision gate.
+  // refs/melee/src/melee/pl/player.c::Player_InitAllPlayers
+  // refs/melee/src/melee/gm/gm_1601.c::fn_8016719C
+  // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_Rebirth_Coll
+  switch (batch->state.stage_id[(size_t)bi]) {
+    case MSL_STAGE_ID_BATTLEFIELD:
+    case MSL_STAGE_ID_FINAL_DESTINATION:
+    case MSL_STAGE_ID_FOUNTAIN_OF_DREAMS:
+    case MSL_STAGE_ID_POKEMON_STADIUM:
+    case MSL_STAGE_ID_YOSHIS_STORY:
+    case MSL_STAGE_ID_DREAM_LAND_N64:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+void match_flow_rebirth_wait_floor_contact(MslBatch* batch, int bi, int p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
+      p >= (int)batch->config.num_players) {
+    return;
+  }
+  const size_t idx = msl_idx_player(bi, p);
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+  const MslCommonParams* c = msl_common_params();
+  msl_ftcommon_8007d6a4(batch, ch, idx);
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.fall_fast[idx] = 0u;
+  if (c != NULL) {
+    rebirth_wait_apply_exit_colanim(batch, idx, c);
+  }
+  batch->state.match_flow_timer[idx] = 0u;
+  // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_RebirthWait_Coll,fn_800D5A30}
+  // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
+}
+
+uint8_t match_flow_entry_custom_ecb_bottom(const MslBatch* batch, size_t idx, float* out_bottom) {
+  if (batch == NULL || out_bottom == NULL) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[idx];
+  if (action != (uint16_t)MSL_ACT_ENTRY_START && action != (uint16_t)MSL_ACT_ENTRY_END) {
+    return 0u;
+  }
+  const MslCommonParams* common = msl_common_params();
+  if (common == NULL || common->entry_start_frames == 0u) {
+    return 0u;
+  }
+  const float x20 = entry_x20(batch, idx);
+  const float timer = (float)batch->state.match_flow_timer[idx];
+  const float denom = (float)common->entry_start_frames;
+  const float fraction =
+      action == (uint16_t)MSL_ACT_ENTRY_START ? (denom - timer) / denom : timer / denom;
+  *out_bottom = -(x20 * fraction);
+  // ftCo_Entry{Start,End}_Coll updates only the saved ftCollisionBox bottom before dispatching the
+  // GA-specific custom-ECB wrapper. Source's x221F_b4 branch reads the primary fighter's entry
+  // packet for a secondary entity; none of the six supported characters owns a secondary fighter,
+  // so the direct packet is the complete supported-domain branch.
+  // refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryStart_Coll,ftCo_EntryEnd_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80084CB0,ft_80083E64,ft_800846B0}
+  return 1u;
+}
+
+uint8_t match_flow_entry_custom_ecb(const MslBatch* batch, size_t idx, MslEcbWorldPoints* out) {
+  if (batch == NULL || out == NULL) {
+    return 0u;
+  }
+  float bottom = 0.0f;
+  if (!match_flow_entry_custom_ecb_bottom(batch, idx, &bottom)) {
+    return 0u;
+  }
+  if (batch->state.entry_saved_ecb_valid[idx] != 0u) {
+    *out = (MslEcbWorldPoints){
+        .bottom_rel_y = bottom,
+        .top_rel_y = batch->state.entry_saved_ecb_top_rel_y[idx],
+        .left_rel_x = batch->state.entry_saved_ecb_left_rel_x[idx],
+        .right_rel_x = batch->state.entry_saved_ecb_right_rel_x[idx],
+        .side_rel_y = batch->state.entry_saved_ecb_side_rel_y[idx],
+    };
+  } else if (batch->state.coll_ecb_bottom_valid[idx] != 0u) {
+    // A teacher-forced seed inside EntryStart/EntryEnd does not serialize mv.co.entry.x2C. The
+    // current CollData ECB is the saved packet already in use by that callback; replace only its
+    // bottom, exactly as the source callback does.
+    *out = (MslEcbWorldPoints){
+        .bottom_rel_y = bottom,
+        .top_rel_y = batch->state.coll_ecb_top_rel_y[idx],
+        .left_rel_x = batch->state.coll_ecb_left_rel_x[idx],
+        .right_rel_x = batch->state.coll_ecb_right_rel_x[idx],
+        .side_rel_y = batch->state.coll_ecb_side_rel_y[idx],
+    };
+  } else {
+    return 0u;
+  }
+  out->frame_u16 = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
+  mpcoll_ecb_world_points_from_rel(out, batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                   out->bottom_rel_y, out->top_rel_y, out->left_rel_x,
+                                   out->right_rel_x, out->side_rel_y, out->frame_u16);
+  return 1u;
 }
 
 void match_flow_update_post_physics(MslBatch* batch) {

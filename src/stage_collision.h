@@ -296,6 +296,8 @@ uint8_t stage_collision_stage_available(uint32_t stage_id);
 
 const MslStageMap* stage_collision_get_map(uint32_t stage_id);
 const MslStageMapLine* stage_collision_map_line(uint32_t stage_id, uint16_t segment_i);
+uint8_t stage_collision_map_lines_connected(uint32_t stage_id, uint16_t start_segment_i,
+                                            uint16_t target_segment_i);
 uint8_t stage_collision_map_line_world(const MslBatch* batch, int bi, const MslStageMapLine* line,
                                        MslStageMapLine* out);
 

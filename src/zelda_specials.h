@@ -15,6 +15,7 @@ uint8_t zelda_special_try_air_iasa(MslBatch* batch, size_t idx);
 void zelda_specials_update_pre_physics_for_fighter(MslBatch* batch, const MslCommonParams* c,
                                                    const MslCharParams* ch, size_t idx,
                                                    uint8_t frame_start_owner);
+void zelda_specials_update_transform_accessory4_for_fighter(MslBatch* batch, size_t idx);
 uint8_t zelda_specials_phys(MslBatch* batch, size_t idx);
 uint8_t zelda_special_farore_air_travel_wallceil_end(MslBatch* batch, size_t idx, float nx,
                                                      float ny);

@@ -43,6 +43,21 @@ def test_ecb_lock_timer_derivation_basic_countdown() -> None:
     assert np.array_equal(got, want)
 
 
+def test_common_floor_loss_lock_starts_after_map_decrement() -> None:
+    # Wait -> Fall is produced by the grounded collision callback. Fighter_procMap has already
+    # performed this frame's countdown before ftCommon_8007D5D4 installs the ten-frame lock.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+    timer, owner = derive_ecb_lock_state(
+        on_ground_u8=np.array([1, 0, 0, 0], dtype=np.uint8),
+        action_id_u16=np.array([0x000E, 0x001D, 0x001D, 0x001D], dtype=np.uint16),
+        action_frame_i16=np.array([6, 0, 1, 2], dtype=np.int16),
+    )
+
+    assert timer.tolist() == [0, 10, 9, 8]
+    assert owner.tolist() == [0, 1, 1, 1]
+
+
 def test_ecb_lock_timer_derivation_is_prefix_invariant() -> None:
     on_ground = np.array([1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0], dtype=np.uint8)
     action_id = np.array([0x000E, 0x000E, 0x0019, 0x0019, 0x0019, 0x0019, 0x000E, 0x001B, 0x001B, 0x001B, 0x000E, 0x000E, 0x001A, 0x001A], dtype=np.uint16)
@@ -151,7 +166,7 @@ def test_falcon_ground_raptor_damage_entry_uses_normal_ground_to_air_lock() -> N
         action_frame_i16=np.array([1, 1, 1], dtype=np.int16),
     )
 
-    assert got.tolist() == [0, 9, 8]
+    assert got.tolist() == [0, 10, 9]
     assert owner.tolist() == [0, 1, 1]
 
 

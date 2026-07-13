@@ -36,6 +36,8 @@ uint8_t spacie_specialhi_hold_air_ground_contact(MslBatch* batch, const MslSpeci
                                                  const MslCharParams* ch, size_t idx);
 void spacie_specialhi_apply_collision_facing_dir(MslBatch* batch, const MslCharParams* ch,
                                                  size_t idx);
+uint8_t spacie_specialhi_floor_contact_should_bound(const MslBatch* batch, const MslCharParams* ch,
+                                                    size_t idx);
 void spacie_enter_specialhi_bound_from_airhi_collision(MslBatch* batch, const MslCharParams* ch,
                                                        size_t idx);
 uint8_t spacie_side_special_air_contact_to_ground(MslBatch* batch, const MslSpecialMsids* ms,

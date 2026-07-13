@@ -1025,6 +1025,37 @@ void shine_update_pre_physics(MslBatch* batch) {
   }
 }
 
+uint8_t shine_air_to_ground_collision(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint8_t cid = batch->state.char_id[idx];
+  const uint16_t a = batch->state.action_id[idx];
+  const MslSpecialMsids* ms = msl_special_msids(cid);
+  if (!char_owns_shine_machine(cid) || !action_is_shine_air(cid, a) || ms == NULL) {
+    return 0u;
+  }
+  const float cur_frame = batch->state.anim_frame_f32[idx];
+  batch->state.action_id[idx] = msl_motion_state_action_for_fx_kind(
+      cid, (uint8_t)(shine_kind(cid, a) - (uint8_t)MSL_FX_SHINE_GROUND_TO_AIR_KIND_DELTA));
+  const uint16_t next = batch->state.action_id[idx];
+  if (shine_kind(cid, next) == (uint8_t)MSL_FX_KIND_SPECIAL_LW_START) {
+    batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_start;
+  } else if (shine_kind(cid, next) == (uint8_t)MSL_FX_KIND_SPECIAL_LW_LOOP) {
+    batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_loop;
+  } else if (shine_kind(cid, next) == (uint8_t)MSL_FX_KIND_SPECIAL_LW_HIT) {
+    batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_hit;
+  } else if (shine_kind(cid, next) == (uint8_t)MSL_FX_KIND_SPECIAL_LW_END) {
+    batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_end;
+  } else if (shine_kind(cid, next) == (uint8_t)MSL_FX_KIND_SPECIAL_LW_TURN) {
+    batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_loop;
+  }
+  // ftCommon_8007D7FC has already published grounded velocity/jump ownership at the caller.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::*SpecialAirLw*_AirToGround
+  msl_anim_timebase_enter(batch, idx, cur_frame, 1.0f);
+  return 1u;
+}
+
 void shine_update_post_collision(MslBatch* batch) {
   if (batch == NULL) {
     return;

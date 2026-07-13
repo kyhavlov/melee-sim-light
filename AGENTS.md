@@ -5,12 +5,29 @@
 Implement a **high-performance, batched, deterministic** SSBM-like simulator for RL.
 
 Current target domain:
-- **Fox vs Falco**, UCF enabled by default. (More characters coming soon)
+- Included fighters are **Fox, Falco, Marth, Sheik, Zelda, and Captain Falcon**. Fox/Falco remains
+  the mature control surface; UCF is enabled by default.
 - RL 1.0 correctness covers the supported legal-stage aggregate: Final Destination, Battlefield,
   Fountain of Dreams, frozen Pokemon Stadium, Yoshi's Story, and Dream Land N64.
 - Singles (2 players) remains the primary/control workflow, but the suite includes doubles
   coverage and the runtime is expected to keep 4-player/2v2 paths viable rather than treating them
   as a future rewrite.
+
+The primary correctness strategy is **gameplay-relevant source completion**: port the relevant
+decomp call graphs, persistent state, tables, callback ownership, and scheduler order for the
+supported domain closely and directly. Organize work by source owner, not validation mismatch.
+Validation is evidence that challenges or supports a source-completion claim; replay names and rows
+must not become the implementation queue. Prefer ambitious close rewrites and deletion of the
+piecemeal implementation when the source boundary crosses several local files or systems.
+
+Use completion terms precisely:
+
+- **Architectural cutover complete** means one source-shaped runtime owns the boundary and the old
+  implementation is deleted; connected semantic work may remain.
+- **Source owner complete** means every gameplay-relevant path in the declared supported boundary
+  is represented directly, with explicit source-backed exclusions.
+- Do not preserve old machinery, add a runtime bridge, or narrow the source boundary merely to keep
+  intermediate validation green.
 
 ## Hard Requirements
 
@@ -103,8 +120,10 @@ Current target domain:
 - Source-completion work is encouraged: if a decomp/data-backed owner family is identified and
   bounded, it is valid to implement the full owner even when some covered variants do not currently
   have replay mismatches. Treat this as distinct from replay-fitting. Cover observed rows plus
-  practical synthetic positive/negative variants, keep validation clean, and call out in review
-  whether a packet is behavior-equivalent refactor or source-completion extension.
+  practical synthetic positive/negative variants, regenerate validation, and investigate results
+  that disprove the claimed source boundary. Call out in review whether a packet is a
+  behavior-equivalent refactor or source-completion extension; zero replay-level reds is not a
+  completion requirement.
 - Do not stop at the first motivating row or one small owner slice.
 - Do not return with diagnosis-only prose if implementation, extraction, probes, locks, or validation remain credible local next steps.
 - Do not package bare behavior-neutral substrate work as a checkpoint by itself.

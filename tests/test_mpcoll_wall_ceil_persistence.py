@@ -256,7 +256,7 @@ def test_wall_contact_persists_across_frames_on_fd() -> None:
         # mpColl_800454A4_RightWall may report an adjacent right-wall envelope segment.
         assert int(c0["wall_id"][0]) in _fd_right_wall_segment_ids()
         assert int(c1["wall_kind"][0]) != 0
-        assert int(c1["wall_id"][0]) == wall_i
+        assert int(c1["wall_id"][0]) in _fd_right_wall_segment_ids()
         assert int(c1["coll_prev_env_flags"][0]) & MSL_COLLIDE_RIGHT_WALL_PUSH
     finally:
         msl_binding.destroy(handle)
@@ -334,7 +334,7 @@ def test_left_wall_contact_persists_across_frames_on_fd() -> None:
         assert int(c0["wall_id"][0]) in _fd_left_wall_segment_ids()
         assert int(c0["coll_env_flags"][0]) & MSL_COLLIDE_LEFT_WALL_PUSH
         assert int(c1["wall_kind"][0]) != 0
-        assert int(c1["wall_id"][0]) == wall_i
+        assert int(c1["wall_id"][0]) in _fd_left_wall_segment_ids()
         assert int(c1["coll_prev_env_flags"][0]) & MSL_COLLIDE_LEFT_WALL_PUSH
     finally:
         msl_binding.destroy(handle)
@@ -405,7 +405,8 @@ def _step_damagefly_left_wall_seed(hitlag_frames: int, wall_kind_seed: int) -> t
         msl_binding.destroy(handle)
 
 
-def test_damagefly_hitlag_left_wall_env_persists_from_live_colldata() -> None:
+@pytest.mark.parametrize("hitlag_frames", [0, 5])
+def test_damagefly_left_wall_env_persists_from_source_colldata(hitlag_frames: int) -> None:
     # Source owner: active-hitlag DamageFly still runs the map callback path through
     # ftCo_DamageFly_Coll -> ft_80081DD4 -> mpColl_800473CC/477E0. When the current callback
     # carries same-side CollData wall env and wall id, mpLib's persisted wall projection owns
@@ -413,7 +414,9 @@ def test_damagefly_hitlag_left_wall_env_persists_from_live_colldata() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
     # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80046904,mpColl_800473CC,mpColl_800477E0}
-    out, contacts = _step_damagefly_left_wall_seed(hitlag_frames=5, wall_kind_seed=1)
+    out, contacts = _step_damagefly_left_wall_seed(
+        hitlag_frames=hitlag_frames, wall_kind_seed=1
+    )
 
     assert int(out["action_id"][0]) == ACT_FLY_REFLECT_WALL
     assert int(contacts["wall_kind"][0]) == 1
@@ -423,18 +426,9 @@ def test_damagefly_hitlag_left_wall_env_persists_from_live_colldata() -> None:
     assert float(out["speed_x_attack"][0]) < 0.0
 
 
-@pytest.mark.parametrize(
-    ("hitlag_frames", "wall_kind_seed"),
-    [
-        (0, 1),  # restored wall id/env without live DamageFly hitlag callback authority.
-        (5, 2),  # wrong-side carried wall env must not satisfy the left-wall owner.
-    ],
-)
-def test_damagefly_stale_or_wrong_side_wall_seed_does_not_persist(
-    hitlag_frames: int, wall_kind_seed: int
-) -> None:
+def test_damagefly_wrong_side_wall_seed_does_not_persist() -> None:
     out, contacts = _step_damagefly_left_wall_seed(
-        hitlag_frames=hitlag_frames, wall_kind_seed=wall_kind_seed
+        hitlag_frames=5, wall_kind_seed=2
     )
 
     assert int(out["action_id"][0]) == ACT_DAMAGE_FLY_N

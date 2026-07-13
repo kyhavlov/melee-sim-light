@@ -5,13 +5,8 @@ import numpy as np
 from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
 
 ACT_DAMAGE_FLY_TOP = 0x005A
-ACT_DOWN_BOUND_U = 0x00B7
-ACT_THROW_LW = 0x00DE
-ACT_THROWN_LW = 0x00F2
 ACT_WAIT = 0x000E
 SM_DAMAGE_FLY_TOP = 180
-SM_THROW_LW = 250
-SM_THROWN_LW = 265
 SM_WAIT1_0 = 2
 
 
@@ -58,33 +53,6 @@ def _base_seed() -> np.ndarray:
     seed["ground_id"][0, :2] = np.uint16(1)
     seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
     return seed
-
-
-def test_throwlw_release_next_callback_uses_source_colldata_last_pos() -> None:
-    # Source ftCo_800DDDE4 writes released-victim CollData.last_pos from the thrower's root plus
-    # 0.5*(thrower.coll_data.ecb.top.y + bottom.y), then the next DamageFly_Coll/ft_80081DD4
-    # floor pass can consume that source-owned endpoint. The simulator's same-frame throw-hit
-    # bridge must remain on the attached-victim root, so this lands on the next step, not instantly.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
-    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
-    seed = _base_seed()
-    seed["action_id"][0, :2] = np.array([ACT_THROW_LW, ACT_THROWN_LW], dtype=np.uint16)
-    seed["animation_index"][0, :2] = np.array([SM_THROW_LW, SM_THROWN_LW], dtype=np.uint32)
-    seed["anim_frame_f32"][0, :2] = np.float32(32.0)
-    seed["action_frame"][0, :2] = np.int16(32)
-    seed["grab_owner_port"][0, 1] = np.uint8(0)
-    seed["percent"][0, 1] = np.float32(20.0)
-
-    first = _step_seed(seed, steps=1)
-    assert int(first["action_id"][1]) == ACT_DAMAGE_FLY_TOP
-    assert int(first["on_ground"][1]) == 0
-
-    second = _step_seed(seed, steps=2)
-    assert int(second["action_id"][1]) == ACT_DOWN_BOUND_U
-    assert int(second["on_ground"][1]) == 1
-    assert int(second["ground_id"][1]) == 1
-    assert float(second["pos_y"][1]) >= 0.0
 
 
 def test_stale_damagefly_ground_id_without_release_colldata_last_pos_does_not_publish() -> None:

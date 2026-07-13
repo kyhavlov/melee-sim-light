@@ -14,6 +14,11 @@
 // - damage/KB/state entry is routed through combat_apply_throw_hit().
 void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int batch_index, int owner_p);
 
+// Throw ground callback floor-loss continuation (`fn_800DD684`): release the linked victim and
+// enter Fall for both fighters.
+void throw_flow_ground_loss_release(MslBatch* batch, int batch_index, int owner_p);
+void throw_flow_resume_attached_victim_after_hold(MslBatch* batch, int batch_index, int owner_p);
+
 static inline uint8_t throw_flow_release_pending_for_victim(const MslBatch* batch, int bi,
                                                             int victim_p) {
   if (batch == NULL) {

@@ -11,10 +11,11 @@
 #include "alloc.h"
 #include "action_ids.h"
 #include "combat.h"
+#include "ftcommon_ecb.h"
 #include "mpcoll_env.h"
-#include "mpcoll_ground.h"
+#include "mpcoll_callback_queries.h"
 #include "mpcoll_source_ground.h"
-#include "mpcoll_wall_ceil.h"
+#include "mpcoll_source_air.h"
 #include "msl_math.h"
 #include "stage_item_params.h"
 
@@ -1642,6 +1643,46 @@ const MslStageMapLine* stage_collision_map_line(uint32_t stage_id, uint16_t segm
              : NULL;
 }
 
+uint8_t stage_collision_map_lines_connected(uint32_t stage_id, uint16_t start_segment_i,
+                                            uint16_t target_segment_i) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  const MslStageMapLine* start = stage_collision_map_line(stage_id, start_segment_i);
+  const MslStageMapLine* target = stage_collision_map_line(stage_id, target_segment_i);
+  if (slot == NULL || start == NULL || target == NULL || start->kind != target->kind) {
+    return 0u;
+  }
+  if (start_segment_i == target_segment_i) {
+    return 1u;
+  }
+  // mpLinesConnected walks the source MapLine next chain and then the prev chain while line kind
+  // remains unchanged. Stable segment ids and extracted links let runtime preserve that exact
+  // topology without consulting normalized endpoint graphs.
+  // refs/melee/src/melee/mp/mplib.c::mpLinesConnected
+  int16_t line_id = start->next_id;
+  for (size_t step = 0; step < slot->map_line_count && line_id >= 0; step++) {
+    const MslStageMapLine* line = stage_collision_map_line(stage_id, (uint16_t)line_id);
+    if (line == NULL || line->kind != start->kind) {
+      break;
+    }
+    if ((uint16_t)line_id == target_segment_i) {
+      return 1u;
+    }
+    line_id = line->next_id;
+  }
+  line_id = start->prev_id;
+  for (size_t step = 0; step < slot->map_line_count && line_id >= 0; step++) {
+    const MslStageMapLine* line = stage_collision_map_line(stage_id, (uint16_t)line_id);
+    if (line == NULL || line->kind != start->kind) {
+      break;
+    }
+    if ((uint16_t)line_id == target_segment_i) {
+      return 1u;
+    }
+    line_id = line->prev_id;
+  }
+  return 0u;
+}
+
 uint8_t stage_collision_map_line_world(const MslBatch* batch, int bi, const MslStageMapLine* line,
                                        MslStageMapLine* out) {
   if (batch == NULL || line == NULL || out == NULL || bi < 0 || bi >= batch->batch_size) {
@@ -2407,7 +2448,7 @@ static uint8_t stage_collision_floor_line_moving_surface_state_impl(
     if (include_motion != 0u) {
       MslStageFloorLine prev = *line;
       MslStageFloorLine cur = *line;
-      const int32_t cur_frame = batch->state.frame_id[bi] + 1;
+      const int32_t cur_frame = batch->state.frame_id[bi];
       if (stage_collision_platform_path_world_line(slot, rec->line_id, cur_frame - 1, &prev) &&
           stage_collision_platform_path_world_line(slot, rec->line_id, cur_frame, &cur)) {
         out->velocity_x = cur.x0 - prev.x0;
@@ -3901,7 +3942,7 @@ static void stage_collision_publish_fod_ground_contact_height_sources(MslBatch* 
   }
 }
 
-static void stage_collision_apply_dream_whispy_wind(MslBatch* batch, uint8_t migrated_phase) {
+static void stage_collision_apply_dream_whispy_wind(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
@@ -3911,8 +3952,9 @@ static void stage_collision_apply_dream_whispy_wind(MslBatch* batch, uint8_t mig
   }
 
   // Dream Land Whispy wind is accumulated after self/knockback velocity and moving-floor carry,
-  // then added directly to cur_pos during Fighter_procUpdate. Packet-1 frame-start owners consume
-  // it before their map callback; retained frame-start owners keep their established post-map phase.
+  // then added directly to cur_pos during Fighter_procUpdate, before Fighter_procMap invokes the
+  // installed collision callback. Source-owned callbacks consume it here; callbacks not yet owned
+  // by the compact kernels retain the existing late phase until their map owner is migrated.
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec
   // refs/melee/src/melee/gr/groldpupupu.c::fn_802112F4
@@ -3949,11 +3991,6 @@ static void stage_collision_apply_dream_whispy_wind(MslBatch* batch, uint8_t mig
     const int num_players = (int)batch->config.num_players;
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      const uint8_t migrated = msl_coll_handler_is_source_ground(msl_motion_state_coll_handler_kind(
-          batch->state.char_id[idx], batch->state.frame_start_action_id[idx]));
-      if (migrated != migrated_phase) {
-        continue;
-      }
       if (batch->state.stocks[idx] == 0u || batch->state.hitlag[idx] != 0u) {
         continue;
       }
@@ -3977,20 +4014,16 @@ static void stage_collision_apply_dream_whispy_wind(MslBatch* batch, uint8_t mig
           // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
           batch->state.pos_x[idx] += x_add;
         }
-        if (migrated_phase == 0u) {
-          mpcoll_ground_refresh_grounded_root_floor_index(batch, bi, p);
-        }
+        mpcoll_ground_refresh_grounded_root_floor_index(batch, bi, p);
       }
     }
-    if (migrated_phase == 0u) {
-      if (batch->replay_frame_dream_whispy_first_apply_pending != NULL) {
-        batch->replay_frame_dream_whispy_first_apply_pending[bi] = 0u;
-      }
-      batch->state.stage_dream_whispy_wind_timer[bi]--;
-      if (batch->state.stage_dream_whispy_wind_timer[bi] == 0u) {
-        batch->state.stage_dream_whispy_wind_dir[bi] = 0u;
-        batch->state.stage_dream_whispy_wind_valid[bi] = 0u;
-      }
+    if (batch->replay_frame_dream_whispy_first_apply_pending != NULL) {
+      batch->replay_frame_dream_whispy_first_apply_pending[bi] = 0u;
+    }
+    batch->state.stage_dream_whispy_wind_timer[bi]--;
+    if (batch->state.stage_dream_whispy_wind_timer[bi] == 0u) {
+      batch->state.stage_dream_whispy_wind_dir[bi] = 0u;
+      batch->state.stage_dream_whispy_wind_valid[bi] = 0u;
     }
   }
 }
@@ -4000,12 +4033,45 @@ void stage_collision_apply(MslBatch* batch) {
     return;
   }
   stage_collision_update_fod_platform_motion(batch);
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    // Ground/JObj refresh advances mpLib's geometry generation before Fighter_procMap. Each
+    // fighter's CollData records the generation consumed by its preceding callback.
+    // refs/melee/src/melee/mp/mpcoll.c::CollData::x38
+    // refs/melee/src/melee/mp/mplib.c::{mpCheckFloorRemap,mpCheckCeilingRemap}
+    // This is mpLib's geometry-update generation, not a gameplay-frame label. Reseeding the same
+    // frame still rebuilds moving-stage/JObj geometry and must force the next CollData remap.
+    // refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
+    // refs/melee/src/melee/mp/mplib.c::{mpCheckFloorRemap,mpCheckCeilingRemap}
+    batch->state.stage_collision_geometry_generation[bi]++;
+    if (batch->state.stage_collision_geometry_generation[bi] == 0u) {
+      batch->state.stage_collision_geometry_generation[bi] = 1u;
+    }
+  }
   stage_collision_publish_fod_ground_contact_height_sources(batch);
-  stage_collision_apply_dream_whispy_wind(batch, 1u);
+  // Fighter_procUpdate applies wind to every eligible fighter after self/knockback movement and
+  // before Fighter_procMap, independent of the installed Coll callback family.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  stage_collision_apply_dream_whispy_wind(batch);
+  // Fighter_procMap advances the CollData ECB lock before consulting the installed coll_cb. The
+  // lock lifetime therefore does not belong to either collision kernel and still advances when a
+  // constrained callback suppresses its map body.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < (int)batch->config.num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.ecb_lock_timer[idx] != 0u) {
+        batch->state.ecb_lock_timer[idx]--;
+        if (batch->state.ecb_lock_timer[idx] == 0u) {
+          // Fighter_procMap clears CollData_X130_Locked before invoking coll_cb. A callback must
+          // therefore observe the ordinary persistent ECB state, not a one-frame provenance
+          // shadow of the expired lock.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+          // refs/melee/src/melee/ft/ftcommon.c::ftCommon_UnlockECB
+          msl_ftcommon_unlock_ecb(batch, idx);
+        }
+      }
+    }
+  }
   mpcoll_source_ground_apply(batch);
-  // Ground contact substrate (mpColl-shaped): owns on_ground/ground_id for loaded MSLSTG01 stages.
-  mpcoll_ground_apply(batch);
-  // Wall + ceiling contact substrate (mpColl-shaped): owns wall/ceiling contact metadata.
-  mpcoll_wall_ceil_apply(batch);
-  stage_collision_apply_dream_whispy_wind(batch, 0u);
+  mpcoll_source_air_apply(batch);
 }

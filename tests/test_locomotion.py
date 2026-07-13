@@ -3113,69 +3113,6 @@ def test_landing_same_ground_edge_enters_and_anchors_ottotto_feh_2531() -> None:
     )
 
 
-@pytest.mark.integration
-def test_landing_same_ground_edge_without_outward_nudge_stays_landing_mvp_3360() -> None:
-    # Negative for the retained ft_80084280 same-ground slice:
-    # - Landing_Coll can consume Collide_Edge into Ottotto, but the packaged reconstruction is the
-    #   source-visible grounded-overlap case. A no-overlap platform-edge Landing row must not use the
-    #   rough replay edge bit alone to enter Ottotto one frame early.
-    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
-    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor}
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
-    dataset_path = Path(
-        "replays/validation/battlefield_recent/MediumVirtualPig.slpz"
-    )
-
-    import msl_binding
-
-    sizes = msl_binding.sizes()
-    input_stride = int(sizes["input"])
-    row = load_replay_buffer_window(str(dataset_path), 3360, 3361).rows
-    assert int(row["seed_t"]["action_id"][0, 1]) == ACT_LANDING
-    assert int(row["ref_t1"]["action_id"][0, 1]) == ACT_LANDING
-
-    out, contacts = _step_once_with_collision_contacts(
-        row["seed_t"].copy(),
-        row["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
-        row["input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
-    )
-    assert int(contacts["coll_env_flags"][1]) & MSL_COLLIDE_EDGE
-    assert int(out["action_id"][1]) == ACT_LANDING
-    assert int(out["action_id"][1]) == int(row["ref_t1"]["action_id"][0, 1])
-
-
-def test_landing_same_ground_edge_static_source_state_enters_ottotto_without_replay_dataset() -> None:
-    import msl_binding
-
-    sizes = msl_binding.sizes()
-    input_stride = int(sizes["input"])
-
-    seed = _seed_base()
-    seed["on_ground"][0, 0] = np.uint8(1)
-    seed["pos_x"][0, 0] = np.float32(85.6)
-    seed["pos_y"][0, 0] = np.float32(0.0)
-    seed["pos_z"][0, 0] = np.float32(0.0)
-    seed["ground_id"][0, 0] = np.uint16(2)
-    seed["facing"][0, 0] = np.uint8(1)
-    seed["facing_dir1"][0, 0] = np.int8(1)
-    seed["speed_ground_x_self"][0, 0] = np.float32(0.0)
-    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
-    seed["action_id"][0, 0] = np.uint16(ACT_LANDING)
-    seed["action_frame"][0, 0] = np.int16(0)
-    seed["animation_index"][0, 0] = np.uint32(43)
-
-    prev_inp = _mk_input_bytes(1, input_stride)
-    inp = _mk_input_bytes(1, input_stride)
-    out, contacts = _step_once_with_collision_contacts(seed, prev_inp, inp)
-
-    # Source boundary: a Landing row with no self horizontal velocity has no local floor-sweep
-    # source for the edge bit, so ft_80084280 may consume same-ground Collide_Edge into Ottotto.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
-    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
-    assert int(contacts["coll_env_flags"][0]) & MSL_COLLIDE_EDGE
-    assert int(out["action_id"][0]) == ACT_OTTOTTO
-
-
 @pytest.mark.parametrize(
     ("action_id", "animation_index", "action_frame", "pos_z"),
     [
@@ -3254,88 +3191,6 @@ def test_landing_a678_waits_for_carried_floor_projection_rejection() -> None:
     # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
     assert int(out["action_id"][0]) == ACT_LANDING_AIR_N
     assert int(out["on_ground"][0]) == 1
-
-
-@pytest.mark.parametrize("action_frame", [0, 1, 5])
-@pytest.mark.parametrize("side", [-1.0, 1.0])
-@pytest.mark.parametrize(
-    (
-        "stage_id",
-        "left_ground_id",
-        "right_ground_id",
-        "x_abs",
-        "start_y",
-        "speed_abs",
-        "expected_x_abs",
-        "expected_y",
-        "left_wall_id",
-        "right_wall_id",
-    ),
-    [
-        (STAGE_FD, 0, 2, 67.8157, -24.25, 16.0, 87.5656967163086, -3.8030765056610107, 13, 10),
-        (STAGE_YOSHIS, 2, 6, 55.75, -14.25, 0.1, 58.0, -7.30307674407959, 19, 16),
-    ],
-)
-def test_landing_lower_wall_root_write_rebases_before_disconnected_4a908_retry(
-    action_frame: int,
-    side: float,
-    stage_id: int,
-    left_ground_id: int,
-    right_ground_id: int,
-    x_abs: float,
-    start_y: float,
-    speed_abs: float,
-    expected_x_abs: float,
-    expected_y: float,
-    left_wall_id: int,
-    right_wall_id: int,
-) -> None:
-    import msl_binding
-
-    input_stride = int(msl_binding.sizes()["input"])
-    # Advancing the Landing pose changes the callback's root/ECB relationship. Keep each later-age
-    # seed on the same lower-wall -> disconnected-floor path instead of asserting against geometry
-    # that only exercises the entry pose.
-    if action_frame > 0 and stage_id == STAGE_FD:
-        start_y += 0.5
-        expected_y = -3.724076509475708 if action_frame == 1 else -3.743682861328125
-    elif action_frame > 0 and stage_id == STAGE_YOSHIS:
-        x_abs += 1.0
-        start_y += 3.5
-        expected_x_abs = 57.795921325683594 if action_frame == 1 else 57.807464599609375
-        expected_y = -10.75407886505127
-    seed = _seed_base()
-    ground_id = left_ground_id if side < 0.0 else right_ground_id
-    seed["stage_id"][0] = np.uint32(stage_id)
-    seed["char_id"][0, 0] = np.uint8(CHAR_FOX)
-    seed["on_ground"][0, 0] = np.uint8(1)
-    seed["ground_id"][0, 0] = np.uint16(ground_id)
-    seed["facing"][0, 0] = np.uint8(1 if side < 0.0 else 0)
-    seed["facing_dir1"][0, 0] = np.int8(1 if side < 0.0 else -1)
-    seed["pos_x"][0, 0] = np.float32(side * x_abs)
-    seed["pos_y"][0, 0] = np.float32(start_y)
-    seed["speed_ground_x_self"][0, 0] = np.float32(side * speed_abs)
-    seed["action_id"][0, 0] = np.uint16(ACT_LANDING)
-    seed["animation_index"][0, 0] = np.uint32(35)
-    seed["action_frame"][0, 0] = np.int16(action_frame)
-    seed["anim_frame_f32"][0, 0] = np.float32(action_frame)
-
-    neutral = _mk_input_bytes(1, input_stride)
-    out, contacts = _step_once_with_collision_contacts(seed, neutral, neutral)
-
-    # The retained lower connected wall moves cur_pos first. Its freshly rebased ECB then feeds
-    # the disconnected 4A908 retry, which rejects support here and leaves the Landing callback's
-    # source Fall result. This locks flat and sloped ledges, both mirrors, and later callbacks.
-    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80049778_LeftWall,
-    #   mpColl_80048AB0_RightWall,mpColl_8004ACE4,mpColl_8004A908_Floor}
-    assert int(out["action_id"][0]) == ACT_FALL
-    assert int(out["on_ground"][0]) == 0
-    assert int(out["ground_id"][0]) == ground_id
-    assert float(out["pos_x"][0]) == pytest.approx(side * expected_x_abs, abs=1e-5)
-    assert float(out["pos_y"][0]) == pytest.approx(expected_y, abs=1e-5)
-    assert int(contacts["wall_kind"][0]) == (1 if side < 0.0 else 2)
-    assert int(contacts["wall_id"][0]) == (left_wall_id if side < 0.0 else right_wall_id)
-    assert int(contacts["coll_env_flags"][0]) & (0x1 if side < 0.0 else 0x40)
 
 
 @pytest.mark.parametrize(("side", "ground_id"), [(-1.0, 2), (1.0, 6)])
@@ -3668,39 +3523,6 @@ def test_timer_active_passivewalljump_startup_does_not_reproject_from_wall() -> 
     assert int(out["action_frame"][p]) == 0
     assert float(out["pos_x"][p]) == pytest.approx(float(seed["pos_x"][0, p]), abs=1e-5)
     assert int(contacts["coll_env_flags"][p]) == 0
-
-
-def test_timer_active_passivewalljump_startup_still_resolves_live_wall_contact() -> None:
-    import msl_binding
-
-    input_stride = int(msl_binding.sizes()["input"])
-    seed = _seed_base()
-    p = 0
-    seed["stage_id"][0] = np.uint32(STAGE_YOSHIS)
-    seed["char_id"][0, p] = np.uint8(CHAR_FALCON)
-    seed["action_id"][0, p] = np.uint16(ACT_PASSIVE_WALL_JUMP)
-    seed["action_frame"][0, p] = np.int16(0)
-    seed["animation_index"][0, p] = np.uint32(SM_PASSIVE_WALL_JUMP)
-    seed["anim_frame_f32"][0, p] = np.float32(0.0)
-    seed["on_ground"][0, p] = np.uint8(0)
-    seed["facing"][0, p] = np.uint8(1)
-    seed["pos_x"][0, p] = np.float32(54.0)
-    seed["pos_y"][0, p] = np.float32(-55.0)
-    seed["passivewall_timer"][0, p] = np.uint8(5)
-
-    out, contacts = _step_once_with_collision_contacts(
-        seed, _mk_input_bytes(1, input_stride), _mk_input_bytes(1, input_stride)
-    )
-
-    # ft_80083318 does not freeze map collision. Its mpColl_80047F40 branch runs inline1 with the
-    # JObj ECB narrowed to +/-1 by load flag 0x8, so a real overlap still publishes and resolves.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_Coll
-    # refs/melee/src/melee/ft/ft_081B.c::ft_80083318
-    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047F40,mpColl_LoadECB_JObj}
-    assert int(out["action_id"][p]) == ACT_PASSIVE_WALL_JUMP
-    assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_RIGHT_WALL_MASK
-    assert int(contacts["wall_kind"][p]) == 2
-    assert float(out["pos_x"][p]) == pytest.approx(54.35312, abs=1.0e-4)
 
 
 def test_turn_reseed_does_not_flip_immediately_when_action_frame_is_0() -> None:

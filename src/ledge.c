@@ -41,24 +41,6 @@ static inline uint8_t is_cliff_hold_action(uint16_t a) {
   }
 }
 
-static inline uint8_t is_cliff_occupancy_action(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_CLIFF_CATCH:
-    case MSL_ACT_CLIFF_WAIT:
-    case MSL_ACT_CLIFF_CLIMB_SLOW:
-    case MSL_ACT_CLIFF_CLIMB_QUICK:
-    case MSL_ACT_CLIFF_ATTACK_SLOW:
-    case MSL_ACT_CLIFF_ATTACK_QUICK:
-    case MSL_ACT_CLIFF_ESCAPE_SLOW:
-    case MSL_ACT_CLIFF_ESCAPE_QUICK:
-    case MSL_ACT_CLIFF_JUMP_SLOW1:
-    case MSL_ACT_CLIFF_JUMP_QUICK1:
-      return 1;
-    default:
-      return 0;
-  }
-}
-
 static inline uint8_t is_cliff_action_any(uint16_t a) {
   return (is_cliff_hold_action(a) || a == (uint16_t)MSL_ACT_CLIFF_JUMP_SLOW2 ||
           a == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK2)
@@ -66,139 +48,23 @@ static inline uint8_t is_cliff_action_any(uint16_t a) {
              : 0;
 }
 
-static inline uint8_t is_fall_like_action(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_FALL:
-    case MSL_ACT_FALL_F:
-    case MSL_ACT_FALL_B:
-    case MSL_ACT_FALL_AERIAL:
-    case MSL_ACT_FALL_AERIAL_F:
-    case MSL_ACT_FALL_AERIAL_B:
-    case MSL_ACT_FALL_SPECIAL:
-    case MSL_ACT_FALL_SPECIAL_F:
-    case MSL_ACT_FALL_SPECIAL_B:
-    case MSL_ACT_DAMAGE_FALL:
-    // MissFoot_Coll uses ft_80082F28, which runs ftCliffCommon_80081298 after the
-    // ground/ledge and wall-jump checks.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_MissFoot_Coll
-    // refs/melee/src/melee/ft/ft_081B.c::ft_80082F28
-    case MSL_ACT_MISS_FOOT:
-      return 1;
-    default:
-      return 0;
+static inline uint8_t coll_callback_runs_cliff_catch(uint32_t source_plan, uint8_t selector,
+                                                     float speed_y_self, uint8_t special_cmd1) {
+  // The generated plan is keyed by exact retail Coll pointer identity. Only the two source
+  // callbacks whose cliff call is conditional need live fighter state here: Falcon Dive waits for
+  // cmd1, while Dolphin Slash additionally waits until descending.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
+  // refs/melee/src/melee/ft/chara/{ftCaptain/ftCa_SpecialHi.c,ftMars/ftMs_SpecialHi.c}
+  if (msl_coll_source_plan_has(source_plan, MSL_COLL_SOURCE_CLIFF_CATCH)) {
+    return 1u;
   }
-}
-
-static inline uint8_t is_airborne_action_with_cliffcatch_check(uint8_t char_id, uint16_t a,
-                                                               float speed_y_self,
-                                                               uint8_t special_cmd1) {
-  if (is_fall_like_action(a)) {
-    return 1;
+  if (msl_coll_source_plan_has(source_plan, MSL_COLL_SOURCE_CLIFF_CATCH_CMD1)) {
+    return special_cmd1 != 0u;
   }
-  // Marth char-specials (the 341..372 range is per-character; check BEFORE the fox/falco
-  // case labels below, which collide numerically). Dolphin Slash's collision callback takes
-  // the ft_800831CC (cliffcatch-enabled) branch once launched (cmd0) and descending; the
-  // rising/pre-launch frames use ft_80083B68 (stage collision + item catch only). Other Marth
-  // air specials use ft_80081D0C (no ledge grab).
-  // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::{ftMs_SpecialHi_Coll,
-  //   ftMs_SpecialAirHi_Coll}
-  if (char_id == (uint8_t)MSL_CHAR_ID_MARTH && a >= 341u && a <= 372u) {
-    // cmd_vars[1] arms on the first descending collision pass; the cliffcatch wrapper runs
-    // from the second (ftMs_Special(Air)Hi_Coll branch order).
-    return (uint8_t)((a == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
-                      a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) &&
-                     speed_y_self < 0.0f && special_cmd1 != 0u);
+  if (selector == (uint8_t)MSL_COLL_SELECTOR_MARS_HI) {
+    return (uint8_t)(special_cmd1 != 0u && speed_y_self < 0.0f);
   }
-  // Falcon Dive (Special(Air)Hi): doAirColl runs ftCliffCommon_80081298 ONLY once the script's
-  // cmd_vars[0] IASA pulse armed mv.ca.specialhi.x2_b1 (the shared special_cmd1 latch); before
-  // that the airborne Coll is ft_80083B68 (no ledge). No descending requirement.
-  // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::doAirColl
-  if (char_id == (uint8_t)MSL_CHAR_ID_FALCON && a >= 341u && a <= 372u) {
-    return (uint8_t)((a == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
-                      a == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI) &&
-                     special_cmd1 != 0u);
-  }
-  if (msl_motion_state_class_has(char_id, a, MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL) != 0u) {
-    // Generated callback owner for actions whose Coll callback calls ft_CheckGroundAndLedge and
-    // then ftCliffCommon_80081298 on the airborne path, including Zelda Farore's Wind aerial
-    // startup/travel/end and Sheik Vanish's matching source shape.
-    // data/motion_state/owners/{fox,falco,sheik,zelda}.bin::MSLMSO01
-    // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialHi.c::{
-    //   ftZd_SpecialAirHiStart_0_Coll,ftZd_SpecialAirHiStart_1_Coll,ftZd_SpecialAirHi_Coll}
-    // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
-    // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298
-    return 1;
-  }
-  // Sheik Vanish's three airborne collision callbacks all call ft_CheckGroundAndLedge and then
-  // ftCliffCommon_80081298 on the airborne path. The 341..364 action-id range is per-character,
-  // so keep this char gate before the shared spacie special-kind lookup below.
-  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
-  //   ftSk_SpecialAirHiStart_0_Coll,ftSk_SpecialAirHiStart_1_Coll,ftSk_SpecialAirHi_Coll}
-  if (char_id == (uint8_t)MSL_CHAR_ID_SHEIK) {
-    switch (a) {
-      case MSL_ACT_SK_SPECIAL_AIR_HI_START_0:
-      case MSL_ACT_SK_SPECIAL_AIR_HI_START_1:
-      case MSL_ACT_SK_SPECIAL_AIR_HI:
-        return 1;
-      default:
-        break;
-    }
-  }
-  switch (a) {
-    // Pass / platform drop collision uses the MissFoot-style common-air wrapper, which runs
-    // ftCliffCommon_80081298 after airborne stage collision. Holding down still blocks the catch
-    // inside ftCliffCommon_80081298, but releasing down before the ledge window must allow it.
-    // Decomp:
-    // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_Pass_Coll
-    // - refs/melee/src/melee/ft/ft_081B.c::ft_80082F28
-    case MSL_ACT_PASS:
-      return 1;
-
-    // Jump / aerial jump collision wrappers end with ftCliffCommon_80081298.
-    // Decomp:
-    // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
-    // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
-    // - refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
-    case MSL_ACT_JUMP_F:
-    case MSL_ACT_JUMP_B:
-    case MSL_ACT_JUMP_AERIAL_F:
-    case MSL_ACT_JUMP_AERIAL_B:
-      return 1;
-
-    // NOTE(decomp): the common aerial attack / airdodge collision callbacks do not end in the
-    // cliff catch check (ftCliffCommon_80081298). They use ft_80082C74, which only runs stage
-    // collision and then optionally calls a landing transition callback.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-    // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
-    //
-    // This lite sim therefore does not schedule CliffCatch directly from AttackAir*/EscapeAir;
-    // ledge catches are expected to occur from fall-like motions and other collision wrappers.
-
-    // Spacie aerial specials with decomp call sites that include the cliff catch check.
-    // Decomp:
-    // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialAirSStart_Coll,ftFx_SpecialAirS_Coll,ftFx_SpecialAirSEnd_Coll}
-    // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
-    //   ftFx_SpecialHiHoldAir_Coll,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll,
-    //   ftFx_SpecialHiBound_Coll}
-    default: {
-      // Ownership from the extracted MotionState row identity (the aerial SpecialS family
-      // plus the airborne SpecialHi rows whose Coll callbacks include the cliff catch).
-      const uint8_t fx_kind = msl_motion_state_fx_special_kind(char_id, a);
-      switch (fx_kind) {
-        case MSL_FX_KIND_SPECIAL_AIR_S_START:
-        case MSL_FX_KIND_SPECIAL_AIR_S:
-        case MSL_FX_KIND_SPECIAL_AIR_S_END:
-        case MSL_FX_KIND_SPECIAL_HI_HOLD_AIR:
-        case MSL_FX_KIND_SPECIAL_AIR_HI:
-        case MSL_FX_KIND_SPECIAL_HI_FALL:
-        case MSL_FX_KIND_SPECIAL_HI_BOUND:
-          return 1;
-        default:
-          return 0;
-      }
-    }
-  }
+  return 0u;
 }
 
 static inline uint16_t cliff_submotion_for_action(uint16_t a) {
@@ -965,7 +831,7 @@ static inline void refresh_stage_ledge_occupants(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t a = batch->state.action_id[idx];
-      if (!is_cliff_occupancy_action(a)) {
+      if (!is_cliff_hold_action(a)) {
         continue;
       }
       // Decomp: ledge occupancy checks use fp->x221D_b7, which is set by CliffCatch entry and by
@@ -1015,6 +881,27 @@ static inline void refresh_stage_ledge_occupants(MslBatch* batch) {
       }
     }
   }
+}
+
+static uint8_t ledge_floor_is_occupied(const MslBatch* batch, int bi, int candidate_p,
+                                       uint16_t candidate_floor) {
+  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
+  for (int p = 0; p < (int)batch->config.num_players; p++) {
+    if (p == candidate_p) {
+      continue;
+    }
+    const size_t idx = msl_idx_player(bi, p);
+    const uint16_t owner_floor = batch->state.cliff_ledge_floor_segment_id[idx];
+    if (is_cliff_hold_action(batch->state.action_id[idx]) && owner_floor != 0xFFFFu &&
+        stage_collision_map_lines_connected(stage_id, owner_floor, candidate_floor)) {
+      return 1u;
+    }
+  }
+  // ft_80082E3C tests every attached fighter's stored cliff floor through mpLinesConnected; it is
+  // not a one-slot-per-side stage reduction.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80082E3C
+  // refs/melee/src/melee/mp/mplib.c::mpLinesConnected
+  return 0u;
 }
 
 void ledge_update_pre_physics(MslBatch* batch) {
@@ -1267,12 +1154,9 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
       if (batch->state.on_ground[idx]) {
         continue;
       }
-      // Decomp: Fighter_procUpdate and Fighter_procMap collision blocks are gated out during hitlag
-      // (and thus do not run cliff catch checks).
-      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (the `if (!fp->x2219_b5)` block)
-      if (batch->state.hitlag_started_frame[idx] != 0) {
-        continue;
-      }
+      // Fighter_procMap is not hitlag-gated: the installed Coll callback can publish ledge bits and
+      // enter CliffCatch while Fighter_procUpdate's physics work is frozen.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
       // Match-flow actions use dedicated (or NULL) collision callbacks in decomp; this lite sim
       // skips generic stage collision for those motions, and thus should not schedule cliff catch.
       // refs: src/match_flow.c::match_flow_should_stage_collide
@@ -1290,9 +1174,10 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
       // whose collision callbacks include the cliff check in-engine.
       // Decomp: cliff check call sites are in shared collision wrappers that run after mpColl.
       // refs/melee/src/melee/ft/ft_081B.c::{ft_800835B0,ft_800831CC,ft_80083090}
-      if (!is_airborne_action_with_cliffcatch_check(batch->state.char_id[idx], a,
-                                                    batch->state.speed_y_self[idx],
-                                                    batch->state.special_cmd1[idx])) {
+      if (!coll_callback_runs_cliff_catch(batch->state.live_coll_source_plan[idx],
+                                          batch->state.live_coll_wrapper_selector_kind[idx],
+                                          batch->state.speed_y_self[idx],
+                                          batch->state.special_cmd1[idx])) {
         continue;
       }
       // Decomp: cliff catch checks collision env flags for Collide_LedgeGrabMask.
@@ -1327,7 +1212,8 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
         if (!have_left) {
           continue;
         }
-        if (batch->state.stage_ledge_occupant_left[bi] >= 0) {
+        const MslStageFloorLine* ledge_floor = stage_collision_get_ledge_floor_line(stage_id, 0);
+        if (ledge_floor == NULL || ledge_floor_is_occupied(batch, bi, p, ledge_floor->segment_i)) {
           continue;
         }
 
@@ -1355,7 +1241,8 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
         if (!have_right) {
           continue;
         }
-        if (batch->state.stage_ledge_occupant_right[bi] >= 0) {
+        const MslStageFloorLine* ledge_floor = stage_collision_get_ledge_floor_line(stage_id, 1);
+        if (ledge_floor == NULL || ledge_floor_is_occupied(batch, bi, p, ledge_floor->segment_i)) {
           continue;
         }
 

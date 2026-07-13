@@ -1048,26 +1048,6 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
 
     x44_abs = arc.ptr32(ftdata_abs + 0x44)
     wait_anim_abs = arc.ptr32(ftdata_abs + 0x24)
-    # Probe-backed gameplay overlay:
-    # ftCo_800DDDE4 always samples a selected capture/throw anchor, but the observed
-    # mpColl_800471F8 floor-publication subset is not equivalent to the anchor part id.
-    # Marth ThrowF/ThrowLw, Sheik ThrowLw, and Falcon ThrowLw publish the floor-hit substep root
-    # before damage entry; Marth ThrowB and Fox/Falco controls do not. Keep the source-completion
-    # discriminator explicit so characters with the same anchor id do not inherit this path.
-    # Bit order: ThrowF, ThrowB, ThrowHi, ThrowLw.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
-    # refs/Ishiiruka engine-dump-v12-probes ftCo_800DDDE4 probe:
-    #   IPW 1231..1233/10031, ParallelFamiliarZebra 1427..1429, FSP 9061..9067,
-    #   RuralReasonableRat 3168; Falcon-suite vanilla release rows including
-    #   Game_20260509T030948 375/2508/3019 and Game_20260505T215428 329/527.
-    throw_release_mpcoll_floor_publication_mask = 0
-    if ftdata_symbol == "ftDataMars":
-        throw_release_mpcoll_floor_publication_mask = (1 << 0) | (1 << 3)
-    if ftdata_symbol == "ftDataSeak":
-        throw_release_mpcoll_floor_publication_mask = 1 << 3
-    if ftdata_symbol == "ftDataCaptain":
-        throw_release_mpcoll_floor_publication_mask = 1 << 3
     # Source-callsite gameplay overlay:
     # ftCo_80096900 stores arg1 into mv.co.fallspecial.xC. Marth Dolphin Slash calls it with
     # arg1=0 from SpecialHi/SpecialAirHi, while Fox/Falco Firefox fall/end callsites pass arg1=1.
@@ -1080,21 +1060,6 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     fallspecial_xc0_source_fx_kind_mask = 0
     if ftdata_symbol == "ftDataMars":
         fallspecial_xc0_source_fx_kind_mask = (1 << 15) | (1 << 16)
-    # Probe-backed seed/provenance overlay:
-    # Slippi does not expose CollData ECB bottom. Marth FallAerial shallow landing witnesses and
-    # Sheik Fall shallow platform/floor witnesses need the seed CollData bottom reconstructed from
-    # the CommonFall directional blend hidden lane, but aggregate Fox/Falco controls reject
-    # promoting that to a shared free-running mpColl rule. Keep this as an explicit
-    # character/action seed mask until a direct mpColl probe proves a wider live-callback owner.
-    # Bit order: Fall, FallAerial, FallSpecial.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::{
-    #   ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
-    common_fall_blended_ecb_seed_mask = 0
-    if ftdata_symbol in ("ftDataMars", "ftDataCaptain"):
-        common_fall_blended_ecb_seed_mask = 1 << 1
-    if ftdata_symbol == "ftDataSeak":
-        common_fall_blended_ecb_seed_mask = 1 << 0
     # Sustained EscapeAir_Coll carried ledge-floor wall publication overlay. This is kept explicit
     # instead of inferred from action id or a stage/replay row: Sheik/Zelda probes require the live
     # carried floor -> adjacent wall owner, while Fox/Falco/Marth validation controls reject
@@ -1108,9 +1073,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
 
     out = {
         "grab_capture_anchor_part_id": grab_capture_anchor_part_id,
-        "throw_release_mpcoll_floor_publication_mask": throw_release_mpcoll_floor_publication_mask,
         "fallspecial_xc0_source_fx_kind_mask": fallspecial_xc0_source_fx_kind_mask,
-        "common_fall_blended_ecb_seed_mask": common_fall_blended_ecb_seed_mask,
         "escapeair_carried_floor_wall_source": escapeair_carried_floor_wall_source,
         "walk_init_vel": f(0x00),
         "walk_accel": f(0x04),
@@ -1438,6 +1401,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
     # Deprecated keys from previous extractor iterations; drop them on rewrite so downstream
     # consumers don't accidentally treat them as part of the contract.
     drop_keys = {
+        "common_fall_blended_ecb_seed_mask",
         "ecb_bone_indices",
         "escapeair_active_lock_requires_current_floor_owner",
     }
@@ -1486,9 +1450,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "pushbox_x",
         "pushbox_y",
         "grab_capture_anchor_part_id",
-        "throw_release_mpcoll_floor_publication_mask",
         "fallspecial_xc0_source_fx_kind_mask",
-        "common_fall_blended_ecb_seed_mask",
         "escapeair_carried_floor_wall_source",
         "illusion_gravity_delay_start_frames",
         "illusion_air_friction_start",

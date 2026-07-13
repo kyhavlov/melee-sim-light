@@ -806,21 +806,15 @@ Collect before writing any code:
 4. **Throw/capture release publication audit**: do not stop after the throw
    hitbox table works. `ftCo_800DDDE4` samples the selected throw-side TransN2
    part, writes the victim's `x1A70` release vector, clears/restores XRotN
-   collision state, writes `CollData.last_pos`, and then calls
-   `mpColl_800471F8` before damage entry. New characters can remap the extracted
+   collision state, writes `CollData.last_pos`, and then calls the complete
+   `mpColl_800471F8` callback before damage entry whenever the live `x2226_b2`
+   constraint was set. New characters can remap the extracted
    `grab_capture_anchor_part_id` (Marth: part 88; Fox/Falco controls publish
-   part 71/65), but the runtime owner is the explicit
-   `throw_release_mpcoll_floor_publication_mask`, not the anchor id. Only the
-   probed throw directions and admitted `mpColl_80043754` floor sweep should
-   publish the floor-hit substep root instead of the raw below-floor `x1A70`
-   point (Marth ThrowF/ThrowLw and Sheik/Falcon ThrowLw publish; Marth ThrowB and
-   Fox/Falco controls do not). Probe at least one forward throw/CaptureCut, one adjacent
-   throw-direction variant, and one non-new-char negative before assuming spacie
-   release placement generalizes. Source anchors:
+   part 71/65), but neither character nor throw direction selects collision.
+   Preserve the universal live constraint gate and canonical wall/ceiling/floor
+   kernel; do not add a character-data publication mask. Source anchors:
    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4`,
-   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}`, and
-   the probe-backed character-data mask in
-   `data/characters/*::throw_release_mpcoll_floor_publication_mask`.
+   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043670,mpColl_800471F8,mpColl_80043754}`.
 5. **Throw-release damage facing audit**: throw damage entry has two source
    facing lanes. `ftCo_800DDDE4` writes `victim->dmg.facing_dir_1 =
    -thrower->facing_dir`; `ftCo_8008DCE0` uses that lane for knockback velocity.

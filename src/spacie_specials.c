@@ -12,7 +12,7 @@
 #include "input_axis.h"
 #include "locomotion.h"
 #include "motion_state_owners.h"
-#include "mpcoll_wall_ceil.h"
+#include "mp_coll.h"
 #include "msl_math.h"
 #include "specialhi_pose.h"
 
@@ -314,6 +314,26 @@ static inline float spacie_specialhi_collision_angle_to_self_vel(float normal_x,
     dot = -1.0f;
   }
   return acosf(dot);
+}
+
+uint8_t spacie_specialhi_floor_contact_should_bound(const MslBatch* batch, const MslCharParams* ch,
+                                                    size_t idx) {
+  if (batch == NULL || ch == NULL ||
+      msl_motion_state_fx_special_kind(batch->state.char_id[idx], batch->state.action_id[idx]) !=
+          (uint8_t)MSL_FX_KIND_SPECIAL_AIR_HI ||
+      (batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_FLOOR_MASK) == 0u) {
+    return 0u;
+  }
+  const float angle = spacie_specialhi_collision_angle_to_self_vel(
+      batch->state.ground_normal_x[idx], batch->state.ground_normal_y[idx],
+      batch->state.speed_air_x_self[idx], batch->state.speed_y_self[idx]);
+  const float threshold = (90.0f + ch->firefox_bound_angle_degrees) * (MSL_PI_F / 180.0f);
+  // ftFx_SpecialAirHi_Coll rebounds only when the floor/self-velocity angle fails the shallow
+  // continuation gate. Platform contacts are rejected by ftFox_SpecialHi_IsBound before this
+  // predicate and are handled by the callback-local floor-skip branch.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFox_SpecialHi_IsBound,ftFx_SpecialAirHi_Coll}
+  return (uint8_t)(!(angle < threshold));
 }
 
 void spacie_specialhi_apply_collision_facing_dir(MslBatch* batch, const MslCharParams* ch,

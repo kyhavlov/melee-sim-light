@@ -75,6 +75,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->magnify_damage_runtime_visibility_owner, 0, sizeof(uint8_t) * bp);
   memset(state->magnify_damage_seed_episode_active, 0, sizeof(uint8_t) * bp);
   memset(state->magnify_damage_local_episode_kind, 0, sizeof(uint8_t) * bp);
+  memset(state->live_coll_callback_action_id, 0xFF, sizeof(uint16_t) * bp);
   memset(state->dynamic_pose_apply_collision_matrix, 0, sizeof(uint8_t) * bp);
   memset(state->dynamic_pose_node_count, 0, sizeof(uint8_t) * bp);
   memset(state->dynamic_pose_char_id, 0, sizeof(uint8_t) * bp);
@@ -153,10 +154,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->coll_desired_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_desired_ecb_bottom_locked_owner, 0, sizeof(uint8_t) * bp);
   memset(state->coll_common_fall_blended_ecb_seed_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_common_fall_blended_ecb_runtime_owned, 0, sizeof(uint8_t) * bp);
   memset(state->floor_sweep_prev_runtime_owned, 0, sizeof(uint8_t) * bp);
   memset(state->coll_damage_hitlag_ecb_source_kind, 0, sizeof(uint8_t) * bp);
   memset(state->coll_damage_hitlag_floor_contact_runtime, 0, sizeof(uint8_t) * bp);
-  memset(state->coll_escapeair_floor_producer_runtime, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_source, 0, sizeof(uint8_t) * bp);
   memset(state->coll_a678_edge_runtime, 0, sizeof(uint8_t) * bp);
@@ -173,7 +174,6 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->coll_floor_probe_projection_hit, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_probe_carried_source_owned, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_probe_carried_runtime_owned, 0, sizeof(uint8_t) * bp);
-  memset(state->coll_floor_probe_reject_bits, 0, sizeof(uint64_t) * bp);
   memset(state->coll_floor_probe_source_phases, 0, sizeof(uint32_t) * bp);
   memset(state->coll_floor_probe_carried_segment_id, 0xFF, sizeof(uint16_t) * bp);
   memset(state->coll_floor_probe_candidate_segment_id, 0xFF, sizeof(uint16_t) * bp);

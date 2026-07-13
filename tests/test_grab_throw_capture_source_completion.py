@@ -80,6 +80,42 @@ def test_throw_release_callback_order_stays_anim_before_compatibility_cleanup() 
         ],
     )
 
+
+def test_throw_ground_loss_uses_source_fall_entry_for_both_fighters() -> None:
+    source = (ROOT / "src/throw_flow.c").read_text()
+    helper = _function_body(source, "throw_enter_fall_via_ftco_fall_enter")
+    body = _function_body(source, "throw_flow_ground_loss_release")
+
+    _assert_ordered(
+        helper,
+        [
+            "const uint8_t was_grounded",
+            "msl_locomotion_enter_fall_via_ftco_fall_enter",
+            "combat_apply_ftCommon_8007D5D4_ground_to_air",
+        ],
+    )
+    assert body.count("throw_enter_fall_via_ftco_fall_enter") == 2
+    assert "enter_fall_release" not in body
+
+
+def test_dc920_connected_floor_materializes_source_ecb_clear() -> None:
+    grab_source = (ROOT / "src/grab_attachment.c").read_text()
+    pose_source = (ROOT / "src/mpcoll_ecb_pose.c").read_text()
+    release = _function_body(grab_source, "grab_attachment_dc920_release_now")
+    clear = _function_body(pose_source, "mpcoll_clear_current_ecb_packet")
+
+    _assert_ordered(
+        release,
+        [
+            "if (connected_floor)",
+            "batch->state.coll_substep_cur_pos_y[constrained_idx] = floor.corrected_pos_y",
+            "mpcoll_clear_current_ecb_packet(batch, constrained_idx)",
+        ],
+    )
+    assert "mpcoll_store_current_ecb_points" in clear
+    assert "mpcoll_store_prev_ecb_points" in clear
+    assert "coll_squeeze_restore_ecb_valid[idx] = 0u" in clear
+
     throw_source = (ROOT / "src/throw_flow.c").read_text()
     anim_body = _function_body(throw_source, "throw_flow_update_anim_callback_pre_input")
     _assert_ordered(
@@ -93,7 +129,7 @@ def test_throw_release_callback_order_stays_anim_before_compatibility_cleanup() 
     )
 
 
-def test_throw_release_floor_sweep_prev_endpoint_is_live_for_release_probe() -> None:
+def test_throw_release_floor_sweep_prev_endpoint_is_live_for_release_callback() -> None:
     # ftCo_800DDDE4 calls mpColl_800471F8 during the same Throw release callback that detaches and
     # damages the victim. Keep the pre-release attached root in the live sweep endpoint before the
     # simulator release-local DamageFly bridge; the next-frame seed lane carries source
@@ -102,6 +138,7 @@ def test_throw_release_floor_sweep_prev_endpoint_is_live_for_release_probe() -> 
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpCollPrev,mpColl_80043754}
     source = (ROOT / "src/throw_flow.c").read_text()
     body = _function_body(source, "throw_flow_update_anim_callback_pre_input")
+    post_items_body = _function_body(source, "throw_flow_update_post_items")
 
     _assert_ordered(
         body,
@@ -114,6 +151,13 @@ def test_throw_release_floor_sweep_prev_endpoint_is_live_for_release_probe() -> 
             "batch->state.floor_sweep_seed_prev_pos_x[vidx] = source_release_last_pos_x",
             "batch->state.floor_sweep_seed_prev_valid[vidx] = 1u",
             "batch->state.floor_sweep_prev_runtime_owned[vidx] = 1u",
+            "mpcoll_source_air_run_release_471f8",
+        ],
+    )
+    _assert_ordered(
+        post_items_body,
+        [
+            "combat_apply_throw_hit",
             "knockdown_try_throw_release_damage_floor_contact",
         ],
     )

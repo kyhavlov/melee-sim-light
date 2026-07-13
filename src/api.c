@@ -56,7 +56,8 @@
 #include "ucf.h"
 #include "mpcoll_colldata_copy.h"
 #include "mpcoll_ecb_points.h"
-#include "mpcoll_wall_ceil.h"
+#include "mpcoll_ecb_pose.h"
+#include "mp_coll.h"
 #include "specialhi_pose.h"
 #include "state.h"
 #include "state_flags.h"
@@ -100,11 +101,7 @@ static inline uint8_t reseed_common_fall_blended_ecb_seed_owner(const MslBatch* 
     return 0u;
   }
   const uint8_t bit = reseed_common_fall_blended_ecb_seed_bit(action_id);
-  if (bit == 0u) {
-    return 0u;
-  }
-  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
-  return (ch != NULL && (ch->common_fall_blended_ecb_seed_mask & bit) != 0u) ? 1u : 0u;
+  return bit != 0u ? 1u : 0u;
 }
 
 static inline uint8_t reseed_common_fall_blended_ecb_points(MslEcbWorldPoints* out,
@@ -2267,6 +2264,16 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
                                                                      seed_floor_skip)))
               ? seed_floor_skip
               : 0xFFFFu;
+      if (batch->state.floor_skip_segment_id[idx] == 0xFFFFu &&
+          seed->action_id[p] == (uint16_t)MSL_ACT_PASS && seed->ground_id[p] != 0xFFFFu &&
+          stage_collision_floor_line_is_platform(seed->stage_id, seed->ground_id[p])) {
+        // ftCo_8009A228 writes CollData.floor_skip immediately after entering Pass. Public replay
+        // rows retain floor.index but not floor_skip, so teacher-forced initialization reconstructs
+        // that real hidden field from the source-owned motion and carried platform.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A228
+        // refs/melee/src/melee/mp/mpcoll.c::mpUpdateFloorSkip
+        batch->state.floor_skip_segment_id[idx] = seed->ground_id[p];
+      }
       batch->state.team_id[idx] = seed->team_id[p];
       batch->state.char_id[idx] = seed->char_id[p];
       batch->state.handicap[idx] = (seed->handicap[p] != 0u) ? seed->handicap[p] : 9u;
@@ -2307,7 +2314,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.coll_wall_ceil_prev_pos_valid[idx] = 0u;
       batch->state.coll_last_pos_x[idx] = seed->pos_x[p];
       batch->state.coll_last_pos_y[idx] = seed->pos_y[p];
-      batch->state.coll_escapeair_floor_producer_runtime[idx] = 0u;
       batch->state.coll_a678_edge_runtime[idx] = 0u;
       batch->state.mpcoll_joint_id_skip[idx] = -1;
       batch->state.mpcoll_joint_id_only[idx] = -1;
@@ -2631,18 +2637,11 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       anim_timebase_seed_common_fall_blend(batch, idx, seed->action_frame[p]);
       const uint8_t common_fall_blend_seed_bit =
           reseed_common_fall_blended_ecb_seed_bit(seed->action_id[p]);
-      const MslCharParams* common_fall_blend_seed_ch =
-          msl_char_params_fast(batch->state.char_id[idx]);
-      if (seed->common_fall_blend_valid_u8[p] != 0u && common_fall_blend_seed_bit != 0u &&
-          common_fall_blend_seed_ch != NULL &&
-          (common_fall_blend_seed_ch->common_fall_blended_ecb_seed_mask &
-           common_fall_blend_seed_bit) != 0u) {
+      if (seed->common_fall_blend_valid_u8[p] != 0u && common_fall_blend_seed_bit != 0u) {
         // Prefix-causal hidden seed lane for mv.co.{fall,fallaerial,fallspecial}.x4/smid.
         // The fallback above uses only one visible row's current velocity; preprocessing carries
-        // the real recurrence through replay history for data-marked teacher-forced reseeds whose
-        // hidden blended ECB owner is source/probe-backed. Free-running runtime still advances x4
-        // from live velocity in anim_timebase_common_fall_blend_tick.
-        // data/characters/<char>.json::common_fall_blended_ecb_seed_mask
+        // the real recurrence through replay history. Free-running runtime still advances x4 from
+        // live velocity in anim_timebase_common_fall_blend_tick.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
         batch->state.common_fall_blend_x4[idx] = seed->common_fall_blend_x4_f32[p];
         batch->state.common_fall_blend_msid[idx] = seed->common_fall_blend_msid_u16[p];
@@ -3314,7 +3313,48 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         reseed_prev_ecb_rel_points_sample(
             &prev_ecb, batch->state.char_id[idx], batch->state.animation_index[idx],
             seed->anim_frame_f32[p], facing_dir, seed->seed_prev_action_id[p],
-            seed->seed_prev_action_frame[p], 0u);
+            seed->seed_prev_action_frame[p], seed->on_ground[p] ? 1u : 0u);
+        if (seed->action_frame[p] > 0) {
+          // The seed is a completed post-frame snapshot. Once the destination MotionState has
+          // advanced, at least one destination map callback has converged CollData.ecb to that
+          // frame's desired pose. This remains true when the action id changed on entry; retaining
+          // the pre-entry action envelope beyond frame zero makes later floor sweeps one owner
+          // behind. Fresh frame-zero entries retain the pre-entry sample because their destination
+          // callback may not yet have run. Active Damage hitlag has its explicit frozen packet
+          // override below.
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpCollInterpolateECB}
+          const uint16_t seed_frame = msl_ecb_frame_u16_from_anim_frame(seed->anim_frame_f32[p]);
+          msl_ecb_world_points_sample(&prev_ecb, batch->state.char_id[idx],
+                                      batch->state.animation_index[idx], seed_frame, facing_dir,
+                                      0.0f, 0.0f, seed->on_ground[p] ? 1u : 0u);
+        }
+        if (seed_locked_bottom_valid) {
+          // A replay seed is the frame-end CollData state. Every completed mpColl callback
+          // interpolates current ECB all the way to desired ECB; an active x130 lock therefore
+          // leaves both at the preserved bottom. Sampling the visible previous animation here
+          // manufactures a lifted ECB that never existed and can sweep through a platform on the
+          // next callback.
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpCollInterpolateECB}
+          msl_ecb_world_points_preserve_desired_bottom_rel_y(&prev_ecb, 0.0f, 0.0f,
+                                                             seed->ecb_lock_bottom_rel_y_f32[p]);
+        }
+        if (seed->action_frame[p] > 0 &&
+            mpcoll_ground_specialhi_uses_jobj_ecb(batch->state.char_id[idx], seed->action_id[p])) {
+          MslEcbWorldPoints jobj_ecb = desired_ecb;
+          const uint16_t seed_frame = msl_ecb_frame_u16_from_anim_frame(seed->anim_frame_f32[p]);
+          if (mpcoll_ground_try_sample_specialhi_jobj_ecb(
+                  &jobj_ecb, batch, idx, batch->state.char_id[idx],
+                  batch->state.animation_index[idx], seed->action_id[p], seed_frame, facing_dir,
+                  0.0f, 0.0f)) {
+            // SpecialHi's Anim callback rotates FtPart_XRotN before Fighter_procMap. A completed
+            // replay seed therefore owns the same live JObj collision packet in current,
+            // previous, and desired CollData lanes; fixed animation extents are not source state.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFox_SpecialHi_RotateModel
+            // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+            desired_ecb = jobj_ecb;
+            prev_ecb = jobj_ecb;
+          }
+        }
         const uint8_t common_fall_blended_ecb_seed =
             (!force_locked_bottom &&
              reseed_common_fall_blended_ecb_seed_owner(batch, idx, seed->action_id[p]))
@@ -3325,13 +3365,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           // Slippi does not expose CollData.current/desired ECB. For data-marked Fall-family
           // rows, initialize only the hidden bottom lane from the already reconstructed
           // mv.co.{fall,fallaerial,fallspecial}.x4/smid blend. This is consumed for one
-          // callback and then cleared by mpcoll_ground_apply; free-running collision must still
+          // callback and then cleared by mpcoll_source_plan_apply; free-running collision must still
           // publish its own CollData state.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::{
           //   ftCo_FallAerial_Anim,ftCo_FallAerial_Coll}
           // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
-          // data/characters/<char>.json::common_fall_blended_ecb_seed_mask
           MslEcbWorldPoints blended_ecb = {0};
           if (reseed_common_fall_blended_ecb_points(&blended_ecb, batch, idx,
                                                     batch->state.char_id[idx],
@@ -3340,6 +3379,17 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
             desired_ecb = blended_ecb;
             prev_ecb = blended_ecb;
           }
+        }
+        if (seed_locked_bottom_valid) {
+          // Common Fall/FallAerial animation blending refreshes the live top/side JObj envelope,
+          // but CollData_X130_Locked preserves desired_ecb.bottom across that load. Apply the
+          // explicit source lane after blending so the blend cannot displace the locked bottom.
+          // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+          msl_ecb_world_points_preserve_desired_bottom_rel_y(&desired_ecb, 0.0f, 0.0f,
+                                                             seed->ecb_lock_bottom_rel_y_f32[p]);
+          msl_ecb_world_points_preserve_desired_bottom_rel_y(&prev_ecb, 0.0f, 0.0f,
+                                                             seed->ecb_lock_bottom_rel_y_f32[p]);
         }
         reseed_store_colldata_ecb_desired(batch, idx, &desired_ecb);
         batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
@@ -3356,6 +3406,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
                                                                : prev_ecb.bottom_rel_y;
         batch->state.coll_effective_bottom_rel_prev_valid[idx] = 1u;
         batch->state.coll_common_fall_blended_ecb_seed_valid[idx] = common_fall_blended_ecb_seed;
+        // A replay seed reconstructs source state for this callback, but has not itself completed
+        // a live prior map callback. The runtime owner is published only at the mpColl frame tail.
+        // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpCollEnd}
+        batch->state.coll_common_fall_blended_ecb_runtime_owned[idx] = 0u;
         batch->state.coll_squeeze_restore_ecb_valid[idx] = 0u;
         batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_ecb_bottom_valid[idx] = 1u;
@@ -3367,20 +3421,18 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // manufacture live `mpColl_80044628_Floor` floor-contact authority.
         // refs/melee/src/melee/mp/mpcoll.c::{inline0,mpColl_80044628_Floor,mpColl_80044948_Floor}
         batch->state.coll_damage_hitlag_floor_contact_runtime[idx] = 0u;
-        batch->state.coll_escapeair_floor_producer_runtime[idx] = 0u;
         batch->state.coll_a678_edge_runtime[idx] = 0u;
         MslEcbWorldPoints damage_hitlag_ecb = {0};
         if (reseed_damage_hitlag_ecb_points_from_seed(&damage_hitlag_ecb, seed, p)) {
           // Active Damage hitlag can keep the pre-hit JObj collision envelope live while the
           // replay-visible action already names DamageAir/DamageFly. Initialize the hidden
-          // CollData current/prev/desired ECB from the explicit seed lane; position is added by
+          // CollData current/previous ECB from the explicit seed lane; position is added by
           // mpColl consumers when converting relative points to world points.
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
           // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
           // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
           reseed_store_colldata_ecb_current(batch, idx, &damage_hitlag_ecb);
           reseed_store_colldata_ecb_prev(batch, idx, &damage_hitlag_ecb);
-          reseed_store_colldata_ecb_desired(batch, idx, &damage_hitlag_ecb);
           batch->state.coll_damage_hitlag_ecb_valid[idx] = 1u;
           batch->state.coll_damage_hitlag_ecb_source_kind[idx] = MSL_DAMAGE_HITLAG_ECB_SOURCE_NONE;
         }
@@ -5464,8 +5516,6 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
       out->floor_result_mode[p] = batch->state.coll_floor_result_mode[idx];
       out->damage_hitlag_floor_contact_runtime[p] =
           batch->state.coll_damage_hitlag_floor_contact_runtime[idx];
-      out->escapeair_floor_producer_runtime[p] =
-          batch->state.coll_escapeair_floor_producer_runtime[idx];
       out->floor_probe_valid[p] = batch->state.coll_floor_probe_valid[idx];
       out->floor_probe_owner[p] = batch->state.coll_floor_probe_owner[idx];
       out->floor_probe_reject_reason[p] = batch->state.coll_floor_probe_reject_reason[idx];
@@ -5493,7 +5543,6 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
       out->specialhi_rotate_model_valid[p] =
           msl_specialhi_rotate_model_get(batch, idx, &out->specialhi_rotate_model[p]) ? 1u : 0u;
 
-      out->floor_probe_reject_bits[p] = batch->state.coll_floor_probe_reject_bits[idx];
       out->floor_probe_source_phases[p] = batch->state.coll_floor_probe_source_phases[idx];
       out->floor_result_segment_id[p] = batch->state.coll_floor_result_segment_id[idx];
       out->cliff_ledge_floor_segment_id[p] = batch->state.cliff_ledge_floor_segment_id[idx];
@@ -5671,28 +5720,6 @@ int msl_batch_debug_set_mpcoll_joint_filters(MslBatch* batch, int batch_index, i
   return 0;
 }
 
-int msl_batch_debug_set_escapeair_floor_producer_runtime(MslBatch* batch, int batch_index,
-                                                         int player_index, uint8_t authority,
-                                                         uint8_t desired_owner) {
-  if (batch == NULL) {
-    return EINVAL;
-  }
-  if (batch_index < 0 || batch_index >= batch->batch_size) {
-    return EINVAL;
-  }
-  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
-    return EINVAL;
-  }
-  if (desired_owner > (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_FTCOMMON) {
-    return EINVAL;
-  }
-  const size_t idx = msl_idx_player(batch_index, player_index);
-  batch->state.coll_escapeair_floor_producer_runtime[idx] = authority ? 1u : 0u;
-  batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
-      msl_escapeair_locked_bottom_owner_normalize(desired_owner);
-  return 0;
-}
-
 int msl_batch_debug_set_floor_sweep_prev_runtime(MslBatch* batch, int batch_index, int player_index,
                                                  float pos_x, float pos_y, uint8_t authority) {
   if (batch == NULL || !isfinite(pos_x) || !isfinite(pos_y)) {
@@ -5807,7 +5834,14 @@ int msl_batch_debug_run_knockdown_post_collision(MslBatch* batch) {
   if (batch == NULL) {
     return EINVAL;
   }
-  knockdown_update_post_collision(batch);
+  // The runtime collision kernels invoke each source callback owner exactly once and mark it run;
+  // this forensic hook intentionally re-enters the selected post-collision owner after a test has
+  // replaced its contact packet.
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < (int)batch->config.num_players; p++) {
+      knockdown_update_post_collision_one(batch, bi, p);
+    }
+  }
   return 0;
 }
 

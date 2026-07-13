@@ -1942,13 +1942,6 @@ static inline void combat_processhit_apply_resolved_damage(const MslCommonParams
   }
   combat_damage_mark_entry_time_since_hit(batch, ev->d_idx);
 
-  MslEcbWorldPoints active_hitlag_attackair_ecb = {0};
-  const uint8_t active_hitlag_attackair_ecb_valid =
-      (ev->defender_on_ground == 0u && ev->d_hl != 0u && ev->source_is_item_hit != 0u &&
-       ev->source_item_owns_motion_clear != 0u)
-          ? combat_sample_active_hitlag_attackair_ecb(batch, ev->d_idx,
-                                                      &active_hitlag_attackair_ecb)
-          : 0u;
   const uint8_t defender_on_ground_after = batch->state.on_ground[ev->d_idx] ? 1u : 0u;
   const uint16_t pre_entry_action = batch->state.action_id[ev->d_idx];
   combat_damage_enter_state(
@@ -1975,20 +1968,17 @@ static inline void combat_processhit_apply_resolved_damage(const MslCommonParams
     // refs/melee/src/melee/it/itcoll.c::it_80272460
     hitboxes_clear_player_active(batch, ev->bi, ev->defender);
   }
-  if (ev->grounded_ecb_lock_owner != 0u && ev->d_hl != 0u) {
+  if (ev->d_hl != 0u && batch->state.on_ground[ev->d_idx] == 0u &&
+      msl_coll_handler_is_damage(msl_motion_state_coll_handler_kind(
+          batch->state.char_id[ev->d_idx], batch->state.action_id[ev->d_idx]))) {
     combat_publish_damage_entry_hitlag_ecb_current(batch, ev->d_idx);
   }
-  if (active_hitlag_attackair_ecb_valid != 0u) {
-    combat_publish_damage_hitlag_ecb_points(batch, ev->d_idx, &active_hitlag_attackair_ecb);
-    if (ev->source_item_owns_motion_clear != 0u) {
-      // Thrown-Needle item BODY owns the frozen active-hitlag Damage ECB even if the article's
-      // DmgDealt callback destroys or bounces it later in the same item pass. Persist the source
-      // kind on the victim's CollData state instead of rediscovering it from live item slots.
-      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ProcessHit_8006D1EC}
-      // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt
-      batch->state.coll_damage_hitlag_ecb_source_kind[ev->d_idx] =
-          MSL_DAMAGE_HITLAG_ECB_SOURCE_THROWN_NEEDLE;
-    }
+  if (ev->source_item_owns_motion_clear != 0u &&
+      batch->state.coll_damage_hitlag_ecb_valid[ev->d_idx] != 0u) {
+    // Thrown-Needle destruction must not clear the victim's already-published CollData owner.
+    // refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt
+    batch->state.coll_damage_hitlag_ecb_source_kind[ev->d_idx] =
+        MSL_DAMAGE_HITLAG_ECB_SOURCE_THROWN_NEEDLE;
   }
   combat_processhit_apply_hitlag_after_entry(batch, ev);
   if (ev->apply_guard_reflect_followup != 0u) {
@@ -3997,6 +3987,16 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialLw_800E5128,doCatchAnim}
   if (constrained_ground_to_air_preapplied == 0u) {
     combat_apply_ftCommon_8007D5D4_ground_to_air(batch, d_idx);
+    if (batch->state.grab_constraint_x2226_b2[d_idx] != 0u) {
+      // DDDE4 releases the ordinary thrown victim's XRotN constraint, explicitly unlocks the ECB,
+      // and runs its release-local mpColl packet before DE7C0 enters Damage*. Leaving D5D4's lock
+      // live pins the later Damage map callback to the captured zero-bottom ECB and creates a
+      // false floor/DownBound transition on low throws.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+      // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_UnlockECB}
+      batch->state.grab_constraint_x2226_b2[d_idx] = 0u;
+      msl_ftcommon_unlock_ecb(batch, d_idx);
+    }
   }
   const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
 
@@ -7612,7 +7612,8 @@ static void combat_processhit_resolve_falcon_dive_pairs(
     // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Damage.s::ftCo_8008EC90
     if (holder_hit && !victim_hit) {
       (void)combat_apply_falcon_dive_capture_break_hit(batch, bi, holder, victim);
-      grab_attachment_falcon_dive_damage_release_now(batch, bi, holder, victim);
+      grab_attachment_dc920_release_now(batch, bi, holder, victim,
+                                        batch->state.falcon_specialhi_x221b_b7[hidx]);
       combat_processhit_apply_resolved_damage(c, batch, &pending[holder]);
       continue;
     }
@@ -7627,7 +7628,8 @@ static void combat_processhit_resolve_falcon_dive_pairs(
         batch->state.hitlag[hidx] = pair_hitlag;
         batch->state.hitlag[vidx] = pair_hitlag;
       } else {
-        grab_attachment_falcon_dive_damage_release_now(batch, bi, holder, victim);
+        grab_attachment_dc920_release_now(batch, bi, holder, victim,
+                                          batch->state.falcon_specialhi_x221b_b7[hidx]);
         combat_processhit_apply_resolved_damage(c, batch, &pending[victim]);
         (void)combat_falcon_dive_de2f0_release_hit(batch, bi, holder);
       }
@@ -7643,12 +7645,14 @@ static void combat_processhit_resolve_falcon_dive_pairs(
         stored.hitlag_sets_x221a = pending[victim].hitlag_sets_x221a;
         stored.hitlag_allows_sdi = pending[victim].hitlag_allows_sdi;
         combat_processhit_apply_bookkeeping(batch, &pending[victim]);
-        grab_attachment_falcon_dive_damage_release_now(batch, bi, holder, victim);
+        grab_attachment_dc920_release_now(batch, bi, holder, victim,
+                                          batch->state.falcon_specialhi_x221b_b7[hidx]);
         combat_processhit_apply_resolved_damage(c, batch, &pending[holder]);
         combat_processhit_apply_resolved_damage(c, batch, &stored);
       }
     } else {
-      grab_attachment_falcon_dive_damage_release_now(batch, bi, holder, victim);
+      grab_attachment_dc920_release_now(batch, bi, holder, victim,
+                                        batch->state.falcon_specialhi_x221b_b7[hidx]);
       combat_processhit_apply_resolved_damage(c, batch, &pending[holder]);
       combat_processhit_apply_resolved_damage(c, batch, &pending[victim]);
     }

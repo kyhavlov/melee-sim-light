@@ -295,7 +295,8 @@ uint8_t locomotion_action_uses_ft80082b1c_basic_landing_callback(uint8_t char_id
   // - Fox/Falco SpecialAirN* collision callbacks -> ft_80082B1C
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ft_800831CC,ft_800835B0}
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::*_Coll
-  return msl_motion_state_class_has(char_id, a, MSL_MS_CLASS_FT80082B1C_BASIC_LANDING_COLL);
+  return msl_coll_source_plan_has(msl_motion_state_coll_source_plan(char_id, a),
+                                  MSL_COLL_SOURCE_BASIC_LANDING);
 }
 
 uint16_t locomotion_ft80082b1c_basic_landing_action(const MslBatch* batch, const MslCommonParams* c,
@@ -381,23 +382,6 @@ void locomotion_enter_landing_action_from_air(MslBatch* batch, const MslCharPara
     batch->state.pos_y[idx] = locomotion_landing_root_y_from_mpcoll_contact(
         batch, idx, bi, preserve_fall_basic_dd90_order);
   }
-  if (source_act == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-      land_act == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL &&
-      batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
-      batch->state.frame_start_action_id[idx] == (uint16_t)MSL_ACT_KNEE_BEND &&
-      batch->state.coll_floor_result_valid[idx] != 0u) {
-    // The official Sheik demo proves a same-proc KneeBend -> Jump -> EscapeAir floor hit where
-    // LandingFallSpecial publishes the first mpColl substep root, not the fully integrated airborne
-    // root. Keep this on the live frame-start KneeBend owner: replay seed history is too stale and
-    // falsely catches ordinary Fox/Falco EscapeAir landing tails in aggregate validation.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-    // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
-    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044838_Floor}
-    batch->state.pos_x[idx] = 0.5f * (batch->state.prev_pos_x[idx] + batch->state.pos_x[idx]);
-  }
-
   batch->state.fall_fast[idx] = 0;
   // Decomp: grounding transitions clear ECB lock via ftCommon_UnlockECB.
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D6A4,ftCommon_UnlockECB}

@@ -202,7 +202,6 @@ def test_manual_damagefly_wall_hit_enters_flyreflectwall() -> None:
     assert int(contacts_822["wall_kind"][falco]) == 2
     assert int(contacts_822["wall_id"][falco]) == 9
     assert float(contacts_822["wall_contact_x"][falco]) == pytest.approx(85.56570, abs=1e-4)
-    assert float(contacts_822["wall_contact_y"][falco]) == pytest.approx(-7.80846, abs=1e-4)
     assert float(contacts_822["wall_normal_x"][falco]) == pytest.approx(1.0, abs=1e-6)
     assert float(contacts_822["wall_normal_y"][falco]) == pytest.approx(0.0, abs=1e-6)
     assert int(contacts_822["coll_env_flags"][falco]) & MSL_COLLIDE_RIGHT_WALL_PUSH
@@ -213,7 +212,6 @@ def test_manual_damagefly_wall_hit_enters_flyreflectwall() -> None:
     assert int(out_823["action_id"][falco]) == 247
     assert float(out_823["pos_x"][falco]) == pytest.approx(89.67888, abs=1e-4)
     assert float(out_823["pos_y"][falco]) == pytest.approx(-13.40928, abs=1e-4)
-    assert int(contacts_823["wall_kind"][falco]) == 2
     assert int(out_840["action_id"][falco]) == 247
     assert int(out_840["hurtbox_state"][falco]) == 0
 

@@ -425,7 +425,6 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "wait_anim_choice_weights",
       "ecb_joints",
       "grab_capture_anchor_part_id",
-      "throw_release_mpcoll_floor_publication_mask",
       "laser_spawn_joint_part_id",
   };
 
@@ -480,31 +479,12 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       }
     }
   }
-  if (strstr(buf, "\"throw_release_mpcoll_floor_publication_mask\"") == NULL) {
-    fprintf(stderr,
-            "msl: missing required key \"throw_release_mpcoll_floor_publication_mask\" in %s\n",
-            path);
-    fprintf(stderr,
-            "hint: regenerate character data with the current extractor so throw-release "
-            "publication ownership is explicit.\n");
-    alloc_free(buf);
-    return -1;
-  }
   if (strstr(buf, "\"fallspecial_xc0_source_fx_kind_mask\"") == NULL) {
     fprintf(stderr, "msl: missing required key \"fallspecial_xc0_source_fx_kind_mask\" in %s\n",
             path);
     fprintf(stderr,
             "hint: regenerate character data with the current extractor/overlays so FallSpecial "
             "xC callsite ownership is explicit.\n");
-    alloc_free(buf);
-    return -1;
-  }
-  if (strstr(buf, "\"common_fall_blended_ecb_seed_mask\"") == NULL) {
-    fprintf(stderr, "msl: missing required key \"common_fall_blended_ecb_seed_mask\" in %s\n",
-            path);
-    fprintf(stderr,
-            "hint: regenerate character data with the current extractor/overlays so CommonFall "
-            "CollData ECB seed ownership is explicit.\n");
     alloc_free(buf);
     return -1;
   }
@@ -589,12 +569,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_u16_or_default(buf, "laser_spawn_joint_part_id", 0,
                               &out.laser_spawn_joint_part_id) != 0 ||
       json_get_u16(buf, "grab_capture_anchor_part_id", &out.grab_capture_anchor_part_id) != 0 ||
-      json_get_u8_or_default(buf, "throw_release_mpcoll_floor_publication_mask", 0,
-                             &out.throw_release_mpcoll_floor_publication_mask) != 0 ||
       json_get_u32(buf, "fallspecial_xc0_source_fx_kind_mask",
                    &out.fallspecial_xc0_source_fx_kind_mask) != 0 ||
-      json_get_u8_or_default(buf, "common_fall_blended_ecb_seed_mask", 0,
-                             &out.common_fall_blended_ecb_seed_mask) != 0 ||
       json_get_u8_or_default(buf, "escapeair_carried_floor_wall_source", 0,
                              &out.escapeair_carried_floor_wall_source) != 0 ||
       json_get_u8_or_default(buf, "illusion_gravity_delay_start_frames", 0,

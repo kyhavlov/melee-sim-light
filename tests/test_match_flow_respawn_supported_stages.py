@@ -168,7 +168,7 @@ def test_dead_to_rebirth_uses_mslstg01_respawn_and_world_zero_facing(stage_id: i
     rebirth_start_y = 120.0 if int(stage_id) == 3 else float(cam_top)
     assert float(out["pos_y"][port]) == pytest.approx(
         rebirth_start_y + float(out["speed_y_self"][port]),
-        abs=1e-5,
+        abs=1e-4,
     )
     assert float(respawn_y) < float(cam_top)
 

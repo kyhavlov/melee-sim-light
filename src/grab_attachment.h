@@ -72,17 +72,19 @@ void grab_attachment_apply_thrown_release_anchor_now(MslBatch* batch, int batch_
 // Decomp-shaped usage:
 // - When the Falcon Dive victim was grounded, ftCo_800DDDE4 treats Falcon as the constrained
 //   fighter (fp4) and the victim as the anchor owner (fp3), samples fp3 FtPart_TransN2, applies
-//   Falcon's static x1A70 offsets. The caller owns constraint clear, ECB unlock, and floor probe.
+//   Falcon's static x1A70 offsets. The caller owns constraint clear, ECB unlock, and 471F8.
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
 void grab_attachment_apply_falcon_dive_ground_release_anchor_now(MslBatch* batch, int batch_index,
                                                                  int falcon_p, int victim_p);
 // Airborne-victim counterpart: place the constrained CaptureCaptain from Falcon's TransN2 anchor.
 void grab_attachment_apply_falcon_dive_air_release_anchor_now(MslBatch* batch, int batch_index,
                                                               int victim_p, int falcon_p);
-void grab_attachment_falcon_dive_release_floor_probe_now(MslBatch* batch, size_t constrained_idx,
-                                                         size_t sample_owner_idx);
-void grab_attachment_falcon_dive_damage_release_now(MslBatch* batch, int batch_index, int falcon_p,
-                                                    int victim_p);
+void grab_attachment_falcon_dive_release_collision_now(MslBatch* batch, size_t constrained_idx,
+                                                       size_t sample_owner_idx);
+// Shared ftCo_800DC920 release-placement owner. `constrained_owner` selects whether the grab owner
+// (Falcon Dive grounded-victim mode) or ordinary victim owns x2226/XRotN placement.
+void grab_attachment_dc920_release_now(MslBatch* batch, int batch_index, int owner_p, int victim_p,
+                                       uint8_t constrained_owner);
 void grab_attachment_query_thrown_anchor_world(float* out_x, float* out_y, float* out_z,
                                                const MslBatch* batch, int batch_index, int victim_p,
                                                int owner_p);

@@ -907,31 +907,6 @@ PyObject* msl_debug_set_mpcoll_joint_filters_py(PyObject* self, PyObject* args) 
   Py_RETURN_NONE;
 }
 
-PyObject* msl_debug_set_escapeair_floor_producer_runtime_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* handle_obj = NULL;
-  int batch_index = 0;
-  int player_index = 0;
-  unsigned int authority = 0;
-  unsigned int desired_owner = 0;
-  if (!PyArg_ParseTuple(args, "OiiII", &handle_obj, &batch_index, &player_index, &authority,
-                        &desired_owner)) {
-    return NULL;
-  }
-  PyMslHandle* h = unpack_handle(handle_obj);
-  if (h == NULL) {
-    return NULL;
-  }
-  const int err = msl_batch_debug_set_escapeair_floor_producer_runtime(
-      h->batch, batch_index, player_index, (uint8_t)authority, (uint8_t)desired_owner);
-  if (err != 0) {
-    PyErr_Format(PyExc_ValueError,
-                 "msl_batch_debug_set_escapeair_floor_producer_runtime failed: %d", err);
-    return NULL;
-  }
-  Py_RETURN_NONE;
-}
-
 PyObject* msl_debug_set_floor_sweep_prev_runtime_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;

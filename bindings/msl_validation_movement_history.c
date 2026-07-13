@@ -314,6 +314,21 @@ static inline uint8_t validation_falcon_ground_special_damage_output(uint16_t pr
   return (uint8_t)(grounded_special && damage_output);
 }
 
+static inline uint8_t validation_common_post_map_ground_to_air(uint16_t action) {
+  // These visible destinations can only acquire the ordinary ten-frame ECB lock after the
+  // current frame's Fighter_procMap decrement:
+  // - a grounded common collision callback loses its floor and enters Fall;
+  // - Fighter_ProcessHit runs after procMap and enters the Damage family.
+  // Jump and character-special entry owners run before procMap and retain the nine-frame generic
+  // post value below. Character-special collision owners with exact source proof are handled by
+  // validation_falcon_ecb_lock_post_refresh.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_procMap,Fighter_ProcessHit_8006D1EC}
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  return (uint8_t)(action == (uint16_t)MSL_ACT_FALL || action == (uint16_t)MSL_ACT_DAMAGE_FALL ||
+                   msl_py_damage_action_any(action));
+}
+
 static ValidationEcbLockRefresh validation_falcon_ecb_lock_post_refresh(
     uint8_t char_id, uint16_t action, int16_t action_frame, uint16_t prev_action,
     uint8_t prev_ground, uint8_t action_entry) {
@@ -469,8 +484,18 @@ PyObject* msl_derive_ecb_lock_state_py(PyObject* self, PyObject* args) {
     } else if (falcon_refresh.timer != 0xFFu) {
       timer = falcon_refresh.timer;
       owner = falcon_refresh.owner;
-    } else if (jump_entry || (i > 0 && prev_ground)) {
-      timer = set_post;
+    } else if (jump_entry ||
+               (i > 0 && prev_ground && !msl_action_is_thrown_victim((uint16_t)prev_action))) {
+      // Thrown* has empty Phys/Coll callbacks and keeps its attached accessory owner through the
+      // pre-release window. A replay-visible Thrown* -> airborne Damage transition therefore does
+      // not prove ftCommon_8007D5D4's grounded launch/ECB-lock call; synthesizing that lock pins
+      // the new Damage ECB bottom to the floor and creates a false DownDamage contact.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{
+      //   ftCo_ThrownF_Phys,ftCo_ThrownF_Coll,ftCo_ThrownLw_Phys,ftCo_ThrownLw_Coll}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+      timer = i > 0 && prev_ground && !jump_entry && validation_common_post_map_ground_to_air(a[i])
+                  ? lock_frames
+                  : set_post;
       owner = timer != 0 ? (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130
                          : (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_NONE;
     } else if (timer > 0) {
@@ -574,15 +599,15 @@ PyObject* msl_derive_ecb_lock_bottom_rel_y_py(PyObject* self, PyObject* args) {
             (uint8_t)(i > 0 && ground_p[i - 1] != 0u && char_id == (uint8_t)MSL_CHAR_ID_FALCON &&
                       lock_owner == (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130 &&
                       validation_falcon_ground_special_damage_output(prev_action, action));
-        // Both common lock helpers preserve the existing desired bottom. Trust the established
-        // air-jump seed family, a prefix-proven live ftCommon episode, and the bounded generic
-        // ground-to-air owner reconstructed when ProcessHit interrupts a grounded Falcon special.
-        // A timer-only generic row is not enough to publish hidden-bottom provenance.
+        // Both common lock helpers preserve the existing desired bottom. derive_ecb_lock_state
+        // publishes an owner only for a prefix-causal lock episode (jump entry, grounded-to-air
+        // handoff, or the bounded Falcon refresh); the countdown alone is never provenance.
+        // Carry every such owned episode instead of discarding the ordinary ground-to-air owner.
         // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_8007D60C}
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
         episode_preserves_desired_bottom =
             (uint8_t)(action == jaf || action == jab ||
-                      lock_owner == (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_FTCOMMON ||
+                      lock_owner != (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_NONE ||
                       falcon_special_damage_owner);
       }
       if (!desired_valid) {
@@ -686,8 +711,6 @@ PyObject* msl_derive_damage_hitlag_colldata_ecb_py(PyObject* self, PyObject* arg
   float* side_p = (float*)PyArray_DATA(side_arr);
   uint8_t* valid_p = (uint8_t*)PyArray_DATA(valid_arr);
 
-  MslEcbWorldPoints frozen = {0};
-  uint8_t frozen_valid = 0u;
   uint8_t prev_active = 0u;
   for (npy_intp i = 0; i < n; i++) {
     const uint16_t action = action_p[i];
@@ -696,19 +719,16 @@ PyObject* msl_derive_damage_hitlag_colldata_ecb_py(PyObject* self, PyObject* arg
         (ground_p[i] == 0u && hitlag_p[i] != 0u && msl_coll_handler_is_damage(coll_handler)) ? 1u
                                                                                              : 0u;
     if (!active) {
-      frozen_valid = 0u;
       prev_active = 0u;
       continue;
     }
     if (!prev_active) {
-      frozen_valid = 0u;
       if (i > 0) {
         const uint16_t prev_action = action_p[i - 1];
-        const uint8_t prev_damage_collision = msl_coll_handler_is_damage(
-            msl_motion_state_coll_handler_kind(char_p[i - 1], prev_action));
-        const uint8_t prev_attackair =
-            msl_motion_state_class_has(char_p[i - 1], prev_action, MSL_MS_CLASS_ATTACK_AIR);
-        if (!prev_damage_collision && prev_attackair) {
+        const uint8_t prev_map_callback =
+            msl_motion_state_coll_source_plan(char_p[i - 1], prev_action) != 0u;
+        if (prev_map_callback) {
+          MslEcbWorldPoints frozen = {0};
           const float src_frame = anim_frame_p[i - 1] + frame_speed_p[i - 1];
           const uint16_t src_ecb_frame = msl_ecb_frame_u16_from_anim_frame(src_frame);
           const float facing_dir = facing_p[i - 1] ? 1.0f : -1.0f;
@@ -718,18 +738,15 @@ PyObject* msl_derive_damage_hitlag_colldata_ecb_py(PyObject* self, PyObject* arg
               isfinite(frozen.left_rel_x) && isfinite(frozen.right_rel_x) &&
               isfinite(frozen.side_rel_y) && frozen.top_rel_y > frozen.bottom_rel_y &&
               frozen.right_rel_x > frozen.left_rel_x) {
-            frozen_valid = 1u;
+            bottom_p[i] = frozen.bottom_rel_y;
+            top_p[i] = frozen.top_rel_y;
+            left_p[i] = frozen.left_rel_x;
+            right_p[i] = frozen.right_rel_x;
+            side_p[i] = frozen.side_rel_y;
+            valid_p[i] = 1u;
           }
         }
       }
-    }
-    if (frozen_valid) {
-      bottom_p[i] = frozen.bottom_rel_y;
-      top_p[i] = frozen.top_rel_y;
-      left_p[i] = frozen.left_rel_x;
-      right_p[i] = frozen.right_rel_x;
-      side_p[i] = frozen.side_rel_y;
-      valid_p[i] = 1u;
     }
     prev_active = 1u;
   }
@@ -1633,11 +1650,13 @@ PyObject* msl_derive_walljump_used_seed_lanes_py(PyObject* self, PyObject* args)
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64}
       const uint8_t ordinary_entry =
           (uint8_t)(action_i == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP && i > 0 &&
-                    msl_motion_state_class3_has(c[i - 1], prev_action,
-                                                MSL_MS_CLASS3_ORDINARY_WALLJUMP_COLL) != 0u);
+                    msl_coll_source_plan_has(
+                        msl_motion_state_coll_source_plan(c[i - 1], prev_action),
+                        MSL_COLL_SOURCE_WALLJUMP));
       const uint8_t walltech_entry =
-          (uint8_t)(i > 0 && msl_motion_state_class3_has(c[i - 1], prev_action,
-                                                         MSL_MS_CLASS3_WALLTECH_COLL) != 0u);
+          (uint8_t)(i > 0 && msl_coll_source_plan_has(
+                                 msl_motion_state_coll_source_plan(c[i - 1], prev_action),
+                                 MSL_COLL_SOURCE_WALLTECH));
       if (ordinary_entry != 0u) {
         episode_exponent = count;
         if (count < UINT8_MAX) {

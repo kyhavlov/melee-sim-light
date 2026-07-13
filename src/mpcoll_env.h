@@ -18,3 +18,8 @@
 // - Fighter cliff catch checks those bits in ftCliffCommon_80081298.
 //   (refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298)
 void mpcoll_env_update_ledge_grab(MslBatch* batch);
+
+// Callback-local form used by source-shaped airborne map callbacks. The caller has already
+// selected a ledge-enabled ft_081B wrapper and published CollData's final substep endpoints.
+void mpcoll_env_update_ledge_grab_one(MslBatch* batch, int bi, int p, float prev_x, float prev_y,
+                                      float cur_x, float cur_y);

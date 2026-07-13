@@ -388,24 +388,24 @@ static void fc_specialhi_do_catch_anim_release(MslBatch* batch, size_t idx) {
   if (!b7) {
     // Airborne-victim hold: CaptureCaptain is the constrained fighter. Source applies the full
     // D5D4 bundle before unparenting XRotN, places the victim from Falcon's TransN2+x1A70, and
-    // immediately runs the release-local mpColl floor probe before damage entry.
+    // immediately runs the release-local mpColl callback before damage entry.
     combat_apply_ftCommon_8007D5D4_ground_to_air(batch, vidx);
     batch->state.grab_constraint_x2226_b2[vidx] = 0u;
     grab_attachment_apply_falcon_dive_air_release_anchor_now(batch, bi, victim_p, owner_p);
     msl_ftcommon_unlock_ecb(batch, vidx);
-    grab_attachment_falcon_dive_release_floor_probe_now(batch, vidx, idx);
+    grab_attachment_falcon_dive_release_collision_now(batch, vidx, idx);
   } else {
     // Grounded-victim hold: the ATTACKER is the constrained fighter. The accessory4 snap
     // (ftCa_SpecialLw_800E550C) keeps Falcon constrained to the victim during the hold, then sets
     // Falcon airborne per ftCommon_8007D5D4 on release.
     // ftCo_800DDDE4 applies the complete D5D4 bundle to the constrained fighter before
-    // releasing its XRotN constraint and running the release-local mpColl floor probe.
+    // releasing its XRotN constraint and running the release-local mpColl callback.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
     combat_apply_ftCommon_8007D5D4_ground_to_air(batch, idx);
     batch->state.grab_constraint_x2226_b2[idx] = 0u;
     grab_attachment_apply_falcon_dive_ground_release_anchor_now(batch, bi, owner_p, victim_p);
     msl_ftcommon_unlock_ecb(batch, idx);
-    grab_attachment_falcon_dive_release_floor_probe_now(batch, idx, vidx);
+    grab_attachment_falcon_dive_release_collision_now(batch, idx, vidx);
   }
   batch->state.grab_constraint_x2226_b2[idx] = 0u;
   batch->state.grab_constraint_x2226_b2[vidx] = 0u;

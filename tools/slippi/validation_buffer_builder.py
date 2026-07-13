@@ -317,32 +317,14 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
             raise RuntimeError('native msl_binding.derive_marth_counter_hitlag_floor_active is required; run `make build`') from exc
         return msl_binding.derive_marth_counter_hitlag_floor_active(_ascontiguousarray(char_id_u8, dtype=np.uint8), _ascontiguousarray(action_id_u16, dtype=np.uint16), _ascontiguousarray(state_flags_u8, dtype=np.uint8))
 
-    def _derive_teleport_travel_timer(*, char_id_u8: np.ndarray, action_id_u16: np.ndarray, sheik_internal_id: int | None, sheik_travel_frames: int, zelda_internal_id: int | None, zelda_travel_frames: int) -> np.ndarray:
-        char_arr = np.asarray(char_id_u8, dtype=np.uint8)
-        action_arr = np.asarray(action_id_u16, dtype=np.uint16)
-        if char_arr.ndim == 2:
-            out_2d = np.zeros(action_arr.shape, dtype=np.uint8)
-            for slot in range(action_arr.shape[1]):
-                out_2d[:, slot] = _derive_teleport_travel_timer(char_id_u8=char_arr[:, slot], action_id_u16=action_arr[:, slot], sheik_internal_id=sheik_internal_id, sheik_travel_frames=sheik_travel_frames, zelda_internal_id=zelda_internal_id, zelda_travel_frames=zelda_travel_frames)
-            return out_2d
-        out = np.zeros(action_arr.shape[0], dtype=np.uint8)
-        owners: list[tuple[int | None, int, tuple[int, ...]]] = [
-            (sheik_internal_id, int(sheik_travel_frames), (356, 359)),
-            (zelda_internal_id, int(zelda_travel_frames), (350, 353)),
-        ]
-        for internal_id, travel_frames, actions in owners:
-            if internal_id is None or int(internal_id) < 0 or travel_frames <= 0:
-                continue
-            travel = (char_arr == np.uint8(int(internal_id))) & np.isin(action_arr, np.asarray(actions, dtype=np.uint16))
-            idx = np.flatnonzero(travel)
-            if idx.size == 0:
-                continue
-            split_at = np.flatnonzero(np.diff(idx) != 1) + 1
-            for seg in np.split(idx, split_at):
-                remaining = int(travel_frames) - np.arange(seg.size, dtype=np.int16)
-                remaining = np.clip(remaining, 1, 255).astype(np.uint8)
-                out[seg] = remaining
-        return out
+    def _derive_teleport_travel_timer(*, char_id_u8: np.ndarray, action_id_u16: np.ndarray, hitlag_u16: np.ndarray, sheik_internal_id: int | None, sheik_travel_frames: int, zelda_internal_id: int | None, zelda_travel_frames: int) -> np.ndarray:
+        return msl_binding.derive_teleport_travel_timer(
+            _ascontiguousarray(char_id_u8, dtype=np.uint8),
+            _ascontiguousarray(action_id_u16, dtype=np.uint16),
+            _ascontiguousarray(hitlag_u16, dtype=np.uint16),
+            -1 if sheik_internal_id is None else int(sheik_internal_id), int(sheik_travel_frames),
+            -1 if zelda_internal_id is None else int(zelda_internal_id), int(zelda_travel_frames),
+        )
 
     def _stale_multiplier_from_seed_queue(queue_index: int, queue_move_ids: np.ndarray, move_id: int) -> float:
         if move_id in (65535, 1):
@@ -934,7 +916,12 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     hidden_pos_z = _derive_grounded_overlap_hidden_pos_z(num_players=num_players, char_id_u8=post_char_id, action_id_u16=post_action_id, on_ground_u8=post_on_ground, stocks_u8=post_stocks, pos_x_f32=post_pos_x, pos_z_f32=post_pos_z_2d, facing_u8=post_facing, common=common, data_dir='data')
     samples['seed_t']['pos_z'] = hidden_pos_z[:-1]
     if int(stage_id) == 2:
-        fod_height, fod_valid, fod_velocity, fod_velocity_valid, fod_height_source = _fod_platform_motion_with_ground_contact(samples['seed_t']['stage_fod_platform_height_f32'], samples['seed_t']['stage_fod_platform_height_valid_u8'], event_fresh_u8=None if fod_fresh is None else fod_fresh[:-1], post_on_ground_u8=post_on_ground[:-1, :num_players], post_ground_id_u16=post_ground_id[:-1, :num_players], post_pos_y_f32=post_pos_y[:-1, :num_players], next_post_on_ground_u8=post_on_ground[1:, :num_players], next_post_ground_id_u16=post_ground_id[1:, :num_players], next_post_pos_y_f32=post_pos_y[1:, :num_players], line_transforms=_fod_platform_height_transform_records(data_root), motion_params=fod_motion_params, return_source=True)
+        damage_collision_actions: set[int] = set()
+        for handler_kind in (11, 12, 13, 24, 25):
+            for actions in _motion_state_owner_actions_by_char(str(data_root), coll_handler_kind=handler_kind).values():
+                damage_collision_actions.update(actions)
+        damage_collision_action_lut = _u8_lut_from_items(tuple(sorted(damage_collision_actions)))
+        fod_height, fod_valid, fod_velocity, fod_velocity_valid, fod_height_source = _fod_platform_motion_with_ground_contact(samples['seed_t']['stage_fod_platform_height_f32'], samples['seed_t']['stage_fod_platform_height_valid_u8'], event_fresh_u8=None if fod_fresh is None else fod_fresh[:-1], post_on_ground_u8=post_on_ground[:-1, :num_players], post_ground_id_u16=post_ground_id[:-1, :num_players], post_pos_y_f32=post_pos_y[:-1, :num_players], next_post_on_ground_u8=post_on_ground[1:, :num_players], next_post_ground_id_u16=post_ground_id[1:, :num_players], next_post_pos_y_f32=post_pos_y[1:, :num_players], next_post_action_id_u16=post_action_id[1:, :num_players], next_post_hitlag_u16=post_hitlag[1:, :num_players], next_post_pos_x_f32=post_pos_x[1:, :num_players], damage_collision_action_lut_u8=damage_collision_action_lut, line_transforms=_fod_platform_height_transform_records(data_root), motion_params=fod_motion_params, return_source=True)
         fod_deferred_velocity = np.zeros_like(fod_velocity, dtype=np.float32)
         fod_deferred_velocity_valid = np.zeros_like(fod_velocity_valid, dtype=np.uint8)
         if fod_motion_params:
@@ -1015,7 +1002,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     motion_entry_iid_override[motion_entry_override_mask] = post_instance_id[1:, :][motion_entry_override_mask]
     samples['seed_t']['motion_entry_instance_id_override_u16'][:, :] = motion_entry_iid_override
     samples['seed_t']['specialn_blaster_loop_requested'][:, :] = (specialn_blaster_loop_latch_owner | specialn_cmd0_edge_latch_owner).astype(np.uint8)
-    samples['seed_t']['sheik_vanish_travel_timer_u8'][:, :] = _derive_teleport_travel_timer(char_id_u8=samples['seed_t']['char_id'], action_id_u16=samples['seed_t']['action_id'], sheik_internal_id=sheik_char_id, sheik_travel_frames=sheik_vanish_travel_frames, zelda_internal_id=zelda_char_id, zelda_travel_frames=zelda_farore_travel_frames)
+    samples['seed_t']['sheik_vanish_travel_timer_u8'][:, :] = _derive_teleport_travel_timer(char_id_u8=samples['seed_t']['char_id'], action_id_u16=samples['seed_t']['action_id'], hitlag_u16=samples['seed_t']['hitlag'], sheik_internal_id=sheik_char_id, sheik_travel_frames=sheik_vanish_travel_frames, zelda_internal_id=zelda_char_id, zelda_travel_frames=zelda_farore_travel_frames)
     sheik_vanish_floor_skip = _derive_sheik_vanish_floor_skip_segments(stage_id=int(stage_id), action_id_u16=samples['seed_t']['action_id'][:, :num_players], char_id_u8=samples['seed_t']['char_id'][:, :num_players], on_ground_u8=samples['seed_t']['on_ground'][:, :num_players], ground_id_u16=samples['seed_t']['ground_id'][:, :num_players], vanish_travel_timer_u8=samples['seed_t']['sheik_vanish_travel_timer_u8'][:, :num_players], pos_x_f32=samples['seed_t']['pos_x'][:, :num_players], pos_y_f32=samples['seed_t']['pos_y'][:, :num_players], sheik_internal_id=sheik_char_id, travel_frames=sheik_vanish_travel_frames, ground_contact_min_frames=sheik_vanish_ground_contact_min_frames, data_root=data_root)
     zelda_farore_floor_skip = _derive_sheik_vanish_floor_skip_segments(stage_id=int(stage_id), action_id_u16=samples['seed_t']['action_id'][:, :num_players], char_id_u8=samples['seed_t']['char_id'][:, :num_players], on_ground_u8=samples['seed_t']['on_ground'][:, :num_players], ground_id_u16=samples['seed_t']['ground_id'][:, :num_players], vanish_travel_timer_u8=samples['seed_t']['sheik_vanish_travel_timer_u8'][:, :num_players], pos_x_f32=samples['seed_t']['pos_x'][:, :num_players], pos_y_f32=samples['seed_t']['pos_y'][:, :num_players], sheik_internal_id=zelda_char_id, travel_frames=zelda_farore_travel_frames, ground_contact_min_frames=zelda_farore_ground_contact_min_frames, data_root=data_root)
     current_floor_skip = samples['seed_t']['floor_skip_segment_id_u16'][:, :num_players]

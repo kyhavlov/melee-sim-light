@@ -20,9 +20,9 @@ from tools.slippi.slpz import replay_path_for_peppi  # noqa: F401
 from tools.extraction.known_data_artifacts import read_mslftsc1_v1  # noqa: F401
 from tools.slippi.suite_io import team_attack_on_from_start  # noqa: F401
 MSL_MS_CLASS_ATTACK_AIR = 1 << 0
-MSL_MS_CLASS3_JUMP_COLL = 1 << 12
-MSL_MS_CLASS3_FALL_COLL = 1 << 13
-MSL_MS_CLASS3_FALCON_SPECIALHI_THROW0_COLL = 1 << 14
+MSL_MS_CLASS3_JUMP_FLOOR_SKIP = 1 << 12
+MSL_MS_CLASS3_FALL_FLOOR_SKIP = 1 << 13
+MSL_COLL_SOURCE_FALCON_SPECIALHI_THROW0 = 1 << 6
 MSL_COLL_HANDLER_AIR_ESCAPE = 10
 FOD_SKIP_ECB_VERTICAL_UNIT = 1.0
 FOD_TRANSFORMED_PLATFORM_SKIP_LOOKUP_SLOP = 2.0 * FOD_SKIP_ECB_VERTICAL_UNIT
@@ -298,8 +298,8 @@ def _manifest_preprocess_tables(data_root_text: str) -> _ManifestPreprocessTable
                 # its submotion through the generated callback owner instead of duplicating the
                 # character's raw MotionState/submotion ids in preprocessing.
                 # refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::ftCa_SpecialHiThrow0_Coll
-                for action_id, class3_bits in enumerate(owners_tbl.class3_bits):
-                    if int(class3_bits) & MSL_MS_CLASS3_FALCON_SPECIALHI_THROW0_COLL:
+                for action_id, source_plan in enumerate(owners_tbl.coll_source_plan):
+                    if int(source_plan) & MSL_COLL_SOURCE_FALCON_SPECIALHI_THROW0:
                         lag_by_msid[int(owners_tbl.submotion_id[action_id])] = float(attrs['falcon_specialhi_landing_lag'])
                 for m in _msids('side_air', 'start'):
                     lag_by_msid[m] = float(attrs['falcon_specials_miss_landing_lag'])

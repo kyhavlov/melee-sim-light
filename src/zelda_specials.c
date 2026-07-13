@@ -23,7 +23,7 @@
 #include "locomotion.h"
 #include "motion_state_owners.h"
 #include "mpcoll_floor_skip.h"
-#include "mpcoll_wall_ceil.h"
+#include "mp_coll.h"
 #include "msl_math.h"
 #include "move_tables.h"
 #include "sheik_specials.h"
@@ -790,22 +790,6 @@ static void zd_update_specialhi(MslBatch* batch, const MslCommonParams* c, const
 
 static void zd_update_speciallw(MslBatch* batch, size_t idx, uint16_t a) {
   switch (a) {
-    case MSL_ACT_ZD_SPECIAL_LW:
-    case MSL_ACT_ZD_SPECIAL_AIR_LW:
-      if (zd_anim_finished(batch, idx, a)) {
-        const MslCharParams* sk = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
-        if (sk == NULL) {
-          return;
-        }
-        zd_transform_cache_visible_twin_2218(batch, idx);
-        batch->state.char_id[idx] = (uint8_t)MSL_CHAR_ID_SHEIK;
-        zd_enter(batch, idx,
-                 batch->state.on_ground[idx] ? (uint16_t)MSL_ACT_SK_SPECIAL_LW_2
-                                             : (uint16_t)MSL_ACT_SK_SPECIAL_AIR_LW_2,
-                 sk->sheik_transform_finish_start_frame, 1.0f);
-        zd_transform_set_live_2218(batch, idx, 0u);
-      }
-      break;
     case MSL_ACT_ZD_SPECIAL_LW_2:
       if (zd_anim_finished(batch, idx, a)) {
         zd_enter_wait(batch, idx);
@@ -819,6 +803,39 @@ static void zd_update_speciallw(MslBatch* batch, size_t idx, uint16_t a) {
     default:
       break;
   }
+}
+
+void zelda_specials_update_transform_accessory4_for_fighter(MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_ZELDA) {
+    return;
+  }
+  const uint16_t a = batch->state.action_id[idx];
+  if ((a != (uint16_t)MSL_ACT_ZD_SPECIAL_LW && a != (uint16_t)MSL_ACT_ZD_SPECIAL_AIR_LW) ||
+      !zd_anim_finished(batch, idx, a) || batch->state.frame_start_action_id[idx] != a) {
+    return;
+  }
+
+  // The terminal Anim callback only installs ftZd_SpecialLw_8013AEAC into accessory4. The actual
+  // twin activation therefore happens at proc priority 9, after Phys (4) and Coll (6). A same-frame
+  // ground/air collision swap installs the transform-effect callback instead, replacing the pending
+  // twin activation; requiring the action to survive from frame start models that callback overwrite
+  // without another runtime lane.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate,Fighter_procMap,
+  //   Fighter_8006C80C}
+  // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::{ftZd_SpecialLw_Anim,
+  //   ftZd_SpecialAirLw_Anim,ftZd_SpecialLw_8013AEAC,ftZd_SpecialLw_8013B1CC,
+  //   ftZd_SpecialLw_8013B238}
+  const MslCharParams* sk = msl_char_params_fast((uint8_t)MSL_CHAR_ID_SHEIK);
+  if (sk == NULL) {
+    return;
+  }
+  zd_transform_cache_visible_twin_2218(batch, idx);
+  batch->state.char_id[idx] = (uint8_t)MSL_CHAR_ID_SHEIK;
+  zd_enter(batch, idx,
+           batch->state.on_ground[idx] ? (uint16_t)MSL_ACT_SK_SPECIAL_LW_2
+                                       : (uint16_t)MSL_ACT_SK_SPECIAL_AIR_LW_2,
+           sk->sheik_transform_finish_start_frame, 1.0f);
+  zd_transform_set_live_2218(batch, idx, 0u);
 }
 
 uint8_t zelda_action_is_special(uint16_t action_id) {

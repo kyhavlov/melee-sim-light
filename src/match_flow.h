@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "batch_internal.h"
+#include "mpcoll_ecb_points.h"
 
 // Match flow: KO/death/respawn/entry state machine glue.
 //
@@ -35,11 +36,14 @@ void match_flow_update_post_physics(MslBatch* batch);
 //   refs/melee/src/melee/ft/ftmotionstates.c (ftCo_MS_DeadDown et al.)
 // - Entry coll_cb is an empty function (no map collision).
 //   refs/melee/src/melee/ft/ft_0C31.c::ftCo_Entry_Coll
-// - Rebirth/EntryStart/EntryEnd run dedicated collision entrypoints (mpColl-based / ECB-based),
-//   which we do not yet implement in this lite sim.
+// - Rebirth/EntryStart/EntryEnd run dedicated selector-owned mpColl/custom-ECB entrypoints.
 //   refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Coll
 //   refs/melee/src/melee/ft/ft_0C31.c::ftCo_EntryStart_Coll
 uint8_t match_flow_should_stage_collide(uint16_t action_id);
+uint8_t match_flow_entry_custom_ecb_bottom(const MslBatch* batch, size_t idx, float* out_bottom);
+uint8_t match_flow_entry_custom_ecb(const MslBatch* batch, size_t idx, MslEcbWorldPoints* out);
+uint8_t match_flow_rebirth_stage_collision_runs(const MslBatch* batch, int bi);
+void match_flow_rebirth_wait_floor_contact(MslBatch* batch, int bi, int p);
 
 // Match-start fighter input lock (`fp->x221D_b4`) countdown for live init-match episodes only.
 // Replay-seeded rows reconstruct the same owner through MslSeed::opening_input_lock_timer instead.
