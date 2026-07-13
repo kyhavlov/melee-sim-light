@@ -13,13 +13,13 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 == replays/validation/falcon/AmusingIncompleteCapybara.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 2360
-rollout.streak_count: 11
-rollout.streak_len.median: 742
-rollout.streak_len.p90: 1019
+rollout.streak_count: 10
+rollout.streak_len.median: 431
+rollout.streak_len.p90: 1671
 rollout.streak_len.p95: 2360
 rollout.streak_len.max: 2360
-rollout.first_mismatch_total: 10
-rollout.first_mismatch_seeded_total: 7
+rollout.first_mismatch_total: 9
+rollout.first_mismatch_seeded_total: 6
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=29.92 rec=6631 p=1 seed/ref/out=-34.9971/-34.9251/-5.00503 actions=27/27/27 category=unclassified
@@ -272,12 +272,12 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:72
 == replays/validation/falcon/GrowlingBogusAlbatross.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1070
-rollout.streak_count: 16
-rollout.streak_len.median: 344
+rollout.streak_count: 17
+rollout.streak_len.median: 342
 rollout.streak_len.p90: 822
 rollout.streak_len.p95: 1070
 rollout.streak_len.max: 1070
-rollout.first_mismatch_total: 18
+rollout.first_mismatch_total: 19
 rollout.first_mismatch_seeded_total: 9
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -486,11 +486,11 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:45
 overall.rollout.streak_count: 531
 overall.rollout.streak_len.median: 219
 overall.rollout.streak_len.p90: 796
-overall.rollout.streak_len.p95: 1027
+overall.rollout.streak_len.p95: 1053
 overall.rollout.streak_len.max: 2710
 overall.rollout.best_len.max: 2710
 overall.rollout.first_mismatch_total: 565
-overall.rollout.first_mismatch_seeded_total: 321
+overall.rollout.first_mismatch_seeded_total: 320
 overall.rollout.approved_exception_total: 13
 overall.rollout.approved_exception_seeded_total: 13
 overall.rollout.status: NOT-CLEAN

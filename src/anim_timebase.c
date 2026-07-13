@@ -65,6 +65,7 @@ static void anim_timebase_common_fall_blend_tick(MslBatch* batch, size_t idx,
                                           &backwards)) {
     batch->state.common_fall_blend_x4[idx] = 0.0f;
     batch->state.common_fall_blend_msid[idx] = 0u;
+    batch->state.common_fall_blend_reload[idx] = 0u;
     return;
   }
   if (seed_pretick) {
@@ -77,6 +78,7 @@ static void anim_timebase_common_fall_blend_tick(MslBatch* batch, size_t idx,
   if (batch->state.common_fall_blend_msid[idx] == 0u) {
     batch->state.common_fall_blend_msid[idx] = neutral;
   }
+  batch->state.common_fall_blend_reload[idx] = 0u;
   float x4 = batch->state.common_fall_blend_x4[idx];
   uint16_t target_smid = neutral;
   const float target = anim_timebase_common_fall_blend_target(batch, idx, c, ch, neutral, forwards,
@@ -93,6 +95,7 @@ static void anim_timebase_common_fall_blend_tick(MslBatch* batch, size_t idx,
     x4 += c->common_fall_blend_lerp * (target - x4);
     if (x4 != 0.0f && target_smid != batch->state.common_fall_blend_msid[idx]) {
       batch->state.common_fall_blend_msid[idx] = target_smid;
+      batch->state.common_fall_blend_reload[idx] = 1u;
     }
   }
   x4 += c->common_fall_blend_lerp * (target - x4);
@@ -107,6 +110,10 @@ static void anim_timebase_common_fall_blend_tick(MslBatch* batch, size_t idx,
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
   if (x4 != 0.0f && target_smid != batch->state.common_fall_blend_msid[idx]) {
     batch->state.common_fall_blend_msid[idx] = target_smid;
+    // ftAnim_8006EDD0 reload: this frame's consumed pose compounds two ftAnim_8006FE9C passes
+    // (ftCo_Fall_Anim_Inner + ftCo_800CC988); the pose sampler applies the second-stage blend.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Anim_Inner,ftCo_800CC988}
+    batch->state.common_fall_blend_reload[idx] = 1u;
   }
   batch->state.common_fall_blend_x4[idx] = x4;
 }

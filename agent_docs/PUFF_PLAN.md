@@ -842,3 +842,16 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   af 0-2 entry rows and likely the sheik rec 9478 phantom belong to the same family. Doubles
   005918 FallSpecial land-margins wait on FallAerial/FallSpecial mask probes (bits 1<<1/1<<2).
   Full probe evidence in the worklog.
+- 2026-07-13 (blend pose fidelity round 2, committed): the smid-switch (ftAnim_8006EDD0 reload)
+  frame consumes the COMPOUND of two ftAnim_8006FE9C passes -- ftCo_Fall_Anim_Inner blends the
+  fresh base with the alternate at its load frame, the alt AObj advances, and ftCo_800CC988
+  blends that in-place result with the alternate at +1 (JObj blend probe PositiveRevolvingHyena
+  f8015: two lb_8000C490 passes, identical x4, pass-2 base quaternion == pass-1 output to the
+  digit; x8A4 action-transition blend disproven for this row, x8a4==0 throughout). Modeled as a
+  reload-edge lane: runtime tick flags its own switches, new seed lane
+  common_fall_blend_reload_u8 carries the t1-phased switch bit for mask owners, and the sampler
+  applies the second-stage blend. Heals Hyena rec 8137 AND the doubles 005918 rows; one-step
+  totals improve again (doubles -20, aggregate -12, falcon -6). Remaining cumulative ledger:
+  PaleMajorEchidna (3 independent margin rows: sheik rec 9478 phantom at x4 0.08, falco rec
+  4035 land-margin at x4 0.93, falco rec 5991 blend-free combat cascade) and small rollout
+  streak_count flips (Rat +3, Elephant +2, Termite +1) -- free-run margins of the same family.

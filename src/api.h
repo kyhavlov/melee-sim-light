@@ -1616,6 +1616,11 @@ typedef struct MslSeed {
   uint8_t common_fall_blend_valid_u8[MSL_MAX_PLAYERS];
   float common_fall_blend_x4_f32[MSL_MAX_PLAYERS];
   uint16_t common_fall_blend_msid_u16[MSL_MAX_PLAYERS];
+  // 1 when the produced frame's Anim tick reloads the alternate submotion (smid switch):
+  // that frame consumes the compound of two ftAnim_8006FE9C passes (ftCo_Fall_Anim_Inner +
+  // ftCo_800CC988). JObj blend probe: PositiveRevolvingHyena f8015 (two lb_8000C490 passes,
+  // pass-2 base == pass-1 output; alt frames A and A+1).
+  uint8_t common_fall_blend_reload_u8[MSL_MAX_PLAYERS];
   // Marth Counter descriptor hitlag-floor provenance (`shield_unk0/1 = MarsAttributes::x60`).
   //
   // Decomp owner:

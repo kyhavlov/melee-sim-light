@@ -128,3 +128,16 @@ def test_falcon_blended_ecb_alt_frame_owns_edge_margin() -> None:
         "replays/validation/falcon/FumblingSaneBeaver.slpz", [1, 2], 5178, 1)
     assert ref_act == 29
     assert out_act == 29
+
+
+def test_falco_reload_frame_compound_blend_owns_laser_graze_miss() -> None:
+    # On the smid-switch (ftAnim_8006EDD0 reload) frame the consumed pose is the COMPOUND of two
+    # ftAnim_8006FE9C passes: blend(blend(base@A, target@A, x4), target@A+1, x4) -- JObj blend
+    # probe PositiveRevolvingHyena f8015 shows two lb_8000C490 passes with identical x4 whose
+    # pass-2 base quaternion equals pass-1's output exactly. With the single-blend pose the
+    # trailing falco laser beam offset ([-9.37] x scale 3.0) grazes p0's leg cap by 0.11 where
+    # the game (compound pose, knee ~6.4deg more bent) misses by 0.08.
+    out_act, ref_act = _one_step_action(
+        "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz", [1, 2], 8137, 0)
+    assert ref_act == 29
+    assert out_act == 29

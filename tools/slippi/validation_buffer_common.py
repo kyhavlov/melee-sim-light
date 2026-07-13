@@ -434,8 +434,8 @@ def _multijump_ladder_lut_cached(data_root_text: str) -> tuple[np.ndarray, np.nd
 def _multijump_ladder_lut(data_root: Path) -> tuple[np.ndarray, np.ndarray]:
     return _multijump_ladder_lut_cached(_path_cache_key(data_root))
 
-def _derive_common_fall_blend_seed(*, char_id_u8: np.ndarray, action_id_u16: np.ndarray, speed_air_x_self_f32: np.ndarray, facing_dir_f32: np.ndarray, air_drift_max_by_char: np.ndarray, threshold: float, lerp: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Derive prefix-causal mv.co.{fall,fallaerial,fallspecial}.x4/smid seed lanes."""
+def _derive_common_fall_blend_seed(*, char_id_u8: np.ndarray, action_id_u16: np.ndarray, speed_air_x_self_f32: np.ndarray, facing_dir_f32: np.ndarray, air_drift_max_by_char: np.ndarray, threshold: float, lerp: float) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Derive prefix-causal mv.co.{fall,fallaerial,fallspecial}.x4/smid seed lanes plus the reload (smid-switch) bit for the produced frame."""
     try:
         import msl_binding
     except ImportError as exc:

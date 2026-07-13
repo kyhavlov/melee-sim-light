@@ -822,6 +822,12 @@ typedef struct MslStateSoA {
   uint8_t* common_fall_blend_seed_pretick;
   float* common_fall_blend_x4;
   uint16_t* common_fall_blend_msid;
+  // Set for the frame whose Anim tick reloaded the alternate submotion (smid switch):
+  // ftCo_Fall_Anim_Inner's reload path runs ftAnim_8006FE9C once itself and ftCo_800CC988 runs
+  // it again, so the consumed pose that frame is the COMPOUND
+  // blend(blend(base@A, target@A, x4), target@A+1, x4) (JObj blend probe
+  // PositiveRevolvingHyena f8015: two lb_8000C490 passes, pass-2 base == pass-1 output).
+  uint8_t* common_fall_blend_reload;
   // Hidden mv.co.squat.x0/x4 platform-pass latch/countdown. ftCo_80099F9C arms it while down is
   // held on a platform; ftCo_Squat_IASA_inline later decrements x4 and enters Pass without
   // rechecking stick down.

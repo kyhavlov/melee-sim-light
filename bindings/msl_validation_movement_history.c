@@ -2369,10 +2369,12 @@ PyObject* msl_derive_common_fall_blend_seed_py(PyObject* self, PyObject* args) {
   PyArrayObject* out_valid = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
   PyArrayObject* out_x4 = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
   PyArrayObject* out_msid = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT16, 0);
-  if (out_valid == NULL || out_x4 == NULL || out_msid == NULL) {
+  PyArrayObject* out_reload = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  if (out_valid == NULL || out_x4 == NULL || out_msid == NULL || out_reload == NULL) {
     Py_XDECREF(out_valid);
     Py_XDECREF(out_x4);
     Py_XDECREF(out_msid);
+    Py_XDECREF(out_reload);
     return NULL;
   }
 
@@ -2384,6 +2386,7 @@ PyObject* msl_derive_common_fall_blend_seed_py(PyObject* self, PyObject* args) {
   uint8_t* ov = (uint8_t*)PyArray_DATA(out_valid);
   float* ox = (float*)PyArray_DATA(out_x4);
   uint16_t* om = (uint16_t*)PyArray_DATA(out_msid);
+  uint8_t* orl = (uint8_t*)PyArray_DATA(out_reload);
 
   float x4 = 0.0f;
   uint16_t stored_msid = 0u;
@@ -2436,6 +2439,9 @@ PyObject* msl_derive_common_fall_blend_seed_py(PyObject* self, PyObject* args) {
     }
     if (x4 != 0.0f && target_msid != stored_msid) {
       stored_msid = target_msid;
+      // The lane is phased as the produced frame's post-tick state, so a switch at row i means
+      // the produced frame's Anim tick performs the ftAnim_8006EDD0 reload (compound pose frame).
+      orl[i] = 1u;
     }
     ov[i] = 1u;
     ox[i] = x4;
@@ -2445,5 +2451,5 @@ PyObject* msl_derive_common_fall_blend_seed_py(PyObject* self, PyObject* args) {
     prev_char = ch[i];
   }
 
-  return Py_BuildValue("NNN", out_valid, out_x4, out_msid);
+  return Py_BuildValue("NNNN", out_valid, out_x4, out_msid, out_reload);
 }

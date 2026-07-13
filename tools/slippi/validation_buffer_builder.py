@@ -714,10 +714,11 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         samples['seed_t']['specialhi_rotate_model_valid_u8'][:, slot] = specialhi_rotate_model_valid[:-1]
         facing_dir1_post = _derive_facing_dir1_sign(facing_u8=post_dir, action_id_u16=post_state)
         samples['seed_t']['facing_dir1'][:, slot] = facing_dir1_post[:-1]
-        common_fall_valid, common_fall_x4, common_fall_msid = _derive_common_fall_blend_seed(char_id_u8=post_char, action_id_u16=post_state, speed_air_x_self_f32=speed_air_x_self, facing_dir_f32=facing_dir1_post.astype(np.float32), air_drift_max_by_char=air_drift_max_by_char, threshold=common_fall_blend_threshold, lerp=common_fall_blend_lerp)
+        common_fall_valid, common_fall_x4, common_fall_msid, common_fall_reload = _derive_common_fall_blend_seed(char_id_u8=post_char, action_id_u16=post_state, speed_air_x_self_f32=speed_air_x_self, facing_dir_f32=facing_dir1_post.astype(np.float32), air_drift_max_by_char=air_drift_max_by_char, threshold=common_fall_blend_threshold, lerp=common_fall_blend_lerp)
         samples['seed_t']['common_fall_blend_valid_u8'][:, slot] = common_fall_valid[:-1]
         samples['seed_t']['common_fall_blend_x4_f32'][:, slot] = common_fall_x4[:-1]
         samples['seed_t']['common_fall_blend_msid_u16'][:, slot] = common_fall_msid[:-1]
+        samples['seed_t']['common_fall_blend_reload_u8'][:, slot] = common_fall_reload[:-1]
         samples['seed_t']['kb_smashcharge_active'][:, slot] = _derive_kb_smashcharge_active_from_post(post=post)[:-1]
         damage_time_since_hit_x18ac = derive_damage_time_since_hit_x18ac(action_id_u16=post_state, hitlag_u16=post_hitlag, hitstun_u16=post_hitstun, state_flags_u8=state_flags)
         samples['seed_t']['damage_time_since_hit_x18ac'][:, slot] = damage_time_since_hit_x18ac[:-1]

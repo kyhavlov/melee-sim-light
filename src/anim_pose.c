@@ -2736,8 +2736,9 @@ static float common_fall_blend_alt_anim_frame(const MslAnimPoseTable* t, uint16_
 
 static int common_fall_blended_local_matrix(const MslAnimPoseTable* t, uint16_t neutral_msid,
                                             uint16_t target_msid, float anim_frame,
-                                            uint16_t part_id, float weight, const float* parent_scl,
-                                            float out[12], float out_scl[3], uint32_t* out_flags,
+                                            uint16_t part_id, float weight, uint8_t reload,
+                                            const float* parent_scl, float out[12],
+                                            float out_scl[3], uint32_t* out_flags,
                                             int16_t* out_parent) {
   const float alt_frame = common_fall_blend_alt_anim_frame(t, target_msid, anim_frame);
   if (out_flags == NULL || out_parent == NULL) {
@@ -2781,6 +2782,42 @@ static int common_fall_blended_local_matrix(const MslAnimPoseTable* t, uint16_t 
 
   const float inv = 1.0f - weight;
   float pos[3], scl[3];
+  MslQuat target_q;
+  MslQuat neutral_q;
+  MslQuat blended_q;
+  quat_from_euler_srt_order(neutral_rot, &neutral_q);
+  if (reload) {
+    // ftAnim_8006EDD0 reload frame: ftCo_Fall_Anim_Inner's own ftAnim_8006FE9C pass blends the
+    // fresh base pose with the alternate at its load frame (the base cur_anim_frame), the alt
+    // AObj advances, and ftCo_800CC988's pass blends that in-place result with the alternate at
+    // the +1 frame. JObj blend probe PositiveRevolvingHyena f8015: two lb_8000C490 passes with
+    // identical x4, pass-2's base quaternion equals pass-1's output exactly.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Anim_Inner,ftCo_800CC988}
+    float p1_rot[3], p1_pos[3], p1_scl[3];
+    uint32_t p1_flags = 0u;
+    int16_t p1_parent = -1;
+    if (local_srt_for_part_f32(t, target_msid, anim_frame, part_id, p1_rot, p1_pos, p1_scl,
+                               &p1_flags, &p1_parent) != 0 ||
+        p1_parent != neutral_parent || p1_flags != neutral_flags) {
+      return -1;
+    }
+    float stage_pos[3], stage_scl[3];
+    for (int i = 0; i < 3; i++) {
+      stage_pos[i] = p1_pos[i] * weight + neutral_pos[i] * inv;
+      stage_scl[i] = p1_scl[i] * weight + neutral_scl[i] * inv;
+      pos[i] = target_pos[i] * weight + stage_pos[i] * inv;
+      scl[i] = target_scl[i] * weight + stage_scl[i] * inv;
+      out_scl[i] = scl[i];
+    }
+    MslQuat p1_q;
+    MslQuat stage_q;
+    quat_from_euler_srt_order(p1_rot, &p1_q);
+    quat_slerp_lb_c490(&p1_q, &neutral_q, inv, &stage_q);
+    quat_from_euler_srt_order(target_rot, &target_q);
+    quat_slerp_lb_c490(&target_q, &stage_q, inv, &blended_q);
+    mtx34_quat_srt_simple(&blended_q, pos, scl, parent_scl, out);
+    return 0;
+  }
   for (int i = 0; i < 3; i++) {
     // ftAnim_8006FE9C calls lb_8000C490(x4_jobj2, joint, joint, x4, 1-x4). Position and scale
     // are linear SRT blends; rotation follows lb_8000C490's quaternion path below.
@@ -2788,11 +2825,7 @@ static int common_fall_blended_local_matrix(const MslAnimPoseTable* t, uint16_t 
     scl[i] = target_scl[i] * weight + neutral_scl[i] * inv;
     out_scl[i] = scl[i];
   }
-  MslQuat target_q;
-  MslQuat neutral_q;
-  MslQuat blended_q;
   quat_from_euler_srt_order(target_rot, &target_q);
-  quat_from_euler_srt_order(neutral_rot, &neutral_q);
   quat_slerp_lb_c490(&target_q, &neutral_q, inv, &blended_q);
   mtx34_quat_srt_simple(&blended_q, pos, scl, parent_scl, out);
   return 0;
@@ -2800,7 +2833,7 @@ static int common_fall_blended_local_matrix(const MslAnimPoseTable* t, uint16_t 
 
 static int matrix_from_common_fall_blended_locals(const MslAnimPoseTable* t, uint16_t neutral_msid,
                                                   uint16_t target_msid, float anim_frame,
-                                                  uint16_t part_id, float weight,
+                                                  uint16_t part_id, float weight, uint8_t reload,
                                                   float out_3x4[12]) {
   if (weight == 1.0f) {
     // ftCo_Fall_Anim_Inner calls ftAnim_8006FF74, not ftAnim_8006FE9C, once x4 reaches 1.0.
@@ -2851,7 +2884,8 @@ static int matrix_from_common_fall_blended_locals(const MslAnimPoseTable* t, uin
       parent_scl = parent_world_scl;
     }
     if (common_fall_blended_local_matrix(t, neutral_msid, target_msid, anim_frame, chain[ci],
-                                         weight, parent_scl, local, scl, &flags, &parent) != 0) {
+                                         weight, reload, parent_scl, local, scl, &flags,
+                                         &parent) != 0) {
       return -1;
     }
     mtx34_concat(world, local, world);
@@ -2893,7 +2927,7 @@ int anim_pose_debug_common_fall_blend_matrix(uint8_t char_id, uint16_t neutral_m
     weight = 1.0f;
   }
   return matrix_from_common_fall_blended_locals(t, neutral_msid, target_msid, anim_frame, part_id,
-                                                weight, out_3x4);
+                                                weight, /*reload=*/0u, out_3x4);
 }
 
 int anim_pose_debug_collision_matrix_f32(uint8_t char_id, uint16_t msid, float anim_frame,
@@ -2932,8 +2966,9 @@ int anim_pose_get_common_fall_blend_collision_matrix_f32(const MslBatch* batch, 
   }
   const uint8_t char_id = batch->state.char_id[player_idx];
   const MslAnimPoseTable* t = table_for_char(char_id);
+  const uint8_t reload = batch->state.common_fall_blend_reload[player_idx];
   if (t == NULL || matrix_from_common_fall_blended_locals(t, msid, target_msid, anim_frame, part_id,
-                                                          weight, out_3x4) != 0) {
+                                                          weight, reload, out_3x4) != 0) {
     return -1;
   }
   // ftCo_800CC988 / ftCo_Fall_Anim_Inner run the selected Fall/FallF/FallB submotion, then call

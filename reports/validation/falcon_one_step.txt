@@ -503,21 +503,21 @@ overall.float_norm_mae_p95: 0.00038539
 
 == replays/validation/falcon/AmusingIncompleteCapybara.slpz ==
 Records: 7675  Players/scored per record: 2  Total player-frames: 15350
-mismatch.action_id: 6 / 15350 (0.000391)
-mismatch.action_frame: 3 / 15350 (0.000195)
-mismatch.on_ground: 1 / 15350 (0.000065)
+mismatch.action_id: 5 / 15350 (0.000326)
+mismatch.action_frame: 2 / 15350 (0.000130)
+mismatch.on_ground: 0 / 15350 (0.000000)
 mismatch.facing: 0 / 15350 (0.000000)
 mismatch.stocks: 0 / 15350 (0.000000)
-mismatch.jumps_left: 1 / 15350 (0.000065)
+mismatch.jumps_left: 0 / 15350 (0.000000)
 mismatch.is_dead: 0 / 15350 (0.000000)
 mismatch.hitlag: 0 / 15350 (0.000000)
 mismatch.hitstun: 0 / 15350 (0.000000)
 mismatch.l_cancel: 0 / 15350 (0.000000)
 mismatch.hurtbox_state: 1 / 15350 (0.000065)
 mismatch.ground_id: 0 / 15350 (0.000000)
-mismatch.animation_index: 6 / 15350 (0.000391)
+mismatch.animation_index: 5 / 15350 (0.000326)
 mismatch.instance_hit_by: 0 / 15350 (0.000000)
-mismatch.instance_id: 2 / 15350 (0.000130)
+mismatch.instance_id: 1 / 15350 (0.000065)
 mismatch.last_attack_landed: 0 / 15350 (0.000000)
 mismatch.combo_count: 0 / 15350 (0.000000)
 mismatch.last_hit_by: 3 / 15350 (0.000195)
@@ -529,9 +529,9 @@ mismatch.item_owner: 0 / 115125 (0.000000)
 mismatch.item_instance_id: 0 / 115125 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 28 / 15350 (0.001824)
 err.pos_x: mae=0.004020 p95=0.000000 max=1.884941
-err.pos_y: mae=0.001155 p95=0.000000 max=3.190019
+err.pos_y: mae=0.000947 p95=0.000000 max=1.556557
 err.speed_air_x_self: mae=0.002731 p95=0.000000 max=1.884943
-err.speed_ground_x_self: mae=0.000111 p95=0.000000 max=1.113037
+err.speed_ground_x_self: mae=0.000085 p95=0.000000 max=1.113037
 err.speed_y_self: mae=0.000823 p95=0.000000 max=1.000000
 err.speed_x_attack: mae=0.000000 p95=0.000000 max=0.000001
 err.speed_y_attack: mae=0.000000 p95=0.000000 max=0.000000
@@ -541,10 +541,10 @@ err.item_pos_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 28 / 928675
-overall.strict_discrete_mismatch: 56 / 928675
+overall.discrete_mismatch: 22 / 928675
+overall.strict_discrete_mismatch: 50 / 928675
 overall.ignored_discrete_mismatch: 28
-overall.float_norm_mae_p95: 0.00020234
+overall.float_norm_mae_p95: 0.00020043
 
 == replays/validation/falcon/OddballCleanViper.slpz ==
 Records: 10006  Players/scored per record: 2  Total player-frames: 20012
@@ -997,7 +997,7 @@ overall.ignored_discrete_mismatch: 12
 overall.float_norm_mae_p95: 0.00000603
 
 == suite summary ==
-overall.discrete_mismatch: 2824 / 22406659
-overall.strict_discrete_mismatch: 4057 / 22406659
+overall.discrete_mismatch: 2818 / 22406659
+overall.strict_discrete_mismatch: 4051 / 22406659
 overall.ignored_discrete_mismatch: 1233
-overall.float_norm_mae_p95: 0.00024258
+overall.float_norm_mae_p95: 0.00024251

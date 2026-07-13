@@ -2631,6 +2631,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // Default: the one-row fallback above is a pre-tick value, so the in-step tick runs.
       // The data-mask-owned seed-lane apply below re-arms this as a post-tick skip.
       batch->state.common_fall_blend_seed_pretick[idx] = 0u;
+      batch->state.common_fall_blend_reload[idx] = 0u;
       // GuardSetOff hidden exit-rate owner:
       // frame_speed_mul_f32 above remains strictly causal. This explicit GuardSetOff-only lane
       // carries the replay-visible `fp->frame_speed_mul` source value from the shield-hit entry /
@@ -3322,6 +3323,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         if (seed->common_fall_blend_valid_u8[p] != 0u) {
           batch->state.common_fall_blend_x4[idx] = seed->common_fall_blend_x4_f32[p];
           batch->state.common_fall_blend_msid[idx] = seed->common_fall_blend_msid_u16[p];
+          batch->state.common_fall_blend_reload[idx] = seed->common_fall_blend_reload_u8[p];
         }
         const uint8_t common_fall_blend_seed_owner =
             reseed_common_fall_blended_ecb_seed_owner(batch, idx, seed->action_id[p]);
@@ -3359,6 +3361,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         } else {
           batch->state.common_fall_blend_x4[idx] = fallback_blend_x4;
           batch->state.common_fall_blend_msid[idx] = fallback_blend_msid;
+          // Non-owner rows keep the strictly-causal fallback; the live tick re-derives the
+          // reload edge itself.
+          batch->state.common_fall_blend_reload[idx] = 0u;
           batch->state.common_fall_blend_seed_pretick[idx] = 0u;
         }
         reseed_store_colldata_ecb_desired(batch, idx, &desired_ecb);

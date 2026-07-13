@@ -1047,6 +1047,9 @@ The replay seed contains:
 - `common_fall_blend_valid_u8[player]`
 - `common_fall_blend_x4_f32[player]`
 - `common_fall_blend_msid_u16[player]`
+- `common_fall_blend_reload_u8[player]` -- 1 when the produced frame's Anim tick reloads the
+  alternate submotion (smid switch). That frame's pose compounds two ftAnim_8006FE9C passes
+  (ftCo_Fall_Anim_Inner + ftCo_800CC988): blend(blend(base@A, target@A, x4), target@A+1, x4).
 
 These lanes carry the hidden `mv.co.{fall,fallaerial,fallspecial}.x4` scalar and selected
 Fall/F/B submotion id for CommonFall, FallAerial, and FallSpecial families.

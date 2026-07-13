@@ -205,6 +205,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->fall_fast_seed_frame_start_valid, 0, sizeof(uint8_t) * bp);
   memset(state->common_fall_blend_x4, 0, sizeof(float) * bp);
   memset(state->common_fall_blend_msid, 0, sizeof(uint16_t) * bp);
+  memset(state->common_fall_blend_reload, 0, sizeof(uint8_t) * bp);
   memset(state->squat_pass_x0, 0, sizeof(uint8_t) * bp);
   memset(state->squat_pass_x4, 0, sizeof(uint8_t) * bp);
   memset(state->sheik_needle_count, 0, sizeof(uint8_t) * bp);
