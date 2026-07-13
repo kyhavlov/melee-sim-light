@@ -831,3 +831,14 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   (falco laser graze), doubles 005918 +5, small rollout streak flips -- all sub-0.1-margin;
   next candidates in the worklog (laser probe, sheik phantom probe, flags_b0 dynamics
   exclusion shared with items 7/9).
+- 2026-07-13 (margin-row attribution, committed): PositiveRevolvingHyena rec 8137 is
+  item-side-exact -- the sim's falco laser beam offsets ([-0.78,-3.64,-6.51,-9.37] x scale_z
+  3.0 = laser_scale_max) match the game's collision probe bit-for-bit; the decider is falco's
+  Fall-ENTRY leg pose (af 0-1 straight out of shine), which in game is still cross-fading from
+  the previous action via the x8A4 animBlendFrames action-transition blend (game misses the
+  offset-[3] beam segment by 0.08, sim grazes by 0.11). NEW project-scale owner: the
+  action-transition pose blend (x8A4/x8A8, Fighter_ChangeMotionState blend args), replay
+  derivable from prev action + exit frame + per-transition blend frames; PaleMajorEchidna's
+  af 0-2 entry rows and likely the sheik rec 9478 phantom belong to the same family. Doubles
+  005918 FallSpecial land-margins wait on FallAerial/FallSpecial mask probes (bits 1<<1/1<<2).
+  Full probe evidence in the worklog.
