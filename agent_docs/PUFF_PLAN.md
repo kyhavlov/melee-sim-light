@@ -855,3 +855,9 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   PaleMajorEchidna (3 independent margin rows: sheik rec 9478 phantom at x4 0.08, falco rec
   4035 land-margin at x4 0.93, falco rec 5991 blend-free combat cascade) and small rollout
   streak_count flips (Rat +3, Elephant +2, Termite +1) -- free-run margins of the same family.
+- 2026-07-13 (Echidna rec 9478 probed): the game hits too -- collision probe f9356 shows ret=1
+  with overlap 0.0087, INSIDE the x7A8=0.01 phantom band (game: phantom/no-knockback; sim's
+  overlap lands just above -> full hit). Decided by ~0.002u of sheik leg-capsule position at a
+  nearly-neutral blend (x4 0.083): the row sits at the pose-precision floor; residual owner
+  candidates are sheik ftDynamics (hair) and sub-0.01 sampler numerics. Falco recs 4035/5991
+  remain unprobed (land-margin at saturated x4; blend-free combat cascade).
