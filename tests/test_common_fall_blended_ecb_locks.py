@@ -141,3 +141,14 @@ def test_falco_reload_frame_compound_blend_owns_laser_graze_miss() -> None:
         "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz", [1, 2], 8137, 0)
     assert ref_act == 29
     assert out_act == 29
+
+
+def test_falco_blended_bottom_lands_same_ledge_floor_crossing_this_frame() -> None:
+    # The fall-same-floor-early one-frame delay is a stand-in for the unblended Fall bottom and
+    # must not apply to blended-ECB owners: fall-floor probe PaleMajorEchidna p1 f3913 -- the
+    # game's plain bottom sweep (blended bottoms 4.483 -> 4.518, x4 0.932 saturated) crosses the
+    # Dream Land ledge floor at x -81.6 and lands this frame (ret=1, y snapped to 0).
+    out_act, ref_act = _one_step_action(
+        "replays/validation/sheik/PaleMajorEchidna.slpz", [1, 2], 4035, 1)
+    assert ref_act == 42
+    assert out_act == 42

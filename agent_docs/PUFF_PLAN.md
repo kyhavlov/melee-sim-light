@@ -861,3 +861,12 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   nearly-neutral blend (x4 0.083): the row sits at the pose-precision floor; residual owner
   candidates are sheik ftDynamics (hair) and sub-0.01 sampler numerics. Falco recs 4035/5991
   remain unprobed (land-margin at saturated x4; blend-free combat cascade).
+- 2026-07-13 (Echidna 4035 fixed; ONE-STEP LEDGER CLEAN): the fall-same-floor-early one-frame
+  delay (reject bit 5) is a stand-in for the unblended bottom's early crossing and is now gated
+  off for blended-ECB owners -- fall-floor probe PaleMajorEchidna p1 f3913: the game's plain
+  bottom sweep (blended bottoms 4.483->4.518 at x4 0.932) crosses the DL ledge floor at x -81.6
+  and lands the same frame. aggregate/sheik -7 each; with this, ZERO cumulative one-step
+  regressions remain vs the cycle baseline. Remaining ledger: rollout streak_count +-1..3
+  free-run reshuffles (Rat/Elephant/Termite/Seahorse) and two attributed non-blend rows
+  (Echidna 9478 at the 0.002 phantom-ceiling precision floor; Echidna 5991 sheik Vanish-warp
+  hit vs landing-frame ordering -- the game lands AND hits the same frame, probe f5869).

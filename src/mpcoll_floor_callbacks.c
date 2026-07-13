@@ -1575,6 +1575,15 @@ uint8_t msl_mpcoll_80047e14_reject_fall_same_floor_early_final_land(
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
   // refs/melee/src/melee/ft/ft_081B.c::ft_80082B1C
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+  //
+  // One-frame-early stand-in for the unblended Fall ECB bottom: when the character's data mask
+  // marks the CommonFall blended ECB as the collision consumer the swept bottom is source-true
+  // and the game's plain mpCheckFloor bottom sweep lands the same-floor ledge crossing on THIS
+  // frame (fall-floor probe PaleMajorEchidna p1 f3913: falco sweeps blended bottoms
+  // 4.483 -> 4.518 across the Dream Land ledge floor at x -81.6, ret=1, y snapped to 0).
+  if (batch != NULL && mpcoll_common_fall_blended_ecb_live_owner(batch, idx, action_id) != 0u) {
+    return 0u;
+  }
   return (uint8_t)(batch != NULL && g != NULL && action_id == (uint16_t)MSL_ACT_FALL &&
                    batch->state.seed_prev_action_id[idx] == action_id &&
                    batch->state.seed_prev_action_frame[idx] <= batch->state.action_frame[idx] &&

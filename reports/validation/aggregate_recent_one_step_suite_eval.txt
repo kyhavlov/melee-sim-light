@@ -2663,25 +2663,25 @@ overall.float_norm_mae_p95: 0.00000037
 
 == replays/validation/sheik/PaleMajorEchidna.slpz ==
 Records: 10638  Players/scored per record: 2  Total player-frames: 21276
-mismatch.action_id: 11 / 21276 (0.000517)
-mismatch.action_frame: 18 / 21276 (0.000846)
-mismatch.on_ground: 3 / 21276 (0.000141)
+mismatch.action_id: 10 / 21276 (0.000470)
+mismatch.action_frame: 17 / 21276 (0.000799)
+mismatch.on_ground: 2 / 21276 (0.000094)
 mismatch.facing: 1 / 21276 (0.000047)
 mismatch.stocks: 0 / 21276 (0.000000)
-mismatch.jumps_left: 3 / 21276 (0.000141)
+mismatch.jumps_left: 2 / 21276 (0.000094)
 mismatch.is_dead: 0 / 21276 (0.000000)
 mismatch.hitlag: 8 / 21276 (0.000376)
 mismatch.hitstun: 5 / 21276 (0.000235)
 mismatch.l_cancel: 1 / 21276 (0.000047)
 mismatch.hurtbox_state: 1 / 21276 (0.000047)
 mismatch.ground_id: 1 / 21276 (0.000047)
-mismatch.animation_index: 11 / 21276 (0.000517)
+mismatch.animation_index: 10 / 21276 (0.000470)
 mismatch.instance_hit_by: 2 / 21276 (0.000094)
-mismatch.instance_id: 6 / 21276 (0.000282)
+mismatch.instance_id: 5 / 21276 (0.000235)
 mismatch.last_attack_landed: 4 / 21276 (0.000188)
 mismatch.combo_count: 0 / 21276 (0.000000)
 mismatch.last_hit_by: 2 / 21276 (0.000094)
-mismatch.state_flags: 23 / 106380 (0.000216)
+mismatch.state_flags: 22 / 106380 (0.000207)
 mismatch.item_exists: 4 / 159570 (0.000025)
 mismatch.item_type: 4 / 159570 (0.000025)
 mismatch.item_state: 1 / 159570 (0.000006)
@@ -2689,9 +2689,9 @@ mismatch.item_owner: 4 / 159570 (0.000025)
 mismatch.item_instance_id: 4 / 159570 (0.000025)
 ignored_mismatch.state_flags[4]&0x80: 15 / 21276 (0.000705)
 err.pos_x: mae=0.000513 p95=0.000000 max=3.613499
-err.pos_y: mae=0.000912 p95=0.000000 max=6.950021
+err.pos_y: mae=0.000586 p95=0.000000 max=3.160000
 err.speed_air_x_self: mae=0.000229 p95=0.000000 max=1.680992
-err.speed_ground_x_self: mae=0.000171 p95=0.000000 max=1.680992
+err.speed_ground_x_self: mae=0.000134 p95=0.000000 max=1.680992
 err.speed_y_self: mae=0.001008 p95=0.000000 max=3.500000
 err.speed_x_attack: mae=0.000186 p95=0.000000 max=1.554211
 err.speed_y_attack: mae=0.000412 p95=0.000000 max=4.270162
@@ -2701,10 +2701,10 @@ err.item_pos_x: mae=0.000189 p95=0.000000 max=0.344872
 err.item_pos_y: mae=0.003254 p95=0.000000 max=2.000000
 err.item_vel_x: mae=0.000978 p95=0.000000 max=1.400000
 err.item_vel_y: mae=0.002381 p95=0.000000 max=0.100000
-overall.discrete_mismatch: 117 / 1287198
-overall.strict_discrete_mismatch: 132 / 1287198
+overall.discrete_mismatch: 110 / 1287198
+overall.strict_discrete_mismatch: 125 / 1287198
 overall.ignored_discrete_mismatch: 15
-overall.float_norm_mae_p95: 0.00011404
+overall.float_norm_mae_p95: 0.00011120
 
 == replays/validation/sheik/ConstantStiffOtter.slpz ==
 Records: 11721  Players/scored per record: 2  Total player-frames: 23442
@@ -3202,7 +3202,7 @@ overall.ignored_discrete_mismatch: 5
 overall.float_norm_mae_p95: 30.64350316
 
 == suite summary ==
-overall.discrete_mismatch: 5749 / 79185425
-overall.strict_discrete_mismatch: 9513 / 79185425
+overall.discrete_mismatch: 5742 / 79185425
+overall.strict_discrete_mismatch: 9506 / 79185425
 overall.ignored_discrete_mismatch: 3764
-overall.float_norm_mae_p95: 0.95063156
+overall.float_norm_mae_p95: 0.95063151

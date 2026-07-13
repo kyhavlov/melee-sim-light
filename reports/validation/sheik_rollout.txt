@@ -159,22 +159,22 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 == replays/validation/sheik/PaleMajorEchidna.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 3118
-rollout.streak_count: 17
-rollout.streak_len.median: 415
+rollout.streak_count: 16
+rollout.streak_len.median: 289
 rollout.streak_len.p90: 1676
 rollout.streak_len.p95: 3118
 rollout.streak_len.max: 3118
-rollout.first_mismatch_total: 16
-rollout.first_mismatch_seeded_total: 12
+rollout.first_mismatch_total: 15
+rollout.first_mismatch_seeded_total: 11
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=12.9365 rec=3309 p=0 seed/ref/out=0.681917/0.828417/-12.1081 actions=67/67/67 category=unclassified
-  2. speed_air_x_self max_err=0.786041 rec=3247 p=0 seed/ref/out=-2.58604/-2.1799/-2.96594 actions=238/238/238 category=unclassified
-  3. speed_ground_x_self max_err=0.786041 rec=3240 p=0 seed/ref/out=-2.82422/-1.8/-2.58604 actions=50/237/237 category=unclassified
+  2. pos_y max_err=4.52411 rec=4035 p=1 seed/ref/out=-3.44992/0.000100136/-4.52401 actions=29/42/42 category=unclassified
+  3. speed_air_x_self max_err=0.786041 rec=3247 p=0 seed/ref/out=-2.58604/-2.1799/-2.96594 actions=238/238/238 category=unclassified
 rollout.float_top_downstream:
   1. pos_x max_err=12.9365 rec=3310 p=0 seed/ref/out=0.828417/0.934917/-12.0016 actions=67/67/67 category=downstream_discrete_mismatch
   2. percent max_err=10.2 rec=7721 p=0 seed/ref/out=104.55/114.75/104.55 actions=18/88/18 category=downstream_discrete_mismatch
-  3. pos_y max_err=6.95002 rec=4035 p=1 seed/ref/out=-3.44992/0.000100136/-6.94992 actions=29/42/29 category=downstream_discrete_mismatch
+  3. speed_y_attack max_err=4.27016 rec=9478 p=0 seed/ref/out=1.30734/1.25769/-3.01247 actions=29/29/89 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:134
 
 == replays/validation/sheik/RuralReasonableRat.slpz ==
@@ -430,14 +430,14 @@ rollout.float_top_errors:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:54
 
 == suite summary ==
-overall.rollout.streak_count: 461
-overall.rollout.streak_len.median: 269
-overall.rollout.streak_len.p90: 915
-overall.rollout.streak_len.p95: 1216
+overall.rollout.streak_count: 460
+overall.rollout.streak_len.median: 268
+overall.rollout.streak_len.p90: 946
+overall.rollout.streak_len.p95: 1237
 overall.rollout.streak_len.max: 3169
 overall.rollout.best_len.max: 3169
-overall.rollout.first_mismatch_total: 466
-overall.rollout.first_mismatch_seeded_total: 253
+overall.rollout.first_mismatch_total: 465
+overall.rollout.first_mismatch_seeded_total: 252
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=132.896 rec=3639 p=0 seed/ref/out=11.2125/6.1412/139.037 actions=7/7/7 category=unclassified
