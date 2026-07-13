@@ -816,6 +816,10 @@ typedef struct MslStateSoA {
   uint8_t* fall_fast_seed_frame_start_valid;
   // Hidden mv.co.{fall,fallaerial,fallspecial}.x4 live JObj blend scalar and selected smid.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+  // One-shot: the reseeded blend lanes already hold the post-tick x4/smid of the frame the
+  // next step produces (the seed lane derive performs that tick in preprocessing), so the
+  // first anim tick after a data-mask-owned reseed must be skipped to stay in phase.
+  uint8_t* common_fall_blend_seed_pretick;
   float* common_fall_blend_x4;
   uint16_t* common_fall_blend_msid;
   // Hidden mv.co.squat.x0/x4 platform-pass latch/countdown. ftCo_80099F9C arms it while down is

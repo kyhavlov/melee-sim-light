@@ -555,9 +555,15 @@ def test_character_overlay_masks_survive_fresh_extraction() -> None:
     import msl_binding
 
     cases = {
-        "fox": (1, 0, 0, 0, 0),
-        "falco": (22, 0, 0, 0, 0),
-        "falcon": (2, 1 << 3, 0, 1 << 1, 0),
+        # fox/falco commonfall mask 1<<0: probe-proven CollData ECB CommonFall blend consumers
+        # (MSL_FALL_FLOOR_PROBE on Game_20260313T121034 frames 3570-3575, ShadyDecimalStarling
+        # frames 7042-7048, and ToughOutlyingChicken frames 6216-6224; see
+        # extract_character_attrs.py).
+        "fox": (1, 0, 0, 1 << 0, 0),
+        "falco": (22, 0, 0, 1 << 0, 0),
+        # falcon adds commonfall bit 1<<0: MSL_FALL_FLOOR_PROBE on FumblingSaneBeaver p1
+        # frames 5050-5057 (see extract_character_attrs.py).
+        "falcon": (2, 1 << 3, 0, (1 << 1) | (1 << 0), 0),
         "marth": (18, (1 << 0) | (1 << 3), (1 << 15) | (1 << 16), 1 << 1, 0),
         "sheik": (7, 1 << 3, 0, 1 << 0, 1),
         "zelda": (19, 0, 0, 0, 1),

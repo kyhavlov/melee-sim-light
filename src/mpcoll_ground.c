@@ -4222,10 +4222,15 @@ void mpcoll_ground_apply(MslBatch* batch) {
               // refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
               // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
               // refs/melee/src/melee/ft/types.h::Fighter::allow_interrupt (fp+0x2218:0)
-              (action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] != 0u &&
-               batch->state.ground_id[idx] == 0xFFFFu && ecb_lock_timer_seed == 0u &&
-               batch->state.action_frame[idx] <= 4 && hit_line_idx >= 0 &&
-               fabsf(batch->state.speed_air_x_self[idx]) > 0.5f &&
+              // Shallow-depth stand-in for the unblended Fall ECB bottom: when the character's
+              // data mask marks the CommonFall blended ECB as the collision consumer, the swept
+              // bottom is already source-true and genuinely shallow crossings land (fall-floor
+              // probe ElatedWearyTermite p0 frame 5843: game sweeps blended bottom 4.204->4.273
+              // across the FoD floor at depth 0.21 and lands; this rule must not eat it).
+              (!common_fall_blended_ecb_consumer && action_id == (uint16_t)MSL_ACT_FALL &&
+               batch->state.fall_fast[idx] != 0u && batch->state.ground_id[idx] == 0xFFFFu &&
+               ecb_lock_timer_seed == 0u && batch->state.action_frame[idx] <= 4 &&
+               hit_line_idx >= 0 && fabsf(batch->state.speed_air_x_self[idx]) > 0.5f &&
                (iy - cur_bottom_y) > k_floor_y_bias && (iy - cur_bottom_y) < 0.35f &&
                (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
                                          (size_t)MSL_STATE_FLAGS_2218_INDEX] &
@@ -6166,27 +6171,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
               (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u)
                 ? 1u
                 : 0u;
-        const uint8_t suppress_fall_stale_platform_first_hard_floor_land =
-            // refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
-            // refs/melee/src/melee/mp/mpcoll.c::{
-            // data/stages/bin/*.bin::MSLSTG01 floor flags
-            (action_id == (uint16_t)MSL_ACT_FALL &&
-             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_FALL &&
-             batch->state.fall_fast[idx] == 0u && ecb_lock_timer_seed == 0u &&
-             batch->state.ground_id[idx] != 0xFFFFu &&
-             stage_collision_floor_line_is_platform(stage_id, batch->state.ground_id[idx]) &&
-             (batch->state.speed_air_x_self[idx] * batch->state.facing_dir1[idx]) < -0.5f &&
-             final_ground_line_idx >= 0 && (size_t)final_ground_line_idx < g->line_count &&
-             !g->lines[(size_t)final_ground_line_idx].is_platform &&
-             !g->lines[(size_t)final_ground_line_idx].is_ledge &&
-             !stage_collision_floor_line_has_platform_transform(stage_id, ground_id) &&
-             ground_id != batch->state.ground_id[idx] && batch->state.speed_y_self[idx] < 0.0f &&
-             prev_bottom_y > (contact_y + k_floor_y_bias) &&
-             cur_bottom_y < (contact_y - k_floor_y_bias) &&
-             (contact_y - cur_bottom_y) < k_ecb_vertical_unit &&
-             !fall_loop_wrap_fresh_root_crossed_land)
-                ? 1u
-                : 0u;
+        // The former suppress_fall_stale_platform_first_hard_floor_land owner (opposite-drift
+        // shallow first hard-floor crossings after a platform walk-off, SDS rec 7169) was a
+        // facing-vs-drift stand-in for the CommonFall directional-blend ECB bottom: fox's FallB
+        // blend raises the real swept bottom (Fall 3.86-3.91 -> FallB 4.73-4.87) so the game's
+        // first shallow crossing never reaches the floor. With the blended ECB seeded/live for
+        // fox (data/characters/fox.json::common_fall_blended_ecb_seed_mask, probe-proven on
+        // Game_20260313T121034 frames 3570-3575), that rule over-suppressed genuine landings
+        // whose bottoms clamp to the root (puff wallbounce_teeter_ys rec 792, probe-proven
+        // ordinary land at frame 670) and is retired.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80044628_Floor}
         const uint8_t suppress_fall_shallow_terminal_hard_floor_land =
             // data/stages/bin/*.bin::MSLSTG01 floor flags/links/platform-transform metadata
             // refs/melee/src/melee/ft/types.h::Fighter::x2218
@@ -6774,11 +6769,6 @@ void mpcoll_ground_apply(MslBatch* batch) {
             MSL_MPCOLL_REJECT_FALL_LOOP_WRAP_STAGE_OBJECT_FLOOR_TO_HARD_FLOOR,
             MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
             (uint32_t)MSL_MPCOLL_PHASE_PLATFORM_PASS);
-        mpcoll_floor_reject_add_if_state(&final_floor_reject,
-                                         suppress_fall_stale_platform_first_hard_floor_land,
-                                         MSL_MPCOLL_REJECT_FALL_STALE_PLATFORM_FIRST_HARD_FLOOR,
-                                         MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
-                                         (uint32_t)MSL_MPCOLL_PHASE_PLATFORM_PASS);
         mpcoll_floor_reject_add_if_state(&final_floor_reject,
                                          suppress_fall_shallow_terminal_hard_floor_land,
                                          MSL_MPCOLL_REJECT_FALL_SHALLOW_TERMINAL_HARD_FLOOR,

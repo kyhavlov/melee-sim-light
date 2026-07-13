@@ -311,6 +311,7 @@ MSL_STATE_FIELD(fall_fast_seed_frame_start, uint8_t, bp, (size_t)MSL_MAX_PLAYERS
 MSL_STATE_FIELD(fall_fast_seed_frame_start_valid, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(common_fall_blend_x4, float, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(common_fall_blend_msid, uint16_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(common_fall_blend_seed_pretick, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(squat_pass_x0, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(squat_pass_x4, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(attackdash_x0, int16_t, bp, (size_t)MSL_MAX_PLAYERS)

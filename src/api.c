@@ -2628,24 +2628,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // consume the same Fall/F/B blended pose without adding replay-row gameplay logic.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
       anim_timebase_seed_common_fall_blend(batch, idx, seed->action_frame[p]);
-      const uint8_t common_fall_blend_seed_bit =
-          reseed_common_fall_blended_ecb_seed_bit(seed->action_id[p]);
-      const MslCharParams* common_fall_blend_seed_ch =
-          msl_char_params_fast(batch->state.char_id[idx]);
-      if (seed->common_fall_blend_valid_u8[p] != 0u && common_fall_blend_seed_bit != 0u &&
-          common_fall_blend_seed_ch != NULL &&
-          (common_fall_blend_seed_ch->common_fall_blended_ecb_seed_mask &
-           common_fall_blend_seed_bit) != 0u) {
-        // Prefix-causal hidden seed lane for mv.co.{fall,fallaerial,fallspecial}.x4/smid.
-        // The fallback above uses only one visible row's current velocity; preprocessing carries
-        // the real recurrence through replay history for data-marked teacher-forced reseeds whose
-        // hidden blended ECB owner is source/probe-backed. Free-running runtime still advances x4
-        // from live velocity in anim_timebase_common_fall_blend_tick.
-        // data/characters/<char>.json::common_fall_blended_ecb_seed_mask
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
-        batch->state.common_fall_blend_x4[idx] = seed->common_fall_blend_x4_f32[p];
-        batch->state.common_fall_blend_msid[idx] = seed->common_fall_blend_msid_u16[p];
-      }
+      // Default: the one-row fallback above is a pre-tick value, so the in-step tick runs.
+      // The data-mask-owned seed-lane apply below re-arms this as a post-tick skip.
+      batch->state.common_fall_blend_seed_pretick[idx] = 0u;
       // GuardSetOff hidden exit-rate owner:
       // frame_speed_mul_f32 above remains strictly causal. This explicit GuardSetOff-only lane
       // carries the replay-visible `fp->frame_speed_mul` source value from the shield-hit entry /
@@ -3324,11 +3309,24 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
             &prev_ecb, batch->state.char_id[idx], batch->state.animation_index[idx],
             seed->anim_frame_f32[p], facing_dir, seed->seed_prev_action_id[p],
             seed->seed_prev_action_frame[p], 0u);
+        // Seed-lane blend application: the seed lane carries the source mv.co.*.x4/smid
+        // recurrence, phased as the produced frame's post-tick value (the fall-floor probe on
+        // PutridJoyousOryx frames 5257-5263 matches the lane bit-for-bit one frame ahead of
+        // the seed row). The owner gate must see the seed-lane x4 (the one-row fallback can
+        // be 0 while the carried recurrence is saturated: ShadyDecimalStarling rec 7169
+        // x4=1.0), so the apply precedes the gate. The seed lane derive marks every character
+        // in a Fall-family action valid, but only data-mask owners keep it: masked-off
+        // characters restore the strictly-causal one-row fallback below.
+        const float fallback_blend_x4 = batch->state.common_fall_blend_x4[idx];
+        const uint16_t fallback_blend_msid = batch->state.common_fall_blend_msid[idx];
+        if (seed->common_fall_blend_valid_u8[p] != 0u) {
+          batch->state.common_fall_blend_x4[idx] = seed->common_fall_blend_x4_f32[p];
+          batch->state.common_fall_blend_msid[idx] = seed->common_fall_blend_msid_u16[p];
+        }
+        const uint8_t common_fall_blend_seed_owner =
+            reseed_common_fall_blended_ecb_seed_owner(batch, idx, seed->action_id[p]);
         const uint8_t common_fall_blended_ecb_seed =
-            (!force_locked_bottom &&
-             reseed_common_fall_blended_ecb_seed_owner(batch, idx, seed->action_id[p]))
-                ? 1u
-                : 0u;
+            (!force_locked_bottom && common_fall_blend_seed_owner) ? 1u : 0u;
         if (common_fall_blended_ecb_seed) {
           // Teacher-forced CollData ECB seed bridge:
           // Slippi does not expose CollData.current/desired ECB. For data-marked Fall-family
@@ -3349,6 +3347,19 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
             desired_ecb = blended_ecb;
             prev_ecb = blended_ecb;
           }
+        }
+        if (common_fall_blend_seed_owner) {
+          // The applied seed lanes stay live for the step: the game's mv.co.*.x4 poses the
+          // JObj (hurt/hit bones) as well as the CollData ECB (UnusedLivelyLouse rec 2843:
+          // sheik's blended hurt pose is what the game swings marth's uair past). The lane
+          // is phased as the produced frame's post-tick value, so the first in-step tick is
+          // skipped (PutridJoyousOryx rec 5385: an extra tick under-blends the pose and
+          // drops the game's clean hit).
+          batch->state.common_fall_blend_seed_pretick[idx] = 1u;
+        } else {
+          batch->state.common_fall_blend_x4[idx] = fallback_blend_x4;
+          batch->state.common_fall_blend_msid[idx] = fallback_blend_msid;
+          batch->state.common_fall_blend_seed_pretick[idx] = 0u;
         }
         reseed_store_colldata_ecb_desired(batch, idx, &desired_ecb);
         batch->state.coll_desired_ecb_bottom_locked_owner[idx] =

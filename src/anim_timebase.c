@@ -56,6 +56,8 @@ static void anim_timebase_common_fall_blend_tick(MslBatch* batch, size_t idx,
   if (batch == NULL) {
     return;
   }
+  const uint8_t seed_pretick = batch->state.common_fall_blend_seed_pretick[idx];
+  batch->state.common_fall_blend_seed_pretick[idx] = 0u;
   uint16_t neutral = 0u;
   uint16_t forwards = 0u;
   uint16_t backwards = 0u;
@@ -63,6 +65,13 @@ static void anim_timebase_common_fall_blend_tick(MslBatch* batch, size_t idx,
                                           &backwards)) {
     batch->state.common_fall_blend_x4[idx] = 0.0f;
     batch->state.common_fall_blend_msid[idx] = 0u;
+    return;
+  }
+  if (seed_pretick) {
+    // Data-mask-owned reseed applied the derived seed lane, which is already the post-tick
+    // x4/smid of this frame (the preprocessing recurrence performs this frame's tick); running
+    // the live tick again would advance one frame past the source.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim_Inner
     return;
   }
   if (batch->state.common_fall_blend_msid[idx] == 0u) {

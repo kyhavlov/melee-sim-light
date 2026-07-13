@@ -1199,7 +1199,30 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     common_fall_blended_ecb_seed_mask = 0
     if ftdata_symbol in ("ftDataMars", "ftDataCaptain"):
         common_fall_blended_ecb_seed_mask = 1 << 1
+    if ftdata_symbol == "ftDataCaptain":
+        # Direct mpColl probe on falcon plain Fall: FumblingSaneBeaver p1 (port 2) frames
+        # 5050-5057 (MSL_FALL_FLOOR_PROBE) -- Fall entry at f5054 ramps mv.co.fall.x4
+        # 0.44 -> 0.755 (smid 22) and the CollData bottom rises 1.998 -> 3.677, keeping the
+        # swept bottom 0.027 above the floor at f5056 where the unblended table lands a frame
+        # early; the game lands at f5057 (ret=1, y snapped to 0).
+        common_fall_blended_ecb_seed_mask |= 1 << 0
     if ftdata_symbol == "ftDataSeak":
+        common_fall_blended_ecb_seed_mask = 1 << 0
+    if ftdata_symbol == "ftDataFox":
+        # Direct mpColl probe (the wider-owner proof the previous comment demanded): fox plain
+        # Fall fastfall witness Game_20260313T121034 p0 frames 3570-3575 (MSL_FALL_FLOOR_PROBE on
+        # mpColl_80044628_Floor/80047E14) shows the game's live CollData ecb/desired bottom is the
+        # CommonFall directional blend (Fall 3.86-3.91 <-> FallB 4.73-4.87 at x4 0.64-0.9,
+        # matching the derived common_fall_blend_x4/msid seed lanes exactly), which keeps the
+        # swept bottom above the BF side platform at frame 3574 where the unblended table lands
+        # a frame early.
+        common_fall_blended_ecb_seed_mask = 1 << 0
+    if ftdata_symbol == "ftDataFalco":
+        # Same direct mpColl probe on falco: ToughOutlyingChicken p1 frames 6216-6224
+        # (MSL_FALL_FLOOR_PROBE) shows plain-Fall CollData ecb/desired bottoms 5.25-5.55 with
+        # x130=0 -- the CommonFall directional blend, far above the raw Fall table -- keeping
+        # him airborne through frame 6222 where the unblended table lands early; the game
+        # lands only at frame 6224 (swept bottom -2.66 crosses the Dream Land floor).
         common_fall_blended_ecb_seed_mask = 1 << 0
     # Sustained EscapeAir_Coll carried ledge-floor wall publication overlay. This is kept explicit
     # instead of inferred from action id or a stage/replay row: Sheik/Zelda probes require the live

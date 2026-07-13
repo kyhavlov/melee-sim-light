@@ -805,3 +805,17 @@ bodies + ftPurinAttributes struct from ftPurin/types.h):
   in-memory-each-frame state, so modeling is sanctioned per the project rule). This class
   plausibly also covers item 9 (laser-vs-roll hurtcap pose) and the puff census
   instance_hit_by seedact=24/42 buckets. Full evidence + implementation plan in the worklog.
+- 2026-07-13 (owner-4 CommonFall blend: runtime-wide model landed, uncommitted): the
+  mv.co.{fall,*}.x4 recurrence is applied to the RUNTIME blend lanes at reseed for data-mask
+  owners with a one-shot pretick skip (the derived lane is bit-for-bit the game's post-tick x4
+  of the produced frame — probe fp+0x2344 on PutridJoyousOryx/ElatedWearyTermite). Decomp
+  ftCo_Fall.c::ftCo_800CC988 re-applies x4 to the skeleton every frame, so the blend owns hurt
+  poses and CollData ECB alike; the session-2 collision-only override lanes were retired.
+  Masks probe-proven fox/falco/falcon 1<<0 (sheik/marth pre-existing). The shallow-fastfall
+  depth suppressor is gated off for blended-ECB consumers (Termite f5843 probe). All suite
+  totals improve (falcon -117, doubles -114, sheik -53, aggregate -33; puff census 1368);
+  remaining replay-level reds are blend POSE-FIDELITY margins (sim blended pose ~0.1-0.3u off
+  vs game margins 0.01-0.12u: Oryx rec 5385 hit-margin, Hyena rec 8137, Beaver rec 5178
+  bottoms-margin) — next owner: HSD track-space blending (ftAnim_8006FE9C from FtPart_TransN),
+  equipment MSL_PROBE_JOBJ_BLEND_TRACE vs anim_pose_common_fall_blend_matrix. Same
+  project-scale tier as the ftDynamics item above.

@@ -78,13 +78,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == replays/validation/sheik/DrabMeanArmadillo.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1293
-rollout.streak_count: 15
+rollout.streak_count: 14
 rollout.streak_len.median: 239
-rollout.streak_len.p90: 1065
+rollout.streak_len.p90: 1073
 rollout.streak_len.p95: 1293
 rollout.streak_len.max: 1293
-rollout.first_mismatch_total: 16
-rollout.first_mismatch_seeded_total: 12
+rollout.first_mismatch_total: 15
+rollout.first_mismatch_seeded_total: 11
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=12.5546 rec=653 p=1 seed/ref/out=-101.685/-102.441/-114.996 actions=27/27/27 category=unclassified
@@ -180,13 +180,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:134
 == replays/validation/sheik/RuralReasonableRat.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1585
-rollout.streak_count: 27
+rollout.streak_count: 26
 rollout.streak_len.median: 259
-rollout.streak_len.p90: 695
+rollout.streak_len.p90: 744
 rollout.streak_len.p95: 1007
 rollout.streak_len.max: 1585
-rollout.first_mismatch_total: 29
-rollout.first_mismatch_seeded_total: 17
+rollout.first_mismatch_total: 28
+rollout.first_mismatch_seeded_total: 16
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=5.325 rec=8602 p=1 seed/ref/out=27.2001/32.9331/38.2581 actions=88/88/88 category=unclassified
@@ -244,13 +244,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:147
 == replays/validation/sheik/TenseSameHummingbird.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1677
-rollout.streak_count: 28
-rollout.streak_len.median: 306
-rollout.streak_len.p90: 978
+rollout.streak_count: 27
+rollout.streak_len.median: 323
+rollout.streak_len.p90: 986
 rollout.streak_len.p95: 1205
 rollout.streak_len.max: 1677
-rollout.first_mismatch_total: 28
-rollout.first_mismatch_seeded_total: 10
+rollout.first_mismatch_total: 27
+rollout.first_mismatch_seeded_total: 9
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=14.4587 rec=10870 p=0 seed/ref/out=10.9579/10.6579/25.1166 actions=179/179/179 category=unclassified
@@ -287,13 +287,13 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:3
 == replays/validation/sheik/ToughOutlyingChicken.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1874
-rollout.streak_count: 29
-rollout.streak_len.median: 300
-rollout.streak_len.p90: 1055
+rollout.streak_count: 30
+rollout.streak_len.median: 248
+rollout.streak_len.p90: 951
 rollout.streak_len.p95: 1065
 rollout.streak_len.max: 1874
-rollout.first_mismatch_total: 32
-rollout.first_mismatch_seeded_total: 21
+rollout.first_mismatch_total: 33
+rollout.first_mismatch_seeded_total: 20
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=10.2601 rec=3750 p=1 seed/ref/out=-76.7035/-76.7035/-66.4434 actions=179/179/179 category=unclassified
@@ -304,7 +304,7 @@ rollout.float_top_downstream:
   2. pos_y max_err=7.84355 rec=7353 p=1 seed/ref/out=-5.94192/-7.83465/0.0089 actions=91/91/191 category=downstream_discrete_mismatch
   3. speed_x_attack max_err=4.77869 rec=7920 p=1 seed/ref/out=0/0/-4.77869 actions=69/69/88 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1248
-rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
+rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:4
 
 == replays/validation/sheik/UnusedLivelyLouse.slpz ==
 rollout.status: NOT-CLEAN
@@ -353,12 +353,12 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == replays/validation/sheik/WavyRundownAardvark.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1401
-rollout.streak_count: 25
+rollout.streak_count: 24
 rollout.streak_len.median: 260
 rollout.streak_len.p90: 1141
 rollout.streak_len.p95: 1213
 rollout.streak_len.max: 1401
-rollout.first_mismatch_total: 28
+rollout.first_mismatch_total: 27
 rollout.first_mismatch_seeded_total: 18
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
@@ -374,13 +374,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:669
 == replays/validation/sheik/ZestyPreciousTurtle.slpz ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1364
-rollout.streak_count: 26
+rollout.streak_count: 25
 rollout.streak_len.median: 208
 rollout.streak_len.p90: 802
 rollout.streak_len.p95: 823
 rollout.streak_len.max: 1364
-rollout.first_mismatch_total: 25
-rollout.first_mismatch_seeded_total: 11
+rollout.first_mismatch_total: 24
+rollout.first_mismatch_seeded_total: 10
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=36.5152 rec=7034 p=0 seed/ref/out=109.83/109.18/145.695 actions=28/28/28 category=unclassified
@@ -430,14 +430,14 @@ rollout.float_top_errors:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:54
 
 == suite summary ==
-overall.rollout.streak_count: 460
-overall.rollout.streak_len.median: 268
-overall.rollout.streak_len.p90: 934
-overall.rollout.streak_len.p95: 1216
+overall.rollout.streak_count: 456
+overall.rollout.streak_len.median: 273
+overall.rollout.streak_len.p90: 951
+overall.rollout.streak_len.p95: 1237
 overall.rollout.streak_len.max: 3169
 overall.rollout.best_len.max: 3169
-overall.rollout.first_mismatch_total: 466
-overall.rollout.first_mismatch_seeded_total: 258
+overall.rollout.first_mismatch_total: 462
+overall.rollout.first_mismatch_seeded_total: 253
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_y max_err=132.896 rec=3639 p=0 seed/ref/out=11.2125/6.1412/139.037 actions=7/7/7 category=unclassified
@@ -448,4 +448,4 @@ overall.rollout.float_top_downstream:
   2. pos_x max_err=56.8659 rec=4441 p=0 seed/ref/out=2.36495/2.58415/-54.2817 actions=90/183/90 category=downstream_discrete_mismatch
   3. percent max_err=20.3671 rec=1349 p=1 seed/ref/out=22/22/42.3671 actions=236/43/88 category=downstream_discrete_mismatch
 overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:11050
-overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:16
+overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:18
