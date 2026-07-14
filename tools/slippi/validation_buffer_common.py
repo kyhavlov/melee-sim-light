@@ -1,7 +1,9 @@
 from __future__ import annotations
 import functools
 import json
+import subprocess
 import struct  # noqa: F401
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace  # noqa: F401
@@ -171,6 +173,26 @@ def _load_moves_file(data_root: Path, name: str) -> dict[str, Any]:
 def _load_common_data(data_root: Path=Path('data')) -> dict[str, Any]:
     return _load_json_file(Path(data_root) / 'common' / 'ft_common_data.json')
 
+@functools.lru_cache(maxsize=1)
+def _checkout_extraction_tree() -> str | None:
+    root = Path(__file__).resolve().parents[2]
+    try:
+        proc = subprocess.run(['git', '-C', str(root), 'rev-parse', 'HEAD:tools/extraction'], check=True, capture_output=True, text=True)
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return proc.stdout.strip() or None
+
+@functools.lru_cache(maxsize=8)
+def _warn_extraction_tree_stale(data_root_key: str, recorded_tree: str | None, recorded_revision: str | None) -> None:
+    current = _checkout_extraction_tree()
+    if not recorded_tree or not current or recorded_tree == current:
+        return
+    warnings.warn(
+        f'{data_root_key}/manifest.json was generated at git revision {recorded_revision or "unknown"} whose committed tools/extraction differs from this checkout; extracted data may be stale - run `make build_data`.',
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
 def manifest_registry_chars(data_root: Path) -> list[tuple[int, str]]:
     """(internal_id, name) for every char in the data manifest, registry-verified.
 
@@ -179,12 +201,18 @@ def manifest_registry_chars(data_root: Path) -> list[tuple[int, str]]:
     (a skipped char gets default/empty entries in every per-char preprocessor map).
     """
     from tools.extraction.char_registry import CHARS as registry_chars
-    manifest_chars = json.loads((data_root / 'manifest.json').read_text()).get('chars') or ['fox', 'falco']
+    manifest = json.loads((data_root / 'manifest.json').read_text())
+    manifest_chars = manifest.get('chars') or ['fox', 'falco']
+    _warn_extraction_tree_stale(str(data_root), manifest.get('extraction_tree'), manifest.get('git_revision'))
     out: list[tuple[int, str]] = []
     for key in manifest_chars:
         info = registry_chars.get(str(key))
         if info is None:
-            raise ValueError(f'data manifest names char {key!r} not present in tools/extraction/char_registry.py - add the registry row before preprocessing')
+            raise ValueError(
+                f'data manifest names char {key!r} not present in tools/extraction/char_registry.py. '
+                f'Local data/ was generated at git revision {manifest.get("git_revision") or "unknown"} and is likely stale for this checkout - '
+                f'regenerate with `make build_data` (or add the registry row if introducing a new character).'
+            )
         out.append((info.internal_id, info.name))
     return out
 

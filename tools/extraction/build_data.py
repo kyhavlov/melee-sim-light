@@ -75,6 +75,29 @@ def _copy_source_artifact(rel: str, out_path: Path) -> None:
         out_path.write_bytes(f.read())
 
 
+def _git_provenance() -> dict[str, str | None]:
+    """Best-effort provenance of the checkout generating this data (None outside a git repo).
+
+    `extraction_tree` hashes only committed `tools/extraction/` state, so consumers can tell
+    whether extraction code actually changed since generation instead of warning on every commit.
+    """
+    root = Path(__file__).resolve().parents[2]
+
+    def rev(spec: str) -> str | None:
+        try:
+            proc = subprocess.run(
+                ["git", "-C", str(root), "rev-parse", spec],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return None
+        return proc.stdout.strip() or None
+
+    return {"git_revision": rev("HEAD"), "extraction_tree": rev("HEAD:tools/extraction")}
+
+
 def _write_data_manifest(out_root: Path, *, chars: list[str], stages: list[str]) -> None:
     payload = {
         "magic": "MSLDATA1",
@@ -82,6 +105,7 @@ def _write_data_manifest(out_root: Path, *, chars: list[str], stages: list[str])
         "schemas": dict(DATA_SCHEMA_VERSIONS),
         "chars": list(chars),
         "stages": list(stages),
+        **_git_provenance(),
     }
     (out_root / "manifest.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
