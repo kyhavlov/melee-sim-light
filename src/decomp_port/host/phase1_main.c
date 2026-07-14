@@ -342,6 +342,10 @@ static void write_compare(const Phase1Runtime* runtime, uint32_t frame_seed,
                     MSL_DP_STAGE_FINAL_DESTINATION);
     out[offsetof(MslDpCompare, num_players)] = 2;
     out[offsetof(MslDpCompare, is_teams)] = runtime->config.is_teams ? 1 : 0;
+    // MslCompare represents all four controller slots. Slots without a source
+    // Fighter GObj use the validation contract's inactive/dead value.
+    out[offsetof(MslDpCompare, is_dead) + 2] = 1;
+    out[offsetof(MslDpCompare, is_dead) + 3] = 1;
 
     for (i = 0; i < 2; ++i) {
         Fighter* fp = GET_FIGHTER(runtime->fighters[i]);
@@ -435,8 +439,44 @@ static int runtime_step(Phase1Runtime* runtime, const MslDpInput* input,
 static void usage(const char* argv0)
 {
     fprintf(stderr,
-            "usage: %s GAME_DATA CONFIG PREV_INPUT_OR_- INPUT_TAPE OUTPUT\n",
-            argv0);
+            "usage: %s GAME_DATA CONFIG PREV_INPUT_OR_- INPUT_TAPE OUTPUT\n"
+            "       %s GAME_DATA --stream\n",
+            argv0, argv0);
+}
+
+static int run_stream(const char* data_root)
+{
+    uint8_t config_wire[sizeof(MslDpMatchConfig)];
+    MslDpInput previous_input;
+    MslDpInput input;
+    Phase1Runtime runtime;
+    size_t count;
+
+    if (fread(config_wire, 1, sizeof(config_wire), stdin) !=
+            sizeof(config_wire) ||
+        fread(&previous_input, 1, sizeof(previous_input), stdin) !=
+            sizeof(previous_input)) {
+        fprintf(stderr, "short decomp-port stream header\n");
+        return 1;
+    }
+    if (runtime_init(&runtime, data_root, config_wire, &previous_input) != 0) {
+        return 1;
+    }
+    while ((count = fread(&input, 1, sizeof(input), stdin)) == sizeof(input)) {
+        if (runtime_step(&runtime, &input, stdout) != 0) {
+            return 1;
+        }
+    }
+    if (count != 0 || ferror(stdin)) {
+        fprintf(stderr, "short decomp-port input stream\n");
+        return 1;
+    }
+    if (fflush(stdout) != 0) {
+        fprintf(stderr, "failed to flush compare stream: %s\n",
+                strerror(errno));
+        return 1;
+    }
+    return 0;
 }
 
 int main(int argc, char** argv)
@@ -450,6 +490,9 @@ int main(int argc, char** argv)
     size_t count;
     int result = 1;
 
+    if (argc == 3 && strcmp(argv[2], "--stream") == 0) {
+        return run_stream(argv[1]);
+    }
     if (argc != 6) {
         usage(argv[0]);
         return 2;

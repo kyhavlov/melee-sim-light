@@ -30,6 +30,8 @@ def test_phase1_locomotion_is_deterministic_and_source_scheduled() -> None:
     assert np.array_equal(first["frame_id"], np.arange(len(inputs), dtype=np.int32))
     assert np.all(first["stage_id"] == 32)
     assert np.all(first["char_id"][:, :2] == 1)
+    assert np.all(first["is_dead"][:, :2] == 0)
+    assert np.all(first["is_dead"][:, 2:] == 1)
     assert np.any(first["pos_x"][:, 0] != first["pos_x"][0, 0])
 
     actions = set(int(value) for value in first["action_id"][:, 0])

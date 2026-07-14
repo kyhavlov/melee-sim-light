@@ -1,8 +1,10 @@
-# Isolated Phase 1 build.  Deliberately does not include the repository's
-# Python/native-extension Makefile, so this path never starts Python.
+# Isolated Phase 1 build. It does not include the repository's main
+# Python/native-extension Makefile. The optional validation-native target asks
+# the selected Python for its include directory once at build time.
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 BUILD := $(ROOT)/build/decomp_port/phase1
+VALIDATION_BUILD := $(ROOT)/build/decomp_port/validation
 OBJ_DIR := $(BUILD)/obj
 TOOLCHAIN_ROOT := $(ROOT)/build/decomp_port/ppc-toolchain/root
 TOOLCHAIN_STAMP := $(ROOT)/build/decomp_port/ppc-toolchain/ready.stamp
@@ -11,6 +13,7 @@ QEMU := $(TOOLCHAIN_ROOT)/usr/bin/qemu-ppc-static
 SYSROOT := $(TOOLCHAIN_ROOT)
 QEMU_SYSROOT := $(TOOLCHAIN_ROOT)/usr/powerpc-linux-gnu
 PY ?= $(ROOT)/.venv/bin/python
+HOST_CC ?= cc
 
 UPSTREAM_SRCS := $(shell find $(ROOT)/src/decomp_port/upstream/src -type f -name '*.c' -print | LC_ALL=C sort)
 HOST_SRCS := \
@@ -46,6 +49,8 @@ FIGHTER_SMOKE := $(BUILD)/fighter-smoke
 MAP_SMOKE := $(BUILD)/map-collision-smoke
 MODEL_SMOKE := $(BUILD)/model-animation-smoke
 SCHEDULER_SMOKE := $(BUILD)/scheduler-smoke
+VALIDATION_NATIVE_SRC := $(ROOT)/bindings/msl_decomp_validate.c
+VALIDATION_NATIVE := $(VALIDATION_BUILD)/_msl_decomp_validate.so
 
 CPPFLAGS := \
 	-DBUGFIX \
@@ -64,11 +69,22 @@ CFLAGS := \
 	-fdata-sections -w
 LDLIBS := -lm
 
-.PHONY: all mvp clean run toolchain smoke map-smoke locomotion-smoke test
+.PHONY: all mvp validation validation-native clean run toolchain smoke map-smoke locomotion-smoke validation-smoke test
 
 all: mvp
 
 mvp: $(BINARY)
+
+validation: mvp validation-native
+
+validation-native: $(VALIDATION_NATIVE)
+
+$(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(ROOT)/src/decomp_port/host/wire.h
+	@mkdir -p "$(@D)"
+	@PY_INCLUDE="$$($(PY) -c 'import sysconfig; print(sysconfig.get_path("include"))')"; \
+		"$(HOST_CC)" -O3 -std=c11 -fPIC -shared -Wall -Wextra \
+			-D_POSIX_C_SOURCE=200809L -I"$$PY_INCLUDE" \
+			-I"$(ROOT)/src/decomp_port" "$<" -lm -o "$@"
 
 toolchain: $(TOOLCHAIN_STAMP)
 
@@ -123,7 +139,11 @@ locomotion-smoke: $(BINARY)
 	@timeout 25s env OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
 		"$(PY)" "$(ROOT)/tests/decomp_port/phase1_locomotion_smoke.py"
 
-test: smoke locomotion-smoke
+validation-smoke: validation
+	@timeout 25s env OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+		"$(PY)" -m pytest -q "$(ROOT)/tests/test_decomp_port_validation.py"
+
+test: smoke locomotion-smoke validation-smoke
 
 # Example:
 # make -f src/decomp_port/Makefile run CONFIG=... INPUT=... OUTPUT=... PREV=-
@@ -136,6 +156,6 @@ run: $(BINARY)
 		"$(DATA)" "$(CONFIG)" "$(PREV)" "$(INPUT)" "$(OUTPUT)"
 
 clean:
-	@rm -rf "$(BUILD)"
+	@rm -rf "$(BUILD)" "$(VALIDATION_BUILD)"
 
 -include $(DEPS)

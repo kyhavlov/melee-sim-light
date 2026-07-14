@@ -210,14 +210,16 @@ make -f src/decomp_port/Makefile -j2 mvp
 make -f src/decomp_port/Makefile -j2 test
 ```
 
-The isolated Makefile deliberately does not include the main repository Makefile and therefore
-does not run Python while parsing or compiling C. `test` runs six bounded native-source smokes and
-one bounded Python adapter smoke; the latter starts two QEMU processes for deterministic comparison
-and pins NumPy math-library thread counts to one. The focused commands are:
+The isolated Makefile deliberately does not include the main repository Makefile. PPC compilation
+does not start Python; the separate `validation-native` target asks the selected interpreter for
+its C include directory once. `test` runs six bounded native-source smokes, the deterministic tape
+smoke, and one one-frame native replay-stream smoke. Python-side math-library thread counts remain
+pinned to one. The focused commands are:
 
 ```bash
 make -f src/decomp_port/Makefile -j2 smoke
 make -f src/decomp_port/Makefile -j2 locomotion-smoke
+make -f src/decomp_port/Makefile -j2 validation-smoke
 ```
 
 The ordinary repository-wide pytest entry point still requires the existing simulator's generated
@@ -236,6 +238,82 @@ The fixed wire sizes are 36-byte `MslMatchConfig`, 32-byte `MslInput`, and 1022-
 directly compatible with the current NumPy dtypes even though the process is big-endian. The thin
 adapter is `melee_sim/decomp_port.py`; it writes one tape, invokes QEMU once, and reads the compare
 array without a per-frame Python loop or process.
+
+The PPC executable also has an internal pipe mode:
+
+```text
+melee-decomp-port GAME_DATA --stream
+```
+
+It reads one config, one previous input, and then raw input rows from stdin; it writes compare rows
+to stdout as they are produced. Diagnostics and loud-stub failures remain on stderr.
+
+Replay comparison is a deliberately small stdout-only diagnostic. Python resolves `.slp`/`.slpz`,
+loads each replay once with Peppi, and passes `game.frames` directly to the native validator. From
+that point onward C owns all frame work:
+
+- the Arrow C Data Interface exposes Peppi's existing column buffers without NumPy conversion;
+- C selects human ports and indexes the last occurrence of each rollback frame;
+- C converts physical controller columns directly into the 32-byte wire rows;
+- one duplex pipe streams those rows through one QEMU/PPC process while C drains its output;
+- C compares each 1022-byte output immediately against replay-visible Arrow columns and retains
+  only the first mismatch summary.
+
+There is no generated-data dependency, per-frame Python loop, NumPy frame materialization,
+temporary input/output tape, or replay-sized `MslCompare` allocation. The native path uses fixed
+64 KiB pipe buffers, one compare row, and an O(number of raw frames) `int64` rollback index. It
+currently compares all exported fighter fields bit-for-bit and item presence/count; detailed item
+field comparison will be filled in with the item runtime owner. It does not write or refresh
+validation reports. The implementation is `bindings/msl_decomp_validate.c`; the Python file below
+only builds/loads it, asks Peppi for the replay, and formats the small returned summary:
+
+```bash
+python tools/decomp_port/validate_replay.py \
+  replays/validation/aggregate_recent/Game_20260514T181413.slpz
+```
+
+`--frames N` bounds an exploratory run. `--start-frame F` still advances the PPC runtime through
+every preceding replay input, but begins comparison at frame `F`; this lets later source-owner gaps
+remain visible behind a known match-opening mismatch. Multiple replay paths can be supplied to one
+command, which builds and imports the validator once; `--no-build` skips even the no-op Make check
+for repeated runs. The raw game DAT directory remains `refs/melee-disc/files`.
+
+On the initial development host, the full 2,723-transition starter replay took about 1.9 seconds
+and 69 MiB maximum RSS through the direct path. The discarded validation-buffer implementation
+took about 2.1 seconds and 304 MiB for the same replay. At this size QEMU executing the unoptimized
+PPC source is already the dominant cost; the planned native scalar build, not more Python
+preprocessing, is the next major throughput lever for million-frame suites.
+
+The input wire carries Slippi's physical controller samples, not only the processed Fighter input
+floats. This distinction is required for UCF: `Recording/SendGamePreFrame.asm` records processed
+input from `Fighter` and separately recovers the current raw stick bytes from Melee's five-frame
+hardware ring, while `Playback/Core/RestoreGameFrame.asm` restores raw X specifically to preserve
+UCF dashback. UCF therefore belongs inside the runtime at its original phase owners rather than as
+a lossy preprocessing transform:
+
+- pad-buffer publication and optional 1.0-cardinal snapping from
+  `refs/ucf/src/pad_buffer/pad_buffer.cpp`;
+- Turn-frame dashback from `refs/ucf/src/dashback/dashback.cpp`;
+- shield-drop, SDI/shield-SDI, tumble, and DBOOC injections from their sibling `refs/ucf/src/`
+  owners.
+
+The current simulator's `src/ucf.c`, `src/input.c`, `src/locomotion.c`, and `src/action.c` are useful
+cross-checks for the wire semantics and phase placement, but remain independent gameplay code and
+are not linked into this port. Phase 1 already uses Slippi's FD neutral-spawn coordinates. It does
+not yet implement UCF or the remaining gameplay-affecting Slippi patches, and the validator reports
+that boundary separately rather than classifying patch-owned divergence as a vanilla decomp error.
+
+The initial starter replay is
+`replays/validation/aggregate_recent/Game_20260514T181413.slpz`, a 2,723-transition Fox/Fox FD
+game. Its aggregate suite enables UCF and 1.0 cardinals. The full input tape completes in one PPC
+process without reaching a loud stub. Exact replay comparison fails on the first transition, frame
+-122: the replay owns `ftCo_MS_Entry` (322), frozen
+Y=10 positions, source instance IDs 1/2, and match-opening flags, while the Phase 1 bootstrap owns
+`Fall` (29), applies gravity immediately, and has not initialized the match-flow identity owner.
+Warming through frame 0 with `--start-frame 0` exposes the already-declared arbitrary-input gaps:
+fighter positions and RNG phase have diverged, one fighter is in `ftFx_MS_SpecialAirNEnd` (346),
+and the blaster item/article row differs. These are owner-boundary findings, not a useful aggregate
+correctness score yet.
 
 Phase 1 exports source position, velocity, action/motion, animation frame/index, ground state and
 line, jumps, stocks, damage/shield, hitlag/hitstun, identity/combo fields, RNG seed, and the five
@@ -279,17 +357,60 @@ Dolphin before deciding whether this kernel is only an oracle or the basis of th
 
 ## Later phases
 
-### Phase 2 — Complete Fox-vs-Fox gameplay on Final Destination
+### Phase 2 — Complete Slippi Fox-vs-Fox gameplay on Final Destination
 
-Close normal attacks, hitboxes/hurtboxes, ProcessHit/DmgLog, damage states, shield, reflect, grab,
-throw, death, stocks, respawn, Fox specials, and fighter articles. Accept arbitrary controller input
-for a complete vanilla Fox mirror and compare free-running state with source/replay evidence.
+#### Objective
+
+Produce one source-shaped scalar runtime that owns the complete supported Fox/Fox singles gameplay
+boundary on Final Destination under arbitrary controller input, including the UCF and Slippi
+behavior present in the replay corpus. The initial acceptance replay is
+`replays/validation/aggregate_recent/Game_20260514T181413.slpz`; it must validate from match opening
+through completion, but its first mismatch is evidence for choosing a source owner, not permission
+to implement replay-row exceptions.
+
+#### Scope
+
+- Replace the minimal fighter bootstrap with the source match-opening, Entry, identity, stock, and
+  match-flow state needed to reproduce Slippi-visible state.
+- Complete the reached scheduler and callback phases for arbitrary Fox input: action changes,
+  animation and script events, IASA, physics, collision, accessories, articles/items, and match
+  flow. Preserve source callback ownership and ordering rather than compensating downstream.
+- Close the full Fox/FD gameplay systems: normal attacks, hitboxes/hurtboxes, ProcessHit/DmgLog,
+  hitlag/hitstun and damage states, shield and reflect, grabs and throws, Fox specials and fighter
+  articles, death, stocks, respawn, and game end.
+- Port UCF 0.84, 1.0-cardinal behavior, and gameplay-affecting Slippi patches at their original
+  input/scheduler owners. Keep physical controller samples as the replay wire substrate.
+- Extend native comparison to every replay-visible item/article field once those runtime owners
+  exist; item count alone is only a Phase 1 diagnostic.
+- Stub presentation, audio, platform I/O, and other genuinely headless-only paths when reached.
+  Unreached source may remain for linker garbage collection. Do not delete or false-predicate
+  gameplay-adjacent code merely because the starter replay does not exercise it.
+
+Phase 2 does not include other fighters or stages, production SoA/batching, allocation removal,
+native 64-bit layout conversion, or final throughput optimization. It must not link or bridge to the
+old simulator's gameplay implementation to achieve intermediate validation progress.
+
+#### Completion criteria
+
+1. The 2,723-transition starter replay passes end-to-end against all exported fighter and complete
+   item/article state, with UCF and applicable Slippi patches enabled.
+2. The declared Fox/Fox FD source boundary is represented broadly enough for arbitrary legal
+   controller input, with focused positive/negative tests for source owners not isolated by the
+   replay. No in-scope arbitrary-input path reaches a loud unresolved stub.
+3. Remaining stubs and exclusions are enumerated and source-backed as headless or outside Phase 2;
+   there are no replay-, frame-, or dataset-keyed gameplay branches.
+4. Repeated runs are bitwise deterministic, the isolated decomp-port test suite passes, and the
+   streaming validator can process the full replay without Python frame materialization or runtime
+   failure.
+5. Any reached nonmatching-decomp or PPC-float seam is either corrected/contained with source or
+   oracle evidence, or remains an explicit blocker; it is not silently accepted as a successful
+   Phase 2 result.
 
 ### Phase 3 — RL 1.0 supported scalar domain
 
 Add Falco, Marth, Sheik, Zelda, Captain Falcon, the remaining five legal stages, relevant
-items/articles and stage objects, UCF, singles match rules, and four-player/doubles scheduling.
-Expand by shared source owner rather than by replay row.
+items/articles and stage objects, character/stage-specific Slippi patch behavior, singles match
+rules, and four-player/doubles scheduling. Expand by shared source owner rather than by replay row.
 
 ### Phase 4 — Scalar correctness hardening
 
@@ -309,8 +430,8 @@ None of those optimizations may replace or narrow source behavior established by
 - `refs/melee/` is an independent clean clone at the source pin above.
 - `refs/melee-disc` and `SSBM.iso` are symlinks to existing local assets.
 - `refs/slippi-ssbm-asm` and `refs/ucf` are symlinks to existing reference checkouts.
-- The current simulator can use the parent worktree's generated data with
-  `MSL_DATA_DIR=/mnt/nvme0/projects/melee-sim-light/data` for later comparisons.
+- The decomp-port replay validator is independent of the existing simulator's generated `data/`
+  package. It reads replay-visible columns directly and the runtime reads original game DATs.
 - Phase 1's repository-local PPC32 cross-toolchain and sysroot live under ignored
   `build/decomp_port/`; the documented setup target downloads Debian cross packages without
   installing or modifying host packages.
