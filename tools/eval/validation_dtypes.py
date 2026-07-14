@@ -344,6 +344,7 @@ SEED_DTYPE = np.dtype(
         ("turn_kneebend_facing_override_u8", _arr("u1", MAX_PLAYERS)),
         ("guard_tilt_x8", _arr("<u2", MAX_PLAYERS)),
         ("guard_tilt_x4", _arr("<f4", MAX_PLAYERS)),
+        ("guard_tilt_x8_f32", _arr("<f4", MAX_PLAYERS)),
         ("guard_reflect_timer_x14", _arr("u1", MAX_PLAYERS)),
         ("guard_reflect_timer_x18", _arr("u1", MAX_PLAYERS)),
         ("guard_reflect_origin_guardon_u8", _arr("u1", MAX_PLAYERS)),

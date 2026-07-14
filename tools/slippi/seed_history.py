@@ -507,8 +507,8 @@ def load_shield_tilt_table_meta(*, data_dir: str = "data") -> dict[int, tuple[in
             raise ValueError(f"{p}: bad magic (want MSLSHLD1)")
 
         ver = struct.unpack_from("<I", buf, 8)[0]
-        if ver != 4:
-            raise ValueError(f"{p}: unsupported MSLSHLD1 version={ver} (want 4)")
+        if ver != 5:
+            raise ValueError(f"{p}: unsupported MSLSHLD1 version={ver} (want 5)")
 
         frame_count, neutral_frame = struct.unpack_from("<HH", buf, 12)
         if frame_count == 0:

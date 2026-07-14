@@ -2990,6 +2990,24 @@ int anim_pose_debug_collision_matrix_f32(uint8_t char_id, uint16_t msid, float a
   return 0;
 }
 
+int anim_pose_get_matrix_f32(uint8_t char_id, uint16_t msid, float anim_frame, uint16_t part_id,
+                             float out_3x4[12]) {
+  if (out_3x4 == NULL || !isfinite(anim_frame)) {
+    return -1;
+  }
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL) {
+    return -1;
+  }
+  // Track-curve evaluation at the exact float frame (HSD_JObjReqAnimAllByFlags semantics; no
+  // near-integer snapping). Falls back to the baked integer matrix when tracks are absent.
+  if (matrix_from_locals_f32(t, msid, anim_frame, part_id, out_3x4) == 0) {
+    return 0;
+  }
+  const uint16_t frame = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(anim_frame));
+  return anim_pose_get_matrix(char_id, msid, frame, part_id, out_3x4);
+}
+
 int anim_pose_get_common_fall_blend_collision_matrix_f32(const MslBatch* batch, size_t player_idx,
                                                          uint16_t msid, float anim_frame,
                                                          uint16_t part_id, float out_3x4[12]) {

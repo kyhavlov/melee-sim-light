@@ -688,7 +688,7 @@ def _char_key_for_shield_data(char_id: int) -> str:
 
 
 def _load_shield_pose_table(char_id_target: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
-    # data/shields/<char>.bin layout: tools/extraction/extract_shield_tilt_table.py (MSLSHLD1 v4).
+    # data/shields/<char>.bin layout: tools/extraction/extract_shield_tilt_table.py (MSLSHLD1 v5).
     key = _char_key_for_shield_data(char_id_target)
     path = Path("data/shields") / f"{key}.bin"
     if not path.exists():
@@ -697,8 +697,8 @@ def _load_shield_pose_table(char_id_target: int) -> tuple[np.ndarray, np.ndarray
     if buf[:8] != b"MSLSHLD1":
         raise AssertionError(f"{path}: bad magic")
     (ver,) = struct.unpack_from("<I", buf, 8)
-    if int(ver) != 4:
-        raise AssertionError(f"{path}: unsupported ver={ver} (want v4 guard_on pose data)")
+    if int(ver) != 5:
+        raise AssertionError(f"{path}: unsupported ver={ver} (want v5 guard_on pose + shield_part data)")
     frame_count = int(struct.unpack_from("<H", buf, 12)[0])
     neutral_frame = int(struct.unpack_from("<H", buf, 14)[0])
     guard_on_frame_count = int(struct.unpack_from("<H", buf, 28)[0])

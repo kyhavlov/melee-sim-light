@@ -1160,13 +1160,16 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         if (guard_tilt_mag > 1.0f) {
           guard_tilt_mag = 1.0f;
         }
-        uint16_t guard_tilt_frame = batch->state.guard_tilt_x8[idx];
+        float guard_tilt_frame_f = batch->state.guard_tilt_x8_f32[idx];
+        if (!(guard_tilt_frame_f > 0.0f)) {
+          guard_tilt_frame_f = (float)batch->state.guard_tilt_x8[idx];
+        }
         const float guard_end = msl_anim_end_frame(char_id, (uint16_t)MSL_SM_GUARD);
-        if (guard_end > 0.0f && (float)guard_tilt_frame > guard_end) {
-          guard_tilt_frame = msl_anim_frame_floor_u16(guard_end);
+        if (guard_end > 0.0f && guard_tilt_frame_f > guard_end) {
+          guard_tilt_frame_f = guard_end;
         }
         if (anim_pose_get_collision_matrices_f32(batch, idx, (uint16_t)MSL_SM_GUARD,
-                                                 (float)guard_tilt_frame, cap_part_ids, cap_count,
+                                                 guard_tilt_frame_f, cap_part_ids, cap_count,
                                                  guard_tilt_mats, guard_tilt_mat_ok) == 0) {
           use_guard_tilt_body_pose = 1u;
         }

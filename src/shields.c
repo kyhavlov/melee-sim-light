@@ -154,13 +154,20 @@ void shields_refresh_guard_tilt_body_owner(MslBatch* batch) {
       const float x4 = batch->state.guard_tilt_x4[idx];
       batch->state.guard_tilt_x4[idx] = fmaf(lerp, mag - x4, x4);
 
-      const uint16_t f = clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
       const float tilt_mag = clamp01(batch->state.guard_tilt_x4[idx]);
       const size_t n_i = (size_t)neutral * 3u;
-      const size_t f_i = (size_t)f * 3u;
-      const float dx = tv.xyz[n_i + 0] + tilt_mag * (tv.xyz[f_i + 0] - tv.xyz[n_i + 0]);
-      const float dy = tv.xyz[n_i + 1] + tilt_mag * (tv.xyz[f_i + 1] - tv.xyz[n_i + 1]);
-      const float dz = tv.xyz[n_i + 2] + tilt_mag * (tv.xyz[f_i + 2] - tv.xyz[n_i + 2]);
+      float target[3];
+      if (msl_shield_tilt_target_xyz_f32(batch->state.char_id[idx], &tv,
+                                         batch->state.guard_tilt_x8_f32[idx], target) != 0) {
+        const uint16_t f = clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
+        const size_t f_i = (size_t)f * 3u;
+        target[0] = tv.xyz[f_i + 0];
+        target[1] = tv.xyz[f_i + 1];
+        target[2] = tv.xyz[f_i + 2];
+      }
+      const float dx = tv.xyz[n_i + 0] + tilt_mag * (target[0] - tv.xyz[n_i + 0]);
+      const float dy = tv.xyz[n_i + 1] + tilt_mag * (target[1] - tv.xyz[n_i + 1]);
+      const float dz = tv.xyz[n_i + 2] + tilt_mag * (target[2] - tv.xyz[n_i + 2]);
       const float scale_y = batch->state.fighter_scale_y[idx];
       const float lx = dx * scale_y;
       const float ly = dy * scale_y;

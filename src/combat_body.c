@@ -1680,15 +1680,17 @@ uint8_t combat_guard_family_catch_hurtcap_world(const MslBatch* batch, size_t d_
   }
   if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
       batch->state.guard_tilt_x4[d_idx] > 0.0f) {
-    uint16_t guard_tilt_frame = batch->state.guard_tilt_x8[d_idx];
+    float guard_tilt_frame_f = batch->state.guard_tilt_x8_f32[d_idx];
+    if (!(guard_tilt_frame_f > 0.0f)) {
+      guard_tilt_frame_f = (float)batch->state.guard_tilt_x8[d_idx];
+    }
     const float guard_end = msl_anim_end_frame(char_id, (uint16_t)MSL_SM_GUARD);
-    if (guard_end > 0.0f && (float)guard_tilt_frame > guard_end) {
-      guard_tilt_frame = msl_anim_frame_floor_u16(guard_end);
+    if (guard_end > 0.0f && guard_tilt_frame_f > guard_end) {
+      guard_tilt_frame_f = guard_end;
     }
     float target_m[12];
-    if (anim_pose_get_collision_matrix_f32(batch, d_idx, (uint16_t)MSL_SM_GUARD,
-                                           (float)guard_tilt_frame, cap->bone_part_id,
-                                           target_m) == 0) {
+    if (anim_pose_get_collision_matrix_f32(batch, d_idx, (uint16_t)MSL_SM_GUARD, guard_tilt_frame_f,
+                                           cap->bone_part_id, target_m) == 0) {
       float tilt_mag = batch->state.guard_tilt_x4[d_idx];
       if (tilt_mag > 1.0f) {
         tilt_mag = 1.0f;
@@ -1875,15 +1877,17 @@ uint8_t combat_guard_family_body_hurtcap_world(const MslBatch* batch, size_t d_i
   const uint8_t char_id = batch->state.char_id[d_idx];
   if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
       batch->state.guard_tilt_x4[d_idx] > 0.0f) {
-    uint16_t guard_tilt_frame = batch->state.guard_tilt_x8[d_idx];
+    float guard_tilt_frame_f = batch->state.guard_tilt_x8_f32[d_idx];
+    if (!(guard_tilt_frame_f > 0.0f)) {
+      guard_tilt_frame_f = (float)batch->state.guard_tilt_x8[d_idx];
+    }
     const float guard_end = msl_anim_end_frame(char_id, (uint16_t)MSL_SM_GUARD);
-    if (guard_end > 0.0f && (float)guard_tilt_frame > guard_end) {
-      guard_tilt_frame = msl_anim_frame_floor_u16(guard_end);
+    if (guard_end > 0.0f && guard_tilt_frame_f > guard_end) {
+      guard_tilt_frame_f = guard_end;
     }
     float target_m[12];
-    if (anim_pose_get_collision_matrix_f32(batch, d_idx, (uint16_t)MSL_SM_GUARD,
-                                           (float)guard_tilt_frame, cap->bone_part_id,
-                                           target_m) == 0) {
+    if (anim_pose_get_collision_matrix_f32(batch, d_idx, (uint16_t)MSL_SM_GUARD, guard_tilt_frame_f,
+                                           cap->bone_part_id, target_m) == 0) {
       float tilt_mag = batch->state.guard_tilt_x4[d_idx];
       if (tilt_mag > 1.0f) {
         tilt_mag = 1.0f;
@@ -2359,14 +2363,17 @@ uint8_t combat_apply_guard_tilt_live_body_matrix(const MslBatch* batch, size_t d
   if (mag > 1.0f) {
     mag = 1.0f;
   }
-  uint16_t guard_tilt_frame = batch->state.guard_tilt_x8[d_idx];
+  float guard_tilt_frame_f = batch->state.guard_tilt_x8_f32[d_idx];
+  if (!(guard_tilt_frame_f > 0.0f)) {
+    guard_tilt_frame_f = (float)batch->state.guard_tilt_x8[d_idx];
+  }
   const float guard_end = msl_anim_end_frame(char_id, (uint16_t)MSL_SM_GUARD);
-  if (guard_end > 0.0f && (float)guard_tilt_frame > guard_end) {
-    guard_tilt_frame = msl_anim_frame_floor_u16(guard_end);
+  if (guard_end > 0.0f && guard_tilt_frame_f > guard_end) {
+    guard_tilt_frame_f = guard_end;
   }
   float target_m[12];
-  if (anim_pose_get_collision_matrix_f32(batch, d_idx, (uint16_t)MSL_SM_GUARD,
-                                         (float)guard_tilt_frame, part_id, target_m) != 0) {
+  if (anim_pose_get_collision_matrix_f32(batch, d_idx, (uint16_t)MSL_SM_GUARD, guard_tilt_frame_f,
+                                         part_id, target_m) != 0) {
     return 0u;
   }
   // Source owner: ftCo_Guard_Anim -> ftCo_80091E78 samples the Guard tilt AObj/JObj timeline at

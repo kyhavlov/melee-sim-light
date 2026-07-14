@@ -97,6 +97,12 @@ int anim_pose_debug_common_fall_blend_matrix(uint8_t char_id, uint16_t neutral_m
 
 // Debug/test helper for the float-frame collision matrix path without requiring a live batch.
 // This is intentionally not a gameplay API; it exists to lock SSANIMT1/FObj replay-data behavior.
+// Part matrix at an exact float anim frame via FObj track evaluation (no near-integer
+// snapping); source semantics of ftAnim_80070710 -> HSD_JObjReqAnimAllByFlags. Falls back to
+// the baked integer-frame matrix when track data is unavailable.
+int anim_pose_get_matrix_f32(uint8_t char_id, uint16_t msid, float anim_frame, uint16_t part_id,
+                             float out_3x4[12]);
+
 int anim_pose_debug_collision_matrix_f32(uint8_t char_id, uint16_t msid, float anim_frame,
                                          uint16_t part_id, float out_3x4[12]);
 

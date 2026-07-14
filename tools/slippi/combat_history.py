@@ -290,6 +290,7 @@ def derive_combat_hitlist_seed_fields(
     fighter_scale_y: np.ndarray,
     guard_tilt_x8: np.ndarray,
     guard_tilt_x4: np.ndarray,
+    guard_tilt_x8_f32: np.ndarray | None = None,
     stocks: np.ndarray,
     shield_hp: np.ndarray,
     hurtbox_state: np.ndarray,
@@ -364,6 +365,10 @@ def derive_combat_hitlist_seed_fields(
         np.ascontiguousarray(fighter_scale_y, dtype=np.float32),
         np.ascontiguousarray(guard_tilt_x8, dtype=np.uint16),
         np.ascontiguousarray(guard_tilt_x4, dtype=np.float32),
+        np.ascontiguousarray(
+            guard_tilt_x8_f32 if guard_tilt_x8_f32 is not None else guard_tilt_x8,
+            dtype=np.float32,
+        ),
         np.ascontiguousarray(stocks, dtype=np.uint8),
         np.ascontiguousarray(shield_hp, dtype=np.float32),
         np.ascontiguousarray(hurtbox_state, dtype=np.uint8),

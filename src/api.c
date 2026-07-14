@@ -2692,9 +2692,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.turn_kneebend_facing_override[idx] = (turn_kb_face <= 2u) ? turn_kb_face : 0u;
       batch->state.anim_defer_tick_once[idx] = 0;
       batch->state.guard_tilt_x8[idx] = seed->guard_tilt_x8[p];
-      batch->state.guard_tilt_x8_f32[idx] = (float)seed->guard_tilt_x8[p];
+      batch->state.guard_tilt_x8_f32[idx] = (seed->guard_tilt_x8_f32[p] > 0.0f)
+                                                ? seed->guard_tilt_x8_f32[p]
+                                                : (float)seed->guard_tilt_x8[p];
       batch->state.guard_tilt_x4[idx] = seed->guard_tilt_x4[p];
       batch->state.guard_tilt_x8_frame_start[idx] = seed->guard_tilt_x8[p];
+      batch->state.guard_tilt_x8_f32_frame_start[idx] = batch->state.guard_tilt_x8_f32[idx];
       batch->state.guard_tilt_x4_frame_start[idx] = seed->guard_tilt_x4[p];
       batch->state.guard_reflect_timer_x14[idx] = seed->guard_reflect_timer_x14[p];
       batch->state.guard_reflect_timer_x18[idx] = seed->guard_reflect_timer_x18[p];
@@ -7140,17 +7143,24 @@ int msl_batch_debug_shield_display_bubbles_world(const MslBatch* batch, int batc
     const float mag = debug_clamp01_f32(batch->state.guard_tilt_x4[idx]);
     const uint8_t no_tilt = (mag <= 0.0f) ? 1u : 0u;
     const uint16_t frame_max = (uint16_t)(tv.frame_count - 1u);
-    const uint16_t f = debug_clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
-    const size_t f_i = (size_t)f * 3u;
+    float f_f = batch->state.guard_tilt_x8_f32[idx];
+    if (!(f_f > 0.0f)) {
+      f_f = (float)debug_clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
+    }
+    float target[3];
+    if (msl_shield_tilt_target_xyz_f32(batch->state.char_id[idx], &tv, f_f, target) != 0) {
+      const uint16_t f = debug_clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
+      const size_t f_i = (size_t)f * 3u;
+      target[0] = tv.xyz[f_i + 0];
+      target[1] = tv.xyz[f_i + 1];
+      target[2] = tv.xyz[f_i + 2];
+    }
     const float dx =
-        no_tilt ? tv.xyz[0]
-                : tv.guard_on_x20_xyz[0] + mag * (tv.xyz[f_i + 0] - tv.guard_on_x20_xyz[0]);
+        no_tilt ? tv.xyz[0] : tv.guard_on_x20_xyz[0] + mag * (target[0] - tv.guard_on_x20_xyz[0]);
     const float dy =
-        no_tilt ? tv.xyz[1]
-                : tv.guard_on_x20_xyz[1] + mag * (tv.xyz[f_i + 1] - tv.guard_on_x20_xyz[1]);
+        no_tilt ? tv.xyz[1] : tv.guard_on_x20_xyz[1] + mag * (target[1] - tv.guard_on_x20_xyz[1]);
     const float dz =
-        no_tilt ? tv.xyz[2]
-                : tv.guard_on_x20_xyz[2] + mag * (tv.xyz[f_i + 2] - tv.guard_on_x20_xyz[2]);
+        no_tilt ? tv.xyz[2] : tv.guard_on_x20_xyz[2] + mag * (target[2] - tv.guard_on_x20_xyz[2]);
 
     const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
     const MslCharParams* ca = msl_char_params_fast(batch->state.char_id[idx]);

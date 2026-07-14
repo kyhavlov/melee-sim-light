@@ -214,6 +214,7 @@ def _entry_anchor_xyz_from_pldat(
 def _write_table(
     out_path: Path,
     *,
+    shield_part: int,
     neutral_frame: int,
     guard_on_x20_xyz: tuple[float, float, float],
     xyz_by_frame: list[tuple[float, float, float]],
@@ -228,7 +229,7 @@ def _write_table(
         raise ValueError("bad guard_on_frame_count")
     with out_path.open("wb") as f:
         f.write(b"MSLSHLD1")
-        f.write(struct.pack("<I", 4))
+        f.write(struct.pack("<I", 5))
         f.write(struct.pack("<HH", int(frame_count) & 0xFFFF, int(neutral_frame) & 0xFFFF))
         f.write(
             struct.pack(
@@ -238,7 +239,7 @@ def _write_table(
                 float(guard_on_x20_xyz[2]),
             )
         )
-        f.write(struct.pack("<HH", int(guard_on_frame_count) & 0xFFFF, 0))
+        f.write(struct.pack("<HH", int(guard_on_frame_count) & 0xFFFF, int(shield_part) & 0xFFFF))
         for (x, y, z) in xyz_by_frame:
             f.write(struct.pack("<3f", float(x), float(y), float(z)))
         for (x, y, z) in guard_on_xyz_by_frame:
@@ -616,14 +617,17 @@ def main() -> None:
         m = world_mtx[shield_part]
         out_xyz.append((float(m[3]), float(m[7]), float(m[11])))
 
-    # MSLSHLD1 v4 carries:
+    # MSLSHLD1 v5 carries:
     # - steady Guard tilt centers,
     # - ftCo_80091E78 `ftData.x20->x0->x8` GuardOn target,
-    # - live GuardOn pose trajectory used by the fresh GuardOn projectile-shield owner.
+    # - live GuardOn pose trajectory used by the fresh GuardOn projectile-shield owner,
+    # - shield_part (ftData.x8->x11) so the runtime can evaluate the tilt anim at the fractional
+    #   mv.co.guard.x8 float frame via the FObj tracks (ftAnim_80070710 semantics).
     # v4 is required because older tables accidentally read the ftData.x20 root object instead of
-    # the x0->x8 child consumed by ftCo_80091E78.
+    # the x0->x8 child consumed by ftCo_80091E78; v5 adds shield_part in the former pad u16.
     _write_table(
         args.out,
+        shield_part=shield_part,
         neutral_frame=neutral_frame,
         guard_on_x20_xyz=guard_on_x20_xyz,
         xyz_by_frame=out_xyz,

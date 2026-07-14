@@ -707,6 +707,7 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       // the previous frame's guard anim callback; both shields_refresh blocks update the live
       // lanes later this step.
       batch->state.guard_tilt_x8_frame_start[idx] = batch->state.guard_tilt_x8[idx];
+      batch->state.guard_tilt_x8_f32_frame_start[idx] = batch->state.guard_tilt_x8_f32[idx];
       batch->state.guard_tilt_x4_frame_start[idx] = batch->state.guard_tilt_x4[idx];
       batch->state.x672_input_timer[idx] =
           x672_trigger_timer_update(batch->state.x672_input_timer[idx], x650_trig, x650_prev_trig,

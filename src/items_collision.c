@@ -557,15 +557,17 @@ uint8_t item_body_lbcoll_matrix_radius_overlap(const MslBatch* batch, int bi, in
   if (no_submotion_guard_source_pose != 0u &&
       batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
       batch->state.guard_tilt_x4[d_idx] > 0.0f) {
-    uint16_t guard_tilt_frame = batch->state.guard_tilt_x8[d_idx];
+    float guard_tilt_frame_f = batch->state.guard_tilt_x8_f32[d_idx];
+    if (!(guard_tilt_frame_f > 0.0f)) {
+      guard_tilt_frame_f = (float)batch->state.guard_tilt_x8[d_idx];
+    }
     const float guard_end = msl_anim_end_frame(char_id, (uint16_t)MSL_SM_GUARD);
-    if (guard_end > 0.0f && (float)guard_tilt_frame > guard_end) {
-      guard_tilt_frame = msl_anim_frame_floor_u16(guard_end);
+    if (guard_end > 0.0f && guard_tilt_frame_f > guard_end) {
+      guard_tilt_frame_f = guard_end;
     }
     float target_m[12];
-    if (anim_pose_get_collision_matrix_f32(batch, d_idx, (uint16_t)MSL_SM_GUARD,
-                                           (float)guard_tilt_frame, cap->bone_part_id,
-                                           target_m) == 0) {
+    if (anim_pose_get_collision_matrix_f32(batch, d_idx, (uint16_t)MSL_SM_GUARD, guard_tilt_frame_f,
+                                           cap->bone_part_id, target_m) == 0) {
       float tilt_mag = batch->state.guard_tilt_x4[d_idx];
       if (tilt_mag > 1.0f) {
         tilt_mag = 1.0f;
@@ -1519,9 +1521,9 @@ uint8_t item_try_guardon_carried_behavior_shield_center(const MslBatch* batch, s
   if (neutral >= tv.frame_count) {
     neutral = 0u;
   }
-  uint16_t f = batch->state.guard_tilt_x8[d_idx];
-  if (f >= tv.frame_count) {
-    f = (uint16_t)(tv.frame_count - 1u);
+  float f_f = batch->state.guard_tilt_x8_f32[d_idx];
+  if (!(f_f > 0.0f)) {
+    f_f = (float)batch->state.guard_tilt_x8[d_idx];
   }
   float mag = batch->state.guard_tilt_x4[d_idx];
   if (mag < 0.0f) {
@@ -1531,10 +1533,20 @@ uint8_t item_try_guardon_carried_behavior_shield_center(const MslBatch* batch, s
     mag = 1.0f;
   }
   const size_t n_i = (size_t)neutral * 3u;
-  const size_t f_i = (size_t)f * 3u;
-  const float dx = tv.xyz[n_i + 0u] + mag * (tv.xyz[f_i + 0u] - tv.xyz[n_i + 0u]);
-  const float dy = tv.xyz[n_i + 1u] + mag * (tv.xyz[f_i + 1u] - tv.xyz[n_i + 1u]);
-  const float dz = tv.xyz[n_i + 2u] + mag * (tv.xyz[f_i + 2u] - tv.xyz[n_i + 2u]);
+  float target[3];
+  if (msl_shield_tilt_target_xyz_f32(batch->state.char_id[d_idx], &tv, f_f, target) != 0) {
+    uint16_t f = batch->state.guard_tilt_x8[d_idx];
+    if (f >= tv.frame_count) {
+      f = (uint16_t)(tv.frame_count - 1u);
+    }
+    const size_t f_i = (size_t)f * 3u;
+    target[0] = tv.xyz[f_i + 0u];
+    target[1] = tv.xyz[f_i + 1u];
+    target[2] = tv.xyz[f_i + 2u];
+  }
+  const float dx = tv.xyz[n_i + 0u] + mag * (target[0] - tv.xyz[n_i + 0u]);
+  const float dy = tv.xyz[n_i + 1u] + mag * (target[1] - tv.xyz[n_i + 1u]);
+  const float dz = tv.xyz[n_i + 2u] + mag * (target[2] - tv.xyz[n_i + 2u]);
   const float scale_y = batch->state.fighter_scale_y[d_idx];
   const float facing_dir = batch->state.facing[d_idx] ? 1.0f : -1.0f;
   const float lx = dx * scale_y;

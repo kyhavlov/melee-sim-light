@@ -636,6 +636,8 @@ static PyMethodDef methods[] = {
      "ecb_extents_rel(char_id, animation_index, action_frame) -> (min_x, max_x, min_y, max_y)"},
     {"anim_pose_matrix", msl_anim_pose_matrix_py, METH_VARARGS,
      "anim_pose_matrix(char_id, msid, frame, part_id) -> np.ndarray[float32] shape=(12,)"},
+    {"anim_pose_matrix_f32", msl_anim_pose_matrix_f32_py, METH_VARARGS,
+     "anim_pose_matrix_f32(char_id, msid, anim_frame, part_id) -> np.ndarray[float32] shape=(12,)"},
     {"anim_pose_common_fall_blend_matrix", msl_anim_pose_common_fall_blend_matrix_py, METH_VARARGS,
      "anim_pose_common_fall_blend_matrix(char_id, neutral_msid, target_msid, anim_frame, "
      "part_id, weight) -> np.ndarray[float32] shape=(12,)"},

@@ -1112,6 +1112,9 @@ typedef struct MslSeed {
   // - mv.co.guard.x4: stick magnitude smoothing used to blend the pose
   uint16_t guard_tilt_x8[MSL_MAX_PLAYERS];
   float guard_tilt_x4[MSL_MAX_PLAYERS];
+  // Continuous mv.co.guard.x8 (the source keeps x8 as a float; the u16 lane above is the
+  // truncated frame index). Restores the fractional tilt at reseed.
+  float guard_tilt_x8_f32[MSL_MAX_PLAYERS];
   // GuardReflect reflect timer (seeded; strictly causal in preprocessing).
   //
   // Decomp trail:

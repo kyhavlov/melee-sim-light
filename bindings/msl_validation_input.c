@@ -440,6 +440,7 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
       MslSeed* seed = vh_seed_at(seed_u8, seed_stride, i);
       seed->guard_tilt_x8[slot] = guard_x8;
       seed->guard_tilt_x4[slot] = guard_x4;
+      seed->guard_tilt_x8_f32[slot] = guard_x8_f;
       seed->guard_release_latched_xc[slot] = (uint8_t)(guard_xc ? 1u : 0u);
       seed->guard_x10[slot] = (uint8_t)(guard_x10 & 0xFF);
       seed->lightshield_amount[slot] = light;

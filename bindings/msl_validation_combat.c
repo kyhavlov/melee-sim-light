@@ -1437,6 +1437,7 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   PyObject* scale_y_obj = NULL;
   PyObject* guard_x8_obj = NULL;
   PyObject* guard_x4_obj = NULL;
+  PyObject* guard_x8_f32_obj = NULL;
   PyObject* stocks_obj = NULL;
   PyObject* shield_hp_obj = NULL;
   PyObject* hurtbox_state_obj = NULL;
@@ -1455,14 +1456,14 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   PyObject* percent_obj = Py_None;
   PyObject* items_obj = Py_None;
   if (!PyArg_ParseTuple(
-          args, "iiOOOOOOOOOOOOOOOOOOOOOOOOOOOOOiii", &num_players, &is_teams, &team_obj, &char_obj,
-          &action_obj, &action_frame_obj, &anim_obj, &facing_obj, &on_ground_obj, &pos_x_obj,
-          &pos_y_obj, &scale_y_obj, &guard_x8_obj, &guard_x4_obj, &stocks_obj, &shield_hp_obj,
-          &hurtbox_state_obj, &hitlag_obj, &last_hit_by_obj, &instance_hit_by_obj, &instance_id_obj,
-          &input_buttons_obj, &input_l_obj, &input_r_obj, &turn_has_turned_obj, &anim_frame_obj,
-          &frame_speed_obj, &rotate_model_obj, &rotate_valid_obj, &percent_obj, &items_obj,
-          &include_per_hitbox, &include_replay_only_shield_admission,
-          &include_replay_only_body_admission)) {
+          args, "iiOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOiii", &num_players, &is_teams, &team_obj,
+          &char_obj, &action_obj, &action_frame_obj, &anim_obj, &facing_obj, &on_ground_obj,
+          &pos_x_obj, &pos_y_obj, &scale_y_obj, &guard_x8_obj, &guard_x4_obj, &guard_x8_f32_obj,
+          &stocks_obj, &shield_hp_obj, &hurtbox_state_obj, &hitlag_obj, &last_hit_by_obj,
+          &instance_hit_by_obj, &instance_id_obj, &input_buttons_obj, &input_l_obj, &input_r_obj,
+          &turn_has_turned_obj, &anim_frame_obj, &frame_speed_obj, &rotate_model_obj,
+          &rotate_valid_obj, &percent_obj, &items_obj, &include_per_hitbox,
+          &include_replay_only_shield_admission, &include_replay_only_body_admission)) {
     return NULL;
   }
   if (num_players != 2 && num_players != 4) {
@@ -1489,6 +1490,7 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   REQ_ARR(pos_y, pos_y_obj, NPY_FLOAT32, "pos_y");
   REQ_ARR(scale_y, scale_y_obj, NPY_FLOAT32, "fighter_scale_y");
   REQ_ARR(guard_x8, guard_x8_obj, NPY_UINT16, "guard_tilt_x8");
+  REQ_ARR(guard_x8_f32, guard_x8_f32_obj, NPY_FLOAT32, "guard_tilt_x8_f32");
   REQ_ARR(guard_x4, guard_x4_obj, NPY_FLOAT32, "guard_tilt_x4");
   REQ_ARR(stocks, stocks_obj, NPY_UINT8, "stocks");
   REQ_ARR(shield_hp, shield_hp_obj, NPY_FLOAT32, "shield_hp");
@@ -1543,6 +1545,7 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   CHECK_DIMS(pos_y, "pos_y");
   CHECK_DIMS(scale_y, "fighter_scale_y");
   CHECK_DIMS(guard_x8, "guard_tilt_x8");
+  CHECK_DIMS(guard_x8_f32, "guard_tilt_x8_f32");
   CHECK_DIMS(guard_x4, "guard_tilt_x4");
   CHECK_DIMS(stocks, "stocks");
   CHECK_DIMS(shield_hp, "shield_hp");
@@ -1624,6 +1627,7 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   PTR(scale_y_p, float, scale_y);
   PTR(guard_x8_p, uint16_t, guard_x8);
   PTR(guard_x4_p, float, guard_x4);
+  PTR(guard_x8_f32_p, float, guard_x8_f32);
   PTR(stocks_p, uint8_t, stocks);
   PTR(shield_hp_p, float, shield_hp);
   PTR(hurtbox_state_p, uint8_t, hurtbox_state);
@@ -1899,9 +1903,9 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
           shield_r[p] = s * ch->initial_shield_size * scale_y_val;
           MslShieldTiltTableView tv;
           if (msl_shield_tilt_table_view(cid, &tv) == 0 && tv.xyz != NULL && tv.frame_count != 0u) {
-            uint16_t f = guard_x8_p[pi];
-            if (f >= tv.frame_count) {
-              f = (uint16_t)(tv.frame_count - 1u);
+            float f_f = guard_x8_f32_p[pi];
+            if (!(f_f > 0.0f)) {
+              f_f = (float)guard_x8_p[pi];
             }
             float mag = msl_py_clamp01(guard_x4_p[pi]);
             const uint8_t steady_guard_no_tilt =
@@ -1910,7 +1914,16 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
                     : 0u;
             const uint16_t neutral = steady_guard_no_tilt ? 0u : tv.neutral_frame;
             const float* nxyz = tv.xyz + (size_t)neutral * 3u;
-            const float* fxyz = tv.xyz + (size_t)f * 3u;
+            float fxyz[3];
+            if (msl_shield_tilt_target_xyz_f32(cid, &tv, f_f, fxyz) != 0) {
+              uint16_t f = guard_x8_p[pi];
+              if (f >= tv.frame_count) {
+                f = (uint16_t)(tv.frame_count - 1u);
+              }
+              fxyz[0] = tv.xyz[(size_t)f * 3u + 0u];
+              fxyz[1] = tv.xyz[(size_t)f * 3u + 1u];
+              fxyz[2] = tv.xyz[(size_t)f * 3u + 2u];
+            }
             const float dx = nxyz[0] + mag * (fxyz[0] - nxyz[0]);
             const float dy = nxyz[1] + mag * (fxyz[1] - nxyz[1]);
             const float dz = nxyz[2] + mag * (fxyz[2] - nxyz[2]);

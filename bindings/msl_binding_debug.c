@@ -1734,6 +1734,35 @@ PyObject* msl_anim_pose_matrix_py(PyObject* self, PyObject* args) {
   return (PyObject*)arr;
 }
 
+PyObject* msl_anim_pose_matrix_f32_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int char_id_u = 0;
+  unsigned int msid_u = 0;
+  float anim_frame = 0.0f;
+  unsigned int part_id_u = 0;
+  if (!PyArg_ParseTuple(args, "IIfI", &char_id_u, &msid_u, &anim_frame, &part_id_u)) {
+    return NULL;
+  }
+  if (char_id_u > 255u || msid_u > 0xFFFFu || part_id_u > 0xFFFFu) {
+    PyErr_SetString(PyExc_ValueError, "char_id/msid/part_id out of range");
+    return NULL;
+  }
+  npy_intp dims[1] = {(npy_intp)12};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_FLOAT32);
+  if (arr == NULL) {
+    return NULL;
+  }
+  float* out = (float*)PyArray_DATA(arr);
+  const int err = anim_pose_get_matrix_f32((uint8_t)char_id_u, (uint16_t)msid_u, anim_frame,
+                                           (uint16_t)part_id_u, out);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_SetString(PyExc_ValueError, "anim_pose_get_matrix_f32 failed");
+    return NULL;
+  }
+  return (PyObject*)arr;
+}
+
 PyObject* msl_anim_pose_common_fall_blend_matrix_py(PyObject* self, PyObject* args) {
   (void)self;
   unsigned int char_id_u = 0;

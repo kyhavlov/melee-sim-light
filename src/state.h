@@ -664,6 +664,7 @@ typedef struct MslStateSoA {
   // pass reads mv.co.guard.{x4,x8} as left by the PREVIOUS frame's guard anim callback (MAJ:7384
   // rollout needs x4=0.501, not the same-step 0.75 post-update value).
   uint16_t* guard_tilt_x8_frame_start;
+  float* guard_tilt_x8_f32_frame_start;
   float* guard_tilt_x4_frame_start;
   // Runtime-only transient: set when enter_guard_on() runs during the current step so item
   // projectile shield precedence can distinguish same-step GuardOn entry from teacher-forced

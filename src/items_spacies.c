@@ -1509,10 +1509,14 @@ static uint8_t item_guard_reflect_center_xyz_impl(const MslBatch* batch, size_t 
       // descriptors ride (MAJ:7383 rollout - the untilted entry-frame anchor let the aged owner
       // stage a reflect vanilla never staged, slowing the laser by 3.3u).
       const uint8_t tilt_entry_live = batch->state.guard_reflect_entered_this_frame[idx];
-      uint16_t f = tilt_entry_live ? batch->state.guard_tilt_x8[idx]
-                                   : batch->state.guard_tilt_x8_frame_start[idx];
-      if (f > frame_max) {
-        f = frame_max;
+      float f_f = tilt_entry_live ? batch->state.guard_tilt_x8_f32[idx]
+                                  : batch->state.guard_tilt_x8_f32_frame_start[idx];
+      if (!(f_f > 0.0f)) {
+        f_f = (float)(tilt_entry_live ? batch->state.guard_tilt_x8[idx]
+                                      : batch->state.guard_tilt_x8_frame_start[idx]);
+      }
+      if (f_f > (float)frame_max) {
+        f_f = (float)frame_max;
       }
       float tilt_mag = tilt_entry_live ? batch->state.guard_tilt_x4[idx]
                                        : batch->state.guard_tilt_x4_frame_start[idx];
@@ -1523,10 +1527,16 @@ static uint8_t item_guard_reflect_center_xyz_impl(const MslBatch* batch, size_t 
         tilt_mag = 1.0f;
       }
       const size_t n_i = (size_t)tv.neutral_frame * 3u;
-      const size_t f_i = (size_t)f * 3u;
-      const float ddx = tilt_mag * (tv.xyz[f_i + 0] - tv.xyz[n_i + 0]);
-      const float ddy = tilt_mag * (tv.xyz[f_i + 1] - tv.xyz[n_i + 1]);
-      const float ddz = tilt_mag * (tv.xyz[f_i + 2] - tv.xyz[n_i + 2]);
+      float target[3];
+      if (msl_shield_tilt_target_xyz_f32(batch->state.char_id[idx], &tv, f_f, target) != 0) {
+        const size_t f_i = (size_t)f_f * 3u;
+        target[0] = tv.xyz[f_i + 0];
+        target[1] = tv.xyz[f_i + 1];
+        target[2] = tv.xyz[f_i + 2];
+      }
+      const float ddx = tilt_mag * (target[0] - tv.xyz[n_i + 0]);
+      const float ddy = tilt_mag * (target[1] - tv.xyz[n_i + 1]);
+      const float ddz = tilt_mag * (target[2] - tv.xyz[n_i + 2]);
       const float tilt_scale_y = batch->state.fighter_scale_y[idx];
       const float tilt_facing = batch->state.facing[idx] ? 1.0f : -1.0f;
       *out_x += tilt_facing * ddz * tilt_scale_y;

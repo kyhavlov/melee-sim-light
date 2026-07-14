@@ -3,22 +3,26 @@
 #include "char_registry.h"
 #include "ids.h"
 
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "action_ids.h"
 #include "alloc.h"
+#include "anim_pose.h"
 
 enum {
   SHIELD_MAGIC_LEN = 8,
   SHIELD_HDR_BYTES_V1 = 16,  // magic[8] + ver[u32] + frame_count[u16] + neutral_frame[u16]
   SHIELD_HDR_BYTES_V2 = 28,  // v1 + entry_anchor_xyz[3f]
-  SHIELD_HDR_BYTES_V3 = 32,  // v2 + guard_on_frame_count[u16] + pad[u16]
+  SHIELD_HDR_BYTES_V3 = 32,  // v2 + guard_on_frame_count[u16] + pad[u16] (v5: shield_part[u16])
   SHIELD_VERSION_V1 = 1,
   SHIELD_VERSION_V2 = 2,
   SHIELD_VERSION_V3 = 3,
   SHIELD_VERSION_V4 = 4,
+  SHIELD_VERSION_V5 = 5,
 };
 
 static const uint8_t k_magic[SHIELD_MAGIC_LEN] = {'M', 'S', 'L', 'S', 'H', 'L', 'D', '1'};
@@ -32,6 +36,7 @@ typedef struct {
   uint16_t frame_count;
   uint16_t neutral_frame;
   uint16_t guard_on_frame_count;
+  uint16_t shield_part;
   uint8_t have;
 } MslShieldTiltTable;
 
@@ -105,7 +110,7 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
     return -1;
   }
   const uint32_t ver = read_u32_le(buf + 8);
-  if (ver != (uint32_t)SHIELD_VERSION_V4) {
+  if (ver != (uint32_t)SHIELD_VERSION_V5) {
     alloc_free(buf);
     return -1;
   }
@@ -118,11 +123,13 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
   float guard_on_x20_xyz[3] = {0.0f, 0.0f, 0.0f};
   size_t hdr_bytes = (size_t)SHIELD_HDR_BYTES_V1;
   uint16_t guard_on_frame_count = 0u;
+  uint16_t shield_part = 0u;
   const float* guard_on_xyz = NULL;
-  if (ver == (uint32_t)SHIELD_VERSION_V4) {
+  if (ver == (uint32_t)SHIELD_VERSION_V5) {
     hdr_bytes = (size_t)SHIELD_HDR_BYTES_V3;
     memcpy(guard_on_x20_xyz, buf + SHIELD_HDR_BYTES_V1, sizeof(guard_on_x20_xyz));
     guard_on_frame_count = read_u16_le(buf + SHIELD_HDR_BYTES_V2);
+    shield_part = read_u16_le(buf + SHIELD_HDR_BYTES_V2 + 2);
     if (guard_on_frame_count == 0u) {
       alloc_free(buf);
       return -1;
@@ -130,14 +137,14 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
   }
 
   size_t need = hdr_bytes + (size_t)frame_count * 3u * 4u;
-  if (ver == (uint32_t)SHIELD_VERSION_V4) {
+  if (ver == (uint32_t)SHIELD_VERSION_V5) {
     need += (size_t)guard_on_frame_count * 3u * 4u;
   }
   if (need != sz) {
     alloc_free(buf);
     return -1;
   }
-  if (ver == (uint32_t)SHIELD_VERSION_V4) {
+  if (ver == (uint32_t)SHIELD_VERSION_V5) {
     guard_on_xyz = (const float*)(buf + hdr_bytes + (size_t)frame_count * 3u * 4u);
   }
 
@@ -154,6 +161,7 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
       .frame_count = frame_count,
       .neutral_frame = neutral_frame,
       .guard_on_frame_count = guard_on_frame_count,
+      .shield_part = shield_part,
       .have = 1,
   };
   g_by_char[char_id].guard_on_x20_xyz[0] = guard_on_x20_xyz[0];
@@ -203,5 +211,33 @@ int msl_shield_tilt_table_view(uint8_t char_id, MslShieldTiltTableView* out) {
   out->frame_count = t->frame_count;
   out->neutral_frame = t->neutral_frame;
   out->guard_on_frame_count = t->guard_on_frame_count;
+  out->shield_part = t->shield_part;
+  return 0;
+}
+
+int msl_shield_tilt_target_xyz_f32(uint8_t char_id, const MslShieldTiltTableView* tv, float x8_f32,
+                                   float out_xyz[3]) {
+  if (tv == NULL || tv->xyz == NULL || tv->frame_count == 0u || out_xyz == NULL) {
+    return -1;
+  }
+  float f = isfinite(x8_f32) ? x8_f32 : 0.0f;
+  if (f < 0.0f) {
+    f = 0.0f;
+  }
+  const float frame_max = (float)(tv->frame_count - 1u);
+  if (f > frame_max) {
+    f = frame_max;
+  }
+  float m[12];
+  if (anim_pose_get_matrix_f32(char_id, (uint16_t)MSL_SM_GUARD, f, tv->shield_part, m) == 0) {
+    out_xyz[0] = m[3];
+    out_xyz[1] = m[7];
+    out_xyz[2] = m[11];
+    return 0;
+  }
+  const size_t fi = (size_t)f * 3u;
+  out_xyz[0] = tv->xyz[fi + 0u];
+  out_xyz[1] = tv->xyz[fi + 1u];
+  out_xyz[2] = tv->xyz[fi + 2u];
   return 0;
 }

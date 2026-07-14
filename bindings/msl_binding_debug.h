@@ -41,6 +41,7 @@ PyObject* msl_debug_reset_pose_and_hitboxes_tables_py(PyObject* self, PyObject* 
 PyObject* msl_ecb_bottom_rel_y_py(PyObject* self, PyObject* args);
 PyObject* msl_ecb_extents_rel_py(PyObject* self, PyObject* args);
 PyObject* msl_anim_pose_matrix_py(PyObject* self, PyObject* args);
+PyObject* msl_anim_pose_matrix_f32_py(PyObject* self, PyObject* args);
 PyObject* msl_anim_pose_common_fall_blend_matrix_py(PyObject* self, PyObject* args);
 PyObject* msl_anim_pose_collision_matrix_f32_py(PyObject* self, PyObject* args);
 PyObject* msl_hurtcaps_world_py(PyObject* self, PyObject* args);
