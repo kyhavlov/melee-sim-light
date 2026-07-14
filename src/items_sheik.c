@@ -1,4 +1,5 @@
 #include "items_internal.h"
+#include "msl_math.h"
 
 static inline uint8_t sheik_vanish_smoke_body_deferred_by_owner_invincible_contact_order(
     MslBatch* batch, int bi, int item_slot, int owner, int defender) {
@@ -372,8 +373,8 @@ void sheik_needle_spawn_thrown_article_from_fighter(MslBatch* batch, int bi, int
   batch->state.item_direction[ii] = facing_dir;
   batch->state.item_pos_x[ii] = batch->state.pos_x[o_idx] + scale_y * x_off;
   batch->state.item_pos_y[ii] = batch->state.pos_y[o_idx] + scale_y * (y_base + y_jitter);
-  batch->state.item_vel_x[ii] = -ap->needle_launch_speed * cosf(angle);
-  batch->state.item_vel_y[ii] = ap->needle_launch_speed * sinf(angle);
+  batch->state.item_vel_x[ii] = -ap->needle_launch_speed * msl_melee_cosf(angle);
+  batch->state.item_vel_y[ii] = ap->needle_launch_speed * msl_melee_sinf(angle);
   batch->state.item_timer[ii] = (float)ap->needle_lifetime_frames;
   batch->state.item_attack_id[ii] = batch->state.attack_id[o_idx];
   batch->state.item_attack_instance[ii] = batch->state.attack_instance[o_idx];

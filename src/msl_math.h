@@ -276,6 +276,32 @@ static inline float msl_melee_atan2f(float y, float x) {
   return msl_float_from_bits(y_sign + UINT32_C(0x3FC90FDB));
 }
 
+// GALE01 single-precision acos used by sysdolphin quaternion/bone math (HSD_QuatSlerp) and
+// gameplay angle clamps.
+//
+// Source path:
+// - refs/melee/src/melee/lb/lbrefract.c::acosf (0x80022D1C)
+// - refs/melee/src/sysdolphin/baselib/quatlib.c (slerp theta)
+//
+// One frsqrte estimate plus three Newton steps builds 1/sqrt(1-x^2); the result is pi/2 -
+// atanf(x/sqrt(1-x^2)). |x| == 1 goes through atanf(+-inf) == +-pi/2 and |x| > 1 propagates NaN,
+// matching the game.
+static inline float msl_melee_acosf(float x) {
+  float result = 1.0f - x * x;
+  if (result > 0.0f) {
+    float guess = (float)msl_ppc_frsqrte((double)result);
+    guess = 0.5f * guess * (3.0f - guess * guess * result);
+    guess = 0.5f * guess * (3.0f - guess * guess * result);
+    guess = 0.5f * guess * (3.0f - guess * guess * result);
+    result = guess;
+  } else if (result != 0.0f) {
+    result = NAN;
+  } else {
+    result = INFINITY;
+  }
+  return MSL_PI_2_F - msl_melee_atanf(x * result);
+}
+
 // GALE01 single-precision sin/cos approximations used by MSL `trigf.c`.
 //
 // Source:

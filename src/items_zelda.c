@@ -136,12 +136,12 @@ uint8_t items_spawn_zelda_din_fire_article(MslBatch* batch, size_t owner_idx, fl
   batch->state.item_zelda_din_angle_offset[ii] = ap->zelda_din_fire_initial_angle_offset * facing;
   batch->state.item_zelda_din_base_angle[ii] = facing > 0.0f ? 0.0f : MSL_PI_F;
   batch->state.item_zelda_din_speed[ii] = ap->zelda_din_fire_initial_speed;
-  batch->state.item_vel_x[ii] =
-      ap->zelda_din_fire_initial_speed * cosf(batch->state.item_zelda_din_base_angle[ii] +
-                                              batch->state.item_zelda_din_angle_offset[ii]);
-  batch->state.item_vel_y[ii] =
-      ap->zelda_din_fire_initial_speed * sinf(batch->state.item_zelda_din_base_angle[ii] +
-                                              batch->state.item_zelda_din_angle_offset[ii]);
+  batch->state.item_vel_x[ii] = ap->zelda_din_fire_initial_speed *
+                                msl_melee_cosf(batch->state.item_zelda_din_base_angle[ii] +
+                                               batch->state.item_zelda_din_angle_offset[ii]);
+  batch->state.item_vel_y[ii] = ap->zelda_din_fire_initial_speed *
+                                msl_melee_sinf(batch->state.item_zelda_din_base_angle[ii] +
+                                               batch->state.item_zelda_din_angle_offset[ii]);
   return 1u;
 }
 
@@ -318,8 +318,8 @@ static void zd_din_fire_update_one(MslBatch* batch, int bi, int it,
         batch->state.item_zelda_din_speed[ii] = speed;
         const float angle = batch->state.item_zelda_din_base_angle[ii] +
                             batch->state.item_zelda_din_angle_offset[ii];
-        batch->state.item_vel_x[ii] = speed * cosf(angle);
-        batch->state.item_vel_y[ii] = speed * sinf(angle);
+        batch->state.item_vel_x[ii] = speed * msl_melee_cosf(angle);
+        batch->state.item_vel_y[ii] = speed * msl_melee_sinf(angle);
       }
     }
     const float old_x = batch->state.item_pos_x[ii];
