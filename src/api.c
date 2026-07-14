@@ -2692,6 +2692,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.turn_kneebend_facing_override[idx] = (turn_kb_face <= 2u) ? turn_kb_face : 0u;
       batch->state.anim_defer_tick_once[idx] = 0;
       batch->state.guard_tilt_x8[idx] = seed->guard_tilt_x8[p];
+      batch->state.guard_tilt_x8_f32[idx] = (float)seed->guard_tilt_x8[p];
       batch->state.guard_tilt_x4[idx] = seed->guard_tilt_x4[p];
       batch->state.guard_tilt_x8_frame_start[idx] = seed->guard_tilt_x8[p];
       batch->state.guard_tilt_x4_frame_start[idx] = seed->guard_tilt_x4[p];

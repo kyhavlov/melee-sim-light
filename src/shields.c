@@ -136,14 +136,15 @@ void shields_refresh_guard_tilt_body_owner(MslBatch* batch) {
         deg = 359.0f;
       }
 
-      const float offset = (float)batch->state.guard_tilt_x8[idx] - (float)neutral;
+      const float offset = batch->state.guard_tilt_x8_f32[idx] - (float)neutral;
       const float delta = normalize_angle_180(deg - offset);
       const float lerp = c->guard_stick_lerp_x44c;
-      const float next_offset = normalize_angle_0(delta * lerp + offset);
+      const float next_offset = normalize_angle_0(fmaf(lerp, delta, offset));
       const float next_x8_f = (float)neutral + next_offset;
+      batch->state.guard_tilt_x8_f32[idx] = next_x8_f;
       batch->state.guard_tilt_x8[idx] = clamp_u16((uint16_t)next_x8_f, 0, frame_max);
 
-      float mag = sqrtf(stick_x_unit * stick_x_unit + stick_y_unit * stick_y_unit);
+      float mag = msl_melee_sqrtf(stick_x_unit * stick_x_unit + stick_y_unit * stick_y_unit);
       if (mag > 1.0f) {
         mag = 1.0f;
       }
@@ -151,7 +152,7 @@ void shields_refresh_guard_tilt_body_owner(MslBatch* batch) {
         mag = 0.0f;
       }
       const float x4 = batch->state.guard_tilt_x4[idx];
-      batch->state.guard_tilt_x4[idx] = (lerp * (mag - x4)) + x4;
+      batch->state.guard_tilt_x4[idx] = fmaf(lerp, mag - x4, x4);
 
       const uint16_t f = clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
       const float tilt_mag = clamp01(batch->state.guard_tilt_x4[idx]);
@@ -283,6 +284,7 @@ void shields_refresh(MslBatch* batch) {
           if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON &&
               batch->state.action_frame[idx] == 0) {
             batch->state.guard_tilt_x8[idx] = neutral;
+            batch->state.guard_tilt_x8_f32[idx] = (float)neutral;
             batch->state.guard_tilt_x4[idx] = 0.0f;
           }
 
@@ -303,14 +305,15 @@ void shields_refresh(MslBatch* batch) {
               deg = 359.0f;
             }
 
-            const float offset = (float)batch->state.guard_tilt_x8[idx] - (float)neutral;
+            const float offset = batch->state.guard_tilt_x8_f32[idx] - (float)neutral;
             const float delta = normalize_angle_180(deg - offset);
             const float lerp = c->guard_stick_lerp_x44c;
-            const float next_offset = normalize_angle_0(delta * lerp + offset);
+            const float next_offset = normalize_angle_0(fmaf(lerp, delta, offset));
             const float next_x8_f = (float)neutral + next_offset;
+            batch->state.guard_tilt_x8_f32[idx] = next_x8_f;
             batch->state.guard_tilt_x8[idx] = clamp_u16((uint16_t)next_x8_f, 0, frame_max);
 
-            float mag = sqrtf(stick_x_unit * stick_x_unit + stick_y_unit * stick_y_unit);
+            float mag = msl_melee_sqrtf(stick_x_unit * stick_x_unit + stick_y_unit * stick_y_unit);
             if (mag > 1.0f) {
               mag = 1.0f;
             }
@@ -318,7 +321,7 @@ void shields_refresh(MslBatch* batch) {
               mag = 0.0f;
             }
             const float x4 = batch->state.guard_tilt_x4[idx];
-            batch->state.guard_tilt_x4[idx] = (lerp * (mag - x4)) + x4;
+            batch->state.guard_tilt_x4[idx] = fmaf(lerp, mag - x4, x4);
           }
 
           if (has_tv) {

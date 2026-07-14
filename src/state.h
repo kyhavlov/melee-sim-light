@@ -655,6 +655,10 @@ typedef struct MslStateSoA {
   uint16_t*
       guard_tilt_x8;     // mv.co.guard.x8 (frame-ish index; neutral is shield table neutral_frame)
   float* guard_tilt_x4;  // mv.co.guard.x4 (stick magnitude smoothing; 0..1)
+  // Continuous mv.co.guard.x8: the source keeps x8 as a float and only the anim sampler
+  // consumes it, so the per-frame smoothing must accumulate fractional degrees. The u16 lane
+  // above stays the truncated frame index for table consumers and seeding.
+  float* guard_tilt_x8_f32;
   // Runtime-only frame-start snapshots of the tilt lanes, captured by shields_refresh before its
   // per-step ftCo_80091BC4 update. Item collision consumes the pre-update values: the source item
   // pass reads mv.co.guard.{x4,x8} as left by the PREVIOUS frame's guard anim callback (MAJ:7384

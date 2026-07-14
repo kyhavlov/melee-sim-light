@@ -6,8 +6,8 @@
 #include "../src/attack_id_tables.h"
 #include "../src/common_params.h"
 #include "../src/input_axis.h"
-#include "../src/msl_math.h"
 #include "../src/ucf.h"
+#include "../src/msl_math.h"
 
 static inline uint8_t vh_sat_inc_fe(uint8_t v) { return v < 0xFEu ? (uint8_t)(v + 1u) : 0xFEu; }
 
@@ -238,6 +238,7 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
 
   uint16_t prev_buttons = 0u;
   uint16_t guard_x8 = 0u;
+  float guard_x8_f = 0.0f;
   float guard_x4 = 0.0f;
   uint8_t guard_xc = 0u;
   int guard_x10 = 0;
@@ -278,6 +279,7 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
 
     if (a == act_guard_on && frame[i] == 0) {
       guard_x8 = neutral[i];
+      guard_x8_f = (float)neutral[i];
       guard_x4 = 0.0f;
     }
     if (in_guard) {
@@ -289,27 +291,29 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
       float deg = rad * rad_to_deg;
       if (deg < 0.0f) deg = 0.0f;
       if (deg > 359.0f) deg = 359.0f;
-      const float offset = (float)guard_x8 - (float)neutral[i];
+      const float offset = guard_x8_f - (float)neutral[i];
       float delta = deg - offset;
       if (delta > 180.0f) {
         delta -= 360.0f;
       } else if (delta < -180.0f) {
         delta += 360.0f;
       }
-      float next_offset = delta * lerp + offset;
+      float next_offset = fmaf(lerp, delta, offset);
       if (next_offset > 360.0f) {
         next_offset -= 360.0f;
       } else if (next_offset < 0.0f) {
         next_offset += 360.0f;
       }
-      int next_x8 = (int)((float)neutral[i] + next_offset);
+      const float next_x8_f = (float)neutral[i] + next_offset;
+      guard_x8_f = next_x8_f;
+      int next_x8 = (int)next_x8_f;
       if (next_x8 < 0) next_x8 = 0;
       if (next_x8 > (int)frame_max[i]) next_x8 = (int)frame_max[i];
       guard_x8 = (uint16_t)next_x8;
-      float mag = sqrtf(stick_x[i] * stick_x[i] + stick_y[i] * stick_y[i]);
+      float mag = msl_melee_sqrtf(stick_x[i] * stick_x[i] + stick_y[i] * stick_y[i]);
       if (mag > 1.0f) mag = 1.0f;
       if (mag < 0.0f) mag = 0.0f;
-      guard_x4 = lerp * (mag - guard_x4) + guard_x4;
+      guard_x4 = fmaf(lerp, mag - guard_x4, guard_x4);
     }
 
     if ((a == act_guard_on && prev_a != act_guard_on) ||

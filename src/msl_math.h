@@ -279,6 +279,26 @@ static inline float msl_melee_atan2f(float y, float x) {
   return msl_float_from_bits(y_sign + UINT32_C(0x3FC90FDB));
 }
 
+// GALE01 single-precision sqrt: MSL's PPC inline (one frsqrte estimate, three Newton steps in
+// double with the 3 - x*g*g term fused exactly like the fnmsub codegen, then (float)(x * guess)).
+// Differs from IEEE sqrtf by ULPs; gameplay paths that feed serialized game floats (e.g. shield
+// tilt stick magnitude in ftCo_80091BC4) need this rounding, not libm's.
+//
+// Source path:
+// - refs/melee/src/MSL/math_ppc.h::sqrtf
+// - refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Guard.s::ftCo_80091BC4 (inlined)
+static inline float msl_melee_sqrtf(float x) {
+  if (x > 0.0f) {
+    const double xd = (double)x;
+    double guess = msl_ppc_frsqrte(xd);
+    guess = 0.5 * guess * fma(-xd, guess * guess, 3.0);
+    guess = 0.5 * guess * fma(-xd, guess * guess, 3.0);
+    guess = 0.5 * guess * fma(-xd, guess * guess, 3.0);
+    return (float)(xd * guess);
+  }
+  return x;
+}
+
 // GALE01 stick/vector angle helper used by shield tilt and other ftCommon stick-angle consumers.
 //
 // This is NOT atan2f: |x| < 1e-5 snaps to 0 or +-pi/2 before any division, x > 0 defers to plain

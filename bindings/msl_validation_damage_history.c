@@ -1,8 +1,8 @@
 /* Native validation derivation for damage and guard hitlag history lanes. */
 
 #include "msl_validation_damage_history.h"
-#include "../src/msl_math.h"
 #include "msl_validation_history_common.h"
+#include "../src/msl_math.h"
 
 PyObject* msl_derive_damage_time_since_hit_x18ac_py(PyObject* self, PyObject* args) {
   (void)self;
@@ -702,6 +702,7 @@ PyObject* msl_derive_guard_tilt_state_py(PyObject* self, PyObject* args) {
   uint16_t* out_x8_p = (uint16_t*)PyArray_DATA(out_x8);
   float* out_x4_p = (float*)PyArray_DATA(out_x4);
   uint16_t x8 = 0u;
+  float x8_f = 0.0f;
   float x4 = 0.0f;
   const float lerp = (float)lerp_d;
   const float rad_to_deg = MSL_RAD_TO_DEG_F;
@@ -711,6 +712,7 @@ PyObject* msl_derive_guard_tilt_state_py(PyObject* self, PyObject* args) {
     const uint16_t frame_max_i = fmax[i];
     if (a == act_guard_on && afr[i] == 0) {
       x8 = neutral_i;
+      x8_f = (float)neutral_i;
       x4 = 0.0f;
     }
     if (a == act_guard_on || a == act_guard || a == act_guard_reflect) {
@@ -722,28 +724,29 @@ PyObject* msl_derive_guard_tilt_state_py(PyObject* self, PyObject* args) {
       float deg = rad * rad_to_deg;
       if (deg < 0.0f) deg = 0.0f;
       if (deg > 359.0f) deg = 359.0f;
-      const float offset = (float)x8 - (float)neutral_i;
+      const float offset = x8_f - (float)neutral_i;
       float delta = deg - offset;
       if (delta > 180.0f) {
         delta -= 360.0f;
       } else if (delta < -180.0f) {
         delta += 360.0f;
       }
-      float next_offset = delta * lerp + offset;
+      float next_offset = fmaf(lerp, delta, offset);
       if (next_offset > 360.0f) {
         next_offset -= 360.0f;
       } else if (next_offset < 0.0f) {
         next_offset += 360.0f;
       }
       const float next_x8_f = (float)neutral_i + next_offset;
+      x8_f = next_x8_f;
       int next_x8 = (int)next_x8_f;
       if (next_x8 < 0) next_x8 = 0;
       if (next_x8 > (int)frame_max_i) next_x8 = (int)frame_max_i;
       x8 = (uint16_t)next_x8;
-      float mag = sqrtf((sx[i] * sx[i]) + (sy[i] * sy[i]));
+      float mag = msl_melee_sqrtf((sx[i] * sx[i]) + (sy[i] * sy[i]));
       if (mag > 1.0f) mag = 1.0f;
       if (mag < 0.0f) mag = 0.0f;
-      x4 = lerp * (mag - x4) + x4;
+      x4 = fmaf(lerp, mag - x4, x4);
     }
     out_x8_p[i] = x8;
     out_x4_p[i] = x4;
