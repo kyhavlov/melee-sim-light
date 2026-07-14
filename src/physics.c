@@ -164,8 +164,9 @@ static inline void physics_apply_specialhi_air_reverse_accel(const MslBatch* bat
     return;
   }
   const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-  *io_vel_x = -((facing_dir * (ch->firefox_launch_reverse_accel * cosf(rotate_model))) - *io_vel_x);
-  *io_vel_y = -((ch->firefox_launch_reverse_accel * sinf(rotate_model)) - *io_vel_y);
+  *io_vel_x = -((facing_dir * (ch->firefox_launch_reverse_accel * msl_melee_cosf(rotate_model))) -
+                *io_vel_x);
+  *io_vel_y = -((ch->firefox_launch_reverse_accel * msl_melee_sinf(rotate_model)) - *io_vel_y);
 }
 
 static inline float physics_ground_friction_mul_for_floor(const MslBatch* batch, size_t bi,

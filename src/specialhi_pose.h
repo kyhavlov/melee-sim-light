@@ -37,7 +37,7 @@ static inline uint8_t msl_specialhi_rotate_model_from_velocity(float vel_x, floa
     return 0u;
   }
   const float facing_dir = facing ? 1.0f : -1.0f;
-  *out = atan2f(vel_y, vel_x * facing_dir);
+  *out = msl_melee_atan2f(vel_y, vel_x * facing_dir);
   return 1u;
 }
 

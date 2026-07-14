@@ -1,6 +1,7 @@
 /* Native validation derivation for damage and guard hitlag history lanes. */
 
 #include "msl_validation_damage_history.h"
+#include "../src/msl_math.h"
 #include "msl_validation_history_common.h"
 
 PyObject* msl_derive_damage_time_since_hit_x18ac_py(PyObject* self, PyObject* args) {
@@ -703,7 +704,7 @@ PyObject* msl_derive_guard_tilt_state_py(PyObject* self, PyObject* args) {
   uint16_t x8 = 0u;
   float x4 = 0.0f;
   const float lerp = (float)lerp_d;
-  const float rad_to_deg = 180.0f / 3.14159265358979323846f;
+  const float rad_to_deg = MSL_RAD_TO_DEG_F;
   for (npy_intp i = 0; i < n; i++) {
     const int a = (int)aid[i];
     const uint16_t neutral_i = neu[i];
@@ -716,7 +717,7 @@ PyObject* msl_derive_guard_tilt_state_py(PyObject* self, PyObject* args) {
       const float facing_dir = fac[i] != 0u ? 1.0f : -1.0f;
       const float x = sx[i] * facing_dir;
       const float y = sy[i];
-      float rad = atan2f(y, x);
+      float rad = msl_melee_lb_angle(y, x);
       if (rad < 0.0f) rad += 2.0f * 3.14159265358979323846f;
       float deg = rad * rad_to_deg;
       if (deg < 0.0f) deg = 0.0f;

@@ -10,6 +10,7 @@
 #include "ecb_pose.h"
 #include "ids.h"
 #include "motion_state_owners.h"
+#include "msl_math.h"
 #include "mtx34.h"
 #include "specialhi_pose.h"
 
@@ -93,8 +94,8 @@ static inline uint8_t mpcoll_ground_specialhi_rotate_collision_point_xrotn(
   const float px = *io_x - ax0;
   const float py = *io_y - ay0;
   const float pz = *io_z - az0;
-  const float c = cosf(angle);
-  const float s = sinf(angle);
+  const float c = msl_melee_cosf(angle);
+  const float s = msl_melee_sinf(angle);
   const float dot = axis_x * px + axis_y * py + axis_z * pz;
   const float cross_x = axis_y * pz - axis_z * py;
   const float cross_y = axis_z * px - axis_x * pz;

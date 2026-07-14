@@ -124,11 +124,11 @@ void shields_refresh_guard_tilt_body_owner(MslBatch* batch) {
       const uint16_t frame_max = (uint16_t)(tv.frame_count - 1u);
       const float x = stick_x_unit * facing_dir;
       const float y = stick_y_unit;
-      float rad = atan2f(y, x);
+      float rad = msl_melee_lb_angle(y, x);
       if (rad < 0.0f) {
         rad += 2.0f * MSL_PI_F;
       }
-      float deg = rad * (180.0f / MSL_PI_F);
+      float deg = rad * MSL_RAD_TO_DEG_F;
       if (deg < 0.0f) {
         deg = 0.0f;
       }
@@ -290,11 +290,11 @@ void shields_refresh(MslBatch* batch) {
             const float x = stick_x_unit * facing_dir;
             const float y = stick_y_unit;
 
-            float rad = atan2f(y, x);
+            float rad = msl_melee_lb_angle(y, x);
             if (rad < 0.0f) {
               rad += 2.0f * MSL_PI_F;
             }
-            float deg = rad * (180.0f / MSL_PI_F);
+            float deg = rad * MSL_RAD_TO_DEG_F;
             // Decomp: ftCo_80091BC4 clamps lstick_deg to [0, 359].
             if (deg < 0.0f) {
               deg = 0.0f;

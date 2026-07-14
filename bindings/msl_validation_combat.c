@@ -23,6 +23,7 @@
 #include "../src/attack_id_tables.h"
 #include "../src/move_tables.h"
 #include "../src/motion_state_owners.h"
+#include "../src/msl_math.h"
 #include "../src/shield_tilt_table.h"
 #include "../src/stage_item_params.h"
 #include "../src/staling.h"
@@ -2725,7 +2726,7 @@ PyObject* msl_derive_specialhi_rotate_model_seed_lane_py(PyObject* self, PyObjec
     const bool recompute = !cur_valid || !prev_special || f[i] != prev_facing || collision_refresh;
     if (recompute && has_vel) {
       const float fx = f[i] != 0u ? 1.0f : -1.0f;
-      cur = atan2f(vy[i], vx[i] * fx);
+      cur = msl_melee_atan2f(vy[i], vx[i] * fx);
       cur_valid = true;
     }
     if (cur_valid) {

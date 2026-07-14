@@ -27,6 +27,7 @@
 #include "../src/shield_tilt_table.h"
 #include "../src/specialhi_pose.h"
 #include "../src/stage_item_params.h"
+#include "../src/msl_math.h"
 #include "../src/staling.h"
 #include "../src/ucf.h"
 
@@ -115,8 +116,8 @@ uint8_t msl_py_apply_specialhi_xrotn(uint8_t char_id, uint16_t action_id, uint16
   const float px = *io_x - ax0;
   const float py = *io_y - ay0;
   const float pz = *io_z - az0;
-  const float c = cosf(angle);
-  const float s = sinf(angle);
+  const float c = msl_melee_cosf(angle);
+  const float s = msl_melee_sinf(angle);
   const float dot = axis_x * px + axis_y * py + axis_z * pz;
   const float cross_x = axis_y * pz - axis_z * py;
   const float cross_y = axis_z * px - axis_x * pz;

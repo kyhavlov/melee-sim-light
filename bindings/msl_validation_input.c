@@ -6,6 +6,7 @@
 #include "../src/attack_id_tables.h"
 #include "../src/common_params.h"
 #include "../src/input_axis.h"
+#include "../src/msl_math.h"
 #include "../src/ucf.h"
 
 static inline uint8_t vh_sat_inc_fe(uint8_t v) { return v < 0xFEu ? (uint8_t)(v + 1u) : 0xFEu; }
@@ -221,7 +222,7 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
   const float fdz_x = (float)deadzone_x;
   const float fdz_y = (float)deadzone_y;
   const float lerp = (float)guard_lerp;
-  const float rad_to_deg = 180.0f / 3.14159265358979323846f;
+  const float rad_to_deg = MSL_RAD_TO_DEG_F;
   const uint16_t mask_lr = (uint16_t)((button_mask_lr | button_mask_z) & 0xFFFFu);
   int guard_init = guard_x10_init;
   if (guard_init < 0) guard_init = 0;
@@ -283,7 +284,7 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
       const float facing_dir = facing[i] != 0u ? 1.0f : -1.0f;
       const float x = stick_x[i] * facing_dir;
       const float y = stick_y[i];
-      float rad = atan2f(y, x);
+      float rad = msl_melee_lb_angle(y, x);
       if (rad < 0.0f) rad += 2.0f * 3.14159265358979323846f;
       float deg = rad * rad_to_deg;
       if (deg < 0.0f) deg = 0.0f;

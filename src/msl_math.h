@@ -13,6 +13,9 @@
 #define MSL_PI_F 3.14159265358979323846f
 #define MSL_TAU_F 6.28318530717958647692f
 #define MSL_PI_2_F 1.57079632679489661923f
+// (float)(180 / M_PI) = 0x42652EE1, one ULP above 180.0f / MSL_PI_F.
+// refs/melee/src/MSL/math.h::rad_to_deg
+#define MSL_RAD_TO_DEG_F ((float)(180.0 / 3.14159265358979323846))
 
 static inline uint32_t msl_float_bits(float v) {
   uint32_t bits = 0u;
@@ -274,6 +277,33 @@ static inline float msl_melee_atan2f(float y, float x) {
     return msl_melee_atanf(y / x);
   }
   return msl_float_from_bits(y_sign + UINT32_C(0x3FC90FDB));
+}
+
+// GALE01 stick/vector angle helper used by shield tilt and other ftCommon stick-angle consumers.
+//
+// This is NOT atan2f: |x| < 1e-5 snaps to 0 or +-pi/2 before any division, x > 0 defers to plain
+// atanf, and the x < 0 quadrant fold runs in double precision ((f64)sign * (M_PI - atanf(|y/x|)))
+// before rounding back to float.
+//
+// Source path:
+// - refs/melee/src/melee/lb/lb_00CE.c::lb_8000D008
+// - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091BC4 (shield tilt consumer)
+static inline float msl_melee_lb_angle(float point_y, float point_x) {
+  if (point_x < 0.00001f && point_x > -0.00001f) {
+    if (point_y < 0.00001f && point_y > -0.00001f) {
+      return 0.0f;
+    }
+    return point_y < 0.0f ? -MSL_PI_2_F : MSL_PI_2_F;
+  }
+  if (point_x > 0.0f) {
+    return msl_melee_atanf(point_y / point_x);
+  }
+  float mag = point_y / point_x;
+  if (mag < 0.0f) {
+    mag = -mag;
+  }
+  const double sign = point_y < 0.0f ? -1.0 : 1.0;
+  return (float)(sign * (3.14159265358979323846 - (double)msl_melee_atanf(mag)));
 }
 
 // GALE01 single-precision acos used by sysdolphin quaternion/bone math (HSD_QuatSlerp) and

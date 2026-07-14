@@ -3905,8 +3905,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
                                        : (dir > 0.0f ? 0.0f : MSL_PI_F);
           batch->state.item_zelda_din_base_angle[ii] = base_angle;
           batch->state.item_zelda_din_angle_offset[ii] =
-              seed->item_zelda_din_angle_offset[it] != 0.0f ? seed->item_zelda_din_angle_offset[it]
-                                                            : (atan2f(vy, vx) - base_angle);
+              seed->item_zelda_din_angle_offset[it] != 0.0f
+                  ? seed->item_zelda_din_angle_offset[it]
+                  : (msl_melee_atan2f(vy, vx) - base_angle);
         } else if (item->type == zelda_din_ap->zelda_din_fire_explode_itkind) {
           float charge = seed->item_zelda_din_charge[it];
           if (!(charge > 0.0f)) {
@@ -6093,8 +6094,8 @@ static uint8_t debug_sample_hitbox_center_proxy(const MslBatch* batch, size_t id
           const float px = cx - ax0;
           const float py = cy - ay0;
           const float pz = cz - az0;
-          const float c = cosf(angle);
-          const float s = sinf(angle);
+          const float c = msl_melee_cosf(angle);
+          const float s = msl_melee_sinf(angle);
           const float dot = axis_x * px + axis_y * py + axis_z * pz;
           const float cross_x = axis_y * pz - axis_z * py;
           const float cross_y = axis_z * px - axis_x * pz;

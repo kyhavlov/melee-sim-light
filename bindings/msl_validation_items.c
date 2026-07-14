@@ -9,6 +9,7 @@
 
 #include "../src/api.h"
 #include "../src/item_article_params.h"
+#include "../src/msl_math.h"
 #include "../src/stage_collision.h"
 
 static int require_u8_rows(PyArrayObject* arr, npy_intp rows, npy_intp min_cols, const char* name) {
@@ -1129,7 +1130,7 @@ PyObject* msl_validation_derive_zelda_din_buffers_py(PyObject* self, PyObject* a
       const float dir = item->direction < 0.0f ? -1.0f : 1.0f;
       const float base_angle = dir > 0.0f ? 0.0f : 3.14159265358979323846f;
       seed->item_zelda_din_base_angle[it] = base_angle;
-      seed->item_zelda_din_angle_offset[it] = atan2f(vy, vx) - base_angle;
+      seed->item_zelda_din_angle_offset[it] = msl_melee_atan2f(vy, vx) - base_angle;
       if (is_explode) {
         // Explosion itemVar.xDD4 is copied from the fire charge by it_802C4580; Slippi exposes
         // only the new explosion item. Carry the same tracked charge by owner/instance identity.
