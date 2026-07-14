@@ -163,6 +163,7 @@ def test_terminal_fall_from_damage_owner_does_not_require_concrete_cap(tmp_path:
         textwrap.dedent(
             """
             #include <assert.h>
+            #include <stdlib.h>
             #include <string.h>
 
             #include "batch_internal.h"
@@ -185,6 +186,16 @@ def test_terminal_fall_from_damage_owner_does_not_require_concrete_cap(tmp_path:
                     [MSL_ACT_DAMAGE_FLY_TOP] = MSL_MS_CLASS_DAMAGE_FLY,
                     [MSL_ACT_DAMAGE_FLY_ROLL] = MSL_MS_CLASS_DAMAGE_FLY,
                 };
+
+            /* The weak common-class table above is defined in this TU, so the _fast helper's
+             * out-of-line fallback is unreachable. Mach-O still resolves relocations in dead
+             * branches at -O0 (ELF/GCC folds the defined-weak null check away), so satisfy the
+             * linker with a stub that fails loudly if the contract is ever broken. */
+            uint8_t msl_motion_state_common_class_has(uint16_t action_id, uint32_t class_bit) {
+              (void)action_id;
+              (void)class_bit;
+              abort();
+            }
 
             static void bind_state(void) {
               memset(&batch, 0, sizeof(batch));
