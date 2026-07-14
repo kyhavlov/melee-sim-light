@@ -1,6 +1,9 @@
 #include "ft_084E.h"
 
 #include <math.h>
+#ifdef MSL_DECOMP_PORT
+#include <MetroTRK/intrinsics.h>
+#endif
 #include <melee/ft/fighter.h>
 #include <melee/ft/ftcommon.h>
 
@@ -79,8 +82,15 @@ void ft_80085030(Fighter_GObj* gobj, float gr_friction, float facing_dir)
 {
     Fighter* fp = gobj->user_data;
     if (fp->x594_b0) {
+#ifdef MSL_DECOMP_PORT
+        // GALE01 0x8008505C is one PPC fmsubs instruction. Preserve that
+        // operation boundary in the GCC-hosted PPC runtime.
+        fp->xE4_ground_accel_1 =
+            __fmsubs(fp->x6A4_transNOffset.z, facing_dir, fp->gr_vel);
+#else
         fp->xE4_ground_accel_1 =
             fp->x6A4_transNOffset.z * facing_dir - fp->gr_vel;
+#endif
     } else {
         ftCommon_ApplyFrictionGround(fp, gr_friction);
     }

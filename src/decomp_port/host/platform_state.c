@@ -8,9 +8,12 @@ HSD_PadStatus HSD_PadGameStatus[4];
 HSD_PadStatus HSD_PadCopyStatus[4];
 int DbLevel;
 
-// The original costume cache is linker-owned BSS. Phase 1 only requests
-// Fox's neutral costume, so the single source-declared entry is sufficient.
-UnkCostumeStruct ft_80459B28;
+// The original linker map exposes only the first Fox costume-cache address as
+// ft_80459B28, while CostumeListsForeachCharacter indexes four contiguous
+// UnkCostumeStruct entries from it. Hosted ELF must reserve the full span
+// explicitly instead of relying on adjacent DOL BSS symbols.
+// refs/melee/src/melee/ft/ftdata.c::CostumeListsForeachCharacter
+UnkCostumeStruct ft_80459B28[4];
 
 // These match-mode queries are false for a normal local human match.
 int gm_8016B0FC(void) { return 0; }
@@ -20,7 +23,3 @@ int gm_801A45E8(int mode)
     (void) mode;
     return 0;
 }
-
-// Phase 1 has no stock/death boundary. Keep the crowd-warning test inactive.
-float Stage_CalcUnkCamY(void) { return -1000000.0F; }
-float Stage_CalcUnkCamYBounds(void) { return -1000000.0F; }

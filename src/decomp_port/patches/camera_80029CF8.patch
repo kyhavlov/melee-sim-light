@@ -1,0 +1,28 @@
+--- camera.c
++++ camera.c
+@@ -761,2 +761,3 @@ void Camera_80029CF8(CameraBounds* bounds, CameraTransformState* transform)
+     Vec3 scroll_offset2;
+     f32 vert_offset;
++    f32 max_horiz_pan_angle;
+@@ -791,9 +792,9 @@ void Camera_80029CF8(CameraBounds* bounds, CameraTransformState* transform)
+     mid_x = 0.5f * (bounds->x_min + bounds->x_max);
+     {
+         f32 info_x20 = Stage_GetCamInfoX20();
+-        vert_offset = deg_to_rad * cm_803BCCA0.x14;
++        max_horiz_pan_angle = deg_to_rad * cm_803BCCA0.x14;
+         pan_angle = -(deg_to_rad * ((mid_x - scroll_offset2.x) * info_x20));
+     }
+-    if (pan_angle > vert_offset) {
+-        pan_angle = vert_offset;
++    if (pan_angle > max_horiz_pan_angle) {
++        pan_angle = max_horiz_pan_angle;
+     }
+@@ -1258,9 +1259,6 @@ void Camera_8002A768(CameraTransformState* transform, s32 arg1)
+             cam_correction.y = bottom_overlap;
+         }
+-        cam_correction.x *= -1.0f;
+-        cam_correction.y *= -1.0f;
+-        cam_correction.z *= -1.0f;
+         lbVector_Add(&transform->target_position, &cam_correction);
+         lbVector_Add(&transform->target_interest, &cam_correction);
+     }

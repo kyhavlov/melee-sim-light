@@ -93,15 +93,33 @@ typedef struct ReplayPlayer {
   Primitive speed_y_attack;
 } ReplayPlayer;
 
+typedef struct ReplayItem {
+  Primitive type;
+  Primitive state;
+  Primitive direction;
+  Primitive vel_x;
+  Primitive vel_y;
+  Primitive pos_x;
+  Primitive pos_y;
+  Primitive damage;
+  Primitive timer;
+  Primitive spawn_id;
+  Primitive misc[4];
+  Primitive owner;
+  Primitive instance_id;
+} ReplayItem;
+
 typedef struct ReplayView {
   int64_t raw_length;
   Primitive frame_id;
   Primitive frame_seed;
   const struct ArrowArray* item_list;
+  ReplayItem item;
   ReplayPlayer players[MSL_DP_MAX_PLAYERS];
   int port_1based[MSL_DP_MAX_PLAYERS];
   uint8_t team_id[MSL_DP_MAX_PLAYERS];
   uint8_t start_stocks[MSL_DP_MAX_PLAYERS];
+  uint8_t costume_id[MSL_DP_MAX_PLAYERS];
   int num_players;
   uint32_t stage_id;
   uint8_t is_teams;
@@ -285,6 +303,11 @@ static int parse_start(PyObject* start, ReplayView* replay) {
     }
     replay->port_1based[slot] = port;
     replay->start_stocks[slot] = (uint8_t)PyLong_AsUnsignedLong(stocks_obj);
+    value = PyDict_GetItemString(player, "costume");
+    replay->costume_id[slot] =
+        value != NULL && PyLong_Check(value)
+            ? (uint8_t)PyLong_AsUnsignedLong(value)
+            : 0;
     replay->team_id[slot] = 0;
     if (replay->is_teams) {
       PyObject* team = PyDict_GetItemString(player, "team");
@@ -308,12 +331,15 @@ static int parse_start(PyObject* start, ReplayView* replay) {
         int port = replay->port_1based[i];
         uint8_t stocks = replay->start_stocks[i];
         uint8_t team = replay->team_id[i];
+        uint8_t costume = replay->costume_id[i];
         replay->port_1based[i] = replay->port_1based[j];
         replay->start_stocks[i] = replay->start_stocks[j];
         replay->team_id[i] = replay->team_id[j];
+        replay->costume_id[i] = replay->costume_id[j];
         replay->port_1based[j] = port;
         replay->start_stocks[j] = stocks;
         replay->team_id[j] = team;
+        replay->costume_id[j] = costume;
       }
     }
   }
@@ -396,6 +422,49 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
   return 0;
 }
 
+static int load_items(ArrowNode items, ReplayView* replay, char* error, size_t error_size) {
+  ArrowNode values;
+  ArrowNode velocity;
+  ArrowNode position;
+  ArrowNode misc;
+  int k;
+#define ITEM_FIELD(PARENT, NAME, FORMAT, TARGET)                                         \
+  do {                                                                                    \
+    if (primitive_child((PARENT), (NAME), (FORMAT), &(TARGET), error, error_size) != 0) { \
+      return -1;                                                                          \
+    }                                                                                     \
+  } while (0)
+  if (items.schema->format == NULL || strcmp(items.schema->format, "+l") != 0 ||
+      items.array->n_buffers < 2 || items.array->buffers[1] == NULL ||
+      items.schema->n_children != 1 || items.array->n_children != 1 ||
+      node_child(items, "item", &values, error, error_size) != 0 ||
+      node_child(values, "velocity", &velocity, error, error_size) != 0 ||
+      node_child(values, "position", &position, error, error_size) != 0 ||
+      node_child(values, "misc", &misc, error, error_size) != 0) {
+    snprintf(error, error_size, "unsupported Arrow item list");
+    return -1;
+  }
+  replay->item_list = items.array;
+  ITEM_FIELD(values, "type", "S", replay->item.type);
+  ITEM_FIELD(values, "state", "C", replay->item.state);
+  ITEM_FIELD(values, "direction", "f", replay->item.direction);
+  ITEM_FIELD(velocity, "x", "f", replay->item.vel_x);
+  ITEM_FIELD(velocity, "y", "f", replay->item.vel_y);
+  ITEM_FIELD(position, "x", "f", replay->item.pos_x);
+  ITEM_FIELD(position, "y", "f", replay->item.pos_y);
+  ITEM_FIELD(values, "damage", "S", replay->item.damage);
+  ITEM_FIELD(values, "timer", "f", replay->item.timer);
+  ITEM_FIELD(values, "id", "I", replay->item.spawn_id);
+  ITEM_FIELD(values, "owner", "c", replay->item.owner);
+  ITEM_FIELD(values, "instance_id", "S", replay->item.instance_id);
+  for (k = 0; k < 4; ++k) {
+    char name[2] = {(char)('0' + k), '\0'};
+    ITEM_FIELD(misc, name, "C", replay->item.misc[k]);
+  }
+#undef ITEM_FIELD
+  return 0;
+}
+
 static int load_replay(ArrowNode frames, ReplayView* replay, char* error, size_t error_size) {
   ArrowNode ports;
   ArrowNode start;
@@ -415,12 +484,9 @@ static int load_replay(ArrowNode frames, ReplayView* replay, char* error, size_t
       node_child(frames, "item", &items, error, error_size) != 0) {
     return -1;
   }
-  if (items.schema->format == NULL || strcmp(items.schema->format, "+l") != 0 ||
-      items.array->n_buffers < 2 || items.array->buffers[1] == NULL) {
-    snprintf(error, error_size, "unsupported Arrow item list");
+  if (load_items(items, replay, error, error_size) != 0) {
     return -1;
   }
-  replay->item_list = items.array;
   for (i = 0; i < replay->num_players; ++i) {
     if (load_player(ports, replay->port_1based[i], &replay->players[i], error, error_size) != 0) {
       return -1;
@@ -485,9 +551,13 @@ static uint8_t trigger_u8(float value) {
     return 0;
   }
   if (value >= 1.0F) {
-    return 255;
+    return 140;
   }
-  return (uint8_t)lrintf(value * 255.0F);
+  /* Slippi records HSD_PadStatus::nml_analog{L,R}; Melee derives those
+     values from the post-clamp byte with scale_analogLR == 140.
+     refs/melee/src/melee/gm/gmmain.c::gmMain_8015FD24
+     refs/melee/src/sysdolphin/baselib/controller.c::HSD_PadScale */
+  return (uint8_t)lrintf(value * 140.0F);
 }
 
 static void build_input(const ReplayView* replay, int64_t raw, MslDpInput* input) {
@@ -524,6 +594,17 @@ static int16_t frame_i16(float value) {
     return 32767;
   }
   return (int16_t)floorf(value);
+}
+
+static int64_t item_range_start(const ReplayView* replay, int64_t raw) {
+  const int32_t* offsets = (const int32_t*)(const void*)replay->item_list->buffers[1];
+  return offsets[replay->item_list->offset + raw];
+}
+
+static int64_t item_count(const ReplayView* replay, int64_t raw) {
+  const int32_t* offsets = (const int32_t*)(const void*)replay->item_list->buffers[1];
+  int64_t i = replay->item_list->offset + raw;
+  return (int64_t)offsets[i + 1] - offsets[i];
 }
 
 static void build_expected(const ReplayView* replay, int64_t raw, MslDpCompare* expected) {
@@ -572,6 +653,36 @@ static void build_expected(const ReplayView* replay, int64_t raw, MslDpCompare* 
     expected->last_hit_by[player] = get_u8(&src->last_hit_by, raw);
     for (flag = 0; flag < MSL_DP_STATE_FLAGS_BYTES; ++flag) {
       expected->state_flags[player][flag] = get_u8(&src->state_flags[flag], raw);
+    }
+  }
+  {
+    int64_t count = item_count(replay, raw);
+    int64_t start = item_range_start(replay, raw);
+    int64_t slot;
+    if (count > MSL_DP_MAX_ITEMS) {
+      count = MSL_DP_MAX_ITEMS;
+    }
+    for (slot = 0; slot < count; ++slot) {
+      const ReplayItem* src = &replay->item;
+      MslDpItem* dst = &expected->items[slot];
+      int64_t item = start + slot;
+      dst->exists = 1;
+      dst->state = get_u8(&src->state, item);
+      dst->type = get_u16(&src->type, item);
+      dst->owner = get_i8(&src->owner, item);
+      dst->instance_id = get_u16(&src->instance_id, item);
+      dst->direction = get_f32(&src->direction, item);
+      dst->vel_x = get_f32(&src->vel_x, item);
+      dst->vel_y = get_f32(&src->vel_y, item);
+      dst->pos_x = get_f32(&src->pos_x, item);
+      dst->pos_y = get_f32(&src->pos_y, item);
+      dst->damage = get_u16(&src->damage, item);
+      dst->timer = get_f32(&src->timer, item);
+      dst->spawn_id = get_u32(&src->spawn_id, item);
+      dst->misc0 = get_u8(&src->misc[0], item);
+      dst->misc1 = get_u8(&src->misc[1], item);
+      dst->misc2 = get_u8(&src->misc[2], item);
+      dst->misc3 = get_u8(&src->misc[3], item);
     }
   }
 }
@@ -694,12 +805,6 @@ static void record_detail(ValidationResult* result, const char* field, int index
   format_value(detail->actual, sizeof(detail->actual), kind, actual);
 }
 
-static int64_t item_count(const ReplayView* replay, int64_t raw) {
-  const int32_t* offsets = (const int32_t*)(const void*)replay->item_list->buffers[1];
-  int64_t i = replay->item_list->offset + raw;
-  return (int64_t)offsets[i + 1] - offsets[i];
-}
-
 static int actual_item_count(const MslDpCompare* actual) {
   int count = 0;
   int i;
@@ -707,6 +812,78 @@ static int actual_item_count(const MslDpCompare* actual) {
     count += actual->items[i].exists != 0;
   }
   return count;
+}
+
+typedef struct ItemFieldSpec {
+  const char* name;
+  size_t offset;
+  uint8_t kind;
+} ItemFieldSpec;
+
+#define ITEM_SPEC(NAME, MEMBER, KIND) { NAME, offsetof(MslDpItem, MEMBER), KIND }
+
+static const ItemFieldSpec item_compare_fields[] = {
+    ITEM_SPEC("item.exists", exists, FIELD_U8),
+    ITEM_SPEC("item.state", state, FIELD_U8),
+    ITEM_SPEC("item.type", type, FIELD_U16),
+    ITEM_SPEC("item.owner", owner, FIELD_U8),
+    ITEM_SPEC("item.instance_id", instance_id, FIELD_U16),
+    ITEM_SPEC("item.direction", direction, FIELD_F32),
+    ITEM_SPEC("item.vel_x", vel_x, FIELD_F32),
+    ITEM_SPEC("item.vel_y", vel_y, FIELD_F32),
+    ITEM_SPEC("item.pos_x", pos_x, FIELD_F32),
+    ITEM_SPEC("item.pos_y", pos_y, FIELD_F32),
+    ITEM_SPEC("item.damage", damage, FIELD_U16),
+    ITEM_SPEC("item.timer", timer, FIELD_F32),
+    ITEM_SPEC("item.spawn_id", spawn_id, FIELD_U32),
+    ITEM_SPEC("item.misc0", misc0, FIELD_U8),
+    ITEM_SPEC("item.misc1", misc1, FIELD_U8),
+    ITEM_SPEC("item.misc2", misc2, FIELD_U8),
+    ITEM_SPEC("item.misc3", misc3, FIELD_U8),
+};
+
+#undef ITEM_SPEC
+
+static int item_field_is_gameplay_state(const MslDpItem* item, const ItemFieldSpec* spec) {
+  enum {
+    // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Laser.
+    ITEM_KIND_FOX_LASER = 54,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Illusion.
+    ITEM_KIND_FOX_ILLUSION = 56,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Blaster.  Keep this
+    // protocol value local to the native replay adapter rather than making it
+    // depend on the PPC runtime's headers.
+    ITEM_KIND_FOX_BLASTER = 74,
+  };
+
+  if (item->type == ITEM_KIND_FOX_BLASTER &&
+      (spec->offset == offsetof(MslDpItem, misc2) ||
+       spec->offset == offsetof(MslDpItem, misc3))) {
+    // SendItemInfo.s samples bytes xDEB/xDEF generically.  For Fox's blaster
+    // those bytes are the low bytes of xDE4[1]/xDE4[2], effect-object
+    // pointers populated by itfoxblaster.c::it_802ADF10.  Their numeric
+    // values are presentation allocator addresses, not deterministic
+    // gameplay/article state in a headless process.
+    return 0;
+  }
+  if (item->type == ITEM_KIND_FOX_LASER &&
+      spec->offset == offsetof(MslDpItem, misc3)) {
+    // SendItemInfo.s samples xDEF, but itFoxLaser_ItemVars ends at xDEC
+    // (refs/melee/src/melee/it/itCharItems.h). For a laser this lane is
+    // unowned allocator residue beyond the defined article state.
+    return 0;
+  }
+  if (item->type == ITEM_KIND_FOX_ILLUSION &&
+      spec->offset >= offsetof(MslDpItem, misc0) &&
+      spec->offset <= offsetof(MslDpItem, misc3)) {
+    // itFoxIllusion_ItemVars contains a model-joint pointer at xDD4, an
+    // unused xDD8 lane, and a presentation JObj pointer at xDDC; it ends at
+    // xDE0. SendItemInfo.s therefore records pointer bytes or unowned
+    // allocator residue in all four generic misc positions for this kind.
+    // refs/melee/src/melee/it/{itCharItems.h,items/itfoxillusion.c}
+    return 0;
+  }
+  return 1;
 }
 
 static int compare_row(const ReplayView* replay, int64_t raw, const MslDpCompare* actual,
@@ -738,6 +915,29 @@ static int compare_row(const ReplayView* replay, int64_t raw, const MslDpCompare
                     (uint32_t)actual_items);
     }
   }
+  {
+    size_t item_field;
+    int slot;
+    for (slot = 0; slot < MSL_DP_MAX_ITEMS; ++slot) {
+      const uint8_t* expected_item = (const uint8_t*)(const void*)&expected.items[slot];
+      const uint8_t* actual_item = (const uint8_t*)(const void*)&actual->items[slot];
+      for (item_field = 0;
+           item_field < sizeof(item_compare_fields) / sizeof(item_compare_fields[0]);
+           ++item_field) {
+        const ItemFieldSpec* spec = &item_compare_fields[item_field];
+        size_t width = field_width((FieldKind)spec->kind);
+        uint32_t expected_bits = load_bits(expected_item + spec->offset, width);
+        uint32_t actual_bits = load_bits(actual_item + spec->offset, width);
+        if (!item_field_is_gameplay_state(&expected.items[slot], spec)) {
+          continue;
+        }
+        if (expected_bits != actual_bits) {
+          record_detail(result, spec->name, slot, (FieldKind)spec->kind, expected_bits,
+                        actual_bits);
+        }
+      }
+    }
+  }
   return result->mismatch_count == mismatch_before;
 }
 
@@ -752,12 +952,13 @@ static void refill_write_buffer(StreamState* state) {
     state->header_written = 1;
   }
   while (state->next_input_pos <= state->process_end_pos &&
-         state->write_len + sizeof(MslDpInput) <= sizeof(state->write_buf)) {
-    MslDpInput input;
+         state->write_len + sizeof(MslDpStreamFrame) <= sizeof(state->write_buf)) {
+    MslDpStreamFrame frame;
     int64_t raw = state->rows->raw[state->next_input_pos++];
-    build_input(state->replay, raw, &input);
-    memcpy(state->write_buf + state->write_len, &input, sizeof(input));
-    state->write_len += sizeof(input);
+    frame.frame_pre_random_seed = get_u32(&state->replay->frame_seed, raw);
+    build_input(state->replay, raw, &frame.input);
+    memcpy(state->write_buf + state->write_len, &frame, sizeof(frame));
+    state->write_len += sizeof(frame);
   }
 }
 
@@ -771,7 +972,7 @@ static int consume_output(StreamState* state, const uint8_t* data, size_t size, 
     data += take;
     size -= take;
     if (state->output_have == sizeof(state->output_row)) {
-      int64_t logical_pos = ++state->output_rows;
+      int64_t logical_pos = state->output_rows++;
       if (logical_pos > state->process_end_pos) {
         snprintf(error, error_size, "PPC runner produced too many rows");
         return -1;
@@ -962,7 +1163,8 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
              WIFEXITED(status) ? WEXITSTATUS(status) : -1);
     goto done;
   }
-  if (state->output_have != 0 || state->output_rows != state->process_end_pos) {
+  if (state->output_have != 0 ||
+      state->output_rows != state->process_end_pos + 1) {
     snprintf(error, error_size,
              "PPC runner returned %" PRId64 "/%" PRId64 " complete rows and %zu trailing bytes",
              state->output_rows, state->process_end_pos, state->output_have);
@@ -1187,14 +1389,17 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   state.rows = &rows;
   state.compare_start_pos = compare_start;
   state.process_end_pos = compare_start + compare_count - 1;
-  state.next_input_pos = 1;
+  // A freshly constructed source match is at the start of Slippi's first
+  // finalized frame, not at its post-frame snapshot. Run row 0 as a hidden
+  // warm-up so Entry timers, scheduler state, and RNG consumers reach the
+  // pre-frame state for the first compared transition (row 1).
+  state.next_input_pos = 0;
   state.config.stage_id = replay.stage_id;
-  state.config.frame_id = get_i32(&replay.frame_id, rows.raw[0]);
-  // Slippi records the frame-start RNG before destination-frame fighter
-  // callbacks. The fighter snapshot is row 0, but the transition executes
-  // row 1, so the source runtime starts from row 1's frame-start stream.
+  state.config.frame_id = get_i32(&replay.frame_id, rows.raw[0]) - 1;
+  // Slippi records RNG before the frame's source callbacks. The hidden row-0
+  // warm-up therefore starts from row 0's seed and advances it naturally.
   // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
-  state.config.frame_pre_random_seed = get_u32(&replay.frame_seed, rows.raw[1]);
+  state.config.frame_pre_random_seed = get_u32(&replay.frame_seed, rows.raw[0]);
   state.config.match_damage_ratio = replay.damage_ratio;
   state.config.num_players = (uint8_t)replay.num_players;
   state.config.is_teams = replay.is_teams;
@@ -1206,6 +1411,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     }
     state.config.players[i].char_id = get_u8(&player->character, rows.raw[0]);
     state.config.players[i].team_id = replay.team_id[i];
+    state.config.players[i].costume_id = replay.costume_id[i];
     state.config.players[i].facing = get_f32(&player->direction, rows.raw[0]) > 0.0F;
   }
   if (state.config.stock_count == 0) {

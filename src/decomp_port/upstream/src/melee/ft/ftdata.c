@@ -136,7 +136,7 @@
 extern int ft_8045996C[FTKIND_MAX];
 
 #ifdef MSL_DECOMP_PORT
-// Phase 1 preserves the source registries' shapes but only publishes their
+// Phase 2 preserves the source registries' shapes but only publishes their
 // exact Fox rows. This prevents an indexed Fox lookup from retaining every
 // unsupported character owner in the standalone locomotion binary.
 struct UnkCostumeList CostumeListsForeachCharacter[FTKIND_MAX] = {
@@ -154,30 +154,66 @@ HSD_GObjEvent ftData_OnDeath[FTKIND_MAX] = {
     [FTKIND_FOX] = ftFx_Init_OnDeath,
 };
 HSD_GObjEvent ftData_OnUserDataRemove[FTKIND_MAX];
-MotionState* ftData_CharacterStateTables[FTKIND_MAX];
+MotionState* ftData_CharacterStateTables[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_Init_MotionStateTable,
+};
 MotionState* ftData_UnkMotionStates0[FTKIND_MAX];
 
-// Specials, combat, items, and knockback are explicit Phase 1 exclusions.
-// Their source-shaped dispatch slots remain NULL and therefore fail closed.
-HSD_GObjEvent ftData_SpecialS[FTKIND_MAX];
-HSD_GObjEvent ftData_SpecialAirHi[FTKIND_MAX];
-HSD_GObjEvent ftData_SpecialAirLw[FTKIND_MAX];
-HSD_GObjEvent ftData_SpecialAirS[FTKIND_MAX];
-HSD_GObjEvent ftData_SpecialAirN[FTKIND_MAX];
-HSD_GObjEvent ftData_SpecialN[FTKIND_MAX];
-HSD_GObjEvent ftData_SpecialLw[FTKIND_MAX];
-HSD_GObjEvent ftData_SpecialHi[FTKIND_MAX];
+// Direct Fox rows from the source registries below.  Keeping the indexed
+// source shape is important: common action code owns these dispatches, while
+// the Phase 2 domain projection merely prevents unsupported character rows
+// from retaining every other fighter implementation.
+HSD_GObjEvent ftData_SpecialS[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_SpecialSStart_Enter,
+};
+HSD_GObjEvent ftData_SpecialAirHi[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_SpecialAirHiStart_Enter,
+};
+HSD_GObjEvent ftData_SpecialAirLw[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_SpecialAirLw_Enter,
+};
+HSD_GObjEvent ftData_SpecialAirS[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_SpecialAirSStart_Enter,
+};
+HSD_GObjEvent ftData_SpecialAirN[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_SpecialAirN_Enter,
+};
+HSD_GObjEvent ftData_SpecialN[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_SpecialN_Enter,
+};
+HSD_GObjEvent ftData_SpecialLw[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_SpecialLw_Enter,
+};
+HSD_GObjEvent ftData_SpecialHi[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_SpecialHi_Enter,
+};
 HSD_GObjEvent ftData_OnAbsorb[FTKIND_MAX];
-Fighter_ItemEvent ftData_OnItemPickupExt[FTKIND_MAX];
-HSD_GObjEvent ftData_OnItemInvisible[FTKIND_MAX];
-HSD_GObjEvent ftData_OnItemVisible[FTKIND_MAX];
-Fighter_ItemEvent ftData_OnItemDropExt[FTKIND_MAX];
-Fighter_ItemEvent ftData_OnItemPickup[FTKIND_MAX];
-Fighter_ItemEvent ftData_OnItemDrop[FTKIND_MAX];
+Fighter_ItemEvent ftData_OnItemPickupExt[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_Init_OnItemPickup,
+};
+HSD_GObjEvent ftData_OnItemInvisible[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_Init_OnItemInvisible,
+};
+HSD_GObjEvent ftData_OnItemVisible[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_Init_OnItemVisible,
+};
+Fighter_ItemEvent ftData_OnItemDropExt[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_Init_OnItemDrop,
+};
+Fighter_ItemEvent ftData_OnItemPickup[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_Init_OnItemPickup,
+};
+Fighter_ItemEvent ftData_OnItemDrop[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_Init_OnItemDrop,
+};
 HSD_GObjEvent ftData_UnkMotionStates1[FTKIND_MAX];
 HSD_GObjEvent ftData_UnkMotionStates2[FTKIND_MAX];
-HSD_GObjEvent ftData_OnKnockbackEnter[FTKIND_MAX];
-HSD_GObjEvent ftData_OnKnockbackExit[FTKIND_MAX];
+HSD_GObjEvent ftData_OnKnockbackEnter[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_Init_OnKnockbackEnter,
+};
+HSD_GObjEvent ftData_OnKnockbackExit[FTKIND_MAX] = {
+    [FTKIND_FOX] = ftFx_Init_OnKnockbackExit,
+};
 HSD_GObjEvent ftData_UnkMotionStates3[FTKIND_MAX];
 HSD_GObjEvent ftData_UnkMotionStates4[FTKIND_MAX];
 HSD_GObjEvent ftKindCalcIndiviParamTable[FTKIND_MAX] = {

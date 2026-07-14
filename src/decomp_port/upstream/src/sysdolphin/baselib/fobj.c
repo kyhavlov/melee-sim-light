@@ -4,6 +4,9 @@
 #include "spline.h"
 
 #include <__mem.h>
+#ifdef MSL_DECOMP_PORT
+#include <MetroTRK/intrinsics.h>
+#endif
 
 HSD_ObjAllocData fobj_alloc_data;
 
@@ -368,7 +371,13 @@ void FObjUpdateAnim(HSD_FObj* fobj, void* obj, HSD_ObjUpdateFunc obj_update)
                 fobj->p0 = fobj->p1;
             }
         }
+#ifdef MSL_DECOMP_PORT
+        // GALE01 baselib FObjUpdateAnim, 0x8036AF98: the linear-key
+        // interpolation is one scalar-single fmadds instruction.
+        fobjdata.fv = __fmadds(fobj->d0, fobj->time, fobj->p0);
+#else
         fobjdata.fv = fobj->d0 * fobj->time + fobj->p0;
+#endif
         break;
     case HSD_A_OP_SPL0:
     case HSD_A_OP_SPL:

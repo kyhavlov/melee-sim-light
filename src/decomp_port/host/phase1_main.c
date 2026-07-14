@@ -1,8 +1,17 @@
 #include "host/files.h"
+#include "host/phase2_domain.h"
+#include "host/phase2_effect_projection.h"
 #include "host/wire.h"
 
 #include "ft/fighter.h"
+#include "ft/ftdevice.h"
+#include "ft/ftlib.h"
+#include "gr/grdatfiles.h"
 #include "gr/ground.h"
+#include "gr/types.h"
+#include "it/inlines.h"
+#include "it/item.h"
+#include "it/types.h"
 #include "lb/lbarchive.h"
 #include "lb/lbspdisplay.h"
 #include "mp/mpcoll.h"
@@ -11,11 +20,14 @@
 #include "pl/player.h"
 #include "pl/types.h"
 
+#include <MSL/math.h>
+
 #include <baselib/aobj.h>
 #include <baselib/controller.h>
 #include <baselib/fobj.h>
 #include <baselib/gobj.h>
 #include <baselib/id.h>
+#include <baselib/jobj.h>
 #include <baselib/list.h>
 #include <baselib/mtx.h>
 #include <baselib/robj.h>
@@ -34,6 +46,9 @@ enum {
 
 extern u32 seed;
 extern u32* seed_ptr;
+extern int mpColl_804D64AC;
+extern void msl_camera_publish_fighter_visibility(HSD_GObj* gobj);
+extern void Camera_8002B3D4(void* arg0);
 
 typedef struct Phase1Runtime {
     Fighter_GObj* fighters[2];
@@ -41,10 +56,24 @@ typedef struct Phase1Runtime {
     int32_t frame_id;
 } Phase1Runtime;
 
+static void headless_ground_anim_proc(HSD_GObj* gobj)
+{
+    // Exact gameplay-bearing projection of Ground_801C1CD0. Material updates
+    // and the per-stage presentation callback are absent on FD, but every map
+    // GObj must still publish one collision epoch after advancing its JObj.
+    // refs/melee/src/melee/gr/ground.c::Ground_801C1CD0
+    HSD_JObjAnimAll(gobj->hsd_obj);
+    mpColl_804D64AC += 1;
+}
+
 static void init_hsd(void)
 {
     HSD_GObjLibInitDataType init;
 
+    // The DOL runs MSL's constructor table before scene bootstrap. The ELF
+    // host build has no MetroWerks .ctors section, so initialize trigf's
+    // split 4/pi constants explicitly before any gameplay math.
+    __sinit_trigf_c();
     HSD_AObjInitAllocData();
     HSD_FObjInitAllocData();
     HSD_IDInitAllocData();
@@ -84,25 +113,32 @@ static int read_exact_file(const char* path, void* dst, size_t size)
     return 0;
 }
 
-static int8_t clamp_stick(int8_t value)
+static void source_clamp_stick(int8_t raw_x, int8_t raw_y, int8_t* out_x,
+                               int8_t* out_y)
 {
-    if (value > MSL_DP_STICK_SCALE) {
-        return MSL_DP_STICK_SCALE;
-    }
-    if (value < -MSL_DP_STICK_SCALE) {
-        return -MSL_DP_STICK_SCALE;
-    }
-    return value;
-}
+    float radius;
+    int8_t x = raw_x;
+    int8_t y = raw_y;
 
-static float stick_unit(int8_t value)
-{
-    return (float) clamp_stick(value) / (float) MSL_DP_STICK_SCALE;
+    // Exact default-min/default-max projection of HSD_PadClampCheck3 from
+    // refs/melee/src/sysdolphin/baselib/controller.c. The assignments back
+    // to signed bytes intentionally truncate each radially scaled axis.
+    radius = sqrtf(((float) x * (float) x) + ((float) y * (float) y));
+    if (radius > (float) MSL_DP_STICK_SCALE) {
+        x = ((float) x * (float) MSL_DP_STICK_SCALE) / radius;
+        y = ((float) y * (float) MSL_DP_STICK_SCALE) / radius;
+    }
+    *out_x = x;
+    *out_y = y;
 }
 
 static float trigger_unit(uint8_t value)
 {
-    return (float) value / 255.0F;
+    // The Slippi physical-trigger fields are HSD_PadStatus::nml_analog{L,R},
+    // whose source scale is 140 after Melee's controller clamp.
+    // refs/melee/src/{melee/gm/gmmain.c::gmMain_8015FD24,
+    // sysdolphin/baselib/controller.c::HSD_PadScale}
+    return (float) value / 140.0F;
 }
 
 static uint16_t input_buttons(const MslDpInputPlayer* input)
@@ -144,24 +180,30 @@ static void inject_pad_status(int slot, const MslDpInputPlayer* input)
 {
     HSD_PadStatus* game = &HSD_PadGameStatus[slot];
     HSD_PadStatus* copy = &HSD_PadCopyStatus[slot];
+    int8_t main_x;
+    int8_t main_y;
+    int8_t c_x;
+    int8_t c_y;
     uint32_t previous = game->button;
     uint32_t buttons = input_buttons(input);
 
+    source_clamp_stick(input->main_x, input->main_y, &main_x, &main_y);
+    source_clamp_stick(input->c_x, input->c_y, &c_x, &c_y);
     memset(game, 0, sizeof(*game));
     game->last_button = previous;
     game->button = buttons;
     game->trigger = buttons & (previous ^ buttons);
     game->release = previous & (previous ^ buttons);
-    game->stickX = clamp_stick(input->main_x);
-    game->stickY = clamp_stick(input->main_y);
-    game->subStickX = clamp_stick(input->c_x);
-    game->subStickY = clamp_stick(input->c_y);
+    game->stickX = main_x;
+    game->stickY = main_y;
+    game->subStickX = c_x;
+    game->subStickY = c_y;
     game->analogL = input->l;
     game->analogR = input->r;
-    game->nml_stickX = stick_unit(input->main_x);
-    game->nml_stickY = stick_unit(input->main_y);
-    game->nml_subStickX = stick_unit(input->c_x);
-    game->nml_subStickY = stick_unit(input->c_y);
+    game->nml_stickX = (float) main_x / (float) MSL_DP_STICK_SCALE;
+    game->nml_stickY = (float) main_y / (float) MSL_DP_STICK_SCALE;
+    game->nml_subStickX = (float) c_x / (float) MSL_DP_STICK_SCALE;
+    game->nml_subStickY = (float) c_y / (float) MSL_DP_STICK_SCALE;
     game->nml_analogL = trigger_unit(input->l);
     game->nml_analogR = trigger_unit(input->r);
     *copy = *game;
@@ -169,10 +211,17 @@ static void inject_pad_status(int slot, const MslDpInputPlayer* input)
 
 static void seed_previous_input(Fighter* fp, const MslDpInputPlayer* input)
 {
-    fp->input.x630 = stick_unit(input->main_x);
-    fp->input.x634 = stick_unit(input->main_y);
-    fp->input.x648 = stick_unit(input->c_x);
-    fp->input.x64C = stick_unit(input->c_y);
+    int8_t main_x;
+    int8_t main_y;
+    int8_t c_x;
+    int8_t c_y;
+
+    source_clamp_stick(input->main_x, input->main_y, &main_x, &main_y);
+    source_clamp_stick(input->c_x, input->c_y, &c_x, &c_y);
+    fp->input.x630 = (float) main_x / (float) MSL_DP_STICK_SCALE;
+    fp->input.x634 = (float) main_y / (float) MSL_DP_STICK_SCALE;
+    fp->input.x648 = (float) c_x / (float) MSL_DP_STICK_SCALE;
+    fp->input.x64C = (float) c_y / (float) MSL_DP_STICK_SCALE;
     fp->input.x658 = source_trigger_value(input);
     fp->input.x664 = source_held_buttons(input);
     fp->x221D_b3 = false;
@@ -196,17 +245,17 @@ static int decode_config(MslDpMatchConfig* config, const uint8_t* wire)
            sizeof(config->players));
 
     if (config->stage_id != MSL_DP_STAGE_FINAL_DESTINATION) {
-        fprintf(stderr, "Phase 1 supports stage_id=32 (Final Destination) only\n");
+        fprintf(stderr, "Phase 2 supports stage_id=32 (Final Destination) only\n");
         return -1;
     }
     if (config->num_players != 0 && config->num_players != 2) {
-        fprintf(stderr, "Phase 1 requires num_players=2 (or zero default)\n");
+        fprintf(stderr, "Phase 2 requires num_players=2 (or zero default)\n");
         return -1;
     }
     if (config->players[0].char_id != MSL_DP_CHAR_FOX ||
         config->players[1].char_id != MSL_DP_CHAR_FOX)
     {
-        fprintf(stderr, "Phase 1 supports two external char_id=1 Fox players only\n");
+        fprintf(stderr, "Phase 2 supports two external char_id=1 Fox players only\n");
         return -1;
     }
     config->num_players = 2;
@@ -220,10 +269,7 @@ static int runtime_init(Phase1Runtime* runtime, const char* data_root,
                         const uint8_t* config_wire,
                         const MslDpInput* previous_input)
 {
-    HSD_Archive* stage_archive;
-    MapCollData* coll_data = NULL;
-    UnkStage6B0* ground_param = NULL;
-    struct plAllocInfo alloc = { 0 };
+    UnkArchiveStruct* stage_data;
     // FD singles slots 0/1 from the source-backed Slippi neutral-spawn table:
     // data/stages/slippi_neutral_spawns.json, extracted from
     // refs/slippi-ssbm-asm/External/NeutralSpawn/NeutralSpawn.asm.
@@ -238,39 +284,133 @@ static int runtime_init(Phase1Runtime* runtime, const char* data_root,
         return -1;
     }
     runtime->frame_id = runtime->config.frame_id;
+    msl_phase2_set_match_rules(runtime->config.is_teams,
+                               runtime->config.match_damage_ratio);
 
     msl_host_set_data_root(data_root);
     init_hsd();
-    stage_archive = lbArchive_LoadSymbols(
-        "GrNLa.dat", (void**) &coll_data, "coll_data",
-        (void**) &ground_param, "grGroundParam", NULL);
-    if (stage_archive == NULL || coll_data == NULL || ground_param == NULL) {
+    msl_effect_projection_init();
+    // Standard versus creates the source camera owner before stage/fighters.
+    // The HSD CObj/draw link remains headless; the transform process and
+    // subject pool are gameplay-relevant through fp->x221F_b0.
+    Camera_80028B9C(0x46);
+    {
+        HSD_GObj* camera_gobj = GObj_Create(0x10, 0x12, 0);
+        if (camera_gobj == NULL) {
+            fprintf(stderr, "failed to create headless gameplay camera GObj\n");
+            return -1;
+        }
+        HSD_GObj_SetupProc(camera_gobj,
+                           (void (*)(HSD_GObj*)) Camera_8002B3D4, 0x12);
+    }
+    // Source stage-data bootstrap without renderer-owned Ground GObjs.
+    // grDatFiles publishes every gameplay DAT symbol; the four FD map joints
+    // below publish map-point JObjs exactly as Ground_GetStageGObj does.
+    Ground_801BFFB0();
+    stage_info.internal_stage_id = LAST;
+    grDatFiles_801C6038("/GrNLa.dat", 0, 0);
+    if (stage_info.coll_data == NULL || stage_info.param == NULL) {
         fprintf(stderr, "failed to load Final Destination data\n");
         return -1;
     }
-    stage_info.coll_data = coll_data;
-    stage_info.param = ground_param;
-    stage_info.internal_stage_id = LAST;
+    // Stage_802251E8 keeps the external stage-list id (32 for FD) separately
+    // from InternalStageId::LAST; grGroundParam is keyed by that list id.
+    Ground_801C28CC(&stage_info.xA0, MSL_DP_STAGE_FINAL_DESTINATION);
+
+    Ground_801C38D0(stage_info.param->x8, stage_info.param->x14,
+                    stage_info.param->x1C, stage_info.param->x18);
+    Ground_801C38EC(stage_info.param->x10, stage_info.param->xC);
+    Ground_801C3970(stage_info.param->x28);
+    Ground_801C3900(stage_info.param->x2E, stage_info.param->x30,
+                    stage_info.param->x34, stage_info.param->x38,
+                    stage_info.param->x3C, stage_info.param->x40,
+                    stage_info.param->x44, stage_info.param->x48);
+    Ground_801C392C(stage_info.param->x50, stage_info.param->x54,
+                    stage_info.param->x58, stage_info.param->x5C,
+                    stage_info.param->x60, stage_info.param->x64);
+    Ground_801C3960(stage_info.param->x20);
+    Ground_801C3950(stage_info.param->x24);
+
     mpColl_80041C78();
     mpLibLoad(stage_info.coll_data);
-
+    mpLib_80058820();
+    stage_data = grDatFiles_801C6324();
+    if (stage_data == NULL || stage_data->unk4 == NULL) {
+        fprintf(stderr, "Final Destination map data is missing\n");
+        return -1;
+    }
+    for (i = 0; i < stage_data->unk4->unkC; ++i) {
+        HSD_GObj* gobj;
+        HSD_JObj* root;
+        stage_data = grDatFiles_801C6330(i);
+        if (stage_data == NULL || stage_data->unk4 == NULL ||
+            i >= stage_data->unk4->unkC ||
+            stage_data->unk4->unk8[i].unk0 == NULL)
+        {
+            fprintf(stderr, "Final Destination map joint %d is missing\n", i);
+            return -1;
+        }
+        root = HSD_JObjLoadJoint(stage_data->unk4->unk8[i].unk0);
+        if (root == NULL) {
+            fprintf(stderr, "failed to load Final Destination map joint %d\n",
+                    i);
+            return -1;
+        }
+        Ground_801C34AC(i, root, stage_data->unk4->unk8[i].unk0);
+        gobj = GObj_Create(HSD_GOBJ_CLASS_STAGE, 5, 0);
+        if (gobj == NULL) {
+            fprintf(stderr, "failed to create Final Destination map GObj %d\n",
+                    i);
+            return -1;
+        }
+        HSD_GObjObject_80390A70(gobj, HSD_GObj_804D7849, root);
+        HSD_GObj_SetupProc(gobj, headless_ground_anim_proc, 1);
+    }
+    // grlast.c::grLast_OnInit gameplay-visible stage publication.
+    stage_info.unk8C.b4 = true;
+    stage_info.unk8C.b5 = true;
+    Ground_801C39C0();
+    Ground_801C3BB4();
+    // refs/melee/src/melee/gm/gm_16AE.c::fn_8016DCC0 and fn_8016E730.
+    // Keep the source owners intact: Player_InitAllPlayers also initializes
+    // each slot's statistics state, and Player_80036DD8 loads the common
+    // player table consumed by the scheduled statistics pass.
+    Player_InitAllPlayers();
+    Player_80036DD8();
     for (i = 0; i < 2; ++i) {
-        Player_InitOrResetPlayer(i);
         Player_SetPlayerCharacter(i, CKIND_FOX);
         Player_SetSlottype(i, Gm_PKind_Human);
         Player_SetTeam(i, runtime->config.players[i].team_id);
         Player_SetStocks(i, runtime->config.stock_count);
+        Player_SetCostumeId(i, runtime->config.players[i].costume_id);
+        Player_SetPlayerId(i, i);
         Player_SetFacingDirection(i, i == 0 ? 1.0F : -1.0F);
         Player_SetControllerIndex(i, i + 1);
+        // Standard VS PlayerInitData leaves xD_b2 clear, enabling magnify
+        // damage for ordinary human fighters.
+        // refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC
+        Player_SetMoreFlagsBit3(i, 1);
+        // PlayerInitData.xC_b1 selects the normal versus-entry creation path.
+        // Standard versus starts assign staggered five-frame Entry timers.
+        // refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC
+        Player_SetFlagsBit3(i, 1);
+        Player_SetUnk4C(i, (i + 1) * 5);
         Player_80032768(i, &spawns[i]);
     }
-    Fighter_FirstInitialize_80067A84();
-
-    alloc.internal_id = FTKIND_FOX;
-    alloc.x5 = -1;
+    // The versus bootstrap initializes fighter/device/item allocation before
+    // Fighter_Create. Items are disabled in the Phase 2 domain, so the exact
+    // Item_80266FA8(false) entry is equivalent to Item_80266F70's source gate
+    // without retaining the scene-owned item-switch aggregate.
+    ftCo_800C06C0();
+    Item_80266FA8();
+    Item_80266FCC();
+    Player_80036DA4();
     for (i = 0; i < 2; ++i) {
-        alloc.slot = i;
-        runtime->fighters[i] = Fighter_Create(&alloc);
+        // gm_16AE.c::fn_8016E2BC creates match fighters through the player
+        // owner so player_entity/transformation state and scheduled player
+        // bookkeeping refer to the same GObj.
+        Player_80031AD0(i);
+        runtime->fighters[i] = Player_GetEntityAtIndex(i, 0);
         if (runtime->fighters[i] == NULL) {
             fprintf(stderr, "source Fighter_Create returned NULL for slot %d\n",
                     i);
@@ -279,7 +419,21 @@ static int runtime_init(Phase1Runtime* runtime, const char* data_root,
         seed_previous_input(GET_FIGHTER(runtime->fighters[i]),
                             &previous_input->p[i]);
         inject_pad_status(i, &previous_input->p[i]);
+        msl_ucf_seed_pad(i, previous_input->p[i].main_x,
+                         previous_input->p[i].main_y,
+                         previous_input->p[i].c_x,
+                         previous_input->p[i].c_y);
     }
+
+    Camera_80030730(Ground_801C20D0());
+    Ground_EnableMatchCamera();
+    Camera_8002F3AC();
+    // Slippi installs the versus on-unpause override. fn_8016E730 invokes it
+    // during scene bootstrap and then snaps the standard camera a second
+    // time; the second evaluation uses the depth established by the first.
+    // refs/melee/src/melee/gm/gm_16AE.c::fn_8016E730
+    // refs/slippi-ssbm-asm/External/OnFrame.asm::OnGameFirstFrame
+    Camera_8002F3AC();
 
     // MslMatchConfig names this as the seed immediately before the first
     // simulated frame, so constructor-time random choices do not consume it.
@@ -327,6 +481,53 @@ static int16_t state_age_i16(float value)
     return (int16_t) floorf(value);
 }
 
+static void write_item_compare(uint8_t* out, int slot, Item_GObj* gobj)
+{
+    Item* item = GET_ITEM(gobj);
+    uint8_t* item_out =
+        out + offsetof(MslDpCompare, items) +
+        (size_t) slot * sizeof(MslDpItem);
+    uint8_t* item_bytes = (uint8_t*) item;
+    int8_t owner = -1;
+
+    // Recording/SendItemInfo.s follows the owner GObj and reads the player
+    // slot from user-data byte 0xC. Fox articles retain their fighter owner for
+    // their complete lifetime, so the same source layout applies here.
+    if (item->owner != NULL && item->owner->user_data != NULL) {
+        owner = ((int8_t*) item->owner->user_data)[0xC];
+    }
+
+    item_out[offsetof(MslDpItem, exists)] = 1;
+    item_out[offsetof(MslDpItem, state)] = (uint8_t) item->msid;
+    msl_dp_put_le16(item_out + offsetof(MslDpItem, type),
+                    (uint16_t) item->kind);
+    item_out[offsetof(MslDpItem, owner)] = (uint8_t) owner;
+    msl_dp_put_le16(item_out + offsetof(MslDpItem, instance_id),
+                    item->xDA8_short);
+    msl_dp_put_le16(item_out + offsetof(MslDpItem, attack_id),
+                    (uint16_t) item->xD88_attackID);
+    msl_dp_put_le16(item_out + offsetof(MslDpItem, attack_instance),
+                    item->xD8C_attack_instance);
+    msl_dp_put_lef32(item_out + offsetof(MslDpItem, direction),
+                     item->facing_dir);
+    msl_dp_put_lef32(item_out + offsetof(MslDpItem, vel_x), item->x40_vel.x);
+    msl_dp_put_lef32(item_out + offsetof(MslDpItem, vel_y), item->x40_vel.y);
+    msl_dp_put_lef32(item_out + offsetof(MslDpItem, pos_x), item->pos.x);
+    msl_dp_put_lef32(item_out + offsetof(MslDpItem, pos_y), item->pos.y);
+    msl_dp_put_le16(item_out + offsetof(MslDpItem, damage),
+                    (uint16_t) item->xC9C);
+    msl_dp_put_lef32(item_out + offsetof(MslDpItem, timer),
+                     item->xD44_lifeTimer);
+    msl_dp_put_le32(item_out + offsetof(MslDpItem, spawn_id),
+                    (uint32_t) item->x1C);
+    // These four bytes are the exact metadata lanes exported by Slippi.
+    // refs/slippi-ssbm-asm/Recording/SendItemInfo.s
+    item_out[offsetof(MslDpItem, misc0)] = item_bytes[0xDD7];
+    item_out[offsetof(MslDpItem, misc1)] = item_bytes[0xDDB];
+    item_out[offsetof(MslDpItem, misc2)] = item_bytes[0xDEB];
+    item_out[offsetof(MslDpItem, misc3)] = item_bytes[0xDEF];
+}
+
 static void write_compare(const Phase1Runtime* runtime, uint32_t frame_seed,
                           MslDpCompare* compare)
 {
@@ -350,7 +551,8 @@ static void write_compare(const Phase1Runtime* runtime, uint32_t frame_seed,
     for (i = 0; i < 2; ++i) {
         Fighter* fp = GET_FIGHTER(runtime->fighters[i]);
         uint8_t* fighter_bytes = (uint8_t*) fp;
-        int hitstun = (fighter_bytes[0x221C] & 0x02) ? fp->mv.co.common.x0 : 0;
+        float hitstun =
+            (fighter_bytes[0x221C] & 0x02) ? fp->mv.co.damage.x0 : 0.0F;
         int hurtbox = fp->x1988 != 0 ? fp->x1988 : fp->x198C;
         int jumps_left = fp->co_attrs.max_jumps - fp->x1968_jumpsUsed;
 
@@ -371,7 +573,11 @@ static void write_compare(const Phase1Runtime* runtime, uint32_t frame_seed,
         out[offsetof(MslDpCompare, facing) + i] = fp->facing_dir > 0.0F;
         out[offsetof(MslDpCompare, on_ground) + i] =
             fp->ground_or_air == GA_Ground;
-        out[offsetof(MslDpCompare, is_dead) + i] = 0;
+        // The existing MslCompare contract uses this lane for eliminated
+        // player slots, not the source Fighter's transient Dead motion flag.
+        // Slippi-visible stock ownership remains Player_GetStocks.
+        out[offsetof(MslDpCompare, is_dead) + i] =
+            Player_GetStocks(fp->player_id) == 0;
         put_player_u16(out, offsetof(MslDpCompare, action_id), i,
                        (uint16_t) fp->motion_id);
         put_player_u16(out, offsetof(MslDpCompare, action_frame), i,
@@ -387,8 +593,10 @@ static void write_compare(const Phase1Runtime* runtime, uint32_t frame_seed,
         put_player_u16(out, offsetof(MslDpCompare, hitlag), i,
                        float_frames_u16(fp->dmg.x195c_hitlag_frames));
         put_player_u16(out, offsetof(MslDpCompare, hitstun), i,
-                       hitstun > 0 ? (uint16_t) hitstun : 0);
-        out[offsetof(MslDpCompare, l_cancel) + i] = 0;
+                       float_frames_u16(hitstun));
+        // Slippi's ExtendPlayerBlock/GetLCancelStatus patches own this byte.
+        // refs/slippi-ssbm-asm/Recording/{Recording.s,GetLCancelStatus/}
+        out[offsetof(MslDpCompare, l_cancel) + i] = fighter_bytes[0x25FF];
         out[offsetof(MslDpCompare, hurtbox_state) + i] = (uint8_t) hurtbox;
         put_player_u16(out, offsetof(MslDpCompare, ground_id), i,
                        (uint16_t) fp->coll_data.floor.index);
@@ -414,21 +622,66 @@ static void write_compare(const Phase1Runtime* runtime, uint32_t frame_seed,
         out[offsetof(MslDpCompare, state_flags) + i * 5 + 4] =
             fighter_bytes[0x221F];
     }
+
+    {
+        Item_GObj* item_gobj = (Item_GObj*) HSD_GObj_Entities->items;
+        int item_slot = 0;
+        while (item_gobj != NULL && item_slot < MSL_DP_MAX_ITEMS) {
+            write_item_compare(out, item_slot++, item_gobj);
+            item_gobj = (Item_GObj*) item_gobj->next;
+        }
+    }
 }
 
 static int runtime_step(Phase1Runtime* runtime, const MslDpInput* input,
-                        FILE* output)
+                        uint32_t frame_seed, FILE* output)
 {
     MslDpCompare compare;
-    uint32_t frame_seed = *seed_ptr;
     int i;
+
+    // Slippi's pre-frame row owns the RNG value used by replay playback.
+    // Restore it once here, then let all source gameplay consumers advance the
+    // ordinary HSD stream during this frame.
+    // refs/slippi-ssbm-asm/{Recording/SendGamePreFrame.asm,
+    // Playback/Core/RestoreGameFrame.asm}
+    *seed_ptr = frame_seed;
+
+    // The normal VS overlay is IfAll.dat::ScInfCnt_scene_models[3]. Its
+    // completion callback, gm_16AE.c::fn_8016B7F8, calls ftLib_800868A4 before
+    // raw frame -39 is processed. Frame -40 therefore remains locked and
+    // preserves its physical stick in input.x630/x634; the first playable
+    // frame inherits that sample as input history rather than seeing a fresh
+    // dash flick. The renderer-owned overlay itself is absent headlessly.
+    // refs/melee/src/melee/{gm/gm_16AE.c,if/ifstatus.c,if/if_2F72.c}
+    // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+    if (runtime->frame_id == -40) {
+        ftLib_800868A4();
+    }
 
     for (i = 0; i < 2; ++i) {
         inject_pad_status(i, &input->p[i]);
+        msl_ucf_set_pending_pad(i, input->p[i].main_x,
+                                input->p[i].main_y, input->p[i].c_x,
+                                input->p[i].c_y);
     }
     HSD_GObj_80390CFC();
+    // Slippi's post-frame recorder snapshots fighter state after gameplay
+    // processes but before the render pass. x221F_b0 therefore reflects the
+    // preceding render in the exported row.
+    // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     runtime->frame_id += 1;
     write_compare(runtime, frame_seed, &compare);
+
+    // The subsequent retail render pass invokes ftDrawCommon_80080E18.
+    // Preserve its camera-visibility publication for the next gameplay/
+    // recording frame without retaining drawing.
+    // refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18
+    for (i = 0; i < 2; ++i) {
+        msl_camera_publish_fighter_visibility(runtime->fighters[i]);
+    }
+    // gm_8016AEDC is observed by fighter processes during this pass. The
+    // source match owner advances it only after those processes have run.
+    msl_phase2_advance_match_frame();
     if (fwrite(&compare, 1, sizeof(compare), output) != sizeof(compare)) {
         fprintf(stderr, "failed to write compare output: %s\n", strerror(errno));
         return -1;
@@ -448,7 +701,7 @@ static int run_stream(const char* data_root)
 {
     uint8_t config_wire[sizeof(MslDpMatchConfig)];
     MslDpInput previous_input;
-    MslDpInput input;
+    MslDpStreamFrame frame;
     Phase1Runtime runtime;
     size_t count;
 
@@ -462,8 +715,9 @@ static int run_stream(const char* data_root)
     if (runtime_init(&runtime, data_root, config_wire, &previous_input) != 0) {
         return 1;
     }
-    while ((count = fread(&input, 1, sizeof(input), stdin)) == sizeof(input)) {
-        if (runtime_step(&runtime, &input, stdout) != 0) {
+    while ((count = fread(&frame, 1, sizeof(frame), stdin)) == sizeof(frame)) {
+        uint32_t frame_seed = msl_dp_get_le32(&frame.frame_pre_random_seed);
+        if (runtime_step(&runtime, &frame.input, frame_seed, stdout) != 0) {
             return 1;
         }
     }
@@ -522,7 +776,7 @@ int main(int argc, char** argv)
     }
 
     while ((count = fread(&input, 1, sizeof(input), input_file)) == sizeof(input)) {
-        if (runtime_step(&runtime, &input, output_file) != 0) {
+        if (runtime_step(&runtime, &input, *seed_ptr, output_file) != 0) {
             goto done;
         }
     }

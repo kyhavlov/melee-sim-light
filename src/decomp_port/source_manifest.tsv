@@ -1,102 +1,269 @@
-# decomp_pin	507715a982c95992c271483c7e5be05a06689dff
-# upstream_path	local_path	upstream_match	local_copy	disposition
+# decomp_pin	91b9789fa6539ea847998a6ed330fa748fa200ec
+# upstream_path	local_path	upstream_status	local_copy	disposition
 extern/dolphin/include/	src/decomp_port/upstream/extern/dolphin/include/	header-substrate	exact-tree	Dolphin SDK declaration/type substrate
-src/**/*.h	src/decomp_port/upstream/src/**/*.h	header-substrate	exact-or-host-adapted-tree	decomp declaration/type substrate; only listed C owners compile
-src/melee/ft/chara/ftCommon/ftCo_09F4.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_09F4.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_Dash.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Dash.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_Fall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Fall.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_FallAerial.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_Jump.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Jump.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_KneeBend.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_Landing.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Landing.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_Ottotto.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_Run.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Run.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_RunBrake.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_RunDirect.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_StopCeil.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_StopCeil.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_StopWall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_StopWall.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_Turn.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Turn.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_TurnRun.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_Wait.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Wait.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftCommon/ftCo_Walk.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Walk.c	matching	exact	compiled common-action owner
-src/melee/ft/chara/ftFox/ftFx_Init.c	src/decomp_port/upstream/src/melee/ft/chara/ftFox/ftFx_Init.c	matching	exact	compiled Fox owner
-src/melee/ft/fighter.c	src/decomp_port/upstream/src/melee/ft/fighter.c	matching	host-adapted	compiled fighter-core owner
-src/melee/ft/ftCo_800C7CA0.c	src/decomp_port/upstream/src/melee/ft/ftCo_800C7CA0.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ft_0819.c	src/decomp_port/upstream/src/melee/ft/ft_0819.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ft_081B.c	src/decomp_port/upstream/src/melee/ft/ft_081B.c	matching	host-adapted	compiled fighter-core owner
-src/melee/ft/ft_084E.c	src/decomp_port/upstream/src/melee/ft/ft_084E.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ft_0852.c	src/decomp_port/upstream/src/melee/ft/ft_0852.c	nonmatching	host-adapted	compiled fighter-core owner
-src/melee/ft/ft_0881.c	src/decomp_port/upstream/src/melee/ft/ft_0881.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ft_0892.c	src/decomp_port/upstream/src/melee/ft/ft_0892.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ft_0899.c	src/decomp_port/upstream/src/melee/ft/ft_0899.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ft_08A1.c	src/decomp_port/upstream/src/melee/ft/ft_08A1.c	matching	host-adapted	compiled fighter-core owner
-src/melee/ft/ft_0C88.c	src/decomp_port/upstream/src/melee/ft/ft_0C88.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ft_0C8C.c	src/decomp_port/upstream/src/melee/ft/ft_0C8C.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ft_0DF0.c	src/decomp_port/upstream/src/melee/ft/ft_0DF0.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftaction.c	src/decomp_port/upstream/src/melee/ft/ftaction.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftanim.c	src/decomp_port/upstream/src/melee/ft/ftanim.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftchangeparam.c	src/decomp_port/upstream/src/melee/ft/ftchangeparam.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftcliffcommon.c	src/decomp_port/upstream/src/melee/ft/ftcliffcommon.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftcolanim.c	src/decomp_port/upstream/src/melee/ft/ftcolanim.c	matching	host-adapted	compiled fighter-core owner
-src/melee/ft/ftcoll.c	src/decomp_port/upstream/src/melee/ft/ftcoll.c	nonmatching	host-adapted	compiled fighter-core owner
-src/melee/ft/ftcommon.c	src/decomp_port/upstream/src/melee/ft/ftcommon.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftdata.c	src/decomp_port/upstream/src/melee/ft/ftdata.c	matching	host-adapted	compiled fighter-core owner
-src/melee/ft/ftdevice.c	src/decomp_port/upstream/src/melee/ft/ftdevice.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftdynamics.c	src/decomp_port/upstream/src/melee/ft/ftdynamics.c	nonmatching	exact	compiled fighter-core owner
-src/melee/ft/ftlib.c	src/decomp_port/upstream/src/melee/ft/ftlib.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftmaterial.c	src/decomp_port/upstream/src/melee/ft/ftmaterial.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftmetal.c	src/decomp_port/upstream/src/melee/ft/ftmetal.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftparts.c	src/decomp_port/upstream/src/melee/ft/ftparts.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftswing.c	src/decomp_port/upstream/src/melee/ft/ftswing.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftwaitanim.c	src/decomp_port/upstream/src/melee/ft/ftwaitanim.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftwalkcommon.c	src/decomp_port/upstream/src/melee/ft/ftwalkcommon.c	matching	exact	compiled fighter-core owner
-src/melee/ft/ftwalljump.c	src/decomp_port/upstream/src/melee/ft/ftwalljump.c	matching	exact	compiled fighter-core owner
-src/melee/gr/grdatfiles.c	src/decomp_port/upstream/src/melee/gr/grdatfiles.c	matching	exact	compiled ground/stage owner
-src/melee/gr/grdynamicattr.c	src/decomp_port/upstream/src/melee/gr/grdynamicattr.c	matching	exact	compiled ground/stage owner
-src/melee/gr/ground.c	src/decomp_port/upstream/src/melee/gr/ground.c	nonmatching	host-adapted	compiled ground/stage owner
-src/melee/lb/lb_00B0.c	src/decomp_port/upstream/src/melee/lb/lb_00B0.c	matching	exact	compiled library/data owner
-src/melee/lb/lb_00CE.c	src/decomp_port/upstream/src/melee/lb/lb_00CE.c	matching	exact	compiled library/data owner
-src/melee/lb/lbanim.c	src/decomp_port/upstream/src/melee/lb/lbanim.c	matching	exact	compiled library/data owner
-src/melee/lb/lbarchive.c	src/decomp_port/upstream/src/melee/lb/lbarchive.c	matching	host-adapted	compiled library/data owner
-src/melee/lb/lbcollision.c	src/decomp_port/upstream/src/melee/lb/lbcollision.c	nonmatching	exact	compiled library/data owner
-src/melee/lb/lbcommand.c	src/decomp_port/upstream/src/melee/lb/lbcommand.c	matching	exact	compiled library/data owner
-src/melee/lb/lbspdisplay.c	src/decomp_port/upstream/src/melee/lb/lbspdisplay.c	nonmatching	host-adapted	compiled library/data owner
-src/melee/lb/lbvector.c	src/decomp_port/upstream/src/melee/lb/lbvector.c	matching	host-adapted	compiled library/data owner
-src/melee/mp/mpcoll.c	src/decomp_port/upstream/src/melee/mp/mpcoll.c	nonmatching	exact	compiled stage-collision owner
-src/melee/mp/mpisland.c	src/decomp_port/upstream/src/melee/mp/mpisland.c	nonmatching	exact	compiled stage-collision owner
-src/melee/mp/mplib.c	src/decomp_port/upstream/src/melee/mp/mplib.c	nonmatching	exact	compiled stage-collision owner
-src/melee/pl/player.c	src/decomp_port/upstream/src/melee/pl/player.c	matching	exact	compiled player-state owner
-src/sysdolphin/baselib/aobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/aobj.c	matching	host-adapted	compiled HSD runtime owner
-src/sysdolphin/baselib/archive.c	src/decomp_port/upstream/src/sysdolphin/baselib/archive.c	matching	host-adapted	compiled HSD runtime owner
-src/sysdolphin/baselib/class.c	src/decomp_port/upstream/src/sysdolphin/baselib/class.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/dobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/dobj.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/fobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/fobj.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/gobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobj.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/gobjgxlink.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjgxlink.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/gobjinit.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjinit.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/gobjobject.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjobject.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/gobjplink.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjplink.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/gobjproc.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjproc.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/gobjuserdata.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjuserdata.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/hash.c	src/decomp_port/upstream/src/sysdolphin/baselib/hash.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/id.c	src/decomp_port/upstream/src/sysdolphin/baselib/id.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/jobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/jobj.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/list.c	src/decomp_port/upstream/src/sysdolphin/baselib/list.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/mobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/mobj.c	matching	host-adapted	compiled HSD runtime owner
-src/sysdolphin/baselib/mtx.c	src/decomp_port/upstream/src/sysdolphin/baselib/mtx.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/objalloc.c	src/decomp_port/upstream/src/sysdolphin/baselib/objalloc.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/object.c	src/decomp_port/upstream/src/sysdolphin/baselib/object.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/pobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/pobj.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/quatlib.c	src/decomp_port/upstream/src/sysdolphin/baselib/quatlib.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/random.c	src/decomp_port/upstream/src/sysdolphin/baselib/random.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/robj.c	src/decomp_port/upstream/src/sysdolphin/baselib/robj.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/spline.c	src/decomp_port/upstream/src/sysdolphin/baselib/spline.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/state.c	src/decomp_port/upstream/src/sysdolphin/baselib/state.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/tev.c	src/decomp_port/upstream/src/sysdolphin/baselib/tev.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/texp.c	src/decomp_port/upstream/src/sysdolphin/baselib/texp.c	nonmatching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/texpdag.c	src/decomp_port/upstream/src/sysdolphin/baselib/texpdag.c	nonmatching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/tobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/tobj.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/util.c	src/decomp_port/upstream/src/sysdolphin/baselib/util.c	matching	exact	compiled HSD runtime owner
-src/sysdolphin/baselib/wobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/wobj.c	matching	exact	compiled HSD runtime owner
+src/**/*.h	src/decomp_port/upstream/src/**/*.h	header-substrate	exact-or-host-adapted-tree	decomp declaration/type substrate
+src/melee/cm/camera.c	build/decomp_port/phase1/generated/melee/cm/camera.c	NonMatching	patched-at-build	compiled source owner; retail-DOL correction in patches/camera_80029CF8.patch
+src/MSL/float.c	src/decomp_port/upstream/src/MSL/float.c	Matching	exact	compiled by decomp-port Makefile
+src/MSL/math_1.c	src/decomp_port/upstream/src/MSL/math_1.c	Matching	exact	compiled by decomp-port Makefile
+src/MSL/math_data.c	src/decomp_port/upstream/src/MSL/math_data.c	Matching	exact	compiled by decomp-port Makefile
+src/MSL/trigf.c	src/decomp_port/upstream/src/MSL/trigf.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_09C4.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_09C4.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_09F4.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_09F4.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_09F7.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_09F7.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_0A01.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_0A01.c	NonMatching	exact	copied reference; host source-shaped replacement compiled
+src/melee/ft/chara/ftCommon/ftCo_0C35.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_0C35.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_0C60.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_0C60.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_AirCatch.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_AirCatch.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_AppealS.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_AppealS.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Attack1.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Attack1.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Attack100.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Attack100.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_AttackAir.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_AttackDash.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_AttackS3.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_AttackS4.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Barrel.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Barrel.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_BarrelWait.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_BarrelWait.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Bury.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Bury.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_BuryWait.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_BuryWait.c	not-listed	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CaptureDamageKoopa.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CaptureDamageKoopa.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CaptureKirby.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CaptureKirby.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CaptureKoopa.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CaptureKoopa.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CaptureMewtwo.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CaptureMewtwo.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CaptureWaitKirby.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CaptureWaitKirby.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CaptureWaitKoopa.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CaptureWaitKoopa.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CaptureYoshi.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CaptureYoshi.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CargoFall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CargoFall.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CargoJump.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CargoJump.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CargoKneebend.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CargoKneebend.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CargoLanding.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CargoLanding.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CargoThrow.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CargoThrow.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CargoTurn.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CargoTurn.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CargoWait.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CargoWait.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CargoWalk.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CargoWalk.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CliffEscape.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CliffEscape.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CliffJump.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_CliffWait.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Damage.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Damage.c	NonMatching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_DamageBind.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_DamageBind.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_DamageFall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_DamageIce.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_DamageIce.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_DamageScrew.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_DamageScrew.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_DamageSong.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Dash.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Dash.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_DemoCallback0.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_DemoCallback0.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Down.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Down.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_DownAttack.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_DownBound.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_DownBound.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_DownDamage.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_DownSpot.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_DownSpot.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_DownStand.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_DownStand.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Escape.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Escape.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Fall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Fall.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_FallAerial.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Furafura.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Furafura.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Guard.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Guard.c	NonMatching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_HammerFall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_HammerFall.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_HammerJump.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_HammerJump.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_HammerKneeBend.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_HammerKneeBend.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_HammerLanding.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_HammerLanding.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_HammerTurn.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_HammerTurn.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_HammerWait.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_HammerWait.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_HammerWalk.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_HammerWalk.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ItemParasolDamageFall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ItemParasolDamageFall.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ItemParasolFall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ItemParasolFall.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ItemParasolFallSpecial.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ItemParasolFallSpecial.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ItemParasolOpen.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ItemParasolOpen.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ItemScrew.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ItemScrew.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Jump.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Jump.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_KinokoGiantEnd.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_KinokoGiantEnd.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_KinokoGiantStart.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_KinokoGiantStart.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_KinokoSmallEnd.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_KinokoSmallEnd.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_KinokoSmallStart.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_KinokoSmallStart.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_KneeBend.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Landing.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Landing.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_LandingAir.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Lift.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Lift.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_MissFoot.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Ottotto.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Pass.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Pass.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Passive.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Passive.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_PassiveCeil.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_PassiveCeil.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Rebound.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Rebound.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Run.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Run.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_RunBrake.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_RunDirect.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ShieldBreakDown.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakDown.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFall.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFly.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFly.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ShieldBreakStand.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakStand.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Shouldered.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Shouldered.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_SpecialS.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Squat.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Squat.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_SquatRv.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_SquatWait.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_StopCeil.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_StopCeil.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_StopWall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_StopWall.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Throw.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Throw.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Thrown.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Thrown.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ThrownKirby.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ThrownKirby.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ThrownKoopa.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ThrownKoopa.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_ThrownMewtwo.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_ThrownMewtwo.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Turn.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Turn.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_TurnRun.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Wait.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Wait.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_Walk.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Walk.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_WarpStar.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_WarpStar.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftCo_YoshiEgg.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_YoshiEgg.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftCommon/ftpickupitem.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftpickupitem.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftFox/ftFx_AppealS.c	src/decomp_port/upstream/src/melee/ft/chara/ftFox/ftFx_AppealS.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftFox/ftFx_Init.c	src/decomp_port/upstream/src/melee/ft/chara/ftFox/ftFx_Init.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftFox/ftFx_SpecialHi.c	src/decomp_port/upstream/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftFox/ftFx_SpecialLw.c	src/decomp_port/upstream/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftFox/ftFx_SpecialN.c	src/decomp_port/upstream/src/melee/ft/chara/ftFox/ftFx_SpecialN.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/chara/ftFox/ftFx_SpecialS.c	src/decomp_port/upstream/src/melee/ft/chara/ftFox/ftFx_SpecialS.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/fighter.c	src/decomp_port/upstream/src/melee/ft/fighter.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/ftCo_800C703C.c	src/decomp_port/upstream/src/melee/ft/ftCo_800C703C.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftCo_800C7434.c	src/decomp_port/upstream/src/melee/ft/ftCo_800C7434.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftCo_800C7590.c	src/decomp_port/upstream/src/melee/ft/ftCo_800C7590.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftCo_800C7CA0.c	src/decomp_port/upstream/src/melee/ft/ftCo_800C7CA0.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_07C1.c	src/decomp_port/upstream/src/melee/ft/ft_07C1.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_07C6.c	src/decomp_port/upstream/src/melee/ft/ft_07C6.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0819.c	src/decomp_port/upstream/src/melee/ft/ft_0819.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_081B.c	src/decomp_port/upstream/src/melee/ft/ft_081B.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/ft_084E.c	src/decomp_port/upstream/src/melee/ft/ft_084E.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/ft_0852.c	src/decomp_port/upstream/src/melee/ft/ft_0852.c	NonMatching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/ft_0877.c	src/decomp_port/upstream/src/melee/ft/ft_0877.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0881.c	src/decomp_port/upstream/src/melee/ft/ft_0881.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0892.c	src/decomp_port/upstream/src/melee/ft/ft_0892.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0899.c	src/decomp_port/upstream/src/melee/ft/ft_0899.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_08A1.c	src/decomp_port/upstream/src/melee/ft/ft_08A1.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/ft_0BF0.c	src/decomp_port/upstream/src/melee/ft/ft_0BF0.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0C31.c	src/decomp_port/upstream/src/melee/ft/ft_0C31.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0C88.c	src/decomp_port/upstream/src/melee/ft/ft_0C88.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0C8C.c	src/decomp_port/upstream/src/melee/ft/ft_0C8C.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0CDD.c	src/decomp_port/upstream/src/melee/ft/ft_0CDD.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0CDF.c	src/decomp_port/upstream/src/melee/ft/ft_0CDF.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0CE3.c	src/decomp_port/upstream/src/melee/ft/ft_0CE3.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0D27.c	src/decomp_port/upstream/src/melee/ft/ft_0D27.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0D31.c	src/decomp_port/upstream/src/melee/ft/ft_0D31.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/ft_0D4D.c	src/decomp_port/upstream/src/melee/ft/ft_0D4D.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0DF0.c	src/decomp_port/upstream/src/melee/ft/ft_0DF0.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ft_0DF1.c	src/decomp_port/upstream/src/melee/ft/ft_0DF1.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftaction.c	src/decomp_port/upstream/src/melee/ft/ftaction.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftafterimage.c	src/decomp_port/upstream/src/melee/ft/ftafterimage.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftanim.c	src/decomp_port/upstream/src/melee/ft/ftanim.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftattacks4combo.c	src/decomp_port/upstream/src/melee/ft/ftattacks4combo.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftchangeparam.c	src/decomp_port/upstream/src/melee/ft/ftchangeparam.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftcliffcommon.c	src/decomp_port/upstream/src/melee/ft/ftcliffcommon.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftcolanim.c	src/decomp_port/upstream/src/melee/ft/ftcolanim.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/ftcoll.c	src/decomp_port/upstream/src/melee/ft/ftcoll.c	NonMatching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/ftcommon.c	src/decomp_port/upstream/src/melee/ft/ftcommon.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftdata.c	src/decomp_port/upstream/src/melee/ft/ftdata.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/ft/ftdevice.c	src/decomp_port/upstream/src/melee/ft/ftdevice.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftdynamics.c	src/decomp_port/upstream/src/melee/ft/ftdynamics.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftlib.c	src/decomp_port/upstream/src/melee/ft/ftlib.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftmaterial.c	src/decomp_port/upstream/src/melee/ft/ftmaterial.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftmetal.c	src/decomp_port/upstream/src/melee/ft/ftmetal.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftmotionstates.c	src/decomp_port/upstream/src/melee/ft/ftmotionstates.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftparts.c	src/decomp_port/upstream/src/melee/ft/ftparts.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftswing.c	src/decomp_port/upstream/src/melee/ft/ftswing.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftwaitanim.c	src/decomp_port/upstream/src/melee/ft/ftwaitanim.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftwalkcommon.c	src/decomp_port/upstream/src/melee/ft/ftwalkcommon.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/ft/ftwalljump.c	src/decomp_port/upstream/src/melee/ft/ftwalljump.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/gm/gm_16F1.c	src/decomp_port/upstream/src/melee/gm/gm_16F1.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/gr/grdatfiles.c	src/decomp_port/upstream/src/melee/gr/grdatfiles.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/gr/grdynamicattr.c	src/decomp_port/upstream/src/melee/gr/grdynamicattr.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/gr/ground.c	src/decomp_port/upstream/src/melee/gr/ground.c	NonMatching	host-adapted	compiled by decomp-port Makefile
+src/melee/it/it_26B1.c	src/decomp_port/upstream/src/melee/it/it_26B1.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/it/it_2725.c	src/decomp_port/upstream/src/melee/it/it_2725.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/it/it_279C.c	src/decomp_port/upstream/src/melee/it/it_279C.c	Matching	exact	copied reference; host source-shaped replacement compiled
+src/melee/it/itanimlist.c	src/decomp_port/upstream/src/melee/it/itanimlist.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/it/itcoll.c	src/decomp_port/upstream/src/melee/it/itcoll.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/it/iteffect.c	src/decomp_port/upstream/src/melee/it/iteffect.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/it/item.c	src/decomp_port/upstream/src/melee/it/item.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/it/items/it_2E5A.c	src/decomp_port/upstream/src/melee/it/items/it_2E5A.c	Matching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/itfflower.c	src/decomp_port/upstream/src/melee/it/items/itfflower.c	Matching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/itfflowerflame.c	src/decomp_port/upstream/src/melee/it/items/itfflowerflame.c	Matching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/itfoxblaster.c	src/decomp_port/upstream/src/melee/it/items/itfoxblaster.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/it/items/itfoxillusion.c	src/decomp_port/upstream/src/melee/it/items/itfoxillusion.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/it/items/itfoxlaser.c	src/decomp_port/upstream/src/melee/it/items/itfoxlaser.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/it/items/itgreatfoxlaser.c	src/decomp_port/upstream/src/melee/it/items/itgreatfoxlaser.c	Matching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/ithammer.c	src/decomp_port/upstream/src/melee/it/items/ithammer.c	Matching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/itkinoko.c	src/decomp_port/upstream/src/melee/it/items/itkinoko.c	Matching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/itleadead.c	src/decomp_port/upstream/src/melee/it/items/itleadead.c	Matching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/itlgun.c	src/decomp_port/upstream/src/melee/it/items/itlgun.c	Matching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/itlinkhookshot.c	src/decomp_port/upstream/src/melee/it/items/itlinkhookshot.c	NonMatching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/itrabbitc.c	src/decomp_port/upstream/src/melee/it/items/itrabbitc.c	Matching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/itsamusgrapple.c	src/decomp_port/upstream/src/melee/it/items/itsamusgrapple.c	NonMatching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/itsscope.c	src/decomp_port/upstream/src/melee/it/items/itsscope.c	Matching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/itsword.c	src/decomp_port/upstream/src/melee/it/items/itsword.c	Matching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/items/itwstar.c	src/decomp_port/upstream/src/melee/it/items/itwstar.c	Matching	exact	copied link substrate; excluded by items-off Phase 2 filter
+src/melee/it/itgroundcoll.c	src/decomp_port/upstream/src/melee/it/itgroundcoll.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/it/ithitbox.c	src/decomp_port/upstream/src/melee/it/ithitbox.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/it/itmaplib.c	src/decomp_port/upstream/src/melee/it/itmaplib.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/lb/lb_00B0.c	src/decomp_port/upstream/src/melee/lb/lb_00B0.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/lb/lb_00CE.c	src/decomp_port/upstream/src/melee/lb/lb_00CE.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/lb/lbanim.c	src/decomp_port/upstream/src/melee/lb/lbanim.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/lb/lbarchive.c	src/decomp_port/upstream/src/melee/lb/lbarchive.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/lb/lbcollision.c	src/decomp_port/upstream/src/melee/lb/lbcollision.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/lb/lbcommand.c	src/decomp_port/upstream/src/melee/lb/lbcommand.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/lb/lbspdisplay.c	src/decomp_port/upstream/src/melee/lb/lbspdisplay.c	NonMatching	host-adapted	compiled by decomp-port Makefile
+src/melee/lb/lbvector.c	src/decomp_port/upstream/src/melee/lb/lbvector.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/melee/mp/mpcoll.c	src/decomp_port/upstream/src/melee/mp/mpcoll.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/mp/mpisland.c	src/decomp_port/upstream/src/melee/mp/mpisland.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/mp/mplib.c	src/decomp_port/upstream/src/melee/mp/mplib.c	NonMatching	exact	compiled by decomp-port Makefile
+src/melee/pl/pl_040D.c	src/decomp_port/upstream/src/melee/pl/pl_040D.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/pl/plattack.c	src/decomp_port/upstream/src/melee/pl/plattack.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/pl/player.c	src/decomp_port/upstream/src/melee/pl/player.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/pl/plbonus.c	src/decomp_port/upstream/src/melee/pl/plbonus.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/pl/plbonuslib.c	src/decomp_port/upstream/src/melee/pl/plbonuslib.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/pl/plstale.c	src/decomp_port/upstream/src/melee/pl/plstale.c	Matching	exact	compiled by decomp-port Makefile
+src/melee/pl/pltrick.c	src/decomp_port/upstream/src/melee/pl/pltrick.c	NonMatching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/aobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/aobj.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/sysdolphin/baselib/archive.c	src/decomp_port/upstream/src/sysdolphin/baselib/archive.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/sysdolphin/baselib/class.c	src/decomp_port/upstream/src/sysdolphin/baselib/class.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/dobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/dobj.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/fobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/fobj.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/sysdolphin/baselib/gobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobj.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/gobjgxlink.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjgxlink.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/gobjinit.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjinit.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/gobjobject.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjobject.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/gobjplink.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjplink.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/gobjproc.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjproc.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/gobjuserdata.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjuserdata.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/hash.c	src/decomp_port/upstream/src/sysdolphin/baselib/hash.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/id.c	src/decomp_port/upstream/src/sysdolphin/baselib/id.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/jobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/jobj.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/list.c	src/decomp_port/upstream/src/sysdolphin/baselib/list.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/mobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/mobj.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/sysdolphin/baselib/mtx.c	src/decomp_port/upstream/src/sysdolphin/baselib/mtx.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/objalloc.c	src/decomp_port/upstream/src/sysdolphin/baselib/objalloc.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/object.c	src/decomp_port/upstream/src/sysdolphin/baselib/object.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/pobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/pobj.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/quatlib.c	src/decomp_port/upstream/src/sysdolphin/baselib/quatlib.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/random.c	src/decomp_port/upstream/src/sysdolphin/baselib/random.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/robj.c	src/decomp_port/upstream/src/sysdolphin/baselib/robj.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/spline.c	src/decomp_port/upstream/src/sysdolphin/baselib/spline.c	Matching	host-adapted	compiled by decomp-port Makefile
+src/sysdolphin/baselib/state.c	src/decomp_port/upstream/src/sysdolphin/baselib/state.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/tev.c	src/decomp_port/upstream/src/sysdolphin/baselib/tev.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/texp.c	src/decomp_port/upstream/src/sysdolphin/baselib/texp.c	NonMatching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/texpdag.c	src/decomp_port/upstream/src/sysdolphin/baselib/texpdag.c	NonMatching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/tobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/tobj.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/util.c	src/decomp_port/upstream/src/sysdolphin/baselib/util.c	Matching	exact	compiled by decomp-port Makefile
+src/sysdolphin/baselib/wobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/wobj.c	Matching	exact	compiled by decomp-port Makefile

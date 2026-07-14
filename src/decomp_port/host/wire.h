@@ -26,11 +26,16 @@ typedef struct MslDpInput {
     MslDpInputPlayer p[MSL_DP_MAX_PLAYERS];
 } MslDpInput;
 
+typedef struct MslDpStreamFrame {
+    uint32_t frame_pre_random_seed;
+    MslDpInput input;
+} MslDpStreamFrame;
+
 typedef struct MslDpMatchPlayerConfig {
     uint8_t char_id;
     uint8_t team_id;
     uint8_t facing;
-    uint8_t _pad0;
+    uint8_t costume_id;
 } MslDpMatchPlayerConfig;
 
 typedef struct MslDpMatchConfig {
@@ -115,6 +120,7 @@ typedef struct MslDpCompare {
 
 _Static_assert(sizeof(MslDpInputPlayer) == 8, "MslInputPlayer wire size");
 _Static_assert(sizeof(MslDpInput) == 32, "MslInput wire size");
+_Static_assert(sizeof(MslDpStreamFrame) == 36, "stream frame wire size");
 _Static_assert(sizeof(MslDpMatchConfig) == 36, "MslMatchConfig wire size");
 _Static_assert(sizeof(MslDpItem) == 48, "MslItem wire size");
 _Static_assert(sizeof(MslDpCompare) == 1022, "MslCompare wire size");

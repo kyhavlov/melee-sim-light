@@ -27,6 +27,10 @@
 #include "ftCommon/ftCo_Jump.h"
 #include "ftCommon/ftCo_SpecialS.h"
 
+#ifdef MSL_DECOMP_PORT
+#include "host/phase2_domain.h"
+#endif
+
 bool ftCo_800C97A8(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
@@ -106,6 +110,10 @@ void ftCo_Turn_IASA(Fighter_GObj* gobj)
     if (!fp->mv.co.turn.has_turned) {
         fp->facing_dir = -fp->facing_dir;
     }
+#ifdef MSL_DECOMP_PORT
+    // UCF 0.84 injects immediately after the preceding 0x800C9A44 store.
+    msl_ucf_apply_dashback(fp);
+#endif
 
     RETURN_IF(ftCo_SpecialS_CheckInput(gobj));
     RETURN_IF(ftCo_800D68C0(gobj));

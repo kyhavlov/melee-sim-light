@@ -98,6 +98,11 @@
 #include <baselib/gobjuserdata.h>
 #include <baselib/jobj.h>
 #include <baselib/lobj.h>
+
+#ifdef MSL_DECOMP_PORT
+#include "host/phase2_domain.h"
+#endif
+#include <MetroTRK/intrinsics.h>
 #include <baselib/mtx.h>
 #include <baselib/random.h>
 #include <MSL/math.h>
@@ -159,7 +164,13 @@ void Fighter_800679B0(void)
     s32 i;
 
     /// @warning don't hardcode the allocation sizes
+#ifdef MSL_DECOMP_PORT
+    // Slippi Recording/ExtendPlayerBlock.asm replaces sizeof(Fighter) with
+    // PlayerBlockSize so its recording-owned state at 0x25FF is addressable.
+    HSD_ObjAllocInit(&fighter_alloc_data, 0x2600, /*align*/ 4);
+#else
     HSD_ObjAllocInit(&fighter_alloc_data, sizeof(Fighter), /*align*/ 4);
+#endif
     HSD_ObjAllocInit(&fighter_dat_attrs_alloc_data, /*size*/ 0x424,
                      /*align*/ 4);
     ft_800852B0();
@@ -916,26 +927,32 @@ Fighter_GObj* Fighter_Create(struct plAllocInfo* input)
 
     ftColl_8007B320(gobj);
 #ifdef MSL_DECOMP_PORT
-    // Source reset, ECB publication, floor admission, and Wait entry are the
-    // gameplay-bearing subset of Fighter_UnkProcessDeath for a fresh stock.
-    // Stocks, camera, effects, rumble, and combat reset owners are excluded
-    // from Phase 1 and retain no state read by this bounded locomotion path.
-    Fighter_UnkInitReset_80067C98(fp);
-    HSD_JObjSetTranslate(GET_JOBJ(gobj), &fp->cur_pos);
-    ftCommon_8007E2FC(gobj);
-    ft_80081B38(gobj);
-    if (ft_80082A68(gobj)) {
-        ftCommon_8007D6A4(fp);
-    } else {
-        ftCommon_8007D5D4(fp);
-    }
-    Fighter_UpdateModelScale(gobj);
-
+    // Retain the source camera subject and callback slot: the renderer itself
+    // is headless, but ftLib_80086A8C publishes gameplay-visible x221F_b0 from
+    // the updated subject. See host/phase2_camera.c.
+    fp->x890_cameraBox = Camera_80029020();
+    ftCamera_80076064(fp);
+    HSD_GObj_SetupProc(gobj, &Fighter_8006A1BC, 0);
     HSD_GObj_SetupProc(gobj, &Fighter_8006A360, 1);
+    HSD_GObj_SetupProc(gobj, &Fighter_8006ABA0, 2);
     HSD_GObj_SetupProc(gobj, &Fighter_Spaghetti_8006AD10, 3);
     HSD_GObj_SetupProc(gobj, &Fighter_procUpdate, 4);
     HSD_GObj_SetupProc(gobj, &Fighter_procMap, 6);
-    ftCommon_8007D92C(gobj);
+    HSD_GObj_SetupProc(gobj, &Fighter_8006C5F4, 7);
+    HSD_GObj_SetupProc(gobj, &Fighter_CallAcessoryCallbacks_8006C624, 8);
+    HSD_GObj_SetupProc(gobj, &Fighter_8006C80C, 9);
+    HSD_GObj_SetupProc(gobj, &Fighter_UnkProcessGrab_8006CA5C, 0xC);
+    HSD_GObj_SetupProc(gobj, &Fighter_8006CB94, 0xD);
+    HSD_GObj_SetupProc(gobj, &Fighter_ProcessHit_8006D1EC, 0xE);
+    HSD_GObj_SetupProc(gobj, &Fighter_8006D9AC, 0x10);
+    HSD_GObj_SetupProc(gobj, &Fighter_UnkCallCameraCallback_8006D9EC, 0x12);
+    HSD_GObj_SetupProc(gobj, &Fighter_8006DA4C, 0x16);
+    Fighter_UnkProcessDeath_80068354(gobj);
+    if (Player_GetFlagsBit3(fp->player_id) != 0) {
+        ftCo_800C61B0(gobj);
+    } else {
+        ftCommon_8007D92C(gobj);
+    }
 #else
     fp->x890_cameraBox = Camera_80029020();
 
@@ -973,8 +990,12 @@ Fighter_GObj* Fighter_Create(struct plAllocInfo* input)
             HSD_ASSERTREPORT(1065, 0, "ellegal flag fp->no_normal_motion\n");
         }
     }
-    ftLib_800867E8(gobj);
 #endif
+    // Source Fighter_Create freezes physical input until the VS countdown's
+    // completion callback releases every fighter. Keep this outside the
+    // hosted presentation split: x221D_b4 is gameplay state consumed by
+    // Fighter_Spaghetti_8006AD10.
+    ftLib_800867E8(gobj);
     return gobj;
 }
 
@@ -2057,6 +2078,12 @@ void Fighter_Spaghetti_8006AD10(Fighter_GObj* gobj)
                 fp->x679_x = 0;
             }
 
+#ifdef MSL_DECOMP_PORT
+            // UCF 0.84 pad-buffer/cardinal injection at
+            // Fighter_Spaghetti_8006AD10+0x750 (GALE01 0x8006B460).
+            msl_ucf_apply_pad_buffer(fp);
+#endif
+
             // Fighter_ClampSpecificValue
             fp->x678++;
             if (fp->x678 > 0xFE) {
@@ -2220,12 +2247,24 @@ void Fighter_procUpdate(Fighter_GObj* gobj)
                     {
                         p_kb_vel->x = p_kb_vel->y = 0;
                     } else {
+#ifdef MSL_DECOMP_PORT
+                        // Original DOL 0x8006B9C8/0x8006B9E4 uses fnmsubs;
+                        // GCC's exploratory build otherwise rounds the
+                        // multiply before the subtract.
+                        p_kb_vel->x = __fnmsubs(
+                            p_ftCommonData->x204_knockbackFrameDecay,
+                            cosf(kb_angle), p_kb_vel->x);
+                        p_kb_vel->y = __fnmsubs(
+                            p_ftCommonData->x204_knockbackFrameDecay,
+                            sinf(kb_angle), p_kb_vel->y);
+#else
                         p_kb_vel->x -=
                             p_ftCommonData->x204_knockbackFrameDecay *
                             cosf(kb_angle);
                         p_kb_vel->y -=
                             p_ftCommonData->x204_knockbackFrameDecay *
                             sinf(kb_angle);
+#endif
                     }
                 }
 
@@ -2274,12 +2313,23 @@ void Fighter_procUpdate(Fighter_GObj* gobj)
                     // p_stc_ftcommon->x3e8_shield_kb_frameDecay)/atkShieldKB_len
                     // float atkShieldKBAngle = atan2_80022C30(pAtkShieldKB->y,
                     // pAtkShieldKB->x);
+#ifdef MSL_DECOMP_PORT
+                    // Original DOL 0x8006BB34/0x8006BB50, same fused owner as
+                    // ordinary knockback decay above.
+                    pAtkShieldKB->x = __fnmsubs(
+                        p_ftCommonData->x3E8_shieldKnockbackFrameDecay,
+                        cosf(atkShieldKBAngle), pAtkShieldKB->x);
+                    pAtkShieldKB->y = __fnmsubs(
+                        p_ftCommonData->x3E8_shieldKnockbackFrameDecay,
+                        sinf(atkShieldKBAngle), pAtkShieldKB->y);
+#else
                     pAtkShieldKB->x -=
                         p_ftCommonData->x3E8_shieldKnockbackFrameDecay *
                         cosf(atkShieldKBAngle);
                     pAtkShieldKB->y -=
                         p_ftCommonData->x3E8_shieldKnockbackFrameDecay *
                         sinf(atkShieldKBAngle);
+#endif
                 }
                 fp->xF4_ground_attacker_shield_kb_vel = 0;
             } else {
@@ -2509,6 +2559,11 @@ void Fighter_procMap(Fighter_GObj* gobj)
 
         fp->x2223_b5 = 0;
 
+#ifdef MSL_DECOMP_PORT
+        // Slippi Recording/GetLCancelStatus/ResetLCancelStatus.asm hooks this
+        // exact map-pass seam before the collision callback.
+        ((u8*) fp)[0x25FF] = 0;
+#endif
         HSD_JObjSetTranslate(gobj->hsd_obj, &fp->cur_pos);
 
         if (fp->coll_cb) {

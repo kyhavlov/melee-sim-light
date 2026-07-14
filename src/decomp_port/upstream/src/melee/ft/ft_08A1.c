@@ -60,7 +60,7 @@ bool ft_8008A244(Fighter_GObj* gobj)
 void ft_8008A2BC(HSD_GObj* gobj)
 {
 #ifdef MSL_DECOMP_PORT
-    // Phase 1 only constructs Fox; the boss-specific neutral entries are not
+    // Phase 2 only constructs Fox; the boss-specific neutral entries are not
     // part of this registry projection.
     ft_8008A348(gobj, 0);
 #else

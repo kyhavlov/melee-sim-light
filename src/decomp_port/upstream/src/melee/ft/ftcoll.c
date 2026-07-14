@@ -44,6 +44,7 @@
 
 #include <common_structs.h>
 #include <math.h>
+#include <MetroTRK/intrinsics.h>
 #include <dolphin/mtx.h>
 #include <baselib/debug.h>
 #include <baselib/gobj.h>
@@ -2095,25 +2096,32 @@ float ftColl_80079AB0(Fighter* fp, HitCapsule* hit, u32 unk_count, float arg3,
     float decay;
     float result;
 
+    // Retail DOL 0x80079AB0..0x80079C6C uses scalar-single fmadds for
+    // growth, base knockback, and the final damage/base blend. GCC's split
+    // operations change ordinary fighter-hit knockback by an ULP.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80079AB0
     if (hit->x28 != 0) {
+        float growth;
         float x24_f;
 
         decay = ftd->xF8;
         result = (w * decay) / (1.0F + w);
         decay -= result;
 
-        result = ftd->x118 * (float) (u32) hit->x28;
-        result = ftd->x118 * ftd->x110 + ftd->x114 * result;
-        result = decay * result;
-        result = ftd->x11C * result + ftd->x120;
+        growth = ftd->x118 * (float) (u32) hit->x28;
+        growth = ftd->x114 * growth;
+        growth = __fmadds(ftd->x118, ftd->x110, growth);
+        result = decay * growth;
+        result = __fmadds(ftd->x11C, result, ftd->x120);
         x24_f = 0.01F * (float) (u32) hit->x24;
-        result = x24_f * result + (float) (u32) hit->x2C;
+        result = __fmadds(x24_f, result, (float) (u32) hit->x2C);
         result = arg3 * result;
         result = attack * result;
         result = defense * result;
     } else {
         s32 count;
         float damage;
+        float growth;
         float x24_f;
 
         if (fp->x2225_b7) {
@@ -2130,13 +2138,13 @@ float ftColl_80079AB0(Fighter* fp, HitCapsule* hit, u32 unk_count, float arg3,
         result = (w * decay) / (1.0F + w);
         decay -= result;
         damage = (float) count + fp->dmg.x1838_percentTemp;
-        result = (float) (u32) unk_count * damage;
-        result = ftd->x110 * damage + ftd->x114 * result;
-        result = decay * result;
-        result = ftd->x11C * result + ftd->x120;
+        growth = (float) (u32) unk_count * damage;
+        growth = ftd->x114 * growth;
+        growth = __fmadds(ftd->x110, damage, growth);
+        result = decay * growth;
+        result = __fmadds(ftd->x11C, result, ftd->x120);
         x24_f = 0.01F * (float) (u32) hit->x24;
-        (void) x24_f;
-        result = x24_f * result + (float) (u32) hit->x2C;
+        result = __fmadds(x24_f, result, (float) (u32) hit->x2C);
         result = arg3 * result;
         result = attack * result;
         result = defense * result;
@@ -2162,25 +2170,31 @@ float ftColl_80079C70(Fighter* fp, Fighter* attacker, HitCapsule* hit,
     float result;
     PAD_STACK(8);
 
+    // Same retail scalar-single expression family as ftColl_80079AB0.
+    // Retail DOL 0x80079C70..0x80079EA4.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80079C70
     if (hit->x28 != 0) {
+        float growth;
         float x24_f;
 
         decay = ftd->xF8;
         result = (w * decay) / (1.0F + w);
         decay -= result;
 
-        result = ftd->x118 * (float) (u32) hit->x28;
-        result = ftd->x118 * ftd->x110 + ftd->x114 * result;
-        result = decay * result;
-        result = ftd->x11C * result + ftd->x120;
+        growth = ftd->x118 * (float) (u32) hit->x28;
+        growth = ftd->x114 * growth;
+        growth = __fmadds(ftd->x118, ftd->x110, growth);
+        result = decay * growth;
+        result = __fmadds(ftd->x11C, result, ftd->x120);
         x24_f = 0.01F * (float) (u32) hit->x24;
-        result = x24_f * result + (float) (u32) hit->x2C;
+        result = __fmadds(x24_f, result, (float) (u32) hit->x2C);
         result = arg3 * result;
         result = attack * result;
         result = defense * result;
     } else {
         s32 count;
         float damage;
+        float growth;
         float x24_f;
 
         if (fp->x2225_b7) {
@@ -2197,13 +2211,13 @@ float ftColl_80079C70(Fighter* fp, Fighter* attacker, HitCapsule* hit,
         result = (w * decay) / (1.0F + w);
         decay -= result;
         damage = (float) count + fp->dmg.x1838_percentTemp;
-        result = (float) (u32) unk_count * damage;
-        result = ftd->x110 * damage + ftd->x114 * result;
-        result = decay * result;
-        result = ftd->x11C * result + ftd->x120;
+        growth = (float) (u32) unk_count * damage;
+        growth = ftd->x114 * growth;
+        growth = __fmadds(ftd->x110, damage, growth);
+        result = decay * growth;
+        result = __fmadds(ftd->x11C, result, ftd->x120);
         x24_f = 0.01F * (float) (u32) hit->x24;
-        (void) x24_f;
-        result = x24_f * result + (float) (u32) hit->x2C;
+        result = __fmadds(x24_f, result, (float) (u32) hit->x2C);
         result = arg3 * result;
         result = attack * result;
         result = defense * result;
@@ -2219,30 +2233,38 @@ float ftColl_80079C70(Fighter* fp, Fighter* attacker, HitCapsule* hit,
 float ftColl_80079EA8(Fighter* fp, HitCapsule* hit, u32 unk_count)
 {
     ftCommonData* ftd = p_ftCommonData;
-    float decay;
     float result;
     float w = fp->co_attrs.weight;
     PAD_STACK(8);
     w *= ftd->xF4;
 
+    // The matching source expression relies on three scalar-single fmadds.
+    // Spell out the DOL order because GCC otherwise splits them at -O0 and
+    // changes knockback by an ULP.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80079EA8
+    // Retail DOL 0x80079EA8..0x8007A068.
     if (hit->x28 != 0) {
-        float x118;
         float one = 1.0F;
+        float decay;
+        float growth;
+        float scale;
 
-        decay = ftd->xF8;
-        x118 = ftd->x118;
-
-        result =
-            one *
-            (one *
-             (one * ((0.01F * hit->x24 *
-                      (ftd->x11C * ((ftd->xF8 - ((w * ftd->xF8) / (one + w))) *
-                                    (x118 * ftd->x110 +
-                                     ftd->x114 * (x118 * hit->x28))) +
-                       ftd->x120)) +
-                     hit->x2C)));
+        decay = ftd->xF8 - ((w * ftd->xF8) / (one + w));
+        growth = ftd->x118 * (float) (u32) hit->x28;
+        growth = ftd->x114 * growth;
+        growth = __fmadds(ftd->x118, ftd->x110, growth);
+        result = decay * growth;
+        result = __fmadds(ftd->x11C, result, ftd->x120);
+        scale = 0.01F * (float) (u32) hit->x24;
+        result = __fmadds(scale, result, (float) (u32) hit->x2C);
+        result = one * (one * (one * result));
     } else {
         s32 count;
+        float one = 1.0F;
+        float decay;
+        float damage;
+        float growth;
+        float scale;
 
         if (fp->x2225_b7) {
             if (fp->x2224_b2) {
@@ -2254,23 +2276,16 @@ float ftColl_80079EA8(Fighter* fp, HitCapsule* hit, u32 unk_count)
             count = (s32) fp->dmg.x1830_percent;
         }
 
-        {
-            float one = 1.0F;
-
-            result =
-                one *
-                (one *
-                 (one *
-                  ((0.01F * hit->x24 *
-                    (ftd->x11C *
-                         ((ftd->xF8 - ((w * ftd->xF8) / (one + w))) *
-                          (ftd->x110 * (count + fp->dmg.x1838_percentTemp) +
-                           ftd->x114 *
-                               (unk_count *
-                                (count + fp->dmg.x1838_percentTemp)))) +
-                     ftd->x120)) +
-                   hit->x2C)));
-        }
+        decay = ftd->xF8 - ((w * ftd->xF8) / (one + w));
+        damage = (float) count + fp->dmg.x1838_percentTemp;
+        growth = (float) unk_count * damage;
+        growth = ftd->x114 * growth;
+        growth = __fmadds(ftd->x110, damage, growth);
+        result = decay * growth;
+        result = __fmadds(ftd->x11C, result, ftd->x120);
+        scale = 0.01F * (float) (u32) hit->x24;
+        result = __fmadds(scale, result, (float) (u32) hit->x2C);
+        result = one * (one * (one * result));
     }
 
     if (result >= ftd->x108) {

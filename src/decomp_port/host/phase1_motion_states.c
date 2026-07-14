@@ -1,5 +1,6 @@
 #include "ft/types.h"
 
+#include "ft/ft_0C31.h"
 #include "ft/chara/ftCommon/forward.h"
 #include "ft/chara/ftCommon/ftCo_Dash.h"
 #include "ft/chara/ftCommon/ftCo_Fall.h"
@@ -128,4 +129,16 @@ MotionState ftData_MotionStateList[ftCo_MS_Count] = {
         ftCo_SM_OttottoWait, ftCo_MF_OttottoWait, FtMoveId_Default << 24,
         ftCo_OttottoWait_Anim, ftCo_OttottoWait_IASA,
         ftCo_OttottoWait_Phys, ftCo_OttottoWait_Coll),
+    [ftCo_MS_Entry] = MOVE_STATE(
+        ftCo_SM_None, ftCo_MF_Rebirth, FtMoveId_Default << 24,
+        ftCo_Entry_Anim, ftCo_Entry_IASA, ftCo_Entry_Phys,
+        ftCo_Entry_Coll),
+    [ftCo_MS_EntryStart] = MOVE_STATE(
+        ftCo_SM_EntryStart, ftCo_MF_Rebirth, FtMoveId_Default << 24,
+        ftCo_EntryStart_Anim, ftCo_EntryStart_IASA, ftCo_EntryStart_Phys,
+        ftCo_EntryStart_Coll),
+    [ftCo_MS_EntryEnd] = MOVE_STATE(
+        ftCo_SM_None, ftCo_MF_Rebirth, FtMoveId_Default << 24,
+        ftCo_EntryEnd_Anim, ftCo_EntryEnd_IASA, ftCo_EntryEnd_Phys,
+        ftCo_EntryEnd_Coll),
 };

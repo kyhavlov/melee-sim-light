@@ -1,0 +1,45 @@
+#include "ftCo_ThrownMewtwo.h"
+
+#include "placeholder.h"
+
+#include <platform.h>
+
+#include "ft/fighter.h"
+
+#include "ft/forward.h"
+
+#include "ft/ftanim.h"
+#include "ft/ftcommon.h"
+#include "ft/types.h"
+#include "ftCommon/ftCo_Thrown.h"
+#include "ftCommon/types.h"
+
+void ftCo_800BD0E8(Fighter_GObj* gobj, FtMotionId msid)
+{
+    Fighter* fp = GET_FIGHTER(gobj);
+    PAD_STACK(8);
+    fp->facing_dir = GET_FIGHTER(fp->victim_gobj)->facing_dir;
+    fp->mv.co.capturekoopa.x0 = false;
+    Fighter_ChangeMotionState(gobj, msid,
+                              fp->x2222_b6 ? Ft_MF_FreezeState : Ft_MF_None, 0,
+                              1, 0, fp->victim_gobj);
+    fp->accessory1_cb = ftCo_800DE508;
+    ftCommon_8007E2F4(fp, 0x1FF);
+    ftAnim_8006EBA4(gobj);
+}
+
+void ftCo_ThrownMewtwo_Anim(Fighter_GObj* gobj) {}
+
+void ftCo_ThrownMewtwo_IASA(Fighter_GObj* gobj) {}
+
+void ftCo_ThrownMewtwo_Phys(Fighter_GObj* gobj) {}
+
+void ftCo_ThrownMewtwo_Coll(Fighter_GObj* gobj) {}
+
+void ftCo_ThrownMewtwoAir_Anim(Fighter_GObj* gobj) {}
+
+void ftCo_ThrownMewtwoAir_IASA(Fighter_GObj* gobj) {}
+
+void ftCo_ThrownMewtwoAir_Phys(Fighter_GObj* gobj) {}
+
+void ftCo_ThrownMewtwoAir_Coll(Fighter_GObj* gobj) {}
