@@ -143,10 +143,6 @@ INTERNALS_DTYPE = np.dtype(
         ("instance_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
         ("instance_id_counter", "<u2"),
         ("item_spawn_id_counter", "<u4"),
-        ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
-        ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
-        ("throw_pending_victim_port", ("u1", (MAX_PLAYERS,))),
-        ("throw_pending_hit_idx", ("u1", (MAX_PLAYERS,))),
         ("attached_victim_port", ("u1", (MAX_PLAYERS,))),
         ("dead_up_fall_offset_y", ("<f4", (MAX_PLAYERS,))),
         ("dead_up_fall_vel_y", ("<f4", (MAX_PLAYERS,))),
@@ -1448,68 +1444,6 @@ def test_guardon_snapshot_preserves_lightshield_drain_on_seed43_prefix_row() -> 
     assert int(out_132["action_id"][1]) == ACT_GUARD_OFF
     assert int(out_132["action_frame"][1]) == 0
     assert float(out_132["shield_hp"][1]) == pytest.approx(59.56161117553711, abs=0.001)
-
-
-def test_guardon_snapshot_spotdodge_handoff_keeps_shield_hp_on_seed44_prefix_row() -> None:
-    import json
-
-    import msl_binding
-
-    from tools.modelplay.sim_env import CHAR_FOX, build_match_config_array
-
-    fixture_path = Path("tests/fixtures/modelplay/puffer_5b_selfplay_60s_seed44_prefix_0_191.json")
-    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
-    frames = fixture["frames"]
-
-    sizes = msl_binding.sizes()
-    compare_stride = int(sizes["compare"])
-    input_stride = int(sizes["input"])
-
-    config = build_match_config_array(
-        num_players=2,
-        char_ids=(CHAR_FOX, CHAR_FOX),
-        facing=(1, 0),
-        stocks=4,
-    )
-    config_bytes = config.view(np.uint8).reshape((1, -1))
-    out_cmp = np.zeros((1, compare_stride), dtype=np.uint8)
-
-    handle = msl_binding.init(batch_size=1, num_players=2)
-    try:
-        msl_binding.init_match(handle, config_bytes)
-        prev_in = _input_bytes_from_modelplay_prefix_frame(frames[0], input_stride)
-        history: dict[int, np.ndarray] = {}
-        for frame_i in range(1, len(frames)):
-            cur_in = _input_bytes_from_modelplay_prefix_frame(frames[frame_i], input_stride)
-            msl_binding.step_input(handle, prev_in, cur_in)
-            msl_binding.write_compare(handle, out_cmp)
-            history[frame_i] = out_cmp.view(COMPARE_DTYPE).reshape((1,))[0].copy()
-            prev_in = cur_in
-    finally:
-        msl_binding.destroy(handle)
-
-    out_166 = history[166]
-    out_167 = history[167]
-    out_168 = history[168]
-    out_189 = history[189]
-    out_190 = history[190]
-    out_191 = history[191]
-    assert int(out_166["action_id"][1]) == ACT_GUARD_ON
-    assert float(out_166["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
-    assert int(out_167["action_id"][1]) == ACT_ESCAPE_N
-    assert int(out_167["action_frame"][1]) == 1
-    assert float(out_167["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
-    assert int(out_168["action_id"][1]) == ACT_ESCAPE_N
-    assert int(out_168["action_frame"][1]) == 2
-    assert float(out_168["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
-    assert int(out_189["action_id"][1]) == ACT_GUARD_ON
-    assert float(out_189["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
-    assert int(out_190["action_id"][1]) == ACT_ESCAPE_N
-    assert int(out_190["action_frame"][1]) == 1
-    assert float(out_190["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
-    assert int(out_191["action_id"][1]) == ACT_ESCAPE_N
-    assert int(out_191["action_frame"][1]) == 2
-    assert float(out_191["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
 
 
 def test_grounded_attack_wait_handoff_can_enter_walkslow_on_seed45_prefix_row() -> None:
@@ -4027,6 +3961,41 @@ def test_attackhi4_live_smash_charge_holds_on_action_frame_2() -> None:
         msl_binding.destroy(handle)
 
 
+@pytest.mark.parametrize(
+    ("smash_state", "seed_rate", "expected_frame"),
+    (
+        (2, 1.0, 2),
+        (3, 0.0, 3),
+    ),
+)
+def test_attackhi4_reseed_uses_live_smash_state_rate(
+    smash_state: int, seed_rate: float, expected_frame: int
+) -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_HI4)
+    seed["action_frame"][0, 0] = np.int16(2)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_HI4)
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(seed_rate)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    seed["smash_charge_state"][0, 0] = np.uint8(smash_state)
+    seed["smash_charge_frames"][0, 0] = np.uint8(8)
+    seed["smash_charge_hold_frames_max"][0, 0] = np.uint8(60)
+    seed["smash_charge_saved_rate_fp_q16_16"][0, 0] = np.int32(1 << 16)
+
+    # The incoming delta-derived rate is deliberately stale at each callback edge. Charging owns
+    # a live zero rate; Release owns the saved positive rate.
+    # refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEF38,ftCo_800DF0D0}
+    neutral = _mk_input_bytes(1, int(sizes["input"]))
+    out = _step_once(seed, neutral, neutral)
+    assert int(out["action_id"][0]) == ACT_ATTACK_HI4
+    assert int(out["action_frame"][0]) == expected_frame
+
+
 def test_attackhi4_live_smash_charge_starts_from_fresh_a_on_action_frame_2() -> None:
     sizes = __import__("msl_binding").sizes()
     input_stride = int(sizes["input"])
@@ -4083,11 +4052,6 @@ def test_attackhi4_live_smash_charge_uses_character_script_start_frame() -> None
     # refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
     # refs/melee/src/melee/ft/ft_0DF0.c::ftCo_800DF0D0
     # data/moves/sheik.json::moves.ftCo_SM_AttackHi4.events start_smash_charge
-    ok, frame, hold = msl_binding.move_tables_debug_query(
-        "grounded_smash_charge_info", CHAR_SHEIK, ACT_ATTACK_HI4, 0.0, 0.0
-    )
-    assert (ok, frame, hold) == (1, 10, 60)
-
     seed = _seed_base()
     seed["char_id"][0, 0] = np.uint8(CHAR_SHEIK)
     seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_HI4)

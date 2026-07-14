@@ -7,7 +7,7 @@
 
 // Captain Falcon (ftCa_*) character specials: Falcon Punch, Raptor Boost, Falcon Dive,
 // Falcon Kick. Decomp-first port of refs/melee/src/melee/ft/chara/ftCaptain/ftCa_Special{N,S,Hi,Lw}.c.
-// Movescripts own hitboxes/timing/windows (data/moves + data/scripts via move_tables);
+// The live fighter-script cursor owns movescript hitboxes, timing, and command state;
 // this module carries only state, counters, transitions, physics, and combat hooks.
 //
 // All four special families are live. Source-specific combat effects enter through the hooks below;

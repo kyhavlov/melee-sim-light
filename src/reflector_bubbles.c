@@ -8,10 +8,10 @@
 #include <stdint.h>
 
 #include "action_ids.h"
-#include "anim_frame.h"
-#include "anim_pose.h"
 #include "char_params.h"
-#include "mtx34.h"
+#include "common_params.h"
+#include "fighter_pose.h"
+#include "shield_tilt_table.h"
 
 static inline uint8_t is_fox_falco(uint8_t char_id) {
   return (char_id == (uint8_t)MSL_CHAR_ID_FOX) || (char_id == (uint8_t)MSL_CHAR_ID_FALCO);
@@ -48,6 +48,11 @@ static inline uint8_t action_is_shine(uint8_t char_id, uint16_t a) {
              : 0u;
 }
 
+static inline uint8_t action_is_guard_reflector_owner(uint16_t a) {
+  return (uint8_t)(a == (uint16_t)MSL_ACT_GUARD_ON || a == (uint16_t)MSL_ACT_GUARD ||
+                   a == (uint16_t)MSL_ACT_GUARD_REFLECT || a == (uint16_t)MSL_ACT_GUARD_SET_OFF);
+}
+
 void reflector_bubbles_refresh(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -59,78 +64,16 @@ void reflector_bubbles_refresh(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint8_t cid = batch->state.char_id[idx];
-      if (!is_fox_falco(cid) && cid != (uint8_t)MSL_CHAR_ID_ZELDA) {
-        batch->state.reflector_x[idx] = batch->state.pos_x[idx];
-        batch->state.reflector_y[idx] = batch->state.pos_y[idx];
-        batch->state.reflector_radius[idx] = 0.0f;
-        continue;
-      }
-
       const MslCharParams* ch = msl_char_params_fast(cid);
-      if (ch == NULL) {
-        continue;
-      }
-
       const uint16_t a = batch->state.action_id[idx];
-      const uint8_t zelda_nayru_active =
-          (cid == (uint8_t)MSL_CHAR_ID_ZELDA && action_is_zelda_nayru(a) &&
-           batch->state.special_cmd0[idx] == 2u)
-              ? 1u
-              : 0u;
-      const uint8_t active =
-          (uint8_t)(action_is_shine_reflector_active(batch->state.char_id[idx], a) != 0u ||
-                    zelda_nayru_active != 0u);
-
-      float rx = batch->state.pos_x[idx];
-      float ry = batch->state.pos_y[idx];
-      float rr = 0.0f;
-
-      if (active) {
-        // Bubble size/attachment comes from ReflectDesc in the character special attrs section:
-        // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit (reflect_hit.bone/offset/size)
-        const float scale_y = batch->state.fighter_scale_y[idx];
-        const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-        const uint16_t reflector_bone = zelda_nayru_active != 0u
-                                            ? ch->zelda_nayru_reflector_bone_part_id
-                                            : ch->reflector_bone_part_id;
-        const float reflector_offset[3] = {
-            zelda_nayru_active != 0u ? ch->zelda_nayru_reflector_offset_x : ch->reflector_offset_x,
-            zelda_nayru_active != 0u ? ch->zelda_nayru_reflector_offset_y : ch->reflector_offset_y,
-            zelda_nayru_active != 0u ? ch->zelda_nayru_reflector_offset_z : ch->reflector_offset_z,
-        };
-        rr = (zelda_nayru_active != 0u ? ch->zelda_nayru_reflector_size : ch->reflector_size) *
-             scale_y;
-
-        const uint32_t anim_u32 = batch->state.animation_index[idx];
-        if (anim_u32 <= 0xFFFFu) {
-          const uint16_t msid = (uint16_t)anim_u32;
-          const float anim_frame_f32 =
-              msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-          const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
-
-          float m[12];
-          if (anim_pose_get_matrix(cid, msid, frame, reflector_bone, m) == 0) {
-            float off[3] = {reflector_offset[0], reflector_offset[1], reflector_offset[2]};
-            float lx = 0.0f, ly = 0.0f, lz = 0.0f;
-            msl_mtx34_mul_point(m, off, &lx, &ly, &lz);
-            (void)lz;
-
-            lx *= (scale_y * facing_dir);
-            ly *= scale_y;
-
-            rx = batch->state.pos_x[idx] + lx;
-            ry = batch->state.pos_y[idx] + ly;
-          }
-        }
-      }
-
-      batch->state.reflector_x[idx] = rx;
-      batch->state.reflector_y[idx] = ry;
-      batch->state.reflector_radius[idx] = (isfinite(rr) && rr > 0.0f) ? rr : 0.0f;
+      const uint16_t prev_a = batch->state.prev_action_id[idx];
 
       const size_t flags_i =
           idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
       uint8_t f = batch->state.state_flags[flags_i];
+      const uint8_t zelda_nayru_active =
+          (uint8_t)(cid == (uint8_t)MSL_CHAR_ID_ZELDA && action_is_zelda_nayru(a) &&
+                    batch->state.special_cmd0[idx] == 2u);
 
       // Slippi state_flags byte0 bit0x10 mirrors fp->reflecting (GALE01 fp+0x2218 bit4).
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit (sets fp->reflecting=true)
@@ -142,7 +85,6 @@ void reflector_bubbles_refresh(MslBatch* batch) {
       //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50 (init x14=x2A4)
       //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0 (tick/expire; clears fp->reflecting)
       // - Otherwise leave it seed-carry-through (other reflect windows not modeled yet).
-      const uint16_t prev_a = batch->state.prev_action_id[idx];
       const uint8_t override_shine = (action_is_shine(batch->state.char_id[idx], a) ||
                                       action_is_shine(batch->state.char_id[idx], prev_a))
                                          ? 1u
@@ -246,6 +188,105 @@ void reflector_bubbles_refresh(MslBatch* batch) {
         }
         batch->state.state_flags[flags_i] = f;
       }
+
+      // Publish one complete live ReflectDesc after its callback-owned identity bit is settled.
+      // Geometry consumes the persistent collision JObj pose, including SkipAnim and dynamic-node
+      // state, just as lbColl_80007BCC consumes reflect_hit.bone. Descriptor parameters stay beside
+      // the sphere so item families never infer them from character/action ids.
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+      batch->state.reflector_x[idx] = batch->state.pos_x[idx];
+      batch->state.reflector_y[idx] = batch->state.pos_y[idx];
+      batch->state.reflector_z[idx] = batch->state.pos_z[idx];
+      batch->state.reflector_radius[idx] = 0.0f;
+      batch->state.reflector_damage_mul[idx] = 1.0f;
+      batch->state.reflector_speed_mul[idx] = 1.0f;
+      batch->state.reflector_max_damage[idx] = 0;
+
+      if ((f & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) == 0u || ch == NULL) {
+        continue;
+      }
+
+      uint16_t part_id = UINT16_MAX;
+      float offset[3] = {0.0f, 0.0f, 0.0f};
+      float size = 0.0f;
+      float guard_joint_scale = 1.0f;
+      if (zelda_nayru_active != 0u) {
+        part_id = ch->zelda_nayru_reflector_bone_part_id;
+        offset[0] = ch->zelda_nayru_reflector_offset_x;
+        offset[1] = ch->zelda_nayru_reflector_offset_y;
+        offset[2] = ch->zelda_nayru_reflector_offset_z;
+        size = ch->zelda_nayru_reflector_size;
+        batch->state.reflector_damage_mul[idx] = ch->zelda_nayru_reflector_damage_mul;
+        batch->state.reflector_speed_mul[idx] = ch->zelda_nayru_reflector_speed_mul;
+        batch->state.reflector_max_damage[idx] = ch->zelda_nayru_reflector_max_damage;
+      } else if (is_fox_falco(cid) && action_is_shine(cid, a)) {
+        part_id = ch->reflector_bone_part_id;
+        offset[0] = ch->reflector_offset_x;
+        offset[1] = ch->reflector_offset_y;
+        offset[2] = ch->reflector_offset_z;
+        size = ch->reflector_size;
+        batch->state.reflector_damage_mul[idx] = ch->reflector_damage_mul;
+        batch->state.reflector_speed_mul[idx] = ch->reflector_speed_mul;
+        batch->state.reflector_max_damage[idx] = ch->reflector_max_damage;
+      } else if (action_is_guard_reflector_owner(a) != 0u) {
+        const MslCommonParams* common = msl_common_params();
+        if (common == NULL) {
+          continue;
+        }
+        part_id = msl_shield_part_id(cid);
+        size = common->powershield_reflect_size;
+        batch->state.reflector_damage_mul[idx] = common->powershield_reflect_damage_mul;
+        batch->state.reflector_speed_mul[idx] = common->powershield_reflect_speed_mul;
+        batch->state.reflector_max_damage[idx] = (int32_t)batch->state.shield_hp[idx];
+        if (common->start_shield_health > 0.0f && ch->initial_shield_size > 0.0f) {
+          float light = batch->state.lightshield_amount[idx];
+          if (light < 0.0f) {
+            light = 0.0f;
+          } else if (light > 1.0f) {
+            light = 1.0f;
+          }
+          float hp = batch->state.shield_hp[idx] / common->start_shield_health;
+          if (hp < 0.0f) {
+            hp = 0.0f;
+          } else if (hp > 1.0f) {
+            hp = 1.0f;
+          }
+          const float light_scale =
+              light * (common->shield_size_lightshield_max - common->shield_size_lightshield_min) +
+              common->shield_size_lightshield_min;
+          guard_joint_scale = ((1.0f - common->shield_size_min_scale) * hp * light_scale +
+                               common->shield_size_min_scale) *
+                              ch->initial_shield_size;
+        }
+      } else {
+        // The serialized `reflecting` bit proves that a ReflectDesc existed, but it does not carry
+        // the descriptor's bone, offset, size, or callback. Only source-known supported owners may
+        // publish geometry; an unrelated seeded action must fail closed instead of borrowing the
+        // common Guard descriptor.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+        continue;
+      }
+
+      MslFighterCollisionPose pose;
+      const float axis_offset[3] = {offset[0] + 1.0f, offset[1], offset[2]};
+      float center[3];
+      float axis[3];
+      if (part_id == UINT16_MAX || !(size > 0.0f) ||
+          fighter_pose_collision_pose(batch, idx, &pose) == 0u ||
+          fighter_pose_attachment_pair_local(batch, idx, pose.msid, pose.anim_frame, part_id,
+                                             offset, axis_offset, center, axis, NULL) != 0) {
+        continue;
+      }
+      const float facing = pose.facing;
+      batch->state.reflector_x[idx] = batch->state.pos_x[idx] + facing * center[2];
+      batch->state.reflector_y[idx] = batch->state.pos_y[idx] + center[1];
+      batch->state.reflector_z[idx] = batch->state.pos_z[idx] - facing * center[0];
+      const float dx = axis[0] - center[0];
+      const float dy = axis[1] - center[1];
+      const float dz = axis[2] - center[2];
+      const float radius = size * guard_joint_scale * sqrtf(dx * dx + dy * dy + dz * dz);
+      batch->state.reflector_radius[idx] = (isfinite(radius) && radius > 0.0f) ? radius : 0.0f;
     }
   }
 }

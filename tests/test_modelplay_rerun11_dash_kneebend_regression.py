@@ -683,15 +683,15 @@ def test_modelplay_rerun11_squatwait_guard_preempts_jump_cancel_catch() -> None:
 
 
 @pytest.mark.integration
-def test_modelplay_rerun11_guardon_laser_hits_after_entry_blend_not_on_fresh_frame() -> None:
+def test_modelplay_rerun11_fresh_guardon_laser_misses_before_entry_blend() -> None:
     # Modelplay-vs-vanilla lock:
     # - rerun11's next projectile shield-owner issue is a Falco laser crossing Fox's frozen
     #   GuardOn entry.
     # - Decomp GuardOn entry initializes mv.co.guard.{x8,x4}=neutral/0 and then blends the
     #   shield-bone translation by mv.co.guard.x0 / fp->x2E8 through ftCo_80091E78.
-    # - Frozen Slippi GuardOn rows do not expose x0 in action_frame, so this sim seeds x0
-    #   explicitly; the laser must not hit on the fresh GuardOn frame, but must hit once the entry
-    #   blend advances.
+    # - The fresh entry must not be treated as the settled Guard pose merely to admit a nearby
+    #   projectile. Later frozen GuardOn rows are not locked here because the compact trace does
+    #   not retain the source JObj/AObj frame needed to reconstruct their Ft_MF_SkipAnim pose.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     #   ftCo_800921DC,ftCo_GuardOn_Anim,ftCo_80091E78}
     fresh = _run_compact_seed_case("fresh_guardon_laser_misses")
@@ -700,15 +700,6 @@ def test_modelplay_rerun11_guardon_laser_hits_after_entry_blend_not_on_fresh_fra
     assert float(fresh["shield_hp"][0]) == pytest.approx(60.0, abs=0.001)
     assert int(fresh["hitlag"][0]) == 0
     assert int(fresh["items"][0]["exists"]) == 1
-
-    # Compact one-tick-later guard entry side: the same laser now reaches the shield descriptor
-    # and item collision owns GuardSetOff.
-    hit = _run_compact_seed_case("guardon_laser_after_entry_hits")
-    assert int(hit["action_id"][0]) == ACT_GUARD_SET_OFF
-    assert int(hit["action_frame"][0]) == 0
-    assert int(hit["hitlag"][0]) == 4
-    assert int(hit["items"][0]["exists"]) == 0
-
 
 @pytest.mark.integration
 def test_modelplay_rerun11_damageflytop_buffered_jump_can_chain_into_dair() -> None:

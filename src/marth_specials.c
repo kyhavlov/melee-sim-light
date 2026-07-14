@@ -14,12 +14,19 @@
 #include "char_registry.h"
 #include "common_params.h"
 #include "common_specials.h"
+#include "combat.h"
+#include "combat_geom.h"
+#include "combat_internal.h"
 #include "grab_flow.h"
 #include "fighter_callbacks.h"
+#include "fighter_script.h"
 #include "ids.h"
+#include "hitlist.h"
 #include "locomotion.h"
-#include "move_tables.h"
+#include "motion_state_runtime.h"
+#include "mtx34.h"
 #include "msl_math.h"
+#include "staling.h"
 #include "state_flags.h"
 
 // ---------------------------------------------------------------------------
@@ -45,6 +52,187 @@ static inline void ms_reset_cmds(MslBatch* batch, size_t idx) {
   batch->state.special_cmd0[idx] = 0u;
   batch->state.special_cmd1[idx] = 0u;
   batch->state.special_cmd2[idx] = 0u;
+}
+
+static inline void ms_counter_set_shielddesc_active(MslBatch* batch, size_t idx, uint8_t active) {
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+  if (active != 0u) {
+    // ftColl_8007B1B8 creates the live descriptor, then Counter marks x221B_b1.
+    // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
+    //   ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim}
+    batch->state.state_flags[flags_i] |=
+        (uint8_t)(MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE | MSL_STATE_FLAG_221B_B1);
+  } else {
+    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+  }
+}
+
+static inline uint8_t ms_counter_intercepts_contact(const MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_MARTH) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[idx];
+  if (action == (uint16_t)MSL_ACT_MS_SPECIAL_LW_HIT ||
+      action == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW_HIT) {
+    // The first descriptor callback has already changed motion, but sibling HitCapsules in the
+    // same priority-13 traversal still belong to the consumed ShieldDesc packet.
+    return batch->state.speciallw_counter_window[idx] == 1u ? 1u : 0u;
+  }
+  if (action != (uint16_t)MSL_ACT_MS_SPECIAL_LW && action != (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW) {
+    return 0u;
+  }
+  return batch->state.speciallw_counter_window[idx] == 2u ? 1u : 0u;
+}
+
+uint8_t marth_counter_shielddesc_world(const MslBatch* batch, size_t idx, float* out_x,
+                                       float* out_y, float* out_z, float* out_radius) {
+  if (batch == NULL || out_x == NULL || out_y == NULL || out_z == NULL || out_radius == NULL ||
+      ms_counter_intercepts_contact(batch, idx) == 0u) {
+    return 0u;
+  }
+  const uint8_t cid = batch->state.char_id[idx];
+  const MslCharParams* marth = msl_char_params_fast(cid);
+  if (marth == NULL || !(marth->speciallw_counter_desc_size > 0.0f)) {
+    return 0u;
+  }
+  const uint16_t msid = (uint16_t)(batch->state.animation_index[idx] & 0xFFFFu);
+  const uint16_t frame =
+      msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+  float matrix[12];
+  if (anim_pose_get_matrix(cid, msid, frame, (uint16_t)marth->speciallw_counter_desc_bone,
+                           matrix) != 0) {
+    return 0u;
+  }
+  const float fighter_scale = batch->state.fighter_scale_y[idx];
+  const float model_scaling =
+      (isfinite(marth->model_scaling) && marth->model_scaling > 0.0f) ? marth->model_scaling : 1.0f;
+  const float model_scale = fighter_scale * model_scaling;
+  const float facing = batch->state.facing[idx] != 0u ? 1.0f : -1.0f;
+  const float offset[3] = {marth->speciallw_counter_desc_offset_x,
+                           marth->speciallw_counter_desc_offset_y,
+                           marth->speciallw_counter_desc_offset_z};
+  float x = 0.0f;
+  float y = 0.0f;
+  float z = 0.0f;
+  msl_mtx34_mul_point(matrix, offset, &x, &y, &z);
+  *out_x = facing * z * model_scale + batch->state.pos_x[idx];
+  *out_y = y * model_scale + batch->state.pos_y[idx];
+  *out_z = -facing * x * model_scale + batch->state.pos_z[idx];
+  *out_radius = marth->speciallw_counter_desc_size * fighter_scale;
+  return 1u;
+}
+
+static uint8_t ms_counter_apply_contact(MslBatch* batch, int bi, int attacker, int defender,
+                                        int damage, float source_pos_x,
+                                        uint8_t apply_attacker_hitlag) {
+  const size_t d_idx = msl_idx_player(bi, defender);
+  if (ms_counter_intercepts_contact(batch, d_idx) == 0u) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_MS_SPECIAL_LW_HIT ||
+      batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW_HIT) {
+    return 1u;
+  }
+  const MslCommonParams* common = msl_common_params();
+  const MslCharParams* marth = msl_char_params_fast(batch->state.char_id[d_idx]);
+  if (common == NULL || marth == NULL || damage <= 0) {
+    return 1u;
+  }
+
+  uint16_t hitlag = combat_calc_hitlag_frames(common, damage, batch->state.action_id[d_idx], 1.0f);
+  if (batch->state.speciallw_counter_hitlag_floor_active[d_idx] != 0u &&
+      marth->speciallw_counter_shield_strength > (float)hitlag) {
+    hitlag = (uint16_t)marth->speciallw_counter_shield_strength;
+  }
+  if (apply_attacker_hitlag != 0u) {
+    const size_t a_idx = msl_idx_player(bi, attacker);
+    if (hitlag > batch->state.hitlag[a_idx]) {
+      batch->state.hitlag[a_idx] = hitlag;
+      combat_state_flags_set_is_hitlag(batch, a_idx, hitlag);
+    }
+  }
+  if (hitlag > batch->state.hitlag[d_idx]) {
+    batch->state.hitlag[d_idx] = hitlag;
+    combat_state_flags_set_is_hitlag(batch, d_idx, hitlag);
+  }
+
+  float countered = (float)damage * marth->speciallw_counter_damage_mul;
+  if (countered < 0.0f) {
+    countered = 0.0f;
+  } else if (countered > 65535.0f) {
+    countered = 65535.0f;
+  }
+  batch->state.speciallw_countered_damage[d_idx] = (uint16_t)countered;
+  batch->state.speciallw_counter_window[d_idx] = 1u;
+  batch->state.speciallw_counter_hitlag_floor_active[d_idx] = 0u;
+  const int8_t facing = batch->state.pos_x[d_idx] > source_pos_x ? -1 : 1;
+  batch->state.specialn_facing_dir1[d_idx] = facing;
+  batch->state.facing_dir1[d_idx] = facing;
+  batch->state.facing[d_idx] = facing > 0 ? 1u : 0u;
+  const uint8_t grounded = batch->state.on_ground[d_idx] != 0u ? 1u : 0u;
+  motion_state_change(batch, bi, defender,
+                      grounded != 0u ? (uint16_t)MSL_ACT_MS_SPECIAL_LW_HIT
+                                     : (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW_HIT,
+                      grounded != 0u ? 324u : 326u, 0u, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_NONE);
+  return 1u;
+}
+
+uint8_t marth_counter_try_fighter_contact(MslBatch* batch, int bi, int attacker, int defender,
+                                          int hitbox_id) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || attacker < 0 || defender < 0 ||
+      attacker >= (int)batch->config.num_players || defender >= (int)batch->config.num_players ||
+      attacker == defender || hitbox_id < 0 || hitbox_id >= MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const size_t d_idx = msl_idx_player(bi, defender);
+  const size_t hi =
+      ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
+      (size_t)hitbox_id;
+  float x = 0.0f;
+  float y = 0.0f;
+  float z = 0.0f;
+  float radius = 0.0f;
+  if (batch->state.hitbox_enabled[hi] == 0u ||
+      marth_counter_shielddesc_world(batch, d_idx, &x, &y, &z, &radius) == 0u) {
+    return 0u;
+  }
+  float distance_sq = 0.0f;
+  combat_segment_segment_dist2(batch->state.hitbox_prev_x[hi], batch->state.hitbox_prev_y[hi],
+                               batch->state.hitbox_prev_z[hi], batch->state.hitbox_x[hi],
+                               batch->state.hitbox_y[hi], batch->state.hitbox_z[hi], x, y, z, x, y,
+                               z, &distance_sq, NULL, NULL);
+  const float combined_radius = batch->state.hitbox_radius[hi] + radius;
+  if (distance_sq > combined_radius * combined_radius) {
+    return 0u;
+  }
+  const uint8_t group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hi]);
+  const uint8_t rehit = hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hi]);
+  hitlist_register_fighter_group(batch, bi, attacker, group, defender,
+                                 batch->state.instance_id[d_idx], (int)MSL_LBCOLL_INSERT_FT_SHIELD,
+                                 rehit);
+  const int damage = combat_hitbox_collision_env_damage(batch, a_idx, hi);
+  return ms_counter_apply_contact(batch, bi, attacker, defender, damage, batch->state.pos_x[a_idx],
+                                  1u);
+}
+
+uint8_t marth_counter_apply_item_contact(MslBatch* batch, int bi, int attacker, int defender,
+                                         uint16_t item_attack_id, uint16_t item_attack_instance,
+                                         float damage, float item_pos_x) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || attacker < 0 || defender < 0 ||
+      attacker >= (int)batch->config.num_players || defender >= (int)batch->config.num_players ||
+      attacker == defender) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  (void)item_attack_instance;
+  float collision_damage = damage;
+  const float stale = staling_multiplier_for_move(batch, a_idx, item_attack_id);
+  if (stale != 1.0f) {
+    collision_damage *= stale;
+  }
+  return ms_counter_apply_contact(batch, bi, attacker, defender,
+                                  combat_get_env_dmg(collision_damage), item_pos_x, 0u);
 }
 
 static inline float ms_facing_dir(const MslBatch* batch, size_t idx) {
@@ -341,7 +529,7 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
       if (ms_db_is_stage(a)) {
         // IASA chain (per-stage): cmd0 window from the stage movescript; cmd1 = pressed-early
         // lockout (decomp ftMs_SpecialS*_IASA).
-        const uint8_t window = move_tables_special_cmd_var_value_at_frame(cid, msid, 0u, frame);
+        const uint8_t window = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
         if (!ms_db_is_final_stage(a)) {
           if (window) {
             if (batch->state.special_cmd1[idx] == 0u && (pressed & AB) != 0u) {
@@ -366,7 +554,7 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
       // ---- Dolphin Slash -------------------------------------------------
       if (a == (uint16_t)MSL_ACT_MS_SPECIAL_HI || a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) {
         // Pre-launch IASA: stick X tilts the launch angle (ftMs_SpecialHi_IASA).
-        const uint8_t launched = move_tables_special_cmd_var_value_at_frame(cid, msid, 0u, frame);
+        const uint8_t launched = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
         {
           const float sx = ms_stick_unit(batch->state.input_main_x[idx]);
           const float ax = fabsf(sx);
@@ -387,8 +575,7 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
           // consume-once, modeled as a single-frame window at the pulse crossing.
           // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_IASA
           // refs/melee/src/melee/ft/inlines.h::ftCheckThrowB3
-          if (move_tables_special_throw_flags_window(cid, msid, frame) &&
-              !move_tables_special_throw_flags_window(cid, msid, frame - 1.0f) &&
+          if (fighter_script_take_throw_flag(batch, idx, 3u) &&
               ax > ch->specialhi_breverse_stick_threshold) {
             batch->state.facing[idx] = (uint8_t)(sx > 0.0f);
           }
@@ -415,18 +602,20 @@ static void ms_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
       if (a == (uint16_t)MSL_ACT_MS_SPECIAL_LW || a == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW) {
         // Window state machine (ftMs_SpecialLw_Anim): script cmd1 drives the intercept
         // descriptor lifetime; the armed value (2) persists until the script closes the window.
-        const uint8_t script_cmd1 =
-            move_tables_special_cmd_var_value_at_frame(cid, msid, 1u, frame);
+        const uint8_t script_cmd1 = fighter_script_cmd_var(batch, idx, 1u) != 0u ? 1u : 0u;
         if (script_cmd1 && batch->state.speciallw_counter_window[idx] == 0u) {
           batch->state.speciallw_counter_window[idx] = 2u;  // armed
           batch->state.speciallw_counter_hitlag_floor_active[idx] = 1u;
+          ms_counter_set_shielddesc_active(batch, idx, 1u);
         } else if (!script_cmd1 && batch->state.speciallw_counter_window[idx] != 0u) {
           batch->state.speciallw_counter_window[idx] = 0u;
           batch->state.speciallw_counter_hitlag_floor_active[idx] = 0u;
+          ms_counter_set_shielddesc_active(batch, idx, 0u);
         }
         if (ms_anim_finished(cid, msid, frame)) {
           batch->state.speciallw_counter_window[idx] = 0u;
           batch->state.speciallw_counter_hitlag_floor_active[idx] = 0u;
+          ms_counter_set_shielddesc_active(batch, idx, 0u);
           ms_exit_to_wait_or_fall(batch, c, ch, idx);
         }
         break;
@@ -630,8 +819,7 @@ uint8_t marth_specials_phys(MslBatch* batch, size_t idx) {
       return 1u;
     }
     case MSL_ACT_MS_SPECIAL_AIR_HI: {
-      const uint8_t launched =
-          move_tables_special_cmd_var_value_at_frame(batch->state.char_id[idx], msid, 0u, frame);
+      const uint8_t launched = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
       if (!launched) {
         ms_fall_step(batch, idx, ch->grav, ch->terminal_vel);
         return 1u;
@@ -757,7 +945,7 @@ static uint8_t ms_b_entry_mask(const MslBatch* batch, size_t idx, uint16_t a, ui
       case MSL_ACT_GUARD_OFF:
         return (batch->state.guard_special_enable_timer_x1c[idx] != 0u) ? (uint8_t)MS_B_ALL : 0u;
       // Grounded attack IASA -> specials, gated on fp->allow_interrupt (the script-owned
-      // allow_interrupt event via move_tables):
+      // allow_interrupt event consumed by the live fighter-script cursor):
       // - AttackS4_IASA runs the full special chain directly.
       // - Attack13/AttackDash/AttackS3*/AttackHi3/AttackHi4/AttackLw4 delegate to
       //   ftCo_Wait_IASA (full chain) once allow_interrupt is set.
@@ -780,12 +968,14 @@ static uint8_t ms_b_entry_mask(const MslBatch* batch, size_t idx, uint16_t a, ui
       case MSL_ACT_ATTACK_S4_LW_S:
       case MSL_ACT_ATTACK_S4_LW:
       case MSL_ACT_ATTACK_HI4:
-      case MSL_ACT_ATTACK_LW4:
-        return move_tables_grounded_attack_allow_interrupt(
-                   batch->state.char_id[idx], a,
-                   msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]))
+      case MSL_ACT_ATTACK_LW4: {
+        const size_t flags_i =
+            idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+        return (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) !=
+                       0u
                    ? (uint8_t)MS_B_ALL
                    : 0u;
+      }
       // Grounded Damage_IASA delegates to ftCo_Wait_IASA once the hitstun scalar clears
       // (x221C_b6); the dispatcher's hitstun gate already enforces the scalar.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
@@ -1213,6 +1403,9 @@ static void ms_swap_preserving_frame(MslBatch* batch, size_t idx, uint16_t next_
     // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{
     //   ftMs_SpecialLw_80138D38,ftMs_SpecialLw_80138DD0,
     //   ftMs_SpecialLw_80139080,ftMs_SpecialLw_801390E0}
+    if (batch->state.speciallw_counter_window[idx] != 0u) {
+      ms_counter_set_shielddesc_active(batch, idx, 1u);
+    }
     batch->state.speciallw_counter_hitlag_floor_active[idx] = 0u;
   }
   // ChangeMotionState without Ft_MF_Unk24 clears fp->x221C_u16_y; opcode-52 levels whose

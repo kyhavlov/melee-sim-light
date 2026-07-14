@@ -8,7 +8,6 @@
 #include "common_params.h"
 #include "decomp/lb/lb_00ce.h"
 #include "input_axis.h"
-#include "move_tables.h"
 #include "ucf.h"
 
 // UCF pad buffer: refs/ucf/include/ucf/pad_buffer.h
@@ -209,8 +208,6 @@ static inline uint8_t clamp_inc_u8_ff(uint8_t prev) {
   return (uint8_t)t;
 }
 
-static inline float q16_16_to_f32(int32_t x) { return (float)x * (1.0f / 65536.0f); }
-
 static inline uint8_t input_action_is_grounded_smash(uint16_t a) {
   switch (a) {
     case MSL_ACT_ATTACK_S4_HI:
@@ -234,6 +231,7 @@ static inline void grounded_smash_charge_clear(MslBatch* batch, size_t idx) {
   batch->state.smash_charge_state[idx] = 0u;
   batch->state.smash_charge_frames[idx] = 0u;
   batch->state.smash_charge_hold_frames_max[idx] = 0u;
+  batch->state.smash_charge_damage_mul[idx] = 0.0f;
   batch->state.smash_charge_saved_rate_fp_q16_16[idx] = 0;
 }
 
@@ -303,32 +301,10 @@ static inline void grounded_smash_charge_update_ftCo_800DF0D0_subset(MslBatch* b
     return;
   }
 
-  const float cur_anim_frame = batch->state.anim_frame_f32[idx];
-  const float prev_anim_frame =
-      cur_anim_frame - q16_16_to_f32(batch->state.frame_speed_mul_fp_q16_16[idx]);
-  uint8_t hold_frames = 0u;
-  if (!move_tables_grounded_smash_charge_crossed(batch->state.char_id[idx], action_id,
-                                                 prev_anim_frame, cur_anim_frame, &hold_frames)) {
-    return;
-  }
-
-  // Live ownership note:
-  // - ftCo_800DF0D0 consults the fighter's current input snapshot when promoting
-  //   SmashState_PreCharge -> Charging.
-  // - A fresh held-A pulse on the row that reaches af=2 is enough to freeze the next AttackHi4/
-  //   AttackLw4 timeline advance; prior-frame A continuity is not required.
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-  // refs/melee/src/melee/ft/ft_0DF0.c::ftCo_800DF0D0
-  if (held_a == 0u) {
-    return;
-  }
-
-  batch->state.smash_charge_state[idx] = 2u;
-  batch->state.smash_charge_frames[idx] = 0u;
-  batch->state.smash_charge_hold_frames_max[idx] = hold_frames;
-  batch->state.smash_charge_saved_rate_fp_q16_16[idx] = batch->state.frame_speed_mul_fp_q16_16[idx];
-  batch->state.kb_smashcharge_active[idx] = 1u;
-  batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+  // Opcode 56 is executed by fighter_script before this priority-3 input owner and publishes
+  // SmashState_PreCharge above. If the state is still inactive, this action has no charge command
+  // due on the current source interpreter tick.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
 }
 
 static inline void opening_input_lock_apply_Fighter_UnkInitLoad_80068914_Inner1_subset(

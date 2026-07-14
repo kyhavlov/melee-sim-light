@@ -57,12 +57,14 @@ ifeq ($(strip $(NATIVE_OPT)),1)
 CFLAGS += -march=native
 endif
 ifeq ($(strip $(LTO)),1)
-CFLAGS += -flto
+LTO_FLAG := -flto
+CFLAGS += $(LTO_FLAG)
 endif
 BENCH_SIM ?= build/bench/bench_sim
 BENCHMARK_REPORT ?= reports/benchmarks/sim_benchmark.txt
 BENCHMARK_REPLAY_JSON ?= build/bench/validation_rollout_benchmark.json
-BENCH_SIM_SRCS := $(wildcard src/*.c) src/decomp/lb/lb_00ce.c tools/bench/bench_sim.c
+BENCH_SIM_CORE_SRCS := $(wildcard src/*.c) src/decomp/lb/lb_00ce.c
+BENCH_SIM_TOOL_SRC := tools/bench/bench_sim.c
 BUILD_FORCE ?= 0
 BUILD_STAMP ?= build/msl_binding.stamp
 NATIVE_EXT_GLOB := melee_sim/_native*.so
@@ -81,6 +83,8 @@ ifeq ($(strip $(NATIVE_SRCS)),)
 $(error native extension source list is empty; check setup.py and $(NATIVE_SOURCE_LIST_TOOL))
 endif
 NATIVE_OBJS := $(patsubst %.c,$(NATIVE_OBJ_DIR)/%.o,$(NATIVE_SRCS))
+BENCH_SIM_CORE_OBJS := $(patsubst %.c,$(NATIVE_OBJ_DIR)/%.o,$(BENCH_SIM_CORE_SRCS))
+BENCH_SIM_TOOL_OBJ := $(patsubst %.c,$(NATIVE_OBJ_DIR)/%.o,$(BENCH_SIM_TOOL_SRC))
 LEGACY_ROOT_EXT_GLOB := msl_binding*.so
 VIEWER_PORT ?= 8001
 HOST ?= 127.0.0.1
@@ -145,7 +149,7 @@ $(NATIVE_OBJ_DIR)/%.o: %.c Makefile $(NATIVE_CONFIG_STAMP) $(NATIVE_OBJECT_DEPS)
 
 $(NATIVE_SO): $(NATIVE_OBJS) $(NATIVE_SOURCE_LIST_DEPS) $(NATIVE_CONFIG_STAMP)
 	@mkdir -p "$(@D)"
-	$(BUILD_QUIET)$(CC) -shared $(if $(filter 1,$(strip $(LTO))),-flto,) $(filter %.o,$^) $(PY_LINK_FLAGS) -lm -o "$@"
+	$(BUILD_QUIET)$(CC) -shared $(LTO_FLAG) $(filter %.o,$^) $(PY_LINK_FLAGS) -lm -o "$@"
 
 $(BUILD_STAMP): $(NATIVE_SO) $(BUILD_STAMP_DEPS)
 	@mkdir -p "$(@D)"
@@ -254,9 +258,12 @@ dolphin-engine-dump:
 dolphin-extract:
 	@$(PY) -m tools.dolphin.extract_engine_dump_rows $(ARGS)
 
-build-bench-sim:
-	@mkdir -p build/bench
-	@$(CC) $(CFLAGS) -Isrc $(BENCH_SIM_SRCS) -lm -o "$(BENCH_SIM)"
+build-bench-sim: $(BENCH_SIM)
+
+$(BENCH_SIM): $(BENCH_SIM_CORE_OBJS) $(BENCH_SIM_TOOL_OBJ) $(NATIVE_CONFIG_STAMP)
+	@mkdir -p "$(@D)"
+	$(BUILD_QUIET)$(CC) $(filter -pg,$(CFLAGS)) $(LTO_FLAG) \
+		$(BENCH_SIM_CORE_OBJS) $(BENCH_SIM_TOOL_OBJ) -lm -o "$@"
 
 build-bench-sim-native:
 	@$(MAKE) --no-print-directory NATIVE_OPT=1 build-bench-sim

@@ -428,7 +428,12 @@ PyObject* msl_validation_init_static_buffers_py(PyObject* self, PyObject* args) 
     MslCompare* ref = (MslCompare*)(void*)(ref_u8 + (size_t)i * ref_stride);
     seed->frame_id = frame_ids[i];
     ref->frame_id = frame_ids[i + 1];
-    seed->frame_pre_random_seed = rng[i];
+    // A validation seed is the post-frame fighter snapshot at i, but step_input executes the
+    // destination frame i+1. Slippi's priority-0 frame-start GObj records the HSD stream before
+    // that destination frame's fighter callbacks, so both the transition seed and its reference
+    // carry rng[i+1]. This is one global scheduler boundary, not an owner-specific promotion.
+    // refs/slippi-ssbm-asm/Recording/SendFrameStart.s::Macro_SendFrameStart
+    seed->frame_pre_random_seed = rng[i + 1];
     ref->frame_pre_random_seed = rng[i + 1];
     seed->stage_id = stage_id;
     ref->stage_id = stage_id;
@@ -442,9 +447,6 @@ PyObject* msl_validation_init_static_buffers_py(PyObject* self, PyObject* args) 
     memset(seed->combo_victim_port, 0xFF, sizeof(seed->combo_victim_port));
     memset(seed->grab_owner_port, 0xFF, sizeof(seed->grab_owner_port));
     memset(seed->phantom_damage_source_port, 0xFF, sizeof(seed->phantom_damage_source_port));
-    memset(seed->item_reflect_transfer_port, 0xFF, sizeof(seed->item_reflect_transfer_port));
-    memset(seed->item_hidden_body_hit_victim_port, 0xFF,
-           sizeof(seed->item_hidden_body_hit_victim_port));
     for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
       seed->floor_skip_segment_id_u16[p] = 0xFFFFu;
       seed->floor_skip_segment_valid_u8[p] = 0;

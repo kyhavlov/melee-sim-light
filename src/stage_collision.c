@@ -20,16 +20,6 @@
 #include "stage_item_params.h"
 
 typedef struct {
-  int16_t kind_index;
-  int16_t fighter_floor_index;
-  uint16_t map_index;
-  uint8_t kind;
-  uint8_t platform_transform_kind;
-  uint8_t platform_transform_id;
-  uint8_t _pad0;
-} MslStageSegmentRef;
-
-typedef struct {
   float left;
   float right;
   float top;
@@ -1132,6 +1122,7 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
   slot->map_lines = map_lines;
   slot->map_line_count = seg_n;
   slot->map.lines = slot->map_lines;
+  slot->map.segment_refs = slot->segment_ref;
   slot->map.line_count = slot->map_line_count;
   slot->floor_line_count = floor_n;
   slot->fighter_floor_lines = fighter_floor_lines;
@@ -3368,8 +3359,14 @@ static inline uint8_t stage_segment_intersection_point(float ax0, float ay0, flo
   return 1u;
 }
 
-static uint8_t stage_collision_item_line_query(uint32_t stage_id, float x0, float y0, float x1,
-                                               float y1, float* hit_x_out, float* hit_y_out) {
+static inline uint8_t stage_wall_line_intersects_sweep_segment(const MslStageWallLine* seg,
+                                                               int side, float ax0, float ay0,
+                                                               float ax1, float ay1);
+
+static uint8_t stage_collision_item_line_query(const MslBatch* batch, int bi, uint32_t stage_id,
+                                               float x0, float y0, float x1, float y1,
+                                               float* hit_x_out, float* hit_y_out,
+                                               float* hit_vel_x_out, float* hit_vel_y_out) {
   const MslStageSlot* slot = stage_slot(stage_id);
   if (slot == NULL || !slot->loaded) {
     return 0;
@@ -3377,8 +3374,10 @@ static uint8_t stage_collision_item_line_query(uint32_t stage_id, float x0, floa
   float best_t = 2.0f;
   float best_x = 0.0f;
   float best_y = 0.0f;
+  float best_vel_x = 0.0f;
+  float best_vel_y = 0.0f;
   uint8_t found = 0u;
-#define TRY_ITEM_LINE(SEG, HIT_EXPR)                                                      \
+#define TRY_ITEM_LINE(SEG, HIT_EXPR, VEL_X, VEL_Y)                                        \
   do {                                                                                    \
     if (!stage_line_is_active_for_item_collision((SEG)->fighter_solid) || !(HIT_EXPR)) {  \
       break;                                                                              \
@@ -3393,28 +3392,51 @@ static uint8_t stage_collision_item_line_query(uint32_t stage_id, float x0, floa
       best_t = t__;                                                                       \
       best_x = x__;                                                                       \
       best_y = y__;                                                                       \
+      best_vel_x = (VEL_X);                                                               \
+      best_vel_y = (VEL_Y);                                                               \
       found = 1u;                                                                         \
     }                                                                                     \
   } while (0)
   for (size_t si = 0; si < slot->floor_line_count; si++) {
     const MslStageFloorLine* seg = &slot->floor_lines[si];
-    TRY_ITEM_LINE(seg, stage_floor_segment_intersects_item(x0, y0, x1, y1, seg->x0, seg->y0,
-                                                           seg->x1, seg->y1));
+    MslStageFloorLine world = *seg;
+    float surface_vel_x = 0.0f;
+    float surface_vel_y = 0.0f;
+    if (batch != NULL) {
+      MslStageMovingSurfaceState surface = {0};
+      if (stage_collision_floor_line_moving_surface_state(batch, bi, seg, &surface)) {
+        if (surface.active == 0u || surface.visible == 0u) {
+          continue;
+        }
+        world.x0 = surface.x0;
+        world.y0 = surface.y0;
+        world.x1 = surface.x1;
+        world.y1 = surface.y1;
+        surface_vel_x = surface.velocity_x;
+        surface_vel_y = surface.velocity_y;
+      }
+    }
+    TRY_ITEM_LINE(
+        &world,
+        stage_floor_segment_intersects_item(x0, y0, x1, y1, world.x0, world.y0, world.x1, world.y1),
+        surface_vel_x, surface_vel_y);
   }
   for (size_t si = 0; si < slot->left_wall_line_count; si++) {
     const MslStageWallLine* seg = &slot->left_wall_lines[si];
-    TRY_ITEM_LINE(seg,
-                  stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1));
+    TRY_ITEM_LINE(seg, stage_wall_line_intersects_sweep_segment(seg, 0, x0, y0, x1, y1), 0.0f,
+                  0.0f);
   }
   for (size_t si = 0; si < slot->right_wall_line_count; si++) {
     const MslStageWallLine* seg = &slot->right_wall_lines[si];
-    TRY_ITEM_LINE(seg,
-                  stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1));
+    TRY_ITEM_LINE(seg, stage_wall_line_intersects_sweep_segment(seg, 1, x0, y0, x1, y1), 0.0f,
+                  0.0f);
   }
   for (size_t si = 0; si < slot->ceiling_line_count; si++) {
     const MslStageCeilingLine* seg = &slot->ceiling_lines[si];
-    TRY_ITEM_LINE(seg, stage_ceiling_segment_intersects_item(x0, y0, x1, y1, seg->x0, seg->y0,
-                                                             seg->x1, seg->y1));
+    TRY_ITEM_LINE(
+        seg,
+        stage_ceiling_segment_intersects_item(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1),
+        0.0f, 0.0f);
   }
 #undef TRY_ITEM_LINE
   if (!found) {
@@ -3425,6 +3447,12 @@ static uint8_t stage_collision_item_line_query(uint32_t stage_id, float x0, floa
   }
   if (hit_y_out != NULL) {
     *hit_y_out = best_y;
+  }
+  if (hit_vel_x_out != NULL) {
+    *hit_vel_x_out = best_vel_x;
+  }
+  if (hit_vel_y_out != NULL) {
+    *hit_vel_y_out = best_vel_y;
   }
   return 1u;
 }
@@ -3441,12 +3469,33 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
   // refs/melee/src/melee/it/itgroundcoll.c::it_8026E9A4
   // refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
   // data/stages/bin/grps.bin::MSLSTG01 segments[*].fighter_solid
-  return stage_collision_item_line_query(stage_id, x0, y0, x1, y1, NULL, NULL);
+  return stage_collision_item_line_query(NULL, 0, stage_id, x0, y0, x1, y1, NULL, NULL, NULL, NULL);
 }
 
 uint8_t stage_collision_item_line_hit_floor(uint32_t stage_id, float x0, float y0, float x1,
                                             float y1, float* hit_x_out, float* hit_y_out) {
-  return stage_collision_item_line_query(stage_id, x0, y0, x1, y1, hit_x_out, hit_y_out);
+  return stage_collision_item_line_query(NULL, 0, stage_id, x0, y0, x1, y1, hit_x_out, hit_y_out,
+                                         NULL, NULL);
+}
+
+uint8_t stage_collision_item_line_hits_runtime(const MslBatch* batch, int bi, float x0, float y0,
+                                               float x1, float y1) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+  return stage_collision_item_line_query(batch, bi, batch->state.stage_id[bi], x0, y0, x1, y1, NULL,
+                                         NULL, NULL, NULL);
+}
+
+uint8_t stage_collision_item_line_hit_runtime(const MslBatch* batch, int bi, float x0, float y0,
+                                              float x1, float y1, float* hit_x_out,
+                                              float* hit_y_out, float* hit_vel_x_out,
+                                              float* hit_vel_y_out) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+  return stage_collision_item_line_query(batch, bi, batch->state.stage_id[bi], x0, y0, x1, y1,
+                                         hit_x_out, hit_y_out, hit_vel_x_out, hit_vel_y_out);
 }
 
 static inline uint8_t stage_vertical_wall_intersects_sweep_source(float wall_x, float wall_y0,

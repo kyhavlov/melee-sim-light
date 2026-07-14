@@ -1,12 +1,34 @@
 from __future__ import annotations
 
+import struct
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+from tools.dolphin import dolphin_engine_dump as capture
 from tools.dolphin import engine_dump_io as io
 from tools.dolphin.dolphin_engine_dump import _write_dolphin_ini
+from tools.slippi.slpz import EVENT_PAYLOADS, GAME_START, RAW_HEADER, compress_slpz
+
+
+def _fake_slp() -> bytes:
+    event_payloads = bytes(
+        [
+            EVENT_PAYLOADS,
+            7,
+            GAME_START,
+            0,
+            2,
+            0x37,
+            0,
+            3,
+        ]
+    )
+    game_start = bytes([GAME_START, 0xAA, 0xBB])
+    events = bytes([0x37, 1, 2, 3])
+    raw = event_payloads + game_start + events
+    return RAW_HEADER + struct.pack(">I", len(raw)) + raw + b"{U\x08metadata"
 
 
 def _build_dump(path: Path, *, version: int, port_ids: tuple[int, ...] | None = None) -> Path:
@@ -159,6 +181,50 @@ def test_dolphin_ini_keeps_jit_for_bounded_probe_hooks(tmp_path: Path) -> None:
     assert "CPUCore = 1" in ini
     assert "CPUCore = 0" not in ini
     assert "EmulationSpeed = 0.000" in ini
+
+
+def test_capture_materializes_slpz_for_playback_and_cleans_temp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    requested_slp = tmp_path / "game.slp"
+    requested_slp.with_suffix(".slpz").write_bytes(compress_slpz(_fake_slp()))
+    dolphin = tmp_path / "dolphin"
+    iso = tmp_path / "melee.iso"
+    dolphin.touch()
+    iso.touch()
+    materialized: Path | None = None
+
+    def observe_playback(
+        _user_dir: Path,
+        *,
+        replay: Path,
+        start_frame: int,
+        end_frame: int,
+        dump_path: Path,
+        should_resync: bool = True,
+    ) -> Path:
+        del start_frame, end_frame, dump_path, should_resync
+        nonlocal materialized
+        materialized = replay
+        assert replay.suffix == ".slp"
+        assert replay.read_bytes() == _fake_slp()
+        raise RuntimeError("observed materialized playback path")
+
+    monkeypatch.setattr(capture, "_write_playback_txt", observe_playback)
+    result = capture.capture_engine_dump(
+        replay=requested_slp,
+        dolphin=dolphin,
+        iso=iso,
+        user_dir=tmp_path / "user",
+        out_bin=tmp_path / "dump.bin",
+        start_frame=0,
+        end_frame=0,
+    )
+
+    assert result.returncode == 1
+    assert result.error == "observed materialized playback path"
+    assert materialized is not None
+    assert not materialized.exists()
 
 
 def test_read_engine_dump_v6_backward_compat(tmp_path: Path) -> None:

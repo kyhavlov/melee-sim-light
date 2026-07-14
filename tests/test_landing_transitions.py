@@ -20,6 +20,7 @@ ACT_CLIFF_JUMP_QUICK2 = 0x0107
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_FALL = 20
+SM_ATTACK_AIR_N = 68
 SM_LANDING = 35
 SM_LANDING_AIR_N = 73
 SM_LANDING_FALL_SPECIAL = 36
@@ -175,17 +176,18 @@ def test_attack_air_n_lands_enters_landing_air_n_and_refreshes_jumps() -> None:
     cmd0_on = _fox_attackair_cmd0_on_frame("ftCo_SM_AttackAirN")
     seed["action_frame"][0, 0] = np.int16(max(0, cmd0_on - 1))
     seed["anim_frame_f32"][0, 0] = np.float32(seed["action_frame"][0, 0])
-    # Use a stable ECB pose for grounding/ECB evaluation; landing selection in this sim is keyed off action_id
-    # (not animation_index) on the collision->grounding transition.
-    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    # Keep the source motion owner coherent: ftCo_LandingAir_EnterWithLag selects from
+    # fp->motion_id and reads cmd_vars[0] from that motion's extracted script.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_AIR_N)
     seed["ground_id"][0, 0] = np.uint16(1)  # prefer main FD floor segment
 
     # Ensure we cross the FD floor in one frame under ECB-bottom grounding, accounting for the
     # sim's per-frame ordering (gravity/terminal clamp before integration).
     af0 = int(seed["action_frame"][0, 0])
     af1 = af0 + 1
-    bot0 = _fox_ecb_bottom_rel_y(SM_FALL, af0)
-    bot1 = _fox_ecb_bottom_rel_y(SM_FALL, af1)
+    bot0 = _fox_ecb_bottom_rel_y(SM_ATTACK_AIR_N, af0)
+    bot1 = _fox_ecb_bottom_rel_y(SM_ATTACK_AIR_N, af1)
     seed["pos_y"][0, 0] = np.float32(-bot0 + 0.10)
     # Choose a small downward self-velocity so gravity pushes us below the floor in one frame.
     # Fox grav is ISO-extracted: data/characters/fox.json `grav`.

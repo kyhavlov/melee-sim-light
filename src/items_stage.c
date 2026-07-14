@@ -632,11 +632,8 @@ static uint8_t yoshi_shyguy_try_knocked_state_fighter_body_hit(MslBatch* batch, 
         batch, bi, src.attacker, def, batch->state.attack_id[src.attacker_idx],
         batch->state.attack_instance[src.attacker_idx], batch->state.instance_id[src.attacker_idx],
         batch->state.item_type[shy_idx], batch->state.item_state[shy_idx], src.damage, src.angle,
-        src.kbg, src.wsk, src.bkb, hurt_height, src.element, 1.0f,
-        // Knocked Shy Guy Counter geometry: the contact capsule is the carried source hitbox
-        // (hx/hy with radius hr, the same sweep tested against the defender's hurtcaps above),
-        // so the descriptor sphere sees the real contact position/radius.
-        hx, hy, hr, batch->state.item_vel_x[shy_idx], 1u);
+        src.kbg, src.wsk, src.bkb, hurt_height, src.element, 1.0f, hx,
+        batch->state.item_vel_x[shy_idx], 1u);
     if (res == MSL_ITEM_HIT_NONE) {
       continue;
     }
@@ -794,80 +791,9 @@ static inline void yoshi_shyguy_apply_item_damage(MslBatch* batch, size_t shy_id
                                    dir);
 }
 
-static int yoshi_shyguy_laser_item_hit_deferred_to_throw_fighter_body(const MslBatch* batch, int bi,
-                                                                      size_t laser_idx,
-                                                                      const MslLaserParams* lp,
-                                                                      uint8_t laser_state,
-                                                                      float vx) {
-  if (batch == NULL || lp == NULL || laser_state == 0u ||
-      !item_type_is_fox_laser(batch->state.item_type[laser_idx])) {
-    return -1;
-  }
-  const int owner = (int)batch->state.item_owner[laser_idx];
-  if (owner < 0 || owner >= (int)batch->config.num_players) {
-    return -1;
-  }
-  const size_t o_idx = msl_idx_player(bi, owner);
-  if (batch->state.action_id[o_idx] != (uint16_t)MSL_ACT_THROW_HI) {
-    return -1;
-  }
-  int16_t first_pulse_af = 0;
-  int16_t last_pulse_af = 0;
-  if (!move_tables_throw_projectile_first_pulse_frame(
-          batch->state.char_id[o_idx], batch->state.action_id[o_idx], &first_pulse_af) ||
-      !move_tables_throw_projectile_last_pulse_frame(
-          batch->state.char_id[o_idx], batch->state.action_id[o_idx], &last_pulse_af) ||
-      batch->state.throw_pulse_crossed_prev_frame[o_idx] != (uint8_t)last_pulse_af) {
-    return -1;
-  }
-
-  int candidate = -1;
-  const int num_players = (int)batch->config.num_players;
-  for (int vp = 0; vp < num_players; vp++) {
-    if (vp == owner) {
-      continue;
-    }
-    const size_t v_idx = msl_idx_player(bi, vp);
-    if (batch->state.hitlag[v_idx] != 0u || batch->state.hitstun[v_idx] == 0u ||
-        (!items_action_is_damage_family(batch->state.action_id[v_idx]) &&
-         !msl_damage_owner_is_damagefly_action(batch->state.action_id[v_idx])) ||
-        !msl_damage_source_victim_port_matches_attacker(batch, v_idx, o_idx, owner) ||
-        batch->state.last_attack_landed[v_idx] != (uint8_t)first_pulse_af ||
-        ((batch->state.pos_x[v_idx] - batch->state.pos_x[o_idx]) * vx) > 0.0f) {
-      continue;
-    }
-    if (candidate >= 0) {
-      return -1;
-    }
-    candidate = vp;
-  }
-  if (candidate < 0) {
-    return -1;
-  }
-
-  // Fox ThrowHi final-pulse fighter callback before Shy Guy item contact:
-  // - The final ThrowHi set_throw_spawn_projectile pulse is source-owned by the extracted script
-  //   (18/20/24). ftFx_Throw_Anim spawns the state1 Fox laser through it_8029C6CC.
-  // - Fighter_8006CB94 / ftColl_8007925C owns item-vs-fighter contact before the laser item
-  //   collision callback reaches stage-item contact. In the final-pulse carry frame, the unique
-  //   victim is already in same-source DamageFly hitstun from the first pulse and remains on the
-  //   non-projectile side; Shy Guy item contact must not clear the shot before the next BODY
-  //   callback consumes it.
-  // - This is not a replay row key: it requires extracted ThrowHi pulse order, Fox shot data,
-  //   source damage provenance, first-pulse item attack id, and unique current victim ownership.
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-  // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
-  // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
-  // refs/melee/src/melee/it/items/itheiho.c::it_802D8EC8
-  // data/moves/fox.json moves["ftCo_SM_ThrowHi"].events
-  return candidate;
-}
-
 uint8_t yoshi_shyguy_try_laser_item_hit(MslBatch* batch, int bi, int laser_slot,
                                         const MslLaserParams* lp, uint8_t laser_state, float x0,
-                                        float y0, float x, float y, float ux, float uy, float sr,
+                                        float y0, float x, float y, float ux, float uy,
                                         float laser_prev_scale_z, float laser_scale_z) {
   const MslYoshiShyguyParams* params = stage_item_params_yoshi_shyguy();
   if (batch == NULL || lp == NULL || params == NULL ||
@@ -878,20 +804,6 @@ uint8_t yoshi_shyguy_try_laser_item_hit(MslBatch* batch, int bi, int laser_slot,
   const size_t laser_idx = msl_idx_item(bi, laser_slot);
   const uint8_t off_n =
       (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
-  const float cur_offset_scale = laser_collision_offset_scale(
-      lp, laser_state, laser_scale_z, MSL_LASER_COLLISION_SPACE_BODY, 0u, 1u);
-  const float prev_offset_scale = laser_collision_offset_scale(
-      lp, laser_state, laser_prev_scale_z, MSL_LASER_COLLISION_SPACE_BODY, 0u, 1u);
-  const int deferred_fighter_body_victim =
-      yoshi_shyguy_laser_item_hit_deferred_to_throw_fighter_body(
-          batch, bi, laser_idx, lp, laser_state, batch->state.item_vel_x[laser_idx]);
-  if (deferred_fighter_body_victim >= 0) {
-    batch->state.item_hidden_body_hit_victim_port[laser_idx] =
-        (uint8_t)deferred_fighter_body_victim;
-    batch->state.item_hidden_body_hit_hurt_height[laser_idx] = 1u;
-    batch->state.item_hidden_callback_flags[laser_idx] = (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_CLEAR;
-    return 0u;
-  }
   for (int it = 0; it < MSL_MAX_ITEMS; it++) {
     if (it == laser_slot) {
       continue;
@@ -909,8 +821,10 @@ uint8_t yoshi_shyguy_try_laser_item_hit(MslBatch* batch, int bi, int laser_slot,
       const float bx = batch->state.item_pos_x[shy_idx] + params->hurtbox_b_offset[hi][0];
       const float by = batch->state.item_pos_y[shy_idx] + params->hurtbox_b_offset[hi][1];
       const float bz = params->hurtbox_b_offset[hi][2];
-      const float rr = sr + params->hurtbox_scale[hi];
       if (off_n == 0u) {
+        const float base_radius =
+            ((laser_state == 0u) ? lp->size : lp->state1_size) * lp->item_scale;
+        const float rr = base_radius + params->hurtbox_scale[hi];
         const float d2 =
             item_segment_segment_dist2(x0, y0, 0.0f, x, y, 0.0f, ax, ay, az, bx, by, bz);
         if (d2 <= rr * rr) {
@@ -926,10 +840,14 @@ uint8_t yoshi_shyguy_try_laser_item_hit(MslBatch* batch, int bi, int laser_slot,
       for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X; oi++) {
         const float off_x =
             (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
-        const float sx0 = x0 + ux * off_x * prev_offset_scale;
-        const float sy0 = y0 + uy * off_x * prev_offset_scale;
-        const float sx = x + ux * off_x * cur_offset_scale;
-        const float sy = y + uy * off_x * cur_offset_scale;
+        const float sx0 = x0 + ux * off_x * laser_prev_scale_z;
+        const float sy0 = y0 + uy * off_x * laser_prev_scale_z;
+        const float sx = x + ux * off_x * laser_scale_z;
+        const float sy = y + uy * off_x * laser_scale_z;
+        const float hitbox_radius =
+            ((laser_state == 0u) ? lp->hitbox_sizes[oi] : lp->state1_hitbox_sizes[oi]) *
+            lp->item_scale;
+        const float rr = hitbox_radius + params->hurtbox_scale[hi];
         const float d2 =
             item_segment_segment_dist2(sx0, sy0, 0.0f, sx, sy, 0.0f, ax, ay, az, bx, by, bz);
         if (d2 <= rr * rr) {

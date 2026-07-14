@@ -11,6 +11,7 @@ from tests.stage_metadata_helpers import fd_stage_segments
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
+ACT_DAMAGE_FALL = 0x0026
 ACT_CLIFF_CATCH = 0x00FC
 ACT_CLIFF_WAIT = 0x00FD
 ACT_FX_SPECIAL_HI_FALL = 0x0166
@@ -19,6 +20,7 @@ ACT_PASS = 0x00F4
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
 SM_FALL = 20
+SM_DAMAGE_FALL = 29
 SM_FX_SPECIAL_HI_FALL = 311
 SM_PASS = 209
 
@@ -118,7 +120,6 @@ def _step_once_with_inputs(seed: np.ndarray, *, prev_inp: np.ndarray | None = No
     finally:
         msl_binding.destroy(handle)
 
-
 def test_ledge_catch_requires_facing_and_outside() -> None:
     (lx, ly), _ = _fd_ledge_points()
     _snap_x, snap_y, _snap_h = _fox_ledge_params()
@@ -155,6 +156,35 @@ def test_ledge_catch_requires_facing_and_outside() -> None:
     seed["pos_x"][0, 0] = np.float32(lx + 1.0)
     out = _step_once(seed)
     assert int(out["action_id"][0]) != ACT_CLIFF_CATCH
+
+
+def test_damagefall_8370c_uses_full_ledge_snap_height() -> None:
+    # DamageFall_Coll uses ft_8008370C -> mpColl_800473CC directly. Unlike the DamageFly family's
+    # ft_80081DD4 wrapper, it does not temporarily multiply ledge_snap_height by x1CC. Place Fox in
+    # the narrow vertical band admitted by the full initialized height but rejected by the scaled
+    # DamageFly height, then retain an adjacent just-above rejection.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_8008370C,ft_80081DD4}
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
+    (lx, ly), _ = _fd_ledge_points()
+    _, snap_y, _ = _fox_ledge_params()
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGE_FALL)
+    seed["action_frame"][0, 0] = np.int16(4)
+    seed["anim_frame_f32"][0, 0] = np.float32(4.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_DAMAGE_FALL)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(lx - 1.0)
+    seed["speed_y_self"][0, 0] = np.float32(-3.1)
+
+    # The terminal self velocity moves the root by -3.1 before map collision. An offset of 4.0
+    # remains inside the full-height AABB; 4.6 is immediately outside it.
+    seed["pos_y"][0, 0] = np.float32(ly - snap_y + 4.0 + 3.1)
+    assert int(_step_once(seed)["action_id"][0]) == ACT_CLIFF_CATCH
+
+    seed["pos_y"][0, 0] = np.float32(ly - snap_y + 4.6 + 3.1)
+    assert int(_step_once(seed)["action_id"][0]) != ACT_CLIFF_CATCH
 
 
 def test_specialhi_fall_cliffcatch_both_can_grab_facing_away() -> None:

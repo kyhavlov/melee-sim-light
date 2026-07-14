@@ -37,34 +37,30 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "stale_move_id" in SEED_DTYPE.fields
     assert "stale_attack_instance" in SEED_DTYPE.fields
     assert "attack_instance" in SEED_DTYPE.fields
-    # Throw-side pulse-latch schema scaffold (future causal ownership wiring).
-    assert "throw_pulse_consumed" in SEED_DTYPE.fields
-    assert "throw_pulse_crossed_prev_frame" in SEED_DTYPE.fields
-    assert "throw_command_pending_pulse_frame" in SEED_DTYPE.fields
+    # Callback-consumed throw_flags come from the live script cursor, not a second seed timer.
+    assert "script_throw_flags" not in SEED_DTYPE.fields
+    assert "throw_pulse_consumed" not in SEED_DTYPE.fields
+    assert "throw_pulse_crossed_prev_frame" not in SEED_DTYPE.fields
+    assert "throw_command_pending_pulse_frame" not in SEED_DTYPE.fields
     assert "item_hitlist_victim_port" in SEED_DTYPE.fields
     assert "item_hitlist_victim_cd" in SEED_DTYPE.fields
     assert "item_hitlist_victim_hitbox_mask" in SEED_DTYPE.fields
     assert "item_hitlist_victim_iid" in SEED_DTYPE.fields
-    assert "item_reflect_transfer_port" in SEED_DTYPE.fields
-    assert "item_reflect_transfer_iid" in SEED_DTYPE.fields
-    assert "item_shield_bounce_valid" in SEED_DTYPE.fields
-    assert "item_hidden_body_hit_victim_port" in SEED_DTYPE.fields
+    assert "item_reflect_transfer_port" not in SEED_DTYPE.fields
+    assert "item_reflect_transfer_iid" not in SEED_DTYPE.fields
+    assert "item_hidden_body_hit_victim_port" not in SEED_DTYPE.fields
+    assert "item_hidden_body_hit_hurt_height" not in SEED_DTYPE.fields
     assert "item_hidden_callback_flags" in SEED_DTYPE.fields
-    assert "item_sheik_needle_callback_bounce_vel_y_index" in SEED_DTYPE.fields
-    assert "item_sheik_needle_callback_bounce_vel_x_index_sign" in SEED_DTYPE.fields
+    assert "item_sheik_needle_callback_bounce_vel_y_index" not in SEED_DTYPE.fields
+    assert "item_sheik_needle_callback_bounce_vel_x_index_sign" not in SEED_DTYPE.fields
     assert "item_sheik_needle_motion_seed_kind" in SEED_DTYPE.fields
     assert "item_sheik_needle_motion_vel_x_index_sign" in SEED_DTYPE.fields
     assert "item_sheik_needle_motion_gravity_index" in SEED_DTYPE.fields
     assert "item_sheik_needle_motion_min_vel_y_index" in SEED_DTYPE.fields
-    assert "item_sheik_needle_stage_hit_seed_kind" in SEED_DTYPE.fields
-    assert "item_sheik_needle_stage_hit_vel_y_index" in SEED_DTYPE.fields
-    assert "item_sheik_needle_stage_hit_vel_x_index_sign" in SEED_DTYPE.fields
+    assert "item_sheik_needle_stage_hit_seed_kind" not in SEED_DTYPE.fields
+    assert "item_sheik_needle_stage_hit_vel_y_index" not in SEED_DTYPE.fields
+    assert "item_sheik_needle_stage_hit_vel_x_index_sign" not in SEED_DTYPE.fields
     assert "source_clear_timer_x18c8" in SEED_DTYPE.fields
-    assert "source_clear_owner_set_phase" in SEED_DTYPE.fields
-    assert "source_clear_processhit_damage_pending_phase" in SEED_DTYPE.fields
-    assert "fighter_8006cda4_pre_gate_consume_count" in SEED_DTYPE.fields
-    assert "source_clear_grounded_damage_clear_phase" in SEED_DTYPE.fields
-    assert "source_clear_terminal_phase" in SEED_DTYPE.fields
     # Walk callback-owned source velocity lane (ftWalkCommon_800DFDDC `mv_x0`).
     assert "walk_anim_source_vel_f32" in SEED_DTYPE.fields
     # Walk retarget source lane for the hidden ft_GetGroundFrictionMultiplier branch.
@@ -79,14 +75,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "capture_wait_counter_f32" in SEED_DTYPE.fields
     assert "capture_wait_anim_rate_timer_f32" in SEED_DTYPE.fields
     assert "capture_wait_jump_latch_u8" in SEED_DTYPE.fields
-    assert "capture_breakout_pending_u8" in SEED_DTYPE.fields
     # GuardSetOff hidden x19A4 lower-bound bridge for F02 blocker rows.
     assert "guard_setoff_hitlag_damage_min" in SEED_DTYPE.fields
-    # F02 blocker lane: GuardSetOff hitlag-exit ownership phase.
-    assert "guard_setoff_hitlag_exit_phase_u8" in SEED_DTYPE.fields
-    # F02 blocker lane: GuardSetOff post-hitlag owner class.
-    assert "guard_setoff_post_hitlag_owner_u8" in SEED_DTYPE.fields
-    assert "guard_setoff_exit_frame_speed_mul_f32" in SEED_DTYPE.fields
     # Same-frame fighter-proc order lane for plAttack_80037B08 instance_id entries.
     assert "motion_entry_instance_id_override_u16" in SEED_DTYPE.fields
     # Item spawn-id global counter (`it_804D6D10` -> item->x1C).
@@ -123,11 +113,12 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "phantom_damage_timer_x189c" in SEED_DTYPE.fields
     # Legacy name; stores local simulator slot or 0xFF, not raw Slippi source-port domain.
     assert "phantom_damage_source_port" in SEED_DTYPE.fields
+    assert "combat_hitlist_hb_v2_mask" in SEED_DTYPE.fields
     # Grounded attacker shield-pushback scalar (`fp->xF4_ground_attacker_shield_kb_vel`).
     assert "attacker_shield_ground_kb_vel" in SEED_DTYPE.fields
-    assert "combat_shield_contact_hb_kind" in SEED_DTYPE.fields
-    assert "combat_shield_hit_int_damage" in SEED_DTYPE.fields
-    assert "combat_shield_damage_taken" in SEED_DTYPE.fields
+    assert "combat_shield_contact_hb_kind" not in SEED_DTYPE.fields
+    assert "combat_shield_hit_int_damage" not in SEED_DTYPE.fields
+    assert "combat_shield_damage_taken" not in SEED_DTYPE.fields
     # ReboundStop queued xE8 ground-accel lane.
     assert "rebound_ground_accel_2_f32" in SEED_DTYPE.fields
     assert "rebound_anim_rate_f32" in SEED_DTYPE.fields
@@ -894,6 +885,12 @@ def test_ft_common_data_exports_magnify_damage_source_constants() -> None:
     assert int(data["magnify_damage_interval_frames"]) == 60
     assert int(data["magnify_damage_percent_limit"]) == 150
     assert int(data["magnify_damage_amount"]) == 1
+
+
+def test_ft_common_data_exports_damage_source_clear_lifetime() -> None:
+    data = json.loads(Path("data/common/ft_common_data.json").read_text())
+    # p_ftCommonData->x814, consumed by Fighter_ChangeMotionState/Fighter_8006A360.
+    assert int(data["damage_source_clear_frames_x814"]) == 60
 
 
 def test_ft_common_data_exports_walljump_vertical_decay_source_constant() -> None:

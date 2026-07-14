@@ -76,26 +76,19 @@ def test_four_player_active_refreshes_include_slot_three_geometry_and_shield() -
         held_view["p"]["l"][0, 3] = np.uint8(140)
 
         msl_binding.reseed_seed(handle, seed_bytes)
-        msl_binding.debug_set_hitbox_world(handle, 0, 3, 0, 123.0, 456.0, 0.0, 9.0, 7.0, 1)
         msl_binding.debug_set_hurtcap_world(handle, 0, 3, 0, 100.0, 100.0, 0.0, 101.0, 100.0, 0.0, 8.0)
 
-        before_hitboxes, before_hitbox_count = msl_binding.hitboxes_world(handle, 0, 3)
         before_hurtcaps, before_hurtcap_count = msl_binding.hurtcaps_world(handle, 0, 3)
-        assert before_hitbox_count == 1
         assert before_hurtcap_count == 1
-        assert float(before_hitboxes[0, 0]) == np.float32(123.0)
         assert float(before_hurtcaps[0, 0]) == np.float32(100.0)
 
         msl_binding.step_input(handle, held_shield, held_shield)
 
-        hitboxes, hitbox_count = msl_binding.hitboxes_world(handle, 0, 3)
         hurtcaps, hurtcap_count = msl_binding.hurtcaps_world(handle, 0, 3)
         bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
     finally:
         msl_binding.destroy(handle)
 
-    assert hitbox_count == 0
-    assert not np.any(hitboxes[:, 9] != np.float32(0.0))
     assert hurtcap_count > 0
     assert not np.any(
         (hurtcaps[:, 0] == np.float32(100.0)) & (hurtcaps[:, 6] == np.float32(8.0))

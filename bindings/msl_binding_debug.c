@@ -1284,6 +1284,37 @@ PyObject* msl_debug_dynamic_pose_state_py(PyObject* self, PyObject* args) {
   return (PyObject*)arr;
 }
 
+PyObject* msl_validation_source_clear_timer_state_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  if (!PyArg_ParseTuple(args, "O", &handle_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  // Validation preprocessing uses an ordinary one-frame runtime step to observe every real
+  // Fighter_ChangeMotionState x18C8 writer, including same-frame intermediate states that are not
+  // present in Slippi post-frame rows. Copying the fixed SoA lane here keeps that reconstruction
+  // native and batched; this function does not participate in gameplay execution.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+  npy_intp dims[2] = {(npy_intp)h->batch->batch_size, (npy_intp)MSL_MAX_PLAYERS};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_UINT8);
+  if (arr == NULL) {
+    return NULL;
+  }
+  uint8_t* out = (uint8_t*)PyArray_DATA(arr);
+  for (int bi = 0; bi < h->batch->batch_size; bi++) {
+    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+      out[(size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p] =
+          h->batch->state.source_clear_timer_x18c8[msl_idx_player(bi, p)];
+    }
+  }
+  return (PyObject*)arr;
+}
+
 PyObject* msl_debug_common_fall_blend_state_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -1328,30 +1359,6 @@ PyObject* msl_debug_walljump_state_py(PyObject* self, PyObject* args) {
                        (unsigned int)h->batch->state.passivewall_vel_y_exponent[idx]);
 }
 
-PyObject* msl_debug_get_fighter_8006cda4_pre_gate_consume_count_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* handle_obj = NULL;
-  int batch_index = 0;
-  int player_index = 0;
-  if (!PyArg_ParseTuple(args, "Oii", &handle_obj, &batch_index, &player_index)) {
-    return NULL;
-  }
-  PyMslHandle* h = unpack_handle(handle_obj);
-  if (h == NULL) {
-    return NULL;
-  }
-
-  uint8_t count = 0u;
-  const int err = msl_batch_debug_get_fighter_8006cda4_pre_gate_consume_count(h->batch, batch_index,
-                                                                              player_index, &count);
-  if (err != 0) {
-    PyErr_Format(PyExc_ValueError,
-                 "msl_batch_debug_get_fighter_8006cda4_pre_gate_consume_count failed: %d", err);
-    return NULL;
-  }
-  return PyLong_FromUnsignedLong((unsigned long)count);
-}
-
 PyObject* msl_debug_get_sheik_needle_count_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -1373,33 +1380,6 @@ PyObject* msl_debug_get_sheik_needle_count_py(PyObject* self, PyObject* args) {
     return NULL;
   }
   return PyLong_FromUnsignedLong((unsigned long)count);
-}
-
-PyObject* msl_debug_attackairb_continuation_overlap_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* handle_obj = NULL;
-  int batch_index = 0;
-  int attacker = 0;
-  int hb_id = 0;
-  int defender = 0;
-  int cap_id = 0;
-  if (!PyArg_ParseTuple(args, "Oiiiii", &handle_obj, &batch_index, &attacker, &hb_id, &defender,
-                        &cap_id)) {
-    return NULL;
-  }
-  PyMslHandle* h = unpack_handle(handle_obj);
-  if (h == NULL) {
-    return NULL;
-  }
-  float overlap = 0.0f;
-  const int err = msl_batch_debug_attackairb_continuation_overlap(
-      h->batch, batch_index, attacker, hb_id, defender, cap_id, &overlap);
-  if (err != 0) {
-    PyErr_Format(PyExc_ValueError, "msl_batch_debug_attackairb_continuation_overlap failed: %d",
-                 err);
-    return NULL;
-  }
-  return PyFloat_FromDouble((double)overlap);
 }
 
 PyObject* msl_debug_body_matrix_overlap_py(PyObject* self, PyObject* args) {
@@ -2040,42 +2020,6 @@ PyObject* msl_debug_combat_contacts_classified_filtered_py(PyObject* self, PyObj
     Py_DECREF(arr);
     PyErr_Format(PyExc_ValueError, "msl_batch_debug_combat_contacts_classified_filtered failed: %d",
                  err);
-    return NULL;
-  }
-
-  return Py_BuildValue("(Oi)", arr, (int)count);
-}
-
-PyObject* msl_debug_shield_candidate_decisions_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* handle_obj = NULL;
-  int batch_index = 0;
-  int max_rows = 256;
-  if (!PyArg_ParseTuple(args, "Oi|i", &handle_obj, &batch_index, &max_rows)) {
-    return NULL;
-  }
-  PyMslHandle* h = unpack_handle(handle_obj);
-  if (h == NULL) {
-    return NULL;
-  }
-  if (max_rows < 0 || max_rows > 0xFFFF) {
-    PyErr_SetString(PyExc_ValueError, "max_rows out of range");
-    return NULL;
-  }
-
-  npy_intp dims[2] = {(npy_intp)max_rows, (npy_intp)sizeof(MslDebugShieldCandidateDecision)};
-  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_UINT8);
-  if (arr == NULL) {
-    return NULL;
-  }
-
-  uint16_t count = 0;
-  MslDebugShieldCandidateDecision* out = (MslDebugShieldCandidateDecision*)PyArray_DATA(arr);
-  const int err = msl_batch_debug_shield_candidate_decisions(h->batch, batch_index, out,
-                                                             (uint16_t)max_rows, &count);
-  if (err != 0) {
-    Py_DECREF(arr);
-    PyErr_Format(PyExc_ValueError, "msl_batch_debug_shield_candidate_decisions failed: %d", err);
     return NULL;
   }
 

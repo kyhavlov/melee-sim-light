@@ -1,7 +1,6 @@
 #include "motion_state_runtime.h"
 
 #include "motion_state_owners.h"
-#include "hitboxes.h"
 #include "mpcoll_ecb_pose.h"
 #include "mpcoll_floor_skip.h"
 
@@ -11,7 +10,11 @@ void motion_state_install_live_callbacks(MslBatch* batch, size_t idx) {
   }
   const uint8_t char_id = batch->state.char_id[idx];
   const uint16_t action_id = batch->state.action_id[idx];
+  batch->state.live_anim_callback_id[idx] = msl_motion_state_anim_cb_id(char_id, action_id);
+  batch->state.live_iasa_callback_id[idx] = msl_motion_state_iasa_cb_id(char_id, action_id);
+  batch->state.live_phys_callback_id[idx] = msl_motion_state_phys_cb_id(char_id, action_id);
   batch->state.live_coll_callback_id[idx] = msl_motion_state_coll_cb_id(char_id, action_id);
+  batch->state.live_cam_callback_id[idx] = msl_motion_state_cam_cb_id(char_id, action_id);
   batch->state.live_coll_callback_action_id[idx] = action_id;
   batch->state.live_coll_handler_kind[idx] = msl_motion_state_coll_handler_kind(char_id, action_id);
   batch->state.live_coll_wrapper_selector_kind[idx] =
@@ -28,8 +31,9 @@ void motion_state_install_live_callbacks_before_map(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       // Fighter_ChangeMotionState installs the destination callbacks once; later source overrides
       // remain live until another motion entry. Most simulator entries already install through
-      // msl_anim_timebase_enter(). This compatibility boundary catches older direct action writes
-      // without rebuilding the callback every frame and erasing a persistent override.
+      // msl_anim_timebase_enter(). Until Phase 3 converges the remaining direct action writers,
+      // synchronize only when the action identity changes; rebuilding every frame would erase a
+      // persistent source override.
       // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_procMap}
       const size_t idx = msl_idx_player(bi, p);
       if (batch->state.live_coll_callback_action_id[idx] != batch->state.action_id[idx]) {
@@ -92,17 +96,11 @@ void motion_state_change(MslBatch* batch, int bi, int p, uint16_t action_id,
     return;
   }
   const size_t idx = msl_idx_player(bi, p);
-  const uint8_t old_fastfall = batch->state.fall_fast[idx];
-  if ((flags & (uint32_t)MSL_MOTION_ENTRY_SKIP_HIT) == 0u) {
-    hitboxes_clear_player_active(batch, bi, p);
-  }
   // Fighter_ChangeMotionState clears CollData.floor_skip before installing the destination row.
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
   // refs/melee/src/melee/mp/mpcoll.c::mpClearFloorSkip
   msl_mpcoll_clear_floor_skip(batch, idx);
   batch->state.action_id[idx] = action_id;
   batch->state.animation_index[idx] = animation_index;
-  msl_anim_timebase_enter_with_policy(batch, idx, anim_start, anim_speed, tick_policy);
-  batch->state.fall_fast[idx] =
-      (flags & (uint32_t)MSL_MOTION_ENTRY_KEEP_FASTFALL) != 0u ? old_fastfall : 0u;
+  msl_anim_timebase_enter_with_policy_flags(batch, idx, anim_start, anim_speed, tick_policy, flags);
 }

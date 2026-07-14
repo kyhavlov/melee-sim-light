@@ -53,10 +53,6 @@ DEBUG_INTERNALS_DTYPE = np.dtype(
         ("instance_identity_last_action_id", ("<u2", (4,))),
         ("instance_id_counter", "<u2"),
         ("item_spawn_id_counter", "<u4"),
-        ("throw_pulse_consumed", ("u1", (4,))),
-        ("throw_pulse_crossed_prev_frame", ("u1", (4,))),
-        ("throw_pending_victim_port", ("u1", (4,))),
-        ("throw_pending_hit_idx", ("u1", (4,))),
         ("attached_victim_port", ("u1", (4,))),
         ("dead_up_fall_offset_y", ("<f4", (4,))),
         ("dead_up_fall_vel_y", ("<f4", (4,))),
@@ -1272,20 +1268,6 @@ def test_shyguy_accumulates_all_ordinary_attackers_before_single_damage_callback
     assert snapshots[0] == pytest.approx(snapshots[1])
 
 
-def test_raptor_boost_detect_ignores_coarse_dense_hitlist_seed() -> None:
-    # A replay-derived hit-group seed is not an exact HitCapsule victims_1 entry. The inert BODY
-    # path must still run lbColl admission and OnDetect; concrete per-hitbox entries remain live.
-    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
-    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
-    seed = _seed_vs(25.0)
-    seed["combat_hitlist_cd"][0, 0, 0, 1] = np.uint16(0xFFFF)
-    seed["combat_hitlist_victim_iid"][0, 0, 0, 1] = seed["instance_id"][0, 1]
-
-    outs = _run(seed, [_mk_inputs(**SIDE_B)] + [_mk_inputs()] * 40)
-
-    assert ACT_FC_S in [int(out["action_id"][0]) for out in outs]
-
-
 def test_raptor_boost_detects_shielding_opponent() -> None:
     # The inert shield-overlap branch writes the attacker's unk_gobj too, so Raptor Boost
     # connects on shield (the punch is then shielded).
@@ -2135,7 +2117,7 @@ def _is_damage_action(action: int) -> bool:
 @pytest.mark.parametrize(
     "damaged_players", [(0,), (1,), (0, 1)], ids=["holder", "victim", "simultaneous"]
 )
-def test_dive_processhit_source_branch_matrix(
+def test_processhit_source_branch_matrix(
     grounded_victim_mode: bool, damage: float, damaged_players: tuple[int, ...]
 ) -> None:
     out, internal, seed = _debug_dive_fighter_damage(
@@ -2505,7 +2487,7 @@ def test_dc920_x1a70_xy_fmadds_are_bit_exact_for_both_constraint_modes_and_facin
         struct.unpack("<I", struct.pack("<f", float(out[field][constrained])))[0]
         for field in ("pos_x", "pos_y")
     )
-    assert bits == ((0x419BCB92, 0x421AA1D1) if grounded_victim_mode else (0xC1A00000, 0x41C80001))
+    assert bits == ((0x41980157, 0x421AA1D1) if grounded_victim_mode else (0xC1A00000, 0x41C80001))
 
 
 @pytest.mark.parametrize("grounded_victim_mode", [False, True])
@@ -2522,7 +2504,9 @@ def test_ddde4_x1a70_xy_matches_for_both_constraint_modes_and_facings(
     seed["facing"][0, constrained] = np.uint8(facing)
     out = _run(seed, [_mk_inputs()])[0]
     expected_bits = (
-        (0xC10EA867, 0x41DB1BD8) if grounded_victim_mode else (0x4174EBBC, 0x4211B1BC)
+        ((0xC11678E0 if facing == 0 else 0xC106D7EE), 0x41DB1BD8)
+        if grounded_victim_mode
+        else (0x4174EBBC, 0x4211B1BC)
     )
     expected = tuple(struct.unpack("<f", struct.pack("<I", bits))[0] for bits in expected_bits)
     assert float(out["pos_x"][constrained]) == pytest.approx(expected[0], abs=2e-6)

@@ -7,7 +7,12 @@
 #include "batch_internal.h"
 #include "action_ids.h"
 #include "anim_table.h"
+#include "common_params.h"
+#include "fighter_script.h"
+#include "fighter_pose.h"
 #include "motion_state_owners.h"
+
+void grab_attachment_refresh_xrotn_constraint_after_anim(MslBatch* batch, size_t fighter_idx);
 
 // Deterministic animation/script timebase helpers.
 //
@@ -115,6 +120,8 @@ static inline void msl_anim_timebase_seed(MslBatch* batch, size_t idx, float cur
   }
   batch->state.anim_frame_fp_q16_16[idx] = anim_q;
   batch->state.frame_speed_mul_fp_q16_16[idx] = speed_q;
+  batch->state.script_rate_f32[idx] =
+      isfinite(frame_speed_mul_f32) ? frame_speed_mul_f32 : msl_f32_from_q16_16(speed_q);
   msl_anim_timebase_recompute_derived(batch, idx);
 }
 
@@ -140,8 +147,41 @@ static inline void msl_anim_timebase_enter_raw(MslBatch* batch, size_t idx, floa
   // across a later ChangeMotionState and double-advance the new action's frame counter.
   batch->state.anim_defer_tick_once[idx] = 0u;
   batch->state.frame_speed_mul_fp_q16_16[idx] = speed_fp;
+  batch->state.script_rate_f32[idx] =
+      isfinite(anim_speed_f32) ? anim_speed_f32 : msl_f32_from_q16_16(speed_fp);
   batch->state.anim_frame_fp_q16_16[idx] = start_fp;
   msl_anim_timebase_recompute_derived(batch, idx);
+}
+
+static inline void msl_anim_timebase_tick_once_interpret(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
+  const uint32_t anim_u32 = batch->state.animation_index[idx];
+  if (anim_u32 <= 0xFFFFu) {
+    const uint16_t smid = (uint16_t)anim_u32;
+    const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], smid);
+    if (end_frame > 0.0f) {
+      const int32_t end_fp = msl_q16_16_from_f32(end_frame);
+      if (end_fp > 0 && batch->state.anim_frame_fp_q16_16[idx] >= end_fp) {
+        if (msl_anim_is_looping(batch->state.char_id[idx], smid)) {
+          batch->state.anim_frame_fp_q16_16[idx] %= end_fp;
+        } else {
+          batch->state.anim_frame_fp_q16_16[idx] = end_fp;
+          batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+        }
+      }
+    }
+  }
+  msl_anim_timebase_recompute_derived(batch, idx);
+  // ftAnim_8006EBA4 interprets the AObj/JObj and command script as one source call. Later map and
+  // contact priorities must never observe the advanced timebase with the pre-call collision pose.
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006C80C}
+  fighter_pose_publish_motion_entry(batch, idx, 0u);
+  fighter_script_tick_once(batch, idx);
+  grab_attachment_refresh_xrotn_constraint_after_anim(batch, idx);
 }
 
 static inline void msl_anim_timebase_tick_once(MslBatch* batch, size_t idx) {
@@ -165,24 +205,7 @@ static inline void msl_anim_timebase_tick_once(MslBatch* batch, size_t idx) {
     msl_anim_timebase_recompute_derived(batch, idx);
     return;
   }
-  batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
-  const uint32_t anim_u32 = batch->state.animation_index[idx];
-  if (anim_u32 <= 0xFFFFu) {
-    const uint16_t smid = (uint16_t)anim_u32;
-    const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], smid);
-    if (end_frame > 0.0f) {
-      const int32_t end_fp = msl_q16_16_from_f32(end_frame);
-      if (end_fp > 0 && batch->state.anim_frame_fp_q16_16[idx] >= end_fp) {
-        if (msl_anim_is_looping(batch->state.char_id[idx], smid)) {
-          batch->state.anim_frame_fp_q16_16[idx] %= end_fp;
-        } else {
-          batch->state.anim_frame_fp_q16_16[idx] = end_fp;
-          batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-        }
-      }
-    }
-  }
-  msl_anim_timebase_recompute_derived(batch, idx);
+  msl_anim_timebase_tick_once_interpret(batch, idx);
 }
 
 static inline void msl_anim_timebase_defer_tick_once(MslBatch* batch, size_t idx) {
@@ -228,10 +251,9 @@ static inline void msl_motion_state_start_source_clear_timer_x18c8(MslBatch* bat
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
   // refs/melee/src/melee/ft/types.h::MotionState (x9_b1), fp->dmg.x18C8
   // data/attack_id/move_id/{fox,falco}.bin::motion_state_word
-  enum { MSL_SOURCE_CLEAR_X18C8_INIT_FRAMES_X814 = 60u };
   if ((motion_word & (uint32_t)(1u << 22)) != 0u) {
-    batch->state.source_clear_timer_x18c8[idx] = (uint8_t)MSL_SOURCE_CLEAR_X18C8_INIT_FRAMES_X814;
-    batch->state.source_clear_owner_set_phase[idx] = 1u;
+    const uint16_t frames = msl_common_params()->damage_source_clear_frames_x814;
+    batch->state.source_clear_timer_x18c8[idx] = (uint8_t)((frames > 255u) ? 255u : frames);
   }
 }
 
@@ -247,7 +269,8 @@ void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx)
 // later entry-side effects; keep the live callback lane on the same central entry boundary.
 void motion_state_install_live_callbacks(MslBatch* batch, size_t idx);
 
-static inline void msl_motion_state_enter_side_effects(MslBatch* batch, size_t idx) {
+static inline void msl_motion_state_enter_side_effects(MslBatch* batch, size_t idx,
+                                                       uint32_t transition_flags) {
   // Decomp: Fighter_ChangeMotionState updates motion-state-owned identity/bookkeeping after
   // installing the destination motion. Some simulator paths intentionally delay only the animation
   // timebase/pose commit for collision parity; they still need these side effects at source-time.
@@ -264,24 +287,41 @@ static inline void msl_motion_state_enter_side_effects(MslBatch* batch, size_t i
   }
 
   if (batch != NULL) {
-    const uint16_t a = batch->state.action_id[idx];
-    const uint32_t x4_flags = attack_id_x4_flags_from_action(batch->state.char_id[idx], a);
     // Decomp: Fighter_ChangeMotionState clears `fp->fall_fast` when
     // (flags & Ft_MF_KeepFastFall)==0.
     // refs/melee/src/melee/ft/fighter.c (see KeepFastFall gate).
     // refs/melee/src/melee/ft/forward.h::Ft_MF_KeepFastFall
-    //
-    // This simulator does not plumb the per-transition `flags` argument explicitly; approximate
-    // using the ISO-extracted per-action x4_flags table (same source used for move identity).
-    // Decomp: AttackAir enters with Ft_MF_KeepFastFall unconditionally.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
-    if (!(a == (uint16_t)MSL_ACT_ATTACK_AIR_N || a == (uint16_t)MSL_ACT_ATTACK_AIR_F ||
-          a == (uint16_t)MSL_ACT_ATTACK_AIR_B || a == (uint16_t)MSL_ACT_ATTACK_AIR_HI ||
-          a == (uint16_t)MSL_ACT_ATTACK_AIR_LW)) {
-      if ((x4_flags & (uint32_t)MSL_MOTION_FLAG_KEEP_FASTFALL) == 0u) {
-        batch->state.fall_fast[idx] = 0;
+    if ((transition_flags & (uint32_t)MSL_MOTION_FLAG_KEEP_FASTFALL) == 0u) {
+      batch->state.fall_fast[idx] = 0;
+    }
+    if ((transition_flags & (uint32_t)MSL_MOTION_FLAG_KEEP_COLANIM_HIT_STATUS) == 0u) {
+      batch->state.script_hit_status_x1988[idx] = 0u;
+      const size_t cap_base = idx * (size_t)MSL_MAX_HURTCAPS;
+      for (size_t cap_id = 0u; cap_id < (size_t)MSL_MAX_HURTCAPS; cap_id++) {
+        batch->state.script_hurtcap_state[cap_base + cap_id] = 0u;
       }
     }
+    if ((transition_flags & (uint32_t)MSL_MOTION_FLAG_KEEP_STATE_FLAGS_221C_Y) == 0u) {
+      batch->state.script_state_flags_221c_y[idx] = 0u;
+    }
+
+    // Fighter_ChangeMotionState destroys the current ShieldDesc/ReflectDesc ownership before the
+    // destination entry callback may create replacements. Keep these source fields on the central
+    // motion-entry boundary instead of reconstructing them later from action history.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    const size_t flags_2218_i =
+        idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+    const size_t flags_221a_i =
+        idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221A_INDEX;
+    const size_t flags_221b_i =
+        idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+    const size_t flags_221c_i =
+        idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+    batch->state.state_flags[flags_2218_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+    batch->state.state_flags[flags_221a_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B7;
+    batch->state.state_flags[flags_221b_i] &=
+        (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+    batch->state.state_flags[flags_221c_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
 
     // Decomp: smash_attrs is motion-owned transient state. Fighter_ChangeMotionState enters a new
     // motion with smash charge lifecycle cleared unless a later command script seeds it again.
@@ -320,22 +360,55 @@ static inline void msl_motion_state_enter_side_effects(MslBatch* batch, size_t i
   msl_motion_state_start_source_clear_timer_x18c8(batch, idx);
 }
 
-static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float anim_start_f32,
-                                           float anim_speed_f32) {
+static inline void msl_anim_timebase_enter_flags(MslBatch* batch, size_t idx, float anim_start_f32,
+                                                 float anim_speed_f32, uint32_t transition_flags) {
   // Decomp: Fighter_ChangeMotionState sets the anim timebase then invokes motion-state identity
   // updates (ft_800890D0 / ft_800895E0). This helper models that full "enter motion state" bundle.
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
   // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
   // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
-  msl_anim_timebase_enter_raw(batch, idx, anim_start_f32, anim_speed_f32);
-  msl_motion_state_enter_side_effects(batch, idx);
+  if ((transition_flags & (uint32_t)MSL_MOTION_FLAG_SKIP_HIT) == 0u) {
+    fighter_script_disable_hitcapsules(batch, idx);
+  }
+  // SkipAnim still installs the MotionState callback row, but Fighter_ChangeMotionState does not
+  // load an AObj/submotion or command script. It leaves cur_anim_frame at anim_start-anim_speed and
+  // publishes anim_id=-1. GuardOn/Guard/GuardReflect all depend on this exact source shape.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,ftCo_80092908,
+  //   ftCo_8009388C,ftCo_80093A50}
+  const uint8_t skip_anim =
+      (transition_flags & (uint32_t)MSL_MOTION_FLAG_SKIP_ANIM) != 0u ? 1u : 0u;
+  msl_anim_timebase_enter_raw(
+      batch, idx, skip_anim ? (anim_start_f32 - anim_speed_f32) : anim_start_f32, anim_speed_f32);
+  fighter_script_prepare_motion_entry(batch, idx);
+  msl_motion_state_enter_side_effects(batch, idx, transition_flags);
+  if (skip_anim != 0u) {
+    batch->state.animation_index[idx] = UINT32_MAX;
+    fighter_script_disable_hitcapsules(batch, idx);
+  } else {
+    fighter_script_enter(batch, idx);
+  }
+  fighter_pose_publish_motion_entry(batch, idx, transition_flags);
+}
+
+static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float anim_start_f32,
+                                           float anim_speed_f32) {
+  msl_anim_timebase_enter_flags(batch, idx, anim_start_f32, anim_speed_f32, 0u);
+}
+
+static inline void msl_anim_timebase_enter_with_policy_flags(MslBatch* batch, size_t idx,
+                                                             float anim_start_f32,
+                                                             float anim_speed_f32,
+                                                             MslAnimEnterTickPolicy policy,
+                                                             uint32_t transition_flags) {
+  msl_anim_timebase_enter_flags(batch, idx, anim_start_f32, anim_speed_f32, transition_flags);
+  msl_anim_timebase_apply_enter_tick_policy(batch, idx, policy);
 }
 
 static inline void msl_anim_timebase_enter_with_policy(MslBatch* batch, size_t idx,
                                                        float anim_start_f32, float anim_speed_f32,
                                                        MslAnimEnterTickPolicy policy) {
-  msl_anim_timebase_enter(batch, idx, anim_start_f32, anim_speed_f32);
-  msl_anim_timebase_apply_enter_tick_policy(batch, idx, policy);
+  msl_anim_timebase_enter_with_policy_flags(batch, idx, anim_start_f32, anim_speed_f32, policy, 0u);
 }
 
 // Pure animation timebase reset without invoking Fighter_ChangeMotionState side-effects.
@@ -352,9 +425,11 @@ static inline void msl_anim_timebase_set_rate(MslBatch* batch, size_t idx, float
     return;
   }
   batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(anim_rate_f32);
+  batch->state.script_rate_f32[idx] = anim_rate_f32;
 }
 
 void anim_timebase_update_pre_input(MslBatch* batch);
+void anim_timebase_update_pre_input_fighter(MslBatch* batch, int bi, int p);
 uint8_t anim_timebase_effective_hitlag_frozen(const MslBatch* batch, int batch_index,
                                               int player_index);
 void anim_timebase_seed_common_fall_blend(MslBatch* batch, size_t idx, int16_t action_frame);

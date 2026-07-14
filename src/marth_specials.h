@@ -6,7 +6,7 @@
 
 // Marth (ftMs_*) character specials: Shield Breaker, Dancing Blade, Dolphin Slash, Counter.
 // Decomp-first port of refs/melee/src/melee/ft/chara/ftMars/ftMs_Special{N,S,Hi,Lw}.c.
-// Movescripts own hitboxes/timing/windows (data/moves + data/scripts via move_tables);
+// The live fighter-script cursor owns movescript hitboxes, timing, and command state;
 // this module carries only state, counters, transitions, physics, and combat hooks.
 
 // True for the marth char-special action id range (341..372). Callers must gate on
@@ -35,3 +35,18 @@ uint8_t marth_specials_phys(MslBatch* batch, size_t idx);
 // refs/melee/src/melee/ft/chara/ftMars/ftMs_Special{N,S,Lw}.c (Coll handlers)
 uint8_t marth_special_try_air_to_ground_swap(MslBatch* batch, size_t idx);
 uint8_t marth_special_try_ground_to_air_swap(MslBatch* batch, size_t idx);
+
+// Counter owns a live ShieldDesc installed by ftColl_8007B1B8. Contact systems query the same
+// posed descriptor for fighter and item HitCapsules; the callback consumer below owns the shared
+// x19A4 -> SpecialLwHit transition.
+// refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c::{ftMs_SpecialLw_Anim,
+//   ftMs_SpecialLw_80139140}
+// refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80078C70,ftColl_8007925C}
+uint8_t marth_counter_shielddesc_world(const MslBatch* batch, size_t defender_idx, float* out_x,
+                                       float* out_y, float* out_z, float* out_radius);
+uint8_t marth_counter_try_fighter_contact(MslBatch* batch, int batch_index, int attacker,
+                                          int defender, int hitbox_id);
+uint8_t marth_counter_apply_item_contact(MslBatch* batch, int batch_index, int attacker,
+                                         int defender, uint16_t item_attack_id,
+                                         uint16_t item_attack_instance, float damage,
+                                         float item_pos_x);

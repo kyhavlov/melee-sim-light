@@ -13,14 +13,14 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "fighter_script.h"
+#include "grab_attachment.h"
 #include "input_axis.h"
 #include "motion_state_owners.h"
-#include "move_tables.h"
 #include "msl_math.h"
 #include "stage_collision.h"
 #include "specialhi_pose.h"
 #include "state_flags.h"
-#include "throw_flow.h"
 
 static inline uint8_t physics_action_skip_common_air_helper_first_frame(uint16_t action_id,
                                                                         uint16_t prev_action_id,
@@ -849,51 +849,7 @@ static inline float physics_apply_ftcommon_8007cf58_x_clamp(const MslCharParams*
   return air_apply_friction_step(vel_x, friction);
 }
 
-static inline uint8_t physics_damagefall_seed_allow_interrupt(const MslBatch* batch, size_t idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
-  return (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) ? 1u
-                                                                                            : 0u;
-}
-
-static inline uint8_t physics_damagefall_source_fastfall_latch(const MslBatch* batch,
-                                                               const MslCommonParams* c,
-                                                               size_t idx) {
-  if (batch == NULL || c == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_DAMAGE_FALL ||
-      batch->state.fall_fast[idx] != 0u || !(batch->state.speed_y_self[idx] < 0.0f)) {
-    return 0u;
-  }
-  const float stick_y =
-      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-  if (!(stick_y <= -c->fastfall_stick_threshold) ||
-      !(batch->state.tilt_timer_y[idx] < c->fastfall_tilt_max_frames)) {
-    return 0u;
-  }
-  // DamageFall fastfall latch order:
-  // - DamageFall_Phys delegates to ft_80084DB0.
-  // - ft_80084DB0 calls ftCommon_CheckFallFast before ftCommon_Fall/FallFast.
-  // - Fighter_procUpdate then integrates cur_pos with the newly latched fastfall self_vel.y.
-  // Keep this narrower than the older steady DamageFall compatibility bridge: it only flips rows
-  // whose current input/timer state proves the source fastfall latch fires this frame.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Phys
-  // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  return 1u;
-}
-
-static inline uint8_t physics_replay_rollout_advanced_past_reseed(const MslBatch* batch, int bi) {
-  if (batch == NULL || batch->replay_rollout_reseeded == NULL ||
-      batch->replay_rollout_reseeded[bi] == 0u || batch->replay_rollout_seed_frame_id == NULL) {
-    return 0u;
-  }
-  return (batch->state.frame_id[bi] != batch->replay_rollout_seed_frame_id[bi]) ? 1u : 0u;
-}
-
-static inline uint8_t physics_action_use_pre_integration_common_air_gravity(const MslBatch* batch,
-                                                                            int bi, size_t idx,
+static inline uint8_t physics_action_use_pre_integration_common_air_gravity(uint8_t char_id,
                                                                             uint16_t action_id) {
   // Decomp: many common airborne action states call `ft_80084DB0` from their phys callbacks, which
   // runs `ftCommon_CheckFallFast` + `ftCommon_Fall/FallFast` (mutating `self_vel.y`) before
@@ -901,54 +857,16 @@ static inline uint8_t physics_action_use_pre_integration_common_air_gravity(cons
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
   // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
   //
-  // However, in the v1 teacher-forced reseed loop some steady DamageFall rows still carry a
-  // seed-driven current-frame displacement surface. Applying the common fall helper before
-  // integration for every such row can cause match-flow blastzone false positives (stocks
-  // decremented) vs the replay reference.
-  //
-  // Repro (suite): `AttachedGoodNaturedGuanaco.msl` record=2959 p=0 (DamageFall) crosses FD blast
-  // bottom and triggers `MSL_ACT_DEAD_DOWN` when we apply common gravity pre-integration.
-  //
-  // QGD's post-hitstun DamageFall source row carries the replay-exposed `fp+0x2218` allow-interrupt
-  // lane after `DamageFall_IASA` is active. For that terminal lane, use the decomp callback order
-  // (`DamageFall_Phys -> ft_80084DB0`) before integration; keep the older bridge for steady rows
-  // without that source lane until the remaining DamageFall seed surface is closed.
-  //
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Phys
-  // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
   // Note:
   // - Common airborne Damage states (for example DamageAir2) route through ftCo_Damage_Phys,
   //   which calls ft_80084DB0 when x221C_b6 is clear.
   // - DamageFly is handled via its own x221C_b6-gated branch below.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Phys
-  if (!msl_action_allows_fastfall(batch->state.char_id[idx], action_id)) {
+  if (!msl_action_allows_fastfall(char_id, action_id)) {
     return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_2 ||
                      action_id == (uint16_t)MSL_ACT_CAPTURE_JUMP);
   }
-  if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL) {
-    // Direct teacher-forced seeds may still need the legacy seed-displacement bridge above, but
-    // once a replay rollout has advanced past the exact reseed row, DamageFall is live runtime
-    // state again and its Phys callback owns source-order gravity before position integration.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Phys
-    // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
-    if (physics_replay_rollout_advanced_past_reseed(batch, bi)) {
-      return 1u;
-    }
-    return (uint8_t)(physics_damagefall_seed_allow_interrupt(batch, idx) ||
-                     physics_damagefall_source_fastfall_latch(batch, msl_common_params(), idx));
-  }
   return 1u;
-}
-
-static inline uint8_t physics_action_use_post_integration_common_air_gravity(const MslBatch* batch,
-                                                                             size_t idx,
-                                                                             uint16_t action_id) {
-  // Temporary v1 compatibility: update `speed_y_self` for next frame without affecting current
-  // frame displacement (see note above).
-  return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FALL &&
-                   !physics_damagefall_seed_allow_interrupt(batch, idx));
 }
 
 static inline uint8_t physics_damagefall_entry_uses_pre_integration_phys(uint16_t action_id,
@@ -1298,7 +1216,9 @@ static inline uint16_t physics_common_overlap_nudge_source_action(const MslBatch
 static inline uint8_t physics_guard_entry_from_wait_nudge_can_feed_floor_loss(
     const MslBatch* batch, const MslStageFloorGraph* g, int line_idx, size_t idx, float nudge_x) {
   if (batch == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_GUARD_ON ||
-      batch->state.guard_entry_via_wait_callback[idx] == 0u) {
+      batch->state.frame_start_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON ||
+      !msl_coll_handler_is_source_ground(msl_motion_state_coll_handler_kind(
+          batch->state.char_id[idx], batch->state.frame_start_action_id[idx]))) {
     return 0u;
   }
   // Source order bridge for this single callback window:
@@ -2098,23 +2018,10 @@ void physics_integrate(MslBatch* batch) {
       // CapturePulled*/CaptureWait*/CaptureDamage* victims:
       // - Decomp capture pulled/wait/damage victim Phys applies a per-frame translation delta
       //   (ftCo_Attack100.c::fn_800DAD18) and does not use self/KB integration as the driver.
-      // - In this simulator, that delta is applied in grab_attachment_update_pre_collision() in a
-      //   "motion-state Phys" slot before stage collision. Skip integration here to avoid double
-      //   movement (integrate + delta) on those frames.
+      // - Run that callback here, inside this fighter's priority-4 update, then skip ordinary
+      //   integration to avoid double movement.
       if (msl_action_is_capture_pulled_wait_damage_victim(action_id)) {
-        continue;
-      }
-
-      if (throw_flow_release_pending_for_victim(batch, bi, p)) {
-        // Compatibility pending-release placeholder:
-        // - ftCo_800DD724 consumes release and immediately calls ftCo_800DDDE4/ftCo_800DE7C0 in
-        //   the thrower's Anim callback; the victim does not get an intervening generic Fall Phys
-        //   drift frame before Damage* entry.
-        // - Normal runtime release damage now runs in that Anim callback path. Seed/reseed
-        //   compatibility latches may still expose the detached victim as Fall; keep that
-        //   placeholder non-physical until throw_flow_update_post_items() consumes it.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
+        (void)grab_attachment_update_capture_phys_fighter(batch, bi, p);
         continue;
       }
 
@@ -2150,8 +2057,7 @@ void physics_integrate(MslBatch* batch) {
               //
               // Source of truth:
               // - data/moves/{fox,falco}.json moves["ftCo_SM_EscapeAir"]["events"] set_cmd_var(idx=0)
-              if (!move_tables_escapeair_cmd0_active(batch->state.char_id[idx],
-                                                     batch->state.anim_frame_f32[idx])) {
+              if (fighter_script_cmd_var(batch, idx, 0u) == 0u) {
                 batch->state.speed_air_x_self[idx] *= c->escapeair_decay;
                 batch->state.speed_y_self[idx] *= c->escapeair_decay;
               } else {
@@ -2259,8 +2165,8 @@ void physics_integrate(MslBatch* batch) {
                       batch->state.speed_air_x_self[idx], phys->aerial_friction);
                 }
               }
-            } else if (physics_action_use_pre_integration_common_air_gravity(batch, bi, idx,
-                                                                             action_id) ||
+            } else if (physics_action_use_pre_integration_common_air_gravity(
+                           batch->state.char_id[idx], action_id) ||
                        physics_damagefall_entry_uses_pre_integration_phys(
                            action_id, batch->state.prev_action_id[idx], action_frame) ||
                        damage_uses_common_air_helper) {
@@ -2687,7 +2593,6 @@ void physics_integrate(MslBatch* batch) {
             //   ftCa_SpecialLw_Phys,ftCa_SpecialLwEnd_Phys,ftCa_SpecialAirLwEnd_Phys,
             //   ftCa_SpecialLwEndAir_Phys,ftCa_Special_Inline_Friction}
             // refs/melee/src/melee/ft/ft_084E.c::{ft_80085088,ft_800850E0,ft_80084F3C}
-            const uint16_t fc_msid = falcon_special_submotion(action_id);
             const float fc_frame = physics_cur_anim_frame_f32(batch, idx);
             uint8_t scaled = 0u;
             if (action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW ||
@@ -2709,8 +2614,7 @@ void physics_integrate(MslBatch* batch) {
               // LwEnd (358) / AirLwEnd (360): the script's cmd_vars[2] window selects the
               // per-family traction friction; otherwise ft_80084F3C (high-speed mul).
               // data/moves/falcon.json::specials_by_msid.{312,314} set_cmd_var(idx=2)
-              if (move_tables_special_cmd_var_u8_value_at_frame(batch->state.char_id[idx], fc_msid,
-                                                                2u, fc_frame) != 0u) {
+              if (fighter_script_cmd_var(batch, idx, 2u) != 0u) {
                 const float traction = (action_id == (uint16_t)MSL_ACT_CA_SPECIAL_LW_END)
                                            ? ch->falcon_speciallw_ground_traction
                                            : ch->falcon_speciallw_air_landing_traction;
@@ -3112,37 +3016,6 @@ void physics_integrate(MslBatch* batch) {
       batch->state.pos_x[idx] += atk_shield_kb_x;
       batch->state.pos_y[idx] += atk_shield_kb_y;
       physics_apply_combo_push_timer(batch, c, idx);
-
-      // Post-integration gravity update for states we intentionally keep "seed-driven" for current
-      // frame displacement (notably DamageFall; see helper docs above).
-      if (!on_ground && !physics_is_match_flow_airborne(action_id) &&
-          physics_action_use_post_integration_common_air_gravity(batch, idx, action_id) &&
-          !physics_action_use_pre_integration_common_air_gravity(batch, bi, idx, action_id) &&
-          !physics_damagefall_entry_uses_pre_integration_phys(
-              action_id, batch->state.prev_action_id[idx], action_frame)) {
-        const MslCharParams* phys = msl_char_params_fast(batch->state.char_id[idx]);
-        if (phys != NULL) {
-          const uint8_t allow_fastfall =
-              msl_action_allows_fastfall(batch->state.char_id[idx], action_id);
-          if (allow_fastfall) {
-            const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
-                                                 c->lstick_deadzone_y);
-            (void)ftCommon_CheckFallFast(c, stick_y, vy_self_pre, &batch->state.fall_fast[idx],
-                                         &batch->state.tilt_timer_y[idx]);
-          }
-
-          float next_vy = vy_self_pre;
-          if (allow_fastfall && batch->state.fall_fast[idx]) {
-            next_vy = -phys->fast_fall_velocity;
-          } else {
-            next_vy -= phys->grav;
-            if (next_vy < -phys->terminal_vel) {
-              next_vy = -phys->terminal_vel;
-            }
-          }
-          batch->state.speed_y_self[idx] = next_vy;
-        }
-      }
     }
   }
 }

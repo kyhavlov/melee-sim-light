@@ -19,7 +19,7 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
     if buf[:8] != b"SSDYNN01":
         raise ValueError(f"SSDYNN01: bad magic {buf[:8]!r}")
     version, set_count, total_nodes = struct.unpack_from("<IHH", buf, 8)
-    if version != 8:
+    if version != 9:
         raise ValueError(f"SSDYNN01: bad version {version}")
     off = 16
     sets: list[dict[str, object]] = []
@@ -30,13 +30,25 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
         off += 16
         nodes: list[dict[str, object]] = []
         for _node_i in range(int(node_count)):
-            if off + 64 > len(buf):
+            if off + 100 > len(buf):
                 raise ValueError("SSDYNN01: truncated node")
             part, _pad = struct.unpack_from("<HH", buf, off)
             off += 4
             constants = struct.unpack_from("<15f", buf, off)
             off += 15 * 4
-            nodes.append({"part": int(part), "constants": constants})
+            rest_rot = struct.unpack_from("<3f", buf, off)
+            rest_pos = struct.unpack_from("<3f", buf, off + 12)
+            rest_scl = struct.unpack_from("<3f", buf, off + 24)
+            off += 9 * 4
+            nodes.append(
+                {
+                    "part": int(part),
+                    "constants": constants,
+                    "rest_rot": rest_rot,
+                    "rest_pos": rest_pos,
+                    "rest_scl": rest_scl,
+                }
+            )
         sets.append(
             {
                 "root_part": int(root_part),
@@ -89,6 +101,17 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
         (msid,) = struct.unpack_from("<H", buf, off)
         off += 2
         catch_grabbable_msids.append(int(msid))
+    disabled_msids: list[int] = []
+    if off + 4 > len(buf):
+        raise ValueError("SSDYNN01: truncated disabled owner index")
+    disabled_msid_count, _reserved = struct.unpack_from("<HH", buf, off)
+    off += 4
+    for _ in range(int(disabled_msid_count)):
+        if off + 2 > len(buf):
+            raise ValueError("SSDYNN01: truncated disabled owner msid")
+        (msid,) = struct.unpack_from("<H", buf, off)
+        off += 2
+        disabled_msids.append(int(msid))
     if off + 4 > len(buf):
         raise ValueError("SSDYNN01: truncated collider index")
     collider_count, _reserved = struct.unpack_from("<HH", buf, off)
@@ -99,7 +122,13 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
             raise ValueError("SSDYNN01: truncated collider")
         part, _pad, ox, oy, oz, radius = struct.unpack_from("<HH4f", buf, off)
         off += 20
-        colliders.append({"part": int(part), "offset": (float(ox), float(oy), float(oz)), "radius": float(radius)})
+        colliders.append(
+            {
+                "part": int(part),
+                "offset": (float(ox), float(oy), float(oz)),
+                "radius": float(radius),
+            }
+        )
     if off != len(buf):
         raise ValueError("SSDYNN01: trailing bytes")
     return {
@@ -111,11 +140,14 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
         "source_step_msids": source_step_msids,
         "cone_msids": cone_msids,
         "catch_grabbable_msids": catch_grabbable_msids,
+        "disabled_msids": disabled_msids,
         "colliders": colliders,
     }
 
 
-def _write_minimal_ssanim(path: Path, *, version: int = 5, msid: int = 2, part_id: int = 0) -> None:
+def _write_minimal_ssanim(
+    path: Path, *, version: int = 5, msid: int = 2, part_id: int = 0
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     ident = (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
     path.write_bytes(
@@ -143,7 +175,9 @@ def _write_minimal_locals(path: Path, *, msid: int = 2, part_id: int = 17) -> No
         + struct.pack("<IHH", 1, 1, 1)
         + bytes([int(part_id) & 0xFF])
         + struct.pack("<hI", -1, 0)
-        + struct.pack("<HH9f", int(msid) & 0xFFFF, 1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+        + struct.pack(
+            "<HH9f", int(msid) & 0xFFFF, 1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0
+        )
     )
 
 
@@ -151,32 +185,64 @@ def _write_dyn(
     path: Path,
     sets: list[tuple[int, list[int]]],
     *,
-    version: int = 8,
+    version: int = 9,
     collision_msids: list[int] | None = None,
     source_step_msids: list[int] | None = None,
     cone_msids: list[int] | None = None,
     catch_grabbable_msids: list[int] | None = None,
+    disabled_msids: list[int] | None = None,
     colliders: list[tuple[int, tuple[float, float, float], float]] | None = None,
 ) -> None:
     total_nodes = sum(len(parts) for _root, parts in sets)
     buf = bytearray()
     buf += b"SSDYNN01"
     buf += struct.pack("<IHH", int(version), len(sets), total_nodes)
-    constants = (1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7853981852531433, 3.1415927410125732,
-                 3.1415927410125732, 3.1415927410125732, -3.1415927410125732,
-                 -3.1415927410125732, -3.1415927410125732, 0.008726646192371845,
-                 0.05235987901687622)
+    constants = (
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.7853981852531433,
+        3.1415927410125732,
+        3.1415927410125732,
+        3.1415927410125732,
+        -3.1415927410125732,
+        -3.1415927410125732,
+        -3.1415927410125732,
+        0.008726646192371845,
+        0.05235987901687622,
+    )
     for root, parts in sets:
-        buf += struct.pack("<HH3f", int(root) & 0xFFFF, len(parts), 1.0, 1.0, 0.04363323003053665)
+        buf += struct.pack(
+            "<HH3f", int(root) & 0xFFFF, len(parts), 1.0, 1.0, 0.04363323003053665
+        )
         for part in parts:
-            buf += struct.pack("<HH15f", int(part) & 0xFFFF, 0, *constants)
+            buf += struct.pack(
+                "<HH24f",
+                int(part) & 0xFFFF,
+                0,
+                *constants,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                1.0,
+            )
     if version >= 2:
         owner_msids = sorted({int(msid) & 0xFFFF for msid in (collision_msids or [])})
         buf += struct.pack("<HH", len(owner_msids), 0)
         for msid in owner_msids:
             buf += struct.pack("<H", msid)
     if version >= 6:
-        source_step_owner_msids = sorted({int(msid) & 0xFFFF for msid in (source_step_msids or [])})
+        source_step_owner_msids = sorted(
+            {int(msid) & 0xFFFF for msid in (source_step_msids or [])}
+        )
         buf += struct.pack("<HH", len(source_step_owner_msids), 0)
         for msid in source_step_owner_msids:
             buf += struct.pack("<H", msid)
@@ -186,20 +252,33 @@ def _write_dyn(
         for msid in cone_owner_msids:
             buf += struct.pack("<H", msid)
     if version >= 8:
-        catch_owner_msids = sorted({int(msid) & 0xFFFF for msid in (catch_grabbable_msids or [])})
+        catch_owner_msids = sorted(
+            {int(msid) & 0xFFFF for msid in (catch_grabbable_msids or [])}
+        )
         buf += struct.pack("<HH", len(catch_owner_msids), 0)
         for msid in catch_owner_msids:
+            buf += struct.pack("<H", msid)
+    if version >= 9:
+        disabled_owner_msids = sorted(
+            {int(msid) & 0xFFFF for msid in (disabled_msids or [])}
+        )
+        buf += struct.pack("<HH", len(disabled_owner_msids), 0)
+        for msid in disabled_owner_msids:
             buf += struct.pack("<H", msid)
     if version >= 5:
         collider_rows = list(colliders or [])
         buf += struct.pack("<HH", len(collider_rows), 0)
         for part, offset, radius in collider_rows:
-            buf += struct.pack("<HH4f", int(part) & 0xFFFF, 0, offset[0], offset[1], offset[2], radius)
+            buf += struct.pack(
+                "<HH4f", int(part) & 0xFFFF, 0, offset[0], offset[1], offset[2], radius
+            )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(bytes(buf))
 
 
-def _write_truncated_ssanimt1_varint(path: Path, *, msid: int = 2, part_id: int = 0) -> None:
+def _write_truncated_ssanimt1_varint(
+    path: Path, *, msid: int = 2, part_id: int = 0
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     buf = bytearray()
     buf += b"SSANIMT1"
@@ -211,7 +290,9 @@ def _write_truncated_ssanimt1_varint(path: Path, *, msid: int = 2, part_id: int 
     # Track payload is one unterminated variable-length pack-info byte. The extractor/data-contract
     # path must reject this before generated SSANIMT1 inputs are accepted.
     # refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
-    buf += struct.pack("<BBBBHH", 5, 0, 0, 0, 0, 1)  # obj_type, frac*, pad, startframe, len
+    buf += struct.pack(
+        "<BBBBHH", 5, 0, 0, 0, 0, 1
+    )  # obj_type, frac*, pad, startframe, len
     buf += bytes([0x81])
     path.write_bytes(bytes(buf))
 
@@ -268,7 +349,9 @@ def test_runtime_rejects_stale_ssanim01_v4_artifacts() -> None:
 
     build_dir = Path("build")
     build_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="ssanim-v4-stale-", dir=build_dir) as tmp_raw:
+    with tempfile.TemporaryDirectory(
+        prefix="ssanim-v4-stale-", dir=build_dir
+    ) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_dir(data_dir, exclude=exclude)
         _write_minimal_ssanim(data_dir / "anims/fox.bin", version=4)
@@ -302,14 +385,21 @@ def test_runtime_rejects_stale_ssdynn01_v3_artifacts() -> None:
 
     build_dir = Path("build")
     build_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="ssdynn-v3-stale-", dir=build_dir) as tmp_raw:
+    with tempfile.TemporaryDirectory(
+        prefix="ssdynn-v3-stale-", dir=build_dir
+    ) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_dir(data_dir, exclude=exclude)
         _write_minimal_ssanim(data_dir / "anims/fox.bin")
         _write_minimal_ssanim(data_dir / "anims/falco.bin")
         _write_minimal_locals(data_dir / "anims/fox.locals.bin")
         _write_minimal_locals(data_dir / "anims/falco.locals.bin")
-        _write_dyn(data_dir / "anims/fox.dyn.bin", [(17, [17, 18, 19, 20])], version=3, collision_msids=[17, 52, 58])
+        _write_dyn(
+            data_dir / "anims/fox.dyn.bin",
+            [(17, [17, 18, 19, 20])],
+            version=3,
+            collision_msids=[17, 52, 58],
+        )
         _write_dyn(data_dir / "anims/falco.dyn.bin", [], version=3)
 
         old_data_dir = os.environ.get("MSL_DATA_DIR")
@@ -340,7 +430,9 @@ def test_runtime_rejects_nonempty_ssdynn01_source_step_index() -> None:
 
     build_dir = Path("build")
     build_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="ssdynn-source-step-disabled-", dir=build_dir) as tmp_raw:
+    with tempfile.TemporaryDirectory(
+        prefix="ssdynn-source-step-disabled-", dir=build_dir
+    ) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_dir(data_dir, exclude=exclude)
         _write_minimal_ssanim(data_dir / "anims/fox.bin")
@@ -371,19 +463,48 @@ def test_runtime_rejects_nonempty_ssdynn01_source_step_index() -> None:
 
 
 @pytest.mark.integration
-def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface() -> None:
+def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface() -> (
+    None
+):
     paths = [Path("data/anims/fox.dyn.bin"), Path("data/anims/falco.dyn.bin")]
     fox = _parse_ssdynn01_or_skip(paths[0])
     falco = _parse_ssdynn01_or_skip(paths[1])
 
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["version"] == 8
-    assert fox["collision_msids"] == [17, 36, 44, 58, 222, 242, 243]
+    assert fox["version"] == 9
+    assert fox["collision_msids"] == []
     assert fox["source_step_msids"] == []
-    assert fox["cone_msids"] == [242]
-    assert fox["catch_grabbable_msids"] == [52]
-    assert fox["colliders"] == [{"part": 41, "offset": pytest.approx((0.0, 2.0, 0.0)), "radius": pytest.approx(3.0)}]
+    assert fox["cone_msids"] == []
+    assert fox["catch_grabbable_msids"] == []
+    assert fox["disabled_msids"] == [
+        2,
+        3,
+        30,
+        31,
+        34,
+        59,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        210,
+        211,
+        239,
+    ]
+    assert fox["colliders"] == [
+        {
+            "part": 41,
+            "offset": pytest.approx((0.0, 2.0, 0.0)),
+            "radius": pytest.approx(3.0),
+        }
+    ]
     fox_set = fox["sets"][0]  # type: ignore[index]
     assert fox_set["root_part"] == 17
     assert fox_set["node_count"] == 4
@@ -392,9 +513,10 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
     assert c0[6] == pytest.approx(0.7853981852531433)
     assert c0[13] == pytest.approx(0.008726646192371845)
     assert c0[14] == pytest.approx(0.05235987901687622)
+    assert fox_set["nodes"][0]["rest_scl"] == pytest.approx((1.0, 1.0, 1.0))
 
     assert falco == {
-        "version": 8,
+        "version": 9,
         "set_count": 0,
         "total_nodes": 0,
         "sets": [],
@@ -402,6 +524,7 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
         "source_step_msids": [],
         "cone_msids": [],
         "catch_grabbable_msids": [],
+        "disabled_msids": [],
         "colliders": [],
     }
 
@@ -415,37 +538,15 @@ def test_dynamic_collision_owner_predicate_is_data_driven_not_raw_msid_gate() ->
     assert "MSL_SM_CATCH_DASH" not in src
 
 
-def test_catch_grabbable_owner_is_fox_tail_catch_only_and_not_body_collision() -> None:
-    from tools.extraction.extract_fighter_anims import _dynamic_catch_grabbable_owner_msids
-    from tools.extraction.extract_fighter_anims import _dynamic_collision_owner_msids
+def test_dynamic_owner_uses_source_animation_flags_not_motion_allowlists() -> None:
+    from tools.extraction.extract_fighter_anims import _dynamic_disabled_msids
 
-    moves = {
-        "moves": {
-            "ftCo_SM_AttackDash": {"submotion_id": 52},
-            "ftCo_SM_JumpB": {"submotion_id": 17},
-            "ftCo_SM_AttackHi3": {"submotion_id": 58},
-            "ftCo_SM_EscapeAir": {"submotion_id": 44},
-            "ftCo_SM_Catch": {"submotion_id": 242},
-            "ftCo_SM_CatchDash": {"submotion_id": 243},
-        }
-    }
-    fox_tail_dynamic_set = [{"root_part": 17, "chain_count": 4, "entries": [], "colliders": []}]
-
-    catch_msids = _dynamic_catch_grabbable_owner_msids("fox", moves, fox_tail_dynamic_set)
-    body_msids = _dynamic_collision_owner_msids("fox", moves, fox_tail_dynamic_set)
-
-    assert catch_msids == [52]
-    assert 52 not in body_msids
-    assert 44 in body_msids
-    assert _dynamic_catch_grabbable_owner_msids("falco", moves, fox_tail_dynamic_set) == []
-    assert _dynamic_catch_grabbable_owner_msids(
-        "fox", moves, [{"root_part": 99, "chain_count": 4, "entries": [], "colliders": []}]
-    ) == []
-
+    assert _dynamic_disabled_msids("fox", [2, 52, 58, 71, 222, 242]) == [2, 71]
     src = Path("src/anim_pose.c").read_text()
-    assert "dyn_collision_have_msid[msid]" in src
+    assert "dyn_collision_have_msid[msid]" not in src
     assert "dyn_source_step_have_msid" not in src
-    assert "source_step_msid_count != 0u" in src
+    assert "dyn_disabled_have_msid[msid]" in src
+    assert "ftCo_8009E7B4" in src
 
 
 def test_dynamic_state_validity_is_split_from_collision_matrix_application() -> None:
@@ -454,10 +555,13 @@ def test_dynamic_state_validity_is_split_from_collision_matrix_application() -> 
 
     assert "dynamic_pose_state_valid" in state_h
     assert "dynamic_pose_apply_collision_matrix" in state_h
-    assert "const uint8_t same_msid_sequential =" in src
-    assert "cross_msid_carry" not in src
+    assert "anim_pose_sync_dynamic_ownership" in src
+    assert "ftCo_8009CF84,ftCo_8009DD94" in src
     assert "batch->state.dynamic_pose_state_valid[idx] = 1u;" in src
-    assert "batch->state.dynamic_pose_apply_collision_matrix[idx] = apply_collision_pose;" in src
+    assert (
+        "batch->state.dynamic_pose_apply_collision_matrix[idx] = apply_collision_pose;"
+        in src
+    )
     assert "batch->state.dynamic_pose_apply_collision_matrix[player_idx]" in src
 
 
@@ -487,7 +591,11 @@ _DYNAMIC_POSE_STATE_DTYPE = np.dtype(
 
 
 def _sample_field_bytes(row: np.ndarray, field: str, stride: int) -> np.ndarray:
-    return np.frombuffer(row[field].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, stride)
+    return (
+        np.frombuffer(row[field].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, stride)
+    )
 
 
 def _dynamic_state_record(binding: object, handle: object, player: int) -> np.void:
@@ -496,11 +604,18 @@ def _dynamic_state_record(binding: object, handle: object, player: int) -> np.vo
 
 
 @pytest.mark.integration
-def test_fox_attackhi3_dynamic_reseed_reconstruction_matches_sequential_carry_bhh1599() -> None:
-    # BHH:1599 exercises Fox AttackHi3's SSDYNN01 collision pose. The non-sequential
-    # teacher-forced seed path reconstructs action-local dynamic state by replaying frame 0..N
-    # during reseed/pre-combat update; normal rollout carries the same state frame-to-frame.
-    dataset_path = Path("replays/validation/aggregate_recent/BlondHardHippopotamus.slpz")
+def test_fox_dynamic_reseed_preserves_absolute_world_state_bhh1599() -> None:
+    # Normal validation only observes public fighter/contact outputs, so it cannot protect the
+    # hidden coordinate contract of DynamicsDesc. BHH:1598..1599 supplies an active Fox chain for
+    # this out-of-band binding invariant: translating the fighter must translate the persistent
+    # node positions in world space, and reseed must restore that derived state verbatim. Comparing
+    # a free-running step to a teacher-forced replay row is not valid here because their visible
+    # world positions can already differ.
+    # refs/melee/src/melee/lb/lb_00F9.c::{lb_8000FD48,lb_8001044C}
+    # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009CF84,ftCo_8009DD94}
+    dataset_path = Path(
+        "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
+    )
     if not dataset_path.exists():
         pytest.skip(f"missing local replay: {dataset_path}")
     _parse_ssdynn01_or_skip(Path("data/anims/fox.dyn.bin"))
@@ -510,70 +625,105 @@ def test_fox_attackhi3_dynamic_reseed_reconstruction_matches_sequential_carry_bh
     samples = ds.rows
     prev_record = 1598
     target_record = 1599
-    prev_row = samples[prev_record : prev_record + 1]
-    target_row = samples[target_record : target_record + 1]
+    seed_rows = samples["seed_t"][prev_record : target_record + 1].copy()
+    translated_rows = seed_rows.copy()
     player = 1
 
-    assert int(prev_row["seed_t"][0]["animation_index"][player]) == 58
-    assert int(target_row["seed_t"][0]["animation_index"][player]) == 58
-    assert int(target_row["seed_t"][0]["action_frame"][player]) == 3
+    assert int(seed_rows[0]["animation_index"][player]) == 58
+    assert int(seed_rows[1]["animation_index"][player]) == 58
+    assert int(seed_rows[1]["action_frame"][player]) == 3
 
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
-    input_stride = int(sizes["input"])
+    assert seed_rows.dtype.itemsize == seed_stride
+    translation_x = np.float32(13.0)
+    translated_rows["pos_x"][:, player] += translation_x
+    for rows in (seed_rows, translated_rows):
+        binding.validation_derive_dynamic_pose_buffers(
+            rows.view(np.uint8).reshape(len(rows), seed_stride), int(ds.num_players)
+        )
 
-    seq_handle = binding.init(batch_size=1, num_players=int(ds.num_players))
-    nonseq_handle = binding.init(batch_size=1, num_players=int(ds.num_players))
+    node_count = int(seed_rows[1]["dynamic_pose_seed_node_count_u8"][player])
+    assert node_count == 4
+    assert np.all(seed_rows["dynamic_pose_seed_valid_u8"][:, player] == 1)
+    assert np.all(translated_rows["dynamic_pose_seed_valid_u8"][:, player] == 1)
+    for field in ("rot_x", "rot_y", "rot_z", "axis_x", "axis_y", "axis_z", "angle"):
+        key = f"dynamic_pose_seed_{field}_f32"
+        np.testing.assert_allclose(
+            translated_rows[key][:, player, :node_count],
+            seed_rows[key][:, player, :node_count],
+            rtol=0.0,
+            atol=5.0e-4,
+            err_msg=field,
+        )
+    for field, expected_delta in (
+        ("pos_x", translation_x),
+        ("pos_y", np.float32(0.0)),
+        ("pos_z", np.float32(0.0)),
+    ):
+        key = f"dynamic_pose_seed_{field}_f32"
+        np.testing.assert_allclose(
+            translated_rows[key][:, player, :node_count]
+            - seed_rows[key][:, player, :node_count],
+            expected_delta,
+            rtol=0.0,
+            atol=5.0e-4,
+            err_msg=field,
+        )
+
+    handle = binding.init(batch_size=1, num_players=int(ds.num_players))
     try:
-        binding.reseed_seed(seq_handle, _sample_field_bytes(prev_row, "seed_t", seed_stride))
-        binding.step_input(
-            seq_handle,
-            _sample_field_bytes(prev_row, "prev_input_t", input_stride),
-            _sample_field_bytes(prev_row, "input_t", input_stride),
+        binding.reseed_seed(
+            handle,
+            seed_rows[1:2].view(np.uint8).reshape(1, seed_stride),
         )
-        binding.debug_step_input_pre_combat(
-            seq_handle,
-            _sample_field_bytes(target_row, "prev_input_t", input_stride),
-            _sample_field_bytes(target_row, "input_t", input_stride),
-        )
-        sequential = _dynamic_state_record(binding, seq_handle, player)
-
-        binding.reseed_seed(nonseq_handle, _sample_field_bytes(target_row, "seed_t", seed_stride))
-        binding.debug_step_input_pre_combat(
-            nonseq_handle,
-            _sample_field_bytes(target_row, "prev_input_t", input_stride),
-            _sample_field_bytes(target_row, "input_t", input_stride),
-        )
-        reconstructed = _dynamic_state_record(binding, nonseq_handle, player)
+        reconstructed = _dynamic_state_record(binding, handle, player)
     finally:
-        binding.destroy(seq_handle)
-        binding.destroy(nonseq_handle)
+        binding.destroy(handle)
 
-    for field in ("player", "char_id", "state_valid", "apply_collision_matrix", "node_count", "msid", "frame"):
-        assert int(sequential[field]) == int(reconstructed[field]), field
     assert int(reconstructed["state_valid"]) == 1
-    assert int(reconstructed["node_count"]) == 4
+    assert int(reconstructed["node_count"]) == node_count
     assert int(reconstructed["msid"]) == 58
-    for field in ("rot_x", "rot_y", "rot_z", "pos_x", "pos_y", "pos_z", "axis_x", "axis_y", "axis_z", "angle"):
-        np.testing.assert_allclose(sequential[field], reconstructed[field], rtol=0.0, atol=1.0e-6, err_msg=field)
+    for field in (
+        "rot_x",
+        "rot_y",
+        "rot_z",
+        "pos_x",
+        "pos_y",
+        "pos_z",
+        "axis_x",
+        "axis_y",
+        "axis_z",
+        "angle",
+    ):
+        key = f"dynamic_pose_seed_{field}_f32"
+        np.testing.assert_array_equal(
+            reconstructed[field][:node_count],
+            seed_rows[1][key][player, :node_count],
+            err_msg=field,
+        )
 
 
 @pytest.mark.integration
-def test_fox_cliffattackquick_dynamic_collision_pose_rejects_tail_false_body_sds6237() -> None:
+def test_fox_cliffattackquick_dynamic_collision_pose_rejects_tail_false_body_sds6237() -> (
+    None
+):
     # SDS:6237 locks the CliffAttackQuick SSDYNN01 BODY owner:
     # - p0 Fox CliffAttackQuick frame 37 exposes cap12/FtPart-18 near Falco's weak BAir hb2.
     # - Static baked pose admits a false BODY hit; source consumes the live ftData.x2C tail chain
     #   through `ftColl_80078C70 -> lbColl_8000805C`, so the row stays in CliffAttackQuick.
-    # - The owner is generated in `data/anims/fox.dyn.bin` as collision msid 222, not a replay-row
-    #   or attacker-action suppressor.
+    # - ftData submotion 222 does not carry x594_b3, so the source-wide dynamic chain owns it; no
+    #   replay-curated collision-msid allowlist is involved.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_8009AEA4
     # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
-    dataset_path = Path("replays/validation/dream_land_recent/ShadyDecimalStarling.slpz")
+    dataset_path = Path(
+        "replays/validation/dream_land_recent/ShadyDecimalStarling.slpz"
+    )
     if not dataset_path.exists():
         pytest.skip(f"missing local replay: {dataset_path}")
     fox_dyn = _parse_ssdynn01_or_skip(Path("data/anims/fox.dyn.bin"))
-    assert 222 in fox_dyn["collision_msids"]
+    assert 222 not in fox_dyn["disabled_msids"]
 
     binding = pytest.importorskip("msl_binding")
     ds = load_replay_buffers(str(dataset_path))
@@ -615,7 +765,9 @@ def test_fox_cliffattackquick_dynamic_collision_pose_rejects_tail_false_body_sds
     assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 257
     assert int(out["hitlag"][player]) == int(ref["hitlag"][player]) == 0
     assert int(out["hitstun"][player]) == int(ref["hitstun"][player]) == 0
-    assert float(out["percent"][player]) == pytest.approx(float(ref["percent"][player]), abs=1e-5)
+    assert float(out["percent"][player]) == pytest.approx(
+        float(ref["percent"][player]), abs=1e-5
+    )
 
 
 @pytest.mark.parametrize(
@@ -625,7 +777,9 @@ def test_fox_cliffattackquick_dynamic_collision_pose_rejects_tail_false_body_sds
         ("oversized_chain", [(17, [17, 18, 19, 20, 21])]),
     ],
 )
-def test_runtime_dynamic_loader_rejects_unsupported_present_files(name: str, sets: list[tuple[int, list[int]]]) -> None:
+def test_runtime_dynamic_loader_rejects_unsupported_present_files(
+    name: str, sets: list[tuple[int, list[int]]]
+) -> None:
     import msl_binding
 
     exclude = {
@@ -639,7 +793,9 @@ def test_runtime_dynamic_loader_rejects_unsupported_present_files(name: str, set
 
     build_dir = Path("build")
     build_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=f"dyn-contract-{name}-", dir=build_dir) as tmp_raw:
+    with tempfile.TemporaryDirectory(
+        prefix=f"dyn-contract-{name}-", dir=build_dir
+    ) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_dir(data_dir, exclude=exclude)
         _write_minimal_ssanim(data_dir / "anims/fox.bin")
@@ -677,7 +833,9 @@ def test_runtime_dynamic_loader_rejects_present_dyn_without_locals() -> None:
 
     build_dir = Path("build")
     build_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="dyn-contract-missing-locals-", dir=build_dir) as tmp_raw:
+    with tempfile.TemporaryDirectory(
+        prefix="dyn-contract-missing-locals-", dir=build_dir
+    ) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_dir(data_dir, exclude=exclude)
         _write_minimal_ssanim(data_dir / "anims/fox.bin")
@@ -698,7 +856,9 @@ def test_runtime_dynamic_loader_rejects_present_dyn_without_locals() -> None:
             msl_binding.debug_reset_pose_and_hitboxes_tables()
 
 
-def test_runtime_dynamic_loader_allows_missing_dyn_and_locals_for_synthetic_pose_only() -> None:
+def test_runtime_dynamic_loader_allows_missing_dyn_and_locals_for_synthetic_pose_only() -> (
+    None
+):
     import msl_binding
 
     exclude = {
@@ -712,7 +872,9 @@ def test_runtime_dynamic_loader_allows_missing_dyn_and_locals_for_synthetic_pose
 
     build_dir = Path("build")
     build_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="dyn-contract-missing-both-", dir=build_dir) as tmp_raw:
+    with tempfile.TemporaryDirectory(
+        prefix="dyn-contract-missing-both-", dir=build_dir
+    ) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_dir(data_dir, exclude=exclude)
         _write_minimal_ssanim(data_dir / "anims/fox.bin")
@@ -739,7 +901,9 @@ def test_tracks_data_contract_rejects_truncated_variable_length_records() -> Non
 
     build_dir = Path("build")
     build_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="tracks-contract-truncated-varint-", dir=build_dir) as tmp_raw:
+    with tempfile.TemporaryDirectory(
+        prefix="tracks-contract-truncated-varint-", dir=build_dir
+    ) as tmp_raw:
         tracks_path = Path(tmp_raw) / "data" / "anims" / "fox.tracks.bin"
         _write_truncated_ssanimt1_varint(tracks_path)
         with pytest.raises(ValueError, match="corrupt SSANIMT1 FObj payload"):

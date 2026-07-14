@@ -5,6 +5,23 @@
 
 typedef struct MslCombatProcessHitResolved MslCombatProcessHitResolved;
 
+enum { MSL_LIVE_POSE_LOCAL_CAP = 40 };
+
+typedef struct MslLivePoseLocal {
+  float pos[3];
+  float scl[3];
+  float quat[4];
+} MslLivePoseLocal;
+
+typedef struct MslCombatShieldPending {
+  uint16_t max_damage;
+  uint16_t damage_total;
+  uint8_t source_player;
+  uint8_t element;
+  uint8_t valid;
+  uint8_t _pad;
+} MslCombatShieldPending;
+
 enum {
   MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE = 1,
   MSL_RNG_SITE_FTCOLL_ELECTRIC_CLANK_SFX = 2,
@@ -69,11 +86,14 @@ struct MslBatch {
 
   // Init-allocated, fixed-capacity scratch for batch-wide ProcessHit collection. A reciprocal
   // Falcon Dive pair must select both incoming events before either Damage entry mutates the
-  // linked actors' source poses. Contents and the collection flag are frame-local; the storage is
-  // not serialized and keeps the runtime path allocation-free.
-  MslCombatProcessHitResolved* dive_processhit_pending;
-  uint8_t* dive_processhit_pending_valid;
-  uint8_t dive_processhit_collecting;
+  // linked actors' source poses. Outgoing x1914 damage is likewise collected until ProcessHit so
+  // priority-13 contact cannot start hitlag during the remaining traversal. Contents and the
+  // collection flag are frame-local; storage is not serialized and keeps runtime allocation-free.
+  MslCombatProcessHitResolved* processhit_pending;
+  uint8_t* processhit_pending_valid;
+  MslCombatShieldPending* processhit_shield_pending;
+  uint16_t* processhit_dealt_damage_pending;
+  uint8_t processhit_collecting;
 
   // Episode/match init scratch, allocated with the batch so `msl_batch_init_match` can remain
   // allocation-free when used as an RL reset path.
@@ -128,6 +148,14 @@ struct MslBatch {
   // stays out of serialized state so existing replay corpora keep their schema.
   uint8_t* hurtcap_matrix_valid;  // [batch * players * caps]
   float* hurtcap_matrix;          // [batch * players * caps * 12]
+
+  // Sparse materialization of the source live fighter JObj SRT tree. Ordinary animations remain
+  // represented by the cheap collision-pose descriptor; SkipAnim/blend owners materialize this
+  // fixed-capacity local tree only while they genuinely need persistent mutable JObj state.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ChangeMotionState}
+  // refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006FE9C,ftAnim_80070010,ftAnim_80070108}
+  uint8_t* live_pose_materialized;    // [batch * players]
+  MslLivePoseLocal* live_pose_local;  // [batch * players * MSL_LIVE_POSE_LOCAL_CAP]
 
   // RNG ownership and trace state:
   // - rng_shadow_seed starts from frame_pre_random_seed each step and advances through modeled

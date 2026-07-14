@@ -186,7 +186,9 @@ def test_rebirth_wait_collision_skip_keeps_zero_geometry_and_visible_state() -> 
     handle, compare = _step_seed(binding, seed)
     try:
         assert int(compare["action_id"][0]) == ACT_REBIRTH_WAIT
-        assert int(compare["action_frame"][0]) == 120
+        # ftCo_8008A7A8 restarts the terminal Wait1 AObj without changing RebirthWait.
+        # refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8}
+        assert int(compare["action_frame"][0]) == 0
         hurtcaps, count = binding.hurtcaps_world(handle, 0, 0)
         assert int(count) == 0
         assert not np.any(hurtcaps)

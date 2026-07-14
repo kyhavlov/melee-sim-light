@@ -7,9 +7,9 @@
 #include "anim_timebase.h"
 #include "api.h"
 #include "ftcommon_ecb.h"
+#include "fighter_script.h"
 #include "ids.h"
 #include "motion_state_owners.h"
-#include "move_tables.h"
 #include "stage_collision.h"
 #include "state_flags.h"
 
@@ -52,13 +52,12 @@ static inline uint32_t landing_submotion_for_action(uint8_t char_id, uint16_t a)
 }
 
 static inline void landing_entry_carry_raw_allow_interrupt_from_source(MslBatch* batch, size_t idx,
-                                                                       uint16_t source_action,
                                                                        uint16_t land_action) {
   if (batch == NULL || land_action != (uint16_t)MSL_ACT_LANDING) {
     return;
   }
-  if (move_tables_attackair_allow_interrupt(batch->state.char_id[idx], source_action,
-                                            batch->state.anim_frame_f32[idx]) == 0u) {
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+  if ((batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u) {
     return;
   }
   // Raw fp+0x2218 bit0 carry on basic Landing entry:
@@ -70,8 +69,7 @@ static inline void landing_entry_carry_raw_allow_interrupt_from_source(MslBatch*
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
   //   ftCo_Landing_Enter,ftCo_Landing_Enter_Basic}
-  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
-  batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+  // The raw source field is already live and survives Fighter_ChangeMotionState.
 }
 
 uint8_t locomotion_landing_contact_y_owner_matches_source(uint8_t char_id, uint16_t source_act,
@@ -327,8 +325,7 @@ uint16_t locomotion_attackair_landing_action_for_contact(const MslBatch* batch, 
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
   // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
-  const uint8_t lag_enabled = move_tables_attackair_cmd0_active(batch->state.char_id[idx], a,
-                                                                batch->state.anim_frame_f32[idx]);
+  const uint8_t lag_enabled = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
   return lag_enabled ? landing_air_action_from_attackair(a) : (uint16_t)MSL_ACT_LANDING;
 }
 
@@ -401,7 +398,7 @@ void locomotion_enter_landing_action_from_air(MslBatch* batch, const MslCharPara
   batch->state.action_id[idx] = land_act;
   batch->state.animation_index[idx] =
       landing_submotion_for_action(batch->state.char_id[idx], land_act);
-  landing_entry_carry_raw_allow_interrupt_from_source(batch, idx, source_act, land_act);
+  landing_entry_carry_raw_allow_interrupt_from_source(batch, idx, land_act);
   if (land_act == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
     // Decomp: LandingFallSpecial carries mv.co.landing.allow_interrupt from its entry helper.
     // EscapeAir_Coll passes false; FallSpecial_Coll forwards the FallSpecial source flag. This

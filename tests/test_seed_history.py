@@ -38,8 +38,6 @@ from tools.slippi.seed_history import (
     derive_guard_release_lockout_and_lightshield,
     derive_guard_special_enable_timer_x1c,
     derive_guard_setoff_hitlag_damage_min,
-    derive_guard_setoff_hitlag_exit_phase,
-    derive_guard_setoff_post_hitlag_owner,
     derive_ecb_lock_bottom_rel_y,
     derive_ucf_pad_buffer_state,
     derive_kneebend_internals,
@@ -111,111 +109,6 @@ def test_derive_instance_id_counter_running_max_seed_bridge() -> None:
     )
     assert got.dtype == np.uint16
     assert got.tolist() == [1, 11, 12, 12, 13, 13, 1, 1]
-
-
-@pytest.mark.parametrize(
-    ("char_id", "action_frame", "should_carry"),
-    [
-        (22, 8, True),  # Falco AttackAirN same-group refresh: create frame 4 -> create frame 8.
-        (18, 15, False),  # Marth AttackAirN clears at frame 8 before the frame-15 create band.
-    ],
-)
-def test_shield_contact_seed_bridge_respects_attackairn_script_lifetime(
-    char_id: int, action_frame: int, should_carry: bool
-) -> None:
-    # The one-step bridge may seed a replay-proven shield victim into later same-group AttackAirN
-    # rows only when MSLFTSC1 says the HitCapsule lifetime was not cleared/recreated.
-    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
-    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80078C70}
-    # data/scripts/{falco,marth}.bin::ftCo_SM_AttackAirN create_hitbox/clear_hitboxes
-    msl_binding = pytest.importorskip("msl_binding")
-
-    n = 4
-    players = 2
-    hb_count = 4
-    attacker = 0
-    defender = 1
-    act_attackairn = np.uint16(65)
-    act_guard = np.uint16(179)
-    act_guard_setoff = np.uint16(181)
-
-    shield_contact = np.zeros((n, players, hb_count, players), dtype=np.uint8)
-    hitlist_valid = np.zeros((n, players, hb_count), dtype=np.uint8)
-    hitlist_cd = np.zeros((n, players, hb_count, players), dtype=np.uint16)
-    hitlist_iid = np.zeros((n, players, hb_count, players), dtype=np.uint16)
-    action = np.zeros((n, players), dtype=np.uint16)
-    hitlag = np.zeros((n, players), dtype=np.uint16)
-    instance_id = np.zeros((n, players), dtype=np.uint16)
-    shield = np.full((n, players), 60.0, dtype=np.float32)
-    lightshield = np.zeros((n, players), dtype=np.float32)
-    animation_index = np.zeros((n, players), dtype=np.uint32)
-    state_age = np.zeros((n, players), dtype=np.int16)
-    char = np.zeros((n, players), dtype=np.uint8)
-    attack_id = np.zeros((n, players), dtype=np.uint16)
-    stale_queue = np.zeros((n, players), dtype=np.uint8)
-    stale_move_id = np.zeros((n, players, 10), dtype=np.uint16)
-    active_shield_hit_lut = np.zeros((256, 256, 64), dtype=np.uint16)
-    stale_weights = np.ones(10, dtype=np.float32)
-    guard_lut = np.zeros(65536, dtype=np.uint8)
-    attack_lut = np.zeros(65536, dtype=np.uint8)
-    same_frame_lut = np.zeros(65536, dtype=np.uint8)
-    same_frame_special_lut = np.zeros(65536, dtype=np.uint8)
-
-    action[:, attacker] = act_attackairn
-    action[:, defender] = act_guard
-    action[1, defender] = act_guard_setoff
-    hitlag[1, attacker] = 3
-    hitlag[1, defender] = 3
-    instance_id[:, defender] = np.array([10, 11, 12, 12], dtype=np.uint16)
-    char[:, attacker] = np.uint8(char_id)
-    state_age[2, attacker] = np.int16(action_frame)
-    shield_contact[0, attacker, :, defender] = np.uint8(2)
-    shield_contact[2, attacker, :, defender] = np.uint8(1)
-    guard_lut[int(act_guard)] = np.uint8(1)
-    guard_lut[int(act_guard_setoff)] = np.uint8(1)
-    attack_lut[int(act_attackairn)] = np.uint8(1)
-
-    msl_binding.derive_shield_contact_seed_bridge(
-        shield_contact,
-        hitlist_valid,
-        hitlist_cd,
-        hitlist_iid,
-        action,
-        hitlag,
-        instance_id,
-        shield,
-        lightshield,
-        animation_index,
-        state_age,
-        char,
-        attack_id,
-        stale_queue,
-        stale_move_id,
-        active_shield_hit_lut,
-        stale_weights,
-        guard_lut,
-        attack_lut,
-        same_frame_lut,
-        same_frame_special_lut,
-        players,
-        int(act_guard_setoff),
-        1.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-    )
-
-    expected_valid = 1 if should_carry else 0
-    expected_cd = 0xFFFF if should_carry else 0
-    expected_iid = int(instance_id[2, defender]) if should_carry else 0
-    assert int(hitlist_valid[2, attacker, 0]) == expected_valid
-    assert int(hitlist_cd[2, attacker, 0, defender]) == expected_cd
-    assert int(hitlist_iid[2, attacker, 0, defender]) == expected_iid
 
 
 def test_derive_ecb_lock_bottom_rel_y_preserves_desired_bottom_during_lock() -> None:
@@ -391,6 +284,54 @@ def test_guard_reflect_origin_guardon_tracks_entry_path_prefix_causal() -> None:
             act_guard=int(act_guard),
         )
         assert np.array_equal(got, full[:end])
+
+
+def test_guard_pose_history_reconstructs_entry_recurrence_and_collapses_in_guard() -> None:
+    import msl_binding
+
+    from tools.eval.validation_dtypes import SEED_DTYPE
+
+    rows = np.zeros((5,), dtype=SEED_DTYPE)
+    rows["guard_tilt_x8"][:, 0] = np.uint16(10)
+    rows["guard_tilt_x4"][:, 0] = np.float32(0.5)
+    rows["guard_anim_counter_x0"][:, 0] = np.array([0, 0, 1, 2, 3], dtype=np.uint16)
+
+    char_id = np.full((6,), 1, dtype=np.uint8)
+    action_id = np.array([14, 178, 178, 178, 179, 179], dtype=np.uint16)
+    animation_index = np.array(
+        [14, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 179, 179], dtype=np.uint32
+    )
+    anim_frame = np.array([5.0, 0.0, 1.0, 2.0, 10.0, 10.0], dtype=np.float32)
+    frame_speed = np.ones((6,), dtype=np.float32)
+    hitlag = np.zeros((6,), dtype=np.uint16)
+
+    msl_binding.validation_derive_guard_pose_history(
+        rows.view(np.uint8).reshape((len(rows), SEED_DTYPE.itemsize)),
+        0,
+        char_id,
+        action_id,
+        animation_index,
+        anim_frame,
+        frame_speed,
+        hitlag,
+        178,
+        179,
+        182,
+    )
+
+    assert int(rows["guard_pose_history_valid_u8"][0, 0]) == 0
+    assert int(rows["guard_pose_history_valid_u8"][1, 0]) == 1
+    assert int(rows["guard_pose_entry_msid_u16"][1, 0]) == 14
+    assert float(rows["guard_pose_entry_anim_frame_f32"][1, 0]) == pytest.approx(6.0)
+    assert int(rows["guard_pose_history_count_u8"][1, 0]) == 1
+    assert float(rows["guard_pose_target_weight_f32"][1, 0, 0]) == 0.0
+    assert int(rows["guard_pose_history_count_u8"][3, 0]) == 3
+    assert 0.0 < float(rows["guard_pose_target_weight_f32"][3, 0, 2]) < 1.0
+
+    # ftCo_Guard_Anim applies weight 1.0, so prior GuardOn recurrence can no longer affect the
+    # collision locals and the compact history reduces to this single source operation.
+    assert int(rows["guard_pose_history_count_u8"][4, 0]) == 1
+    assert float(rows["guard_pose_target_weight_f32"][4, 0, 0]) == 1.0
 
 
 def test_derive_illusion_ghost_pos01_tracks_decomp_ring_order() -> None:
@@ -1146,113 +1087,6 @@ def test_derive_guard_setoff_hitlag_damage_min_is_prefix_invariant() -> None:
     assert out1[: out0.size].tolist() == out0.tolist()
 
 
-def test_derive_guard_setoff_hitlag_exit_phase_marks_last_hitlag_and_first_post_hitlag() -> None:
-    act_wait = np.uint16(0x000E)
-    act_guard_set_off = np.uint16(0x00B5)
-    action_id = np.array(
-        [act_wait, act_guard_set_off, act_guard_set_off, act_guard_set_off, act_guard_set_off, act_wait],
-        dtype=np.uint16,
-    )
-    hitlag = np.array([0, 3, 2, 1, 0, 0], dtype=np.uint16)
-
-    out = derive_guard_setoff_hitlag_exit_phase(
-        action_id=action_id,
-        hitlag=hitlag,
-        act_guard_set_off=int(act_guard_set_off),
-    )
-
-    assert out.tolist() == [0, 1, 1, 2, 3, 0]
-
-
-def test_derive_guard_setoff_hitlag_exit_phase_is_prefix_invariant() -> None:
-    act_wait = np.uint16(0x000E)
-    act_guard_set_off = np.uint16(0x00B5)
-
-    action_id_prefix = np.array(
-        [act_wait, act_guard_set_off, act_guard_set_off, act_guard_set_off, act_guard_set_off],
-        dtype=np.uint16,
-    )
-    hitlag_prefix = np.array([0, 4, 2, 1, 0], dtype=np.uint16)
-
-    out0 = derive_guard_setoff_hitlag_exit_phase(
-        action_id=action_id_prefix,
-        hitlag=hitlag_prefix,
-        act_guard_set_off=int(act_guard_set_off),
-    )
-
-    action_id_ext = np.concatenate([action_id_prefix, np.array([act_guard_set_off, act_wait], dtype=np.uint16)])
-    hitlag_ext = np.concatenate([hitlag_prefix, np.array([0, 0], dtype=np.uint16)])
-
-    out1 = derive_guard_setoff_hitlag_exit_phase(
-        action_id=action_id_ext,
-        hitlag=hitlag_ext,
-        act_guard_set_off=int(act_guard_set_off),
-    )
-
-    assert out0.tolist() == [0, 1, 1, 2, 3]
-    assert out1[: out0.size].tolist() == out0.tolist()
-
-
-def test_derive_guard_setoff_post_hitlag_owner_marks_normal_and_powershield_handoffs() -> None:
-    act_wait = np.uint16(0x000E)
-    act_guard_set_off = np.uint16(0x00B5)
-    action_id = np.array(
-        [act_wait, act_guard_set_off, act_guard_set_off, act_guard_set_off, act_guard_set_off, act_wait],
-        dtype=np.uint16,
-    )
-    phase = np.array([0, 1, 2, 3, 0, 0], dtype=np.uint8)
-    flags_221c_normal = np.array([0x00, 0x00, 0x00, 0x00, 0x00, 0x00], dtype=np.uint8)
-    flags_221c_ps = np.array([0x00, 0x60, 0x60, 0x20, 0x20, 0x00], dtype=np.uint8)
-
-    out_normal = derive_guard_setoff_post_hitlag_owner(
-        action_id=action_id,
-        guard_setoff_hitlag_exit_phase_u8=phase,
-        state_flags_221c_u8=flags_221c_normal,
-        act_guard_set_off=int(act_guard_set_off),
-    )
-    out_ps = derive_guard_setoff_post_hitlag_owner(
-        action_id=action_id,
-        guard_setoff_hitlag_exit_phase_u8=phase,
-        state_flags_221c_u8=flags_221c_ps,
-        act_guard_set_off=int(act_guard_set_off),
-    )
-
-    assert out_normal.tolist() == [0, 0, 1, 1, 0, 0]
-    assert out_ps.tolist() == [0, 0, 2, 2, 0, 0]
-
-
-def test_derive_guard_setoff_post_hitlag_owner_is_prefix_invariant() -> None:
-    act_wait = np.uint16(0x000E)
-    act_guard_set_off = np.uint16(0x00B5)
-    action_id_prefix = np.array(
-        [act_wait, act_guard_set_off, act_guard_set_off, act_guard_set_off, act_guard_set_off],
-        dtype=np.uint16,
-    )
-    phase_prefix = np.array([0, 1, 2, 3, 0], dtype=np.uint8)
-    flags_221c_prefix = np.array([0x00, 0x60, 0x60, 0x20, 0x20], dtype=np.uint8)
-
-    out0 = derive_guard_setoff_post_hitlag_owner(
-        action_id=action_id_prefix,
-        guard_setoff_hitlag_exit_phase_u8=phase_prefix,
-        state_flags_221c_u8=flags_221c_prefix,
-        act_guard_set_off=int(act_guard_set_off),
-    )
-
-    action_id_ext = np.concatenate([action_id_prefix, np.array([act_wait], dtype=np.uint16)])
-    phase_ext = np.concatenate([phase_prefix, np.array([0], dtype=np.uint8)])
-    flags_221c_ext = np.concatenate([flags_221c_prefix, np.array([0x00], dtype=np.uint8)])
-
-    out1 = derive_guard_setoff_post_hitlag_owner(
-        action_id=action_id_ext,
-        guard_setoff_hitlag_exit_phase_u8=phase_ext,
-        state_flags_221c_u8=flags_221c_ext,
-        act_guard_set_off=int(act_guard_set_off),
-    )
-
-    assert out0.tolist() == [0, 0, 2, 2, 0]
-    assert out1[: out0.size].tolist() == out0.tolist()
-
-
 def test_derive_guard_release_lightshield_persists_through_guard_set_off() -> None:
     # GuardSetOff entry uses the already-latched fp->lightshield_amount and does not reset it.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
@@ -1893,7 +1727,6 @@ def test_derive_capture_grab_hidden_post_tracks_shared_owner_state() -> None:
         counter,
         anim_timer,
         jump_latch,
-        breakout_pending,
     ) = derive_capture_grab_hidden_post(
         action_id_u16=action_id,
         action_frame_i16=action_frame,
@@ -1928,50 +1761,6 @@ def test_derive_capture_grab_hidden_post_tracks_shared_owner_state() -> None:
     assert counter.tolist() == pytest.approx([0.0, 1.0, 2.0, 3.0])
     assert anim_timer.tolist() == pytest.approx([0.0, 0.0, 10.0, 9.0])
     assert jump_latch.tolist() == [0, 0, 0, 0]
-    assert breakout_pending.tolist() == [0, 0, 0, 0]
-
-
-def test_derive_capture_grab_hidden_post_marks_wait_to_breakout_rows() -> None:
-    act_capturewait_lw = np.uint16(0x00E3)
-    act_capturecut = np.uint16(0x00E5)
-    act_capturejump = np.uint16(0x00E6)
-
-    (
-        _grab_timer,
-        _counter,
-        _anim_timer,
-        _jump_latch,
-        breakout_pending,
-    ) = derive_capture_grab_hidden_post(
-        action_id_u16=np.array(
-            [act_capturewait_lw, act_capturecut, act_capturewait_lw, act_capturejump],
-            dtype=np.uint16,
-        ),
-        action_frame_i16=np.array([3, 0, 7, 0], dtype=np.int16),
-        grab_owner_port_u8=np.array([0, 0, 0, 0], dtype=np.uint8),
-        percent_f32=np.array([10.0, 10.0, 10.0, 10.0], dtype=np.float32),
-        buttons_pressed_u16=np.zeros(4, dtype=np.uint16),
-        stick_x_unit=np.zeros(4, dtype=np.float32),
-        stick_y_unit=np.zeros(4, dtype=np.float32),
-        frame_speed_mul_f32=np.ones(4, dtype=np.float32),
-        grab_mash_stick_x_sign_post=np.zeros(4, dtype=np.int8),
-        grab_mash_stick_y_sign_post=np.zeros(4, dtype=np.int8),
-        slot_index=0,
-        handicap=9,
-        capture_grab_timer_base=30.0,
-        capture_grab_timer_handicap_mul=8.0,
-        capture_grab_timer_handicap_base=9.0,
-        capture_grab_timer_slot_mul=15.0,
-        capture_grab_timer_slot_base=4.0,
-        capture_grab_timer_percent_mul=1.6,
-        capture_wait_grab_timer_decrement=1.0,
-        capture_wait_grab_mash_damage=6.0,
-        capture_wait_anim_rate_hold_frames=10.0,
-        capture_wait_jump_latch_window_frames=16.0,
-        grab_mash_stick_threshold=0.5,
-    )
-
-    assert breakout_pending.tolist() == [1, 0, 1, 0]
 
 
 def test_derive_capture_grab_hidden_post_is_prefix_invariant() -> None:
@@ -2870,20 +2659,161 @@ def test_derive_combat_hitlist_seed_fields_per_hitbox_schema_shape() -> None:
         data_root="data",
     )
 
-    assert len(out) == 6
-    group_cd, group_iid, hb_valid, hb_cd, hb_iid, shield_contact_kind = out
+    assert len(out) == 5
+    group_cd, group_iid, hb_valid, hb_cd, hb_iid = out
     assert group_cd.shape == (n, 4, 8, 4)
     assert group_iid.shape == (n, 4, 8, 4)
     assert hb_valid.shape == (n, 4, 4)
     assert hb_cd.shape == (n, 4, 4, 4)
     assert hb_iid.shape == (n, 4, 4, 4)
-    assert shield_contact_kind.shape == (n, 4, 4, 4)
     assert group_cd.dtype == np.uint16
     assert hb_valid.dtype == np.uint8
-    assert shield_contact_kind.dtype == np.uint8
     assert not bool(np.any(group_cd))
     assert not bool(np.any(hb_valid))
-    assert not bool(np.any(shield_contact_kind))
+
+
+def test_capture_pummel_reconstructs_attached_hitcapsule_victim_ring() -> None:
+    # CatchAttack's only-hit-grabbed capsule contacts the victim at the source attachment joint,
+    # not at the victim's independently reconstructed replay pose. CaptureDamage plus matching
+    # source instance attribution and a percent edge causally identifies the hidden victims_1
+    # registration; the ring remains live through hitlag and clears with the script hitbox.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Catch.c::ftCo_CatchAttack_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_800DC284,ftCo_800DC3A4}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80076808}
+    n = 4
+    z_u8 = np.zeros((n, 4), dtype=np.uint8)
+    z_u16 = np.zeros((n, 4), dtype=np.uint16)
+    z_u32 = np.zeros((n, 4), dtype=np.uint32)
+    z_i16 = np.full((n, 4), -1, dtype=np.int16)
+    z_f32 = np.zeros((n, 4), dtype=np.float32)
+
+    char_id = z_u8.copy()
+    char_id[:, :2] = np.uint8(1)  # Fox, src/ids.h
+    action_id = z_u16.copy()
+    action_id[:, 0] = np.uint16(217)  # CatchAttack
+    action_id[:, 1] = np.array([225, 228, 228, 226], dtype=np.uint16)
+    action_frame = z_i16.copy()
+    action_frame[:, 0] = np.array([3, 4, 4, 5], dtype=np.int16)
+    animation_index = z_u32.copy()
+    animation_index[:, 0] = np.uint32(245)  # ftCo_SM_CatchAttack
+    animation_index[:, 1] = np.uint32(0xFFFFFFFF)
+    stocks = z_u8.copy()
+    stocks[:, :2] = np.uint8(4)
+    instance_id = z_u16.copy()
+    instance_id[:, 0] = np.uint16(111)
+    instance_id[:, 1] = np.uint16(222)
+    instance_hit_by = z_u16.copy()
+    instance_hit_by[1:, 1] = np.uint16(111)
+    percent = z_f32.copy()
+    percent[:, 1] = np.array([0.0, 3.0, 3.0, 3.0], dtype=np.float32)
+    pos_x = z_f32.copy()
+    pos_x[:, 1] = np.float32(1000.0)  # Prove the owner path is not ordinary pose geometry.
+
+    def derive(attribution: np.ndarray) -> tuple[np.ndarray, ...]:
+        return derive_combat_hitlist_seed_fields(
+            num_players=2,
+            is_teams=False,
+            team_id=z_u8,
+            char_id=char_id,
+            action_id=action_id,
+            action_frame=action_frame,
+            animation_index=animation_index,
+            facing=np.ones((n, 4), dtype=np.uint8),
+            on_ground=z_u8,
+            pos_x=pos_x,
+            pos_y=z_f32,
+            fighter_scale_y=np.ones((n, 4), dtype=np.float32),
+            guard_tilt_x8=z_u16,
+            guard_tilt_x4=z_f32,
+            stocks=stocks,
+            shield_hp=z_f32,
+            hurtbox_state=z_u8,
+            instance_hit_by=attribution,
+            instance_id=instance_id,
+            input_buttons=z_u16,
+            input_l=z_u8,
+            input_r=z_u8,
+            anim_frame_f32=action_frame.astype(np.float32),
+            percent=percent,
+            include_per_hitbox=True,
+        )
+
+    _, _, hb_valid, hb_cd, hb_iid = derive(instance_hit_by)
+    assert hb_valid[:, 0, 0].tolist() == [0, 1, 1, 0]
+    assert hb_cd[:, 0, 0, 1].tolist() == [0, 0xFFFF, 0xFFFF, 0]
+    assert hb_iid[:, 0, 0, 1].tolist() == [0, 222, 222, 0]
+
+    wrong_attribution = instance_hit_by.copy()
+    wrong_attribution[:, 1] = np.uint16(333)
+    _, _, _, wrong_cd, _ = derive(wrong_attribution)
+    assert not bool(np.any(wrong_cd[:, 0, 0, 1]))
+
+
+def test_phantom_contact_seeds_victims_2_without_suppressing_body_hit() -> None:
+    # A tip-log contact records defender hitlag/source attribution without percent or attacker
+    # hitlag and inserts only HitCapsule.victims_2. A later full BODY overlap from the same live
+    # capsule must remain eligible because victims_1 is still empty.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,checkTipLog,inlineB0,inlineB1}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_80008820}
+    n = 3
+    z_u8 = np.zeros((n, 4), dtype=np.uint8)
+    z_u16 = np.zeros((n, 4), dtype=np.uint16)
+    z_u32 = np.zeros((n, 4), dtype=np.uint32)
+    z_i16 = np.full((n, 4), -1, dtype=np.int16)
+    z_f32 = np.zeros((n, 4), dtype=np.float32)
+    char_id = z_u8.copy()
+    char_id[:, :2] = np.array([22, 1], dtype=np.uint8)  # Falco, Fox
+    action_id = z_u16.copy()
+    action_id[:, :2] = np.array([65, 25], dtype=np.uint16)  # AttackAirN, JumpF
+    action_frame = z_i16.copy()
+    action_frame[:, 0] = np.array([3, 4, 5], dtype=np.int16)
+    action_frame[:, 1] = np.int16(11)
+    animation_index = z_u32.copy()
+    animation_index[:, :2] = np.array([68, 25], dtype=np.uint32)
+    stocks = z_u8.copy()
+    stocks[:, :2] = np.uint8(4)
+    instance_id = z_u16.copy()
+    instance_id[:, :2] = np.array([603, 601], dtype=np.uint16)
+    hitlag = z_u16.copy()
+    hitlag[1:, 1] = np.array([5, 4], dtype=np.uint16)
+    last_hit_by = z_u8.copy()
+    instance_hit_by = z_u16.copy()
+    instance_hit_by[1:, 1] = np.uint16(603)
+
+    _, _, hb_valid, hb_cd, _, hb_v2_mask = derive_combat_hitlist_seed_fields(
+        num_players=2,
+        is_teams=False,
+        team_id=z_u8,
+        char_id=char_id,
+        action_id=action_id,
+        action_frame=action_frame,
+        animation_index=animation_index,
+        facing=np.ones((n, 4), dtype=np.uint8),
+        on_ground=z_u8,
+        pos_x=z_f32,
+        pos_y=z_f32,
+        fighter_scale_y=np.ones((n, 4), dtype=np.float32),
+        guard_tilt_x8=z_u16,
+        guard_tilt_x4=z_f32,
+        stocks=stocks,
+        shield_hp=z_f32,
+        hurtbox_state=z_u8,
+        hitlag=hitlag,
+        last_hit_by=last_hit_by,
+        instance_hit_by=instance_hit_by,
+        instance_id=instance_id,
+        input_buttons=z_u16,
+        input_l=z_u8,
+        input_r=z_u8,
+        anim_frame_f32=action_frame.astype(np.float32),
+        percent=z_f32,
+        include_per_hitbox=True,
+        include_victims_2=True,
+    )
+
+    assert hb_valid[1:, 0, :3].tolist() == [[1, 1, 1], [1, 1, 1]]
+    assert not bool(np.any(hb_cd[1:, 0, :3, 1]))
+    assert hb_v2_mask[1:, 0, :3].tolist() == [[2, 2, 2], [2, 2, 2]]
 
 
 def _derive_falcon_kick_processhit_producer(
@@ -2982,10 +2912,9 @@ def _derive_falcon_kick_processhit_producer(
         items=items,
         include_per_hitbox=True,
         include_processhit_producers=True,
-        include_replay_only_body_admission=True,
         data_root="data",
     )
-    assert len(out) == 7
+    assert len(out) == 6
     return out[-1]
 
 
@@ -3075,93 +3004,17 @@ def test_falcon_kick_processhit_producer_is_prefix_causal() -> None:
     assert np.array_equal(prefix, extended[: len(prefix)])
 
 
-def test_last_hit_by_raw_port_mapping_keeps_ambiguous_local_slots() -> None:
-    # Out-of-range raw controller ports prove source_port0 ownership only on a replay-visible
-    # damage onset from a prior shield-family row that also names the attacker's live instance.
-    # In-range values are ambiguous with legacy local-slot seed lanes and must keep the local
-    # meaning so the raw-port repair does not widen unrelated hitlist provenance.
+def test_last_hit_by_raw_port_mapping_uses_selected_local_slots() -> None:
+    # SendGamePostFrame records raw zero-based controller ports, while native reconstruction owns
+    # compact selected-player slots. This mapping is unconditional; raw values that do not name a
+    # selected player remain unknown.
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     got = _localize_last_hit_by_for_native(
         last_hit_by=np.array([[0, 1], [2, 3], [3, 2], [4, 0]], dtype=np.uint8),
         source_port0=np.array([[1, 0], [2, 3], [0, 3], [1, 0]], dtype=np.uint8),
-        action_id=np.array([[0xB2, 0xB2], [0x59, 0x59], [0x59, 0x59], [0x59, 0x59]], dtype=np.uint16),
-        hitlag=np.array([[0, 0], [4, 4], [4, 4], [4, 0]], dtype=np.uint16),
-        percent=np.array([[0.0, 0.0], [5.0, 5.0], [5.0, 6.0], [7.0, 6.0]], dtype=np.float32),
-        instance_hit_by=np.array([[0, 0], [11, 21], [22, 12], [13, 0]], dtype=np.uint16),
-        instance_id=np.array([[10, 20], [11, 21], [12, 22], [13, 23]], dtype=np.uint16),
         num_players=2,
     )
-    assert got.tolist() == [[0, 1], [0, 1], [0xFF, 0xFF], [0xFF, 0]]
-
-
-@pytest.mark.integration
-def test_guardon_body_admission_hitlist_uses_raw_source_port_mapping() -> None:
-    # RuralReasonableRat:2973 is a GuardOn ShieldDesc-miss -> BODY hit. The active BAir hitboxes
-    # carry a stale dense hitlist entry from the prior no-damage GuardOn overlap, but the next
-    # post-frame proves BODY damage from raw source port 3. The selected local attacker slot is 1,
-    # so replay-only BODY admission must compare last_hit_by against source_port0, not local slot.
-    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by raw controller-port lane)
-    root = Path(__file__).resolve().parents[1]
-    dataset_path = root / "replays/validation/sheik/RuralReasonableRat.slpz"
-    ds = load_replay_buffers(str(dataset_path))
-    rec = 2973
-    attacker = 1
-    defender = 0
-    samples = ds.rows
-    cur = samples[rec]["seed_t"]
-    nxt = samples[rec + 1]["seed_t"]
-
-    def stack_seed(name: str) -> np.ndarray:
-        return np.ascontiguousarray(samples["seed_t"][name])
-
-    def stack_input(name: str) -> np.ndarray:
-        return np.ascontiguousarray(samples["input_t"]["p"][name])
-
-    common_kwargs = dict(
-        num_players=2,
-        is_teams=False,
-        team_id=stack_seed("team_id"),
-        char_id=stack_seed("char_id"),
-        action_id=stack_seed("action_id"),
-        action_frame=stack_seed("action_frame"),
-        animation_index=stack_seed("animation_index"),
-        facing=stack_seed("facing"),
-        on_ground=stack_seed("on_ground"),
-        pos_x=stack_seed("pos_x"),
-        pos_y=stack_seed("pos_y"),
-        fighter_scale_y=stack_seed("fighter_scale_y"),
-        guard_tilt_x8=stack_seed("guard_tilt_x8"),
-        guard_tilt_x4=stack_seed("guard_tilt_x4"),
-        stocks=stack_seed("stocks"),
-        percent=stack_seed("percent"),
-        shield_hp=stack_seed("shield_hp"),
-        hurtbox_state=stack_seed("hurtbox_state"),
-        hitlag=stack_seed("hitlag"),
-        last_hit_by=stack_seed("last_hit_by"),
-        instance_hit_by=stack_seed("instance_hit_by"),
-        instance_id=stack_seed("instance_id"),
-        input_buttons=stack_input("buttons"),
-        input_l=stack_input("l"),
-        input_r=stack_input("r"),
-        anim_frame_f32=stack_seed("anim_frame_f32"),
-        frame_speed_mul_f32=stack_seed("frame_speed_mul_f32"),
-        include_per_hitbox=True,
-        include_replay_only_body_admission=True,
-        data_root="data",
-    )
-    assert int(cur["last_hit_by"][defender]) == 3
-    assert int(cur["source_port0"][attacker]) == 3
-    assert int(nxt["last_hit_by"][defender]) == 3
-    assert int(nxt["instance_hit_by"][defender]) == int(cur["instance_id"][attacker])
-
-    no_map = derive_combat_hitlist_seed_fields(**common_kwargs)
-    with_map = derive_combat_hitlist_seed_fields(
-        **common_kwargs,
-        source_port0=stack_seed("source_port0"),
-    )
-    assert [int(x) for x in no_map[2][rec, attacker]] == [0, 0, 0, 0]
-    assert [int(x) for x in with_map[2][rec, attacker]] == [1, 1, 1, 0]
-    assert [int(with_map[3][rec, attacker, hb, defender]) for hb in range(4)] == [0, 0, 0, 0]
-    assert [int(with_map[4][rec, attacker, hb, defender]) for hb in range(4)] == [0, 0, 0, 0]
+    assert got.tolist() == [[1, 0], [0, 1], [1, 0xFF], [0xFF, 1]]
 
 
 def test_seed_bridge_trim_preserves_authoritative_per_hitbox_hitlist() -> None:
@@ -3396,6 +3249,154 @@ def test_derive_combat_hitlist_seed_fields_is_prefix_invariant_wrt_shield_inputs
 
     assert np.array_equal(cd0, cd1[: cd0.shape[0]])
     assert np.array_equal(iid_cd0, iid_cd1[: iid_cd0.shape[0]])
+
+
+def test_shield_contact_seed_uses_pre_guardsetoff_descriptor_and_persists_victim_ring() -> None:
+    # Collision sees the live Guard ShieldDesc before ftCo_80092F2C changes the defender to
+    # GuardSetOff. Guard rows may have no Slippi animation frame, but that does not disable the
+    # callback-owned descriptor. The accepted contact remains in each live HitCapsule victims_1
+    # ring through the hitlag tail.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_80076808}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    n = 3
+    z_u8 = np.zeros((n, 4), dtype=np.uint8)
+    z_u16 = np.zeros((n, 4), dtype=np.uint16)
+    z_u32 = np.zeros((n, 4), dtype=np.uint32)
+    z_i16 = np.full((n, 4), -1, dtype=np.int16)
+    z_f32 = np.zeros((n, 4), dtype=np.float32)
+
+    char_id = z_u8.copy()
+    char_id[:, :2] = np.uint8(22)  # Falco, src/ids.h
+    action_id = z_u16.copy()
+    action_id[:, 0] = np.uint16(50)  # AttackAirN
+    action_id[:, 1] = np.array([179, 181, 181], dtype=np.uint16)  # Guard -> GuardSetOff
+    action_frame = z_i16.copy()
+    action_frame[:, 0] = np.array([9, 10, 11], dtype=np.int16)
+    action_frame[1:, 1] = np.array([0, 4], dtype=np.int16)
+    animation_index = z_u32.copy()
+    animation_index[:, 0] = np.uint32(52)  # data/hitboxes/falco.bin::MSLHITB1
+    animation_index[:, 1] = np.array([0xFFFFFFFF, 40, 40], dtype=np.uint32)
+    facing = z_u8.copy()
+    facing[:, :2] = np.uint8(1)
+    on_ground = z_u8.copy()
+    on_ground[:, :2] = np.uint8(1)
+    stocks = z_u8.copy()
+    stocks[:, :2] = np.uint8(4)
+    shield_hp = z_f32.copy()
+    shield_hp[:, 1] = np.array([60.0, 55.0, 55.0], dtype=np.float32)
+    hitlag = z_u16.copy()
+    hitlag[:, :2] = np.array([[0, 0], [4, 4], [3, 3]], dtype=np.uint16)
+    instance_id = z_u16.copy()
+    instance_id[:, 0] = np.uint16(10)
+    instance_id[:, 1] = np.array([20, 21, 21], dtype=np.uint16)
+    shield_desc_active = z_u8.copy()
+    shield_desc_active[:, 1] = np.uint8(1)
+
+    _, _, hb_valid, hb_cd, hb_iid = derive_combat_hitlist_seed_fields(
+        num_players=2,
+        is_teams=False,
+        team_id=z_u8,
+        char_id=char_id,
+        action_id=action_id,
+        action_frame=action_frame,
+        animation_index=animation_index,
+        facing=facing,
+        on_ground=on_ground,
+        pos_x=z_f32,
+        pos_y=z_f32,
+        fighter_scale_y=np.ones((n, 4), dtype=np.float32),
+        guard_tilt_x8=z_u16,
+        guard_tilt_x4=z_f32,
+        stocks=stocks,
+        shield_hp=shield_hp,
+        hurtbox_state=z_u8,
+        hitlag=hitlag,
+        instance_id=instance_id,
+        input_buttons=z_u16,
+        input_l=z_u8,
+        input_r=z_u8,
+        anim_frame_f32=action_frame.astype(np.float32),
+        shield_desc_active=shield_desc_active,
+        include_per_hitbox=True,
+    )
+
+    assert int(hb_valid[0, 0, 1]) == 1
+    assert int(hb_cd[0, 0, 1, 1]) == 0
+    assert hb_cd[1:, 0, 1, 1].tolist() == [0xFFFF, 0xFFFF]
+    assert hb_iid[1:, 0, 1, 1].tolist() == [21, 21]
+
+
+def test_direct_guardsetoff_entry_replaces_stale_dense_ring_with_hitcapsule_owner() -> None:
+    # A shield input can enter GuardOn and be hit before the next recorded post-frame state, so
+    # the visible transition may be Dash -> GuardSetOff. A dense compatibility ring from an older
+    # attack must not suppress reconstruction of the current HitCapsule victims_1 owner.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80092F2C}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808}
+    n = 3
+    z_u8 = np.zeros((n, 4), dtype=np.uint8)
+    z_u16 = np.zeros((n, 4), dtype=np.uint16)
+    z_u32 = np.zeros((n, 4), dtype=np.uint32)
+    z_i16 = np.full((n, 4), -1, dtype=np.int16)
+    z_f32 = np.zeros((n, 4), dtype=np.float32)
+
+    char_id = z_u8.copy()
+    char_id[:, :2] = np.uint8(22)  # Falco, src/ids.h
+    action_id = z_u16.copy()
+    action_id[:, 0] = np.array([50, 14, 50], dtype=np.uint16)  # attack, Wait, attack
+    action_id[:, 1] = np.array([75, 20, 181], dtype=np.uint16)  # DamageHi1, Dash, GuardSetOff
+    action_frame = z_i16.copy()
+    action_frame[:, 0] = np.array([10, -1, 10], dtype=np.int16)
+    action_frame[:, 1] = np.array([0, 4, 0], dtype=np.int16)
+    animation_index = z_u32.copy()
+    animation_index[:, 0] = np.array([52, 0xFFFFFFFF, 52], dtype=np.uint32)
+    animation_index[:, 1] = np.array([40, 14, 40], dtype=np.uint32)
+    facing = z_u8.copy()
+    facing[:, :2] = np.uint8(1)
+    on_ground = z_u8.copy()
+    on_ground[:, :2] = np.uint8(1)
+    stocks = z_u8.copy()
+    stocks[:, :2] = np.uint8(4)
+    hitlag = z_u16.copy()
+    hitlag[:, :2] = np.array([[4, 4], [0, 0], [4, 4]], dtype=np.uint16)
+    instance_id = z_u16.copy()
+    instance_id[:, 0] = np.array([10, 11, 12], dtype=np.uint16)
+    instance_id[:, 1] = np.array([20, 21, 22], dtype=np.uint16)
+    shield_hp = z_f32.copy()
+    shield_hp[:, 1] = np.float32(55.0)
+    shield_desc_active = z_u8.copy()
+    shield_desc_active[2, 1] = np.uint8(1)
+
+    _, _, hb_valid, hb_cd, hb_iid = derive_combat_hitlist_seed_fields(
+        num_players=2,
+        is_teams=False,
+        team_id=z_u8,
+        char_id=char_id,
+        action_id=action_id,
+        action_frame=action_frame,
+        animation_index=animation_index,
+        facing=facing,
+        on_ground=on_ground,
+        pos_x=z_f32,
+        pos_y=z_f32,
+        fighter_scale_y=np.ones((n, 4), dtype=np.float32),
+        guard_tilt_x8=z_u16,
+        guard_tilt_x4=z_f32,
+        stocks=stocks,
+        shield_hp=shield_hp,
+        hurtbox_state=z_u8,
+        hitlag=hitlag,
+        instance_id=instance_id,
+        input_buttons=z_u16,
+        input_l=z_u8,
+        input_r=z_u8,
+        anim_frame_f32=action_frame.astype(np.float32),
+        shield_desc_active=shield_desc_active,
+        include_per_hitbox=True,
+    )
+
+    assert int(hb_valid[2, 0, 1]) == 1
+    assert int(hb_cd[2, 0, 1, 1]) == 0xFFFF
+    assert int(hb_iid[2, 0, 1, 1]) == 22
 
 
 def test_fighter_stick_input_counters_are_causal_wrt_future_frames() -> None:
@@ -4150,3 +4151,140 @@ def test_derive_camera_target_point_inside_stage_cam_bounds_prefix_invariant() -
         camera_box_radius_f32=r_prefix,
     )
     assert battlefield.tolist() == [1, 1, 1, 0]
+
+
+def _derive_item_hitlist_rows(rows: np.ndarray) -> np.ndarray:
+    import msl_binding
+
+    msl_binding.validation_derive_item_hitlist_buffers(
+        rows.view(np.uint8).reshape((len(rows), rows.dtype.itemsize)),
+        2,
+    )
+    return rows
+
+
+def test_item_hitlist_reseed_carries_source_shield_victim_lifetime_prefix_causally() -> None:
+    from tools.eval.validation_dtypes import SEED_DTYPE
+
+    rows = np.zeros((5,), dtype=SEED_DTYPE)
+    rows["num_players"] = np.uint8(2)
+    rows["source_port0"][:, :2] = np.array([0, 1], dtype=np.uint8)
+    rows["instance_id"][:, 1] = np.uint16(22)
+    rows["action_id"][:, 1] = np.array([179, 181, 181, 181, 181], dtype=np.uint16)
+    rows["hitlag"][:, 1] = np.array([0, 3, 2, 1, 0], dtype=np.uint16)
+    rows["shield_hp"][:, 1] = np.array([60.0, 56.0, 56.0, 56.0, 56.0], dtype=np.float32)
+
+    item = rows["items"][:, 0]
+    item["exists"] = np.uint8(1)
+    item["type"] = np.uint16(55)
+    item["state"] = np.uint8(0)
+    item["owner"] = np.int8(0)
+    item["instance_id"] = np.uint16(42)
+    item["spawn_id"] = np.uint32(900)
+    item["vel_x"] = np.array([5.0, -0.7, -0.7, -0.7, -0.7], dtype=np.float32)
+    item["vel_y"] = np.array([0.0, 4.95, 4.95, 4.95, 4.95], dtype=np.float32)
+    item["spawn_id"][4] = np.uint32(901)
+
+    prefix = _derive_item_hitlist_rows(rows[:3].copy())
+    got = _derive_item_hitlist_rows(rows.copy())
+
+    assert np.array_equal(
+        got[:3]["item_hitlist_victim_port"], prefix["item_hitlist_victim_port"]
+    )
+    assert got["item_hitlist_victim_port"][:, 0].tolist() == [255, 1, 1, 1, 255]
+    assert got["item_hitlist_victim_cd"][:, 0].tolist() == [0, 0, 0, 0, 0]
+    assert got["item_hitlist_victim_hitbox_mask"][:, 0].tolist() == [0, 15, 15, 15, 0]
+    assert got["item_hitlist_victim_iid"][:, 0].tolist() == [0, 22, 22, 22, 0]
+
+
+def test_item_hitlist_reseed_materializes_throw_laser_victim_ring() -> None:
+    from tools.eval.validation_dtypes import SEED_DTYPE
+
+    rows = np.zeros((3,), dtype=SEED_DTYPE)
+    rows["num_players"] = np.uint8(2)
+    rows["source_port0"][:, :2] = np.array([0, 1], dtype=np.uint8)
+    rows["instance_id"][:, 0] = np.uint16(22)
+    rows["action_id"][:, 0] = np.uint16(242)  # ThrownLw.
+    rows["action_id"][:, 1] = np.uint16(222)  # ThrowLw.
+    rows["grab_owner_port"][:, 0] = np.uint8(1)
+    rows["hitlag"][:, 0] = np.uint16(4)
+
+    item = rows["items"][:, 0]
+    item["exists"] = np.uint8(1)
+    item["type"] = np.uint16(55)
+    item["state"] = np.uint8(1)
+    item["owner"] = np.int8(1)
+    item["instance_id"] = np.uint16(77)
+    item["spawn_id"] = np.uint32(900)
+    rows["instance_hit_by"][:, 0] = np.array([77, 76, 77], dtype=np.uint16)
+    rows["action_id"][2, 1] = np.uint16(14)  # Wait: no attached throw owner.
+
+    got = _derive_item_hitlist_rows(rows)
+
+    assert int(got["item_hitlist_victim_port"][0, 0]) == 0
+    assert int(got["item_hitlist_victim_cd"][0, 0]) == 16
+    assert int(got["item_hitlist_victim_hitbox_mask"][0, 0]) == 0x03
+    assert int(got["item_hitlist_victim_iid"][0, 0]) == 22
+    assert got["item_hitlist_victim_port"][1:, 0].tolist() == [255, 255]
+
+
+def test_item_hitlist_reseed_materializes_illusion_body_victim_ring() -> None:
+    from tools.eval.validation_dtypes import SEED_DTYPE
+
+    rows = np.zeros((3,), dtype=SEED_DTYPE)
+    rows["num_players"] = np.uint8(2)
+    rows["source_port0"][:, :2] = np.array([2, 0], dtype=np.uint8)
+    rows["instance_id"][:, :2] = np.array([31, 47], dtype=np.uint16)
+    rows["hitlag"][:, 1] = np.array([3, 0, 2], dtype=np.uint16)
+    rows["hitstun"][:, 1] = np.array([8, 7, 6], dtype=np.uint16)
+    rows["last_hit_by"][:, 1] = np.array([2, 2, 0], dtype=np.uint8)
+    rows["instance_hit_by"][:, 1] = np.uint16(31)
+
+    item = rows["items"][:, 0]
+    item["exists"] = np.uint8(1)
+    item["type"] = np.uint16(56)  # Extracted Fox Illusion article kind.
+    item["state"] = np.uint8(0)
+    item["owner"] = np.int8(0)
+    item["instance_id"] = np.uint16(31)
+    item["spawn_id"] = np.uint32(900)
+
+    got = _derive_item_hitlist_rows(rows)
+
+    assert got["item_hitlist_victim_port"][:, 0].tolist() == [1, 1, 1]
+    assert got["item_hitlist_victim_cd"][:, 0].tolist() == [0, 0, 0]
+    assert got["item_hitlist_victim_hitbox_mask"][:, 0].tolist() == [1, 1, 1]
+    assert got["item_hitlist_victim_iid"][:, 0].tolist() == [47, 47, 47]
+
+
+def test_item_hitlist_reseed_carries_din_explosion_body_victim_ring() -> None:
+    from tools.eval.validation_dtypes import SEED_DTYPE
+
+    rows = np.zeros((4,), dtype=SEED_DTYPE)
+    rows["num_players"] = np.uint8(2)
+    rows["source_port0"][:, :2] = np.array([0, 1], dtype=np.uint8)
+    rows["instance_id"][:, :2] = np.array([35, 36], dtype=np.uint16)
+
+    item = rows["items"][:, 0]
+    item["exists"] = np.uint8(1)
+    item["type"] = np.uint16(109)  # Extracted Zelda Din Fire Explode article kind.
+    item["state"] = np.uint8(0)
+    item["owner"] = np.int8(0)
+    item["instance_id"] = np.uint16(35)
+    item["spawn_id"] = np.uint32(1)
+
+    # The first post-contact row exposes the exact item source. Later rows retain the same live
+    # HitCapsule and therefore carry its zero-rehit victims_1 entry even after hitlag/hitstun end.
+    rows["hitlag"][:, 1] = np.array([0, 6, 0, 0], dtype=np.uint16)
+    rows["hitstun"][:, 1] = np.array([0, 25, 8, 0], dtype=np.uint16)
+    rows["last_hit_by"][:, 1] = np.array([6, 0, 0, 0], dtype=np.uint8)
+    rows["instance_hit_by"][:, 1] = np.array([20, 35, 35, 35], dtype=np.uint16)
+    item["spawn_id"][3] = np.uint32(2)
+
+    prefix = _derive_item_hitlist_rows(rows[:3].copy())
+    got = _derive_item_hitlist_rows(rows.copy())
+
+    assert np.array_equal(got[:3]["item_hitlist_victim_port"], prefix["item_hitlist_victim_port"])
+    assert got["item_hitlist_victim_port"][:, 0].tolist() == [255, 1, 1, 255]
+    assert got["item_hitlist_victim_cd"][:, 0].tolist() == [0, 0, 0, 0]
+    assert got["item_hitlist_victim_hitbox_mask"][:, 0].tolist() == [0, 1, 1, 0]
+    assert got["item_hitlist_victim_iid"][:, 0].tolist() == [0, 36, 36, 0]

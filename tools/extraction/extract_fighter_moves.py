@@ -86,6 +86,8 @@ class Hitbox:
     item_body_enabled: bool
     item_grabbable_only: bool
     item_match_start_x138: bool
+    item_hitbox_word4_raw: int
+    item_flags_raw: int
 
 
 @dataclass(frozen=True)
@@ -93,6 +95,19 @@ class Event:
     frame: int
     kind: str
     data: dict
+    # Source control command that schedules this event group. `frame` remains the unit-rate
+    # decoded timeline coordinate used by tooling; runtime timing uses this command metadata.
+    # refs/melee/src/melee/lb/lbcommand.c::{Command_01,Command_02}
+    timer_kind: int = 0  # 0=initial/same group, 1=synchronous, 2=asynchronous
+    timer_value: int = 0
+
+
+def _event_to_json(event: Event) -> dict:
+    out = {"frame": event.frame, "kind": event.kind, "data": event.data}
+    if event.timer_kind != 0:
+        out["timer_kind"] = event.timer_kind
+        out["timer_value"] = event.timer_value
+    return out
 
 
 def _decode_create_hitbox(words: list[int], *, item_hitbox_layout: bool = False) -> Hitbox:
@@ -137,9 +152,18 @@ def _decode_create_hitbox(words: list[int], *, item_hitbox_layout: bool = False)
     item_hit_interaction = bool((w3 >> 4) & 0x1)
     ignore_thrown_fighters = bool((w3 >> 3) & 0x1)
     ignore_fighter_scale = bool((w3 >> 2) & 0x1)
-    clank = bool((w3 >> 1) & 0x1)
-    rebound = bool(w3 & 0x1)
+    if item_hitbox_layout:
+        # Item command 11 does not consume the five fighter-only flags at the bottom of word 3.
+        # Its HitCapsule.x40_b0 contact/clank gate is the dedicated bit in it_create_hitbox_4.
+        # refs/melee/src/melee/it/itanimlist.c::it_802790C0
+        # refs/melee/src/melee/lb/types.h::it_create_hitbox_4
+        clank = bool((w4 >> 17) & 0x1)
+        rebound = False
+    else:
+        clank = bool((w3 >> 1) & 0x1)
+        rebound = bool(w3 & 0x1)
     item_match_start_x138 = False
+    item_flags_raw = 0
     if w5 is not None:
         # Item command ownership: it_802790C0 copies cmd->x8_bits->x2_b5 into
         # item->x5D4_hitboxes[id].x138. ftColl_8007925C consults this bit under
@@ -147,6 +171,12 @@ def _decode_create_hitbox(words: list[int], *, item_hitbox_layout: bool = False)
         # refs/melee/src/melee/it/itanimlist.c::it_802790C0
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
         item_match_start_x138 = bool((w5 >> 10) & 0x1)
+        # Preserve the three gameplay bytes copied verbatim by it_802790C0: HitCapsule.x40_b4,
+        # x41_b4..x42_b3, and x42_b4..x43_b0 plus ItemHitbox.x138. Consumers should decode the
+        # named HitCapsule bits from this source word instead of reconstructing article behavior
+        # from fighter actions or replay context.
+        # refs/melee/src/melee/it/itanimlist.c::it_802790C0
+        item_flags_raw = int(w5) & 0xFFFFFF00
 
     bkb = (w4 >> 23) & 0x1FF
     element = (w4 >> 18) & 0x1F
@@ -212,6 +242,8 @@ def _decode_create_hitbox(words: list[int], *, item_hitbox_layout: bool = False)
         item_body_enabled=item_body_enabled,
         item_grabbable_only=item_grabbable_only,
         item_match_start_x138=item_match_start_x138,
+        item_hitbox_word4_raw=(int(w4) if item_hitbox_layout else 0),
+        item_flags_raw=item_flags_raw,
     )
 
 
@@ -311,6 +343,10 @@ def _parse_subaction_events(
     frame_count: float = 0.0
     call_stack: list[int] = []
     loop_stack: list[tuple[int, int]] = []  # (start_pc, remaining)
+    timer_kind = 0
+    timer_value = 0
+    timer_generation = 0
+    emitted_timer_generation = 0
 
     out: list[Event] = []
 
@@ -337,12 +373,38 @@ def _parse_subaction_events(
                     break
                 if op == 1:
                     # SynchronousTimer: add frames to the current timer.
-                    timer += float(_u26(w0))
+                    timer_value = int(_u26(w0))
+                    timer_kind = 1
+                    timer_generation += 1
+                    out.append(
+                        Event(
+                            frame=frame,
+                            kind="command_timer",
+                            data={},
+                            timer_kind=timer_kind,
+                            timer_value=timer_value,
+                        )
+                    )
+                    emitted_timer_generation = timer_generation
+                    timer += float(timer_value)
                     pc += 4
                     continue
                 if op == 2:
                     # AsynchronousTimer: timer = value - frame_count.
-                    timer = float(_u26(w0)) - frame_count
+                    timer_value = int(_u26(w0))
+                    timer_kind = 2
+                    timer_generation += 1
+                    out.append(
+                        Event(
+                            frame=frame,
+                            kind="command_timer",
+                            data={},
+                            timer_kind=timer_kind,
+                            timer_value=timer_value,
+                        )
+                    )
+                    emitted_timer_generation = timer_generation
+                    timer = float(timer_value) - frame_count
                     pc += 4
                     continue
                 if op == 3:
@@ -397,6 +459,7 @@ def _parse_subaction_events(
                 continue
 
             # Fighter events (>=10): parse subset we care about, otherwise skip.
+            event_count_before = len(out)
             n_words = _cmd_len_words(op)
             if op == 11:
                 n_words = 6 if item_hitbox_layout else _cmd_len_words(op)
@@ -658,6 +721,17 @@ def _parse_subaction_events(
                     )
                 )
 
+            for event_index in range(event_count_before, len(out)):
+                event = out[event_index]
+                owns_timer = timer_generation != emitted_timer_generation
+                out[event_index] = Event(
+                    frame=event.frame,
+                    kind=event.kind,
+                    data=event.data,
+                    timer_kind=timer_kind if owns_timer else 0,
+                    timer_value=timer_value if owns_timer else 0,
+                )
+                emitted_timer_generation = timer_generation
             pc += 4 * n_words
 
     return out
@@ -767,6 +841,18 @@ def main() -> None:
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c
         "ftCo_SM_JumpF",
         "ftCo_SM_JumpB",
+        # Ground transition scripts own x221C_u16_y and interrupt state across squat/landing
+        # boundaries; keep these causal instead of reconstructing their levels from action ids.
+        "ftCo_SM_Squat",
+        "ftCo_SM_SquatWait",
+        "ftCo_SM_SquatRv",
+        "ftCo_SM_Landing",
+        "ftCo_SM_LandingFallSpecial",
+        "ftCo_SM_LandingAirN",
+        "ftCo_SM_LandingAirF",
+        "ftCo_SM_LandingAirB",
+        "ftCo_SM_LandingAirHi",
+        "ftCo_SM_LandingAirLw",
         # Spotdodge (EscapeN) `allow_interrupt` is a command-script lane used by fp->allow_interrupt.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Anim
         # refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
@@ -794,10 +880,23 @@ def main() -> None:
         "ftCo_SM_Attack100Loop",
         "ftCo_SM_Attack100End",
         "ftCo_SM_AttackDash",
+        # Extract every angled side-attack submotion. Characters may share these command lists,
+        # leave a variant empty, or author genuinely different HitCapsules; the Pl*.dat row is the
+        # owner in all three cases.
+        # refs/melee/src/melee/ft/ftmotionstates.c (AttackS3* / AttackS4* rows)
+        # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackS3.c,ftCo_AttackS4.c}
+        "ftCo_SM_AttackS3Hi",
+        "ftCo_SM_AttackS3HiS",
         "ftCo_SM_AttackS3",
+        "ftCo_SM_AttackS3LwS",
+        "ftCo_SM_AttackS3Lw",
         "ftCo_SM_AttackHi3",
         "ftCo_SM_AttackLw3",
+        "ftCo_SM_AttackS4Hi",
+        "ftCo_SM_AttackS4HiS",
         "ftCo_SM_AttackS4",
+        "ftCo_SM_AttackS4LwS",
+        "ftCo_SM_AttackS4Lw",
         "ftCo_SM_AttackHi4",
         "ftCo_SM_AttackLw4",
         "ftCo_SM_AttackAirN",
@@ -808,6 +907,27 @@ def main() -> None:
         # Knockdown getup attacks (common): needed for replay parity (DownAttackU/D hitboxes).
         "ftCo_SM_DownAttackU",
         "ftCo_SM_DownAttackD",
+        # The rest of the bounded knockdown/passive family owns script hit/hurt status.
+        "ftCo_SM_DownBoundU",
+        "ftCo_SM_DownWaitU",
+        "ftCo_SM_DownDamageU",
+        "ftCo_SM_DownStandU",
+        "ftCo_SM_DownFowardU",
+        "ftCo_SM_DownBackU",
+        "ftCo_SM_DownSpotU",
+        "ftCo_SM_DownBoundD",
+        "ftCo_SM_DownWaitD",
+        "ftCo_SM_DownDamageD",
+        "ftCo_SM_DownStandD",
+        "ftCo_SM_DownFowardD",
+        "ftCo_SM_DownBackD",
+        "ftCo_SM_DownSpotD",
+        "ftCo_SM_Passive",
+        "ftCo_SM_PassiveStandF",
+        "ftCo_SM_PassiveStandB",
+        "ftCo_SM_PassiveWall",
+        "ftCo_SM_PassiveWallJump",
+        "ftCo_SM_PassiveCeil",
         # Grabs / throws (common): needed for replay parity (ftCo_MS_Thrown*, etc.).
         "ftCo_SM_Catch",
         "ftCo_SM_CatchDash",
@@ -821,6 +941,43 @@ def main() -> None:
         "ftCo_SM_ThrownB",
         "ftCo_SM_ThrownHi",
         "ftCo_SM_ThrownLw",
+        "ftCo_SM_CliffCatch",
+        "ftCo_SM_CliffWait",
+        "ftCo_SM_CliffClimbSlow",
+        "ftCo_SM_CliffClimbQuick",
+        "ftCo_SM_CliffEscapeSlow",
+        "ftCo_SM_CliffEscapeQuick",
+        "ftCo_SM_CliffJumpSlow1",
+        "ftCo_SM_CliffJumpSlow2",
+        "ftCo_SM_CliffJumpQuick1",
+        "ftCo_SM_CliffJumpQuick2",
+        # Common item swings publish ordinary fighter HitCapsules through ftAction_8007121C.
+        # Keep them in the same audited moves JSON -> MSLFTSC1 contract as unarmed attacks.
+        # refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_Submotion
+        "ftCo_SM_SwordSwing1",
+        "ftCo_SM_SwordSwing3",
+        "ftCo_SM_SwordSwing4",
+        "ftCo_SM_SwordSwingDash",
+        "ftCo_SM_BatSwing1",
+        "ftCo_SM_BatSwing3",
+        "ftCo_SM_BatSwing4",
+        "ftCo_SM_BatSwingDash",
+        "ftCo_SM_ParasolSwing1",
+        "ftCo_SM_ParasolSwing3",
+        "ftCo_SM_ParasolSwing4",
+        "ftCo_SM_ParasolSwingDash",
+        "ftCo_SM_HarisenSwing1",
+        "ftCo_SM_HarisenSwing3",
+        "ftCo_SM_HarisenSwing4",
+        "ftCo_SM_HarisenSwingDash",
+        "ftCo_SM_StarRodSwing1",
+        "ftCo_SM_StarRodSwing3",
+        "ftCo_SM_StarRodSwing4",
+        "ftCo_SM_StarRodSwingDash",
+        "ftCo_SM_LipstickSwing1",
+        "ftCo_SM_LipstickSwing3",
+        "ftCo_SM_LipstickSwing4",
+        "ftCo_SM_LipstickSwingDash",
     ]
     want_ids = {name: enum_map[name] for name in want if name in enum_map}
     if len(want_ids) != len(want):
@@ -854,7 +1011,7 @@ def main() -> None:
             moves[name] = {
                 "submotion_id": sm_id,
                 "subaction_abs_off": sub_ptr,
-                "events": [e.__dict__ for e in events],
+                "events": [_event_to_json(e) for e in events],
             }
 
         specials_by_msid: dict[str, dict] = {}
@@ -871,7 +1028,7 @@ def main() -> None:
             specials_by_msid[str(int(msid))] = {
                 "submotion_id": int(msid),
                 "subaction_abs_off": sub_ptr,
-                "events": [e.__dict__ for e in events],
+                "events": [_event_to_json(e) for e in events],
             }
 
         out = {

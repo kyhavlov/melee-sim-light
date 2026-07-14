@@ -569,6 +569,7 @@ static inline uint8_t damage_ground_try_enter_guard_from_wait_iasa(MslBatch* bat
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &= (uint8_t) ~(
       uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  msl_guard_set_shield_desc_active(batch, idx, 1u);
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = msl_guard_x10_raw_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
@@ -1521,7 +1522,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
             // fighters' later input callbacks and before ProcessHit can overwrite the action.
             const uint8_t keep_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-            msl_motion_state_enter_side_effects(batch, idx);
+            msl_motion_state_enter_side_effects(batch, idx, 0u);
             // Decomp: ftCo_Fall_Enter uses Ft_MF_KeepFastFall, so a DamageAir source that is
             // already fastfalling keeps fp->fall_fast on the first Fall publication row.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
@@ -2007,7 +2008,7 @@ static inline void enter_fall_from_damagefall_iasa(MslBatch* batch, size_t idx) 
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
   const uint8_t keep_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-  msl_motion_state_enter_side_effects(batch, idx);
+  msl_motion_state_enter_side_effects(batch, idx, 0u);
   // Decomp: this DamageFall_IASA branch calls ftCo_Fall_Enter, whose
   // Fighter_ChangeMotionState flags include Ft_MF_KeepFastFall.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
@@ -2091,6 +2092,7 @@ static inline void enter_down_stand_from_downdamage_anim(MslBatch* batch, size_t
   // data/scripts/{fox,falco}.bin (MSLFTSC1 set_hit_status / hurt-state events)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_80098160
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071A14
+  batch->state.script_hit_status_x1988[idx] = 2u;
   batch->state.hurtbox_state[idx] = 2u;
 }
 

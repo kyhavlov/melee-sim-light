@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tests.test_hitbox_scale_flags import _populate_data_dir, _write_minimal_mslhitb1
+from tests.test_hitbox_scale_flags import _populate_data_dir, _write_minimal_mslftsc1
 from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
 from tools.extraction.extract_fighter_hitboxes import _records_from_events
 from tools.extraction.extract_fighter_script_timeline import EVENT_IDS, _encode_payload
@@ -113,6 +113,64 @@ def test_mslftsc1_encodes_set_hitbox_interaction_payload() -> None:
     }
 
 
+def test_fox_throwhi_preserves_asynchronous_timer_ownership() -> None:
+    root = Path(__file__).resolve().parents[1]
+    moves = json.loads((root / "data" / "moves" / "fox.json").read_text())
+    events = moves["moves"]["ftCo_SM_ThrowHi"]["events"]
+
+    timers = [event for event in events if event["kind"] == "command_timer"]
+
+    # PlFx.dat ThrowHi uses Command_02 at every one of these boundaries. In particular, target 20
+    # replaces (rather than adds to) the f32 residual left after target 18; that distinction moves
+    # the second laser pulse by one interpreter tick at a 4/3 animation rate.
+    # refs/melee/src/melee/lb/lbcommand.c::Command_02
+    assert [(event["timer_kind"], event["timer_value"]) for event in timers[:5]] == [
+        (2, frame) for frame in (8, 13, 18, 20, 24)
+    ]
+
+
+def test_angled_side_attacks_extract_their_concrete_source_scripts() -> None:
+    root = Path(__file__).resolve().parents[1]
+    fox = json.loads((root / "data" / "moves" / "fox.json").read_text())["moves"]
+    falcon = json.loads((root / "data" / "moves" / "falcon.json").read_text())["moves"]
+
+    side_tilt_names = (
+        "ftCo_SM_AttackS3Hi",
+        "ftCo_SM_AttackS3HiS",
+        "ftCo_SM_AttackS3",
+        "ftCo_SM_AttackS3LwS",
+        "ftCo_SM_AttackS3Lw",
+    )
+    assert [fox[name]["submotion_id"] for name in side_tilt_names] == list(range(53, 58))
+    assert all(fox[name]["events"] == fox["ftCo_SM_AttackS3"]["events"] for name in side_tilt_names)
+
+    # Captain authors distinct up/neutral/down scripts for this family. A runtime alias to the
+    # neutral submotion would therefore be incorrect even though Fox happens to share its stream.
+    # refs/melee/src/melee/ft/ftmotionstates.c (AttackS3* rows)
+    assert falcon["ftCo_SM_AttackS3Hi"]["events"] != falcon["ftCo_SM_AttackS3"]["events"]
+    assert falcon["ftCo_SM_AttackS3Lw"]["events"] != falcon["ftCo_SM_AttackS3"]["events"]
+
+
+def test_sheik_vanish_preserves_timer_only_command_groups() -> None:
+    root = Path(__file__).resolve().parents[1]
+    moves = json.loads((root / "data" / "moves" / "sheik.json").read_text())
+    events = moves["specials_by_msid"]["312"]["events"]
+    cmd_index = next(i for i, event in enumerate(events) if event["kind"] == "set_cmd_var")
+
+    # This script advances through ten synchronous one-frame control groups before publishing
+    # cmd_vars[0]. The entry interpreter has already subtracted one rate, so the first wait expires
+    # immediately and the command remains an audit-frame-9 event. Dropping timer-only groups made
+    # the persistent interpreter fire it at entry.
+    assert [(event["timer_kind"], event["timer_value"]) for event in events[:cmd_index]] == [
+        (1, 1)
+    ] * 10
+    assert events[cmd_index] == {
+        "frame": 9,
+        "kind": "set_cmd_var",
+        "data": {"idx": 0, "value": 1},
+    }
+
+
 def test_mslhitb1_folds_set_hitbox_damage_into_active_slot_record() -> None:
     records = _records_from_events(
         [
@@ -166,8 +224,8 @@ def test_runtime_set_hitbox_damage_does_not_create_edge() -> None:
     exclude = {
         Path("anims/fox.bin"),
         Path("anims/falco.bin"),
-        Path("hitboxes/fox.bin"),
-        Path("hitboxes/falco.bin"),
+        Path("scripts/fox.bin"),
+        Path("scripts/falco.bin"),
     }
 
     build_dir = Path("build")
@@ -181,56 +239,19 @@ def test_runtime_set_hitbox_damage_does_not_create_edge() -> None:
         _write_repeated_ssanim_v5(data_dir / "anims/fox.bin", msid=0, part_id=0, frame_count=8, mtx34=ident)
         _write_repeated_ssanim_v5(data_dir / "anims/falco.bin", msid=0, part_id=0, frame_count=8, mtx34=ident)
 
-        records = [
-            {
-                "frame": 3,
-                "kind": 0,
-                "hitbox_id": 0,
-                "bone_part_id": 0,
-                "x": 0.0,
-                "y": 0.0,
-                "z": 0.0,
-                "radius": 4.0,
-                "damage": 4.0,
-                "u16_0": 45,
-                "u16_1": 100,
-                "u16_3": 30,
-                "u16_7": 1 << 8,
-            },
-            {
-                "frame": 6,
-                "kind": 2,
-                "hitbox_id": 0,
-                "bone_part_id": 0,
-                "x": 0.0,
-                "y": 0.0,
-                "z": 0.0,
-                "radius": 4.0,
-                "damage": 9.0,
-                "u16_0": 45,
-                "u16_1": 100,
-                "u16_3": 30,
-                "u16_7": 1 << 8,
-            },
+        create = _create_hitbox_event(frame=3, hitbox_id=0, damage=4.0)
+        create["data"]["hitbox"]["bone"] = 0
+        events = [
+            create,
+            {"frame": 6, "kind": "set_hitbox_damage", "data": {"idx": 0, "damage": 9.0}},
             {
                 "frame": 7,
-                "kind": 3,
-                "hitbox_id": 0,
-                "bone_part_id": 0,
-                "x": 0.0,
-                "y": 0.0,
-                "z": 0.0,
-                "radius": 4.0,
-                "damage": 9.0,
-                "u16_0": 45,
-                "u16_1": 100,
-                "u16_3": 30,
-                "u16_6": (1 << 2) | (1 << 1) | (1 << 10),
-                "u16_7": 1 << 8,
+                "kind": "set_hitbox_interaction",
+                "data": {"idx": 0, "type": 0, "value": 0},
             },
         ]
-        _write_minimal_mslhitb1(data_dir / "hitboxes/fox.bin", msid=0, records=records)
-        _write_minimal_mslhitb1(data_dir / "hitboxes/falco.bin", msid=0, records=records)
+        _write_minimal_mslftsc1(data_dir / "scripts/fox.bin", msid=0, events=events)
+        _write_minimal_mslftsc1(data_dir / "scripts/falco.bin", msid=0, events=events)
 
         old_data_dir = os.environ.get("MSL_DATA_DIR")
         try:
@@ -266,8 +287,6 @@ def test_runtime_set_hitbox_damage_does_not_create_edge() -> None:
                 msl_binding.step_input(handle, prev_inp, inp)
 
                 hitboxes, count = msl_binding.hitboxes_world(handle, 0, 0)
-                timing_raw = msl_binding.debug_hitbox_event_timing(handle, 0, 0, 0)
-
                 seed["action_frame"][0, :2] = np.int16(7)
                 seed["anim_frame_f32"][0, :2] = np.float32(7.0)
                 msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
@@ -275,7 +294,6 @@ def test_runtime_set_hitbox_damage_does_not_create_edge() -> None:
                 interaction_hitboxes, interaction_count = msl_binding.hitboxes_world_full(
                     handle, 0, 0
                 )
-                interaction_timing_raw = msl_binding.debug_hitbox_event_timing(handle, 0, 0, 0)
             finally:
                 msl_binding.destroy(handle)
         finally:
@@ -285,25 +303,103 @@ def test_runtime_set_hitbox_damage_does_not_create_edge() -> None:
                 os.environ["MSL_DATA_DIR"] = old_data_dir
             msl_binding.debug_reset_pose_and_hitboxes_tables()
 
-    timing = timing_raw.reshape(-1).view(_DEBUG_HITBOX_EVENT_TIMING_DTYPE)[0]
     assert int(count) == 1
     assert hitboxes[0, 4] == np.float32(9.0)
-    assert int(timing["enabled_prev"]) == 1
-    assert int(timing["enabled_cur"]) == 1
-    assert int(timing["start_frame"]) == 3
-    assert int(timing["pose_create_count"]) == 0
-    assert int(timing["enable_edge"]) == 0
-    assert int(timing["last_affect_kind_eq"]) == 2
-
-    interaction_timing = interaction_timing_raw.reshape(-1).view(_DEBUG_HITBOX_EVENT_TIMING_DTYPE)[0]
     assert int(interaction_count) == 1
     assert int(interaction_hitboxes[0, 13]) & 0b111 == 0b110
-    assert int(interaction_timing["enabled_prev"]) == 1
-    assert int(interaction_timing["enabled_cur"]) == 1
-    assert int(interaction_timing["start_frame"]) == 3
-    assert int(interaction_timing["pose_create_count"]) == 0
-    assert int(interaction_timing["enable_edge"]) == 0
-    assert int(interaction_timing["last_affect_kind_eq"]) == 3
+
+
+def test_runtime_async_timer_replaces_residual_at_nonunit_rate() -> None:
+    import msl_binding
+
+    exclude = {
+        Path("anims/fox.bin"),
+        Path("anims/falco.bin"),
+        Path("scripts/fox.bin"),
+        Path("scripts/falco.bin"),
+    }
+    msid = 249  # ftCo_SM_ThrowHi
+    rate = np.float32(4.0 / 3.0)
+
+    build_dir = Path("build")
+    build_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=build_dir) as tmp_s:
+        data_dir = Path(tmp_s) / "data"
+        _populate_data_dir(data_dir, exclude=exclude)
+
+        ident = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+        for char in ("fox", "falco"):
+            _write_repeated_ssanim_v5(
+                data_dir / "anims" / f"{char}.bin",
+                msid=msid,
+                part_id=0,
+                frame_count=48,
+                mtx34=ident,
+            )
+
+        create = _create_hitbox_event(frame=18, hitbox_id=0, damage=4.0)
+        create["timer_kind"] = 2
+        create["timer_value"] = 18
+        create["data"]["hitbox"]["bone"] = 0
+        clear = {
+            "frame": 20,
+            "kind": "clear_hitboxes",
+            "timer_kind": 2,
+            "timer_value": 20,
+            "data": {},
+        }
+        for char in ("fox", "falco"):
+            _write_minimal_mslftsc1(
+                data_dir / "scripts" / f"{char}.bin", msid=msid, events=[create, clear]
+            )
+
+        old_data_dir = os.environ.get("MSL_DATA_DIR")
+        try:
+            os.environ["MSL_DATA_DIR"] = str(data_dir)
+            msl_binding.debug_reset_pose_and_hitboxes_tables()
+
+            sizes = msl_binding.sizes()
+            seed_stride = int(sizes["seed"])
+            input_stride = int(sizes["input"])
+            seed = np.zeros((1,), dtype=SEED_DTYPE)
+            seed["stage_id"][0] = np.uint32(32)
+            seed["num_players"][0] = np.uint8(2)
+            seed["stocks"][0, :2] = np.uint8(4)
+            seed["char_id"][0, :2] = np.uint8(1)
+            seed["action_id"][0, 0] = np.uint16(0x00DD)  # ftCo_MS_ThrowHi
+            seed["action_id"][0, 1] = np.uint16(0x000E)  # ftCo_MS_Wait
+            seed["animation_index"][0, 0] = np.uint32(msid)
+            seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)
+            seed["action_frame"][0, 0] = np.int16(19)
+            seed["anim_frame_f32"][0, 0] = np.float32(14.0) * rate
+            seed["frame_speed_mul_f32"][0, 0] = rate
+            seed["frame_speed_mul_f32"][0, 1] = np.float32(1.0)
+            seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+            seed["facing"][0, :2] = np.uint8(1)
+            seed["on_ground"][0, :2] = np.uint8(1)
+            seed["pos_x"][0, :] = np.float32([100.0, -100.0, 0.0, 0.0])
+
+            inp = np.zeros((1, input_stride), dtype=np.uint8)
+            handle = msl_binding.init(batch_size=1, num_players=2)
+            try:
+                msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+                _, count_at_18 = msl_binding.hitboxes_world(handle, 0, 0)
+                msl_binding.step_input(handle, inp, inp)
+                _, count_at_20 = msl_binding.hitboxes_world(handle, 0, 0)
+                msl_binding.step_input(handle, inp, inp)
+                _, count_after_20 = msl_binding.hitboxes_world(handle, 0, 0)
+            finally:
+                msl_binding.destroy(handle)
+        finally:
+            if old_data_dir is None:
+                os.environ.pop("MSL_DATA_DIR", None)
+            else:
+                os.environ["MSL_DATA_DIR"] = old_data_dir
+            msl_binding.debug_reset_pose_and_hitboxes_tables()
+
+    assert int(count_at_18) == 1
+    assert int(count_at_20) == 1
+    assert int(count_after_20) == 0
 
 
 def test_generated_script_manifests_have_no_runtime_owner_unsupported_events() -> None:

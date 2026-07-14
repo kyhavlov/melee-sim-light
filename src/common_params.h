@@ -500,8 +500,15 @@ typedef struct MslCommonParams {
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_800765F0
   // refs/melee/src/melee/ft/ftcoll.c::inlineB3
   float ftcoll_damage_mul_x128;  // p_ftCommonData->x128
-  float kb_ice_mul;              // p_ftCommonData->kb_ice_mul (+0x718)
-  float kb_smashcharge_mul;      // p_ftCommonData->kb_smashcharge_mul (+0x7C4)
+  // Ordinary BODY DmgLog hit-effect RNG parameters.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007A06C,ftColl_80078538}
+  // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch
+  float damage_effect_async_kb_threshold;       // p_ftCommonData->x3F0
+  int32_t damage_effect_randi_range_kind0;      // p_ftCommonData->x3F4
+  int32_t damage_effect_randi_range_kind1;      // p_ftCommonData->x3F8
+  uint8_t damage_effect_kind0_spawn_rng_steps;  // EfCoData generator 0x42
+  float kb_ice_mul;                             // p_ftCommonData->kb_ice_mul (+0x718)
+  float kb_smashcharge_mul;                     // p_ftCommonData->kb_smashcharge_mul (+0x7C4)
   // ftColl_80079AB0 percent-term override constants (p_ftCommonData->0x6D4/0x6D8).
   //
   // Used in the non-WSK else-branch when fp+0x2225 bit0 is set (decomp name: fp->x2225_b7):
@@ -546,6 +553,10 @@ typedef struct MslCommonParams {
   uint16_t combo_push_timer_frames;              // p_ftCommonData->x4D8
   float combo_push_low_speed;                    // p_ftCommonData->x4D0
   float combo_push_high_speed;                   // p_ftCommonData->x4D4
+  // Fighter_ChangeMotionState seeds fp->dmg.x18C8 from x814 for grounded MotionState.x9_b1
+  // entries; Fighter_8006A360 owns its countdown and source clear.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+  uint16_t damage_source_clear_frames_x814;  // p_ftCommonData->x814
 
   // DamageFlyTop angle window (radians) (ftCo_8008DCE0 block_33).
   float damagefly_top_angle_min_radians;  // p_ftCommonData->0x234

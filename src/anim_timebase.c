@@ -13,7 +13,7 @@
 #include "common_params.h"
 #include "damage_source.h"
 #include "motion_state_owners.h"
-#include "move_tables.h"
+#include "fighter_script.h"
 #include "sheik_specials.h"
 
 enum { Ft_MF_KeepFastFall = 1 << 0 };
@@ -161,121 +161,10 @@ static inline uint8_t anim_timebase_try_rebound_anim_speed_from_ground_vel(const
   return 1u;
 }
 
-static inline uint8_t anim_timebase_turnrun_entry_facing_bit(const MslBatch* batch, size_t idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  return (batch->state.facing_dir1[idx] > 0) ? 1u : 0u;
-}
-
-static inline uint8_t anim_timebase_turnrun_zero_speed_pause(const MslBatch* batch, size_t idx,
-                                                             uint16_t action_id) {
-  if (batch == NULL || action_id != (uint16_t)MSL_ACT_TURN_RUN) {
-    return 0u;
-  }
-  // TurnRun mid-state pivot owner:
-  // - ftCo_TurnRun_Anim freezes rate once `cmd_vars[1]` first fires, then on a later Anim callback
-  //   resumes rate and flips facing when `mv.co.turnrun.accel_mul * gr_vel <= 0.01`.
-  // - `mv.co.turnrun.accel_mul` is initialized from the pre-turn facing direction; runtime maps it
-  //   to `facing_dir1`, the same source used by TurnRun_Phys.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::{
-  //   ftCo_TurnRun_Enter,ftCo_TurnRun_Anim}
-  const float entry_facing_dir = (batch->state.facing_dir1[idx] < 0.0f) ? -1.0f : 1.0f;
-  return (batch->state.on_ground[idx] != 0u && batch->state.frame_speed_mul_fp_q16_16[idx] == 0 &&
-          (entry_facing_dir * batch->state.speed_ground_x_self[idx]) <= 0.01f)
-             ? 1u
-             : 0u;
-}
-
-static inline uint8_t anim_timebase_turnrun_cmd1_freeze_due(const MslBatch* batch, size_t idx,
-                                                            uint16_t action_id,
-                                                            int16_t action_frame_pre) {
-  if (batch == NULL || action_id != (uint16_t)MSL_ACT_TURN_RUN ||
-      batch->state.on_ground[idx] == 0u || batch->state.hitlag[idx] != 0u ||
-      batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_TURN_RUN ||
-      batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
-    return 0u;
-  }
-  const uint8_t entry_facing = anim_timebase_turnrun_entry_facing_bit(batch, idx);
-  if (batch->state.facing[idx] != entry_facing) {
-    return 0u;
-  }
-  // TurnRun mid-state pivot owner, live rollout path:
-  // - The common TurnRun script sets cmd_vars[1] (MSLFTSC1 set_cmd_var idx=1).
-  // - ftCo_TurnRun_Anim responds by setting anim rate to 0 and arming mv.co.turnrun.x14.
-  // - Skip the first TurnRun row after Run/RunBrake entry: source can enter TurnRun with a
-  //   preserved anim_start past the command frame, but the command-owned freeze is only consumed
-  //   on the next steady TurnRun Anim callback.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::{
-  //   ftCo_TurnRun_Enter,ftCo_TurnRun_Anim}
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
-  return move_tables_turnrun_cmd1_active(batch->state.char_id[idx], (float)action_frame_pre);
-}
-
-static inline uint8_t anim_timebase_turnrun_cmd1_pivot_due(const MslBatch* batch, size_t idx,
-                                                           uint16_t action_id,
-                                                           int16_t action_frame_pre) {
-  if (batch == NULL || action_id != (uint16_t)MSL_ACT_TURN_RUN ||
-      batch->state.on_ground[idx] == 0u || batch->state.hitlag[idx] != 0u ||
-      batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_TURN_RUN ||
-      batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
-    return 0u;
-  }
-  const uint8_t entry_facing = anim_timebase_turnrun_entry_facing_bit(batch, idx);
-  if (batch->state.facing[idx] != entry_facing) {
-    return 0u;
-  }
-  // TurnRun hidden x14 latch replay ownership:
-  // - The common TurnRun script sets cmd_vars[1] (MSLFTSC1 set_cmd_var idx=1).
-  // - ftCo_TurnRun_Anim first arms mv.co.turnrun.x14 by setting rate 0, then a later Anim callback
-  //   restores rate and flips facing once `mv.co.turnrun.accel_mul * gr_vel <= 0.01`.
-  // - One-step seeds can expose the post-rate value without exposing x14. Use the decomp pivot
-  //   predicate itself, scoped to steady TurnRun rows and the script-owned cmd1 window, rather than
-  //   fitting replay rows by action frame.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
-  if (!move_tables_turnrun_cmd1_active(batch->state.char_id[idx], (float)action_frame_pre)) {
-    return 0u;
-  }
-  const float entry_facing_dir = (batch->state.facing_dir1[idx] < 0.0f) ? -1.0f : 1.0f;
-  return (entry_facing_dir * batch->state.speed_ground_x_self[idx]) <= 0.01f ? 1u : 0u;
-}
-
-static inline int anim_timebase_throw_index_from_action(uint16_t action_id) {
-  switch (action_id) {
-    case (uint16_t)MSL_ACT_THROW_F:
-      return 0;
-    case (uint16_t)MSL_ACT_THROW_B:
-      return 1;
-    case (uint16_t)MSL_ACT_THROW_HI:
-      return 2;
-    case (uint16_t)MSL_ACT_THROW_LW:
-      return 3;
-    default:
-      return -1;
-  }
-}
-
-static inline uint16_t anim_timebase_throw_action_from_thrown(uint16_t action_id) {
-  switch (action_id) {
-    case (uint16_t)MSL_ACT_THROWN_F:
-      return (uint16_t)MSL_ACT_THROW_F;
-    case (uint16_t)MSL_ACT_THROWN_B:
-      return (uint16_t)MSL_ACT_THROW_B;
-    case (uint16_t)MSL_ACT_THROWN_HI:
-      return (uint16_t)MSL_ACT_THROW_HI;
-    case (uint16_t)MSL_ACT_THROWN_LW:
-    case (uint16_t)MSL_ACT_THROWN_LW_WOMEN:
-      return (uint16_t)MSL_ACT_THROW_LW;
-    default:
-      return 0xFFFFu;
-  }
-}
-
 static inline float anim_timebase_throw_rate_f32_from_pair(uint8_t owner_char_id,
                                                            uint8_t victim_char_id,
                                                            uint16_t throw_action) {
-  const int throw_index = anim_timebase_throw_index_from_action(throw_action);
+  const int throw_index = msl_throw_index_from_owner_action(throw_action);
   if (throw_index < 0) {
     return 0.0f;
   }
@@ -342,7 +231,7 @@ static inline uint8_t anim_timebase_attached_non_low_throw_pair_active(const Msl
       return 0u;
     }
     const size_t oidx = msl_idx_player(bi, (int)owner_p);
-    const uint16_t owner_action = anim_timebase_throw_action_from_thrown(a);
+    const uint16_t owner_action = msl_throw_owner_action_from_victim(a);
     return (owner_action != 0xFFFFu && batch->state.action_id[oidx] == owner_action &&
             batch->state.attached_victim_port[oidx] == (uint8_t)p)
                ? 1u
@@ -385,7 +274,7 @@ static inline float anim_timebase_attached_non_low_throw_rate_f32(const MslBatch
       return 0.0f;
     }
     const size_t oidx = msl_idx_player(bi, (int)owner_p);
-    const uint16_t owner_action = anim_timebase_throw_action_from_thrown(a);
+    const uint16_t owner_action = msl_throw_owner_action_from_victim(a);
     if (owner_action == 0xFFFFu || batch->state.action_id[oidx] != owner_action ||
         batch->state.attached_victim_port[oidx] != (uint8_t)p) {
       return 0.0f;
@@ -446,10 +335,8 @@ static inline int32_t anim_timebase_non_low_throw_rate_snap_delta(const MslBatch
     const int32_t end_fp = (end_frame > 0.0f) ? msl_q16_16_from_f32(end_frame) : 0;
     if (end_fp > 0 && cur_fp < end_fp) {
       const int32_t delta_to_end = end_fp - cur_fp;
-      const float prev_frame =
-          msl_f32_from_q16_16(cur_fp - batch->state.frame_speed_mul_fp_q16_16[idx]);
       if (delta_to_end > 0 && delta_to_end <= 8 &&
-          move_tables_throw_release_hit_idx(batch->state.char_id[idx], action, prev_frame, NULL)) {
+          fighter_script_consumed_throw_release(batch, idx)) {
         // Post-release thrower AObj end snap:
         // ftCo_800DD398 installs a victim-weight throw rate on the thrower. ftCo_800DD724's
         // release consume detaches the victim, but does not reset the thrower's AObj rate; the
@@ -491,61 +378,15 @@ static inline int32_t anim_timebase_non_low_throw_rate_snap_delta(const MslBatch
   if (delta_to_integer <= 0 || delta_to_integer > 8) {
     return 0;
   }
-  const int32_t prev_fp = cur_fp - batch->state.frame_speed_mul_fp_q16_16[idx];
-  const float prev_frame = msl_f32_from_q16_16(prev_fp);
-  const float snapped_frame = msl_f32_from_q16_16(cur_fp + delta_to_integer);
-  const uint8_t char_id = batch->state.char_id[idx];
-  if (move_tables_throw_should_flip_facing(char_id, action, prev_frame, snapped_frame)) {
-    return delta_to_integer;
-  }
-  if (move_tables_throw_release_hit_idx(char_id, action, snapped_frame, NULL) &&
-      !move_tables_throw_release_hit_idx(char_id, action, prev_frame, NULL)) {
-    return delta_to_integer;
-  }
-  int16_t crossed_pulse_af = -1;
-  if (move_tables_throw_crossed_projectile_pulse_frame(char_id, action, prev_frame, snapped_frame,
-                                                       &crossed_pulse_af)) {
-    uint8_t pulse_ordinal = 0u;
-    const uint8_t has_ordinal = move_tables_throw_projectile_pulse_ordinal(
-        char_id, action, crossed_pulse_af, &pulse_ordinal);
-    if (action == (uint16_t)MSL_ACT_THROW_HI && has_ordinal && pulse_ordinal == 2u) {
-      const uint8_t prior_pulse_frame = batch->state.throw_pulse_crossed_prev_frame[idx];
-      uint8_t first_pulse_hit_provenance_active = 0u;
-      if (prior_pulse_frame != 0u && (int16_t)prior_pulse_frame < crossed_pulse_af) {
-        for (int vp = 0; vp < num_players; vp++) {
-          if (vp == p) {
-            continue;
-          }
-          const size_t v_idx = msl_idx_player(bi, vp);
-          if (batch->state.hitstun[v_idx] > 0u &&
-              msl_damage_source_victim_matches_attacker(batch, v_idx, idx, p)) {
-            first_pulse_hit_provenance_active = 1u;
-            break;
-          }
-        }
-      }
-      if (first_pulse_hit_provenance_active) {
-        // ThrowHi mid-pulse timebase / command split:
-        // - The AObj timebase can still reach the integer frame-20 state on the 4/3-rate callback;
-        //   holding the fighter action frame below the integer creates replay-visible state_age
-        //   drift.
-        // - The article pulse is a separate ftAction/ftFx_Throw_Anim command-cursor owner. `items.c`
-        //   keeps the frame-20 command on the following callback when the frame-18 source-proven
-        //   hit is still active, instead of using the timebase snap itself as article authority.
-        // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-        return delta_to_integer;
-      }
-    }
-    return delta_to_integer;
-  }
-  int16_t last_pulse_af = -1;
-  const uint8_t past_last_projectile_pulse =
-      (move_tables_throw_projectile_last_pulse_frame(char_id, action, &last_pulse_af) &&
-       prev_frame > (float)last_pulse_af)
-          ? 1u
-          : 0u;
-  if (past_last_projectile_pulse && move_tables_throw_cmd1_active(char_id, action, snapped_frame)) {
+  // The exact f32 CommandInfo timer is the source owner for every throw flag, projectile pulse,
+  // and cmd-var group. If that live group becomes due on this tick, align the public Q16 frame to
+  // the same integer boundary rather than re-querying a second absolute-frame script snapshot.
+  // A live cmd_var[1] keeps the post-projectile throw-rate band source-visible after its last
+  // command pulse has been consumed.
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80073240,ftAction_80073354}
+  // refs/melee/src/melee/lb/lbcommand.c::{Command_01,Command_02}
+  if (fighter_script_command_due_next_tick(batch, idx) ||
+      fighter_script_cmd_var(batch, idx, 1u) != 0u) {
     return delta_to_integer;
   }
   return 0;
@@ -857,17 +698,21 @@ uint8_t anim_timebase_effective_hitlag_frozen(const MslBatch* batch, int bi, int
   if (batch->state.hitlag_started_frame[idx] != 0u) {
     return 1u;
   }
-  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN) {
+  if (msl_action_is_grabbed_victim(batch->state.action_id[idx])) {
     const uint8_t owner_p = batch->state.grab_owner_port[idx];
     if (owner_p == 0xFFu || owner_p >= batch->config.num_players || owner_p == (uint8_t)p) {
       return 0u;
     }
     const size_t owner_idx = msl_idx_player(bi, (int)owner_p);
-    if (batch->state.char_id[owner_idx] != (uint8_t)MSL_CHAR_ID_FALCON ||
-        batch->state.action_id[owner_idx] != (uint16_t)MSL_ACT_CA_SPECIAL_HI_CATCH ||
-        batch->state.attached_victim_port[owner_idx] != (uint8_t)p) {
+    if (batch->state.attached_victim_port[owner_idx] != (uint8_t)p) {
       return 0u;
     }
+    // Fighter_ProcessHit propagates x2219_b5 recursively through the holder's live x1A5C link.
+    // The held fighter's public x195C hitlag counter remains zero, but its Anim/Phys/Coll callbacks
+    // stay frozen until the holder clears the recursive flag. This is common capture/throw
+    // ownership; Falcon Dive is one consumer, not a separate scheduler.
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkRecursiveFunc_8006D044,Fighter_8006D10C}
+    // refs/melee/src/melee/ft/ftcoll.c::ftGrabDist
     return batch->state.hitlag_started_frame[owner_idx] != 0u ? 1u : 0u;
   }
   if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
@@ -886,699 +731,526 @@ uint8_t anim_timebase_effective_hitlag_frozen(const MslBatch* batch, int bi, int
   return 0u;
 }
 
+void anim_timebase_update_pre_input_fighter(MslBatch* batch, int bi, int p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
+      p >= (int)batch->config.num_players) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  const int num_players = (int)batch->config.num_players;
+  const size_t idx = msl_idx_player(bi, p);
+  const uint16_t a = batch->state.action_id[idx];
+
+  // Hitlag freezes animation advancement (decomp gate is fp->x2219_b5).
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  if (anim_timebase_effective_hitlag_frozen(batch, bi, p)) {
+    // Keep derived fields coherent even when frozen.
+    msl_anim_timebase_recompute_derived(batch, idx);
+    return;
+  }
+
+  // Falcon Dive held victim: the owner's hitlag enter/exit recursively propagates the
+  // x2219_b5 freeze flag through the fp->x1A5C held-victim link (the victim's own x195C
+  // hitlag counter stays 0 — Slippi shows hitlag 0 across the connect window), so the
+  // CaptureCaptain anim freezes in lockstep with the owner's hitlag window. Outside that
+  // window the donor figatree plays at the ChangeMotionState entry rate 1 (empty Anim
+  // callback; the delta-derived seed rate lane reads 0 around replay freeze edges and must
+  // not stall the resume row).
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkRecursiveFunc_8006D044,Fighter_8006D10C}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
+  if (a == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN) {
+    batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
+  }
+
+  // Decomp: Run animation rate is scaled from current ground velocity:
+  // `ftAnim_SetAnimRate(fp, ABS(fp->gr_vel) / fp->co_attrs.run_animation_scaling)`.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_SetAnimRate
+  //
+  // Source of truth for the per-character scaling:
+  // - ISO-extracted `data/characters/{fox,falco}.json` `run_animation_scaling`.
+  const int16_t action_frame_pre = batch->state.action_frame[idx];
+  const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
+
+  // PassiveWall / PassiveWallJump startup hold:
+  // - ftCo_800C1E64 seeds `fp->mv.co.passivewall.timer = p_ftCommonData->x760`.
+  // - ftCo_PassiveWall_Anim decrements that hidden timer each non-hitlag frame and keeps the
+  //   animation frozen until it reaches 0, at which point motion/anim advance begins.
+  // - Replay-visible action_frame stays at 0 through the frozen startup, so action_frame alone
+  //   cannot distinguish "still held" from "ready to launch".
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
+  if ((a == (uint16_t)MSL_ACT_PASSIVE_WALL || a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
+      batch->state.passivewall_timer[idx] != 0u) {
+    batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+  } else if ((a == (uint16_t)MSL_ACT_PASSIVE_WALL || a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
+             action_frame_pre == 0) {
+    // First post-hold PassiveWall frame:
+    // - when ftCo_PassiveWall_Anim decrements timer->0, it either calls inlineA0
+    //   (ChangeMotionState(..., anim_speed=1)) or ftAnim_SetAnimRate(gobj, 1).
+    // - the next seeded timer==0 / action_frame==0 snapshot therefore advances at rate 1.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{inlineA0,ftCo_PassiveWall_Anim}
+    batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
+  }
+
+  // Decomp: Walk Anim callback (ftCo_Walk_Anim -> ftWalkCommon_800DFDDC) updates anim rate
+  // from current walk velocity and facing.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
+  // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+  //
+  // Entry ordering (not a magic threshold):
+  // - Walk entry uses Fighter_ChangeMotionState(..., anim_start=0, anim_speed=1).
+  // - The first ftAnim tick (0->1) happens before Walk_Anim writes the velocity-scaled rate.
+  // - Therefore the entry frame (`action_frame==0`) must advance at 1.0; scaled walk rate
+  //   applies from the next steady frame onward.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
+  if (anim_timebase_is_walk(a)) {
+    // Entry-only guard: apply 1.0 on true walk motion-state entry, including same-family
+    // WalkSlow/Middle/Fast retargets. ftWalkCommon_800DFEC8 runs from Walk_IASA after the
+    // frame's Walk_Anim callback has already run, so the new walk motion state's first
+    // post-retarget Anim tick consumes the ChangeMotionState entry rate before its own
+    // Walk_Anim callback can write the velocity-scaled rate for the following tick.
+    // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFEC8
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::{ftCo_Walk_Anim,ftCo_Walk_IASA}
+    const uint8_t walk_entry =
+        (batch->state.prev_action_id[idx] != a || batch->state.seed_prev_action_id[idx] != a) ? 1u
+                                                                                              : 0u;
+    if (walk_entry) {
+      batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(1.0f);
+      batch->state.walk_anim_source_vel[idx] = batch->state.speed_ground_x_self[idx];
+    } else if (action_frame_pre == 1) {
+      // Decomp ordering bridge for first steady walk frame:
+      // - Walk enter uses ChangeMotionState(..., anim_speed=1) then immediate ftAnim tick.
+      // - Walk_Anim (ftWalkCommon_800DFDDC) writes the velocity-scaled rate after that tick,
+      //   for the *next* frame's advance.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Enter
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      //
+      // Keep the seeded/source 1.0 entry carry here; applying the scaled walk rate one frame
+      // early at action_frame==1 shifts Walk timebase ownership. Runtime rollouts promote the
+      // frame-start source action into seed_prev_action_id, which preserves this same
+      // first-steady Walk entry owner after a same-frame Damage_IASA/Wait_IASA walk enter. A
+      // zero carry at action_frame==1 is also an entry-clamp artifact, not a valid Walk_Anim
+      // rate: source entry used anim_speed=1 and Walk_Anim has not yet supplied the consumed
+      // rate for this tick.
+      if (batch->state.seed_prev_action_id[idx] != a ||
+          batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
+      }
+    } else {
+      // Walk callback-source ownership:
+      // - ftCo_Walk_Anim runs after ftAnim advance and writes the rate used by the next frame.
+      // - ftWalkCommon_800DFDDC selects `mv_x0` from either `fp->mv.co.walk.x0` or `fp->gr_vel`
+      //   before converting it to `frame_speed_mul`.
+      // - Under one-step reseed, Slippi exposes the post-callback rate but not that hidden
+      //   source, so `walk_anim_source_vel` is the minimum explicit carry for the same owner.
+      // - Walk type-change rows have one more hidden branch (`ft_GetGroundFrictionMultiplier`)
+      //   deciding whether this tick consumes hidden `mv.co.walk.x0` or current `gr_vel`; the
+      //   narrow retarget lane carries that source only for those replay-reseeded rows.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
+      // refs/melee/src/melee/ft/ftwalkcommon.c::{ftWalkCommon_800DFDDC,ftWalkCommon_800DFEC8}
+      float source_vel = batch->state.walk_anim_source_vel[idx];
+      const uint16_t speed_walk_action =
+          anim_timebase_walk_action_from_speed(c, ch, batch->state.speed_ground_x_self[idx]);
+      if (speed_walk_action != a && batch->state.walk_retarget_tick_source_vel[idx] != 0.0f) {
+        source_vel = batch->state.walk_retarget_tick_source_vel[idx];
+      }
+      float walk_rate = 0.0f;
+      if (anim_timebase_try_walk_rate_from_source_vel(a, ch, source_vel,
+                                                      batch->state.facing_dir1[idx], &walk_rate)) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(walk_rate);
+      }
+    }
+  }
+
+  // Run callback-source ownership:
+  // - ftCo_Run_Anim runs after ftAnim advance and writes the rate used by the next frame.
+  // - Under one-step reseed, Slippi exposes that post-callback rate one row after the anim tick
+  //   that consumed it, so `run_anim_source_vel` is the explicit replay-facing hidden-owner lane.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c::ftCo_RunDirect_Anim
+  if ((a == (uint16_t)MSL_ACT_RUN || a == (uint16_t)MSL_ACT_RUN_DIRECT) && action_frame_pre > 0) {
+    float source_vel = batch->state.run_anim_source_vel[idx];
+    if (source_vel != 0.0f) {
+      float rate = 0.0f;
+      if (anim_timebase_try_run_rate_from_source_vel(ch, source_vel, batch->state.facing_dir1[idx],
+                                                     &rate)) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rate);
+      }
+    }
+  }
+
+  if (a == (uint16_t)MSL_ACT_REBOUND && action_frame_pre == 0) {
+    const int32_t hidden_rebound_rate_fp = batch->state.rebound_anim_rate_fp_q16_16[idx];
+    if (hidden_rebound_rate_fp > 0) {
+      // Rebound callback-source ownership:
+      // - ftCo_80099D9C stores `mv.co.rebound.anim_start` from `dmg.x191C`.
+      // - ftCo_80099E44 consumes that hidden rate when entering Rebound.
+      // - On first-Rebound replay seeds, `mv.co.rebound.x0` may already be consumed by
+      //   Rebound_Phys, so the ground-velocity reconstruction is only a fallback.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{
+      //   ftCo_80099D9C,ftCo_80099E44,ftCo_Rebound_Phys}
+      batch->state.frame_speed_mul_fp_q16_16[idx] = hidden_rebound_rate_fp;
+    } else {
+      float rebound_rate = 0.0f;
+      if (anim_timebase_try_rebound_anim_speed_from_ground_vel(
+              c, ch, batch->state.speed_ground_x_self[idx], &rebound_rate)) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rebound_rate);
+      }
+    }
+  }
+
+  // Attached ThrowHi/ThrownHi first-steady rate ownership:
+  // - ftCo_800DD4B0 computes one shared throw anim_speed from the victim weight.
+  // - ftCo_800DD398 enters both thrower and victim with that speed and immediately calls
+  //   ftAnim_8006EBA4 in the owner callback, so the first attached post-entry snapshot has
+  //   action_frame 1, and attached pre-release throw frames continue advancing on the shared
+  //   throw rate until the throw script changes the rate/flags.
+  // - This keeps rollout-started ThrowHi release timing aligned without broadening release
+  //   gates; the victim/owner link and attached pre-release action phase are the source
+  //   predicate.
+  // - Keep this on ThrowHi/ThrownHi: ThrowF/B/Lw have their own release / hitlag pulse slices,
+  //   and broadening this rate restore changed unrelated rollout first-break ownership.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+  if ((a == (uint16_t)MSL_ACT_THROW_HI || a == (uint16_t)MSL_ACT_THROWN_HI) &&
+      action_frame_pre >= 1 && batch->state.hitlag[idx] == 0u) {
+    if (msl_action_is_throw_owner(a)) {
+      const uint8_t victim_p = batch->state.attached_victim_port[idx];
+      if (victim_p != 0xFFu && (int)victim_p < num_players && (int)victim_p != p) {
+        const size_t vidx = msl_idx_player(bi, (int)victim_p);
+        if (msl_action_is_thrown_victim(batch->state.action_id[vidx])) {
+          int32_t throw_rate_fp = batch->state.throw_anim_rate_fp_q16_16[idx];
+          if (throw_rate_fp <= 0) {
+            throw_rate_fp = anim_timebase_throw_rate_fp_from_pair(batch->state.char_id[idx],
+                                                                  batch->state.char_id[vidx], a);
+          }
+          if (throw_rate_fp > 0) {
+            batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
+          }
+        }
+      }
+    } else {
+      uint8_t owner_p = batch->state.grab_owner_port[idx];
+      if (owner_p == 0xFFu || (int)owner_p >= num_players || (int)owner_p == p) {
+        for (int candidate = 0; candidate < num_players; candidate++) {
+          const size_t cidx = msl_idx_player(bi, candidate);
+          if (batch->state.attached_victim_port[cidx] == (uint8_t)p) {
+            owner_p = (uint8_t)candidate;
+            break;
+          }
+        }
+      }
+      if (owner_p != 0xFFu && (int)owner_p < num_players && (int)owner_p != p) {
+        const size_t oidx = msl_idx_player(bi, (int)owner_p);
+        if (msl_action_is_throw_owner(batch->state.action_id[oidx]) &&
+            batch->state.attached_victim_port[oidx] == (uint8_t)p) {
+          const uint16_t throw_action = msl_throw_owner_action_from_victim(a);
+          int32_t throw_rate_fp = batch->state.throw_anim_rate_fp_q16_16[idx];
+          if (throw_rate_fp <= 0 && throw_action != 0xFFFFu) {
+            throw_rate_fp = anim_timebase_throw_rate_fp_from_pair(
+                batch->state.char_id[oidx], batch->state.char_id[idx], throw_action);
+          }
+          if (throw_rate_fp > 0) {
+            batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
+          }
+        }
+      }
+    }
+  }
+
+  if (a == (uint16_t)MSL_ACT_THROW_LW) {
+    const int32_t throw_rate_fp = batch->state.throw_anim_rate_fp_q16_16[idx];
+    const uint8_t victim_p = batch->state.attached_victim_port[idx];
+    const uint8_t has_attached_victim =
+        (victim_p != 0xFFu && (int)victim_p < num_players && (int)victim_p != p) ? 1u : 0u;
+    // There are two extracted ThrowLw hitlag owners before the release command:
+    // - a fighter HitCapsule in the throw script (Sheik-style), after which the shared throw
+    //   rate resumes as soon as Fighter_8006A1BC clears the thrower's hitlag gate;
+    // - a throw-side article pulse (Fox/Falco), whose owner and victim leave hitlag on
+    //   different GObj ticks and expose one zero-rate snapshot before the attached pair
+    //   resumes together.
+    // Classify them from MSLFTSC1 command ownership instead of the live HitCapsule flags.
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD398,ftCo_ThrowLw_Anim}
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // data/scripts/<char>.bin (MSLFTSC1 create_hitbox/set_throw_spawn_projectile)
+    const uint8_t fighter_hit_then_release = batch->state.hitbox_count[idx] != 0u ? 1u : 0u;
+    if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag_started_frame[idx] == 0u) {
+      batch->state.frame_speed_mul_fp_q16_16[idx] =
+          (throw_rate_fp > 0 && fighter_hit_then_release != 0u) ? throw_rate_fp : 0;
+    } else if (batch->state.frame_speed_mul_fp_q16_16[idx] == 0 && throw_rate_fp > 0) {
+      uint8_t resume = fighter_hit_then_release;
+      if (resume == 0u && has_attached_victim != 0u) {
+        const size_t vidx = msl_idx_player(bi, (int)victim_p);
+        resume =
+            (uint8_t)(msl_action_is_grabbed_victim(batch->state.action_id[vidx]) &&
+                      batch->state.hitlag_pre_timer[vidx] != 0u && batch->state.hitlag[vidx] == 0u);
+      }
+      if (resume != 0u) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
+      }
+    }
+  }
+  //
+  // Decomp: AttackAir entry always uses anim_speed=1.0f (KeepFastFall only affects fastfall).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
+  //
+  // Decomp ordering rationale for `action_frame_pre == 1` (not a magic constant):
+  // - ChangeMotionState enters at anim_start=0, anim_speed=1.
+  // - The first ftAnim tick advances frame 0->1 before motion Anim callback-style rate updates
+  //   are visible to the next tick.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  // So frame 1 is the first "steady" reseed frame where stale carry-over rates must be reset.
+  if (anim_timebase_is_attackair(a) && action_frame_pre == 1) {
+    batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(1.0f);
+  }
+
+  // Decomp entry-rate corrections for landing states:
+  // - LandingAir*: rate = (end_frame + 0.1f) / lag (with x67F L-cancel lag divide branch)
+  // - LandingFallSpecial: anim_speed = (0.1f + fp->x2EC) / landing_lag
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+  //
+  // Apply on action_frame==0 (entry-shaped snapshots) so one-step reseeds do not depend on
+  // prior-frame hidden rates.
+  // Marth scoping: live LandingFallSpecial entries (Dolphin Slash / FallSpecial chains)
+  // already wrote a source-correct rate via enter_landing_action_from_air; the af==0
+  // re-derivation would clobber it with the common default because prev_action_id is
+  // already self by the time this runs. Spacie rows keep the original re-derivation
+  // unconditionally (validated lock behavior: reseeds carry replay rates).
+  // Sheik/Zelda Vanish LandingFallSpecial publishes a transient entry `frame_speed_mul`
+  // matching ftSk_SpecialHi's landing helper, but Slippi state_age then advances with the
+  // steady LandingFallSpecial rate on the following frame. Frame-0 replay seeds therefore
+  // rederive the steady rate instead of preserving the visible transient. Marth Dolphin Slash
+  // keeps the existing preserve path because its source-specific landing lag is not otherwise
+  // recoverable from the frame-0 self prev-action row.
+  // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+  const uint8_t skip_rederive_live_entry =
+      (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+       batch->state.frame_speed_mul_fp_q16_16[idx] != msl_q16_16_from_f32(1.0f))
+          ? 1u
+          : 0u;
+  if (action_frame_pre == 0 && c != NULL && !skip_rederive_live_entry) {
+    float entry_rate = 0.0f;
+    if (a == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
+      float lag = c->landing_fall_special_lag_frames;
+      const uint16_t source_prev_action = (action_frame_pre == 0)
+                                              ? batch->state.seed_prev_action_id[idx]
+                                              : batch->state.prev_action_id[idx];
+      // Live rollout rows can carry a stale seed_prev_action_id; honor the live prev lane
+      // too so a real FallSpecial -> LandingFallSpecial chain keeps its forwarded
+      // mv.co.fallspecial.landing_lag rate (ftCo_80096D28) instead of the common default.
+      const uint16_t live_prev_action = batch->state.prev_action_id[idx];
+      const uint8_t source_is_fallspecial =
+          (source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL ||
+           source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
+           source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_B ||
+           live_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL ||
+           live_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
+           live_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_B)
+              ? 1u
+              : 0u;
+      if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
+          (source_prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
+           source_prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI ||
+           live_prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
+           live_prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI)) {
+        // Dolphin Slash direct landing: LandingFallSpecial with MarsAttributes x2C.
+        // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
+        lag = (ch != NULL) ? ch->specialhi_landing_lag_frames : lag;
+      } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                 (source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                  source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI ||
+                  source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW ||
+                  live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
+                  live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI ||
+                  live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW)) {
+        // Falcon Dive direct landing: doAirColl and SpecialHiThrow0_Coll enter
+        // LandingFallSpecial with ftCaptainAttributes::specialhi_landing_lag.
+        // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{
+        //   doAirColl,ftCa_SpecialHiThrow0_Coll}
+        // data/characters/falcon.json::falcon_specialhi_landing_lag
+        lag = (ch != NULL) ? ch->falcon_specialhi_landing_lag : lag;
+      } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                 (source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START ||
+                  live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START)) {
+        // Aerial Raptor Boost miss landing: ftCa_SpecialAirSStart_Coll enters
+        // LandingFallSpecial with ftCaptainAttributes::specials_miss_landing_lag.
+        // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirSStart_Coll
+        // data/characters/falcon.json::falcon_specials_miss_landing_lag
+        lag = (ch != NULL) ? ch->falcon_specials_miss_landing_lag : lag;
+      } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
+                 (source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S ||
+                  live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S)) {
+        // Aerial Raptor Boost hit landing: ftCa_SpecialAirS_Coll enters LandingFallSpecial
+        // with ftCaptainAttributes::specials_hit_landing_lag.
+        // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirS_Coll
+        // data/characters/falcon.json::falcon_specials_hit_landing_lag
+        lag = (ch != NULL) ? ch->falcon_specials_hit_landing_lag : lag;
+      } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
+                 (source_prev_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI ||
+                  live_prev_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI) &&
+                 ch != NULL && ch->sheik_vanish_landing_lag_frames > 0.0f) {
+        // Sheik Vanish direct landing: ftSk_SpecialAirHi_Coll enters
+        // LandingFallSpecial through the Sheik-specific landing helper. Replay frame-0
+        // snapshots can expose the helper's transient entry rate, while the next source
+        // Anim tick consumes the steady `(end_frame + 0.1f) / da->x2EC` rate.
+        // MSLMSO01's fx_special_kind lane is intentionally Fox/Falco-scoped, so this
+        // Sheik-only callsite uses the ftSk action id and the extracted character attr.
+        // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
+        //   ftSk_SpecialAirHi_Coll,fn_80112ED8}
+        // data/characters/sheik.json::sheik_vanish_landing_lag_frames
+        lag = ch->sheik_vanish_landing_lag_frames;
+      } else if (msl_motion_state_fx_special_kind(batch->state.char_id[idx], source_prev_action) ==
+                 (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END) {
+        // Decomp source split for LandingFallSpecial entry rate:
+        // - EscapeAir_Coll enters ftCo_LandingFallSpecial_Enter(..., p_ftCommonData->x344).
+        // - Fox/Falco Illusion end collision enters ftCo_LandingFallSpecial_Enter(...,
+        //   da->x50_FOX_ILLUSION_LANDING_LAG).
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+        // data/characters/{fox,falco}.json: illusion_landing_lag_frames
+        lag = (float)ch->illusion_landing_lag_frames;
+      }
+      if (!source_is_fallspecial) {
+        const float end_frame =
+            msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
+        if (lag > 0.0f && end_frame > 0.0f) {
+          entry_rate = (end_frame + 0.1f) / lag;
+        }
+      }
+    } else if (anim_timebase_try_landing_air_rate(a, ch, c, batch->state.char_id[idx],
+                                                  batch->state.l_cancel[idx] == 1u ? 0u : UINT8_MAX,
+                                                  batch->state.l_cancel[idx], &entry_rate)) {
+      // Entry-shaped replay seeds already carry Slippi's post-frame L-cancel result.
+      // A stale x67F/lr_press_timer window can remain nonzero on the first LandingAir frame
+      // even when source did not take the divide-lag branch, so frame-0 rederive uses the
+      // explicit result lane while live entry paths still call the helper with the input timer.
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+      // rate already written to entry_rate by helper.
+    }
+    if (entry_rate > 0.0f) {
+      batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(entry_rate);
+    }
+  }
+
+  // Slippi parity (no-submotion snapshots):
+  // Slippi can report `animation_index==0xFFFFFFFF` with `state_age==-1` (i.e.
+  // `anim_frame_f32==-1`, `action_frame==-1`). Preserve that frozen (-1) timebase even if a
+  // nonzero `frame_speed_mul` is seeded.
+  if (batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+      batch->state.anim_frame_fp_q16_16[idx] < 0) {
+    msl_anim_timebase_recompute_derived(batch, idx);
+    return;
+  }
+
+  batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
+  {
+    // Deterministic fixed-point representation guard for source float throw rates:
+    // Fox/Falco attached back/up throws can use a data-backed 4/3 shared rate. Repeated Q16.16
+    // rounded advances can land exactly one LSB below an integer (for example 3.999984),
+    // delaying set_throw_flags / throw-side script-frame checks even though the source float
+    // timebase crosses the integer. During the attached window this mirrors the shared
+    // ThrowB/Hi source rate directly; after detach, keep it only on extracted throw command
+    // windows/events because ordinary fractional frames can legitimately remain just below an
+    // integer in Slippi.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
+    //   ftCo_800DD4B0,ftCo_800DD398,ftCo_800DD724
+    // }
+    const int32_t cur_fp = batch->state.anim_frame_fp_q16_16[idx];
+    if (cur_fp > 0) {
+      const int32_t rem = cur_fp % (int32_t)MSL_Q16_16_ONE;
+      const int32_t throw_snap_delta =
+          anim_timebase_non_low_throw_rate_snap_delta(batch, bi, p, idx, num_players, cur_fp, rem);
+      if (throw_snap_delta > 0) {
+        batch->state.anim_frame_fp_q16_16[idx] = cur_fp + throw_snap_delta;
+      }
+    }
+  }
+  const uint8_t anim_src_char = anim_timebase_anim_source_char_id(batch, bi, p, idx, num_players);
+  const uint8_t did_wrap = anim_timebase_apply_aobj_loop(batch, idx, anim_src_char);
+  anim_timebase_apply_capture_loop(batch, idx);
+
+  // Non-looping AObj timelines clamp at end_frame and stop advancing their current frame.
+  //
+  // Decomp:
+  // - ftAnim_8006EBA4 advances the underlying HSD AObj timeline.
+  // - HSD_AObjInterpretAnim clamps curr_frame at end_frame when not looping and marks the AObj
+  //   NO_ANIM. It does not rewrite Fighter::frame_speed_mul; ftAction immediately consumes
+  //   that live fighter rate before the MotionState Anim callback observes animation end.
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+  //
+  // Scope guard: only apply this clamp to non-looping tracks (AOBJ_LOOP==0 in extracted
+  // `data/anims/*.tracks.bin`). Looping tracks continue to use the deterministic modulo wrap
+  // in anim_timebase_apply_aobj_loop() exactly as before.
+  if (!did_wrap) {
+    const uint32_t anim_u32 = batch->state.animation_index[idx];
+    if (anim_u32 <= 0xFFFFu && !msl_anim_is_looping(anim_src_char, (uint16_t)anim_u32)) {
+      const float end_frame = msl_anim_end_frame(anim_src_char, (uint16_t)anim_u32);
+      if (end_frame > 0.0f) {
+        const int32_t end_fp = msl_q16_16_from_f32(end_frame);
+        if (end_fp > 0) {
+          int32_t cur_fp = batch->state.anim_frame_fp_q16_16[idx];
+          if (cur_fp > end_fp) {
+            cur_fp = end_fp;
+            batch->state.anim_frame_fp_q16_16[idx] = cur_fp;
+          }
+        }
+      }
+    }
+  }
+
+  msl_anim_timebase_recompute_derived(batch, idx);
+  // Fall/FallAerial/FallSpecial Anim callback owner:
+  // source advances the AObj timeline, then ftCo_Fall_Anim_Inner updates mv.co.*.x4 and
+  // ftCo_800CC988 publishes the blended neutral/F/B JObj pose before BODY collision refresh.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
+  //   ftCo_Fall_Anim,ftCo_Fall_Anim_Inner,ftCo_800CC988}
+  anim_timebase_common_fall_blend_tick(batch, idx, c, ch);
+
+  // Decomp: Fighter_ChangeMotionState clears `fp->fall_fast` unless KeepFastFall is requested.
+  // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside ChangeMotionState).
+  //
+  // Some suite-present special-move timelines restart their motion state on anim-end by
+  // calling Fighter_ChangeMotionState (even if the action_id is unchanged), which clears
+  // `fp->fall_fast` unless KeepFastFall is present in the call flags.
+  //
+  // Decomp example (GALE01):
+  // - ftFx_SpecialAirNLoop_Anim restarts ftFx_MS_SpecialAirNLoop with
+  //   (Ft_MF_SkipAttackCount | Ft_MF_SkipModel | Ft_MF_KeepGfx), i.e. without KeepFastFall.
+  //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
+  //
+  // We do not model per-state Anim callbacks yet, but we can observe restart-like boundaries
+  // via a wrap in the derived `action_frame` and clear fastfall in those cases.
+  //
+  // IMPORTANT: Do not clear `fall_fast` generically on any AObj loop wrap. Many common motion
+  // states (including Fall) use AOBJ_LOOP and wrap `cur_anim_frame` without invoking
+  // Fighter_ChangeMotionState; fastfall persists across those wraps in decomp.
+  if (did_wrap && action_frame_pre >= 0 && batch->state.action_frame[idx] < action_frame_pre) {
+    const uint16_t a = batch->state.action_id[idx];
+    if (msl_motion_state_fx_special_kind(batch->state.char_id[idx], a) ==
+        (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP) {
+      batch->state.fall_fast[idx] = 0;
+    }
+  }
+}
+
 void anim_timebase_update_pre_input(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
-  const MslCommonParams* c = msl_common_params();
-
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      const uint16_t a = batch->state.action_id[idx];
-
-      // Hitlag freezes animation advancement (decomp gate is fp->x2219_b5).
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      if (anim_timebase_effective_hitlag_frozen(batch, bi, p)) {
-        // Keep derived fields coherent even when frozen.
-        msl_anim_timebase_recompute_derived(batch, idx);
-        continue;
-      }
-
-      // Falcon Dive held victim: the owner's hitlag enter/exit recursively propagates the
-      // x2219_b5 freeze flag through the fp->x1A5C held-victim link (the victim's own x195C
-      // hitlag counter stays 0 — Slippi shows hitlag 0 across the connect window), so the
-      // CaptureCaptain anim freezes in lockstep with the owner's hitlag window. Outside that
-      // window the donor figatree plays at the ChangeMotionState entry rate 1 (empty Anim
-      // callback; the delta-derived seed rate lane reads 0 around replay freeze edges and must
-      // not stall the resume row).
-      // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkRecursiveFunc_8006D044,Fighter_8006D10C}
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCaptain.c::ftCo_8009CA0C
-      if (a == (uint16_t)MSL_ACT_CAPTURE_CAPTAIN) {
-        batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
-      }
-
-      // Decomp: Run animation rate is scaled from current ground velocity:
-      // `ftAnim_SetAnimRate(fp, ABS(fp->gr_vel) / fp->co_attrs.run_animation_scaling)`.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
-      // refs/melee/src/melee/ft/ftanim.c::ftAnim_SetAnimRate
-      //
-      // Source of truth for the per-character scaling:
-      // - ISO-extracted `data/characters/{fox,falco}.json` `run_animation_scaling`.
-      const int16_t action_frame_pre = batch->state.action_frame[idx];
-      const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
-
-      // PassiveWall / PassiveWallJump startup hold:
-      // - ftCo_800C1E64 seeds `fp->mv.co.passivewall.timer = p_ftCommonData->x760`.
-      // - ftCo_PassiveWall_Anim decrements that hidden timer each non-hitlag frame and keeps the
-      //   animation frozen until it reaches 0, at which point motion/anim advance begins.
-      // - Replay-visible action_frame stays at 0 through the frozen startup, so action_frame alone
-      //   cannot distinguish "still held" from "ready to launch".
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
-      if ((a == (uint16_t)MSL_ACT_PASSIVE_WALL || a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
-          batch->state.passivewall_timer[idx] != 0u) {
-        batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-      } else if ((a == (uint16_t)MSL_ACT_PASSIVE_WALL ||
-                  a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
-                 action_frame_pre == 0) {
-        // First post-hold PassiveWall frame:
-        // - when ftCo_PassiveWall_Anim decrements timer->0, it either calls inlineA0
-        //   (ChangeMotionState(..., anim_speed=1)) or ftAnim_SetAnimRate(gobj, 1).
-        // - the next seeded timer==0 / action_frame==0 snapshot therefore advances at rate 1.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{inlineA0,ftCo_PassiveWall_Anim}
-        batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
-      }
-
-      // Decomp: Walk Anim callback (ftCo_Walk_Anim -> ftWalkCommon_800DFDDC) updates anim rate
-      // from current walk velocity and facing.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
-      // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
-      //
-      // Entry ordering (not a magic threshold):
-      // - Walk entry uses Fighter_ChangeMotionState(..., anim_start=0, anim_speed=1).
-      // - The first ftAnim tick (0->1) happens before Walk_Anim writes the velocity-scaled rate.
-      // - Therefore the entry frame (`action_frame==0`) must advance at 1.0; scaled walk rate
-      //   applies from the next steady frame onward.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
-      if (anim_timebase_is_walk(a)) {
-        // Entry-only guard: apply 1.0 on true walk motion-state entry, including same-family
-        // WalkSlow/Middle/Fast retargets. ftWalkCommon_800DFEC8 runs from Walk_IASA after the
-        // frame's Walk_Anim callback has already run, so the new walk motion state's first
-        // post-retarget Anim tick consumes the ChangeMotionState entry rate before its own
-        // Walk_Anim callback can write the velocity-scaled rate for the following tick.
-        // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFEC8
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::{ftCo_Walk_Anim,ftCo_Walk_IASA}
-        const uint8_t walk_entry =
-            (batch->state.prev_action_id[idx] != a || batch->state.seed_prev_action_id[idx] != a)
-                ? 1u
-                : 0u;
-        if (walk_entry) {
-          batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(1.0f);
-          batch->state.walk_anim_source_vel[idx] = batch->state.speed_ground_x_self[idx];
-        } else if (action_frame_pre == 1) {
-          // Decomp ordering bridge for first steady walk frame:
-          // - Walk enter uses ChangeMotionState(..., anim_speed=1) then immediate ftAnim tick.
-          // - Walk_Anim (ftWalkCommon_800DFDDC) writes the velocity-scaled rate after that tick,
-          //   for the *next* frame's advance.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Enter
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
-          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-          //
-          // Keep the seeded/source 1.0 entry carry here; applying the scaled walk rate one frame
-          // early at action_frame==1 shifts Walk timebase ownership. Runtime rollouts promote the
-          // frame-start source action into seed_prev_action_id, which preserves this same
-          // first-steady Walk entry owner after a same-frame Damage_IASA/Wait_IASA walk enter. A
-          // zero carry at action_frame==1 is also an entry-clamp artifact, not a valid Walk_Anim
-          // rate: source entry used anim_speed=1 and Walk_Anim has not yet supplied the consumed
-          // rate for this tick.
-          if (batch->state.seed_prev_action_id[idx] != a ||
-              batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
-            batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
-          }
-        } else {
-          // Walk callback-source ownership:
-          // - ftCo_Walk_Anim runs after ftAnim advance and writes the rate used by the next frame.
-          // - ftWalkCommon_800DFDDC selects `mv_x0` from either `fp->mv.co.walk.x0` or `fp->gr_vel`
-          //   before converting it to `frame_speed_mul`.
-          // - Under one-step reseed, Slippi exposes the post-callback rate but not that hidden
-          //   source, so `walk_anim_source_vel` is the minimum explicit carry for the same owner.
-          // - Walk type-change rows have one more hidden branch (`ft_GetGroundFrictionMultiplier`)
-          //   deciding whether this tick consumes hidden `mv.co.walk.x0` or current `gr_vel`; the
-          //   narrow retarget lane carries that source only for those replay-reseeded rows.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
-          // refs/melee/src/melee/ft/ftwalkcommon.c::{ftWalkCommon_800DFDDC,ftWalkCommon_800DFEC8}
-          float source_vel = batch->state.walk_anim_source_vel[idx];
-          const uint16_t speed_walk_action =
-              anim_timebase_walk_action_from_speed(c, ch, batch->state.speed_ground_x_self[idx]);
-          if (speed_walk_action != a && batch->state.walk_retarget_tick_source_vel[idx] != 0.0f) {
-            source_vel = batch->state.walk_retarget_tick_source_vel[idx];
-          }
-          float walk_rate = 0.0f;
-          if (anim_timebase_try_walk_rate_from_source_vel(
-                  a, ch, source_vel, batch->state.facing_dir1[idx], &walk_rate)) {
-            batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(walk_rate);
-          }
-        }
-      }
-
-      // Run callback-source ownership:
-      // - ftCo_Run_Anim runs after ftAnim advance and writes the rate used by the next frame.
-      // - Under one-step reseed, Slippi exposes that post-callback rate one row after the anim tick
-      //   that consumed it, so `run_anim_source_vel` is the explicit replay-facing hidden-owner lane.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c::ftCo_RunDirect_Anim
-      if ((a == (uint16_t)MSL_ACT_RUN || a == (uint16_t)MSL_ACT_RUN_DIRECT) &&
-          action_frame_pre > 0) {
-        float source_vel = batch->state.run_anim_source_vel[idx];
-        if (source_vel != 0.0f) {
-          float rate = 0.0f;
-          if (anim_timebase_try_run_rate_from_source_vel(ch, source_vel,
-                                                         batch->state.facing_dir1[idx], &rate)) {
-            batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rate);
-          }
-        }
-      }
-
-      uint8_t turnrun_flip_after_zero_tick = 0u;
-      if (anim_timebase_turnrun_zero_speed_pause(batch, idx, a)) {
-        const uint8_t entry_facing = anim_timebase_turnrun_entry_facing_bit(batch, idx);
-        if (batch->state.facing[idx] == entry_facing) {
-          // Source order: this tick consumes the zero rate written by the prior TurnRun Anim
-          // callback, then the same callback flips facing and restores rate for the next tick.
-          turnrun_flip_after_zero_tick = 1u;
-        } else {
-          // Teacher-forced one-step seeds can start on the first post-flip row: facing already
-          // exposes the callback result, but the causal frame_speed seed still carries the prior
-          // zero rate. Restore the callback-owned rate before this tick advances.
-          batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
-        }
-      } else if (anim_timebase_turnrun_cmd1_pivot_due(batch, idx, a, action_frame_pre)) {
-        batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-        turnrun_flip_after_zero_tick = 1u;
-      } else if (anim_timebase_turnrun_cmd1_freeze_due(batch, idx, a, action_frame_pre)) {
-        batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-      }
-
-      // Grounded smash early-hold replay bridge:
-      // - The live current-sim owner is opcode 56 / `smash_attrs` in input.c
-      //   (`ftAction_80073008` -> `ftCo_800DEE84` / `ftCo_800DF0D0`).
-      // - Teacher-forced reseed can still start mid-hold on the start_smash_charge row without
-      //   the prior frame's live smash_attrs lifecycle, so keep this narrow replay-real bridge at
-      //   the extracted script boundary.
-      // - Decomp input ownership: `fp->input.x668` is updated in Fighter_procUpdate (prio3), so
-      //   prio1 Anim callbacks use prior-frame input state.
-      // refs/melee/src/melee/ft/ftattacks4combo.c::ftCo_800CECE8
-      // refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
-      // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DF0D0}
-      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-      // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackHi4.c,ftCo_AttackLw4.c}
-      // data/scripts/<char>.bin::MSLFTSC1 start_smash_charge
-      uint16_t smash_charge_frame = 0u;
-      uint8_t smash_hold_timer_max = 0u;
-      if ((a == (uint16_t)MSL_ACT_ATTACK_S4_S || a == (uint16_t)MSL_ACT_ATTACK_HI4 ||
-           a == (uint16_t)MSL_ACT_ATTACK_LW4) &&
-          batch->state.on_ground[idx] != 0u && batch->state.hitstun[idx] == 0u &&
-          batch->state.hitlag[idx] == 0u &&
-          move_tables_grounded_smash_charge_info(batch->state.char_id[idx], a, &smash_charge_frame,
-                                                 &smash_hold_timer_max) &&
-          action_frame_pre == (int16_t)smash_charge_frame) {
-        const uint8_t pre_input_a_held =
-            ((batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
-        if (pre_input_a_held != 0u && batch->state.x67C[idx] <= smash_hold_timer_max) {
-          batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-        } else if (pre_input_a_held == 0u && batch->state.x67C[idx] > 0u &&
-                   batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
-          // Release bridge:
-          // - when prior-frame A is no longer held, clear stale seeded hold-rate carry and resume
-          //   default 1.0 on the next advance.
-          // Decomp/data refs:
-          // - Fresh held-A admission on the visible start_smash_charge row is legal in live play
-          //   (`x67C == 0`), but rows with prevA==0 still resume on the next step once A is no
-          //   longer held.
-          // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackHi4.c,ftCo_AttackLw4.c}
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-          // data/scripts/<char>.bin::MSLFTSC1 start_smash_charge
-          batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
-        }
-      }
-
-      if (a == (uint16_t)MSL_ACT_REBOUND && action_frame_pre == 0) {
-        const int32_t hidden_rebound_rate_fp = batch->state.rebound_anim_rate_fp_q16_16[idx];
-        if (hidden_rebound_rate_fp > 0) {
-          // Rebound callback-source ownership:
-          // - ftCo_80099D9C stores `mv.co.rebound.anim_start` from `dmg.x191C`.
-          // - ftCo_80099E44 consumes that hidden rate when entering Rebound.
-          // - On first-Rebound replay seeds, `mv.co.rebound.x0` may already be consumed by
-          //   Rebound_Phys, so the ground-velocity reconstruction is only a fallback.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{
-          //   ftCo_80099D9C,ftCo_80099E44,ftCo_Rebound_Phys}
-          batch->state.frame_speed_mul_fp_q16_16[idx] = hidden_rebound_rate_fp;
-        } else {
-          float rebound_rate = 0.0f;
-          if (anim_timebase_try_rebound_anim_speed_from_ground_vel(
-                  c, ch, batch->state.speed_ground_x_self[idx], &rebound_rate)) {
-            batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rebound_rate);
-          }
-        }
-      }
-
-      // Attached ThrowHi/ThrownHi first-steady rate ownership:
-      // - ftCo_800DD4B0 computes one shared throw anim_speed from the victim weight.
-      // - ftCo_800DD398 enters both thrower and victim with that speed and immediately calls
-      //   ftAnim_8006EBA4 in the owner callback, so the first attached post-entry snapshot has
-      //   action_frame 1, and attached pre-release throw frames continue advancing on the shared
-      //   throw rate until the throw script changes the rate/flags.
-      // - This keeps rollout-started ThrowHi release timing aligned without broadening release
-      //   gates; the victim/owner link and attached pre-release action phase are the source
-      //   predicate.
-      // - Keep this on ThrowHi/ThrownHi: ThrowF/B/Lw have their own release / hitlag pulse slices,
-      //   and broadening this rate restore changed unrelated rollout first-break ownership.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398}
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
-      if ((a == (uint16_t)MSL_ACT_THROW_HI || a == (uint16_t)MSL_ACT_THROWN_HI) &&
-          action_frame_pre >= 1 && batch->state.hitlag[idx] == 0u) {
-        if (msl_action_is_throw_owner(a)) {
-          const uint8_t victim_p = batch->state.attached_victim_port[idx];
-          if (victim_p != 0xFFu && (int)victim_p < num_players && (int)victim_p != p) {
-            const size_t vidx = msl_idx_player(bi, (int)victim_p);
-            if (msl_action_is_thrown_victim(batch->state.action_id[vidx])) {
-              int32_t throw_rate_fp = batch->state.throw_anim_rate_fp_q16_16[idx];
-              if (throw_rate_fp <= 0) {
-                throw_rate_fp = anim_timebase_throw_rate_fp_from_pair(
-                    batch->state.char_id[idx], batch->state.char_id[vidx], a);
-              }
-              if (throw_rate_fp > 0) {
-                batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
-              }
-            }
-          }
-        } else {
-          uint8_t owner_p = batch->state.grab_owner_port[idx];
-          if (owner_p == 0xFFu || (int)owner_p >= num_players || (int)owner_p == p) {
-            for (int candidate = 0; candidate < num_players; candidate++) {
-              const size_t cidx = msl_idx_player(bi, candidate);
-              if (batch->state.attached_victim_port[cidx] == (uint8_t)p) {
-                owner_p = (uint8_t)candidate;
-                break;
-              }
-            }
-          }
-          if (owner_p != 0xFFu && (int)owner_p < num_players && (int)owner_p != p) {
-            const size_t oidx = msl_idx_player(bi, (int)owner_p);
-            if (msl_action_is_throw_owner(batch->state.action_id[oidx]) &&
-                batch->state.attached_victim_port[oidx] == (uint8_t)p) {
-              const uint16_t throw_action = anim_timebase_throw_action_from_thrown(a);
-              int32_t throw_rate_fp = batch->state.throw_anim_rate_fp_q16_16[idx];
-              if (throw_rate_fp <= 0 && throw_action != 0xFFFFu) {
-                throw_rate_fp = anim_timebase_throw_rate_fp_from_pair(
-                    batch->state.char_id[oidx], batch->state.char_id[idx], throw_action);
-              }
-              if (throw_rate_fp > 0) {
-                batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
-              }
-            }
-          }
-        }
-      }
-      // ThrowLw attached pulse/post-hitlag anim-rate ownership:
-      // - Throw entry computes one shared throw anim-speed via ftCo_800DD4B0, and ftCo_800DD398
-      //   installs it onto both thrower and thrown victim.
-      // - The remaining non-shared slice is specifically ThrowLw's throw-side pulse family:
-      //   ftCo_ThrowLw_Anim runs ftFx_Throw_Anim while the victim remains attached under
-      //   ftCo_800DE508, and on the first post-hitlag pre-input row replay can carry a zeroed
-      //   thrower frame_speed_mul snapshot even though the ThrowLw callback resumes the shared
-      //   throw anim-speed for the attached pulse-25 window.
-      // - This is not generic throw substrate: broadening it to ThrowF/ThrowHi changes real
-      //   release-time ownership outside the ftFx_Throw_Anim family.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398,ftCo_ThrowLw_Anim,ftCo_800DD724}
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
-      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-      if (a == (uint16_t)MSL_ACT_THROW_LW) {
-        const int32_t throw_rate_fp = batch->state.throw_anim_rate_fp_q16_16[idx];
-        const uint8_t victim_p = batch->state.attached_victim_port[idx];
-        const uint8_t has_attached_victim =
-            (victim_p != 0xFFu && (int)victim_p < num_players && (int)victim_p != p) ? 1u : 0u;
-        const uint8_t fighter_hit_then_release =
-            (has_attached_victim != 0u &&
-             move_tables_throw_release_after_create_hitbox(batch->state.char_id[idx], a) != 0u)
-                ? 1u
-                : 0u;
-        if (batch->state.hitlag_pre_timer[idx] != 0u &&
-            batch->state.hitlag_started_frame[idx] == 0u) {
-          // Fighter-hit ThrowLw scripts can enter attacker-side hitlag before the later
-          // set_throw_flags(hit_idx=0) release command. On hitlag exit, Fighter_8006A1BC clears
-          // x2219_b5 before Fighter_8006A360 advances the AObj, so the shared throw anim-speed
-          // resumes immediately and the later release flag can be reached.
-          //
-          // This is data-backed by MSLFTSC1 create_hitbox before set_throw_flags, rather than a
-          // Sheik id branch. Projectile-pulse ThrowLw scripts stay on the existing zero-rate
-          // cursor path below.
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724}
-          // data/scripts/<char>.bin (MSLFTSC1) create_hitbox / set_throw_flags
-          if (throw_rate_fp > 0) {
-            if (fighter_hit_then_release != 0u) {
-              batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
-            } else {
-              batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-            }
-          } else {
-            batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-          }
-        } else if (batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
-          if (throw_rate_fp > 0) {
-            if (fighter_hit_then_release != 0u) {
-              batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
-            } else if (has_attached_victim != 0u) {
-              const size_t vidx = msl_idx_player(bi, (int)victim_p);
-              if (msl_action_is_grabbed_victim(batch->state.action_id[vidx]) &&
-                  batch->state.hitlag_pre_timer[vidx] != 0u && batch->state.hitlag[vidx] == 0u) {
-                batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
-              }
-            }
-          }
-        }
-      }
-
-      //
-      // Decomp: AttackAir entry always uses anim_speed=1.0f (KeepFastFall only affects fastfall).
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
-      //
-      // Decomp ordering rationale for `action_frame_pre == 1` (not a magic constant):
-      // - ChangeMotionState enters at anim_start=0, anim_speed=1.
-      // - The first ftAnim tick advances frame 0->1 before motion Anim callback-style rate updates
-      //   are visible to the next tick.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
-      // So frame 1 is the first "steady" reseed frame where stale carry-over rates must be reset.
-      if (anim_timebase_is_attackair(a) && action_frame_pre == 1) {
-        batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(1.0f);
-      }
-
-      // Decomp entry-rate corrections for landing states:
-      // - LandingAir*: rate = (end_frame + 0.1f) / lag (with x67F L-cancel lag divide branch)
-      // - LandingFallSpecial: anim_speed = (0.1f + fp->x2EC) / landing_lag
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
-      //
-      // Apply on action_frame==0 (entry-shaped snapshots) so one-step reseeds do not depend on
-      // prior-frame hidden rates.
-      // Marth scoping: live LandingFallSpecial entries (Dolphin Slash / FallSpecial chains)
-      // already wrote a source-correct rate via enter_landing_action_from_air; the af==0
-      // re-derivation would clobber it with the common default because prev_action_id is
-      // already self by the time this runs. Spacie rows keep the original re-derivation
-      // unconditionally (validated lock behavior: reseeds carry replay rates).
-      // Sheik/Zelda Vanish LandingFallSpecial publishes a transient entry `frame_speed_mul`
-      // matching ftSk_SpecialHi's landing helper, but Slippi state_age then advances with the
-      // steady LandingFallSpecial rate on the following frame. Frame-0 replay seeds therefore
-      // rederive the steady rate instead of preserving the visible transient. Marth Dolphin Slash
-      // keeps the existing preserve path because its source-specific landing lag is not otherwise
-      // recoverable from the frame-0 self prev-action row.
-      // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Coll
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
-      const uint8_t skip_rederive_live_entry =
-          (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
-           batch->state.frame_speed_mul_fp_q16_16[idx] != msl_q16_16_from_f32(1.0f))
-              ? 1u
-              : 0u;
-      if (action_frame_pre == 0 && c != NULL && !skip_rederive_live_entry) {
-        float entry_rate = 0.0f;
-        if (a == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
-          float lag = c->landing_fall_special_lag_frames;
-          const uint16_t source_prev_action = (action_frame_pre == 0)
-                                                  ? batch->state.seed_prev_action_id[idx]
-                                                  : batch->state.prev_action_id[idx];
-          // Live rollout rows can carry a stale seed_prev_action_id; honor the live prev lane
-          // too so a real FallSpecial -> LandingFallSpecial chain keeps its forwarded
-          // mv.co.fallspecial.landing_lag rate (ftCo_80096D28) instead of the common default.
-          const uint16_t live_prev_action = batch->state.prev_action_id[idx];
-          const uint8_t source_is_fallspecial =
-              (source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL ||
-               source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
-               source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_B ||
-               live_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL ||
-               live_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
-               live_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_B)
-                  ? 1u
-                  : 0u;
-          if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
-              (source_prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
-               source_prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI ||
-               live_prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
-               live_prev_action == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI)) {
-            // Dolphin Slash direct landing: LandingFallSpecial with MarsAttributes x2C.
-            // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::ftMs_SpecialHi_80138884
-            lag = (ch != NULL) ? ch->specialhi_landing_lag_frames : lag;
-          } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
-                     (source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
-                      source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI ||
-                      source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW ||
-                      live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI ||
-                      live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI ||
-                      live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW)) {
-            // Falcon Dive direct landing: doAirColl and SpecialHiThrow0_Coll enter
-            // LandingFallSpecial with ftCaptainAttributes::specialhi_landing_lag.
-            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{
-            //   doAirColl,ftCa_SpecialHiThrow0_Coll}
-            // data/characters/falcon.json::falcon_specialhi_landing_lag
-            lag = (ch != NULL) ? ch->falcon_specialhi_landing_lag : lag;
-          } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
-                     (source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START ||
-                      live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START)) {
-            // Aerial Raptor Boost miss landing: ftCa_SpecialAirSStart_Coll enters
-            // LandingFallSpecial with ftCaptainAttributes::specials_miss_landing_lag.
-            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirSStart_Coll
-            // data/characters/falcon.json::falcon_specials_miss_landing_lag
-            lag = (ch != NULL) ? ch->falcon_specials_miss_landing_lag : lag;
-          } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_FALCON &&
-                     (source_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S ||
-                      live_prev_action == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S)) {
-            // Aerial Raptor Boost hit landing: ftCa_SpecialAirS_Coll enters LandingFallSpecial
-            // with ftCaptainAttributes::specials_hit_landing_lag.
-            // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirS_Coll
-            // data/characters/falcon.json::falcon_specials_hit_landing_lag
-            lag = (ch != NULL) ? ch->falcon_specials_hit_landing_lag : lag;
-          } else if (batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_SHEIK &&
-                     (source_prev_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI ||
-                      live_prev_action == (uint16_t)MSL_ACT_SK_SPECIAL_AIR_HI) &&
-                     ch != NULL && ch->sheik_vanish_landing_lag_frames > 0.0f) {
-            // Sheik Vanish direct landing: ftSk_SpecialAirHi_Coll enters
-            // LandingFallSpecial through the Sheik-specific landing helper. Replay frame-0
-            // snapshots can expose the helper's transient entry rate, while the next source
-            // Anim tick consumes the steady `(end_frame + 0.1f) / da->x2EC` rate.
-            // MSLMSO01's fx_special_kind lane is intentionally Fox/Falco-scoped, so this
-            // Sheik-only callsite uses the ftSk action id and the extracted character attr.
-            // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::{
-            //   ftSk_SpecialAirHi_Coll,fn_80112ED8}
-            // data/characters/sheik.json::sheik_vanish_landing_lag_frames
-            lag = ch->sheik_vanish_landing_lag_frames;
-          } else if (msl_motion_state_fx_special_kind(batch->state.char_id[idx],
-                                                      source_prev_action) ==
-                     (uint8_t)MSL_FX_KIND_SPECIAL_AIR_S_END) {
-            // Decomp source split for LandingFallSpecial entry rate:
-            // - EscapeAir_Coll enters ftCo_LandingFallSpecial_Enter(..., p_ftCommonData->x344).
-            // - Fox/Falco Illusion end collision enters ftCo_LandingFallSpecial_Enter(...,
-            //   da->x50_FOX_ILLUSION_LANDING_LAG).
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
-            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
-            // data/characters/{fox,falco}.json: illusion_landing_lag_frames
-            lag = (float)ch->illusion_landing_lag_frames;
-          }
-          if (!source_is_fallspecial) {
-            const float end_frame = msl_anim_end_frame(batch->state.char_id[idx],
-                                                       (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
-            if (lag > 0.0f && end_frame > 0.0f) {
-              entry_rate = (end_frame + 0.1f) / lag;
-            }
-          }
-        } else if (anim_timebase_try_landing_air_rate(
-                       a, ch, c, batch->state.char_id[idx],
-                       batch->state.l_cancel[idx] == 1u ? 0u : UINT8_MAX,
-                       batch->state.l_cancel[idx], &entry_rate)) {
-          // Entry-shaped replay seeds already carry Slippi's post-frame L-cancel result.
-          // A stale x67F/lr_press_timer window can remain nonzero on the first LandingAir frame
-          // even when source did not take the divide-lag branch, so frame-0 rederive uses the
-          // explicit result lane while live entry paths still call the helper with the input timer.
-          // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
-          // rate already written to entry_rate by helper.
-        }
-        if (entry_rate > 0.0f) {
-          batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(entry_rate);
-        }
-      }
-
-      // Slippi parity (no-submotion snapshots):
-      // Slippi can report `animation_index==0xFFFFFFFF` with `state_age==-1` (i.e.
-      // `anim_frame_f32==-1`, `action_frame==-1`). Preserve that frozen (-1) timebase even if a
-      // nonzero `frame_speed_mul` is seeded.
-      if (batch->state.animation_index[idx] == 0xFFFFFFFFu &&
-          batch->state.anim_frame_fp_q16_16[idx] < 0) {
-        msl_anim_timebase_recompute_derived(batch, idx);
-        continue;
-      }
-
-      uint8_t runbrake_set_rate_one_after_tick = 0u;
-      if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_RUN_BRAKE && c != NULL) {
-        const float cur_frame = msl_f32_from_q16_16(batch->state.anim_frame_fp_q16_16[idx]);
-        const uint8_t runbrake_freeze_state = batch->state.runbrake_freeze_x0[idx];
-        const uint8_t cmd1 =
-            (uint8_t)(runbrake_freeze_state != 3u &&
-                      move_tables_runbrake_cmd1_active(batch->state.char_id[idx], cur_frame) != 0u);
-        const float speed_abs = fabsf(batch->state.speed_ground_x_self[idx]);
-        if (runbrake_freeze_state == 1u) {
-          batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-          if (speed_abs <= c->runbrake_anim_freeze_speed_threshold) {
-            runbrake_set_rate_one_after_tick = 1u;
-            batch->state.runbrake_freeze_x0[idx] = 3u;
-          }
-        } else if (cmd1 != 0u && runbrake_freeze_state == 0u &&
-                   speed_abs >= c->runbrake_anim_freeze_speed_threshold) {
-          // ftCo_RunBrake_Anim: when cmd_vars[1] is set and |gr_vel| is still above
-          // p_ftCommonData->x42C, source calls ftAnim_SetAnimRate(0) and sets
-          // mv.co.runbrake.x0. While that latch is set, the AObj stays frozen until |gr_vel| is
-          // below-or-equal to x42C, at which point source calls ftAnim_SetAnimRate(1) and clears
-          // cmd_vars[1]. The cmd-var event is visible at the callback's current frame before the
-          // AObj add publishes the next action_frame, so the freeze suppresses the frame-11 tick.
-          // If the command first fires when gr_vel is already at the zero x42C threshold, source
-          // still publishes that one frozen command frame, then the consumed command resumes on the
-          // next AObj tick; sustained high-speed brakes keep the x0 latch until a later callback.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
-          //   ftCo_RunBrake_Enter,ftCo_RunBrake_Anim}
-          // data/scripts/<char>.bin::MSLFTSC1 ftCo_SM_RunBrake set_cmd_var(idx=1,value=1)
-          // data/common/ft_common_data.json::runbrake_anim_freeze_speed_threshold
-          batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-          if (speed_abs <= c->runbrake_anim_freeze_speed_threshold) {
-            runbrake_set_rate_one_after_tick = 1u;
-            batch->state.runbrake_freeze_x0[idx] = 3u;
-          } else {
-            batch->state.runbrake_freeze_x0[idx] = 1u;
-          }
-        } else if (cmd1 != 0u && batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
-          batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
-        }
-      }
-
-      batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
-      {
-        // Deterministic fixed-point representation guard for source float throw rates:
-        // Fox/Falco attached back/up throws can use a data-backed 4/3 shared rate. Repeated Q16.16
-        // rounded advances can land exactly one LSB below an integer (for example 3.999984),
-        // delaying set_throw_flags / throw-side script-frame checks even though the source float
-        // timebase crosses the integer. During the attached window this mirrors the shared
-        // ThrowB/Hi source rate directly; after detach, keep it only on extracted throw command
-        // windows/events because ordinary fractional frames can legitimately remain just below an
-        // integer in Slippi.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
-        //   ftCo_800DD4B0,ftCo_800DD398,ftCo_800DD724
-        // }
-        const int32_t cur_fp = batch->state.anim_frame_fp_q16_16[idx];
-        if (cur_fp > 0) {
-          const int32_t rem = cur_fp % (int32_t)MSL_Q16_16_ONE;
-          const int32_t throw_snap_delta = anim_timebase_non_low_throw_rate_snap_delta(
-              batch, bi, p, idx, num_players, cur_fp, rem);
-          if (throw_snap_delta > 0) {
-            batch->state.anim_frame_fp_q16_16[idx] = cur_fp + throw_snap_delta;
-          }
-        }
-      }
-      const uint8_t anim_src_char =
-          anim_timebase_anim_source_char_id(batch, bi, p, idx, num_players);
-      const uint8_t did_wrap = anim_timebase_apply_aobj_loop(batch, idx, anim_src_char);
-      anim_timebase_apply_capture_loop(batch, idx);
-
-      // Non-looping timelines clamp at end_frame and stop advancing.
-      //
-      // Decomp:
-      // - ftAnim_8006EBA4 advances the underlying HSD AObj timeline.
-      // - HSD_AObjInterpretAnim clamps curr_frame at end_frame when not looping.
-      // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
-      // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
-      //
-      // Scope guard: only apply this clamp to non-looping tracks (AOBJ_LOOP==0 in extracted
-      // `data/anims/*.tracks.bin`). Looping tracks continue to use the deterministic modulo wrap
-      // in anim_timebase_apply_aobj_loop() exactly as before.
-      if (!did_wrap) {
-        const uint32_t anim_u32 = batch->state.animation_index[idx];
-        if (anim_u32 <= 0xFFFFu && !msl_anim_is_looping(anim_src_char, (uint16_t)anim_u32)) {
-          const float end_frame = msl_anim_end_frame(anim_src_char, (uint16_t)anim_u32);
-          if (end_frame > 0.0f) {
-            const int32_t end_fp = msl_q16_16_from_f32(end_frame);
-            if (end_fp > 0) {
-              int32_t cur_fp = batch->state.anim_frame_fp_q16_16[idx];
-              if (cur_fp > end_fp) {
-                cur_fp = end_fp;
-                batch->state.anim_frame_fp_q16_16[idx] = cur_fp;
-              }
-              if (cur_fp >= end_fp) {
-                batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-              }
-            }
-          }
-        }
-      }
-
-      if (turnrun_flip_after_zero_tick != 0u && batch->state.action_id[idx] == a) {
-        const uint8_t entry_facing = anim_timebase_turnrun_entry_facing_bit(batch, idx);
-        batch->state.facing[idx] = entry_facing ? 0u : 1u;
-        batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
-      }
-
-      msl_anim_timebase_recompute_derived(batch, idx);
-      if (runbrake_set_rate_one_after_tick != 0u &&
-          batch->state.action_id[idx] == (uint16_t)MSL_ACT_RUN_BRAKE) {
-        batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
-      }
-      // Fall/FallAerial/FallSpecial Anim callback owner:
-      // source advances the AObj timeline, then ftCo_Fall_Anim_Inner updates mv.co.*.x4 and
-      // ftCo_800CC988 publishes the blended neutral/F/B JObj pose before BODY collision refresh.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{
-      //   ftCo_Fall_Anim,ftCo_Fall_Anim_Inner,ftCo_800CC988}
-      anim_timebase_common_fall_blend_tick(batch, idx, c, ch);
-
-      // Action-script pseudo-random SFX command RNG lane:
-      // - Command opcode 38 (`ftAction_80071FC8`) consumes one HSD_Randi(random_range) when the
-      //   event executes during command-script interpretation.
-      // - Command scripts are interpreted on the anim callback timeline under Fighter_8006A360.
-      // refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
-      //
-      // Runtime mapping:
-      // - Extracted event pulses are sourced from `data/moves/{fox,falco}.json`
-      //   `specials_by_msid["<msid>"].events` with kind `pseudo_random_sfx`.
-      // - Consume each crossed pulse once using the same frame-crossing policy as other script
-      //   pulse lanes.
-      // - `MSL_RNG_DISABLE_PSEUDO_RANDOM_SFX_CMD=1` is a debug kill-switch for A/B ablations.
-      if (!batch->debug_rng_disable_pseudo_random_sfx_cmd && action_frame_pre >= 0) {
-        const uint32_t smid_u32 = batch->state.animation_index[idx];
-        const int16_t action_frame_cur = batch->state.action_frame[idx];
-        if (smid_u32 <= 0xFFFFu && action_frame_cur >= action_frame_pre) {
-          enum { MSL_PSEUDO_SFX_PULSE_MAX = 16 };
-          uint8_t random_ranges[MSL_PSEUDO_SFX_PULSE_MAX] = {0};
-          const uint8_t pulse_n = move_tables_special_pseudo_random_sfx_ranges_crossed(
-              batch->state.char_id[idx], (uint16_t)smid_u32, (float)action_frame_pre,
-              (float)action_frame_cur, random_ranges, (uint8_t)MSL_PSEUDO_SFX_PULSE_MAX);
-          for (uint8_t ri = 0; ri < pulse_n; ri++) {
-            const uint8_t rr = random_ranges[ri];
-            if (rr > 0u) {
-              (void)combat_rng_consume_randi_site(
-                  batch, bi, MSL_RNG_SITE_FTACTION_PSEUDO_RANDOM_SFX_CMD, (uint32_t)rr);
-            }
-          }
-        }
-      }
-
-      // Decomp: Fighter_ChangeMotionState clears `fp->fall_fast` unless KeepFastFall is requested.
-      // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside ChangeMotionState).
-      //
-      // Some suite-present special-move timelines restart their motion state on anim-end by
-      // calling Fighter_ChangeMotionState (even if the action_id is unchanged), which clears
-      // `fp->fall_fast` unless KeepFastFall is present in the call flags.
-      //
-      // Decomp example (GALE01):
-      // - ftFx_SpecialAirNLoop_Anim restarts ftFx_MS_SpecialAirNLoop with
-      //   (Ft_MF_SkipAttackCount | Ft_MF_SkipModel | Ft_MF_KeepGfx), i.e. without KeepFastFall.
-      //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
-      //
-      // We do not model per-state Anim callbacks yet, but we can observe restart-like boundaries
-      // via a wrap in the derived `action_frame` and clear fastfall in those cases.
-      //
-      // IMPORTANT: Do not clear `fall_fast` generically on any AObj loop wrap. Many common motion
-      // states (including Fall) use AOBJ_LOOP and wrap `cur_anim_frame` without invoking
-      // Fighter_ChangeMotionState; fastfall persists across those wraps in decomp.
-      if (did_wrap && action_frame_pre >= 0 && batch->state.action_frame[idx] < action_frame_pre) {
-        const uint16_t a = batch->state.action_id[idx];
-        if (msl_motion_state_fx_special_kind(batch->state.char_id[idx], a) ==
-            (uint8_t)MSL_FX_KIND_SPECIAL_AIR_N_LOOP) {
-          batch->state.fall_fast[idx] = 0;
-        }
-      }
+      anim_timebase_update_pre_input_fighter(batch, bi, p);
     }
   }
 }
@@ -1635,6 +1307,12 @@ void anim_timebase_apply_deferred_tick_once_pre_collision(MslBatch* batch) {
       }
 
       msl_anim_timebase_recompute_derived(batch, idx);
+      // The deferred flag changes scheduling only; source has still interpreted the advanced
+      // AObj before priority-9 HitCapsule publication and priority-13 contact.
+      // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006C80C
+      fighter_pose_publish_motion_entry(batch, idx, 0u);
+      fighter_script_tick_once(batch, idx);
     }
   }
 }

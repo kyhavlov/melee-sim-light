@@ -52,33 +52,34 @@ def test_grab_throw_capture_source_completion_doc_is_closed() -> None:
     assert "Throw-side blaster command pulses" in doc
 
 
-def test_throw_release_damage_family_uses_generated_damage_owners() -> None:
+def test_throw_release_uses_later_fighter_source_phase_without_deferred_repair() -> None:
     source = (ROOT / "src/throw_flow.c").read_text()
-    body = _function_body(source, "throw_flow_action_is_damage_family")
+    body = _function_body(source, "throw_flow_update_anim_callback_pre_input")
 
-    assert "msl_damage_owner_is_damage_ground_action" in body
-    assert "msl_damage_owner_is_damage_air_action" in body
-    assert "msl_damage_owner_is_damagefly_action" in body
-    assert "MSL_ACT_DAMAGE_FALL" in body
-    assert "case MSL_ACT_DAMAGE_HI_1" not in body
-    assert "case MSL_ACT_DAMAGE_FLY_HI" not in body
+    assert "combat_apply_throw_hit" in body
+    assert "msl_anim_timebase_defer_tick_once" not in body
+    assert "throw_flow_apply_post_release_damage_callback_phase" not in source
 
 
-def test_throw_release_callback_order_stays_anim_before_compatibility_cleanup() -> None:
+def test_throw_release_callback_runs_in_source_anim_phase() -> None:
     source = (ROOT / "src/fighter_callbacks.c").read_text()
     body = _function_body(source, "fighter_callbacks_pre_input_anim_phase")
 
     _assert_ordered(
         body,
         [
-            "anim_timebase_update_pre_input(batch)",
             "items_update_pre_fighter_anim_phase(batch)",
+            "anim_timebase_update_pre_input_fighter(batch, bi, p)",
+            "fighter_pose_publish_animation_phase_fighter(batch, bi, p)",
+            "fighter_script_advance_fighter(batch, bi, p)",
+            "timers_update_post_anim_fighter(batch, bi, p)",
             "msl_fighter_callback_context_make(",
             "action_update_anim_callback_pre_input_fighter(&ctx)",
-            "action_update_anim_callbacks_pre_input_global(batch)",
-            "combat_processhit_consume(batch)",
+            "items_spawn_fighter_anim_callback(batch, bi, p)",
         ],
     )
+    assert "action_update_anim_callbacks_pre_input_global" not in body
+    assert "combat_processhit_consume" not in body
 
 
 def test_throw_ground_loss_uses_source_fall_entry_for_both_fighters() -> None:
@@ -121,8 +122,9 @@ def test_dc920_connected_floor_materializes_source_ecb_clear() -> None:
     _assert_ordered(
         anim_body,
         [
-            "move_tables_throw_should_flip_facing",
-            "move_tables_throw_release_hit_idx",
+            "const uint8_t throw_flags = batch->state.script_throw_flags[oidx]",
+            "(throw_flags & (uint8_t)(1u << 4))",
+            "(throw_flags & (uint8_t)(1u << 3))",
             "grab_attachment_apply_thrown_release_anchor_now",
             "combat_apply_throw_hit",
         ],
@@ -138,8 +140,6 @@ def test_throw_release_floor_sweep_prev_endpoint_is_live_for_release_callback() 
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpCollPrev,mpColl_80043754}
     source = (ROOT / "src/throw_flow.c").read_text()
     body = _function_body(source, "throw_flow_update_anim_callback_pre_input")
-    post_items_body = _function_body(source, "throw_flow_update_post_items")
-
     _assert_ordered(
         body,
         [
@@ -154,13 +154,7 @@ def test_throw_release_floor_sweep_prev_endpoint_is_live_for_release_callback() 
             "mpcoll_source_air_run_release_471f8",
         ],
     )
-    _assert_ordered(
-        post_items_body,
-        [
-            "combat_apply_throw_hit",
-            "knockdown_try_throw_release_damage_floor_contact",
-        ],
-    )
+    assert "throw_flow_update_post_items" not in source
 
 
 def test_thrown_attachment_comments_match_closed_source_owner() -> None:

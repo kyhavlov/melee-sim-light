@@ -23,6 +23,7 @@
 #include "dash_iasa.h"
 #include "deadupstar_rng.h"
 #include "escapeair_collision_owner.h"
+#include "fighter_script.h"
 #include "grab_flow.h"
 #include "ftcommon_ecb.h"
 #include "input.h"
@@ -30,7 +31,6 @@
 #include "instance_id.h"
 #include "jump_input.h"
 #include "locomotion_landing.h"
-#include "move_tables.h"
 #include "motion_state_owners.h"
 #include "mpcoll_ecb_pose.h"
 #include "mpcoll_floor_skip.h"
@@ -45,7 +45,6 @@
 #include "spacie_specials.h"
 #include "stage_collision.h"
 #include "trigger_input.h"
-#include "throw_flow.h"
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 
@@ -241,19 +240,6 @@ static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_f
   // sanitized timebase end-frame comparison.
   // refs/melee/src/melee/ft/ftanim.c::ftAnim_IsFramesRemaining
   return msl_anim_frame_sanitize_f32(anim_frame_f32) >= end;
-}
-
-static inline void grounded_attack_carry_allow_interrupt(MslBatch* batch, size_t idx) {
-  // Source-callback ownership for fp+0x2218 bit0:
-  // grounded Attack* IASA callbacks first test command-owned fp->allow_interrupt, then may enter a
-  // non-attack destination through Wait_IASA in the same fighter proc. The destination post-frame
-  // still serializes the already-live allow_interrupt bit, so write it at the transition site.
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
-  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,
-  //   ftCo_AttackS4.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
-  batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
 }
 
 static inline uint8_t action_preserves_cliff_ledge_floor_owner(uint16_t action_id) {
@@ -865,9 +851,7 @@ uint8_t locomotion_attackair_try_enter_from_air_iasa(MslBatch* batch, const MslC
   // Keep the raw Slippi fp+0x2218 bit in sync even when the same frame's ProcessHit overwrites the
   // visible action with Damage* before state_flags.c can sample the transient AttackAir state.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
-  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t)~MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_anim_timebase_enter_flags(batch, idx, 0.0f, 1.0f, (uint32_t)MSL_MOTION_FLAG_KEEP_FASTFALL);
   // Decomp entry immediately calls `ftAnim_8006EBA4`, so the same frame's Phys/Coll callbacks
   // see the first AttackAir pose/ECB rather than the raw frame-0 motion-entry pose.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
@@ -1053,11 +1037,6 @@ static inline uint8_t grounded_attack_wait_iasa_specials_action(uint16_t action_
                                                 MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS);
 }
 
-static inline uint8_t grounded_attack_wait_iasa_interrupt_dest_action(uint16_t action_id) {
-  return msl_motion_state_common_class2_has_fast(
-      action_id, MSL_MS_CLASS2_GROUNDED_ATTACK_WAIT_IASA_INTERRUPT_DEST);
-}
-
 static inline uint8_t grounded_attack_wait_iasa_locomotion_action(uint16_t action_id) {
   // Generated IASA-owner subset for grounded Attack* callbacks whose source path can delegate into
   // Wait_IASA's jump/dash/squat/turn/walk tail after `fp->allow_interrupt`.
@@ -1232,15 +1211,13 @@ static inline void enter_fall_keep_fastfall_ftco_fall_enter(MslBatch* batch, siz
   if (batch == NULL) {
     return;
   }
-  const uint8_t keep_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_anim_timebase_enter_flags(batch, idx, 0.0f, 1.0f, (uint32_t)MSL_MOTION_FLAG_KEEP_FASTFALL);
   // Decomp: ftCo_Fall_Enter calls Fighter_ChangeMotionState(..., Ft_MF_KeepFastFall, ...), so
   // fp->fall_fast persists across this motion change.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
   // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside Fighter_ChangeMotionState)
-  batch->state.fall_fast[idx] = keep_fastfall;
 }
 
 static inline void ftco_fall_enter_clamp_air_drift_x(MslBatch* batch, const MslCharParams* ch,
@@ -1439,8 +1416,6 @@ static inline uint8_t grounded_attack_update(MslBatch* batch, const MslCommonPar
     return 1u;
   }
   if (anim_finished(char_id, (uint16_t)sm, batch->state.anim_frame_f32[idx])) {
-    const uint8_t allow_interrupt_on_anim_end = move_tables_grounded_attack_allow_interrupt(
-        char_id, action_id, batch->state.anim_frame_f32[idx]);
     if (action_id == (uint16_t)MSL_ACT_ATTACK_LW3) {
       // Decomp: AttackLw3_Anim exits through ftCo_800D638C (SquatWait). The later input callback
       // dispatches destination SquatWait_IASA in the same Fighter proc, whose order is:
@@ -1449,9 +1424,6 @@ static inline uint8_t grounded_attack_update(MslBatch* batch, const MslCommonPar
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::{ftCo_800D638C,ftCo_SquatWait_IASA}
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_CheckInput
       enter_squat_wait_from_anim_end(batch, idx);
-      if (allow_interrupt_on_anim_end) {
-        grounded_attack_carry_allow_interrupt(batch, idx);
-      }
       if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
                                                 tilt_timer_x, tilt_timer_y, facing_dir, 0u, 1u)) {
         return 1;
@@ -1473,9 +1445,6 @@ static inline uint8_t grounded_attack_update(MslBatch* batch, const MslCommonPar
       batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
       batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
       msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-      if (allow_interrupt_on_anim_end) {
-        grounded_attack_carry_allow_interrupt(batch, idx);
-      }
     }
   }
   return 1;
@@ -1622,8 +1591,6 @@ static inline uint8_t common_appeal_try_enter_from_grounded_iasa(MslBatch* batch
   // lane for that state is state_flags[0] bit 0x80 (fp+0x2218_b7); clear it on Appeal entry so
   // stale seeded grounded-attack interrupt state cannot leak onto the taunt destination.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_800DEAE8
-  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t)~MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
   return 1u;
 }
 
@@ -1724,6 +1691,136 @@ static inline uint8_t ftco_landing_iasa_try_enter(MslBatch* batch, const MslComm
   return 0u;
 }
 
+void locomotion_update_anim_callback_pre_input_fighter(MslBatch* batch, int bi, int p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
+      p >= (int)batch->config.num_players) {
+    return;
+  }
+  const size_t idx = msl_idx_player(bi, p);
+  if (batch->state.hitlag[idx] != 0u) {
+    return;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  const uint8_t char_id = batch->state.char_id[idx];
+  if (action_id == (uint16_t)MSL_ACT_ATTACK_100_START) {
+    // Attack100Start_Anim transitions to Attack100Loop during Fighter_8006A360, before
+    // Fighter_procUpdate runs the current-frame IASA callback.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Start_Anim
+    if (anim_finished(char_id, (uint16_t)MSL_SM_ATTACK_100_START,
+                      batch->state.anim_frame_f32[idx])) {
+      batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_100_LOOP;
+      batch->state.animation_index[idx] = (uint32_t)MSL_SM_ATTACK_100_LOOP;
+      batch->state.attack100_x0[idx] = 0u;
+      batch->state.attack100_x4[idx] = 0u;
+      msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    }
+  } else if (action_id == (uint16_t)MSL_ACT_ATTACK_100_LOOP) {
+    // Attack100Loop_Anim consumes the script-owned throw_flags_b3 checkpoint before the IASA
+    // callback can latch current-frame A input into mv.co.attack100.x4.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Loop_Anim
+    const float cur_anim = batch->state.anim_frame_f32[idx];
+    const float rate = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
+    if (cur_anim >= 0.0f && cur_anim < rate) {
+      batch->state.attack100_x0[idx] = 1u;
+      // Attack100Loop_Anim refreshes attack identity at the loop restart before script hitboxes
+      // are interpreted: ft_800892A0 bumps x206C for the same move id and ft_80089824 refreshes
+      // the action-state instance bookkeeping. The x206C bump is required so repeated rapid-jab
+      // hits can enter the stale queue as separate same-move instances.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Loop_Anim
+      // refs/melee/src/melee/ft/ft_0881.c::ft_800892A0
+      // refs/melee/src/melee/ft/ft_0892.c::ft_80089824
+      attack_identity_restart_same_move_ft_800892A0(batch, idx);
+    }
+    if (fighter_script_take_throw_flag(batch, idx, 3u)) {
+      if (batch->state.attack100_x0[idx] != 0u && batch->state.attack100_x4[idx] == 0u) {
+        batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_100_END;
+        batch->state.animation_index[idx] = (uint32_t)MSL_SM_ATTACK_100_END;
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+      } else {
+        batch->state.attack100_x4[idx] = 0u;
+      }
+    }
+  } else if (action_id == (uint16_t)MSL_ACT_ATTACK_100_END) {
+    // Attack100End_Anim resolves through ft_8008A2BC when the ending animation finishes.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100End_Anim
+    if (anim_finished(char_id, (uint16_t)MSL_SM_ATTACK_100_END, batch->state.anim_frame_f32[idx])) {
+      batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+      batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+      msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    }
+  } else if (action_id == (uint16_t)MSL_ACT_RUN_BRAKE) {
+    const MslCharParams* ch = msl_char_params_fast(char_id);
+    const MslCommonParams* c = msl_common_params();
+    // The command interpreter immediately precedes this Anim callback. Consume its live
+    // cmd_vars[1] result and publish the rate used by the next AObj tick.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Anim
+    if (c != NULL && fighter_script_cmd_var(batch, idx, 1u) != 0u) {
+      const float speed_abs = msl_absf(batch->state.speed_ground_x_self[idx]);
+      if (batch->state.runbrake_freeze_x0[idx] == 0u) {
+        if (speed_abs >= c->runbrake_anim_freeze_speed_threshold) {
+          batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+          batch->state.runbrake_freeze_x0[idx] = 1u;
+        }
+      } else if (speed_abs <= c->runbrake_anim_freeze_speed_threshold) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
+        fighter_script_clear_cmd_var(batch, idx, 1u);
+      }
+    }
+    const uint32_t anim = batch->state.animation_index[idx];
+    if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
+      const uint8_t anim_has_frames =
+          (uint8_t)(!anim_finished(char_id, (uint16_t)anim, batch->state.anim_frame_f32[idx]));
+      const uint8_t timer_has_frames =
+          (uint8_t)(ch != NULL && ch->max_run_brake_frames > 0.0f &&
+                    ((float)batch->state.action_frame[idx] + 1.0f) < ch->max_run_brake_frames);
+      if (!(anim_has_frames != 0u && timer_has_frames != 0u)) {
+        // RunBrake_Anim resolves through ft_8008A2BC when either the AObj has no frames
+        // remaining or mv.co.runbrake.frames reaches zero. This runs in Fighter_8006A360 after
+        // the frame's animation advance and before RunBrake_IASA / Wait_IASA input callbacks.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
+        //   ftCo_RunBrake_Anim,ftCo_RunBrake_IASA}
+        batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+        batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+        batch->state.runbrake_freeze_x0[idx] = 0u;
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+      }
+    }
+  } else if (action_id == (uint16_t)MSL_ACT_TURN_RUN) {
+    // ftCo_TurnRun_Anim consumes live cmd_vars[1] after script interpretation. Its rate write
+    // affects the next AObj tick; the armed callback flips facing once the source velocity
+    // predicate is satisfied.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
+    if (fighter_script_cmd_var(batch, idx, 1u) != 0u) {
+      if (batch->state.turnrun_x14[idx] == 0u) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+        batch->state.turnrun_x14[idx] = 1u;
+      } else {
+        const float entry_facing = batch->state.facing_dir1[idx] < 0 ? -1.0f : 1.0f;
+        if (entry_facing * batch->state.speed_ground_x_self[idx] <= 0.01f) {
+          batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
+          fighter_script_clear_cmd_var(batch, idx, 1u);
+          batch->state.facing[idx] = batch->state.facing[idx] != 0u ? 0u : 1u;
+        }
+      }
+    }
+  } else if (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+             action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) {
+    const uint32_t anim = batch->state.animation_index[idx];
+    if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu &&
+        anim_finished(char_id, (uint16_t)anim, batch->state.anim_frame_f32[idx])) {
+      // JumpAerial_Anim runs before current-frame IASA. On terminal aerial-jump frames it
+      // enters FallAerial with Ft_MF_None, clearing fp->fall_fast before FallAerial_IASA can
+      // immediately consume AttackAir/EscapeAir input in the same Fighter_procUpdate.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{
+      //   ftCo_JumpAerial_Anim,ftCo_JumpAerial_IASA}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::ftCo_FallAerial_Enter
+      batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL_AERIAL;
+      batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL_AERIAL;
+      msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    }
+  }
+}
+
 void locomotion_update_anim_callbacks_pre_input(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -1731,98 +1828,37 @@ void locomotion_update_anim_callbacks_pre_input(MslBatch* batch) {
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      if (batch->state.hitlag[idx] != 0u) {
-        continue;
-      }
-      const uint16_t action_id = batch->state.action_id[idx];
-      const uint8_t char_id = batch->state.char_id[idx];
-      if (action_id == (uint16_t)MSL_ACT_ATTACK_100_START) {
-        // Attack100Start_Anim transitions to Attack100Loop during Fighter_8006A360, before
-        // Fighter_procUpdate runs the current-frame IASA callback.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Start_Anim
-        if (anim_finished(char_id, (uint16_t)MSL_SM_ATTACK_100_START,
-                          batch->state.anim_frame_f32[idx])) {
-          batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_100_LOOP;
-          batch->state.animation_index[idx] = (uint32_t)MSL_SM_ATTACK_100_LOOP;
-          batch->state.attack100_x0[idx] = 0u;
-          batch->state.attack100_x4[idx] = 0u;
-          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-        }
-      } else if (action_id == (uint16_t)MSL_ACT_ATTACK_100_LOOP) {
-        // Attack100Loop_Anim consumes the script-owned throw_flags_b3 checkpoint before the IASA
-        // callback can latch current-frame A input into mv.co.attack100.x4.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Loop_Anim
-        const float cur_anim = batch->state.anim_frame_f32[idx];
-        const float rate = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
-        if (cur_anim >= 0.0f && cur_anim < rate) {
-          batch->state.attack100_x0[idx] = 1u;
-          // Attack100Loop_Anim refreshes attack identity at the loop restart before script hitboxes
-          // are interpreted: ft_800892A0 bumps x206C for the same move id and ft_80089824 refreshes
-          // the action-state instance bookkeeping. The x206C bump is required so repeated rapid-jab
-          // hits can enter the stale queue as separate same-move instances.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Loop_Anim
-          // refs/melee/src/melee/ft/ft_0881.c::ft_800892A0
-          // refs/melee/src/melee/ft/ft_0892.c::ft_80089824
-          attack_identity_restart_same_move_ft_800892A0(batch, idx);
-        }
-        if (move_tables_attack100_loop_end_check_crossed(
-                char_id, batch->state.prev_action_frame[idx], batch->state.action_frame[idx])) {
-          if (batch->state.attack100_x0[idx] != 0u && batch->state.attack100_x4[idx] == 0u) {
-            batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_100_END;
-            batch->state.animation_index[idx] = (uint32_t)MSL_SM_ATTACK_100_END;
-            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-          } else {
-            batch->state.attack100_x4[idx] = 0u;
-          }
-        }
-      } else if (action_id == (uint16_t)MSL_ACT_ATTACK_100_END) {
-        // Attack100End_Anim resolves through ft_8008A2BC when the ending animation finishes.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100End_Anim
-        if (anim_finished(char_id, (uint16_t)MSL_SM_ATTACK_100_END,
-                          batch->state.anim_frame_f32[idx])) {
-          batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
-          batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
-          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-        }
-      } else if (action_id == (uint16_t)MSL_ACT_RUN_BRAKE) {
-        const MslCharParams* ch = msl_char_params_fast(char_id);
-        const uint32_t anim = batch->state.animation_index[idx];
-        if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
-          const uint8_t anim_has_frames =
-              (uint8_t)(!anim_finished(char_id, (uint16_t)anim, batch->state.anim_frame_f32[idx]));
-          const uint8_t timer_has_frames =
-              (uint8_t)(ch != NULL && ch->max_run_brake_frames > 0.0f &&
-                        ((float)batch->state.action_frame[idx] + 1.0f) < ch->max_run_brake_frames);
-          if (!(anim_has_frames != 0u && timer_has_frames != 0u)) {
-            // RunBrake_Anim resolves through ft_8008A2BC when either the AObj has no frames
-            // remaining or mv.co.runbrake.frames reaches zero. This runs in Fighter_8006A360 after
-            // the frame's animation advance and before RunBrake_IASA / Wait_IASA input callbacks.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
-            //   ftCo_RunBrake_Anim,ftCo_RunBrake_IASA}
-            batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
-            batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
-            batch->state.runbrake_freeze_x0[idx] = 0u;
-            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-          }
-        }
-      } else if (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
-                 action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) {
-        const uint32_t anim = batch->state.animation_index[idx];
-        if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu &&
-            anim_finished(char_id, (uint16_t)anim, batch->state.anim_frame_f32[idx])) {
-          // JumpAerial_Anim runs before current-frame IASA. On terminal aerial-jump frames it
-          // enters FallAerial with Ft_MF_None, clearing fp->fall_fast before FallAerial_IASA can
-          // immediately consume AttackAir/EscapeAir input in the same Fighter_procUpdate.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{
-          //   ftCo_JumpAerial_Anim,ftCo_JumpAerial_IASA}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c::ftCo_FallAerial_Enter
-          batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL_AERIAL;
-          batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL_AERIAL;
-          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-        }
-      }
+      locomotion_update_anim_callback_pre_input_fighter(batch, bi, p);
     }
+  }
+}
+
+void locomotion_reseed_anim_callback_state(MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_TURN_RUN) {
+    return;
+  }
+
+  // A replay seed is a post-fighter-proc snapshot. Once the source command seek reconstructs
+  // TurnRun's frame-9 cmd_vars[1], its Anim callback has already either frozen the AObj or resumed
+  // it and flipped facing. Slippi does not expose fp->frame_speed_mul; validation derives the rate
+  // from the preceding visible AObj delta, which is one callback phase behind at both edges.
+  // Reconstruct the real source state from the persistent command bit and the callback's visible
+  // facing result instead of carrying that lagged delta into the next proc.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::{
+  //   ftCo_TurnRun_Enter,ftCo_TurnRun_Anim}
+  // data/scripts/{fox,falco,marth,sheik,zelda,captain}.bin: TurnRun cmd_vars[1]
+  if (fighter_script_cmd_var(batch, idx, 1u) == 0u) {
+    batch->state.turnrun_x14[idx] = 0u;
+    return;
+  }
+
+  batch->state.turnrun_x14[idx] = 1u;
+  const uint8_t entry_facing = batch->state.facing_dir1[idx] < 0 ? 0u : 1u;
+  if (batch->state.facing[idx] == entry_facing) {
+    batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+  } else {
+    batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
+    fighter_script_clear_cmd_var(batch, idx, 1u);
   }
 }
 
@@ -1839,10 +1875,8 @@ uint8_t locomotion_wait_iasa_locomotion_subset_try_enter(
 }
 
 static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, const MslCharParams* ch,
-                                                           size_t idx, uint8_t char_id,
-                                                           uint16_t action_id_start,
-                                                           uint16_t action_id, uint16_t buttons,
-                                                           float script_frame) {
+                                                           size_t idx, uint16_t action_id_start,
+                                                           uint16_t action_id, uint16_t buttons) {
   if (batch == NULL) {
     return 0u;
   }
@@ -1896,22 +1930,26 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, cons
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
   if (ch != NULL && ch->rapid_jab_window > 0u &&
       batch->state.jab_rapid_count[idx] >= ch->rapid_jab_window &&
-      move_tables_jab_rapid_active(char_id, action_id, script_frame)) {
+      (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u) {
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_100_START;
     batch->state.animation_index[idx] = (uint32_t)MSL_SM_ATTACK_100_START;
     batch->state.jab_x0[idx] = 0u;
     batch->state.attack100_x0[idx] = 0u;
     batch->state.attack100_x4[idx] = 0u;
+    // ftCo_800D6B00 clears throw_flags and enters Attack100Start, but does not clear x2218_b2;
+    // the rapid-jab script gate remains published on the destination frame. The combo/interrupt
+    // gates are no longer owned after leaving Attack11/12/13.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Attack_800D6A50,ftCo_800D6B00}
     batch->state.state_flags[flags_i] &=
-        (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
-                             MSL_STATE_FLAG_2218_B2);
+        (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1);
     // Attack100Start entry goes through ftCo_800D6B00, which calls ftAnim_8006EBA4
     // immediately after Fighter_ChangeMotionState; the first visible start row is frame 1.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D6B00
     msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
     return 1u;
   }
-  const uint8_t jab_combo_active = move_tables_jab_combo_active(char_id, action_id, script_frame);
+  const uint8_t jab_combo_active =
+      (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_2218_B1) != 0u ? 1u : 0u;
   // Source input.x668 already folds raw Z into the A bit before Attack11/12 IASA reads it, so the
   // jab intent latch uses the same synthesized edge lane as grounded attack selectors.
   // refs/melee/src/melee/ft/fighter.c:1868-1896
@@ -1983,14 +2021,13 @@ static inline uint8_t guardon_powershield_reflect_preempts_platform_pass(const M
   // p_ftCommonData->x2A0 and the current input has an L/R edge. The platform-pass precheck below
   // is a sim ordering convenience, so it must yield to this earlier source owner.
   //
-  // Snapshot note matches action.c::guard_update_grounded: no-submotion GuardOn rows can expose
-  // action_frame < 0, but this guard.x0 predicate should treat that as the entry-like 0 frame.
+  // mv.co.guard.x0 is persistent callback-owned state; this precheck consumes the same lane as
+  // action.c's GuardOn_IASA owner rather than reconstructing it from replay animation fields.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
   //   ftCo_GuardOn_IASA,ftCo_80093694}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
   enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
-  const uint16_t guard_x0 =
-      (batch->state.action_frame[idx] < 0) ? 0u : (uint16_t)batch->state.action_frame[idx];
+  const uint16_t guard_x0 = batch->state.guard_anim_counter_x0[idx];
   return (uint8_t)(guard_x0 < (uint16_t)c->powershield_reflect_window_frames &&
                    (batch->state.input_buttons_pressed[idx] & (uint16_t)LR) != 0u &&
                    batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames);
@@ -3232,6 +3269,7 @@ static inline void enter_shieldbreak_down_from_floor_contact(MslBatch* batch,
   batch->state.speed_ground_x_self[idx] = gr;
   batch->state.speed_air_x_self[idx] = gr;
   batch->state.ecb_lock_timer[idx] = 0u;
+  batch->state.colanim_hit_status_x198c[idx] = 2u;
   batch->state.hurtbox_state[idx] = 2u;
 
   const uint8_t down_u = shieldbreak_down_faces_up(batch, idx, prev_action);
@@ -3319,17 +3357,31 @@ void locomotion_update_pre(MslBatch* batch) {
       const uint16_t action_id_start = action_id;
       uint8_t grounded_attack_input_callback_consumed = 0u;
 
-      // Compatibility pending-release bridge guard:
-      // - Normal runtime throw release detaches/damages the victim in the thrower's Anim callback.
-      //   Seed/reseed pending latches can still install a temporary Fall bridge consumed by
-      //   throw_flow_update_post_items().
-      // - In decomp, throw release/hit runs inside Throw Anim callback (`ftCo_800DD724` ->
-      //   `ftCo_800DDDE4`) before normal victim locomotion IASA has a chance to consume aerial
-      //   jump/attack inputs on that same release frame.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-      if (throw_flow_release_pending_for_victim(batch, bi, p)) {
-        continue;
+      // Standing wait animation owner (Anim callback phase, before IASA/Phys/Coll): Rebirth,
+      // RebirthWait, and Wait all call ftCo_8008A7A8 with ftData.x24. This is independent of the
+      // states' different timer and collision owners, and Rebirth/RebirthWait are ordinarily
+      // airborne, so it must not live under the grounded locomotion branch.
+      // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_Rebirth_Anim,ftCo_RebirthWait_Anim}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Anim
+      // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8,getAnimID}
+      const uint8_t uses_standing_wait_anim =
+          (uint8_t)(action_id == MSL_ACT_REBIRTH || action_id == MSL_ACT_REBIRTH_WAIT ||
+                    action_id == MSL_ACT_WAIT);
+      const uint32_t standing_wait_anim = batch->state.animation_index[idx];
+      if (uses_standing_wait_anim != 0u && standing_wait_anim <= 0xFFFFu &&
+          anim_finished(cid, (uint16_t)standing_wait_anim, batch->state.anim_frame_f32[idx])) {
+        const uint8_t replay_wait_rng_owner =
+            ((batch->rollout_clock_rng_owned != NULL &&
+              batch->rollout_clock_rng_owned[bi] == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) ||
+             (batch->replay_frame_rng_applied != NULL && batch->replay_frame_rng_applied[bi] != 0u))
+                ? 1u
+                : 0u;
+        if (replay_wait_rng_owner != 0u) {
+          locomotion_consume_deadupstar_effect_prefix_before_wait(batch, bi, p);
+        }
+        batch->state.animation_index[idx] =
+            choose_wait_anim_variant(batch, bi, ch, (uint16_t)standing_wait_anim);
+        msl_anim_timebase_restart(batch, idx, 0.0f, 1.0f);
       }
 
       // -------------------------
@@ -3526,37 +3578,6 @@ void locomotion_update_pre(MslBatch* batch) {
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             action_id = (uint16_t)MSL_ACT_WAIT;
           }
-        }
-
-        const uint8_t replay_wait_rng_owner =
-            ((batch->rollout_clock_rng_owned != NULL &&
-              batch->rollout_clock_rng_owned[bi] == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) ||
-             (batch->replay_frame_rng_applied != NULL && batch->replay_frame_rng_applied[bi] != 0u))
-                ? 1u
-                : 0u;
-        const uint32_t wait_anim = batch->state.animation_index[idx];
-        if (action_id == MSL_ACT_WAIT && wait_anim <= 0xFFFFu &&
-            anim_finished(cid, (uint16_t)wait_anim, batch->state.anim_frame_f32[idx])) {
-          // Wait_Anim does not simply let the AObj loop carry the visible frame past the end.
-          // It calls ftCo_8008A7A8, which restarts the current/selected wait subanimation through
-          // ftCo_8008A6D8 / ftAnim_8006EBE8. Character WaitStruct tables provide the weighted
-          // submotion choices; getAnimID consumes HSD_Randi(100)+1 for the source selection.
-          // The end gate belongs to the current visible Wait submotion's AObj; this is separate
-          // from the RNG-owned choice of the next Wait variant. Ordinary rollout may still choose a
-          // deterministic next variant when the roulette stream is not reconstructed, but it must
-          // not end the currently visible Wait2/Wait3 early using Wait1's duration.
-          // This is not Fighter_ChangeMotionState, so it must not run the motion-entry identity
-          // bundle (`ft_800895E0` / `plAttack_80037B08`) or bump fp->x2088.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Anim
-          // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8,getAnimID}
-          // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
-          if (replay_wait_rng_owner != 0u) {
-            locomotion_consume_deadupstar_effect_prefix_before_wait(batch, bi, p);
-          }
-          batch->state.animation_index[idx] =
-              choose_wait_anim_variant(batch, bi, ch, (uint16_t)batch->state.animation_index[idx]);
-          msl_anim_timebase_restart(batch, idx, 0.0f, 1.0f);
-          action_id = (uint16_t)MSL_ACT_WAIT;
         }
 
         {
@@ -3773,15 +3794,15 @@ void locomotion_update_pre(MslBatch* batch) {
             }
           }
           if (grounded_attack_submotion_from_action(cid, action_id) != 0xFFFFFFFFu) {
-            const float grounded_attack_script_frame = batch->state.anim_frame_f32[idx];
-            if (grounded_attack_try_jab_chain_subset(batch, ch, idx, cid, action_id_start,
-                                                     action_id, buttons,
-                                                     grounded_attack_script_frame)) {
+            if (grounded_attack_try_jab_chain_subset(batch, ch, idx, action_id_start, action_id,
+                                                     buttons)) {
               action_id = batch->state.action_id[idx];
             }
 
-            const uint8_t allow_interrupt = move_tables_grounded_attack_allow_interrupt(
-                cid, action_id, batch->state.anim_frame_f32[idx]);
+            const size_t flags_i =
+                idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+            const uint8_t allow_interrupt = (batch->state.state_flags[flags_i] &
+                                             (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) != 0u;
 
             uint8_t attackdash_pregate_consumed = 0u;
             if (action_id == (uint16_t)MSL_ACT_ATTACK_DASH) {
@@ -3886,9 +3907,6 @@ void locomotion_update_pre(MslBatch* batch) {
               if (act_before_guard == (uint16_t)MSL_ACT_ATTACK_DASH &&
                   action_id != (uint16_t)MSL_ACT_ATTACK_DASH) {
                 attackdash_guard_iasa_consumed = 1u;
-                if (grounded_attack_wait_iasa_interrupt_dest_action(action_id)) {
-                  grounded_attack_carry_allow_interrupt(batch, idx);
-                }
               }
             }
             uint8_t grounded_attack_guard_iasa_consumed = 0u;
@@ -3926,9 +3944,6 @@ void locomotion_update_pre(MslBatch* batch) {
               action_id = batch->state.action_id[idx];
               if (act_before_guard != action_id) {
                 grounded_attack_guard_iasa_consumed = 1u;
-                if (grounded_attack_wait_iasa_interrupt_dest_action(action_id)) {
-                  grounded_attack_carry_allow_interrupt(batch, idx);
-                }
               }
             }
             if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed &&
@@ -3986,10 +4001,6 @@ void locomotion_update_pre(MslBatch* batch) {
                   grounded_attack_guard_iasa_consumed = 1u;
                 }
               }
-              if (grounded_attack_guard_iasa_consumed &&
-                  grounded_attack_wait_iasa_interrupt_dest_action(action_id)) {
-                grounded_attack_carry_allow_interrupt(batch, idx);
-              }
             }
             if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed &&
                 !grounded_attack_guard_iasa_consumed && allow_interrupt &&
@@ -4018,10 +4029,6 @@ void locomotion_update_pre(MslBatch* batch) {
                 if (act_before_guard != action_id) {
                   grounded_attack_guard_iasa_consumed = 1u;
                 }
-              }
-              if (grounded_attack_guard_iasa_consumed &&
-                  grounded_attack_wait_iasa_interrupt_dest_action(action_id)) {
-                grounded_attack_carry_allow_interrupt(batch, idx);
               }
             }
             const uint8_t attackdash_specials_has_input =
@@ -4062,7 +4069,6 @@ void locomotion_update_pre(MslBatch* batch) {
               // data/common/ft_common_data.json: special_stick_y_threshold
               shine_enter_ground_start_from_iasa(batch, idx);
               action_id = batch->state.action_id[idx];
-              grounded_attack_carry_allow_interrupt(batch, idx);
             }
             if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed &&
                 !grounded_attack_guard_iasa_consumed && allow_interrupt &&
@@ -4084,7 +4090,6 @@ void locomotion_update_pre(MslBatch* batch) {
               // data/common/ft_common_data.json: special_stick_x_threshold_side
               enter_squat_immediate(batch, idx);
               action_id = batch->state.action_id[idx];
-              grounded_attack_carry_allow_interrupt(batch, idx);
             } else if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed &&
                        !grounded_attack_guard_iasa_consumed && allow_interrupt &&
                        attackdash_wait_iasa_enabled && !attackdash_specials_has_input &&
@@ -4093,9 +4098,6 @@ void locomotion_update_pre(MslBatch* batch) {
                                                        facing_dir)) {
               action_id = batch->state.action_id[idx];
               grounded_attack_input_callback_consumed = 1u;
-              if (grounded_attack_wait_iasa_interrupt_dest_action(action_id)) {
-                grounded_attack_carry_allow_interrupt(batch, idx);
-              }
             }
 
             if (grounded_attack_submotion_from_action(cid, action_id) != 0xFFFFFFFFu) {
@@ -4794,8 +4796,7 @@ void locomotion_update_pre(MslBatch* batch) {
           const float cur_anim_frame = batch->state.anim_frame_f32[idx];
           if (fn_800CAF78_check_input(batch, c, idx, buttons_pressed, stick_y, tilt_timer_y)) {
             action_id = (uint16_t)MSL_ACT_KNEE_BEND;
-          } else if (batch->state.runbrake_cmd0[idx] != 0u &&
-                     move_tables_runbrake_cmd0_active(cid, cur_anim_frame) != 0u &&
+          } else if (fighter_script_cmd_var(batch, idx, 0u) != 0u &&
                      (stick_x * facing_dir) <= c->turn_run_stick_x_threshold) {
             // Decomp: RunBrake IASA enters TurnRun via fn_800C9CEC only while cmd_vars[0] is enabled
             // by the RunBrake command script; TurnRun_Enter preserves the current anim frame. The
@@ -4810,7 +4811,6 @@ void locomotion_update_pre(MslBatch* batch) {
             // - data/moves/{fox,falco,marth}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN_RUN;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN_RUN;
-            batch->state.runbrake_cmd0[idx] = 0u;
             msl_anim_timebase_enter(batch, idx, cur_anim_frame, 1.0f);
             action_id = (uint16_t)MSL_ACT_TURN_RUN;
           } else if (ftco_squat_check_input(batch, c, idx, stick_y)) {
@@ -4954,7 +4954,7 @@ void locomotion_update_pre(MslBatch* batch) {
               // Source of truth for fp->cmd_vars[0] timing:
               // - data/moves/{fox,falco}.json moves["ftCo_SM_Dash"]["events"] set_cmd_var(idx=0).
               if (action_id == MSL_ACT_DASH && dash_checkinput_entered_dash == 0u &&
-                  move_tables_dash_cmd0_active(cid, cur_anim_frame)) {
+                  fighter_script_cmd_var(batch, idx, 0u) != 0u) {
                 const float stick_f = stick_x * facing_dir;
                 if (stick_f >= c->run_stick_x_threshold) {
                   batch->state.action_id[idx] = (uint16_t)MSL_ACT_RUN;
@@ -4978,7 +4978,7 @@ void locomotion_update_pre(MslBatch* batch) {
               locomotion_has_opponent_active_catch_connect_window(batch, bi, p, num_players);
           const uint8_t fresh_kneebend_from_prior_callback =
               (action_id_start != (uint16_t)MSL_ACT_KNEE_BEND ||
-               batch->state.guard_jump_oos_entered_this_frame[idx])
+               batch->state.frame_start_action_id[idx] != (uint16_t)MSL_ACT_KNEE_BEND)
                   ? 1u
                   : 0u;
 
@@ -5220,9 +5220,7 @@ void locomotion_update_pre(MslBatch* batch) {
       if (is_attack_air) {
         const uint32_t anim = batch->state.animation_index[idx];
         if (batch->state.on_ground[idx] == 0u && anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
-          if (move_tables_attackair_throw_flags_b3_crossed_fp(
-                  cid, action_id, batch->state.anim_frame_fp_q16_16[idx],
-                  batch->state.frame_speed_mul_fp_q16_16[idx])) {
+          if (fighter_script_take_throw_flag(batch, idx, 3u)) {
             batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
             facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
           }
@@ -5412,8 +5410,10 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
       } else if (is_attack_air) {
-        const uint8_t allow_interrupt =
-            move_tables_attackair_allow_interrupt(cid, action_id, batch->state.anim_frame_f32[idx]);
+        const size_t flags_i =
+            idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+        const uint8_t allow_interrupt = (batch->state.state_flags[flags_i] &
+                                         (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) != 0u;
 
         // Limited subset of DO_IASA for AttackAir* (only what we currently model):
         // - EscapeAir (airdodge)

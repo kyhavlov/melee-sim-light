@@ -8,119 +8,9 @@
 #include "../src/escapeair_collision_owner.h"
 #include "../src/ids.h"
 #include "../src/input_axis.h"
-#include "../src/move_tables.h"
 #include "../src/motion_state_owners.h"
 #include "../src/mpcoll_ecb_points.h"
-
-PyObject* msl_derive_guard_setoff_post_hitlag_owner_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* action_obj = NULL;
-  PyObject* phase_obj = NULL;
-  PyObject* flags_obj = NULL;
-  int act_guard_set_off = 0;
-  if (!PyArg_ParseTuple(args, "OOOi", &action_obj, &phase_obj, &flags_obj, &act_guard_set_off)) {
-    return NULL;
-  }
-  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id");
-  PyArrayObject* phase =
-      require_contiguous_array(phase_obj, NPY_UINT8, 1, "guard_setoff_hitlag_exit_phase_u8");
-  PyArrayObject* flags = require_contiguous_array(flags_obj, NPY_UINT8, 1, "state_flags_221c_u8");
-  if (action == NULL || phase == NULL || flags == NULL) return NULL;
-  const npy_intp n = PyArray_SIZE(action);
-  if (PyArray_SIZE(phase) != n || PyArray_SIZE(flags) != n) {
-    PyErr_SetString(PyExc_ValueError, "action_id/phase/state_flags_221c must have the same length");
-    return NULL;
-  }
-  npy_intp dims[1] = {n};
-  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
-  if (out == NULL) return NULL;
-  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
-  const uint8_t* ph = (const uint8_t*)PyArray_DATA(phase);
-  const uint8_t* fl = (const uint8_t*)PyArray_DATA(flags);
-  uint8_t* out_p = (uint8_t*)PyArray_DATA(out);
-  for (npy_intp i = 0; i < n; i++) {
-    if ((int)a[i] != act_guard_set_off) continue;
-    if (ph[i] != 2u && ph[i] != 3u) continue;
-    out_p[i] = (uint8_t)((fl[i] & 0x20u) != 0u ? 2u : 1u);
-  }
-  return (PyObject*)out;
-}
-
-PyObject* msl_derive_guard_setoff_exit_frame_speed_seed_lane_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* action_obj = NULL;
-  PyObject* hitlag_obj = NULL;
-  PyObject* frame_speed_obj = NULL;
-  int num_players = 0;
-  int act_guard_set_off = 0;
-  if (!PyArg_ParseTuple(args, "OOOii", &action_obj, &hitlag_obj, &frame_speed_obj, &num_players,
-                        &act_guard_set_off)) {
-    return NULL;
-  }
-  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 2, "action_id_u16");
-  PyArrayObject* hitlag = require_contiguous_array(hitlag_obj, NPY_UINT16, 2, "hitlag_u16");
-  PyArrayObject* frame_speed =
-      require_contiguous_array(frame_speed_obj, NPY_FLOAT32, 2, "frame_speed_mul_f32");
-  if (action == NULL || hitlag == NULL || frame_speed == NULL) return NULL;
-  const npy_intp n = PyArray_DIM(action, 0);
-  const npy_intp width = PyArray_DIM(action, 1);
-  if (PyArray_DIM(hitlag, 0) != n || PyArray_DIM(frame_speed, 0) != n ||
-      PyArray_DIM(hitlag, 1) != width || PyArray_DIM(frame_speed, 1) != width) {
-    PyErr_SetString(PyExc_ValueError, "GuardSetOff exit-rate inputs must have the same shape");
-    return NULL;
-  }
-  if (num_players < 0 || num_players > width) {
-    PyErr_SetString(PyExc_ValueError, "num_players is outside the input width");
-    return NULL;
-  }
-  npy_intp dims[2] = {n, width};
-  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(2, dims, NPY_FLOAT32, 0);
-  if (out == NULL) return NULL;
-
-  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
-  const uint16_t* hl = (const uint16_t*)PyArray_DATA(hitlag);
-  const float* rate = (const float*)PyArray_DATA(frame_speed);
-  float* out_p = (float*)PyArray_DATA(out);
-  for (int p = 0; p < num_players; p++) {
-    npy_intp i = 0;
-    while (i < n) {
-      const npy_intp idx = i * width + p;
-      if ((int)a[idx] != act_guard_set_off || hl[idx] == 0u) {
-        i++;
-        continue;
-      }
-
-      const npy_intp start = i;
-      while (i < n && (int)a[i * width + p] == act_guard_set_off && hl[i * width + p] > 0u) {
-        i++;
-      }
-      if (i >= n || (int)a[i * width + p] != act_guard_set_off || hl[i * width + p] != 0u) {
-        continue;
-      }
-
-      const float exit_rate = rate[i * width + p];
-      if (!(isfinite(exit_rate) && exit_rate > 0.0f)) {
-        continue;
-      }
-
-      // GuardSetOff hitlag hides the `fp->frame_speed_mul` value that source consumes when
-      // Fighter_8006A1BC exits hitlag and Fighter_8006A360 advances animation. The replay-visible
-      // first non-hitlag GuardSetOff row publishes that rate; seed it across the frozen segment,
-      // plus the immediately preceding shield-hit entry row, so rollouts that start before or
-      // inside the segment carry the same source-owned value until exit.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-      //   ftCo_80092F2C,ftCo_GuardSetOff_Anim}
-      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-      for (npy_intp j = start; j < i; j++) {
-        out_p[j * width + p] = exit_rate;
-      }
-      if (start > 0 && (int)a[(start - 1) * width + p] != act_guard_set_off) {
-        out_p[(start - 1) * width + p] = exit_rate;
-      }
-    }
-  }
-  return (PyObject*)out;
-}
+#include "../src/script_events.h"
 
 PyObject* msl_derive_run_x0_py(PyObject* self, PyObject* args) {
   (void)self;
@@ -165,60 +55,6 @@ PyObject* msl_derive_run_x0_py(PyObject* self, PyObject* args) {
       }
     }
     out_p[i] = (uint8_t)x0;
-  }
-  return (PyObject*)out;
-}
-
-PyObject* msl_derive_runbrake_cmd0_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* action_obj = NULL;
-  PyObject* anim_obj = NULL;
-  PyObject* char_obj = NULL;
-  PyObject* on_obj = NULL;
-  PyObject* off_obj = NULL;
-  int act_run_brake = 0;
-  if (!PyArg_ParseTuple(args, "OOOOOi", &action_obj, &anim_obj, &char_obj, &on_obj, &off_obj,
-                        &act_run_brake)) {
-    return NULL;
-  }
-  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
-  PyArrayObject* anim = require_contiguous_array(anim_obj, NPY_FLOAT32, 1, "anim_frame_f32");
-  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
-  if (action == NULL || anim == NULL || chr == NULL) return NULL;
-  const npy_intp n = PyArray_SIZE(action);
-  if (PyArray_SIZE(anim) != n || PyArray_SIZE(chr) != n) {
-    PyErr_SetString(PyExc_ValueError, "action_id_u16/anim_frame_f32/char_id_u8 must match length");
-    return NULL;
-  }
-  npy_intp dims[1] = {n};
-  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
-  if (out == NULL) return NULL;
-  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
-  const float* af = (const float*)PyArray_DATA(anim);
-  const uint8_t* cid = (const uint8_t*)PyArray_DATA(chr);
-  uint8_t* out_p = (uint8_t*)PyArray_DATA(out);
-  for (npy_intp i = 0; i < n; i++) {
-    if ((int)a[i] != act_run_brake) continue;
-    PyObject* key = PyLong_FromLong((long)cid[i]);
-    if (key == NULL) return NULL;
-    PyObject* on_val = PyObject_GetItem(on_obj, key);
-    PyObject* off_val = PyObject_GetItem(off_obj, key);
-    Py_DECREF(key);
-    if (on_val == NULL || off_val == NULL) {
-      PyErr_Clear();
-      Py_XDECREF(on_val);
-      Py_XDECREF(off_val);
-      continue;
-    }
-    const long start = PyLong_AsLong(on_val);
-    const long end = PyLong_AsLong(off_val);
-    Py_DECREF(on_val);
-    Py_DECREF(off_val);
-    if (PyErr_Occurred()) return NULL;
-    if (start < 0 || end < 0 || end < start) continue;
-    if (isfinite(af[i]) && af[i] >= (float)start && af[i] < (float)end) {
-      out_p[i] = 1u;
-    }
   }
   return (PyObject*)out;
 }
@@ -1079,6 +915,15 @@ PyObject* msl_derive_smash_charge_seed_lanes_py(PyObject* self, PyObject* args) 
       hitlag == NULL || hitstun == NULL || buttons == NULL) {
     return NULL;
   }
+  if (script_events_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "script_events_init failed for smash-charge seed lanes");
+    return NULL;
+  }
+  if (motion_state_owners_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError,
+                    "motion_state_owners_init failed for smash-charge seed lanes");
+    return NULL;
+  }
   const npy_intp n = PyArray_SIZE(action);
   if (PyArray_SIZE(chr) != n || PyArray_SIZE(anim) != n || PyArray_SIZE(frame_speed) != n ||
       PyArray_SIZE(on_ground) != n || PyArray_SIZE(hitlag) != n || PyArray_SIZE(hitstun) != n ||
@@ -1087,11 +932,6 @@ PyObject* msl_derive_smash_charge_seed_lanes_py(PyObject* self, PyObject* args) 
                     "smash-charge arrays must have matching one-dimensional length");
     return NULL;
   }
-  if (move_tables_init() != 0) {
-    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed for smash-charge seed lanes");
-    return NULL;
-  }
-
   npy_intp dims[1] = {n};
   PyArrayObject* out_state = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
   PyArrayObject* out_frames = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
@@ -1154,9 +994,11 @@ PyObject* msl_derive_smash_charge_seed_lanes_py(PyObject* self, PyObject* args) 
       }
     } else if (state == 0u) {
       const float prev_frame = (act[i] == prev_action) ? prev_anim : af[i] - fs[i];
-      if (ground[i] != 0u && hl[i] == 0u && hs[i] == 0u && held_a != 0u &&
-          move_tables_grounded_smash_charge_crossed(ch[i], act[i], prev_frame, af[i],
-                                                    &hold_frames)) {
+      const uint16_t msid = msl_motion_state_submotion_id(ch[i], act[i]);
+      const MslScriptEvent* charge = script_events_first_crossed(
+          ch[i], msid, MSL_SCRIPT_EVENT_START_SMASH_CHARGE, prev_frame, af[i]);
+      if (ground[i] != 0u && hl[i] == 0u && hs[i] == 0u && held_a != 0u && charge != NULL) {
+        hold_frames = charge->payload.smash_charge.hold_frames;
         state = 2u;
         frames = 0u;
         hold = hold_frames;
@@ -1959,14 +1801,19 @@ PyObject* msl_derive_attack100_seed_latches_py(PyObject* self, PyObject* args) {
       pressed == NULL) {
     return NULL;
   }
+  if (script_events_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "script_events_init failed for Attack100 seed latches");
+    return NULL;
+  }
+  if (motion_state_owners_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError,
+                    "motion_state_owners_init failed for Attack100 seed latches");
+    return NULL;
+  }
   const npy_intp n = PyArray_SIZE(action);
   if (PyArray_SIZE(chr) != n || PyArray_SIZE(action_frame) != n || PyArray_SIZE(hitlag) != n ||
       PyArray_SIZE(released) != n || PyArray_SIZE(pressed) != n) {
     PyErr_SetString(PyExc_ValueError, "Attack100 latch inputs must have equal lengths");
-    return NULL;
-  }
-  if (move_tables_init() != 0) {
-    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed for Attack100 seed latches");
     return NULL;
   }
   npy_intp dims[1] = {n};
@@ -2001,7 +1848,9 @@ PyObject* msl_derive_attack100_seed_latches_py(PyObject* self, PyObject* args) {
         x0 = 0u;
         x4 = 0u;
       }
-      if (move_tables_attack100_loop_end_check_crossed(c[i], prev_action_frame, af[i]) != 0u) {
+      const uint16_t loop_msid = msl_motion_state_submotion_id(c[i], cur);
+      if (script_events_first_crossed(c[i], loop_msid, MSL_SCRIPT_EVENT_SET_THROW_FLAGS,
+                                      (float)prev_action_frame, (float)af[i]) != NULL) {
         // Attack100Loop_Anim consumes mv.co.attack100.x4 before the current IASA callback.
         // If replay remains in the Loop state after this checkpoint, either x4 saved the loop or
         // the callback did not take the pickup branch; both source paths clear x4 post-callback.

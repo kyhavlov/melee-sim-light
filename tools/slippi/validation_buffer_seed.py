@@ -14,10 +14,8 @@ from tools.slippi.validation_buffer_common import (  # noqa: F401
     COMPARE_DTYPE,
     INPUT_DTYPE,
     SEED_DTYPE,
-    load_action_state_tables,
     hitstun_u16_from_misc_as_and_state_flags3,
     item_article_kind_set,
-    item_article_values_by_sim_char,
     STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT,
     dream_whispy_metadata,
     fountain_of_dreams_default_platform_heights,
@@ -424,36 +422,13 @@ def _respawn_point_y_for_stage_port(*, stage_id: int, port0: int, data_dir: str=
         return 0.0
     return float(points[port0])
 
-def _load_throw_pulse_seed_tables(*, data_root, throw_action_to_move: dict[int, str]) -> tuple[dict[tuple[int, int], tuple[int, ...]], dict[tuple[int, int], int], dict[int, int]]:
-    """
-    Load throw pulse/cmd timing metadata.
-
-    Source of truth:
-    - data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"]
-      - set_throw_spawn_projectile
-      - set_cmd_var(idx=1,value=1)
-    """
-    pulse_frames_by_char_action: dict[tuple[int, int], tuple[int, ...]] = {}
-    cmd1_start_by_char_action: dict[tuple[int, int], int] = {}
-    shot_itkind_by_char: dict[int, int] = {}
-    for char_id, key in ((1, 'fox'), (22, 'falco')):
-        moves = _load_moves_file(data_root, key)['moves']
-        shot_itkind_by_char[int(char_id)] = int(item_article_values_by_sim_char(data_root, 'blaster_shot_itkind').get(int(char_id), 0))
-        for action_id, move_name in throw_action_to_move.items():
-            events = moves.get(move_name, {}).get('events', [])
-            pulses = sorted((int(ev.get('frame', 0)) for ev in events if ev.get('kind') == 'set_throw_spawn_projectile'))
-            pulse_frames_by_char_action[int(char_id), int(action_id)] = tuple(pulses)
-            cmd1_set_on = sorted((int(ev.get('frame', 0)) for ev in events if ev.get('kind') == 'set_cmd_var' and int((ev.get('data') or {}).get('idx', -1)) == 1 and (int((ev.get('data') or {}).get('value', -1)) == 1)))
-            cmd1_start_by_char_action[int(char_id), int(action_id)] = int(cmd1_set_on[0]) if cmd1_set_on else -1
-    return (pulse_frames_by_char_action, cmd1_start_by_char_action, shot_itkind_by_char)
-
 @functools.lru_cache(maxsize=None)
 def _load_specialn_loop_cmd0_windows(*, data_root) -> dict[tuple[int, int], tuple[int, int]]:
     """Load Fox/Falco SpecialN Loop raw cmd_var[0] windows from MSLFTSC1 script data.
 
-    Runtime uses move_tables_special_cmd0_active_at_frame() for the live IASA latch check, but
-    that helper intentionally includes a small latch-clear tail. Replay seed reconstruction must
-    use the raw script interval only: a B edge after the source clear frame does not prove
+    Runtime consumes this command through the live fighter-script cursor and retains a small
+    latch-clear tail. Replay seed reconstruction must use the raw script interval only: a B edge
+    after the source clear frame does not prove
     `mv.fx.SpecialN.isBlasterLoop` was live when Loop_Anim reached anim-end.
 
     Source: refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
@@ -487,155 +462,110 @@ def _load_specialn_loop_cmd0_windows(*, data_root) -> dict[tuple[int, int], tupl
                 windows[int(char_id), int(msid)] = (int(on_frame), int(off_frame))
     return windows
 
-@functools.lru_cache(maxsize=None)
-def _load_runbrake_cmd0_seed_tables(*, data_root) -> tuple[dict[int, int], dict[int, int]]:
-    """Load RunBrake cmd_var[0] timing from extracted move scripts.
+def _derive_source_clear_motion_state_entry_events(
+    *,
+    seed_u8: np.ndarray,
+    prev_input_u8: np.ndarray,
+    input_u8: np.ndarray,
+    num_players: int,
+    ucf_enabled: bool,
+    ucf_cardinals_1_0_enabled: bool,
+    source_clear_init_frames: int,
+    chunk_size: int = 256,
+) -> np.ndarray:
+    """Observe x18C8 writers by stepping the ordinary runtime once per teacher-forced seed.
 
-    Source of truth:
-    - data/moves/{fox,falco}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0)
+    A Slippi post-frame row cannot expose intermediate same-frame MotionStates. In particular, an
+    Anim callback can enter grounded Wait (x9_b1), start x18C8, and then an IASA callback can enter
+    another state before the row is recorded. The simulator already owns that callback ordering;
+    use it directly instead of duplicating transition/action lists in preprocessing.
+
+    This is native batched teacher-forced reconstruction of real hidden source state. Python only
+    schedules fixed-size chunks; there is no per-frame Python derivation.
+    refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
     """
-    cmd0_on_by_char: dict[int, int] = {}
-    cmd0_off_by_char: dict[int, int] = {}
-    from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS_RB
-    for char_id, key in ((info.internal_id, info.name) for info in _REGISTRY_CHARS_RB.values()):
-        moves = _load_moves_file(data_root, key)['moves']
-        events = moves.get('ftCo_SM_RunBrake', {}).get('events', [])
-        cmd0_on = sorted((int(ev.get('frame', 0)) for ev in events if ev.get('kind') == 'set_cmd_var' and int((ev.get('data') or {}).get('idx', -1)) == 0 and (int((ev.get('data') or {}).get('value', -1)) != 0)))
-        cmd0_off = sorted((int(ev.get('frame', 0)) for ev in events if ev.get('kind') == 'set_cmd_var' and int((ev.get('data') or {}).get('idx', -1)) == 0 and (int((ev.get('data') or {}).get('value', -1)) == 0)))
-        cmd0_on_by_char[int(char_id)] = int(cmd0_on[0]) if cmd0_on else -1
-        cmd0_off_by_char[int(char_id)] = int(cmd0_off[0]) if cmd0_off else -1
-    return (cmd0_on_by_char, cmd0_off_by_char)
+    try:
+        import msl_binding
+    except ImportError as exc:
+        raise RuntimeError('native msl_binding is required; run `make build`') from exc
 
-@functools.lru_cache(maxsize=None)
-def _load_source_clear_terminal_followup_tables(*, data_root) -> tuple[dict[tuple[int, int], int], dict[tuple[int, int], int]]:
-    """Load command-script phase gates for source-clear terminal followups.
+    seed = _ascontiguousarray(seed_u8, dtype=np.uint8)
+    prev = _ascontiguousarray(prev_input_u8, dtype=np.uint8)
+    current = _ascontiguousarray(input_u8, dtype=np.uint8)
+    if seed.ndim != 2 or prev.ndim != 2 or current.ndim != 2:
+        raise ValueError('runtime source-clear probe inputs must be 2D uint8 arrays')
+    if prev.shape[0] != seed.shape[0] or current.shape[0] != seed.shape[0]:
+        raise ValueError('runtime source-clear probe row counts differ')
+    n = int(seed.shape[0])
+    out = np.zeros((n, 4), dtype=np.uint8)
+    if n == 0 or int(source_clear_init_frames) <= 0:
+        return out
 
-    Source of truth:
-    - data/moves/{fox,falco}.json moves["ftCo_SM_*"]["events"]
-      - set_cmd_var(idx=0,value=1/0)
-      - clear_hitboxes (for AttackHi3 continuation cutoff)
-    - extracted from fighter subaction scripts in Pl*.dat.
-    refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
-    """
-    action_to_move = {65: 'ftCo_SM_AttackAirN', 69: 'ftCo_SM_AttackAirLw', 236: 'ftCo_SM_EscapeAir', 56: 'ftCo_SM_AttackHi3'}
-    cmd0_on_by_char_action: dict[tuple[int, int], int] = {}
-    cmd0_off_by_char_action: dict[tuple[int, int], int] = {}
-    from tools.extraction.char_registry import CHARS as _REGISTRY_CHARS_CA
-    for char_id, key in ((info.internal_id, info.name) for info in _REGISTRY_CHARS_CA.values()):
-        moves = _load_moves_file(data_root, key)['moves']
-        for action_id, move_name in action_to_move.items():
-            events = moves.get(move_name, {}).get('events', [])
-            cmd0_on = sorted((int(ev.get('frame', 0)) for ev in events if ev.get('kind') == 'set_cmd_var' and int((ev.get('data') or {}).get('idx', -1)) == 0 and (int((ev.get('data') or {}).get('value', -1)) == 1)))
-            cmd0_off = sorted((int(ev.get('frame', 0)) for ev in events if ev.get('kind') == 'set_cmd_var' and int((ev.get('data') or {}).get('idx', -1)) == 0 and (int((ev.get('data') or {}).get('value', -1)) == 0)))
-            if int(action_id) == 56 and (not cmd0_off):
-                clear_hitboxes = sorted((int(ev.get('frame', 0)) for ev in events if ev.get('kind') == 'clear_hitboxes'))
-                cmd0_off = clear_hitboxes
-            cmd0_on_by_char_action[int(char_id), int(action_id)] = int(cmd0_on[0]) if cmd0_on else -1
-            cmd0_off_by_char_action[int(char_id), int(action_id)] = int(cmd0_off[0]) if cmd0_off else -1
-    return (cmd0_on_by_char_action, cmd0_off_by_char_action)
+    cap = max(1, min(int(chunk_size), n))
+    seed_chunk = np.empty((cap, seed.shape[1]), dtype=np.uint8)
+    prev_chunk = np.empty((cap, prev.shape[1]), dtype=np.uint8)
+    input_chunk = np.empty((cap, current.shape[1]), dtype=np.uint8)
+    handle = msl_binding.init(
+        batch_size=cap,
+        num_players=int(num_players),
+        ucf_enabled=int(bool(ucf_enabled)),
+        ucf_cardinals_1_0_enabled=int(bool(ucf_cardinals_1_0_enabled)),
+    )
+    try:
+        for start in range(0, n, cap):
+            stop = min(start + cap, n)
+            count = stop - start
+            seed_chunk[:count] = seed[start:stop]
+            prev_chunk[:count] = prev[start:stop]
+            input_chunk[:count] = current[start:stop]
+            if count < cap:
+                seed_chunk[count:] = seed_chunk[count - 1]
+                prev_chunk[count:] = prev_chunk[count - 1]
+                input_chunk[count:] = input_chunk[count - 1]
+            msl_binding.reseed_seed(handle, seed_chunk)
+            msl_binding.step_input(handle, prev_chunk, input_chunk)
+            timer = msl_binding.validation_source_clear_timer_state(handle)
+            out[start:stop] = (
+                np.asarray(timer[:count], dtype=np.uint8) == np.uint8(source_clear_init_frames)
+            )
+    finally:
+        msl_binding.destroy(handle)
+    return out
 
-@functools.lru_cache(maxsize=None)
-def _load_action_x9_b1_tables(*, data_root) -> dict[int, np.ndarray]:
-    """Load decomp MotionState.x9_b1 tables for supported chars from MSLACID1 v3.
 
-    Source of truth:
-    - data/attack_id/move_id/{fox,falco}.bin `motion_state_word` table.
-    - Derived from decomp MotionState initializers.
-    - refs/melee/src/melee/ft/types.h::MotionState
-    - refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
-    """
-    return {char_id: table.x9_b1 for char_id, table in load_action_state_tables(str(data_root)).items()}
-
-def _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(*, action_id_u16: np.ndarray, char_id_u8: np.ndarray, on_ground_u8: np.ndarray, state_flags_u8: np.ndarray, last_hit_by_u8: np.ndarray, x9_b1_by_char: dict[int, np.ndarray], source_clear_init_frames: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Derive strictly-causal x18C8 countdown + owner-set phase lane.
+def _derive_source_clear_timer_x18c8_seed_lane(*, state_flags_u8: np.ndarray, last_hit_by_u8: np.ndarray, hitlag_u16: np.ndarray, hitstun_u16: np.ndarray, instance_hit_by_u16: np.ndarray, percent_f32: np.ndarray, motion_state_entry_event_u8: np.ndarray, source_clear_init_frames: int) -> np.ndarray:
+    """Derive the real hidden x18C8 countdown from its source writers and timer owner.
 
     Decomp ownership:
-    - Fighter_ChangeMotionState seeds `dmg.x18C8 = p_ftCommonData->x814` iff
-      grounded && new_motion_state->x9_b1 && dmg.x18C8 == -1.
-    - Fighter_8006A360 decrements x18C8 under !fp->x221F_b3; when it reaches -1, clears source owner.
+    - Fighter_ChangeMotionState seeds `dmg.x18C8 = p_ftCommonData->x814` iff grounded,
+      new_motion_state->x9_b1, and dmg.x18C8 == -1. The entry-event lane is observed by stepping
+      the ordinary runtime, so hidden same-frame intermediate MotionStates are retained.
+    - Every ftColl_8007861C damage-source write resets x18C8 to -1, including same-port hits.
+    - Fighter_8006A360 decrements x18C8 under !fp->x221F_b3; at zero it clears source owner.
     refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+    refs/melee/src/melee/ft/ftcoll.c::ftColl_8007861C
     refs/melee/src/melee/ft/types.h::MotionState (x9_b1)
     refs/melee/src/melee/ft/types.h (fp+0x221F bitfields; b3 gate)
     refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (state_flags byte at fp+0x221F)
 
-    Seed representation:
-    - timer lane:
-      - 0 => inactive (decomp internal -1)
-      - N>0 => decomp internal countdown + 1
-    - owner phase lane:
-      - 0 => current active x18C8 run was not preceded by a causal source-owner set edge.
-      - 1 => current active x18C8 run was preceded by a source-owner set edge (t-1 -> t).
-
-    Owner-set edge model (strictly causal):
-    - Slippi `last_hit_by` mirrors `dmg.x18C4_source_ply` snapshots.
-    - Treat 6 -> owner transitions as source-owner acquire edges.
-    - Carry that edge as pending context until owner is cleared back to 6; when x18C8 starts,
-      mark the active run as edge-backed only if a pending edge exists.
-    refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-    refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
-    """
-    max_actions = max((int(tbl.shape[0]) for tbl in x9_b1_by_char.values()), default=0)
-    x9_lut = np.zeros((256, max_actions), dtype=np.uint8)
-    for cid, tbl in x9_b1_by_char.items():
-        arr = np.asarray(tbl, dtype=np.uint8).reshape(-1)
-        x9_lut[int(cid) & 255, :int(arr.shape[0])] = arr
-    try:
-        import msl_binding
-    except ImportError as exc:
-        raise RuntimeError('native msl_binding.derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes is required; run `make build`') from exc
-    return msl_binding.derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1), np.asarray(char_id_u8, dtype=np.uint8).reshape(-1), np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1), _ascontiguousarray(state_flags_u8, dtype=np.uint8), np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1), x9_lut, int(source_clear_init_frames))
-
-def _derive_source_clear_grounded_damage_clear_phase_seed_lane(*, action_id_u16: np.ndarray, action_frame_i16: np.ndarray, on_ground_u8: np.ndarray, hitlag_u16: np.ndarray, hitstun_u16: np.ndarray, combo_count_u8: np.ndarray, source_clear_timer_x18c8_u8: np.ndarray, source_clear_owner_set_phase_u8: np.ndarray, state_flags_u8: np.ndarray, last_hit_by_u8: np.ndarray) -> np.ndarray:
-    """Derive one-step grounded source-owner clear phase bridge.
-
-    Decomp ownership:
-    - ftCommon_800804FC clears source-owner and disables x18C8 on grounded paths.
-    - Fighter_ProcessHit ownership can invoke that grounded clear path before the next snapshot.
-    refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-    refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-    refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-
-    Seed representation:
-    - 0: no grounded clear-phase override.
-    - 1: consume grounded clear before x18C8 decrement for this one-step row.
-
-    Causality:
-    - Strictly causal: uses only t and (t-1 -> t) lanes.
+    Seed representation is direct: 0 means decomp -1, N>0 is the live countdown. Source-port,
+    source-instance, and damage/hitlag edges are the replay-visible evidence of ftColl_8007861C's
+    otherwise hidden write. The derivation is prefix-causal and does not inspect the reference row.
     """
     try:
         import msl_binding
     except ImportError as exc:
-        raise RuntimeError('native msl_binding.derive_source_clear_grounded_damage_clear_phase_seed_lane is required; run `make build`') from exc
-    return msl_binding.derive_source_clear_grounded_damage_clear_phase_seed_lane(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1), np.asarray(action_frame_i16, dtype=np.int16).reshape(-1), np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1), np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1), np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1), np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1), np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1), np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1), _ascontiguousarray(state_flags_u8, dtype=np.uint8), np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1))
-
-def _derive_source_clear_processhit_damage_pending_phase_seed_lane(*, action_id_u16: np.ndarray, action_frame_i16: np.ndarray, on_ground_u8: np.ndarray, hitlag_u16: np.ndarray, hitstun_u16: np.ndarray, combo_count_u8: np.ndarray, last_attack_landed_u8: np.ndarray, source_clear_timer_x18c8_u8: np.ndarray, source_clear_owner_set_phase_u8: np.ndarray, colanim_hit_status_x198c_u8: np.ndarray, state_flags_u8: np.ndarray, last_hit_by_u8: np.ndarray) -> np.ndarray:
-    """Derive one-step hidden ProcessHit damage-pending source-clear bridge.
-
-    Decomp ownership:
-    - Fighter_ProcessHit consumes callback-owned damage state and can route grounded source-owner
-      clear through ftCommon_800804FC before the next post-frame snapshot.
-    refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-    refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-    refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-
-    Seed representation:
-    - 0: no ProcessHit-owned clear override.
-    - 1: consume source-owner clear before x18C8 decrement for this one-step row.
-
-    Current producer policy:
-    - Foundational/runtime-neutral only.
-    - Keep the explicit seed lane plumbed end-to-end, but do not materialize positive rows until a
-      generic decomp-causal separator exists for the hidden ownership work at this site.
-    - This avoids replay-shaped row/action/timer fitting in validation-buffer generation.
-
-    Causality:
-    - Strictly causal: validate current-row preconditions only, never future frames.
-    """
-    try:
-        import msl_binding
-    except ImportError as exc:
-        raise RuntimeError('native msl_binding.derive_source_clear_processhit_damage_pending_phase_seed_lane is required; run `make build`') from exc
-    return msl_binding.derive_source_clear_processhit_damage_pending_phase_seed_lane(_ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)), _ascontiguousarray(state_flags_u8, dtype=np.uint8))
+        raise RuntimeError('native msl_binding.derive_source_clear_timer_x18c8_seed_lane is required; run `make build`') from exc
+    return msl_binding.derive_source_clear_timer_x18c8_seed_lane(
+        _ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        _ascontiguousarray(np.asarray(last_hit_by_u8).reshape(-1), dtype=np.uint8),
+        _ascontiguousarray(np.asarray(hitlag_u16).reshape(-1), dtype=np.uint16),
+        _ascontiguousarray(np.asarray(hitstun_u16).reshape(-1), dtype=np.uint16),
+        _ascontiguousarray(np.asarray(instance_hit_by_u16).reshape(-1), dtype=np.uint16),
+        _ascontiguousarray(np.asarray(percent_f32).reshape(-1), dtype=np.float32),
+        _ascontiguousarray(np.asarray(motion_state_entry_event_u8).reshape(-1), dtype=np.uint8),
+        int(source_clear_init_frames),
+    )
 
 def _derive_phantom_damage_pending_seed_lanes(*, percent_f32: np.ndarray, hitlag_u16: np.ndarray, action_id_u16: np.ndarray, instance_hit_by_u16: np.ndarray, instance_id_u16: np.ndarray, num_players: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Derive hidden fighter phantom/tip-log damage pending at one-step reseed boundaries.
@@ -663,111 +593,3 @@ def _derive_phantom_damage_pending_seed_lanes(*, percent_f32: np.ndarray, hitlag
     except ImportError as exc:
         raise RuntimeError('native msl_binding.derive_phantom_damage_pending_seed_lanes is required; run `make build`') from exc
     return msl_binding.derive_phantom_damage_pending_seed_lanes(np.asarray(percent_f32, dtype=np.float32), np.asarray(hitlag_u16, dtype=np.uint16), np.asarray(action_id_u16, dtype=np.uint16), np.asarray(instance_hit_by_u16, dtype=np.uint16), np.asarray(instance_id_u16, dtype=np.uint16), int(num_players))
-
-def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(*, action_id_u16: np.ndarray, action_frame_i16: np.ndarray, ref_action_id_u16: np.ndarray, on_ground_u8: np.ndarray, hitlag_u16: np.ndarray, hitstun_u16: np.ndarray, state_flags_u8: np.ndarray, last_hit_by_u8: np.ndarray, all_source_port0_u8: np.ndarray, all_action_id_u16: np.ndarray, all_action_frame_i16: np.ndarray, all_ref_action_id_u16: np.ndarray | None=None, all_on_ground_u8: np.ndarray | None=None, all_hitlag_u16: np.ndarray | None=None, all_hitstun_u16: np.ndarray | None=None, all_last_hit_by_u8: np.ndarray | None=None, all_ref_last_hit_by_u8: np.ndarray | None=None, frame_pre_random_seed_u32: np.ndarray, damagefly_roll_prob: float, victim_port: int, num_players: int, allow_grounded_kneebend: bool=False) -> np.ndarray:
-    """Derive the explicit Fighter_8006CDA4 pre-gate HSD_Randi consume count.
-
-    Decomp ownership:
-    - Fighter_8006CDA4 runs before ftCo_8008DCE0 block_33 and can advance the global RNG stream
-      through one or more HSD_Randi calls.
-    refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-    refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
-
-    Why this is an explicit seed lane rather than a replay-visible owner reconstruction:
-    - The decomp branch depends on hidden fighter internals (`item_gobj`, `x1978`, `x197C`,
-      `x2220_b3`, `x2220_b4`, `x2226_b2`, and `ftCo_8008E984(fp)`).
-    - Slippi post-frames do not expose those fighter-owned pointers/booleans directly, so the
-      minimal replay-facing representation is the total pre-gate consume count itself.
-    refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-    refs/melee/src/melee/ft/types.h
-    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E984
-    refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-
-    Seed representation:
-    - 0: no seeded pre-gate Fighter_8006CDA4 consume ownership on this row.
-    - 1: consume one pre-gate HSD_Randi before the DamageFlyRoll gate.
-    - 2: consume two pre-gate HSD_Randi calls before the DamageFlyRoll gate.
-    - 3: consume all three decomp-visible pre-gate HSD_Randi calls before the DamageFlyRoll gate.
-    - 4: source-proven zero-consume gate; admit the gate without a pre-gate stream advance.
-
-    Current producer policy:
-    - Materialize the replay-real families that are currently separable by strict-causal current-row
-      context without replay-keyed lookup:
-      * AttackAirB airborne carry -> one consume
-      * ThrownF grounded-hitlag carry with x221A_b3 latched -> two consumes
-      * DamageFlyTop airborne carry while the live source owner is still in the steady AttackAirB
-        window -> two consumes
-      * DamageFlyTop AttackAirB early/steady rows where the replay-visible RNG outcome proves the
-        hidden held-item/x197C stream phase -> explicit zero-consume marker or one to three
-        consumes
-      * Catch-family severe-airborne damage entry rows where the replay-visible RNG outcome proves
-        the hidden held-item/x197C stream phase -> explicit zero-consume marker or one to three
-        consumes
-      * FoD grounded KneeBend severe-airborne damage entry rows, currently scoped to the grIzumi
-        validation owner where the same hidden stream phase is replay-visible without causing
-        non-FoD rollout reshaping.
-
-    Causality:
-    - Runtime remains causal: it consumes only this explicit stream-phase lane.
-    - Validation-buffer derivation uses `ref_t1.action_id` only to infer hidden Fighter_8006CDA4 stream phase
-      where Slippi does not expose the consume-critical held-item/x197C internals.
-    """
-    if all_ref_action_id_u16 is None:
-        all_ref_action_id_u16 = np.asarray(all_action_id_u16, dtype=np.uint16)
-    if all_on_ground_u8 is None:
-        all_on_ground_u8 = np.broadcast_to(np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1, 1), np.asarray(all_action_id_u16).shape)
-    if all_hitlag_u16 is None:
-        all_hitlag_u16 = np.broadcast_to(np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1, 1), np.asarray(all_action_id_u16).shape)
-    if all_hitstun_u16 is None:
-        all_hitstun_u16 = np.broadcast_to(np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1, 1), np.asarray(all_action_id_u16).shape)
-    if all_last_hit_by_u8 is None:
-        all_last_hit_by_u8 = np.broadcast_to(np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1, 1), np.asarray(all_action_id_u16).shape)
-    if all_ref_last_hit_by_u8 is None:
-        all_ref_last_hit_by_u8 = all_last_hit_by_u8
-    try:
-        import msl_binding
-    except ImportError as exc:
-        raise RuntimeError('native msl_binding.derive_fighter_8006cda4_pre_gate_consume_count is required; run `make build`') from exc
-    return msl_binding.derive_fighter_8006cda4_pre_gate_consume_count(_ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)), _ascontiguousarray(np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)), _ascontiguousarray(np.asarray(ref_action_id_u16, dtype=np.uint16).reshape(-1)), _ascontiguousarray(np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)), _ascontiguousarray(np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)), _ascontiguousarray(np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)), _ascontiguousarray(state_flags_u8, dtype=np.uint8), _ascontiguousarray(np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)), _ascontiguousarray(all_source_port0_u8, dtype=np.uint8), _ascontiguousarray(all_action_id_u16, dtype=np.uint16), _ascontiguousarray(all_action_frame_i16, dtype=np.int16), _ascontiguousarray(all_ref_action_id_u16, dtype=np.uint16), _ascontiguousarray(all_on_ground_u8, dtype=np.uint8), _ascontiguousarray(all_hitlag_u16, dtype=np.uint16), _ascontiguousarray(all_hitstun_u16, dtype=np.uint16), _ascontiguousarray(all_last_hit_by_u8, dtype=np.uint8), _ascontiguousarray(all_ref_last_hit_by_u8, dtype=np.uint8), _ascontiguousarray(np.asarray(frame_pre_random_seed_u32, dtype=np.uint32).reshape(-1)), float(damagefly_roll_prob), int(victim_port), int(num_players), int(bool(allow_grounded_kneebend)))
-
-def _derive_source_clear_terminal_phase_seed_lane(*, char_id_u8: np.ndarray, action_id_u16: np.ndarray, action_frame_i16: np.ndarray, hitlag_u16: np.ndarray, hitstun_u16: np.ndarray, combo_count_u8: np.ndarray, last_attack_landed_u8: np.ndarray, source_clear_timer_x18c8_u8: np.ndarray, source_clear_owner_set_phase_u8: np.ndarray, state_flags_u8: np.ndarray, last_hit_by_u8: np.ndarray, terminal_followup_cmd0_on_by_char_action: dict[tuple[int, int], int], terminal_followup_cmd0_off_by_char_action: dict[tuple[int, int], int]) -> np.ndarray:
-    """Derive one-step terminal phase lane for source-owner clear/parking.
-
-    Decomp ownership:
-    - Fighter_8006A360 owns x18C8 countdown + terminal source-owner clear in proc-prio-1.
-      Some terminal callback contexts park the source owner while retiring the countdown.
-    - Slippi `last_hit_by` mirrors `dmg.x18C4_source_ply` snapshots.
-    refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-    refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-
-    Seed representation:
-    - 0: default terminal-clear behavior at `source_clear_timer_x18c8 == 1`.
-    - 1: park source owner and retire the countdown on this row.
-
-    Producer policy (narrow, replay-causal):
-    - only on terminal timer rows (`t == 1`) under !x221F_b3,
-    - only when the active timer run is backed by a causal source-owner set phase edge,
-    - only from present/past lanes (`t` and `t-1`), never future frames,
-    - only for source/provenance classes accepted by the native seed-bridge predicate,
-    - only in stable ongoing ownership context:
-      - no active hitlag/hitstun at `t` (runtime already has explicit hitstun defer),
-      - prior row continuity (`timer 2->1`, same owner, same action progression),
-      - active combo provenance (`combo_count > 0 && last_attack_landed > 0`).
-
-    This keeps derivation strict-causal for one-step reseed. Validation-inferred action/frame/flag
-    distinctions are seed/provenance bridge inputs, not free-running gameplay predicates.
-    refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
-    """
-    max_action = max([*(int(action) for _, action in terminal_followup_cmd0_on_by_char_action.keys()), *(int(action) for _, action in terminal_followup_cmd0_off_by_char_action.keys()), 0])
-    cmd0_on = np.full((256, max_action + 1), -1, dtype=np.int16)
-    cmd0_off = np.full((256, max_action + 1), -1, dtype=np.int16)
-    for (cid, action), frame in terminal_followup_cmd0_on_by_char_action.items():
-        cmd0_on[int(cid) & 255, int(action)] = np.int16(int(frame))
-    for (cid, action), frame in terminal_followup_cmd0_off_by_char_action.items():
-        cmd0_off[int(cid) & 255, int(action)] = np.int16(int(frame))
-    try:
-        import msl_binding
-    except ImportError as exc:
-        raise RuntimeError('native msl_binding.derive_source_clear_terminal_phase_seed_lane is required; run `make build`') from exc
-    return msl_binding.derive_source_clear_terminal_phase_seed_lane(_ascontiguousarray(np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)), _ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)), _ascontiguousarray(np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)), _ascontiguousarray(np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)), _ascontiguousarray(np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)), _ascontiguousarray(np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1)), _ascontiguousarray(np.asarray(last_attack_landed_u8, dtype=np.uint8).reshape(-1)), _ascontiguousarray(np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1)), _ascontiguousarray(np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1)), _ascontiguousarray(state_flags_u8, dtype=np.uint8), _ascontiguousarray(np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)), cmd0_on, cmd0_off)

@@ -15,7 +15,6 @@ void action_update(MslBatch* batch);
 // Pre-input Anim-callback phase (decomp-shaped prio 1 callbacks that do not depend on current-frame
 // input edge processing). Runs after anim timebase/timers pre-input updates and before input_apply().
 void action_update_anim_callback_pre_input_fighter(const MslFighterCallbackContext* ctx);
-void action_update_anim_callbacks_pre_input_global(MslBatch* batch);
 
 // ----------------
 // Guard / shielding

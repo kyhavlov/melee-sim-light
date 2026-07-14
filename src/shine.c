@@ -19,10 +19,8 @@
 #include "locomotion.h"
 #include "motion_state_owners.h"
 #include "mpcoll_floor_skip.h"
-#include "move_tables.h"
 #include "special_msids.h"
 #include "stage_collision.h"
-#include "throw_flow.h"
 
 static inline uint8_t char_owns_shine_machine(uint8_t char_id) {
   // Data-driven machine admission: a character enters the SpecialLw (shine) machine iff
@@ -282,9 +280,6 @@ static inline uint8_t action_allows_shine_entry_air(const MslBatch* batch, size_
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::DO_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_IASA
-  if (throw_flow_release_source_blocks_iasa(batch, idx, action_id)) {
-    return 0u;
-  }
   switch (action_id) {
     case MSL_ACT_JUMP_F:
     case MSL_ACT_JUMP_B:
@@ -466,20 +461,15 @@ static inline void enter_shine_ground_start(MslBatch* batch, size_t idx,
   // The general hurtbox_state overwrite rule in hurtboxes_refresh() defers x1988 on entry frames
   // for post-Anim transitions; Shine Start is a known exception with a decomp anchor, so apply
   // the table-derived hit status immediately here.
-  uint8_t hit_status = 0;
+  uint8_t hit_status = batch->state.script_hit_status_x1988[idx];
   if (batch->debug_hit_status_override != NULL) {
     const uint8_t ov = batch->debug_hit_status_override[idx];
     if (ov != 0xFFu) {
       hit_status = ov;
-    } else {
-      (void)move_tables_hit_status_at_frame(batch->state.char_id[idx],
-                                            (uint16_t)ms->speciallw_ground_start, 0u, &hit_status);
     }
-  } else {
-    (void)move_tables_hit_status_at_frame(batch->state.char_id[idx],
-                                          (uint16_t)ms->speciallw_ground_start, 0u, &hit_status);
   }
   if (hit_status != 0u) {
+    batch->state.script_hit_status_x1988[idx] = hit_status;
     batch->state.hurtbox_state[idx] = hit_status;
   }
 }
@@ -510,20 +500,15 @@ static inline void enter_shine_air_start(MslBatch* batch, size_t idx, const MslC
   msl_anim_timebase_tick_once(batch, idx);
 
   // See enter_shine_ground_start() for the decomp-backed "run cmd script on entry" exception.
-  uint8_t hit_status = 0;
+  uint8_t hit_status = batch->state.script_hit_status_x1988[idx];
   if (batch->debug_hit_status_override != NULL) {
     const uint8_t ov = batch->debug_hit_status_override[idx];
     if (ov != 0xFFu) {
       hit_status = ov;
-    } else {
-      (void)move_tables_hit_status_at_frame(batch->state.char_id[idx],
-                                            (uint16_t)ms->speciallw_air_start, 0u, &hit_status);
     }
-  } else {
-    (void)move_tables_hit_status_at_frame(batch->state.char_id[idx],
-                                          (uint16_t)ms->speciallw_air_start, 0u, &hit_status);
   }
   if (hit_status != 0u) {
+    batch->state.script_hit_status_x1988[idx] = hit_status;
     batch->state.hurtbox_state[idx] = hit_status;
   }
 }
@@ -1116,6 +1101,7 @@ void shine_update_post_collision(MslBatch* batch) {
         if (ch != NULL) {
           batch->state.jumps_left[idx] = (ch->max_jumps > 0u) ? (uint8_t)(ch->max_jumps - 1u) : 0u;
         }
+        msl_anim_timebase_enter(batch, idx, cur_frame, 1.0f);
         if (special_lw_start_platform_pass != 0u) {
           // The post-collision ground->air remap also sees the platform-pass form after mpColl has
           // already produced `pass_vel_y`. Unlike ordinary SpecialLwStart_GroundToAir,
@@ -1126,7 +1112,6 @@ void shine_update_post_collision(MslBatch* batch) {
           batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] |=
               (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
         }
-        msl_anim_timebase_enter(batch, idx, cur_frame, 1.0f);
       } else if (action_is_shine_air(cid, a) && on_ground) {
         // Air -> ground: preserve anim frame.
         const MslCharParams* ch = msl_char_params_fast(cid);

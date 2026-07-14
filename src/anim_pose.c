@@ -12,22 +12,35 @@
 #include "alloc.h"
 #include "anim_frame.h"
 #include "batch_internal.h"
+#include "fighter_pose.h"
 #include "msl_math.h"
+#include "shield_tilt_table.h"
+
+#if defined(__linux__)
+extern void sincosf(float angle, float* sin_out, float* cos_out);
+#endif
+
+static inline void anim_pose_sincosf(float angle, float* sin_out, float* cos_out) {
+#if defined(__linux__)
+  sincosf(angle, sin_out, cos_out);
+#elif defined(__APPLE__)
+  __sincosf(angle, sin_out, cos_out);
+#else
+  *sin_out = sinf(angle);
+  *cos_out = cosf(angle);
+#endif
+}
 
 // SSANIM01 v5 is written by tools/extraction/extract_fighter_anims.py.
 enum {
   ANIM_MAGIC_LEN = 8,
   ANIM_HDR_BASE_BYTES = 16,  // magic[8] + ver[u32] + joint_count[u16] + anim_count[u16]
   ANIM_VERSION_V5 = 5,
-  ANIM_DYN_VERSION_V4 = 4,
-  ANIM_DYN_VERSION_V5 = 5,
-  ANIM_DYN_VERSION_V6 = 6,
-  ANIM_DYN_VERSION_V7 = 7,
-  ANIM_DYN_VERSION_V8 = 8,
+  ANIM_DYN_VERSION_V9 = 9,
   MAT_BYTES = 12 * 4,              // float32[12] (3x4)
   TRANSN_BYTES_PER_FRAME = 3 * 4,  // float32[3] v4 tail (TransN/root translation)
 
-  // SSDYNN01 v8 is written by tools/extraction/extract_fighter_anims.py.
+  // SSDYNN01 v9 is written by tools/extraction/extract_fighter_anims.py.
   //
   // RL1.0 target data contract:
   // - Fox ftData.x2C has exactly one dynamic bone set rooted at part 17.
@@ -46,6 +59,13 @@ static const uint8_t k_anim_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'A', 'N', 'I', 'M
 typedef struct {
   uint16_t part_id;
   float c[15];
+  float rest_rot[3];
+  float rest_pos[3];
+  float rest_scl[3];
+  float natural_basis[9];
+  float rest_len;
+  float max_step_cos;
+  float cone_cos;
 } MslAnimDynNodeData;
 
 typedef struct {
@@ -100,19 +120,26 @@ typedef struct {
   uint16_t dyn_collider_count;
   MslAnimDynSetData dyn_sets[ANIM_DYN_MAX_SETS];
   MslAnimDynColliderData dyn_colliders[ANIM_DYN_MAX_COLLIDERS];
-  uint8_t* dyn_collision_have_msid;        // [65536], extracted SSDYNN01 collision-owner index
-  uint8_t* dyn_cone_have_msid;             // [65536], extracted descriptor +0x68 cone-owner index
-  uint8_t* dyn_catch_grabbable_have_msid;  // [65536], extracted Catch grabbable owner index
+  uint8_t* dyn_disabled_have_msid;  // [65536], ftData animation-entry x594_b3 owner
 
   uint8_t* track_buf;
   size_t track_sz;
   uint16_t track_local_count;
   uint16_t track_anim_count;
-  uint16_t* track_part_to_index;               // [65536]
-  uint16_t* track_msid_to_anim_index;          // [65536], 0xFFFF if missing
-  uint32_t* track_part_record_off_by_anim_li;  // [track_anim_count * track_local_count]
-  uint32_t* exact_local_base_by_msid;          // [65536], float offset or UINT32_MAX
-  float* exact_integer_locals;                 // source-interpreted common-Fall local SRTs
+  uint16_t* track_part_to_index;                  // [65536]
+  uint16_t* track_msid_to_anim_index;             // [65536], 0xFFFF if missing
+  uint32_t* track_part_record_off_by_anim_li;     // [track_anim_count * track_local_count]
+  uint8_t* dyn_rotation_track_mask_by_anim_node;  // [track_anim_count * dynamic-node cap]
+  uint32_t* exact_local_base_by_msid;             // [65536], float offset or UINT32_MAX
+  float* exact_integer_locals;                    // source-interpreted common-Fall local SRTs
+  uint8_t* dyn_exact_index_by_local;              // [local_count], UINT8_MAX if not dynamics-owned
+  uint32_t* dyn_exact_base_by_msid;               // [65536], float offset or UINT32_MAX
+  float* dyn_exact_integer_locals;                // source-interpreted dynamics closure local SRTs
+  float* dyn_exact_owner_matrices;  // exact-frame local matrices for collider/root-parent owners
+  uint16_t dyn_exact_matrix_parts[ANIM_DYN_MAX_COLLIDERS + ANIM_DYN_MAX_SETS];
+  uint8_t dyn_exact_parent_matrix_index[ANIM_DYN_MAX_SETS];
+  uint8_t dyn_exact_matrix_count;
+  uint8_t dyn_exact_part_count;
 
   uint8_t have;
 } MslAnimPoseTable;
@@ -121,6 +148,49 @@ static MslAnimPoseTable g_table_by_char[256];
 static int g_loaded = 0;
 
 static int build_exact_integer_local_cache(MslAnimPoseTable* t);
+static int build_dynamic_exact_integer_local_cache(MslAnimPoseTable* t);
+static int build_dynamic_rotation_track_masks(MslAnimPoseTable* t);
+static uint8_t local_rotation_track_mask(const MslAnimPoseTable* t, uint16_t msid,
+                                         uint16_t part_id);
+static void dynamic_rotation_basis(const float rot[3], float out[9]);
+static int matrix_from_locals_f32(const MslAnimPoseTable* t, uint16_t msid, float anim_frame,
+                                  uint16_t part_id, float out_3x4[12]);
+
+static uint8_t track_msid_uses_root_motion(const MslAnimPoseTable* t, uint16_t msid) {
+  if (t == NULL || t->track_buf == NULL || t->track_msid_to_anim_index == NULL ||
+      t->track_part_record_off_by_anim_li == NULL || t->track_local_count == 0u) {
+    return 0u;
+  }
+  const uint16_t ai = t->track_msid_to_anim_index[msid];
+  if (ai == UINT16_MAX || ai >= t->track_anim_count) {
+    return 0u;
+  }
+  // SSANIMT1 stores `uses_root_motion` as the final byte of each animation header, immediately
+  // before that animation's first part record. Keep the existing record-offset index as the sole
+  // lookup substrate rather than allocating a duplicate 65k-entry flag table.
+  // tools/extraction/extract_fighter_anims.py::extract_one_character (SSANIMT1 writer)
+  const uint32_t first_record =
+      t->track_part_record_off_by_anim_li[(size_t)ai * (size_t)t->track_local_count];
+  return first_record > 0u && (uint64_t)first_record <= (uint64_t)t->track_sz
+             ? (uint8_t)(t->track_buf[(size_t)first_record - 1u] != 0u)
+             : 0u;
+}
+
+static inline void live_jobj_consume_transn_translation(const MslAnimPoseTable* t, uint16_t msid,
+                                                        uint16_t part_id, float pos[3]) {
+  if (part_id != 1u || pos == NULL || track_msid_uses_root_motion(t, msid) == 0u) {
+    return;
+  }
+  // ftAnim_8006E054 consumes TransN translation into x68C/x6A4 and then clears the live JObj
+  // local translation before collision, shield, or attachment code samples a world matrix. Keep
+  // the raw extracted local available to root-motion physics, but clear it at every live-JObj
+  // composition boundary. Integer SSANIM01 matrices already contain this consumed pose.
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E054
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState (x594_b0)
+  pos[0] = 0.0f;
+  pos[1] = 0.0f;
+  pos[2] = 0.0f;
+}
 
 uint32_t anim_pose_data_schema_version(void) { return 2u; }
 
@@ -584,15 +654,18 @@ static void free_table(MslAnimPoseTable* t) {
   alloc_free(t->local_have_msid);
   alloc_free(t->local_frame_count_by_msid);
   alloc_free(t->local_base_off_by_msid);
-  alloc_free(t->dyn_collision_have_msid);
-  alloc_free(t->dyn_cone_have_msid);
-  alloc_free(t->dyn_catch_grabbable_have_msid);
+  alloc_free(t->dyn_disabled_have_msid);
   alloc_free(t->track_buf);
   alloc_free(t->track_part_to_index);
   alloc_free(t->track_msid_to_anim_index);
   alloc_free(t->track_part_record_off_by_anim_li);
+  alloc_free(t->dyn_rotation_track_mask_by_anim_node);
   alloc_free(t->exact_local_base_by_msid);
   alloc_free(t->exact_integer_locals);
+  alloc_free(t->dyn_exact_index_by_local);
+  alloc_free(t->dyn_exact_base_by_msid);
+  alloc_free(t->dyn_exact_integer_locals);
+  alloc_free(t->dyn_exact_owner_matrices);
   alloc_free(t->buf);
   *t = (MslAnimPoseTable){0};
 }
@@ -789,7 +862,6 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   if (n <= 0 || (size_t)n >= sizeof(path)) {
     return -1;
   }
-
   FILE* f = fopen(path, "rb");
   if (f == NULL) {
     return 1;
@@ -799,11 +871,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
     return -1;
   }
   const long sz_long = ftell(f);
-  if (sz_long <= 0) {
-    fclose(f);
-    return -1;
-  }
-  if (fseek(f, 0, SEEK_SET) != 0) {
+  if (sz_long <= 0 || fseek(f, 0, SEEK_SET) != 0) {
     fclose(f);
     return -1;
   }
@@ -821,28 +889,27 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
     return -1;
   }
 
+  uint8_t* disabled_have_msid = NULL;
+  uint16_t seen_nodes = 0u;
+  uint16_t collider_count = 0u;
   static const uint8_t dyn_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'D', 'Y', 'N', 'N', '0', '1'};
-  const uint32_t ver = (sz >= ANIM_HDR_BASE_BYTES) ? read_u32_le(buf + 8) : 0u;
+  const uint32_t ver = sz >= ANIM_HDR_BASE_BYTES ? read_u32_le(buf + 8) : 0u;
   if (sz < ANIM_HDR_BASE_BYTES || memcmp(buf, dyn_magic, ANIM_MAGIC_LEN) != 0 ||
-      ver != ANIM_DYN_VERSION_V8) {
-    alloc_free(buf);
-    return -1;
+      ver != ANIM_DYN_VERSION_V9) {
+    goto fail;
   }
   const uint16_t set_count = read_u16_le(buf + 12);
   const uint16_t total_nodes = read_u16_le(buf + 14);
   if (set_count > (uint16_t)ANIM_DYN_MAX_SETS || total_nodes > (uint16_t)MSL_MAX_DYNAMIC_NODES) {
-    alloc_free(buf);
-    return -1;
+    goto fail;
   }
 
   size_t off = ANIM_HDR_BASE_BYTES;
-  uint16_t seen_nodes = 0;
   memset(t->dyn_sets, 0, sizeof(t->dyn_sets));
   memset(t->dyn_colliders, 0, sizeof(t->dyn_colliders));
-  for (uint16_t si = 0; si < set_count; si++) {
+  for (uint16_t si = 0u; si < set_count; si++) {
     if (off + 16u > sz) {
-      alloc_free(buf);
-      return -1;
+      goto fail;
     }
     MslAnimDynSetData* set = &t->dyn_sets[si];
     set->root_part = read_u16_le(buf + off);
@@ -851,177 +918,99 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
     set->pos[1] = read_f32_le(buf + off + 8u);
     set->pos[2] = read_f32_le(buf + off + 12u);
     off += 16u;
-    if (set->node_count > (uint16_t)MSL_MAX_DYNAMIC_NODES) {
-      alloc_free(buf);
-      return -1;
+    if (set->node_count > (uint16_t)MSL_MAX_DYNAMIC_NODES ||
+        (uint32_t)seen_nodes + (uint32_t)set->node_count > (uint32_t)total_nodes) {
+      goto fail;
     }
-    if ((uint32_t)seen_nodes + (uint32_t)set->node_count > (uint32_t)total_nodes) {
-      alloc_free(buf);
-      return -1;
-    }
-    for (uint16_t ni = 0; ni < set->node_count; ni++) {
-      if (off + 64u > sz) {
-        alloc_free(buf);
-        return -1;
+    for (uint16_t ni = 0u; ni < set->node_count; ni++) {
+      if (off + 100u > sz) {
+        goto fail;
       }
-      set->nodes[ni].part_id = read_u16_le(buf + off);
-      off += 4u;  // part + pad
-      for (uint16_t ci = 0; ci < 15u; ci++) {
-        set->nodes[ni].c[ci] = read_f32_le(buf + off + (size_t)ci * 4u);
+      MslAnimDynNodeData* node = &set->nodes[ni];
+      node->part_id = read_u16_le(buf + off);
+      off += 4u;
+      for (uint8_t ci = 0u; ci < 15u; ci++) {
+        node->c[ci] = read_f32_le(buf + off + (size_t)ci * 4u);
       }
       off += 15u * 4u;
+      for (uint8_t axis = 0u; axis < 3u; axis++) {
+        node->rest_rot[axis] = read_f32_le(buf + off + (size_t)axis * 4u);
+        node->rest_pos[axis] = read_f32_le(buf + off + 12u + (size_t)axis * 4u);
+        node->rest_scl[axis] = read_f32_le(buf + off + 24u + (size_t)axis * 4u);
+      }
+      dynamic_rotation_basis(&node->c[2], node->natural_basis);
+      node->rest_len =
+          sqrtf(node->rest_pos[0] * node->rest_pos[0] + node->rest_pos[1] * node->rest_pos[1] +
+                node->rest_pos[2] * node->rest_pos[2]);
+      node->max_step_cos = cosf(node->c[14]);
+      node->cone_cos = cosf(node->c[6]);
+      off += 9u * 4u;
     }
     seen_nodes = (uint16_t)(seen_nodes + set->node_count);
   }
-  uint8_t* dyn_collision_have_msid = NULL;
-  uint8_t* dyn_cone_have_msid = NULL;
-  uint8_t* dyn_catch_grabbable_have_msid = NULL;
-  if (off + 4u > sz) {
-    alloc_free(buf);
-    return -1;
-  }
-  const uint16_t collision_msid_count = read_u16_le(buf + off);
-  off += 4u;  // collision_msid_count + reserved
-  if (off + (size_t)collision_msid_count * 2u > sz) {
-    alloc_free(buf);
-    return -1;
-  }
-  dyn_collision_have_msid = (uint8_t*)alloc_calloc(65536, 1);
-  if (dyn_collision_have_msid == NULL) {
-    alloc_free(buf);
-    return -1;
-  }
-  for (uint16_t i = 0; i < collision_msid_count; i++) {
-    const uint16_t msid = read_u16_le(buf + off + (size_t)i * 2u);
-    dyn_collision_have_msid[msid] = 1u;
-  }
-  off += (size_t)collision_msid_count * 2u;
-  dyn_cone_have_msid = (uint8_t*)alloc_calloc(65536, 1);
-  if (dyn_cone_have_msid == NULL) {
-    alloc_free(buf);
-    alloc_free(dyn_collision_have_msid);
-    return -1;
-  }
-  if (off + 4u > sz) {
-    alloc_free(buf);
-    alloc_free(dyn_collision_have_msid);
-    alloc_free(dyn_cone_have_msid);
-    return -1;
-  }
-  const uint16_t source_step_msid_count = read_u16_le(buf + off);
-  off += 4u;  // source_step_msid_count + reserved
-  if (source_step_msid_count != 0u) {
-    // SSDYNN01 v8 reserves a source-step owner index, but this stack intentionally hard-disables
-    // the runtime mode after the DamageAir2 source-step attempt was rejected. Non-empty artifacts
-    // must fail loudly until the full source-order dynamic/AObj owner is implemented.
-    alloc_free(buf);
-    alloc_free(dyn_collision_have_msid);
-    alloc_free(dyn_cone_have_msid);
-    return -1;
-  }
-  if (off + (size_t)source_step_msid_count * 2u > sz) {
-    alloc_free(buf);
-    alloc_free(dyn_collision_have_msid);
-    alloc_free(dyn_cone_have_msid);
-    return -1;
-  }
-  off += (size_t)source_step_msid_count * 2u;
-  if (off + 4u > sz) {
-    alloc_free(buf);
-    alloc_free(dyn_collision_have_msid);
-    alloc_free(dyn_cone_have_msid);
-    return -1;
-  }
-  const uint16_t cone_msid_count = read_u16_le(buf + off);
-  off += 4u;  // cone_msid_count + reserved
-  if (off + (size_t)cone_msid_count * 2u > sz) {
-    alloc_free(buf);
-    alloc_free(dyn_collision_have_msid);
-    alloc_free(dyn_cone_have_msid);
-    return -1;
-  }
-  for (uint16_t i = 0; i < cone_msid_count; i++) {
-    const uint16_t msid = read_u16_le(buf + off + (size_t)i * 2u);
-    if (!dyn_collision_have_msid[msid]) {
-      alloc_free(buf);
-      alloc_free(dyn_collision_have_msid);
-      alloc_free(dyn_cone_have_msid);
-      return -1;
+
+  // Four empty v8 probe-owner headers are reserved during the v9 artifact transition. They must
+  // stay empty: x594_b3 is the sole per-motion owner in the source-shaped runtime.
+  for (uint8_t legacy = 0u; legacy < 4u; legacy++) {
+    if (off + 4u > sz || read_u16_le(buf + off) != 0u) {
+      goto fail;
     }
-    dyn_cone_have_msid[msid] = 1u;
-  }
-  off += (size_t)cone_msid_count * 2u;
-  dyn_catch_grabbable_have_msid = (uint8_t*)alloc_calloc(65536, 1);
-  if (dyn_catch_grabbable_have_msid == NULL) {
-    alloc_free(buf);
-    alloc_free(dyn_collision_have_msid);
-    alloc_free(dyn_cone_have_msid);
-    return -1;
+    off += 4u;
   }
   if (off + 4u > sz) {
-    alloc_free(buf);
-    alloc_free(dyn_collision_have_msid);
-    alloc_free(dyn_cone_have_msid);
-    alloc_free(dyn_catch_grabbable_have_msid);
-    return -1;
+    goto fail;
   }
-  const uint16_t catch_grabbable_msid_count = read_u16_le(buf + off);
-  off += 4u;  // catch_grabbable_msid_count + reserved
-  if (off + (size_t)catch_grabbable_msid_count * 2u > sz) {
-    alloc_free(buf);
-    alloc_free(dyn_collision_have_msid);
-    alloc_free(dyn_cone_have_msid);
-    alloc_free(dyn_catch_grabbable_have_msid);
-    return -1;
+  const uint16_t disabled_count = read_u16_le(buf + off);
+  off += 4u;
+  if (off + (size_t)disabled_count * 2u > sz) {
+    goto fail;
   }
-  for (uint16_t i = 0; i < catch_grabbable_msid_count; i++) {
-    const uint16_t msid = read_u16_le(buf + off + (size_t)i * 2u);
-    dyn_catch_grabbable_have_msid[msid] = 1u;
+  disabled_have_msid = (uint8_t*)alloc_calloc(65536, 1);
+  if (disabled_have_msid == NULL) {
+    goto fail;
   }
-  off += (size_t)catch_grabbable_msid_count * 2u;
+  for (uint16_t i = 0u; i < disabled_count; i++) {
+    disabled_have_msid[read_u16_le(buf + off + (size_t)i * 2u)] = 1u;
+  }
+  off += (size_t)disabled_count * 2u;
+
   if (off + 4u > sz) {
-    alloc_free(buf);
-    alloc_free(dyn_collision_have_msid);
-    alloc_free(dyn_cone_have_msid);
-    alloc_free(dyn_catch_grabbable_have_msid);
-    return -1;
+    goto fail;
   }
-  const uint16_t collider_count = read_u16_le(buf + off);
-  off += 4u;  // collider_count + reserved
+  collider_count = read_u16_le(buf + off);
+  off += 4u;
   if (collider_count > (uint16_t)ANIM_DYN_MAX_COLLIDERS ||
       off + (size_t)collider_count * 20u > sz) {
-    alloc_free(buf);
-    alloc_free(dyn_collision_have_msid);
-    alloc_free(dyn_cone_have_msid);
-    alloc_free(dyn_catch_grabbable_have_msid);
-    return -1;
+    goto fail;
   }
-  for (uint16_t ci = 0; ci < collider_count; ci++) {
+  for (uint16_t ci = 0u; ci < collider_count; ci++) {
     MslAnimDynColliderData* col = &t->dyn_colliders[ci];
     col->part_id = read_u16_le(buf + off);
-    off += 4u;  // part + pad
+    off += 4u;
     col->offset[0] = read_f32_le(buf + off);
     col->offset[1] = read_f32_le(buf + off + 4u);
     col->offset[2] = read_f32_le(buf + off + 8u);
     col->radius = read_f32_le(buf + off + 12u);
     off += 16u;
   }
-  alloc_free(buf);
   if (off != sz || seen_nodes != total_nodes) {
-    alloc_free(dyn_collision_have_msid);
-    alloc_free(dyn_cone_have_msid);
-    alloc_free(dyn_catch_grabbable_have_msid);
-    return -1;
+    goto fail;
   }
+
+  alloc_free(buf);
   t->dyn_set_count = set_count;
   t->dyn_total_nodes = total_nodes;
   t->dyn_collider_count = collider_count;
-  t->dyn_collision_have_msid = dyn_collision_have_msid;
-  t->dyn_cone_have_msid = dyn_cone_have_msid;
-  t->dyn_catch_grabbable_have_msid = dyn_catch_grabbable_have_msid;
+  t->dyn_disabled_have_msid = disabled_have_msid;
   return 0;
-}
 
+fail:
+  alloc_free(disabled_have_msid);
+  alloc_free(buf);
+  memset(t->dyn_sets, 0, sizeof(t->dyn_sets));
+  memset(t->dyn_colliders, 0, sizeof(t->dyn_colliders));
+  return -1;
+}
 static int load_tracks_into_table(const char* data_dir, const char* rel_path, MslAnimPoseTable* t) {
   if (data_dir == NULL || rel_path == NULL || t == NULL) {
     return -1;
@@ -1417,6 +1406,16 @@ static int load_pose_for_char(const char* data_dir, const char* rel_path, uint8_
       free_table(&next);
       return -1;
     }
+    if (track_status == 0 && build_dynamic_exact_integer_local_cache(&next) != 0) {
+      fprintf(stderr, "msl: anim dynamics local cache build failed: %s/%s\n", data_dir, tracks_rel);
+      free_table(&next);
+      return -1;
+    }
+    if (track_status == 0 && build_dynamic_rotation_track_masks(&next) != 0) {
+      fprintf(stderr, "msl: anim dynamics track-mask build failed: %s/%s\n", data_dir, tracks_rel);
+      free_table(&next);
+      return -1;
+    }
   }
 
   // Replace any existing table for this character.
@@ -1714,6 +1713,179 @@ static int build_exact_integer_local_cache(MslAnimPoseTable* t) {
   return 0;
 }
 
+static int dynamic_exact_add_closure(const MslAnimPoseTable* t, uint16_t part_id,
+                                     uint8_t* index_by_local, uint16_t parts[96],
+                                     uint8_t* part_count) {
+  if (t == NULL || index_by_local == NULL || parts == NULL || part_count == NULL) {
+    return -1;
+  }
+  for (uint16_t depth = 0u; depth < t->local_count; depth++) {
+    const uint16_t li = t->local_part_to_index[part_id];
+    if (li == UINT16_MAX || li >= t->local_count) {
+      return -1;
+    }
+    if (index_by_local[li] != UINT8_MAX) {
+      return 0;
+    }
+    if (*part_count >= 96u) {
+      return -1;
+    }
+    index_by_local[li] = *part_count;
+    parts[*part_count] = part_id;
+    (*part_count)++;
+    const int16_t parent = t->local_parent_part_by_index[li];
+    if (parent < 0) {
+      return 0;
+    }
+    part_id = (uint16_t)parent;
+  }
+  return -1;
+}
+
+static int build_dynamic_exact_integer_local_cache(MslAnimPoseTable* t) {
+  if (t == NULL || t->dyn_set_count == 0u || t->track_buf == NULL || t->local_count == 0u ||
+      t->local_frame_count_by_msid == NULL) {
+    return 0;
+  }
+
+  // HSD_JObjAnim publishes the local SRT before the priority-0x10 DynamicsDesc callback. Cache
+  // only the descriptor/collider hierarchy closure, and only at exact integer AObj frames; the
+  // float-frame path remains the live FObj interpreter. This is the same init-time specialization
+  // already used by common Fall, without duplicating the complete fighter pose table.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
+  // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+  uint8_t* index_by_local = (uint8_t*)alloc_malloc_uninit(t->local_count);
+  if (index_by_local == NULL) {
+    return -1;
+  }
+  memset(index_by_local, 0xFF, t->local_count);
+  uint16_t parts[96];
+  uint8_t part_count = 0u;
+  for (uint16_t si = 0u; si < t->dyn_set_count; si++) {
+    const MslAnimDynSetData* set = &t->dyn_sets[si];
+    for (uint16_t ni = 0u; ni < set->node_count; ni++) {
+      if (dynamic_exact_add_closure(t, set->nodes[ni].part_id, index_by_local, parts,
+                                    &part_count) != 0) {
+        alloc_free(index_by_local);
+        return -1;
+      }
+    }
+  }
+  for (uint16_t ci = 0u; ci < t->dyn_collider_count; ci++) {
+    if (dynamic_exact_add_closure(t, t->dyn_colliders[ci].part_id, index_by_local, parts,
+                                  &part_count) != 0) {
+      alloc_free(index_by_local);
+      return -1;
+    }
+  }
+  if (part_count == 0u) {
+    alloc_free(index_by_local);
+    return 0;
+  }
+
+  enum { SRT_FLOATS = 9 };
+  uint64_t total_floats = 0u;
+  for (uint32_t msid = 0u; msid < 65536u; msid++) {
+    total_floats +=
+        (uint64_t)t->local_frame_count_by_msid[msid] * (uint64_t)part_count * (uint64_t)SRT_FLOATS;
+  }
+  if (total_floats == 0u || total_floats > (uint64_t)UINT32_MAX) {
+    alloc_free(index_by_local);
+    return 0;
+  }
+
+  uint32_t* base_by_msid = (uint32_t*)alloc_malloc(65536u * sizeof(uint32_t));
+  float* locals = (float*)alloc_malloc_uninit((size_t)total_floats * sizeof(float));
+  if (base_by_msid == NULL || locals == NULL) {
+    alloc_free(locals);
+    alloc_free(base_by_msid);
+    alloc_free(index_by_local);
+    return -1;
+  }
+  memset(base_by_msid, 0xFF, 65536u * sizeof(uint32_t));
+
+  uint32_t base = 0u;
+  for (uint32_t msid_u32 = 0u; msid_u32 < 65536u; msid_u32++) {
+    const uint16_t msid = (uint16_t)msid_u32;
+    const uint16_t frame_count = t->local_frame_count_by_msid[msid];
+    if (frame_count == 0u) {
+      continue;
+    }
+    base_by_msid[msid] = base;
+    uint8_t complete = 1u;
+    for (uint16_t frame = 0u; frame < frame_count && complete != 0u; frame++) {
+      for (uint8_t pi = 0u; pi < part_count; pi++) {
+        float* out =
+            &locals[(size_t)base + ((size_t)frame * (size_t)part_count + (size_t)pi) * SRT_FLOATS];
+        if (local_srt_for_part_f32_uncached(t, msid, (float)frame, parts[pi], out, out + 3, out + 6,
+                                            NULL, NULL) != 0) {
+          complete = 0u;
+          break;
+        }
+      }
+    }
+    if (complete == 0u) {
+      base_by_msid[msid] = UINT32_MAX;
+    }
+    base += (uint32_t)((uint32_t)frame_count * (uint32_t)part_count * SRT_FLOATS);
+  }
+
+  t->dyn_exact_index_by_local = index_by_local;
+  t->dyn_exact_base_by_msid = base_by_msid;
+  t->dyn_exact_integer_locals = locals;
+  t->dyn_exact_part_count = part_count;
+
+  memset(t->dyn_exact_parent_matrix_index, 0xFF, sizeof(t->dyn_exact_parent_matrix_index));
+  uint8_t matrix_count = 0u;
+  for (uint16_t ci = 0u; ci < t->dyn_collider_count; ci++) {
+    t->dyn_exact_matrix_parts[matrix_count++] = t->dyn_colliders[ci].part_id;
+  }
+  for (uint16_t si = 0u; si < t->dyn_set_count; si++) {
+    const uint16_t root_li = t->local_part_to_index[t->dyn_sets[si].nodes[0].part_id];
+    if (root_li == UINT16_MAX || root_li >= t->local_count) {
+      return -1;
+    }
+    const int16_t parent = t->local_parent_part_by_index[root_li];
+    if (parent >= 0) {
+      t->dyn_exact_parent_matrix_index[si] = matrix_count;
+      t->dyn_exact_matrix_parts[matrix_count++] = (uint16_t)parent;
+    }
+  }
+  t->dyn_exact_matrix_count = matrix_count;
+  if (matrix_count != 0u) {
+    const uint64_t total_frames = total_floats / ((uint64_t)part_count * SRT_FLOATS);
+    const uint64_t matrix_floats = total_frames * (uint64_t)matrix_count * (uint64_t)12u;
+    if (matrix_floats > (uint64_t)SIZE_MAX / sizeof(float)) {
+      return -1;
+    }
+    float* matrices = (float*)alloc_malloc_uninit((size_t)matrix_floats * sizeof(float));
+    if (matrices == NULL) {
+      return -1;
+    }
+    for (uint32_t msid_u32 = 0u; msid_u32 < 65536u; msid_u32++) {
+      const uint16_t msid = (uint16_t)msid_u32;
+      const uint32_t local_base = base_by_msid[msid];
+      if (local_base == UINT32_MAX) {
+        continue;
+      }
+      const size_t frame_base = (size_t)local_base / ((size_t)part_count * SRT_FLOATS);
+      for (uint16_t frame = 0u; frame < t->local_frame_count_by_msid[msid]; frame++) {
+        for (uint8_t mi = 0u; mi < matrix_count; mi++) {
+          float* out = &matrices[((frame_base + frame) * matrix_count + mi) * 12u];
+          if (matrix_from_locals_f32(t, msid, (float)frame, t->dyn_exact_matrix_parts[mi], out) !=
+              0) {
+            alloc_free(matrices);
+            return -1;
+          }
+        }
+      }
+    }
+    t->dyn_exact_owner_matrices = matrices;
+  }
+  return 0;
+}
+
 static int local_srt_for_part_f32(const MslAnimPoseTable* t, uint16_t msid, float anim_frame,
                                   uint16_t part_id, float rot[3], float pos[3], float scl[3],
                                   uint32_t* out_flags, int16_t* out_parent) {
@@ -1741,8 +1913,144 @@ static int local_srt_for_part_f32(const MslAnimPoseTable* t, uint16_t msid, floa
       return 0;
     }
   }
+  if (t != NULL && t->dyn_exact_index_by_local != NULL && t->dyn_exact_base_by_msid != NULL &&
+      t->dyn_exact_integer_locals != NULL && isfinite(anim_frame)) {
+    const uint16_t frame = msl_anim_frame_floor_u16(anim_frame);
+    const uint16_t li = t->local_part_to_index[part_id];
+    if (li != UINT16_MAX && li < t->local_count) {
+      const uint8_t pi = t->dyn_exact_index_by_local[li];
+      const uint32_t base = t->dyn_exact_base_by_msid[msid];
+      if (anim_frame == (float)frame && pi != UINT8_MAX && pi < t->dyn_exact_part_count &&
+          base != UINT32_MAX && frame < t->local_frame_count_by_msid[msid]) {
+        enum { SRT_FLOATS = 9 };
+        const float* in =
+            &t->dyn_exact_integer_locals[(size_t)base +
+                                         ((size_t)frame * (size_t)t->dyn_exact_part_count +
+                                          (size_t)pi) *
+                                             SRT_FLOATS];
+        memcpy(rot, in, 3u * sizeof(float));
+        memcpy(pos, in + 3, 3u * sizeof(float));
+        memcpy(scl, in + 6, 3u * sizeof(float));
+        if (out_flags != NULL) {
+          *out_flags = t->local_flags_by_index[li];
+        }
+        if (out_parent != NULL) {
+          *out_parent = t->local_parent_part_by_index[li];
+        }
+        return 0;
+      }
+    }
+  }
   return local_srt_for_part_f32_uncached(t, msid, anim_frame, part_id, rot, pos, scl, out_flags,
                                          out_parent);
+}
+
+static uint8_t local_rotation_track_mask(const MslAnimPoseTable* t, uint16_t msid,
+                                         uint16_t part_id) {
+  if (t == NULL || t->track_buf == NULL || t->track_msid_to_anim_index == NULL ||
+      t->track_part_to_index == NULL || t->track_part_record_off_by_anim_li == NULL) {
+    return 0u;
+  }
+  const uint16_t ai = t->track_msid_to_anim_index[msid];
+  const uint16_t li = t->track_part_to_index[part_id];
+  if (ai == UINT16_MAX || ai >= t->track_anim_count || li == UINT16_MAX ||
+      li >= t->track_local_count) {
+    return 0u;
+  }
+  const size_t rec_off =
+      (size_t)t->track_part_record_off_by_anim_li[(size_t)ai * (size_t)t->track_local_count + li];
+  if (rec_off + 2u > t->track_sz || t->track_buf[rec_off] != (uint8_t)part_id) {
+    return 0u;
+  }
+  const uint8_t n_tracks = t->track_buf[rec_off + 1u];
+  size_t off = rec_off + 2u;
+  uint8_t mask = 0u;
+  for (uint8_t ti = 0u; ti < n_tracks; ti++) {
+    if (off + 8u > t->track_sz) {
+      return 0u;
+    }
+    const uint8_t obj_type = t->track_buf[off];
+    const uint16_t length = read_u16_le(t->track_buf + off + 6u);
+    if (obj_type >= 1u && obj_type <= 3u) {
+      mask |= (uint8_t)(1u << (obj_type - 1u));
+    }
+    off += 8u + (size_t)length;
+    if (off > t->track_sz) {
+      return 0u;
+    }
+  }
+  return mask;
+}
+
+static int build_dynamic_rotation_track_masks(MslAnimPoseTable* t) {
+  if (t == NULL || t->dyn_set_count == 0u || t->track_anim_count == 0u ||
+      t->track_msid_to_anim_index == NULL) {
+    return 0;
+  }
+  uint8_t* masks = (uint8_t*)alloc_calloc(
+      (size_t)t->track_anim_count * (size_t)MSL_MAX_DYNAMIC_NODES, sizeof(uint8_t));
+  if (masks == NULL) {
+    return -1;
+  }
+  const MslAnimDynSetData* set = &t->dyn_sets[0];
+  for (uint32_t msid = 0u; msid <= UINT16_MAX; msid++) {
+    const uint16_t ai = t->track_msid_to_anim_index[msid];
+    if (ai == UINT16_MAX || ai >= t->track_anim_count) {
+      continue;
+    }
+    for (uint16_t ni = 0u; ni < set->node_count; ni++) {
+      masks[(size_t)ai * (size_t)MSL_MAX_DYNAMIC_NODES + ni] =
+          local_rotation_track_mask(t, (uint16_t)msid, set->nodes[ni].part_id);
+    }
+  }
+  t->dyn_rotation_track_mask_by_anim_node = masks;
+  return 0;
+}
+
+int anim_pose_get_local_translation_f32(uint8_t char_id, uint16_t msid, float anim_frame,
+                                        uint16_t part_id, float out_xyz[3]) {
+  if (out_xyz == NULL) {
+    return -1;
+  }
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL) {
+    return -1;
+  }
+  float rot[3], scl[3];
+  if (local_srt_for_part_f32(t, msid, anim_frame, part_id, rot, out_xyz, scl, NULL, NULL) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+int anim_pose_get_animated_local_translation_f32(uint8_t char_id, uint16_t msid, float anim_frame,
+                                                 uint16_t part_id, float out_xyz[3]) {
+  if (out_xyz == NULL) {
+    return -1;
+  }
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL || t->track_buf == NULL || t->track_msid_to_anim_index == NULL ||
+      t->track_part_to_index == NULL || t->track_part_record_off_by_anim_li == NULL) {
+    return -1;
+  }
+  const uint16_t ai = t->track_msid_to_anim_index[msid];
+  const uint16_t li = t->track_part_to_index[part_id];
+  if (ai == 0xFFFFu || ai >= t->track_anim_count || li == 0xFFFFu || li >= t->track_local_count) {
+    return -1;
+  }
+  const uint32_t rec_off =
+      t->track_part_record_off_by_anim_li[(size_t)ai * (size_t)t->track_local_count + (size_t)li];
+  if ((uint64_t)rec_off + 2u > (uint64_t)t->track_sz ||
+      t->track_buf[(size_t)rec_off + 0u] != (uint8_t)part_id ||
+      t->track_buf[(size_t)rec_off + 1u] == 0u) {
+    return -1;
+  }
+  float rot[3], pos[3], scl[3];
+  if (local_srt_for_part_f32(t, msid, anim_frame, part_id, rot, pos, scl, NULL, NULL) != 0) {
+    return -1;
+  }
+  memcpy(out_xyz, pos, 3u * sizeof(float));
+  return 0;
 }
 
 static void vec3_cross(const float a[3], const float b[3], float out[3]);
@@ -1750,7 +2058,6 @@ static uint8_t vec3_normalize(float v[3]);
 static float vec3_angle(const float a[3], const float b[3]);
 static void vec3_rotate_about_unit_axis(const float v[3], const float axis[3], float angle,
                                         float out[3]);
-
 static void mtx34_identity(float m[12]) {
   m[0] = 1.0f;
   m[1] = 0.0f;
@@ -1824,41 +2131,18 @@ static void mtx34_srt_simple(const float rot[3], const float pos[3], const float
   out[11] = pos[2];
 }
 
-static void quat_from_unit_mtx34(const float m[12], MslQuat* out) {
-  const float trace = m[0] + m[5] + m[10];
-  if (trace > 0.0f) {
-    const float s = sqrtf(trace + 1.0f) * 2.0f;
-    out->w = 0.25f * s;
-    out->x = (m[9] - m[6]) / s;
-    out->y = (m[2] - m[8]) / s;
-    out->z = (m[4] - m[1]) / s;
-  } else if (m[0] > m[5] && m[0] > m[10]) {
-    const float s = sqrtf(1.0f + m[0] - m[5] - m[10]) * 2.0f;
-    out->w = (m[9] - m[6]) / s;
-    out->x = 0.25f * s;
-    out->y = (m[1] + m[4]) / s;
-    out->z = (m[2] + m[8]) / s;
-  } else if (m[5] > m[10]) {
-    const float s = sqrtf(1.0f + m[5] - m[0] - m[10]) * 2.0f;
-    out->w = (m[2] - m[8]) / s;
-    out->x = (m[1] + m[4]) / s;
-    out->y = 0.25f * s;
-    out->z = (m[6] + m[9]) / s;
-  } else {
-    const float s = sqrtf(1.0f + m[10] - m[0] - m[5]) * 2.0f;
-    out->w = (m[4] - m[1]) / s;
-    out->x = (m[2] + m[8]) / s;
-    out->y = (m[6] + m[9]) / s;
-    out->z = 0.25f * s;
-  }
-}
-
 static void quat_from_euler_srt_order(const float rot[3], MslQuat* out) {
-  const float pos[3] = {0.0f, 0.0f, 0.0f};
-  const float scl[3] = {1.0f, 1.0f, 1.0f};
-  float m[12];
-  mtx34_srt_simple(rot, pos, scl, NULL, m);
-  quat_from_unit_mtx34(m, out);
+  // refs/melee/src/sysdolphin/baselib/quatlib.c::EulerToQuat
+  float sx, sy, sz, cx, cy, cz;
+  anim_pose_sincosf(0.5f * rot[0], &sx, &cx);
+  anim_pose_sincosf(0.5f * rot[1], &sy, &cy);
+  anim_pose_sincosf(0.5f * rot[2], &sz, &cz);
+  const float ss = sy * sz;
+  const float cc = cy * cz;
+  out->w = cx * cc + sx * ss;
+  out->x = sx * cc - cx * ss;
+  out->y = cz * (cx * sy) + sz * (sx * cy);
+  out->z = sz * (cx * cy) - cz * (sx * sy);
 }
 
 static void quat_normalize(MslQuat* q) {
@@ -1875,6 +2159,55 @@ static void quat_normalize(MslQuat* q) {
   q->y *= inv;
   q->z *= inv;
   q->w *= inv;
+}
+
+static MslQuat quat_axis_angle(const float axis[3], float angle) {
+  const float half = 0.5f * angle;
+  float s, c;
+  anim_pose_sincosf(half, &s, &c);
+  return (MslQuat){axis[0] * s, axis[1] * s, axis[2] * s, c};
+}
+
+static MslQuat quat_mul(const MslQuat* p, const MslQuat* q) {
+  // refs/melee/src/sysdolphin/baselib/quatlib.c::HSD_QuatLib_8037EC4C
+  return (MslQuat){
+      q->w * p->x + p->w * q->x + (p->y * q->z - q->y * p->z),
+      q->w * p->y + p->w * q->y + (q->x * p->z - p->x * q->z),
+      q->w * p->z + p->w * q->z + (p->x * q->y - q->x * p->y),
+      p->w * q->w - (p->z * q->z + (p->x * q->x + p->y * q->y)),
+  };
+}
+
+static void euler_from_unit_quat(const MslQuat* q, float out[3]) {
+  // This is HSD_QuatToMtx followed by HSD_QuatLib_8037EB28 with the unused matrix members
+  // eliminated. Dynamics owns a unit quaternion and no translation/scale at this point.
+  // refs/melee/src/sysdolphin/baselib/quatlib.c::{HSD_QuatToMtx,HSD_QuatLib_8037EB28}
+  const float xx = q->x * q->x;
+  const float yy = q->y * q->y;
+  const float zz = q->z * q->z;
+  const float xy = q->x * q->y;
+  const float xz = q->x * q->z;
+  const float yz = q->y * q->z;
+  const float wx = q->w * q->x;
+  const float wy = q->w * q->y;
+  const float wz = q->w * q->z;
+  const float r00 = 1.0f - 2.0f * (yy + zz);
+  const float r10 = 2.0f * (xy + wz);
+  const float r11 = 1.0f - 2.0f * (xx + zz);
+  const float r12 = 2.0f * (yz - wx);
+  const float r20 = 2.0f * (xz - wy);
+  const float r21 = 2.0f * (yz + wx);
+  const float r22 = 1.0f - 2.0f * (xx + yy);
+  const float len = sqrtf(r00 * r00 + r10 * r10);
+  if (len > 1.0e-5f) {
+    out[0] = atan2f(r21, r22);
+    out[1] = atan2f(-r20, len);
+    out[2] = atan2f(r10, r00);
+  } else {
+    out[0] = atan2f(-r12, r11);
+    out[1] = atan2f(-r20, len);
+    out[2] = 0.0f;
+  }
 }
 
 static void quat_slerp_lb_c490(const MslQuat* target, const MslQuat* neutral, float neutral_t,
@@ -1959,24 +2292,304 @@ static void mtx34_quat_srt_simple(const MslQuat* q, const float pos[3], const fl
   out[11] = pos[2];
 }
 
-static void mtx34_apply_world_axis_angle(float m[12], const float axis[3], float angle) {
-  float col0[3] = {m[0], m[4], m[8]};
-  float col1[3] = {m[1], m[5], m[9]};
-  float col2[3] = {m[2], m[6], m[10]};
-  float out[3];
+static inline MslLivePoseLocal* live_pose_locals(MslBatch* batch, size_t player_idx) {
+  return &batch->live_pose_local[player_idx * (size_t)MSL_LIVE_POSE_LOCAL_CAP];
+}
 
-  vec3_rotate_about_unit_axis(col0, axis, angle, out);
-  m[0] = out[0];
-  m[4] = out[1];
-  m[8] = out[2];
-  vec3_rotate_about_unit_axis(col1, axis, angle, out);
-  m[1] = out[0];
-  m[5] = out[1];
-  m[9] = out[2];
-  vec3_rotate_about_unit_axis(col2, axis, angle, out);
-  m[2] = out[0];
-  m[6] = out[1];
-  m[10] = out[2];
+static inline const MslLivePoseLocal* live_pose_locals_const(const MslBatch* batch,
+                                                             size_t player_idx) {
+  return &batch->live_pose_local[player_idx * (size_t)MSL_LIVE_POSE_LOCAL_CAP];
+}
+
+void anim_pose_live_discard(MslBatch* batch, size_t player_idx) {
+  if (batch != NULL && batch->live_pose_materialized != NULL) {
+    batch->live_pose_materialized[player_idx] = 0u;
+  }
+}
+
+int anim_pose_live_materialize(MslBatch* batch, size_t player_idx, uint16_t msid,
+                               float anim_frame) {
+  if (batch == NULL || batch->live_pose_materialized == NULL || batch->live_pose_local == NULL) {
+    return -1;
+  }
+  const MslAnimPoseTable* table = table_for_char(batch->state.char_id[player_idx]);
+  if (table == NULL || table->local_count == 0u ||
+      table->local_count > (uint16_t)MSL_LIVE_POSE_LOCAL_CAP) {
+    return -1;
+  }
+  MslLivePoseLocal* live = live_pose_locals(batch, player_idx);
+  for (uint16_t li = 0u; li < table->local_count; li++) {
+    const uint16_t part = table->local_buf[ANIM_HDR_BASE_BYTES + (size_t)li];
+    float rot[3];
+    if (local_srt_for_part_f32(table, msid, anim_frame, part, rot, live[li].pos, live[li].scl, NULL,
+                               NULL) != 0) {
+      return -1;
+    }
+    live_jobj_consume_transn_translation(table, msid, part, live[li].pos);
+    quat_from_euler_srt_order(rot, (MslQuat*)(void*)live[li].quat);
+  }
+  batch->live_pose_materialized[player_idx] = 1u;
+  return 0;
+}
+
+static void live_pose_blend(const float target_pos[3], const float target_scl[3],
+                            const MslQuat* target_quat, const MslLivePoseLocal* prior,
+                            float prior_weight, MslLivePoseLocal* out) {
+  for (uint8_t axis = 0u; axis < 3u; axis++) {
+    out->pos[axis] = target_pos[axis] * (1.0f - prior_weight) + prior->pos[axis] * prior_weight;
+    out->scl[axis] = target_scl[axis] * (1.0f - prior_weight) + prior->scl[axis] * prior_weight;
+  }
+  quat_slerp_lb_c490(target_quat, (const MslQuat*)(const void*)prior->quat, prior_weight,
+                     (MslQuat*)(void*)out->quat);
+}
+
+int anim_pose_live_guard_apply(MslBatch* batch, size_t player_idx, float target_weight) {
+  if (batch == NULL) {
+    return -1;
+  }
+  if (batch->live_pose_materialized[player_idx] == 0u) {
+    const uint16_t msid = batch->state.collision_pose_msid[player_idx];
+    const float frame = batch->state.collision_pose_anim_frame[player_idx];
+    if (batch->state.collision_pose_valid[player_idx] == 0u ||
+        anim_pose_live_materialize(batch, player_idx, msid, frame) != 0) {
+      return -1;
+    }
+  }
+  if (target_weight < 0.0f) {
+    target_weight = 0.0f;
+  } else if (target_weight > 1.0f) {
+    target_weight = 1.0f;
+  }
+  const uint8_t char_id = batch->state.char_id[player_idx];
+  const MslAnimPoseTable* table = table_for_char(char_id);
+  if (table == NULL || table->local_count > (uint16_t)MSL_LIVE_POSE_LOCAL_CAP) {
+    return -1;
+  }
+  MslLivePoseLocal* live = live_pose_locals(batch, player_idx);
+  if (target_weight == 0.0f) {
+    const uint16_t shield_part = msl_shield_part_id(char_id);
+    if (shield_part < 256u) {
+      const uint16_t shield_li = table->local_part_to_index[shield_part];
+      if (shield_li != UINT16_MAX && shield_li < table->local_count) {
+        // ftCo_800921DC zeros the shield joint's local translation before the entry-time
+        // ftCo_80091E78(gobj, 0) blend preserves the current tree.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800921DC
+        memset(live[shield_li].pos, 0, sizeof(live[shield_li].pos));
+      }
+    }
+  }
+  float guard_weight = batch->state.guard_tilt_x4[player_idx];
+  if (guard_weight < 0.0f) {
+    guard_weight = 0.0f;
+  } else if (guard_weight > 1.0f) {
+    guard_weight = 1.0f;
+  }
+  const float guard_frame = (float)batch->state.guard_tilt_x8[player_idx];
+  for (uint16_t li = 0u; li < table->local_count; li++) {
+    const uint16_t part = table->local_buf[ANIM_HDR_BASE_BYTES + (size_t)li];
+    if (part < 1u) {
+      continue;
+    }
+    float target_rot[3];
+    MslLivePoseLocal target;
+    if (msl_shield_guard_target_srt(char_id, part, target_rot, target.pos, target.scl) != 0) {
+      continue;
+    }
+    quat_from_euler_srt_order(target_rot, (MslQuat*)(void*)target.quat);
+
+    // ftParts marks TransN and part 0x35 as copy-only blend joints. Both ftAnim blend passes copy
+    // the target SRT for these parts regardless of their scalar weights.
+    // refs/melee/src/melee/ft/ftparts.c::ftParts_80074E58
+    // refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006FE9C,ftAnim_80070010,ftAnim_80070108}
+    if (part == 1u || part == 0x35u) {
+      live[li] = target;
+      continue;
+    }
+    if (guard_weight > 0.0f) {
+      MslLivePoseLocal guard;
+      float guard_rot[3];
+      if (local_srt_for_part_f32(table, (uint16_t)MSL_SM_GUARD, guard_frame, part, guard_rot,
+                                 guard.pos, guard.scl, NULL, NULL) == 0) {
+        quat_from_euler_srt_order(guard_rot, (MslQuat*)(void*)guard.quat);
+        live_pose_blend(target.pos, target.scl, (const MslQuat*)(const void*)target.quat, &guard,
+                        guard_weight, &target);
+      }
+    }
+    MslLivePoseLocal blended;
+    live_pose_blend(target.pos, target.scl, (const MslQuat*)(const void*)target.quat, &live[li],
+                    1.0f - target_weight, &blended);
+    live[li] = blended;
+  }
+  return 0;
+}
+
+static int dynamic_set_node_index_for_part(const MslAnimDynSetData* set, uint16_t part_id);
+
+static int matrix_from_live_pose(const MslBatch* batch, size_t player_idx, uint16_t part_id,
+                                 float out[12]) {
+  if (batch == NULL || out == NULL || batch->live_pose_materialized[player_idx] == 0u) {
+    return -1;
+  }
+  const MslAnimPoseTable* table = table_for_char(batch->state.char_id[player_idx]);
+  if (table == NULL || table->local_count > (uint16_t)MSL_LIVE_POSE_LOCAL_CAP) {
+    return -1;
+  }
+  enum { MAX_CHAIN = MSL_LIVE_POSE_LOCAL_CAP };
+  uint16_t chain[MAX_CHAIN];
+  uint16_t count = 0u;
+  uint16_t part = part_id;
+  for (;;) {
+    const uint16_t li = table->local_part_to_index[part];
+    if (li == UINT16_MAX || li >= table->local_count || count >= MAX_CHAIN) {
+      return -1;
+    }
+    chain[count++] = li;
+    const int16_t parent = table->local_parent_part_by_index[li];
+    if (parent < 0) {
+      break;
+    }
+    part = (uint16_t)parent;
+  }
+
+  const MslLivePoseLocal* live = live_pose_locals_const(batch, player_idx);
+  const MslAnimDynSetData* dynamic_set = NULL;
+  if (batch->state.dynamic_pose_state_valid[player_idx] != 0u &&
+      batch->state.dynamic_pose_apply_collision_matrix[player_idx] != 0u &&
+      batch->state.dynamic_pose_char_id[player_idx] == batch->state.char_id[player_idx] &&
+      table->dyn_set_count != 0u) {
+    // ftCo_8009DD94 updates the fighter's persistent DynamicsDesc by mutating the same JObj
+    // rotations that HSD_JObjSetupMatrix subsequently publishes. A materialized AObj pose is
+    // therefore the input tree, not an alternate collision tree that can bypass dynamics.
+    // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
+    // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
+    dynamic_set = &table->dyn_sets[0];
+  }
+  float world[12];
+  mtx34_identity(world);
+  float parent_world_scl[3] = {0.0f, 0.0f, 0.0f};
+  uint8_t have_parent_scl = 0u;
+  for (int i = (int)count - 1; i >= 0; i--) {
+    const uint16_t li = chain[i];
+    const uint16_t chain_part = table->local_buf[ANIM_HDR_BASE_BYTES + (size_t)li];
+    const int16_t parent = table->local_parent_part_by_index[li];
+    const float* parent_scl = parent >= 0 && have_parent_scl != 0u ? parent_world_scl : NULL;
+    const MslQuat* local_quat = (const MslQuat*)(const void*)live[li].quat;
+    const float* local_pos = live[li].pos;
+    const float* local_scl = live[li].scl;
+    MslQuat dynamic_quat;
+    const int dynamic_i = dynamic_set_node_index_for_part(dynamic_set, chain_part);
+    if (dynamic_i >= 0 &&
+        (uint16_t)(dynamic_i + 1) < batch->state.dynamic_pose_node_count[player_idx]) {
+      const size_t di = player_idx * (size_t)MSL_MAX_DYNAMIC_NODES + (size_t)dynamic_i;
+      const float dynamic_rot[3] = {
+          batch->state.dynamic_pose_rot_x[di],
+          batch->state.dynamic_pose_rot_y[di],
+          batch->state.dynamic_pose_rot_z[di],
+      };
+      quat_from_euler_srt_order(dynamic_rot, &dynamic_quat);
+      local_quat = &dynamic_quat;
+      local_pos = dynamic_set->nodes[dynamic_i].rest_pos;
+      local_scl = dynamic_set->nodes[dynamic_i].rest_scl;
+    }
+    float local[12];
+    mtx34_quat_srt_simple(local_quat, local_pos, local_scl, parent_scl, local);
+    mtx34_concat(world, local, world);
+    if ((table->local_flags_by_index[li] & 8u) != 0u) {
+      have_parent_scl = parent >= 0 && have_parent_scl != 0u ? 1u : 0u;
+    } else {
+      if (parent >= 0 && have_parent_scl != 0u) {
+        for (uint8_t axis = 0u; axis < 3u; axis++) {
+          parent_world_scl[axis] *= local_scl[axis];
+        }
+      } else {
+        memcpy(parent_world_scl, local_scl, sizeof(parent_world_scl));
+      }
+      have_parent_scl = 1u;
+    }
+  }
+  memcpy(out, world, MAT_BYTES);
+  return 0;
+}
+
+int anim_pose_get_guard_target_matrix_f32(uint8_t char_id, float guard_frame, float guard_weight,
+                                          uint16_t part_id, float out_3x4[12]) {
+  const MslAnimPoseTable* table = table_for_char(char_id);
+  if (table == NULL || out_3x4 == NULL || table->local_count == 0u) {
+    return -1;
+  }
+  if (guard_weight < 0.0f) {
+    guard_weight = 0.0f;
+  } else if (guard_weight > 1.0f) {
+    guard_weight = 1.0f;
+  }
+  enum { MAX_CHAIN = 96 };
+  uint16_t chain[MAX_CHAIN];
+  uint16_t count = 0u;
+  uint16_t part = part_id;
+  for (;;) {
+    const uint16_t li = table->local_part_to_index[part];
+    if (li == UINT16_MAX || li >= table->local_count || count >= MAX_CHAIN) {
+      return -1;
+    }
+    chain[count++] = li;
+    const int16_t parent = table->local_parent_part_by_index[li];
+    if (parent < 0) {
+      break;
+    }
+    part = (uint16_t)parent;
+  }
+
+  float world[12];
+  mtx34_identity(world);
+  float parent_world_scl[3] = {0.0f, 0.0f, 0.0f};
+  uint8_t have_parent_scl = 0u;
+  for (int i = (int)count - 1; i >= 0; i--) {
+    const uint16_t li = chain[i];
+    part = table->local_buf[ANIM_HDR_BASE_BYTES + (size_t)li];
+    MslLivePoseLocal local;
+    float rot[3];
+    if (part < 1u || msl_shield_guard_target_srt(char_id, part, rot, local.pos, local.scl) != 0) {
+      if (local_srt_for_part_f32(table, (uint16_t)MSL_SM_GUARD, guard_frame, part, rot, local.pos,
+                                 local.scl, NULL, NULL) != 0) {
+        return -1;
+      }
+    } else if (guard_weight > 0.0f && part != 1u && part != 0x35u) {
+      MslLivePoseLocal guard;
+      float guard_rot[3];
+      if (local_srt_for_part_f32(table, (uint16_t)MSL_SM_GUARD, guard_frame, part, guard_rot,
+                                 guard.pos, guard.scl, NULL, NULL) == 0) {
+        quat_from_euler_srt_order(rot, (MslQuat*)(void*)local.quat);
+        quat_from_euler_srt_order(guard_rot, (MslQuat*)(void*)guard.quat);
+        MslLivePoseLocal blended;
+        live_pose_blend(local.pos, local.scl, (const MslQuat*)(const void*)local.quat, &guard,
+                        guard_weight, &blended);
+        local = blended;
+        goto have_quat;
+      }
+    }
+    quat_from_euler_srt_order(rot, (MslQuat*)(void*)local.quat);
+  have_quat:;
+    const int16_t parent = table->local_parent_part_by_index[li];
+    const float* parent_scl = parent >= 0 && have_parent_scl != 0u ? parent_world_scl : NULL;
+    float matrix[12];
+    mtx34_quat_srt_simple((const MslQuat*)(const void*)local.quat, local.pos, local.scl, parent_scl,
+                          matrix);
+    mtx34_concat(world, matrix, world);
+    if ((table->local_flags_by_index[li] & 8u) != 0u) {
+      have_parent_scl = parent >= 0 && have_parent_scl != 0u ? 1u : 0u;
+    } else {
+      if (parent >= 0 && have_parent_scl != 0u) {
+        for (uint8_t axis = 0u; axis < 3u; axis++) {
+          parent_world_scl[axis] *= local.scl[axis];
+        }
+      } else {
+        memcpy(parent_world_scl, local.scl, sizeof(parent_world_scl));
+      }
+      have_parent_scl = 1u;
+    }
+  }
+  memcpy(out_3x4, world, MAT_BYTES);
+  return 0;
 }
 
 static int dynamic_set_node_index_for_part(const MslAnimDynSetData* set, uint16_t part_id) {
@@ -2022,7 +2635,7 @@ static float vec3_len(const float v[3]) { return sqrtf(vec3_dot(v, v)); }
 
 static uint8_t vec3_normalize(float v[3]) {
   const float len = vec3_len(v);
-  if (!(len > 1.0e-6f)) {
+  if (len == 0.0f) {
     return 0u;
   }
   const float inv = 1.0f / len;
@@ -2033,31 +2646,111 @@ static uint8_t vec3_normalize(float v[3]) {
 }
 
 static float vec3_angle(const float a[3], const float b[3]) {
-  float d = vec3_dot(a, b);
-  if (d < -1.0f) {
-    d = -1.0f;
-  } else if (d > 1.0f) {
-    d = 1.0f;
+  const float lengths = vec3_len(a) * vec3_len(b);
+  if (!(lengths > 1.0e-10f)) {
+    return 0.0f;
   }
-  return acosf(d);
+  float cosine = vec3_dot(a, b) / lengths;
+  if (cosine > 1.0f) {
+    cosine = 1.0f;
+  } else if (cosine < -1.0f) {
+    cosine = -1.0f;
+  }
+  return acosf(cosine);
+}
+
+// lbvector.c deliberately uses these quintic approximations in both
+// lbVector_RotateAboutUnitAxis and lbVector_CreateEulerMatrix. Fighter dynamics feed their
+// output back into the next frame, so replacing them with libm changes gameplay geometry rather
+// than merely the last bits of a transient calculation.
+// refs/melee/src/melee/lb/lbvector.c::{sin,cos,lbVector_RotateAboutUnitAxis,
+//   lbVector_CreateEulerMatrix}
+static float dynamic_lb_sin(float angle) {
+  if (angle > MSL_PI_F) {
+    angle -= MSL_TAU_F;
+  } else if (angle < -MSL_PI_F) {
+    angle += MSL_TAU_F;
+  }
+  const float angle2 = angle * angle;
+  return 0.9878619909286499f * angle - 0.15527099370956421f * angle * angle2 +
+         0.0056429998949170113f * angle * angle2 * angle2;
+}
+
+static float dynamic_lb_cos(float angle) { return dynamic_lb_sin(angle + MSL_PI_2_F); }
+
+static void dynamic_rotation_basis(const float rot[3], float out[9]) {
+  const float sin_x = dynamic_lb_sin(rot[0]);
+  const float cos_x = dynamic_lb_cos(rot[0]);
+  const float sin_y = dynamic_lb_sin(rot[1]);
+  const float cos_y = dynamic_lb_cos(rot[1]);
+  const float sin_z = dynamic_lb_sin(rot[2]);
+  const float cos_z = dynamic_lb_cos(rot[2]);
+  const float sinx_siny = sin_x * sin_y;
+  const float cosx_siny = cos_x * sin_y;
+  out[0] = cos_z * cos_y;
+  out[3] = sin_z * cos_y;
+  out[6] = -sin_y;
+  out[1] = cos_z * sinx_siny - cos_x * sin_z;
+  out[4] = sin_z * sinx_siny + cos_x * cos_z;
+  out[7] = cos_y * sin_x;
+  out[2] = cos_z * cosx_siny + sin_x * sin_z;
+  out[5] = sin_z * cosx_siny - sin_x * cos_z;
+  out[8] = cos_y * cos_x;
+}
+
+static void dynamic_mtx34_from_basis(const float basis[9], const float pos[3], const float scl[3],
+                                     float out[12]) {
+  out[0] = basis[0] * scl[0];
+  out[4] = basis[3] * scl[0];
+  out[8] = basis[6] * scl[0];
+  out[1] = basis[1] * scl[1];
+  out[5] = basis[4] * scl[1];
+  out[9] = basis[7] * scl[1];
+  out[2] = basis[2] * scl[2];
+  out[6] = basis[5] * scl[2];
+  out[10] = basis[8] * scl[2];
+  out[3] = pos[0];
+  out[7] = pos[1];
+  out[11] = pos[2];
+}
+
+static void dynamic_world_origin_direction(const float parent[12], const float basis[9],
+                                           const float pos[3], const float scl[3],
+                                           const float child_pos[3], float origin[3],
+                                           float direction[3]) {
+  const float local_x = basis[0] * (scl[0] * child_pos[0]) + basis[1] * (scl[1] * child_pos[1]) +
+                        basis[2] * (scl[2] * child_pos[2]);
+  const float local_y = basis[3] * (scl[0] * child_pos[0]) + basis[4] * (scl[1] * child_pos[1]) +
+                        basis[5] * (scl[2] * child_pos[2]);
+  const float local_z = basis[6] * (scl[0] * child_pos[0]) + basis[7] * (scl[1] * child_pos[1]) +
+                        basis[8] * (scl[2] * child_pos[2]);
+  origin[0] = parent[0] * pos[0] + parent[1] * pos[1] + parent[2] * pos[2] + parent[3];
+  origin[1] = parent[4] * pos[0] + parent[5] * pos[1] + parent[6] * pos[2] + parent[7];
+  origin[2] = parent[8] * pos[0] + parent[9] * pos[1] + parent[10] * pos[2] + parent[11];
+  direction[0] = parent[0] * local_x + parent[1] * local_y + parent[2] * local_z;
+  direction[1] = parent[4] * local_x + parent[5] * local_y + parent[6] * local_z;
+  direction[2] = parent[8] * local_x + parent[9] * local_y + parent[10] * local_z;
 }
 
 static void vec3_rotate_about_unit_axis(const float v[3], const float axis[3], float angle,
                                         float out[3]) {
-  const float s = sinf(angle);
-  const float c = cosf(angle);
-  const float one_c = 1.0f - c;
-  const float dot = vec3_dot(axis, v);
-  float cross[3];
-  vec3_cross(axis, v, cross);
-  out[0] = v[0] * c + cross[0] * s + axis[0] * dot * one_c;
-  out[1] = v[1] * c + cross[1] * s + axis[1] * dot * one_c;
-  out[2] = v[2] * c + cross[2] * s + axis[2] * dot * one_c;
+  // lbVector_RotateAboutUnitAxis's two basis changes reduce to Rodrigues rotation because its
+  // contract requires a unit axis. Keep Melee's quintic trig, but remove the intermediate basis
+  // construction and its square-root/divides from every dynamics constraint.
+  // refs/melee/src/melee/lb/lbvector.c::lbVector_RotateAboutUnitAxis
+  const float s = dynamic_lb_sin(angle);
+  const float c = dynamic_lb_cos(angle);
+  const float one_minus_c = 1.0f - c;
+  const float dot = axis[0] * v[0] + axis[1] * v[1] + axis[2] * v[2];
+  const float cross[3] = {axis[1] * v[2] - axis[2] * v[1], axis[2] * v[0] - axis[0] * v[2],
+                          axis[0] * v[1] - axis[1] * v[0]};
+  out[0] = v[0] * c + cross[0] * s + axis[0] * dot * one_minus_c;
+  out[1] = v[1] * c + cross[1] * s + axis[1] * dot * one_minus_c;
+  out[2] = v[2] * c + cross[2] * s + axis[2] * dot * one_minus_c;
 }
 
 static void vec3_rotate_towards(float v[3], const float target[3], float step_angle) {
-  const float angle = vec3_angle(v, target);
-  if (!(angle > 1.0e-6f) || !(step_angle > 0.0f)) {
+  if (step_angle == 0.0f) {
     return;
   }
   float axis[3];
@@ -2065,14 +2758,30 @@ static void vec3_rotate_towards(float v[3], const float target[3], float step_an
   if (!vec3_normalize(axis)) {
     return;
   }
-  const float step = (step_angle < angle) ? step_angle : angle;
   float out[3];
-  vec3_rotate_about_unit_axis(v, axis, step, out);
-  if (vec3_normalize(out)) {
-    v[0] = out[0];
-    v[1] = out[1];
-    v[2] = out[2];
+  vec3_rotate_about_unit_axis(v, axis, step_angle, out);
+  memcpy(v, out, sizeof(out));
+}
+
+static float vec3_unit_dot(const float a[3], const float b[3]) {
+  float cosine = vec3_dot(a, b);
+  if (cosine > 1.0f) {
+    cosine = 1.0f;
+  } else if (cosine < -1.0f) {
+    cosine = -1.0f;
   }
+  return cosine;
+}
+
+static float vec3_unit_angle(const float a[3], const float b[3]) {
+  return acosf(vec3_unit_dot(a, b));
+}
+
+static void dynamic_mtx34_srt(const float rot[3], const float pos[3], const float scl[3],
+                              float out[12]) {
+  float basis[9];
+  dynamic_rotation_basis(rot, basis);
+  dynamic_mtx34_from_basis(basis, pos, scl, out);
 }
 
 static uint8_t segment_sphere_intersects(const float a[3], const float b[3], const float c[3],
@@ -2097,45 +2806,74 @@ static uint8_t segment_sphere_intersects(const float a[3], const float b[3], con
   return (dx * dx + dy * dy + dz * dz <= r * r) ? 1u : 0u;
 }
 
-static uint16_t dynamic_world_colliders(const MslAnimPoseTable* t, uint8_t char_id, uint16_t msid,
-                                        uint16_t frame, float out[ANIM_DYN_MAX_COLLIDERS][4]) {
-  if (t == NULL || out == NULL || t->dyn_collider_count == 0u) {
+static uint8_t dynamic_exact_owner_matrix(const MslAnimPoseTable* t, uint16_t msid,
+                                          float anim_frame, uint8_t matrix_i, float out[12]) {
+  if (t == NULL || out == NULL || t->dyn_exact_owner_matrices == NULL ||
+      t->dyn_exact_base_by_msid == NULL || t->dyn_exact_part_count == 0u ||
+      matrix_i >= t->dyn_exact_matrix_count || !isfinite(anim_frame)) {
+    return 0u;
+  }
+  const uint16_t frame = msl_anim_frame_floor_u16(anim_frame);
+  const uint32_t local_base = t->dyn_exact_base_by_msid[msid];
+  if (anim_frame != (float)frame || local_base == UINT32_MAX ||
+      frame >= t->local_frame_count_by_msid[msid]) {
+    return 0u;
+  }
+  enum { SRT_FLOATS = 9 };
+  const size_t frame_base = (size_t)local_base / ((size_t)t->dyn_exact_part_count * SRT_FLOATS);
+  memcpy(out,
+         &t->dyn_exact_owner_matrices
+              [((frame_base + frame) * (size_t)t->dyn_exact_matrix_count + matrix_i) * 12u],
+         12u * sizeof(float));
+  return 1u;
+}
+
+static const float* dynamic_exact_local_frame(const MslAnimPoseTable* t, uint16_t msid,
+                                              float anim_frame) {
+  if (t == NULL || t->dyn_exact_base_by_msid == NULL || t->dyn_exact_integer_locals == NULL ||
+      t->dyn_exact_part_count == 0u || !isfinite(anim_frame)) {
+    return NULL;
+  }
+  const uint16_t frame = msl_anim_frame_floor_u16(anim_frame);
+  const uint32_t base = t->dyn_exact_base_by_msid[msid];
+  if (anim_frame != (float)frame || base == UINT32_MAX ||
+      frame >= t->local_frame_count_by_msid[msid]) {
+    return NULL;
+  }
+  enum { SRT_FLOATS = 9 };
+  return &t->dyn_exact_integer_locals[(size_t)base + (size_t)frame *
+                                                         (size_t)t->dyn_exact_part_count *
+                                                         (size_t)SRT_FLOATS];
+}
+
+static uint16_t dynamic_world_colliders(const MslBatch* batch, size_t idx,
+                                        const MslAnimPoseTable* t, uint16_t msid, float anim_frame,
+                                        const MslFighterPoseFrame* pose_frame,
+                                        float out[ANIM_DYN_MAX_COLLIDERS][4]) {
+  if (batch == NULL || t == NULL || pose_frame == NULL || out == NULL ||
+      t->dyn_collider_count == 0u) {
     return 0u;
   }
   uint16_t count = 0u;
   for (uint16_t ci = 0; ci < t->dyn_collider_count && ci < (uint16_t)ANIM_DYN_MAX_COLLIDERS; ci++) {
     const MslAnimDynColliderData* col = &t->dyn_colliders[ci];
-    float m[12];
-    if (anim_pose_get_matrix(char_id, msid, frame, col->part_id, m) != 0) {
+    float local[12], world[12];
+    if ((dynamic_exact_owner_matrix(t, msid, anim_frame, (uint8_t)ci, local) == 0u &&
+         matrix_from_locals_f32(t, msid, anim_frame, col->part_id, local) != 0) ||
+        fighter_pose_matrix_world_from_frame(batch, idx, col->part_id, local, pose_frame, world) !=
+            0) {
       continue;
     }
     const float x = col->offset[0];
     const float y = col->offset[1];
     const float z = col->offset[2];
-    out[count][0] = m[0] * x + m[1] * y + m[2] * z + m[3];
-    out[count][1] = m[4] * x + m[5] * y + m[6] * z + m[7];
-    out[count][2] = m[8] * x + m[9] * y + m[10] * z + m[11];
+    out[count][0] = world[0] * x + world[1] * y + world[2] * z + world[3];
+    out[count][1] = world[4] * x + world[5] * y + world[6] * z + world[7];
+    out[count][2] = world[8] * x + world[9] * y + world[10] * z + world[11];
     out[count][3] = col->radius;
     count++;
   }
   return count;
-}
-
-static int dynamic_node_base_positions(const MslAnimDynSetData* set, uint8_t char_id, uint16_t msid,
-                                       uint16_t frame, float out_pos[MSL_MAX_DYNAMIC_NODES][3]) {
-  if (set == NULL || out_pos == NULL) {
-    return -1;
-  }
-  for (uint16_t ni = 0; ni < set->node_count; ni++) {
-    float m[12];
-    if (anim_pose_get_matrix(char_id, msid, frame, set->nodes[ni].part_id, m) != 0) {
-      return -1;
-    }
-    out_pos[ni][0] = m[3];
-    out_pos[ni][1] = m[7];
-    out_pos[ni][2] = m[11];
-  }
-  return 0;
 }
 
 static void dynamic_state_initialize_from_locals(MslBatch* batch, size_t idx,
@@ -2152,6 +2890,9 @@ static void dynamic_state_initialize_from_locals(MslBatch* batch, size_t idx,
   batch->state.dynamic_pose_char_id[idx] = char_id;
   batch->state.dynamic_pose_msid[idx] = msid;
   batch->state.dynamic_pose_frame[idx] = frame;
+  MslFighterPoseFrame pose_frame;
+  const uint8_t have_pose_frame =
+      fighter_pose_frame_init(batch, idx, msid, (float)frame, &pose_frame) == 0 ? 1u : 0u;
   for (uint16_t ni = 0; ni < (uint16_t)MSL_MAX_DYNAMIC_NODES; ni++) {
     const size_t di = dynamic_state_index(idx, ni);
     batch->state.dynamic_pose_axis_x[di] = 1.0f;
@@ -2172,23 +2913,20 @@ static void dynamic_state_initialize_from_locals(MslBatch* batch, size_t idx,
         0) {
       rot[0] = rot[1] = rot[2] = 0.0f;
     }
-    const float max_bend = fabsf(set->nodes[ni].c[6]);
-    float init_x = rot[0];
-    if (ni + 1u < node_count) {
-      if (init_x < -max_bend) {
-        init_x = -max_bend;
-      } else if (init_x > max_bend) {
-        init_x = max_bend;
-      }
-    }
-    batch->state.dynamic_pose_rot_x[di] = init_x;
+    // lb_8000FD48 snapshots the live JObj rotation verbatim. The +0x68 cone is applied by
+    // lb_8001044C to the solved link direction; it is not an initialization clamp on rotate.x.
+    // refs/melee/src/melee/lb/lb_00F9.c::{lb_8000FD48,lb_8001044C}
+    batch->state.dynamic_pose_rot_x[di] = rot[0];
     batch->state.dynamic_pose_rot_y[di] = rot[1];
     batch->state.dynamic_pose_rot_z[di] = rot[2];
-    float m[12];
-    if (anim_pose_get_matrix(char_id, msid, frame, set->nodes[ni].part_id, m) == 0) {
-      batch->state.dynamic_pose_pos_x[di] = m[3];
-      batch->state.dynamic_pose_pos_y[di] = m[7];
-      batch->state.dynamic_pose_pos_z[di] = m[11];
+    float local[12], world[12];
+    if (have_pose_frame != 0u &&
+        matrix_from_locals_f32(t, msid, (float)frame, set->nodes[ni].part_id, local) == 0 &&
+        fighter_pose_matrix_world_from_frame(batch, idx, set->nodes[ni].part_id, local, &pose_frame,
+                                             world) == 0) {
+      batch->state.dynamic_pose_pos_x[di] = world[3];
+      batch->state.dynamic_pose_pos_y[di] = world[7];
+      batch->state.dynamic_pose_pos_z[di] = world[11];
     } else {
       batch->state.dynamic_pose_pos_x[di] = 0.0f;
       batch->state.dynamic_pose_pos_y[di] = 0.0f;
@@ -2199,19 +2937,21 @@ static void dynamic_state_initialize_from_locals(MslBatch* batch, size_t idx,
 
 static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTable* t,
                                const MslAnimDynSetData* set, uint8_t char_id, uint16_t msid,
-                               uint16_t frame, uint8_t collision_owner) {
+                               float anim_frame, uint8_t collision_owner) {
   if (batch == NULL || t == NULL || set == NULL || set->node_count == 0u) {
     return;
   }
   const uint16_t node_count = set->node_count;
-  float base_pos[MSL_MAX_DYNAMIC_NODES][3];
-  if (dynamic_node_base_positions(set, char_id, msid, frame, base_pos) != 0) {
+  float colliders[ANIM_DYN_MAX_COLLIDERS][4];
+  const uint16_t frame = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(anim_frame));
+  MslFighterPoseFrame pose_frame;
+  if (fighter_pose_frame_init(batch, idx, msid, anim_frame, &pose_frame) != 0) {
     batch->state.dynamic_pose_state_valid[idx] = 0u;
     batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
     return;
   }
-  float colliders[ANIM_DYN_MAX_COLLIDERS][4];
-  const uint16_t collider_count = dynamic_world_colliders(t, char_id, msid, frame, colliders);
+  const uint16_t collider_count =
+      dynamic_world_colliders(batch, idx, t, msid, anim_frame, &pose_frame, colliders);
 
   float prev_pos[MSL_MAX_DYNAMIC_NODES][3];
   for (uint16_t ni = 0; ni < node_count; ni++) {
@@ -2221,219 +2961,478 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
     prev_pos[ni][2] = batch->state.dynamic_pose_pos_z[di];
   }
 
+  // HSD_JObjAnim publishes each chain node's local SRT once before lb_8001044C walks the
+  // descriptor. Sample that fixed chain once as well. The old nested traversal interpreted the
+  // same FObj record as both one node's child and the next node's current JObj, then interpreted
+  // the tail a third time; that was neither source-shaped nor cheap.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
+  // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
+  float node_rot[MSL_MAX_DYNAMIC_NODES][3];
+  float node_pos[MSL_MAX_DYNAMIC_NODES][3];
+  float node_scl[MSL_MAX_DYNAMIC_NODES][3];
+  const float* exact_local_frame = dynamic_exact_local_frame(t, msid, anim_frame);
+  const uint16_t track_ai =
+      t->track_msid_to_anim_index != NULL ? t->track_msid_to_anim_index[msid] : UINT16_MAX;
   for (uint16_t ni = 0; ni < node_count; ni++) {
     const size_t di = dynamic_state_index(idx, ni);
-    float rot[3], pos[3], scl[3];
-    if (local_srt_for_part(t, msid, frame, set->nodes[ni].part_id, rot, pos, scl, NULL, NULL) !=
-        0) {
-      continue;
+    const uint16_t part_id = set->nodes[ni].part_id;
+    const uint16_t li = t->local_part_to_index[part_id];
+    const uint8_t exact_pi =
+        li != UINT16_MAX && li < t->local_count ? t->dyn_exact_index_by_local[li] : UINT8_MAX;
+    if (exact_local_frame != NULL && exact_pi < t->dyn_exact_part_count) {
+      const float* in = &exact_local_frame[(size_t)exact_pi * 9u];
+      memcpy(node_rot[ni], in, 3u * sizeof(float));
+      memcpy(node_pos[ni], in + 3, 3u * sizeof(float));
+      memcpy(node_scl[ni], in + 6, 3u * sizeof(float));
+    } else if (local_srt_for_part_f32(t, msid, anim_frame, part_id, node_rot[ni], node_pos[ni],
+                                      node_scl[ni], NULL, NULL) != 0) {
+      batch->state.dynamic_pose_state_valid[idx] = 0u;
+      batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+      return;
     }
-    batch->state.dynamic_pose_rot_x[di] = rot[0];
-    batch->state.dynamic_pose_rot_y[di] = rot[1];
-    batch->state.dynamic_pose_rot_z[di] = rot[2];
+    uint8_t rotation_track_mask =
+        t->dyn_rotation_track_mask_by_anim_node != NULL && track_ai < t->track_anim_count
+            ? t->dyn_rotation_track_mask_by_anim_node[(size_t)track_ai *
+                                                          (size_t)MSL_MAX_DYNAMIC_NODES +
+                                                      ni]
+            : local_rotation_track_mask(t, msid, part_id);
+    if (part_id < 64u &&
+        (batch->state.script_bone_physics_mask[idx] & (UINT64_C(1) << part_id)) != 0u) {
+      rotation_track_mask = 0u;
+    }
+    if ((rotation_track_mask & 1u) == 0u) {
+      node_rot[ni][0] = batch->state.dynamic_pose_rot_x[di];
+    }
+    if ((rotation_track_mask & 2u) == 0u) {
+      node_rot[ni][1] = batch->state.dynamic_pose_rot_y[di];
+    }
+    if ((rotation_track_mask & 4u) == 0u) {
+      node_rot[ni][2] = batch->state.dynamic_pose_rot_z[di];
+    }
   }
 
-  // Root node position is directly recomputed from the current JObj matrix each frame. Child node
-  // positions are the lb_8001044C carry state.
-  {
-    const size_t root_di = dynamic_state_index(idx, 0u);
-    batch->state.dynamic_pose_pos_x[root_di] = base_pos[0][0];
-    batch->state.dynamic_pose_pos_y[root_di] = base_pos[0][1];
-    batch->state.dynamic_pose_pos_z[root_di] = base_pos[0][2];
+  float parent_world[12];
+  const uint16_t root_part = set->nodes[0].part_id;
+  const uint16_t root_li = t->local_part_to_index[root_part];
+  if (root_li == UINT16_MAX || root_li >= t->local_count) {
+    batch->state.dynamic_pose_state_valid[idx] = 0u;
+    batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+    return;
+  }
+  const int16_t root_parent = t->local_parent_part_by_index[root_li];
+  if (root_parent >= 0) {
+    float parent_local[12];
+    const size_t set_i = (size_t)(set - t->dyn_sets);
+    const uint8_t matrix_i =
+        set_i < t->dyn_set_count ? t->dyn_exact_parent_matrix_index[set_i] : UINT8_MAX;
+    if ((dynamic_exact_owner_matrix(t, msid, anim_frame, matrix_i, parent_local) == 0u &&
+         matrix_from_locals_f32(t, msid, anim_frame, (uint16_t)root_parent, parent_local) != 0) ||
+        fighter_pose_matrix_world_from_frame(batch, idx, (uint16_t)root_parent, parent_local,
+                                             &pose_frame, parent_world) != 0) {
+      batch->state.dynamic_pose_state_valid[idx] = 0u;
+      batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+      return;
+    }
+  } else {
+    mtx34_identity(parent_world);
   }
 
-  // SSDYNN01 v8's collision-owner index means this submotion consumes the live dynamic JObj
-  // matrix for BODY hurtcaps on every supported frame, even when the current lb_8001044C update
-  // resolves to the static segment vector with no nonzero correction carry.
-  // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
-  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  // Source order from lb_8001044C:
+  //   current animated JObj matrix -> descriptor-natural matrix -> prior link carry -> gravity ->
+  //   angular carry -> per-frame clamp -> natural convergence/cone -> colliders -> quaternion
+  //   writeback -> dominant-axis damping. Keeping that order removes the old per-motion/probe
+  //   approximation from the runtime solver.
+  // refs/melee/src/melee/lb/lb_00F9.c::{lb_8000FD48,lb_8001044C,lb_80011710}
+  // refs/melee/src/sysdolphin/baselib/quatlib.c::{EulerToQuat,HSD_QuatLib_8037EB28,
+  //   HSD_QuatLib_8037EC4C,HSD_QuatLib_8037ECE0}
   uint8_t apply_collision_pose = collision_owner ? 1u : 0u;
   for (uint16_t ni = 0; ni + 1u < node_count; ni++) {
     const size_t di = dynamic_state_index(idx, ni);
     const size_t child_di = dynamic_state_index(idx, (uint16_t)(ni + 1u));
+    float* rot = node_rot[ni];
+    const float* pos = node_pos[ni];
+    const float* scl = node_scl[ni];
+    const float* child_pos = node_pos[ni + 1u];
+    // Fighter_procUpdate interprets the current AObj before the priority-0x10 dynamics callback,
+    // but HSD_JObjAnim only writes components that have an FObj track. An unkeyed Euler component
+    // therefore remains the rotation written by the preceding lb_8001044C step. Opcode 50 skips
+    // HSD_JObjAnim for the selected part altogether, retaining all three solved components.
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_8006D9AC}
+    // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E9B4
+    // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
+    float current_basis[9];
+    dynamic_rotation_basis(rot, current_basis);
+    float origin[3], current_dir[3];
+    dynamic_world_origin_direction(parent_world, current_basis, pos, scl, child_pos, origin,
+                                   current_dir);
 
-    float parent_pos[3] = {
-        batch->state.dynamic_pose_pos_x[di],
-        batch->state.dynamic_pose_pos_y[di],
-        batch->state.dynamic_pose_pos_z[di],
-    };
-    float current_dir[3] = {
-        base_pos[ni + 1u][0] - base_pos[ni][0],
-        base_pos[ni + 1u][1] - base_pos[ni][1],
-        base_pos[ni + 1u][2] - base_pos[ni][2],
-    };
-    const float seg_len = vec3_len(current_dir);
-    if (!vec3_normalize(current_dir)) {
-      batch->state.dynamic_pose_pos_x[child_di] = base_pos[ni + 1u][0];
-      batch->state.dynamic_pose_pos_y[child_di] = base_pos[ni + 1u][1];
-      batch->state.dynamic_pose_pos_z[child_di] = base_pos[ni + 1u][2];
-      continue;
+    float natural_origin[3], natural_dir[3];
+    // The decomp types this four-word slot as Quaternion, but lb_8001044C deliberately passes it
+    // to lbVector_CreateEulerMatrix and consumes x/y/z as Euler angles. Preserve that concrete
+    // source interpretation; the fourth word is not read by this owner.
+    // refs/melee/src/melee/lb/lb_00F9.c::{lb_80011710,lb_8001044C}
+    dynamic_world_origin_direction(parent_world, set->nodes[ni].natural_basis, pos, scl, child_pos,
+                                   natural_origin, natural_dir);
+    (void)natural_origin;
+    // lb_8000FD48 fixes unk_48 when the DynamicsDesc is created; lb_8001044C does not derive a
+    // new segment length from the current animation's child translation. Fox's active chain has
+    // unit rest scale, so its descriptor length is the costume-rest child translation magnitude
+    // transformed by the fighter model scale.
+    // refs/melee/src/melee/lb/lb_00F9.c::{lb_8000FD48,lb_8001044C}
+    const float seg_len = set->nodes[ni + 1u].rest_len * pose_frame.model_scale;
+    float link_dir[3] = {prev_pos[ni + 1u][0] - origin[0], prev_pos[ni + 1u][1] - origin[1],
+                         prev_pos[ni + 1u][2] - origin[2]};
+    if (!vec3_normalize(current_dir) || !vec3_normalize(natural_dir)) {
+      batch->state.dynamic_pose_state_valid[idx] = 0u;
+      batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+      return;
     }
-    float prev_vec[3] = {
-        prev_pos[ni + 1u][0] - parent_pos[0],
-        prev_pos[ni + 1u][1] - parent_pos[1],
-        prev_pos[ni + 1u][2] - parent_pos[2],
-    };
-    if (!vec3_normalize(prev_vec)) {
-      prev_vec[0] = current_dir[0];
-      prev_vec[1] = current_dir[1];
-      prev_vec[2] = current_dir[2];
+    if (!vec3_normalize(link_dir)) {
+      memcpy(link_dir, current_dir, sizeof(link_dir));
     }
-    float original_prev[3] = {prev_vec[0], prev_vec[1], prev_vec[2]};
+    const float saved_dir[3] = {link_dir[0], link_dir[1], link_dir[2]};
 
-    // Ported shape from lb_8001044C:
-    // - node +0x4C and descriptor +0x08 blend previous segment direction toward current_dir.
-    // - node +0x8C applies the gravity/down-vector correction derived by lb_80011710 from
-    //   descriptor +0x10 / segment length.
-    // - node +0x38/+0x44 carries the prior angular correction axis/angle, then +0x84 decays it.
-    // - node +0x88 limits same-frame angular movement from the saved link direction.
-    // - node +0x50 converges toward natural_dir, and node +0x68 clamps max deviation from it.
-    // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
-    const float anim_follow = set->nodes[ni].c[0] * set->pos[0];
-    if (anim_follow < 1.0f) {
-      vec3_rotate_towards(prev_vec, current_dir,
-                          vec3_angle(prev_vec, current_dir) * (1.0f - anim_follow));
+    const float stiffness = set->nodes[ni].c[0] * set->pos[0];
+    if (stiffness < 1.0f) {
+      // All three directions were normalized immediately above, matching lb_8001044C's input
+      // contract for this first constraint.
+      // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
+      const float follow_angle = vec3_unit_angle(link_dir, current_dir);
+      vec3_rotate_towards(link_dir, current_dir, follow_angle * (1.0f - stiffness));
     }
-
-    const float inv_len_corr = (seg_len > 1.0e-6f) ? (set->pos[2] / seg_len) : 0.0f;
-    if (inv_len_corr != 0.0f) {
-      const float down[3] = {0.0f, -1.0f, 0.0f};
-      const float down_angle = vec3_angle(prev_vec, down);
-      if (down_angle > 1.0e-6f) {
-        vec3_rotate_towards(prev_vec, down, fabsf(sinf(down_angle) * inv_len_corr));
-      }
+    const float gravity = seg_len > 1.0e-6f ? set->pos[2] / seg_len : 0.0f;
+    const float down[3] = {0.0f, -1.0f, 0.0f};
+    const float down_cos = vec3_unit_dot(link_dir, down);
+    const float down_sin_sq = 1.0f - down_cos * down_cos;
+    if (down_sin_sq > 0.0f) {
+      vec3_rotate_towards(link_dir, down, fabsf(gravity * sqrtf(down_sin_sq)));
     }
 
     const float carry_angle = batch->state.dynamic_pose_angle[di];
-    if (fabsf(carry_angle) > 1.0e-6f) {
-      float axis[3] = {
-          batch->state.dynamic_pose_axis_x[di],
-          batch->state.dynamic_pose_axis_y[di],
-          batch->state.dynamic_pose_axis_z[di],
-      };
-      if (vec3_normalize(axis)) {
-        float out[3];
-        vec3_rotate_about_unit_axis(prev_vec, axis, carry_angle, out);
-        if (vec3_normalize(out)) {
-          prev_vec[0] = out[0];
-          prev_vec[1] = out[1];
-          prev_vec[2] = out[2];
-        }
-      }
+    if (carry_angle != 0.0f) {
+      const float carry_axis[3] = {batch->state.dynamic_pose_axis_x[di],
+                                   batch->state.dynamic_pose_axis_y[di],
+                                   batch->state.dynamic_pose_axis_z[di]};
+      float carried[3];
+      vec3_rotate_about_unit_axis(link_dir, carry_axis, carry_angle, carried);
+      memcpy(link_dir, carried, sizeof(link_dir));
     }
 
-    const float converge_angle = fabsf(set->nodes[ni].c[1]);
-    if (converge_angle > 0.0f) {
-      const float angle_to_natural = vec3_angle(current_dir, prev_vec);
-      if (angle_to_natural < converge_angle) {
-        prev_vec[0] = current_dir[0];
-        prev_vec[1] = current_dir[1];
-        prev_vec[2] = current_dir[2];
+    const float max_step = set->nodes[ni].c[14];
+    if (vec3_unit_dot(saved_dir, link_dir) < set->nodes[ni].max_step_cos) {
+      const float unclamped[3] = {link_dir[0], link_dir[1], link_dir[2]};
+      memcpy(link_dir, saved_dir, sizeof(link_dir));
+      vec3_rotate_towards(link_dir, unclamped, max_step);
+    }
+
+    const float convergence = set->nodes[ni].c[1];
+    if (convergence > 0.0f) {
+      const float natural_angle = vec3_angle(natural_dir, link_dir);
+      if (natural_angle < convergence) {
+        memcpy(link_dir, natural_dir, sizeof(link_dir));
       } else {
-        vec3_rotate_towards(prev_vec, current_dir, converge_angle);
+        vec3_rotate_towards(link_dir, natural_dir, convergence);
       }
     }
-
-    const float cone = fabsf(set->nodes[ni].c[6]);
-    // lb_8001044C applies descriptor +0x68 as a max-deviation cone around the source natural
-    // direction after gravity/carry-angle correction. The descriptor natural direction is authored
-    // in the same local segment basis as the current JObj chain for Fox's tail set, so clamp against
-    // the current segment direction here instead of leaving the already-ported constant unused.
-    // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
-    if (cone > 0.0f && t->dyn_cone_have_msid != NULL && t->dyn_cone_have_msid[msid]) {
-      const float cone_angle = vec3_angle(current_dir, prev_vec);
-      if (cone_angle > cone) {
-        vec3_rotate_towards(prev_vec, current_dir, cone_angle - cone);
-      }
+    const float cone = set->nodes[ni].c[6];
+    if (vec3_unit_dot(natural_dir, link_dir) < set->nodes[ni].cone_cos) {
+      const float deviation = vec3_angle(natural_dir, link_dir);
+      vec3_rotate_towards(link_dir, natural_dir, deviation - cone);
     }
 
-    // ftCo_8009DD94 refreshes fp->x1670 via ftColl_8007AF60 and passes those source dynamic
-    // colliders to lb_8001044C before JObj matrices are rebuilt. Source applies this after the
-    // max-deviation cone, so collider avoidance can still move a constrained segment away from
-    // the fighter body.
-    // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
-    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AF60
-    // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
-    const uint16_t active_collider_count = collider_count;
-    for (uint16_t ci = 0; ci < active_collider_count; ci++) {
+    if (collider_count != 0u) {
+      // lb_8001044C normalizes the solved link immediately before collider iteration.
+      // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
+      (void)vec3_normalize(link_dir);
+    }
+    for (uint16_t ci = 0; ci < collider_count; ci++) {
       const float collider_pos[3] = {colliders[ci][0], colliders[ci][1], colliders[ci][2]};
       const float collider_radius = colliders[ci][3];
-      float next_pos[3] = {parent_pos[0] + prev_vec[0] * seg_len,
-                           parent_pos[1] + prev_vec[1] * seg_len,
-                           parent_pos[2] + prev_vec[2] * seg_len};
-      float coll_dir[3] = {collider_pos[0] - parent_pos[0], collider_pos[1] - parent_pos[1],
-                           collider_pos[2] - parent_pos[2]};
-      float coll_dist = vec3_len(coll_dir);
-      if (coll_dist > collider_radius &&
-          segment_sphere_intersects(parent_pos, next_pos, collider_pos, kDynColliderSkinRadius,
-                                    collider_radius)) {
-        float force_dir[3] = {coll_dir[0], coll_dir[1], coll_dir[2]};
-        if (!vec3_normalize(force_dir)) {
-          continue;
-        }
-        const float coll_angle = vec3_angle(force_dir, prev_vec);
-        if (coll_angle <= 1.0e-6f) {
-          continue;
-        }
-        const float adj_radius = kDynColliderSkinRadius + collider_radius;
-        float side_sq = coll_dist * coll_dist - adj_radius * adj_radius;
-        if (side_sq < 0.0f) {
-          side_sq = 0.0f;
-        }
-        const float side = sqrtf(side_sq);
-        const float avoidance_angle = fabsf(atan2f(adj_radius, side)) - coll_angle;
-        if (avoidance_angle > 0.0f) {
-          float axis[3];
-          vec3_cross(force_dir, prev_vec, axis);
-          if (vec3_normalize(axis)) {
-            float out[3];
-            vec3_rotate_about_unit_axis(prev_vec, axis, avoidance_angle, out);
-            if (vec3_normalize(out)) {
-              prev_vec[0] = out[0];
-              prev_vec[1] = out[1];
-              prev_vec[2] = out[2];
-            }
-          }
+      const float next_pos[3] = {origin[0] + link_dir[0] * seg_len,
+                                 origin[1] + link_dir[1] * seg_len,
+                                 origin[2] + link_dir[2] * seg_len};
+      float coll_dir[3] = {collider_pos[0] - origin[0], collider_pos[1] - origin[1],
+                           collider_pos[2] - origin[2]};
+      const float coll_dist = vec3_len(coll_dir);
+      if (coll_dist <= collider_radius ||
+          !segment_sphere_intersects(origin, next_pos, collider_pos, kDynColliderSkinRadius,
+                                     collider_radius)) {
+        continue;
+      }
+      if (!vec3_normalize(coll_dir)) {
+        continue;
+      }
+      const float coll_angle = vec3_angle(coll_dir, link_dir);
+      if (coll_angle == 0.0f) {
+        continue;
+      }
+      const float adjusted_radius = kDynColliderSkinRadius + collider_radius;
+      float side_sq = coll_dist * coll_dist - adjusted_radius * adjusted_radius;
+      if (side_sq > 0.0f) {
+        side_sq = sqrtf(side_sq);
+      }
+      const float avoidance = fabsf(atan2f(adjusted_radius, side_sq)) - coll_angle;
+      if (avoidance > 0.0f) {
+        float axis[3];
+        vec3_cross(coll_dir, link_dir, axis);
+        if (vec3_normalize(axis)) {
+          float avoided[3];
+          vec3_rotate_about_unit_axis(link_dir, axis, avoidance, avoided);
+          memcpy(link_dir, avoided, sizeof(link_dir));
         }
       }
+    }
+
+    const float angle_diff = collider_count != 0u ? vec3_unit_angle(current_dir, link_dir)
+                                                  : vec3_angle(current_dir, link_dir);
+    float cross[3];
+    vec3_cross(current_dir, link_dir, cross);
+    const uint8_t have_cross = vec3_normalize(cross);
+    if (have_cross != 0u && angle_diff != 0.0f) {
+      float aligned[3];
+      vec3_rotate_about_unit_axis(current_dir, cross, angle_diff, aligned);
+      memcpy(link_dir, aligned, sizeof(link_dir));
     }
 
     float carry_axis[3];
-    vec3_cross(original_prev, prev_vec, carry_axis);
-    float next_carry = 0.0f;
-    if (vec3_normalize(carry_axis)) {
-      next_carry = vec3_angle(original_prev, prev_vec);
-    } else {
+    vec3_cross(saved_dir, link_dir, carry_axis);
+    float next_carry = collider_count != 0u ? vec3_unit_angle(saved_dir, link_dir)
+                                            : vec3_angle(saved_dir, link_dir);
+    if (!vec3_normalize(carry_axis)) {
       carry_axis[0] = 1.0f;
       carry_axis[1] = 0.0f;
       carry_axis[2] = 0.0f;
     }
-    const float decay = fabsf(set->nodes[ni].c[13]);
-    if (next_carry > decay) {
-      next_carry -= decay;
+    const float damping = set->nodes[ni].c[13];
+    if (next_carry > damping) {
+      next_carry -= damping;
+    } else if (next_carry < -damping) {
+      next_carry += damping;
     } else {
       next_carry = 0.0f;
-    }
-    if (next_carry > 1.0e-6f) {
-      if (collision_owner) {
-        apply_collision_pose = 1u;
-      }
     }
     batch->state.dynamic_pose_axis_x[di] = carry_axis[0];
     batch->state.dynamic_pose_axis_y[di] = carry_axis[1];
     batch->state.dynamic_pose_axis_z[di] = carry_axis[2];
     batch->state.dynamic_pose_angle[di] = next_carry;
 
-    batch->state.dynamic_pose_pos_x[child_di] = parent_pos[0] + prev_vec[0] * seg_len;
-    batch->state.dynamic_pose_pos_y[child_di] = parent_pos[1] + prev_vec[1] * seg_len;
-    batch->state.dynamic_pose_pos_z[child_di] = parent_pos[2] + prev_vec[2] * seg_len;
+    float solved_rot[3] = {rot[0], rot[1], rot[2]};
+    if (have_cross != 0u && angle_diff >= 1.0e-5f) {
+      float local_axis[3] = {
+          parent_world[0] * cross[0] + parent_world[4] * cross[1] + parent_world[8] * cross[2],
+          parent_world[1] * cross[0] + parent_world[5] * cross[1] + parent_world[9] * cross[2],
+          parent_world[2] * cross[0] + parent_world[6] * cross[1] + parent_world[10] * cross[2],
+      };
+      if (vec3_normalize(local_axis)) {
+        const MslQuat angle_q = quat_axis_angle(local_axis, angle_diff);
+        MslQuat current_q;
+        quat_from_euler_srt_order(rot, &current_q);
+        const MslQuat solved_q = quat_mul(&angle_q, &current_q);
+        euler_from_unit_quat(&solved_q, solved_rot);
+      }
+    }
+    const float tx = fabsf(child_pos[0]);
+    const float ty = fabsf(child_pos[1]);
+    const float tz = fabsf(child_pos[2]);
+    if (tz > ty && tz > tx) {
+      solved_rot[2] *= 0.9f;
+    } else if (ty > tx) {
+      solved_rot[1] *= 0.9f;
+    } else {
+      solved_rot[0] *= 0.9f;
+    }
+
+    float solved_local[12], solved_world[12];
+    dynamic_mtx34_srt(solved_rot, pos, scl, solved_local);
+    mtx34_concat(parent_world, solved_local, solved_world);
+    batch->state.dynamic_pose_rot_x[di] = solved_rot[0];
+    batch->state.dynamic_pose_rot_y[di] = solved_rot[1];
+    batch->state.dynamic_pose_rot_z[di] = solved_rot[2];
+    batch->state.dynamic_pose_pos_x[di] = solved_world[3];
+    batch->state.dynamic_pose_pos_y[di] = solved_world[7];
+    batch->state.dynamic_pose_pos_z[di] = solved_world[11];
+    batch->state.dynamic_pose_pos_x[child_di] = solved_world[0] * child_pos[0] +
+                                                solved_world[1] * child_pos[1] +
+                                                solved_world[2] * child_pos[2] + solved_world[3];
+    batch->state.dynamic_pose_pos_y[child_di] = solved_world[4] * child_pos[0] +
+                                                solved_world[5] * child_pos[1] +
+                                                solved_world[6] * child_pos[2] + solved_world[7];
+    batch->state.dynamic_pose_pos_z[child_di] = solved_world[8] * child_pos[0] +
+                                                solved_world[9] * child_pos[1] +
+                                                solved_world[10] * child_pos[2] + solved_world[11];
+    memcpy(parent_world, solved_world, sizeof(parent_world));
   }
+
+  const uint16_t tail_i = (uint16_t)(node_count - 1u);
+  const size_t tail_di = dynamic_state_index(idx, tail_i);
+  const float* tail_pos = node_pos[tail_i];
+  batch->state.dynamic_pose_pos_x[tail_di] = parent_world[0] * tail_pos[0] +
+                                             parent_world[1] * tail_pos[1] +
+                                             parent_world[2] * tail_pos[2] + parent_world[3];
+  batch->state.dynamic_pose_pos_y[tail_di] = parent_world[4] * tail_pos[0] +
+                                             parent_world[5] * tail_pos[1] +
+                                             parent_world[6] * tail_pos[2] + parent_world[7];
+  batch->state.dynamic_pose_pos_z[tail_di] = parent_world[8] * tail_pos[0] +
+                                             parent_world[9] * tail_pos[1] +
+                                             parent_world[10] * tail_pos[2] + parent_world[11];
   batch->state.dynamic_pose_state_valid[idx] = 1u;
   batch->state.dynamic_pose_apply_collision_matrix[idx] = apply_collision_pose;
   batch->state.dynamic_pose_node_count[idx] = (uint8_t)node_count;
   batch->state.dynamic_pose_char_id[idx] = char_id;
   batch->state.dynamic_pose_msid[idx] = msid;
   batch->state.dynamic_pose_frame[idx] = frame;
+}
+
+void anim_pose_reseed_dynamic_state(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t char_id = batch->state.char_id[idx];
+  const uint32_t anim_u32 = batch->state.animation_index[idx];
+  if (anim_u32 > 0xFFFFu) {
+    batch->state.dynamic_pose_state_valid[idx] = 0u;
+    batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+    return;
+  }
+  const uint16_t msid = (uint16_t)anim_u32;
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL || t->dyn_set_count == 0u) {
+    batch->state.dynamic_pose_state_valid[idx] = 0u;
+    batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+    return;
+  }
+  const MslAnimDynSetData* set = &t->dyn_sets[0];
+  if (set->node_count == 0u || !t->local_have_msid || !t->local_have_msid[msid] ||
+      t->local_frame_count_by_msid[msid] == 0u) {
+    batch->state.dynamic_pose_state_valid[idx] = 0u;
+    batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+    return;
+  }
+  const uint16_t frame =
+      msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+  const uint8_t disabled =
+      (t->dyn_disabled_have_msid != NULL && t->dyn_disabled_have_msid[msid] != 0u) ? 1u : 0u;
+  dynamic_state_initialize_from_locals(batch, idx, t, set, char_id, msid,
+                                       disabled != 0u ? frame : 0u);
+  if (disabled != 0u) {
+    // x594_b3 routes the whole chain through ftCo_8009CB40(..., false, NULL). The AObj owns the
+    // collision JObjs and lb_8001044C rejects the 0x100 disabled-set marker before stepping.
+    // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009CB40,ftCo_8009E7B4}
+    batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+    return;
+  }
+  const uint16_t max_frame = (frame < t->local_frame_count_by_msid[msid])
+                                 ? frame
+                                 : (uint16_t)(t->local_frame_count_by_msid[msid] - 1u);
+  for (uint16_t f = 0u; f <= max_frame; f++) {
+    dynamic_state_step(batch, idx, t, set, char_id, msid, (float)f, 1u);
+    if (f == 0xFFFFu) {
+      break;
+    }
+  }
+}
+
+void anim_pose_sync_dynamic_ownership(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t char_id = batch->state.char_id[idx];
+  const uint32_t anim_u32 = batch->state.animation_index[idx];
+  if (anim_u32 > 0xFFFFu) {
+    batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+    return;
+  }
+  const uint16_t msid = (uint16_t)anim_u32;
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL || t->dyn_set_count == 0u || t->local_have_msid == NULL ||
+      t->local_have_msid[msid] == 0u) {
+    batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+    return;
+  }
+  const uint16_t frame =
+      msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+  const uint8_t disabled =
+      (t->dyn_disabled_have_msid != NULL && t->dyn_disabled_have_msid[msid] != 0u) ? 1u : 0u;
+  if (disabled != 0u) {
+    batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+    batch->state.dynamic_pose_msid[idx] = msid;
+    batch->state.dynamic_pose_frame[idx] = frame;
+    return;
+  }
+
+  const MslAnimDynSetData* set = &t->dyn_sets[0];
+  if (batch->state.dynamic_pose_state_valid[idx] == 0u ||
+      batch->state.dynamic_pose_char_id[idx] != char_id ||
+      batch->state.dynamic_pose_apply_collision_matrix[idx] == 0u) {
+    // Re-enabling after x594_b3 preserves the last animated Euler rotation, snapshots the live
+    // world positions, clears angular carry, and restores the descriptor's saved translate/scale.
+    // The initializer captures the first three products; collision reconstruction below uses the
+    // extracted rest SRT for the final product.
+    // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40
+    uint16_t source_msid = msid;
+    uint16_t source_frame = frame;
+    if (batch->state.collision_pose_valid[idx] != 0u) {
+      source_msid = batch->state.collision_pose_msid[idx];
+      source_frame = msl_anim_frame_floor_u16(
+          msl_anim_frame_sanitize_f32(batch->state.collision_pose_anim_frame[idx]));
+    }
+    dynamic_state_initialize_from_locals(batch, idx, t, set, char_id, source_msid, source_frame);
+  }
+  batch->state.dynamic_pose_apply_collision_matrix[idx] = 1u;
+  batch->state.dynamic_pose_msid[idx] = msid;
+  batch->state.dynamic_pose_frame[idx] = frame;
+}
+
+void anim_pose_update_dynamic_state_player(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t char_id = batch->state.char_id[idx];
+  // Fighter_8006D9AC does not run ftCo_8009E0A8 while the fighter object is suppressed or
+  // x2219_b5 hitlag is live. ProcessHit can enter hitlag before this priority-0x10 callback,
+  // so newly accepted contacts freeze the chain immediately as well.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006D9AC
+  if (batch->state.hitlag[idx] != 0u) {
+    return;
+  }
+  if (batch->state.dynamic_pose_state_valid[idx] == 0u ||
+      batch->state.dynamic_pose_char_id[idx] != char_id) {
+    anim_pose_reseed_dynamic_state(batch, idx);
+    return;
+  }
+  const uint32_t anim_u32 = batch->state.animation_index[idx];
+  if (anim_u32 > 0xFFFFu) {
+    return;
+  }
+  const uint16_t msid = (uint16_t)anim_u32;
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL || t->dyn_set_count == 0u || !t->local_have_msid || !t->local_have_msid[msid]) {
+    return;
+  }
+  const MslAnimDynSetData* set = &t->dyn_sets[0];
+  // Fighter dynamics are persistent JObj state, not an action-family collision exception.
+  // Opcode 50 mutates individual FighterBone animation ownership, while ftCo_8009DD94 keeps
+  // advancing the dynamics set. Every collision consumer therefore reads the live solved JObj
+  // whenever the character owns this set.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80072B94
+  // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
+  const uint8_t collision_owner =
+      (t->dyn_disabled_have_msid == NULL || t->dyn_disabled_have_msid[msid] == 0u) ? 1u : 0u;
+  if (collision_owner == 0u) {
+    batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+    batch->state.dynamic_pose_msid[idx] = msid;
+    batch->state.dynamic_pose_frame[idx] =
+        msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+    return;
+  }
+  const float dynamic_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+  // The dynamics descriptor is fighter-lifetime state. Motion changes, loop wraps, and hitlag can
+  // all make visible AObj time discontinuous without recreating that object; ftCo_8009DD94 still
+  // advances the existing lb_8001044C carry exactly once. Only reseed (or character replacement)
+  // lacks live carry and must reconstruct a bounded current-motion history from extracted locals.
+  // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009CF84,ftCo_8009DD94}
+  dynamic_state_step(batch, idx, t, set, char_id, msid, dynamic_frame_f32, collision_owner);
 }
 
 void anim_pose_update_dynamic_state(MslBatch* batch) {
@@ -2443,175 +3442,137 @@ void anim_pose_update_dynamic_state(MslBatch* batch) {
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      const uint8_t char_id = batch->state.char_id[idx];
-      const uint32_t anim_u32 = batch->state.animation_index[idx];
-      if (anim_u32 > 0xFFFFu) {
-        batch->state.dynamic_pose_state_valid[idx] = 0u;
-        batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
-        continue;
-      }
-      const uint16_t msid = (uint16_t)anim_u32;
-      const MslAnimPoseTable* t = table_for_char(char_id);
-      if (t == NULL || t->dyn_set_count == 0u) {
-        batch->state.dynamic_pose_state_valid[idx] = 0u;
-        batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
-        continue;
-      }
-      const MslAnimDynSetData* set = &t->dyn_sets[0];
-      if (set->node_count == 0u || !t->local_have_msid || !t->local_have_msid[msid]) {
-        batch->state.dynamic_pose_state_valid[idx] = 0u;
-        batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
-        continue;
-      }
-      const uint8_t collision_owner =
-          (t->dyn_collision_have_msid != NULL && t->dyn_collision_have_msid[msid]) ? 1u : 0u;
-      const uint8_t catch_grabbable_owner =
-          (t->dyn_catch_grabbable_have_msid != NULL && t->dyn_catch_grabbable_have_msid[msid]) ? 1u
-                                                                                               : 0u;
-      if (!collision_owner && !catch_grabbable_owner) {
-        batch->state.dynamic_pose_state_valid[idx] = 0u;
-        batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
-        continue;
-      }
-      float dynamic_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-      const uint16_t frame = msl_anim_frame_floor_u16(dynamic_frame_f32);
-      const uint8_t same_msid_sequential =
-          (batch->state.dynamic_pose_state_valid[idx] &&
-           batch->state.dynamic_pose_char_id[idx] == char_id &&
-           batch->state.dynamic_pose_msid[idx] == msid &&
-           (uint16_t)(batch->state.dynamic_pose_frame[idx] + 1u) == frame)
-              ? 1u
-              : 0u;
-      if (!same_msid_sequential) {
-        dynamic_state_initialize_from_locals(batch, idx, t, set, char_id, msid, 0u);
-        const uint16_t max_frame = (frame < t->local_frame_count_by_msid[msid])
-                                       ? frame
-                                       : (uint16_t)(t->local_frame_count_by_msid[msid] - 1u);
-        for (uint16_t f = 0u; f <= max_frame; f++) {
-          dynamic_state_step(batch, idx, t, set, char_id, msid, f, collision_owner);
-          if (f == 0xFFFFu) {
-            break;
-          }
-        }
-      } else {
-        dynamic_state_step(batch, idx, t, set, char_id, msid, frame, collision_owner);
-      }
+      anim_pose_update_dynamic_state_player(batch, msl_idx_player(bi, p));
     }
   }
+}
+
+static int dynamic_matrices_from_locals(const MslBatch* batch, size_t player_idx,
+                                        const MslAnimPoseTable* t, const MslAnimDynSetData* set,
+                                        uint16_t msid, uint16_t frame, const uint16_t* part_ids,
+                                        uint16_t count, float* out_mats_12, uint8_t* out_ok) {
+  if (batch == NULL || t == NULL || set == NULL || part_ids == NULL || out_mats_12 == NULL ||
+      out_ok == NULL || t->local_count > (uint16_t)MSL_LIVE_POSE_LOCAL_CAP) {
+    return -1;
+  }
+  float world_by_local[MSL_LIVE_POSE_LOCAL_CAP][12];
+  float world_scl_by_local[MSL_LIVE_POSE_LOCAL_CAP][3];
+  uint8_t matrix_valid[MSL_LIVE_POSE_LOCAL_CAP] = {0};
+  uint8_t scale_valid[MSL_LIVE_POSE_LOCAL_CAP] = {0};
+  uint8_t any = 0u;
+  for (uint16_t oi = 0u; oi < count; oi++) {
+    out_ok[oi] = 0u;
+    if (dynamic_set_node_index_for_part(set, part_ids[oi]) < 0) {
+      continue;
+    }
+    uint16_t li = t->local_part_to_index[part_ids[oi]];
+    uint16_t chain[MSL_LIVE_POSE_LOCAL_CAP];
+    uint16_t chain_count = 0u;
+    while (li != UINT16_MAX && li < t->local_count && matrix_valid[li] == 0u) {
+      if (chain_count >= (uint16_t)MSL_LIVE_POSE_LOCAL_CAP) {
+        break;
+      }
+      chain[chain_count++] = li;
+      const int16_t parent = t->local_parent_part_by_index[li];
+      if (parent < 0) {
+        li = UINT16_MAX;
+        break;
+      }
+      li = t->local_part_to_index[(uint16_t)parent];
+    }
+    if (chain_count == 0u ||
+        (li != UINT16_MAX && (li >= t->local_count || matrix_valid[li] == 0u))) {
+      continue;
+    }
+
+    float world[12];
+    float parent_world_scl[3] = {0.0f, 0.0f, 0.0f};
+    uint8_t have_parent_scl = 0u;
+    if (li != UINT16_MAX) {
+      memcpy(world, world_by_local[li], MAT_BYTES);
+      have_parent_scl = scale_valid[li];
+      if (have_parent_scl != 0u) {
+        memcpy(parent_world_scl, world_scl_by_local[li], sizeof(parent_world_scl));
+      }
+    } else {
+      mtx34_identity(world);
+    }
+
+    uint8_t complete = 1u;
+    for (int ci = (int)chain_count - 1; ci >= 0; ci--) {
+      const uint16_t child_li = chain[ci];
+      const uint16_t part = t->local_buf[ANIM_HDR_BASE_BYTES + (size_t)child_li];
+      float rot[3], pos[3], scl[3];
+      uint32_t flags = 0u;
+      int16_t parent = -1;
+      if (local_srt_for_part(t, msid, frame, part, rot, pos, scl, &flags, &parent) != 0) {
+        complete = 0u;
+        break;
+      }
+      live_jobj_consume_transn_translation(t, msid, part, pos);
+      const int dyn_i = dynamic_set_node_index_for_part(set, part);
+      if (dyn_i >= 0 && (uint16_t)dyn_i < batch->state.dynamic_pose_node_count[player_idx]) {
+        const size_t di = dynamic_state_index(player_idx, (uint16_t)dyn_i);
+        rot[0] = batch->state.dynamic_pose_rot_x[di];
+        rot[1] = batch->state.dynamic_pose_rot_y[di];
+        rot[2] = batch->state.dynamic_pose_rot_z[di];
+      }
+      float local[12];
+      mtx34_srt_simple(rot, pos, scl,
+                       parent >= 0 && have_parent_scl != 0u ? parent_world_scl : NULL, local);
+      mtx34_concat(world, local, world);
+      if ((flags & 8u) != 0u) {
+        have_parent_scl = parent >= 0 && have_parent_scl != 0u ? 1u : 0u;
+      } else {
+        if (parent >= 0 && have_parent_scl != 0u) {
+          for (uint8_t axis = 0u; axis < 3u; axis++) {
+            parent_world_scl[axis] *= scl[axis];
+          }
+        } else {
+          memcpy(parent_world_scl, scl, sizeof(parent_world_scl));
+        }
+        have_parent_scl = 1u;
+      }
+      memcpy(world_by_local[child_li], world, MAT_BYTES);
+      scale_valid[child_li] = have_parent_scl;
+      if (have_parent_scl != 0u) {
+        memcpy(world_scl_by_local[child_li], parent_world_scl, sizeof(parent_world_scl));
+      }
+      matrix_valid[child_li] = 1u;
+    }
+    const uint16_t out_li = t->local_part_to_index[part_ids[oi]];
+    if (complete != 0u && out_li != UINT16_MAX && out_li < t->local_count &&
+        matrix_valid[out_li] != 0u) {
+      memcpy(&out_mats_12[(size_t)oi * 12u], world_by_local[out_li], MAT_BYTES);
+      out_ok[oi] = 1u;
+      any = 1u;
+    }
+  }
+  return any != 0u ? 0 : -1;
 }
 
 static int dynamic_matrix_from_locals(const MslBatch* batch, size_t player_idx,
                                       const MslAnimPoseTable* t, const MslAnimDynSetData* set,
                                       uint16_t msid, uint16_t frame, uint16_t part_id,
                                       uint8_t dynamic_matrix_mode, float out_3x4[12]) {
-  enum { MAX_PATH = 96 };
-  uint16_t path[MAX_PATH];
-  uint16_t count = 0;
-  uint16_t cur = part_id;
-  for (;;) {
-    if (count >= (uint16_t)MAX_PATH) {
-      return -1;
-    }
-    float rot[3], pos[3], scl[3];
-    int16_t parent = -1;
-    if (local_srt_for_part(t, msid, frame, cur, rot, pos, scl, NULL, &parent) != 0) {
-      return -1;
-    }
-    path[count++] = cur;
-    if (parent < 0) {
-      break;
-    }
-    cur = (uint16_t)parent;
+  if (dynamic_matrix_mode == 0u) {
+    return -1;
   }
-
-  float world[12];
-  mtx34_identity(world);
-  float parent_world_scl[3] = {0.0f, 0.0f, 0.0f};
-  uint8_t have_parent_scl = 0u;
-  for (int i = (int)count - 1; i >= 0; i--) {
-    const uint16_t part = path[i];
-    float rot[3], pos[3], scl[3];
-    uint32_t flags = 0;
-    int16_t parent = -1;
-    if (local_srt_for_part(t, msid, frame, part, rot, pos, scl, &flags, &parent) != 0) {
-      return -1;
-    }
-    const int dyn_i = dynamic_set_node_index_for_part(set, part);
-    const float* parent_scl = NULL;
-    if (parent >= 0 && have_parent_scl) {
-      parent_scl = parent_world_scl;
-    }
-    float local[12];
-    mtx34_srt_simple(rot, pos, scl, parent_scl, local);
-    mtx34_concat(world, local, world);
-    if (batch != NULL && dynamic_matrix_mode != 0u && dyn_i >= 0 &&
-        (uint16_t)dyn_i < (uint16_t)MSL_MAX_DYNAMIC_NODES) {
-      const uint16_t dyn_u = (uint16_t)dyn_i;
-      const size_t di = dynamic_state_index(player_idx, dyn_u);
-      if (dyn_u + 1u < batch->state.dynamic_pose_node_count[player_idx]) {
-        const size_t child_di = dynamic_state_index(player_idx, (uint16_t)(dyn_u + 1u));
-        float base_parent[12], base_child[12];
-        if (anim_pose_get_matrix(batch->state.dynamic_pose_char_id[player_idx], msid, frame, part,
-                                 base_parent) == 0 &&
-            anim_pose_get_matrix(batch->state.dynamic_pose_char_id[player_idx], msid, frame,
-                                 set->nodes[dyn_u + 1u].part_id, base_child) == 0) {
-          float base_dir[3] = {
-              base_child[3] - base_parent[3],
-              base_child[7] - base_parent[7],
-              base_child[11] - base_parent[11],
-          };
-          float dyn_dir[3] = {
-              batch->state.dynamic_pose_pos_x[child_di] - batch->state.dynamic_pose_pos_x[di],
-              batch->state.dynamic_pose_pos_y[child_di] - batch->state.dynamic_pose_pos_y[di],
-              batch->state.dynamic_pose_pos_z[child_di] - batch->state.dynamic_pose_pos_z[di],
-          };
-          if (vec3_normalize(base_dir) && vec3_normalize(dyn_dir)) {
-            float axis[3];
-            vec3_cross(base_dir, dyn_dir, axis);
-            if (vec3_normalize(axis)) {
-              const float angle = vec3_angle(base_dir, dyn_dir);
-              if (angle > 1.0e-6f) {
-                mtx34_apply_world_axis_angle(world, axis, angle);
-              }
-            }
-          }
-        }
-      }
-      if (dynamic_matrix_mode == 2u) {
-        world[3] = batch->state.dynamic_pose_pos_x[di];
-        world[7] = batch->state.dynamic_pose_pos_y[di];
-        world[11] = batch->state.dynamic_pose_pos_z[di];
-      }
-    }
-
-    if ((flags & 8u) != 0u) {
-      if (parent >= 0 && have_parent_scl) {
-        // The path is a single root-to-part chain, so the only future scale consumer is this
-        // node's direct child in the same chain.
-        have_parent_scl = 1u;
-      } else {
-        have_parent_scl = 0u;
-      }
-    } else {
-      if (parent >= 0 && have_parent_scl) {
-        parent_world_scl[0] *= scl[0];
-        parent_world_scl[1] *= scl[1];
-        parent_world_scl[2] *= scl[2];
-      } else {
-        memcpy(parent_world_scl, scl, 3u * sizeof(float));
-      }
-      have_parent_scl = 1u;
-    }
+  uint8_t ok = 0u;
+  if (dynamic_matrices_from_locals(batch, player_idx, t, set, msid, frame, &part_id, 1u, out_3x4,
+                                   &ok) != 0 ||
+      ok == 0u) {
+    return -1;
   }
-  memcpy(out_3x4, world, MAT_BYTES);
   return 0;
 }
 
 static int local_parent_for_part(const MslAnimPoseTable* t, uint16_t part_id, int16_t* out_parent);
 
-static int matrix_from_locals_f32(const MslAnimPoseTable* t, uint16_t msid, float anim_frame,
-                                  uint16_t part_id, float out_3x4[12]) {
+static int matrix_from_locals_f32_with_xrotn_restore(const MslAnimPoseTable* t, uint16_t msid,
+                                                     float anim_frame, uint16_t part_id,
+                                                     const float* xrotn_restore_pos,
+                                                     float out_3x4[12]) {
   if (t == NULL || out_3x4 == NULL) {
     return -1;
   }
@@ -2651,6 +3612,20 @@ static int matrix_from_locals_f32(const MslAnimPoseTable* t, uint16_t msid, floa
     if (local_srt_for_part_f32(t, msid, anim_frame, part, rot, pos, scl, &flags, &parent) != 0) {
       return -1;
     }
+    live_jobj_consume_transn_translation(t, msid, part, pos);
+    if (part == 2u && xrotn_restore_pos != NULL) {
+      // ftCo_800DB368 changes FtPart_XRotN to Euler mode with a zero rotation and saves its local
+      // translation in fp->x2174 before installing the RObj constraint. ftCo_800DDDE4 removes the
+      // constraint and restores that exact local translation before mpColl_LoadECB_JObj walks the
+      // current Thrown* descendants. Rebuild the ordinary local chain with only that source JObj
+      // override; replacing a composed matrix downstream loses parent-scale semantics.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+      rot[0] = 0.0f;
+      rot[1] = 0.0f;
+      rot[2] = 0.0f;
+      memcpy(pos, xrotn_restore_pos, 3u * sizeof(float));
+    }
     const float* parent_scl = NULL;
     if (parent >= 0 && have_parent_scl) {
       parent_scl = parent_world_scl;
@@ -2680,6 +3655,26 @@ static int matrix_from_locals_f32(const MslAnimPoseTable* t, uint16_t msid, floa
   return 0;
 }
 
+static int matrix_from_locals_f32(const MslAnimPoseTable* t, uint16_t msid, float anim_frame,
+                                  uint16_t part_id, float out_3x4[12]) {
+  return matrix_from_locals_f32_with_xrotn_restore(t, msid, anim_frame, part_id, NULL, out_3x4);
+}
+
+int anim_pose_get_xrotn_restored_collision_matrix_f32(uint8_t char_id, uint16_t msid,
+                                                      float anim_frame, uint16_t part_id,
+                                                      const float xrotn_restore_pos[3],
+                                                      float out_3x4[12]) {
+  if (xrotn_restore_pos == NULL || out_3x4 == NULL) {
+    return -1;
+  }
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL) {
+    return -1;
+  }
+  return matrix_from_locals_f32_with_xrotn_restore(t, msid, anim_frame, part_id, xrotn_restore_pos,
+                                                   out_3x4);
+}
+
 int anim_pose_get_collision_matrix(const MslBatch* batch, size_t player_idx, uint16_t msid,
                                    uint16_t frame, uint16_t part_id, float out_3x4[12]) {
   if (out_3x4 == NULL) {
@@ -2687,6 +3682,9 @@ int anim_pose_get_collision_matrix(const MslBatch* batch, size_t player_idx, uin
   }
   if (batch == NULL) {
     return -1;
+  }
+  if (matrix_from_live_pose(batch, player_idx, part_id, out_3x4) == 0) {
+    return 0;
   }
   const uint8_t char_id = batch->state.char_id[player_idx];
   if (anim_pose_get_matrix(char_id, msid, frame, part_id, out_3x4) != 0) {
@@ -2696,15 +3694,14 @@ int anim_pose_get_collision_matrix(const MslBatch* batch, size_t player_idx, uin
     return 0;
   }
   const MslAnimPoseTable* t = table_for_char(char_id);
-  if (t == NULL || t->dyn_collision_have_msid == NULL || !t->dyn_collision_have_msid[msid]) {
+  if (t == NULL) {
     return 0;
   }
   const MslAnimDynSetData* set = dynamic_set_for_part(t, part_id);
   if (set == NULL) {
     return 0;
   }
-  if (batch->state.dynamic_pose_char_id[player_idx] != char_id ||
-      batch->state.dynamic_pose_msid[player_idx] != msid) {
+  if (batch->state.dynamic_pose_char_id[player_idx] != char_id) {
     return 0;
   }
   float dyn[12];
@@ -2752,15 +3749,11 @@ static int anim_pose_get_collision_matrix_f32_base(const MslBatch* batch, size_t
   if (!batch->state.dynamic_pose_apply_collision_matrix[player_idx]) {
     return 0;
   }
-  if (t->dyn_collision_have_msid == NULL || !t->dyn_collision_have_msid[msid]) {
-    return 0;
-  }
   const MslAnimDynSetData* set = dynamic_set_for_part(t, part_id);
   if (set == NULL) {
     return 0;
   }
-  if (batch->state.dynamic_pose_char_id[player_idx] != char_id ||
-      batch->state.dynamic_pose_msid[player_idx] != msid) {
+  if (batch->state.dynamic_pose_char_id[player_idx] != char_id) {
     return 0;
   }
   float dyn[12];
@@ -2948,6 +3941,117 @@ static int matrix_from_common_fall_blended_locals(const MslAnimPoseTable* t, uin
   return 0;
 }
 
+static int matrices_from_common_fall_blended_locals(const MslAnimPoseTable* t,
+                                                    uint16_t neutral_msid, uint16_t target_msid,
+                                                    float anim_frame, const uint16_t* part_ids,
+                                                    uint16_t count, float weight,
+                                                    float* out_mats_12, uint8_t* out_ok) {
+  if (t == NULL || part_ids == NULL || out_mats_12 == NULL || out_ok == NULL ||
+      t->local_count > (uint16_t)MSL_LIVE_POSE_LOCAL_CAP) {
+    return -1;
+  }
+  if (weight == 0.0f || weight == 1.0f) {
+    const uint16_t endpoint_msid = weight == 1.0f ? target_msid : neutral_msid;
+    uint8_t any = 0u;
+    for (uint16_t oi = 0u; oi < count; oi++) {
+      out_ok[oi] = 0u;
+      if (matrix_from_locals_f32(t, endpoint_msid, anim_frame, part_ids[oi],
+                                 &out_mats_12[(size_t)oi * 12u]) == 0) {
+        out_ok[oi] = 1u;
+        any = 1u;
+      }
+    }
+    return any != 0u ? 0 : -1;
+  }
+
+  // HSD_JObjSetupMatrix publishes each ancestor product once before mpColl_LoadECB_JObj reads
+  // several collision JObjs. Preserve ftAnim_8006FE9C's local-SRT blend, but share the composed
+  // ancestors across all requested parts instead of rebuilding the same root path per consumer.
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FE9C
+  // refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjSetupMatrix
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+  float world_by_local[MSL_LIVE_POSE_LOCAL_CAP][12];
+  float world_scl_by_local[MSL_LIVE_POSE_LOCAL_CAP][3];
+  uint8_t matrix_valid[MSL_LIVE_POSE_LOCAL_CAP] = {0};
+  uint8_t scale_valid[MSL_LIVE_POSE_LOCAL_CAP] = {0};
+  uint8_t any = 0u;
+  for (uint16_t oi = 0u; oi < count; oi++) {
+    out_ok[oi] = 0u;
+    uint16_t li = t->local_part_to_index[part_ids[oi]];
+    uint16_t chain[MSL_LIVE_POSE_LOCAL_CAP];
+    uint16_t chain_count = 0u;
+    while (li != UINT16_MAX && li < t->local_count && matrix_valid[li] == 0u) {
+      if (chain_count >= (uint16_t)MSL_LIVE_POSE_LOCAL_CAP) {
+        break;
+      }
+      chain[chain_count++] = li;
+      const int16_t parent = t->local_parent_part_by_index[li];
+      li = parent < 0 ? UINT16_MAX : t->local_part_to_index[(uint16_t)parent];
+    }
+    if (li != UINT16_MAX && (li >= t->local_count || matrix_valid[li] == 0u)) {
+      continue;
+    }
+
+    float world[12];
+    float parent_world_scl[3] = {0.0f, 0.0f, 0.0f};
+    uint8_t have_parent_scl = 0u;
+    if (li != UINT16_MAX) {
+      memcpy(world, world_by_local[li], MAT_BYTES);
+      have_parent_scl = scale_valid[li];
+      if (have_parent_scl != 0u) {
+        memcpy(parent_world_scl, world_scl_by_local[li], sizeof(parent_world_scl));
+      }
+    } else {
+      mtx34_identity(world);
+    }
+
+    uint8_t complete = 1u;
+    for (int ci = (int)chain_count - 1; ci >= 0; ci--) {
+      const uint16_t child_li = chain[ci];
+      const uint16_t part = t->local_buf[ANIM_HDR_BASE_BYTES + (size_t)child_li];
+      float local[12];
+      float scl[3];
+      uint32_t flags = 0u;
+      int16_t parent = -1;
+      const int16_t expected_parent = t->local_parent_part_by_index[child_li];
+      const float* parent_scl =
+          expected_parent >= 0 && have_parent_scl != 0u ? parent_world_scl : NULL;
+      if (common_fall_blended_local_matrix(t, neutral_msid, target_msid, anim_frame, part, weight,
+                                           parent_scl, local, scl, &flags, &parent) != 0) {
+        complete = 0u;
+        break;
+      }
+      mtx34_concat(world, local, world);
+      if ((flags & 8u) != 0u) {
+        have_parent_scl = parent >= 0 && have_parent_scl != 0u ? 1u : 0u;
+      } else {
+        if (parent >= 0 && have_parent_scl != 0u) {
+          for (uint8_t axis = 0u; axis < 3u; axis++) {
+            parent_world_scl[axis] *= scl[axis];
+          }
+        } else {
+          memcpy(parent_world_scl, scl, sizeof(parent_world_scl));
+        }
+        have_parent_scl = 1u;
+      }
+      memcpy(world_by_local[child_li], world, MAT_BYTES);
+      scale_valid[child_li] = have_parent_scl;
+      if (have_parent_scl != 0u) {
+        memcpy(world_scl_by_local[child_li], parent_world_scl, sizeof(parent_world_scl));
+      }
+      matrix_valid[child_li] = 1u;
+    }
+    const uint16_t out_li = t->local_part_to_index[part_ids[oi]];
+    if (complete != 0u && out_li != UINT16_MAX && out_li < t->local_count &&
+        matrix_valid[out_li] != 0u) {
+      memcpy(&out_mats_12[(size_t)oi * 12u], world_by_local[out_li], MAT_BYTES);
+      out_ok[oi] = 1u;
+      any = 1u;
+    }
+  }
+  return any != 0u ? 0 : -1;
+}
+
 int anim_pose_debug_common_fall_blend_matrix(uint8_t char_id, uint16_t neutral_msid,
                                              uint16_t target_msid, float anim_frame,
                                              uint16_t part_id, float weight, float out_3x4[12]) {
@@ -3021,53 +4125,18 @@ int anim_pose_get_common_fall_blend_collision_matrix_f32(const MslBatch* batch, 
 
 int anim_pose_get_collision_matrix_f32(const MslBatch* batch, size_t player_idx, uint16_t msid,
                                        float anim_frame, uint16_t part_id, float out_3x4[12]) {
+  if (out_3x4 == NULL || batch == NULL) {
+    return -1;
+  }
+  if (matrix_from_live_pose(batch, player_idx, part_id, out_3x4) == 0) {
+    return 0;
+  }
   if (anim_pose_get_common_fall_blend_collision_matrix_f32(batch, player_idx, msid, anim_frame,
                                                            part_id, out_3x4) == 0) {
     return 0;
   }
   return anim_pose_get_collision_matrix_f32_base(batch, player_idx, msid, anim_frame, part_id,
                                                  out_3x4);
-}
-
-int anim_pose_get_catch_grabbable_matrix_f32(const MslBatch* batch, size_t player_idx,
-                                             uint16_t msid, float anim_frame, uint16_t part_id,
-                                             float out_3x4[12]) {
-  if (out_3x4 == NULL || batch == NULL) {
-    return -1;
-  }
-  const uint8_t char_id = batch->state.char_id[player_idx];
-  const float safe_frame = isfinite(anim_frame) ? anim_frame : 0.0f;
-  const uint16_t frame = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(safe_frame));
-  const MslAnimPoseTable* t = table_for_char(char_id);
-  if (t == NULL) {
-    return -1;
-  }
-  const uint16_t frame_count = (t->have_msid[msid] != 0u) ? t->frame_count_by_msid[msid] : 0u;
-  const uint8_t catch_dynamic_pose =
-      (batch->state.dynamic_pose_state_valid[player_idx] != 0u &&
-       batch->state.dynamic_pose_char_id[player_idx] == char_id &&
-       batch->state.dynamic_pose_msid[player_idx] == msid &&
-       (t->dyn_catch_grabbable_have_msid != NULL && t->dyn_catch_grabbable_have_msid[msid]))
-          ? 1u
-          : 0u;
-  if (catch_dynamic_pose == 0u) {
-    return -1;
-  }
-  if (matrix_from_locals_f32(t, msid, safe_frame, part_id, out_3x4) != 0) {
-    if (frame >= frame_count || anim_pose_get_matrix(char_id, msid, frame, part_id, out_3x4) != 0) {
-      return -1;
-    }
-  }
-  const MslAnimDynSetData* set = dynamic_set_for_part(t, part_id);
-  if (set == NULL) {
-    return 0;
-  }
-  float dyn[12];
-  if (dynamic_matrix_from_locals(batch, player_idx, t, set, msid, frame, part_id,
-                                 /*dynamic_matrix_mode=*/2u, dyn) == 0) {
-    memcpy(out_3x4, dyn, MAT_BYTES);
-  }
-  return 0;
 }
 
 int anim_pose_get_collision_matrices_f32(const MslBatch* batch, size_t player_idx, uint16_t msid,
@@ -3095,16 +4164,33 @@ int anim_pose_get_collision_matrices_f32(const MslBatch* batch, size_t player_id
   const uint16_t frame_count = t->frame_count_by_msid[msid];
   const uint8_t have_baked_matrix_frame = (frame < frame_count) ? 1u : 0u;
 
+  uint16_t fall_target = 0u;
+  float fall_weight = 0.0f;
+  const uint8_t common_fall =
+      anim_pose_common_fall_target_msid(batch, player_idx, msid, &fall_target, &fall_weight);
+  if (batch->live_pose_materialized[player_idx] != 0u ||
+      count > (uint16_t)MSL_LIVE_POSE_LOCAL_CAP) {
+    for (uint16_t i = 0; i < count; i++) {
+      if (anim_pose_get_collision_matrix_f32(batch, player_idx, msid, safe_frame, part_ids[i],
+                                             &out_mats_12[(size_t)i * 12u]) == 0) {
+        out_ok[i] = 1u;
+      }
+    }
+    return 0;
+  }
+  if (common_fall != 0u) {
+    return matrices_from_common_fall_blended_locals(t, msid, fall_target, safe_frame, part_ids,
+                                                    count, fall_weight, out_mats_12, out_ok);
+  }
+
   const uint8_t integer_frame = (fabsf(safe_frame - (float)frame) <= 1.0e-6f) ? 1u : 0u;
   const uint8_t dynamic_collision_pose =
       (batch->state.dynamic_pose_apply_collision_matrix[player_idx] != 0u &&
-       t->dyn_collision_have_msid != NULL && t->dyn_collision_have_msid[msid] &&
-       batch->state.dynamic_pose_char_id[player_idx] == char_id &&
-       batch->state.dynamic_pose_msid[player_idx] == msid)
+       batch->state.dynamic_pose_char_id[player_idx] == char_id)
           ? 1u
           : 0u;
 
-  if (integer_frame != 0u && dynamic_collision_pose == 0u && have_baked_matrix_frame != 0u) {
+  if (integer_frame != 0u && have_baked_matrix_frame != 0u) {
     const uint32_t base_off = t->base_off_by_msid[msid];
     const uint64_t joint_count_u = (uint64_t)t->joint_count;
     const uint64_t frame_u = (uint64_t)frame;
@@ -3120,14 +4206,9 @@ int anim_pose_get_collision_matrices_f32(const MslBatch* batch, size_t player_id
       }
       const uint64_t mat_off_u = frame_base_u + (uint64_t)joint_index * (uint64_t)MAT_BYTES;
       memcpy(&out_mats_12[(size_t)i * 12u], t->buf + (size_t)mat_off_u, (size_t)MAT_BYTES);
-      (void)anim_pose_get_common_fall_blend_collision_matrix_f32(
-          batch, player_idx, msid, safe_frame, part_ids[i], &out_mats_12[(size_t)i * 12u]);
       out_ok[i] = 1u;
     }
-    return 0;
-  }
-
-  if (dynamic_collision_pose == 0u) {
+  } else {
     for (uint16_t i = 0; i < count; i++) {
       float* out = &out_mats_12[(size_t)i * 12u];
       if (matrix_from_locals_f32(t, msid, safe_frame, part_ids[i], out) != 0) {
@@ -3136,17 +4217,23 @@ int anim_pose_get_collision_matrices_f32(const MslBatch* batch, size_t player_id
           continue;
         }
       }
-      (void)anim_pose_get_common_fall_blend_collision_matrix_f32(batch, player_idx, msid,
-                                                                 safe_frame, part_ids[i], out);
       out_ok[i] = 1u;
     }
-    return 0;
   }
 
-  for (uint16_t i = 0; i < count; i++) {
-    if (anim_pose_get_collision_matrix_f32(batch, player_idx, msid, safe_frame, part_ids[i],
-                                           &out_mats_12[(size_t)i * 12u]) == 0) {
-      out_ok[i] = 1u;
+  if (dynamic_collision_pose != 0u && t->dyn_set_count != 0u) {
+    // HSD_JObjSetupMatrix walks the live tree once and all HurtCapsules consume that publication.
+    // Share ancestor products across the requested dynamic parts instead of rebuilding the same
+    // root-to-tail chain once per capsule.
+    // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    // refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjSetupMatrix
+    uint8_t dynamic_ok[MSL_LIVE_POSE_LOCAL_CAP];
+    (void)dynamic_matrices_from_locals(batch, player_idx, t, &t->dyn_sets[0], msid, frame, part_ids,
+                                       count, out_mats_12, dynamic_ok);
+    for (uint16_t i = 0u; i < count; i++) {
+      if (dynamic_ok[i] != 0u) {
+        out_ok[i] = 1u;
+      }
     }
   }
   return 0;

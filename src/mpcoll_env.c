@@ -13,7 +13,6 @@
 #include "mpcoll_ecb_points.h"
 #include "mpcoll_ecb_pose.h"
 #include "stage_collision.h"
-#include "throw_flow.h"
 
 // Decomp constants / shapes:
 // - mpColl_80044164 / mpColl_800443C4 build a swept AABB using:
@@ -446,8 +445,15 @@ static inline uint32_t ledge_grab_flags_for_fighter(const MslBatch* batch, size_
   const float snap_x = ch->ledge_snap_x * fighter_scale_y;
   const float snap_y = ch->ledge_snap_y * fighter_scale_y;
   const MslCommonParams* common = msl_common_params();
-  const uint8_t damage_height_owner =
-      msl_coll_handler_is_damage(batch->state.live_coll_handler_kind[idx]);
+  // Only ft_80081DD4 temporarily scales ledge_snap_height by p_ftCommonData->x1CC. DamageFall's
+  // distinct ft_8008370C callback runs the same 473CC geometry with the fighter's full initialized
+  // ledge height, so handler-family identity is too broad here; consume the extracted exact
+  // wrapper selector instead.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80081DD4,ft_8008370C}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Coll
+  // data/motion_state/owners/*.bin::MSLMSO01 coll_wrapper_selector_kind
+  const uint8_t damage_height_owner = (uint8_t)(batch->state.live_coll_wrapper_selector_kind[idx] ==
+                                                (uint8_t)MSL_COLL_SELECTOR_GA_DAMAGE);
   const float snap_h =
       ch->ledge_snap_height * fighter_scale_y *
       (damage_height_owner && common != NULL ? common->damage_ledge_snap_height_mul : 1.0f);
@@ -591,9 +597,6 @@ static void update_ledge_grab_one(MslBatch* batch, int bi, int p, float coll_pre
     if (owner != 0xFFu && owner < (uint8_t)num_players && owner != (uint8_t)p) {
       return;
     }
-  }
-  if (throw_flow_release_pending_for_victim(batch, bi, p)) {
-    return;
   }
   // Decomp: if fp->x2064_ledgeCooldown is nonzero, fighter collision uses the mpColl variant
   // that does not attempt ledge grabs (e.g., mpColl_80047AC8 instead of mpColl_80047E14).

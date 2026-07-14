@@ -90,7 +90,7 @@ def test_build_data_preflights_target_and_donor_animation_dats(
 ):
     iso_dir = tmp_path / "iso"
     iso_dir.mkdir()
-    required = {"main.dol", "PlCo.dat", "ItCo.dat"}
+    required = {"main.dol", "PlCo.dat", "ItCo.dat", "EfCoData.dat"}
     for info in CHARS.values():
         required.update((info.pl_dat, info.aj_dat, info.costume_dat))
     for name in sorted(required - {missing_name}):
@@ -121,7 +121,7 @@ def test_build_data_routes_motion_state_outputs_through_iso_dol(tmp_path, monkey
     out_dir = tmp_path / "data"
     missing_decomp = tmp_path / "missing_decomp"
     iso_dir.mkdir()
-    required = {"main.dol", "PlCo.dat", "ItCo.dat", "GrNLa.dat"}
+    required = {"main.dol", "PlCo.dat", "ItCo.dat", "EfCoData.dat", "GrNLa.dat"}
     for info in CHARS.values():
         required.update((info.pl_dat, info.aj_dat, info.costume_dat))
     for name in sorted(required):

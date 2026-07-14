@@ -19,6 +19,11 @@
 
 void locomotion_update_pre(MslBatch* batch);
 void locomotion_update_anim_callbacks_pre_input(MslBatch* batch);
+void locomotion_update_anim_callback_pre_input_fighter(MslBatch* batch, int bi, int p);
+
+// Reconstruct callback-owned hidden state at a teacher-forced replay boundary after the source
+// command stream has been sought to the seeded animation frame.
+void locomotion_reseed_anim_callback_state(MslBatch* batch, size_t idx);
 
 // Common airborne AttackAir input owner used by Fall/Jump/JumpAerial and reused by DamageFall-
 // shaped IASA ladders.

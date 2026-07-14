@@ -95,18 +95,9 @@ void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_misc1[ii] = 0;
   batch->state.item_misc2[ii] = 0;
   batch->state.item_misc3[ii] = 0;
+  batch->state.item_laser_scale[ii] = 0.0f;
   msl_item_reflect_clear_all_lanes(batch, ii);
-  batch->state.item_hidden_body_hit_victim_port[ii] = 0xFFu;
-  batch->state.item_hidden_body_hit_hurt_height[ii] = 0u;
   batch->state.item_hidden_callback_flags[ii] = 0u;
-  batch->state.item_sheik_needle_callback_bounce_vel_y_index[ii] = 0xFFu;
-  batch->state.item_sheik_needle_callback_bounce_vel_x_index_sign[ii] = 0xFFu;
-  batch->state.item_sheik_needle_callback_bounce_motion_valid[ii] = 0u;
-  batch->state.item_sheik_needle_callback_bounce_gravity_index[ii] = 0u;
-  batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii] = 0u;
-  batch->state.item_sheik_needle_stage_hit_seed_kind[ii] = 0u;
-  batch->state.item_sheik_needle_stage_hit_vel_y_index[ii] = 0u;
-  batch->state.item_sheik_needle_stage_hit_vel_x_index_sign[ii] = 0u;
   batch->state.item_sheik_needle_hidden_drop_valid[ii] = 0u;
   batch->state.item_sheik_needle_hidden_drop_min_vel_y[ii] = 0.0f;
   batch->state.item_sheik_needle_hidden_drop_gravity[ii] = 0.0f;
@@ -187,24 +178,10 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint8_t, batch->state.item_misc1);
   SWAP(uint8_t, batch->state.item_misc2);
   SWAP(uint8_t, batch->state.item_misc3);
+  SWAP(float, batch->state.item_laser_scale);
   SWAP(uint8_t, batch->state.item_pending_reflect_owner_port);
   SWAP(uint16_t, batch->state.item_pending_reflect_instance_id);
-  SWAP(uint8_t, batch->state.item_reflect_transfer_seed_port);
-  SWAP(uint16_t, batch->state.item_reflect_transfer_seed_iid);
-  SWAP(uint8_t, batch->state.item_shield_bounce_seed_valid);
-  SWAP(float, batch->state.item_shield_bounce_seed_vel_x);
-  SWAP(float, batch->state.item_shield_bounce_seed_vel_y);
-  SWAP(uint8_t, batch->state.item_hidden_body_hit_victim_port);
-  SWAP(uint8_t, batch->state.item_hidden_body_hit_hurt_height);
   SWAP(uint8_t, batch->state.item_hidden_callback_flags);
-  SWAP(uint8_t, batch->state.item_sheik_needle_callback_bounce_vel_y_index);
-  SWAP(uint8_t, batch->state.item_sheik_needle_callback_bounce_vel_x_index_sign);
-  SWAP(uint8_t, batch->state.item_sheik_needle_callback_bounce_motion_valid);
-  SWAP(uint8_t, batch->state.item_sheik_needle_callback_bounce_gravity_index);
-  SWAP(uint8_t, batch->state.item_sheik_needle_callback_bounce_min_vel_y_index);
-  SWAP(uint8_t, batch->state.item_sheik_needle_stage_hit_seed_kind);
-  SWAP(uint8_t, batch->state.item_sheik_needle_stage_hit_vel_y_index);
-  SWAP(uint8_t, batch->state.item_sheik_needle_stage_hit_vel_x_index_sign);
   SWAP(uint8_t, batch->state.item_sheik_needle_hidden_drop_valid);
   SWAP(float, batch->state.item_sheik_needle_hidden_drop_min_vel_y);
   SWAP(float, batch->state.item_sheik_needle_hidden_drop_gravity);
@@ -429,20 +406,65 @@ uint8_t items_row_has_fighter_collision_demand(const MslBatch* batch, int bi) {
       continue;
     }
     const uint16_t type = batch->state.item_type[ii];
-    if (laser_params_for_item_type(type) != NULL ||
-        item_article_params_is_illusion_item_type(type) != 0u ||
-        item_article_params_for_sheik_needle_throw_item_type(type) != NULL ||
-        item_article_params_for_zelda_din_item_type(type) != NULL ||
-        // Sheik Vanish smoke state 0 owns an item BODY HitCapsule published by it_802B1D40 ->
-        // it_8027518C. It therefore demands fighter hurtcap endpoint geometry just like lasers and
-        // thrown Needles before the item collision phase consumes BODY overlap.
-        // refs/melee/src/melee/it/items/itseakvanish.c::{it_802B1D40,itSeakvanish_UnkMotion0_Anim}
-        // refs/melee/src/melee/it/it_2725.c::it_8027518C
-        (sk_ap != NULL && type == sk_ap->sheik_vanish_itkind)) {
-      return 1u;
+    const uint8_t owns_body_hitcapsule =
+        (laser_params_for_item_type(type) != NULL ||
+         item_article_params_is_illusion_item_type(type) != 0u ||
+         item_article_params_for_sheik_needle_throw_item_type(type) != NULL ||
+         item_article_params_for_zelda_din_item_type(type) != NULL ||
+         (sk_ap != NULL && type == sk_ap->sheik_vanish_itkind))
+            ? 1u
+            : 0u;
+    if (owns_body_hitcapsule == 0u) {
+      continue;
     }
+
+    // Fighter_8006CB94 publishes the fighter collision primitives before ftColl_8007925C walks
+    // each fighter's item list. Keep that publication complete for every fighter when any live
+    // authored item BODY HitCapsule exists; the later traversal itself owns current-item-owner
+    // rejection and callback collapse.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    return 1u;
   }
   return 0u;
+}
+
+enum {
+  MSL_ITEM_ROW_ANY = 1u << 0,
+  MSL_ITEM_ROW_ILLUSION = 1u << 1,
+  MSL_ITEM_ROW_NEEDLE = 1u << 2,
+  MSL_ITEM_ROW_VANISH = 1u << 3,
+  MSL_ITEM_ROW_DIN = 1u << 4,
+  MSL_ITEM_ROW_LASER = 1u << 5,
+};
+
+static uint8_t items_row_live_family_mask(const MslBatch* batch, int bi) {
+  uint8_t mask = 0u;
+  const MslItemArticleParams* sk_ap = item_article_params_get((uint8_t)MSL_CHAR_ID_SHEIK);
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii] == 0u) {
+      continue;
+    }
+    mask |= (uint8_t)MSL_ITEM_ROW_ANY;
+    const uint16_t type = batch->state.item_type[ii];
+    if (item_article_params_is_illusion_item_type(type) != 0u) {
+      mask |= (uint8_t)MSL_ITEM_ROW_ILLUSION;
+    }
+    if (item_article_params_for_sheik_needle_throw_item_type(type) != NULL) {
+      mask |= (uint8_t)MSL_ITEM_ROW_NEEDLE;
+    }
+    if (sk_ap != NULL && type == sk_ap->sheik_vanish_itkind) {
+      mask |= (uint8_t)MSL_ITEM_ROW_VANISH;
+    }
+    if (item_article_params_for_zelda_din_item_type(type) != NULL) {
+      mask |= (uint8_t)MSL_ITEM_ROW_DIN;
+    }
+    if (laser_params_for_item_type(type) != NULL) {
+      mask |= (uint8_t)MSL_ITEM_ROW_LASER;
+    }
+  }
+  return mask;
 }
 
 void items_update_pre_fighter_anim_phase(MslBatch* batch) {
@@ -518,7 +540,8 @@ void items_update_collision_phase(MslBatch* batch) {
         batch->state.stage_yoshi_shyguy_valid[bi] != 0u) {
       yoshi_shyguy_stage_update(batch, bi);
     }
-    const uint8_t row_had_items = items_row_has_any(batch, bi);
+    const uint8_t family_mask = items_row_live_family_mask(batch, bi);
+    const uint8_t row_had_items = (family_mask & (uint8_t)MSL_ITEM_ROW_ANY) != 0u ? 1u : 0u;
     if (row_had_items == 0u &&
         items_row_has_illusion_setphys_source(batch, bi, num_players) == 0u) {
       // With no live item GObj and no Side-B SetPhys owner, the collision item phase has no
@@ -535,91 +558,34 @@ void items_update_collision_phase(MslBatch* batch) {
       yoshi_shyguy_items_update(batch, bi);
 
       // Motion + collision/hit apply for Illusion/Phantasm ghost items.
-      illusion_items_update_and_collide(batch, bi);
+      if ((family_mask & (uint8_t)MSL_ITEM_ROW_ILLUSION) != 0u) {
+        illusion_items_update_and_collide(batch, bi);
+      }
 
       // Fighter HitCapsule -> Sheik thrown-Needle item hurtbox damage/callback.
-      sheik_needles_update_and_collide(batch, bi);
+      if ((family_mask & (uint8_t)MSL_ITEM_ROW_NEEDLE) != 0u) {
+        sheik_needles_update_and_collide(batch, bi);
+      }
 
       // Sheik Vanish disappear-smoke explosion hitbox (BODY/shield), then lifetime. Collide runs
       // before the lifetime decrement so the article age == anim frame for the size-keyframe/remove
       // window.
-      sheik_vanish_smoke_collide(batch, bi);
-      sheik_vanish_smoke_items_update(batch, bi);
+      if ((family_mask & (uint8_t)MSL_ITEM_ROW_VANISH) != 0u) {
+        sheik_vanish_smoke_collide(batch, bi);
+        sheik_vanish_smoke_items_update(batch, bi);
+      }
 
       // Zelda Din's Fire charge/explosion articles.
-      zelda_din_fire_update_and_collide(batch, bi);
+      if ((family_mask & (uint8_t)MSL_ITEM_ROW_DIN) != 0u) {
+        zelda_din_fire_update_and_collide(batch, bi);
+      }
 
       // Motion + collision/hit apply for existing lasers.
-      lasers_update_and_collide(batch, bi);
-    }
-
-    // ThrowLw stale-latch carry trim (post-collision, context-narrow):
-    // - Throw-side pulses are one-shot throw_flags_b0 events consumed in ftFx_Throw_Anim.
-    // - On one-step reseed around the first ThrowLw projectile pulse crossing while victim is still
-    //   attached in ThrownLw, the pulse can leave a stale carried state1 laser item at t+1 even when
-    //   replay ref has no item.
-    // - Keep spawn/collision ownership unchanged (to preserve hitlag parity), then clear only this
-    //   stale carried state1 item after collision resolution in the same frame.
-    // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
-    // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowLw"]["events"]
-    if (row_had_items != 0u) {
-      for (int p = 0; p < num_players; p++) {
-        const size_t o_idx = msl_idx_player(bi, p);
-        if (batch->state.action_id[o_idx] != (uint16_t)MSL_ACT_THROW_LW) {
-          continue;
-        }
-        const uint8_t cid = batch->state.char_id[o_idx];
-        const MslLaserParams* lp = laser_params_get(cid);
-        if (lp == NULL || !item_type_is_falco_laser(lp->shot_itkind)) {
-          continue;
-        }
-        const float af_cur = items_cur_anim_frame_f32(batch, o_idx);
-        const int32_t prev_fp = batch->state.anim_frame_fp_q16_16[o_idx] -
-                                batch->state.frame_speed_mul_fp_q16_16[o_idx];
-        const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
-        int16_t crossed_pulse_af = -1;
-        if (!move_tables_throw_cmd1_active(cid, (uint16_t)MSL_ACT_THROW_LW, af_cur) ||
-            !move_tables_throw_crossed_projectile_pulse_frame(cid, (uint16_t)MSL_ACT_THROW_LW,
-                                                              af_prev, af_cur, &crossed_pulse_af)) {
-          continue;
-        }
-        int16_t first_pulse_af = -1;
-        if (!move_tables_throw_projectile_first_pulse_frame(cid, (uint16_t)MSL_ACT_THROW_LW,
-                                                            &first_pulse_af) ||
-            crossed_pulse_af != first_pulse_af) {
-          continue;
-        }
-        uint8_t stale_context = 0u;
-        for (int vp = 0; vp < num_players; vp++) {
-          if (vp == p) {
-            continue;
-          }
-          const size_t v_idx = msl_idx_player(bi, vp);
-          if (batch->state.grab_owner_port[v_idx] == (uint8_t)p &&
-              batch->state.action_id[v_idx] == (uint16_t)MSL_ACT_THROWN_LW &&
-              batch->state.hitlag_pre_timer[v_idx] == 0u && batch->state.hitstun[v_idx] == 0u) {
-            stale_context = 1u;
-            break;
-          }
-        }
-        if (!stale_context) {
-          continue;
-        }
-        for (int it = 0; it < MSL_MAX_ITEMS; it++) {
-          const size_t ii = msl_idx_item(bi, it);
-          if (!batch->state.item_exists[ii]) {
-            continue;
-          }
-          if (batch->state.item_type[ii] != lp->shot_itkind || batch->state.item_owner[ii] != p ||
-              batch->state.item_state[ii] != (uint8_t)1u) {
-            continue;
-          }
-          item_slot_clear(batch, ii);
-        }
+      if ((family_mask & (uint8_t)MSL_ITEM_ROW_LASER) != 0u) {
+        lasers_source_update_and_collide(batch, bi);
       }
     }
+
     // Refresh the seeded `ghostEffectPos[0..2]` gameplay lanes for the next frame.
     // Decomp: ftFox_SpecialS_SetPhys advances the live ring as
     // `ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos`.

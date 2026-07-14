@@ -57,9 +57,17 @@ typedef struct MslLaserParams {
   // Per-scripted-hitbox item->x5D4_hitboxes[id].x138 bit. ftColl_8007925C skips item hitboxes
   // with this bit clear while gm_8016B1C4() is active.
   uint16_t hitbox_x138_mask;
+  uint16_t hitbox_clank_mask;
 
   uint8_t hitbox_offsets_x_count;
   float hitbox_offsets_x[MSL_LASER_MAX_HITBOX_OFFS_X];
+  float hitbox_sizes[MSL_LASER_MAX_HITBOX_OFFS_X];
+  uint32_t hitbox_word4_raw[MSL_LASER_MAX_HITBOX_OFFS_X];
+  // Raw big-endian command word carrying x40_b4, x41_b4..x42_b3,
+  // x42_b4..x43_b0, and ItemHitbox.x138. See it_802790C0.
+  uint32_t hitbox_flags_raw[MSL_LASER_MAX_HITBOX_OFFS_X];
+  uint8_t hitbox_groups[MSL_LASER_MAX_HITBOX_OFFS_X];
+  uint8_t hitbox_ids[MSL_LASER_MAX_HITBOX_OFFS_X];
 
   // Optional state-0 script damage update (`set_hitbox_damage`):
   // it_80279544 calls it_80272460 on the selected HitCapsule after creation.
@@ -87,9 +95,18 @@ typedef struct MslLaserParams {
   int8_t state1_shield_damage;
   uint8_t state1_zero_kb_damage_class;
   uint16_t state1_hitbox_x138_mask;
+  uint16_t state1_hitbox_clank_mask;
 
   uint8_t state1_hitbox_offsets_x_count;
   float state1_hitbox_offsets_x[MSL_LASER_MAX_HITBOX_OFFS_X];
+  float state1_hitbox_sizes[MSL_LASER_MAX_HITBOX_OFFS_X];
+  uint32_t state1_hitbox_word4_raw[MSL_LASER_MAX_HITBOX_OFFS_X];
+  uint32_t state1_hitbox_flags_raw[MSL_LASER_MAX_HITBOX_OFFS_X];
+  uint8_t state1_hitbox_groups[MSL_LASER_MAX_HITBOX_OFFS_X];
+  uint8_t state1_hitbox_ids[MSL_LASER_MAX_HITBOX_OFFS_X];
+
+  // ItemAttr.x60_scale, initialized into Item.scl and supplied to lbColl item overlaps.
+  float item_scale;
 } MslLaserParams;
 
 // IMPORTANT: laser_params_init() may do IO/allocations; call only during batch init.

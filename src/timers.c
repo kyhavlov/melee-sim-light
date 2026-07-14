@@ -10,117 +10,11 @@
 #include "buttons.h"
 #include "common_params.h"
 #include "damage_source.h"
-#include "damage_terminal_owner.h"
 #include "input_axis.h"
 #include "msl_math.h"
 #include "motion_state_owners.h"
 #include "stage_collision.h"
 #include "state_flags.h"
-
-static inline uint8_t timers_match_flow_dead_action_defers_source_clear(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_DEAD_DOWN:
-    case MSL_ACT_DEAD_LEFT:
-    case MSL_ACT_DEAD_RIGHT:
-    case MSL_ACT_DEAD_UP_STAR:
-    case MSL_ACT_DEAD_UP_FALL:
-    case MSL_ACT_DEAD_UP_FALL_HIT_CAMERA:
-    case MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_FLAT:
-    case MSL_ACT_DEAD_UP_FALL_ICE:
-    case MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_ICE:
-      return 1u;
-    default:
-      return 0u;
-  }
-}
-
-static inline uint8_t timers_source_clear_downed_recovery_terminal_parks_owner(
-    const MslBatch* batch, size_t idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const uint16_t action = batch->state.action_id[idx];
-  if (msl_source_clear_terminal_is_downed_recovery_park_action(action) == 0u) {
-    return 0u;
-  }
-
-  if (batch->state.source_clear_owner_set_phase[idx] == 0u || batch->state.combo_count[idx] == 0u ||
-      batch->state.last_attack_landed[idx] == 0u || batch->state.hitlag[idx] != 0u ||
-      batch->state.hitstun[idx] != 0u) {
-    return 0u;
-  }
-
-  const uint16_t prev_action = batch->state.prev_action_id[idx];
-  const int16_t prev_frame = batch->state.prev_action_frame[idx];
-  const int16_t action_frame = batch->state.action_frame[idx];
-  if (prev_action != action || prev_frame < 0 || action_frame != (int16_t)(prev_frame + 1)) {
-    return 0u;
-  }
-
-  // Decomp owner:
-  // - Fighter_ChangeMotionState starts x18C8 on grounded x9_b1 motions.
-  // - Fighter_8006A360 decrements that live timer in the main fighter proc.
-  // - The downed/passive recovery family (`ftCo_Down*` / `ftCo_Passive*`) can inherit an already
-  //   live x18C8 run from an earlier grounded motion; when the replay-visible terminal row is
-  //   reached, source ownership parks with the timer inactive rather than clearing during rollout.
-  // This mirrors the one-step terminal phase producer for the same decomp callback family without
-  // keying on a corpus, replay, or row id.
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
-  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Passive.c,ftCo_PassiveStand.c}
-  // refs/melee/src/melee/ft/ftmotionstates.c (Down*/Passive* callback rows)
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-  return 1u;
-}
-
-static inline uint8_t timers_source_clear_active_damagefly_terminal_parks_owner(
-    const MslBatch* batch, size_t idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  if (batch->state.source_clear_owner_set_phase[idx] == 0u || batch->state.combo_count[idx] == 0u ||
-      batch->state.last_attack_landed[idx] == 0u || batch->state.hitlag[idx] != 0u ||
-      batch->state.hitstun[idx] == 0u) {
-    return 0u;
-  }
-  // Active DamageFly x18C8 terminal owner:
-  // - Fighter_8006A360 owns the x18C8 countdown in the same prio-1 phase as Damage anim_cb.
-  // - DamageFly hitstun rows can retire the countdown while keeping `dmg.x18C4_source_ply`
-  //   replay-visible for the rest of the damage/combo episode; do not defer the terminal tick
-  //   until the later Squat/Wait row, where it would publish the sentinel source too late.
-  // - Keep this bounded to generated DamageFly motion-state class plus live owner/combo evidence;
-  //   AttackAirN terminal rows still take the ordinary source clear path.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-  return msl_motion_state_common_class_has_fast(batch->state.action_id[idx],
-                                                MSL_MS_CLASS_DAMAGE_FLY);
-}
-
-static inline uint8_t timers_seed_terminal_phase_parks_source_owner(const MslBatch* batch,
-                                                                    size_t idx) {
-  if (batch == NULL || batch->state.source_clear_terminal_phase[idx] == 0u) {
-    return 0u;
-  }
-  const uint16_t action = batch->state.action_id[idx];
-  const int16_t action_frame = (batch->state.seed_prev_action_frame[idx] >= 0)
-                                   ? (int16_t)(batch->state.seed_prev_action_frame[idx] + 1)
-                                   : batch->state.action_frame[idx];
-  const uint8_t flags_2218 =
-      batch->state
-          .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
-  const uint8_t flags_221c =
-      batch->state
-          .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  // `source_clear_terminal_phase` is a one-step reseed/provenance bridge. Natural free-running
-  // gameplay reaches this helper with the lane clear and takes Fighter_8006A360's generic
-  // terminal source clear instead.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-  return msl_source_clear_terminal_seed_bridge_parks_source_owner(
-      batch->state.source_clear_terminal_phase[idx], action, action_frame, flags_2218, flags_221c,
-      batch->state.last_attack_landed[idx],
-      msl_motion_state_fx_special_kind_fast(batch->state.char_id[idx], action));
-}
 
 void timers_update(MslBatch* batch) {
   if (batch == NULL) {
@@ -184,23 +78,6 @@ void timers_update(MslBatch* batch) {
       if (hl > 0) {
         hl--;
         batch->state.hitlag[idx] = hl;
-      }
-
-      if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-          batch->state.hitlag_pre_timer[idx] != 0u && hl == 0u &&
-          batch->state.guard_setoff_exit_rate_fp_q16_16[idx] > 0) {
-        // GuardSetOff hidden exit-rate owner:
-        // Fighter_8006A1BC decrements hitlag at prio 0, then Fighter_8006A360 advances
-        // `fp->cur_anim_frame` with the live `fp->frame_speed_mul` before GuardSetOff_Anim runs.
-        // Replay reseeds can initialize this hidden rate from the first non-hitlag GuardSetOff
-        // publication; natural gameplay leaves the lane zero and keeps the live ftCo_80092F2C
-        // entry rate.
-        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-        //   ftCo_80092F2C,ftCo_GuardSetOff_Anim}
-        batch->state.frame_speed_mul_fp_q16_16[idx] =
-            batch->state.guard_setoff_exit_rate_fp_q16_16[idx];
-        batch->state.guard_setoff_exit_rate_fp_q16_16[idx] = 0;
       }
 
       // Per-frame hitlag gate (see src/state.h for rationale).
@@ -903,258 +780,129 @@ void timers_update_magnify_damage_post_frame(MslBatch* batch) {
   }
 }
 
+void timers_update_post_anim_fighter(MslBatch* batch, int bi, int p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
+      p >= (int)batch->config.num_players) {
+    return;
+  }
+
+  const MslCommonParams* c = msl_common_params();
+  const int num_players = (int)batch->config.num_players;
+  const size_t idx = msl_idx_player(bi, p);
+  const uint8_t in_hitlag = batch->state.hitlag[idx] != 0u ? 1u : 0u;
+
+  // Fighter_8006A360 owns this entire priority-1 sequence for one fighter: damage age, color
+  // timers, source expiry, combo bookkeeping, then the MotionState Anim callback's hitstun tick.
+  // Keeping the sequence fighter-local lets an earlier fighter's callback change a linked peer
+  // before that peer reaches its own priority-1 procedure.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+
+  if (in_hitlag == 0u) {
+    int16_t t = batch->state.damage_time_since_hit_x18ac[idx];
+    if (t >= 0 && t < INT16_MAX) {
+      batch->state.damage_time_since_hit_x18ac[idx] = (int16_t)(t + 1);
+    }
+  }
+
+  uint16_t x1990 = batch->state.colanim_timer_x1990[idx];
+  batch->state.colanim_terminal_x1990_item_body_guard[idx] = 0u;
+  if (x1990 == 1u && batch->state.colanim_hit_status_x198c[idx] == 2u &&
+      batch->state.colanim_lock_x2221_b0[idx] == 0u) {
+    batch->state.colanim_terminal_x1990_item_body_guard[idx] =
+        batch->state.colanim_timer_x1994[idx] != 0u ? 2u : 1u;
+  }
+  if (x1990 != 0u) {
+    x1990--;
+    batch->state.colanim_timer_x1990[idx] = x1990;
+    if (x1990 == 0u && batch->state.colanim_lock_x2221_b0[idx] == 0u) {
+      batch->state.colanim_hit_status_x198c[idx] =
+          batch->state.colanim_timer_x1994[idx] != 0u ? 1u : 0u;
+    }
+  }
+
+  uint16_t x1994 = batch->state.colanim_timer_x1994[idx];
+  if (x1994 != 0u) {
+    x1994--;
+    batch->state.colanim_timer_x1994[idx] = x1994;
+    if (x1994 == 0u) {
+      batch->state.colanim_hit_status_x198c[idx] = (batch->state.colanim_lock_x2221_b0[idx] != 0u ||
+                                                    batch->state.colanim_timer_x1990[idx] != 0u)
+                                                       ? 2u
+                                                       : 0u;
+    }
+  }
+
+  // fp->dmg.x18C8 expires last-hit attribution under the same x221F_b3 gate.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  const uint8_t flags_221f =
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + MSL_STATE_FLAGS_221F_INDEX];
+  if ((flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B3) == 0u) {
+    if (batch->state.last_hit_by[idx] == (uint8_t)MSL_DAMAGE_SOURCE_NONE) {
+      batch->state.source_clear_timer_x18c8[idx] = 0u;
+    } else {
+      uint8_t t = batch->state.source_clear_timer_x18c8[idx];
+      if (t != 0u) {
+        t--;
+        batch->state.source_clear_timer_x18c8[idx] = t;
+        if (t == 0u) {
+          batch->state.last_hit_by[idx] = (uint8_t)MSL_DAMAGE_SOURCE_NONE;
+        }
+      }
+    }
+  }
+
+  if (in_hitlag != 0u) {
+    return;
+  }
+
+  uint16_t combo_timer = batch->state.combo_timer_x2098[idx];
+  if (combo_timer != 0u) {
+    batch->state.combo_timer_x2098[idx] = (uint16_t)(combo_timer - 1u);
+  }
+  const uint8_t victim_port = batch->state.combo_victim_port[idx];
+  if (victim_port != 0xFFu) {
+    if (victim_port >= (uint8_t)num_players) {
+      batch->state.combo_victim_port[idx] = 0xFFu;
+      batch->state.combo_victim_instance_id[idx] = 0u;
+    } else {
+      const size_t victim_idx = msl_idx_player(bi, (int)victim_port);
+      const uint8_t victim_flags =
+          batch->state.state_flags[victim_idx * MSL_STATE_FLAGS_BYTES + MSL_STATE_FLAGS_221C_INDEX];
+      if ((victim_flags & MSL_STATE_FLAG_221C_IS_HITSTUN) == 0u &&
+          batch->state.combo_timer_x2098[victim_idx] == 0u) {
+        batch->state.combo_victim_port[idx] = 0xFFu;
+        batch->state.combo_victim_instance_id[idx] = 0u;
+      }
+    }
+  }
+
+  const size_t flags_221c_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  if ((batch->state.state_flags[flags_221c_i] & MSL_STATE_FLAG_221C_IS_HITSTUN) == 0u) {
+    return;
+  }
+  uint16_t hitstun = batch->state.hitstun[idx];
+  if (hitstun > 0u) {
+    hitstun--;
+    batch->state.hitstun[idx] = hitstun;
+  }
+  if (hitstun != 0u || damage_timer_down_damage_action(batch->state.action_id[idx])) {
+    return;
+  }
+
+  batch->state.state_flags[flags_221c_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+  batch->state.combo_timer_x2098[idx] = c != NULL ? c->combo_timer_post_hitstun_frames : 0u;
+}
+
 void timers_update_post_anim(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
-
-  // Combo timer reset constant (GALE01 p_ftCommonData->x4CC).
-  const MslCommonParams* c = msl_common_params();
-
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
-    // Decomp ordering inside Fighter_8006A360 (proc prio 1, under !fp->x221F_b3 gate):
-    // - ftColl_800764DC (combo timer tick + victim clear) runs before per-action anim_cb.
-    // - Damage anim_cb calls ftCo_8008F744 (hitstun decrement + end effects).
-    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-    // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
-
-    // Pass 0: Damage time-since-hit timer (fp->dmg.x18AC).
-    //
-    // Decomp:
-    // - Fighter_8006A360 runs under `!fp->x2219_b5` (not in hitlag),
-    // - if x18AC != -1, it increments before ftAnim_8006EBA4, ftColl_800764DC, and anim_cb,
-    // - ftCo_8008DCE0 later resets x18AC to 0 on fresh Damage entry.
-    //
-    // Keep this before the other prio-1 timer/callback owners so current-frame ProcessHit sees the
-    // same pre-collision timer value that ftCo_Damage_CalcVel uses in vanilla.
-    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcVel,ftCo_8008DCE0}
     for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      if (batch->state.hitlag[idx] != 0u) {
-        continue;
-      }
-      int16_t t = batch->state.damage_time_since_hit_x18ac[idx];
-      if (t < 0) {
-        continue;
-      }
-      if (t < INT16_MAX) {
-        t++;
-      }
-      batch->state.damage_time_since_hit_x18ac[idx] = t;
-    }
-
-    // Pass 1: x198C timer ownership (x1990/x1994) before combo/hitstun passes.
-    //
-    // Decomp:
-    // - Fighter_8006A360 decrements x1990/x1994 every frame and updates x198C on expiry.
-    // - x1990 expiry: if (!x2221_b0) x198C = (x1994 != 0) ? 1 : 0
-    // - x1994 expiry: x198C = (x2221_b0 || x1990 != 0) ? 2 : 0
-    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-    for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-
-      uint16_t x1990 = batch->state.colanim_timer_x1990[idx];
-      batch->state.colanim_terminal_x1990_item_body_guard[idx] = 0u;
-      if (x1990 == 1u && batch->state.colanim_hit_status_x198c[idx] == 2u &&
-          batch->state.colanim_lock_x2221_b0[idx] == 0u) {
-        batch->state.colanim_terminal_x1990_item_body_guard[idx] =
-            (batch->state.colanim_timer_x1994[idx] != 0u) ? 2u : 1u;
-      }
-      if (x1990 != 0u) {
-        x1990--;
-        batch->state.colanim_timer_x1990[idx] = x1990;
-        if (x1990 == 0u && batch->state.colanim_lock_x2221_b0[idx] == 0u) {
-          batch->state.colanim_hit_status_x198c[idx] =
-              (batch->state.colanim_timer_x1994[idx] != 0u) ? 1u : 0u;
-        }
-      }
-
-      uint16_t x1994 = batch->state.colanim_timer_x1994[idx];
-      if (x1994 != 0u) {
-        x1994--;
-        batch->state.colanim_timer_x1994[idx] = x1994;
-        if (x1994 == 0u) {
-          batch->state.colanim_hit_status_x198c[idx] =
-              (batch->state.colanim_lock_x2221_b0[idx] != 0u ||
-               batch->state.colanim_timer_x1990[idx] != 0u)
-                  ? 2u
-                  : 0u;
-        }
-      }
-    }
-
-    // Pass 2: combo timer tick + combo-victim clear (ftColl_800764DC family).
-    //
-    // Also consume source-owner clear timer ownership (`fp->dmg.x18C8`) under the same
-    // !fp->x221F_b3 gate:
-    // - Fighter_8006A360 decrements x18C8 once per frame when active.
-    // - On expiry (x18C8 reaches -1), clears source owner x18C4_source_ply to sentinel 6.
-    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-    // refs/melee/src/melee/ft/types.h (fp+0x221F bitfields; b3 gate)
-    // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-    //
-    // Seed lane uses +1 bias:
-    // - source_clear_timer_x18c8 == 0 -> inactive (decomp -1)
-    // - source_clear_timer_x18c8 > 0  -> active countdown + 1
-    for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      const uint8_t flags_221f =
-          batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + MSL_STATE_FLAGS_221F_INDEX];
-      if ((flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B3) != 0u) {
-        continue;
-      }
-      // Decomp reset owner path:
-      // - ftCommon_800804FC clears x18c4_source_ply to 6 and sets x18C8 to -1 on grounded paths.
-      // Keep the seeded countdown inactive when source owner is already cleared.
-      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-      if (batch->state.last_hit_by[idx] == (uint8_t)MSL_DAMAGE_SOURCE_NONE) {
-        batch->state.source_clear_timer_x18c8[idx] = 0u;
-        continue;
-      }
-      if (timers_match_flow_dead_action_defers_source_clear(batch->state.action_id[idx])) {
-        // Dead-flow source attribution lifetime:
-        // - Dead* entry stores death bookkeeping in ftCo_800D331C / ftCo_800D34E0 and later
-        //   dead-flow callbacks still consume `fp->dmg.x18c4_source_ply` for KO/suicide and
-        //   death-effect ownership.
-        // - Do not let the ordinary Fighter_8006A360 x18C8 countdown clear the replay-visible
-        //   source lane while the fighter is inside Dead* match-flow actions; Rebirth reset owns
-        //   the eventual attribution clear through Fighter_UnkInitReset_80067C98.
-        // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_800D331C,ftCo_800D34E0}
-        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_UnkInitReset_80067C98}
-        continue;
-      }
-      // Grounded clear-path bridge:
-      // - ftCommon_800804FC clears source-owner + disables x18C8 on grounded paths.
-      // - Consume this one-step seed-owned phase before timer decrement so the replay-facing
-      //   source-owner lane (`last_hit_by`) follows grounded ProcessHit ownership ordering.
-      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-      if (batch->state.source_clear_grounded_damage_clear_phase[idx] != 0u) {
-        msl_damage_source_clear(batch, idx);
-        continue;
-      }
-      uint8_t t = batch->state.source_clear_timer_x18c8[idx];
-      if (t == 0u) {
-        continue;
-      }
-      // Damage callback ownership in active hitstun can preserve attacker identity lanes
-      // through the current step snapshot; defer the terminal clear tick while hitstun is
-      // still active to avoid premature source clear on Damage-family rows.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
-      // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
-      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-      //
-      // Some terminal x18C8 rows park source owner with the timer inactive due to callback-owned
-      // ownership phase ordering inside Fighter_8006A360. The seed lane preserves one-step rows;
-      // the downed/passive predicate reconstructs the same owner in free rollout.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      if (t == 1u && timers_source_clear_active_damagefly_terminal_parks_owner(batch, idx) != 0u) {
-        batch->state.source_clear_timer_x18c8[idx] = 0u;
-        continue;
-      }
-      if (t == 1u && batch->state.hitstun[idx] != 0u) {
-        continue;
-      }
-      if (t == 1u && (timers_seed_terminal_phase_parks_source_owner(batch, idx) != 0u ||
-                      timers_source_clear_downed_recovery_terminal_parks_owner(batch, idx))) {
-        batch->state.source_clear_timer_x18c8[idx] = 0u;
-        continue;
-      }
-      t--;
-      batch->state.source_clear_timer_x18c8[idx] = t;
-      if (t == 0u) {
-        batch->state.last_hit_by[idx] = (uint8_t)MSL_DAMAGE_SOURCE_NONE;
-      }
-    }
-
-    // Pass 3: combo timer tick + combo-victim clear (ftColl_800764DC family).
-    for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      // Use post-decrement hitlag frames (not hitlag_started_frame) because the hitlag gate
-      // `fp->x2219_b5` is cleared when hitlag reaches 0 in Fighter_8006A1BC.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
-      if (batch->state.hitlag[idx] != 0) {
-        continue;
-      }
-
-      uint16_t t = batch->state.combo_timer_x2098[idx];
-      if (t != 0) {
-        t--;
-        batch->state.combo_timer_x2098[idx] = t;
-      }
-
-      const uint8_t v_port = batch->state.combo_victim_port[idx];
-      if (v_port == 0xFFu) {
-        continue;
-      }
-      if (v_port >= (uint8_t)num_players) {
-        batch->state.combo_victim_port[idx] = 0xFFu;
-        batch->state.combo_victim_instance_id[idx] = 0;
-        continue;
-      }
-
-      const size_t v_idx = msl_idx_player(bi, (int)v_port);
-      const uint8_t v_flags_221c =
-          batch->state.state_flags[v_idx * MSL_STATE_FLAGS_BYTES + MSL_STATE_FLAGS_221C_INDEX];
-      const uint8_t v_is_hitstun = (v_flags_221c & MSL_STATE_FLAG_221C_IS_HITSTUN) ? 1u : 0u;
-      if (!v_is_hitstun && batch->state.combo_timer_x2098[v_idx] == 0) {
-        batch->state.combo_victim_port[idx] = 0xFFu;
-        batch->state.combo_victim_instance_id[idx] = 0;
-      }
-    }
-
-    // Pass 4: hitstun decrement + hitstun end effects (ftCo_8008F744 family).
-    for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      // Use post-decrement hitlag frames (not hitlag_started_frame) because the hitlag gate
-      // `fp->x2219_b5` is cleared when hitlag reaches 0 in Fighter_8006A1BC.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
-      if (batch->state.hitlag[idx] != 0) {
-        continue;
-      }
-
-      const uint8_t flags_221c =
-          batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + MSL_STATE_FLAGS_221C_INDEX];
-      const uint8_t is_hitstun = (flags_221c & MSL_STATE_FLAG_221C_IS_HITSTUN) ? 1u : 0u;
-      if (!is_hitstun) {
-        continue;
-      }
-
-      uint16_t hs = batch->state.hitstun[idx];
-      if (hs > 0) {
-        hs--;
-        batch->state.hitstun[idx] = hs;
-      }
-
-      // Decomp: hitstun flag is cleared when the hitstun timer reaches 0.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
-      if (hs == 0) {
-        if (damage_timer_down_damage_action(batch->state.action_id[idx])) {
-          // DownDamage owns a separate anim/timer lane:
-          // - ftCo_DownDamage_Anim decrements mv.co.downdamage.x0,
-          // - it does not call ftCo_8008F744 while the action remains DownDamageU/D, and
-          // - x221C_b6 can remain visible after the replay-facing hitstun scalar reaches zero.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Anim
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
-          continue;
-        }
-        const size_t flags_221c_i =
-            idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-        batch->state.state_flags[flags_221c_i] &=
-            (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
-
-        // Decomp: when hitstun ends, set `fp->x2098 = p_ftCommonData->x4CC`.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
-        if (c != NULL) {
-          batch->state.combo_timer_x2098[idx] = c->combo_timer_post_hitstun_frames;
-        } else {
-          batch->state.combo_timer_x2098[idx] = 0;
-        }
-      }
+      timers_update_post_anim_fighter(batch, bi, p);
     }
   }
 }

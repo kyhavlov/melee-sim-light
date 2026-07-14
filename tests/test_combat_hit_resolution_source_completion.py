@@ -75,8 +75,7 @@ def test_combat_runtime_phase_order_matches_source_inventory() -> None:
     # Source inventory owner:
     # - HitCapsule cooldowns and ShieldDesc/reflector bubbles must refresh before item/fighter
     #   collision.
-    # - Item/projectile contacts feed the shared combat substrate before fighter-vs-fighter
-    #   combat.
+    # - Fighter HitCapsules traverse before the same fighter's item-HitCapsule contacts.
     # - Post-combat item/knockdown owners observe the combat result.
     _assert_ordered(
         body,
@@ -84,35 +83,40 @@ def test_combat_runtime_phase_order_matches_source_inventory() -> None:
             "hitlist_tick(batch)",
             "shields_refresh(batch)",
             "reflector_bubbles_refresh(batch)",
+            "combat_processhit_pending_begin(batch)",
+            "fighter_contact_resolve_catch(batch)",
+            "fighter_contact_resolve_damage(batch)",
             "items_update_collision_phase(batch)",
-            "throw_flow_update_post_items(batch)",
-            "combat_resolve(batch)",
+            "combat_processhit_resolve(batch)",
             "items_update_post_combat(batch)",
             "knockdown_update_post_combat(batch)",
         ],
     )
 
 
-def test_combat_resolve_applies_damage_logs_after_selection_pass() -> None:
+def test_combat_resolve_uses_the_shared_causal_contact_chain() -> None:
     source = (ROOT / "src/combat.c").read_text()
     body = _function_body(source, "combat_resolve")
 
     _assert_ordered(
         body,
         [
-            "combat_select_body_hits_one_mutating(batch, bi)",
-            "combat_preserve_fresh_air_damage_entry_root_y(batch)",
+            "fighter_contact_resolve_catch(batch)",
+            "fighter_contact_resolve_damage(batch)",
+            "combat_processhit_resolve(batch)",
         ],
     )
 
-    select_body = _function_body(source, "combat_select_body_hits_one_mutating")
+    contact = (ROOT / "src/fighter_contact.c").read_text()
+    damage = _function_body(contact, "contact_resolve_damage_row")
     _assert_ordered(
-        select_body,
+        damage,
         [
-            "combat_select_catch_hits_one_mutating(batch, bi)",
-            "combat_mutations_pass1_future_apply_shield_hit",
-            "combat_body_damage_log_record",
-            "combat_body_damage_log_apply",
+            "contact_resolve_clanks(batch, bi, clank_skip)",
+            "marth_counter_try_fighter_contact(batch, bi, attacker, defender, hb)",
+            "contact_hitbox_shield_overlap(batch, bi, attacker, hb, defender)",
+            "combat_source_body_log_record(batch, &logs[defender]",
+            "combat_source_body_log_apply(batch, bi, &logs[defender])",
         ],
     )
 

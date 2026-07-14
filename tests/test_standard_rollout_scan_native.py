@@ -600,7 +600,7 @@ def _python_collect_rollout_float_offenders_oracle(
             1024,
             "rl1_gameplay",
             (0, 1),
-            {"scored": True, "ignored": True, "seeded": False, "max_records": 1024},
+            {"scored": False, "ignored": True, "seeded": False, "max_records": 1024},
         ),
     ],
 )

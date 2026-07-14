@@ -55,10 +55,10 @@ def _laser_record_by_char(char_id_target: int) -> tuple[int, int, int, int, int,
     buf = path.read_bytes()
     assert buf[:8] == b"MSLLASR1"
     (version,) = struct.unpack_from("<I", buf, 8)
-    assert version in (6, 7)
+    assert version in (6, 7, 8, 9, 10)
     (count,) = struct.unpack_from("<H", buf, 12)
     off = 16
-    record_bytes = 226 if version >= 7 else 218
+    record_bytes = 682 if version >= 10 else 546 if version >= 9 else 514 if version >= 8 else 226 if version >= 7 else 218
     for _ in range(int(count)):
         base = off
         char_id = int(buf[base])
@@ -124,18 +124,6 @@ def test_msllasr1_laser_data_closes_fox_zero_kb_and_falco_kb_boundary() -> None:
     assert falco[7] == 0
 
 
-def test_laser_collision_scale_keeps_shield_admission_source_policy() -> None:
-    items = _read("src/items_spacies.c")
-    body = _function_body(items, "laser_collision_offset_scale")
-
-    assert "narrowed_temporary" not in body
-    assert "ShieldDesc admission" in body
-    assert "Item_80269DC8" in body
-    assert "shield_cap_enabled && s > 1.0f" in body
-    assert "lane == MSL_LASER_COLLISION_SPACE_SHIELD" in body
-    assert "lane == MSL_LASER_COLLISION_SPACE_REFLECT" not in body
-
-
 def test_laser_shield_bounce_uses_source_segment_threshold_not_old_hemisphere_proxy() -> None:
     items = _read("src/items_spacies.c")
     assert re.search(r"\blaser_try_shield_bounce_velocity\s*\(", items) is None
@@ -149,23 +137,21 @@ def test_laser_shield_bounce_uses_source_segment_threshold_not_old_hemisphere_pr
 
 
 def test_laser_runtime_keeps_source_order_for_spawn_collision_and_post_callbacks() -> None:
-    source = _read("src/items_spacies.c")
-    body = _function_body(source, "lasers_update_and_collide")
+    source = _read("src/items_laser.c")
+    body = _function_body(source, "lasers_source_update_and_collide")
 
     _assert_ordered(
         body,
         [
-            "const uint8_t hidden_victim = batch->state.item_hidden_body_hit_victim_port[ii]",
-            "combat_apply_item_hit(",
             "msl_item_reflect_apply_pending_laser_callback(batch, ii)",
-            "float x0 = batch->state.item_pos_x[ii]",
-            "batch->state.item_pos_x[ii] = x",
-            "stage_collision_item_line_hits_floor(stage_id, x0, y0, x, y)",
-            "item_try_shine_reflect_contact(",
-            "combat_apply_item_shield_hit(",
-            "combat_apply_item_hit(",
+            "frame->prev_x = batch->state.item_pos_x[ii]",
+            "batch->state.item_pos_x[ii] = frame->x",
+            "stage_collision_item_line_hits_runtime(",
+            "laser_try_fighter_contact(",
         ],
     )
+    contact = _function_body(source, "laser_try_fighter_contact")
+    assert "item_hitcapsule_select_fighter_contact(" in contact
 
 
 def test_throw_laser_birth_frame_marker_does_not_suppress_generic_body_contact() -> None:
@@ -204,18 +190,18 @@ def test_throw_laser_birth_frame_marker_does_not_suppress_generic_body_contact()
 
 def test_projectile_reflect_comments_do_not_claim_proxy_closure() -> None:
     items = _read("src/items_spacies.c")
+    lasers = _read("src/items_laser.c")
     checked = "\n".join(
         [
             _read("agent_docs/systems/projectiles_reflect.md"),
             _read("src/item_reflect.h"),
             _read("src/laser_params.h"),
             _read("tools/extraction/extract_lasers.py"),
-            _function_body(items, "blaster_gun_update_from_fighter"),
+            _function_body(items, "blaster_gun_run_owner_callback"),
             _function_body(items, "laser_spawn_from_fighter"),
-            _function_body(items, "laser_collision_offset_scale"),
             _function_body(items, "laser_try_shield_bounce_velocity_from_segment"),
-            _function_body(items, "lasers_update_and_collide"),
-            _function_body(items, "items_spawn_fighter_anim_phase"),
+            _function_body(lasers, "lasers_source_update_and_collide"),
+            _function_body(items, "items_spawn_fighter_anim_callback"),
         ]
     )
 

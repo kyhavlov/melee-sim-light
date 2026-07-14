@@ -12,12 +12,53 @@ def _u32_be(buf: bytes, off: int) -> int:
     return int.from_bytes(buf[off : off + 4], "big", signed=False)
 
 
+def _u16_be(buf: bytes, off: int) -> int:
+    return int.from_bytes(buf[off : off + 2], "big", signed=False)
+
+
 def _i32_be(buf: bytes, off: int) -> int:
     return int.from_bytes(buf[off : off + 4], "big", signed=True)
 
 
 def _f32_be(buf: bytes, off: int) -> float:
     return struct.unpack(">f", buf[off : off + 4])[0]
+
+
+def _damage_effect_kind0_spawn_rng_steps(efco: Path) -> int:
+    """Return the immediate HSD RNG steps owned by damage-effect generator 0x42."""
+    buf = efco.read_bytes()
+    arc = parse_hsd_archive(buf)
+    table = arc.get_public_offset("effCommonDataTable")
+    if table is None:
+        raise SystemExit("effCommonDataTable not found in EfCoData.dat public symbols")
+
+    # effCommonDataTable[0] points at the common particle command bank. hsd_8039F05C consumes one
+    # HSD_Randf while initializing a nonnegative-random, non-kind-0x100 generator. The kind-0
+    # damage-effect follow-up is the only ProcessHit-owned generator with that property.
+    # refs/melee/src/melee/ef/{efasync.c,efsync.c}::{efAsync_Dispatch,efSync_Spawn}
+    # refs/melee/src/sysdolphin/baselib/particle.c::{psInitDataBankLoad,hsd_8039F05C}
+    cmd_bank = arc.data_base + _u32_be(buf, table)
+    version = _u16_be(buf, cmd_bank)
+    if version == 0:
+        entry_count = _u32_be(buf, cmd_bank + 4)
+        entries = cmd_bank + 8
+    elif 0x40 <= version <= 0x43:
+        offset_count = _u32_be(buf, cmd_bank + 4)
+        entry_count = offset_count + _u32_be(buf, cmd_bank + 8)
+        entries = cmd_bank + 12 - offset_count * 4
+    else:
+        raise SystemExit(f"unsupported EfCoData particle command version {version:#x}")
+
+    generator_id = 0x42
+    if generator_id >= entry_count:
+        raise SystemExit(f"EfCoData particle command bank has no generator {generator_id:#x}")
+    rel = _u32_be(buf, entries + generator_id * 4)
+    if rel == 0:
+        raise SystemExit(f"EfCoData particle generator {generator_id:#x} is null")
+    command = cmd_bank + rel
+    kind = _u32_be(buf, command + 0x08)
+    random = _f32_be(buf, command + 0x28)
+    return 0 if (kind & 0x100) != 0 or random < 0.0 else 1
 
 
 def main() -> None:
@@ -29,6 +70,12 @@ def main() -> None:
         type=Path,
         default=Path("_iso/PlCo.dat"),
         help="path to PlCo.dat (HSD archive)",
+    )
+    ap.add_argument(
+        "--efco",
+        type=Path,
+        default=Path("_iso/EfCoData.dat"),
+        help="path to EfCoData.dat (common effect/particle archive)",
     )
     ap.add_argument("--out", type=Path, default=Path("data/common/ft_common_data.json"))
     args = ap.parse_args()
@@ -49,6 +96,7 @@ def main() -> None:
     ptrs = [_u32_be(raw, i * 4) for i in range(n_ptr)]
     ft_common_abs = arc.data_base + ptrs[0]
     fighter_scale_abs = arc.data_base + ptrs[12]
+    damage_effect_kind0_rng_steps = _damage_effect_kind0_spawn_rng_steps(args.efco)
 
     out = {
         # Input processing thresholds
@@ -166,6 +214,12 @@ def main() -> None:
         "combo_push_low_speed": float(_f32_be(buf, ft_common_abs + 0x4D0)),
         "combo_push_high_speed": float(_f32_be(buf, ft_common_abs + 0x4D4)),
         "combo_push_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x4D8))),
+        # Damage-source ownership lifetime:
+        # - Fighter_ChangeMotionState writes p_ftCommonData->x814 into fp->dmg.x18C8 when a
+        #   grounded MotionState.x9_b1 state is entered while the timer is inactive.
+        # - Fighter_8006A360 decrements the timer and clears x18C4_source_ply at zero.
+        # refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+        "damage_source_clear_frames_x814": int(max(0, _i32_be(buf, ft_common_abs + 0x814))),
         # PassiveWall / PassiveWallJump startup timer (`fp->mv.co.passivewall.timer`).
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64}
         "passivewall_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x760))),
@@ -556,6 +610,17 @@ def main() -> None:
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_800765F0
         # refs/melee/src/melee/ft/ftcoll.c::inlineB3
         "ftcoll_damage_mul_x128": float(_f32_be(buf, ft_common_abs + 0x128)),
+        # Ordinary BODY DmgLog hit-effect RNG ownership:
+        # - ftColl_8007A06C routes Normal/Ground/Cape elements through ftColl_80078538.
+        # - KB below x3F0 spawns effect 0x3E8, whose efAsync dispatcher consumes HSD_Randi(8);
+        #   otherwise effect 0x3F3 creates generator 0xB.
+        # - integer damage >= 1 consumes an additional per-character-xA0 draw using x3F4/x3F8.
+        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007A06C,ftColl_80078538}
+        # refs/melee/src/melee/ef/{efasync.c,efsync.c}::{efAsync_Dispatch,efSync_Spawn}
+        "damage_effect_async_kb_threshold": float(_f32_be(buf, ft_common_abs + 0x3F0)),
+        "damage_effect_randi_range_kind0": int(_i32_be(buf, ft_common_abs + 0x3F4)),
+        "damage_effect_randi_range_kind1": int(_i32_be(buf, ft_common_abs + 0x3F8)),
+        "damage_effect_kind0_spawn_rng_steps": damage_effect_kind0_rng_steps,
         # ftCo_Damage_CalcKnockback additional modifiers (GALE01):
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
         # Offsets (relative to ftCommonData base) are from decomp struct:

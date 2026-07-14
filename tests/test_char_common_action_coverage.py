@@ -440,7 +440,14 @@ def test_guard_on_entry_and_shield_radius_scale(char_name: str) -> None:
     light_scale = light * (ls_max - ls_min) + ls_min
     min_scale = float(c.get("shield_size_min_scale", 0.15))
     hp_ratio = hp / 60.0
-    expect = ((1.0 - min_scale) * hp_ratio * light_scale + min_scale) * float(a["initial_shield_size"])
+    # Fighter_UpdateModelScale installs scale_y * co_attrs.model_scaling on the root. The shield
+    # joint lives outside the inverse-scale BODY collision subtree and inherits that full scale.
+    # refs/melee/src/melee/ft/{fighter.c::Fighter_UpdateModelScale,ftcommon.c::ftCommon_GetModelScale}
+    expect = (
+        ((1.0 - min_scale) * hp_ratio * light_scale + min_scale)
+        * float(a["initial_shield_size"])
+        * float(a["model_scaling"])
+    )
     assert abs(r - expect) < 0.3, f"{char_name}: steady shield radius {r} vs {expect} (hp {hp})"
 
 
@@ -620,7 +627,7 @@ def test_jab_contact_applies_script_damage_and_hitlag(char_name: str) -> None:
 
 @CHAR_PARAMS
 def test_fsmash_charge_hold_delays_release(char_name: str) -> None:
-    # Smash charge: holding A at the charge frame freezes the anim (move_tables smash_charge);
+    # Smash charge: holding A at the script charge command freezes the animation;
     # releasing later still attacks. refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c
     seed = _seed_base(char_name)
     smash = _mk_inputs(buttons=0x0100, main_x=127, c_x=0)

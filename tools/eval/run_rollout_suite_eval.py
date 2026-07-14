@@ -242,6 +242,20 @@ def print_rollout_dataset_report(*, reporter: Reporter, row: dict, overlay: dict
     reporter.print(f"rollout.streak_len.max: {row['max_streak_len']}")
     reporter.print(f"rollout.first_mismatch_total: {row['first_mismatch_total']}")
     reporter.print(f"rollout.first_mismatch_seeded_total: {row['first_mismatch_seeded_total']}")
+    scored = dict(row.get("first_mismatch_field_counts", {}))
+    scored_seeded = dict(row.get("first_mismatch_field_counts_seeded", {}))
+    if scored:
+        reporter.print(
+            "rollout.first_mismatch_top:",
+            " ".join(f"{k}:{v}" for k, v in sorted(scored.items(), key=lambda kv: (-kv[1], kv[0]))[:8]),
+        )
+    if scored_seeded:
+        reporter.print(
+            "rollout.first_mismatch_seeded_top:",
+            " ".join(
+                f"{k}:{v}" for k, v in sorted(scored_seeded.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
+            ),
+        )
     accepted_total = int(overlay.get("accepted_total", 0))
     accepted_seeded_total = int(overlay.get("accepted_seeded_total", 0))
     if accepted_total:
@@ -411,6 +425,26 @@ def emit_rollout_suite_report(
     reporter.print(f"overall.rollout.best_len.max: {suite_summary['max_best_len']}")
     reporter.print(f"overall.rollout.first_mismatch_total: {suite_summary['first_mismatch_total']}")
     reporter.print(f"overall.rollout.first_mismatch_seeded_total: {suite_summary['first_mismatch_seeded_total']}")
+    reporter.print(
+        "overall.rollout.first_mismatch_top:",
+        " ".join(
+            f"{k}:{v}"
+            for k, v in sorted(
+                dict(suite_summary["first_mismatch_field_counts"]).items(),
+                key=lambda kv: (-kv[1], kv[0]),
+            )[:8]
+        ),
+    )
+    reporter.print(
+        "overall.rollout.first_mismatch_seeded_top:",
+        " ".join(
+            f"{k}:{v}"
+            for k, v in sorted(
+                dict(suite_summary["first_mismatch_field_counts_seeded"]).items(),
+                key=lambda kv: (-kv[1], kv[0]),
+            )[:8]
+        ),
+    )
     if suite_exception_totals["accepted_total"]:
         reporter.print(f"overall.rollout.approved_exception_total: {suite_exception_totals['accepted_total']}")
     if suite_exception_totals["accepted_seeded_total"]:

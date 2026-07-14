@@ -240,10 +240,31 @@ typedef struct MslStageMapLine {
   uint8_t platform_transform_id;
 } MslStageMapLine;
 
+typedef struct MslStageSegmentRef {
+  int16_t kind_index;
+  int16_t fighter_floor_index;
+  uint16_t map_index;
+  uint8_t kind;
+  uint8_t platform_transform_kind;
+  uint8_t platform_transform_id;
+  uint8_t _pad0;
+} MslStageSegmentRef;
+
 typedef struct MslStageMap {
   const MslStageMapLine* lines;
+  const MslStageSegmentRef* segment_refs;
   size_t line_count;
 } MslStageMap;
+
+static inline const MslStageMapLine* stage_collision_map_line_in_map(const MslStageMap* map,
+                                                                     uint16_t segment_i) {
+  if (map == NULL || map->lines == NULL || map->segment_refs == NULL) {
+    return NULL;
+  }
+  const uint16_t map_index = map->segment_refs[segment_i].map_index;
+  return map_index != UINT16_MAX && (size_t)map_index < map->line_count ? &map->lines[map_index]
+                                                                        : NULL;
+}
 
 typedef enum MslStageObjectSupportKind {
   MSL_STAGE_OBJECT_SUPPORT_NONE = 0,
@@ -430,6 +451,12 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
                                              float y1);
 uint8_t stage_collision_item_line_hit_floor(uint32_t stage_id, float x0, float y0, float x1,
                                             float y1, float* hit_x_out, float* hit_y_out);
+uint8_t stage_collision_item_line_hits_runtime(const MslBatch* batch, int bi, float x0, float y0,
+                                               float x1, float y1);
+uint8_t stage_collision_item_line_hit_runtime(const MslBatch* batch, int bi, float x0, float y0,
+                                              float x1, float y1, float* hit_x_out,
+                                              float* hit_y_out, float* hit_vel_x_out,
+                                              float* hit_vel_y_out);
 
 // Item fixed-ECB wall helper for stage-owned item Coll callbacks. Returns 1 when the fixed ECB's
 // previous-to-current point/edge sweep hits the requested active wall graph. side: 0 = left wall,

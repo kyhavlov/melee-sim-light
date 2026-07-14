@@ -921,15 +921,37 @@ static inline uint8_t msl_action_is_thrown_victim(uint16_t action_id) {
 }
 
 static inline uint8_t msl_action_is_throw_owner(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_THROW_F:
-    case MSL_ACT_THROW_B:
-    case MSL_ACT_THROW_HI:
-    case MSL_ACT_THROW_LW:
-      return 1;
-    default:
-      return 0;
+  return (uint8_t)(action_id >= (uint16_t)MSL_ACT_THROW_F &&
+                   action_id <= (uint16_t)MSL_ACT_THROW_LW);
+}
+
+static inline int msl_throw_index_from_owner_action(uint16_t action_id) {
+  // ftCo_800DD4B0 uses exactly `msid - ftCo_MS_ThrowF` to index the four throw lanes.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+  if (!msl_action_is_throw_owner(action_id)) {
+    return -1;
   }
+  return (int)(action_id - (uint16_t)MSL_ACT_THROW_F);
+}
+
+static inline int msl_throw_index_from_thrown_action(uint16_t action_id) {
+  if (action_id == (uint16_t)MSL_ACT_THROWN_LW_WOMEN) {
+    return 3;
+  }
+  if (action_id < (uint16_t)MSL_ACT_THROWN_F || action_id > (uint16_t)MSL_ACT_THROWN_LW) {
+    return -1;
+  }
+  return (int)(action_id - (uint16_t)MSL_ACT_THROWN_F);
+}
+
+static inline uint16_t msl_throw_victim_action_from_owner(uint16_t action_id) {
+  const int index = msl_throw_index_from_owner_action(action_id);
+  return index < 0 ? 0xFFFFu : (uint16_t)((uint16_t)MSL_ACT_THROWN_F + (uint16_t)index);
+}
+
+static inline uint16_t msl_throw_owner_action_from_victim(uint16_t action_id) {
+  const int index = msl_throw_index_from_thrown_action(action_id);
+  return index < 0 ? 0xFFFFu : (uint16_t)((uint16_t)MSL_ACT_THROW_F + (uint16_t)index);
 }
 
 static inline uint8_t msl_action_is_capture_pulled_wait_damage_victim(uint16_t action_id) {
@@ -946,4 +968,24 @@ static inline uint8_t msl_action_is_capture_pulled_wait_damage_victim(uint16_t a
     default:
       return 0;
   }
+}
+
+static inline uint16_t msl_action_capture_high_from_low(uint16_t action_id) {
+  // The common CapturePulled/Wait/Damage high and low MotionStates are parallel contiguous
+  // source families: {0xDF,0xE0,0xE1} <-> {0xE2,0xE3,0xE4}.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_CapturePulledLw_Phys,ftCo_CaptureWaitLw_Phys,ftCo_CaptureDamageLw_Phys}
+  if (action_id >= (uint16_t)MSL_ACT_CAPTURE_PULLED_LW &&
+      action_id <= (uint16_t)MSL_ACT_CAPTURE_DAMAGE_LW) {
+    return (uint16_t)(action_id - 3u);
+  }
+  return 0u;
+}
+
+static inline uint16_t msl_action_capture_low_from_high(uint16_t action_id) {
+  if (action_id >= (uint16_t)MSL_ACT_CAPTURE_PULLED_HI &&
+      action_id <= (uint16_t)MSL_ACT_CAPTURE_DAMAGE_HI) {
+    return (uint16_t)(action_id + 3u);
+  }
+  return 0u;
 }

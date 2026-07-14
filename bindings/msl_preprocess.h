@@ -22,10 +22,8 @@ bool msl_py_action_is_airborne_damage_family(uint16_t action_id);
 
 PyObject* msl_fill_items_fixed_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_item_spawn_id_counter_py(PyObject* self, PyObject* args);
-PyObject* msl_derive_throw_laser_item_hitlist_seed_lanes_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_item_attack_fields_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_item_reflect_damage_mul_py(PyObject* self, PyObject* args);
-PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_illusion_seed_position_updates_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_frame_speed_mul_f32_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_landing_fallspecial_allow_interrupt_py(PyObject* self, PyObject* args);

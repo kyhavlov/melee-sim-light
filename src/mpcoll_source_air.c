@@ -11,13 +11,13 @@
 #include "coll_env_flags.h"
 #include "ecb_pose.h"
 #include "ftcommon_ecb.h"
+#include "fighter_script.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
 #include "match_flow.h"
 #include "locomotion.h"
 #include "motion_state_owners.h"
 #include "motion_state_runtime.h"
-#include "move_tables.h"
 #include "mp_coll.h"
 #include "mp_lib.h"
 #include "mpcoll_ecb_points.h"
@@ -199,14 +199,27 @@ static void source_apply_selector_jobj_mode(const MslBatch* batch, size_t idx, u
   }
 }
 
-static void source_load_ecb(MslBatch* batch, size_t idx, uint8_t selector,
+static void source_load_ecb(MslBatch* batch, size_t idx, uint8_t selector, uint8_t clear_ecb,
                             MslSourceAirCollData* coll) {
   const uint8_t char_id = batch->state.char_id[idx];
   const uint32_t anim = batch->state.animation_index[idx];
   const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
   const float facing = batch->state.facing[idx] ? 1.0f : -1.0f;
+  float pose_frame = (float)frame;
+  if (clear_ecb != 0u && selector == (uint8_t)MSL_COLL_SELECTOR_AIR_471F8) {
+    // DDDE4's release-local clear/load runs after the victim's ordinary Anim proc when its player
+    // GObj precedes the thrower. mpColl_LoadECB_JObj reads those live collision-joint matrices; it
+    // does not quantize the non-unit throw AObj cursor. Other no-live-pose reseed callbacks retain
+    // their established discrete fallback until that wider pose-publication owner is closed.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    pose_frame = batch->state.anim_frame_f32[idx];
+  }
+  // `frame` remains the discrete fallback/table key when no represented live pose is available.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_LoadECB_inline}
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E054
   if (anim > 0xFFFFu || msl_ecb_world_points_sample_collision_pose_f32(
-                            &coll->desired_ecb, batch, idx, char_id, (uint16_t)anim, (float)frame,
+                            &coll->desired_ecb, batch, idx, char_id, (uint16_t)anim, pose_frame,
                             facing, coll->cur_x, coll->cur_y, 0u) != 0) {
     msl_ecb_world_points_sample(&coll->desired_ecb, char_id, anim, frame, facing, coll->cur_x,
                                 coll->cur_y, 0u);
@@ -379,29 +392,16 @@ static void source_air_keep_action_grounded(MslBatch* batch, size_t idx) {
 
 static uint8_t source_air_capture_hi_floor_continuation(MslBatch* batch, size_t idx) {
   const uint16_t action = batch->state.action_id[idx];
-  uint16_t next_action = 0u;
-  uint16_t next_submotion = 0u;
-  switch (action) {
-    case MSL_ACT_CAPTURE_PULLED_HI:
-      next_action = (uint16_t)MSL_ACT_CAPTURE_PULLED_LW;
-      next_submotion = (uint16_t)MSL_SM_CAPTURE_PULLED_LW;
-      break;
-    case MSL_ACT_CAPTURE_WAIT_HI:
-      next_action = (uint16_t)MSL_ACT_CAPTURE_WAIT_LW;
-      next_submotion = (uint16_t)MSL_SM_CAPTURE_WAIT_LW;
-      break;
-    case MSL_ACT_CAPTURE_DAMAGE_HI:
-      next_action = (uint16_t)MSL_ACT_CAPTURE_DAMAGE_LW;
-      next_submotion = (uint16_t)MSL_SM_CAPTURE_DAMAGE_LW;
-      break;
-    default:
-      return 0u;
+  const uint16_t next_action = msl_action_capture_low_from_high(action);
+  if (next_action == 0u) {
+    return 0u;
   }
 
   const float frame = batch->state.anim_frame_f32[idx];
   source_air_keep_action_grounded(batch, idx);
   batch->state.action_id[idx] = next_action;
-  batch->state.animation_index[idx] = (uint32_t)next_submotion;
+  batch->state.animation_index[idx] =
+      (uint32_t)msl_motion_state_submotion_id(batch->state.char_id[idx], next_action);
   msl_anim_timebase_enter(batch, idx, frame, 1.0f);
   // CapturePulledHi/WaitHi/DamageHi all run the constrained ft_80083C00 -> 477E0 wrapper and
   // invoke their family-specific Hi->Lw callback when FloorMask is published. Keep that callback
@@ -466,9 +466,7 @@ static uint8_t source_air_selector_continuation(MslBatch* batch, int bi, int p, 
           // fixed-cap runtime shape here.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::fn_800DD5EC
           for (int i = 0; i < 255; i++) {
-            if (move_tables_special_cmd_var_value_at_frame(
-                    batch->state.char_id[idx], batch->state.animation_index[idx], 0u,
-                    batch->state.anim_frame_f32[idx]) != 0u) {
+            if (fighter_script_cmd_var(batch, idx, 0u) != 0u) {
               break;
             }
             msl_anim_timebase_tick_once(batch, idx);
@@ -593,9 +591,7 @@ static uint8_t source_air_callback(MslBatch* batch, int bi, int p, uint8_t selec
     // data/scripts/marth.bin::MSLFTSC1
     // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::{ftMs_SpecialHi_Coll,
     //   ftMs_SpecialAirHi_Coll}
-    const uint8_t launched = move_tables_special_cmd_var_value_at_frame(
-        batch->state.char_id[idx], batch->state.animation_index[idx], 0u,
-        batch->state.anim_frame_f32[idx]);
+    const uint8_t launched = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
     const uint8_t descending = (uint8_t)(launched != 0u && batch->state.speed_y_self[idx] < 0.0f);
     const uint8_t late = (uint8_t)(descending && batch->state.special_cmd1[idx] != 0u);
     coll.stay_airborne = (uint8_t)!late;
@@ -636,7 +632,7 @@ static uint8_t source_air_callback(MslBatch* batch, int bi, int p, uint8_t selec
   batch->state.coll_wall_probe_candidate_count[idx] = 0u;
   batch->state.coll_wall_probe_segment_id[idx] = -1;
   batch->state.coll_wall_probe_corr_x[idx] = 0.0f;
-  source_load_ecb(batch, idx, selector, &coll);
+  source_load_ecb(batch, idx, selector, clear_ecb, &coll);
   if (clear_ecb) {
     // DDDE4 sets CollData_X130_Clear before loading the released fighter's ECB. LoadECB clears the
     // current packet to a zero envelope, retains the freshly sampled desired packet, and then the

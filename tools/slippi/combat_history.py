@@ -12,9 +12,6 @@ HITLIST_CD_INDEFINITE = 0xFFFF
 
 # src/action_ids.h
 ACT_GUARD = 0x00B3
-ACT_GUARD_ON = 0x00B2
-ACT_GUARD_SET_OFF = 0x00B5
-ACT_GUARD_REFLECT = 0x00B6
 # Seed-bridge discriminator for early create-order stale carryover rows in current suite:
 # - falco msid=70 create frame 8 (data/hitboxes/falco.bin)
 # - fox   msid=72 create frame 8 (data/hitboxes/fox.bin)
@@ -44,77 +41,27 @@ def _should_prune_guard_stale_seed_bridge(
     )
 
 
-def _is_shield_family_action(action_id: np.ndarray) -> np.ndarray:
-    return (
-        (action_id == np.uint16(ACT_GUARD_ON))
-        | (action_id == np.uint16(ACT_GUARD))
-        | (action_id == np.uint16(ACT_GUARD_SET_OFF))
-        | (action_id == np.uint16(ACT_GUARD_REFLECT))
-    )
-
-
 def _localize_last_hit_by_for_native(
     *,
     last_hit_by: np.ndarray,
     source_port0: np.ndarray,
-    action_id: np.ndarray,
-    hitlag: np.ndarray,
-    percent: np.ndarray,
-    instance_hit_by: np.ndarray,
-    instance_id: np.ndarray,
     num_players: int,
 ) -> np.ndarray:
     raw_last_hit_by = np.ascontiguousarray(last_hit_by, dtype=np.uint8)
     raw_source_port0 = np.ascontiguousarray(source_port0, dtype=np.uint8)
-    action_u16 = np.ascontiguousarray(action_id, dtype=np.uint16)
-    hitlag_u16 = np.ascontiguousarray(hitlag, dtype=np.uint16)
-    percent_f32 = np.ascontiguousarray(percent, dtype=np.float32)
-    instance_hit_by_u16 = np.ascontiguousarray(instance_hit_by, dtype=np.uint16)
-    instance_id_u16 = np.ascontiguousarray(instance_id, dtype=np.uint16)
     if raw_source_port0.shape != raw_last_hit_by.shape:
         raise ValueError(
             f"source_port0 shape {raw_source_port0.shape} must match last_hit_by shape {raw_last_hit_by.shape}"
         )
-    for name, arr in (
-        ("action_id", action_u16),
-        ("hitlag", hitlag_u16),
-        ("percent", percent_f32),
-        ("instance_hit_by", instance_hit_by_u16),
-        ("instance_id", instance_id_u16),
-    ):
-        if arr.shape != raw_last_hit_by.shape:
-            raise ValueError(
-                f"{name} shape {arr.shape} must match last_hit_by shape {raw_last_hit_by.shape}"
-            )
-    # Slippi exports last_hit_by as a raw controller-port id, while the native replay-only BODY
-    # admission branch reasons in local selected-player slot order. Do not globally remap the lane:
-    # most hitlist reconstruction already uses legacy local-slot semantics, and broad conversion
-    # changes unrelated stale-hitlist owners. Convert only out-of-local-range raw ports on a proven
-    # damage-onset row: both attacker and victim are in hitlag, victim percent increased, and
-    # instance_hit_by names the attacker's live action instance.
+    # Slippi exports last_hit_by in the raw controller-port domain. Native hitlist reconstruction
+    # indexes its fixed fighter arrays by selected local slot, so map every source through the
+    # corresponding seed lane. Values that name an unselected port remain source-unknown.
     # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by/source port)
-    last_hit_by_local = np.array(raw_last_hit_by, copy=True, dtype=np.uint8)
-    out_of_local_range = raw_last_hit_by >= np.uint8(num_players)
-    last_hit_by_local[out_of_local_range] = np.uint8(0xFF)
-    damage_onset = np.zeros(raw_last_hit_by.shape, dtype=bool)
-    previous_shield_family = np.zeros(raw_last_hit_by.shape, dtype=bool)
-    if raw_last_hit_by.shape[0] > 1:
-        damage_onset[1:, :] = percent_f32[1:, :] > percent_f32[:-1, :]
-        previous_shield_family[1:, :] = _is_shield_family_action(action_u16[:-1, :])
+    last_hit_by_local = np.full(raw_last_hit_by.shape, np.uint8(0xFF), dtype=np.uint8)
     for slot in range(int(num_players)):
-        raw_slot_match = raw_last_hit_by == raw_source_port0[:, slot : slot + 1]
-        attacker_in_hitlag = hitlag_u16[:, slot : slot + 1] > 0
-        attacker_instance = instance_id_u16[:, slot : slot + 1]
-        source_proven = (
-            out_of_local_range
-            & raw_slot_match
-            & damage_onset
-            & previous_shield_family
-            & (hitlag_u16 > 0)
-            & attacker_in_hitlag
-            & (instance_hit_by_u16 == attacker_instance)
-        )
-        last_hit_by_local[source_proven] = np.uint8(slot)
+        last_hit_by_local[
+            raw_last_hit_by == raw_source_port0[:, slot : slot + 1]
+        ] = np.uint8(slot)
     return last_hit_by_local
 
 
@@ -308,10 +255,12 @@ def derive_combat_hitlist_seed_fields(
     specialhi_rotate_model_valid_u8: np.ndarray | None = None,
     percent: np.ndarray | None = None,
     items: np.ndarray | None = None,
+    shield_desc_active: np.ndarray | None = None,
+    lightshield_amount: np.ndarray | None = None,
+    guard_anim_counter_x0: np.ndarray | None = None,
     include_per_hitbox: bool = False,
+    include_victims_2: bool = False,
     include_processhit_producers: bool = False,
-    include_replay_only_shield_admission: bool = False,
-    include_replay_only_body_admission: bool = False,
     data_root: str | Path = "data",
 ) -> tuple[np.ndarray, ...]:
     """Derive combat hitlist seed internals through the native data-table path."""
@@ -331,21 +280,10 @@ def derive_combat_hitlist_seed_fields(
         ) from exc
 
     last_hit_by_native = last_hit_by
-    if (
-        last_hit_by is not None
-        and source_port0 is not None
-        and hitlag is not None
-        and percent is not None
-        and instance_hit_by is not None
-    ):
+    if last_hit_by is not None and source_port0 is not None:
         last_hit_by_native = _localize_last_hit_by_for_native(
             last_hit_by=last_hit_by,
             source_port0=source_port0,
-            action_id=action_id,
-            hitlag=hitlag,
-            percent=percent,
-            instance_hit_by=instance_hit_by,
-            instance_id=instance_id,
             num_players=num_players,
         )
 
@@ -389,10 +327,21 @@ def derive_combat_hitlist_seed_fields(
             if items is not None
             else None
         ),
+        np.ascontiguousarray(shield_desc_active, dtype=np.uint8)
+        if shield_desc_active is not None
+        else None,
+        np.ascontiguousarray(lightshield_amount, dtype=np.float32)
+        if lightshield_amount is not None
+        else None,
+        np.ascontiguousarray(guard_anim_counter_x0, dtype=np.uint8)
+        if guard_anim_counter_x0 is not None
+        else None,
         int(bool(include_per_hitbox)),
-        int(bool(include_replay_only_shield_admission)),
-        int(bool(include_replay_only_body_admission)),
     )
     if include_per_hitbox:
-        return out if include_processhit_producers else out[:6]
+        if include_victims_2:
+            return out if include_processhit_producers else out[:6]
+        if include_processhit_producers:
+            return (*out[:5], out[6])
+        return out[:5]
     return out[0], out[1]

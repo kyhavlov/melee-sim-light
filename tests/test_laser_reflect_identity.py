@@ -26,7 +26,7 @@ CHAR_FALCO = 22
 STAGE_FD = 32
 
 
-def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_path: Path) -> None:
+def test_item_reflect_episode_helper_owns_runtime_snapshot_and_damage_lanes(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     source = tmp_path / "item_reflect_episode_test.c"
     exe = tmp_path / "item_reflect_episode_test"
@@ -51,21 +51,14 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
             static uint8_t item_reflect_body_damage_valid[MSL_MAX_ITEMS];
             static uint8_t item_pending_reflect_owner_port[MSL_MAX_ITEMS];
             static uint16_t item_pending_reflect_instance_id[MSL_MAX_ITEMS];
-            static uint8_t item_reflect_transfer_seed_port[MSL_MAX_ITEMS];
-            static uint16_t item_reflect_transfer_seed_iid[MSL_MAX_ITEMS];
-            static uint8_t item_shield_bounce_seed_valid[MSL_MAX_ITEMS];
-            static float item_shield_bounce_seed_vel_x[MSL_MAX_ITEMS];
-            static float item_shield_bounce_seed_vel_y[MSL_MAX_ITEMS];
             static float item_vel_x[MSL_MAX_ITEMS];
             static float item_vel_y[MSL_MAX_ITEMS];
-            static float item_pos_x[MSL_MAX_ITEMS];
             static float item_direction[MSL_MAX_ITEMS];
             static uint8_t item_misc2[MSL_MAX_ITEMS];
             static uint8_t item_misc3[MSL_MAX_ITEMS];
             static uint16_t instance_id[MSL_MAX_PLAYERS];
             static uint16_t attack_id[MSL_MAX_PLAYERS];
             static uint16_t attack_instance[MSL_MAX_PLAYERS];
-            static float pos_x[MSL_MAX_PLAYERS];
             static uint8_t stale_queue_index[MSL_MAX_PLAYERS];
             static uint16_t stale_move_id[MSL_MAX_PLAYERS * MSL_STALE_QUEUE_SIZE];
             static uint16_t stale_attack_instance[MSL_MAX_PLAYERS * MSL_STALE_QUEUE_SIZE];
@@ -88,21 +81,14 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
               batch.state.item_reflect_body_damage_valid = item_reflect_body_damage_valid;
               batch.state.item_pending_reflect_owner_port = item_pending_reflect_owner_port;
               batch.state.item_pending_reflect_instance_id = item_pending_reflect_instance_id;
-              batch.state.item_reflect_transfer_seed_port = item_reflect_transfer_seed_port;
-              batch.state.item_reflect_transfer_seed_iid = item_reflect_transfer_seed_iid;
-              batch.state.item_shield_bounce_seed_valid = item_shield_bounce_seed_valid;
-              batch.state.item_shield_bounce_seed_vel_x = item_shield_bounce_seed_vel_x;
-              batch.state.item_shield_bounce_seed_vel_y = item_shield_bounce_seed_vel_y;
               batch.state.item_vel_x = item_vel_x;
               batch.state.item_vel_y = item_vel_y;
-              batch.state.item_pos_x = item_pos_x;
               batch.state.item_direction = item_direction;
               batch.state.item_misc2 = item_misc2;
               batch.state.item_misc3 = item_misc3;
               batch.state.instance_id = instance_id;
               batch.state.attack_id = attack_id;
               batch.state.attack_instance = attack_instance;
-              batch.state.pos_x = pos_x;
               batch.state.stale_queue_index = stale_queue_index;
               batch.state.stale_move_id = stale_move_id;
               batch.state.stale_attack_instance = stale_attack_instance;
@@ -120,8 +106,6 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
               assert(item_reflect_body_attack_instance[0] == 0u);
               assert(item_reflect_body_damage_valid[0] == 0u);
               assert(item_pending_reflect_owner_port[0] == MSL_ITEM_REFLECT_NO_PORT);
-              assert(item_reflect_transfer_seed_port[0] == MSL_ITEM_REFLECT_NO_PORT);
-              assert(item_shield_bounce_seed_valid[0] == 0u);
               assert(msl_item_reflect_has_transfer_provenance(&batch, 0u) == 0u);
 
               msl_item_reflect_set_damage_mul(&batch, 0u, 0.5f);
@@ -171,29 +155,6 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
               assert(item_reflect_body_damage_valid[0] == 0u);
               assert(msl_item_reflect_has_transfer_provenance(&batch, 0u) == 1u);
 
-              item_owner[0] = 0;
-              item_vel_x[0] = 3.0f;
-              item_pos_x[0] = -10.0f;
-              pos_x[1] = 0.0f;
-              msl_item_reflect_apply_seeded_transfer(&batch, 0u, 1u, 333u, 0.25f);
-              assert(item_owner[0] == 1);
-              assert(item_instance_id[0] == 333u);
-              assert(almost(item_direction[0], -1.0f));
-              assert(almost(item_reflect_damage_mul[0], 0.25f));
-              assert(msl_item_reflect_has_transfer_provenance(&batch, 0u) == 1u);
-
-              item_reflect_transfer_seed_port[0] = 1u;
-              item_reflect_transfer_seed_iid[0] = 333u;
-              item_shield_bounce_seed_valid[0] = 1u;
-              item_shield_bounce_seed_vel_x[0] = 1.0f;
-              item_shield_bounce_seed_vel_y[0] = 2.0f;
-              msl_item_reflect_clear_seed_lanes(&batch, 0u);
-              assert(item_reflect_transfer_seed_port[0] == MSL_ITEM_REFLECT_NO_PORT);
-              assert(item_reflect_transfer_seed_iid[0] == 0u);
-              assert(item_shield_bounce_seed_valid[0] == 0u);
-              assert(almost(item_shield_bounce_seed_vel_x[0], 0.0f));
-              assert(almost(item_shield_bounce_seed_vel_y[0], 0.0f));
-
               return 0;
             }
             """
@@ -207,382 +168,6 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
     subprocess.run([str(exe)], check=True)
 
 
-def test_item_hidden_callback_seed_lanes_keep_shallow_shieldbounced_velocity() -> None:
-    import msl_binding  # type: ignore
-
-    seed_exists = np.zeros((1, 15), dtype=np.uint8)
-    seed_type = np.zeros((1, 15), dtype=np.uint16)
-    seed_owner = np.full((1, 15), -1, dtype=np.int8)
-    seed_iid = np.zeros((1, 15), dtype=np.uint16)
-    seed_spawn = np.zeros((1, 15), dtype=np.uint32)
-    seed_dir = np.zeros((1, 15), dtype=np.float32)
-    seed_vx = np.zeros((1, 15), dtype=np.float32)
-    seed_vy = np.zeros((1, 15), dtype=np.float32)
-    ref_exists = np.zeros((1, 15), dtype=np.uint8)
-    ref_type = np.zeros((1, 15), dtype=np.uint16)
-    ref_owner = np.full((1, 15), -1, dtype=np.int8)
-    ref_iid = np.zeros((1, 15), dtype=np.uint16)
-    ref_spawn = np.zeros((1, 15), dtype=np.uint32)
-    ref_vx = np.zeros((1, 15), dtype=np.float32)
-    ref_vy = np.zeros((1, 15), dtype=np.float32)
-    seed_action = np.zeros((1, 4), dtype=np.uint16)
-    ref_action = np.zeros((1, 4), dtype=np.uint16)
-    ref_hitlag = np.zeros((1, 4), dtype=np.uint16)
-    ref_hitstun = np.zeros((1, 4), dtype=np.uint16)
-    ref_instance_hit_by = np.zeros((1, 4), dtype=np.uint16)
-    laser_lut = np.zeros(65536, dtype=np.uint8)
-
-    seed_exists[0, 0] = 1
-    seed_type[0, 0] = 55
-    seed_owner[0, 0] = 0
-    seed_iid[0, 0] = 16
-    seed_spawn[0, 0] = 2
-    seed_dir[0, 0] = 1.0
-    seed_vx[0, 0] = 5.0
-    ref_exists[0, 0] = 1
-    ref_type[0, 0] = 55
-    ref_owner[0, 0] = 0
-    ref_iid[0, 0] = 16
-    ref_spawn[0, 0] = 2
-    ref_vx[0, 0] = np.float32(4.9860768)
-    ref_vy[0, 0] = np.float32(0.37187797)
-    seed_action[0, 1] = ACT_GUARD_REFLECT
-    ref_action[0, 1] = 181  # GuardSetOff
-    laser_lut[55] = 1
-
-    _, _, bounce_valid, bounce_vx, bounce_vy, *_ = msl_binding.derive_item_hidden_callback_seed_lanes(
-        seed_exists,
-        seed_type,
-        seed_owner,
-        seed_iid,
-        seed_spawn,
-        seed_dir,
-        seed_vx,
-        seed_vy,
-        ref_exists,
-        ref_type,
-        ref_owner,
-        ref_iid,
-        ref_spawn,
-        ref_vx,
-        ref_vy,
-        seed_action,
-        ref_action,
-        ref_hitlag,
-        ref_hitstun,
-        ref_instance_hit_by,
-        laser_lut,
-        laser_lut,
-        2,
-    )
-    assert int(bounce_valid[0, 0]) == 1
-    assert float(bounce_vx[0, 0]) == pytest.approx(float(ref_vx[0, 0]), abs=1e-7)
-    assert float(bounce_vy[0, 0]) == pytest.approx(float(ref_vy[0, 0]), abs=1e-7)
-
-    ref_vx[0, 0] = np.float32(5.0)
-    ref_vy[0, 0] = np.float32(0.0005)
-    _, _, bounce_valid, *_ = msl_binding.derive_item_hidden_callback_seed_lanes(
-        seed_exists,
-        seed_type,
-        seed_owner,
-        seed_iid,
-        seed_spawn,
-        seed_dir,
-        seed_vx,
-        seed_vy,
-        ref_exists,
-        ref_type,
-        ref_owner,
-        ref_iid,
-        ref_spawn,
-        ref_vx,
-        ref_vy,
-        seed_action,
-        ref_action,
-        ref_hitlag,
-        ref_hitstun,
-        ref_instance_hit_by,
-        laser_lut,
-        laser_lut,
-        2,
-    )
-    assert int(bounce_valid[0, 0]) == 0
-
-
-def test_item_hidden_callback_seed_lanes_allow_nonlaser_shield_bounce_without_body_latch() -> None:
-    import msl_binding
-
-    seed_exists = np.zeros((1, 15), dtype=np.uint8)
-    seed_type = np.zeros((1, 15), dtype=np.uint16)
-    seed_owner = np.full((1, 15), -1, dtype=np.int8)
-    seed_iid = np.zeros((1, 15), dtype=np.uint16)
-    seed_spawn = np.zeros((1, 15), dtype=np.uint32)
-    seed_dir = np.ones((1, 15), dtype=np.float32)
-    seed_vx = np.zeros((1, 15), dtype=np.float32)
-    seed_vy = np.zeros((1, 15), dtype=np.float32)
-    ref_exists = np.zeros((1, 15), dtype=np.uint8)
-    ref_type = np.zeros((1, 15), dtype=np.uint16)
-    ref_owner = np.full((1, 15), -1, dtype=np.int8)
-    ref_iid = np.zeros((1, 15), dtype=np.uint16)
-    ref_spawn = np.zeros((1, 15), dtype=np.uint32)
-    ref_vx = np.zeros((1, 15), dtype=np.float32)
-    ref_vy = np.zeros((1, 15), dtype=np.float32)
-    seed_action = np.zeros((1, 4), dtype=np.uint16)
-    ref_action = np.zeros((1, 4), dtype=np.uint16)
-    ref_hitlag = np.zeros((1, 4), dtype=np.uint16)
-    ref_hitstun = np.zeros((1, 4), dtype=np.uint16)
-    ref_instance_hit_by = np.zeros((1, 4), dtype=np.uint16)
-    laser_lut = np.zeros(65536, dtype=np.uint8)
-    shield_bounce_lut = np.zeros(65536, dtype=np.uint8)
-
-    seed_exists[0, 0] = 1
-    seed_type[0, 0] = 79  # Sheik thrown Needle.
-    seed_owner[0, 0] = 0
-    seed_iid[0, 0] = 44
-    seed_spawn[0, 0] = 9
-    seed_vx[0, 0] = -4.0
-    ref_exists[0, 0] = 1
-    ref_type[0, 0] = 79
-    ref_owner[0, 0] = 0
-    ref_iid[0, 0] = 44
-    ref_spawn[0, 0] = 9
-    ref_vx[0, 0] = np.float32(1.25)
-    ref_vy[0, 0] = np.float32(-3.8)
-    seed_action[0, 1] = ACT_GUARD_REFLECT
-    ref_action[0, 1] = 181  # GuardSetOff.
-    shield_bounce_lut[79] = 1
-
-    *_, body_victim, body_height, callback_flags = msl_binding.derive_item_hidden_callback_seed_lanes(
-        seed_exists,
-        seed_type,
-        seed_owner,
-        seed_iid,
-        seed_spawn,
-        seed_dir,
-        seed_vx,
-        seed_vy,
-        ref_exists,
-        ref_type,
-        ref_owner,
-        ref_iid,
-        ref_spawn,
-        ref_vx,
-        ref_vy,
-        seed_action,
-        ref_action,
-        ref_hitlag,
-        ref_hitstun,
-        ref_instance_hit_by,
-        laser_lut,
-        shield_bounce_lut,
-        2,
-    )
-    _, _, bounce_valid, bounce_vx, bounce_vy, *_ = msl_binding.derive_item_hidden_callback_seed_lanes(
-        seed_exists,
-        seed_type,
-        seed_owner,
-        seed_iid,
-        seed_spawn,
-        seed_dir,
-        seed_vx,
-        seed_vy,
-        ref_exists,
-        ref_type,
-        ref_owner,
-        ref_iid,
-        ref_spawn,
-        ref_vx,
-        ref_vy,
-        seed_action,
-        ref_action,
-        ref_hitlag,
-        ref_hitstun,
-        ref_instance_hit_by,
-        laser_lut,
-        shield_bounce_lut,
-        2,
-    )
-    assert int(bounce_valid[0, 0]) == 1
-    assert float(bounce_vx[0, 0]) == pytest.approx(float(ref_vx[0, 0]), abs=1e-7)
-    assert float(bounce_vy[0, 0]) == pytest.approx(float(ref_vy[0, 0]), abs=1e-7)
-    assert int(body_victim[0, 0]) == 0xFF
-    assert int(body_height[0, 0]) == 0
-    assert int(callback_flags[0, 0]) == 0
-
-    ref_vx[0, 0] = 0.0
-    ref_vy[0, 0] = 0.0
-    _, _, bounce_valid, *_ = msl_binding.derive_item_hidden_callback_seed_lanes(
-        seed_exists,
-        seed_type,
-        seed_owner,
-        seed_iid,
-        seed_spawn,
-        seed_dir,
-        seed_vx,
-        seed_vy,
-        ref_exists,
-        ref_type,
-        ref_owner,
-        ref_iid,
-        ref_spawn,
-        ref_vx,
-        ref_vy,
-        seed_action,
-        ref_action,
-        ref_hitlag,
-        ref_hitstun,
-        ref_instance_hit_by,
-        laser_lut,
-        shield_bounce_lut,
-        2,
-    )
-    assert int(bounce_valid[0, 0]) == 0
-
-
-def test_item_hidden_callback_seed_lanes_mark_reflected_laser_body_latch_only_when_proven() -> None:
-    # Reflected laser callbacks can expose public facing/owner before the hidden laser angle and
-    # BODY latch are consumed. The seed lane is source-owned only when the next frame proves this
-    # item instance uniquely damaged a fighter and disappeared; ordinary aligned laser contacts stay
-    # on runtime collision.
-    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxLaser_Logic94_Reflected,
-    # itFoxlaser_UnkMotion1_Anim}
-    # refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}
-    import msl_binding  # type: ignore
-
-    seed_exists = np.zeros((1, 15), dtype=np.uint8)
-    seed_type = np.zeros((1, 15), dtype=np.uint16)
-    seed_owner = np.full((1, 15), -1, dtype=np.int8)
-    seed_iid = np.zeros((1, 15), dtype=np.uint16)
-    seed_spawn = np.zeros((1, 15), dtype=np.uint32)
-    seed_dir = np.zeros((1, 15), dtype=np.float32)
-    seed_vx = np.zeros((1, 15), dtype=np.float32)
-    seed_vy = np.zeros((1, 15), dtype=np.float32)
-    ref_exists = np.zeros((1, 15), dtype=np.uint8)
-    ref_type = np.zeros((1, 15), dtype=np.uint16)
-    ref_owner = np.full((1, 15), -1, dtype=np.int8)
-    ref_iid = np.zeros((1, 15), dtype=np.uint16)
-    ref_spawn = np.zeros((1, 15), dtype=np.uint32)
-    ref_vx = np.zeros((1, 15), dtype=np.float32)
-    ref_vy = np.zeros((1, 15), dtype=np.float32)
-    seed_action = np.zeros((1, 4), dtype=np.uint16)
-    ref_action = np.zeros((1, 4), dtype=np.uint16)
-    ref_hitlag = np.zeros((1, 4), dtype=np.uint16)
-    ref_hitstun = np.zeros((1, 4), dtype=np.uint16)
-    ref_instance_hit_by = np.zeros((1, 4), dtype=np.uint16)
-    laser_lut = np.zeros(65536, dtype=np.uint8)
-
-    seed_exists[0, 0] = 1
-    seed_type[0, 0] = 55
-    seed_owner[0, 0] = 0
-    seed_iid[0, 0] = 131
-    seed_spawn[0, 0] = 3
-    seed_dir[0, 0] = 1.0
-    seed_vx[0, 0] = -5.0
-    ref_action[0, 1] = ACT_DAMAGE_N1
-    ref_hitlag[0, 1] = 4
-    ref_hitstun[0, 1] = 9
-    ref_instance_hit_by[0, 1] = 131
-    laser_lut[55] = 1
-
-    *_, body_victim, body_height, callback_flags = msl_binding.derive_item_hidden_callback_seed_lanes(
-        seed_exists,
-        seed_type,
-        seed_owner,
-        seed_iid,
-        seed_spawn,
-        seed_dir,
-        seed_vx,
-        seed_vy,
-        ref_exists,
-        ref_type,
-        ref_owner,
-        ref_iid,
-        ref_spawn,
-        ref_vx,
-        ref_vy,
-        seed_action,
-        ref_action,
-        ref_hitlag,
-        ref_hitstun,
-        ref_instance_hit_by,
-        laser_lut,
-        laser_lut,
-        2,
-    )
-    assert int(body_victim[0, 0]) == 1
-    assert int(body_height[0, 0]) == 1
-    assert int(callback_flags[0, 0]) == 1
-
-    ref_exists[0, 0] = 1
-    ref_type[0, 0] = 55
-    ref_owner[0, 0] = 1
-    ref_iid[0, 0] = 222
-    ref_spawn[0, 0] = 4
-    *_, body_victim, body_height, callback_flags = msl_binding.derive_item_hidden_callback_seed_lanes(
-        seed_exists,
-        seed_type,
-        seed_owner,
-        seed_iid,
-        seed_spawn,
-        seed_dir,
-        seed_vx,
-        seed_vy,
-        ref_exists,
-        ref_type,
-        ref_owner,
-        ref_iid,
-        ref_spawn,
-        ref_vx,
-        ref_vy,
-        seed_action,
-        ref_action,
-        ref_hitlag,
-        ref_hitstun,
-        ref_instance_hit_by,
-        laser_lut,
-        laser_lut,
-        2,
-    )
-    assert int(body_victim[0, 0]) == 0xFF
-    assert int(body_height[0, 0]) == 0
-    assert int(callback_flags[0, 0]) == 0
-
-    ref_exists[0, 0] = 0
-    ref_type[0, 0] = 0
-    ref_owner[0, 0] = -1
-    ref_iid[0, 0] = 0
-    ref_spawn[0, 0] = 0
-    seed_vx[0, 0] = 5.0
-    *_, body_victim, body_height, callback_flags = msl_binding.derive_item_hidden_callback_seed_lanes(
-        seed_exists,
-        seed_type,
-        seed_owner,
-        seed_iid,
-        seed_spawn,
-        seed_dir,
-        seed_vx,
-        seed_vy,
-        ref_exists,
-        ref_type,
-        ref_owner,
-        ref_iid,
-        ref_spawn,
-        ref_vx,
-        ref_vy,
-        seed_action,
-        ref_action,
-        ref_hitlag,
-        ref_hitstun,
-        ref_instance_hit_by,
-        laser_lut,
-        laser_lut,
-        2,
-    )
-    assert int(body_victim[0, 0]) == 0xFF
-    assert int(body_height[0, 0]) == 0
-    assert int(callback_flags[0, 0]) == 0
-
-
 def _common_attr(name: str) -> float:
     import json
     from pathlib import Path
@@ -591,8 +176,16 @@ def _common_attr(name: str) -> float:
     return float(common[name])
 
 
+def _char_attr(char_id: int, name: str) -> float:
+    import json
+
+    key = _char_key_for_shield_data(char_id)
+    attrs = json.loads((Path("data/characters") / f"{key}.json").read_text())
+    return float(attrs[name])
+
+
 def _load_laser_shot_itkind_and_first_offset_x_and_lifetime(char_id_target: int) -> tuple[int, float, int]:
-    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2..v7).
+    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py.
     path = "data/items/lasers.bin"
     if not Path(path).exists():
         pytest.skip(f"missing local artifact: {path}")
@@ -600,13 +193,13 @@ def _load_laser_shot_itkind_and_first_offset_x_and_lifetime(char_id_target: int)
     if buf[:8] != b"MSLLASR1":
         raise AssertionError(f"{path}: bad magic")
     (ver,) = struct.unpack_from("<I", buf, 8)
-    if ver not in (1, 2, 3, 4, 5, 6, 7):
+    if ver not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10):
         raise AssertionError(f"{path}: unsupported ver={ver}")
     (count,) = struct.unpack_from("<H", buf, 12)
     off = 16
 
     # Record packing (see tools/extraction/extract_lasers.py::_pack_record).
-    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254, 5: 254, 6: 218, 7: 226}[int(ver)]
+    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254, 5: 254, 6: 218, 7: 226, 8: 514, 9: 546, 10: 682}[int(ver)]
 
     for _ in range(int(count)):
         base = off
@@ -614,7 +207,7 @@ def _load_laser_shot_itkind_and_first_offset_x_and_lifetime(char_id_target: int)
         shot_itkind = int(struct.unpack_from("<H", buf, off + 2)[0])
 
         # Match src/laser_params.c offsets. v6 removed SpecialN script shoot-frame arrays; those
-        # cmd_var[2] pulses now come from MSLFTSC1/move_tables.
+        # cmd_var[2] pulses now come from the MSLFTSC1 fighter-script cursor.
         if int(ver) == 1:
             off_part2 = base + 70
         elif int(ver) >= 6:
@@ -641,7 +234,7 @@ def _load_laser_shot_itkind_and_first_offset_x_and_lifetime(char_id_target: int)
 
 
 def _load_laser_shot_size_and_offsets_x(char_id_target: int) -> tuple[float, tuple[float, ...]]:
-    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2..v7).
+    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py.
     path = Path("data/items/lasers.bin")
     if not path.exists():
         pytest.skip(f"missing local artifact: {path}")
@@ -649,11 +242,11 @@ def _load_laser_shot_size_and_offsets_x(char_id_target: int) -> tuple[float, tup
     if buf[:8] != b"MSLLASR1":
         raise AssertionError(f"{path}: bad magic")
     (ver,) = struct.unpack_from("<I", buf, 8)
-    if ver not in (1, 2, 3, 4, 5, 6, 7):
+    if ver not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10):
         raise AssertionError(f"{path}: unsupported ver={ver}")
     (count,) = struct.unpack_from("<H", buf, 12)
     off = 16
-    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254, 5: 254, 6: 218, 7: 226}[int(ver)]
+    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254, 5: 254, 6: 218, 7: 226, 8: 514, 9: 546, 10: 682}[int(ver)]
 
     for _ in range(int(count)):
         base = off
@@ -687,34 +280,6 @@ def _char_key_for_shield_data(char_id: int) -> str:
     raise AssertionError(f"unsupported char_id={char_id} for shield data")
 
 
-def _load_shield_pose_table(char_id_target: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
-    # data/shields/<char>.bin layout: tools/extraction/extract_shield_tilt_table.py (MSLSHLD1 v4).
-    key = _char_key_for_shield_data(char_id_target)
-    path = Path("data/shields") / f"{key}.bin"
-    if not path.exists():
-        pytest.skip(f"missing local artifact: {path}")
-    buf = path.read_bytes()
-    if buf[:8] != b"MSLSHLD1":
-        raise AssertionError(f"{path}: bad magic")
-    (ver,) = struct.unpack_from("<I", buf, 8)
-    if int(ver) != 4:
-        raise AssertionError(f"{path}: unsupported ver={ver} (want v4 guard_on pose data)")
-    frame_count = int(struct.unpack_from("<H", buf, 12)[0])
-    neutral_frame = int(struct.unpack_from("<H", buf, 14)[0])
-    guard_on_frame_count = int(struct.unpack_from("<H", buf, 28)[0])
-    hdr = 32
-    guard_on_x20_xyz = np.frombuffer(buf, dtype="<f4", count=3, offset=16).copy()
-    steady_xyz = np.frombuffer(buf, dtype="<f4", count=frame_count * 3, offset=hdr).reshape((frame_count, 3))
-    guard_on_xyz = np.frombuffer(
-        buf, dtype="<f4", count=guard_on_frame_count * 3, offset=hdr + (frame_count * 3 * 4)
-    ).reshape((guard_on_frame_count, 3))
-    if neutral_frame < 0 or neutral_frame >= frame_count:
-        raise AssertionError(f"{path}: neutral_frame out of range")
-    if guard_on_frame_count <= 0:
-        raise AssertionError(f"{path}: missing guard_on pose data")
-    return steady_xyz, guard_on_x20_xyz, guard_on_xyz, neutral_frame
-
-
 def _full_shield_radius(char_id: int) -> float:
     import json
 
@@ -727,6 +292,7 @@ def _full_shield_radius(char_id: int) -> float:
     shield_size_lightshield_max = float(common["shield_size_lightshield_max"])
     shield_size_min_scale = float(common["shield_size_min_scale"])
     initial_shield_size = float(attrs["initial_shield_size"])
+    model_scaling = float(attrs["model_scaling"])
 
     # Full digital shield hold in this probe row uses trigger=1.0.
     denom = 1.0 - trigger_deadzone
@@ -734,91 +300,9 @@ def _full_shield_radius(char_id: int) -> float:
     hp_ratio = 1.0
     light_scale = light * (shield_size_lightshield_max - shield_size_lightshield_min) + shield_size_lightshield_min
     scale = ((1.0 - shield_size_min_scale) * (hp_ratio * light_scale)) + shield_size_min_scale
-    return float(scale * initial_shield_size)
-
-
-def _shield_local_xyz_to_world(
-    local_xyz: np.ndarray, *, pos_x: float, pos_y: float, pos_z: float, facing: int, scale_y: float = 1.0
-) -> tuple[float, float, float]:
-    facing_dir = 1.0 if int(facing) != 0 else -1.0
-    lx = float(local_xyz[0]) * float(scale_y)
-    ly = float(local_xyz[1]) * float(scale_y)
-    lz = float(local_xyz[2]) * float(scale_y)
-    return (
-        float(pos_x + (facing_dir * lz)),
-        float(pos_y + ly),
-        float(pos_z + (-facing_dir * lx)),
-    )
-
-
-def _swept_sphere_sphere_intersects_3d(
-    ax0: float, ay0: float, az0: float, ax1: float, ay1: float, az1: float, ar: float, bx: float, by: float, bz: float, br: float
-) -> bool:
-    vx = ax1 - ax0
-    vy = ay1 - ay0
-    vz = az1 - az0
-    wx = bx - ax0
-    wy = by - ay0
-    wz = bz - az0
-    vv = vx * vx + vy * vy + vz * vz
-    t = 0.0
-    if vv > 0.0:
-        t = (wx * vx + wy * vy + wz * vz) / vv
-        if t < 0.0:
-            t = 0.0
-        elif t > 1.0:
-            t = 1.0
-    cx = ax0 + (t * vx)
-    cy = ay0 + (t * vy)
-    cz = az0 + (t * vz)
-    dx = cx - bx
-    dy = cy - by
-    dz = cz - bz
-    rr = ar + br
-    return (dx * dx + dy * dy + dz * dz) <= (rr * rr)
-
-
-def _laser_sweep_hits_shield(
-    *,
-    x0: float,
-    y0: float,
-    vx: float,
-    vy: float,
-    offsets_x: tuple[float, ...],
-    laser_radius: float,
-    shield_center: tuple[float, float, float],
-    shield_radius: float,
-) -> bool:
-    speed_sq = (vx * vx) + (vy * vy)
-    if speed_sq > 0.0:
-        inv_speed = 1.0 / float(np.sqrt(speed_sq))
-        ux = vx * inv_speed
-        uy = vy * inv_speed
-    else:
-        ux = 1.0
-        uy = 0.0
-    x1 = x0 + vx
-    y1 = y0 + vy
-    for off_x in offsets_x:
-        sx0 = x0 + (ux * float(off_x))
-        sy0 = y0 + (uy * float(off_x))
-        sx1 = x1 + (ux * float(off_x))
-        sy1 = y1 + (uy * float(off_x))
-        if _swept_sphere_sphere_intersects_3d(
-            sx0,
-            sy0,
-            0.0,
-            sx1,
-            sy1,
-            0.0,
-            float(laser_radius),
-            float(shield_center[0]),
-            float(shield_center[1]),
-            float(shield_center[2]),
-            float(shield_radius),
-        ):
-            return True
-    return False
+    # Fighter_UpdateModelScale uses ftCommon_GetModelScale(fp): x34_scale.y *
+    # co_attrs.model_scaling. This probe keeps x34_scale.y at 1.
+    return float(scale * initial_shield_size * model_scaling)
 
 
 def _mk_input_bytes(batch: int, input_stride: int) -> np.ndarray:
@@ -929,29 +413,18 @@ def test_reflected_laser_updates_owner_instance_and_staling_identity() -> None:
 
         it0 = cmp0["items"][0]
         assert int(it0["exists"]) == 1
-        # Decomp-split ownership model:
-        # - overlap writes reflect snapshot fields (ftColl_80077464),
-        # - item pass consumes snapshot ownership (Item_80269F14).
-        # The pending owner snapshot is now hidden fixed-capacity runtime state rather than a
-        # user-visible misc2/misc3 marker; ownership transfer is still observed on the next step.
+        # Fighter priority 13 writes the reflect packet, then item priority 14 consumes it before
+        # the post-frame publication. The public item therefore already carries the reflector's
+        # ownership identity on this frame.
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
         # refs/melee/src/melee/it/item.c::Item_80269F14
-        assert int(it0["owner"]) == int(seed2["items"][0, 0]["owner"])
-        assert int(it0["misc2"]) == int(seed2["items"][0, 0]["misc2"])
-        assert int(it0["misc3"]) == int(seed2["items"][0, 0]["misc3"])
+        assert int(it0["owner"]) == 1
+        assert int(it0["instance_id"]) == 200
+        assert int(it0["misc2"]) == 0
+        assert int(it0["misc3"]) == 0
         # Spawn-latched staling identity (v1): does not transfer on reflect.
         assert int(it0["attack_id"]) == int(seed2["items"][0, 0]["attack_id"])
         assert int(it0["attack_instance"]) == int(seed2["items"][0, 0]["attack_instance"])
-
-        msl_binding.step_input(handle, prev_inp, inp)
-        out_cmp2 = np.zeros((1, compare_stride), dtype=np.uint8)
-        msl_binding.write_compare(handle, out_cmp2)
-        cmp1 = out_cmp2.view(COMPARE_DTYPE).reshape((1,))[0]
-        it1 = cmp1["items"][0]
-        assert int(it1["exists"]) == 1
-        assert int(it1["owner"]) == 1
-        assert int(it1["misc2"]) == 0
-        assert int(it1["misc3"]) == 0
     finally:
         msl_binding.destroy(handle)
 
@@ -992,6 +465,7 @@ def test_guardreflect_stale_x14_shield_hit_clears_reflect_active_and_destroys_la
     seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)
     seed["guard_reflect_timer_x14"][0, 1] = np.uint8(0)
     seed["guard_reflect_timer_x18"][0, 1] = np.uint8(1)
+    seed["state_flags"][0, 1, 2] = np.uint8(0x80)  # x221B_b0: live ShieldDesc
     seed["state_flags"][0, 1, 3] = np.uint8(0x20)
     seed["shield_hp"][0, 1] = np.float32(_common_attr("start_shield_health"))
     seed["pos_x"][0, 1] = np.float32(0.0)
@@ -1035,108 +509,9 @@ def test_guardreflect_stale_x14_shield_hit_clears_reflect_active_and_destroys_la
 
         assert int(cmp0["action_id"][1]) == 181  # GuardSetOff
         assert int(cmp0["animation_index"][1]) == 40  # GuardDamage
-        assert int(cmp0["hitlag"][1]) == 4
+        assert int(cmp0["hitlag"][1]) == 3
         assert int(cmp0["state_flags"][1, 1]) == 33
         assert int(cmp0["items"][0]["exists"]) == 0
-    finally:
-        msl_binding.destroy(handle)
-
-
-def test_guardreflect_late_locomotion_shield_hit_keeps_one_frame_old_laser_alive() -> None:
-    import msl_binding
-
-    sizes = msl_binding.sizes()
-    seed_stride = int(sizes["seed"])
-    input_stride = int(sizes["input"])
-    compare_stride = int(sizes["compare"])
-
-    assert seed_stride == SEED_DTYPE.itemsize
-    assert input_stride == INPUT_DTYPE.itemsize
-    assert compare_stride == COMPARE_DTYPE.itemsize
-
-    shot_itkind, _, _ = _load_laser_shot_itkind_and_first_offset_x_and_lifetime(CHAR_FALCO)
-
-    seed = np.zeros((1,), dtype=SEED_DTYPE)
-    seed["stage_id"][0] = np.uint32(STAGE_FD)
-    seed["num_players"][0] = np.uint8(2)
-    seed["stocks"][0, :2] = np.uint8(4)
-    seed["char_id"][0, 0] = np.uint8(CHAR_FALCO)
-    seed["char_id"][0, 1] = np.uint8(CHAR_FOX)
-    seed["facing"][0, :2] = np.uint8(1)
-    seed["on_ground"][0, :2] = np.uint8(1)
-    seed["ground_id"][0, :2] = np.uint16(0)
-
-    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
-    seed["animation_index"][0, 0] = np.uint32(2)
-
-    # One-frame-late locomotion -> GuardReflect frozen snapshot:
-    # - replay can already resolve the projectile contact through GuardSetOff while keeping the
-    #   one-frame-old laser alive on the shield-bounce path instead of reflecting or despawning it.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-    #   ftCo_80091A4C,ftCo_800939B4,ftCo_8009370C,ftCo_GuardReflect_Anim}
-    # refs/melee/src/melee/it/items/itfoxlaser.c::{
-    #   it_8029C504,itFoxlaser_UnkMotion1_Anim,itFoxLaser_Logic94_ShieldBounced}
-    seed["action_id"][0, 1] = np.uint16(ACT_GUARD_REFLECT)
-    seed["action_frame"][0, 1] = np.int16(-1)
-    seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)
-    seed["guard_reflect_timer_x14"][0, 1] = np.uint8(1)
-    seed["guard_reflect_timer_x18"][0, 1] = np.uint8(1)
-    seed["state_flags"][0, 1, 3] = np.uint8(0x20)
-    seed["shield_hp"][0, 1] = np.float32(_common_attr("start_shield_health"))
-    seed["pos_x"][0, 1] = np.float32(0.0)
-    seed["pos_y"][0, 1] = np.float32(0.0)
-
-    # Row-shaped synthetic from the kept TBK family:
-    # - defender is the grounded Fox on the first shield-admission frame,
-    # - attacker-side Falco laser is one-step before the replay-kept bounce.
-    seed["facing"][0, 0] = np.uint8(1)
-    seed["facing"][0, 1] = np.uint8(0)
-    seed["pos_x"][0, 0] = np.float32(-20.015694)
-    seed["pos_y"][0, 0] = np.float32(0.0001)
-    seed["pos_x"][0, 1] = np.float32(25.920704)
-    seed["pos_y"][0, 1] = np.float32(0.0001)
-
-    handle = msl_binding.init(batch_size=1, num_players=2)
-    try:
-        prev_inp = _mk_input_bytes(1, input_stride)
-        inp = _mk_input_bytes(1, input_stride)
-        inp_view = inp.view(INPUT_DTYPE).reshape((1,))
-        inp_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
-        inp_view["p"]["l"][0, 1] = TRIGGER_FULL
-
-        seed2 = seed.copy()
-        seed2["items"][0, 0]["exists"] = np.uint8(1)
-        seed2["items"][0, 0]["type"] = np.uint16(shot_itkind)
-        seed2["items"][0, 0]["owner"] = np.int8(0)
-        seed2["items"][0, 0]["instance_id"] = np.uint16(999)
-        seed2["items"][0, 0]["direction"] = np.float32(1.0)
-        seed2["items"][0, 0]["vel_x"] = np.float32(5.0)
-        seed2["items"][0, 0]["vel_y"] = np.float32(0.0)
-        seed2["items"][0, 0]["pos_x"] = np.float32(20.115339)
-        seed2["items"][0, 0]["pos_y"] = np.float32(13.752838)
-        seed2["items"][0, 0]["timer"] = np.float32(94.0)
-        seed2["items"][0, 0]["spawn_id"] = np.uint32(123)
-        # This synthetic row is a teacher-forced frozen GuardReflect contact, so preserve the
-        # hidden Item_80269DC8 ShieldBounced result explicitly instead of depending on reduced
-        # collision geometry to reconstruct xDCE/xC54/xC58.
-        seed2["item_shield_bounce_valid"][0, 0] = np.uint8(1)
-        seed2["item_shield_bounce_vel_x"][0, 0] = np.float32(-0.5)
-        seed2["item_shield_bounce_vel_y"][0, 0] = np.float32(4.9)
-
-        seed2_bytes = seed2.view(np.uint8).reshape((1, seed_stride))
-        msl_binding.reseed_seed(handle, seed2_bytes)
-        msl_binding.step_input(handle, prev_inp, inp)
-
-        out_cmp = np.zeros((1, compare_stride), dtype=np.uint8)
-        msl_binding.write_compare(handle, out_cmp)
-        cmp0 = out_cmp.view(COMPARE_DTYPE).reshape((1,))[0]
-
-        assert int(cmp0["action_id"][1]) == 181  # GuardSetOff
-        assert int(cmp0["animation_index"][1]) == 40  # GuardDamage
-        assert int(cmp0["hitlag"][1]) == 4
-        assert int(cmp0["items"][0]["exists"]) == 1
-        assert int(cmp0["items"][0]["owner"]) == 0
-        assert int(cmp0["items"][0]["instance_id"]) == 999
     finally:
         msl_binding.destroy(handle)
 
@@ -1166,10 +541,6 @@ def test_fresh_locomotion_guardreflect_front_door_uses_entry_pose_shield_math() 
     #   ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50,ftCo_800921DC,ftCo_80091E78}
     # refs/melee/src/melee/it/items/itfoxlaser.c::{
     #   itFoxlaser_UnkMotion1_Phys,it_8029C4D4,itFoxLaser_Logic94_HitShield}
-    shot_itkind, _, _ = _load_laser_shot_itkind_and_first_offset_x_and_lifetime(CHAR_FALCO)
-    laser_radius, laser_offsets_x = _load_laser_shot_size_and_offsets_x(CHAR_FALCO)
-    steady_xyz, guard_on_x20_xyz, guard_on_xyz, neutral_frame = _load_shield_pose_table(CHAR_FALCO)
-
     seed = np.zeros((1,), dtype=SEED_DTYPE)
     seed["stage_id"][0] = np.uint32(STAGE_FD)
     seed["num_players"][0] = np.uint8(2)
@@ -1233,52 +604,6 @@ def test_fresh_locomotion_guardreflect_front_door_uses_entry_pose_shield_math() 
         shield_radius = float(bubbles[1, 3])
         assert shield_radius == pytest.approx(_full_shield_radius(CHAR_FALCO), abs=1e-5)
 
-        defender_pos_x = float(seed["pos_x"][0, 1])
-        defender_pos_y = float(seed["pos_y"][0, 1])
-        defender_pos_z = 0.0
-        defender_facing = int(seed["facing"][0, 1])
-        steady_center = _shield_local_xyz_to_world(
-            steady_xyz[neutral_frame],
-            pos_x=defender_pos_x,
-            pos_y=defender_pos_y,
-            pos_z=defender_pos_z,
-            facing=defender_facing,
-        )
-        entry_center = _shield_local_xyz_to_world(
-            guard_on_xyz[0],
-            pos_x=defender_pos_x,
-            pos_y=defender_pos_y,
-            pos_z=defender_pos_z,
-            facing=defender_facing,
-        )
-
-        # Vanilla probe row (raw -10 -> -9): the Falco laser keeps traveling from x=4.341 to
-        # x=9.341 at y=17.253 with no shield hit on the fresh GuardReflect entry. The settled steady
-        # bubble would overlap this beam segment, while the GuardOn current-pose center does not.
-        laser_x0 = 4.341033935546875
-        laser_y0 = 17.252840042114258
-        laser_vx = 5.0
-        laser_vy = 0.0
-        assert _laser_sweep_hits_shield(
-            x0=laser_x0,
-            y0=laser_y0,
-            vx=laser_vx,
-            vy=laser_vy,
-            offsets_x=laser_offsets_x,
-            laser_radius=laser_radius,
-            shield_center=steady_center,
-            shield_radius=shield_radius,
-        )
-        assert not _laser_sweep_hits_shield(
-            x0=laser_x0,
-            y0=laser_y0,
-            vx=laser_vx,
-            vy=laser_vy,
-            offsets_x=laser_offsets_x,
-            laser_radius=laser_radius,
-            shield_center=entry_center,
-            shield_radius=shield_radius,
-        )
     finally:
         msl_binding.destroy(handle)
 

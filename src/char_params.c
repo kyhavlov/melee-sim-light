@@ -202,6 +202,18 @@ static int json_get_u32(const char* json, const char* key, uint32_t* out) {
   return 0;
 }
 
+static int json_get_u32_or_default(const char* json, const char* key, uint32_t default_v,
+                                   uint32_t* out) {
+  // Missing key -> default (used for per-character special params absent on other characters).
+  char pat[128];
+  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
+  if (n <= 0 || (size_t)n >= sizeof(pat) || strstr(json, pat) == NULL) {
+    *out = default_v;
+    return 0;
+  }
+  return json_get_u32(json, key, out);
+}
+
 static int json_get_i32(const char* json, const char* key, int32_t* out) {
   if (json == NULL || key == NULL || out == NULL) {
     return -1;
@@ -390,6 +402,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "illusion_item_lifetime_state2_frames",
       "illusion_item_state0_damage",
       "illusion_item_state0_shield_damage",
+      "illusion_item_state0_contact_flags",
       "illusion_item_state0_angle",
       "illusion_item_state0_kbg",
       "illusion_item_state0_wsk",
@@ -398,6 +411,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "illusion_item_state0_hitbox_y_offset",
       "illusion_item_state1_damage",
       "illusion_item_state1_shield_damage",
+      "illusion_item_state1_contact_flags",
       "illusion_item_state1_angle",
       "illusion_item_state1_kbg",
       "illusion_item_state1_wsk",
@@ -425,6 +439,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "wait_anim_choice_weights",
       "ecb_joints",
       "grab_capture_anchor_part_id",
+      "static_x1a70_y",
+      "static_x1a70_z",
       "laser_spawn_joint_part_id",
   };
 
@@ -517,6 +533,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_u8(buf, "turn_frames", &out.turn_frames) != 0 ||
       json_get_f32(buf, "rebound_anim_numerator_frames", &out.rebound_anim_numerator_frames) != 0 ||
       json_get_u8(buf, "rapid_jab_window", &out.rapid_jab_window) != 0 ||
+      json_get_u8(buf, "damage_effect_randi_kind", &out.damage_effect_randi_kind) != 0 ||
       json_get_u16_array(buf, "wait_anim_choice_msids", out.wait_anim_choice_msids,
                          sizeof(out.wait_anim_choice_msids) / sizeof(out.wait_anim_choice_msids[0]),
                          &wait_anim_choice_msid_count) != 0 ||
@@ -569,6 +586,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_u16_or_default(buf, "laser_spawn_joint_part_id", 0,
                               &out.laser_spawn_joint_part_id) != 0 ||
       json_get_u16(buf, "grab_capture_anchor_part_id", &out.grab_capture_anchor_part_id) != 0 ||
+      json_get_f32(buf, "static_x1a70_y", &out.static_x1a70_y) != 0 ||
+      json_get_f32(buf, "static_x1a70_z", &out.static_x1a70_z) != 0 ||
       json_get_u32(buf, "fallspecial_xc0_source_fx_kind_mask",
                    &out.fallspecial_xc0_source_fx_kind_mask) != 0 ||
       json_get_u8_or_default(buf, "escapeair_carried_floor_wall_source", 0,
@@ -605,6 +624,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
                               &out.illusion_item_state0_damage) != 0 ||
       json_get_i8_or_default(buf, "illusion_item_state0_shield_damage", 0,
                              &out.illusion_item_state0_shield_damage) != 0 ||
+      json_get_u32_or_default(buf, "illusion_item_state0_contact_flags", 0,
+                              &out.illusion_item_state0_contact_flags) != 0 ||
       json_get_u16_or_default(buf, "illusion_item_state0_angle", 0,
                               &out.illusion_item_state0_angle) != 0 ||
       json_get_u16_or_default(buf, "illusion_item_state0_kbg", 0, &out.illusion_item_state0_kbg) !=
@@ -621,6 +642,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
                               &out.illusion_item_state1_damage) != 0 ||
       json_get_i8_or_default(buf, "illusion_item_state1_shield_damage", 0,
                              &out.illusion_item_state1_shield_damage) != 0 ||
+      json_get_u32_or_default(buf, "illusion_item_state1_contact_flags", 0,
+                              &out.illusion_item_state1_contact_flags) != 0 ||
       json_get_u16_or_default(buf, "illusion_item_state1_angle", 0,
                               &out.illusion_item_state1_angle) != 0 ||
       json_get_u16_or_default(buf, "illusion_item_state1_kbg", 0, &out.illusion_item_state1_kbg) !=

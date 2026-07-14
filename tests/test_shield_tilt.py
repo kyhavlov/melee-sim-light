@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
 from tools.slippi.seed_history import load_shield_tilt_table_meta
@@ -10,10 +11,12 @@ BUTTON_L = 0x0040
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_GUARD = 0x00B3
+ACT_GUARD_SET_OFF = 0x00B5
 ACT_WAIT = 0x000E
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
+SM_GUARD_DAMAGE = 40
 
 CHAR_FOX = 1
 STAGE_FD = 32
@@ -62,6 +65,7 @@ def _seed_guard(*, facing_p1: int) -> np.ndarray:
     seed["animation_index"][0, 1] = np.uint32(0xFFFF_FFFF)
     seed["shield_hp"][0, :2] = np.float32(_common_attr("start_shield_health"))
     seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+    seed["state_flags"][0, 1, 2] = np.uint8(0x80)  # fp+0x221B_b0: live ShieldDesc
     # P0 is only a dummy opponent for the shield-pose query; keep it out of the common grounded
     # player-overlap nudge lane so this test isolates shield tilt.
     seed["pos_x"][0, 0] = np.float32(-20.0)
@@ -147,7 +151,6 @@ def test_shield_bubble_center_moves_with_guard_tilt_and_mirrors_with_facing() ->
     finally:
         msl_binding.destroy(handle)
 
-
 def test_guard_tilt_has_inertia_and_converges_over_multiple_frames() -> None:
     import msl_binding
 
@@ -175,16 +178,27 @@ def test_guard_tilt_has_inertia_and_converges_over_multiple_frames() -> None:
         b0 = msl_binding.debug_shield_bubbles_world(handle, 0)
         p0 = np.array([float(b0[1, 0]), float(b0[1, 1]), float(b0[1, 2])], dtype=np.float64)
 
-        # Sudden change: 1 frame of up tilt.
+        # Current input is published after the priority-1 Guard Anim callback, so the first up
+        # sample is intentionally deferred for one frame.
         msl_binding.step_input(handle, neutral, up)
+        b_deferred = msl_binding.debug_shield_bubbles_world(handle, 0)
+        p_deferred = np.array(
+            [float(b_deferred[1, 0]), float(b_deferred[1, 1]), float(b_deferred[1, 2])],
+            dtype=np.float64,
+        )
+
+        # On the next frame, Anim consumes the previous up sample and begins the source recurrence.
+        msl_binding.step_input(handle, up, up)
         b1 = msl_binding.debug_shield_bubbles_world(handle, 0)
         p1 = np.array([float(b1[1, 0]), float(b1[1, 1]), float(b1[1, 2])], dtype=np.float64)
 
         # Hold: converge towards the final up-tilt pose.
-        for _ in range(24):
+        for _ in range(23):
             msl_binding.step_input(handle, up, up)
         bN = msl_binding.debug_shield_bubbles_world(handle, 0)
         pN = np.array([float(bN[1, 0]), float(bN[1, 1]), float(bN[1, 2])], dtype=np.float64)
+
+        assert np.array_equal(p_deferred, p0)
 
         d01 = float(np.linalg.norm(p1 - p0))
         d0N = float(np.linalg.norm(pN - p0))
@@ -193,5 +207,57 @@ def test_guard_tilt_has_inertia_and_converges_over_multiple_frames() -> None:
         assert d01 > 1.0e-7
         assert d0N > d01
         assert d1N < d0N
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_guardsetoff_shielddesc_uses_live_descriptor_and_guarddamage_joint() -> None:
+    import json
+    from pathlib import Path
+
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    attrs = json.loads(Path("data/characters/fox.json").read_text())
+    shield_part = int(attrs["grab_capture_anchor_part_id"])
+    model_scale = float(attrs["model_scaling"])
+
+    seed = _seed_guard(facing_p1=1)
+    seed["action_id"][0, 1] = np.uint16(ACT_GUARD_SET_OFF)
+    seed["action_frame"][0, 1] = np.int16(5)
+    seed["animation_index"][0, 1] = np.uint32(SM_GUARD_DAMAGE)
+    seed["anim_frame_f32"][0, 1] = np.float32(5.0)
+    seed["hitlag"][0, 1] = np.uint8(2)
+    seed["state_flags"][0, 1, 2] = np.uint8(0x80)  # fp+0x221B_b0: live ShieldDesc
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        neutral = _mk_input_bytes(1, input_stride)
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.step_input(handle, neutral, neutral)
+        bubble = msl_binding.debug_shield_bubbles_world(handle, 0)[1]
+
+        # GuardSetOff's motion-state row owns ftCo_SM_GuardDamage, while ftCo_80092450 keeps the
+        # live ShieldDesc attached to ftData.x8->x11. Its center must therefore follow this JObj,
+        # not the steady Guard tilt table.
+        # refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_GuardSetOff
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092450
+        matrix = msl_binding.anim_pose_collision_matrix_f32(
+            CHAR_FOX, SM_GUARD_DAMAGE, 5.0, shield_part
+        )
+        expected_x = float(matrix[11]) * model_scale
+        expected_y = float(matrix[7]) * model_scale
+        assert float(bubble[0]) == pytest.approx(expected_x, abs=2.0e-3)
+        assert float(bubble[1]) == pytest.approx(expected_y, abs=2.0e-3)
+        assert float(bubble[3]) > 0.0
+
+        # Descriptor identity, not GuardSetOff's action id, controls collision availability.
+        seed["state_flags"][0, 1, 2] = np.uint8(0)
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.step_input(handle, neutral, neutral)
+        inactive = msl_binding.debug_shield_bubbles_world(handle, 0)[1]
+        assert float(inactive[3]) == 0.0
     finally:
         msl_binding.destroy(handle)

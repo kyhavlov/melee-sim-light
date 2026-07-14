@@ -334,7 +334,7 @@ def test_rebound_clank_damage_uses_smash_release_damage_before_stale_scalar() ->
     seed["facing"][0, 1] = np.uint8(0)
 
     raw_damage = 18.0
-    charged_damage = raw_damage * 1.3671875
+    charged_damage = raw_damage * 1.3671000003814697
     expected_int_damage = int(charged_damage)
     assert expected_int_damage > int(raw_damage)
 

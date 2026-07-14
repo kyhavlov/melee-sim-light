@@ -98,8 +98,8 @@ def test_capture_delta_applied_once_per_step() -> None:
     if mx is None or mv is None:
         pytest.skip("local anims missing required joint parts for capture delta test; regenerate via extract_fighter_anims")
 
-    owner_pos = (0.0, 50.0, 0.0)
-    victim_pos = (10.0, 50.0, 0.0)
+    owner_pos = (0.0, 0.0, 0.0)
+    victim_pos = (10.0, 0.0, 0.0)
     scale_y = 1.0
     facing = 1  # right
 
@@ -131,7 +131,7 @@ def test_capture_delta_applied_once_per_step() -> None:
         seed["stage_id"][0] = np.uint32(STAGE_FD)
         seed["num_players"][0] = np.uint8(2)
         seed["stocks"][0, :2] = np.uint8(4)
-        seed["ground_id"][0, :2] = np.uint16(0xFFFF)
+        seed["ground_id"][0, :2] = np.uint16(1)  # FD main floor
 
         # Owner (p0): stable grounded Wait (no physics movement).
         seed["char_id"][0, 0] = np.uint8(CHAR_FOX)
@@ -154,7 +154,7 @@ def test_capture_delta_applied_once_per_step() -> None:
         seed["pos_z"][0, 1] = np.float32(victim_pos[2])
         seed["fighter_scale_y"][0, 1] = np.float32(scale_y)
         seed["facing"][0, 1] = np.uint8(facing)
-        seed["on_ground"][0, 1] = np.uint8(0)
+        seed["on_ground"][0, 1] = np.uint8(1)
         seed["action_id"][0, 1] = np.uint16(ACT_CAPTURE_PULLED_LW)
         seed["action_frame"][0, 1] = np.int16(0)
         seed["animation_index"][0, 1] = np.uint32(msid)
@@ -172,9 +172,8 @@ def test_capture_delta_applied_once_per_step() -> None:
         out = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
 
         got_x = float(out["pos_x"][1])
-        got_y = float(out["pos_y"][1])
-        # If the capture delta were applied twice, we'd observe ~2x displacement from the seed.
+        # The following source Coll callback projects Y back onto FD's floor. X remains an exact
+        # witness for whether Phys applied the capture delta once or twice.
         assert got_x == pytest.approx(victim_pos[0] + exp_dx, abs=1e-4)
-        assert got_y == pytest.approx(victim_pos[1] + exp_dy, abs=1e-4)
     finally:
         msl_binding.destroy(handle)

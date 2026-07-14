@@ -22,9 +22,9 @@
 #include "grab_flow.h"
 #include "ftcommon_ecb.h"
 #include "fighter_callbacks.h"
+#include "fighter_script.h"
 #include "ids.h"
 #include "locomotion.h"
-#include "move_tables.h"
 #include "msl_math.h"
 #include "state_flags.h"
 
@@ -268,21 +268,14 @@ void falcon_specials_reseed_init(MslBatch* batch, int batch_index) {
     // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{ftCa_SpecialHi_IASA,
     //   doAirIASA,ftCa_SpecialHiThrow0_Anim}
     if (a == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_N || a == (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW) {
-      batch->state.special_cmd0[idx] = move_tables_special_cmd_var_value_at_frame(
-          batch->state.char_id[idx], falcon_special_submotion(a), 0u,
-          msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+      batch->state.special_cmd0[idx] = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
     } else if (a == (uint16_t)MSL_ACT_CA_SPECIAL_HI || a == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_HI) {
-      batch->state.special_cmd1[idx] = move_tables_special_cmd_var_value_at_frame(
-          batch->state.char_id[idx], falcon_special_submotion(a), 0u,
-          msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+      batch->state.special_cmd1[idx] = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
     }
     if (a == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START || a == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S) {
-      const float frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-      const uint16_t msid = falcon_special_submotion(a);
       const uint8_t grav_owner = (a == (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S)
                                      ? 1u
-                                     : move_tables_special_cmd_var_u8_value_at_frame(
-                                           batch->state.char_id[idx], msid, 1u, frame);
+                                     : (fighter_script_cmd_var(batch, idx, 1u) != 0u ? 1u : 0u);
       if (grav_owner != 0u) {
         // Slippi exposes self_vel.y but not mv.ca.specials.grav. In aerial Raptor Boost's gravity
         // owner, Phys subtracts from that hidden accumulator and then copies it back to self_vel.y.
@@ -407,6 +400,8 @@ static void fc_specialhi_do_catch_anim_release(MslBatch* batch, size_t idx) {
     msl_ftcommon_unlock_ecb(batch, idx);
     grab_attachment_falcon_dive_release_collision_now(batch, idx, vidx);
   }
+  batch->state.grab_constraint_x2174_valid[idx] = 0u;
+  batch->state.grab_constraint_x2174_valid[vidx] = 0u;
   batch->state.grab_constraint_x2226_b2[idx] = 0u;
   batch->state.grab_constraint_x2226_b2[vidx] = 0u;
   batch->state.falcon_specialhi_x221b_b7[idx] = 0u;
@@ -426,12 +421,11 @@ static void fc_specialhi_do_catch_anim_release(MslBatch* batch, size_t idx) {
   batch->state.grab_owner_port[vidx] = 0xFFu;
 
   MslThrowHitboxParams tp = {0};
-  if (!move_tables_throw_hitbox_params(batch->state.char_id[idx],
-                                       (uint16_t)MSL_ACT_CA_SPECIAL_HI_THROW, 0u, &tp)) {
+  if (!fighter_script_throw_hitbox_params(batch, idx, 0u, &tp)) {
     return;
   }
   const uint8_t applied =
-      combat_apply_throw_hit_falcon_dive_release(batch, bi, owner_p, victim_p, &tp, 1u);
+      combat_apply_throw_hit_falcon_dive_release(batch, bi, owner_p, victim_p, &tp);
   if (!applied) {
     batch->state.on_ground[vidx] = 0u;
     batch->state.action_id[vidx] = (uint16_t)MSL_ACT_FALL;
@@ -525,9 +519,10 @@ static void fc_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
       // the swap transition flags carry cmd state (Ft_MF_UpdateCmd).
       // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_IASA
       // data/moves/falcon.json::specials_by_msid.302 set_cmd_var(idx=0)@50
-      const uint8_t cmd0 = move_tables_special_cmd_var_value_at_frame(cid, msid, 0u, frame);
+      const uint8_t cmd0 = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
       if (cmd0 != 0u && batch->state.special_cmd0[idx] == 0u) {
         batch->state.special_cmd0[idx] = 1u;
+        fighter_script_clear_cmd_var(batch, idx, 0u);
         const float ang = fc_specialn_angle_rad(batch, c, ch, idx);
         batch->state.speed_y_self[idx] = ch->falcon_specialn_vel_x * sinf(ang);
         batch->state.speed_air_x_self[idx] =
@@ -672,9 +667,10 @@ static void fc_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
       // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c::{
       //   ftCa_SpecialHi_IASA,doAirIASA}
       // data/moves/falcon.json::specials_by_msid.{307,308} set_cmd_var(idx=0)@13
-      const uint8_t cmd0 = move_tables_special_cmd_var_value_at_frame(cid, msid, 0u, frame);
+      const uint8_t cmd0 = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
       if (cmd0 != 0u && batch->state.special_cmd1[idx] == 0u) {
         batch->state.special_cmd1[idx] = 1u;
+        fighter_script_clear_cmd_var(batch, idx, 0u);
         const float raw_sx =
             fc_apply_deadzone(fc_stick_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
         if (fabsf(raw_sx) > ch->falcon_specialhi_input_var) {
@@ -714,9 +710,10 @@ static void fc_update_player(MslBatch* batch, const MslCommonParams* c, const Ms
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C
       // data/moves/falcon.json::specials_by_msid.310 set_cmd_var(idx=0)@45
       fc_apply_ftcommon_8007d60c(batch, idx);
-      const uint8_t cmd0 = move_tables_special_cmd_var_value_at_frame(cid, msid, 0u, frame);
+      const uint8_t cmd0 = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
       if (cmd0 != 0u && batch->state.special_cmd0[idx] == 0u) {
         batch->state.special_cmd0[idx] = 1u;
+        fighter_script_clear_cmd_var(batch, idx, 0u);
       }
       if (fc_anim_finished(cid, msid, frame)) {
         fc_exit_to_wait_or_fall(batch, c, ch, idx);
@@ -917,8 +914,7 @@ uint8_t falcon_specials_phys(MslBatch* batch, size_t idx) {
       // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::ftCa_SpecialAirN_Phys
       // refs/melee/src/melee/ft/ft_084E.c::ft_80084EEC
       // data/moves/falcon.json::specials_by_msid.302 set_cmd_var(idx=1)@{50,65}
-      const uint8_t cmd1 =
-          move_tables_special_cmd_var_u8_value_at_frame(batch->state.char_id[idx], msid, 1u, frame);
+      const uint8_t cmd1 = (uint8_t)fighter_script_cmd_var(batch, idx, 1u);
       switch (cmd1) {
         case 0u:
           fc_fall_step(batch, idx, ch->grav, ch->terminal_vel);
@@ -953,8 +949,7 @@ uint8_t falcon_specials_phys(MslBatch* batch, size_t idx) {
       // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c::ftCa_SpecialAirSStart_Phys
       // data/moves/falcon.json::specials_by_msid.305 set_cmd_var(idx=1)@30
       fc_air_anim_vel_85134(batch, ch, idx, msid, frame);
-      const uint8_t cmd1 =
-          move_tables_special_cmd_var_u8_value_at_frame(batch->state.char_id[idx], msid, 1u, frame);
+      const uint8_t cmd1 = (uint8_t)fighter_script_cmd_var(batch, idx, 1u);
       if (cmd1 == 1u) {
         float g = batch->state.falcon_specials_grav[idx] - ch->falcon_specials_grav;
         if (g < -ch->falcon_specials_terminal_vel) {
@@ -1032,8 +1027,7 @@ uint8_t falcon_specials_phys(MslBatch* batch, size_t idx) {
       // ftCa_SpecialLwEndAir_Phys air branch: cmd0 ? ft_80084EEC : ft_80085134.
       // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c::ftCa_SpecialLwEndAir_Phys
       // data/moves/falcon.json::specials_by_msid.315 set_cmd_var(idx=0)@7
-      const uint8_t cmd0 =
-          move_tables_special_cmd_var_u8_value_at_frame(batch->state.char_id[idx], msid, 0u, frame);
+      const uint8_t cmd0 = (uint8_t)fighter_script_cmd_var(batch, idx, 0u);
       if (cmd0 != 0u) {
         fc_fall_step(batch, idx, ch->grav, ch->terminal_vel);
         fc_air_friction_step(batch, idx, ch->aerial_friction);
@@ -1221,10 +1215,7 @@ void falcon_specials_processhit_consume(MslBatch* batch) {
            a != (uint16_t)MSL_ACT_CA_SPECIAL_AIR_S_START)) {
         continue;
       }
-      const uint16_t msid = falcon_special_submotion(a);
-      const float frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-      if (move_tables_special_cmd_var_u8_value_at_frame(batch->state.char_id[idx], msid, 0u,
-                                                        frame) != 0u) {
+      if (fighter_script_cmd_var(batch, idx, 0u) != 0u) {
         const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
         if (ch != NULL) {
           fc_specials_on_detect(batch, ch, idx);
@@ -1256,10 +1247,7 @@ uint8_t falcon_special_try_speciallw_wall_rebound(MslBatch* batch, size_t idx) {
   if (a != (uint16_t)MSL_ACT_CA_SPECIAL_LW && a != (uint16_t)MSL_ACT_CA_SPECIAL_S_START) {
     return 0u;
   }
-  const uint16_t msid = falcon_special_submotion(a);
-  const float frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-  if (move_tables_special_cmd_var_u8_value_at_frame(batch->state.char_id[idx], msid, 0u, frame) ==
-      0u) {
+  if (fighter_script_cmd_var(batch, idx, 0u) == 0u) {
     return 0u;
   }
   const uint32_t env = batch->state.coll_env_flags[idx];
@@ -1365,12 +1353,14 @@ static uint8_t fc_b_entry_mask(const MslBatch* batch, size_t idx, uint16_t a, ui
       case MSL_ACT_ATTACK_S4_LW_S:
       case MSL_ACT_ATTACK_S4_LW:
       case MSL_ACT_ATTACK_HI4:
-      case MSL_ACT_ATTACK_LW4:
-        return move_tables_grounded_attack_allow_interrupt(
-                   batch->state.char_id[idx], a,
-                   msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]))
+      case MSL_ACT_ATTACK_LW4: {
+        const size_t flags_i =
+            idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+        return (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) !=
+                       0u
                    ? (uint8_t)FC_B_ALL
                    : 0u;
+      }
       case MSL_ACT_DAMAGE_HI_1:
       case MSL_ACT_DAMAGE_HI_1 + 1:
       case MSL_ACT_DAMAGE_HI_1 + 2:
@@ -1873,10 +1863,7 @@ uint8_t falcon_special_try_ground_to_air_swap(MslBatch* batch, size_t idx) {
   }
   if (a == (uint16_t)MSL_ACT_CA_SPECIAL_S_START || a == (uint16_t)MSL_ACT_CA_SPECIAL_S) {
     if (a == (uint16_t)MSL_ACT_CA_SPECIAL_S_START) {
-      const uint16_t msid = falcon_special_submotion(a);
-      const float frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-      const uint8_t cmd2 =
-          move_tables_special_cmd_var_u8_value_at_frame(batch->state.char_id[idx], msid, 2u, frame);
+      const uint8_t cmd2 = (uint8_t)fighter_script_cmd_var(batch, idx, 2u);
       if (cmd2 == 0u) {
         // Before/after the script-owned dash collision window, SpecialSStart_Coll delegates to
         // ft_80084104. Floor loss therefore enters ordinary Fall: clamp drift, preserve fastfall,

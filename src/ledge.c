@@ -386,8 +386,8 @@ static inline void enter_guard_on_from_cliff_end(MslBatch* batch, const MslCommo
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &= (uint8_t) ~(
       uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  msl_guard_set_shield_desc_active(batch, idx, 1u);
   batch->state.guard_release_latched_xc[idx] = 0u;
-  batch->state.guard_on_cliff_end_source[idx] = 1u;
   // Same no-submotion GuardOn entry surface as action.c::enter_guard_on and the cliff
   // GuardReflect sibling below: ftCo_800924C0 publishes the replay-visible post-first-hold-tick
   // x10 lane after the Wait_IASA guard handoff. Raw x268 lasts one frame too long for sustained
@@ -395,7 +395,7 @@ static inline void enter_guard_on_from_cliff_end(MslBatch* batch, const MslCommo
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Anim
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800923B4,ftCo_800924C0}
-  batch->state.guard_x10[idx] = msl_guard_x10_visible_guardon_init_u8(c);
+  batch->state.guard_x10[idx] = msl_guard_x10_raw_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
 }
 
@@ -423,11 +423,15 @@ static inline void enter_guard_reflect_from_cliff_end(MslBatch* batch, const Msl
   batch->state.guard_reflect_origin_guardon[idx] = 0u;
   batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.guard_release_latched_xc[idx] = 0u;
-  batch->state.guard_x10[idx] = msl_guard_x10_visible_guardon_init_u8(c);
+  batch->state.guard_x10[idx] = msl_guard_x10_raw_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] |=
       (uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  msl_guard_set_shield_desc_active(batch, idx, 1u);
+  const size_t flags_2218_i =
+      idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+  batch->state.state_flags[flags_2218_i] |= (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
 }
 
 static inline void try_wait_interrupts_after_cliff_option_end(MslBatch* batch,

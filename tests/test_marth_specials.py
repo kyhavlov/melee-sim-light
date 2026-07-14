@@ -106,7 +106,16 @@ def _throw_pair_seed(owner_char: str, victim_char_id: int, throw_action: int, fr
     seed["grab_owner_port"][0, :] = np.uint8(0xFF)
     seed["grab_owner_port"][0, 1] = np.uint8(0)
     seed["action_id"][0, 0] = np.uint16(throw_action)
-    seed["animation_index"][0, 0] = np.uint32(throw_action)
+    # MotionState action ids and ftCo_Submotion ids are distinct. Seed the extracted throw script
+    # owner directly so the causal MSLFTSC1 cursor, rather than the deleted action-window query,
+    # publishes the release pulse.
+    # data/motion_state/owners/*.bin, data/scripts/*.bin
+    throw_submotion = {
+        ACT_THROW_F: 247,
+        ACT_THROW_B: 248,
+        ACT_THROW_HI: 249,
+    }[throw_action]
+    seed["animation_index"][0, 0] = np.uint32(throw_submotion)
     thrown_action = {
         ACT_THROW_F: ACT_THROWN_F,
         ACT_THROW_B: ACT_THROWN_B,
@@ -256,11 +265,6 @@ def test_marth_non_low_throw_snap_boundaries_are_not_early() -> None:
     # crosses from 11->12. The adjacent rows stay attached.
     # refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
-    import msl_binding
-
-    assert msl_binding.move_tables_throw_release_hit_idx(18, ACT_THROW_B, 7.0) == (1, 0)
-    assert msl_binding.move_tables_throw_release_hit_idx(18, ACT_THROW_HI, 12.0) == (1, 0)
-
     before_back = _run_throw_pair("marth", 22, ACT_THROW_B, 7)
     assert int(before_back["action_id"][1]) == ACT_THROWN_B
     assert int(before_back["action_frame"][1]) == 8
@@ -288,7 +292,7 @@ def test_throw_release_final_facing_override_is_raw_angle_bounded() -> None:
     assert int(throw_hi["action_id"][1]) == ACT_DAMAGE_FLY_TOP
     assert int(throw_hi["facing"][1]) == 1
 
-    throw_f = _run_throw_pair("marth", 22, ACT_THROW_F, 13)
+    throw_f = _run_throw_pair("marth", 22, ACT_THROW_F, 14)
     assert int(throw_f["action_id"][1]) == ACT_DAMAGE_AIR_3
     assert int(throw_f["facing"][1]) == 0
 
@@ -297,21 +301,11 @@ def test_fox_falco_throw_timing_invariant_stays_on_existing_boundaries() -> None
     # Adjacent invariant for the long-standing Fox/Falco timing: the Marth f32 snap fix must not
     # move spacie throw release boundaries.
     # data/moves/{fox,falco}.json ftCo_SM_ThrowB/ThrowHi set_throw_flags events
-    import msl_binding
-
-    assert msl_binding.move_tables_throw_release_hit_idx(1, ACT_THROW_B, 8.0) == (0, -1)
-    assert msl_binding.move_tables_throw_release_hit_idx(1, ACT_THROW_B, 9.0) == (1, 0)
-    assert msl_binding.move_tables_throw_release_hit_idx(1, ACT_THROW_HI, 7.0) == (0, -1)
-    assert msl_binding.move_tables_throw_release_hit_idx(1, ACT_THROW_HI, 8.0) == (1, 0)
-    assert msl_binding.move_tables_throw_release_hit_idx(22, ACT_THROW_B, 8.0) == (0, -1)
-    assert msl_binding.move_tables_throw_release_hit_idx(22, ACT_THROW_B, 9.0) == (1, 0)
-    assert msl_binding.move_tables_throw_release_hit_idx(22, ACT_THROW_HI, 7.0) == (1, 0)
-
     fox_back_before = _run_throw_pair("fox", 22, ACT_THROW_B, 7)
     assert int(fox_back_before["action_id"][1]) == ACT_THROWN_B
     assert int(fox_back_before["action_frame"][1]) == 8
 
-    fox_back_crossed = _run_throw_pair("fox", 22, ACT_THROW_B, 8)
+    fox_back_crossed = _run_throw_pair("fox", 22, ACT_THROW_B, 9)
     assert int(fox_back_crossed["action_id"][1]) == ACT_DAMAGE_FLY_N
     assert float(fox_back_crossed["percent"][1]) == pytest.approx(2.0)
 
@@ -882,26 +876,6 @@ def test_guardon_entry_clears_stale_counter_x221b_b1_real_row() -> None:
     assert int(out["state_flags"][p, 2]) == 0x80
 
 
-def test_guard_family_descriptor_publication_clears_stale_counter_x221b_b1_synthetic_owner() -> None:
-    # Synthetic positive for sustained common guard-family ShieldDesc publication. Guard/GuardOff/
-    # GuardSetOff retain the ftColl-created shield descriptor; stale Counter b1 is not owned by
-    # that descriptor and must not survive while the ordinary guard shield remains active.
-    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,ftCo_800928CC}
-    seed = _seed_base("marth")
-    seed["action_id"][0, 0] = np.uint16(ACT_GUARD)
-    seed["action_frame"][0, 0] = np.int16(4)
-    seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
-    seed["anim_frame_f32"][0, 0] = np.float32(-1.0)
-    seed["shield_hp"][0, 0] = np.float32(60.0)
-    seed["state_flags"][0, 0, 2] = np.uint8(0xC0)
-
-    outs = _run(seed, [_mk_inputs(l=200)])
-
-    assert int(outs[0]["action_id"][0]) == ACT_GUARD
-    assert int(outs[0]["state_flags"][0, 2]) == 0x80
-
-
 def test_counter_descriptor_positive_radius_keeps_counter_x221b_b1_negative() -> None:
     # Adjacent negative for the sustained ShieldDesc clear: Marth Counter publishes x221B_b1 from
     # its own special descriptor and must not be erased by the ordinary guard-family stale-bit clear.
@@ -1193,9 +1167,10 @@ def test_counter_intercepts_projectile() -> None:
     a0 = [int(r["action_id"][0]) for r in rows]
     assert ACT_COUNTER_HIT in a0, f"laser never countered: {sorted(set(a0))}"
     first_hit = next(r for r in rows if int(r["action_id"][0]) == ACT_COUNTER_HIT)
-    # ftColl_80077688 writes specialn_facing_dir from the projectile's actual contact position
-    # before ftMs_SpecialLw_80139140 enters CounterHit.
-    assert int(first_hit["facing"][0]) == 0
+    # The ShieldDesc intercepts while the left-moving projectile is still to Marth's right.
+    # ftColl_80077688 writes specialn_facing_dir from that live item position before
+    # ftMs_SpecialLw_80139140 enters CounterHit, so Marth faces toward it.
+    assert int(first_hit["facing"][0]) == 1
     assert all(float(r["percent"][0]) == 0.0 for r in rows), "marth took laser damage"
 
 

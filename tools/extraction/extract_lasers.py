@@ -34,6 +34,7 @@ class LaserRecord:
     lifetime_frames: int
     laser_damage: float
     laser_size: float
+    laser_item_scale: float
     laser_angle: int
     laser_kbg: int
     laser_wsk: int
@@ -42,7 +43,13 @@ class LaserRecord:
     laser_shield_damage: int
     laser_zero_kb_damage_class: int
     hitbox_x138_mask: int
+    hitbox_clank_mask: int
     hitbox_offsets_x: tuple[float, ...]
+    hitbox_sizes: tuple[float, ...]
+    hitbox_ids: tuple[int, ...]
+    hitbox_word4_raw: tuple[int, ...]
+    hitbox_flags_raw: tuple[int, ...]
+    hitbox_groups: tuple[int, ...]
     laser_damage_update_frame: int
     laser_damage_update_hitbox_mask: int
     laser_damage_update_damage: float
@@ -56,7 +63,13 @@ class LaserRecord:
     laser_state1_shield_damage: int
     laser_state1_zero_kb_damage_class: int
     state1_hitbox_x138_mask: int
+    state1_hitbox_clank_mask: int
     state1_hitbox_offsets_x: tuple[float, ...]
+    state1_hitbox_sizes: tuple[float, ...]
+    state1_hitbox_ids: tuple[int, ...]
+    state1_hitbox_word4_raw: tuple[int, ...]
+    state1_hitbox_flags_raw: tuple[int, ...]
+    state1_hitbox_groups: tuple[int, ...]
 
 
 def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: int) -> LaserRecord:
@@ -101,10 +114,40 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
     hitbox_offsets_x = tuple(
         float(x) for x in (laser.get("laser_hitbox_offsets_x") or []) if isinstance(x, (int, float))
     )
+    hitbox_sizes = tuple(
+        float(x) for x in (laser.get("laser_hitbox_sizes") or []) if isinstance(x, (int, float))
+    )
+    hitbox_flags_raw = tuple(
+        int(x) for x in (laser.get("laser_hitbox_flags_raw") or []) if isinstance(x, int)
+    )
+    hitbox_word4_raw = tuple(
+        int(x) for x in (laser.get("laser_hitbox_word4_raw") or []) if isinstance(x, int)
+    )
+    hitbox_groups = tuple(
+        int(x) for x in (laser.get("laser_hitbox_groups") or []) if isinstance(x, int)
+    )
+    hitbox_ids = tuple(int(x) for x in (laser.get("laser_hitbox_ids") or []) if isinstance(x, int))
     hitbox_offsets_x_state1 = tuple(
         float(x)
         for x in (laser.get("laser_state1_hitbox_offsets_x") or [])
         if isinstance(x, (int, float))
+    )
+    hitbox_sizes_state1 = tuple(
+        float(x)
+        for x in (laser.get("laser_state1_hitbox_sizes") or [])
+        if isinstance(x, (int, float))
+    )
+    hitbox_flags_raw_state1 = tuple(
+        int(x) for x in (laser.get("laser_state1_hitbox_flags_raw") or []) if isinstance(x, int)
+    )
+    hitbox_word4_raw_state1 = tuple(
+        int(x) for x in (laser.get("laser_state1_hitbox_word4_raw") or []) if isinstance(x, int)
+    )
+    hitbox_groups_state1 = tuple(
+        int(x) for x in (laser.get("laser_state1_hitbox_groups") or []) if isinstance(x, int)
+    )
+    hitbox_ids_state1 = tuple(
+        int(x) for x in (laser.get("laser_state1_hitbox_ids") or []) if isinstance(x, int)
     )
 
     return LaserRecord(
@@ -124,6 +167,7 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
         lifetime_frames=int(laser.get("laser_lifetime_frames", 0)),
         laser_damage=float(laser.get("laser_damage", 0.0)),
         laser_size=float(laser.get("laser_size", 0.0)),
+        laser_item_scale=float(laser.get("laser_item_scale", 1.0)),
         laser_angle=int(laser.get("laser_angle", 0)),
         laser_kbg=int(laser.get("laser_kbg", 0)),
         laser_wsk=int(laser.get("laser_wsk", 0)),
@@ -136,7 +180,13 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
             int(laser.get("laser_bkb", 0)),
         ),
         hitbox_x138_mask=int(laser.get("laser_hitbox_x138_mask", 0)),
+        hitbox_clank_mask=int(laser.get("laser_hitbox_clank_mask", 0)),
         hitbox_offsets_x=hitbox_offsets_x,
+        hitbox_sizes=hitbox_sizes,
+        hitbox_ids=hitbox_ids,
+        hitbox_word4_raw=hitbox_word4_raw,
+        hitbox_flags_raw=hitbox_flags_raw,
+        hitbox_groups=hitbox_groups,
         laser_damage_update_frame=int(laser.get("laser_damage_update_frame", 0)),
         laser_damage_update_hitbox_mask=int(laser.get("laser_damage_update_hitbox_mask", 0)),
         laser_damage_update_damage=float(laser.get("laser_damage_update_damage", 0.0)),
@@ -158,7 +208,19 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
         state1_hitbox_x138_mask=int(
             laser.get("laser_state1_hitbox_x138_mask", laser.get("laser_hitbox_x138_mask", 0))
         ),
+        state1_hitbox_clank_mask=int(
+            laser.get("laser_state1_hitbox_clank_mask", laser.get("laser_hitbox_clank_mask", 0))
+        ),
         state1_hitbox_offsets_x=hitbox_offsets_x_state1 if hitbox_offsets_x_state1 else hitbox_offsets_x,
+        state1_hitbox_sizes=hitbox_sizes_state1 if hitbox_sizes_state1 else hitbox_sizes,
+        state1_hitbox_ids=hitbox_ids_state1 if hitbox_ids_state1 else hitbox_ids,
+        state1_hitbox_word4_raw=(
+            hitbox_word4_raw_state1 if hitbox_word4_raw_state1 else hitbox_word4_raw
+        ),
+        state1_hitbox_flags_raw=(
+            hitbox_flags_raw_state1 if hitbox_flags_raw_state1 else hitbox_flags_raw
+        ),
+        state1_hitbox_groups=(hitbox_groups_state1 if hitbox_groups_state1 else hitbox_groups),
     )
 
 
@@ -170,6 +232,26 @@ def _pack_record(rec: LaserRecord) -> bytes:
     offs0 += [0.0] * (MAX_HITBOX_OFFS - len(offs0))
     offs1 = list(rec.state1_hitbox_offsets_x)[:MAX_HITBOX_OFFS]
     offs1 += [0.0] * (MAX_HITBOX_OFFS - len(offs1))
+    flags0 = list(rec.hitbox_flags_raw)[:MAX_HITBOX_OFFS]
+    flags0 += [0] * (MAX_HITBOX_OFFS - len(flags0))
+    flags1 = list(rec.state1_hitbox_flags_raw)[:MAX_HITBOX_OFFS]
+    flags1 += [0] * (MAX_HITBOX_OFFS - len(flags1))
+    word4_0 = list(rec.hitbox_word4_raw)[:MAX_HITBOX_OFFS]
+    word4_0 += [0] * (MAX_HITBOX_OFFS - len(word4_0))
+    word4_1 = list(rec.state1_hitbox_word4_raw)[:MAX_HITBOX_OFFS]
+    word4_1 += [0] * (MAX_HITBOX_OFFS - len(word4_1))
+    groups0 = list(rec.hitbox_groups)[:MAX_HITBOX_OFFS]
+    groups0 += [0] * (MAX_HITBOX_OFFS - len(groups0))
+    groups1 = list(rec.state1_hitbox_groups)[:MAX_HITBOX_OFFS]
+    groups1 += [0] * (MAX_HITBOX_OFFS - len(groups1))
+    ids0 = list(rec.hitbox_ids)[:MAX_HITBOX_OFFS]
+    ids0 += list(range(len(ids0), MAX_HITBOX_OFFS))
+    ids1 = list(rec.state1_hitbox_ids)[:MAX_HITBOX_OFFS]
+    ids1 += list(range(len(ids1), MAX_HITBOX_OFFS))
+    sizes0 = list(rec.hitbox_sizes)[:MAX_HITBOX_OFFS]
+    sizes0 += [rec.laser_size] * (MAX_HITBOX_OFFS - len(sizes0))
+    sizes1 = list(rec.state1_hitbox_sizes)[:MAX_HITBOX_OFFS]
+    sizes1 += [rec.laser_state1_size] * (MAX_HITBOX_OFFS - len(sizes1))
 
     # Layout is documented in agent_docs/DATA_CONTRACT.md (MSLLASR1 v7).
     out = bytearray()
@@ -213,6 +295,10 @@ def _pack_record(rec: LaserRecord) -> bytes:
         int(rec.hitbox_x138_mask) & 0xFFFF,
     )
     out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in offs0])
+    out += struct.pack("<" + "I" * MAX_HITBOX_OFFS, *[int(x) & 0xFFFFFFFF for x in word4_0])
+    out += struct.pack("<" + "I" * MAX_HITBOX_OFFS, *[int(x) & 0xFFFFFFFF for x in flags0])
+    out += bytes(int(x) & 0xFF for x in groups0)
+    out += bytes(int(x) & 0xFF for x in ids0)
     out += struct.pack(
         "<fHBB",
         _f32(rec.laser_damage_update_damage),
@@ -241,6 +327,20 @@ def _pack_record(rec: LaserRecord) -> bytes:
         int(rec.state1_hitbox_x138_mask) & 0xFFFF,
     )
     out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in offs1])
+    out += struct.pack("<" + "I" * MAX_HITBOX_OFFS, *[int(x) & 0xFFFFFFFF for x in word4_1])
+    out += struct.pack("<" + "I" * MAX_HITBOX_OFFS, *[int(x) & 0xFFFFFFFF for x in flags1])
+    out += bytes(int(x) & 0xFF for x in groups1)
+    out += bytes(int(x) & 0xFF for x in ids1)
+    # MSLLASR1 v10 append-only extension: ItemAttr.x60_scale and the article-script size for
+    # every authored HitCapsule. Earlier layouts collapsed these to one size per article state.
+    out += struct.pack("<f", _f32(rec.laser_item_scale))
+    out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in sizes0])
+    out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in sizes1])
+    out += struct.pack(
+        "<HH",
+        int(rec.hitbox_clank_mask) & 0xFFFF,
+        int(rec.state1_hitbox_clank_mask) & 0xFFFF,
+    )
     return bytes(out)
 
 
@@ -258,7 +358,7 @@ def main() -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("wb") as f:
         f.write(b"MSLLASR1")
-        f.write(struct.pack("<I", 7))
+        f.write(struct.pack("<I", 10))
         f.write(struct.pack("<H", len(recs)))
         f.write(struct.pack("<H", 0))
         for r in recs:

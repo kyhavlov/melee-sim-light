@@ -487,11 +487,9 @@ def load_shield_tilt_table_meta(*, data_dir: str = "data") -> dict[int, tuple[in
     Source of truth: `data/shields/<character>.bin` (ISO-derived via tools/extraction/extract_shield_tilt_table.py).
     Binary format: tools/extraction/extract_shield_tilt_table.py::_write_table.
     """
-    # Character ids (GALE01): Fox=1, Falco=22.
-    char_files = {
-        1: "fox.bin",
-        22: "falco.bin",
-    }
+    from tools.extraction.char_registry import CHARS
+
+    char_files = {info.internal_id: f"{info.name}.bin" for info in CHARS.values()}
     out: dict[int, tuple[int, int]] = {}
     base = Path(str(data_dir)) / "shields"
     for char_id, fname in char_files.items():
@@ -501,27 +499,24 @@ def load_shield_tilt_table_meta(*, data_dir: str = "data") -> dict[int, tuple[in
                 f"missing shield tilt table {p} (run tools.extraction.build_data to generate data/ artifacts)"
             )
         buf = p.read_bytes()
-        if len(buf) < 8 + 4 + 2 + 2:
+        if len(buf) < 20:
             raise ValueError(f"{p}: too small for MSLSHLD1 header (size={len(buf)})")
         if buf[:8] != b"MSLSHLD1":
             raise ValueError(f"{p}: bad magic (want MSLSHLD1)")
 
         ver = struct.unpack_from("<I", buf, 8)[0]
-        if ver != 4:
-            raise ValueError(f"{p}: unsupported MSLSHLD1 version={ver} (want 4)")
+        if ver != 5:
+            raise ValueError(f"{p}: unsupported MSLSHLD1 version={ver} (want 5)")
 
-        frame_count, neutral_frame = struct.unpack_from("<HH", buf, 12)
-        if frame_count == 0:
-            raise ValueError(f"{p}: frame_count is 0")
+        part_count, neutral_frame, _shield_part, frame_count = struct.unpack_from("<HHHH", buf, 12)
+        if part_count == 0 or frame_count == 0:
+            raise ValueError(f"{p}: empty Guard pose table")
         if neutral_frame >= frame_count:
             raise ValueError(
                 f"{p}: neutral_frame out of range (neutral_frame={neutral_frame}, frame_count={frame_count})"
             )
 
-        hdr = 32
-        want = hdr + int(frame_count) * 3 * 4
-        guard_on_frame_count = struct.unpack_from("<H", buf, 28)[0]
-        want += int(guard_on_frame_count) * 3 * 4
+        want = 20 + int(part_count) * 40
         if len(buf) != want:
             raise ValueError(f"{p}: size mismatch (got {len(buf)}, want {want})")
 
@@ -734,96 +729,6 @@ def derive_guard_setoff_hitlag_damage_min(
         np.ascontiguousarray(hitlag, dtype=np.uint16).reshape(-1),
         float(hitlag_dmg_mul),
         float(hitlag_base),
-        int(act_guard_set_off),
-    )
-
-
-def derive_guard_setoff_hitlag_exit_phase(
-    *,
-    action_id: np.ndarray,
-    hitlag: np.ndarray,
-    act_guard_set_off: int,
-) -> np.ndarray:
-    """
-    Derive a causal GuardSetOff hitlag-exit ownership phase discriminator.
-
-    Purpose:
-    - GuardSetOff action-frame parity depends on the entry-owned anim rate surviving through the
-      frozen hitlag tail and then resuming on the first non-hitlag row.
-    - Slippi exposes action_id, hitlag, anim_frame, and frame_speed_mul, but not the hidden
-      "which step of the hitlag-exit handoff are we on?" ownership phase.
-    - This lane marks that phase explicitly so runtime work can target the last-hitlag and first
-      post-hitlag rows without replay-fitting broad GuardSetOff behavior.
-
-    Phase encoding:
-    - 0: not GuardSetOff, or GuardSetOff steady row outside the hitlag-exit handoff
-    - 1: GuardSetOff hitlag carry row with `hitlag > 1`
-    - 2: GuardSetOff last-hitlag row with `hitlag == 1`
-    - 3: first non-hitlag GuardSetOff row after a same-segment hitlag row
-
-    Causality / prefix-invariance:
-    - Uses only the current and previous replay rows.
-
-    Decomp anchors:
-    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
-    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
-    - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-    """
-    try:
-        import msl_binding  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError(
-            "native msl_binding.derive_guard_setoff_hitlag_exit_phase is required for "
-            "preprocessing; run `make build`"
-        ) from exc
-    return msl_binding.derive_guard_setoff_hitlag_exit_phase(
-        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
-        np.ascontiguousarray(hitlag, dtype=np.uint16).reshape(-1),
-        int(act_guard_set_off),
-    )
-
-
-def derive_guard_setoff_post_hitlag_owner(
-    *,
-    action_id: np.ndarray,
-    guard_setoff_hitlag_exit_phase_u8: np.ndarray,
-    state_flags_221c_u8: np.ndarray,
-    act_guard_set_off: int,
-) -> np.ndarray:
-    """
-    Derive the GuardSetOff post-hitlag ownership discriminator for the handoff rows.
-
-    Meaning:
-    - 0: not a GuardSetOff post-hitlag handoff row
-    - 1: GuardSetOff handoff row with normal (non-powershield) ownership
-    - 2: GuardSetOff handoff row with powershield-active ownership (`x221C_b2` still live)
-
-    Purpose:
-    - The remaining F02 blocker rows all occur on the last-hitlag / first-post-hitlag GuardSetOff
-      handoff, but they split into two ownership shapes:
-    - normal GuardSetOff rows where only ftCo_GuardSetOff_Anim owns the anim-rate handoff, and
-    - powershield-active rows where ftCo_80093BC0 still owns the `x221C_b2` substate while the
-      same GuardSetOff handoff occurs.
-
-    Causality / prefix-invariance:
-    - Uses only the current replay row and the already-causal handoff phase lane.
-
-    Decomp anchors:
-    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
-    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-    - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-    """
-    try:
-        import msl_binding  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError(
-            "native msl_binding.derive_guard_setoff_post_hitlag_owner is required for "
-            "preprocessing; run `make build`"
-        ) from exc
-    return msl_binding.derive_guard_setoff_post_hitlag_owner(
-        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
-        np.ascontiguousarray(guard_setoff_hitlag_exit_phase_u8, dtype=np.uint8).reshape(-1),
-        np.ascontiguousarray(state_flags_221c_u8, dtype=np.uint8).reshape(-1),
         int(act_guard_set_off),
     )
 
@@ -1250,47 +1155,6 @@ def derive_run_x0(
         int(act_run),
         int(act_run_direct),
         int(act_turn_run),
-    )
-
-
-def derive_runbrake_cmd0(
-    *,
-    action_id_u16: np.ndarray,
-    anim_frame_f32: np.ndarray,
-    char_id_u8: np.ndarray,
-    cmd0_on_by_char: dict[int, int],
-    cmd0_off_by_char: dict[int, int],
-    act_run_brake: int,
-) -> np.ndarray:
-    """
-    Derive RunBrake's `fp->cmd_vars[0]` gate per post-frame, strictly causally.
-
-    Decomp:
-    - ftCo_RunBrake_Enter clears `fp->cmd_vars[0] = 0`.
-      refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Enter
-    - ftCo_RunBrake_IASA only reaches `fn_800C9CEC` (TurnRun path) when `fp->cmd_vars[0] != 0`.
-      refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
-    - The command script writes `cmd_vars[0]` via `set_cmd_var`.
-      refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
-
-    Source of truth:
-    - data/moves/<char>.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0)
-
-    Representation:
-    - 0: RunBrake TurnRun gate disabled on this post-frame.
-    - 1: RunBrake TurnRun gate enabled on this post-frame.
-    """
-    try:
-        import msl_binding  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError("native msl_binding.derive_runbrake_cmd0 is required; run `make build`") from exc
-    return msl_binding.derive_runbrake_cmd0(
-        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
-        np.ascontiguousarray(anim_frame_f32, dtype=np.float32).reshape(-1),
-        np.ascontiguousarray(char_id_u8, dtype=np.uint8).reshape(-1),
-        {int(k): int(v) for k, v in cmd0_on_by_char.items()},
-        {int(k): int(v) for k, v in cmd0_off_by_char.items()},
-        int(act_run_brake),
     )
 
 
@@ -1882,7 +1746,7 @@ def derive_colanim_internals(
     damage_actions: tuple[int, ...],
     fall_actions: tuple[int, ...] = (),
     rebirth_actions: tuple[int, ...] = (),
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Derive fp->x198C/x1990/x1994/x2221_b0 seed internals strictly causally.
 
@@ -2395,7 +2259,7 @@ def derive_capture_grab_hidden_post(
     capture_wait_anim_rate_hold_frames: float,
     capture_wait_jump_latch_window_frames: float,
     grab_mash_stick_threshold: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Derive explicit CaptureWait/CaptureDamage hidden owner lanes.
 
     Output row `i` corresponds to the post-frame replay row `i` and is suitable for seeding the

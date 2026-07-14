@@ -14,7 +14,6 @@ from tools.slippi.validation_buffer_common import (  # noqa: F401
     COMPARE_DTYPE,
     INPUT_DTYPE,
     SEED_DTYPE,
-    load_action_state_tables,
     hitstun_u16_from_misc_as_and_state_flags3,
     item_article_kind_set,
     item_article_values_by_sim_char,
@@ -111,98 +110,10 @@ from tools.slippi.validation_buffer_seed import (  # noqa: F401
     _derive_opening_input_lock_timer,
     _stage_respawn_points_y,
     _respawn_point_y_for_stage_port,
-    _load_throw_pulse_seed_tables,
     _load_specialn_loop_cmd0_windows,
-    _load_runbrake_cmd0_seed_tables,
-    _load_source_clear_terminal_followup_tables,
-    _load_action_x9_b1_tables,
-    _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes,
-    _derive_source_clear_grounded_damage_clear_phase_seed_lane,
-    _derive_source_clear_processhit_damage_pending_phase_seed_lane,
+    _derive_source_clear_timer_x18c8_seed_lane,
     _derive_phantom_damage_pending_seed_lanes,
-    _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane,
-    _derive_source_clear_terminal_phase_seed_lane,
 )
-
-def _derive_throw_pulse_seed_lanes(*, seed_action_id_u16: np.ndarray, seed_char_id_u8: np.ndarray, seed_anim_frame_f32: np.ndarray, seed_frame_speed_mul_f32: np.ndarray, seed_hitstun_u16: np.ndarray, seed_last_attack_landed_u8: np.ndarray, seed_last_hit_by_u8: np.ndarray, seed_items: np.ndarray, num_players: int, pulse_frames_by_char_action: dict[tuple[int, int], tuple[int, ...]], cmd1_start_by_char_action: dict[tuple[int, int], int], shot_itkind_by_char: dict[int, int], act_throw_b: int, act_throw_hi: int, act_damage_fly_top: int, falco_char_id: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Derive throw pulse seed lanes strictly from seed-visible replay lanes.
-
-    Decomp ownership:
-    - Throw-side shots come from one-shot throw_flags_b0 pulses consumed in ftFx_Throw_Anim.
-      refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-      refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-
-    Seed policy:
-    - Mark rows where one-step throw pulse reconstruction should be suppressed:
-      - script timing stale windows from throw move events (ThrowB/ThrowHi pulse crossing windows),
-      - and decomp-owned ongoing-damage throw-laser contexts previously gated in runtime C.
-    - Record prior-step pulse crossing frame for future throw command cursor ownership:
-      - 0 means no crossing in (t-1 -> t),
-      - N is the crossed pulse frame from extracted throw move events.
-    """
-    max_action = max((int(action) for _, action in pulse_frames_by_char_action.keys()), default=0)
-    max_pulses = max((len(v) for v in pulse_frames_by_char_action.values()), default=0)
-    if max_pulses <= 0:
-        shape = (int(seed_action_id_u16.shape[0]), 4)
-        return (np.zeros(shape, dtype=np.uint8), np.zeros(shape, dtype=np.uint8), np.zeros(shape, dtype=np.uint8))
-    pulse_lut = np.zeros((256, max_action + 1, max_pulses), dtype=np.int16)
-    pulse_count_lut = np.zeros((256, max_action + 1), dtype=np.uint8)
-    cmd1_lut = np.full((256, max_action + 1), -1, dtype=np.int16)
-    shot_lut = np.zeros(256, dtype=np.uint16)
-    for (cid, action), pulses in pulse_frames_by_char_action.items():
-        cid_i = int(cid) & 255
-        action_i = int(action)
-        pulse_count_lut[cid_i, action_i] = np.uint8(len(pulses))
-        for k, pulse in enumerate(pulses):
-            pulse_lut[cid_i, action_i, k] = np.int16(int(pulse))
-    for (cid, action), frame in cmd1_start_by_char_action.items():
-        cmd1_lut[int(cid) & 255, int(action)] = np.int16(int(frame))
-    for cid, kind in shot_itkind_by_char.items():
-        shot_lut[int(cid) & 255] = np.uint16(int(kind))
-    try:
-        import msl_binding
-    except ImportError as exc:
-        raise RuntimeError('native msl_binding.derive_throw_pulse_seed_lanes is required; run `make build`') from exc
-    return msl_binding.derive_throw_pulse_seed_lanes(_ascontiguousarray(seed_action_id_u16, dtype=np.uint16), _ascontiguousarray(seed_char_id_u8, dtype=np.uint8), _ascontiguousarray(seed_anim_frame_f32, dtype=np.float32), _ascontiguousarray(seed_frame_speed_mul_f32, dtype=np.float32), _ascontiguousarray(seed_hitstun_u16, dtype=np.uint16), _ascontiguousarray(seed_last_attack_landed_u8, dtype=np.uint8), pulse_lut, pulse_count_lut, cmd1_lut, shot_lut, int(num_players), int(act_throw_b), int(act_throw_hi), int(falco_char_id))
-
-def _derive_throw_laser_item_hitlist_seed_lanes(*, seed_action_id_u16: np.ndarray, seed_grab_owner_port_u8: np.ndarray, seed_instance_hit_by_u16: np.ndarray, seed_instance_id_u16: np.ndarray, seed_items: np.ndarray, num_players: int, throw_laser_hitbox_masks: dict[int, np.uint8]) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Derive a compact per-item victims_1 seed lane for throw-side laser articles.
-
-    Decomp ownership:
-    - Item BODY collision inserts fighter victims into HitCapsule.victims_1 through
-      it_8026FAC4 / it_8026FA2C -> lbColl_80008688 before it_80272460 damage callbacks.
-    - Throw-side laser articles are spawned by ftFx_Throw_Anim through it_8029C6CC, but their
-      BODY rehit/carry decision is item HitCapsule state, not command timing alone.
-
-    Producer policy:
-    - Keep the lane prefix-causal and narrow: only state1 throw laser items whose seeded xDA8
-      identity (`item.instance_id`) matches an attached grabbed/thrown victim's
-      `instance_hit_by`.
-    - Dolphin v10 dumps show the authoritative state is per item HitCapsule, not per item: Fox
-      ThrowLw attached rows populate hitboxes 0/1, while Falco rows can populate 2/3 while 0/1
-      remain BODY-eligible. The seed lane therefore carries a compact hitbox mask instead of an
-      item-wide latch; Falco production remains disabled until terminal clear/callback phase is
-      explicitly represented.
-    - This covers replay-real attached-pulse carry rows without broadening to ordinary ThrowHi
-      hitstun rows such as BHH:937 where the dump showed no relevant item hitlist entry.
-
-    refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C,it_80272460}
-    refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
-    refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-    refs/Ishiiruka branch engine-dump-v12-probes (EngineDumpWriter item hitlist lanes)
-    """
-    n_samples = int(seed_action_id_u16.shape[0])
-    if n_samples == 0:
-        shape = (0, 15)
-        return (np.full(shape, 255, dtype=np.uint8), np.zeros(shape, dtype=np.uint8), np.zeros(shape, dtype=np.uint8), np.zeros(shape, dtype=np.uint16))
-    try:
-        import msl_binding
-    except ImportError as exc:
-        raise RuntimeError('native msl_binding.derive_throw_laser_item_hitlist_seed_lanes is required; run `make build`') from exc
-    hitbox_mask_lut = _u8_lut_from_pairs(tuple(sorted(((int(k), int(v)) for k, v in throw_laser_hitbox_masks.items()))))
-    return msl_binding.derive_throw_laser_item_hitlist_seed_lanes(_ascontiguousarray(seed_action_id_u16, dtype=np.uint16), _ascontiguousarray(seed_grab_owner_port_u8, dtype=np.uint8), _ascontiguousarray(seed_instance_hit_by_u16, dtype=np.uint16), _ascontiguousarray(seed_instance_id_u16, dtype=np.uint16), _ascontiguousarray(seed_items['exists'], dtype=np.uint8), _ascontiguousarray(seed_items['state'], dtype=np.uint8), _ascontiguousarray(seed_items['type'], dtype=np.uint16), _ascontiguousarray(seed_items['owner'], dtype=np.int8), _ascontiguousarray(seed_items['instance_id'], dtype=np.uint16), hitbox_mask_lut, int(num_players))
 
 def _fill_items_fixed(frames: pa.StructArray, n_frames: int, *, src_ports: list[int]) -> np.ndarray:
     """
@@ -258,9 +169,9 @@ def _laser_shot_item_kinds(path: Path) -> tuple[int, ...]:
         raise ValueError(f'{path}: invalid MSLLASR1 header')
     version = struct.unpack_from('<I', buf, 8)[0]
     count = struct.unpack_from('<H', buf, 12)[0]
-    if version not in (4, 5, 6, 7):
+    if version not in (4, 5, 6, 7, 8, 9, 10):
         raise ValueError(f'{path}: unsupported MSLLASR1 version {version}')
-    record_size = 226 if version >= 7 else 218 if version >= 6 else 254
+    record_size = 682 if version >= 10 else 546 if version >= 9 else 514 if version >= 8 else 226 if version >= 7 else 218 if version >= 6 else 254
     off = 16
     out: list[int] = []
     for _ in range(int(count)):
@@ -463,26 +374,3 @@ def _damage_hurt_height_from_action(action_id: int, on_ground: int) -> int:
     if action_id in (84, 85, 86):
         return 1
     return 2 if int(on_ground) else 1
-
-def _derive_item_hidden_callback_seed_lanes(*, seed_items: np.ndarray, ref_items: np.ndarray, seed_action_id_u16: np.ndarray, ref_action_id_u16: np.ndarray, seed_on_ground_u8: np.ndarray, ref_hitlag_u16: np.ndarray, ref_hitstun_u16: np.ndarray, ref_instance_hit_by_u16: np.ndarray, num_players: int, laser_types: tuple[int, ...], shield_bounce_types: tuple[int, ...]) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Derive hidden item callback/collision seed lanes for teacher-forced replay reseed.
-
-    The represented state is item-internal and decomp-owned: pending reflect owner (`xC64/xC8C`),
-    shield-bounce internals (`xC54/xC58/xDCE`), and the OnGiveDamage `xC34_damageDealt` latch.
-    Slippi does not serialize those fields, so one-step replay seeds reconstruct them from the next
-    exposed post-frame item/fighter state without branching on replay or record id.
-
-    refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077688,ftColl_80077C60}
-    refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8,Item_8026A294}
-    """
-    n = int(seed_items.shape[0])
-    slots = int(seed_items.shape[1])
-    if n == 0:
-        return (np.full((0, slots), 255, dtype=np.uint8), np.zeros((0, slots), dtype=np.uint16), np.zeros((0, slots), dtype=np.uint8), np.zeros((0, slots), dtype=np.float32), np.zeros((0, slots), dtype=np.float32), np.full((0, slots), 255, dtype=np.uint8), np.zeros((0, slots), dtype=np.uint8), np.zeros((0, slots), dtype=np.uint8))
-    try:
-        import msl_binding
-    except ImportError as exc:
-        raise RuntimeError('native msl_binding.derive_item_hidden_callback_seed_lanes is required; run `make build`') from exc
-    laser_lut = _u8_lut_from_items(tuple((int(k) for k in laser_types)))
-    shield_bounce_lut = _u8_lut_from_items(tuple((int(k) for k in shield_bounce_types)))
-    return msl_binding.derive_item_hidden_callback_seed_lanes(_ascontiguousarray(seed_items['exists'], dtype=np.uint8), _ascontiguousarray(seed_items['type'], dtype=np.uint16), _ascontiguousarray(seed_items['owner'], dtype=np.int8), _ascontiguousarray(seed_items['instance_id'], dtype=np.uint16), _ascontiguousarray(seed_items['spawn_id'], dtype=np.uint32), _ascontiguousarray(seed_items['direction'], dtype=np.float32), _ascontiguousarray(seed_items['vel_x'], dtype=np.float32), _ascontiguousarray(seed_items['vel_y'], dtype=np.float32), _ascontiguousarray(ref_items['exists'], dtype=np.uint8), _ascontiguousarray(ref_items['type'], dtype=np.uint16), _ascontiguousarray(ref_items['owner'], dtype=np.int8), _ascontiguousarray(ref_items['instance_id'], dtype=np.uint16), _ascontiguousarray(ref_items['spawn_id'], dtype=np.uint32), _ascontiguousarray(ref_items['vel_x'], dtype=np.float32), _ascontiguousarray(ref_items['vel_y'], dtype=np.float32), _ascontiguousarray(seed_action_id_u16, dtype=np.uint16), _ascontiguousarray(ref_action_id_u16, dtype=np.uint16), _ascontiguousarray(ref_hitlag_u16, dtype=np.uint16), _ascontiguousarray(ref_hitstun_u16, dtype=np.uint16), _ascontiguousarray(ref_instance_hit_by_u16, dtype=np.uint16), laser_lut, shield_bounce_lut, int(num_players))

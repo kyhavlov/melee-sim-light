@@ -555,26 +555,30 @@ def test_character_overlay_masks_survive_fresh_extraction() -> None:
     import msl_binding
 
     cases = {
-        "fox": (1, 0, 0),
-        "falco": (22, 0, 0),
-        "falcon": (2, 0, 0),
-        "marth": (18, (1 << 15) | (1 << 16), 0),
-        "sheik": (7, 0, 1),
-        "zelda": (19, 0, 1),
+        "fox": (1, 0, 0, -8.30000114440918, 0.0),
+        "falco": (22, 0, 0, -8.30000114440918, 0.0),
+        "falcon": (2, 0, 0, -13.84749698638916, 0.4883970022201538),
+        "marth": (18, (1 << 15) | (1 << 16), 0, -9.848478317260742, -0.42634299397468567),
+        "sheik": (7, 0, 1, -8.2405424118042, -0.3465850055217743),
+        "zelda": (19, 0, 1, -9.399999618530273, -9.999999974752427e-7),
     }
     for (
         char_name,
-        (sim_char, fallspecial_mask, escapeair_wall_source),
+        (sim_char, fallspecial_mask, escapeair_wall_source, static_y, static_z),
     ) in cases.items():
         attrs = json.loads(Path(f"data/characters/{char_name}.json").read_text(encoding="utf-8"))
         assert "throw_release_mpcoll_floor_publication_mask" not in attrs
         assert int(attrs["fallspecial_xc0_source_fx_kind_mask"]) == fallspecial_mask
         assert "common_fall_blended_ecb_seed_mask" not in attrs
         assert int(attrs["escapeair_carried_floor_wall_source"]) == escapeair_wall_source
+        assert float(attrs["static_x1a70_y"]) == pytest.approx(static_y)
+        assert float(attrs["static_x1a70_z"]) == pytest.approx(static_z)
 
         runtime = msl_binding.char_params_part_anchors(sim_char)
         assert "throw_release_mpcoll_floor_publication_mask" not in runtime
         assert int(runtime["escapeair_carried_floor_wall_source"]) == escapeair_wall_source
+        assert float(runtime["static_x1a70_y"]) == pytest.approx(static_y)
+        assert float(runtime["static_x1a70_z"]) == pytest.approx(static_z)
 
 
 @pytest.mark.integration
@@ -734,10 +738,10 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         "needle_hitbox_shield_damage_1": 0,
         "needle_hitbox_shield_damage_2": 0,
         "needle_hitbox_shield_damage_3": 0,
-        "needle_hitbox_flags_0": 5,
-        "needle_hitbox_flags_1": 6,
-        "needle_hitbox_flags_2": 6,
-        "needle_hitbox_flags_3": 6,
+        "needle_hitbox_flags_0": 1701,
+        "needle_hitbox_flags_1": 1702,
+        "needle_hitbox_flags_2": 1702,
+        "needle_hitbox_flags_3": 1702,
     }
     assert set(SHEIK_NEEDLE_FIELD_NAMES) == set(sheik_expected)
     for field_name, expected in sheik_expected.items():
@@ -773,7 +777,7 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
         "vanish_hitbox_bkb": 80,
         "vanish_hitbox_element": 1,
         "vanish_hitbox_shield_damage": 0,
-        "vanish_hitbox_flags": 7,
+        "vanish_hitbox_flags": 759,
         "vanish_hitbox_size_keyframe_count": 2,
         "vanish_hitbox_size_keyframe_frame_0": 7,
         "vanish_hitbox_size_keyframe_value_0": 3.999743938446045,
@@ -881,7 +885,7 @@ def test_item_article_exporter_rejects_partial_sheik_needle_attrs(tmp_path: Path
         "needle_hitbox_bkb": [24, 24, 24, 24],
         "needle_hitbox_element": [3, 3, 3, 3],
         "needle_hitbox_shield_damage": [0, 0, 0, 0],
-        "needle_hitbox_flags": [5, 6, 6, 6],
+        "needle_hitbox_flags": [1701, 1702, 1702, 1702],
     }
     (attrs_dir / "sheik.json").write_text(json.dumps(sheik), encoding="utf-8")
 
@@ -1284,7 +1288,7 @@ def test_runtime_stage_lookup_caches_match_mslstg01_for_supported_stages() -> No
         msl_binding.destroy(handle)
 
 
-def test_runtime_move_tables_reject_stale_mslftsc1(tmp_path: Path) -> None:
+def test_runtime_script_events_reject_stale_mslftsc1(tmp_path: Path) -> None:
     root_data = Path("data").resolve()
     data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("scripts",))
     for path in sorted((root_data / "scripts").glob("*.bin")):
@@ -1409,516 +1413,6 @@ def test_script_timeline_key_events_match_existing_move_json() -> None:
             ]
             assert got == expected, (char_name, move_name, event_kind)
 
-
-def _move_events(moves: dict, move_name: str) -> list[dict]:
-    return list(moves.get("moves", {}).get(move_name, {}).get("events", []))
-
-
-def _special_events(moves: dict, msid: int) -> list[dict]:
-    return list(moves.get("specials_by_msid", {}).get(str(msid), {}).get("events", []))
-
-
-def _cmd_var_window(events: list[dict], idx: int, *, open_end: bool) -> tuple[int, int] | None:
-    on = None
-    off = None
-    for ev in events:
-        if ev.get("kind") != "set_cmd_var":
-            continue
-        data = dict(ev.get("data", {}))
-        if int(data.get("idx", -1)) != idx:
-            continue
-        frame = int(ev["frame"])
-        value = int(data.get("value", 0))
-        if value != 0 and on is None:
-            on = frame
-        elif value == 0 and on is not None and off is None:
-            off = frame
-    if on is None:
-        return None
-    if off is None:
-        off = 32767 if open_end else None
-    if off is None:
-        return None
-    return (on, off)
-
-
-def _cmd0_window(events: list[dict], *, open_end: bool) -> tuple[int, int] | None:
-    return _cmd_var_window(events, 0, open_end=open_end)
-
-
-def _cmd_var_value1_pulses(events: list[dict], idx: int) -> list[int]:
-    return [
-        int(ev["frame"])
-        for ev in events
-        if ev.get("kind") == "set_cmd_var"
-        and int(ev.get("data", {}).get("idx", -1)) == idx
-        and int(ev.get("data", {}).get("value", 0)) == 1
-    ]
-
-
-def _hurtcap_bone_part_ids(char_name: str) -> list[int]:
-    path = Path("data/hurtcaps") / f"{char_name}.bin"
-    buf = path.read_bytes()
-    if buf[:8] != b"MSLHURT1":
-        raise AssertionError(f"{path}: bad magic")
-    version, cap_count, reserved = struct.unpack_from("<IHH", buf, 8)
-    if int(version) != 1 or int(reserved) != 0:
-        raise AssertionError(f"{path}: bad header")
-    out = []
-    off = 16
-    for _ in range(int(cap_count)):
-        out.append(int(struct.unpack_from("<H", buf, off)[0]))
-        off += 34
-    return out
-
-
-def _script_owner_expected_timelines(events: list[dict], cap_bones: list[int]) -> tuple[list[int], list[int], list[int], list[int]]:
-    hit_status = []
-    hurt_masks = []
-    airborne = []
-    flags_221c_y = []
-    cur_hit = 0
-    cur_hurt = [0 for _ in cap_bones]
-    cur_flags = 0
-    bone_to_cap = {}
-    for i, bone in enumerate(cap_bones):
-        bone_to_cap.setdefault(bone, i)
-    events_by_frame: dict[int, list[dict]] = {}
-    for ev in events:
-        events_by_frame.setdefault(int(ev.get("frame", 0)), []).append(ev)
-    for frame in range(0, 240):
-        air = -1
-        for ev in events_by_frame.get(frame, []):
-            kind = ev.get("kind")
-            data = dict(ev.get("data", {}))
-            if kind == "set_hit_status":
-                cur_hit = int(data.get("state", 0)) & 0xFF
-            elif kind == "set_all_hurt_state":
-                cur_hurt = [int(data.get("state", 0)) for _ in cap_bones]
-            elif kind == "set_hurt_state":
-                cap_i = bone_to_cap.get(int(data.get("bone_idx", -1)))
-                if cap_i is not None:
-                    cur_hurt[cap_i] = int(data.get("state", 0))
-            elif kind == "set_airborne_state":
-                state = int(data.get("state", -1))
-                if 0 <= state <= 2:
-                    air = state
-            elif kind == "set_state_flags_221c_u16_y":
-                cur_flags = int(data.get("flags", 0)) & 0x7
-        mask = 0
-        for cap_i, state in enumerate(cur_hurt):
-            if state == 0:
-                mask |= 1 << cap_i
-        hit_status.append(cur_hit)
-        hurt_masks.append(mask)
-        airborne.append(air)
-        flags_221c_y.append(cur_flags)
-    return hit_status, hurt_masks, airborne, flags_221c_y
-
-
-def _allow_interrupt_window(events: list[dict]) -> tuple[int, int] | None:
-    for ev in events:
-        if ev.get("kind") == "allow_interrupt":
-            return (int(ev["frame"]), 32767)
-    return None
-
-
-def _second_create_hitbox_window(events: list[dict]) -> tuple[int, int] | None:
-    first = None
-    second = None
-    clear = None
-    for ev in events:
-        frame = int(ev["frame"])
-        if ev.get("kind") == "create_hitbox":
-            if first is None:
-                first = frame
-            elif second is None and frame != first:
-                second = frame
-        elif ev.get("kind") == "clear_hitboxes" and second is not None and frame >= second:
-            clear = frame
-            break
-    if second is None:
-        return None
-    return (second, clear if clear is not None else 32767)
-
-
-def _throw_flags_start(events: list[dict], *, hit_idx: int | None = None) -> int | None:
-    frames = []
-    for ev in events:
-        if ev.get("kind") != "set_throw_flags":
-            continue
-        if hit_idx is not None and int(dict(ev.get("data", {})).get("hit_idx", -1)) != hit_idx:
-            continue
-        frames.append(int(ev["frame"]))
-    return min(frames) if frames else None
-
-
-def _jab_combo_window(events: list[dict]) -> tuple[int, int] | None:
-    for ev in events:
-        if ev.get("kind") == "set_jab_combo" and int(dict(ev.get("data", {})).get("disabled", 1)) == 0:
-            return (int(ev["frame"]), 32767)
-    return None
-
-
-def _jab_rapid_window(events: list[dict]) -> tuple[int, int] | None:
-    on = None
-    off = None
-    for ev in events:
-        if ev.get("kind") != "set_jab_rapid":
-            continue
-        frame = int(ev["frame"])
-        state = int(dict(ev.get("data", {})).get("state", 0))
-        if state != 0 and on is None:
-            on = frame
-        elif state == 0 and on is not None and off is None:
-            off = frame
-    if on is None:
-        return None
-    return (on, off if off is not None else 32767)
-
-
-def _active(window: tuple[int, int] | None, frame: float) -> int:
-    if window is None:
-        return 0
-    return int(float(window[0]) <= frame < float(window[1]))
-
-
-def _throw_cmd1_window(events: list[dict]) -> tuple[int, int] | None:
-    on = None
-    off = None
-    for ev in events:
-        if ev.get("kind") != "set_cmd_var":
-            continue
-        data = dict(ev.get("data", {}))
-        if int(data.get("idx", -1)) != 1:
-            continue
-        frame = int(ev["frame"])
-        value = int(data.get("value", 0))
-        if value == 1 and on is None:
-            on = frame
-        elif on is not None and off is None:
-            off = frame
-    if on is None:
-        return None
-    return (on, off if off is not None else 32767)
-
-
-def _throw_projectile_pulses(events: list[dict]) -> list[int]:
-    return [int(ev["frame"]) for ev in events if ev.get("kind") == "set_throw_spawn_projectile"]
-
-
-def _throw_hitboxes(events: list[dict]) -> dict[int, tuple]:
-    out = {}
-    for ev in events:
-        if ev.get("kind") != "set_throw_hitbox":
-            continue
-        data = dict(ev.get("data", {}))
-        out[int(data["idx"])] = (
-            float(data["damage"]),
-            int(data["angle"]),
-            int(data["kbg"]),
-            int(data["wsk"]),
-            int(data["bkb"]),
-            int(data["element"]),
-            int(data["sfx_kind"]),
-            int(data["sfx_severity"]),
-        )
-    return out
-
-
-def _crossed_frames(frames: list[int], prev_frame: int, cur_frame: int) -> list[int]:
-    return [frame for frame in frames if prev_frame < frame <= cur_frame]
-
-
-@pytest.mark.integration
-def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
-    import msl_binding
-
-    attackair = [
-        (0x0041, "ftCo_SM_AttackAirN"),
-        (0x0042, "ftCo_SM_AttackAirF"),
-        (0x0043, "ftCo_SM_AttackAirB"),
-        (0x0044, "ftCo_SM_AttackAirHi"),
-        (0x0045, "ftCo_SM_AttackAirLw"),
-    ]
-    grounded = [
-        (0x002C, "ftCo_SM_Attack11"),
-        (0x002D, "ftCo_SM_Attack12"),
-        (0x002E, "ftCo_SM_Attack13"),
-        (0x0032, "ftCo_SM_AttackDash"),
-        (0x0035, "ftCo_SM_AttackS3"),
-        (0x0038, "ftCo_SM_AttackHi3"),
-        (0x0039, "ftCo_SM_AttackLw3"),
-        (0x003C, "ftCo_SM_AttackS4"),
-        (0x003F, "ftCo_SM_AttackHi4"),
-        (0x0040, "ftCo_SM_AttackLw4"),
-    ]
-    throws = [
-        (0x00DB, "ftCo_SM_ThrowF"),
-        (0x00DC, "ftCo_SM_ThrowB"),
-        (0x00DD, "ftCo_SM_ThrowHi"),
-        (0x00DE, "ftCo_SM_ThrowLw"),
-    ]
-    cases = [("fox", 1), ("falco", 22)]
-    for char_name, char_id in cases:
-        moves = json.loads(Path(f"data/moves/{char_name}.json").read_text(encoding="utf-8"))
-        cap_bones = _hurtcap_bone_part_ids(char_name)
-        for action_id, move_name in attackair:
-            events = _move_events(moves, move_name)
-            cmd0 = _cmd0_window(events, open_end=False)
-            allow = _allow_interrupt_window(events)
-            second_create = _second_create_hitbox_window(events)
-            for frame in range(0, 80):
-                assert msl_binding.move_tables_debug_query(
-                    "attackair_cmd0", char_id, action_id, float(frame), 0.0
-                ) == _active(cmd0, float(frame))
-                assert msl_binding.move_tables_debug_query(
-                    "attackair_allow_interrupt", char_id, action_id, float(frame), 0.0
-                ) == _active(allow, float(frame))
-                assert msl_binding.move_tables_debug_query(
-                    "attackair_second_create_hitbox_phase", char_id, action_id, float(frame), 0.0
-                ) == _active(second_create, float(frame))
-
-        for action_id, move_name in grounded:
-            events = _move_events(moves, move_name)
-            allow = _allow_interrupt_window(events)
-            for frame in range(0, 80):
-                assert msl_binding.move_tables_debug_query(
-                    "grounded_attack_allow_interrupt", char_id, action_id, float(frame), 0.0
-                ) == _active(allow, float(frame))
-
-        for action_id, move_name in ((0x003C, "ftCo_SM_AttackS4"), (0x003F, "ftCo_SM_AttackHi4"), (0x0040, "ftCo_SM_AttackLw4")):
-            events = _move_events(moves, move_name)
-            charge = next((ev for ev in events if ev.get("kind") == "start_smash_charge"), None)
-            expected_frame = int(charge["frame"]) if charge else None
-            expected_hold = int(charge["data"]["hold_frames"]) if charge else 0
-            expected_mul = float(charge["data"]["damage_mul"]) if charge else 1.0
-            if charge:
-                # GALE01 opcode 56 uses ftAction_804D82A0 (`.float 0.003906`) via fmuls, not an
-                # exact 1/256 scale. Locking the source literal here prevents both the JSON and
-                # runtime table from drifting together back to exact fixed-point division.
-                source_scale = struct.unpack("<f", struct.pack("<f", 0.003906))[0]
-                source_mul = struct.unpack(
-                    "<f",
-                    struct.pack("<f", float(350) * source_scale),
-                )[0]
-                assert expected_mul == pytest.approx(source_mul, abs=1.0e-8)
-            assert msl_binding.move_tables_debug_query(
-                "grounded_smash_charge_damage_mul", char_id, action_id, 0.0, 0.0
-            ) == pytest.approx(expected_mul)
-            for frame in range(0, 80):
-                got_ok, got_hold = msl_binding.move_tables_debug_query(
-                    "grounded_smash_charge_crossed", char_id, action_id, float(frame - 1), float(frame)
-                )
-                assert (got_ok, got_hold) == (
-                    int(expected_frame is not None and frame - 1 < expected_frame <= frame),
-                    expected_hold if expected_frame is not None and frame - 1 < expected_frame <= frame else 0,
-                )
-
-        escape_n_allow = _allow_interrupt_window(_move_events(moves, "ftCo_SM_EscapeN"))
-        escape_air_cmd0 = _cmd0_window(_move_events(moves, "ftCo_SM_EscapeAir"), open_end=True)
-        dash_cmd0 = _cmd0_window(_move_events(moves, "ftCo_SM_Dash"), open_end=True)
-        runbrake_cmd0 = _cmd0_window(_move_events(moves, "ftCo_SM_RunBrake"), open_end=True)
-        turnrun_cmd1 = _cmd_var_window(_move_events(moves, "ftCo_SM_TurnRun"), 1, open_end=True)
-        catch_attack = _move_events(moves, "ftCo_SM_CatchAttack")
-        catch_on = min(
-            [
-                int(ev["frame"])
-                for ev in catch_attack
-                if ev.get("kind") == "create_hitbox"
-                and ev.get("data", {}).get("hitbox", {}).get("only_hit_grabbed")
-            ],
-            default=None,
-        )
-        catch_off = min(
-            [int(ev["frame"]) for ev in catch_attack if ev.get("kind") == "clear_hitboxes" and catch_on is not None and int(ev["frame"]) >= catch_on],
-            default=(catch_on + 1 if catch_on is not None else None),
-        )
-        for frame in range(0, 90):
-            assert msl_binding.move_tables_debug_query(
-                "escape_allow_interrupt", char_id, 0x00EB, float(frame), 0.0
-            ) == _active(escape_n_allow, float(frame))
-            assert msl_binding.move_tables_debug_query(
-                "escapeair_cmd0", char_id, 0, float(frame), 0.0
-            ) == _active(escape_air_cmd0, float(frame))
-            assert msl_binding.move_tables_debug_query("dash_cmd0", char_id, 0, float(frame), 0.0) == _active(
-                dash_cmd0, float(frame)
-            )
-            assert msl_binding.move_tables_debug_query(
-                "runbrake_cmd0", char_id, 0, float(frame), 0.0
-            ) == _active(runbrake_cmd0, float(frame))
-            assert msl_binding.move_tables_debug_query(
-                "turnrun_cmd1", char_id, 0, float(frame), 0.0
-            ) == _active(turnrun_cmd1, float(frame))
-            assert msl_binding.move_tables_debug_query(
-                "catchattack_grabbed_hit", char_id, 0, float(frame), 0.0
-            ) == _active((catch_on, catch_off) if catch_on is not None and catch_off is not None else None, float(frame))
-
-        for action_id, move_name in ((0x002C, "ftCo_SM_Attack11"), (0x002D, "ftCo_SM_Attack12")):
-            events = _move_events(moves, move_name)
-            combo = _jab_combo_window(events)
-            rapid = _jab_rapid_window(events)
-            for frame in range(0, 80):
-                assert msl_binding.move_tables_debug_query(
-                    "jab_combo", char_id, action_id, float(frame), 0.0
-                ) == _active(combo, float(frame))
-                assert msl_binding.move_tables_debug_query(
-                    "jab_rapid", char_id, action_id, float(frame), 0.0
-                ) == _active(rapid, float(frame))
-
-        attack100_frames = [
-            int(ev["frame"])
-            for ev in _move_events(moves, "ftCo_SM_Attack100Loop")
-            if ev.get("kind") == "set_throw_flags" and int(ev.get("data", {}).get("hit_idx", -1)) == 0
-        ]
-        escapef_frame = _throw_flags_start(_move_events(moves, "ftCo_SM_EscapeF"), hit_idx=0)
-        catch_frame = _throw_flags_start(_move_events(moves, "ftCo_SM_Catch"), hit_idx=None)
-        catchdash_frame = _throw_flags_start(_move_events(moves, "ftCo_SM_CatchDash"), hit_idx=None)
-        for frame in range(0, 90):
-            assert msl_binding.move_tables_debug_query(
-                "attack100_loop_end", char_id, 0, float(frame - 1), float(frame)
-            ) == int(any(frame - 1 < pulse <= frame for pulse in attack100_frames))
-            assert msl_binding.move_tables_debug_query(
-                "escapef_flip", char_id, 0, float(frame - 1), float(frame)
-            ) == int(escapef_frame is not None and frame - 1 < escapef_frame <= frame)
-            assert msl_binding.move_tables_debug_query(
-                "catchpull_enter_wait", char_id, 0x00D5, float(frame), 0.0
-            ) == int(catch_frame is not None and frame >= catch_frame)
-            assert msl_binding.move_tables_debug_query(
-                "catchpull_enter_wait", char_id, 0x00D7, float(frame), 0.0
-            ) == int(catchdash_frame is not None and frame >= catchdash_frame)
-
-        for action_id, move_name in throws:
-            events = _move_events(moves, move_name)
-            release_frame = _throw_flags_start(events, hit_idx=0)
-            flip_frame = _throw_flags_start(events, hit_idx=1)
-            cmd1 = _throw_cmd1_window(events)
-            projectile_pulses = _throw_projectile_pulses(events)
-            hitboxes = _throw_hitboxes(events)
-            assert msl_binding.move_tables_throw_has_release(char_id, action_id) == int(
-                release_frame is not None
-            )
-            assert msl_binding.move_tables_throw_release_frame(char_id, action_id) == (
-                int(release_frame is not None),
-                float(release_frame or 0),
-            )
-            for hit_idx in range(0, 4):
-                assert msl_binding.move_tables_throw_hitbox_params(
-                    char_id, action_id, hit_idx
-                ) == hitboxes.get(hit_idx)
-            assert msl_binding.move_tables_throw_projectile_first_pulse_frame(char_id, action_id) == (
-                int(bool(projectile_pulses)),
-                min(projectile_pulses) if projectile_pulses else -1,
-            )
-            assert msl_binding.move_tables_throw_projectile_last_pulse_frame(char_id, action_id) == (
-                int(bool(projectile_pulses)),
-                max(projectile_pulses) if projectile_pulses else -1,
-            )
-            for pulse_i, pulse_frame in enumerate(projectile_pulses, start=1):
-                assert msl_binding.move_tables_throw_projectile_pulse_ordinal(
-                    char_id, action_id, pulse_frame
-                ) == (1, pulse_i)
-            assert msl_binding.move_tables_throw_projectile_pulse_ordinal(
-                char_id, action_id, 99
-            ) == (0, -1)
-            for frame in range(0, 90):
-                released = int(release_frame is not None and frame >= release_frame)
-                assert msl_binding.move_tables_throw_release_hit_idx(
-                    char_id, action_id, float(frame)
-                ) == (released, 0 if released else -1)
-                assert msl_binding.move_tables_throw_cmd1_active(
-                    char_id, action_id, float(frame)
-                ) == _active(cmd1, float(frame))
-                crossed = _crossed_frames(projectile_pulses, frame - 1, frame)
-                expected_pulse = crossed[0] if crossed else -1
-                assert msl_binding.move_tables_throw_should_spawn_projectile(
-                    char_id, action_id, float(frame - 1), float(frame)
-                ) == int(bool(crossed))
-                assert msl_binding.move_tables_throw_crossed_projectile_pulse_frame(
-                    char_id, action_id, float(frame - 1), float(frame)
-                ) == (int(bool(crossed)), expected_pulse)
-                assert msl_binding.move_tables_throw_should_flip_facing(
-                    char_id, action_id, float(frame - 1), float(frame)
-                ) == int(flip_frame is not None and frame - 1 < flip_frame <= frame)
-
-        special_msids = sorted(int(k) for k in moves["specials_by_msid"].keys())
-        for msid in special_msids:
-            special_events = _special_events(moves, msid)
-            cmd0 = _cmd0_window(special_events, open_end=True)
-            # Runtime intentionally keeps a two-frame latch-clear tail after the extracted clear frame.
-            if cmd0 is not None and cmd0[1] < 32767:
-                cmd0 = (cmd0[0], cmd0[1] + 2)
-            cmd2_pulses = _cmd_var_value1_pulses(special_events, 2)
-            sfx_ranges = [
-                (int(ev["frame"]), int(ev.get("data", {}).get("random_range", 0)))
-                for ev in special_events
-                if ev.get("kind") == "pseudo_random_sfx"
-            ]
-            for frame in range(0, 100):
-                assert msl_binding.move_tables_debug_query(
-                    "special_cmd0", char_id, msid, float(frame), 0.0
-                ) == _active(cmd0, float(frame))
-                crossed_cmd2 = _crossed_frames(cmd2_pulses, frame - 1, frame)
-                expected_cmd2_pulse = crossed_cmd2[0] if crossed_cmd2 else -1
-                assert msl_binding.move_tables_debug_query(
-                    "special_cmd2_pulse", char_id, msid, float(frame - 1), float(frame)
-                ) == (int(bool(crossed_cmd2)), expected_cmd2_pulse)
-                expected_ranges = tuple(
-                    random_range
-                    for pulse_frame, random_range in sfx_ranges
-                    if (frame - 1 < pulse_frame <= frame)
-                    or (pulse_frame == 0 and frame - 1 == 0 and frame > 0)
-                )
-                assert msl_binding.move_tables_special_pseudo_random_sfx_ranges_crossed(
-                    char_id, msid, float(frame - 1), float(frame), 16
-                ) == expected_ranges
-            if cmd2_pulses:
-                assert msl_binding.move_tables_debug_query(
-                    "special_cmd2_pulse", char_id, msid, 10.0, 0.0
-                ) == (0, -1)
-
-        script_owner_cases: dict[int, list[dict]] = {}
-        relevant_kinds = {
-            "set_hit_status",
-            "set_all_hurt_state",
-            "set_hurt_state",
-            "set_airborne_state",
-            "set_state_flags_221c_u16_y",
-        }
-        for move in moves.get("moves", {}).values():
-            events = list(move.get("events", []))
-            if any(ev.get("kind") in relevant_kinds for ev in events):
-                script_owner_cases[int(move["submotion_id"])] = events
-        for msid_s, special in moves.get("specials_by_msid", {}).items():
-            events = list(special.get("events", []))
-            if any(ev.get("kind") in relevant_kinds for ev in events):
-                script_owner_cases[int(msid_s)] = events
-        for msid, events in sorted(script_owner_cases.items()):
-            hit_status, hurt_masks, airborne, flags_221c_y = _script_owner_expected_timelines(
-                events, cap_bones
-            )
-            sample_frames = {0, 1, 238, 239, 240}
-            for ev in events:
-                if ev.get("kind") in relevant_kinds:
-                    frame = int(ev.get("frame", 0))
-                    sample_frames.update({max(0, frame - 1), frame, min(240, frame + 1)})
-            cap_count = len(cap_bones)
-            cap_mask = (1 << cap_count) - 1
-            for frame in sorted(sample_frames):
-                clamp = min(frame, 239)
-                assert msl_binding.move_tables_debug_query(
-                    "hit_status", char_id, msid, float(frame), 0.0
-                ) == (1, hit_status[clamp])
-                assert msl_binding.move_tables_debug_query(
-                    "hurtbox_can_hit_mask", char_id, msid, float(frame), float(cap_count)
-                ) == (1, hurt_masks[clamp] & cap_mask)
-                assert msl_binding.move_tables_debug_query(
-                    "state_flags_221c_y", char_id, msid, float(frame), 0.0
-                ) == (1, flags_221c_y[clamp])
-                expected_air = airborne[frame] if frame < 240 else -1
-                assert msl_binding.move_tables_debug_query(
-                    "airborne_state_event", char_id, msid, float(frame), 0.0
-                ) == (int(expected_air >= 0), expected_air)
 
 
 @pytest.mark.parametrize(

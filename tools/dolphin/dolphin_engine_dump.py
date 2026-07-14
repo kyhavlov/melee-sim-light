@@ -7,12 +7,14 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from tools.dolphin.engine_dump_io import read_engine_dump
+from tools.slippi.slpz import decompress_slpz, resolve_replay_path
 
 INTERPRETER_PROBE_WARN_FRAMES = 3
 
@@ -210,7 +212,7 @@ def capture_engine_dump(
     laser_shield_reflect_event_probe_path: str | Path | None = None,
     sheik_needle_probe_path: str | Path | None = None,
 ) -> CaptureResult:
-    replay = Path(replay)
+    replay = resolve_replay_path(replay)
     if not replay.exists():
         raise FileNotFoundError(replay)
     out_bin = Path(out_bin)
@@ -235,15 +237,6 @@ def capture_engine_dump(
             "probe_interpreter_frame_start and probe_interpreter_frame_end must be provided together"
         )
 
-    playback_txt = _write_playback_txt(
-        user_dir,
-        replay=replay,
-        start_frame=resolved_start,
-        end_frame=resolved_end,
-        dump_path=out_bin,
-        should_resync=should_resync,
-    )
-
     dolphin = Path(dolphin)
     if not dolphin.exists():
         raise FileNotFoundError(dolphin)
@@ -251,15 +244,6 @@ def capture_engine_dump(
     if not iso.exists():
         raise FileNotFoundError(iso)
 
-    proc_args = [
-        str(dolphin),
-        "-e",
-        str(iso.resolve()),
-        "-u",
-        str(user_dir.resolve()),
-        "--slippi-input",
-        str(playback_txt.resolve()),
-    ]
     env = os.environ.copy()
     probe_windows: list[tuple[int, int]] = []
 
@@ -367,7 +351,32 @@ def capture_engine_dump(
     frame_count: int | None = None
     first_frame: int | None = None
     last_frame: int | None = None
+    replay_tmp: tempfile.TemporaryDirectory[str] | None = None
     try:
+        physical_replay = replay
+        if replay.suffix == ".slpz":
+            # Playback Dolphin needs a physical .slp. Keep decompression at the external-tool
+            # boundary and remove it after capture; validation storage remains compressed.
+            replay_tmp = tempfile.TemporaryDirectory(prefix="msl_dolphin_slpz_")
+            physical_replay = Path(replay_tmp.name) / f"{replay.stem}.slp"
+            physical_replay.write_bytes(decompress_slpz(replay.read_bytes()))
+        playback_txt = _write_playback_txt(
+            user_dir,
+            replay=physical_replay,
+            start_frame=resolved_start,
+            end_frame=resolved_end,
+            dump_path=out_bin,
+            should_resync=should_resync,
+        )
+        proc_args = [
+            str(dolphin),
+            "-e",
+            str(iso.resolve()),
+            "-u",
+            str(user_dir.resolve()),
+            "--slippi-input",
+            str(playback_txt.resolve()),
+        ]
         stdout_log.parent.mkdir(parents=True, exist_ok=True)
         with stdout_log.open("wb") as stdout_f, stderr_log.open("wb") as stderr_f:
             proc = subprocess.Popen(
@@ -407,6 +416,9 @@ def capture_engine_dump(
     except Exception as exc:
         error = str(exc)
         rc = 1
+    finally:
+        if replay_tmp is not None:
+            replay_tmp.cleanup()
 
     elapsed = time.monotonic() - t0
     if rc == 0:

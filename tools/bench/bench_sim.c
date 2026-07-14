@@ -468,6 +468,18 @@ int main(int argc, char** argv) {
   const double env_steps_per_sec = env_steps / seconds;
   const double ns_per_env_step = (double)elapsed_ns / env_steps;
   const uint64_t checksum = checksum_compares(compares, cfg.batch_size);
+  int active_items_total = 0;
+  int active_items_max = 0;
+  for (int bi = 0; bi < cfg.batch_size; bi++) {
+    int active_items = 0;
+    for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+      active_items += compares[bi].items[it].exists != 0u ? 1 : 0;
+    }
+    active_items_total += active_items;
+    if (active_items > active_items_max) {
+      active_items_max = active_items;
+    }
+  }
   uint64_t step_ns_total = 0u;
   uint64_t step_ns_max = 0u;
   int step_ns_max_frame = 0;
@@ -505,6 +517,8 @@ int main(int argc, char** argv) {
   printf("elapsed_sec=%.9f env_steps=%.0f env_steps_per_sec=%.3f ns_per_env_step=%.3f\n", seconds,
          env_steps, env_steps_per_sec, ns_per_env_step);
   printf("single_core_fps=%.3f\n", env_steps_per_sec);
+  printf("active_items avg=%.3f max=%d\n", (double)active_items_total / (double)cfg.batch_size,
+         active_items_max);
   printf("step_batch_ns avg=%.3f p50=%" PRIu64 " p95=%" PRIu64 " p99=%" PRIu64 " p999=%" PRIu64
          " max=%" PRIu64 " max_frame=%d p99_over_avg=%.3f max_over_avg=%.3f\n",
          step_ns_avg, step_ns_p50, step_ns_p95, step_ns_p99, step_ns_p999, step_ns_max,

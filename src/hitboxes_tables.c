@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "action_ids.h"
 #include "alloc.h"
 
 enum {
@@ -35,25 +34,6 @@ static MslHitboxesTable g_table_by_char[256];
 static int g_loaded = 0;
 
 uint32_t hitboxes_tables_format_version(void) { return (uint32_t)HITBOXES_VERSION_V2; }
-
-static uint16_t canonical_hitbox_events_msid(uint16_t msid) {
-  switch (msid) {
-    case MSL_SM_ATTACK_S3_HI:
-    case MSL_SM_ATTACK_S3_HI_S:
-    case MSL_SM_ATTACK_S3_LW_S:
-    case MSL_SM_ATTACK_S3_LW:
-      // The angled side-tilt motion states use distinct submotions but the shared AttackS3
-      // callbacks/script owner. The extracted hitbox command table currently stores the common
-      // command list under `ftCo_SM_AttackS3`; keep pose sampling on the real submotion and only
-      // alias the command-event lookup.
-      // refs/melee/src/melee/ft/ftmotionstates.c (AttackS3* table entries)
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c
-      // data/moves/{fox,falco}.json::moves["ftCo_SM_AttackS3"].events
-      return (uint16_t)MSL_SM_ATTACK_S3;
-    default:
-      return msid;
-  }
-}
 
 static uint16_t read_u16_le(const uint8_t* p) {
   uint16_t v = 0;
@@ -346,16 +326,11 @@ int hitboxes_get_events(uint8_t char_id, uint16_t msid, const MslHitboxEvent** o
       t->base_index_by_msid == NULL) {
     return -1;
   }
-  uint16_t events_msid = msid;
-  if (!t->have_msid[events_msid]) {
-    const uint16_t canonical_msid = canonical_hitbox_events_msid(msid);
-    if (canonical_msid == msid || !t->have_msid[canonical_msid]) {
-      return -1;
-    }
-    events_msid = canonical_msid;
+  if (!t->have_msid[msid]) {
+    return -1;
   }
-  const uint16_t count = t->count_by_msid[events_msid];
-  const uint32_t base = t->base_index_by_msid[events_msid];
+  const uint16_t count = t->count_by_msid[msid];
+  const uint32_t base = t->base_index_by_msid[msid];
   if ((uint64_t)base + (uint64_t)count > (uint64_t)t->event_count) {
     return -1;
   }

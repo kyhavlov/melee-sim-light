@@ -424,42 +424,6 @@ PyObject* msl_derive_guard_setoff_hitlag_damage_min_py(PyObject* self, PyObject*
   return (PyObject*)out;
 }
 
-PyObject* msl_derive_guard_setoff_hitlag_exit_phase_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* action_obj = NULL;
-  PyObject* hitlag_obj = NULL;
-  int act_guard_set_off = 0;
-  if (!PyArg_ParseTuple(args, "OOi", &action_obj, &hitlag_obj, &act_guard_set_off)) return NULL;
-  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id");
-  PyArrayObject* hitlag = require_contiguous_array(hitlag_obj, NPY_UINT16, 1, "hitlag");
-  if (action == NULL || hitlag == NULL) return NULL;
-  const npy_intp n = PyArray_SIZE(action);
-  if (PyArray_SIZE(hitlag) != n) {
-    PyErr_SetString(PyExc_ValueError, "action_id/hitlag must have the same length");
-    return NULL;
-  }
-  npy_intp dims[1] = {n};
-  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
-  if (out == NULL) return NULL;
-  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
-  const uint16_t* hl = (const uint16_t*)PyArray_DATA(hitlag);
-  uint8_t* out_p = (uint8_t*)PyArray_DATA(out);
-  for (npy_intp i = 0; i < n; i++) {
-    if ((int)a[i] != act_guard_set_off) continue;
-    const int cur_hl = (int)hl[i];
-    const int prev_a = i > 0 ? (int)a[i - 1] : -1;
-    const int prev_hl = i > 0 ? (int)hl[i - 1] : 0;
-    if (cur_hl > 1) {
-      out_p[i] = 1u;
-    } else if (cur_hl == 1) {
-      out_p[i] = 2u;
-    } else if (prev_a == act_guard_set_off && prev_hl > 0) {
-      out_p[i] = 3u;
-    }
-  }
-  return (PyObject*)out;
-}
-
 PyObject* msl_derive_damage_jump_buffer_x14_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* action_obj = NULL;
@@ -1220,14 +1184,11 @@ PyObject* msl_derive_capture_grab_hidden_post_py(PyObject* self, PyObject* args)
   PyArrayObject* out_counter = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
   PyArrayObject* out_anim = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
   PyArrayObject* out_jump = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_break = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
-  if (out_timer == NULL || out_counter == NULL || out_anim == NULL || out_jump == NULL ||
-      out_break == NULL) {
+  if (out_timer == NULL || out_counter == NULL || out_anim == NULL || out_jump == NULL) {
     Py_XDECREF(out_timer);
     Py_XDECREF(out_counter);
     Py_XDECREF(out_anim);
     Py_XDECREF(out_jump);
-    Py_XDECREF(out_break);
     return NULL;
   }
   const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
@@ -1242,7 +1203,6 @@ PyObject* msl_derive_capture_grab_hidden_post_py(PyObject* self, PyObject* args)
   float* counter_p = (float*)PyArray_DATA(out_counter);
   float* anim_p = (float*)PyArray_DATA(out_anim);
   uint8_t* jump_p = (uint8_t*)PyArray_DATA(out_jump);
-  uint8_t* break_p = (uint8_t*)PyArray_DATA(out_break);
   if (n > 0 && msl_py_capture_attach_action(a[0]) && own[0] != 0xFFu) {
     msl_py_capture_seed_mid_segment(a[0], af[0], pct[0], fs[0], slot_index, handicap, (float)base,
                                     (float)h_mul, (float)h_base, (float)slot_mul, (float)slot_base,
@@ -1292,9 +1252,6 @@ PyObject* msl_derive_capture_grab_hidden_post_py(PyObject* self, PyObject* args)
           jump_latch = 1u;
         }
       }
-      if (msl_py_capture_wait_action(a[i]) && (a[i + 1] == 0x00E5u || a[i + 1] == 0x00E6u)) {
-        break_p[i] = 1u;
-      }
       if (msl_py_capture_attach_action(a[i + 1]) && own[i + 1] == own[i]) {
         next_timer = fmaxf(0.0f, timer);
         next_counter = fmaxf(0.0f, counter);
@@ -1336,5 +1293,5 @@ PyObject* msl_derive_capture_grab_hidden_post_py(PyObject* self, PyObject* args)
     anim_p[i + 1] = next_anim;
     jump_p[i + 1] = next_jump;
   }
-  return Py_BuildValue("NNNNN", out_timer, out_counter, out_anim, out_jump, out_break);
+  return Py_BuildValue("NNNN", out_timer, out_counter, out_anim, out_jump);
 }

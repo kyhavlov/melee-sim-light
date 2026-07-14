@@ -3,7 +3,6 @@
 #include "char_registry.h"
 #include "ids.h"
 
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,10 +10,10 @@
 #include "alloc.h"
 
 enum {
-  MSLFTSC1_VERSION = 3,
+  MSLFTSC1_VERSION = 7,
   MSLFTSC1_HEADER_SIZE = 28,
   MSLFTSC1_INDEX_RECORD_SIZE = 12,
-  MSLFTSC1_EVENT_HEADER_SIZE = 8,
+  MSLFTSC1_EVENT_HEADER_SIZE = 12,
 };
 
 typedef struct MslScriptEntry {
@@ -65,6 +64,13 @@ static void script_table_free(MslScriptTable* table) {
   *table = (MslScriptTable){0};
 }
 
+void script_events_reset_for_tests(void) {
+  for (size_t i = 0; i < 256u; i++) {
+    script_table_free(&g_tables[i]);
+  }
+  g_loaded = 0;
+}
+
 static int decode_event_payload(MslScriptEvent* out, const uint8_t* payload, uint32_t len) {
   if (out == NULL || (len != 0u && payload == NULL)) {
     return -1;
@@ -73,7 +79,7 @@ static int decode_event_payload(MslScriptEvent* out, const uint8_t* payload, uin
     case MSL_SCRIPT_EVENT_CLEAR_HITBOXES:
     case MSL_SCRIPT_EVENT_ALLOW_INTERRUPT:
     case MSL_SCRIPT_EVENT_SET_THROW_SPAWN_PROJECTILE:
-    case MSL_SCRIPT_EVENT_TOGGLE_BONE_PHYSICS:
+    case MSL_SCRIPT_EVENT_COMMAND_TIMER:
       return len == 0u ? 0 : -1;
     case MSL_SCRIPT_EVENT_SET_CMD_VAR:
       if (len != 4u) {
@@ -94,6 +100,19 @@ static int decode_event_payload(MslScriptEvent* out, const uint8_t* payload, uin
       }
       out->payload.hitbox_damage.idx = payload[0];
       out->payload.hitbox_damage.damage = read_le_f32(payload + 4);
+      return 0;
+    case MSL_SCRIPT_EVENT_SET_HITBOX_SIZE:
+      if (len != 8u) {
+        return -1;
+      }
+      out->payload.hitbox_size.idx = payload[0];
+      out->payload.hitbox_size.size = read_le_f32(payload + 4);
+      return 0;
+    case MSL_SCRIPT_EVENT_REMOVE_HITBOX:
+      if (len != 4u) {
+        return -1;
+      }
+      out->payload.hitbox_remove.idx = payload[0];
       return 0;
     case MSL_SCRIPT_EVENT_SET_HITBOX_INTERACTION:
       if (len != 4u || payload[1] > 1u || payload[2] > 1u) {
@@ -124,6 +143,12 @@ static int decode_event_payload(MslScriptEvent* out, const uint8_t* payload, uin
         return -1;
       }
       out->payload.jab_combo.disabled = payload[0];
+      return 0;
+    case MSL_SCRIPT_EVENT_TOGGLE_BONE_PHYSICS:
+      if (len != 4u) {
+        return -1;
+      }
+      out->payload.bone.bone_id = payload[0];
       return 0;
     case MSL_SCRIPT_EVENT_SET_STATE_FLAGS_221C_U16_Y:
       if (len != 4u) {
@@ -283,7 +308,7 @@ static int script_table_load(const char* data_dir, const char* rel_path, MslScri
       return -1;
     }
     const uint8_t* ev = buf + off;
-    const uint32_t payload_len = read_le_u32(ev + 4);
+    const uint32_t payload_len = read_le_u32(ev + 8);
     if (payload_len > (uint32_t)((size_t)sz - off - MSLFTSC1_EVENT_HEADER_SIZE)) {
       alloc_free(events);
       alloc_free(entries);
@@ -292,6 +317,14 @@ static int script_table_load(const char* data_dir, const char* rel_path, MslScri
     }
     events[i].frame = read_le_u16(ev);
     events[i].kind_id = read_le_u16(ev + 2);
+    events[i].timer_kind = ev[4];
+    events[i].timer_value = read_le_u16(ev + 6);
+    if (ev[5] != 0u || events[i].timer_kind > 2u) {
+      alloc_free(events);
+      alloc_free(entries);
+      alloc_free(buf);
+      return -1;
+    }
     const uint8_t* payload = ev + MSLFTSC1_EVENT_HEADER_SIZE;
     if (decode_event_payload(&events[i], payload, payload_len) != 0) {
       alloc_free(events);
@@ -378,350 +411,21 @@ const MslScriptEvent* script_events_first(uint8_t char_id, uint16_t msid, MslScr
   return NULL;
 }
 
-uint8_t script_events_window_contains(MslScriptFrameWindow win, float frame) {
-  return (win.loaded && frame >= (float)win.start_af && frame < (float)win.end_af) ? 1u : 0u;
+const MslScriptEvent* script_events_first_crossed(uint8_t char_id, uint16_t msid,
+                                                  MslScriptEventKind kind, float prev_frame,
+                                                  float cur_frame) {
+  const MslScriptEventRange range = script_events_range(char_id, msid);
+  for (uint32_t i = 0u; i < range.count; i++) {
+    const MslScriptEvent* event = &range.events[i];
+    if (event->kind_id == (uint16_t)kind &&
+        script_events_frame_crossed(event->frame, prev_frame, cur_frame)) {
+      return event;
+    }
+  }
+  return NULL;
 }
 
 uint8_t script_events_frame_crossed(uint16_t frame, float prev_frame, float cur_frame) {
   const float on = (float)frame;
   return (prev_frame < on && cur_frame >= on) ? 1u : 0u;
-}
-
-uint8_t script_events_window_crossed(MslScriptFrameWindow win, float prev_frame, float cur_frame) {
-  return (win.loaded && script_events_frame_crossed((uint16_t)win.start_af, prev_frame, cur_frame))
-             ? 1u
-             : 0u;
-}
-
-uint8_t script_events_cmd_var_window(uint8_t char_id, uint16_t msid, uint8_t idx, uint8_t open_end,
-                                     MslScriptFrameWindow* out) {
-  if (out == NULL) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){0};
-  int on_frame = -1;
-  int off_frame = -1;
-  const MslScriptEventRange range = script_events_range(char_id, msid);
-  for (uint32_t i = 0; i < range.count; i++) {
-    const MslScriptEvent* ev = &range.events[i];
-    if (ev->kind_id != (uint16_t)MSL_SCRIPT_EVENT_SET_CMD_VAR || ev->payload.cmd_var.idx != idx) {
-      continue;
-    }
-    if (ev->payload.cmd_var.value != 0u && on_frame < 0) {
-      on_frame = (int)ev->frame;
-    } else if (ev->payload.cmd_var.value == 0u && on_frame >= 0 && off_frame < 0) {
-      off_frame = (int)ev->frame;
-    }
-  }
-  if (on_frame < 0) {
-    return 0u;
-  }
-  if (off_frame < 0) {
-    if (!open_end) {
-      return 0u;
-    }
-    off_frame = INT16_MAX;
-  }
-  if (off_frame < on_frame) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){
-      .start_af = (int16_t)on_frame, .end_af = (int16_t)off_frame, .loaded = 1u};
-  return 1u;
-}
-
-uint8_t script_events_cmd_var_value_window(uint8_t char_id, uint16_t msid, uint8_t idx,
-                                           uint8_t value, uint8_t open_end,
-                                           MslScriptFrameWindow* out) {
-  if (out == NULL) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){0};
-  int on_frame = -1;
-  int off_frame = -1;
-  const MslScriptEventRange range = script_events_range(char_id, msid);
-  for (uint32_t i = 0; i < range.count; i++) {
-    const MslScriptEvent* ev = &range.events[i];
-    if (ev->kind_id != (uint16_t)MSL_SCRIPT_EVENT_SET_CMD_VAR || ev->payload.cmd_var.idx != idx) {
-      continue;
-    }
-    if (ev->payload.cmd_var.value == value && on_frame < 0) {
-      on_frame = (int)ev->frame;
-    } else if (ev->payload.cmd_var.value != value && on_frame >= 0 && off_frame < 0) {
-      off_frame = (int)ev->frame;
-    }
-  }
-  if (on_frame < 0) {
-    return 0u;
-  }
-  if (off_frame < 0) {
-    if (!open_end) {
-      return 0u;
-    }
-    off_frame = INT16_MAX;
-  }
-  if (off_frame < on_frame) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){
-      .start_af = (int16_t)on_frame, .end_af = (int16_t)off_frame, .loaded = 1u};
-  return 1u;
-}
-
-uint8_t script_events_allow_interrupt_window(uint8_t char_id, uint16_t msid,
-                                             MslScriptFrameWindow* out) {
-  if (out == NULL) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){0};
-  const MslScriptEvent* ev = script_events_first(char_id, msid, MSL_SCRIPT_EVENT_ALLOW_INTERRUPT);
-  if (ev == NULL) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){
-      .start_af = (int16_t)ev->frame, .end_af = (int16_t)INT16_MAX, .loaded = 1u};
-  return 1u;
-}
-
-uint8_t script_events_throw_flags_window(uint8_t char_id, uint16_t msid, uint8_t hit_idx,
-                                         uint8_t use_hit_idx, MslScriptFrameWindow* out) {
-  if (out == NULL) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){0};
-  int on_frame = -1;
-  const MslScriptEventRange range = script_events_range(char_id, msid);
-  for (uint32_t i = 0; i < range.count; i++) {
-    const MslScriptEvent* ev = &range.events[i];
-    if (ev->kind_id != (uint16_t)MSL_SCRIPT_EVENT_SET_THROW_FLAGS) {
-      continue;
-    }
-    if (!use_hit_idx || ev->payload.throw_flags.hit_idx == hit_idx) {
-      if (on_frame < 0 || (int)ev->frame < on_frame) {
-        on_frame = (int)ev->frame;
-      }
-    }
-  }
-  if (on_frame < 0) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){
-      .start_af = (int16_t)on_frame, .end_af = (int16_t)INT16_MAX, .loaded = 1u};
-  return 1u;
-}
-
-uint8_t script_events_throw_flags_pulses(uint8_t char_id, uint16_t msid, uint8_t hit_idx,
-                                         uint16_t* out_frames, uint8_t max_out,
-                                         uint8_t* out_count) {
-  if (out_frames == NULL || out_count == NULL || max_out == 0u) {
-    return 0u;
-  }
-  *out_count = 0u;
-  const MslScriptEventRange range = script_events_range(char_id, msid);
-  for (uint32_t i = 0; i < range.count && *out_count < max_out; i++) {
-    const MslScriptEvent* ev = &range.events[i];
-    if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_SET_THROW_FLAGS &&
-        ev->payload.throw_flags.hit_idx == hit_idx) {
-      uint8_t dup = 0u;
-      for (uint8_t j = 0; j < *out_count; j++) {
-        if (out_frames[j] == ev->frame) {
-          dup = 1u;
-          break;
-        }
-      }
-      if (!dup) {
-        out_frames[*out_count] = ev->frame;
-        *out_count = (uint8_t)(*out_count + 1u);
-      }
-    }
-  }
-  return *out_count != 0u ? 1u : 0u;
-}
-
-uint8_t script_events_first_create_hitbox_phase(uint8_t char_id, uint16_t msid,
-                                                MslScriptFrameWindow* out) {
-  if (out == NULL) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){0};
-  int first_create = -1;
-  int first_clear = -1;
-  const MslScriptEventRange range = script_events_range(char_id, msid);
-  for (uint32_t i = 0; i < range.count; i++) {
-    const MslScriptEvent* ev = &range.events[i];
-    if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CREATE_HITBOX && first_create < 0) {
-      first_create = (int)ev->frame;
-    } else if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CLEAR_HITBOXES && first_create >= 0) {
-      first_clear = (int)ev->frame;
-      break;
-    }
-  }
-  if (first_create < 0) {
-    return 0u;
-  }
-  *out =
-      (MslScriptFrameWindow){.start_af = (int16_t)first_create,
-                             .end_af = (int16_t)((first_clear >= 0) ? first_clear + 1 : INT16_MAX),
-                             .loaded = 1u};
-  return 1u;
-}
-
-uint8_t script_events_hitbox_lifetime(uint8_t char_id, uint16_t msid, MslScriptFrameWindow* out) {
-  if (out == NULL) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){0};
-  int first_create = -1;
-  int last_clear = -1;
-  const MslScriptEventRange range = script_events_range(char_id, msid);
-  for (uint32_t i = 0; i < range.count; i++) {
-    const MslScriptEvent* ev = &range.events[i];
-    if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CREATE_HITBOX && first_create < 0) {
-      first_create = (int)ev->frame;
-    } else if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CLEAR_HITBOXES && first_create >= 0) {
-      last_clear = (int)ev->frame;
-    }
-  }
-  if (first_create < 0) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){.start_af = (int16_t)first_create,
-                                .end_af = (int16_t)((last_clear >= 0) ? last_clear + 1 : INT16_MAX),
-                                .loaded = 1u};
-  return 1u;
-}
-
-uint8_t script_events_second_create_hitbox_phase(uint8_t char_id, uint16_t msid,
-                                                 MslScriptFrameWindow* out) {
-  if (out == NULL) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){0};
-  int first_frame = -1;
-  int second_frame = -1;
-  int clear_frame = -1;
-  const MslScriptEventRange range = script_events_range(char_id, msid);
-  for (uint32_t i = 0; i < range.count; i++) {
-    const MslScriptEvent* ev = &range.events[i];
-    if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CREATE_HITBOX) {
-      if (first_frame < 0) {
-        first_frame = (int)ev->frame;
-      } else if (second_frame < 0 && (int)ev->frame != first_frame) {
-        second_frame = (int)ev->frame;
-      }
-    } else if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CLEAR_HITBOXES && second_frame >= 0 &&
-               (int)ev->frame >= second_frame) {
-      clear_frame = (int)ev->frame;
-      break;
-    }
-  }
-  if (second_frame < 0) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){.start_af = (int16_t)second_frame,
-                                .end_af = (int16_t)((clear_frame >= 0) ? clear_frame : INT16_MAX),
-                                .loaded = 1u};
-  return 1u;
-}
-
-uint8_t script_events_last_create_hitbox_phase(uint8_t char_id, uint16_t msid,
-                                               MslScriptFrameWindow* out) {
-  if (out == NULL) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){0};
-  int last_create = -1;
-  int last_seen_create = -1;
-  const MslScriptEventRange range = script_events_range(char_id, msid);
-  for (uint32_t i = 0; i < range.count; i++) {
-    const MslScriptEvent* ev = &range.events[i];
-    if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CREATE_HITBOX &&
-        (int)ev->frame != last_seen_create) {
-      last_seen_create = (int)ev->frame;
-      last_create = (int)ev->frame;
-    }
-  }
-  if (last_create < 0) {
-    return 0u;
-  }
-  int clear_frame = INT16_MAX;
-  for (uint32_t i = 0; i < range.count; i++) {
-    const MslScriptEvent* ev = &range.events[i];
-    if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CLEAR_HITBOXES && (int)ev->frame >= last_create) {
-      clear_frame = (int)ev->frame;
-      break;
-    }
-  }
-  *out = (MslScriptFrameWindow){
-      .start_af = (int16_t)last_create, .end_af = (int16_t)clear_frame, .loaded = 1u};
-  return 1u;
-}
-
-uint8_t script_events_post_clear_create_hitbox_phase(uint8_t char_id, uint16_t msid,
-                                                     MslScriptFrameWindow* out) {
-  if (out == NULL) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){0};
-  int first_create_after_clear = -1;
-  int last_clear_after_first_create = -1;
-  int seen_create = 0;
-  const MslScriptEventRange range = script_events_range(char_id, msid);
-  for (uint32_t i = 0; i < range.count; i++) {
-    const MslScriptEvent* ev = &range.events[i];
-    if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CREATE_HITBOX) {
-      seen_create = 1;
-      if (last_clear_after_first_create >= 0 && first_create_after_clear < 0) {
-        first_create_after_clear = (int)ev->frame;
-      }
-    } else if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CLEAR_HITBOXES && seen_create) {
-      last_clear_after_first_create = (int)ev->frame;
-    }
-  }
-  if (first_create_after_clear < 0) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){
-      .start_af = (int16_t)first_create_after_clear,
-      .end_af = (int16_t)((last_clear_after_first_create >= first_create_after_clear)
-                              ? last_clear_after_first_create + 1
-                              : INT16_MAX),
-      .loaded = 1u};
-  return 1u;
-}
-
-uint8_t script_events_catchattack_grabbed_hit_window(uint8_t char_id, uint16_t msid,
-                                                     MslScriptFrameWindow* out) {
-  if (out == NULL) {
-    return 0u;
-  }
-  *out = (MslScriptFrameWindow){0};
-  int on_frame = -1;
-  int off_frame = -1;
-  const MslScriptEventRange range = script_events_range(char_id, msid);
-  for (uint32_t i = 0; i < range.count; i++) {
-    const MslScriptEvent* ev = &range.events[i];
-    if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CREATE_HITBOX) {
-      if ((ev->payload.create_hitbox.flags & MSL_SCRIPT_CREATE_HITBOX_FLAG_ONLY_HIT_GRABBED) !=
-          0u) {
-        if (on_frame < 0 || (int)ev->frame < on_frame) {
-          on_frame = (int)ev->frame;
-        }
-      }
-    } else if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CLEAR_HITBOXES && on_frame >= 0 &&
-               (int)ev->frame >= on_frame) {
-      if (off_frame < 0 || (int)ev->frame < off_frame) {
-        off_frame = (int)ev->frame;
-      }
-    }
-  }
-  if (on_frame < 0) {
-    return 0u;
-  }
-  if (off_frame < 0) {
-    off_frame = on_frame + 1;
-  }
-  *out = (MslScriptFrameWindow){
-      .start_af = (int16_t)on_frame, .end_af = (int16_t)off_frame, .loaded = 1u};
-  return 1u;
 }

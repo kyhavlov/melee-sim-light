@@ -78,7 +78,10 @@ typedef struct MslCharParams {
   //
   // Source of truth: ISO-extracted `data/characters/*.json` `rapid_jab_window`.
   uint8_t rapid_jab_window;
-  uint8_t _pad_u8_rapid_jab_window[3];
+  // Ordinary BODY damage-effect RNG variant (`ftCo_DatAttrs.xA0`).
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078538
+  uint8_t damage_effect_randi_kind;
+  uint8_t _pad_u8_rapid_jab_window[2];
 
   // Wait idle sub-animation roulette (`ftCo_8008A7A8` / `getAnimID`).
   //
@@ -170,7 +173,14 @@ typedef struct MslCharParams {
   //
   // Source of truth: ISO-extracted `data/characters/*.json` `grab_capture_anchor_part_id`.
   uint16_t grab_capture_anchor_part_id;
-  uint8_t _pad_u8_grab_0[4];
+  uint16_t _pad_u16_grab_0;
+  // Fighter_Create's persistent victim attachment offset, sampled once from the costume JObj
+  // rest tree as TransN.world - XRotN.world. This is intentionally not derived from Wait1:
+  // several supported fighters animate away the source rest-pose Z component there.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_UnkUpdateVecFromBones_8006876C
+  // Source of truth: ISO-extracted `data/characters/*.json` `static_x1a70_{y,z}`.
+  float static_x1a70_y;
+  float static_x1a70_z;
 
   // Explicit overlay for source callsites that enter common FallSpecial through
   // ftCo_80096900 with xC=0. Bits are keyed by MslMsFxSpecialKind: 1u << fx_kind.
@@ -255,6 +265,8 @@ typedef struct MslCharParams {
   uint8_t illusion_item_state0_element;
   uint8_t illusion_item_state1_element;
   uint8_t _pad_u8_illusion_item_0[2];
+  uint32_t illusion_item_state0_contact_flags;
+  uint32_t illusion_item_state1_contact_flags;
 
   // Fox/Falco up special HoldAir/Launch (Firefox/Firebird) attrs.
   //

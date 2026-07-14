@@ -9,6 +9,8 @@ from tools.eval.validation_dtypes import COMPARE_DTYPE, SEED_DTYPE
 
 
 ACT_WAIT = 0x000E
+ACT_REBIRTH = 0x000C
+ACT_REBIRTH_WAIT = 0x000D
 SM_WAIT1_0 = 2
 CHAR_FOX = 1
 STAGE_FD = 2
@@ -120,6 +122,25 @@ def test_wait_loop_can_keep_current_idle_variant_from_rng() -> None:
     assert int(out["action_id"][p]) == ACT_WAIT
     assert int(out["action_frame"][p]) == 0
     assert int(out["animation_index"][p]) == SM_WAIT1_0
+
+@pytest.mark.parametrize("action_id", [ACT_REBIRTH, ACT_REBIRTH_WAIT])
+def test_rebirth_family_uses_standing_wait_anim_owner(action_id: int) -> None:
+    # Both source Anim callbacks call the same ftData.x24 WaitStruct owner as Wait. This matters
+    # independently of Rebirth's timer/match-flow exit: a completed standing idle must select and
+    # restart its source animation before the timer owner runs.
+    # refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_Rebirth_Anim,ftCo_RebirthWait_Anim}
+    # refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    seed = _wait_seed(14037)
+    seed["action_id"][0, 0] = np.uint16(action_id)
+    seed["match_flow_timer"][0, 0] = np.uint8(10)
+    out = _step_seed(seed, rng_owned=True)
+    p = 0
+    assert int(out["action_id"][p]) == action_id
+    assert int(out["action_frame"][p]) == 0
+    assert int(out["animation_index"][p]) == 3
 
 
 def test_wait_loop_replay_seed_keeps_visible_idle_variant_when_rng_phase_hidden() -> None:

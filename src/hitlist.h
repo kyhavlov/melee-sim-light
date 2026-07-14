@@ -94,6 +94,10 @@ void hitlist_register_fighter_group_v2(MslBatch* batch, int bi, int attacker, ui
 // source episode proves that slot's hidden list, but same-group slots are not proven.
 void hitlist_register_fighter_hitbox(MslBatch* batch, int bi, int attacker, int hb_id, int victim,
                                      uint16_t victim_iid, int type, uint8_t rehit_frames);
+// Materializes one fighter victim in a specific capsule's phantom/tip-log victims_2 ring.
+void hitlist_register_fighter_hitbox_v2(MslBatch* batch, int bi, int attacker, int hb_id,
+                                        int victim, uint16_t victim_iid, int type,
+                                        uint8_t rehit_frames);
 
 // Registers a fighter victim in one item hitbox capsule's victim list (victims_1).
 // Decomp anchor (items): refs/melee/src/melee/it/itcoll.c::it_8026FA2C / it_8026FAC4
@@ -113,22 +117,6 @@ uint8_t hitlist_allows_item_hitbox_fighter(MslBatch* batch, int bi, int item_slo
 // falling back to the legacy dense hit_group map when no per-hitbox seed is marked valid.
 void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int attacker, int hb_id,
                                                  uint8_t hit_group);
-uint8_t hitlist_seed_init_attackairlw_no_clear_dense_body(MslBatch* batch, int bi, int attacker,
-                                                          int hb_id, int victim,
-                                                          uint16_t victim_iid);
-
-// Narrow seed bridge for a proven same-fighter-object dense seed lane whose Slippi-visible
-// instance_id changed before the current HitCapsule create edge. Normal dense seeds fail closed on
-// stale instance ids because ftColl_800768A0 create edges clear/copy concrete HitCapsule state.
-void hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(MslBatch* batch, int bi,
-                                                                 int attacker, int hb_id,
-                                                                 uint8_t hit_group);
-
-// Replay-rollout bridge for dense seed maps whose Slippi instance-id proxy changed even though
-// decomp's raw fighter object pointer is still the same victim object.
-uint8_t hitlist_rollout_dense_seed_same_object_rebind_applies(const MslBatch* batch, int bi,
-                                                              int attacker, int victim);
-
 // Debug helper: clear victim lists for all hitboxes on (attacker).
 void hitlist_debug_clear_fighter_attacker(MslBatch* batch, int bi, int attacker);
 

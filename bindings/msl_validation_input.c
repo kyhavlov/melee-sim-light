@@ -4,8 +4,11 @@
 #include "msl_validation_history_common.h"
 
 #include "../src/attack_id_tables.h"
+#include "../src/action_ids.h"
+#include "../src/anim_table.h"
 #include "../src/common_params.h"
 #include "../src/input_axis.h"
+#include "../src/motion_state_owners.h"
 #include "../src/ucf.h"
 
 static inline uint8_t vh_sat_inc_fe(uint8_t v) { return v < 0xFEu ? (uint8_t)(v + 1u) : 0xFEu; }
@@ -161,7 +164,7 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
   PyArrayObject *c_y_proc_arr = NULL, *stick_x_arr = NULL, *stick_y_arr = NULL,
                 *cstick_y_arr = NULL;
   PyArrayObject *trigger_arr = NULL, *pressed_arr = NULL, *lr_timer_arr = NULL;
-  PyArrayObject *light_arr = NULL, *guard_phase_arr = NULL;
+  PyArrayObject* light_arr = NULL;
   if (vh_make_1d(n, NPY_INT8, &main_x_proc_arr) != 0 ||
       vh_make_1d(n, NPY_INT8, &main_y_proc_arr) != 0 ||
       vh_make_1d(n, NPY_INT8, &c_x_proc_arr) != 0 || vh_make_1d(n, NPY_INT8, &c_y_proc_arr) != 0 ||
@@ -170,8 +173,7 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
       vh_make_1d(n, NPY_FLOAT32, &cstick_y_arr) != 0 ||
       vh_make_1d(n, NPY_FLOAT32, &trigger_arr) != 0 ||
       vh_make_1d(n, NPY_UINT16, &pressed_arr) != 0 ||
-      vh_make_1d(n, NPY_UINT8, &lr_timer_arr) != 0 || vh_make_1d(n, NPY_FLOAT32, &light_arr) != 0 ||
-      vh_make_1d(n, NPY_UINT8, &guard_phase_arr) != 0) {
+      vh_make_1d(n, NPY_UINT8, &lr_timer_arr) != 0 || vh_make_1d(n, NPY_FLOAT32, &light_arr) != 0) {
     Py_XDECREF(main_x_proc_arr);
     Py_XDECREF(main_y_proc_arr);
     Py_XDECREF(c_x_proc_arr);
@@ -183,7 +185,6 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
     Py_XDECREF(pressed_arr);
     Py_XDECREF(lr_timer_arr);
     Py_XDECREF(light_arr);
-    Py_XDECREF(guard_phase_arr);
     return NULL;
   }
 
@@ -199,7 +200,6 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
   const uint16_t* action = (const uint16_t*)PyArray_DATA(action_arr);
   const int16_t* frame = (const int16_t*)PyArray_DATA(frame_arr);
   const uint8_t* facing = (const uint8_t*)PyArray_DATA(facing_arr);
-  const float* shield = (const float*)PyArray_DATA(shield_arr);
   const uint16_t* hitlag = (const uint16_t*)PyArray_DATA(hitlag_arr);
   const uint8_t* flags = (const uint8_t*)PyArray_DATA(flags_arr);
   const npy_intp flags_cols = PyArray_DIM(flags_arr, 1);
@@ -216,7 +216,6 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
   uint16_t* pressed = (uint16_t*)PyArray_DATA(pressed_arr);
   uint8_t* lr_timer_out = (uint8_t*)PyArray_DATA(lr_timer_arr);
   float* light_out = (float*)PyArray_DATA(light_arr);
-  uint8_t* guard_phase_out = (uint8_t*)PyArray_DATA(guard_phase_arr);
 
   const float fdz_x = (float)deadzone_x;
   const float fdz_y = (float)deadzone_y;
@@ -239,6 +238,7 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
   uint16_t guard_x8 = 0u;
   float guard_x4 = 0.0f;
   uint8_t guard_xc = 0u;
+  uint16_t guard_x0 = 0u;
   int guard_x10 = 0;
   float light = 0.0f;
   uint8_t lr_timer = 0xFFu;
@@ -274,12 +274,37 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
     const bool prev_in_guard =
         prev_a == act_guard_on || prev_a == act_guard || prev_a == act_guard_reflect;
     const bool in_guard_setoff = a == act_guard_set_off;
+    const int hl_prev = i > 0 ? (int)hitlag[i - 1] : 0;
+    const int hl_after_prio0 = hl_prev > 0 ? hl_prev - 1 : 0;
+    const bool guard_desc_init =
+        (a == act_guard_on && prev_a != act_guard_on) ||
+        (a == act_guard_reflect && prev_a != act_guard_reflect && !prev_in_guard);
 
-    if (a == act_guard_on && frame[i] == 0) {
+    // mv.co.guard.x0 is advanced by GuardOn/Guard Anim before the input callback. It is not an
+    // animation frame: GuardReflect can preserve it through IASA entry, while x14 expiry enters
+    // GuardOn inside the Anim callback, reinitializes x0, and immediately increments it once.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    //   ftCo_800921DC,ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_GuardReflect_Anim,ftCo_80093BC0}
+    if (guard_desc_init) {
+      guard_x0 =
+          (a == act_guard_on && prev_a == act_guard_reflect && hl_after_prio0 == 0) ? 1u : 0u;
+    } else if (in_guard && prev_in_guard && hl_after_prio0 == 0 && guard_x0 < UINT16_MAX) {
+      guard_x0++;
+    } else if (!in_guard && !in_guard_setoff) {
+      guard_x0 = 0u;
+    }
+
+    if (guard_desc_init) {
+      // Both ftCo_800924C0 and the direct-locomotion ftCo_80093A50 path reach
+      // ftCo_800921DC, which reinitializes the guard-angle recurrence before its
+      // immediate ftCo_80091E78 update. Carrying stale non-guard x8/x4 into a
+      // direct GuardReflect entry reconstructs a different persistent JObj tree.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      //   ftCo_800924C0,ftCo_80093A50,ftCo_800921DC}
       guard_x8 = neutral[i];
       guard_x4 = 0.0f;
     }
-    if (in_guard) {
+    if (in_guard && (guard_desc_init || hl_after_prio0 == 0)) {
       const float facing_dir = facing[i] != 0u ? 1.0f : -1.0f;
       const float x = stick_x[i] * facing_dir;
       const float y = stick_y[i];
@@ -311,11 +336,11 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
       guard_x4 = lerp * (mag - guard_x4) + guard_x4;
     }
 
-    if ((a == act_guard_on && prev_a != act_guard_on) ||
-        (a == act_guard_reflect && prev_a != act_guard_reflect)) {
+    if (guard_desc_init) {
       guard_xc = 0u;
       guard_x10 = guard_init;
-      light = 0.0f;
+      const float t = (trig - trigger_dz) / trigger_denom;
+      light = t >= 0.0f ? (t > 1.0f ? 1.0f : t) : 0.0f;
     }
     if (!in_guard && !in_guard_setoff) {
       guard_xc = 0u;
@@ -332,14 +357,31 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
         const float t = (trig - trigger_dz) / trigger_denom;
         if (t >= 0.0f) light = t > 1.0f ? 1.0f : t;
       }
-    } else {
-      const int hl_prev = i > 0 ? (int)hitlag[i - 1] : 0;
-      const int hl_after_prio0 = hl_prev > 0 ? hl_prev - 1 : 0;
+    } else if (!guard_desc_init) {
       const bool held = ((buttons[i] & mask_lr) != 0u) || trig >= trigger_dz;
-      if (hl_after_prio0 == 0 && shield[i] > 0.0f) {
-        const float t = (trig - trigger_dz) / trigger_denom;
-        if (t >= 0.0f) light = t > 1.0f ? 1.0f : t;
-        if (guard_x10 > 0) guard_x10 -= 1;
+      if (hl_after_prio0 == 0) {
+        // This row's hidden guard state is the result of the frame-start action's Anim callback.
+        // ftCo_800925A4 updates lightshield/x10 only when the preceding post-frame snapshot had a
+        // live ordinary ShieldDesc. In particular, ReflectDesc-only GuardReflect frames must not
+        // consume x10. The current row's descriptor can be created later in the same callback by
+        // ftCo_80093BC0, so it is not the correct gate.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        //   ftCo_800925A4,ftCo_GuardReflect_Anim,ftCo_80093BC0}
+        const bool prev_shield_desc_active =
+            i > 0 && (flags[((i - 1) * flags_cols) + 2] & 0x80u) != 0u;
+        const bool post_shield_desc_active = (flags[(i * flags_cols) + 2] & 0x80u) != 0u;
+        // The previous descriptor covers GuardOn -> GuardReflect entry: GuardOn_Anim drains
+        // before IASA replaces ShieldDesc with ReflectDesc. The post descriptor covers x14
+        // expiry: ftCo_80093BC0 recreates ShieldDesc immediately before GuardOn_Anim calls
+        // ftCo_800925A4 in the same priority-1 callback.
+        if (prev_shield_desc_active || post_shield_desc_active) {
+          const float t = (trig - trigger_dz) / trigger_denom;
+          if (t >= 0.0f) light = t > 1.0f ? 1.0f : t;
+          if (guard_x10 > 0) guard_x10 -= 1;
+        }
+        // inlineC0 runs independently of ShieldDesc and latches release from the priority-3
+        // input lane even while GuardReflect owns only ReflectDesc.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{inlineC0,ftCo_80092BCC}
         if (!held) guard_xc = 1u;
       }
     }
@@ -392,26 +434,6 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
         }
       }
     }
-    uint8_t phase = 0u;
-    if (a == act_guard_set_off) {
-      const int cur_hl = (int)hitlag[i];
-      const int prev_hl = i > 0 ? (int)hitlag[i - 1] : 0;
-      if (cur_hl > 1) {
-        phase = 1u;
-      } else if (cur_hl == 1) {
-        phase = 2u;
-      } else if (prev_a == act_guard_set_off && prev_hl > 0) {
-        phase = 3u;
-      }
-    }
-    guard_phase_out[i] = phase;
-    uint8_t post_hitlag_owner = 0u;
-    if (a == act_guard_set_off) {
-      if (phase == 2u || phase == 3u) {
-        post_hitlag_owner = (flags[(i * flags_cols) + 3] & 0x20u) != 0u ? 2u : 1u;
-      }
-    }
-
     const bool in_reflect = a == act_guard_reflect;
     if (!in_reflect) {
       reflect_x14 = 0;
@@ -436,12 +458,11 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
       seed->guard_tilt_x8[slot] = guard_x8;
       seed->guard_tilt_x4[slot] = guard_x4;
       seed->guard_release_latched_xc[slot] = (uint8_t)(guard_xc ? 1u : 0u);
+      seed->guard_anim_counter_x0[slot] = guard_x0;
       seed->guard_x10[slot] = (uint8_t)(guard_x10 & 0xFF);
       seed->lightshield_amount[slot] = light;
       seed->guard_special_enable_timer_x1c[slot] = (uint8_t)(guard_x1c & 0xFF);
       seed->guard_setoff_hitlag_damage_min[slot] = (uint8_t)(guard_setoff_damage_min & 0xFF);
-      seed->guard_setoff_hitlag_exit_phase_u8[slot] = phase;
-      seed->guard_setoff_post_hitlag_owner_u8[slot] = post_hitlag_owner;
       seed->lr_press_timer[slot] = lr_timer;
       seed->guard_reflect_timer_x14[slot] = (uint8_t)(reflect_x14 & 0xFF);
       seed->guard_reflect_timer_x18[slot] = (uint8_t)(reflect_x18 & 0xFF);
@@ -453,9 +474,173 @@ PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* 
     prev_lr_held = lr_held;
   }
 
-  return Py_BuildValue("NNNNNNNNNNNN", main_x_proc_arr, main_y_proc_arr, c_x_proc_arr, c_y_proc_arr,
+  return Py_BuildValue("NNNNNNNNNNN", main_x_proc_arr, main_y_proc_arr, c_x_proc_arr, c_y_proc_arr,
                        stick_x_arr, stick_y_arr, cstick_y_arr, trigger_arr, pressed_arr,
-                       lr_timer_arr, light_arr, guard_phase_arr);
+                       lr_timer_arr, light_arr);
+}
+
+typedef struct MslGuardPoseHistoryTracker {
+  uint8_t valid;
+  uint8_t count;
+  uint16_t entry_msid;
+  float entry_frame;
+  uint16_t x8[MSL_GUARD_POSE_HISTORY_CAP];
+  float x4[MSL_GUARD_POSE_HISTORY_CAP];
+  float weight[MSL_GUARD_POSE_HISTORY_CAP];
+} MslGuardPoseHistoryTracker;
+
+static inline void vh_guard_pose_history_reset(MslGuardPoseHistoryTracker* tracker,
+                                               uint16_t entry_msid, float entry_frame) {
+  memset(tracker, 0, sizeof(*tracker));
+  tracker->valid = 1u;
+  tracker->entry_msid = entry_msid;
+  tracker->entry_frame = entry_frame;
+}
+
+static inline uint8_t vh_guard_pose_history_append(MslGuardPoseHistoryTracker* tracker, uint16_t x8,
+                                                   float x4, float weight) {
+  if (tracker == NULL || tracker->valid == 0u ||
+      tracker->count >= (uint8_t)MSL_GUARD_POSE_HISTORY_CAP) {
+    return 0u;
+  }
+  const uint8_t i = tracker->count++;
+  tracker->x8[i] = x8;
+  tracker->x4[i] = x4;
+  tracker->weight[i] = weight;
+  return 1u;
+}
+
+static inline void vh_guard_pose_history_write(MslSeed* seed, int slot,
+                                               const MslGuardPoseHistoryTracker* tracker) {
+  seed->guard_pose_history_valid_u8[slot] = tracker->valid;
+  seed->guard_pose_history_count_u8[slot] = tracker->count;
+  seed->guard_pose_entry_msid_u16[slot] = tracker->entry_msid;
+  seed->guard_pose_entry_anim_frame_f32[slot] = tracker->entry_frame;
+  memset(seed->guard_pose_tilt_x8_u16[slot], 0, sizeof(seed->guard_pose_tilt_x8_u16[slot]));
+  memset(seed->guard_pose_tilt_x4_f32[slot], 0, sizeof(seed->guard_pose_tilt_x4_f32[slot]));
+  memset(seed->guard_pose_target_weight_f32[slot], 0,
+         sizeof(seed->guard_pose_target_weight_f32[slot]));
+  if (tracker->valid == 0u) {
+    return;
+  }
+  memcpy(seed->guard_pose_tilt_x8_u16[slot], tracker->x8,
+         (size_t)tracker->count * sizeof(tracker->x8[0]));
+  memcpy(seed->guard_pose_tilt_x4_f32[slot], tracker->x4,
+         (size_t)tracker->count * sizeof(tracker->x4[0]));
+  memcpy(seed->guard_pose_target_weight_f32[slot], tracker->weight,
+         (size_t)tracker->count * sizeof(tracker->weight[0]));
+}
+
+PyObject* msl_validation_derive_guard_pose_history_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject *seed_obj = NULL, *char_obj = NULL, *action_obj = NULL, *animation_obj = NULL;
+  PyObject *anim_frame_obj = NULL, *frame_speed_obj = NULL, *hitlag_obj = NULL;
+  int slot = 0;
+  int act_guard_on = 0, act_guard = 0, act_guard_reflect = 0;
+  if (!PyArg_ParseTuple(args, "OiOOOOOOiii", &seed_obj, &slot, &char_obj, &action_obj,
+                        &animation_obj, &anim_frame_obj, &frame_speed_obj, &hitlag_obj,
+                        &act_guard_on, &act_guard, &act_guard_reflect)) {
+    return NULL;
+  }
+  PyArrayObject* seed_arr = vh_require(seed_obj, NPY_UINT8, 2, "seed_u8");
+  PyArrayObject* char_arr = vh_require(char_obj, NPY_UINT8, 1, "char_id");
+  PyArrayObject* action_arr = vh_require(action_obj, NPY_UINT16, 1, "action_id");
+  PyArrayObject* animation_arr = vh_require(animation_obj, NPY_UINT32, 1, "animation_index");
+  PyArrayObject* anim_frame_arr = vh_require(anim_frame_obj, NPY_FLOAT32, 1, "anim_frame_f32");
+  PyArrayObject* frame_speed_arr =
+      vh_require(frame_speed_obj, NPY_FLOAT32, 1, "frame_speed_mul_f32");
+  PyArrayObject* hitlag_arr = vh_require(hitlag_obj, NPY_UINT16, 1, "hitlag");
+  if (seed_arr == NULL || char_arr == NULL || action_arr == NULL || animation_arr == NULL ||
+      anim_frame_arr == NULL || frame_speed_arr == NULL || hitlag_arr == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_SIZE(action_arr);
+  if (n < 1 || slot < 0 || slot >= MSL_MAX_PLAYERS || vh_seed_rows(seed_arr, n - 1) != 0 ||
+      vh_check_len(char_arr, n, "char_id") != 0 ||
+      vh_check_len(animation_arr, n, "animation_index") != 0 ||
+      vh_check_len(anim_frame_arr, n, "anim_frame_f32") != 0 ||
+      vh_check_len(frame_speed_arr, n, "frame_speed_mul_f32") != 0 ||
+      vh_check_len(hitlag_arr, n, "hitlag") != 0) {
+    return NULL;
+  }
+  if (anim_table_init() != 0 || motion_state_owners_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "guard pose history tables failed to initialize");
+    return NULL;
+  }
+
+  uint8_t* seed_u8 = (uint8_t*)PyArray_DATA(seed_arr);
+  const size_t seed_stride = (size_t)PyArray_STRIDE(seed_arr, 0);
+  const uint8_t* char_id = (const uint8_t*)PyArray_DATA(char_arr);
+  const uint16_t* action = (const uint16_t*)PyArray_DATA(action_arr);
+  const uint32_t* animation = (const uint32_t*)PyArray_DATA(animation_arr);
+  const float* anim_frame = (const float*)PyArray_DATA(anim_frame_arr);
+  const float* frame_speed = (const float*)PyArray_DATA(frame_speed_arr);
+  const uint16_t* hitlag = (const uint16_t*)PyArray_DATA(hitlag_arr);
+  MslGuardPoseHistoryTracker tracker = {0};
+  uint16_t prior_x0 = 0u;
+
+  for (npy_intp i = 0; i < n - 1; i++) {
+    MslSeed* seed = vh_seed_at(seed_u8, seed_stride, i);
+    const uint16_t a = action[i];
+    const uint16_t prev_a = i > 0 ? action[i - 1] : UINT16_MAX;
+    const uint8_t live = (a == (uint16_t)act_guard_on || a == (uint16_t)act_guard ||
+                          a == (uint16_t)act_guard_reflect)
+                             ? 1u
+                             : 0u;
+    const uint8_t prev_live = (prev_a == (uint16_t)act_guard_on || prev_a == (uint16_t)act_guard ||
+                               prev_a == (uint16_t)act_guard_reflect)
+                                  ? 1u
+                                  : 0u;
+    if (live == 0u) {
+      memset(&tracker, 0, sizeof(tracker));
+      prior_x0 = 0u;
+      vh_guard_pose_history_write(seed, slot, &tracker);
+      continue;
+    }
+
+    const uint16_t x8 = seed->guard_tilt_x8[slot];
+    const float x4 = seed->guard_tilt_x4[slot];
+    const uint16_t x0 = seed->guard_anim_counter_x0[slot];
+    if (prev_live == 0u || tracker.valid == 0u) {
+      uint16_t entry_msid = msl_motion_state_submotion_id(char_id[i], a);
+      float entry_frame = 0.0f;
+      if (i > 0 && char_id[i - 1] == char_id[i]) {
+        entry_msid = animation[i - 1] <= UINT16_MAX
+                         ? (uint16_t)animation[i - 1]
+                         : msl_motion_state_submotion_id(char_id[i - 1], prev_a);
+        entry_frame = anim_frame[i - 1];
+        if (hitlag[i - 1] == 0u) {
+          entry_frame += frame_speed[i - 1];
+        }
+      }
+      if (entry_msid == UINT16_MAX || !isfinite(entry_frame)) {
+        memset(&tracker, 0, sizeof(tracker));
+      } else {
+        vh_guard_pose_history_reset(&tracker, entry_msid, entry_frame);
+        if (vh_guard_pose_history_append(&tracker, x8, x4, 0.0f) == 0u) {
+          memset(&tracker, 0, sizeof(tracker));
+        }
+      }
+    } else if (a == (uint16_t)act_guard) {
+      // Guard_Anim uses target weight 1, so the current target completely owns the collision
+      // locals and collapses all GuardOn recurrence history.
+      vh_guard_pose_history_reset(&tracker, (uint16_t)MSL_SM_GUARD, (float)x8);
+      if (vh_guard_pose_history_append(&tracker, x8, x4, 1.0f) == 0u) {
+        memset(&tracker, 0, sizeof(tracker));
+      }
+    } else if (x0 != prior_x0) {
+      const float end = msl_anim_end_frame(char_id[i], (uint16_t)MSL_SM_GUARD_ON);
+      float weight = end > 0.0f ? (float)x0 / end : 1.0f;
+      if (weight < 0.0f) weight = 0.0f;
+      if (weight > 1.0f) weight = 1.0f;
+      if (vh_guard_pose_history_append(&tracker, x8, x4, weight) == 0u) {
+        memset(&tracker, 0, sizeof(tracker));
+      }
+    }
+    prior_x0 = x0;
+    vh_guard_pose_history_write(seed, slot, &tracker);
+  }
+  Py_RETURN_NONE;
 }
 
 PyObject* msl_validation_derive_input_history_suffix_py(PyObject* self, PyObject* args) {

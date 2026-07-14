@@ -24,13 +24,14 @@
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "motion_state_runtime.h"
+#include "fighter_script.h"
+#include "script_events.h"
 #include "common_params.h"
 #include "damage_source.h"
 #include "deadupstar_rng.h"
 #include "config.h"
 #include "escapeair_collision_owner.h"
 #include "special_msids.h"
-#include "move_tables.h"
 #include "match_flow.h"
 #include "ecb_tables.h"
 #include "ecb_pose.h"
@@ -43,7 +44,9 @@
 #include "hurtcaps_tables.h"
 #include "hurtboxes.h"
 #include "mtx34.h"
+#include "reflector_bubbles.h"
 #include "shield_tilt_table.h"
+#include "shields.h"
 #include "laser_params.h"
 #include "item_article_params.h"
 #include "item_common_params.h"
@@ -114,18 +117,6 @@ static inline uint8_t reseed_common_fall_blended_ecb_points(MslEcbWorldPoints* o
   return (uint8_t)(msl_ecb_world_points_sample_collision_pose_f32(out, batch, idx, char_id, msid,
                                                                   anim_frame, facing_dir, 0.0f,
                                                                   0.0f, 0u) == 0);
-}
-
-static inline uint8_t reseed_throwhi_deferred_mid_pulse_rate_source_step(int32_t rate_q16_16) {
-  // Source step owner for the 4/3 ThrowHi frame-20 deferred cursor lane. Keep this as a
-  // quantized equality against the decomp-owned throw rate, not a broad "greater than 1.25"
-  // threshold, so ordinary 1.25x ThrowHi rows remain on current-callback serialization.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80073354
-  const int32_t target_q16_16 = msl_q16_16_from_f32(4.0f / 3.0f);
-  const int32_t delta = (rate_q16_16 >= target_q16_16) ? (rate_q16_16 - target_q16_16)
-                                                       : (target_q16_16 - rate_q16_16);
-  return (delta <= 1) ? 1u : 0u;
 }
 
 static inline void reseed_prev_ecb_rel_points_sample(MslEcbWorldPoints* out, uint8_t char_id,
@@ -315,12 +306,6 @@ static inline uint8_t reseed_action_uses_basic_fall_ledge_cooldown_tick(uint16_t
     default:
       return 0u;
   }
-}
-
-static inline uint8_t reseed_action_is_attackair(uint16_t action) {
-  // Generated from MotionState callback symbols ftCo_AttackAir_* for the five common aerial
-  // attacks. Exhaustive Fox/Falco equivalence is covered by tests/test_motion_state_owners_table.py.
-  return msl_motion_state_common_class_has_fast(action, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint8_t fallspecial_xc0_source_callsite_owner(uint8_t char_id,
@@ -771,42 +756,12 @@ static inline uint8_t seed_bridge_has_escapeair_x1988_masked_x198c(const MslSeed
   return 1u;
 }
 
-static inline int throw_index_from_action_id(uint16_t action_id) {
-  switch (action_id) {
-    case (uint16_t)MSL_ACT_THROW_F:
-      return 0;
-    case (uint16_t)MSL_ACT_THROW_B:
-      return 1;
-    case (uint16_t)MSL_ACT_THROW_HI:
-      return 2;
-    case (uint16_t)MSL_ACT_THROW_LW:
-      return 3;
-    default:
-      return -1;
-  }
-}
-
-static inline uint16_t throw_action_from_thrown_action(uint16_t action_id) {
-  switch (action_id) {
-    case (uint16_t)MSL_ACT_THROWN_F:
-      return (uint16_t)MSL_ACT_THROW_F;
-    case (uint16_t)MSL_ACT_THROWN_B:
-      return (uint16_t)MSL_ACT_THROW_B;
-    case (uint16_t)MSL_ACT_THROWN_HI:
-      return (uint16_t)MSL_ACT_THROW_HI;
-    case (uint16_t)MSL_ACT_THROWN_LW:
-      return (uint16_t)MSL_ACT_THROW_LW;
-    default:
-      return 0xFFFFu;
-  }
-}
-
 static inline int32_t throw_anim_rate_fp_from_pair(const MslBatch* batch, size_t owner_idx,
                                                    size_t victim_idx, uint16_t throw_action) {
   if (batch == NULL) {
     return 0;
   }
-  const int throw_index = throw_index_from_action_id(throw_action);
+  const int throw_index = msl_throw_index_from_owner_action(throw_action);
   if (throw_index < 0) {
     return 0;
   }
@@ -826,6 +781,46 @@ static inline int32_t throw_anim_rate_fp_from_pair(const MslBatch* batch, size_t
     }
   }
   return msl_q16_16_from_f32(throw_anim_speed);
+}
+
+static void reseed_throw_anim_rate_for_batch(MslBatch* batch, int bi, int active_players) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || active_players <= 0) {
+    return;
+  }
+
+  for (int p = 0; p < active_players; p++) {
+    batch->state.throw_anim_rate_fp_q16_16[msl_idx_player(bi, p)] = 0;
+  }
+  for (int owner = 0; owner < active_players; owner++) {
+    const size_t o_idx = msl_idx_player(bi, owner);
+    const uint8_t victim = batch->state.attached_victim_port[o_idx];
+    if (victim == 0xFFu || victim >= (uint8_t)active_players || victim == (uint8_t)owner) {
+      continue;
+    }
+    const size_t v_idx = msl_idx_player(bi, (int)victim);
+    const uint16_t throw_action = batch->state.action_id[o_idx];
+    if (msl_throw_index_from_owner_action(throw_action) < 0 ||
+        msl_throw_owner_action_from_victim(batch->state.action_id[v_idx]) != throw_action ||
+        batch->state.grab_owner_port[v_idx] != (uint8_t)owner) {
+      continue;
+    }
+    const int32_t rate_fp = throw_anim_rate_fp_from_pair(batch, o_idx, v_idx, throw_action);
+    if (rate_fp <= 0) {
+      continue;
+    }
+
+    // ftCo_800DD4B0 computes one victim-weight rate and ftCo_800DD398 installs it on both
+    // fighter AObjs. Hitlag gates Fighter_8006A360; it does not overwrite frame_speed_mul.
+    // Reconstruct that persistent source field before seeking either command stream so a
+    // hitlag-exit replay boundary cannot rebuild the throw script at a fabricated unit/zero rate.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+    batch->state.throw_anim_rate_fp_q16_16[o_idx] = rate_fp;
+    batch->state.throw_anim_rate_fp_q16_16[v_idx] = rate_fp;
+    batch->state.frame_speed_mul_fp_q16_16[o_idx] = rate_fp;
+    batch->state.frame_speed_mul_fp_q16_16[v_idx] = rate_fp;
+  }
 }
 
 MslBatch* msl_batch_create(int batch_size, int num_players) {
@@ -848,7 +843,7 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     msl_batch_destroy(batch);
     return NULL;
   }
-  if (combat_processhit_pair_scratch_init(batch) != 0) {
+  if (combat_processhit_pending_init(batch) != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }
@@ -947,6 +942,16 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
   memset(batch->hurtcap_matrix_valid, 0, hurtcap_count * sizeof(uint8_t));
+
+  const size_t fighter_count = (size_t)batch_size * (size_t)MSL_MAX_PLAYERS;
+  batch->live_pose_materialized = (uint8_t*)alloc_malloc(fighter_count * sizeof(uint8_t));
+  batch->live_pose_local = (MslLivePoseLocal*)alloc_malloc(
+      fighter_count * (size_t)MSL_LIVE_POSE_LOCAL_CAP * sizeof(MslLivePoseLocal));
+  if (batch->live_pose_materialized == NULL || batch->live_pose_local == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->live_pose_materialized, 0, fighter_count * sizeof(uint8_t));
 
   batch->rng_shadow_seed = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
   batch->debug_rng_seed_in = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
@@ -1076,7 +1081,7 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
 
-  if (move_tables_init() != 0) {
+  if (script_events_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }
@@ -1105,13 +1110,15 @@ void msl_batch_destroy(MslBatch* batch) {
   if (batch->debug_rng_trace_file != NULL) {
     (void)fclose((FILE*)batch->debug_rng_trace_file);
   }
-  combat_processhit_pair_scratch_free(batch);
+  combat_processhit_pending_free(batch);
   alloc_free(batch->rng_site_counts);
   alloc_free(batch->debug_rng_seed_out);
   alloc_free(batch->debug_rng_seed_in);
   alloc_free(batch->rng_shadow_seed);
   alloc_free(batch->hurtcap_matrix);
   alloc_free(batch->hurtcap_matrix_valid);
+  alloc_free(batch->live_pose_local);
+  alloc_free(batch->live_pose_materialized);
   alloc_free(batch->debug_hit_status_override);
   alloc_free(batch->camera_zoom_hold_x2ba);
   alloc_free(batch->camera_zoom_scale_x2bc);
@@ -1172,6 +1179,9 @@ static void msl_batch_copy_runtime_lane(MslBatch* dst, const MslBatch* src, int3
                        (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HURTCAPS);
   MSL_BATCH_COPY_FIELD(hurtcap_matrix, float,
                        (size_t)MSL_MAX_PLAYERS*(size_t)MSL_MAX_HURTCAPS * 12u);
+  MSL_BATCH_COPY_FIELD(live_pose_materialized, uint8_t, (size_t)MSL_MAX_PLAYERS);
+  MSL_BATCH_COPY_FIELD(live_pose_local, MslLivePoseLocal,
+                       (size_t)MSL_MAX_PLAYERS * (size_t)MSL_LIVE_POSE_LOCAL_CAP);
   MSL_BATCH_COPY_FIELD(rng_shadow_seed, uint32_t, 1u);
   MSL_BATCH_COPY_FIELD(debug_rng_seed_in, uint32_t, 1u);
   MSL_BATCH_COPY_FIELD(debug_rng_seed_out, uint32_t, 1u);
@@ -1414,33 +1424,6 @@ static inline uint8_t msl_seed_has_live_owner_blaster_article(const MslSeed* see
   return 0u;
 }
 
-static inline uint8_t msl_seed_has_other_unseeded_damageflyroll_gate_candidate(const MslSeed* seed,
-                                                                               int active_players,
-                                                                               int seeded_victim) {
-  if (seed == NULL) {
-    return 0u;
-  }
-  const MslCommonParams* common = msl_common_params();
-  if (common == NULL) {
-    return 0u;
-  }
-  const float roll_threshold = (float)common->damagefly_roll_percent_threshold;
-  for (int p = 0; p < active_players; p++) {
-    if (p == seeded_victim || seed->fighter_8006cda4_pre_gate_consume_count[p] != 0u ||
-        seed->on_ground[p] != 0u || seed->hitlag[p] != 0u || seed->percent[p] < roll_threshold) {
-      continue;
-    }
-    const uint16_t action = seed->action_id[p];
-    if (action == (uint16_t)MSL_ACT_ATTACK_AIR_B && seed->action_frame[p] >= 5) {
-      return 1u;
-    }
-    if (action == (uint16_t)MSL_ACT_ATTACK_AIR_N || action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP) {
-      return 1u;
-    }
-  }
-  return 0u;
-}
-
 static inline uint8_t msl_seed_has_fod_platform_scheduler_rng_owner(const MslSeed* seed) {
   if (seed == NULL || seed->stage_id != (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS) {
     return 0u;
@@ -1591,11 +1574,6 @@ static inline uint8_t msl_seed_has_pre_matchflow_rng_prefix(const MslSeed* seed,
       // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8,getAnimID}
       return 1u;
     }
-    if (seed->fighter_8006cda4_pre_gate_consume_count[p] != 0u) {
-      // Explicit seed lane for Fighter_8006CDA4's HSD_Randi pre-gate consumers.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-      return 1u;
-    }
     const uint16_t action = seed->action_id[p];
     if ((action >= (uint16_t)MSL_ACT_ATTACK_11 && action <= (uint16_t)MSL_ACT_ATTACK_LW4) ||
         (action >= (uint16_t)MSL_ACT_ATTACK_AIR_N && action <= (uint16_t)MSL_ACT_ATTACK_AIR_LW)) {
@@ -1610,11 +1588,10 @@ static inline uint8_t msl_seed_has_pre_matchflow_rng_prefix(const MslSeed* seed,
       return 1u;
     }
     if (seed->animation_index[p] <= 0xFFFFu && seed->action_frame[p] >= 0) {
-      uint8_t random_ranges[1] = {0};
-      const uint8_t pulse_n = move_tables_special_pseudo_random_sfx_ranges_crossed(
-          seed->char_id[p], (uint16_t)seed->animation_index[p], (float)seed->action_frame[p],
-          (float)(seed->action_frame[p] + 1), random_ranges, 1u);
-      if (pulse_n != 0u && random_ranges[0] != 0u) {
+      const MslScriptEvent* sfx = script_events_first_crossed(
+          seed->char_id[p], (uint16_t)seed->animation_index[p], MSL_SCRIPT_EVENT_PSEUDO_RANDOM_SFX,
+          (float)seed->action_frame[p], (float)(seed->action_frame[p] + 1));
+      if (sfx != NULL && sfx->payload.pseudo_random_sfx.random_range != 0u) {
         // Command opcode 38 (`ftAction_80071FC8`) consumes HSD_Randi(random_range) on the
         // extracted script timeline before match-flow. The top-blast site must wait for a modeled
         // prefix rather than consuming the raw replay frame seed.
@@ -1765,46 +1742,8 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
   for (int victim = 0; victim < active_players; victim++) {
     const int attacker = msl_damage_source_seed_local_slot_from_port0(seed, active_players,
                                                                       seed->last_hit_by[victim]);
-    if (seed->fighter_8006cda4_pre_gate_consume_count[victim] >= 1u &&
-        seed->fighter_8006cda4_pre_gate_consume_count[victim] <= 4u) {
-      // Replay-seeded delayed Fighter_8006CDA4 stream-phase rollouts need the Slippi frame-start
-      // RNG clock to advance until combat consumes the later DamageFlyRoll gate. This rollout-only
-      // clock owner is separate from normal one-step reseed metadata. Do not promote the global
-      // replay clock when another player has an unseeded DamageFlyRoll gate candidate in the same
-      // batch: Slippi exposes one frame-start stream, and without that second gate's hidden
-      // Fighter_8006CDA4 phase, advancing the global seed for the seeded victim can perturb the
-      // unrelated gate.
-      //
-      // LandingAirLw's seed lane is only source-owned for one-step reconstruction and current
-      // ProcessHit admission; a stale LandingAirLw row without that live DownAttackU hit source
-      // must not own the later global rollout RNG clock.
-      // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
-      if (!msl_seed_has_other_unseeded_damageflyroll_gate_candidate(seed, active_players, victim)) {
-        if (seed->action_id[victim] != (uint16_t)MSL_ACT_LANDING_AIR_LW) {
-          return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
-        }
-      }
-    }
     if (attacker < 0 || attacker == victim) {
       continue;
-    }
-    if (seed->action_id[victim] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
-        seed->on_ground[victim] == 0u && seed->hitlag[victim] == 0u &&
-        seed->hitstun[victim] != 0u &&
-        seed->fighter_8006cda4_pre_gate_consume_count[victim] != 0u &&
-        seed->instance_hit_by[victim] != 0u) {
-      // Replay-seeded AttackAirB -> DamageFlyTop carry rollouts need the Slippi frame-start RNG
-      // clock to advance until the delayed damage-entry frame. The visible discriminator is the
-      // explicit Fighter_8006CDA4 stream-phase lane plus live source-instance provenance.
-      // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
-      // refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm
-      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by raw source-port domain)
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
     const uint8_t victim_fx_kind =
         msl_motion_state_fx_special_kind(seed->char_id[victim], seed->action_id[victim]);
@@ -2440,34 +2379,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.illusion_ghost_pos1_y[idx] = seed->illusion_ghost_pos1_y[p];
       batch->state.illusion_ghost_pos2_x[idx] = seed->illusion_ghost_pos2_x[p];
       batch->state.illusion_ghost_pos2_y[idx] = seed->illusion_ghost_pos2_y[p];
-      // Throw pulse-consume seed lane (producer: validation replay-buffer seed derivation).
-      // Decomp owner:
-      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-      // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-      batch->state.throw_pulse_consumed[idx] = seed->throw_pulse_consumed[p] ? 1u : 0u;
-      // Previous-step throw pulse crossing lane (strictly causal seed producer).
-      batch->state.throw_pulse_crossed_prev_frame[idx] = seed->throw_pulse_crossed_prev_frame[p];
-      // Command-timer pending pulse lane for this teacher-forced step. This is seed-authoritative
-      // only for the current one-step row; clear_seed_owned_transients_post_frame() drops validity
-      // so rollout can fall back to runtime frame-crossing.
-      // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-      batch->state.throw_command_pending_pulse_frame[idx] =
-          seed->throw_command_pending_pulse_frame[p];
-      batch->state.throw_command_pending_seed_valid[idx] = 1u;
-      batch->state.throw_command_deferred_pulse_frame[idx] = 0u;
-      batch->state.throw_pulse_crossed_curr_frame[idx] = 0u;
       batch->state.source_clear_timer_x18c8[idx] = seed->source_clear_timer_x18c8[p];
-      batch->state.source_clear_owner_set_phase[idx] =
-          seed->source_clear_owner_set_phase[p] ? 1u : 0u;
-      batch->state.source_clear_processhit_damage_pending_phase[idx] =
-          seed->source_clear_processhit_damage_pending_phase[p] ? 1u : 0u;
-      batch->state.fighter_8006cda4_pre_gate_consume_count[idx] =
-          seed->fighter_8006cda4_pre_gate_consume_count[p];
-      batch->state.source_clear_grounded_damage_clear_phase[idx] =
-          seed->source_clear_grounded_damage_clear_phase[p] ? 1u : 0u;
-      batch->state.source_clear_terminal_phase[idx] =
-          seed->source_clear_terminal_phase[p] ? 1u : 0u;
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
       batch->state.match_flow_pending_rebirth_char_id[idx] =
           seed->match_flow_pending_rebirth_char_id[p];
@@ -2577,48 +2489,19 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         }
       }
       batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
-      batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
-      // GuardOn/GuardReflect entry latches are callback-local products used by the reflect item
-      // owner path during the current frame. They are not replay seed state; source callbacks arm
-      // them on GuardOn/GuardReflect entry, and action_update decays them after the frame.
-      // Reseed must not let a previous same-lane row's GuardOn entry feed a later row's
-      // powershield/reflect transfer.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-      //   ftCo_80091A4C,ftCo_8009370C,ftCo_8009388C}
-      batch->state.guard_on_entered_this_frame[idx] = 0u;
-      batch->state.guard_entry_via_wait_callback[idx] = 0u;
       batch->state.guard_entry_via_dash_91ad8[idx] = 0u;
-      batch->state.guard_on_entry_reflect_source_latch[idx] = 0u;
-      batch->state.guard_reflect_entered_this_frame[idx] = 0u;
       batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
       batch->state.guard_seed_shield_desc_active[idx] =
           ((seed->state_flags[p][MSL_STATE_FLAGS_221B_INDEX] &
             (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u)
               ? 1u
               : 0u;
-      uint8_t has_seeded_shield_contact =
-          (seed->combat_shield_hit_int_damage[p] != 0u || seed->combat_shield_damage_taken[p] != 0u)
-              ? 1u
-              : 0u;
-      for (uint8_t attacker = 0; attacker < MSL_MAX_PLAYERS && has_seeded_shield_contact == 0u;
-           ++attacker) {
-        for (uint8_t hb = 0; hb < MSL_MAX_HITBOXES; ++hb) {
-          if (seed->combat_shield_contact_hb_kind[attacker][hb][p] != 0u) {
-            has_seeded_shield_contact = 1u;
-            break;
-          }
-        }
-      }
       // ShieldDesc geometry (`fp->x221B_b0` consumer) is a live collision-refresh product. When the
-      // seed exports neither an active ShieldDesc bit nor one-step shield-contact provenance, start
-      // with no live descriptor so a previous same-lane row's shield bubble cannot suppress stale
-      // dense HitCapsule trim before the current frame publishes a descriptor. Rows whose seed
-      // proves active ShieldDesc or x19A*/ShieldDesc contact keep the existing pre-refresh bridge
-      // until that geometry is promoted to an explicit seed lane.
+      // seed does not export an active ShieldDesc bit, start with no live descriptor so a previous
+      // same-lane row cannot suppress stale dense HitCapsule trim before this frame publishes one.
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80078C70}
       // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
-      if (batch->state.guard_seed_shield_desc_active[idx] == 0u &&
-          has_seeded_shield_contact == 0u) {
+      if (batch->state.guard_seed_shield_desc_active[idx] == 0u) {
         batch->state.shield_x[idx] = batch->state.pos_x[idx];
         batch->state.shield_y[idx] = batch->state.pos_y[idx];
         batch->state.shield_z[idx] = batch->state.pos_z[idx];
@@ -2629,6 +2512,20 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
       // plus a strictly-causal derived fp->frame_speed_mul.
       msl_anim_timebase_seed(batch, idx, seed->anim_frame_f32[p], seed->frame_speed_mul_f32[p]);
+      // SmashState is the authoritative source owner for the live AObj rate at a replay boundary.
+      // The delta-derived seed rate is one input-callback phase behind on both charge edges:
+      // PreCharge -> Charging freezes after the frame reaches the command, while Charging ->
+      // Release restores the saved rate after a zero-delta tick. Apply the already-derived source
+      // state here so the next Anim proc consumes the rate that Melee left live post-frame.
+      // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEF38,ftCo_800DF0D0}
+      if (batch->state.smash_charge_state[idx] == 2u) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+        batch->state.kb_smashcharge_active[idx] = 1u;
+      } else if (batch->state.smash_charge_state[idx] == 3u) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] =
+            batch->state.smash_charge_saved_rate_fp_q16_16[idx];
+        batch->state.kb_smashcharge_active[idx] = 0u;
+      }
       // Hidden CommonFall/FallAerial/FallSpecial JObj blend reconstruction:
       // Slippi exposes cur_anim_frame but not mv.co.{fall,fallaerial,fallspecial}.x4. Reconstruct
       // the source recurrence from action entry so the next live Anim callback and BODY collision
@@ -2646,18 +2543,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.common_fall_blend_x4[idx] = seed->common_fall_blend_x4_f32[p];
         batch->state.common_fall_blend_msid[idx] = seed->common_fall_blend_msid_u16[p];
       }
-      // GuardSetOff hidden exit-rate owner:
-      // frame_speed_mul_f32 above remains strictly causal. This explicit GuardSetOff-only lane
-      // carries the replay-visible `fp->frame_speed_mul` source value from the shield-hit entry /
-      // frozen hitlag segment until Fighter_8006A1BC exits hitlag and Fighter_8006A360 consumes it
-      // for the first non-hitlag animation advance.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
-      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-      const float guard_setoff_exit_rate = seed->guard_setoff_exit_frame_speed_mul_f32[p];
-      batch->state.guard_setoff_exit_rate_fp_q16_16[idx] =
-          (isfinite(guard_setoff_exit_rate) && guard_setoff_exit_rate > 0.0f)
-              ? msl_q16_16_from_f32(guard_setoff_exit_rate)
-              : 0;
       float walk_anim_source_vel = seed->walk_anim_source_vel_f32[p];
       if (!isfinite(walk_anim_source_vel)) {
         walk_anim_source_vel = 0.0f;
@@ -2702,16 +2587,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           seed->guard_reflect_origin_guardon_u8[p] ? 1u : 0u;
       batch->state.guard_special_enable_timer_x1c[idx] = seed->guard_special_enable_timer_x1c[p];
       batch->state.guard_release_latched_xc[idx] = seed->guard_release_latched_xc[p] ? 1 : 0;
+      batch->state.guard_anim_counter_x0[idx] = seed->guard_anim_counter_x0[p];
       batch->state.guard_x10[idx] = seed->guard_x10[p];
-      batch->state.guard_on_cliff_end_source[idx] = 0u;
       batch->state.lightshield_amount[idx] = seed->lightshield_amount[p];
       batch->state.guard_setoff_hitlag_damage_min[idx] = seed->guard_setoff_hitlag_damage_min[p];
-      batch->state.combat_shield_hit_int_damage[idx] = seed->combat_shield_hit_int_damage[p];
-      batch->state.combat_shield_damage_taken[idx] = seed->combat_shield_damage_taken[p];
-      batch->state.guard_setoff_hitlag_exit_phase_u8[idx] =
-          seed->guard_setoff_hitlag_exit_phase_u8[p];
-      batch->state.guard_setoff_post_hitlag_owner_u8[idx] =
-          seed->guard_setoff_post_hitlag_owner_u8[p];
       batch->state.jumps_left[idx] = seed->jumps_left[p];
       batch->state.stocks[idx] = seed->stocks[p];
       batch->state.kneebend_jump_input[idx] = seed->kneebend_jump_input[p];
@@ -2776,20 +2655,15 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.falcon_speciallw_friction[idx] =
           seed->falcon_speciallw_friction[p] > 0.0f ? seed->falcon_speciallw_friction[p] : 1.0f;
       batch->state.run_x0[idx] = seed->run_x0[p];
-      batch->state.runbrake_cmd0[idx] = seed->runbrake_cmd0[p] ? 1u : 0u;
-      batch->state.runbrake_freeze_x0[idx] = 0u;
-      if (seed->action_id[p] == (uint16_t)MSL_ACT_RUN_BRAKE &&
-          seed->frame_speed_mul_f32[p] == 0.0f &&
-          move_tables_runbrake_cmd1_active(seed->char_id[p], seed->anim_frame_f32[p]) != 0u) {
-        // RunBrake_Anim owns cmd_vars[1] and mv.co.runbrake.x0. A zero frame_speed seed on the
-        // cmd1 script frame proves the source latch is already in the sustained freeze/resume
-        // slice. Nonzero-rate cmd1 rows must leave the command live: vanilla can still run
-        // ftAnim_SetAnimRate(0) during the current Anim callback before publishing this step.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Anim
-        // data/scripts/<char>.bin::MSLFTSC1 ftCo_SM_RunBrake set_cmd_var(idx=1,value=1)
-        // data/common/ft_common_data.json::runbrake_anim_freeze_speed_threshold
-        batch->state.runbrake_freeze_x0[idx] = 1u;
-      }
+      // RunBrake's zero visible delta proves its hidden freeze latch is armed. TurnRun is finalized
+      // after the live command stream seek below because its visible delta lags the callback at
+      // both the freeze and resume edges.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Anim
+      batch->state.runbrake_freeze_x0[idx] = (seed->action_id[p] == (uint16_t)MSL_ACT_RUN_BRAKE &&
+                                              seed->frame_speed_mul_f32[p] == 0.0f)
+                                                 ? 1u
+                                                 : 0u;
+      batch->state.turnrun_x14[idx] = 0u;
       batch->state.dash_x4[idx] = seed->dash_x4[p];
       batch->state.shine_release_lag[idx] = seed->shine_release_lag[p];
       batch->state.shine_is_release[idx] = seed->shine_is_release[p];
@@ -2918,16 +2792,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       //
       // refs/melee/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c::{ftMs_SpecialHi_Phys,
       //   ftMs_SpecialHi_Coll}
-      if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_MARTH &&
-          (seed->action_id[p] == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
-           seed->action_id[p] == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) &&
-          seed->on_ground[p] == 0u && seed->speed_y_self[p] < 0.0f &&
-          move_tables_special_cmd_var_value_at_frame(seed->char_id[p],
-                                                     (uint16_t)(295u + (seed->action_id[p] - 341u)),
-                                                     0u, (float)seed->action_frame[p])) {
-        batch->state.special_cmd2[idx] = 1u;
-        batch->state.special_cmd1[idx] = 1u;
-      }
       // FallSpecial xC mode is not exposed by Slippi directly; derive it deterministically from
       // seeded source-owned evidence when possible.
       //
@@ -3079,7 +2943,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.damage_meteor_cancel_eligible_x1a[idx] =
           ((damage_cb_packed & (uint8_t)MSL_DAMAGE_METEOR_CANCEL_X1A_MASK) != 0u) ? 1u : 0u;
       batch->state.attacker_shield_ground_kb_vel[idx] = seed->attacker_shield_ground_kb_vel[p];
-      batch->state.throw_pending_victim_port[idx] = 0xFFu;
       batch->state.attached_victim_port[idx] = 0xFFu;
       batch->state.throw_anim_rate_fp_q16_16[idx] = 0;
       batch->state.l_cancel[idx] = seed->l_cancel[p];
@@ -3101,13 +2964,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // (msid, frame) and it matches the seeded merged value, treat the x198C lane as 0.
         // This prevents stale carry when x1988 windows end on the next frame.
         uint8_t seed_x1988 = 0u;
-        const uint32_t anim_u32 = seed->animation_index[p];
-        if (anim_u32 <= 0xFFFFu) {
-          const uint16_t msid = (uint16_t)anim_u32;
-          const float af = msl_anim_frame_sanitize_f32(seed->anim_frame_f32[p]);
-          const uint16_t fr = msl_anim_frame_floor_u16(af);
-          (void)move_tables_hit_status_at_frame(seed->char_id[p], msid, fr, &seed_x1988);
-        }
+        // The live interpreter is rebuilt after all fighters and attachment-dependent throw rates
+        // are installed. Its x1988 product is reconciled with this hidden x198C seed below.
         if (seed_x1988 != 0u && seed_hurtbox_state == seed_x1988) {
           batch->state.colanim_hit_status_x198c[idx] = 0u;
         }
@@ -3277,6 +3135,57 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         seed_ground_normal_from_floor_id(batch, bi, idx, seed->stage_id, seed->ground_id[p]);
       }
       batch->state.animation_index[idx] = seed->animation_index[p];
+      batch->state.collision_pose_valid[idx] = 0u;
+      batch->state.collision_pose_facing[idx] = batch->state.facing[idx] ? 1u : 0u;
+      batch->state.collision_pose_action_id[idx] = batch->state.action_id[idx];
+      batch->state.collision_pose_anim_frame[idx] = seed->anim_frame_f32[p];
+      if (seed->animation_index[p] <= (uint32_t)UINT16_MAX) {
+        batch->state.collision_pose_msid[idx] = (uint16_t)seed->animation_index[p];
+        batch->state.collision_pose_valid[idx] = 1u;
+      } else {
+        const uint16_t pose_msid =
+            msl_motion_state_submotion_id(batch->state.char_id[idx], batch->state.action_id[idx]);
+        if (pose_msid != UINT16_MAX) {
+          batch->state.collision_pose_msid[idx] = pose_msid;
+          batch->state.collision_pose_valid[idx] = 1u;
+        }
+      }
+      anim_pose_live_discard(batch, idx);
+      if (seed->guard_pose_history_valid_u8[p] != 0u &&
+          seed->guard_pose_history_count_u8[p] <= (uint8_t)MSL_GUARD_POSE_HISTORY_CAP &&
+          (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON ||
+           batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD ||
+           batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) &&
+          anim_pose_live_materialize(batch, idx, seed->guard_pose_entry_msid_u16[p],
+                                     seed->guard_pose_entry_anim_frame_f32[p]) == 0) {
+        const uint16_t seeded_x8 = batch->state.guard_tilt_x8[idx];
+        const float seeded_x4 = batch->state.guard_tilt_x4[idx];
+        uint8_t pose_ok = 1u;
+        for (uint8_t hi = 0u; hi < seed->guard_pose_history_count_u8[p]; hi++) {
+          const float weight = seed->guard_pose_target_weight_f32[p][hi];
+          const float x4 = seed->guard_pose_tilt_x4_f32[p][hi];
+          if (!isfinite(weight) || !isfinite(x4)) {
+            pose_ok = 0u;
+            break;
+          }
+          batch->state.guard_tilt_x8[idx] = seed->guard_pose_tilt_x8_u16[p][hi];
+          batch->state.guard_tilt_x4[idx] = x4;
+          if (anim_pose_live_guard_apply(batch, idx, weight) != 0) {
+            pose_ok = 0u;
+            break;
+          }
+        }
+        batch->state.guard_tilt_x8[idx] = seeded_x8;
+        batch->state.guard_tilt_x4[idx] = seeded_x4;
+        if (pose_ok == 0u) {
+          anim_pose_live_discard(batch, idx);
+        }
+        // This restores the actual persistent JObj-local source state at a teacher-forced replay
+        // boundary. Normal rollouts update the same allocation-free live tree causally in
+        // ftCo_80091E78-shaped Guard callbacks; there is no alternate collision path.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        //   ftCo_800921DC,ftCo_80091E78,ftCo_GuardOn_Anim,ftCo_Guard_Anim}
+      }
       {
         // CollData ECB lifetime seed:
         // Source mpColl carries current/prev/desired ECB points as hidden collision state across
@@ -3457,6 +3366,34 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.dynamic_pose_axis_z[di] = 0.0f;
         batch->state.dynamic_pose_angle[di] = 0.0f;
       }
+      // Dynamics runs at fighter GObj priority 0x10, after collision/ProcessHit. A Slippi seed is
+      // the completed previous frame, so reconstruct its persistent DynamicsDesc now; the next
+      // step consumes this pose before advancing the chain at its own priority-0x10 tail.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_Create,Fighter_8006D9AC}
+      // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009E0A8
+      const uint8_t dynamic_seed_nodes = seed->dynamic_pose_seed_node_count_u8[p];
+      if (seed->dynamic_pose_seed_valid_u8[p] != 0u && dynamic_seed_nodes != 0u &&
+          dynamic_seed_nodes <= (uint8_t)MSL_SEED_DYNAMIC_NODES) {
+        batch->state.dynamic_pose_state_valid[idx] = 1u;
+        batch->state.dynamic_pose_apply_collision_matrix[idx] =
+            seed->dynamic_pose_seed_apply_u8[p] != 0u ? 1u : 0u;
+        batch->state.dynamic_pose_node_count[idx] = dynamic_seed_nodes;
+        for (uint8_t dn = 0u; dn < dynamic_seed_nodes; dn++) {
+          const size_t di = idx * (size_t)MSL_MAX_DYNAMIC_NODES + (size_t)dn;
+          batch->state.dynamic_pose_rot_x[di] = seed->dynamic_pose_seed_rot_x_f32[p][dn];
+          batch->state.dynamic_pose_rot_y[di] = seed->dynamic_pose_seed_rot_y_f32[p][dn];
+          batch->state.dynamic_pose_rot_z[di] = seed->dynamic_pose_seed_rot_z_f32[p][dn];
+          batch->state.dynamic_pose_pos_x[di] = seed->dynamic_pose_seed_pos_x_f32[p][dn];
+          batch->state.dynamic_pose_pos_y[di] = seed->dynamic_pose_seed_pos_y_f32[p][dn];
+          batch->state.dynamic_pose_pos_z[di] = seed->dynamic_pose_seed_pos_z_f32[p][dn];
+          batch->state.dynamic_pose_axis_x[di] = seed->dynamic_pose_seed_axis_x_f32[p][dn];
+          batch->state.dynamic_pose_axis_y[di] = seed->dynamic_pose_seed_axis_y_f32[p][dn];
+          batch->state.dynamic_pose_axis_z[di] = seed->dynamic_pose_seed_axis_z_f32[p][dn];
+          batch->state.dynamic_pose_angle[di] = seed->dynamic_pose_seed_angle_f32[p][dn];
+        }
+      } else {
+        anim_pose_reseed_dynamic_state(batch, idx);
+      }
       batch->state.instance_hit_by[idx] = seed->instance_hit_by[p];
       batch->state.instance_id[idx] = seed->instance_id[p];
       batch->state.motion_entry_instance_id_override[idx] =
@@ -3536,7 +3473,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           }
         }
         batch->state.capture_wait_jump_latch[idx] = seed->capture_wait_jump_latch_u8[p] ? 1u : 0u;
-        batch->state.capture_breakout_pending[idx] = seed->capture_breakout_pending_u8[p] ? 1u : 0u;
       }
       if (seed->instance_id[p] > max_instance_id) {
         max_instance_id = seed->instance_id[p];
@@ -3578,6 +3514,11 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           (seed->source_port0[p] < (uint8_t)MSL_MAX_PLAYERS) ? seed->source_port0[p] : (uint8_t)p;
       batch->state.last_hit_by[idx] = seed->last_hit_by[p];
       batch->state.grab_owner_port[idx] = seed->grab_owner_port[p];
+      batch->state.grab_constraint_x2174_x[idx] = seed->grab_constraint_x2174_x_f32[p];
+      batch->state.grab_constraint_x2174_y[idx] = seed->grab_constraint_x2174_y_f32[p];
+      batch->state.grab_constraint_x2174_z[idx] = seed->grab_constraint_x2174_z_f32[p];
+      batch->state.grab_constraint_x2174_valid[idx] =
+          seed->grab_constraint_x2174_valid_u8[p] ? 1u : 0u;
       batch->state.grab_mash_stick_x_sign[idx] = seed->grab_mash_stick_x_sign[p];
       batch->state.grab_mash_stick_y_sign[idx] = seed->grab_mash_stick_y_sign[p];
 
@@ -3759,13 +3700,57 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
 
     // Compute decomp-shaped grab attachment offsets (fp->x1A70 analog) for any seeded victims.
     grab_attachment_reseed_init(batch, bi);
-    // Reconstruct hidden Falcon Dive lanes (mv.ca.specialhi.vel, x221B_b7) from visible seed
-    // lanes.
+    grab_flow_refresh_catch_contract_for_batch_index(batch, bi);
+
+    // Attachment reconstruction establishes the source thrower/victim pair. Restore its one
+    // shared AObj rate before rebuilding the command interpreter; the interpreter timer is rate
+    // dependent and cannot be repaired after a unit-rate seek.
+    reseed_throw_anim_rate_for_batch(batch, bi, active_players);
+
+    // Reconstruct the live command cursor and HitCapsule payload once from the source script.
+    // Free-running gameplay advances this same state causally and never branches on reseed.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_80073240
+    for (int p = 0; p < active_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      fighter_script_disable_hitcapsules(batch, idx);
+      fighter_script_reseed(batch, idx);
+      const uint8_t live_x1988 = batch->state.script_hit_status_x1988[idx];
+      if (live_x1988 != 0u && seed->hurtbox_state[p] == live_x1988) {
+        if (seed_bridge_has_shine_start_x1988_masked_x198c(seed, p, seed->hurtbox_state[p],
+                                                           live_x1988)) {
+          batch->state.colanim_hit_status_x198c[idx] = 1u;
+          if (seed->colanim_rebirth_fall_x1994_seed[p] != 0u) {
+            batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
+          }
+        } else if (seed_bridge_has_escapeair_x1988_masked_x198c(seed, p, seed->hurtbox_state[p],
+                                                                live_x1988)) {
+          batch->state.colanim_hit_status_x198c[idx] = 1u;
+          batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
+        } else if (batch->state.colanim_timer_x1990[idx] == 0u) {
+          batch->state.colanim_hit_status_x198c[idx] = 0u;
+        }
+      }
+      if (seed->char_id[p] == (uint8_t)MSL_CHAR_ID_MARTH &&
+          (seed->action_id[p] == (uint16_t)MSL_ACT_MS_SPECIAL_HI ||
+           seed->action_id[p] == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_HI) &&
+          seed->on_ground[p] == 0u && seed->speed_y_self[p] < 0.0f &&
+          fighter_script_cmd_var(batch, idx, 0u) != 0u) {
+        batch->state.special_cmd2[idx] = 1u;
+        batch->state.special_cmd1[idx] = 1u;
+      }
+      locomotion_reseed_anim_callback_state(batch, idx);
+      hitboxes_reseed_player(batch, idx);
+    }
+
+    // Reconstruct callback-consumed Falcon fields only after the source command interpreter has
+    // sought to the replay boundary. This uses the same live cmd_vars as free-running gameplay,
+    // rather than a second absolute-frame script snapshot.
+    // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_Special{N,S,Hi}.c
     falcon_specials_reseed_init(batch, bi);
     // ftCo_800DB368 constrains exactly one side of a live Falcon Dive hold. This source bit is
     // reconstructed only after x221B_b7 establishes the fixed connect-time mode.
     grab_attachment_falcon_dive_constraint_reseed_init(batch, bi);
-    grab_flow_refresh_catch_contract_for_batch_index(batch, bi);
 
     // Combat hitlist reseed generation:
     // - Seed carries a dense per-(attacker,hit_group,victim) snapshot, but runtime uses per-hitbox
@@ -3871,51 +3856,33 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.item_misc1[ii] = item->misc1;
       batch->state.item_misc2[ii] = item->misc2;
       batch->state.item_misc3[ii] = item->misc3;
+      batch->state.item_laser_scale[ii] = 0.0f;
+      const MslLaserParams* seeded_laser = laser_params_for_item_type(item->type);
+      if (item->exists != 0u && seeded_laser != NULL) {
+        const float speed = sqrtf(item->vel_x * item->vel_x + item->vel_y * item->vel_y);
+        float age = (float)seeded_laser->lifetime_frames - item->timer;
+        if (age < 0.0f) {
+          age = 0.0f;
+        }
+        const MslCharParams* source = msl_char_params_fast(seeded_laser->source_char_id);
+        const float cap =
+            (source != NULL && source->laser_scale_max > 0.0f) ? source->laser_scale_max : 1.0f;
+        float scale = age * fabsf(speed) / 11.25f;
+        if (scale > cap) {
+          scale = cap;
+        }
+        if (scale < 1.0e-5f) {
+          scale = 1.0e-3f;
+        }
+        batch->state.item_laser_scale[ii] = scale;
+      }
       batch->state.item_reflect_body_owner_port[ii] = 0xFFu;
       batch->state.item_reflect_body_attack_id[ii] = (uint16_t)MSL_FT_MOVE_ID_DEFAULT;
       batch->state.item_reflect_body_attack_instance[ii] = 0u;
       batch->state.item_reflect_body_damage_valid[ii] = 0u;
       batch->state.item_pending_reflect_owner_port[ii] = 0xFFu;
       batch->state.item_pending_reflect_instance_id[ii] = 0u;
-      batch->state.item_reflect_transfer_seed_port[ii] = seed->item_reflect_transfer_port[it];
-      batch->state.item_reflect_transfer_seed_iid[ii] = seed->item_reflect_transfer_iid[it];
-      batch->state.item_shield_bounce_seed_valid[ii] = seed->item_shield_bounce_valid[it] ? 1u : 0u;
-      batch->state.item_shield_bounce_seed_vel_x[ii] = seed->item_shield_bounce_vel_x[it];
-      batch->state.item_shield_bounce_seed_vel_y[ii] = seed->item_shield_bounce_vel_y[it];
-      batch->state.item_hidden_body_hit_victim_port[ii] =
-          seed->item_hidden_body_hit_victim_port[it];
-      batch->state.item_hidden_body_hit_hurt_height[ii] =
-          seed->item_hidden_body_hit_hurt_height[it];
       batch->state.item_hidden_callback_flags[ii] = seed->item_hidden_callback_flags[it];
-      batch->state.item_sheik_needle_callback_bounce_vel_y_index[ii] =
-          seed->item_sheik_needle_callback_bounce_vel_y_index[it];
-      batch->state.item_sheik_needle_callback_bounce_vel_x_index_sign[ii] =
-          seed->item_sheik_needle_callback_bounce_vel_x_index_sign[it];
-      batch->state.item_sheik_needle_callback_bounce_motion_valid[ii] = 0u;
-      batch->state.item_sheik_needle_callback_bounce_gravity_index[ii] = 0u;
-      batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii] = 0u;
-      if ((seed->item_hidden_callback_flags[it] &
-           (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE) != 0u &&
-          seed->item_sheik_needle_motion_seed_kind[it] == 3u &&
-          seed->item_sheik_needle_motion_gravity_index[it] < 8u &&
-          seed->item_sheik_needle_motion_min_vel_y_index[it] < 8u &&
-          item_article_params_for_sheik_needle_throw_item_type(item->type) != NULL) {
-        // One-step/reseed bridge for Logic109 -> SetupBounce hidden xDDC/xDE0 lanes. The seed row
-        // carries these in the generic Needle motion provenance fields when later same-spawn
-        // state-4 publications prove the source table samples.
-        // refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakNeedleThrown_SetupBounce
-        batch->state.item_sheik_needle_callback_bounce_motion_valid[ii] = 1u;
-        batch->state.item_sheik_needle_callback_bounce_gravity_index[ii] =
-            seed->item_sheik_needle_motion_gravity_index[it];
-        batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii] =
-            seed->item_sheik_needle_motion_min_vel_y_index[it];
-      }
-      batch->state.item_sheik_needle_stage_hit_seed_kind[ii] =
-          seed->item_sheik_needle_stage_hit_seed_kind[it];
-      batch->state.item_sheik_needle_stage_hit_vel_y_index[ii] =
-          seed->item_sheik_needle_stage_hit_vel_y_index[it];
-      batch->state.item_sheik_needle_stage_hit_vel_x_index_sign[ii] =
-          seed->item_sheik_needle_stage_hit_vel_x_index_sign[it];
       // Reseed rows expose the public item velocity but not Sheik Needle itemVar xDD8/xDDC/xDE0.
       // Clear resident hidden motion lanes so replay-seeded state-1/4 Needles use the visible
       // velocity reconstruction path instead of inheriting private state from a previous slot owner.
@@ -4076,244 +4043,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
     }
 
-    // Attachment links were reconstructed before the offset/constraint packet above. Rebuild the
-    // paired throw animation rate from that validated bidirectional link.
-    const int num_players = (int)batch->config.num_players;
-    for (int p = 0; p < num_players; p++) {
-      batch->state.throw_anim_rate_fp_q16_16[msl_idx_player(bi, p)] = 0;
-    }
-    for (int owner = 0; owner < num_players; owner++) {
-      const size_t o_idx = msl_idx_player(bi, owner);
-      const uint8_t victim = batch->state.attached_victim_port[o_idx];
-      if (victim == 0xFFu || victim >= (uint8_t)num_players || victim == (uint8_t)owner) {
-        continue;
-      }
-      const size_t v_idx = msl_idx_player(bi, (int)victim);
-      const uint16_t owner_action = batch->state.action_id[o_idx];
-      const uint16_t victim_action = batch->state.action_id[v_idx];
-      uint16_t throw_action = owner_action;
-      if (throw_index_from_action_id(throw_action) < 0) {
-        throw_action = throw_action_from_thrown_action(victim_action);
-      }
-      if (throw_action == 0xFFFFu) {
-        continue;
-      }
-      const int32_t rate_fp = throw_anim_rate_fp_from_pair(batch, o_idx, v_idx, throw_action);
-      if (rate_fp <= 0) {
-        continue;
-      }
-      batch->state.throw_anim_rate_fp_q16_16[o_idx] = rate_fp;
-      batch->state.throw_anim_rate_fp_q16_16[v_idx] = rate_fp;
-    }
-    for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      const uint8_t char_id = batch->state.char_id[idx];
-      const uint16_t action = batch->state.action_id[idx];
-      const MslLaserParams* lp = laser_params_get(char_id);
-      int16_t first_pulse_af = 0;
-      int16_t crossed_pulse_af = 0;
-      uint8_t crossed_pulse_ordinal = 0u;
-      const float af = msl_anim_frame_sanitize_f32(seed->anim_frame_f32[p]);
-      const float rate = seed->frame_speed_mul_f32[p];
-      if (rollout_owned_after != (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED ||
-          batch->state.throw_anim_rate_fp_q16_16[idx] != 0 ||
-          !reseed_throwhi_deferred_mid_pulse_rate_source_step(
-              batch->state.frame_speed_mul_fp_q16_16[idx]) ||
-          lp == NULL || char_id != (uint8_t)MSL_CHAR_ID_FALCO ||
-          action != (uint16_t)MSL_ACT_THROW_HI ||
-          seed->throw_command_pending_pulse_frame[p] != 0u ||
-          !move_tables_throw_projectile_first_pulse_frame(char_id, action, &first_pulse_af) ||
-          seed->throw_pulse_crossed_prev_frame[p] != (uint8_t)first_pulse_af ||
-          !move_tables_throw_crossed_projectile_pulse_frame(char_id, action, af, af + rate,
-                                                            &crossed_pulse_af) ||
-          !move_tables_throw_projectile_pulse_ordinal(char_id, action, crossed_pulse_af,
-                                                      &crossed_pulse_ordinal) ||
-          crossed_pulse_ordinal != 2u) {
-        continue;
-      }
-      uint8_t live_state1_shots = 0u;
-      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
-        const MslItem* si = &seed->items[it];
-        if (si->exists != 0u && si->owner == (int8_t)p && si->type == lp->shot_itkind &&
-            si->state == 1u) {
-          live_state1_shots = (uint8_t)(live_state1_shots + 1u);
-        }
-      }
-      uint8_t same_source_victim = 0u;
-      for (int vp = 0; vp < num_players; vp++) {
-        if (vp == p) {
-          continue;
-        }
-        const size_t v_idx = msl_idx_player(bi, vp);
-        if (batch->state.hitstun[v_idx] > 0u &&
-            msl_damage_source_victim_matches_attacker(batch, v_idx, idx, p)) {
-          same_source_victim = 1u;
-          break;
-        }
-      }
-      if (live_state1_shots == 1u && same_source_victim != 0u) {
-        // Falco ThrowHi deferred command cursor:
-        // - A rollout seed can begin after the frame-18 projectile command has produced one live
-        //   state1 article, while the frame-20 command reaches ftAction on the next 4/3-rate
-        //   callback but is serialized by the following Anim callback rather than the current
-        //   post-frame.
-        // - Reconstruct that hidden source cursor from causal seed state: extracted throw pulse
-        //   order, current frame_speed_mul, one live state1 shot, and same-source victim provenance.
-        //   This is not stage-owned and does not depend on replay row identity.
-        // - Teacher-forced one-step rows with an explicit pending command stay on
-        //   `throw_command_pending_pulse_frame`.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
-        //   ftCo_800DD4B0,ftCo_800DD724}
-        // refs/melee/src/melee/ft/ftaction.c::ftAction_80073354
-        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-        // data/moves/falco.json moves["ftCo_SM_ThrowHi"].events
-        batch->state.throw_command_deferred_pulse_frame[idx] = (uint8_t)crossed_pulse_af;
-        batch->state.throw_anim_rate_fp_q16_16[idx] = batch->state.frame_speed_mul_fp_q16_16[idx];
-      }
-    }
-
-    // Seed bridge: item hitlists (teacher-forced one-step).
-    //
-    // Decomp shape:
-    // - Item collision uses per-item HitCapsule victim rings to prevent re-hitting the same fighter
-    //   across frames (similar to fighter hitbox hitlists).
-    // - Tick/decrement path: refs/melee/src/melee/it/itcoll.c::it_8027146C
-    //
-    // Seed reality:
-    // - Seed schema currently carries fighter hitlist state but does not carry per-item hitlists.
-    // - Under teacher-forced reseed, this can cause false multi-frame item re-hits for items that
-    //   are supposed to persist after a suppressed BODY collision (e.g. grab-owner laser on an
-    //   attached Thrown*/Capture* victim).
-    //
-    // Minimal parity fix (suite-focused, deterministic, no allocations):
-    // - If a victim is still attached (grab_owner_port) and still in a grabbed-victim action and
-    //   is in hitlag from a prior item hit (seeded), pre-latch the matching laser item(s) into the
-    //   per-item hitlist so this step cannot apply an additional BODY hit.
-    for (int victim = 0; victim < num_players; victim++) {
-      if (seed->hitlag[victim] == 0u) {
-        continue;
-      }
-      const uint8_t owner = seed->grab_owner_port[victim];
-      if (owner == 0xFFu || owner >= (uint8_t)num_players) {
-        continue;
-      }
-      const uint16_t act = seed->action_id[victim];
-      if (!msl_action_is_grabbed_victim(act)) {
-        continue;
-      }
-      const uint16_t hit_iid = seed->instance_hit_by[victim];
-      if (hit_iid == 0u) {
-        continue;
-      }
-      const size_t v_idx = msl_idx_player(bi, victim);
-      const uint16_t victim_iid = batch->state.instance_id[v_idx];
-      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
-        const size_t ii = msl_idx_item(bi, it);
-        if (!batch->state.item_exists[ii]) {
-          continue;
-        }
-        if (batch->state.item_owner[ii] != (int8_t)owner) {
-          continue;
-        }
-        if (batch->state.item_instance_id[ii] != hit_iid) {
-          continue;
-        }
-        if (laser_params_for_item_type(batch->state.item_type[ii]) == NULL) {
-          continue;
-        }
-        hitlist_register_item_fighter(batch, bi, it, victim, victim_iid,
-                                      (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
-      }
-    }
-
-    // Seed bridge: item->shield hitlists on ongoing GuardSetOff hitlag.
-    //
-    // Decomp/runtime shape:
-    // - laser shield hits register the defender in the per-item HitCapsule victim ring with
-    //   insert type=shield on the collision frame, preventing the same live shot from rehitting
-    //   the same shield on the next callback pass while the item persists.
-    // - teacher-forced reseed does not currently serialize per-item hitlists, so an ongoing
-    //   GuardSetOff hitlag snapshot can incorrectly accept the same live laser again on t+1.
-    // refs/melee/src/melee/it/itcoll.c::it_8027146C
-    // refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_HitShield
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
-    for (int victim = 0; victim < num_players; victim++) {
-      if (seed->hitlag[victim] == 0u) {
-        continue;
-      }
-      if (seed->action_id[victim] != (uint16_t)MSL_ACT_GUARD_SET_OFF) {
-        continue;
-      }
-      const size_t v_idx = msl_idx_player(bi, victim);
-      const uint16_t victim_iid = batch->state.instance_id[v_idx];
-      int candidate_item = -1;
-      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
-        const size_t ii = msl_idx_item(bi, it);
-        if (!batch->state.item_exists[ii]) {
-          continue;
-        }
-        if (laser_params_for_item_type(batch->state.item_type[ii]) == NULL) {
-          continue;
-        }
-        // Narrow carry:
-        // - seed item->shield carry only when there is exactly one live laser candidate on the
-        //   ongoing GuardSetOff hitlag row,
-        // - if multiple live laser candidates exist, do not guess which one authored the prior
-        //   shield hit; leave that case to the normal runtime hitlist owner instead of suppressing
-        //   untouched shots.
-        if (candidate_item >= 0) {
-          candidate_item = -2;
-          break;
-        }
-        candidate_item = it;
-      }
-      if (candidate_item >= 0) {
-        hitlist_register_item_fighter(batch, bi, candidate_item, victim, victim_iid,
-                                      (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
-      }
-    }
-
-    // Seed bridge: Illusion/Phantasm article hitlag on ongoing GuardSetOff shield-hit rows.
-    //
-    // Decomp/runtime shape:
-    // - successful item shield contact enters generic item hitlag (`item->xCBC_hitlagFrames`),
-    //   and Item_802697D4 skips item Phys/movement while the item remains in hitlag
-    //   (`xDC8_word.flags.x9 != 0`).
-    // - teacher-forced reseed does not serialize item hitlag, so ongoing GuardSetOff rows would
-    //   otherwise let the same live Illusion/Phantasm article keep advancing from
-    //   ghostEffectPos[1] instead of staying frozen at the shield-contact point.
-    // - Keep the bridge conservative: only seed article hitlag when there is exactly one live
-    //   Illusion/Phantasm candidate on the ongoing GuardSetOff hitlag row.
-    // refs/melee/src/melee/it/item.c::{Item_802697D4,checkHitLag}
-    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
-    for (int victim = 0; victim < num_players; victim++) {
-      if (seed->hitlag[victim] == 0u) {
-        continue;
-      }
-      if (seed->action_id[victim] != (uint16_t)MSL_ACT_GUARD_SET_OFF) {
-        continue;
-      }
-      int candidate_item = -1;
-      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
-        const size_t ii = msl_idx_item(bi, it);
-        if (!batch->state.item_exists[ii]) {
-          continue;
-        }
-        if (!item_type_is_illusion_article(batch->state.item_type[ii])) {
-          continue;
-        }
-        if (candidate_item >= 0) {
-          candidate_item = -2;
-          break;
-        }
-        candidate_item = it;
-      }
-      if (candidate_item >= 0) {
-        const size_t ii = msl_idx_item(bi, candidate_item);
-        batch->state.item_hitlag[ii] = seed->hitlag[victim];
-      }
-    }
-
     // Seed bridge: bounced Sheik Needle item hitlag on ongoing BODY-hit rows.
     //
     // Decomp/runtime shape:
@@ -4336,17 +4065,17 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           const size_t ii = msl_idx_item(bi, it);
           if (batch->state.item_exists[ii] == 0u || batch->state.item_type[ii] != needle_kind ||
               batch->state.item_state[ii] != 4u || batch->state.item_owner[ii] < 0 ||
-              batch->state.item_owner[ii] >= (int8_t)num_players ||
+              batch->state.item_owner[ii] >= (int8_t)active_players ||
               batch->state.item_instance_id[ii] == 0u) {
             continue;
           }
-          for (int victim = 0; victim < num_players; victim++) {
+          for (int victim = 0; victim < active_players; victim++) {
             if (seed->hitlag[victim] == 0u ||
                 seed->instance_hit_by[victim] != batch->state.item_instance_id[ii]) {
               continue;
             }
             const int attacker = msl_damage_source_seed_local_slot_from_port0(
-                seed, num_players, seed->last_hit_by[victim]);
+                seed, active_players, seed->last_hit_by[victim]);
             if (attacker != (int)batch->state.item_owner[ii]) {
               continue;
             }
@@ -4437,111 +4166,32 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           batch->state.combat_hitlist_hb_cd[i] = seed->combat_hitlist_hb_cd[attacker][hb][victim];
           batch->state.combat_hitlist_hb_victim_iid[i] =
               seed->combat_hitlist_hb_victim_iid[attacker][hb][victim];
-          {
-            uint8_t kind = seed->combat_shield_contact_hb_kind[attacker][hb][victim];
-            batch->state.combat_shield_contact_hb_kind[i] = kind <= 2u ? kind : 0u;
-          }
         }
       }
     }
 
-    // Seed bridge: fighter->shield HitCapsule victim carry during ongoing GuardSetOff hitlag.
-    //
-    // Decomp/runtime shape:
-    // - Accepted fighter shield hits call ftColl_80076CBC, which inserts the shield owner into the
-    //   attacker's same-hit_group HitCapsule victims_1 list via ftColl_80076808(..., type=1, ...).
-    // - The inserted victims_1 latch suppresses re-hitting the same shield while both fighters are
-    //   still in the shield-hit hitlag segment.
-    //
-    // Seed reality:
-    // - Older replay seeds can carry the hidden GuardSetOff damage lane
-    //   (`guard_setoff_hitlag_damage_min`) without carrying the corresponding fighter hitlist.
-    // - On last-hitlag and immediate post-hitlag reseed rows, that missing latch lets the same
-    //   aerial hitbox re-enter ftColl_80076CBC and restart shield hitlag.
-    //
-    // Minimal prefix-causal bridge:
-    // - Only seed when the defender is visibly in GuardSetOff, the explicit hidden GuardSetOff
-    //   damage lane is present, and exactly one opponent is an airborne attack. The lane spans the
-    //   hitlag tail because ftColl_80076808's victims_1 latch is part of the HitCapsule, not the
-    //   fighter's hitlag scalar.
-    // - Use the suite/data-observed common AttackAir hit_group 0 dense fallback; authoritative
-    //   per-HitCapsule seeds still win when present.
-    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808}
-    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
-    // data/hitboxes/{fox,falco}.bin: common AttackAir hit_group 0 shield-hit lanes.
-    for (int victim = 0; victim < num_players; victim++) {
-      if (seed->action_id[victim] != (uint16_t)MSL_ACT_GUARD_SET_OFF) {
-        continue;
-      }
-      if (seed->guard_setoff_hitlag_damage_min[victim] == 0u) {
-        continue;
-      }
-      int candidate_attacker = -1;
-      for (int attacker = 0; attacker < num_players; attacker++) {
-        if (attacker == victim) {
-          continue;
-        }
-        if (seed->stocks[attacker] == 0u) {
-          continue;
-        }
-        if (!reseed_action_is_attackair(seed->action_id[attacker])) {
-          continue;
-        }
-        if (candidate_attacker >= 0) {
-          candidate_attacker = -2;
-          break;
-        }
-        candidate_attacker = attacker;
-      }
-      if (candidate_attacker < 0) {
-        continue;
-      }
-      uint8_t has_authoritative_hb_seed = 0u;
+    // Materialize the completed seed snapshot into the same live per-HitCapsule victim rings used
+    // by free-running collision. Every explicit seed input is consumed once and later collision
+    // sees only ordinary live HitCapsule state; omitted rings are never guessed from action shape.
+    // refs/melee/src/melee/lb/types.h::HitCapsule
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_8000ACFC}
+    for (int attacker = 0; attacker < active_players; attacker++) {
       for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
-        const size_t vi =
-            hb_valid_base + ((size_t)candidate_attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb);
-        if (batch->state.combat_hitlist_hb_valid[vi]) {
-          has_authoritative_hb_seed = 1u;
-          break;
-        }
-      }
-      if (has_authoritative_hb_seed) {
-        continue;
-      }
-      const size_t i = base + (((size_t)candidate_attacker * (size_t)MSL_HITLIST_GROUPS + 0u) *
-                                   (size_t)MSL_MAX_PLAYERS +
-                               (size_t)victim);
-      if (batch->state.combat_hitlist_cd[i] == 0u) {
-        const size_t v_idx = msl_idx_player(bi, victim);
-        batch->state.combat_hitlist_cd[i] = 0xFFFFu;
-        batch->state.combat_hitlist_victim_iid[i] = batch->state.instance_id[v_idx];
-      }
-    }
-
-    if (rollout_owned_after == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
-      // AttackAirLw no-clear dense HitCapsule rollout-seed initialization:
-      // Some rollout retry rows start after Falco DAir's same-slot second create payload and carry
-      // only the legacy dense hit_group victim map. Materialize that hidden BODY victims_1 state
-      // exactly for replay rollout reseeds so runtime/free-run frames do not re-read dense
-      // provenance as a combat bridge. This is independent of replay-clock RNG ownership: the
-      // source owner is the current HitCapsule.victims_1 list preserved through
-      // ftColl_800768A0. Ordinary public one-step reseeds stay on explicit per-HitCapsule seed
-      // lanes or the live script-site no-clear owner below.
-      // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
-      // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
-      for (int attacker = 0; attacker < num_players; attacker++) {
-        if (seed->action_id[attacker] != (uint16_t)MSL_ACT_ATTACK_AIR_LW) {
-          continue;
-        }
-        for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
-          for (int victim = 0; victim < num_players; victim++) {
-            if (victim == attacker) {
+        const size_t hi =
+            ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
+            (size_t)hb;
+        if (batch->state.hitbox_capsule_state[hi] != 0u) {
+          hitlist_seed_init_fighter_hitbox_from_group(
+              batch, bi, attacker, hb, hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hi]));
+          const uint8_t v2_mask = seed->combat_hitlist_hb_v2_mask[attacker][hb];
+          for (int victim = 0; victim < active_players; victim++) {
+            if ((v2_mask & (uint8_t)(1u << (uint8_t)victim)) == 0u) {
               continue;
             }
-            const size_t v_idx = msl_idx_player(bi, victim);
-            (void)hitlist_seed_init_attackairlw_no_clear_dense_body(
-                batch, bi, attacker, hb, victim, batch->state.instance_id[v_idx]);
+            hitlist_register_fighter_hitbox_v2(batch, bi, attacker, hb, victim,
+                                               batch->state.instance_id[msl_idx_player(bi, victim)],
+                                               (int)MSL_LBCOLL_INSERT_FT_BODY, 0u);
           }
         }
       }
@@ -4831,97 +4481,6 @@ static int msl_batch_apply_replay_frame_stage_lanes(MslBatch* batch, const uint8
   return 0;
 }
 
-static void msl_batch_apply_replay_frame_item_lanes_for_batch(MslBatch* batch, int bi,
-                                                              const MslSeed* seed) {
-  if (batch == NULL || seed == NULL || bi < 0 || bi >= batch->batch_size) {
-    return;
-  }
-  if (batch->replay_reseed_frame_active == NULL || batch->replay_reseed_frame_active[bi] == 0u) {
-    return;
-  }
-  const uint8_t needle_callback_mask =
-      (uint8_t)((uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE |
-                (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_DESTROY);
-  for (int seed_it = 0; seed_it < MSL_MAX_ITEMS; seed_it++) {
-    const MslItem* item = &seed->items[seed_it];
-    const uint8_t callback_bits =
-        (uint8_t)(seed->item_hidden_callback_flags[seed_it] & needle_callback_mask);
-    const uint8_t stage_kind = seed->item_sheik_needle_stage_hit_seed_kind[seed_it];
-    if (item->exists == 0u || (callback_bits == 0u && stage_kind == 0u)) {
-      continue;
-    }
-
-    int live_slot = -1;
-    for (int it = 0; it < MSL_MAX_ITEMS; it++) {
-      const size_t ii = msl_idx_item(bi, it);
-      if (batch->state.item_exists[ii] != 0u && batch->state.item_type[ii] == item->type &&
-          batch->state.item_instance_id[ii] == item->instance_id &&
-          batch->state.item_spawn_id[ii] == item->spawn_id &&
-          batch->state.item_owner[ii] == item->owner) {
-        if (live_slot >= 0) {
-          live_slot = -2;
-          break;
-        }
-        live_slot = it;
-      }
-    }
-    if (live_slot < 0) {
-      continue;
-    }
-    const size_t ii = msl_idx_item(bi, live_slot);
-    // Replay playback lane for one-step Sheik Needle provenance. Validation preprocessing can
-    // prove the hidden Logic109 destroy/bounce fate or state-0 stage-hit branch from the next public
-    // item row, while normal free-running gameplay uses the modeled HSD_Randi sites and live stage
-    // collision. Apply only to the matching live item identity; the Needle owner consumes and clears
-    // these flags in the same item step.
-    // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
-    //   it_2725_Logic109_DmgDealt,it_2725_Logic109_DmgReceived,it_2725_Logic109_HitShield,
-    //   itSeakneedlethrown_UnkMotion0_Coll}
-    batch->state.item_hidden_callback_flags[ii] =
-        (uint8_t)((batch->state.item_hidden_callback_flags[ii] & (uint8_t)~needle_callback_mask) |
-                  callback_bits);
-    batch->state.item_sheik_needle_callback_bounce_vel_y_index[ii] =
-        seed->item_sheik_needle_callback_bounce_vel_y_index[seed_it];
-    batch->state.item_sheik_needle_callback_bounce_vel_x_index_sign[ii] =
-        seed->item_sheik_needle_callback_bounce_vel_x_index_sign[seed_it];
-    batch->state.item_sheik_needle_callback_bounce_motion_valid[ii] = 0u;
-    batch->state.item_sheik_needle_callback_bounce_gravity_index[ii] = 0u;
-    batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii] = 0u;
-    if ((callback_bits & (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_SHEIK_NEEDLE_BOUNCE) != 0u &&
-        seed->item_sheik_needle_motion_seed_kind[seed_it] == 3u &&
-        seed->item_sheik_needle_motion_gravity_index[seed_it] < 8u &&
-        seed->item_sheik_needle_motion_min_vel_y_index[seed_it] < 8u &&
-        item_article_params_for_sheik_needle_throw_item_type(item->type) != NULL) {
-      batch->state.item_sheik_needle_callback_bounce_motion_valid[ii] = 1u;
-      batch->state.item_sheik_needle_callback_bounce_gravity_index[ii] =
-          seed->item_sheik_needle_motion_gravity_index[seed_it];
-      batch->state.item_sheik_needle_callback_bounce_min_vel_y_index[ii] =
-          seed->item_sheik_needle_motion_min_vel_y_index[seed_it];
-    }
-    batch->state.item_sheik_needle_stage_hit_seed_kind[ii] = stage_kind;
-    batch->state.item_sheik_needle_stage_hit_vel_y_index[ii] =
-        seed->item_sheik_needle_stage_hit_vel_y_index[seed_it];
-    batch->state.item_sheik_needle_stage_hit_vel_x_index_sign[ii] =
-        seed->item_sheik_needle_stage_hit_vel_x_index_sign[seed_it];
-  }
-}
-
-static int msl_batch_apply_replay_frame_item_lanes(MslBatch* batch, const uint8_t* seed_bytes,
-                                                   size_t seed_stride_bytes) {
-  if (batch == NULL || seed_bytes == NULL) {
-    return EINVAL;
-  }
-  if (seed_stride_bytes < sizeof(MslSeed)) {
-    return EINVAL;
-  }
-  for (int bi = 0; bi < batch->batch_size; bi++) {
-    const MslSeed* seed =
-        (const MslSeed*)(const void*)(seed_bytes + (size_t)bi * seed_stride_bytes);
-    msl_batch_apply_replay_frame_item_lanes_for_batch(batch, bi, seed);
-  }
-  return 0;
-}
-
 static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
   if (batch == NULL || batch->rollout_clock_rng_owned == NULL) {
     return;
@@ -5030,10 +4589,6 @@ int msl_batch_step_input_replay_frame_rng(MslBatch* batch, const uint8_t* seed_b
     return err;
   }
   err = msl_batch_apply_replay_frame_stage_lanes(batch, seed_bytes, seed_stride_bytes);
-  if (err != 0) {
-    return err;
-  }
-  err = msl_batch_apply_replay_frame_item_lanes(batch, seed_bytes, seed_stride_bytes);
   if (err != 0) {
     return err;
   }
@@ -5427,10 +4982,6 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
       out->instance_id[p] = batch->state.instance_id[idx];
       out->instance_id_x2073[p] = batch->state.instance_id_x2073[idx];
       out->instance_identity_last_action_id[p] = batch->state.instance_identity_last_action_id[idx];
-      out->throw_pulse_consumed[p] = batch->state.throw_pulse_consumed[idx];
-      out->throw_pulse_crossed_prev_frame[p] = batch->state.throw_pulse_crossed_prev_frame[idx];
-      out->throw_pending_victim_port[p] = batch->state.throw_pending_victim_port[idx];
-      out->throw_pending_hit_idx[p] = batch->state.throw_pending_hit_idx[idx];
       out->attached_victim_port[p] = batch->state.attached_victim_port[idx];
       out->dead_up_fall_offset_y[p] = batch->state.dead_up_fall_offset_y[idx];
       out->dead_up_fall_vel_y[p] = batch->state.dead_up_fall_vel_y[idx];
@@ -5870,6 +5421,8 @@ int msl_batch_debug_refresh_combat_geometry(MslBatch* batch) {
   anim_pose_update_dynamic_state(batch);
   hurtboxes_refresh(batch);
   hitboxes_refresh(batch);
+  shields_refresh(batch);
+  reflector_bubbles_refresh(batch);
   return 0;
 }
 
@@ -5911,27 +5464,6 @@ int msl_batch_debug_dynamic_pose_state(const MslBatch* batch, int batch_index, i
     out_state->axis_z[dn] = batch->state.dynamic_pose_axis_z[di];
     out_state->angle[dn] = batch->state.dynamic_pose_angle[di];
   }
-  return 0;
-}
-
-int msl_batch_debug_get_fighter_8006cda4_pre_gate_consume_count(const MslBatch* batch,
-                                                                int batch_index, int player_index,
-                                                                uint8_t* out_count) {
-  if (batch == NULL || out_count == NULL) {
-    return EINVAL;
-  }
-  *out_count = 0u;
-  if (batch_index < 0 || batch_index >= batch->batch_size) {
-    return EINVAL;
-  }
-  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
-    return EINVAL;
-  }
-  if (player_index >= (int)batch->config.num_players) {
-    return 0;
-  }
-  const size_t idx = msl_idx_player(batch_index, player_index);
-  *out_count = batch->state.fighter_8006cda4_pre_gate_consume_count[idx];
   return 0;
 }
 
@@ -6682,9 +6214,12 @@ int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, i
   const uint8_t cap_count_u8 = batch->state.hurtcap_count[p_idx];
   const uint16_t cap_count = (cap_count_u8 > (uint8_t)MSL_MAX_HURTCAPS) ? (uint16_t)MSL_MAX_HURTCAPS
                                                                         : (uint16_t)cap_count_u8;
-  uint32_t can_hit_mask = 0xFFFFFFFFu;
-  (void)move_tables_hurtbox_can_hit_mask_at_frame(out_flags->char_id, msid, frame, cap_count,
-                                                  &can_hit_mask);
+  uint32_t can_hit_mask = 0u;
+  for (uint16_t cap = 0u; cap < cap_count; cap++) {
+    if (batch->state.script_hurtcap_state[p_idx * (size_t)MSL_MAX_HURTCAPS + cap] != 2u) {
+      can_hit_mask |= UINT32_C(1) << cap;
+    }
+  }
   out_flags->can_hit_mask = can_hit_mask;
   out_flags->mode_can_hit_bit = (uint8_t)((can_hit_mask >> cap_id) & 0x1u);
 
@@ -6744,13 +6279,6 @@ int msl_batch_debug_poison_hurtcap_matrix(MslBatch* batch, int batch_index, int 
   memset(&batch->hurtcap_matrix[(size_t)cap_i * 12u], 0, sizeof(float) * 12u);
   batch->hurtcap_matrix_valid[cap_i] = 1u;
   return 0;
-}
-
-int msl_batch_debug_attackairb_continuation_overlap(const MslBatch* batch, int batch_index,
-                                                    int attacker, int hb_id, int defender,
-                                                    int cap_id, float* out_overlap) {
-  return combat_debug_attackairb_continuation_overlap(batch, batch_index, attacker, hb_id, defender,
-                                                      cap_id, out_overlap);
 }
 
 int msl_batch_debug_body_matrix_overlap(const MslBatch* batch, int batch_index, int attacker,
@@ -7075,12 +6603,6 @@ int msl_batch_debug_combat_contacts_classified_filtered(
                                                out_count, 1);
 }
 
-int msl_batch_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
-                                               MslDebugShieldCandidateDecision* out_rows,
-                                               uint16_t max_rows, uint16_t* out_count) {
-  return combat_debug_shield_candidate_decisions(batch, batch_index, out_rows, max_rows, out_count);
-}
-
 int msl_batch_debug_shield_bubbles_world(const MslBatch* batch, int batch_index,
                                          float* out_xyzw_4p) {
   if (batch == NULL || out_xyzw_4p == NULL) {
@@ -7110,101 +6632,11 @@ int msl_batch_debug_shield_bubbles_world(const MslBatch* batch, int batch_index,
   return 0;
 }
 
-static inline float debug_clamp01_f32(float x) {
-  if (x < 0.0f) {
-    return 0.0f;
-  }
-  if (x > 1.0f) {
-    return 1.0f;
-  }
-  return x;
-}
-
-static inline uint16_t debug_clamp_u16(uint16_t x, uint16_t lo, uint16_t hi) {
-  if (x < lo) {
-    return lo;
-  }
-  if (x > hi) {
-    return hi;
-  }
-  return x;
-}
-
-static inline uint8_t debug_is_guard_tilt_action(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_GUARD_ON:
-    case MSL_ACT_GUARD:
-    case MSL_ACT_GUARD_REFLECT:
-      return 1u;
-    default:
-      return 0u;
-  }
-}
-
 int msl_batch_debug_shield_display_bubbles_world(const MslBatch* batch, int batch_index,
                                                  float* out_xyzw_4p) {
-  const int err = msl_batch_debug_shield_bubbles_world(batch, batch_index, out_xyzw_4p);
-  if (err != 0) {
-    return err;
-  }
-
-  // Display-only correction for guard visualization:
-  // `shields_refresh` still emits the gameplay ShieldDesc center used by validation. The live viewer has no
-  // shield joint/model render, so draw no-tilt GuardOn/GuardReflect from the steady no-tilt pose
-  // instead of the transient collision entry pose. For nonzero `mv.co.guard.x4`, blend the angled
-  // Guard timeline sample against `fp->ft_data->x20->x8`, not against the timeline's neutral frame.
-  // This avoids visible forward snap on entry and avoids tilted shields rotating around a base
-  // center already pushed far in front of the fighter.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091BC4,ftCo_80091E78}
-  // data/shields/{fox,falco}.bin::guard_on_x20_xyz
-  const int num_players = (int)batch->config.num_players;
-  for (int p = 0; p < num_players; p++) {
-    const size_t idx = msl_idx_player(batch_index, p);
-    const uint16_t action_id = batch->state.action_id[idx];
-    if (!debug_is_guard_tilt_action(action_id) || batch->state.shield_radius[idx] <= 0.0f) {
-      continue;
-    }
-
-    MslShieldTiltTableView tv;
-    if (msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) != 0 || tv.xyz == NULL ||
-        tv.frame_count == 0u) {
-      continue;
-    }
-    const float mag = debug_clamp01_f32(batch->state.guard_tilt_x4[idx]);
-    const uint8_t no_tilt = (mag <= 0.0f) ? 1u : 0u;
-    const uint16_t frame_max = (uint16_t)(tv.frame_count - 1u);
-    const uint16_t f = debug_clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
-    const size_t f_i = (size_t)f * 3u;
-    const float dx =
-        no_tilt ? tv.xyz[0]
-                : tv.guard_on_x20_xyz[0] + mag * (tv.xyz[f_i + 0] - tv.guard_on_x20_xyz[0]);
-    const float dy =
-        no_tilt ? tv.xyz[1]
-                : tv.guard_on_x20_xyz[1] + mag * (tv.xyz[f_i + 1] - tv.guard_on_x20_xyz[1]);
-    const float dz =
-        no_tilt ? tv.xyz[2]
-                : tv.guard_on_x20_xyz[2] + mag * (tv.xyz[f_i + 2] - tv.guard_on_x20_xyz[2]);
-
-    const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-    const MslCharParams* ca = msl_char_params_fast(batch->state.char_id[idx]);
-    const float model_scaling =
-        (ca != NULL && isfinite(ca->model_scaling) && ca->model_scaling > 0.0f) ? ca->model_scaling
-                                                                                : 1.0f;
-    const float pose_scale = no_tilt ? (batch->state.fighter_scale_y[idx] * model_scaling)
-                                     : batch->state.fighter_scale_y[idx];
-    const float lx = dx * pose_scale;
-    const float ly = dy * pose_scale;
-    const float lz = dz * pose_scale;
-    const float off_x = facing_dir * lz;
-    const float off_z = -facing_dir * lx;
-    const size_t o = (size_t)p * 4u;
-    out_xyzw_4p[o + 0] = batch->state.pos_x[idx] + off_x;
-    out_xyzw_4p[o + 1] = batch->state.pos_y[idx] + ly;
-    out_xyzw_4p[o + 2] = batch->state.pos_z[idx] + off_z;
-    out_xyzw_4p[o + 3] = batch->state.shield_radius[idx];
-  }
-
-  return 0;
+  // The gameplay descriptor now consumes the persistent live JObj directly, so display and
+  // collision geometry share one source of truth.
+  return msl_batch_debug_shield_bubbles_world(batch, batch_index, out_xyzw_4p);
 }
 
 int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int player_index) {
@@ -7234,6 +6666,7 @@ int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int p
     batch->state.hitbox_x43_b2[hb_i] = 0u;
     batch->state.hitbox_capsule_enabled[hb_i] = 0u;
     batch->state.hitbox_capsule_group[hb_i] = 0u;
+    batch->state.hitbox_capsule_state[hb_i] = 0u;
     batch->state.hitbox_stale_damage_valid[hb_i] = 0u;
     batch->state.hitbox_stale_damage_mul[hb_i] = 1.0f;
   }
@@ -7263,9 +6696,17 @@ int msl_batch_debug_set_hitbox_world(MslBatch* batch, int batch_index, int playe
 
   const size_t hb_i = debug_idx_hitbox(batch_index, player_index, hitbox_id);
   batch->state.hitbox_enabled[hb_i] = enabled ? 1 : 0;
+  batch->state.hitbox_capsule_enabled[hb_i] = enabled ? 1u : 0u;
+  batch->state.hitbox_capsule_state[hb_i] = enabled ? 3u : 0u;
   batch->state.hitbox_x[hb_i] = x;
   batch->state.hitbox_y[hb_i] = y;
   batch->state.hitbox_z[hb_i] = z;
+  // This debug primitive installs a static world-space HitCapsule. Keep both endpoints coherent
+  // now that the runtime shield/body narrowphase consumes the source x58 -> x4C sweep.
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  batch->state.hitbox_prev_x[hb_i] = x;
+  batch->state.hitbox_prev_y[hb_i] = y;
+  batch->state.hitbox_prev_z[hb_i] = z;
   batch->state.hitbox_radius[hb_i] = radius;
   batch->state.hitbox_damage[hb_i] = damage;
   batch->state.hitbox_stale_damage_valid[hb_i] = 0u;
@@ -7687,6 +7128,19 @@ int msl_batch_debug_set_smash_charge_state(MslBatch* batch, int batch_index, int
   batch->state.smash_charge_state[idx] = state;
   batch->state.smash_charge_frames[idx] = frames;
   batch->state.smash_charge_hold_frames_max[idx] = hold_frames_max;
+  // This debug boundary models the complete SmashAttr release payload, not just its timers.
+  // The damage multiplier is owned by the extracted start_smash_charge command and consumed by
+  // ftCo_800DEEB8 when ftColl_8007ABD0 publishes collision-time HitCapsule.damage.
+  // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DEEB8}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007ABD0
+  const uint32_t anim = batch->state.animation_index[idx];
+  const MslScriptEvent* charge =
+      anim <= UINT16_MAX ? script_events_first(batch->state.char_id[idx], (uint16_t)anim,
+                                               MSL_SCRIPT_EVENT_START_SMASH_CHARGE)
+                         : NULL;
+  if (charge != NULL) {
+    batch->state.smash_charge_damage_mul[idx] = charge->payload.smash_charge.damage_mul;
+  }
   return 0;
 }
 
@@ -7762,8 +7216,7 @@ int msl_batch_debug_combat_resolve(MslBatch* batch) {
   if (batch == NULL) {
     return EINVAL;
   }
-  combat_processhit_consume(batch);
-  combat_processhit_pair_begin(batch);
+  combat_processhit_pending_begin(batch);
   combat_resolve(batch);
   return 0;
 }
@@ -7916,5 +7369,6 @@ int msl_debug_reset_pose_and_hitboxes_tables(void) {
   msl_clear_data_dir();
   anim_pose_reset_for_tests();
   hitboxes_tables_reset_for_tests();
-  return 0;
+  script_events_reset_for_tests();
+  return script_events_init();
 }

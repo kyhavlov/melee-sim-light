@@ -364,3 +364,43 @@ def test_root_motion_hitbox_pose_does_not_recompose_transn_tail() -> None:
     row = hitboxes[hb_id]
     assert int(row[9]) == 1
     assert np.array_equal(row[:5].astype(np.float32, copy=False).view(np.uint32), expected.view(np.uint32))
+
+
+@pytest.mark.integration
+def test_fractional_collision_pose_consumes_root_motion_transn() -> None:
+    # Falco ThrownHi has a non-zero TransN translation and otherwise-stationary collision joints
+    # across this fractional interval. ftAnim_8006E054 transfers that translation into fighter
+    # motion, then clears the live TransN JObj before mpColl_LoadECB_JObj samples its descendants.
+    # The float-track path must therefore agree with the adjacent baked live pose instead of adding
+    # the root translation to every collision joint a second time.
+    # refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E054
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+    import msl_binding
+
+    path = Path("data/anims/falco.bin")
+    if not path.exists():
+        pytest.skip("missing local artifact: data/anims/falco.bin")
+
+    char_id = 22
+    msid = 264  # ftCo_SM_ThrownHi
+    frame = 7
+    anim_buf = path.read_bytes()
+    joint_count, anim_count, _joint_parts = _read_header(anim_buf)
+    frame_count, base = _find_anim_base_offset(
+        buf=anim_buf, joint_count=joint_count, anim_count=anim_count, msid=msid
+    )
+    assert frame < frame_count
+    transn_base = base + frame_count * joint_count * _MAT_BYTES
+    transn = np.frombuffer(anim_buf, dtype="<f4", count=3, offset=transn_base + frame * 12)
+    assert np.linalg.norm(transn) > np.float32(1.0)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        transn_matrix = msl_binding.anim_pose_collision_matrix_f32(char_id, msid, 7.5, 1)
+        integer_child = msl_binding.anim_pose_collision_matrix_f32(char_id, msid, 7.0, 13)
+        fractional_child = msl_binding.anim_pose_collision_matrix_f32(char_id, msid, 7.5, 13)
+    finally:
+        msl_binding.destroy(handle)
+
+    assert np.array_equal(transn_matrix[[3, 7, 11]], np.zeros(3, dtype=np.float32))
+    assert np.allclose(fractional_child, integer_child, rtol=0.0, atol=5e-7)

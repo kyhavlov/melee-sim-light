@@ -47,8 +47,9 @@ def test_runtime_item_article_params_known_values() -> None:
     assert sheik["needle_hitbox_jobj_y_offset"] == pytest.approx([0.0, 0.0, 0.0, 0.0])
     assert sheik["needle_hitbox_jobj_z_offset"] == pytest.approx([-1.5, -1.5, 0.0, 0.0])
     # Extracted from state-0 item script command-11 target/contact bits:
-    # hb0 grounded+BODY, hb1-3 aerial+BODY; all four have x40_b0 clank clear.
-    assert sheik["needle_hitbox_flags"] == [5, 6, 6, 6]
+    # Normalized command-11 contact flags: target/BODY plus reflect, shield, shield-bounce, and
+    # x42_b4. All four keep x40_b0 clank clear.
+    assert sheik["needle_hitbox_flags"] == [1701, 1702, 1702, 1702]
     assert sheik["sheik_chain_itkind"] == 97
     assert sheik["sheik_chain_spawn_part_id"] == 26
     assert sheik["sheik_chain_lifetime_frames"] == 1400
@@ -67,7 +68,7 @@ def test_runtime_item_article_params_known_values() -> None:
     assert sheik["vanish_hitbox_bkb"] == 80
     assert sheik["vanish_hitbox_element"] == 1
     assert sheik["vanish_hitbox_shield_damage"] == 0
-    assert sheik["vanish_hitbox_flags"] == 7
+    assert sheik["vanish_hitbox_flags"] == 759
     assert sheik["vanish_hitbox_size_keyframe_count"] == 2
     assert sheik["vanish_hitbox_size_keyframe_frame_0"] == 7
     assert sheik["vanish_hitbox_size_keyframe_value_0"] == pytest.approx(3.9997439)

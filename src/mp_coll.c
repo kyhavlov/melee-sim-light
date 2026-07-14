@@ -158,7 +158,7 @@ typedef struct MslMapKindView {
   const MslStageMap* map;
   const MslStageWallGraph* walls;
   const MslStageCeilingGraph* ceilings;
-  uint32_t stage_id;
+  uint8_t kind;
   size_t line_count;
 } MslMapKindView;
 
@@ -168,7 +168,7 @@ typedef struct MslMapKindView {
 // data/stages/bin/*.bin::MSLSTG01 line kind/segment identity
 // refs/melee/src/melee/mp/mplib.c::{mpCheckCeiling,mpCheckLeftWall,mpCheckRightWall}
 static MslMapKindView map_kind_view(uint32_t stage_id, uint8_t kind) {
-  MslMapKindView view = {.map = stage_collision_get_map(stage_id), .stage_id = stage_id};
+  MslMapKindView view = {.map = stage_collision_get_map(stage_id), .kind = kind};
   if (kind == (uint8_t)MSL_STAGE_RAW_LINE_LEFT_WALL) {
     view.walls = stage_collision_get_left_wall_graph(stage_id);
     view.line_count = view.walls != NULL ? view.walls->line_count : 0u;
@@ -188,7 +188,7 @@ static const MslStageMapLine* map_kind_line(const MslMapKindView* view, size_t i
   }
   const uint16_t segment_i =
       view->walls != NULL ? view->walls->lines[i].segment_i : view->ceilings->lines[i].segment_i;
-  return stage_collision_map_line(view->stage_id, segment_i);
+  return stage_collision_map_line_in_map(view->map, segment_i);
 }
 
 static uint8_t raw_same_kind_chain_contains(uint32_t stage_id, uint16_t start_id,
@@ -238,6 +238,29 @@ static uint8_t map_kind_view_intersects_bounds(const MslMapKindView* view, float
   // refs/melee/src/melee/mp/mplib.c::{mpLineIntersectionH,mpLineIntersectionV}
   return (uint8_t)(max_x >= graph_min_x - 0.1f && min_x <= graph_max_x + 0.1f &&
                    max_y >= graph_min_y - 0.1f && min_y <= graph_max_y + 0.1f);
+}
+
+static uint8_t wall_view_intersects_frame(const MslMapKindView* view, const MslMpCollFrame* frame) {
+  float min_x = frame->prev_ecb.bottom_x;
+  float max_x = min_x;
+  float min_y = frame->prev_ecb.bottom_y;
+  float max_y = min_y;
+#define INCLUDE_ECB_POINT(POINTS, NAME)      \
+  do {                                       \
+    min_x = fminf(min_x, (POINTS).NAME##_x); \
+    max_x = fmaxf(max_x, (POINTS).NAME##_x); \
+    min_y = fminf(min_y, (POINTS).NAME##_y); \
+    max_y = fmaxf(max_y, (POINTS).NAME##_y); \
+  } while (0)
+  INCLUDE_ECB_POINT(frame->prev_ecb, left);
+  INCLUDE_ECB_POINT(frame->prev_ecb, right);
+  INCLUDE_ECB_POINT(frame->prev_ecb, top);
+  INCLUDE_ECB_POINT(frame->ecb, bottom);
+  INCLUDE_ECB_POINT(frame->ecb, left);
+  INCLUDE_ECB_POINT(frame->ecb, right);
+  INCLUDE_ECB_POINT(frame->ecb, top);
+#undef INCLUDE_ECB_POINT
+  return map_kind_view_intersects_bounds(view, min_x, min_y, max_x, max_y);
 }
 
 static void wall_envelope_consider(const MslStageMapLine* line, int32_t line_idx,
@@ -442,45 +465,47 @@ static uint8_t wall_commit_root_x(MslBatch* batch, int bi, const MslMpCollFrame*
   return envelope.have;
 }
 
-static uint8_t find_line_hit(MslBatch* batch, int bi, size_t idx, uint8_t kind, float ax, float ay,
-                             float bx, float by, MslStageQueryHit* out) {
-  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
-  const MslMapKindView view = map_kind_view(stage_id, kind);
+static uint8_t find_line_hit(MslBatch* batch, int bi, size_t idx, const MslMapKindView* view,
+                             float ax, float ay, float bx, float by, MslStageQueryHit* out) {
+  (void)bi;
+  const uint8_t kind = view != NULL ? view->kind : (uint8_t)MSL_STAGE_RAW_LINE_UNKNOWN;
   const float min_x = ax < bx ? ax : bx;
   const float max_x = ax > bx ? ax : bx;
   const float min_y = ay < by ? ay : by;
   const float max_y = ay > by ? ay : by;
-  if (view.map == NULL || out == NULL ||
-      !map_kind_view_intersects_bounds(&view, min_x, min_y, max_x, max_y)) {
+  if (view == NULL || view->map == NULL || out == NULL ||
+      !map_kind_view_intersects_bounds(view, min_x, min_y, max_x, max_y)) {
     return 0u;
   }
   uint8_t found = 0u;
   float best_dist2 = FLT_MAX;
   MslStageQueryHit best = {0};
-  for (size_t i = 0; i < view.line_count; i++) {
-    const MslStageMapLine* source = map_kind_line(&view, i);
-    MslStageMapLine line = {0};
-    if (source == NULL || source->fighter_solid == 0u ||
-        !stage_collision_map_line_world(batch, bi, source, &line) ||
-        !joint_admitted(batch, idx, line.joint_id)) {
+  // MSLSTG01 transformations are floor-owned. Wall/ceiling MapLines are already world-space, so
+  // repeated point probes can consume the immutable canonical line directly.
+  // data/stages/bin/*.bin::MSLSTG01 platform transform records
+  // refs/melee/src/melee/mp/mplib.c::{mpCheckCeiling,mpCheckLeftWall,mpCheckRightWall}
+  for (size_t i = 0; i < view->line_count; i++) {
+    const MslStageMapLine* line = map_kind_line(view, i);
+    if (line == NULL || line->fighter_solid == 0u || !joint_admitted(batch, idx, line->joint_id)) {
       continue;
     }
     float ix = 0.0f;
     float iy = 0.0f;
     uint8_t hit = 0u;
-    if (kind == (uint8_t)MSL_STAGE_RAW_LINE_CEILING && fabsf(line.y0 - line.y1) <= 0.0001f) {
-      hit = (uint8_t)(ay <= by && msl_mplib_line_intersection_h(&ix, &iy, line.x0, line.y0, line.x1,
-                                                                ax, ay, bx, by));
+    if (kind == (uint8_t)MSL_STAGE_RAW_LINE_CEILING && fabsf(line->y0 - line->y1) <= 0.0001f) {
+      hit = (uint8_t)(ay <= by && msl_mplib_line_intersection_h(&ix, &iy, line->x0, line->y0,
+                                                                line->x1, ax, ay, bx, by));
     } else if ((kind == (uint8_t)MSL_STAGE_RAW_LINE_LEFT_WALL ||
                 kind == (uint8_t)MSL_STAGE_RAW_LINE_RIGHT_WALL) &&
-               fabsf(line.x0 - line.x1) <= 0.0001f) {
+               fabsf(line->x0 - line->x1) <= 0.0001f) {
       const uint8_t correct_direction =
           kind == (uint8_t)MSL_STAGE_RAW_LINE_LEFT_WALL ? (uint8_t)(ax <= bx) : (uint8_t)(ax >= bx);
-      hit = (uint8_t)(correct_direction && msl_mplib_line_intersection_v(&ix, &iy, line.x0, line.y0,
-                                                                         line.y1, ax, ay, bx, by));
-    } else {
       hit =
-          msl_mplib_line_intersection(&ix, &iy, line.x0, line.y0, line.x1, line.y1, ax, ay, bx, by);
+          (uint8_t)(correct_direction && msl_mplib_line_intersection_v(&ix, &iy, line->x0, line->y0,
+                                                                       line->y1, ax, ay, bx, by));
+    } else {
+      hit = msl_mplib_line_intersection(&ix, &iy, line->x0, line->y0, line->x1, line->y1, ax, ay,
+                                        bx, by);
     }
     if (!hit) {
       continue;
@@ -491,8 +516,8 @@ static uint8_t find_line_hit(MslBatch* batch, int bi, size_t idx, uint8_t kind, 
     if (dist2 >= best_dist2) {
       continue;
     }
-    float nx = -(line.y1 - line.y0);
-    float ny = line.x1 - line.x0;
+    float nx = -(line->y1 - line->y0);
+    float ny = line->x1 - line->x0;
     const float len = sqrtf(nx * nx + ny * ny);
     if (len > 0.0f) {
       nx /= len;
@@ -511,10 +536,10 @@ static uint8_t find_line_hit(MslBatch* batch, int bi, size_t idx, uint8_t kind, 
     best_dist2 = dist2;
     best = (MslStageQueryHit){
         .kind = kind,
-        .line_idx = (int32_t)(source - view.map->lines),
-        .segment_i = line.segment_i,
-        .joint_id = line.joint_id,
-        .flags = line.lo_flags,
+        .line_idx = (int32_t)(line - view->map->lines),
+        .segment_i = line->segment_i,
+        .joint_id = line->joint_id,
+        .flags = line->lo_flags,
         .x = ix,
         .y = iy,
         .normal_x = nx,
@@ -550,35 +575,32 @@ static void remap_2d(float* x_out, float* y_out, float ax0, float ay0, float ax1
   }
 }
 
-static uint8_t find_wall_quad_hit(MslBatch* batch, int bi, size_t idx, uint8_t kind, float ax,
-                                  float ay, float bx, float by, float cx, float cy, float dx,
-                                  float dy, MslStageQueryHit* out) {
+static uint8_t find_wall_quad_hit(MslBatch* batch, int bi, size_t idx, const MslMapKindView* view,
+                                  float ax, float ay, float bx, float by, float cx, float cy,
+                                  float dx, float dy, MslStageQueryHit* out) {
+  (void)bi;
   // Detect a wall vertex crossing the swept quadrilateral between the previous and current ECB
   // edge. Point sweeps alone miss this when both endpoints move around the vertex.
   // refs/melee/src/melee/mp/mplib.c::{mpLib_800511A4_RightWall,mpLib_800515A0_LeftWall}
-  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
-  const MslMapKindView view = map_kind_view(stage_id, kind);
+  const uint8_t kind = view != NULL ? view->kind : (uint8_t)MSL_STAGE_RAW_LINE_UNKNOWN;
   const float min_x = fminf(fminf(ax, bx), fminf(cx, dx));
   const float max_x = fmaxf(fmaxf(ax, bx), fmaxf(cx, dx));
   const float min_y = fminf(fminf(ay, by), fminf(cy, dy));
   const float max_y = fmaxf(fmaxf(ay, by), fmaxf(cy, dy));
-  if (view.map == NULL || out == NULL ||
-      !map_kind_view_intersects_bounds(&view, min_x, min_y, max_x, max_y)) {
+  if (view == NULL || view->map == NULL || out == NULL ||
+      !map_kind_view_intersects_bounds(view, min_x, min_y, max_x, max_y)) {
     return 0u;
   }
   uint8_t found = 0u;
   float best_dist2 = FLT_MAX;
   MslStageQueryHit best = {0};
-  for (size_t i = 0; i < view.line_count; i++) {
-    const MslStageMapLine* source = map_kind_line(&view, i);
-    MslStageMapLine line = {0};
-    if (source == NULL || source->fighter_solid == 0u ||
-        !stage_collision_map_line_world(batch, bi, source, &line) ||
-        !joint_admitted(batch, idx, line.joint_id)) {
+  for (size_t i = 0; i < view->line_count; i++) {
+    const MslStageMapLine* line = map_kind_line(view, i);
+    if (line == NULL || line->fighter_solid == 0u || !joint_admitted(batch, idx, line->joint_id)) {
       continue;
     }
-    const float endpoint_x[2] = {line.x0, line.x1};
-    const float endpoint_y[2] = {line.y0, line.y1};
+    const float endpoint_x[2] = {line->x0, line->x1};
+    const float endpoint_y[2] = {line->y0, line->y1};
     for (int endpoint = 0; endpoint < 2; endpoint++) {
       float mapped_x = 0.0f;
       float mapped_y = 0.0f;
@@ -603,8 +625,8 @@ static uint8_t find_wall_quad_hit(MslBatch* batch, int bi, size_t idx, uint8_t k
       if (dist2 >= best_dist2) {
         continue;
       }
-      float nx = -(line.y1 - line.y0);
-      float ny = line.x1 - line.x0;
+      float nx = -(line->y1 - line->y0);
+      float ny = line->x1 - line->x0;
       const float length = sqrtf(nx * nx + ny * ny);
       if (length > 0.0f) {
         nx /= length;
@@ -618,10 +640,10 @@ static uint8_t find_wall_quad_hit(MslBatch* batch, int bi, size_t idx, uint8_t k
       best_dist2 = dist2;
       best = (MslStageQueryHit){
           .kind = kind,
-          .line_idx = (int32_t)(source - view.map->lines),
-          .segment_i = line.segment_i,
-          .joint_id = line.joint_id,
-          .flags = line.lo_flags,
+          .line_idx = (int32_t)(line - view->map->lines),
+          .segment_i = line->segment_i,
+          .joint_id = line->joint_id,
+          .flags = line->lo_flags,
           .x = ix,
           .y = iy,
           .normal_x = nx,
@@ -693,7 +715,9 @@ static uint8_t grounded_bottom_wall_is_floor_join(const MslBatch* batch, int bi,
 }
 
 static uint8_t resolve_wall(MslBatch* batch, int bi, size_t idx, MslMpCollFrame* frame,
-                            uint8_t kind, uint8_t carried_hug, uint8_t admit_projected_side) {
+                            const MslMapKindView* view, uint8_t carried_hug,
+                            uint8_t admit_projected_side) {
+  const uint8_t kind = view != NULL ? view->kind : (uint8_t)MSL_STAGE_RAW_LINE_UNKNOWN;
   const uint8_t right_wall = (uint8_t)(kind == (uint8_t)MSL_STAGE_RAW_LINE_RIGHT_WALL);
   const uint32_t side_mask =
       right_wall ? (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK : (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK;
@@ -709,18 +733,23 @@ static uint8_t resolve_wall(MslBatch* batch, int bi, size_t idx, MslMpCollFrame*
     // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80048AB0_RightWall,mpColl_80049778_LeftWall}
     return 0u;
   }
+  // Every wall probe below is a segment or swept quad whose vertices come from these two ECB
+  // packets. Reject the complete mpCheck wall family once when its union cannot touch the
+  // extracted per-kind graph, rather than repeating the same graph rejection for nine probes.
+  // data/stages/bin/*.bin::MSLSTG01 wall graph bounds
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044E10_RightWall,mpColl_80045B74_LeftWall}
+  if (!wall_view_intersects_frame(view, frame)) {
+    return 0u;
+  }
   MslStageQueryHit candidates[9] = {{0}};
   uint8_t candidate_count = 0u;
   MslStageQueryHit query = {0};
   const uint16_t carried_id = right_wall ? frame->right_wall_id : frame->left_wall_id;
   if (carried_id != 0xFFFFu) {
-    const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
-    const MslStageMap* map = stage_collision_get_map(stage_id);
-    const MslStageMapLine* source = stage_collision_map_line(stage_id, carried_id);
-    MslStageMapLine line = {0};
+    const MslStageMap* map = view != NULL ? view->map : NULL;
+    const MslStageMapLine* source = stage_collision_map_line_in_map(map, carried_id);
     if (map != NULL && source != NULL && source->kind == kind && source->fighter_solid != 0u &&
-        joint_admitted(batch, idx, source->joint_id) &&
-        stage_collision_map_line_world(batch, bi, source, &line)) {
+        joint_admitted(batch, idx, source->joint_id)) {
       // Source CollData retains the current wall index across callbacks while the fighter remains
       // pressed into that shell. Actual separation drops the carried candidate; fresh point/edge
       // sweeps below still admit a different wall crossed during the same motion.
@@ -730,17 +759,17 @@ static uint8_t resolve_wall(MslBatch* batch, int bi, size_t idx, MslMpCollFrame*
           .kind = kind,
           .line_idx = (int32_t)(source - map->lines),
           .segment_i = carried_id,
-          .joint_id = line.joint_id,
-          .flags = line.lo_flags,
+          .joint_id = source->joint_id,
+          .flags = source->lo_flags,
       };
       candidates[candidate_count++] = query;
     }
   }
   const uint8_t swept_side =
       right_wall
-          ? find_line_hit(batch, bi, idx, kind, frame->prev_ecb.left_x, frame->prev_ecb.left_y,
+          ? find_line_hit(batch, bi, idx, view, frame->prev_ecb.left_x, frame->prev_ecb.left_y,
                           frame->ecb.left_x, frame->ecb.left_y, &query)
-          : find_line_hit(batch, bi, idx, kind, frame->prev_ecb.right_x, frame->prev_ecb.right_y,
+          : find_line_hit(batch, bi, idx, view, frame->prev_ecb.right_x, frame->prev_ecb.right_y,
                           frame->ecb.right_x, frame->ecb.right_y, &query);
   if (swept_side) {
     candidates[candidate_count++] = query;
@@ -753,30 +782,30 @@ static uint8_t resolve_wall(MslBatch* batch, int bi, size_t idx, MslMpCollFrame*
   // WallPush candidates, but DamageFly must not consume them as wall-tech contact.
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044E10_RightWall,
   // mpColl_80045B74_LeftWall}
-  if (find_line_hit(batch, bi, idx, kind, frame->prev_ecb.bottom_x, frame->prev_ecb.bottom_y,
+  if (find_line_hit(batch, bi, idx, view, frame->prev_ecb.bottom_x, frame->prev_ecb.bottom_y,
                     frame->ecb.bottom_x, frame->ecb.bottom_y, &query) &&
       !grounded_bottom_wall_is_floor_join(batch, bi, frame, &query)) {
     candidates[candidate_count++] = query;
   }
-  if (find_line_hit(batch, bi, idx, kind, frame->prev_ecb.top_x, frame->prev_ecb.top_y,
+  if (find_line_hit(batch, bi, idx, view, frame->prev_ecb.top_x, frame->prev_ecb.top_y,
                     frame->ecb.top_x, frame->ecb.top_y, &query)) {
     candidates[candidate_count++] = query;
   }
   const uint8_t bottom_edge_hit =
-      right_wall ? find_line_hit(batch, bi, idx, kind, frame->ecb.bottom_x, frame->ecb.bottom_y,
+      right_wall ? find_line_hit(batch, bi, idx, view, frame->ecb.bottom_x, frame->ecb.bottom_y,
                                  frame->ecb.left_x, frame->ecb.left_y, &query)
-                 : find_line_hit(batch, bi, idx, kind, frame->ecb.bottom_x, frame->ecb.bottom_y,
+                 : find_line_hit(batch, bi, idx, view, frame->ecb.bottom_x, frame->ecb.bottom_y,
                                  frame->ecb.right_x, frame->ecb.right_y, &query);
   if (bottom_edge_hit && !grounded_bottom_wall_is_floor_join(batch, bi, frame, &query)) {
     candidates[candidate_count++] = query;
   }
   const uint8_t bottom_quad_hit =
       right_wall
-          ? find_wall_quad_hit(batch, bi, idx, kind, frame->prev_ecb.bottom_x,
+          ? find_wall_quad_hit(batch, bi, idx, view, frame->prev_ecb.bottom_x,
                                frame->prev_ecb.bottom_y, frame->prev_ecb.left_x,
                                frame->prev_ecb.left_y, frame->ecb.bottom_x, frame->ecb.bottom_y,
                                frame->ecb.left_x, frame->ecb.left_y, &query)
-          : find_wall_quad_hit(batch, bi, idx, kind, frame->prev_ecb.right_x,
+          : find_wall_quad_hit(batch, bi, idx, view, frame->prev_ecb.right_x,
                                frame->prev_ecb.right_y, frame->prev_ecb.bottom_x,
                                frame->prev_ecb.bottom_y, frame->ecb.right_x, frame->ecb.right_y,
                                frame->ecb.bottom_x, frame->ecb.bottom_y, &query);
@@ -784,19 +813,19 @@ static uint8_t resolve_wall(MslBatch* batch, int bi, size_t idx, MslMpCollFrame*
     candidates[candidate_count++] = query;
   }
   const uint8_t top_edge_hit =
-      right_wall ? find_line_hit(batch, bi, idx, kind, frame->ecb.top_x, frame->ecb.top_y,
+      right_wall ? find_line_hit(batch, bi, idx, view, frame->ecb.top_x, frame->ecb.top_y,
                                  frame->ecb.left_x, frame->ecb.left_y, &query)
-                 : find_line_hit(batch, bi, idx, kind, frame->ecb.top_x, frame->ecb.top_y,
+                 : find_line_hit(batch, bi, idx, view, frame->ecb.top_x, frame->ecb.top_y,
                                  frame->ecb.right_x, frame->ecb.right_y, &query);
   if (top_edge_hit) {
     candidates[candidate_count++] = query;
   }
   const uint8_t top_quad_hit =
       right_wall
-          ? find_wall_quad_hit(batch, bi, idx, kind, frame->prev_ecb.left_x, frame->prev_ecb.left_y,
+          ? find_wall_quad_hit(batch, bi, idx, view, frame->prev_ecb.left_x, frame->prev_ecb.left_y,
                                frame->prev_ecb.top_x, frame->prev_ecb.top_y, frame->ecb.left_x,
                                frame->ecb.left_y, frame->ecb.top_x, frame->ecb.top_y, &query)
-          : find_wall_quad_hit(batch, bi, idx, kind, frame->prev_ecb.top_x, frame->prev_ecb.top_y,
+          : find_wall_quad_hit(batch, bi, idx, view, frame->prev_ecb.top_x, frame->prev_ecb.top_y,
                                frame->prev_ecb.right_x, frame->prev_ecb.right_y, frame->ecb.top_x,
                                frame->ecb.top_y, frame->ecb.right_x, frame->ecb.right_y, &query);
   if (top_quad_hit) {
@@ -879,7 +908,8 @@ static uint8_t resolve_wall(MslBatch* batch, int bi, size_t idx, MslMpCollFrame*
   return 1u;
 }
 
-uint8_t msl_mpcoll_resolve_ceiling(MslBatch* batch, int bi, size_t idx, MslMpCollFrame* frame) {
+static uint8_t resolve_ceiling_view(MslBatch* batch, int bi, size_t idx, MslMpCollFrame* frame,
+                                    const MslMapKindView* view) {
   MslStageQueryHit hit = {0};
   if (batch == NULL || frame == NULL) {
     return 0u;
@@ -889,8 +919,8 @@ uint8_t msl_mpcoll_resolve_ceiling(MslBatch* batch, int bi, size_t idx, MslMpCol
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044AD8_Ceiling,mpColl_80044C74_Ceiling}
   const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
   const uint8_t direct =
-      find_line_hit(batch, bi, idx, (uint8_t)MSL_STAGE_RAW_LINE_CEILING, frame->prev_ecb.top_x,
-                    frame->prev_ecb.top_y, frame->ecb.top_x, frame->ecb.top_y, &hit);
+      find_line_hit(batch, bi, idx, view, frame->prev_ecb.top_x, frame->prev_ecb.top_y,
+                    frame->ecb.top_x, frame->ecb.top_y, &hit);
   if (!direct) {
     MslStageRawLineKind linked_kind = MSL_STAGE_RAW_LINE_UNKNOWN;
     uint16_t linked_id = 0xFFFFu;
@@ -932,21 +962,21 @@ uint8_t msl_mpcoll_resolve_ceiling(MslBatch* batch, int bi, size_t idx, MslMpCol
     hit.normal_x = projection.normal_x;
     hit.normal_y = projection.normal_y;
   } else {
-    const MslStageMapLine* source = stage_collision_map_line(stage_id, hit.segment_i);
-    MslStageMapLine line = {0};
-    if (source == NULL || !stage_collision_map_line_world(batch, bi, source, &line)) {
+    const MslStageMapLine* line =
+        stage_collision_map_line_in_map(view != NULL ? view->map : NULL, hit.segment_i);
+    if (line == NULL) {
       return 0u;
     }
-    const uint8_t v0_is_left = (uint8_t)(line.x0 <= line.x1);
-    const float left_x = v0_is_left ? line.x0 : line.x1;
-    const float left_y = v0_is_left ? line.y0 : line.y1;
-    const float right_x = v0_is_left ? line.x1 : line.x0;
-    const float right_y = v0_is_left ? line.y1 : line.y0;
+    const uint8_t v0_is_left = (uint8_t)(line->x0 <= line->x1);
+    const float left_x = v0_is_left ? line->x0 : line->x1;
+    const float left_y = v0_is_left ? line->y0 : line->y1;
+    const float right_x = v0_is_left ? line->x1 : line->x0;
+    const float right_y = v0_is_left ? line->y1 : line->y0;
     const int side = frame->ecb.top_x <= left_x ? -1 : 1;
     const float edge_x = side < 0 ? left_x : right_x;
     const float edge_y = side < 0 ? left_y : right_y;
-    const int16_t adjacent = side < 0 ? (v0_is_left ? line.prev_id : line.next_id)
-                                      : (v0_is_left ? line.next_id : line.prev_id);
+    const int16_t adjacent = side < 0 ? (v0_is_left ? line->prev_id : line->next_id)
+                                      : (v0_is_left ? line->next_id : line->prev_id);
     MslStageRawLineKind adjacent_kind = MSL_STAGE_RAW_LINE_UNKNOWN;
     const uint8_t wall_join =
         (uint8_t)(adjacent >= 0 &&
@@ -971,6 +1001,15 @@ uint8_t msl_mpcoll_resolve_ceiling(MslBatch* batch, int bi, size_t idx, MslMpCol
   batch->state.ceiling_normal_x[idx] = hit.normal_x;
   batch->state.ceiling_normal_y[idx] = hit.normal_y;
   return 1u;
+}
+
+uint8_t msl_mpcoll_resolve_ceiling(MslBatch* batch, int bi, size_t idx, MslMpCollFrame* frame) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const MslMapKindView ceiling =
+      map_kind_view(batch->state.stage_id[(size_t)bi], (uint8_t)MSL_STAGE_RAW_LINE_CEILING);
+  return resolve_ceiling_view(batch, bi, idx, frame, &ceiling);
 }
 
 uint8_t msl_mpcoll_resolve_walls_ceiling(MslBatch* batch, int bi, size_t idx,
@@ -999,28 +1038,30 @@ uint8_t msl_mpcoll_resolve_walls_ceiling(MslBatch* batch, int bi, size_t idx,
   const uint8_t projected_side_owner =
       (uint8_t)(!msl_coll_handler_is_damage(batch->state.live_coll_handler_kind[idx]) ||
                 mpcoll_ground_damageflyroll_uses_jobj_ecb(batch->state.action_id[idx]));
-  uint8_t left = resolve_wall(batch, bi, idx, frame, (uint8_t)MSL_STAGE_RAW_LINE_LEFT_WALL,
-                              carried_left_hug, 0u);
+  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
+  const MslMapKindView left_view = map_kind_view(stage_id, (uint8_t)MSL_STAGE_RAW_LINE_LEFT_WALL);
+  const MslMapKindView right_view = map_kind_view(stage_id, (uint8_t)MSL_STAGE_RAW_LINE_RIGHT_WALL);
+  const MslMapKindView ceiling_view = map_kind_view(stage_id, (uint8_t)MSL_STAGE_RAW_LINE_CEILING);
+  uint8_t left = resolve_wall(batch, bi, idx, frame, &left_view, carried_left_hug, 0u);
   float x_after_left = frame->cur_x;
-  uint8_t right = resolve_wall(batch, bi, idx, frame, (uint8_t)MSL_STAGE_RAW_LINE_RIGHT_WALL,
-                               carried_right_hug, 0u);
+  uint8_t right = resolve_wall(batch, bi, idx, frame, &right_view, carried_right_hug, 0u);
   float x_after_right = frame->cur_x;
   // The second source pass rechecks the side sweep after the first pass projects the root. Admit
   // an exact projected endpoint only for a wall acquired by this coordinator: a wall carried into
   // the callback still needs a new side sweep (or its completed-callback Hug bit) and must not turn
   // a prior bottom/top push into a wall-tech contact on the following frame.
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046904
-  left |=
-      resolve_wall(batch, bi, idx, frame, (uint8_t)MSL_STAGE_RAW_LINE_LEFT_WALL, carried_left_hug,
-                   (uint8_t)(projected_side_owner && left && !entered_with_left_wall));
-  if (left) {
-    x_after_left = frame->cur_x;
-  }
-  right |=
-      resolve_wall(batch, bi, idx, frame, (uint8_t)MSL_STAGE_RAW_LINE_RIGHT_WALL, carried_right_hug,
-                   (uint8_t)(projected_side_owner && right && !entered_with_right_wall));
-  if (right) {
-    x_after_right = frame->cur_x;
+  if (left || right) {
+    left |= resolve_wall(batch, bi, idx, frame, &left_view, carried_left_hug,
+                         (uint8_t)(projected_side_owner && left && !entered_with_left_wall));
+    if (left) {
+      x_after_left = frame->cur_x;
+    }
+    right |= resolve_wall(batch, bi, idx, frame, &right_view, carried_right_hug,
+                          (uint8_t)(projected_side_owner && right && !entered_with_right_wall));
+    if (right) {
+      x_after_right = frame->cur_x;
+    }
   }
   if (!left) {
     frame->env_flags &= ~(uint32_t)MSL_COLLIDE_LEFT_WALL_MASK;
@@ -1034,7 +1075,7 @@ uint8_t msl_mpcoll_resolve_walls_ceiling(MslBatch* batch, int bi, size_t idx,
     // refs/melee/src/melee/mp/mpcoll.c::{mpCollSqueezeHorizontal,mpCollInterpolateECB}
     squeeze_horizontal(batch, idx, frame, x_after_right, x_after_left);
   }
-  return msl_mpcoll_resolve_ceiling(batch, bi, idx, frame);
+  return resolve_ceiling_view(batch, bi, idx, frame, &ceiling_view);
 }
 
 static MslMpCollAirStepResult resolve_air_step_once(MslBatch* batch, int bi, size_t idx,

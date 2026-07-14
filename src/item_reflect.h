@@ -7,7 +7,6 @@
 
 enum {
   MSL_ITEM_REFLECT_NO_PORT = 0xFFu,
-  MSL_ITEM_REFLECT_KNOWN_NONE_PORT = 0xFEu,
 };
 
 static inline void msl_item_reflect_clear_runtime_lanes(MslBatch* batch, size_t item_idx) {
@@ -28,20 +27,8 @@ static inline void msl_item_reflect_clear_runtime_lanes(MslBatch* batch, size_t 
   batch->state.item_pending_reflect_instance_id[item_idx] = 0u;
 }
 
-static inline void msl_item_reflect_clear_seed_lanes(MslBatch* batch, size_t item_idx) {
-  if (batch == NULL) {
-    return;
-  }
-  batch->state.item_reflect_transfer_seed_port[item_idx] = (uint8_t)MSL_ITEM_REFLECT_NO_PORT;
-  batch->state.item_reflect_transfer_seed_iid[item_idx] = 0u;
-  batch->state.item_shield_bounce_seed_valid[item_idx] = 0u;
-  batch->state.item_shield_bounce_seed_vel_x[item_idx] = 0.0f;
-  batch->state.item_shield_bounce_seed_vel_y[item_idx] = 0.0f;
-}
-
 static inline void msl_item_reflect_clear_all_lanes(MslBatch* batch, size_t item_idx) {
   msl_item_reflect_clear_runtime_lanes(batch, item_idx);
-  msl_item_reflect_clear_seed_lanes(batch, item_idx);
 }
 
 static inline void msl_item_reflect_set_damage_mul(MslBatch* batch, size_t item_idx,
@@ -108,11 +95,7 @@ static inline uint8_t msl_item_reflect_has_transfer_provenance(const MslBatch* b
   if (batch->state.item_reflect_body_owner_port[item_idx] != (uint8_t)MSL_ITEM_REFLECT_NO_PORT) {
     return 1u;
   }
-  const uint8_t seed_port = batch->state.item_reflect_transfer_seed_port[item_idx];
-  return (seed_port != (uint8_t)MSL_ITEM_REFLECT_NO_PORT &&
-          seed_port != (uint8_t)MSL_ITEM_REFLECT_KNOWN_NONE_PORT)
-             ? 1u
-             : 0u;
+  return 0u;
 }
 
 static inline void msl_item_reflect_commit_owner_snapshot(MslBatch* batch, size_t item_idx,
@@ -262,10 +245,9 @@ static inline void msl_item_reflect_apply_pending_laser_callback(MslBatch* batch
   batch->state.item_direction[item_idx] = (new_vx >= 0.0f) ? 1.0f : -1.0f;
 }
 
-static inline void msl_item_reflect_apply_immediate_transfer(MslBatch* batch, size_t item_idx,
-                                                             size_t reflector_idx,
-                                                             int reflector_port, float damage_mul,
-                                                             float speed_mul) {
+static inline void msl_item_reflect_apply_transfer_state(MslBatch* batch, size_t item_idx,
+                                                         size_t reflector_idx, int reflector_port,
+                                                         float damage_mul) {
   if (batch == NULL) {
     return;
   }
@@ -298,44 +280,20 @@ static inline void msl_item_reflect_apply_immediate_transfer(MslBatch* batch, si
     batch->state.item_reflect_body_attack_instance[item_idx] = reflector_attack_instance;
     batch->state.item_reflect_body_damage_valid[item_idx] = prior_stale_source_seen;
   }
+}
+
+static inline void msl_item_reflect_apply_immediate_transfer(MslBatch* batch, size_t item_idx,
+                                                             size_t reflector_idx,
+                                                             int reflector_port, float damage_mul,
+                                                             float speed_mul) {
+  if (batch == NULL) {
+    return;
+  }
+  msl_item_reflect_apply_transfer_state(batch, item_idx, reflector_idx, reflector_port, damage_mul);
   const float mul = (speed_mul > 0.0f) ? speed_mul : 1.0f;
   const float new_vx = -batch->state.item_vel_x[item_idx] * mul;
   const float new_vy = -batch->state.item_vel_y[item_idx] * mul;
   batch->state.item_vel_x[item_idx] = new_vx;
   batch->state.item_vel_y[item_idx] = new_vy;
   batch->state.item_direction[item_idx] = (new_vx >= 0.0f) ? 1.0f : -1.0f;
-}
-
-static inline void msl_item_reflect_apply_seeded_transfer(MslBatch* batch, size_t item_idx,
-                                                          uint8_t seed_port, uint16_t seed_iid,
-                                                          float damage_mul) {
-  if (batch == NULL || seed_port >= (uint8_t)batch->config.num_players || seed_iid == 0u) {
-    return;
-  }
-  const int bi = (int)(item_idx / (size_t)MSL_MAX_ITEMS);
-  const size_t reflector_idx = msl_idx_player(bi, (int)seed_port);
-  if (batch->state.item_owner[item_idx] != (int8_t)seed_port &&
-      msl_item_reflect_should_flip_direction_now(batch, item_idx, reflector_idx)) {
-    const float vx = batch->state.item_vel_x[item_idx];
-    if (vx > 0.0f) {
-      batch->state.item_direction[item_idx] = -1.0f;
-    } else if (vx < 0.0f) {
-      batch->state.item_direction[item_idx] = 1.0f;
-    }
-  }
-  batch->state.item_owner[item_idx] = (int8_t)seed_port;
-  batch->state.item_instance_id[item_idx] = seed_iid;
-  msl_item_reflect_set_damage_mul(batch, item_idx, damage_mul);
-  // Stage (do not clear) the pending reflected-callback lanes: ftColl_80077464 only writes the
-  // reflect snapshot; Item_80269F14 consumes it on the item's next callback pass, where
-  // itFoxLaser_Logic94_Reflected flips facing and reverses the velocity unconditionally. The
-  // still-approaching direction heuristic above only times the same-frame visual facing lane; an
-  // already-crossed projectile must still get the next-pass velocity reversal (MAJ rec294: the
-  // powershielded laser crosses the reflector root by 0.63 before the transfer applies, and the
-  // replay's item record flips velocity exactly one item pass later).
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
-  // refs/melee/src/melee/it/item.c::Item_80269F14
-  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_Reflected
-  batch->state.item_pending_reflect_owner_port[item_idx] = (uint8_t)seed_port;
-  batch->state.item_pending_reflect_instance_id[item_idx] = seed_iid;
 }

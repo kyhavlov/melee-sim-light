@@ -90,12 +90,15 @@ typedef struct MslStateSoA {
   uint8_t* is_teams;                // [batch]
   uint8_t* team_id;                 // [batch * MSL_MAX_PLAYERS]
   uint8_t* char_id;                 // [batch * MSL_MAX_PLAYERS]
-  // Live MotionState Coll callback lanes. The row callback is installed on motion entry and may
-  // subsequently be replaced by source callback writes; map dispatch never re-derives ownership
-  // from the current action id.
+  // Live MotionState callback identities. Fighter_ChangeMotionState installs the complete row;
+  // individual source owners may subsequently replace a callback without changing the row.
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Escape.c,ftCo_ItemThrow.c}
+  uint16_t* live_anim_callback_id;
+  uint16_t* live_iasa_callback_id;
+  uint16_t* live_phys_callback_id;
   uint16_t* live_coll_callback_id;
+  uint16_t* live_cam_callback_id;
   uint16_t* live_coll_callback_action_id;
   uint8_t* live_coll_handler_kind;
   uint8_t* live_coll_wrapper_selector_kind;
@@ -332,6 +335,7 @@ typedef struct MslStateSoA {
   uint8_t* smash_charge_state;                 // 0=None, 1=PreCharge, 2=Charging, 3=Release
   uint8_t* smash_charge_frames;                // elapsed Charging frames
   uint8_t* smash_charge_hold_frames_max;       // ftCo_800DEE84 arg2 / x211C_holdFrame
+  float* smash_charge_damage_mul;              // ftCo_800DEE84 arg0 / x2120_damageMul
   int32_t* smash_charge_saved_rate_fp_q16_16;  // x2124_frameSpeedMul
   uint8_t* on_ground;
   uint8_t* frame_start_on_ground;  // on_ground value captured before current-frame callbacks.
@@ -385,30 +389,6 @@ typedef struct MslStateSoA {
   // Previous frame's action_frame (captured at step start; internal-only).
   int16_t* prev_action_frame;
   int16_t* action_frame;
-  // Throw projectile pulse-consume seed lane (decomp owner: ftFx_Throw_Anim consumes
-  // ftAction throw_flags_b0 one-shot pulses).
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-  uint8_t* throw_pulse_consumed;
-  // Throw projectile pulse crossing lane from the previous replay step (0 = none).
-  // Producer is strictly causal in validation replay-buffer seed derivation.
-  uint8_t* throw_pulse_crossed_prev_frame;
-  // Current teacher-forced step's command-timer pending throw projectile pulse (0 = none).
-  // This seed-owned lane is authoritative for one step after reseed; rollout falls back to runtime
-  // frame-crossing after `throw_command_pending_seed_valid` is cleared at end-of-frame.
-  uint8_t* throw_command_pending_pulse_frame;
-  uint8_t* throw_command_pending_seed_valid;
-  // Internal command-cursor carry for source frames where ftAction reaches a projectile command but
-  // the matching article is serialized by the next Anim callback. Unlike the seed-owned pending
-  // lane, this persists across the end-of-frame transient clear until the carried pulse is spawned.
-  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-  uint8_t* throw_command_deferred_pulse_frame;
-  // Internal runtime producer for the current frame's throw pulse crossing.
-  // The frame scheduler promotes this to `throw_pulse_crossed_prev_frame` at end-of-frame so
-  // rollout can carry the same throw-side pulse ownership that one-step seeds expose directly.
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-  uint8_t* throw_pulse_crossed_curr_frame;
   // Common Throw motion vars. x4 is the script-command hold; x8 records that an airborne throw
   // has already completed its floor handoff. They select the installed Throw Coll callback's
   // three source paths and persist independently of public ground_or_air.
@@ -427,7 +407,7 @@ typedef struct MslStateSoA {
   //   ftFx_SpecialN_Enter,ftFx_SpecialN_GetBlasterAction}
   // refs/melee/src/melee/it/items/itfoxblaster.c::{it_802AE8A8,itFoxblaster_UnkMotion8_Anim}
   uint8_t* blaster_gun_spawned_this_frame;
-  // Source-owner clear countdown (`fp->dmg.x18C8`) with +1 bias.
+  // Source-owner clear countdown (`fp->dmg.x18C8`).
   //
   // Decomp:
   // - Fighter_ChangeMotionState seeds x18C8 from p_ftCommonData->x814 under grounded + x9_b1.
@@ -435,51 +415,6 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
   // refs/melee/src/melee/ft/types.h::MotionState (x9_b1)
   uint8_t* source_clear_timer_x18c8;
-  // Source-owner set phase lane for active x18C8 runs (causal seed lane).
-  // 0: active run has no observed source-owner set edge backing.
-  // 1: active run is backed by source-owner set edge context (6 -> owner).
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-  uint8_t* source_clear_owner_set_phase;
-  // One-step hidden ProcessHit damage-pending source-owner clear bridge.
-  // 0: no ProcessHit-owned clear override.
-  // 1: consume source-owner clear before x18C8 decrement for this one-step row.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-  uint8_t* source_clear_processhit_damage_pending_phase;
-  // Explicit Fighter_8006CDA4 pre-gate RNG stream-phase seed lane for DamageFlyRoll entry.
-  // 0: no seeded pre-gate stream ownership.
-  // 1: consume one pre-gate HSD_Randi before ftCo_8008DCE0 block_33.
-  // 2: consume two pre-gate HSD_Randi calls before ftCo_8008DCE0 block_33.
-  // 3: consume all three decomp-visible pre-gate HSD_Randi calls before ftCo_8008DCE0 block_33.
-  // 4: source-proven zero-consume gate; admit the gate without a pre-gate stream advance.
-  // Nonzero DamageFlyTop values may carry across the same segment as hidden held-item/x197C state.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-  // refs/melee/src/melee/ft/types.h
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  uint8_t* fighter_8006cda4_pre_gate_consume_count;
-  // Grounded source-owner clear phase bridge (`ftCommon_800804FC` path).
-  // 0: no grounded clear-phase override.
-  // 1: consume grounded clear before x18C8 decrement for this one-step row.
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-  uint8_t* source_clear_grounded_damage_clear_phase;
-  // Terminal source-owner phase for `source_clear_timer_x18c8 == 1` rows. One-step transient lane
-  // produced in validation tooling; matching runtime owners may also park the source lane while
-  // retiring the countdown.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-  uint8_t* source_clear_terminal_phase;
-  // Internal-only compatibility/seed throw flow latch. Normal runtime release damage is owned by
-  // the thrower's motion-state Anim callback; this lane remains for teacher-forced one-step/reseed
-  // states that expose a detached pending-release victim after item collision.
-  //
-  // Stored on the thrower (not the victim) so we can clear it by iterating over players each frame.
-  // Value: 0xFF = none, else victim port in [0..MSL_MAX_PLAYERS).
-  uint8_t* throw_pending_victim_port;
-  // Internal-only compatibility/seed throw flow latch: the throw hitbox idx to apply when
-  // throw_pending_victim_port is set. Value: 0xFF = none, else hitbox idx in
-  // [0..MSL_THROW_HITBOX_IDX_MAX).
-  uint8_t* throw_pending_hit_idx;
   // Grab/throw victim attachment internals.
   //
   // Decomp:
@@ -617,16 +552,41 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftanim.c (ftAnim_8006F0FC / ftAnim_SetAnimRate)
   int32_t* anim_frame_fp_q16_16;
   int32_t* frame_speed_mul_fp_q16_16;
-  // GuardSetOff hidden exit anim-rate seed/provenance lane.
-  //
-  // Slippi can expose the source `fp->frame_speed_mul` for GuardSetOff only on the first
-  // non-hitlag post-frame, after Fighter_8006A1BC has ended hitlag and before
-  // Fighter_8006A360 advances animation. Runtime uses this field only when seeded/provenanced,
-  // applies it on that hitlag-exit frame, and clears it immediately afterward; natural
-  // free-running gameplay leaves it zero and uses the live ftCo_80092F2C entry rate.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-  int32_t* guard_setoff_exit_rate_fp_q16_16;
+  // Live fighter command-script state. The cursor advances once on the AObj timebase; replay
+  // preprocessing reconstructs this same state before free-running gameplay begins.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80073240,ftAction_80073354,ftAction_8007349C}
+  uint16_t* script_msid;
+  uint32_t* script_event_cursor;
+  int32_t* script_last_frame_fp_q16_16;
+  // Exact source fp->frame_speed_mul snapshot used by ftAction's chained f32 command timer.
+  // The broader animation clock remains fixed-point, but command-boundary ownership must not
+  // inherit its quantization because synchronous waits carry sub-frame residuals across opcodes.
+  float* script_rate_f32;
+  // Live `CommandInfo.timer`. Synchronous waits add to this single f32 accumulator, preserving
+  // the negative residual from one command boundary into the next.
+  // refs/melee/src/melee/lb/lbcommand.c::Command_01
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80073240,ftAction_80073354}
+  float* script_timer_f32;
+  // Live `CommandInfo.frame_count`, advanced on the same exact f32 rate as the command timer.
+  float* script_frame_count_f32;
+  uint16_t* script_cmd_vars;  // [batch * players * 4]
+  uint8_t* script_throw_flags;
+  uint8_t* script_hit_status_x1988;
+  uint8_t* script_hurtcap_state;  // [batch * players * MSL_MAX_HURTCAPS]
+  uint16_t* script_state_flags_221c_y;
+  uint64_t* script_bone_physics_mask;
+  // Two persistent xDF4 scripted throw HitCapsules per fighter.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071E04
+  uint8_t* script_throw_hitbox_valid;
+  float* script_throw_hitbox_damage;
+  uint16_t* script_throw_hitbox_angle;
+  uint16_t* script_throw_hitbox_kbg;
+  uint16_t* script_throw_hitbox_wsk;
+  uint16_t* script_throw_hitbox_bkb;
+  uint8_t* script_throw_hitbox_element;
+  uint8_t* script_throw_hitbox_sfx_kind;
+  uint8_t* script_throw_hitbox_sfx_severity;
   // Walk Anim callback source velocity (`mv_x0` in ftWalkCommon_800DFDDC).
   //
   // Decomp:
@@ -662,7 +622,6 @@ typedef struct MslStateSoA {
   float* capture_wait_counter;          // mv.co.capturewait.x0
   float* capture_wait_anim_rate_timer;  // mv.co.capturewait.x4
   uint8_t* capture_wait_jump_latch;     // mv.co.capturewait.xC
-  uint8_t* capture_breakout_pending;    // explicit CatchWait/CaptureWait breakout resolve bit
   // Shared throw/thrown entry anim-speed cache (`ftCo_800DD4B0` / `ftCo_800DD398`).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398}
   int32_t* throw_anim_rate_fp_q16_16;
@@ -691,23 +650,6 @@ typedef struct MslStateSoA {
   // rollout needs x4=0.501, not the same-step 0.75 post-update value).
   uint16_t* guard_tilt_x8_frame_start;
   float* guard_tilt_x4_frame_start;
-  // Runtime-only transient: set when enter_guard_on() runs during the current step so item
-  // projectile shield precedence can distinguish same-step GuardOn entry from teacher-forced
-  // frozen GuardOn seeds that merely replay as `animation_index==-1, action_frame==-1`.
-  uint8_t* guard_on_entered_this_frame;
-  // Runtime-only owner countdown for GuardOn entered through a same-frame
-  // `... -> Wait -> GuardOn` callback handoff. This survives the immediate frozen
-  // GuardOn/spotdodge handoff window, where prev_action_id no longer identifies the callback
-  // source, then is consumed so later GuardOn rows cannot stale-carry entry provenance.
-  uint8_t* guard_entry_via_wait_callback;
-  // Runtime-only source marker for CliffClimb/Attack/Escape option end -> Wait_IASA -> GuardOn.
-  // Fighter shield pair-order can keep the fresh no-submotion ShieldDesc out of a later-slot
-  // same-frame grounded Reflector pass for this cliff callback owner only; ordinary GuardOn entry
-  // sources stay on the normal ShieldDesc path.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Anim
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0}
-  uint8_t* guard_on_cliff_end_source;
   // Runtime-only marker for GuardOn entered through Dash_IASA's `dash.x4 != 0` handoff into the
   // mid `ftCo_80091AD8` helper. Projectile item collision for that handoff frame has already
   // passed before the ShieldDesc is eligible in vanilla, so same-step item shield precedence must
@@ -715,30 +657,12 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_800923B4}
   uint8_t* guard_entry_via_dash_91ad8;
-  // Runtime-only countdown for Landing -> GuardOn entries whose callback source can feed the
-  // next-frame GuardOn -> GuardReflect item ReflectDesc owner. This is a source-entry latch, not a
-  // replay row key; it decays across the immediate frozen GuardOn handoff window.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::*_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_8009388C}
-  uint8_t* guard_on_entry_reflect_source_latch;
-  // Runtime-only snapshot of mv.co.guard.x10 at the beginning of the current fighter action
-  // callback. Shield contact can enter GuardSetOff later in the same frame; that contact preserves
-  // the pre-GuardOn/Guard hold-tick x10 owner rather than the post-callback decremented value.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,ftCo_80092F2C}
-  uint8_t* guard_x10_frame_start;
   // Runtime-only marker for the Dash IASA locomotion -> GuardReflect entry slice that also reaches
   // Dash's terminal gr_vel scalar in the same callback. Item reflect ownership uses this to keep
   // same-frame xDA8 transfer on the source callback phase that exposed it, without replay ids.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_80093A50}
   uint8_t* guard_reflect_entry_dash_terminal_scalar;
-  // Runtime-only marker for GuardReflect entered during the current input-callback pass. Source
-  // calls ftCo_80093A50/ftCo_8009388C from IASA after the frame's GuardReflect Anim callback phase,
-  // so destination GuardReflect must not run an extra same-frame GuardOn_Anim shield drain.
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-  //   ftCo_8009388C,ftCo_80093A50,ftCo_GuardReflect_Anim}
-  uint8_t* guard_reflect_entered_this_frame;
   // Seed snapshot of `fp+0x221B_b0` / Slippi `isShieldActive` before current-step shield
   // descriptor callbacks mutate state_flags. Item GuardReflect ownership uses this to distinguish
   // aged descriptor-present rows from timer carry rows without replay ids.
@@ -757,13 +681,6 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/types.h (fp+0x221C bitfield layout)
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   uint8_t* state_flags_221c_frame_start;
-  // Runtime-only marker for Guard/GuardOn/GuardReflect/GuardOff IASA entering KneeBend through
-  // ftCo_800CB024 in the current step. The decomp input callback runs once per frame, so a fresh
-  // Guard -> KneeBend handoff must not also consume KneeBend_IASA before the next frame.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_Guard_IASA}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
-  uint8_t* guard_jump_oos_entered_this_frame;
   // Runtime-only marker for SpecialLw Loop/Turn/End IASA entering JumpAerial in the current step.
   // The decomp input callback does not then run destination JumpAerial/Fall special dispatch again
   // in the same frame, so the later generic B-special pass must not consume the same B/up edge.
@@ -803,26 +720,12 @@ typedef struct MslStateSoA {
   // Guard release lockout + shield-drain latch (seeded; decomp-shaped).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC and ::ftCo_800925A4.
   uint8_t* guard_release_latched_xc;  // mv.co.guard.xC (0/1)
+  uint16_t* guard_anim_counter_x0;    // mv.co.guard.x0 (GuardOn/Guard Anim callback counter)
   uint8_t* guard_x10;                 // mv.co.guard.x10 (frames remaining; clamped to 0..255)
   float* lightshield_amount;          // fp->lightshield_amount (0..1)
   // GuardSetOff shield-hit int-damage lower bound for future GuardSetOff ownership fixes.
   // Decomp consumer: fp->x19A4 in ftCo_80092F2C.
   uint8_t* guard_setoff_hitlag_damage_min;
-  // Per-defender teacher-forced shield-hit x19A4 max int damage for accepted GuardSetOff entries.
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
-  uint8_t* combat_shield_hit_int_damage;
-  // Per-defender teacher-forced shield-hit x19A0 shieldDamageTaken for accepted GuardSetOff entries.
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  uint8_t* combat_shield_damage_taken;
-  // GuardSetOff hitlag-exit ownership phase discriminator for future F02 runtime fixes.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
-  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-  uint8_t* guard_setoff_hitlag_exit_phase_u8;
-  // GuardSetOff post-hitlag owner discriminator for future F02 runtime fixes.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-  uint8_t* guard_setoff_post_hitlag_owner_u8;
   // Locomotion/input-history internals.
   // - `tilt_timer_*`, `turn_*`, and KneeBend internals are seeded from replay history (MslSeed).
   uint8_t*
@@ -882,11 +785,6 @@ typedef struct MslStateSoA {
   // - Gates TurnRun/RunBrake in Run_IASA.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::{ftCo_Run_Anim,ftCo_Run_IASA}
   uint8_t* run_x0;  // [batch * players], clamped to 0..255
-  // RunBrake TurnRun gate (`fp->cmd_vars[0]`) derived from the common RunBrake script.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
-  //   ftCo_RunBrake_Enter,ftCo_RunBrake_IASA}
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
-  uint8_t* runbrake_cmd0;  // [batch * players], 0/1
   // RunBrake animation-freeze latch (`mv.co.runbrake.x0`).
   // - Reset on RunBrake entry.
   // - ftCo_RunBrake_Anim sets it when cmd_vars[1] freezes the AObj at |gr_vel| >= x42C.
@@ -894,7 +792,11 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
   //   ftCo_RunBrake_Enter,ftCo_RunBrake_Anim}
   // data/common/ft_common_data.json::runbrake_anim_freeze_speed_threshold
-  uint8_t* runbrake_freeze_x0;  // [batch * players], 0=clear, 1=frozen, 3=cmd1 consumed
+  uint8_t* runbrake_freeze_x0;  // [batch * players], 0=clear, 1=armed
+  // TurnRun animation-freeze latch (`mv.co.turnrun.x14`).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::{
+  //   ftCo_TurnRun_Enter,ftCo_TurnRun_Anim}
+  uint8_t* turnrun_x14;  // [batch * players], 0/1
   // Dash IASA branch latch (decomp: fp->mv.co.dash.x4).
   // - Set by ftCo_Dash_Enter(arg1).
   // - ftCo_Dash_IASA uses (x4 != 0 && cur_anim_frame <= x44) for early-branch gating.
@@ -961,6 +863,15 @@ typedef struct MslStateSoA {
   float* falcon_specialhi_vel_y;
   uint8_t* falcon_specialhi_x221b_b7;
   uint8_t* grab_constraint_x2226_b2;
+  // fp->x2174 saved by ftCo_800DB368 when FtPart_XRotN is constrained. Release restores this
+  // exact local translation before its immediate ECB load; the later Thrown* animation pose is
+  // not an equivalent substitute.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  float* grab_constraint_x2174_x;
+  float* grab_constraint_x2174_y;
+  float* grab_constraint_x2174_z;
+  uint8_t* grab_constraint_x2174_valid;
   // Raptor Boost: mv.ca.specials.grav accumulator + fp->unk_gobj inert-contact detect flag.
   float* falcon_specials_grav;
   uint8_t* falcon_detect_pending;
@@ -1300,6 +1211,16 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
   uint8_t* hitbox_capsule_enabled;  // [batch * players * MSL_MAX_HITBOXES]
   uint8_t* hitbox_capsule_group;    // [batch * players * MSL_MAX_HITBOXES]
+  // Full source HitCapsule state plus bone-local offset retained across priority-9 endpoint
+  // refresh. `hitbox_capsule_enabled` remains temporarily during the cutover and is deleted once
+  // all consumers use the source state directly.
+  // refs/melee/src/melee/lb/types.h::HitCapsule
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+  uint8_t* hitbox_capsule_state;
+  uint8_t* hitbox_only_hit_grabbed;
+  float* hitbox_offset_x;
+  float* hitbox_offset_y;
+  float* hitbox_offset_z;
   // First-frame bootstrap flag for x58 previous centers after teacher-forced reseed.
   // 1 => bootstrap hitbox_prev_* once in hitboxes_refresh(), then clear to 0.
   uint8_t* hitbox_prev_bootstrap;  // [batch * players]
@@ -1344,11 +1265,17 @@ typedef struct MslStateSoA {
   float* shield_y;       // [batch * players]
   float* shield_z;       // [batch * players]
   float* shield_radius;  // [batch * players]
-  // Pose-derived world-space reflector (SpecialLw) bubble parameters (computed each frame in
-  // reflector_bubbles_refresh).
-  float* reflector_x;       // [batch * players]
-  float* reflector_y;       // [batch * players]
-  float* reflector_radius;  // [batch * players]
+  // Live ReflectDesc packet, published from the source callback owner and current JObj pose.
+  // Common powershield, Fox/Falco Reflector, and Zelda Nayru all feed this one descriptor rather
+  // than making each item family reconstruct action/frame-specific reflector state.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+  float* reflector_x;             // [batch * players]
+  float* reflector_y;             // [batch * players]
+  float* reflector_z;             // [batch * players]
+  float* reflector_radius;        // [batch * players]
+  float* reflector_damage_mul;    // [batch * players]
+  float* reflector_speed_mul;     // [batch * players]
+  int32_t* reflector_max_damage;  // [batch * players]
   uint16_t* ground_id;
   // Hidden CollData.floor_skip carry. Pass/shield-drop writes the current platform floor.index via
   // mpUpdateFloorSkip; mpColl floor checks reject that same platform until source clears/overwrites
@@ -1357,6 +1284,17 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip,mpColl_80044628_Floor}
   uint16_t* floor_skip_segment_id;
   uint32_t* animation_index;
+  // Last fighter JObj pose interpreted by ftAnim_8006E9B4/ftAnim_8006EBA4. Collision runs after
+  // Anim/IASA/Phys and therefore cannot reconstruct this object from the then-current MotionState:
+  // a later callback may have changed motion or facing while the already-interpreted JObj remains
+  // live. SkipAnim entries intentionally preserve these lanes.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ChangeMotionState}
+  // refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006E9B4,ftAnim_8006EBA4}
+  uint8_t* collision_pose_valid;       // [batch * players]
+  uint8_t* collision_pose_facing;      // [batch * players]
+  uint16_t* collision_pose_action_id;  // [batch * players]
+  uint16_t* collision_pose_msid;       // [batch * players]
+  float* collision_pose_anim_frame;    // [batch * players]
   // Live fighter dynamic-node pose owner (`ftData.x2C` -> `lb_8001044C`).
   //
   // Runtime-only carry state for the dynamic JObj chain that feeds `lb_8000B1CC` collision
@@ -1399,11 +1337,6 @@ typedef struct MslStateSoA {
   // Internal-only frame-start submotion. Same-callback item/fighter collision can consume the
   // source collision pose after a later action publication has already replaced animation_index.
   uint32_t* frame_start_animation_index;  // [batch * players]
-  // Internal-only frame-start copy of x2068/x206C. Item spawn callbacks use this to recover the
-  // live Blaster Loop attack identity when the simulator has already applied a same-frame
-  // motion-state exit before spawning the shot article.
-  uint16_t* frame_start_attack_id;        // [batch * players]
-  uint16_t* frame_start_attack_instance;  // [batch * players]
   // Internal-only frame-start fighter instance (fp+0x2070 union-as-int low half in Slippi terms).
   // Same-frame reciprocal BODY hits can leave a frame-start HitCapsule live after the attacker has
   // already entered Damage*; collision source attribution still points at the pre-entry fighter.
@@ -1468,9 +1401,6 @@ typedef struct MslStateSoA {
   uint8_t* combat_hitlist_hb_valid;
   uint16_t* combat_hitlist_hb_cd;
   uint16_t* combat_hitlist_hb_victim_iid;
-  // Teacher-forced per-HitCapsule shield-contact tri-state.
-  // Layout: [batch * MSL_MAX_PLAYERS * MSL_MAX_HITBOXES * MSL_MAX_PLAYERS]
-  uint8_t* combat_shield_contact_hb_kind;
   // Reseed generation counter (incremented on reseed_seed).
   uint32_t* hitlist_reseed_gen;  // [batch]
   // Per fighter hitbox victim rings (x914[4] analogue).
@@ -1566,35 +1496,17 @@ typedef struct MslStateSoA {
   uint8_t* item_misc1;
   uint8_t* item_misc2;
   uint8_t* item_misc3;
+  // itFoxLaser itemVar.scale, advanced by Anim and reset by reflect/shield-bounce callbacks.
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim,
+  //   itFoxLaser_Logic94_Reflected,itFoxLaser_Logic94_ShieldBounced}
+  float* item_laser_scale;  // [batch * MSL_MAX_ITEMS]
   // Hidden item reflect snapshot owner copied by ftColl_80077464 and consumed by Item_80269F14.
   // This is runtime-only state; Slippi item misc bytes stay replay-visible item fields.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
   // refs/melee/src/melee/it/item.c::Item_80269F14
   uint8_t* item_pending_reflect_owner_port;    // [batch * MSL_MAX_ITEMS], 0xFF = none
   uint16_t* item_pending_reflect_instance_id;  // [batch * MSL_MAX_ITEMS], item->xC8C
-  uint8_t* item_reflect_transfer_seed_port;    // [batch * MSL_MAX_ITEMS], 0xFE known none
-  uint16_t* item_reflect_transfer_seed_iid;    // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_shield_bounce_seed_valid;      // [batch * MSL_MAX_ITEMS]
-  float* item_shield_bounce_seed_vel_x;        // [batch * MSL_MAX_ITEMS]
-  float* item_shield_bounce_seed_vel_y;        // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_hidden_body_hit_victim_port;   // [batch * MSL_MAX_ITEMS], 0xFF = none
-  uint8_t* item_hidden_body_hit_hurt_height;   // [batch * MSL_MAX_ITEMS]
   uint8_t* item_hidden_callback_flags;         // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_sheik_needle_callback_bounce_vel_y_index;       // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_sheik_needle_callback_bounce_vel_x_index_sign;  // [batch * MSL_MAX_ITEMS]
-  // One-step/replay seed bridge for SetupBounce's hidden xDDC/xDE0 samples on the same source
-  // Logic109 callback that publishes a bounced Needle. This does not alter free-running gameplay:
-  // live callbacks still consume the source RNG sites, and these lanes are consumed/cleared with
-  // item_hidden_callback_flags in the matching item step.
-  // refs/melee/src/melee/it/items/itseakneedlethrown.c::{
-  //   it_2725_Logic109_DmgDealt,it_2725_Logic109_DmgReceived,it_2725_Logic109_HitShield,
-  //   itSeakNeedleThrown_SetupBounce}
-  uint8_t* item_sheik_needle_callback_bounce_motion_valid;     // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_sheik_needle_callback_bounce_gravity_index;    // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_sheik_needle_callback_bounce_min_vel_y_index;  // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_sheik_needle_stage_hit_seed_kind;              // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_sheik_needle_stage_hit_vel_y_index;            // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_sheik_needle_stage_hit_vel_x_index_sign;       // [batch * MSL_MAX_ITEMS]
   // Sheik take-damage-dropped Needle hidden itemVar motion lanes (xDDC terminal min-y, xDE0
   // gravity). Live ftSk_SpecialN_80111FBC drops seed these from itSeakNeedleThrown_SetupDrop; replay
   // seeds of pre-existing state-1/4 Needles leave valid=0 and use visible-velocity reconstruction.

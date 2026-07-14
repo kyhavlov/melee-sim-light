@@ -150,6 +150,10 @@ def main(argv: list[str] | None = None) -> None:
         iso_dir / "ItCo.dat",
         "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*ItCo.dat' --out-dir _iso",
     )
+    _require(
+        iso_dir / "EfCoData.dat",
+        "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*EfCoData.dat' --out-dir _iso",
+    )
     fighter_dats: list[str] = []
     for ch in chars:
         info = CHARS[ch]
@@ -253,7 +257,14 @@ def main(argv: list[str] | None = None) -> None:
     # Common constants.
     _run(
         "tools.extraction.extract_ftcommon_data",
-        ["--plco", str(iso_dir / "PlCo.dat"), "--out", str(out_common)],
+        [
+            "--plco",
+            str(iso_dir / "PlCo.dat"),
+            "--efco",
+            str(iso_dir / "EfCoData.dat"),
+            "--out",
+            str(out_common),
+        ],
     )
     _run(
         "tools.extraction.extract_staling_weights",
@@ -363,14 +374,6 @@ def main(argv: list[str] | None = None) -> None:
             [
                 "--moves",
                 str(out(f"moves/{ch}.json")),
-                "--character",
-                ch,
-                "--iso_dir",
-                str(iso_dir),
-                "--dol",
-                str(iso_dir / "main.dol"),
-                "--special_msids_dir",
-                str(out("special_msids")),
                 "--out",
                 str(out(f"scripts/{ch}.bin")),
                 "--manifest",

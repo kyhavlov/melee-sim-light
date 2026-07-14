@@ -93,7 +93,7 @@ int laser_params_init(void) {
   const uint32_t version = read_u32_le(p);
   p += 4;
   if (version != 1 && version != 2 && version != 3 && version != 4 && version != 5 &&
-      version != 6 && version != 7) {
+      version != 6 && version != 7 && version != 8 && version != 9 && version != 10) {
     alloc_free(buf);
     return -1;
   }
@@ -105,7 +105,10 @@ int laser_params_init(void) {
   // Record layout source:
   // - agent_docs/DATA_CONTRACT.md (MSLLASR1)
   // - tools/extraction/extract_lasers.py
-  const size_t record_bytes = (version >= 7)   ? 226u
+  const size_t record_bytes = (version >= 10)  ? 682u
+                              : (version >= 9) ? 546u
+                              : (version >= 8) ? 514u
+                              : (version >= 7) ? 226u
                               : (version >= 6) ? 218u
                               : (version >= 3) ? 254u
                               : (version == 2) ? 166u
@@ -124,6 +127,7 @@ int laser_params_init(void) {
     MslLaserParams rec = {0};
     rec.loaded = 1;
     rec.source_char_id = char_id;
+    rec.item_scale = 1.0f;
     rec.shot_itkind = read_u16_le(p + 2);
     rec.gun_itkind = read_u16_le(p + 4);
     rec.spawn_bone_part_id = read_u16_le(p + 6);
@@ -142,7 +146,7 @@ int laser_params_init(void) {
       rec.spawn_off_xyz[2] = read_f32_le(p + 36);
       rec.lifetime_frames = read_u16_le(p + 40);
       // MSLLASR1 v6 removed SpecialN command-script shoot frames. Those pulses are owned by
-      // MSLFTSC1/move_tables (set_cmd_var idx=2), leaving this artifact focused on laser article
+      // the MSLFTSC1 fighter-script cursor (set_cmd_var idx=2), leaving this artifact focused on laser article
       // params.
       off = (version >= 6) ? 42u : 78u;
     } else {
@@ -190,6 +194,26 @@ int laser_params_init(void) {
       rec.hitbox_offsets_x[i] = read_f32_le(p + off + (size_t)i * 4);
     }
     off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X * 4u;
+    if (version >= 8) {
+      for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
+        rec.hitbox_word4_raw[i] = read_u32_le(p + off + (size_t)i * 4);
+      }
+      off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X * 4u;
+      for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
+        rec.hitbox_flags_raw[i] = read_u32_le(p + off + (size_t)i * 4);
+      }
+      off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X * 4u;
+      for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
+        rec.hitbox_groups[i] = p[off + (size_t)i];
+      }
+      off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X;
+    }
+    for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
+      rec.hitbox_ids[i] = version >= 9 ? p[off + (size_t)i] : (uint8_t)i;
+    }
+    if (version >= 9) {
+      off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X;
+    }
     if (version >= 7) {
       rec.damage_update_damage = read_f32_le(p + off);
       rec.damage_update_hitbox_mask = read_u16_le(p + off + 4);
@@ -219,6 +243,27 @@ int laser_params_init(void) {
       for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
         rec.state1_hitbox_offsets_x[i] = read_f32_le(p + off + (size_t)i * 4);
       }
+      off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X * 4u;
+      if (version >= 8) {
+        for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
+          rec.state1_hitbox_word4_raw[i] = read_u32_le(p + off + (size_t)i * 4);
+        }
+        off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X * 4u;
+        for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
+          rec.state1_hitbox_flags_raw[i] = read_u32_le(p + off + (size_t)i * 4);
+        }
+        off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X * 4u;
+        for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
+          rec.state1_hitbox_groups[i] = p[off + (size_t)i];
+        }
+        off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X;
+      }
+      for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
+        rec.state1_hitbox_ids[i] = version >= 9 ? p[off + (size_t)i] : (uint8_t)i;
+      }
+      if (version >= 9) {
+        off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X;
+      }
     } else {
       rec.state1_damage = rec.damage;
       rec.state1_size = rec.size;
@@ -233,6 +278,28 @@ int laser_params_init(void) {
       rec.state1_hitbox_offsets_x_count = rec.hitbox_offsets_x_count;
       for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
         rec.state1_hitbox_offsets_x[i] = rec.hitbox_offsets_x[i];
+        rec.state1_hitbox_word4_raw[i] = rec.hitbox_word4_raw[i];
+        rec.state1_hitbox_flags_raw[i] = rec.hitbox_flags_raw[i];
+        rec.state1_hitbox_groups[i] = rec.hitbox_groups[i];
+        rec.state1_hitbox_ids[i] = rec.hitbox_ids[i];
+      }
+    }
+
+    if (version >= 10) {
+      // v10 is an append-only extension after the complete v9 payload.
+      const size_t ext = 546u;
+      rec.item_scale = read_f32_le(p + ext);
+      for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
+        rec.hitbox_sizes[i] = read_f32_le(p + ext + 4u + (size_t)i * 4u);
+        rec.state1_hitbox_sizes[i] =
+            read_f32_le(p + ext + 4u + (size_t)MSL_LASER_MAX_HITBOX_OFFS_X * 4u + (size_t)i * 4u);
+      }
+      rec.hitbox_clank_mask = read_u16_le(p + ext + 132u);
+      rec.state1_hitbox_clank_mask = read_u16_le(p + ext + 134u);
+    } else {
+      for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
+        rec.hitbox_sizes[i] = rec.size;
+        rec.state1_hitbox_sizes[i] = rec.state1_size;
       }
     }
 

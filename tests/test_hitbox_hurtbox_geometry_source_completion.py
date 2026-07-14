@@ -94,10 +94,13 @@ def test_falcon_interaction_mutation_has_runtime_data_demand():
 def test_hitbox_geometry_contract_uses_root_facing_rotation_not_mirror_proxy():
     contract = _read("agent_docs/DATA_CONTRACT.md")
     hitboxes_c = _read("src/hitboxes.c")
+    fighter_pose_c = _read("src/fighter_pose.c")
     assert "center_local = (pose_mtx * (x,y,z)) * fighter_scale_y * co_attrs.model_scaling" in contract
     assert "radius does **not** get `co_attrs.model_scaling`" in contract
-    assert "center_local = (pose_mtx * offset) * scale_y * co_attrs.model_scaling" in hitboxes_c
-    assert "they do not multiply by co_attrs.model_scaling" in hitboxes_c
+    assert "fighter_pose_attachment_local" in hitboxes_c
+    assert "out->model_scale = fighter_pose_model_scale(batch, idx)" in fighter_pose_c
+    assert "point[axis] *= frame->model_scale" in fighter_pose_c
+    assert "radius *= batch->state.fighter_scale_y[idx]" in hitboxes_c
     assert "center_local = rotY90(center_local, facing_dir)" in contract
     assert "local.x *= facing_dir" not in contract
     assert "we do not apply a true facing" not in contract

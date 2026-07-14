@@ -2,13 +2,11 @@
 
 #include "batch_internal.h"
 
-// Refresh per-fighter world-space reflector (SpecialLw) bubble geometry.
-//
-// This models ftColl_CreateReflectHit() + per-frame pose update for the reflector sphere
-// (not powershield).
+// Refresh the complete live per-fighter ReflectDesc packet and world-space sphere.
 //
 // Decomp trail:
 // - refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
 // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_CreateReflectHit
+// - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009370C
 
 void reflector_bubbles_refresh(MslBatch* batch);

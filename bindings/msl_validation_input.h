@@ -4,6 +4,7 @@
 #include "msl_py_common.h"
 
 PyObject* msl_validation_derive_guard_input_prefix_py(PyObject* self, PyObject* args);
+PyObject* msl_validation_derive_guard_pose_history_py(PyObject* self, PyObject* args);
 PyObject* msl_validation_derive_input_history_suffix_py(PyObject* self, PyObject* args);
 PyObject* msl_process_stick_i8_units_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_ucf_pad_buffer_state_py(PyObject* self, PyObject* args);

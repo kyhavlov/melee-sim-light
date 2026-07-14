@@ -187,19 +187,14 @@ static PyMethodDef methods[] = {
     {"debug_dynamic_pose_state", msl_debug_dynamic_pose_state_py, METH_VARARGS,
      "debug_dynamic_pose_state(handle, batch_index, player_index) -> "
      "bytes[1,sizeof(MslDebugDynamicPoseState)]"},
+    {"validation_source_clear_timer_state", msl_validation_source_clear_timer_state_py,
+     METH_VARARGS, "validation_source_clear_timer_state(handle) -> uint8[batch_size,4]"},
     {"debug_common_fall_blend_state", msl_debug_common_fall_blend_state_py, METH_VARARGS,
      "debug_common_fall_blend_state(handle, batch_index, player_index) -> (x4, msid)"},
     {"debug_walljump_state", msl_debug_walljump_state_py, METH_VARARGS,
      "debug_walljump_state(handle, batch_index, player_index) -> (used_count, exponent)"},
-    {"debug_get_fighter_8006cda4_pre_gate_consume_count",
-     msl_debug_get_fighter_8006cda4_pre_gate_consume_count_py, METH_VARARGS,
-     "debug_get_fighter_8006cda4_pre_gate_consume_count(handle, batch_index, player_index) -> int"},
     {"debug_get_sheik_needle_count", msl_debug_get_sheik_needle_count_py, METH_VARARGS,
      "debug_get_sheik_needle_count(handle, batch_index, player_index) -> int"},
-    {"debug_attackairb_continuation_overlap", msl_debug_attackairb_continuation_overlap_py,
-     METH_VARARGS,
-     "debug_attackairb_continuation_overlap(handle, batch_index, attacker, hb_id, defender, "
-     "cap_id) -> float"},
     {"debug_body_matrix_overlap", msl_debug_body_matrix_overlap_py, METH_VARARGS,
      "debug_body_matrix_overlap(handle, batch_index, attacker, hb_id, defender, cap_id) -> float"},
     {"sizes", msl_sizes, METH_NOARGS, "sizes() -> dict of struct sizes"},
@@ -286,10 +281,13 @@ static PyMethodDef methods[] = {
      METH_VARARGS,
      "validation_copy_item_rows_with_illusion(seed_u8, ref_u8, items_u8, replay fields, "
      "illusion LUT, players) -> None"},
-    {"validation_derive_throw_laser_item_hitlist_buffers",
-     msl_validation_derive_throw_laser_item_hitlist_buffers_py, METH_VARARGS,
-     "validation_derive_throw_laser_item_hitlist_buffers(seed_u8, hitbox_mask_lut, players) -> "
-     "None"},
+    {"validation_derive_item_hitlist_buffers", msl_validation_derive_item_hitlist_buffers_py,
+     METH_VARARGS, "validation_derive_item_hitlist_buffers(seed_u8, players) -> None"},
+    {"validation_derive_grab_constraint_x2174_buffers",
+     msl_validation_derive_grab_constraint_x2174_buffers_py, METH_VARARGS,
+     "validation_derive_grab_constraint_x2174_buffers(seed_u8, players) -> None"},
+    {"validation_derive_dynamic_pose_buffers", msl_validation_derive_dynamic_pose_buffers_py,
+     METH_VARARGS, "validation_derive_dynamic_pose_buffers(seed_u8, players) -> None"},
     {"validation_init_static_buffers", msl_validation_init_static_buffers_py, METH_VARARGS,
      "validation_init_static_buffers(seed_u8, ref_u8, frame_ids, frame_rng, stage_id, "
      "num_players, is_teams, damage_ratio) -> None"},
@@ -310,13 +308,13 @@ static PyMethodDef methods[] = {
     {"validation_derive_guard_input_prefix", msl_validation_derive_guard_input_prefix_py,
      METH_VARARGS,
      "validation_derive_guard_input_prefix(seed_u8, slot, input/post arrays, params) -> arrays"},
+    {"validation_derive_guard_pose_history", msl_validation_derive_guard_pose_history_py,
+     METH_VARARGS,
+     "validation_derive_guard_pose_history(seed_u8, slot, replay pose fields, guard actions) -> "
+     "None"},
     {"validation_derive_input_history_suffix", msl_validation_derive_input_history_suffix_py,
      METH_VARARGS,
      "validation_derive_input_history_suffix(seed_u8, slot, derived arrays, params) -> arrays"},
-    {"validation_derive_fighter_8006cda4_buffers",
-     msl_validation_derive_fighter_8006cda4_buffers_py, METH_VARARGS,
-     "validation_derive_fighter_8006cda4_buffers(seed_u8, ref_u8, roll_prob, players, "
-     "allow_grounded_kneebend) -> None"},
     {"validation_derive_falcon_speciallw_seed_lanes",
      msl_validation_derive_falcon_speciallw_seed_lanes_py, METH_VARARGS,
      "validation_derive_falcon_speciallw_seed_lanes(seed_u8, processhit_x1914_u8, players, "
@@ -376,21 +374,8 @@ static PyMethodDef methods[] = {
      METH_VARARGS,
      "derive_guard_setoff_hitlag_damage_min(action, frame, hitlag, mul, base, guard_set_off) -> "
      "uint8[:]"},
-    {"derive_guard_setoff_hitlag_exit_phase", msl_derive_guard_setoff_hitlag_exit_phase_py,
-     METH_VARARGS,
-     "derive_guard_setoff_hitlag_exit_phase(action, hitlag, guard_set_off) -> uint8[:]"},
-    {"derive_guard_setoff_post_hitlag_owner", msl_derive_guard_setoff_post_hitlag_owner_py,
-     METH_VARARGS,
-     "derive_guard_setoff_post_hitlag_owner(action, phase, flags_221c, guard_set_off) -> uint8[:]"},
-    {"derive_guard_setoff_exit_frame_speed_seed_lane",
-     msl_derive_guard_setoff_exit_frame_speed_seed_lane_py, METH_VARARGS,
-     "derive_guard_setoff_exit_frame_speed_seed_lane(action, hitlag, frame_speed, num_players, "
-     "guard_set_off) -> float32[:, :]"},
     {"derive_run_x0", msl_derive_run_x0_py, METH_VARARGS,
      "derive_run_x0(action, hitlag, init, run, run_direct, turn_run) -> uint8[:]"},
-    {"derive_runbrake_cmd0", msl_derive_runbrake_cmd0_py, METH_VARARGS,
-     "derive_runbrake_cmd0(action, anim_frame, char_id, on_by_char, off_by_char, run_brake) -> "
-     "uint8[:]"},
     {"derive_dash_x4", msl_derive_dash_x4_py, METH_VARARGS,
      "derive_dash_x4(action, action_frame, dash, turn) -> uint8[:]"},
     {"derive_ecb_lock_state", msl_derive_ecb_lock_state_py, METH_VARARGS,
@@ -524,12 +509,6 @@ static PyMethodDef methods[] = {
      "travel_frames, ground_contact_min_frames) -> uint16[:,players]"},
     {"derive_specialhi_rotate_model_seed_lane", msl_derive_specialhi_rotate_model_seed_lane_py,
      METH_VARARGS, "derive_specialhi_rotate_model_seed_lane(...) -> (angle, valid)"},
-    {"derive_throw_pulse_seed_lanes", msl_derive_throw_pulse_seed_lanes_py, METH_VARARGS,
-     "derive_throw_pulse_seed_lanes(...) -> (consumed,crossed_prev,pending)"},
-    {"derive_throw_laser_item_hitlist_seed_lanes",
-     msl_derive_throw_laser_item_hitlist_seed_lanes_py, METH_VARARGS,
-     "derive_throw_laser_item_hitlist_seed_lanes(...) -> "
-     "(victim_port,victim_cd,victim_hitbox_mask,victim_iid)"},
     {"derive_item_attack_fields", msl_derive_item_attack_fields_py, METH_VARARGS,
      "derive_item_attack_fields(item fields, fighter attack fields, players[, "
      "prev_frame_spawn_kinds]) -> "
@@ -537,15 +516,9 @@ static PyMethodDef methods[] = {
     {"derive_item_reflect_damage_mul", msl_derive_item_reflect_damage_mul_py, METH_VARARGS,
      "derive_item_reflect_damage_mul(item fields, fighter fields, powershield_mul, players) -> "
      "float32[:,slots]"},
-    {"derive_item_hidden_callback_seed_lanes", msl_derive_item_hidden_callback_seed_lanes_py,
-     METH_VARARGS,
-     "derive_item_hidden_callback_seed_lanes(seed/ref item fields, action fields, laser and "
-     "shield-bounce LUTs) -> "
-     "item hidden callback arrays"},
-    {"validation_derive_item_hidden_callback_buffers",
-     msl_validation_derive_item_hidden_callback_buffers_py, METH_VARARGS,
-     "validation_derive_item_hidden_callback_buffers(seed_u8, ref_u8, laser_lut, shield_lut, "
-     "needle_lut, players) -> None"},
+    {"validation_derive_sheik_needle_motion_buffers",
+     msl_validation_derive_sheik_needle_motion_buffers_py, METH_VARARGS,
+     "validation_derive_sheik_needle_motion_buffers(seed_u8, ref_u8, needle_lut) -> None"},
     {"validation_derive_item_reflect_damage_mul_buffers",
      msl_validation_derive_item_reflect_damage_mul_buffers_py, METH_VARARGS,
      "validation_derive_item_reflect_damage_mul_buffers(seed_u8, items_u8, replay fields, "
@@ -575,36 +548,18 @@ static PyMethodDef methods[] = {
     {"derive_attacker_shield_ground_kb_vel", msl_derive_attacker_shield_ground_kb_vel_py,
      METH_VARARGS,
      "derive_attacker_shield_ground_kb_vel(replay fields, LUTs, constants) -> float32[:,4]"},
-    {"derive_guardsetoff_frame_speed_overrides", msl_derive_guardsetoff_frame_speed_overrides_py,
-     METH_VARARGS,
-     "derive_guardsetoff_frame_speed_overrides(replay fields, LUTs, constants) -> float32[:,4]"},
     {"derive_frame_speed_mul_f32", msl_derive_frame_speed_mul_f32_py, METH_VARARGS,
      "derive_frame_speed_mul_f32(timebase replay columns and source tables) -> float32[:]"},
     {"derive_landing_fallspecial_allow_interrupt",
      msl_derive_landing_fallspecial_allow_interrupt_py, METH_VARARGS,
      "derive_landing_fallspecial_allow_interrupt(action_id, char_id, origin table) -> uint8[:]"},
-    {"derive_shield_contact_seed_bridge", msl_derive_shield_contact_seed_bridge_py, METH_VARARGS,
-     "derive_shield_contact_seed_bridge(hitlist arrays, replay fields, LUTs, constants) -> "
-     "(shield_hit_int_damage, shield_damage_taken)"},
     {"derive_rebound_seed_lanes", msl_derive_rebound_seed_lanes_py, METH_VARARGS,
      "derive_rebound_seed_lanes(replay fields, speeds, constants) -> (ground_accel_2, anim_rate)"},
     {"derive_mpcoll_wall_seed_lanes", msl_derive_mpcoll_wall_seed_lanes_py, METH_VARARGS,
      "derive_mpcoll_wall_seed_lanes(action, frame, hitlag, hitstun, pos_x, pos_y, stage, "
      "segment arrays...) -> (kind, wall_id)"},
-    {"derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes", msl_derive_source_clear_timer_py,
-     METH_VARARGS,
-     "derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(...) -> (timer, phase)"},
-    {"derive_source_clear_grounded_damage_clear_phase_seed_lane",
-     msl_derive_source_clear_grounded_damage_clear_phase_py, METH_VARARGS,
-     "derive_source_clear_grounded_damage_clear_phase_seed_lane(...) -> uint8[:]"},
-    {"derive_source_clear_terminal_phase_seed_lane", msl_derive_source_clear_terminal_phase_py,
-     METH_VARARGS, "derive_source_clear_terminal_phase_seed_lane(...) -> uint8[:]"},
-    {"derive_fighter_8006cda4_pre_gate_consume_count",
-     msl_derive_fighter_8006cda4_pre_gate_count_py, METH_VARARGS,
-     "derive_fighter_8006cda4_pre_gate_consume_count(...) -> uint8[:]"},
-    {"derive_source_clear_processhit_damage_pending_phase_seed_lane",
-     msl_derive_source_clear_processhit_damage_pending_phase_py, METH_VARARGS,
-     "derive_source_clear_processhit_damage_pending_phase_seed_lane(action, flags) -> uint8[:]"},
+    {"derive_source_clear_timer_x18c8_seed_lane", msl_derive_source_clear_timer_py, METH_VARARGS,
+     "derive_source_clear_timer_x18c8_seed_lane(source fields, entry events, init) -> uint8[:]"},
     {"derive_phantom_damage_pending_seed_lanes", msl_derive_phantom_damage_pending_seed_lanes_py,
      METH_VARARGS,
      "derive_phantom_damage_pending_seed_lanes(percent, hitlag, action, hit_by, iid, players) -> "
@@ -628,7 +583,7 @@ static PyMethodDef methods[] = {
      "derive_illusion_ghost_pos012(action_id, action_frame, pos_x, pos_y) -> six float32 arrays"},
     {"derive_combat_hitlist_seed_fields", msl_derive_combat_hitlist_seed_fields_py, METH_VARARGS,
      "derive_combat_hitlist_seed_fields(...) -> "
-     "(cd,iid,hb_valid,hb_cd,hb_iid,shield_kind,processhit_x1914)"},
+     "(cd,iid,hb_valid,hb_cd,hb_iid,hb_v2_mask,processhit_x1914)"},
     {"ecb_bottom_rel_y", msl_ecb_bottom_rel_y_py, METH_VARARGS,
      "ecb_bottom_rel_y(char_id, animation_index, action_frame) -> float"},
     {"ecb_extents_rel", msl_ecb_extents_rel_py, METH_VARARGS,
@@ -641,51 +596,6 @@ static PyMethodDef methods[] = {
     {"anim_pose_collision_matrix_f32", msl_anim_pose_collision_matrix_f32_py, METH_VARARGS,
      "anim_pose_collision_matrix_f32(char_id, msid, anim_frame, part_id) -> DEBUG-ONLY "
      "np.ndarray[float32] shape=(12,)"},
-    {"move_tables_debug_query", msl_move_tables_debug_query_py, METH_VARARGS,
-     "move_tables_debug_query(kind, char_id, action_or_msid, a, b) -> test helper"},
-    {"move_tables_throw_has_release", msl_move_tables_throw_has_release_py, METH_VARARGS,
-     "move_tables_throw_has_release(char_id, throw_action_id) -> 0/1"},
-    {"move_tables_throw_release_frame", msl_move_tables_throw_release_frame_py, METH_VARARGS,
-     "move_tables_throw_release_frame(char_id, throw_action_id) -> (ok, release_af)"},
-    {"move_tables_throw_release_hit_idx", msl_move_tables_throw_release_hit_idx_py, METH_VARARGS,
-     "move_tables_throw_release_hit_idx(char_id, throw_action_id, cur_anim_frame) -> (released, "
-     "hit_idx)"},
-    {"move_tables_throw_hitbox_params", msl_move_tables_throw_hitbox_params_py, METH_VARARGS,
-     "move_tables_throw_hitbox_params(char_id, throw_action_id, hit_idx) -> "
-     "(damage, angle, kbg, wsk, bkb, element, sfx_kind, sfx_severity) or None"},
-    {"move_tables_throw_release_after_create_hitbox",
-     msl_move_tables_throw_release_after_create_hitbox_py, METH_VARARGS,
-     "move_tables_throw_release_after_create_hitbox(char_id, throw_action_id) -> 0/1"},
-    {"move_tables_throw_cmd1_active", msl_move_tables_throw_cmd1_active_py, METH_VARARGS,
-     "move_tables_throw_cmd1_active(char_id, throw_action_id, cur_anim_frame) -> 0/1"},
-    {"move_tables_throw_should_spawn_projectile", msl_move_tables_throw_should_spawn_projectile_py,
-     METH_VARARGS,
-     "move_tables_throw_should_spawn_projectile(char_id, throw_action_id, prev_anim_frame, "
-     "cur_anim_frame) -> 0/1"},
-    {"move_tables_throw_should_flip_facing", msl_move_tables_throw_should_flip_facing_py,
-     METH_VARARGS,
-     "move_tables_throw_should_flip_facing(char_id, throw_action_id, prev_anim_frame, "
-     "cur_anim_frame) -> 0/1"},
-    {"move_tables_throw_crossed_projectile_pulse_frame",
-     msl_move_tables_throw_crossed_projectile_pulse_frame_py, METH_VARARGS,
-     "move_tables_throw_crossed_projectile_pulse_frame(char_id, throw_action_id, prev_anim_frame, "
-     "cur_anim_frame) -> (ok, pulse_frame)"},
-    {"move_tables_throw_projectile_first_pulse_frame",
-     msl_move_tables_throw_projectile_first_pulse_frame_py, METH_VARARGS,
-     "move_tables_throw_projectile_first_pulse_frame(char_id, throw_action_id) -> "
-     "(ok, pulse_frame)"},
-    {"move_tables_throw_projectile_last_pulse_frame",
-     msl_move_tables_throw_projectile_last_pulse_frame_py, METH_VARARGS,
-     "move_tables_throw_projectile_last_pulse_frame(char_id, throw_action_id) -> "
-     "(ok, pulse_frame)"},
-    {"move_tables_throw_projectile_pulse_ordinal",
-     msl_move_tables_throw_projectile_pulse_ordinal_py, METH_VARARGS,
-     "move_tables_throw_projectile_pulse_ordinal(char_id, throw_action_id, pulse_frame) -> "
-     "(ok, ordinal)"},
-    {"move_tables_special_pseudo_random_sfx_ranges_crossed",
-     msl_move_tables_special_pseudo_random_sfx_ranges_crossed_py, METH_VARARGS,
-     "move_tables_special_pseudo_random_sfx_ranges_crossed(char_id, msid, prev_anim_frame, "
-     "cur_anim_frame, max_out=8) -> tuple[int, ...]"},
     {"hurtcaps_world", msl_hurtcaps_world_py, METH_VARARGS,
      "hurtcaps_world(handle, batch_index, player_index) -> (caps[MSL_MAX_HURTCAPS,7], count)"},
     {"hitboxes_world", msl_hitboxes_world_py, METH_VARARGS,
@@ -716,9 +626,6 @@ static PyMethodDef methods[] = {
      METH_VARARGS,
      "debug_combat_contacts_classified_filtered(handle, batch_index, max_contacts=256) -> "
      "(bytes[max, sizeof(MslDebugCombatContactClassified)], count)"},
-    {"debug_shield_candidate_decisions", msl_debug_shield_candidate_decisions_py, METH_VARARGS,
-     "debug_shield_candidate_decisions(handle, batch_index, max_rows=256) -> "
-     "(bytes[max, sizeof(MslDebugShieldCandidateDecision)], count)"},
     {"debug_shield_bubbles_world", msl_debug_shield_bubbles_world_py, METH_VARARGS,
      "debug_shield_bubbles_world(handle, batch_index) -> np.ndarray[float32] "
      "shape=(MSL_MAX_PLAYERS,4)"},

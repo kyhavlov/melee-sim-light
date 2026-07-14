@@ -303,7 +303,8 @@ def test_non_looping_timebase_clamps_at_end_frame_and_stops_advancing() -> None:
         assert int(out1["animation_index"][0]) == SM_DAMAGE_FLY_N
         assert int(out1["action_frame"][0]) == int(end_frame)
 
-        # Step 2: stay clamped (rate should be 0 after reaching end_frame).
+        # Step 2: stay clamped. Source marks the AObj NO_ANIM without rewriting the fighter's
+        # frame_speed_mul, so this asserts the stopped AObj frame rather than a synthetic zero rate.
         binding.step_input(handle, prev_inp, inp)
         binding.write_compare(handle, out_bytes)
         out2 = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()

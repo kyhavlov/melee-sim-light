@@ -9,6 +9,7 @@ from pathlib import Path
 from melee_sim.hsd_archive import parse_hsd_archive
 from melee_sim.iso import extract_file, find_files, list_files
 from tools.extraction.char_registry import CHARS
+from tools.extraction import extract_fighter_anims
 from tools.extraction.extract_fighter_moves import _parse_subaction_events
 
 ARTICLE_HITBOX_FLAG_TARGET_GROUNDED = 1
@@ -16,6 +17,34 @@ ARTICLE_HITBOX_FLAG_TARGET_AERIAL = 2
 ARTICLE_HITBOX_FLAG_BODY_ENABLED = 4
 ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY = 8
 ARTICLE_HITBOX_FLAG_CLANK = 16
+ARTICLE_HITBOX_FLAG_REFLECTABLE = 32
+ARTICLE_HITBOX_FLAG_ABSORBABLE = 64
+ARTICLE_HITBOX_FLAG_SHIELDABLE = 128
+ARTICLE_HITBOX_FLAG_FACING_FILTER = 256
+ARTICLE_HITBOX_FLAG_SHIELD_BOUNCE = 512
+ARTICLE_HITBOX_FLAG_SHIELD_X42_B4 = 1024
+
+
+def _article_hitbox_contact_flags(hitbox: dict) -> int:
+    """Normalize the item HitCapsule gates consumed by ftColl_8007925C."""
+    raw = int(hitbox.get("item_flags_raw", 0))
+    return (
+        (ARTICLE_HITBOX_FLAG_TARGET_GROUNDED if bool(hitbox.get("hit_grounded", False)) else 0)
+        | (ARTICLE_HITBOX_FLAG_TARGET_AERIAL if bool(hitbox.get("hit_aerial", False)) else 0)
+        | (ARTICLE_HITBOX_FLAG_BODY_ENABLED if bool(hitbox.get("item_body_enabled", False)) else 0)
+        | (
+            ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY
+            if bool(hitbox.get("item_grabbable_only", False))
+            else 0
+        )
+        | (ARTICLE_HITBOX_FLAG_CLANK if bool(hitbox.get("clank", False)) else 0)
+        | (ARTICLE_HITBOX_FLAG_REFLECTABLE if raw & (1 << 20) else 0)
+        | (ARTICLE_HITBOX_FLAG_ABSORBABLE if raw & (1 << 19) else 0)
+        | (ARTICLE_HITBOX_FLAG_SHIELDABLE if raw & (1 << 18) else 0)
+        | (ARTICLE_HITBOX_FLAG_FACING_FILTER if raw & (1 << 17) else 0)
+        | (ARTICLE_HITBOX_FLAG_SHIELD_BOUNCE if raw & (1 << 16) else 0)
+        | (ARTICLE_HITBOX_FLAG_SHIELD_X42_B4 if raw & (1 << 15) else 0)
+    )
 
 
 def _ptr32_or_none(arc, abs_off: int) -> int | None:
@@ -149,10 +178,18 @@ def _extract_fox_falco_laser(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
         return out
 
     # struct Article { ItemAttr* x0_common_attr; void* x4_specialAttributes; ... ItemStateArray* xC_itemStates; ... }
+    common_abs = arc.ptr32(shot_article_abs + 0x00)
     special_abs = arc.ptr32(shot_article_abs + 0x04)
     states_abs = arc.ptr32(shot_article_abs + 0x0C)
-    if special_abs == arc.data_base or states_abs == arc.data_base:
+    if common_abs == arc.data_base or special_abs == arc.data_base or states_abs == arc.data_base:
         return out
+
+    # Item.item_data.scl is initialized from ItemAttr.x60_scale and is passed to the common
+    # lbColl item/fighter overlap routines. Preserve the article value even though the retail
+    # Fox/Falco shot articles both author 1.0.
+    # refs/melee/src/melee/it/item.c::Item_80268B18
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    out["laser_item_scale"] = float(_f32_be(pl_buf, common_abs + 0x60))
 
     lifetime = float(_f32_be(pl_buf, special_abs + 0x00))
     out["laser_lifetime_frames"] = int(max(0, round(lifetime)))
@@ -200,16 +237,35 @@ def _extract_fox_falco_laser(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
     #
     # (Decomp: Pl*.dat article state script; parsed via `_parse_subaction_events`.)
     x_offs0: list[float] = []
+    sizes0: list[float] = []
+    hitbox_ids0: list[int] = []
+    word4_raw0: list[int] = []
+    groups0: list[int] = []
+    flags_raw0: list[int] = []
     x138_mask0 = 0
+    clank_mask0 = 0
     for hb in hbs0:
         try:
             x_offs0.append(float(hb.get("x_offset", 0.0)))
+            sizes0.append(float(hb.get("size", 0.0)))
+            hitbox_ids0.append(int(hb.get("hitbox_id", len(hitbox_ids0))))
+            word4_raw0.append(int(hb.get("item_hitbox_word4_raw", 0)))
+            groups0.append(int(hb.get("hit_group", 0)))
+            flags_raw0.append(int(hb.get("item_flags_raw", 0)))
             if bool(hb.get("item_match_start_x138", False)):
                 x138_mask0 |= 1 << (len(x_offs0) - 1)
+            if bool(hb.get("clank", False)):
+                clank_mask0 |= 1 << (len(x_offs0) - 1)
         except Exception:
             pass
     out["laser_hitbox_offsets_x"] = x_offs0
+    out["laser_hitbox_sizes"] = sizes0
+    out["laser_hitbox_ids"] = hitbox_ids0
+    out["laser_hitbox_word4_raw"] = word4_raw0
+    out["laser_hitbox_groups"] = groups0
+    out["laser_hitbox_flags_raw"] = flags_raw0
     out["laser_hitbox_x138_mask"] = int(x138_mask0)
+    out["laser_hitbox_clank_mask"] = int(clank_mask0)
     # State-0 Fox blaster scripts update already-created HitCapsule damage on a later script
     # frame. Preserve the compact first uniform set_hitbox_damage group so runtime can consume
     # `it_80279544 -> it_80272460` without a local item-kind/action predicate.
@@ -253,16 +309,35 @@ def _extract_fox_falco_laser(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
         out["laser_state1_shield_damage"] = int(hb1.get("shield_damage", 0))
 
         x_offs1: list[float] = []
+        sizes1: list[float] = []
+        hitbox_ids1: list[int] = []
+        word4_raw1: list[int] = []
+        groups1: list[int] = []
+        flags_raw1: list[int] = []
         x138_mask1 = 0
+        clank_mask1 = 0
         for hb in hbs1:
             try:
                 x_offs1.append(float(hb.get("x_offset", 0.0)))
+                sizes1.append(float(hb.get("size", 0.0)))
+                hitbox_ids1.append(int(hb.get("hitbox_id", len(hitbox_ids1))))
+                word4_raw1.append(int(hb.get("item_hitbox_word4_raw", 0)))
+                groups1.append(int(hb.get("hit_group", 0)))
+                flags_raw1.append(int(hb.get("item_flags_raw", 0)))
                 if bool(hb.get("item_match_start_x138", False)):
                     x138_mask1 |= 1 << (len(x_offs1) - 1)
+                if bool(hb.get("clank", False)):
+                    clank_mask1 |= 1 << (len(x_offs1) - 1)
             except Exception:
                 pass
         out["laser_state1_hitbox_offsets_x"] = x_offs1
+        out["laser_state1_hitbox_sizes"] = sizes1
+        out["laser_state1_hitbox_ids"] = hitbox_ids1
+        out["laser_state1_hitbox_word4_raw"] = word4_raw1
+        out["laser_state1_hitbox_groups"] = groups1
+        out["laser_state1_hitbox_flags_raw"] = flags_raw1
         out["laser_state1_hitbox_x138_mask"] = int(x138_mask1)
+        out["laser_state1_hitbox_clank_mask"] = int(clank_mask1)
     return out
 
 
@@ -325,6 +400,7 @@ def _extract_fox_falco_illusion_item(pl_buf: bytes, arc, *, ftdata_abs: int) -> 
             "illusion_item_state0_bkb": int(hb0.get("bkb", 0)),
             "illusion_item_state0_element": int(hb0.get("element", 0)),
             "illusion_item_state0_shield_damage": int(hb0.get("shield_damage", 0)),
+            "illusion_item_state0_contact_flags": _article_hitbox_contact_flags(hb0),
             "illusion_item_state1_hitbox_y_offset": _q8(float(hb1.get("y_offset", 0.0))),
             "illusion_item_state1_damage": float(hb1.get("damage", 0.0)),
             "illusion_item_state1_angle": int(hb1.get("angle", 0)),
@@ -333,6 +409,7 @@ def _extract_fox_falco_illusion_item(pl_buf: bytes, arc, *, ftdata_abs: int) -> 
             "illusion_item_state1_bkb": int(hb1.get("bkb", 0)),
             "illusion_item_state1_element": int(hb1.get("element", 0)),
             "illusion_item_state1_shield_damage": int(hb1.get("shield_damage", 0)),
+            "illusion_item_state1_contact_flags": _article_hitbox_contact_flags(hb1),
         }
     return {}
 
@@ -445,12 +522,7 @@ def _extract_seak_needle_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict
                     int(hb.get("shield_damage", 0)) for hb in hitboxes[:4]
                 ]
                 out["needle_hitbox_flags"] = [
-                    (ARTICLE_HITBOX_FLAG_TARGET_GROUNDED if bool(hb.get("hit_grounded", False)) else 0)
-                    | (ARTICLE_HITBOX_FLAG_TARGET_AERIAL if bool(hb.get("hit_aerial", False)) else 0)
-                    | (ARTICLE_HITBOX_FLAG_BODY_ENABLED if bool(hb.get("item_body_enabled", False)) else 0)
-                    | (ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY if bool(hb.get("item_grabbable_only", False)) else 0)
-                    | (ARTICLE_HITBOX_FLAG_CLANK if bool(hb.get("clank", False)) else 0)
-                    for hb in hitboxes[:4]
+                    _article_hitbox_contact_flags(hb) for hb in hitboxes[:4]
                 ]
     return out
 
@@ -510,12 +582,7 @@ def _extract_seak_vanish_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict
         "vanish_hitbox_bkb": int(hb0.get("bkb", 0)),
         "vanish_hitbox_element": int(hb0.get("element", 0)),
         "vanish_hitbox_shield_damage": int(hb0.get("shield_damage", 0)),
-        "vanish_hitbox_flags": (
-            ARTICLE_HITBOX_FLAG_TARGET_GROUNDED if bool(hb0.get("hit_grounded", False)) else 0
-        )
-        | (ARTICLE_HITBOX_FLAG_TARGET_AERIAL if bool(hb0.get("hit_aerial", False)) else 0)
-        | (ARTICLE_HITBOX_FLAG_BODY_ENABLED if bool(hb0.get("item_body_enabled", False)) else 0)
-        | (ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY if bool(hb0.get("item_grabbable_only", False)) else 0),
+        "vanish_hitbox_flags": _article_hitbox_contact_flags(hb0),
         "vanish_hitbox_size_keyframe_count": len(size_keyframes),
         "vanish_hitbox_size_keyframe_frame": [int(frame) for frame, _size in size_keyframes],
         "vanish_hitbox_size_keyframe_value": [float(size) for _frame, size in size_keyframes],
@@ -595,27 +662,7 @@ def _extract_zelda_din_article(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
                         "zelda_din_explode_hitbox_bkb": int(hb0.get("bkb", 0)),
                         "zelda_din_explode_hitbox_element": int(hb0.get("element", 0)),
                         "zelda_din_explode_hitbox_shield_damage": int(hb0.get("shield_damage", 0)),
-                        "zelda_din_explode_hitbox_flags": (
-                            ARTICLE_HITBOX_FLAG_TARGET_GROUNDED
-                            if bool(hb0.get("hit_grounded", False))
-                            else 0
-                        )
-                        | (
-                            ARTICLE_HITBOX_FLAG_TARGET_AERIAL
-                            if bool(hb0.get("hit_aerial", False))
-                            else 0
-                        )
-                        | (
-                            ARTICLE_HITBOX_FLAG_BODY_ENABLED
-                            if bool(hb0.get("item_body_enabled", False))
-                            else 0
-                        )
-                        | (
-                            ARTICLE_HITBOX_FLAG_GRABBABLE_ONLY
-                            if bool(hb0.get("item_grabbable_only", False))
-                            else 0
-                        )
-                        | (ARTICLE_HITBOX_FLAG_CLANK if bool(hb0.get("clank", False)) else 0),
+                        "zelda_din_explode_hitbox_flags": _article_hitbox_contact_flags(hb0),
                     }
                 )
     return out
@@ -1145,6 +1192,11 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
         # refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x98)
         "rapid_jab_window": int(max(0, min(255, i(0x98)))),
+        # Per-character ordinary BODY damage-effect variant consumed by ftColl_80078538.
+        # Values 0 and 1 select p_ftCommonData->x3F4/x3F8 respectively.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078538
+        # refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0xA0)
+        "damage_effect_randi_kind": int(max(0, min(255, i(0xA0)))),
         "landing_lag_frames": int(max(1, landing_lag_frames)),
         "landing_airn_lag_frames": int(max(1, landing_airn_lag_frames)),
         "landing_airf_lag_frames": int(max(1, landing_airf_lag_frames)),
@@ -1417,6 +1469,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "turn_frames",
         "rebound_anim_numerator_frames",
         "rapid_jab_window",
+        "damage_effect_randi_kind",
         "jump_startup_frames",
         "jump_h_initial_velocity",
         "jump_v_initial_velocity",
@@ -1450,6 +1503,8 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "pushbox_x",
         "pushbox_y",
         "grab_capture_anchor_part_id",
+        "static_x1a70_y",
+        "static_x1a70_z",
         "fallspecial_xc0_source_fx_kind_mask",
         "escapeair_carried_floor_wall_source",
         "illusion_gravity_delay_start_frames",
@@ -1474,6 +1529,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "illusion_item_state0_bkb",
         "illusion_item_state0_element",
         "illusion_item_state0_shield_damage",
+        "illusion_item_state0_contact_flags",
         "illusion_item_state1_hitbox_y_offset",
         "illusion_item_state1_damage",
         "illusion_item_state1_angle",
@@ -1482,6 +1538,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "illusion_item_state1_bkb",
         "illusion_item_state1_element",
         "illusion_item_state1_shield_damage",
+        "illusion_item_state1_contact_flags",
         "firefox_hold_gravity_delay_frames",
         "firefox_hold_vel_x",
         "firefox_hold_air_friction",
@@ -1518,8 +1575,10 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "laser_lifetime_frames",
         "laser_damage",
         "laser_size",
+        "laser_item_scale",
         "laser_scale_max",
         "laser_hitbox_offsets_x",
+        "laser_hitbox_sizes",
         "laser_angle",
         "laser_kbg",
         "laser_wsk",
@@ -1675,6 +1734,7 @@ def main() -> None:
             print(f"wrote {dst} ({matches[0].size} bytes)")
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
+    extract_fighter_anims.ISO_DIR = args.pl_dir
 
     for name, (pl_name, sym, blaster, ext_layout) in mapping.items():
         pl_path = args.pl_dir / pl_name
@@ -1685,6 +1745,9 @@ def main() -> None:
                                          ext_attr_layout=ext_layout)
         if name in CHARS:
             extracted["can_walljump"] = _resolved_can_walljump(name, melee_decomp=args.melee_decomp)
+            static_y, static_z = extract_fighter_anims.extract_static_x1a70(name)
+            extracted["static_x1a70_y"] = static_y
+            extracted["static_x1a70_z"] = static_z
         if blaster:
             # Decomp ownership: SpecialN spawn joint uses ftParts_GetBoneIndex(fp, FtPart_RThumbNb).
             # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint

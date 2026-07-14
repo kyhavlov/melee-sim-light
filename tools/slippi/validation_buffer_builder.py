@@ -112,21 +112,12 @@ from tools.slippi.validation_buffer_seed import (  # noqa: F401
     _derive_opening_input_lock_timer,
     _stage_respawn_points_y,
     _respawn_point_y_for_stage_port,
-    _load_throw_pulse_seed_tables,
     _load_specialn_loop_cmd0_windows,
-    _load_runbrake_cmd0_seed_tables,
-    _load_source_clear_terminal_followup_tables,
-    _load_action_x9_b1_tables,
-    _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes,
-    _derive_source_clear_grounded_damage_clear_phase_seed_lane,
-    _derive_source_clear_processhit_damage_pending_phase_seed_lane,
+    _derive_source_clear_motion_state_entry_events,
+    _derive_source_clear_timer_x18c8_seed_lane,
     _derive_phantom_damage_pending_seed_lanes,
-    _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane,
-    _derive_source_clear_terminal_phase_seed_lane,
 )
 from tools.slippi.validation_buffer_items import (  # noqa: F401
-    _derive_throw_pulse_seed_lanes,
-    _derive_throw_laser_item_hitlist_seed_lanes,
     _fill_items_fixed,
     _yoshi_shyguy_params,
     _item_common_params,
@@ -146,7 +137,6 @@ from tools.slippi.validation_buffer_items import (  # noqa: F401
     _derive_item_attack_fields,
     _derive_item_reflect_damage_mul,
     _damage_hurt_height_from_action,
-    _derive_item_hidden_callback_seed_lanes,
 )
 from tools.slippi.validation_buffer_fighter import (  # noqa: F401
     _ascontiguousarray,
@@ -180,10 +170,7 @@ def warm_validation_generated_data_cache(*, data_root: Path=Path('data'), stage_
     from tools.slippi.anim_timebase import load_end_frame_tables
     load_end_frame_tables(data_root)
     load_action_state_tables(str(data_root))
-    _load_action_x9_b1_tables(data_root=data_root)
     _load_specialn_loop_cmd0_windows(data_root=data_root)
-    _load_runbrake_cmd0_seed_tables(data_root=data_root)
-    _load_source_clear_terminal_followup_tables(data_root=data_root)
     item_article_kind_set(data_root, 'blaster_shot_itkind')
     item_article_kind_set(data_root, 'needle_throw_itkind')
     item_article_kind_set(data_root, 'side_special_illusion_itkind')
@@ -219,7 +206,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     from tools.slippi.combat_history import derive_combat_hitlist_seed_fields, derive_hitbox_prev_center_seed_fields
     from tools.slippi.damage_history import derive_damage_time_since_hit_x18ac
     from tools.slippi.anim_timebase import derive_frame_speed_mul_f32, load_end_frame_tables
-    from tools.slippi.seed_history import derive_instance_id_counter, derive_instance_id_x2073, derive_item_spawn_id_counter, derive_colanim_internals, derive_downwait_timer, derive_damage_jump_buffer_x14, derive_damage_meteor_cancel_x1a, derive_damage_entry_tilt_timer_reset_post_mask, derive_damage_hitlag_sdi_reset_post_mask, derive_damage_post_hitlag_cb_kind, derive_camera_box_visible_x221f_b0, derive_camera_target_point_inside_stage_cam_bounds, derive_camera_target_world, derive_magnify_damage_counter_x1910, derive_rebirth_camera_anchor_y, derive_capture_mash_buttons_pressed, derive_capture_grab_hidden_post, derive_grab_mash_stick_sign_post, derive_grab_owner_port, derive_grab_owner_port_2p, derive_seed_prev_action_post, derive_dash_x4, derive_runbrake_cmd0, derive_shine_release_state, derive_run_x0, derive_ecb_lock_state, derive_ecb_lock_bottom_rel_y, derive_damage_hitlag_colldata_ecb, load_shield_tilt_table_meta, process_stick_i8_units
+    from tools.slippi.seed_history import derive_instance_id_counter, derive_instance_id_x2073, derive_item_spawn_id_counter, derive_colanim_internals, derive_downwait_timer, derive_damage_jump_buffer_x14, derive_damage_meteor_cancel_x1a, derive_damage_entry_tilt_timer_reset_post_mask, derive_damage_hitlag_sdi_reset_post_mask, derive_damage_post_hitlag_cb_kind, derive_camera_box_visible_x221f_b0, derive_camera_target_point_inside_stage_cam_bounds, derive_camera_target_world, derive_magnify_damage_counter_x1910, derive_rebirth_camera_anchor_y, derive_capture_mash_buttons_pressed, derive_capture_grab_hidden_post, derive_grab_mash_stick_sign_post, derive_grab_owner_port, derive_grab_owner_port_2p, derive_seed_prev_action_post, derive_dash_x4, derive_shine_release_state, derive_run_x0, derive_ecb_lock_state, derive_ecb_lock_bottom_rel_y, derive_damage_hitlag_colldata_ecb, load_shield_tilt_table_meta, process_stick_i8_units
     with replay_path_for_peppi(args.slp) as peppi_path:
         game = _read_slippi(str(peppi_path), False)
     frames_all = game.frames
@@ -302,9 +289,6 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     air_drift_max_by_char = _load_f32_character_attr_lut(data_root, 'air_drift_max')
     laser_item_types = item_article_kind_set(data_root, 'blaster_shot_itkind')
     needle_throw_item_types = item_article_kind_set(data_root, 'needle_throw_itkind')
-    shield_bounce_item_types = tuple(sorted(set(laser_item_types) | set(needle_throw_item_types)))
-    laser_kind_by_char = item_article_values_by_sim_char(data_root, 'blaster_shot_itkind')
-    throw_laser_hitbox_masks = {int(laser_kind_by_char[1]): np.uint8(3), int(laser_kind_by_char[22]): np.uint8(12)}
     illusion_item_kinds = item_article_kind_set(data_root, 'side_special_illusion_itkind')
     end_frames = load_end_frame_tables(data_root)
     stage_segments: list[dict] = []
@@ -468,13 +452,8 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     act_down_bound_d = 191
     act_down_wait_d = 192
     act_escape_air = 236
-    throw_action_to_move = {int(act_throw_f): 'ftCo_SM_ThrowF', int(act_throw_b): 'ftCo_SM_ThrowB', int(act_throw_hi): 'ftCo_SM_ThrowHi', int(act_throw_lw): 'ftCo_SM_ThrowLw'}
-    throw_pulse_frames_by_char_action, throw_cmd1_start_by_char_action, throw_shot_itkind_by_char = _load_throw_pulse_seed_tables(data_root=data_root, throw_action_to_move=throw_action_to_move)
     specialn_loop_cmd0_windows_by_char_msid = _load_specialn_loop_cmd0_windows(data_root=data_root)
-    runbrake_cmd0_on_by_char, runbrake_cmd0_off_by_char = _load_runbrake_cmd0_seed_tables(data_root=data_root)
-    source_clear_followup_cmd0_on_by_char_action, source_clear_followup_cmd0_off_by_char_action = _load_source_clear_terminal_followup_tables(data_root=data_root)
-    action_x9_b1_by_char = _load_action_x9_b1_tables(data_root=data_root)
-    source_clear_x18c8_init_frames = 60
+    source_clear_x18c8_init_frames = int(common['damage_source_clear_frames_x814'])
     char_fox = 1
     char_falco = 22
     button_mask_xy = 1024 | 2048
@@ -625,14 +604,6 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         seed_prev_action_id, seed_prev_action_frame = derive_seed_prev_action_post(post_action_id_u16=post_state, post_action_frame_i16=post_state_age)
         samples['seed_t']['seed_prev_action_id'][:, slot] = seed_prev_action_id
         samples['seed_t']['seed_prev_action_frame'][:, slot] = seed_prev_action_frame
-        samples['seed_t']['throw_pulse_consumed'][:, slot] = 0
-        samples['seed_t']['throw_pulse_crossed_prev_frame'][:, slot] = 0
-        samples['seed_t']['throw_command_pending_pulse_frame'][:, slot] = 0
-        samples['seed_t']['source_clear_owner_set_phase'][:, slot] = 0
-        samples['seed_t']['source_clear_processhit_damage_pending_phase'][:, slot] = 0
-        samples['seed_t']['fighter_8006cda4_pre_gate_consume_count'][:, slot] = 0
-        samples['seed_t']['source_clear_grounded_damage_clear_phase'][:, slot] = 0
-        samples['seed_t']['source_clear_terminal_phase'][:, slot] = 0
         post_attackdash_x0 = _derive_attackdash_x0_seed_lane(action_id_u16=post_state, action_frame_i16=post_state_age, misc_as_f32=post_misc_as, act_attack_dash=act_attack_dash, attackdash_x0_init_frames=int(common['attackdash_x0_init_frames']))
         samples['seed_t']['attackdash_x0'][:, slot] = post_attackdash_x0[:-1]
         post_jab_x0 = np.zeros(n_frames, dtype=np.uint8)
@@ -688,11 +659,6 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         samples['seed_t']['kb_smashcharge_active'][:, slot] = _derive_kb_smashcharge_active_from_post(post=post)[:-1]
         damage_time_since_hit_x18ac = derive_damage_time_since_hit_x18ac(action_id_u16=post_state, hitlag_u16=post_hitlag, hitstun_u16=post_hitstun, state_flags_u8=state_flags)
         samples['seed_t']['damage_time_since_hit_x18ac'][:, slot] = damage_time_since_hit_x18ac[:-1]
-        source_clear_timer_x18c8, source_clear_owner_set_phase = _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(action_id_u16=post_state, char_id_u8=post_char, on_ground_u8=post_on_ground, state_flags_u8=state_flags, last_hit_by_u8=last_hit_by, x9_b1_by_char=action_x9_b1_by_char, source_clear_init_frames=source_clear_x18c8_init_frames)
-        samples['seed_t']['source_clear_timer_x18c8'][:, slot] = source_clear_timer_x18c8[:-1]
-        samples['seed_t']['source_clear_owner_set_phase'][:, slot] = source_clear_owner_set_phase[:-1]
-        samples['seed_t']['source_clear_grounded_damage_clear_phase'][:, slot] = _derive_source_clear_grounded_damage_clear_phase_seed_lane(action_id_u16=post_state, action_frame_i16=post_state_age, on_ground_u8=post_on_ground, hitlag_u16=post_hitlag, hitstun_u16=post_hitstun, combo_count_u8=combo_count, source_clear_timer_x18c8_u8=source_clear_timer_x18c8, source_clear_owner_set_phase_u8=source_clear_owner_set_phase, state_flags_u8=state_flags, last_hit_by_u8=last_hit_by)[:-1]
-        samples['seed_t']['source_clear_terminal_phase'][:, slot] = _derive_source_clear_terminal_phase_seed_lane(char_id_u8=post_char, action_id_u16=post_state, action_frame_i16=post_state_age, hitlag_u16=post_hitlag, hitstun_u16=post_hitstun, combo_count_u8=combo_count, last_attack_landed_u8=last_attack_landed, source_clear_timer_x18c8_u8=source_clear_timer_x18c8, source_clear_owner_set_phase_u8=source_clear_owner_set_phase, state_flags_u8=state_flags, last_hit_by_u8=last_hit_by, terminal_followup_cmd0_on_by_char_action=source_clear_followup_cmd0_on_by_char_action, terminal_followup_cmd0_off_by_char_action=source_clear_followup_cmd0_off_by_char_action)[:-1]
         colanim_x198c, colanim_x1990, colanim_x1994, colanim_x2221_b0, colanim_rebirth_fall_x1994 = derive_colanim_internals(action_id_u16=post_state, action_frame_i16=post_state_age, hitlag_u16=post_hitlag, hitstun_u16=post_hitstun, hurtbox_state_u8=hurtbox_state, colanim_throw_x1994_frames=int(common['colanim_throw_x1994_frames']), colanim_cliff_x1990_frames=int(common['colanim_cliff_x1990_frames']), colanim_damage_x1994_frames=int(common['colanim_damage_x1994_frames']), colanim_passivewall_x1990_frames=int(common['colanim_passivewall_x1990_frames']), colanim_rebirth_fall_x1994_frames=int(common['colanim_rebirth_fall_x1994_frames']), throw_actions=(act_throw_f, act_throw_b, act_throw_hi, act_throw_lw), cliff_actions=(act_cliff_catch, act_cliff_wait), passivewall_actions=(act_passive_wall, act_passive_wall_jump), damage_actions=(act_damage_hi_1, act_damage_hi_2, act_damage_hi_3, act_damage_n_1, act_damage_n_2, act_damage_n_3, act_damage_lw_1, act_damage_lw_2, act_damage_lw_3, act_damage_air_1, act_damage_air_2, act_damage_air_3, act_damage_fly_hi, act_damage_fly_n, act_damage_fly_lw, act_damage_fly_top, act_damage_fly_roll, act_damage_fall), fall_actions=(act_fall,), rebirth_actions=(act_rebirth, act_rebirth_wait))
         samples['seed_t']['colanim_hit_status_x198c'][:, slot] = colanim_x198c[:-1]
         samples['seed_t']['colanim_lock_x2221_b0'][:, slot] = colanim_x2221_b0[:-1]
@@ -705,7 +671,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         neutral_frame = neutral_lut[post_char]
         frame_max = frame_max_lut[post_char]
         import msl_binding
-        main_x_proc, main_y_proc, c_x_proc, c_y_proc, stick_x, stick_y, cstick_y, trigger_unit, buttons_pressed, lr_press_timer, lightshield_amount, guard_setoff_hitlag_exit_phase = msl_binding.validation_derive_guard_input_prefix(samples.seed_u8(), int(slot), pre_buttons_physical, pre_main_x, pre_main_y, pre_c_x, pre_c_y, pre_l, pre_r, post_char, post_state, post_state_age, post_dir, post_shield, post_hitlag, state_flags, neutral_frame, frame_max, int(ucf_enabled), int(ucf_cardinals_1_0_enabled), float(lstick_deadzone_x), float(lstick_deadzone_y), float(guard_stick_lerp_x44c), int(button_mask_lr), int(button_mask_z), float(common['trigger_deadzone']), int(common['guard_x10_init_frames']), int(act_guard_on), int(act_guard), int(act_guard_off), int(act_guard_reflect), int(act_guard_set_off), int(common['guard_special_enable_frames']), float(common['hitlag_dmg_mul']), float(common['hitlag_base']), int(common['powershield_reflect_frames']), int(common['powershield_reflect_total_frames']))
+        main_x_proc, main_y_proc, c_x_proc, c_y_proc, stick_x, stick_y, cstick_y, trigger_unit, buttons_pressed, lr_press_timer, lightshield_amount = msl_binding.validation_derive_guard_input_prefix(samples.seed_u8(), int(slot), pre_buttons_physical, pre_main_x, pre_main_y, pre_c_x, pre_c_y, pre_l, pre_r, post_char, post_state, post_state_age, post_dir, post_shield, post_hitlag, state_flags, neutral_frame, frame_max, int(ucf_enabled), int(ucf_cardinals_1_0_enabled), float(lstick_deadzone_x), float(lstick_deadzone_y), float(guard_stick_lerp_x44c), int(button_mask_lr), int(button_mask_z), float(common['trigger_deadzone']), int(common['guard_x10_init_frames']), int(act_guard_on), int(act_guard), int(act_guard_off), int(act_guard_reflect), int(act_guard_set_off), int(common['guard_special_enable_frames']), float(common['hitlag_dmg_mul']), float(common['hitlag_base']), int(common['powershield_reflect_frames']), int(common['powershield_reflect_total_frames']))
         walljump_used_count, passivewall_vel_y_exponent = _derive_walljump_used_seed_lanes(char_id_u8=post_char, action_id_u16=post_state, action_frame_i16=post_state_age, on_ground_u8=post_on_ground, jumps_left_u8=post_jumps, max_jumps_lut_u8=max_jumps_lut, buttons_pressed_u16=buttons_pressed, stick_y_f32=stick_y, button_mask_xy=button_mask_xy, tap_jump_threshold=tap_jump_threshold)
         samples['seed_t']['walljump_used_count'][:, slot] = walljump_used_count[:-1]
         samples['seed_t']['passivewall_vel_y_exponent'][:, slot] = passivewall_vel_y_exponent[:-1]
@@ -718,6 +684,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         samples['seed_t']['smash_charge_hold_frames_max'][:, slot] = smash_hold[:-1]
         samples['seed_t']['smash_charge_saved_rate_fp_q16_16'][:, slot] = smash_saved_rate[:-1]
         samples['seed_t']['frame_speed_mul_f32'][:, slot] = frame_speed_mul[:-1]
+        msl_binding.validation_derive_guard_pose_history(samples.seed_u8(), int(slot), _ascontiguousarray(post_char, dtype=np.uint8), _ascontiguousarray(post_state, dtype=np.uint16), _ascontiguousarray(animation_index, dtype=np.uint32), _ascontiguousarray(post_anim_frame_f32, dtype=np.float32), _ascontiguousarray(frame_speed_mul, dtype=np.float32), _ascontiguousarray(post_hitlag, dtype=np.uint16), int(act_guard_on), int(act_guard), int(act_guard_reflect))
         samples['seed_t']['walk_anim_source_vel_f32'][:, slot] = _derive_walk_anim_source_vel_seed_lane(action_id_u16=post_state, char_id_u8=post_char, facing_dir1_i8=facing_dir1_post, frame_speed_mul_f32=frame_speed_mul, walk_divisors_by_char=char_walk_divisors)[:-1]
         samples['seed_t']['walk_retarget_tick_source_vel_f32'][:, slot] = _derive_walk_retarget_tick_source_vel_seed_lane(action_id_u16=post_state, char_id_u8=post_char, facing_dir1_i8=facing_dir1_post, anim_frame_f32=post_anim_frame_f32, ref_action_frame_i16=post_state_age, speed_ground_x_self_f32=speed_ground_x_self, walk_anim_source_vel_f32=samples['seed_t']['walk_anim_source_vel_f32'][:, slot], walk_divisors_by_char=char_walk_divisors, walk_max_by_char=char_walk_max, walk_mid_vel_mul=float(common['walk_mid_vel_mul']), walk_fast_vel_mul=float(common['walk_fast_vel_mul']), end_frames=end_frames)[:-1]
         samples['seed_t']['run_anim_source_vel_f32'][:, slot] = _derive_run_anim_source_vel_seed_lane(action_id_u16=post_state, char_id_u8=post_char, facing_dir1_i8=facing_dir1_post, frame_speed_mul_f32=frame_speed_mul, run_scaling_by_char=char_run_scaling)[:-1]
@@ -743,8 +710,6 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         post_turn_has_turned_u8[:, slot] = turn_has_turned
         run_x0 = derive_run_x0(action_id=post_state, hitlag_u16=post_hitlag, run_x0_init_x430=float(common['run_x0_init_x430']), act_run=act_run, act_run_direct=act_run_direct, act_turn_run=act_turn_run)
         samples['seed_t']['run_x0'][:, slot] = run_x0[:-1]
-        runbrake_cmd0 = derive_runbrake_cmd0(action_id_u16=post_state, anim_frame_f32=post_anim_frame_f32, char_id_u8=post_char, cmd0_on_by_char=runbrake_cmd0_on_by_char, cmd0_off_by_char=runbrake_cmd0_off_by_char, act_run_brake=act_run_brake)
-        samples['seed_t']['runbrake_cmd0'][:, slot] = runbrake_cmd0[:-1]
         dash_x4 = derive_dash_x4(action_id_u16=post_state, action_frame_i16=post_state_age, act_dash=act_dash, act_turn=act_turn)
         samples['seed_t']['dash_x4'][:, slot] = dash_x4[:-1]
         shine_release_lag, shine_is_release = derive_shine_release_state(action_id_u16=post_state, action_frame_i16=post_state_age, buttons_held_u16=pre_buttons_physical, hitlag_u16=post_hitlag, release_lag_init_u8=reflector_release_lag_lut[post_char], button_mask_b=button_mask_b)
@@ -778,42 +743,7 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     import msl_binding
     hist_attack_id, hist_attack_instance, hist_stale_queue_index, hist_stale_move_id, hist_stale_attack_instance = msl_binding.validation_derive_staling_buffers(samples.seed_u8(), samples.ref_u8(), _structured_rows_as_writable_bytes(items_fixed), post_anim_frame_f32_all, np.asarray(_laser_shot_item_kinds(Path('data') / 'items' / 'lasers.bin'), dtype=np.uint16), int(num_players))
     hist = SimpleNamespace(attack_id=hist_attack_id, attack_instance=hist_attack_instance, stale_queue_index=hist_stale_queue_index, stale_move_id=hist_stale_move_id, stale_attack_instance=hist_stale_attack_instance)
-    shield_hit_mul = float(common['shield_hit_damage_mul'])
-    shield_hit_base = float(common['shield_hit_damage_base'])
-    shield_hit_ls_min = float(common['shield_hit_lightshield_min'])
-    shield_hit_ls_max = float(common['shield_hit_lightshield_max'])
-    shield_hold_drain_mul = float(common['shield_hold_drain_mul'])
-    shield_hold_drain_base = float(common['shield_hold_drain_base'])
-    shield_hold_drain_max = float(common['shield_hold_drain_max'])
-    shield_stun_mul = float(common['shield_stun_mul'])
-    shield_stun_base = float(common['shield_stun_base'])
-    shield_stun_ls_min = float(common['shield_stun_lightshield_min'])
-    shield_stun_ls_max = float(common['shield_stun_lightshield_max'])
-    max_end_msid = max((max(v.keys(), default=0) for v in end_frames.by_char_id.values()), default=40)
-    end_frame_lut = np.zeros((256, max(max_end_msid, 40) + 1), dtype=np.float32)
-    for cid, by_msid in end_frames.by_char_id.items():
-        for msid, end_frame in by_msid.items():
-            end_frame_lut[int(cid) & 255, int(msid)] = np.float32(float(end_frame))
-    try:
-        import msl_binding
-    except ImportError as exc:
-        raise RuntimeError('native msl_binding.derive_guardsetoff_frame_speed_overrides is required; run `make build`') from exc
-    guardsetoff_rate = msl_binding.derive_guardsetoff_frame_speed_overrides(_ascontiguousarray(post_action_id_u16, dtype=np.uint16), _ascontiguousarray(post_hitlag_u16_all, dtype=np.uint16), _ascontiguousarray(post_state_age_all, dtype=np.int16), _ascontiguousarray(post_animation_index_u32_all, dtype=np.uint32), _ascontiguousarray(post_char_id_u8, dtype=np.uint8), _ascontiguousarray(post_state_flags_u8, dtype=np.uint8), _ascontiguousarray(post_shield_f32_all, dtype=np.float32), _ascontiguousarray(lightshield_amount_all, dtype=np.float32), _ascontiguousarray(hist.attack_id, dtype=np.uint16), _ascontiguousarray(hist.stale_queue_index, dtype=np.uint8), _ascontiguousarray(hist.stale_move_id, dtype=np.uint16), manifest_tables.active_shield_hit_lut, end_frame_lut, np.asarray(stale_weights, dtype=np.float32), int(num_players), int(act_guard_set_off), shield_hit_mul, shield_hit_base, shield_hit_ls_min, shield_hit_ls_max, shield_stun_mul, shield_stun_base, shield_stun_ls_min, shield_stun_ls_max)
-    guardsetoff_rate_mask = guardsetoff_rate[:, :num_players] > np.float32(0.0)
-    frame_speed_mul_all[:, :num_players][guardsetoff_rate_mask] = guardsetoff_rate[:, :num_players][guardsetoff_rate_mask]
-    samples['seed_t']['frame_speed_mul_f32'][:, :num_players] = frame_speed_mul_all[:-1, :num_players]
-    guard_setoff_exit_frame_speed = msl_binding.derive_guard_setoff_exit_frame_speed_seed_lane(
-        _ascontiguousarray(post_action_id_u16, dtype=np.uint16),
-        _ascontiguousarray(post_hitlag_u16_all, dtype=np.uint16),
-        _ascontiguousarray(frame_speed_mul_all, dtype=np.float32),
-        int(num_players),
-        int(act_guard_set_off),
-    )
-    samples['seed_t']['guard_setoff_exit_frame_speed_mul_f32'][:, :num_players] = guard_setoff_exit_frame_speed[:-1, :num_players]
-    for slot in range(num_players):
-        samples['seed_t']['source_clear_processhit_damage_pending_phase'][:, slot] = _derive_source_clear_processhit_damage_pending_phase_seed_lane(action_id_u16=samples['seed_t']['action_id'][:, slot], action_frame_i16=samples['seed_t']['action_frame'][:, slot], on_ground_u8=samples['seed_t']['on_ground'][:, slot], hitlag_u16=samples['seed_t']['hitlag'][:, slot], hitstun_u16=samples['seed_t']['hitstun'][:, slot], combo_count_u8=samples['seed_t']['combo_count'][:, slot], last_attack_landed_u8=samples['seed_t']['last_attack_landed'][:, slot], source_clear_timer_x18c8_u8=samples['seed_t']['source_clear_timer_x18c8'][:, slot], source_clear_owner_set_phase_u8=samples['seed_t']['source_clear_owner_set_phase'][:, slot], colanim_hit_status_x198c_u8=samples['seed_t']['colanim_hit_status_x198c'][:, slot], state_flags_u8=samples['seed_t']['state_flags'][:, slot, :], last_hit_by_u8=samples['seed_t']['last_hit_by'][:, slot])
     import msl_binding
-    msl_binding.validation_derive_fighter_8006cda4_buffers(samples.seed_u8(), samples.ref_u8(), float(common['damagefly_roll_prob']), int(num_players), int(int(stage_id) == 2))
     illusion_ghost_pos0_x, illusion_ghost_pos0_y, illusion_ghost_pos1_x, illusion_ghost_pos1_y, illusion_ghost_pos2_x, illusion_ghost_pos2_y = derive_illusion_ghost_pos012(post_action_id_u16=post_action_id_u16, post_action_frame_i16=post_state_age_all, post_pos_x=post_pos_x_all, post_pos_y=post_pos_y_all)
     samples['seed_t']['illusion_ghost_pos0_x'][:, :num_players] = illusion_ghost_pos0_x[:-1, :num_players]
     samples['seed_t']['illusion_ghost_pos0_y'][:, :num_players] = illusion_ghost_pos0_y[:-1, :num_players]
@@ -875,10 +805,6 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
                 source_angle[end_mask] = np.uint16(angle)
         damage_meteor_cancel_x1a = derive_damage_meteor_cancel_x1a(action_id=samples['seed_t']['action_id'][:, slot], hitstun_u16=samples['seed_t']['hitstun'][:, slot], source_angle_u16=source_angle, angle_min_deg=int(common['damage_meteor_cancel_angle_min_deg']), angle_max_deg=int(common['damage_meteor_cancel_angle_max_deg']), damage_actions=damage_action_family)
         samples['seed_t']['damage_post_hitlag_cb_kind'][:, slot] = np.bitwise_or(samples['seed_t']['damage_post_hitlag_cb_kind'][:, slot].astype(np.uint8), np.left_shift(damage_meteor_cancel_x1a.astype(np.uint8), np.uint8(7))).astype(np.uint8)
-    throw_pulse_consumed, throw_pulse_crossed_prev, throw_command_pending_pulse_frame = _derive_throw_pulse_seed_lanes(seed_action_id_u16=samples['seed_t']['action_id'], seed_char_id_u8=samples['seed_t']['char_id'], seed_anim_frame_f32=samples['seed_t']['anim_frame_f32'], seed_frame_speed_mul_f32=samples['seed_t']['frame_speed_mul_f32'], seed_hitstun_u16=samples['seed_t']['hitstun'], seed_last_attack_landed_u8=samples['seed_t']['last_attack_landed'], seed_last_hit_by_u8=samples['seed_t']['last_hit_by'], seed_items=samples['seed_t']['items'], num_players=num_players, pulse_frames_by_char_action=throw_pulse_frames_by_char_action, cmd1_start_by_char_action=throw_cmd1_start_by_char_action, shot_itkind_by_char=throw_shot_itkind_by_char, act_throw_b=int(act_throw_b), act_throw_hi=int(act_throw_hi), act_damage_fly_top=int(act_damage_fly_top), falco_char_id=int(char_falco))
-    samples['seed_t']['throw_pulse_consumed'] = throw_pulse_consumed
-    samples['seed_t']['throw_pulse_crossed_prev_frame'] = throw_pulse_crossed_prev
-    samples['seed_t']['throw_command_pending_pulse_frame'] = throw_command_pending_pulse_frame
     post_team_id = np.zeros((n_frames, 4), dtype=np.uint8)
     post_char_id = np.zeros((n_frames, 4), dtype=np.uint8)
     post_action_id = np.zeros((n_frames, 4), dtype=np.uint16)
@@ -1022,11 +948,6 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
             sheik_chain_article_present[:, p] = np.any(is_chain_item & (chain_owner == np.int8(p)), axis=1).astype(np.uint8)
     samples['seed_t']['sheik_needle_count_u8'][:, :], samples['seed_t']['sheik_needle_specialn_timer_u8'][:, :] = _derive_sheik_needle_seed_lanes(char_id_u8=samples['seed_t']['char_id'], action_id_u16=samples['seed_t']['action_id'], action_frame_i16=samples['seed_t']['action_frame'], chain_article_present_u8=sheik_chain_article_present, sheik_internal_id=sheik_char_id)
     samples['seed_t']['sheik_chain_x0_u8'][:, :], samples['seed_t']['sheik_chain_release_latch_u8'][:, :] = _derive_sheik_chain_seed_lanes(char_id_u8=samples['seed_t']['char_id'], action_id_u16=samples['seed_t']['action_id'], buttons_u16=samples['input_t']['p']['buttons'], hitlag_u16=samples['seed_t']['hitlag'], sheik_internal_id=sheik_char_id, b_mask=button_mask_b, release_min_frames=sheik_chain_release_min_frames)
-    if sheik_char_id >= 0:
-        sheik_needle_shoot_rng_owner_by_player = (samples['seed_t']['char_id'] == np.uint8(sheik_char_id)) & np.isin(samples['seed_t']['action_id'], np.array([344, 348], dtype=np.uint16)) & np.isin(samples['seed_t']['action_frame'], np.array([2, 5, 8, 11, 14, 17], dtype=np.int16)) & (samples['seed_t']['sheik_needle_count_u8'] != 0)
-        sheik_needle_shoot_rng_owner = np.any(sheik_needle_shoot_rng_owner_by_player, axis=1)
-        if np.any(sheik_needle_shoot_rng_owner):
-            samples['seed_t']['frame_pre_random_seed'][sheik_needle_shoot_rng_owner] = frame_pre_random_seed[1:][sheik_needle_shoot_rng_owner]
     roles = msl_binding.stage_match_flow_roles(int(stage_id))
     respawn_points = roles.get('respawn_points', [])
     shared_respawn_platform = bool(respawn_points) and all(tuple(p) == tuple(respawn_points[0]) for p in respawn_points)
@@ -1043,12 +964,14 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         import msl_binding
     except ImportError as exc:
         raise RuntimeError('native validation item buffer derivation is required; run `make build`') from exc
-    hitbox_mask_lut = _u8_lut_from_pairs(tuple(sorted(((int(k), int(v)) for k, v in throw_laser_hitbox_masks.items()))))
-    msl_binding.validation_derive_throw_laser_item_hitlist_buffers(_structured_rows_as_writable_bytes(samples['seed_t']), hitbox_mask_lut, int(num_players))
-    laser_lut = _u8_lut_from_items(tuple((int(k) for k in laser_item_types)))
-    shield_bounce_lut = _u8_lut_from_items(tuple((int(k) for k in shield_bounce_item_types)))
+    msl_binding.validation_derive_grab_constraint_x2174_buffers(
+        _structured_rows_as_writable_bytes(samples['seed_t']), int(num_players)
+    )
+    msl_binding.validation_derive_item_hitlist_buffers(
+        _structured_rows_as_writable_bytes(samples['seed_t']), int(num_players)
+    )
     needle_lut = _u8_lut_from_items(tuple((int(k) for k in needle_throw_item_types)))
-    msl_binding.validation_derive_item_hidden_callback_buffers(_structured_rows_as_writable_bytes(samples['seed_t']), _structured_rows_as_bytes(samples['ref_t1']), laser_lut, shield_bounce_lut, needle_lut, int(num_players))
+    msl_binding.validation_derive_sheik_needle_motion_buffers(_structured_rows_as_writable_bytes(samples['seed_t']), _structured_rows_as_bytes(samples['ref_t1']), needle_lut)
     pre_stick_x_unit_2d = np.zeros((n_frames, 4), dtype=np.float32)
     pre_stick_y_unit_2d = np.zeros((n_frames, 4), dtype=np.float32)
     grab_mash_x_sign_post = np.zeros((n_frames, 4), dtype=np.int8)
@@ -1069,12 +992,11 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     samples['seed_t']['phantom_damage_source_port'] = phantom_damage_source_port[:-1]
     for slot, port_1based in enumerate(src_ports[:int(num_players)]):
         st = static_by_port.get(port_1based, PortStatic(team_id=0, char_id=0, handicap=9))
-        capture_grab_timer, capture_wait_counter, capture_wait_anim_timer, capture_wait_jump_latch, capture_breakout_pending = derive_capture_grab_hidden_post(action_id_u16=post_action_id[:, slot], action_frame_i16=post_action_frame[:, slot], grab_owner_port_u8=grab_owner[:, slot], percent_f32=post_percent_all[:, slot], buttons_pressed_u16=capture_mash_buttons_pressed[:, slot], stick_x_unit=pre_stick_x_unit_2d[:, slot], stick_y_unit=pre_stick_y_unit_2d[:, slot], frame_speed_mul_f32=frame_speed_mul_all[:, slot], grab_mash_stick_x_sign_post=grab_mash_x_sign_post[:, slot], grab_mash_stick_y_sign_post=grab_mash_y_sign_post[:, slot], slot_index=slot, handicap=st.handicap, capture_grab_timer_base=float(common['capture_grab_timer_base']), capture_grab_timer_handicap_mul=float(common['capture_grab_timer_handicap_mul']), capture_grab_timer_handicap_base=float(common['capture_grab_timer_handicap_base']), capture_grab_timer_slot_mul=float(common['capture_grab_timer_slot_mul']), capture_grab_timer_slot_base=float(common['capture_grab_timer_slot_base']), capture_grab_timer_percent_mul=float(common['capture_grab_timer_percent_mul']), capture_wait_grab_timer_decrement=float(common['capture_wait_grab_timer_decrement']), capture_wait_grab_mash_damage=float(common['capture_wait_grab_mash_damage']), capture_wait_anim_rate_hold_frames=float(common['capture_wait_anim_rate_hold_frames']), capture_wait_jump_latch_window_frames=float(common['capture_wait_jump_latch_window_frames']), grab_mash_stick_threshold=grab_mash_stick_threshold)
+        capture_grab_timer, capture_wait_counter, capture_wait_anim_timer, capture_wait_jump_latch = derive_capture_grab_hidden_post(action_id_u16=post_action_id[:, slot], action_frame_i16=post_action_frame[:, slot], grab_owner_port_u8=grab_owner[:, slot], percent_f32=post_percent_all[:, slot], buttons_pressed_u16=capture_mash_buttons_pressed[:, slot], stick_x_unit=pre_stick_x_unit_2d[:, slot], stick_y_unit=pre_stick_y_unit_2d[:, slot], frame_speed_mul_f32=frame_speed_mul_all[:, slot], grab_mash_stick_x_sign_post=grab_mash_x_sign_post[:, slot], grab_mash_stick_y_sign_post=grab_mash_y_sign_post[:, slot], slot_index=slot, handicap=st.handicap, capture_grab_timer_base=float(common['capture_grab_timer_base']), capture_grab_timer_handicap_mul=float(common['capture_grab_timer_handicap_mul']), capture_grab_timer_handicap_base=float(common['capture_grab_timer_handicap_base']), capture_grab_timer_slot_mul=float(common['capture_grab_timer_slot_mul']), capture_grab_timer_slot_base=float(common['capture_grab_timer_slot_base']), capture_grab_timer_percent_mul=float(common['capture_grab_timer_percent_mul']), capture_wait_grab_timer_decrement=float(common['capture_wait_grab_timer_decrement']), capture_wait_grab_mash_damage=float(common['capture_wait_grab_mash_damage']), capture_wait_anim_rate_hold_frames=float(common['capture_wait_anim_rate_hold_frames']), capture_wait_jump_latch_window_frames=float(common['capture_wait_jump_latch_window_frames']), grab_mash_stick_threshold=grab_mash_stick_threshold)
         samples['seed_t']['capture_grab_timer_f32'][:, slot] = capture_grab_timer[:-1]
         samples['seed_t']['capture_wait_counter_f32'][:, slot] = capture_wait_counter[:-1]
         samples['seed_t']['capture_wait_anim_rate_timer_f32'][:, slot] = capture_wait_anim_timer[:-1]
         samples['seed_t']['capture_wait_jump_latch_u8'][:, slot] = capture_wait_jump_latch[:-1]
-        samples['seed_t']['capture_breakout_pending_u8'][:, slot] = capture_breakout_pending[:-1]
     if n_frames >= 2:
         post_facing[:-1, :] = samples['seed_t']['facing'][:, :]
         post_facing[-1, :] = post_facing[-2, :]
@@ -1082,7 +1004,12 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
         post_guard_tilt_x8[-1, :] = post_guard_tilt_x8[-2, :]
         post_guard_tilt_x4[:-1, :] = samples['seed_t']['guard_tilt_x4'][:, :]
         post_guard_tilt_x4[-1, :] = post_guard_tilt_x4[-2, :]
-    hitlist_cd, hitlist_iid, hitlist_hb_valid, hitlist_hb_cd, hitlist_hb_iid, shield_contact_hb_kind, processhit_x1914 = derive_combat_hitlist_seed_fields(num_players=num_players, is_teams=bool(is_teams), team_id=post_team_id, char_id=post_char_id, action_id=post_action_id, action_frame=post_action_frame, animation_index=post_animation_index, facing=post_facing, on_ground=post_on_ground, pos_x=post_pos_x, pos_y=post_pos_y, fighter_scale_y=post_scale_y, guard_tilt_x8=post_guard_tilt_x8, guard_tilt_x4=post_guard_tilt_x4, stocks=post_stocks, percent=post_percent_all, shield_hp=post_shield_hp, hurtbox_state=post_hurtbox_state, hitlag=post_hitlag, last_hit_by=post_last_hit_by, source_port0=post_source_port0, instance_hit_by=post_instance_hit_by, instance_id=post_instance_id, input_buttons=pre_buttons, input_l=pre_l, input_r=pre_r, turn_has_turned=post_turn_has_turned_u8, anim_frame_f32=post_anim_frame, frame_speed_mul_f32=frame_speed_mul_all, specialhi_rotate_model_f32=specialhi_rotate_model_all, specialhi_rotate_model_valid_u8=specialhi_rotate_model_valid_all, items=items_fixed, include_per_hitbox=True, include_processhit_producers=True, include_replay_only_shield_admission=True, include_replay_only_body_admission=True, data_root='data')
+    post_guard_anim_counter_x0 = np.zeros((n_frames, 4), dtype=np.uint8)
+    if n_frames >= 2:
+        post_guard_anim_counter_x0[:-1, :] = samples['seed_t']['guard_anim_counter_x0'][:, :]
+        post_guard_anim_counter_x0[-1, :] = post_guard_anim_counter_x0[-2, :]
+    shield_desc_active = ((post_state_flags[:, :, 2] & np.uint8(0x80)) != 0).astype(np.uint8)
+    hitlist_cd, hitlist_iid, hitlist_hb_valid, hitlist_hb_cd, hitlist_hb_iid, hitlist_hb_v2_mask, processhit_x1914 = derive_combat_hitlist_seed_fields(num_players=num_players, is_teams=bool(is_teams), team_id=post_team_id, char_id=post_char_id, action_id=post_action_id, action_frame=post_action_frame, animation_index=post_animation_index, facing=post_facing, on_ground=post_on_ground, pos_x=post_pos_x, pos_y=post_pos_y, fighter_scale_y=post_scale_y, guard_tilt_x8=post_guard_tilt_x8, guard_tilt_x4=post_guard_tilt_x4, stocks=post_stocks, percent=post_percent_all, shield_hp=post_shield_hp, hurtbox_state=post_hurtbox_state, hitlag=post_hitlag, last_hit_by=post_last_hit_by, source_port0=post_source_port0, instance_hit_by=post_instance_hit_by, instance_id=post_instance_id, input_buttons=pre_buttons, input_l=pre_l, input_r=pre_r, turn_has_turned=post_turn_has_turned_u8, anim_frame_f32=post_anim_frame, frame_speed_mul_f32=frame_speed_mul_all, specialhi_rotate_model_f32=specialhi_rotate_model_all, specialhi_rotate_model_valid_u8=specialhi_rotate_model_valid_all, items=items_fixed, shield_desc_active=shield_desc_active, lightshield_amount=lightshield_amount_all, guard_anim_counter_x0=post_guard_anim_counter_x0, include_per_hitbox=True, include_victims_2=True, include_processhit_producers=True, data_root='data')
     if falcon_attrs is not None:
         # ftCa_MS_SpecialLw (357) installs deal_dmg_cb; ftCa_MS_SpecialLwEnd (358) keeps and
         # consumes the same move union. The native combat-history pass above reconstructs the
@@ -1096,29 +1023,12 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     except ImportError as exc:
         raise RuntimeError('native msl_binding.trim_stale_hitlist_seed_bridge is required; run `make build`') from exc
     msl_binding.trim_stale_hitlist_seed_bridge(hitlist_cd, hitlist_iid, hitlist_hb_valid, hitlist_hb_cd, hitlist_hb_iid, _ascontiguousarray(post_instance_id, dtype=np.uint16), _ascontiguousarray(post_instance_hit_by, dtype=np.uint16), _ascontiguousarray(post_last_hit_by, dtype=np.uint8), _ascontiguousarray(post_hitlag, dtype=np.uint16), _ascontiguousarray(post_hitstun, dtype=np.uint16), _ascontiguousarray(post_action_id, dtype=np.uint16), _ascontiguousarray(post_landing_fallspecial_allow_interrupt, dtype=np.uint8), int(num_players), int(act_attack_11), int(act_attack_lw4), int(act_damage_fly_top), int(act_landing_fall_special), int(act_guard_on), int(act_guard), int(act_guard_set_off), int(act_guard_reflect), int(act_guard_off))
-    guard_family_actions = np.array([act_guard_on, act_guard, act_guard_off, act_guard_set_off, act_guard_reflect], dtype=np.uint16)
-    attack_contact_actions = np.arange(int(act_attack_11), int(act_attack_air_lw) + 1, dtype=np.uint16)
-    same_frame_special_contact_entry_actions = np.array([act_fx_special_lw_start, act_fx_special_lw_loop, act_fx_special_lw_hit, act_fx_special_lw_turn, act_fx_special_air_lw_start, act_fx_special_air_lw_loop, act_fx_special_air_lw_hit, act_fx_special_air_lw_turn], dtype=np.uint16)
-    same_frame_contact_entry_actions = np.concatenate((attack_contact_actions, same_frame_special_contact_entry_actions))
-    shield_hit_int_damage = np.zeros((n_frames, samples['seed_t']['combat_shield_hit_int_damage'].shape[1]), dtype=np.uint8)
-    shield_damage_taken = np.zeros((n_frames, samples['seed_t']['combat_shield_damage_taken'].shape[1]), dtype=np.uint8)
-    guard_lut = _u8_lut_from_items(tuple((int(k) for k in guard_family_actions)))
-    attack_lut = _u8_lut_from_items(tuple((int(k) for k in attack_contact_actions)))
-    same_frame_lut = _u8_lut_from_items(tuple((int(k) for k in same_frame_contact_entry_actions)))
-    same_frame_special_lut = _u8_lut_from_items(tuple((int(k) for k in same_frame_special_contact_entry_actions)))
-    try:
-        import msl_binding
-    except ImportError as exc:
-        raise RuntimeError('native msl_binding.derive_shield_contact_seed_bridge is required; run `make build`') from exc
-    shield_hit_int_damage, shield_damage_taken = msl_binding.derive_shield_contact_seed_bridge(shield_contact_hb_kind, hitlist_hb_valid, hitlist_hb_cd, hitlist_hb_iid, _ascontiguousarray(post_action_id, dtype=np.uint16), _ascontiguousarray(post_hitlag, dtype=np.uint16), _ascontiguousarray(post_instance_id, dtype=np.uint16), _ascontiguousarray(post_shield_f32_all, dtype=np.float32), _ascontiguousarray(lightshield_amount_all, dtype=np.float32), _ascontiguousarray(post_animation_index_u32_all, dtype=np.uint32), _ascontiguousarray(post_state_age_all, dtype=np.int16), _ascontiguousarray(post_char_id_u8, dtype=np.uint8), _ascontiguousarray(hist.attack_id, dtype=np.uint16), _ascontiguousarray(hist.stale_queue_index, dtype=np.uint8), _ascontiguousarray(hist.stale_move_id, dtype=np.uint16), manifest_tables.active_shield_hit_lut, _ascontiguousarray(stale_weights, dtype=np.float32), guard_lut, attack_lut, same_frame_lut, same_frame_special_lut, int(num_players), int(act_guard_set_off), float(common['hitlag_dmg_mul']), float(common['hitlag_base']), float(shield_hit_mul), float(shield_hit_base), float(shield_hit_ls_min), float(shield_hit_ls_max), float(shield_hold_drain_mul), float(shield_hold_drain_base), float(shield_hold_drain_max))
     samples['seed_t']['combat_hitlist_cd'] = hitlist_cd[:-1]
     samples['seed_t']['combat_hitlist_victim_iid'] = hitlist_iid[:-1]
     samples['seed_t']['combat_hitlist_hb_valid'] = hitlist_hb_valid[:-1]
     samples['seed_t']['combat_hitlist_hb_cd'] = hitlist_hb_cd[:-1]
     samples['seed_t']['combat_hitlist_hb_victim_iid'] = hitlist_hb_iid[:-1]
-    samples['seed_t']['combat_shield_contact_hb_kind'] = shield_contact_hb_kind[:-1]
-    samples['seed_t']['combat_shield_hit_int_damage'] = shield_hit_int_damage[:-1]
-    samples['seed_t']['combat_shield_damage_taken'] = shield_damage_taken[:-1]
+    samples['seed_t']['combat_hitlist_hb_v2_mask'] = hitlist_hb_v2_mask[:-1]
     rebound_ground_accel_2 = np.zeros((n_frames, samples['seed_t']['rebound_ground_accel_2_f32'].shape[1]), dtype=np.float32)
     rebound_anim_rate = np.zeros((n_frames, samples['seed_t']['rebound_anim_rate_f32'].shape[1]), dtype=np.float32)
     try:
@@ -1144,4 +1054,40 @@ def _build_validation_buffers_impl(args) -> ValidationReplayBuffers:
     samples['seed_t']['stage_dream_whispy_wind_dir_u8'] = dream_wind_dir
     samples['seed_t']['stage_dream_whispy_wind_valid_u8'] = dream_wind_valid
     samples['seed_t']['stage_dream_whispy_wind_timer_u16'] = dream_wind_timer
+
+    # x18C8 is real hidden Fighter state. Slippi post-frame rows cannot reveal intermediate
+    # same-frame MotionStates, so first observe its Fighter_ChangeMotionState writer by stepping
+    # the ordinary native runtime from each complete teacher-forced seed. Then run the source
+    # countdown prefix over those events plus replay-visible damage-source writes.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+    samples['seed_t']['source_clear_timer_x18c8'][:, :] = np.uint8(0)
+    entry_events_by_sample = _derive_source_clear_motion_state_entry_events(
+        seed_u8=samples.seed_u8(),
+        prev_input_u8=samples.prev_input_u8(),
+        input_u8=samples.input_u8(),
+        num_players=int(num_players),
+        ucf_enabled=bool(ucf_enabled),
+        ucf_cardinals_1_0_enabled=bool(ucf_cardinals_1_0_enabled),
+        source_clear_init_frames=source_clear_x18c8_init_frames,
+    )
+    entry_events_post = np.zeros((n_frames, 4), dtype=np.uint8)
+    entry_events_post[1:, :] = entry_events_by_sample
+    for slot in range(int(num_players)):
+        timer = _derive_source_clear_timer_x18c8_seed_lane(
+            state_flags_u8=post_state_flags[:, slot, :],
+            last_hit_by_u8=post_last_hit_by[:, slot],
+            hitlag_u16=post_hitlag[:, slot],
+            hitstun_u16=post_hitstun[:, slot],
+            instance_hit_by_u16=post_instance_hit_by[:, slot],
+            percent_f32=post_percent_all[:, slot],
+            motion_state_entry_event_u8=entry_events_post[:, slot],
+            source_clear_init_frames=source_clear_x18c8_init_frames,
+        )
+        samples['seed_t']['source_clear_timer_x18c8'][:, slot] = timer[:-1]
+    # Fighter dynamic JObjs are persistent descriptor state, not a function of the current action
+    # row alone. Advance the native source-shaped solver over the full replay prefix once and store
+    # each completed post-frame owner state for teacher-forced reseed.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_Create,Fighter_8006D9AC}
+    # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009CB40,ftCo_8009DD94,ftCo_8009E0A8}
+    msl_binding.validation_derive_dynamic_pose_buffers(samples.seed_u8(), int(num_players))
     return samples.as_buffers(num_players=int(num_players))

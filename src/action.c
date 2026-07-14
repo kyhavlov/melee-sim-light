@@ -11,17 +11,18 @@
 
 #include "action_ids.h"
 #include "anim_frame.h"
+#include "anim_pose.h"
 #include "anim_timebase.h"
 #include "anim_table.h"
 #include "buttons.h"
 #include "char_params.h"
 #include "dash_iasa.h"
 #include "ftcommon_ecb.h"
+#include "fighter_script.h"
 #include "input_axis.h"
 #include "locomotion.h"
 #include "motion_state_owners.h"
 #include "motion_state_runtime.h"
-#include "move_tables.h"
 #include "trigger_input.h"
 #include "jump_input.h"
 #include "knockdown.h"
@@ -243,49 +244,6 @@ static inline uint8_t escape_try_enter_spotdodge_from_guard_y(MslBatch* batch,
   return 1;
 }
 
-static inline uint8_t escape_guard_wants_spotdodge(MslBatch* batch, const MslCommonParams* c,
-                                                   size_t idx) {
-  if (batch == NULL || c == NULL) {
-    return 0;
-  }
-  const float stick_y =
-      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-  const float stick_x =
-      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
-  const float cstick_y =
-      apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
-  const uint8_t tilt_timer_x = batch->state.tilt_timer_x[idx];
-  const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
-  if (!((stick_y <= c->spotdodge_stick_y_threshold &&
-         tilt_timer_y < c->spotdodge_flick_tilt_max_frames) ||
-        (cstick_y <= c->spotdodge_stick_y_threshold))) {
-    return 0u;
-  }
-  return ucf_shielddrop_suppresses_spotdodge(batch, c, idx, stick_x, stick_y, cstick_y,
-                                             tilt_timer_x)
-             ? 0u
-             : 1u;
-}
-
-static inline uint8_t guard_entry_via_wait_callback_from_current_row(const MslBatch* batch,
-                                                                     size_t idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const uint16_t a0 = batch->state.action_id[idx];
-  const uint16_t prev = batch->state.prev_action_id[idx];
-  // GuardOn can be entered after another state anim callback first promotes into Wait on the same
-  // frame, then Wait_IASA consumes held shield. The next replay-visible GuardOn row is a frozen
-  // snapshot, so preserve just the fact that entry came through that callback bridge.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Anim
-  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackS4.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
-  if (a0 == (uint16_t)MSL_ACT_WAIT && prev != (uint16_t)MSL_ACT_WAIT) {
-    return 1u;
-  }
-  return 0u;
-}
-
 static inline float guard_x650_from_input(const MslCommonParams* c, uint16_t buttons, uint8_t l,
                                           uint8_t r) {
   // Fighter input synthesis writes the source trigger lane in this order:
@@ -444,11 +402,7 @@ void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const Msl
   }
   batch->state.animation_index[idx] = smid;
 
-  if (a == (uint16_t)MSL_ACT_ESCAPE_F &&
-      batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_F &&
-      move_tables_escapef_should_flip_facing(batch->state.char_id[idx],
-                                             batch->state.prev_action_frame[idx],
-                                             batch->state.action_frame[idx])) {
+  if (a == (uint16_t)MSL_ACT_ESCAPE_F && fighter_script_take_throw_flag(batch, idx, 3u)) {
     // Decomp: Escape_Anim flips facing when ftCheckThrowB3 consumes the script-owned bit.
     // The EscapeF script emits set_throw_flags(hit_idx=0) at the extracted action-frame threshold.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_Escape_Anim
@@ -484,30 +438,49 @@ void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const Msl
 // Guard.c
 // --------
 
+static inline void guard_init_lightshield_from_current_input(MslBatch* batch,
+                                                             const MslCommonParams* c, size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  const float denom = 1.0f - c->trigger_deadzone;
+  if (!(denom > 0.0f)) {
+    batch->state.lightshield_amount[idx] = 0.0f;
+    return;
+  }
+  const float trig = guard_x650_from_input(c, batch->state.input_buttons[idx],
+                                           batch->state.input_l[idx], batch->state.input_r[idx]);
+  float light = (trig - c->trigger_deadzone) / denom;
+  if (light < 0.0f) {
+    light = 0.0f;
+  } else if (light > 1.0f) {
+    light = 1.0f;
+  }
+  batch->state.lightshield_amount[idx] = light;
+}
+
 static inline void enter_guard_reflect_common_setup(MslBatch* batch, const MslCommonParams* c,
                                                     size_t idx) {
   if (batch == NULL) {
     return;
   }
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_REFLECT;
-  // Slippi post-frame `animation_index` is frequently -1 for shield states in our validation rows.
-  // Keep this consistent with replay seeds/refs so validation compares cleanly.
-  batch->state.animation_index[idx] = 0xFFFFFFFFu;
   batch->state.guard_reflect_timer_x14[idx] = msl_guard_reflect_timer_x14_init(c);
   batch->state.guard_reflect_timer_x18[idx] = msl_guard_reflect_timer_x18_init(c);
-  batch->state.guard_reflect_entered_this_frame[idx] = 1u;
   batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.guard_release_latched_xc[idx] = 0;
-  batch->state.guard_x10[idx] = msl_guard_x10_visible_guardon_init_u8(c);
-  batch->state.lightshield_amount[idx] = 0.0f;
-  // GuardReflect entry publishes the timer-owned x221C lanes immediately:
-  // ftCo_8009388C / ftCo_80093A50 set x221C_b3, x221C_b1, and x221C_b2 when the
-  // GuardReflect motion state is installed. A later same-frame Fighter_ChangeMotionState
-  // may clear b3, but b1/b2 remain timer-owned until ftCo_80093BC0 expires x14/x18.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
+}
+
+static inline void enter_guard_reflect_install_descriptor_flags(MslBatch* batch, size_t idx) {
+  // Both GuardReflect entry paths install ReflectDesc after Fighter_ChangeMotionState has cleared
+  // the prior descriptors. x14/x18 then own b1/b2 expiry in ftCo_80093BC0.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] |=
       (uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  const size_t flags_2218_i =
+      idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+  batch->state.state_flags[flags_2218_i] |= (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
 }
 
 static inline void enter_guard_reflect_from_guard(MslBatch* batch, const MslCommonParams* c,
@@ -519,25 +492,18 @@ static inline void enter_guard_reflect_from_guard(MslBatch* batch, const MslComm
   // - ftCo_8009388C keeps the current anim frame and does not call ftAnim_8006EBA4.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009388C
   const float anim_start = batch->state.anim_frame_f32[idx];
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  const int p = (int)(idx % (size_t)MSL_MAX_PLAYERS);
+  motion_state_change(batch, bi, p, (uint16_t)MSL_ACT_GUARD_REFLECT, UINT32_MAX,
+                      (uint32_t)(MSL_MOTION_ENTRY_SKIP_ANIM | MSL_MOTION_ENTRY_KEEP_GFX),
+                      anim_start, 1.0f, MSL_ANIM_ENTER_TICK_NONE);
   enter_guard_reflect_common_setup(batch, c, idx);
   batch->state.guard_reflect_origin_guardon[idx] = 1u;
-  msl_anim_timebase_enter(batch, idx, anim_start, 1.0f);
-  // ftCo_8009388C keeps the current anim frame on Guard->GuardReflect entry. Under teacher-forced
-  // no-submotion snapshots, preserve negative carry-through when present; otherwise fall back to
-  // frozen -1 shape used by Slippi snapshots.
+  // Fighter_ChangeMotionState clears the ordinary ShieldDesc before ftColl_CreateReflectHit
+  // installs ReflectDesc on this already-guarding path.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009388C
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-  // Decomp ordering for GuardOn/GuardReflect path:
-  // - GuardOn_Anim runs before GuardOn_IASA (same Fighter proc), then ftCo_80093694 can enter
-  //   GuardReflect while keeping current anim frame.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_GuardOn_IASA,ftCo_8009388C}
-  //
-  // For no-submotion snapshots (`animation_index==-1`, negative state_age/action_frame), preserve
-  // that "Anim-before-IASA" consumption by stepping one frame deeper into the negative lane so
-  // the next frame's action_frame matches Slippi's -1-lane snapshot shape.
-  // Snapshot-parity only: this is not claiming GALE01 uses a persistent "-2" lane in normal play.
-  msl_anim_timebase_seed(batch, idx, (anim_start < 0.0f) ? (anim_start - 1.0f) : -1.0f,
-                         msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
+  msl_guard_set_shield_desc_active(batch, idx, 0u);
+  enter_guard_reflect_install_descriptor_flags(batch, idx);
 }
 
 static inline void enter_guard_reflect_from_locomotion(MslBatch* batch, const MslCommonParams* c,
@@ -546,15 +512,30 @@ static inline void enter_guard_reflect_from_locomotion(MslBatch* batch, const Ms
   // - ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50.
   // - ftCo_80093A50 calls ftAnim_8006EBA4 immediately after ChangeMotionState.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  const int p = (int)(idx % (size_t)MSL_MAX_PLAYERS);
+  motion_state_change(batch, bi, p, (uint16_t)MSL_ACT_GUARD_REFLECT, UINT32_MAX,
+                      (uint32_t)MSL_MOTION_ENTRY_SKIP_ANIM, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_NONE);
   enter_guard_reflect_common_setup(batch, c, idx);
   batch->state.guard_reflect_origin_guardon[idx] = 0u;
-  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
-  // Slippi no-submotion shield snapshots are commonly encoded with animation_index=-1 and
-  // state_age/action_frame=-1. Keep GuardReflect entry on that frozen timebase shape.
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  batch->state.guard_anim_counter_x0[idx] = 0u;
+  batch->state.guard_x10[idx] = msl_guard_x10_raw_init_u8(c);
+  batch->state.guard_tilt_x8[idx] = 10u;
+  batch->state.guard_tilt_x4[idx] = 0.0f;
+  // ftCo_80093A50 reaches ftCo_800921DC after current input has been published; locomotion
+  // powershield entry initializes the live lightshield latch from that same input.x650.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093A50,ftCo_800921DC}
+  guard_init_lightshield_from_current_input(batch, c, idx);
+  // Direct locomotion entry recreates the ordinary ShieldDesc before installing ReflectDesc.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50
-  msl_anim_timebase_seed(batch, idx, -1.0f,
-                         msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
+  msl_guard_set_shield_desc_active(batch, idx, 1u);
+  enter_guard_reflect_install_descriptor_flags(batch, idx);
+  // ftCo_800921DC initializes x8/x4 and immediately calls ftCo_80091E78; that call first runs
+  // ftCo_80091BC4 on the current controller sample before it blends the persistent JObj tree.
+  // Keep the hidden guard recurrence and the pose update in the same source callback.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_80091E78}
+  shields_guard_anim_update_tilt(batch, idx);
+  (void)anim_pose_live_guard_apply(batch, idx, 0.0f);
 }
 
 static inline uint8_t dash_iasa_guard_admission_reaches_terminal_scalar(
@@ -651,26 +632,18 @@ static inline uint8_t dash_iasa_try_enter_a_tap_jump_after_attack_s4_miss(MslBat
   return 1u;
 }
 
-static inline uint8_t guard_on_entry_source_can_feed_followup_reflect(uint16_t action_id) {
-  return action_id == (uint16_t)MSL_ACT_LANDING ? 1u : 0u;
-}
-
 static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, size_t idx,
                                   uint8_t entered_via_wait_callback) {
   // Decomp entry: ftCo_80091A4C -> ftCo_800923B4 -> ftCo_800924C0.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:66-69 and :313-327.
-  const uint16_t source_action = batch->state.action_id[idx];
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_ON;
-  batch->state.animation_index[idx] = 0xFFFFFFFFu;
-  // Decomp: ftCo_800924C0 calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+  (void)entered_via_wait_callback;
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  const int p = (int)(idx % (size_t)MSL_MAX_PLAYERS);
+  // ftCo_800924C0 uses Ft_MF_SkipAnim. The explicit ftAnim_8006EBA4 that follows is a no-op with
+  // anim_id=-1, leaving the source cur_anim_frame at anim_start-frame_speed (-1 for this entry).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0
-  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
-  // Slippi no-submotion shield snapshots are commonly encoded with animation_index=-1 and
-  // state_age/action_frame=-1. Keep GuardOn entry on that frozen timebase shape.
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0
-  msl_anim_timebase_seed(batch, idx, -1.0f,
-                         msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
+  motion_state_change(batch, bi, p, (uint16_t)MSL_ACT_GUARD_ON, UINT32_MAX,
+                      (uint32_t)MSL_MOTION_ENTRY_SKIP_ANIM, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_NONE);
   // GuardOn entry clears fp+0x221C GuardReflect bits before entering shield hold:
   // - x221C_b3 = 0
   // - x221C_b1 = 0
@@ -680,45 +653,22 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &= (uint8_t) ~(
       uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
-  batch->state.guard_on_entered_this_frame[idx] = 1u;
-  // Keep the entry-family marker through the entry callback row and its immediate frozen
-  // GuardOn_IASA handoff, then consume it below. The two ticks are runtime-only hidden source
-  // state from the same proc window, not a replay seed lane or a persistent GuardOn property.
-  batch->state.guard_entry_via_wait_callback[idx] = entered_via_wait_callback ? 2u : 0u;
-  // Source-entry latch for the immediate GuardOn -> GuardReflect item ReflectDesc owner.
-  // Landing's callback can enter GuardOn one frame before GuardOn_IASA consumes the LR edge into
-  // ftCo_8009388C; run-family GuardOn controls remain on their ordinary item owner unless the
-  // older seed/action lanes already prove the source GuardOn owner.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::*_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_GuardOn_IASA,ftCo_8009388C}
-  batch->state.guard_on_entry_reflect_source_latch[idx] =
-      guard_on_entry_source_can_feed_followup_reflect(source_action) ? 2u : 0u;
+  // ftCo_800924C0 creates the ordinary ShieldDesc after ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,ftCo_80092450}
+  msl_guard_set_shield_desc_active(batch, idx, 1u);
   batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.guard_release_latched_xc[idx] = 0;
-  batch->state.guard_x10[idx] = msl_guard_x10_visible_guardon_init_u8(c);
-  {
-    // GuardOn entry lightshield owner:
-    // ftCo_800924C0 calls ftCo_800921DC before returning to the current callback. That source
-    // helper initializes `fp->lightshield_amount` from the current `input.x650` trigger lane, so
-    // every GuardOn entry path must publish the same held-trigger latch before the first GuardOn
-    // drain. Keep this in the entry helper instead of only the generic grounded IASA call site:
-    // Damage/Wait-style handoffs can enter GuardOn through the same source helper.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,ftCo_800921DC}
-    const float denom = 1.0f - c->trigger_deadzone;
-    if (denom > 0.0f) {
-      const float trig = guard_x650_from_input(
-          c, batch->state.input_buttons[idx], batch->state.input_l[idx], batch->state.input_r[idx]);
-      float light = (trig - c->trigger_deadzone) / denom;
-      if (light < 0.0f) {
-        light = 0.0f;
-      } else if (light > 1.0f) {
-        light = 1.0f;
-      }
-      batch->state.lightshield_amount[idx] = light;
-    } else {
-      batch->state.lightshield_amount[idx] = 0.0f;
-    }
-  }
+  batch->state.guard_anim_counter_x0[idx] = 0u;
+  batch->state.guard_x10[idx] = msl_guard_x10_raw_init_u8(c);
+  batch->state.guard_reflect_timer_x14[idx] = 0u;
+  batch->state.guard_reflect_timer_x18[idx] = 0u;
+  batch->state.guard_reflect_origin_guardon[idx] = 0u;
+  // ftCo_800924C0 reaches ftCo_800921DC after current input has been published, so every
+  // GuardOn entry family initializes the latch from the same input.x650 owner.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,ftCo_800921DC}
+  guard_init_lightshield_from_current_input(batch, c, idx);
+  shields_guard_anim_update_tilt(batch, idx);
+  (void)anim_pose_live_guard_apply(batch, idx, 0.0f);
 }
 
 uint8_t wait_iasa_try_guard_after_callback(MslBatch* batch, const MslCommonParams* c, size_t idx) {
@@ -771,25 +721,28 @@ uint8_t wait_iasa_try_guard_after_callback(MslBatch* batch, const MslCommonParam
 static inline void enter_guard_hold(MslBatch* batch, size_t idx) {
   // Decomp: ftCo_800928CC -> ftCo_80092908 changes motion to ftCo_MS_Guard.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:421-446.
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD;
-  batch->state.animation_index[idx] = 0xFFFFFFFFu;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-
-  // Slippi parity for no-submotion shield snapshots:
-  // `MSL_ACT_GUARD` is packed with animation_index=-1 and state_age/action_frame=-1 in the replay
-  // suite (including GuardSetOff->Guard transitions), so keep Guard on the frozen (-1) timebase.
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-  msl_anim_timebase_seed(batch, idx, -1.0f,
-                         msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  const int p = (int)(idx % (size_t)MSL_MAX_PLAYERS);
+  motion_state_change(batch, bi, p, (uint16_t)MSL_ACT_GUARD, UINT32_MAX,
+                      (uint32_t)MSL_MOTION_ENTRY_SKIP_ANIM, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_NONE);
+  // ftCo_80092908 recreates ShieldDesc after entering Guard.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092908
+  msl_guard_set_shield_desc_active(batch, idx, 1u);
+  (void)anim_pose_live_guard_apply(batch, idx, 1.0f);
 }
 
 static inline void enter_guard_off(MslBatch* batch, size_t idx) {
   // Decomp: ftCo_80092BCC sets a release latch; Guard IASA transitions to GuardOff via ftCo_80092C54.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:481-509.
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_OFF;
-  batch->state.animation_index[idx] = (uint32_t)MSL_SM_GUARD_OFF;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  const int p = (int)(idx % (size_t)MSL_MAX_PLAYERS);
+  motion_state_change(batch, bi, p, (uint16_t)MSL_ACT_GUARD_OFF, (uint32_t)MSL_SM_GUARD_OFF, 0u,
+                      0.0f, 1.0f, MSL_ANIM_ENTER_TICK_NONE);
+  // GuardOff entry only changes motion state; its reset clears the old ShieldDesc.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092C54
+  msl_guard_set_shield_desc_active(batch, idx, 0u);
   batch->state.guard_release_latched_xc[idx] = 0;
+  batch->state.guard_anim_counter_x0[idx] = 0u;
   batch->state.guard_x10[idx] = 0;
   batch->state.lightshield_amount[idx] = 0.0f;
 }
@@ -811,6 +764,7 @@ static inline void enter_shield_break_fly(MslBatch* batch, const MslCharParams* 
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B62C
   batch->state.jumps_left[idx] =
       (ch != NULL && ch->max_jumps > 0u) ? (uint8_t)(ch->max_jumps - 1u) : 0u;
+  batch->state.script_hit_status_x1988[idx] = 2u;
   batch->state.hurtbox_state[idx] = 2u;
   msl_ftcommon_lock_ecb_8007d5d4(batch, idx);
   batch->state.speed_air_x_self[idx] = 0.0f;
@@ -819,9 +773,11 @@ static inline void enter_shield_break_fly(MslBatch* batch, const MslCharParams* 
   batch->state.speed_y_attack[idx] = 0.0f;
   batch->state.speed_y_self[idx] = (ch != NULL) ? ch->shield_break_initial_velocity : 0.0f;
   batch->state.guard_release_latched_xc[idx] = 0;
+  batch->state.guard_anim_counter_x0[idx] = 0u;
   batch->state.guard_x10[idx] = 0;
   batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.lightshield_amount[idx] = 0.0f;
+  msl_guard_set_shield_desc_active(batch, idx, 0u);
 }
 
 static inline void guard_enter_wait(MslBatch* batch, size_t idx) {
@@ -830,6 +786,7 @@ static inline void guard_enter_wait(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_guard_set_shield_desc_active(batch, idx, 0u);
   batch->state.guard_special_enable_timer_x1c[idx] = 0u;
 }
 
@@ -847,6 +804,7 @@ static inline void shieldbreak_enter_stand(MslBatch* batch, size_t idx, uint16_t
   batch->state.animation_index[idx] =
       up ? (uint32_t)MSL_SM_SHIELD_BREAK_STAND_U : (uint32_t)MSL_SM_SHIELD_BREAK_STAND_D;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.colanim_hit_status_x198c[idx] = 2u;
   batch->state.hurtbox_state[idx] = 2u;
 }
 
@@ -969,31 +927,7 @@ static inline uint8_t guard_try_enter_jump_oos(MslBatch* batch, const MslCommonP
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.kneebend_jump_input[idx] = (uint8_t)jump_input;
   batch->state.kneebend_is_short_hop[idx] = 0;
-  batch->state.guard_jump_oos_entered_this_frame[idx] = 1u;
   return 1;
-}
-
-static inline uint8_t guard_jump_oos_has_input(const MslBatch* batch, const MslCommonParams* c,
-                                               size_t idx) {
-  if (batch == NULL || c == NULL) {
-    return 0;
-  }
-  const float stick_y =
-      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-  const float cstick_y =
-      apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
-  const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
-  const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
-  if (stick_y >= c->tap_jump_threshold && tilt_timer_y < c->tap_jump_tilt_max_frames) {
-    return 1u;
-  }
-  if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0) {
-    return 1u;
-  }
-  if (cstick_y >= c->tap_jump_threshold) {
-    return 1u;
-  }
-  return 0u;
 }
 
 static inline uint8_t guard_try_enter_iasa_defense(MslBatch* batch, const MslCommonParams* c,
@@ -1052,37 +986,6 @@ static inline uint8_t apply_shield_hold_drain(MslBatch* batch, const MslCommonPa
   return 0u;
 }
 
-static inline uint8_t apply_shield_hold_drain_preserve_drain_refresh_store(MslBatch* batch,
-                                                                           const MslCommonParams* c,
-                                                                           size_t idx,
-                                                                           float trig_unit) {
-  if (batch == NULL || c == NULL) {
-    return 0u;
-  }
-  const float denom = 1.0f - c->trigger_deadzone;
-  const float drain_light = batch->state.lightshield_amount[idx];
-  float store_light = drain_light;
-  if (denom > 0.0f) {
-    const float t = (trig_unit - c->trigger_deadzone) / denom;
-    if (t >= 0.0f) {
-      store_light = clamp01(t);
-    }
-  }
-  batch->state.lightshield_amount[idx] = store_light;
-  const float drain_factor =
-      (drain_light * (c->shield_hold_drain_max - c->shield_hold_drain_base)) +
-      c->shield_hold_drain_base;
-  const float drain = c->shield_hold_drain_mul * drain_factor;
-  float hp = batch->state.shield_hp[idx] - drain;
-  if (hp < 0.0f) {
-    hp = 0.0f;
-    batch->state.shield_hp[idx] = hp;
-    return 1u;
-  }
-  batch->state.shield_hp[idx] = hp;
-  return 0u;
-}
-
 void guard_update_shield_recharge(MslBatch* batch, const MslCommonParams* c, size_t idx) {
   if (batch == NULL || c == NULL) {
     return;
@@ -1114,8 +1017,13 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
   if (batch == NULL) {
     return;
   }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
 
-  const uint16_t a0 = batch->state.action_id[idx];
+  const uint16_t action = batch->state.action_id[idx];
+  const uint8_t anim_runs = batch->state.hitlag_started_frame[idx] == 0u ? 1u : 0u;
 
   // GuardReflect/GuardSetOff anim-callback timing (prio 1):
   // - ftCo_GuardReflect_Anim calls ftCo_80093BC0 (x14/x18 tick + expire clears), then GuardOn_Anim.
@@ -1124,33 +1032,59 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
   //   ftCo_GuardReflect_Anim,ftCo_GuardSetOff_Anim,ftCo_80093BC0}
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-  if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT || a0 == (uint16_t)MSL_ACT_GUARD_SET_OFF) {
-    if (batch->state.hitlag_started_frame[idx] == 0) {
-      uint8_t t14 = batch->state.guard_reflect_timer_x14[idx];
-      if (t14 > 0) {
-        t14--;
-        batch->state.guard_reflect_timer_x14[idx] = t14;
+  if (action == (uint16_t)MSL_ACT_GUARD_REFLECT || action == (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+    if (anim_runs != 0u) {
+      const size_t flags_i =
+          idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+      const size_t flags_2218_i =
+          idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+      // ftCo_80093BC0 clears the one-frame b3 flag before ticking either descriptor timer.
+      batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
+      if ((batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_221C_B1) != 0u) {
+        uint8_t t14 = batch->state.guard_reflect_timer_x14[idx];
+        if (t14 > 0u) {
+          t14--;
+          batch->state.guard_reflect_timer_x14[idx] = t14;
+        }
+        if (t14 == 0u) {
+          // Runtime stores x14 with a +1 bias, so zero is source x14 < 0. ftCo_80093BC0 clears
+          // ReflectDesc ownership and immediately recreates the ordinary ShieldDesc through
+          // ftCo_80092450; it does not change motion state.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_80092450}
+          batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+          batch->state.state_flags[flags_2218_i] &=
+              (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+          msl_guard_set_shield_desc_active(batch, idx, 1u);
+        }
       }
-      if (t14 == 0u && batch->state.hitlag_pre_timer[idx] == 0u) {
-        // Decomp: ftCo_80093BC0 clears x221C_b1 when the shorter x14 reflect descriptor timer
-        // expires, matching the x18/x221C_b2 clear below.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-        const size_t flags_i =
-            idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-        batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
-      }
-      uint8_t t18 = batch->state.guard_reflect_timer_x18[idx];
-      if (t18 > 0) {
-        t18--;
-        batch->state.guard_reflect_timer_x18[idx] = t18;
+      if ((batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_221C_B2) != 0u) {
+        uint8_t t18 = batch->state.guard_reflect_timer_x18[idx];
+        if (t18 > 0u) {
+          t18--;
+          batch->state.guard_reflect_timer_x18[idx] = t18;
+        }
         if (t18 == 0u) {
-          // Decomp: when mv.co.guard.x18 expires in ftCo_80093BC0, x221C_b2 is cleared in the
-          // same GuardReflect_Anim callback pass.
+          // Runtime stores x18 with the same +1 bias as x14. Zero therefore already represents
+          // the source timer below zero, and ftCo_80093BC0 clears x221C_b2 on this callback even
+          // when the post-frame seed begins at that expired value.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-          const size_t flags_i =
-              idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
           batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
         }
+      }
+
+      if (action == (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+        // GuardSetOff_Anim does not tail-call GuardOn_Anim after x14 expiry. Its remaining work is
+        // the GuardDamage animation-end transition and shield scale publication.
+        const float end =
+            msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_DAMAGE);
+        if (end > 0.0f && batch->state.anim_frame_f32[idx] >= end) {
+          if (batch->state.guard_release_latched_xc[idx] != 0u) {
+            enter_guard_off(batch, idx);
+          } else {
+            enter_guard_hold(batch, idx);
+          }
+        }
+        return;
       }
     }
   } else {
@@ -1160,6 +1094,58 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
     batch->state.guard_reflect_timer_x14[idx] = 0;
     batch->state.guard_reflect_timer_x18[idx] = 0;
     batch->state.guard_reflect_origin_guardon[idx] = 0u;
+  }
+
+  if (anim_runs == 0u) {
+    return;
+  }
+
+  if (action == (uint16_t)MSL_ACT_GUARD_ON || action == (uint16_t)MSL_ACT_GUARD ||
+      action == (uint16_t)MSL_ACT_GUARD_REFLECT) {
+    // GuardOn/Guard/GuardReflect Anim all run ftCo_800925A4 before the input callback. The
+    // callback first increments mv.co.guard.x0, then publishes lightshield, drain, and x10 from
+    // the live pre-input fp->input.x650 snapshot.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    //   ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_GuardReflect_Anim,ftCo_800925A4}
+    if (batch->state.guard_anim_counter_x0[idx] < UINT16_MAX) {
+      batch->state.guard_anim_counter_x0[idx]++;
+    }
+    const size_t flags_221b_i =
+        idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+    const uint8_t shield_desc_active = (batch->state.state_flags[flags_221b_i] &
+                                        (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u
+                                           ? 1u
+                                           : 0u;
+    if (shield_desc_active != 0u) {
+      // ftCo_800925A4 owns lightshield publication, shield drain, and x10 decrement only while
+      // the ordinary ShieldDesc is live. GuardReflect can temporarily own ReflectDesc alone;
+      // those callback frames still increment x0 and update the guard pose, but they do not burn
+      // shield or the release lockout.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      //   ftCo_800925A4,ftCo_GuardReflect_Anim,ftCo_80093BC0}
+      const float trig = guard_x650_from_input(
+          c, batch->state.input_buttons[idx], batch->state.input_l[idx], batch->state.input_r[idx]);
+      if (apply_shield_hold_drain(batch, c, idx, trig, 0u) != 0u) {
+        enter_shield_break_fly(batch, msl_char_params_fast(batch->state.char_id[idx]), idx);
+        return;
+      }
+      if (batch->state.guard_x10[idx] > 0u) {
+        batch->state.guard_x10[idx] = (uint8_t)(batch->state.guard_x10[idx] - 1u);
+      }
+    }
+    shields_guard_anim_update_tilt(batch, idx);
+
+    if (action == (uint16_t)MSL_ACT_GUARD_ON || action == (uint16_t)MSL_ACT_GUARD_REFLECT) {
+      const float end = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_ON);
+      if (end > 0.0f && (float)batch->state.guard_anim_counter_x0[idx] >= end) {
+        enter_guard_hold(batch, idx);
+      } else if (end > 0.0f) {
+        (void)anim_pose_live_guard_apply(batch, idx,
+                                         (float)batch->state.guard_anim_counter_x0[idx] / end);
+      }
+    } else {
+      (void)anim_pose_live_guard_apply(batch, idx, 1.0f);
+    }
   }
 }
 
@@ -1245,10 +1231,6 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
   const uint16_t a0 = batch->state.action_id[idx];
   const float a0_anim_frame = batch->state.anim_frame_f32[idx];
-  batch->state.guard_x10_frame_start[idx] = batch->state.guard_x10[idx];
-  if (a0 != (uint16_t)MSL_ACT_GUARD_ON) {
-    batch->state.guard_on_cliff_end_source[idx] = 0u;
-  }
   enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
   const uint8_t guard_on_fresh_entry_from_non_shield_snapshot =
       // Decomp ownership: input callbacks run once per fighter per frame (Fighter_procUpdate).
@@ -1266,7 +1248,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
       (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.action_frame[idx] < 0 &&
        batch->state.animation_index[idx] == 0xFFFFFFFFu &&
-       batch->state.guard_on_entered_this_frame[idx] != 0u &&
+       msl_guard_action_entered_this_frame(batch, idx, (uint16_t)MSL_ACT_GUARD_ON) != 0u &&
        !msl_guard_lifecycle_action_has_shield_callback(batch->state.prev_action_id[idx]))
           ? 1u
           : 0u;
@@ -1282,25 +1264,21 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       //   ftCo_8009388C,ftCo_80093A50,ftCo_GuardReflect_Anim,ftCo_800925A4}
       (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT && batch->state.action_frame[idx] < 0 &&
        batch->state.animation_index[idx] == 0xFFFFFFFFu &&
-       batch->state.guard_reflect_entered_this_frame[idx] != 0u)
+       msl_guard_action_entered_this_frame(batch, idx, (uint16_t)MSL_ACT_GUARD_REFLECT) != 0u)
           ? 1u
           : 0u;
 
   if (!msl_guard_lifecycle_action_has_shield_callback(a0)) {
     batch->state.guard_release_latched_xc[idx] = 0;
+    batch->state.guard_anim_counter_x0[idx] = 0u;
     batch->state.guard_x10[idx] = 0;
     batch->state.lightshield_amount[idx] = 0.0f;
-    batch->state.guard_entry_via_wait_callback[idx] = 0u;
-    batch->state.guard_on_cliff_end_source[idx] = 0u;
     batch->state.guard_entry_via_dash_91ad8[idx] = 0u;
   }
   batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
 
   const float trig = guard_x650_from_input(c, batch->state.input_buttons[idx],
                                            batch->state.input_l[idx], batch->state.input_r[idx]);
-  const float anim_trig =
-      guard_x650_from_input(c, batch->state.prev_input_buttons[idx], batch->state.prev_input_l[idx],
-                            batch->state.prev_input_r[idx]);
   // Decomp uses held_inputs & HSD_PAD_LR for guard entry/release ownership.
   // Keep this aligned with the input owner that builds the sim's LR-held lane:
   // - digital L/R,
@@ -1313,93 +1291,15 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   const uint8_t shield_held_inputs =
       (((held_buttons & (uint16_t)(LR | MSL_BUTTON_Z)) != 0u) || (trig > c->trigger_deadzone)) ? 1u
                                                                                                : 0u;
-  const uint8_t guard_anim_held_shield_x650_transition =
-      // Source ordering boundary:
-      // GuardOn/Guard Anim can consume the frame-start `input.x650` for the shield-hold drain before
-      // the same frame's input callback observes a shield trigger transition such as Z->L, L->Z, or
-      // no-trigger -> hard analog while the no-submotion Guard lifecycle is still active. Scope this
-      // to rows where shield remains held on the current sample; release-to-none rows keep the
-      // seed/current trigger surface so a stale previous L sample cannot recreate hard-shield
-      // geometry.
-      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_Spaghetti_8006AD10}
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_800925A4}
-      (shield_held_inputs && batch->state.animation_index[idx] == UINT32_MAX &&
-       batch->state.action_frame[idx] < 0 && anim_trig != trig)
-          ? 1u
-          : 0u;
-  const float guard_drain_trig = guard_anim_held_shield_x650_transition ? anim_trig : trig;
-  const uint8_t guard_x10_seed = batch->state.guard_x10[idx];
-
   // Guard release lockout (mv.co.guard.xC + mv.co.guard.x10) is modeled explicitly and seeded via
   // replay-history preprocessing (Slippi does not expose move vars directly).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC (xC latch)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4 (x10 tick)
 
-  // GuardSetOff (shieldstun): no IASA until the underlying "GuardDamage" animation completes.
-  //
-  // Decomp:
-  // - Enter: ftCo_80092F2C (sets anim rate based on shieldstun duration).
-  // - Update/exit: ftCo_GuardSetOff_Anim transitions to Guard or GuardOff when the animation ends.
-  // - Motion-state table selects ftCo_SM_GuardDamage as the submotion for GuardSetOff.
-  //   refs/melee/src/melee/ft/ftmotionstates.c (GuardSetOff entry uses ftCo_SM_GuardDamage).
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
+  // GuardSetOff_Anim ran in the priority-1 phase. If it did not transition there, its IASA
+  // callback is empty and no current-input work remains.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_GuardSetOff_IASA}
   if (a0 == (uint16_t)MSL_ACT_GUARD_SET_OFF) {
-    batch->state.animation_index[idx] = (uint32_t)MSL_SM_GUARD_DAMAGE;
-    const float end_frame =
-        msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_DAMAGE);
-    if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
-      // Shieldstun over:
-      // - If mv.co.guard.xC is latched, transition to GuardOff (ftCo_80092BE8 -> ftCo_80092C54).
-      // - Else transition to Guard (ftCo_800928CC).
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BE8
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800928CC
-      if (batch->state.guard_release_latched_xc[idx]) {
-        enter_guard_off(batch, idx);
-        return;
-      }
-
-      // Shieldstun over -> return to Guard (hold).
-      enter_guard_hold(batch, idx);
-      // IASA for the newly-entered Guard state in the same frame.
-      //
-      // GuardSetOff_Anim runs in Fighter_8006A360 (prio 1). If it enters Guard, the later
-      // Fighter_procUpdate input callback dispatches Guard_IASA in the destination state. Guard_IASA
-      // first calls inlineC0, which latches mv.co.guard.xC from current held_inputs and exits to
-      // GuardOff when x10 is already clear.
-      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-      //   ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_Guard_IASA,inlineC0,ftCo_80092BCC}
-      const uint8_t guard_x10_before_destination_iasa = batch->state.guard_x10[idx];
-      if (!shield_held_inputs) {
-        batch->state.guard_release_latched_xc[idx] = 1u;
-      }
-      if (batch->state.guard_release_latched_xc[idx] && guard_x10_before_destination_iasa == 0u) {
-        enter_guard_off(batch, idx);
-        return;
-      }
-      if (guard_try_enter_iasa_defense(batch, c, idx)) {
-        return;
-      }
-      // Replay-visible GuardSetOff -> Guard carry rows normally expose the destination Guard
-      // lockout timer after the first Guard callback phase, but without the Guard shield-hold HP
-      // drain on the transition row. Model that hidden x10 handoff here so the later `inlineC0`
-      // release gate observes the same countdown as the source sequence.
-      //
-      // GuardSetOff shieldstun-exit carry publishes the destination Guard row after the first
-      // GuardSetOff -> Guard callback handoff. Fresh same-frame shield entries initialize x10 from
-      // raw p_ftCommonData->x268 at shield-hit entry; carried GuardSetOff rows use their seeded
-      // value. Both paths consume the ordinary carry tick here before the next Guard_IASA release
-      // gate.
-      //
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-      //   ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_Guard_IASA,ftCo_800925A4,inlineC0}
-      if (batch->state.guard_x10[idx] > 0u) {
-        batch->state.guard_x10[idx] = (uint8_t)(batch->state.guard_x10[idx] - 1u);
-      }
-      return;
-    }
     return;
   }
 
@@ -1424,37 +1324,17 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       //       fp->x672_input_timer_counter < p_ftCommonData->x2A0)
       //     ftCo_80093850(gobj);
       //
-      // No-submotion GuardOn entry snapshots expose two independent hidden lanes:
-      // - current GuardOn with non-shield `seed_prev_action_id`, negative action_frame, and no
-      //   submotion is still in the hidden guard.x0 entry window before replay publishes a positive
-      //   action_frame.
-      // - only the generated grounded-locomotion IASA subset also owns the x672 frame-start
-      //   replay-seed boundary before the persistent trigger timer advances for the next frame.
-      // Other source GuardOn handoffs retain current x672 ownership. Steady GuardOn snapshots
-      // (seed_prev is already shield-owned) keep both ordinary lanes so held-shield rows do not
-      // re-enter GuardReflect repeatedly.
-      // Scope gate: this check is in ftCo_GuardOn_IASA only (not ftCo_Guard_IASA), so only
-      // GuardOn can re-enter GuardReflect through this path.
+      // mv.co.guard.x0 is now persistent source state, independent of Slippi's no-submotion
+      // animation fields. The generated class remains only for the narrow replay-seed x672 phase
+      // that is hidden at a fresh grounded-locomotion GuardOn boundary.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093694
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_Guard_IASA}
-      //
-      // Snapshot note: in-suite Slippi seeds can carry `action_frame < 0` when
-      // `animation_index==0xFFFFFFFF`. For this *guard.x0* gate only, treat negative action_frame
-      // as 0 (entry-like) rather than a large/underflowed value; this preserves teacher-forced
-      // prefix-invariant powershield behavior without using replay-fit heuristics.
-      // The frame-start x672 replay reconstruction is valid for the source-backed fresh
-      // grounded-locomotion entry shape (`x672<=1` at the seed snapshot). Do not gate this on
-      // shield HP: ftCo_80093694 does not read shield health, and fresh GuardOn can occur after
-      // prior shield damage.
-      const uint8_t guardon_entry_x0_nonshield_seed =
-          (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.action_frame[idx] < 0 &&
-           batch->state.animation_index[idx] == UINT32_MAX &&
-           batch->state.x672_input_timer_frame_start[idx] <= 1u &&
-           !msl_guard_lifecycle_action_has_shield_callback(batch->state.seed_prev_action_id[idx]))
-              ? 1u
-              : 0u;
       const uint8_t guardon_frame_start_x672_seed =
-          (guardon_entry_x0_nonshield_seed != 0u &&
+          (a0 == (uint16_t)MSL_ACT_GUARD_ON &&
+           batch->state.guard_anim_counter_x0[idx] <
+               (uint16_t)c->powershield_reflect_window_frames &&
+           batch->state.x672_input_timer_frame_start[idx] <= 1u &&
+           !msl_guard_lifecycle_action_has_shield_callback(batch->state.seed_prev_action_id[idx]) &&
            // MSLMSO01 separates this frame-start x672 powershield bridge from the broader fresh
            // GuardOn item ShieldDesc owner. Landing_IASA can publish ShieldDesc, but its follow-up
            // GuardOn_IASA consumes live x672 rather than this replay frame-start lane.
@@ -1464,194 +1344,30 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
                                                   MSL_MS_CLASS_GUARDON_FRAME_START_X672_IASA))
               ? 1u
               : 0u;
-      const uint16_t guard_x0 = (batch->state.action_frame[idx] < 0)
-                                    ? (guardon_entry_x0_nonshield_seed != 0u
-                                           ? 0u
-                                           : (uint16_t)c->powershield_reflect_window_frames)
-                                    : (uint16_t)batch->state.action_frame[idx];
       const uint8_t guardon_x672_for_reflect = guardon_frame_start_x672_seed
                                                    ? batch->state.x672_input_timer_frame_start[idx]
                                                    : batch->state.x672_input_timer[idx];
       if (a0 == (uint16_t)MSL_ACT_GUARD_ON &&
-          guard_x0 < (uint16_t)c->powershield_reflect_window_frames &&
+          batch->state.guard_anim_counter_x0[idx] <
+              (uint16_t)c->powershield_reflect_window_frames &&
           (batch->state.input_buttons_pressed[idx] & (uint16_t)LR) != 0 &&
           guardon_x672_for_reflect < c->powershield_reflect_window_frames) {
         guard_reflect_from_guard_pending = 1u;
       }
 
-      // Decomp ordering note (GuardOn/Guard discrete cluster):
-      // - mv.co.guard.x10 is decremented inside ftCo_800925A4 (called by GuardOn_Anim / Guard_Anim).
-      // - The GuardOff transition gate (xC && !x10) lives in inlineC0, called by GuardOn_IASA / Guard_IASA.
+      // The priority-1 owner has already run ftCo_800925A4, so this IASA callback observes the
+      // post-decrement x10 exactly as inlineC0 does.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,inlineC0,ftCo_GuardOn_IASA,ftCo_Guard_IASA}
-      //
-      // Our step ordering models IASA before the x10 decrement, so the GuardOff check must use the
-      // pre-decrement x10 value; otherwise GuardOn can drop 1 frame early when x10 transitions 1->0.
       const uint8_t x10_pre = batch->state.guard_x10[idx];
-      const uint8_t guard_no_submotion_snapshot =
-          (a0 == (uint16_t)MSL_ACT_GUARD && batch->state.action_frame[idx] < 0 &&
-           batch->state.animation_index[idx] == 0xFFFFFFFFu &&
-           batch->state.anim_frame_f32[idx] < 0.0f)
-              ? 1u
-              : 0u;
-      const uint8_t guard_setoff_carry_snapshot =
-          // Restrict the no-submotion carry suppression lane to true GuardSetOff->Guard carry.
-          // A plain Guard hold snapshot can share (anim=-1, frame_speed>0, x672=0xFE) after
-          // powershield entry; suppressing release there incorrectly blocks GuardOff on LR release.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_800928CC}
-          (guard_no_submotion_snapshot &&
-           batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-           msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]) > 0.0f &&
-           batch->state.x672_input_timer[idx] == 0xFEu)
-              ? 1u
-              : 0u;
       // Guard release latch ownership (ftCo_80092BCC):
       // - level check: if (!(held_inputs & HSD_PAD_LR)) xC = true.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
       if (!shield_held_inputs) {
         batch->state.guard_release_latched_xc[idx] = 1;
       }
-      // Decomp: ftCo_800925A4 updates lightshield_amount + drains shield HP + decrements x10 while
-      // the shield is active (fp->x221B_b0). Approximate shield-active as (shield_hp > 0).
-      const uint8_t guardreflect_active_timer_no_submotion =
-          (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT && batch->state.action_frame[idx] < 0 &&
-           batch->state.animation_index[idx] == UINT32_MAX &&
-           batch->state.guard_reflect_timer_x14[idx] > 0u &&
-           (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON ||
-            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON))
-              ? 1u
-              : 0u;
-      if (batch->state.shield_hp[idx] > 0.0f && !guardreflect_active_timer_no_submotion) {
-        const uint8_t guard_jump_pending = guard_jump_oos_has_input(batch, c, idx) ? 1u : 0u;
-        const uint8_t guardon_no_submotion_snapshot =
-            (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.animation_index[idx] == 0xFFFFFFFFu &&
-             batch->state.action_frame[idx] < 0)
-                ? 1u
-                : 0u;
-        const uint8_t guardreflect_terminal_no_submotion_snapshot =
-            (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-             batch->state.animation_index[idx] == 0xFFFFFFFFu &&
-             batch->state.action_frame[idx] <= -2 &&
-             batch->state.guard_reflect_timer_x14[idx] == 0u &&
-             batch->state.guard_reflect_timer_x18[idx] == 0u)
-                ? 1u
-                : 0u;
-        const uint8_t guard_exit_to_guard_off_pending =
-            (!guard_setoff_carry_snapshot && batch->state.guard_release_latched_xc[idx] &&
-             x10_pre == 0)
-                ? 1u
-                : 0u;
-        const uint8_t guard_snapshot_spotdodge_pending =
-            (guardon_no_submotion_snapshot && batch->state.guard_entry_via_wait_callback[idx] &&
-             !guard_exit_to_guard_off_pending && escape_guard_wants_spotdodge(batch, c, idx))
-                ? 1u
-                : 0u;
-        const uint8_t guard_snapshot_refresh_drain_split =
-            (guardreflect_terminal_no_submotion_snapshot && guard_drain_trig > c->trigger_deadzone)
-                ? 1u
-                : 0u;
-        // Decomp timing note:
-        // - GuardOn/Guard Anim drains shield through ftCo_800925A4 before the same frame's
-        //   IASA callback can consume jump OoS via ftCo_800CB024.
-        // - Fighter_8006A360 runs Anim before Fighter_Spaghetti_8006AD10 installs the next
-        //   controller sample for IASA. The shield hold drain therefore consumes the frame-start
-        //   `input.x650` (our prev_input_* lanes), while release/IASA gates below use the current
-        //   held input.
-        // - Ordinary GuardOn/Guard snapshots still follow ftCo_800925A4 order: refresh
-        //   `lightshield_amount` from Anim-visible input.x650 first, then drain using that value.
-        // - Expired no-submotion GuardReflect terminal rows run the same GuardOn_Anim drain before
-        //   transitioning to Guard through ftCo_800928CC. That terminal bridge preserves the carried
-        //   lightshield owner for this row's drain, then refreshes the stored value for following
-        //   Guard rows.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-        //   ftCo_800921DC,ftCo_800925A4,ftCo_80093BC0,ftCo_GuardReflect_Anim,
-        //   ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_GuardOn_IASA,ftCo_Guard_IASA
-        // }
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
-        // Runtime-only distinction: when a frozen GuardOn snapshot came from a same-frame
-        // `... -> Wait -> GuardOn` callback handoff and immediately spotdodges, vanilla keeps
-        // shield HP unchanged on the first EscapeN frame. Preserve that by skipping the GuardOn
-        // drain on just that handoff family.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,ftCo_800925A4,ftCo_GuardOn_IASA}
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009980C
-        uint8_t shield_break_pending = 0u;
-        if (guard_snapshot_spotdodge_pending) {
-          // no-op
-        } else if (guard_snapshot_refresh_drain_split) {
-          shield_break_pending =
-              apply_shield_hold_drain_preserve_drain_refresh_store(batch, c, idx, guard_drain_trig);
-        } else {
-          shield_break_pending =
-              apply_shield_hold_drain(batch, c, idx, guard_drain_trig, guard_jump_pending);
-        }
-        if (shield_break_pending) {
-          enter_shield_break_fly(batch, msl_char_params_fast(batch->state.char_id[idx]), idx);
-          return;
-        }
-      }
-      // Consume the source "entered GuardOn through this callback family" marker after the first
-      // immediate GuardOn/spotdodge handoff window. Keeping it longer stale-carries the entry owner
-      // into unrelated later GuardOn_IASA rows.
-      if (batch->state.guard_entry_via_wait_callback[idx] > 0u) {
-        batch->state.guard_entry_via_wait_callback[idx] =
-            (uint8_t)(batch->state.guard_entry_via_wait_callback[idx] - 1u);
-      }
-
       // Decomp: Guard IASA exits to GuardOff only once (xC && x10==0).
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{inlineC0,ftCo_GuardOn_IASA,ftCo_Guard_IASA}
-      const uint8_t guardon_no_submotion_release_x10_cleared_by_anim =
-          // Source order is GuardOn_Anim before GuardOn_IASA. On no-submotion GuardOn snapshots,
-          // the frame-start release latch can coexist with x10==1; when a same-frame jump input is
-          // present, source ticks x10 to zero in GuardOn_Anim and inlineC0 exits to GuardOff before
-          // ftCo_800CB024 can consume that jump press. Keep the older pre-decrement x10 gate for
-          // ordinary release countdown rows with no competing jump input.
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-          //   ftCo_GuardOn_Anim,ftCo_800925A4,inlineC0,ftCo_GuardOn_IASA}
-          (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.animation_index[idx] == UINT32_MAX &&
-           batch->state.action_frame[idx] < 0 && !shield_held_inputs &&
-           batch->state.guard_release_latched_xc[idx] && x10_pre == 1u &&
-           guard_jump_oos_has_input(batch, c, idx) != 0u)
-              ? 1u
-              : 0u;
-      if (batch->state.guard_release_latched_xc[idx] &&
-          (x10_pre == 0 || guardon_no_submotion_release_x10_cleared_by_anim)) {
-        if (a0 == (uint16_t)MSL_ACT_GUARD_ON) {
-          // Seed-snapshot bridge for GuardOn no-submotion rows:
-          // - GALE01 ordering is GuardOn_Anim then GuardOn_IASA.
-          // - On snapshot-shaped GuardOn seeds (animation_index=-1, state_age=-1), this can appear
-          //   as GuardOn -> Guard -> GuardOff in one frame when release gate fires, consuming two
-          //   motion-state entry bundles before the final GuardOff output.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_GuardOn_IASA,ftCo_800928CC,ftCo_80092C54}
-          const uint8_t guard_no_submotion_snapshot =
-              (batch->state.animation_index[idx] == 0xFFFFFFFFu &&
-               batch->state.anim_frame_f32[idx] < 0.0f)
-                  ? 1u
-                  : 0u;
-          if (guard_no_submotion_snapshot && guard_x10_seed == 0) {
-            enter_guard_hold(batch, idx);
-          }
-        }
-        if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
-          batch->state.guard_reflect_timer_x14[idx] = 0;
-          batch->state.guard_reflect_timer_x18[idx] = 0;
-          // ftCo_GuardReflect_Anim chains into the GuardOn_Anim body after ftCo_80093BC0, so the
-          // same release gate passes through ftCo_800928CC (Guard) before ftCo_80092C54 reaches
-          // GuardOff — two motion-state entry bundles, exactly like the GuardOn arm above. The
-          // shared plAttack_80037B08 instance counter advances twice on this boundary; collapsing
-          // it to a single direct GuardOff entry desyncs both players' instance ids for the rest
-          // of the rollout (MAJ rec302: vanilla ids 85+86 consumed on this exact exit).
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-          //   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardOn_Anim,ftCo_800928CC,ftCo_80092C54}
-          // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
-          const uint8_t guard_reflect_no_submotion_snapshot =
-              (batch->state.animation_index[idx] == 0xFFFFFFFFu &&
-               batch->state.anim_frame_f32[idx] < 0.0f)
-                  ? 1u
-                  : 0u;
-          if (guard_reflect_no_submotion_snapshot) {
-            enter_guard_hold(batch, idx);
-          }
-        }
+      if (batch->state.guard_release_latched_xc[idx] && x10_pre == 0u) {
         enter_guard_off(batch, idx);
         return;
       }
@@ -1663,106 +1379,6 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       if (batch->state.guard_special_enable_timer_x1c[idx] > 0u) {
         batch->state.guard_special_enable_timer_x1c[idx] =
             (uint8_t)(batch->state.guard_special_enable_timer_x1c[idx] - 1u);
-      }
-
-      if (x10_pre > 0 && batch->state.shield_hp[idx] > 0.0f) {
-        batch->state.guard_x10[idx] = (uint8_t)(x10_pre - 1u);
-      }
-    }
-
-    // GuardOn/GuardReflect -> Guard when the GuardOn "raise shield" window completes.
-    //
-    // Decomp: ftCo_GuardOn_Anim increments mv.co.guard.x0 and transitions when x0 >= fp->x2E8.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_Anim
-    //
-    // Teacher-forced reseed note:
-    // In-suite Slippi post-frames frequently seed GuardOn with `animation_index==0xFFFFFFFF` and
-    // `state_age==-1` (so this sim's derived anim/action_frame cannot represent mv.co.guard.x0).
-    // We therefore add a decomp-anchored, reseed-friendly fallback:
-    // - for GuardOn, when mv.co.guard.x10 is already 0 and shield is still held, treat GuardOn as
-    //   complete and enter Guard;
-    // - for GuardReflect, same fallback once the reflect window timer (mv.co.guard.x14) has expired,
-    //   since ftCo_GuardReflect_Anim chains into GuardOn_Anim after ftCo_80093BC0.
-    //
-    // This preserves deterministic one-step GuardOn->Guard transitions without replay-fit constants
-    // and keeps the normal anim-end gate in place when a real timebase is available.
-    const uint8_t guard_no_submotion_snapshot = (batch->state.animation_index[idx] == 0xFFFFFFFFu &&
-                                                 batch->state.anim_frame_f32[idx] < 0.0f)
-                                                    ? 1u
-                                                    : 0u;
-    const uint8_t guard_reflect_window_expired =
-        (batch->state.guard_reflect_timer_x14[idx] == 0u) ? 1u : 0u;
-    // Snapshot bridge (GuardReflect negative lane):
-    // - Replay snapshots can land on GuardReflect with no submotion (anim=-1) and action_frame<=-2.
-    // - In this lane, reflect timers can already be expired while mv.co.guard.x10 still reflects a
-    //   stale release-lockout seed, and GALE01 callback ordering at this boundary can advance to
-    //   Guard before the next "normal" x10 gate observation.
-    // - Keep the usual x10 gate for GuardOn and GuardReflect's normal lane; only bypass x10 for
-    //   GuardReflect no-submotion rows at action_frame<=-2 with expired reflect timer.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_GuardOn_Anim,ftCo_800928CC}
-    const uint8_t guard_reflect_snapshot_neg_lane =
-        (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT && batch->state.action_frame[idx] <= -2 &&
-         batch->state.guard_reflect_timer_x14[idx] == 0u &&
-         batch->state.guard_reflect_timer_x18[idx] == 0u)
-            ? 1u
-            : 0u;
-    const uint8_t guard_reflect_snapshot_neg_lane_x10_one =
-        (guard_reflect_snapshot_neg_lane && guard_x10_seed == 1u) ? 1u : 0u;
-    const uint8_t guard_reflect_released_terminal_hold_snapshot =
-        // Replay-visible GuardReflect snapshots can sit on the terminal no-submotion frame with
-        // reflect timers expired and mv.co.guard.x10 about to clear. GALE01 exposes this as a
-        // Guard post-frame before the following GuardOff; consuming destination Guard_IASA in the
-        // same snapshot row exits one frame too early.
-        //
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-        //   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardOn_Anim,ftCo_800928CC}
-        (guard_reflect_snapshot_neg_lane && guard_x10_seed == 1u && !shield_held_inputs) ? 1u : 0u;
-    const uint8_t guard_snapshot_hold_fallback =
-        (guard_no_submotion_snapshot && shield_held_inputs &&
-         ((a0 == (uint16_t)MSL_ACT_GUARD_ON && guard_x10_seed == 0) ||
-          (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT && guard_reflect_window_expired &&
-           (guard_x10_seed == 0 || guard_reflect_snapshot_neg_lane_x10_one))))
-            ? 1u
-            : 0u;
-    if (batch->state.hitlag_started_frame[idx] == 0 &&
-        guard_reflect_released_terminal_hold_snapshot) {
-      batch->state.guard_reflect_timer_x14[idx] = 0;
-      batch->state.guard_reflect_timer_x18[idx] = 0;
-      enter_guard_hold(batch, idx);
-      return;
-    }
-    if (batch->state.hitlag_started_frame[idx] == 0 && guard_snapshot_hold_fallback) {
-      // Decomp ordering: GuardReflect_Anim can transition to Guard before input callback dispatch,
-      // and the destination Guard_IASA still consumes OoS options in the same frame.
-      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_GuardOn_IASA,ftCo_Guard_IASA}
-      if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
-        batch->state.guard_reflect_timer_x14[idx] = 0;
-        batch->state.guard_reflect_timer_x18[idx] = 0;
-      }
-      enter_guard_hold(batch, idx);
-      if (guard_try_enter_iasa_defense(batch, c, idx)) {
-        return;
-      }
-      return;
-    }
-
-    // GuardOn/GuardReflect -> Guard when the GuardOn animation finishes.
-    // Decomp: ftCo_GuardOn_Anim transitions to ftCo_800928CC when mv.co.guard.x0 >= fp->x2E8.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:367-377.
-    //
-    // Approximation mapping:
-    // - Treat `action_frame` as `mv.co.guard.x0` (both tick once per frame outside hitlag).
-    // - Treat `msl_anim_end_frame(char, ftCo_SM_GuardOn)` as `fp->x2E8` (ISO-derived anim timeline length).
-    if (a0 == MSL_ACT_GUARD_ON || a0 == MSL_ACT_GUARD_REFLECT) {
-      const float end_frame =
-          msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_ON);
-      if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
-        if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
-          batch->state.guard_reflect_timer_x14[idx] = 0;
-          batch->state.guard_reflect_timer_x18[idx] = 0;
-        }
-        enter_guard_hold(batch, idx);
       }
     }
 
@@ -1938,7 +1554,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
          batch->state.anim_frame_f32[idx] <= c->dash_iasa_x4c)
             ? 1u
             : 0u;
-    enter_guard_on(batch, c, idx, guard_entry_via_wait_callback_from_current_row(batch, idx));
+    enter_guard_on(batch, c, idx, 0u);
     batch->state.guard_entry_via_dash_91ad8[idx] = entered_via_dash_91ad8;
     if (dash_iasa_guard_admission_reaches_terminal_scalar(batch, c, idx, a0, a0_anim_frame)) {
       dash_iasa_apply_root_motion_exit_gr_vel_clamp(
@@ -2021,64 +1637,18 @@ void action_update_anim_callback_pre_input_fighter(const MslFighterCallbackConte
   const int bi = ctx->bi;
   const int p = ctx->p;
   const size_t idx = ctx->idx;
-  {
-    const uint32_t anim_u32 = batch->state.animation_index[idx];
-    if (anim_u32 <= 0xFFFFu) {
-      const uint16_t msid = (uint16_t)anim_u32;
-      const uint16_t frame =
-          msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
-      uint8_t air_state = 0xFFu;
-      if (move_tables_airborne_state_event_at_frame(batch->state.char_id[idx], msid, frame,
-                                                    &air_state) != 0u) {
-        const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[idx]);
-        const uint8_t max_jumps = (ch != NULL) ? ch->max_jumps : batch->state.jumps_left[idx];
-        // Movescript opcode 25 (ftAction_80071998) dispatch:
-        // state=0 -> ftCommon_8007D7FC (air->ground common helper)
-        // state=1 -> ftCommon_8007D5D4 (ground->air common helper)
-        // state=2 -> ftCommon_8007D60C (ground->air alt helper)
-        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
-        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D5D4,ftCommon_8007D60C}
-        if (air_state == 0u) {
-          // Common air->ground helper ownership:
-          // - ftAction_80071998 state=0 dispatches ftCommon_8007D7FC / ftCommon_8007D6A4.
-          // - ftCommon_8007D6A4 sets fp->gr_vel = fp->self_vel.x and does not zero self_vel.x.
-          // - grounded Fighter_procUpdate keeps fp->self_vel.x synchronized from fp->gr_vel.
-          // refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
-          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
-          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-          msl_ftcommon_8007d6a4(batch, ch, idx);
-          if (ch == NULL) {
-            batch->state.jumps_left[idx] = max_jumps;
-          }
-        } else if (air_state == 1u) {
-          batch->state.on_ground[idx] = 0u;
-          batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
-          batch->state.speed_ground_x_self[idx] = 0.0f;
-          batch->state.jumps_left[idx] = (max_jumps > 0u) ? (uint8_t)(max_jumps - 1u) : 0u;
-          msl_ftcommon_lock_ecb_8007d5d4(batch, idx);
-        } else if (air_state == 2u) {
-          batch->state.on_ground[idx] = 0u;
-          batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
-          batch->state.speed_ground_x_self[idx] = 0.0f;
-          batch->state.jumps_left[idx] = 0u;
-          msl_ftcommon_lock_ecb_8007d60c(batch, idx);
-        }
-      }
-    }
-  }
+  // Gameplay command opcodes execute causally in fighter_script_advance immediately after the
+  // AObj step. Action callbacks consume the resulting live state; they do not query the script
+  // timeline a second time.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071998,ftAction_80073240}
+  locomotion_update_anim_callback_pre_input_fighter(batch, bi, p);
+  blaster_update_anim_callback_pre_input_fighter(batch, bi, p);
   rebound_update_anim_callback_pre_input(batch, idx);
   shieldbreak_update_anim_callback_pre_input(batch, c, idx);
   guard_update_grounded_anim_callback_pre_input(batch, idx);
+  grab_flow_update_anim_callback_pre_input(batch, bi, p);
   throw_flow_update_anim_callback_pre_input(batch, bi, p);
-}
-
-void action_update_anim_callbacks_pre_input_global(MslBatch* batch) {
-  if (batch == NULL) {
-    return;
-  }
-  locomotion_update_anim_callbacks_pre_input(batch);
-  blaster_update_anim_callbacks_pre_input(batch);
-  grab_flow_update_anim_callbacks_pre_input(batch);
 }
 
 void action_update(MslBatch* batch) {
@@ -2088,15 +1658,8 @@ void action_update(MslBatch* batch) {
     for (int bi = 0; bi < batch->batch_size; bi++) {
       for (int p = 0; p < num_players; p++) {
         const size_t idx = msl_idx_player(bi, p);
-        batch->state.guard_on_entered_this_frame[idx] = 0u;
         batch->state.guard_entry_via_dash_91ad8[idx] = 0u;
-        batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
         batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
-        batch->state.guard_reflect_entered_this_frame[idx] = 0u;
-        if (batch->state.guard_on_entry_reflect_source_latch[idx] != 0u) {
-          batch->state.guard_on_entry_reflect_source_latch[idx] =
-              (uint8_t)(batch->state.guard_on_entry_reflect_source_latch[idx] - 1u);
-        }
         batch->state.shine_jump_iasa_entered_this_frame[idx] = 0u;
       }
     }
@@ -2107,7 +1670,14 @@ void action_update(MslBatch* batch) {
   // on the first actionable frame after a whiffed grab.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Catch_Anim,ftCo_CatchDash_Anim}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
-  grab_flow_update_pre_physics(batch);
+  if (batch != NULL) {
+    const int players = (int)batch->config.num_players;
+    for (int bi = 0; bi < batch->batch_size; bi++) {
+      for (int p = 0; p < players; p++) {
+        grab_flow_update_iasa(batch, bi, p);
+      }
+    }
+  }
   // Run knockdown/damage Anim+IASA before generic locomotion so DamageFly->DamageFall transitions
   // can feed same-frame DamageFall IASA (e.g. ftCo_800CB870 jump check) in locomotion.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Anim,ftCo_DamageFlyRoll_Anim}

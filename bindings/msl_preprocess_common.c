@@ -22,7 +22,6 @@
 #include "../src/hurtcaps_tables.h"
 #include "../src/input_axis.h"
 #include "../src/mpcoll_ecb_points.h"
-#include "../src/move_tables.h"
 #include "../src/motion_state_owners.h"
 #include "../src/shield_tilt_table.h"
 #include "../src/specialhi_pose.h"

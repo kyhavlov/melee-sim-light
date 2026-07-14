@@ -1023,6 +1023,27 @@ uint8_t item_article_params_is_illusion_item_type(uint16_t type) {
   return item_article_params_for_illusion_item_type(type) != NULL ? 1u : 0u;
 }
 
+uint8_t item_article_params_body_hit_keeps_article(uint16_t type) {
+  if (item_article_params_is_illusion_item_type(type) != 0u) {
+    // refs/melee/src/melee/it/it_279C.c::itFoxIllusion_Logic14_DmgDealt
+    return 1u;
+  }
+  const MslItemArticleParams* sheik = item_article_params_get(7u);
+  if (sheik != NULL && type == sheik->sheik_vanish_itkind) {
+    // refs/melee/src/melee/it/it_279C.c::itSeakVanish_Logic42_DmgDealt
+    return 1u;
+  }
+  const MslItemArticleParams* zelda = item_article_params_get(19u);
+  if (zelda != NULL && type == zelda->zelda_din_fire_explode_itkind) {
+    // Zelda Din Fire Explode's OnGiveDamage callback is NULL. Item_8026A294 therefore keeps the
+    // article after BODY contact; its HitCapsule victims_1 ring suppresses repeat contact.
+    // refs/melee/src/melee/it/it_279C.c::itZeldaDinFireExplode
+    // refs/melee/src/melee/it/item.c::Item_8026A294
+    return 1u;
+  }
+  return 0u;
+}
+
 const MslItemArticleParams* item_article_params_for_sheik_needle_throw_item_type(uint16_t type) {
   const MslItemArticleParams* sheik = item_article_params_get(7u);
   if (sheik != NULL && sheik->needle_throw_itkind == type) {

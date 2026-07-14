@@ -14,6 +14,9 @@ int script_events_init(void);
 // Binary artifact schema version expected by this runtime.
 uint32_t script_events_format_version(void);
 
+// Test-only reset for synthetic MSL_DATA_DIR overlays. Never call with live batches.
+void script_events_reset_for_tests(void);
+
 typedef enum MslScriptEventKind {
   MSL_SCRIPT_EVENT_CREATE_HITBOX = 1,
   MSL_SCRIPT_EVENT_SET_HITBOX_DAMAGE = 2,
@@ -36,6 +39,7 @@ typedef enum MslScriptEventKind {
   MSL_SCRIPT_EVENT_START_SMASH_CHARGE = 19,
   MSL_SCRIPT_EVENT_PSEUDO_RANDOM_SFX = 20,
   MSL_SCRIPT_EVENT_SET_THROW_HITBOX = 21,
+  MSL_SCRIPT_EVENT_COMMAND_TIMER = 22,
 } MslScriptEventKind;
 
 enum {
@@ -89,6 +93,9 @@ typedef struct MslScriptThrowHitboxPayload {
 typedef struct MslScriptEvent {
   uint16_t frame;
   uint16_t kind_id;
+  uint16_t timer_value;
+  uint8_t timer_kind;
+  uint8_t _pad_timer;
   union {
     struct {
       uint8_t idx;
@@ -101,6 +108,13 @@ typedef struct MslScriptEvent {
       float damage;
       uint8_t idx;
     } hitbox_damage;
+    struct {
+      float size;
+      uint8_t idx;
+    } hitbox_size;
+    struct {
+      uint8_t idx;
+    } hitbox_remove;
     struct {
       uint8_t idx;
       uint8_t type;
@@ -116,6 +130,9 @@ typedef struct MslScriptEvent {
     struct {
       uint8_t disabled;
     } jab_combo;
+    struct {
+      uint8_t bone_id;
+    } bone;
     struct {
       uint16_t flags;
     } state_flags_221c;
@@ -140,38 +157,10 @@ typedef struct MslScriptEventRange {
   uint32_t count;
 } MslScriptEventRange;
 
-typedef struct MslScriptFrameWindow {
-  int16_t start_af;
-  int16_t end_af;
-  uint8_t loaded;
-} MslScriptFrameWindow;
-
 MslScriptEventRange script_events_range(uint8_t char_id, uint16_t msid);
 const MslScriptEvent* script_events_first(uint8_t char_id, uint16_t msid, MslScriptEventKind kind);
+const MslScriptEvent* script_events_first_crossed(uint8_t char_id, uint16_t msid,
+                                                  MslScriptEventKind kind, float prev_frame,
+                                                  float cur_frame);
 
-uint8_t script_events_window_contains(MslScriptFrameWindow win, float frame);
-uint8_t script_events_window_crossed(MslScriptFrameWindow win, float prev_frame, float cur_frame);
 uint8_t script_events_frame_crossed(uint16_t frame, float prev_frame, float cur_frame);
-
-uint8_t script_events_cmd_var_window(uint8_t char_id, uint16_t msid, uint8_t idx, uint8_t open_end,
-                                     MslScriptFrameWindow* out);
-uint8_t script_events_cmd_var_value_window(uint8_t char_id, uint16_t msid, uint8_t idx,
-                                           uint8_t value, uint8_t open_end,
-                                           MslScriptFrameWindow* out);
-uint8_t script_events_allow_interrupt_window(uint8_t char_id, uint16_t msid,
-                                             MslScriptFrameWindow* out);
-uint8_t script_events_throw_flags_window(uint8_t char_id, uint16_t msid, uint8_t hit_idx,
-                                         uint8_t use_hit_idx, MslScriptFrameWindow* out);
-uint8_t script_events_throw_flags_pulses(uint8_t char_id, uint16_t msid, uint8_t hit_idx,
-                                         uint16_t* out_frames, uint8_t max_out, uint8_t* out_count);
-uint8_t script_events_first_create_hitbox_phase(uint8_t char_id, uint16_t msid,
-                                                MslScriptFrameWindow* out);
-uint8_t script_events_second_create_hitbox_phase(uint8_t char_id, uint16_t msid,
-                                                 MslScriptFrameWindow* out);
-uint8_t script_events_last_create_hitbox_phase(uint8_t char_id, uint16_t msid,
-                                               MslScriptFrameWindow* out);
-uint8_t script_events_post_clear_create_hitbox_phase(uint8_t char_id, uint16_t msid,
-                                                     MslScriptFrameWindow* out);
-uint8_t script_events_hitbox_lifetime(uint8_t char_id, uint16_t msid, MslScriptFrameWindow* out);
-uint8_t script_events_catchattack_grabbed_hit_window(uint8_t char_id, uint16_t msid,
-                                                     MslScriptFrameWindow* out);

@@ -441,8 +441,6 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   batch->state.percent_temp[idx] = 0.0f;
   batch->state.shield_hp[idx] = c->start_shield_health;
   batch->state.lightshield_amount[idx] = 0.0f;
-  batch->state.combat_shield_hit_int_damage[idx] = 0u;
-  batch->state.combat_shield_damage_taken[idx] = 0u;
   // Seed-bridge (decomp call-chain parity):
   // - Rebirth entry runs Fighter_UnkProcessDeath_80068354 before Fighter_ChangeMotionState(Rebirth).
   // - That call chain includes unmodeled internals (ftCo_800BFFAC / ftCo_800C0074 / ...), and
@@ -1298,6 +1296,24 @@ void match_flow_update_pre_anim(MslBatch* batch) {
   }
 }
 
+void match_flow_update_post_anim_fighter(MslBatch* batch, int bi, int p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
+      p >= (int)batch->config.num_players) {
+    return;
+  }
+  const size_t idx = msl_idx_player(bi, p);
+  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_ENTRY_START) {
+    return;
+  }
+  // EntryStart animation is short; state remains active beyond the submotion end. Clamp the
+  // timebase at end_frame and freeze rate to match Slippi state_age/action_frame behavior.
+  const float end_frame =
+      msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_ENTRY_START);
+  if (end_frame > 0.0f && batch->state.anim_frame_f32[idx] >= end_frame) {
+    msl_anim_timebase_seed(batch, idx, end_frame, 0.0f);
+  }
+}
+
 void match_flow_update_post_anim(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -1305,17 +1321,7 @@ void match_flow_update_post_anim(MslBatch* batch) {
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_ENTRY_START) {
-        continue;
-      }
-      // EntryStart animation is short; state remains active beyond the submotion end. Clamp the
-      // timebase at end_frame and freeze rate to match Slippi state_age/action_frame behavior.
-      const float end_frame =
-          msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_ENTRY_START);
-      if (end_frame > 0.0f && batch->state.anim_frame_f32[idx] >= end_frame) {
-        msl_anim_timebase_seed(batch, idx, end_frame, 0.0f);
-      }
+      match_flow_update_post_anim_fighter(batch, bi, p);
     }
   }
 }

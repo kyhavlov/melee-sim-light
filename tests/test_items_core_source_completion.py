@@ -62,7 +62,6 @@ def test_item_slot_swap_keeps_public_and_hidden_item_lanes_together() -> None:
         "item_timer",
         "item_hitlag",
         "item_spawn_id",
-        "item_hidden_body_hit_victim_port",
         "item_shyguy_prev_vel_y",
         "item_shyguy_dyn_y_phase",
         "item_shyguy_speed_index",
@@ -127,9 +126,6 @@ def test_item_reseed_copies_supported_hidden_item_source_state() -> None:
 
     for token in (
         "item_spawn_id_counter",
-        "item_reflect_transfer_seed_port",
-        "item_shield_bounce_seed_valid",
-        "item_hidden_body_hit_victim_port",
         "item_shyguy_prev_vel_y",
         "item_shyguy_dyn_y_phase",
         "item_shyguy_speed_index",

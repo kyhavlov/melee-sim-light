@@ -32,9 +32,9 @@ STAGE_ITEM_OBJECT_VERSION = 4
 DREAM_WHISPY_MAGIC = b"MSLWHSP1"
 DREAM_WHISPY_VERSION = 1
 SCRIPT_MAGIC = b"MSLFTSC1"
-# v3 makes set_hitbox_interaction a required typed event. The byte layout is unchanged from v2,
-# but v2 tables can silently omit Falcon's source x42_b5/x42_b7 mutations.
-SCRIPT_VERSION = 3
+# v7 retains every source timer command, including timer-only groups. Absolute unit-rate frames or
+# only the final wait before a gameplay event cannot reproduce CommandInfo.timer at non-unit rates.
+SCRIPT_VERSION = 7
 SCRIPT_LEGACY_JSON_VERSION = 1
 
 SCRIPT_EVENT_NAMES = {
@@ -59,6 +59,7 @@ SCRIPT_EVENT_NAMES = {
     19: "start_smash_charge",
     20: "pseudo_random_sfx",
     21: "set_throw_hitbox",
+    22: "command_timer",
 }
 
 ITEM_ARTICLE_VALUE_U16 = 1
@@ -297,6 +298,8 @@ class ScriptTimelineEntry:
 class ScriptTimelineEvent:
     frame: int
     kind_id: int
+    timer_kind: int
+    timer_value: int
     payload: dict
 
 
@@ -788,6 +791,10 @@ _SCRIPT_CREATE_HITBOX_FLAG_NAMES = {
 
 def _decode_script_payload(kind_id: int, payload: bytes) -> dict:
     kind = SCRIPT_EVENT_NAMES.get(int(kind_id), "")
+    if kind == "command_timer":
+        if payload:
+            raise ValueError("command_timer payload must be empty")
+        return {}
     if not payload:
         return {}
     if kind == "set_cmd_var":
@@ -799,6 +806,12 @@ def _decode_script_payload(kind_id: int, payload: bytes) -> dict:
     if kind == "set_hitbox_damage":
         idx, damage = struct.unpack_from("<Bxxxf", payload, 0)
         return {"idx": int(idx), "damage": float(damage)}
+    if kind == "set_hitbox_size":
+        idx, size = struct.unpack_from("<Bxxxf", payload, 0)
+        return {"idx": int(idx), "size": float(size)}
+    if kind == "remove_hitbox":
+        (idx,) = struct.unpack_from("<B", payload, 0)
+        return {"idx": int(idx)}
     if kind == "set_hitbox_interaction":
         idx, interaction_type, value = struct.unpack_from("<BBB", payload, 0)
         return {"idx": int(idx), "type": int(interaction_type), "value": int(value)}
@@ -811,6 +824,9 @@ def _decode_script_payload(kind_id: int, payload: bytes) -> dict:
     if kind == "set_jab_combo":
         (disabled,) = struct.unpack_from("<B", payload, 0)
         return {"disabled": int(disabled)}
+    if kind == "toggle_bone_physics":
+        (bone_id,) = struct.unpack_from("<B", payload, 0)
+        return {"bone_id": int(bone_id)}
     if kind == "set_state_flags_221c_u16_y":
         (flags,) = struct.unpack_from("<H", payload, 0)
         return {"flags": int(flags)}
@@ -873,6 +889,11 @@ def _decode_script_payload(kind_id: int, payload: bytes) -> dict:
             "element": int(element),
             "hit_group": int(hit_group),
             "hitbox_id": int(hitbox_id),
+            # MSLFTSC1 is a fighter-script table. The shared script decoder exposes the two
+            # item-only raw words as zero on fighter events, so restore that lossless public JSON
+            # shape without spending bytes on values that cannot vary here.
+            "item_flags_raw": 0,
+            "item_hitbox_word4_raw": 0,
             "kbg": int(kbg),
             "rehit_frames": int(rehit_frames),
             "sfx_kind": int(sfx_kind),
@@ -914,18 +935,34 @@ def read_mslftsc1_v1(path: Path) -> ScriptTimelineMetadata:
 
     off = event_off
     events: list[ScriptTimelineEvent] = []
+    event_header_size = 8 if version == SCRIPT_LEGACY_JSON_VERSION else 12
     for _ in range(event_count):
-        if off + 8 > len(buf):
+        if off + event_header_size > len(buf):
             raise ValueError(f"MSLFTSC1 truncated event header in {path}")
-        frame, kind_id, payload_len = struct.unpack_from("<HHI", buf, off)
-        off += 8 + int(payload_len)
+        if version == SCRIPT_LEGACY_JSON_VERSION:
+            frame, kind_id, payload_len = struct.unpack_from("<HHI", buf, off)
+            timer_kind = 0
+            timer_value = 0
+        else:
+            frame, kind_id, timer_kind, _reserved, timer_value, payload_len = struct.unpack_from(
+                "<HHBBHI", buf, off
+            )
+        off += event_header_size + int(payload_len)
         payload_start = off - int(payload_len)
         raw_payload = buf[payload_start:off]
         if version == SCRIPT_LEGACY_JSON_VERSION:
             payload = json.loads(raw_payload.decode("utf-8")) if raw_payload else {}
         else:
             payload = _decode_script_payload(kind_id, raw_payload)
-        events.append(ScriptTimelineEvent(frame=int(frame), kind_id=int(kind_id), payload=dict(payload)))
+        events.append(
+            ScriptTimelineEvent(
+                frame=int(frame),
+                kind_id=int(kind_id),
+                timer_kind=int(timer_kind),
+                timer_value=int(timer_value),
+                payload=dict(payload),
+            )
+        )
     if off != len(buf):
         raise ValueError(f"MSLFTSC1 trailing bytes in {path}: parsed {off} != {len(buf)}")
     return ScriptTimelineMetadata(

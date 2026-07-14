@@ -10,7 +10,6 @@ PyObject* msl_derive_guard_reflect_timer_plus1_py(PyObject* self, PyObject* args
 PyObject* msl_derive_guard_reflect_origin_guardon_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_guard_special_enable_timer_x1c_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_guard_setoff_hitlag_damage_min_py(PyObject* self, PyObject* args);
-PyObject* msl_derive_guard_setoff_hitlag_exit_phase_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_damage_jump_buffer_x14_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_damage_meteor_cancel_x1a_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_damage_post_hitlag_cb_kind_py(PyObject* self, PyObject* args);

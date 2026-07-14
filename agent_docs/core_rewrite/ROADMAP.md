@@ -113,43 +113,30 @@ an architectural completion boundary, not a claim that all connected gameplay se
 
 ## Phase 2: Causal fighter execution and contact engine
 
-MotionState execution and fighter contact are one connected source chain: motion entry installs
-callbacks and scripts, Anim publishes HitCapsules, priority-9 refresh publishes geometry,
-priorities 12–14 select contact and consume ProcessHit. Build the shared substrate with the first
-behavior-bearing family and continue through the complete chain; do not ship a scheduler-only or
-HitCapsule-only checkpoint.
+Status: restarting from committed Phase 1. The abandoned broad cutover is preserved only as a
+machine-local reference; no implementation is assumed correct or transplanted wholesale.
 
-### 2A. Motion entry and callback execution
+MotionState execution and fighter contact are connected, but they must not become one unauditable
+all-or-nothing diff again. Phase 2 advances through vertical cuts that each own a real source path:
 
-- Converge action-entry sites on source-shaped `Fighter_ChangeMotionState` semantics, including
-  procedural flags, AObj timebase, script cursor, live Anim/IASA/Phys/Coll callbacks, and explicit
-  callback overrides.
-- Dispatch callbacks in source scheduler order. Delete migrated action-family passes, fresh-entry
-  markers, late destination ticks, and broad action-id fallback switches.
-- Complete the causal `MSLFTSC1` contract as each migrated family requires it; extraction, binary
-  layout, loader, packaged data, and fresh-extract smoke move together.
+1. common defense, ShieldDesc/ReflectDesc contact, and Guard aftermath;
+2. ordinary attack HitCapsules, BODY contact, DmgLog selection, and damage ProcessHit;
+3. Catch, capture, scripted throw, and thrown-body ownership;
+4. supported item/article, reflect/absorb, and character-special contact producers;
+5. remaining callback/action families and deletion of displaced snapshot/history infrastructure.
 
-### 2B. Persistent primitives and collision selection
+The order may expand when a source dependency is real. A vertical is not complete until its old
+owner is deleted, but it is not discarded merely because aggregate validation worsens while a
+known connected source owner remains unported. Record every behavior-bearing checkpoint and
+canonical report delta in [phase2/README.md](phase2/README.md).
 
-- Maintain persistent script/HitCapsule state for every supported contact-producing motion.
-- Refresh ordinary HitCapsule endpoints at priority 9 and model lazy hurt/shield/reflect geometry,
-  or prove an eager cache phase-equivalent.
-- Port bounded `lbColl` tests and exact victim-list semantics.
-- Keep priority-12 catch selection and callbacks separate from damage aftermath.
+Shared substrate—motion entry, callback lanes, script cursors, persistent capsules, DmgLog scratch,
+and pending ProcessHit fields—must be introduced by the first vertical that uses it and kept no
+broader than that vertical initially. Later cuts generalize the proven owner. Do not return with a
+scheduler-only, cache-only, or behavior-neutral checkpoint.
 
-### 2C. DmgLog and ProcessHit
-
-- Port stable priority-13 traversal with per-current-fighter `dmg_log0[20]`/`dmg_log1[20]` scratch,
-  then collapse results into persistent source-like pending fields.
-- Port the priority-14 ProcessHit precedence ladder and stale/identity writeback.
-- Route ordinary fighter, item, ordinary throw, scripted throw, thrown-body, and special damage
-  through the corresponding source pending-field order. Temporary adapters must be deleted.
-
-### 2D. Cutover and deletion
-
-- Delete snapshot hitbox replay, semantic window helpers, pairwise clank approximation, geometry
-  bridges, and distributed aftermath.
-- Keep DamageFlyRoll RNG stream policy outside the deterministic contact cutover.
+DamageFlyRoll RNG stream policy remains outside the deterministic contact rewrite unless a selected
+vertical reaches its source-owned RNG boundary directly.
 
 ## Phase 3: Remaining MotionState execution families
 

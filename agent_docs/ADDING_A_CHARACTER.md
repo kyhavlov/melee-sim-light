@@ -132,8 +132,8 @@ Collect before writing any code:
    exclusion). ~84 parameterized tests with expectations derived from the
    char's own extracted data: dash/run physics, jumps, aerials, smash charge,
    throws, shield, ledge, tech, etc. This suite IS the porting checklist.
-2. Expect to find char-blind hardcodes. The class found for Marth:
-   `src/move_tables.c` had a `char_slot` `{1,22}` hardcode plus a 2-entry cache —
+2. Expect to find char-blind hardcodes. The class found for Marth in the now-deleted
+   `src/move_tables.c` cache used a `char_slot` `{1,22}` hardcode plus two entries —
    gated dash->run, runbrake, turnrun, jab combos, smash charge, throw
    hitboxes, catchattack, hit_status, hurtbox masks were ALL silently NULL for
    the new char. Grep for fixed-size per-char caches and `{1,22}`/`char_slot`
@@ -182,8 +182,8 @@ Collect before writing any code:
    hidden source lane itself proves a post-clear latch. Runtime helpers may
    include convenience tails for live callback carry, but copying those tails
    into preprocessing can synthesize stale hidden state. Marth-suite
-   `RipeWealthySeahorse` exposed this on Falco `SpecialNLoop`: the live helper
-   `move_tables_special_cmd0_active_at_frame()` has a latch-clear tail, while
+   `RipeWealthySeahorse` exposed this on Falco `SpecialNLoop`: the live fighter-script owner has a
+   latch-clear tail, while
    the replay seed for `mv.fx.SpecialN.isBlasterLoop` must use the raw MSLFTSC1
    `cmd_var[0]` interval from `ftFx_SpecialNLoop_IASA`.
    **Visible animation frame is not a hidden special timer**: special callbacks
@@ -1049,8 +1049,8 @@ cover most of it.
    - Grounded resolution order is source order: SpecialS -> up -> neutral
      (D6824) -> down (D68C0). Watch same-frame races (Run_IASA dispatches
      before RunBrake entry — the brake entry frame honors Run's chain).
-   - Attack-IASA specials (AttackS4 direct + Wait_IASA delegators) gate on the
-     script's allow_interrupt frame via move_tables.
+   - Attack-IASA specials (AttackS4 direct + Wait_IASA delegators) gate on the live
+     fighter-script `allow_interrupt` product.
    - Post-hitstun delegates: grounded Damage, airborne DamageAir/DamageFly,
      DamageFall (tumble side-B). PassiveWall with walltech-timer block.
    - B-reverse: ftCo handling, NOT nested under cmd0==0.

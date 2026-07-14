@@ -135,7 +135,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"exists {dol_path}; skipping")
 
     files = list_files(iso)
-    for pattern in ("*PlCo.dat", "*ItCo.dat"):
+    for pattern in ("*PlCo.dat", "*ItCo.dat", "*EfCoData.dat"):
         _extract_glob(iso=iso, files=files, pattern=pattern, out_dir=iso_dir, force=args.force)
     for ch in chars:
         _extract_glob(iso=iso, files=files, pattern=_CHAR_GLOBS[ch], out_dir=iso_dir, force=args.force)

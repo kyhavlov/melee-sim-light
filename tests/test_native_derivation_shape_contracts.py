@@ -4,20 +4,6 @@ import numpy as np
 import pytest
 
 
-@pytest.mark.parametrize("num_players", [-1, 5])
-def test_validation_native_wrappers_reject_invalid_num_players(num_players: int) -> None:
-    import msl_binding
-
-    with pytest.raises(ValueError, match="num_players out of range"):
-        msl_binding.validation_derive_fighter_8006cda4_buffers(
-            None, None, 0.0, num_players, 0
-        )
-    with pytest.raises(ValueError, match="num_players out of range"):
-        msl_binding.validation_derive_item_hidden_callback_buffers(
-            None, None, None, None, None, num_players
-        )
-
-
 def test_native_hitbox_prev_centers_rejects_extra_column_side_arrays() -> None:
     import msl_binding
 
@@ -160,24 +146,6 @@ def test_split_native_wrappers_reject_num_players_width_mismatch() -> None:
             u16,
             u16,
             3,
-        )
-
-    with pytest.raises(ValueError, match="num_players out of range"):
-        msl_binding.derive_throw_pulse_seed_lanes(
-            u16,
-            u8,
-            f32,
-            f32,
-            u16,
-            u8,
-            np.zeros((256, 1, 1), dtype=np.int16),
-            np.zeros((256, 1), dtype=np.uint8),
-            np.zeros((256, 1), dtype=np.int16),
-            np.zeros(256, dtype=np.uint16),
-            3,
-            0,
-            0,
-            0,
         )
 
     with pytest.raises(ValueError, match="num_players out of range"):

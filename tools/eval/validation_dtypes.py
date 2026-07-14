@@ -16,6 +16,7 @@ MAX_ITEMS: Final[int] = 15
 MAX_HITBOXES: Final[int] = 4
 HITLIST_GROUPS: Final[int] = 8
 STALE_QUEUE_SIZE: Final[int] = 10  # decomp: refs/melee/src/melee/pl/types.h::StaleMoveTable.StaleMoves[10]
+SEED_DYNAMIC_NODES: Final[int] = 4
 
 INPUT_PLAYER_DTYPE = np.dtype(
     [
@@ -164,55 +165,11 @@ SEED_DTYPE = np.dtype(
         ("illusion_ghost_pos1_y", _arr("<f4", MAX_PLAYERS)),
         ("illusion_ghost_pos2_x", _arr("<f4", MAX_PLAYERS)),
         ("illusion_ghost_pos2_y", _arr("<f4", MAX_PLAYERS)),
-        # Throw-side projectile pulse consume lane (causal producer in validation buffer builder.py).
-        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-        # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-        ("throw_pulse_consumed", _arr("u1", MAX_PLAYERS)),
-        # Previous-step throw pulse crossing lane (strictly causal):
-        # - 0 means no throw projectile pulse crossing in (t-1 -> t),
-        # - N is the crossed pulse frame from extracted throw move events.
-        ("throw_pulse_crossed_prev_frame", _arr("u1", MAX_PLAYERS)),
-        # Current-step command-timer pending pulse lane for throw-side projectile commands.
-        # - 0 means no set_throw_spawn_projectile command should emit this one-step row.
-        # - N is the command pulse frame that should become the single throw_flags_b0 consume.
-        ("throw_command_pending_pulse_frame", _arr("u1", MAX_PLAYERS)),
-        # Source-owner clear countdown (`fp->dmg.x18C8`) with +1 bias.
+        # Source-owner clear countdown (`fp->dmg.x18C8`).
         # - 0: inactive (decomp internal is -1)
-        # - N>0: decomp timer value + 1
+        # - N>0: decomp timer value
         # refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
         ("source_clear_timer_x18c8", _arr("u1", MAX_PLAYERS)),
-        # Source-owner set phase lane for active x18C8 runs (strict-causal, t/t-1 only):
-        # - 0: active run has no observed source-owner set edge backing.
-        # - 1: active run is backed by a source-owner set edge (6 -> owner).
-        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-        ("source_clear_owner_set_phase", _arr("u1", MAX_PLAYERS)),
-        # Hidden ProcessHit damage-pending source-owner clear bridge (one-step transient).
-        # - 0: no ProcessHit-owned clear override.
-        # - 1: consume source-owner clear at the ProcessHit/ftCommon_800804FC ownership point.
-        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-        ("source_clear_processhit_damage_pending_phase", _arr("u1", MAX_PLAYERS)),
-        # Explicit Fighter_8006CDA4 pre-gate RNG stream-phase lane for DamageFlyRoll entry.
-        # - 0: no seeded pre-gate stream ownership
-        # - 1: consume one pre-gate HSD_Randi before ftCo_8008DCE0 block_33
-        # - 2: consume two pre-gate HSD_Randi calls before ftCo_8008DCE0 block_33
-        # - 3: consume all three decomp-visible pre-gate HSD_Randi calls before ftCo_8008DCE0 block_33
-        # - 4: source-proven zero-consume gate; admit the gate without a pre-gate stream advance
-        # Nonzero DamageFlyTop values may carry across the same segment as hidden held-item/x197C state.
-        # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-        # refs/melee/src/melee/ft/types.h
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-        ("fighter_8006cda4_pre_gate_consume_count", _arr("u1", MAX_PLAYERS)),
-        # Grounded source-owner clear phase bridge (`ftCommon_800804FC` path).
-        # - 0: no grounded clear-phase override.
-        # - 1: consume grounded clear before x18C8 decrement for this one-step row.
-        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-        ("source_clear_grounded_damage_clear_phase", _arr("u1", MAX_PLAYERS)),
-        # Terminal source-owner clear phase bridge for `source_clear_timer_x18c8 == 1` rows.
-        # - 0: default terminal-clear behavior
-        # - 1: defer terminal clear one frame
-        # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-        ("source_clear_terminal_phase", _arr("u1", MAX_PLAYERS)),
         # fp+0x2340 AttackDash lane (targeted seed ownership):
         # - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
         # - Preprocessing preserves nonzero misc_as, but reconstructs zero public rows from
@@ -319,6 +276,23 @@ SEED_DTYPE = np.dtype(
         ("mpcoll_wall_id_seed_u16", _arr("<u2", MAX_PLAYERS)),
         ("anim_frame_f32", _arr("<f4", MAX_PLAYERS)),
         ("frame_speed_mul_f32", _arr("<f4", MAX_PLAYERS)),
+        # Prefix-materialized Fighter dynamics descriptor/JObj state. Current gameplay collision
+        # ownership is Fox's four-node ftData.x2C chain; normal runtime storage has the wider cap.
+        # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009CB40,ftCo_8009DD94,ftCo_8009E0A8}
+        # refs/melee/src/melee/lb/lb_00F9.c::{lb_8000FD48,lb_8001044C}
+        ("dynamic_pose_seed_valid_u8", _arr("u1", MAX_PLAYERS)),
+        ("dynamic_pose_seed_apply_u8", _arr("u1", MAX_PLAYERS)),
+        ("dynamic_pose_seed_node_count_u8", _arr("u1", MAX_PLAYERS)),
+        ("dynamic_pose_seed_rot_x_f32", ("<f4", (MAX_PLAYERS, SEED_DYNAMIC_NODES))),
+        ("dynamic_pose_seed_rot_y_f32", ("<f4", (MAX_PLAYERS, SEED_DYNAMIC_NODES))),
+        ("dynamic_pose_seed_rot_z_f32", ("<f4", (MAX_PLAYERS, SEED_DYNAMIC_NODES))),
+        ("dynamic_pose_seed_pos_x_f32", ("<f4", (MAX_PLAYERS, SEED_DYNAMIC_NODES))),
+        ("dynamic_pose_seed_pos_y_f32", ("<f4", (MAX_PLAYERS, SEED_DYNAMIC_NODES))),
+        ("dynamic_pose_seed_pos_z_f32", ("<f4", (MAX_PLAYERS, SEED_DYNAMIC_NODES))),
+        ("dynamic_pose_seed_axis_x_f32", ("<f4", (MAX_PLAYERS, SEED_DYNAMIC_NODES))),
+        ("dynamic_pose_seed_axis_y_f32", ("<f4", (MAX_PLAYERS, SEED_DYNAMIC_NODES))),
+        ("dynamic_pose_seed_axis_z_f32", ("<f4", (MAX_PLAYERS, SEED_DYNAMIC_NODES))),
+        ("dynamic_pose_seed_angle_f32", ("<f4", (MAX_PLAYERS, SEED_DYNAMIC_NODES))),
         # Capture/grab hidden owner lanes.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
         #   ftCo_800DA824,ftCo_CaptureWaitHi_Anim,fn_800DB8A4,fn_800DC014
@@ -327,7 +301,6 @@ SEED_DTYPE = np.dtype(
         ("capture_wait_counter_f32", _arr("<f4", MAX_PLAYERS)),
         ("capture_wait_anim_rate_timer_f32", _arr("<f4", MAX_PLAYERS)),
         ("capture_wait_jump_latch_u8", _arr("u1", MAX_PLAYERS)),
-        ("capture_breakout_pending_u8", _arr("u1", MAX_PLAYERS)),
         # Walk callback source velocity lane (`mv_x0` consumed by ftWalkCommon_800DFDDC).
         # refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
         ("walk_anim_source_vel_f32", _arr("<f4", MAX_PLAYERS)),
@@ -344,11 +317,21 @@ SEED_DTYPE = np.dtype(
         ("turn_kneebend_facing_override_u8", _arr("u1", MAX_PLAYERS)),
         ("guard_tilt_x8", _arr("<u2", MAX_PLAYERS)),
         ("guard_tilt_x4", _arr("<f4", MAX_PLAYERS)),
+        # Compact recurrent live-JObj seed for GuardOn/Guard/GuardReflect. Runtime rollouts retain
+        # the ordinary live pose; only teacher-forced reseed needs this bounded source history.
+        ("guard_pose_history_valid_u8", _arr("u1", MAX_PLAYERS)),
+        ("guard_pose_history_count_u8", _arr("u1", MAX_PLAYERS)),
+        ("guard_pose_entry_msid_u16", _arr("<u2", MAX_PLAYERS)),
+        ("guard_pose_entry_anim_frame_f32", _arr("<f4", MAX_PLAYERS)),
+        ("guard_pose_tilt_x8_u16", ("<u2", (MAX_PLAYERS, 10))),
+        ("guard_pose_tilt_x4_f32", ("<f4", (MAX_PLAYERS, 10))),
+        ("guard_pose_target_weight_f32", ("<f4", (MAX_PLAYERS, 10))),
         ("guard_reflect_timer_x14", _arr("u1", MAX_PLAYERS)),
         ("guard_reflect_timer_x18", _arr("u1", MAX_PLAYERS)),
         ("guard_reflect_origin_guardon_u8", _arr("u1", MAX_PLAYERS)),
         ("guard_special_enable_timer_x1c", _arr("u1", MAX_PLAYERS)),
         ("guard_release_latched_xc", _arr("u1", MAX_PLAYERS)),
+        ("guard_anim_counter_x0", _arr("<u2", MAX_PLAYERS)),
         ("guard_x10", _arr("u1", MAX_PLAYERS)),
         ("lightshield_amount", _arr("<f4", MAX_PLAYERS)),
         # GuardSetOff hidden shield-hit int-damage lower bound (`fp->x19A4` consumer lane).
@@ -358,26 +341,6 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
         ("guard_setoff_hitlag_damage_min", _arr("u1", MAX_PLAYERS)),
-        # GuardSetOff hitlag-exit ownership phase discriminator.
-        # - `2` marks the last frozen hitlag row in GuardSetOff.
-        # - `3` marks the first post-hitlag GuardSetOff row where callback-owned anim-rate resumes.
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
-        # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-        ("guard_setoff_hitlag_exit_phase_u8", _arr("u1", MAX_PLAYERS)),
-        # GuardSetOff post-hitlag owner discriminator on the handoff rows:
-        # - 1: normal GuardSetOff handoff
-        # - 2: powershield-active GuardSetOff handoff (`x221C_b2` still live)
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
-        # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-        ("guard_setoff_post_hitlag_owner_u8", _arr("u1", MAX_PLAYERS)),
-        # Narrow GuardSetOff hidden exit-rate reconstruction.
-        # This field may use the first future same-segment non-hitlag GuardSetOff row because the
-        # replay-visible hidden owner only surfaces there. It is deliberately separate from the
-        # strictly causal frame_speed_mul_f32 seed lane.
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
-        # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-        ("guard_setoff_exit_frame_speed_mul_f32", _arr("<f4", MAX_PLAYERS)),
         ("jumps_left", _arr("u1", MAX_PLAYERS)),
         ("stocks", _arr("u1", MAX_PLAYERS)),
         ("kneebend_jump_input", _arr("u1", MAX_PLAYERS)),
@@ -387,7 +350,6 @@ SEED_DTYPE = np.dtype(
         ("fall_fast", _arr("u1", MAX_PLAYERS)),
         ("fall_fast_hitlag_exit_owner", _arr("u1", MAX_PLAYERS)),
         ("run_x0", _arr("u1", MAX_PLAYERS)),
-        ("runbrake_cmd0", _arr("u1", MAX_PLAYERS)),
         ("dash_x4", _arr("u1", MAX_PLAYERS)),
         ("shine_release_lag", _arr("u1", MAX_PLAYERS)),
         ("shine_is_release", _arr("u1", MAX_PLAYERS)),
@@ -515,6 +477,11 @@ SEED_DTYPE = np.dtype(
         ("source_port0", _arr("u1", MAX_PLAYERS)),
         ("last_hit_by", _arr("u1", MAX_PLAYERS)),
         ("grab_owner_port", _arr("u1", MAX_PLAYERS)),
+        # fp->x2174 saved by ftCo_800DB368 and restored by ftCo_800DDDE4 before release ECB load.
+        ("grab_constraint_x2174_x_f32", _arr("<f4", MAX_PLAYERS)),
+        ("grab_constraint_x2174_y_f32", _arr("<f4", MAX_PLAYERS)),
+        ("grab_constraint_x2174_z_f32", _arr("<f4", MAX_PLAYERS)),
+        ("grab_constraint_x2174_valid_u8", _arr("u1", MAX_PLAYERS)),
         ("grab_mash_stick_x_sign", _arr("i1", MAX_PLAYERS)),
         ("grab_mash_stick_y_sign", _arr("i1", MAX_PLAYERS)),
         ("_pad2", "V1"),
@@ -524,15 +491,7 @@ SEED_DTYPE = np.dtype(
         ("combat_hitlist_hb_valid", ("u1", (MAX_PLAYERS, MAX_HITBOXES))),
         ("combat_hitlist_hb_cd", ("<u2", (MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS))),
         ("combat_hitlist_hb_victim_iid", ("<u2", (MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS))),
-        # Teacher-forced per-HitCapsule shield-contact result:
-        # 0 unknown/use runtime geometry, 1 force no shield contact, 2 force shield contact.
-        ("combat_shield_contact_hb_kind", ("u1", (MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS))),
-        # Teacher-forced shield-hit max integer damage (`fp->x19A4`) for accepted GuardSetOff
-        # entries whose exact ShieldDesc/HitCapsule ordering is hidden at the seed boundary.
-        ("combat_shield_hit_int_damage", _arr("u1", MAX_PLAYERS)),
-        # Teacher-forced shield-hit damage-taken accumulator (`fp->x19A0`) for accepted GuardSetOff
-        # entries. x19A4 owns hitlag/stun; x19A0 owns shield HP depletion.
-        ("combat_shield_damage_taken", _arr("u1", MAX_PLAYERS)),
+        ("combat_hitlist_hb_v2_mask", ("u1", (MAX_PLAYERS, MAX_HITBOXES))),
         # Hidden HitCapsule.x58 seed lane for teacher-forced one-step starts.
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
         # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
@@ -557,26 +516,12 @@ SEED_DTYPE = np.dtype(
         ("item_hitlist_victim_cd", _arr("u1", MAX_ITEMS)),
         ("item_hitlist_victim_hitbox_mask", _arr("u1", MAX_ITEMS)),
         ("item_hitlist_victim_iid", _arr("<u2", MAX_ITEMS)),
-        # Hidden item callback/collision seed lanes consumed only by teacher-forced reseed.
-        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077688,ftColl_80077C60}
-        # refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8,Item_8026A294}
-        ("item_reflect_transfer_port", _arr("u1", MAX_ITEMS)),
-        ("item_reflect_transfer_iid", _arr("<u2", MAX_ITEMS)),
-        ("item_shield_bounce_valid", _arr("u1", MAX_ITEMS)),
-        ("item_shield_bounce_vel_x", _arr("<f4", MAX_ITEMS)),
-        ("item_shield_bounce_vel_y", _arr("<f4", MAX_ITEMS)),
-        ("item_hidden_body_hit_victim_port", _arr("u1", MAX_ITEMS)),
-        ("item_hidden_body_hit_hurt_height", _arr("u1", MAX_ITEMS)),
+        # Live item-step spawn phase state; no future contact or callback outcome is seeded.
         ("item_hidden_callback_flags", _arr("u1", MAX_ITEMS)),
-        ("item_sheik_needle_callback_bounce_vel_y_index", _arr("u1", MAX_ITEMS)),
-        ("item_sheik_needle_callback_bounce_vel_x_index_sign", _arr("u1", MAX_ITEMS)),
         ("item_sheik_needle_motion_seed_kind", _arr("u1", MAX_ITEMS)),
         ("item_sheik_needle_motion_vel_x_index_sign", _arr("u1", MAX_ITEMS)),
         ("item_sheik_needle_motion_gravity_index", _arr("u1", MAX_ITEMS)),
         ("item_sheik_needle_motion_min_vel_y_index", _arr("u1", MAX_ITEMS)),
-        ("item_sheik_needle_stage_hit_seed_kind", _arr("u1", MAX_ITEMS)),
-        ("item_sheik_needle_stage_hit_vel_y_index", _arr("u1", MAX_ITEMS)),
-        ("item_sheik_needle_stage_hit_vel_x_index_sign", _arr("u1", MAX_ITEMS)),
         ("item_zelda_din_charge", _arr("<f4", MAX_ITEMS)),
         ("item_zelda_din_angle_offset", _arr("<f4", MAX_ITEMS)),
         ("item_zelda_din_base_angle", _arr("<f4", MAX_ITEMS)),

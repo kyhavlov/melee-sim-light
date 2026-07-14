@@ -1,7 +1,7 @@
 """Registry completeness: every registry character must run end-to-end.
 
-The marth port found a class of silent per-char data degradation: char-blind table
-caches (move_tables) and init-soft loaders (staling, shield tilt) that returned
+The marth port found a class of silent per-char data degradation: the former char-blind script
+snapshot cache and init-soft loaders (staling, shield tilt) that returned
 NULL/defaults for an unregistered or artifact-less character instead of failing.
 All per-char table inits are now strict at msl_binding.init time, so the loud
 property this file locks is:
@@ -59,7 +59,7 @@ def test_registry_char_inits_seeds_and_steps(char_name: str) -> None:
     sizes = msl_binding.sizes()
     # init is strict: every registry character's per-char tables (params, msids,
     # staling, attack-id, motion-state owners, anim, pose, shield tilt, hurtcaps,
-    # move tables, hitboxes, ecb) must have loaded or this returns NULL/raises.
+    # live script, hitboxes, ecb) must have loaded or this returns NULL/raises.
     handle = msl_binding.init(batch_size=1, num_players=2)
     try:
         # build the seed directly from the registry (the coverage helper's CHARS dict

@@ -18,6 +18,7 @@
 #include "common_specials.h"
 #include "dash_iasa.h"
 #include "grab_flow.h"
+#include "fighter_script.h"
 #include "ids.h"
 #include "items.h"
 #include "locomotion.h"
@@ -25,7 +26,6 @@
 #include "mpcoll_floor_skip.h"
 #include "mp_coll.h"
 #include "msl_math.h"
-#include "move_tables.h"
 #include "sheik_specials.h"
 #include "stage_collision.h"
 #include "state_flags.h"
@@ -615,8 +615,7 @@ static void zd_update_specialn(MslBatch* batch, const MslCommonParams* c, const 
   switch (a) {
     case MSL_ACT_ZD_SPECIAL_N:
     case MSL_ACT_ZD_SPECIAL_AIR_N: {
-      const uint8_t cmd0 = move_tables_special_cmd_var_value_at_frame(
-          batch->state.char_id[idx], zd_submotion(a), 0u, batch->state.anim_frame_f32[idx]);
+      const uint8_t cmd0 = (uint8_t)fighter_script_cmd_var(batch, idx, 0u);
       // ftZd_Special{Air}N_Anim creates ReflectDesc once when the script raises cmd_vars[0], then
       // keeps fp->reflecting live until the script clears cmd0. `2` is this sim's local
       // "descriptor already created" sentinel so repeated cmd0==1 frames do not recreate it.
@@ -625,6 +624,7 @@ static void zd_update_specialn(MslBatch* batch, const MslCommonParams* c, const 
       // data/scripts/zelda.bin::MSLFTSC1 SpecialN/SpecialAirN cmd_var(0) pulses
       if (cmd0 == 1u && batch->state.special_cmd0[idx] != 2u) {
         batch->state.special_cmd0[idx] = 2u;
+        fighter_script_set_cmd_var(batch, idx, 0u, 2u);
       } else if (cmd0 == 0u) {
         batch->state.special_cmd0[idx] = 0u;
       }
@@ -661,13 +661,12 @@ static void zd_din_reset_timers(MslBatch* batch, const MslCharParams* ch, size_t
           : 0u;
 }
 
-static void zd_din_update_spawn_script(MslBatch* batch, const MslCharParams* ch, size_t idx,
-                                       uint16_t a) {
-  const uint8_t cmd0 = move_tables_special_cmd_var_value_at_frame(
-      batch->state.char_id[idx], zd_submotion(a), 0u, batch->state.anim_frame_f32[idx]);
+static void zd_din_update_spawn_script(MslBatch* batch, const MslCharParams* ch, size_t idx) {
+  const uint8_t cmd0 = (uint8_t)fighter_script_cmd_var(batch, idx, 0u);
   if (cmd0 == 1u) {
     (void)items_spawn_zelda_din_fire_article(batch, idx, ch->zelda_din_spawn_offset_x,
                                              ch->zelda_din_spawn_offset_y);
+    fighter_script_clear_cmd_var(batch, idx, 0u);
     batch->state.special_cmd0[idx] = 0u;
   }
 }
@@ -693,7 +692,7 @@ static void zd_update_specials(MslBatch* batch, const MslCommonParams* c, const 
   switch (a) {
     case MSL_ACT_ZD_SPECIAL_S_START:
     case MSL_ACT_ZD_SPECIAL_AIR_S_START:
-      zd_din_update_spawn_script(batch, ch, idx, a);
+      zd_din_update_spawn_script(batch, ch, idx);
       if (zd_anim_finished(batch, idx, a)) {
         zd_enter(batch, idx,
                  a == (uint16_t)MSL_ACT_ZD_SPECIAL_S_START
@@ -706,7 +705,7 @@ static void zd_update_specials(MslBatch* batch, const MslCommonParams* c, const 
       break;
     case MSL_ACT_ZD_SPECIAL_S_LOOP:
     case MSL_ACT_ZD_SPECIAL_AIR_S_LOOP:
-      zd_din_update_spawn_script(batch, ch, idx, a);
+      zd_din_update_spawn_script(batch, ch, idx);
       if (batch->state.sheik_special_timer[idx] != 0u) {
         batch->state.sheik_special_timer[idx]--;
       }
@@ -776,8 +775,7 @@ static void zd_update_specialhi(MslBatch* batch, const MslCommonParams* c, const
       }
       break;
     case MSL_ACT_ZD_SPECIAL_AIR_HI:
-      batch->state.special_cmd0[idx] = move_tables_special_cmd_var_value_at_frame(
-          batch->state.char_id[idx], zd_submotion(a), 0u, batch->state.anim_frame_f32[idx]);
+      batch->state.special_cmd0[idx] = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
       if (zd_anim_finished(batch, idx, a)) {
         zd_enter_fallspecial(batch, ch, idx, ch->zelda_farore_landing_lag_frames,
                              ch->zelda_farore_fallspecial_mobility_mul);

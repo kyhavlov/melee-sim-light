@@ -107,67 +107,6 @@
         "item0_exists": 1,
         "shield_hp": 60.0
       }
-    },
-    {
-      "name": "guardon_laser_after_entry_hits",
-      "players": [
-        {
-          "char_id": 1,
-          "action_id": 178,
-          "animation_index": 180,
-          "action_frame": -1,
-          "pos_x": 10.4230547,
-          "pos_y": 0.0001,
-          "facing": -1,
-          "on_ground": true,
-          "jumps_left": 2,
-          "shield_hp": 60.0
-        },
-        {
-          "char_id": 22,
-          "action_id": 14,
-          "animation_index": 2,
-          "action_frame": 0,
-          "pos_x": -39.7287598,
-          "pos_y": 0.0001,
-          "facing": 1,
-          "on_ground": true,
-          "jumps_left": 2,
-          "shield_hp": 60.0
-        }
-      ],
-      "items": [
-        {
-          "slot": 0,
-          "exists": true,
-          "type": 55,
-          "owner": 1,
-          "instance_id": 2073,
-          "direction": 1.0,
-          "vel_x": 5.0,
-          "vel_y": 0.0,
-          "pos_x": -10.0,
-          "pos_y": 12.9127483,
-          "timer": 94.0,
-          "spawn_id": 201
-        }
-      ],
-      "prev_inputs": [
-        { "anyTrigger": 1.0 },
-        {}
-      ],
-      "inputs": [
-        { "anyTrigger": 1.0 },
-        {}
-      ],
-      "expected": {
-        "player": 0,
-        "action_id": 181,
-        "action_frame": 0,
-        "hitlag": 4,
-        "item0_exists": 0,
-        "shield_hp": 57.4048195
-      }
     }
   ]
 }

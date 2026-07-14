@@ -27,20 +27,4 @@ PyObject* msl_stage_item_line_hit_py(PyObject* self, PyObject* args);
 PyObject* msl_mpcoll_check_bounding_aabb_py(PyObject* self, PyObject* args);
 PyObject* msl_mpcoll_end_publication_py(PyObject* self, PyObject* args);
 PyObject* msl_stage_match_flow_roles_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_debug_query_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_throw_has_release_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_throw_release_frame_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_throw_release_hit_idx_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_throw_hitbox_params_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_throw_release_after_create_hitbox_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_throw_cmd1_active_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_throw_should_spawn_projectile_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_throw_should_flip_facing_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_throw_crossed_projectile_pulse_frame_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_throw_projectile_first_pulse_frame_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_throw_projectile_last_pulse_frame_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_throw_projectile_pulse_ordinal_py(PyObject* self, PyObject* args);
-PyObject* msl_move_tables_special_pseudo_random_sfx_ranges_crossed_py(PyObject* self,
-                                                                      PyObject* args);
-
 #endif

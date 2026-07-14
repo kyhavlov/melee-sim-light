@@ -10,6 +10,14 @@ void grab_attachment_reseed_init(MslBatch* batch, int batch_index);
 // has been recovered from the seed.
 void grab_attachment_falcon_dive_constraint_reseed_init(MslBatch* batch, int batch_index);
 
+// Install ftCo_800DB368's XRotN constraint and capture the local translation it saves in x2174.
+// Call before replacing the constrained fighter's current MotionState/animation.
+void grab_attachment_install_xrotn_constraint(MslBatch* batch, size_t fighter_idx);
+
+// ftAnim_8006EBA4 tail owner for a constrained fighter. When XRotN has an active AObj,
+// ftCo_800DB500 refreshes fp->x2174 from its newly interpreted local translation.
+void grab_attachment_refresh_xrotn_constraint_after_anim(MslBatch* batch, size_t fighter_idx);
+
 // Whether the action's source map callback reaches mpColl this frame. Falcon Dive's owner and
 // CaptureCaptain callbacks return without calling mpColl while that fighter is constrained.
 uint8_t grab_attachment_map_callback_runs(const MslBatch* batch, size_t idx);
@@ -42,18 +50,23 @@ void grab_attachment_use_static_offsets_for_thrown_entry(MslBatch* batch, int ba
 void grab_attachment_apply_capture_delta_now(MslBatch* batch, int batch_index, int victim_p,
                                              int owner_p);
 
-// CapturePulledLw same-callback Phys floor-loss helper.
+// CapturePulledLw same-callback Phys vertical-carry helper.
 //
 // Decomp-shaped usage:
 // - ftCo_CapturePulledLw_Phys applies fn_800DAD18, then enters CapturePulledHi through
-//   fn_800DB230_inline when the source vertical carry exceeds p_ftCommonData->x3C4 or the
-//   following Coll callback loses the floor.
+//   fn_800DB230_inline when the source vertical carry exceeds p_ftCommonData->x3C4.
 // - CatchPull_Anim's owner-side fn_800DB6C8 CaptureWait handoff must observe that updated
 //   CapturePulledHi/Lw variant when both callbacks occur in the same simulator frame.
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
 //   ftCo_CapturePulledLw_Phys,fn_800DB230_inline,fn_800DB6C8}
-uint8_t grab_attachment_apply_capture_pulled_lw_phys_now(MslBatch* batch, int batch_index,
-                                                         int victim_p, int owner_p);
+// Shared low->high CapturePulled/Wait/Damage callback continuation. Phys owns the x3C4 threshold;
+// Coll owns the same transition after a 4B108 floor miss. Both call the family-specific source
+// entry and fn_800DAA40 anchor publication.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+//   fn_800DB230_inline,ftCo_CaptureWaitLw_Phys_inline,fn_800DBED4_inline,
+//   ftCo_CaptureDamageLw_Phys_inline,fn_800DC624_inline}
+uint8_t grab_attachment_capture_low_to_high_now(MslBatch* batch, int batch_index, int victim_p,
+                                                int owner_p);
 
 // Thrown victim same-frame anchor ownership helper.
 //
@@ -85,10 +98,6 @@ void grab_attachment_falcon_dive_release_collision_now(MslBatch* batch, size_t c
 // (Falcon Dive grounded-victim mode) or ordinary victim owns x2226/XRotN placement.
 void grab_attachment_dc920_release_now(MslBatch* batch, int batch_index, int owner_p, int victim_p,
                                        uint8_t constrained_owner);
-void grab_attachment_query_thrown_anchor_world(float* out_x, float* out_y, float* out_z,
-                                               const MslBatch* batch, int batch_index, int victim_p,
-                                               int owner_p);
-
 // CapturePulled*/CaptureWait*/CaptureDamage* victim Phys driver:
 // - Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18
 // - Applies `cur_pos += (owner(x18) - victim(XRotN))`.
@@ -96,7 +105,12 @@ void grab_attachment_query_thrown_anchor_world(float* out_x, float* out_y, float
 // Ordering contract:
 // - Call after action update and before physics integration and stage collision, matching the
 //   decomp callback ordering (Phys then integrate then Coll).
-void grab_attachment_update_pre_collision(MslBatch* batch);
+// CapturePulled/Wait/Damage MotionState Phys owner for one fighter at priority 4.
+// Returns nonzero when the attached capture family owns this fighter's translation.
+uint8_t grab_attachment_update_capture_phys_fighter(MslBatch* batch, int batch_index, int victim_p);
+
+// Thrown* accessory1 callback owner at priority 8, after every fighter's priority-6 map callback.
+void grab_attachment_update_thrown_accessory_phase(MslBatch* batch);
 
 // Falcon Dive's accessory1/accessory4 position callbacks run after map collision and retain the
 // connect-time constraint mode even if either fighter's live floor state changes during the hold.

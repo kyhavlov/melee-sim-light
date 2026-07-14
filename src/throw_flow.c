@@ -10,27 +10,14 @@
 #include "combat_internal.h"
 #include "damage_terminal_owner.h"
 #include "ecb_tables.h"
+#include "fighter_script.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
 #include "locomotion.h"
 #include "mpcoll_ecb_pose.h"
 #include "mpcoll_source_air.h"
-#include "move_tables.h"
 
 #include <math.h>
-
-static inline uint8_t throw_flow_action_is_damage_family(uint16_t action_id_u16) {
-  // Throw release enters the same common Damage* aftermath subset as regular ProcessHit:
-  // DamageHi/N/Lw, DamageAir, DamageFly/FlyReflect, plus DamageFall's dedicated callback family.
-  // Use MSLMSO01 generated damage classes instead of a local action-id list.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DE7C0}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Coll
-  return (uint8_t)(msl_damage_owner_is_damage_ground_action(action_id_u16) ||
-                   msl_damage_owner_is_damage_air_action(action_id_u16) ||
-                   msl_damage_owner_is_damagefly_action(action_id_u16) ||
-                   action_id_u16 == (uint16_t)MSL_ACT_DAMAGE_FALL);
-}
 
 static inline uint8_t throw_anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(char_id, msid);
@@ -59,23 +46,6 @@ static inline void enter_wait_or_fall_from_throw_end(MslBatch* batch, size_t idx
   } else {
     throw_enter_fall_via_ftco_fall_enter(batch, idx);
   }
-}
-
-static inline void enter_fall_release(MslBatch* batch, size_t idx) {
-  if (batch == NULL) {
-    return;
-  }
-  // Decomp: generic fall entry.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
-  //
-  // Simulator note:
-  // - This helper is only used as a detached-victim fallback bridge in throw-release paths.
-  // - Use a pure timebase restart (no motion-identity side effects) so this bridge state does not
-  //   consume an extra instance_id bump before compatibility pending-release cleanup observes it.
-  batch->state.on_ground[idx] = 0;
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-  batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-  msl_anim_timebase_restart(batch, idx, 0.0f, 1.0f);
 }
 
 static inline void throw_enter_fall_via_ftco_fall_enter(MslBatch* batch, size_t idx) {
@@ -140,10 +110,19 @@ static inline void throw_release_source_colldata_last_pos(float* out_x, float* o
   }
   float bottom_rel_y = batch->state.coll_ecb_bottom_rel_y[owner_idx];
   float top_rel_y = batch->state.coll_ecb_top_rel_y[owner_idx];
-  if (!isfinite(bottom_rel_y) || !isfinite(top_rel_y)) {
+  if (batch->state.coll_ecb_bottom_valid[owner_idx] == 0u || !isfinite(bottom_rel_y) ||
+      !isfinite(top_rel_y) || !(top_rel_y > bottom_rel_y)) {
     const uint32_t owner_anim = batch->state.animation_index[owner_idx];
-    const int owner_frame = (int)msl_anim_frame_floor_u16(
-        msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[owner_idx]));
+    // The release flag is consumed after the thrower's priority-1 Anim advance but before its
+    // current-frame map callback. DDDE4 therefore reads the ECB packet published by the previous
+    // map callback, not the just-advanced desired pose. A replay reseed has no serialized ECB
+    // packet and initializes this lane to the clear zero envelope; reconstruct that one hidden
+    // source packet from the previous collision frame instead of treating finite zeroes as live.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_800841B8,ft_80084104}
+    // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_LoadECB_inline}
+    const uint16_t owner_frame = msl_ecb_prev_frame_u16(
+        msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[owner_idx]));
     bottom_rel_y = msl_ecb_bottom_rel_y(batch->state.char_id[owner_idx], owner_anim, owner_frame);
     top_rel_y = msl_ecb_top_rel_y(batch->state.char_id[owner_idx], owner_anim, owner_frame);
   }
@@ -151,142 +130,13 @@ static inline void throw_release_source_colldata_last_pos(float* out_x, float* o
   // Throw release CollData owner:
   // ftCo_800DDDE4 writes released-fighter CollData.last_pos from the thrower root plus inline3=0
   // and inline2=0.5*(thrower.coll_data.ecb.top.y + bottom.y), then calls mpColl_800471F8. MSL's
-  // same-frame throw-hit bridge still consumes the attached-victim root; this packet feeds the
-  // next callback's ft_80081DD4/mpColl sweep only.
+  // release callback consumes the attached-victim root; this packet feeds the next callback's
+  // ft_80081DD4/mpColl sweep.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
   *out_x = batch->state.pos_x[owner_idx];
   *out_y = batch->state.pos_y[owner_idx] + 0.5f * (top_rel_y + bottom_rel_y);
-}
-
-static inline void throw_flow_apply_deferred_throw_hit_kb_decay(MslBatch* batch,
-                                                                size_t victim_idx) {
-  if (batch == NULL) {
-    return;
-  }
-  const MslCommonParams* c = msl_common_params();
-  if (c == NULL) {
-    return;
-  }
-
-  float kb_x = batch->state.speed_x_attack[victim_idx];
-  float kb_y = batch->state.speed_y_attack[victim_idx];
-  if (kb_x == 0.0f && kb_y == 0.0f) {
-    return;
-  }
-
-  // Compatibility pending-release scheduling bridge:
-  // - In decomp, ftCo_800DD724 applies the throw hit during the thrower's Anim callback.
-  // - The victim then reaches Fighter_procUpdate in the same frame, where airborne knockback velocity
-  //   is decayed before position integration.
-  // - Seed/reseed compatibility latches may apply release damage after the normal physics pass, so
-  //   mirror that one Fighter_procUpdate knockback-decay step before the bridge integrates release
-  //   displacement.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  const float kb_mag = sqrtf(kb_x * kb_x + kb_y * kb_y);
-  const float decay = c->knockback_frame_decay;
-  if (kb_mag < decay) {
-    kb_x = 0.0f;
-    kb_y = 0.0f;
-  } else {
-    const float kb_angle = atan2f(kb_y, kb_x);
-    kb_x -= decay * cosf(kb_angle);
-    kb_y -= decay * sinf(kb_angle);
-  }
-  batch->state.speed_x_attack[victim_idx] = kb_x;
-  batch->state.speed_y_attack[victim_idx] = kb_y;
-}
-
-static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(
-    MslBatch* batch, size_t owner_idx, size_t victim_idx, uint8_t apply_damage_phys_step) {
-  if (batch == NULL) {
-    return;
-  }
-
-  const uint8_t on_ground = batch->state.on_ground[victim_idx] ? 1u : 0u;
-  const float vx_self = on_ground ? batch->state.speed_ground_x_self[victim_idx]
-                                  : batch->state.speed_air_x_self[victim_idx];
-  if (on_ground) {
-    // Keep self_vel.x synced with grounded integration velocity, matching ftCommon_ApplyGroundMovement.
-    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
-    batch->state.speed_air_x_self[victim_idx] = vx_self;
-  }
-  if (apply_damage_phys_step && !on_ground &&
-      throw_flow_action_is_damage_family(batch->state.action_id[victim_idx])) {
-    throw_flow_apply_deferred_throw_hit_kb_decay(batch, victim_idx);
-    // Deferred throw-release damage entry happens after this simulator's normal physics pass, but in
-    // decomp the release hit is consumed before the victim's Damage* Phys owner runs. Apply the
-    // one-frame airborne gravity owner before integration so the current displacement observes the
-    // Damage Phys self velocity.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Phys,ftCo_Damage_Phys}
-    // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
-    const MslCharParams* ch = msl_char_params_fast(batch->state.char_id[victim_idx]);
-    if (ch != NULL) {
-      float next_vy = batch->state.speed_y_self[victim_idx] - ch->grav;
-      if (next_vy < -ch->terminal_vel) {
-        next_vy = -ch->terminal_vel;
-      }
-      batch->state.speed_y_self[victim_idx] = next_vy;
-    }
-  }
-
-  const float vy_self = batch->state.speed_y_self[victim_idx];
-  const float vx = vx_self + batch->state.speed_x_attack[victim_idx];
-  const float vy = vy_self + batch->state.speed_y_attack[victim_idx];
-  (void)owner_idx;
-
-  // Compatibility pending-release ordering bridge:
-  // - In decomp, set_throw_flags(0) consume + throw-hit application (ftCo_800DE2A8/ftCo_800DE7C0)
-  //   occurs in Throw Anim callback before Fighter_procUpdate Phys integration.
-  // - Normal runtime releases now apply damage in throw_flow_update_anim_callback_pre_input().
-  //   Teacher-forced/seeded pending latches can still reach throw_flow_update_post_items(); if
-  //   they apply a throw hit there, integrate one position step so throw-hit velocities displace
-  //   in-frame.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DE2A8
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  //
-  // Release-position ownership:
-  // - ftCo_800DD724 consumes set_throw_flags(0) in the thrower's Anim callback, and ftCo_800DDDE4
-  //   samples the throw-side joint immediately there before the thrower's Phys integration.
-  // - This simulator already applies the same-frame release anchor in
-  //   throw_flow_update_anim_callback_pre_input() before any compatibility pending-release damage
-  //   bridge can run; do not add the thrower's self-velocity again here.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  batch->state.pos_x[victim_idx] += vx;
-  batch->state.pos_y[victim_idx] += vy;
-}
-
-static inline void throw_flow_apply_post_release_damage_callback_phase(MslBatch* batch,
-                                                                       size_t victim_idx);
-
-static inline void throw_flow_commit_immediate_release_percent_temp(MslBatch* batch,
-                                                                    size_t victim_idx) {
-  if (batch == NULL) {
-    return;
-  }
-  const float temp = batch->state.percent_temp[victim_idx];
-  if (temp == 0.0f) {
-    return;
-  }
-  // Throw release now applies during the source Anim callback. In native, Fighter_ProcessHit later
-  // in the same frame consumes dmg.x1838_percentTemp into percent. This simulator's
-  // combat_processhit_consume() still runs as an early cleanup shim before item/fighter collision, so
-  // commit the throw-local temp damage here and leave later collision temp ownership unchanged.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  float percent = batch->state.percent[victim_idx] + temp;
-  if (percent > 999.0f) {
-    percent = 999.0f;
-  }
-  batch->state.percent[victim_idx] = percent;
-  batch->state.percent_temp[victim_idx] = 0.0f;
 }
 
 void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owner_p) {
@@ -305,11 +155,6 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 and Fighter_procUpdate
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_Throw*_Anim
   const size_t oidx = msl_idx_player(bi, owner_p);
-  // Internal per-frame latch: clear by iterating over throwers each frame. Throw release damage is
-  // applied immediately below; the latch remains only as a seed/compatibility surface and should not
-  // become live during normal runtime.
-  batch->state.throw_pending_victim_port[oidx] = 0xFFu;
-  batch->state.throw_pending_hit_idx[oidx] = 0xFFu;
   if (batch->state.stocks[oidx] == 0) {
     return;
   }
@@ -345,14 +190,13 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
   const uint8_t owner_pose_facing_before_throw_flags = batch->state.facing[oidx];
   const uint8_t owner_char = batch->state.char_id[oidx];
   const float owner_af = batch->state.anim_frame_f32[oidx];
-  const int32_t owner_prev_fp =
-      batch->state.anim_frame_fp_q16_16[oidx] - batch->state.frame_speed_mul_fp_q16_16[oidx];
-  const float owner_prev_af = msl_f32_from_q16_16(owner_prev_fp);
+  const uint8_t throw_flags = batch->state.script_throw_flags[oidx];
+  batch->state.script_throw_flags[oidx] &= (uint8_t) ~((1u << 3) | (1u << 4));
 
   // Facing flip: set_throw_flags(hit_idx=1) -> throw_flags_b4 -> facing_dir = -facing_dir.
   // refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4 (case 1)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724 (inline1)
-  if (move_tables_throw_should_flip_facing(owner_char, owner_act, owner_prev_af, owner_af)) {
+  if ((throw_flags & (uint8_t)(1u << 4)) != 0u) {
     batch->state.facing[oidx] = (uint8_t)!batch->state.facing[oidx];
   }
 
@@ -367,192 +211,111 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
   //   ftCo_800DD724,ftCo_800DDDE4}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
   // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-  uint8_t rel_hit_idx = 0xFFu;
+  uint8_t rel_hit_idx = 0u;
   float rel_anim_frame = owner_af;
-  // Release-edge reconstruction for attached weight-scaled throws: the source set_throw_flags
-  // timing is NOT a cur_anim_frame comparison — the movescript owns a wait timer decremented by
-  // frame_speed_mul each frame (`ftCommand->timer -= fp->frame_speed_mul`, execute while
-  // timer <= 0), a chained f32 subtraction. At the weight-scaled 1/(weight * x37C) rate the
-  // chain can retain one ulp ABOVE zero on the step where the Q16.16/Slippi-seeded frame reads
-  // the command frame exactly, so the release fires one frame later than a frame comparison
-  // says (falcon ThrowLw vs fox: timer +2.4e-7 at the seeded-20.0 step, release on the next),
-  // and symmetrically it can be consumed on a step where the seeded frame still reads the
-  // command frame exactly (marth ThrowHi seeded 12.000, timer +2.4e-7 the step before).
-  // Rebuild the tick count from the Q16.16 timebase and replay the source f32 timer chain for
-  // both edge sides. Exact only while the release is the script's first timed flag event (the
-  // timer re-anchors at every executed event); other scripts keep the frame-comparison model.
-  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80073354,ftAction_800718A4}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD724}
-  uint8_t released_prev =
-      move_tables_throw_release_hit_idx(owner_char, owner_act, owner_prev_af, NULL);
-  uint8_t released_cur =
-      move_tables_throw_release_hit_idx(owner_char, owner_act, owner_af, &rel_hit_idx);
-  {
-    const uint8_t victim_attached = batch->state.attached_victim_port[oidx];
-    const int32_t rate_fp = batch->state.frame_speed_mul_fp_q16_16[oidx];
-    float release_af = 0.0f;
-    if (victim_attached != 0xFFu && (int)victim_attached < num_players &&
-        (int)victim_attached != owner_p && rate_fp > 0 && rate_fp != (int32_t)MSL_Q16_16_ONE &&
-        move_tables_throw_release_is_first_timed_flag_event(owner_char, owner_act) &&
-        move_tables_throw_release_frame(owner_char, owner_act, &release_af)) {
-      const size_t v_idx = msl_idx_player(bi, (int)victim_attached);
-      const MslCommonParams* common = msl_common_params();
-      const MslCharParams* owner_ch = msl_char_params(owner_char);
-      const MslCharParams* victim_ch = msl_char_params(batch->state.char_id[v_idx]);
-      const int throw_index = (int)owner_act - (int)MSL_ACT_THROW_F;
-      if (common != NULL && owner_ch != NULL && victim_ch != NULL && throw_index >= 0 &&
-          throw_index < 8 &&
-          (owner_ch->weight_independent_throws_mask & (uint8_t)(1u << throw_index)) == 0u &&
-          victim_ch->weight > 0.0f && common->throw_anim_speed_weight_mul > 0.0f) {
-        const float rate = 1.0f / (victim_ch->weight * common->throw_anim_speed_weight_mul);
-        const int32_t owner_prev_fp_local =
-            batch->state.anim_frame_fp_q16_16[oidx] - batch->state.frame_speed_mul_fp_q16_16[oidx];
-        const int32_t n = (owner_prev_fp_local + rate_fp / 2) / rate_fp;
-        if (n >= 0 && n <= 256) {
-          // timer after k post-entry ticks = f32 chain of (release_af - k * rate); the async
-          // command anchored it to the command frame at the frame-0 event execution.
-          float timer = release_af;
-          for (int32_t i = 0; i < n; i++) {
-            timer -= rate;
-          }
-          released_prev = (uint8_t)(timer <= 0.0f);
-          timer -= rate;
-          released_cur = (uint8_t)(timer <= 0.0f);
-          if (released_cur) {
-            rel_hit_idx = 0u;
-          }
-        }
-      }
-    }
-  }
-  if (released_cur && !released_prev) {
-    // Find the grabbed victim owned by this thrower (decomp: fp->victim_gobj is a single pointer).
-    // If a malformed seed contains multiple victims with the same grab_owner_port, choose the lowest
-    // port deterministically and process only that one.
-    for (int victim_p = 0; victim_p < num_players; victim_p++) {
-      if (victim_p == owner_p) {
-        continue;
-      }
+  if ((throw_flags & (uint8_t)(1u << 3)) != 0u) {
+    // Source owns one `victim_gobj` pointer. Replay initialization normalizes the reciprocal port
+    // links once; runtime consumes that one pair instead of searching all fighters every frame.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+    const uint8_t victim_u8 = batch->state.attached_victim_port[oidx];
+    if (victim_u8 < batch->config.num_players && victim_u8 != (uint8_t)owner_p) {
+      const int victim_p = (int)victim_u8;
       const size_t vidx = msl_idx_player(bi, victim_p);
-      if (batch->state.stocks[vidx] == 0) {
-        continue;
-      }
-      if (batch->state.grab_owner_port[vidx] != (uint8_t)owner_p) {
-        continue;
-      }
-      if (!msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
-        // Defensive: if the victim is no longer in a grabbed-victim state, still clear the
-        // attachment link so grab_attachment doesn't keep driving them next frame.
+      if (batch->state.stocks[vidx] == 0u ||
+          batch->state.grab_owner_port[vidx] != (uint8_t)owner_p ||
+          !msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
+        batch->state.attached_victim_port[oidx] = 0xFFu;
         batch->state.grab_owner_port[vidx] = 0xFFu;
-        break;
-      }
-
-      // Common release same-frame attachment ownership:
-      // - ftCo_800DD724 is the shared ThrowF/B/Hi/Lw release consume path.
-      // - ftCo_800DDDE4 / ftCo_800DE508 still own the attached victim world placement for the
-      //   current frame before detach and damage entry.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
-      const float release_sweep_root_x = batch->state.pos_x[vidx];
-      const float release_sweep_root_y = batch->state.pos_y[vidx];
-      float source_release_last_pos_x = release_sweep_root_x;
-      float source_release_last_pos_y = release_sweep_root_y;
-      throw_release_source_colldata_last_pos(&source_release_last_pos_x, &source_release_last_pos_y,
-                                             batch, oidx);
-      // ftCo_800DDDE4 installs this sample-owner midpoint as the input endpoint for its immediate
-      // 471F8 call. It is not the endpoint of the later Damage map callback: the ft_081B wrapper
-      // starts that callback from the cur_pos published by this release-local collision pass.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-      // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043670,mpCollPrev,mpColl_800471F8}
-      batch->state.coll_last_pos_x[vidx] = source_release_last_pos_x;
-      batch->state.coll_last_pos_y[vidx] = source_release_last_pos_y;
-      grab_attachment_apply_thrown_release_anchor_now(batch, bi, victim_p, owner_p, rel_anim_frame,
-                                                      owner_pose_facing_before_throw_flags);
-      const uint8_t release_was_constrained = batch->state.grab_constraint_x2226_b2[vidx];
-      // DDDE4 unparents the victim and consumes x2226_b2 as part of the same release packet. The
-      // attachment helper samples the represented constrained world first; clearing afterward is
-      // the equivalent lifetime boundary in this non-JObj runtime.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-      batch->state.grab_constraint_x2226_b2[vidx] = 0u;
-      if (isfinite(release_sweep_root_x) && isfinite(release_sweep_root_y)) {
-        // Release floor-sweep root ownership:
-        // - ftCo_800DD724 samples the attached victim root before detach/damage entry.
-        // - The next frame's ft_80081DD4/mpColl sweep can still use that pre-release CollData.prev
-        //   root during active hitlag, matching the seed-visible floor_sweep_prev_pos lane.
+      } else {
+        // Common release same-frame attachment ownership:
+        // - ftCo_800DD724 is the shared ThrowF/B/Hi/Lw release consume path.
+        // - ftCo_800DDDE4 / ftCo_800DE508 still own the attached victim world placement for the
+        //   current frame before detach and damage entry.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
-        // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
-        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpCheckFloor}
-        batch->state.floor_sweep_prev_pos_x[vidx] = release_sweep_root_x;
-        batch->state.floor_sweep_prev_pos_y[vidx] = release_sweep_root_y;
-        batch->state.floor_sweep_seed_prev_pos_x[vidx] = source_release_last_pos_x;
-        batch->state.floor_sweep_seed_prev_pos_y[vidx] = source_release_last_pos_y;
-        batch->state.floor_sweep_seed_prev_valid[vidx] = 1u;
-        batch->state.floor_sweep_prev_source_owned[vidx] = 1u;
-        batch->state.floor_sweep_prev_runtime_owned[vidx] = 1u;
-      }
-
-      // Release-local mpColl publication:
-      // - ftCo_800DDDE4 writes CollData.last_pos from the selected sample owner's root + ECB
-      //   midpoint, writes CollData.cur_pos from the x1A70 release vector, then immediately calls
-      //   mpColl_800471F8 before ftCo_800DE7C0 applies release damage.
-      // - The same callback publication must happen in free-running rollout, not only as a
-      //   next-frame seed endpoint, otherwise the release hit integrates from the raw below-floor
-      //   x1A70 point and can falsely downbound on the following frame.
-      uint8_t release_floor_published = 0u;
-      combat_apply_ftCommon_8007D5D4_ground_to_air(batch, vidx);
-      if (release_was_constrained) {
-        // Source has exactly one admission gate: live x2226_b2. Character/action identity does not
-        // decide which releases run collision. Clearing the constraint also unlocks the ECB before
-        // the complete 471F8 wall/ceiling/floor kernel runs.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
+        const float release_sweep_root_x = batch->state.pos_x[vidx];
+        const float release_sweep_root_y = batch->state.pos_y[vidx];
+        float source_release_last_pos_x = release_sweep_root_x;
+        float source_release_last_pos_y = release_sweep_root_y;
+        throw_release_source_colldata_last_pos(&source_release_last_pos_x,
+                                               &source_release_last_pos_y, batch, oidx);
+        // ftCo_800DDDE4 installs this sample-owner midpoint as the input endpoint for its immediate
+        // 471F8 call. It is not the endpoint of the later Damage map callback: the ft_081B wrapper
+        // starts that callback from the cur_pos published by this release-local collision pass.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-        // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
-        msl_ftcommon_unlock_ecb(batch, vidx);
-        release_floor_published = mpcoll_source_air_run_release_471f8(
-            batch, bi, victim_p, source_release_last_pos_x, source_release_last_pos_y);
-      }
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043670,mpCollPrev,mpColl_800471F8}
+        batch->state.coll_last_pos_x[vidx] = source_release_last_pos_x;
+        batch->state.coll_last_pos_y[vidx] = source_release_last_pos_y;
+        grab_attachment_apply_thrown_release_anchor_now(
+            batch, bi, victim_p, owner_p, rel_anim_frame, owner_pose_facing_before_throw_flags);
+        const uint8_t release_was_constrained = batch->state.grab_constraint_x2226_b2[vidx];
+        // DDDE4 unparents the victim and consumes x2226_b2 as part of the same release packet. The
+        // attachment helper samples the represented constrained world first; clearing afterward is
+        // the equivalent lifetime boundary in this non-JObj runtime.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+        batch->state.grab_constraint_x2226_b2[vidx] = 0u;
+        if (isfinite(release_sweep_root_x) && isfinite(release_sweep_root_y)) {
+          // Release floor-sweep root ownership:
+          // - ftCo_800DD724 samples the attached victim root before detach/damage entry.
+          // - The next frame's ft_80081DD4/mpColl sweep can still use that pre-release CollData.prev
+          //   root during active hitlag, matching the seed-visible floor_sweep_prev_pos lane.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpCheckFloor}
+          batch->state.floor_sweep_prev_pos_x[vidx] = release_sweep_root_x;
+          batch->state.floor_sweep_prev_pos_y[vidx] = release_sweep_root_y;
+          batch->state.floor_sweep_seed_prev_pos_x[vidx] = source_release_last_pos_x;
+          batch->state.floor_sweep_seed_prev_pos_y[vidx] = source_release_last_pos_y;
+          batch->state.floor_sweep_seed_prev_valid[vidx] = 1u;
+          batch->state.floor_sweep_prev_source_owned[vidx] = 1u;
+          batch->state.floor_sweep_prev_runtime_owned[vidx] = 1u;
+        }
 
-      // Detach immediately. If the throw hit is suppressed by hurt status, keep the victim in a
-      // normal airborne fallback; otherwise combat_apply_throw_hit() performs the source damage
-      // entry directly.
-      batch->state.attached_victim_port[oidx] = 0xFFu;
-      batch->state.grab_owner_port[vidx] = 0xFFu;
-      enter_fall_release(batch, vidx);
+        // Release-local mpColl publication:
+        // - ftCo_800DDDE4 writes CollData.last_pos from the selected sample owner's root + ECB
+        //   midpoint, writes CollData.cur_pos from the x1A70 release vector, then immediately calls
+        //   mpColl_800471F8 before ftCo_800DE7C0 applies release damage.
+        // - The same callback publication must happen in free-running rollout, not only as a
+        //   next-frame seed endpoint, otherwise the release hit integrates from the raw below-floor
+        //   x1A70 point and can falsely downbound on the following frame.
+        combat_apply_ftCommon_8007D5D4_ground_to_air(batch, vidx);
+        if (release_was_constrained) {
+          // Source has exactly one admission gate: live x2226_b2. Character/action identity does not
+          // decide which releases run collision. Clearing the constraint also unlocks the ECB before
+          // the complete 471F8 wall/ceiling/floor kernel runs.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+          // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
+          msl_ftcommon_unlock_ecb(batch, vidx);
+          (void)mpcoll_source_air_run_release_471f8(batch, bi, victim_p, source_release_last_pos_x,
+                                                    source_release_last_pos_y);
+          batch->state.grab_constraint_x2174_valid[vidx] = 0u;
+        }
 
-      MslThrowHitboxParams p = {0};
-      if (move_tables_throw_hitbox_params(owner_char, owner_act, rel_hit_idx, &p)) {
-        const uint8_t applied = combat_apply_throw_hit(batch, bi, owner_p, victim_p, &p);
-        if (applied && throw_flow_action_is_damage_family(batch->state.action_id[vidx])) {
-          throw_flow_commit_immediate_release_percent_temp(batch, vidx);
-          if (owner_p < victim_p) {
-            // The release happened during an earlier fighter's Anim callback. This simulator has
-            // already run the global timer/Anim pass for the frame, so replay the same narrow
-            // Damage callback work the victim would receive later in the native p1 GObj order.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
-            // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-            msl_anim_timebase_defer_tick_once(batch, vidx);
-            throw_flow_apply_post_release_damage_callback_phase(batch, vidx);
-          }
-          // The release-local 471F8 callback publishes CollData before the throw hit, but it does
-          // not run the newly entered DamageFly collision callback. The victim still receives its
-          // DamageFly Phys callback before Coll consumes this floor packet and enters DownBound.
-          // Let the normal source collision phase below own that transition; entering DownBound
-          // here makes Fighter_procUpdate decay the fresh throw KB as grounded.
+        // Detach immediately, then enter the throw-owned Damage state directly from the victim's
+        // current Thrown/Capture state. Source does not install an intermediate Fall motion:
+        // ftCo_800DDDE4 clears the links and ftCo_800DE7C0 immediately calls ftCo_8008DCE0.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
+        batch->state.attached_victim_port[oidx] = 0xFFu;
+        batch->state.grab_owner_port[vidx] = 0xFFu;
+
+        MslThrowHitboxParams p = {0};
+        if (fighter_script_throw_hitbox_params(batch, oidx, rel_hit_idx, &p)) {
+          // If this victim is later in GObj order, its ordinary priority-1 procedure now consumes
+          // the fresh Damage state naturally. An earlier victim has already completed that phase.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Phys,ftCo_DamageFly_Coll}
-          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-          (void)release_floor_published;
+          (void)combat_apply_throw_hit(batch, bi, owner_p, victim_p, &p);
         }
       }
-      break;
     }
   }
 
-  if (batch->state.throw_coll_x4[oidx] == 0u &&
-      move_tables_special_cmd_var_value_at_frame(owner_char, batch->state.animation_index[oidx], 0u,
-                                                 owner_af) != 0u) {
+  if (batch->state.throw_coll_x4[oidx] == 0u && fighter_script_cmd_var(batch, oidx, 0u) != 0u) {
     // DD724 consumes throw flags first, then cmd_vars[0] into x4 and freezes AObj playback.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
     batch->state.throw_coll_x4[oidx] = 1u;
+    fighter_script_clear_cmd_var(batch, oidx, 0u);
     batch->state.special_cmd0[oidx] = 0u;
     batch->state.frame_speed_mul_fp_q16_16[oidx] = 0;
     const uint8_t victim_p = batch->state.attached_victim_port[oidx];
@@ -573,150 +336,5 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
   if (owner_sm_u32 <= 0xFFFFu &&
       throw_anim_finished(owner_char, (uint16_t)owner_sm_u32, owner_af)) {
     enter_wait_or_fall_from_throw_end(batch, oidx);
-  }
-}
-
-void throw_flow_update_post_items(MslBatch* batch) {
-  if (batch == NULL) {
-    return;
-  }
-  const int num_players = (int)batch->config.num_players;
-
-  // Compatibility cleanup for legacy/teacher-forced pending release latches:
-  //
-  // Decomp scheduling evidence (GALE01):
-  // - Item GObj spawn registers multiple per-frame procs including prio 0 and prio 1.
-  //   refs/melee/src/melee/it/item.c::Item_8026862C (HSD_GObjProc_8038FD54(..., prio=0/1/...))
-  // - Fighter timer decrement is prio 0, and animation advancement is prio 1; motion-state callbacks
-  //   (Anim/Phys/Coll) are scheduled later under Fighter_procUpdate.
-  //   refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC (prio 0)
-  //   refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (prio 1)
-  //   refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  //
-  // Normal runtime release damage is applied in throw_flow_update_anim_callback_pre_input(), matching
-  // ftCo_800DD724's Throw Anim callback ownership. This pass remains only for one-step/reseed
-  // compatibility latches whose seed exposes a detached pending-release victim after item collision.
-  for (int bi = 0; bi < batch->batch_size; bi++) {
-    for (int owner_p = 0; owner_p < num_players; owner_p++) {
-      const size_t oidx = msl_idx_player(bi, owner_p);
-      if (batch->state.stocks[oidx] == 0) {
-        continue;
-      }
-
-      const uint8_t victim_p = batch->state.throw_pending_victim_port[oidx];
-      const uint8_t hit_idx = batch->state.throw_pending_hit_idx[oidx];
-      if (victim_p == 0xFFu || (int)victim_p >= num_players || (int)victim_p == owner_p) {
-        continue;
-      }
-      if (hit_idx == 0xFFu) {
-        continue;
-      }
-
-      const uint8_t owner_char = batch->state.char_id[oidx];
-      uint16_t throw_action = batch->state.action_id[oidx];
-      if (!msl_action_is_throw_owner(throw_action)) {
-        // Compatibility fallback for seeded pending-release lookup:
-        // - Why needed: in decomp, Throw Anim handles release/throw-script timing and can then exit
-        //   the throw state on the same frame (`ftCo_Throw*_Anim` does `ftCo_800DD724` then
-        //   `ftCommon_8007D92C` on anim end).
-        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_Throw{F,B,Hi,Lw}_Anim
-        // - Live runtime release damage has already run in the Throw Anim callback path. This branch
-        //   only recovers the throw action for compatibility pending latches imported from a seed
-        //   where the thrower has already exited Throw*.
-        //   refs/melee/src/melee/it/item.c::Item_8026862C
-        //   refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360,Fighter_procUpdate}
-        // - Safety/determinism: only recover from frame-start action_id when it is strictly one of
-        //   Throw{F,B,Hi,Lw}. If the thrower was interrupted/canceled into a non-throw state,
-        //   fallback is disabled and no throw-hit is applied.
-        const uint16_t prev_act = batch->state.prev_action_id[oidx];
-        if (!msl_action_is_throw_owner(prev_act)) {
-          continue;
-        }
-        throw_action = prev_act;
-      }
-
-      MslThrowHitboxParams p = {0};
-      if (!move_tables_throw_hitbox_params(owner_char, throw_action, hit_idx, &p)) {
-        continue;
-      }
-
-      const size_t vidx = msl_idx_player(bi, (int)victim_p);
-      if (batch->state.stocks[vidx] == 0) {
-        continue;
-      }
-
-      // If the victim transitioned out of the compatibility release placeholder earlier in the
-      // frame (e.g. item hit), do not apply the pending throw hit.
-      if (batch->state.action_id[vidx] != (uint16_t)MSL_ACT_FALL) {
-        continue;
-      }
-      const uint8_t applied = combat_apply_throw_hit(batch, bi, owner_p, (int)victim_p, &p);
-      if (!applied) {
-        // Invincible/intangible suppression: the victim stays in FALL (already detached).
-        // (No additional transition needed.)
-      } else {
-        // Throw-release post-damage callback phase:
-        // - ftCo_800DD724 consumes release/hit in the thrower's Anim callback.
-        // - If owner callback order precedes the victim and the victim enters Damage* this frame,
-        //   decomp still gives the victim its same-frame Damage callback work after entry.
-        // - Compatibility pending-release latches apply throw-hit in this post-item cleanup pass;
-        //   restore the equivalent post-release Damage callback phase here instead of keeping
-        //   ThrowHi-specific bridge logic.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_ThrowLw_Anim,ftCo_800DD724}
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_8008F744}
-        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-        const uint8_t run_post_release_damage_callback =
-            (owner_p < (int)victim_p &&
-             throw_flow_action_is_damage_family(batch->state.action_id[vidx]))
-                ? 1u
-                : 0u;
-        const uint8_t run_post_release_damage_phys =
-            throw_flow_action_is_damage_family(batch->state.action_id[vidx]) ? 1u : 0u;
-        if (run_post_release_damage_callback) {
-          msl_anim_timebase_defer_tick_once(batch, vidx);
-          throw_flow_apply_post_release_damage_callback_phase(batch, vidx);
-        }
-        throw_flow_bridge_integrate_deferred_throw_hit_position(batch, oidx, vidx,
-                                                                run_post_release_damage_phys);
-        if (throw_action == (uint16_t)MSL_ACT_THROW_LW &&
-            throw_flow_action_is_damage_family(batch->state.action_id[vidx])) {
-          knockdown_try_throw_release_damage_floor_contact(batch, (size_t)bi, vidx,
-                                                           (uint16_t)MSL_ACT_DAMAGE_FLY_TOP, 0u);
-        }
-        if (throw_action == (uint16_t)MSL_ACT_THROW_F) {
-          // ThrowF release-position ownership:
-          // - same-frame owner-anchor placement is already bridged at release consume time
-          //   (ftCo_800DE508-style world placement before detach).
-          // - Keep the older deferred extra-share term disabled here to avoid double-counting owner
-          //   motion on the same release frame.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
-        }
-      }
-    }
-  }
-}
-static inline void throw_flow_apply_post_release_damage_callback_phase(MslBatch* batch,
-                                                                       size_t victim_idx) {
-  if (batch == NULL) {
-    return;
-  }
-  // Shared post-release Damage callback phase:
-  // - Damage entry from throw release goes through ftCo_8008DCE0, which immediately advances the
-  //   new Damage* motion once via ftAnim_8006EBA4.
-  // - Under owner-before-victim callback order, the victim's Damage callback work (including the
-  //   hitstun decrement in ftCo_8008F744 when not in hitlag) still occurs later in the same
-  //   Fighter_8006A360 pass.
-  // - Compatibility pending-release cleanup can apply release damage after timers_update_post_anim();
-  //   restore only the callback-owned work that would have happened after entry on the same frame.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DE7C0,ftCo_800DDDE4}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-  if (batch->state.hitlag[victim_idx] != 0u) {
-    return;
-  }
-  const uint16_t hs = batch->state.hitstun[victim_idx];
-  if (hs > 0u) {
-    batch->state.hitstun[victim_idx] = (uint16_t)(hs - 1u);
   }
 }

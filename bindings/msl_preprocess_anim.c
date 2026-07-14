@@ -326,6 +326,8 @@ PyObject* msl_derive_frame_speed_mul_f32_py(PyObject* self, PyObject* args) {
     ACT_LANDING_AIR_LW = 0x004A,
     ACT_LANDING_FALL_SPECIAL = 0x002B,
     ACT_GUARD_SET_OFF = 0x00B5,
+    ACT_THROW_F = 0x00DB,
+    ACT_THROW_LW = 0x00E2,
   };
 
   float last = 1.0f;
@@ -342,7 +344,17 @@ PyObject* msl_derive_frame_speed_mul_f32_py(PyObject* self, PyObject* args) {
       }
       const float delta = (float)(age[i] - age[i - 1]);
       if (isfinite(delta) && delta >= 0.0f) {
-        last = delta;
+        if (actionp[i] >= ACT_THROW_F && actionp[i] <= ACT_THROW_LW && delta > 0.0f &&
+            last > 0.0f && fabsf(delta - last) <= 0.0001f) {
+          // Throw entry installs one victim-weight rate. Successive HSD AObj f32 additions expose
+          // slightly different replay deltas as the accumulated frame rounds, but source does
+          // not rewrite fp->frame_speed_mul on each tick. Preserve the entry value until an
+          // actual freeze/resume produces a materially different delta.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD724}
+          // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+        } else {
+          last = delta;
+        }
       }
       outp[i] = last;
       continue;
@@ -363,6 +375,15 @@ PyObject* msl_derive_frame_speed_mul_f32_py(PyObject* self, PyObject* args) {
     }
 
     const uint16_t a = actionp[i];
+    if (a >= ACT_THROW_F && a <= ACT_THROW_LW && isfinite(age[i]) && age[i] > 0.0f) {
+      // ftCo_800DD398 immediately advances the newly entered throw once. That first visible
+      // AObj frame is therefore the exact victim-weight source rate, without a future-row
+      // lookahead or a replay-fitted action constant.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD398,ftCo_800DD4B0}
+      last = age[i];
+      outp[i] = last;
+      continue;
+    }
     if (a == ACT_LANDING_FALL_SPECIAL && has_end_frame) {
       float lag = common_landing_fall_special_lag_frames;
       (void)msl_py_landing_fallspecial_lag_for_entry(i, cid, actionp, &fallspecial_origin_lag_table,

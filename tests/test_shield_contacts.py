@@ -16,9 +16,6 @@ X42_FIGHTER_INTERACTION = 1 << 0
 X42_ITEM_INTERACTION = 1 << 1
 X42_INTERACTION_VALID = 1 << 2
 
-DEBUG_SHIELD_ACCEPT = 0
-DEBUG_SHIELD_REJECT_HITBOX_DISABLED = 6
-
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
 
@@ -26,39 +23,6 @@ CHAR_FOX = 1
 STAGE_FD = 32
 
 TRIGGER_FULL = np.uint8(255)
-
-_DEBUG_SHIELD_CANDIDATE_DTYPE = np.dtype(
-    [
-        ("source_kind", "u1"),
-        ("attacker", "u1"),
-        ("defender", "u1"),
-        ("hitbox_id", "u1"),
-        ("reject_reason", "u1"),
-        ("attacker_hitlag_started_frame", "u1"),
-        ("defender_hitlag_started_frame", "u1"),
-        ("shield_active", "u1"),
-        ("hitbox_enabled", "u1"),
-        ("defender_on_ground", "u1"),
-        ("hitlist_allows", "u1"),
-        ("overlap_shield", "u1"),
-        ("element", "u1"),
-        ("hb_flags", "<u2"),
-        ("attacker_msid", "<u2"),
-        ("attacker_action_frame", "<i2"),
-        ("hitbox_damage", "<f4"),
-        ("hitbox_x", "<f4"),
-        ("hitbox_y", "<f4"),
-        ("hitbox_z", "<f4"),
-        ("hitbox_radius", "<f4"),
-        ("shield_x", "<f4"),
-        ("shield_y", "<f4"),
-        ("shield_z", "<f4"),
-        ("shield_radius", "<f4"),
-        ("shield_overlap_margin", "<f4"),
-    ],
-    align=False,
-)
-
 
 def _common_attr(name: str) -> float:
     import json
@@ -190,70 +154,16 @@ def test_debug_combat_contacts_classified_shield_overlap_reports_shield() -> Non
         msl_binding.destroy(handle)
 
 
-def test_debug_shield_candidate_decisions_reports_pair_and_hitbox_rejects() -> None:
-    import msl_binding
-
-    sizes = msl_binding.sizes()
-    seed_stride = int(sizes["seed"])
-    input_stride = int(sizes["input"])
-
-    handle = msl_binding.init(batch_size=1, num_players=2)
-    try:
-        seed = _seed_base()
-        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
-        msl_binding.reseed_seed(handle, seed_bytes)
-
-        neutral = _mk_input_bytes(1, input_stride)
-        msl_binding.step_input(handle, neutral, neutral)
-        raw0, count0 = msl_binding.debug_shield_candidate_decisions(handle, 0, 64)
-        rows0 = raw0.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[:count0]
-
-        pair01 = [
-            r
-            for r in rows0
-            if int(r["source_kind"]) == 1 and int(r["attacker"]) == 0 and int(r["defender"]) == 1
-        ]
-        assert pair01
-        # Reject at defender shield inactive gate.
-        assert int(pair01[0]["reject_reason"]) == 5
-
-        # Activate defender shield, force attacker hitboxes disabled, then expect hitbox-disabled
-        # reject reasons for attacker->defender hitbox candidates.
-        shield = _mk_input_bytes(1, input_stride)
-        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
-        msl_binding.step_input(handle, neutral, shield)
-        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
-        raw1, count1 = msl_binding.debug_shield_candidate_decisions(handle, 0, 64)
-        rows1 = raw1.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[:count1]
-        hb01 = [
-            r
-            for r in rows1
-            if int(r["source_kind"]) == 0 and int(r["attacker"]) == 0 and int(r["defender"]) == 1
-        ]
-        assert len(hb01) == 4
-        assert all(int(r["reject_reason"]) == 6 for r in hb01)
-    finally:
-        msl_binding.destroy(handle)
-
 
 @pytest.mark.parametrize(
-    ("interaction_flags", "expected_reason", "expect_shield_hit"),
+    ("interaction_flags", "expect_shield_hit"),
     [
-        (
-            X42_INTERACTION_VALID | X42_ITEM_INTERACTION,
-            DEBUG_SHIELD_REJECT_HITBOX_DISABLED,
-            False,
-        ),
-        (
-            X42_INTERACTION_VALID | X42_ITEM_INTERACTION | X42_FIGHTER_INTERACTION,
-            DEBUG_SHIELD_ACCEPT,
-            True,
-        ),
+        (X42_INTERACTION_VALID | X42_ITEM_INTERACTION, False),
+        (X42_INTERACTION_VALID | X42_ITEM_INTERACTION | X42_FIGHTER_INTERACTION, True),
     ],
 )
-def test_shield_x42_b5_diagnostic_matches_runtime_mutation(
-    interaction_flags: int, expected_reason: int, expect_shield_hit: bool
+def test_shield_x42_b5_controls_runtime_mutation(
+    interaction_flags: int, expect_shield_hit: bool
 ) -> None:
     import msl_binding
 
@@ -283,19 +193,6 @@ def test_shield_x42_b5_diagnostic_matches_runtime_mutation(
             handle, 0, 0, 0, int(HIT_GROUNDED | interaction_flags)
         )
 
-        raw, count = msl_binding.debug_shield_candidate_decisions(handle, 0, 64)
-        rows = raw.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[:count]
-        hitbox_rows = rows[
-            (rows["source_kind"] == 0)
-            & (rows["attacker"] == 0)
-            & (rows["defender"] == 1)
-            & (rows["hitbox_id"] == 0)
-        ]
-        assert len(hitbox_rows) == 1
-        assert int(hitbox_rows[0]["hitbox_enabled"]) == 1
-        assert int(hitbox_rows[0]["reject_reason"]) == expected_reason
-        assert int(hitbox_rows[0]["overlap_shield"]) == int(expect_shield_hit)
-
         before = _read_compare(handle).copy()
         msl_binding.debug_combat_resolve(handle)
         after = _read_compare(handle)
@@ -310,63 +207,5 @@ def test_shield_x42_b5_diagnostic_matches_runtime_mutation(
             assert int(after["hitlag"][0]) == int(before["hitlag"][0]) == 0
             assert int(after["hitlag"][1]) == int(before["hitlag"][1]) == 0
             assert int(after["action_id"][1]) == int(before["action_id"][1])
-    finally:
-        msl_binding.destroy(handle)
-
-
-def test_debug_shield_candidate_decisions_rejects_later_shield_after_earlier_body() -> None:
-    # Source ordering: ftColl_80078C70 checks shield then BODY for one HitCapsule before advancing
-    # to the next HitCapsule. Therefore a lower-index BODY contact rejects a later shield candidate.
-    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
-    import msl_binding
-
-    sizes = msl_binding.sizes()
-    seed_stride = int(sizes["seed"])
-    input_stride = int(sizes["input"])
-
-    handle = msl_binding.init(batch_size=1, num_players=2)
-    try:
-        seed = _seed_base()
-        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
-        msl_binding.reseed_seed(handle, seed_bytes)
-
-        neutral = _mk_input_bytes(1, input_stride)
-        shield = _mk_input_bytes(1, input_stride)
-        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
-        msl_binding.step_input(handle, neutral, shield)
-
-        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
-        shx, shy, shz, shr = (
-            float(bubbles[1, 0]),
-            float(bubbles[1, 1]),
-            float(bubbles[1, 2]),
-            float(bubbles[1, 3]),
-        )
-        assert shr > 0.0
-
-        body_x = shx + shr + 4.0
-        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
-        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, body_x - 0.25, shy, shz, body_x + 0.25, shy, shz, 0.5)
-
-        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
-        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, body_x, shy, shz, 1.0, 5.0, 1)
-        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
-        msl_binding.debug_set_hitbox_world(handle, 0, 0, 1, shx, shy, shz, 1.0, 5.0, 2)
-        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 1, int(HIT_GROUNDED))
-
-        raw, count = msl_binding.debug_shield_candidate_decisions(handle, 0, 64)
-        rows = raw.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[:count]
-        hb1 = [
-            r
-            for r in rows
-            if int(r["source_kind"]) == 0
-            and int(r["attacker"]) == 0
-            and int(r["defender"]) == 1
-            and int(r["hitbox_id"]) == 1
-        ]
-        assert len(hb1) == 1
-        assert int(hb1[0]["reject_reason"]) == 12
-        assert int(hb1[0]["overlap_shield"]) == 0
     finally:
         msl_binding.destroy(handle)

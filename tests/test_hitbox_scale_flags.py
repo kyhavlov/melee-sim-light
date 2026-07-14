@@ -10,18 +10,28 @@ import json
 
 from tools.eval.validation_dtypes import INPUT_DTYPE, SEED_DTYPE
 from tools.extraction.extract_fighter_hitboxes import FORMAT_VERSION as HITBOX_VERSION
+from tools.extraction.extract_fighter_script_timeline import (
+    EVENT_IDS,
+    SCRIPT_MAGIC,
+    SCRIPT_VERSION,
+    _encode_payload,
+)
 
 
-def _write_minimal_ssanim_v5(path: Path, *, msid: int, part_id: int, mtx34: list[float]) -> None:
+def _write_minimal_ssanim_v5(
+    path: Path, *, msid: int, part_id: int, mtx34: list[float], frame_count: int = 1
+) -> None:
     # Format matches src/anim_pose.c (SSANIM01 v5).
     path.parent.mkdir(parents=True, exist_ok=True)
     buf = bytearray()
     buf += b"SSANIM01"
     buf += struct.pack("<IHH", 5, 1, 1)  # ver=5, joint_count=1, anim_count=1
     buf += struct.pack("<B", int(part_id) & 0xFF)  # joint_parts[1]
-    buf += struct.pack("<HH", int(msid) & 0xFFFF, 1)  # anim header: msid, frame_count=1
-    buf += struct.pack("<12f", *[float(x) for x in mtx34])  # frame0/joint0 matrix
-    buf += struct.pack("<3f", 0.0, 0.0, 0.0)  # TransN tail (unused by anim_pose_get_matrix)
+    buf += struct.pack("<HH", int(msid) & 0xFFFF, frame_count)
+    for _ in range(frame_count):
+        buf += struct.pack("<12f", *[float(x) for x in mtx34])
+    for _ in range(frame_count):
+        buf += struct.pack("<3f", 0.0, 0.0, 0.0)
     path.write_bytes(bytes(buf))
 
 
@@ -66,6 +76,33 @@ def _write_minimal_mslhitb1(
     path.write_bytes(bytes(buf))
 
 
+def _write_minimal_mslftsc1(path: Path, *, msid: int, events: list[dict]) -> None:
+    """Write one causal fighter-script timeline for runtime tests."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    records = bytearray()
+    for event in events:
+        kind = str(event["kind"])
+        payload = _encode_payload(kind, dict(event.get("data", {})))
+        records += struct.pack(
+            "<HHBBHI",
+            int(event["frame"]) & 0xFFFF,
+            EVENT_IDS[kind],
+            int(event.get("timer_kind", 0)) & 0xFF,
+            0,
+            int(event.get("timer_value", 0)) & 0xFFFF,
+            len(payload),
+        )
+        records += payload
+
+    index_off = 28
+    event_off = index_off + 12
+    buf = bytearray(SCRIPT_MAGIC)
+    buf += struct.pack("<IIIII", SCRIPT_VERSION, 1, len(events), index_off, event_off)
+    buf += struct.pack("<HHiI", int(msid) & 0xFFFF, 0, 0, len(events))
+    buf += records
+    path.write_bytes(bytes(buf))
+
+
 def _populate_data_dir(dst_data_dir: Path, *, exclude: set[Path]) -> None:
     # Create a data/ overlay that shares everything via hardlinks (fast), except excluded paths.
     src_data_dir = Path("data").resolve()
@@ -90,7 +127,7 @@ def _populate_data_dir(dst_data_dir: Path, *, exclude: set[Path]) -> None:
 def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> None:
     # This is intentionally synthetic (no replay suite): we provide:
     # - identity-ish SSANIM pose matrices,
-    # - a minimal MSLHITB1 table with one hitbox that scales and one that ignores scale.
+    # - a minimal MSLFTSC1 timeline with one hitbox that scales and one that ignores scale.
     #
     # C-side note: anim_pose / hitboxes tables are global singletons loaded once per process from
     # MSL_DATA_DIR. We reset just those tables for this test so we can point MSL_DATA_DIR at a
@@ -100,8 +137,8 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
     exclude = {
         Path("anims/fox.bin"),
         Path("anims/falco.bin"),
-        Path("hitboxes/fox.bin"),
-        Path("hitboxes/falco.bin"),
+        Path("scripts/fox.bin"),
+        Path("scripts/falco.bin"),
     }
 
     model_scaling = np.float32(1.0)
@@ -115,43 +152,69 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
         with open(data_dir / "characters/fox.json", encoding="utf-8") as f:
             model_scaling = np.float32(json.load(f)["model_scaling"])
 
-        # Minimal identity pose for part_id=0 on msid=0, frame=0.
+        # Minimal identity pose for part_id=0 on msid=0.
         ident = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
-        _write_minimal_ssanim_v5(data_dir / "anims/fox.bin", msid=0, part_id=0, mtx34=ident)
-        _write_minimal_ssanim_v5(data_dir / "anims/falco.bin", msid=0, part_id=0, mtx34=ident)
+        _write_minimal_ssanim_v5(
+            data_dir / "anims/fox.bin", msid=0, part_id=0, frame_count=2, mtx34=ident
+        )
+        _write_minimal_ssanim_v5(
+            data_dir / "anims/falco.bin", msid=0, part_id=0, frame_count=2, mtx34=ident
+        )
 
-        # Two always-on hitboxes at frame 0:
-        # - hb0: scales with fighter_scale_y
-        # - hb1: ignores fighter_scale_y (u16_6 bit 13)
-        IGNORE_SCALE = 1 << 13
-        records = [
+        # Two persistent create commands at frame 0:
+        # - hb0 scales with fighter_scale_y;
+        # - hb1 opts out through the source script flag.
+        hitboxes = [
             {
-                "frame": 0,
-                "kind": 0,
                 "hitbox_id": 0,
-                "bone_part_id": 0,
-                "x": 1.5,
-                "y": 2.0,
-                "z": 3.0,
-                "radius": 4.0,
+                "bone": 0,
+                "hit_group": 0,
+                "element": 0,
+                "sfx_kind": 0,
+                "sfx_severity": 0,
+                "shield_damage": 0,
+                "rehit_frames": 0,
+                "angle": 45,
+                "kbg": 100,
+                "wsk": 0,
+                "bkb": 30,
                 "damage": 5.0,
-                "u16_6": 0,
+                "size": 4.0,
+                "x_offset": 1.5,
+                "y_offset": 2.0,
+                "z_offset": 3.0,
+                "hit_grounded": True,
+                "hit_aerial": True,
             },
             {
-                "frame": 0,
-                "kind": 0,
                 "hitbox_id": 1,
-                "bone_part_id": 0,
-                "x": 1.5,
-                "y": 2.0,
-                "z": 3.0,
-                "radius": 4.0,
+                "bone": 0,
+                "hit_group": 1,
+                "element": 0,
+                "sfx_kind": 0,
+                "sfx_severity": 0,
+                "shield_damage": 0,
+                "rehit_frames": 0,
+                "angle": 45,
+                "kbg": 100,
+                "wsk": 0,
+                "bkb": 30,
                 "damage": 5.0,
-                "u16_6": IGNORE_SCALE,
+                "size": 4.0,
+                "x_offset": 1.5,
+                "y_offset": 2.0,
+                "z_offset": 3.0,
+                "hit_grounded": True,
+                "hit_aerial": True,
+                "ignore_fighter_scale": True,
             },
         ]
-        _write_minimal_mslhitb1(data_dir / "hitboxes/fox.bin", msid=0, records=records)
-        _write_minimal_mslhitb1(data_dir / "hitboxes/falco.bin", msid=0, records=records)
+        events = [
+            {"frame": 0, "kind": "create_hitbox", "data": {"hitbox": hitbox}}
+            for hitbox in hitboxes
+        ]
+        _write_minimal_mslftsc1(data_dir / "scripts/fox.bin", msid=0, events=events)
+        _write_minimal_mslftsc1(data_dir / "scripts/falco.bin", msid=0, events=events)
 
         old_data_dir = os.environ.get("MSL_DATA_DIR")
         try:
@@ -168,7 +231,7 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
             seed["num_players"][0] = np.uint8(2)
             seed["stocks"][0, :2] = np.uint8(4)
             seed["char_id"][0, :2] = np.uint8(1)  # Fox
-            seed["action_id"][0, :2] = np.uint16(0xFFFF)
+            seed["action_id"][0, :2] = np.uint16(0x0041)  # ftCo_MS_AttackAirN
 
             seed["pos_x"][0, 0] = np.float32(100.0)
             seed["pos_y"][0, 0] = np.float32(-50.0)
@@ -181,8 +244,8 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
             seed["facing"][0, 0] = np.uint8(1)  # right => +X
             seed["facing"][0, 1] = np.uint8(0)  # left  => -X
 
-            seed["action_frame"][0, :2] = np.int16(0)
-            seed["anim_frame_f32"][0, :2] = np.float32(0.0)
+            seed["action_frame"][0, :2] = np.int16(1)
+            seed["anim_frame_f32"][0, :2] = np.float32(1.0)
             seed["animation_index"][0, :2] = np.uint32(0)
 
             # Freeze gameplay updates; we only care about refresh output.
@@ -195,7 +258,7 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
             try:
                 seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
                 msl_binding.reseed_seed(handle, seed_bytes)
-                msl_binding.step_input(handle, prev_inp, inp)
+                msl_binding.debug_step_input_pre_combat(handle, prev_inp, inp)
 
                 hb0, c0 = msl_binding.hitboxes_world(handle, 0, 0)
                 hb1, c1 = msl_binding.hitboxes_world(handle, 0, 1)
@@ -226,15 +289,16 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
     #
     # Facing applies decomp-shaped root rotY90, mixing X/Z.
     #
-    # With identity pose, local = (x,y,z) * (fighter_scale_y * model_scaling), then:
+    # The script stores offsets in fighter-command order (x,y,z); ftAction maps them to the
+    # HitCapsule local vector (z,y,x). With identity pose, that local vector is scaled, then:
     # - facing right:  (x,z) -> ( z, -x)
     # - facing left:   (x,z) -> (-z,  x)
-    assert np.isclose(p0[0, 0], np.float32(100.0 + model_scale * 3.0))  # +z -> +x
-    assert np.isclose(p1[0, 0], np.float32(100.0 - model_scale * 3.0))  # -z -> +x
+    assert np.isclose(p0[0, 0], np.float32(100.0 + model_scale * 1.5))  # +z -> +x
+    assert np.isclose(p1[0, 0], np.float32(100.0 - model_scale * 1.5))  # -z -> +x
     assert np.isclose(p0[0, 1], np.float32(-50.0 + model_scale * 2.0))
-    assert np.isclose(p0[0, 2], np.float32(0.25 - model_scale * 1.5))  # -x -> +z
+    assert np.isclose(p0[0, 2], np.float32(0.25 - model_scale * 3.0))  # -x -> +z
     assert np.isclose(p0[0, 3], np.float32(4.0 * 2.0))
 
     # hb1: center still scales (pose space), but radius ignores fighter_scale_y.
-    assert np.isclose(p0[1, 0], np.float32(100.0 + model_scale * 3.0))
+    assert np.isclose(p0[1, 0], np.float32(100.0 + model_scale * 1.5))
     assert np.isclose(p0[1, 3], np.float32(4.0))

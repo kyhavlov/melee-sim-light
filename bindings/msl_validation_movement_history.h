@@ -3,10 +3,7 @@
 
 #include "msl_py_common.h"
 
-PyObject* msl_derive_guard_setoff_post_hitlag_owner_py(PyObject* self, PyObject* args);
-PyObject* msl_derive_guard_setoff_exit_frame_speed_seed_lane_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_run_x0_py(PyObject* self, PyObject* args);
-PyObject* msl_derive_runbrake_cmd0_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_dash_x4_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_ecb_lock_state_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_ecb_lock_bottom_rel_y_py(PyObject* self, PyObject* args);

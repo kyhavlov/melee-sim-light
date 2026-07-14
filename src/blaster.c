@@ -14,12 +14,12 @@
 #include "common_params.h"
 #include "common_specials.h"
 #include "dash_iasa.h"
+#include "fighter_script.h"
 #include "input_axis.h"
+#include "items.h"
 #include "laser_params.h"
 #include "motion_state_owners.h"
-#include "move_tables.h"
 #include "special_msids.h"
-#include "throw_flow.h"
 
 static inline uint8_t char_owns_blaster_machine(uint8_t char_id) {
   // Data-driven machine admission: a character enters the SpecialN (blaster) machine iff
@@ -95,21 +95,13 @@ static inline void specialn_update_blaster_loop_request_iasa(MslBatch* batch, si
   if ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) == 0u) {
     return;
   }
-  const uint32_t msid_u32 = batch->state.animation_index[idx];
-  if (msid_u32 > 0xFFFFu) {
-    return;
-  }
-  const int af = (int)batch->state.action_frame[idx];
-  if (af < 0) {
-    return;
-  }
   // Decomp: ftFx_SpecialN{Start,Loop}_IASA and aerial counterparts set
   // `mv.fx.SpecialN.isBlasterLoop` when cmd_vars[0] is live and the current input edge contains B.
   // The latch persists until the next Loop Anim callback consumes it.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
   //   ftFx_SpecialNStart_IASA,ftFx_SpecialNLoop_IASA,
   //   ftFx_SpecialAirNStart_IASA,ftFx_SpecialAirNLoop_IASA}
-  if (move_tables_special_cmd0_active_at_frame(batch->state.char_id[idx], (uint16_t)msid_u32, af)) {
+  if (fighter_script_cmd_var(batch, idx, 0u) != 0u) {
     batch->state.specialn_blaster_loop_requested[idx] = 1u;
   }
 }
@@ -226,9 +218,6 @@ static inline uint8_t action_allows_special_entry_air(const MslBatch* batch, siz
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::DO_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_IASA
-  if (throw_flow_release_source_blocks_iasa(batch, idx, action_id)) {
-    return 0u;
-  }
   switch (action_id) {
     case MSL_ACT_JUMP_F:
     case MSL_ACT_JUMP_B:
@@ -457,6 +446,15 @@ static inline void enter_blaster_start(MslBatch* batch, size_t idx, const MslLas
   // ChangeMotionState.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialN_Enter,ftFx_SpecialAirN_Enter}
   msl_anim_timebase_defer_tick_once(batch, idx);
+
+  // Fighter_ChangeMotionState updates fp->x2088 before it_802AE8A8 copies that identity into the
+  // attached item. Create only after the complete motion-state entry bundle above. This callback
+  // runs at fighter proc priority 4, so the new item's priority-1 Anim proc begins next frame.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+  //   ftFx_SpecialN_Enter,ftFx_SpecialAirN_Enter}
+  // refs/melee/src/melee/it/it_2725.c::it_8027B070
+  // refs/melee/src/sysdolphin/baselib/gobj.c::HSD_GObj_80390CFC
+  items_blaster_gun_create_on_entry(batch, idx);
 
   // Decomp split:
   // - Grounded SpecialN enter clears gr_vel/self_vel.x/y/z.
@@ -867,25 +865,33 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
   }
 }
 
-void blaster_update_anim_callbacks_pre_input(MslBatch* batch) {
-  if (batch == NULL) {
+void blaster_update_anim_callback_pre_input_fighter(MslBatch* batch, int bi, int p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
+      p >= (int)batch->config.num_players) {
     return;
   }
   const MslCommonParams* c = msl_common_params();
   if (c == NULL) {
     return;
   }
+  const size_t idx = msl_idx_player(bi, p);
+  const uint8_t cid = batch->state.char_id[idx];
+  if (!char_owns_blaster_machine(cid)) {
+    return;
+  }
+  const MslCharParams* ch = msl_char_params_fast(cid);
+  const MslLaserParams* lp = laser_params_get(cid);
+  blaster_update_active_timeline_player(batch, c, ch, lp, idx, cid);
+}
+
+void blaster_update_anim_callbacks_pre_input(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      const uint8_t cid = batch->state.char_id[idx];
-      if (!char_owns_blaster_machine(cid)) {
-        continue;
-      }
-      const MslCharParams* ch = msl_char_params_fast(cid);
-      const MslLaserParams* lp = laser_params_get(cid);
-      blaster_update_active_timeline_player(batch, c, ch, lp, idx, cid);
+      blaster_update_anim_callback_pre_input_fighter(batch, bi, p);
     }
   }
 }

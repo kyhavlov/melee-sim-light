@@ -23,7 +23,6 @@
 #include "../src/item_article_params.h"
 #include "../src/items.h"
 #include "../src/ids.h"
-#include "../src/move_tables.h"
 #include "../src/motion_state_owners.h"
 #include "../src/mpcoll_bounding.h"
 #include "../src/mpcoll_end.h"

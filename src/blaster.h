@@ -7,6 +7,7 @@ struct MslCommonParams;
 // Fox/Falco neutral special (Blaster) minimal motion-state handler.
 // Decomp reference: refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c
 void blaster_update_anim_callbacks_pre_input(MslBatch* batch);
+void blaster_update_anim_callback_pre_input_fighter(MslBatch* batch, int bi, int p);
 void blaster_update_pre_physics(MslBatch* batch);
 
 // Grounded Wait_IASA B-special subset (Side/Up/Neutral), intentionally excluding reflector.

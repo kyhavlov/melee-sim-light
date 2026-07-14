@@ -68,9 +68,13 @@ This completion label means the old coordinator is gone and one source-shaped ru
 collision. It does not claim that all map-collision semantics or the MotionState/contact owners
 feeding and consuming CollData are already source-complete.
 
-The next program is the causal MotionState/contact execution chain: exact motion entry and
-Anim/IASA/Phys/Coll ownership, script/HitCapsule state, contact traversal, and ProcessHit. These are
-one connected source surface and should be split only at boundaries that can delete displaced code.
+Phase 2 restarts the causal MotionState/contact program as a sequence of complete vertical source
+cuts. Each cut must reach from its entry/producer boundary through callbacks, contact, and final
+state publication, then delete the displaced owner. A cut may remain temporarily validation-red
+while a source-clear dependency is incomplete; the worklog must make that dependency and the
+canonical metric movement explicit rather than either abandoning the foundation or hiding the
+regression. The first proposed vertical is common defense plus ShieldDesc/ReflectDesc contact. See
+[phase2/README.md](phase2/README.md).
 
 The decisions are recorded in
 [0001-first-target-map-collision.md](decisions/0001-first-target-map-collision.md) and
@@ -95,8 +99,9 @@ The decisions are recorded in
    and delete a complete owner slice rather than retain two gameplay implementations.
 6. **Validation is evidence, not the queue.** Broad regressions or mismatches inside a claimed
    source-complete owner demand investigation. Other replay-level reds identify connected owners
-   still to port; they do not become bespoke repair tasks. Never preserve old machinery or add a
-   replay-shaped compensation to satisfy a metric.
+   still to port; they do not become bespoke repair tasks. A temporary aggregate regression is a
+   reason to finish or expand a well-founded vertical, not to abandon it reflexively. Never
+   preserve old machinery or add a replay-shaped compensation to satisfy a metric.
 7. **Deletion is an outcome, not a quota.** LOC estimates rank opportunities. Source-complete code
    should not be distorted to hit a numeric deletion target.
 8. **Packets track source coverage, not work turns.** Packets may remain useful ledgers and
@@ -112,6 +117,7 @@ The decisions are recorded in
 - [candidates/map-collision.md](candidates/map-collision.md): recommended first vertical rewrite.
 - [candidates/contact-engine.md](candidates/contact-engine.md): recommended second vertical rewrite.
 - [decisions/0002-source-completion-first.md](decisions/0002-source-completion-first.md): branch-wide source-completion policy and terminology.
+- [phase2/README.md](phase2/README.md): Phase 2 restart charter, worklog, and first defense/contact vertical.
 - [ROADMAP.md](ROADMAP.md): implementation order, cutover protocol, and completion gates.
 - [callback-ledger.md](callback-ledger.md): the five map-collision packets and current cutover state.
 - [packets/01-common-grounded.md](packets/01-common-grounded.md): Packet 1 implementation and gates.

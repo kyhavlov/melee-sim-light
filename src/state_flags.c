@@ -11,16 +11,11 @@
 #include "batch_internal.h"
 #include "common_params.h"
 #include "char_params.h"
-#include "falcon_specials.h"
+#include "fighter_script.h"
 #include "guard_lifecycle.h"
 #include "marth_specials.h"
 #include "motion_state_owners.h"
-#include "move_tables.h"
 #include "stage_collision.h"
-
-static inline uint8_t state_flags_2218_allow_interrupt_attackair_action(uint16_t action_id) {
-  return msl_motion_state_common_class_has_fast(action_id, MSL_MS_CLASS_ATTACK_AIR);
-}
 
 static inline uint8_t state_flags_is_damage_action(uint16_t action_id) {
   switch (action_id) {
@@ -73,30 +68,6 @@ static inline uint8_t state_flags_221a_b5_capture_action(uint16_t action_id) {
   }
 }
 
-static inline uint8_t state_flags_2218_allow_interrupt_grounded_attack_action(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_ATTACK_11:
-    case MSL_ACT_ATTACK_DASH:
-    case MSL_ACT_ATTACK_S3_HI:
-    case MSL_ACT_ATTACK_S3_HI_S:
-    case MSL_ACT_ATTACK_S3_S:
-    case MSL_ACT_ATTACK_S3_LW_S:
-    case MSL_ACT_ATTACK_S3_LW:
-    case MSL_ACT_ATTACK_HI3:
-    case MSL_ACT_ATTACK_LW3:
-    case MSL_ACT_ATTACK_S4_HI:
-    case MSL_ACT_ATTACK_S4_HI_S:
-    case MSL_ACT_ATTACK_S4_S:
-    case MSL_ACT_ATTACK_S4_LW_S:
-    case MSL_ACT_ATTACK_S4_LW:
-    case MSL_ACT_ATTACK_HI4:
-    case MSL_ACT_ATTACK_LW4:
-      return 1u;
-    default:
-      return 0u;
-  }
-}
-
 static inline uint8_t state_flags_marth_counter_shielddesc_active(const MslBatch* batch, size_t idx,
                                                                   uint16_t action_id) {
   if (batch->state.char_id[idx] != (uint8_t)MSL_CHAR_ID_MARTH) {
@@ -115,11 +86,7 @@ static inline uint8_t state_flags_marth_counter_shielddesc_active(const MslBatch
   //     ftMs_SpecialLw_Anim,ftMs_SpecialAirLw_Anim}
   // - refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
   // - refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x221B -> state_flags[2])
-  const uint16_t msid = marth_special_submotion(action_id);
-  const float frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-  return move_tables_special_cmd_var_value_at_frame((uint8_t)MSL_CHAR_ID_MARTH, msid, 1u, frame)
-             ? 1u
-             : 0u;
+  return fighter_script_cmd_var(batch, idx, 1u) != 0u ? 1u : 0u;
 }
 
 static inline uint8_t state_flags_marth_counter_hit_action(const MslBatch* batch, size_t idx,
@@ -127,34 +94,6 @@ static inline uint8_t state_flags_marth_counter_hit_action(const MslBatch* batch
   return (uint8_t)(batch->state.char_id[idx] == (uint8_t)MSL_CHAR_ID_MARTH &&
                    (action_id == (uint16_t)MSL_ACT_MS_SPECIAL_LW_HIT ||
                     action_id == (uint16_t)MSL_ACT_MS_SPECIAL_AIR_LW_HIT));
-}
-
-static inline uint8_t state_flags_2218_attack12_allow_interrupt_action(uint16_t action_id) {
-  return (uint8_t)(action_id == (uint16_t)MSL_ACT_ATTACK_12);
-}
-
-static inline uint8_t state_flags_2218_falcon_special_allow_interrupt_action(uint8_t char_id,
-                                                                             uint16_t action_id) {
-  return (uint8_t)(char_id == (uint8_t)MSL_CHAR_ID_FALCON && falcon_action_is_special(action_id));
-}
-
-static inline uint8_t state_flags_action_allow_interrupt_at_frame(uint8_t char_id,
-                                                                  uint16_t action_id, float frame) {
-  if (state_flags_2218_allow_interrupt_attackair_action(action_id)) {
-    return move_tables_attackair_allow_interrupt(char_id, action_id, frame);
-  }
-  if (state_flags_2218_allow_interrupt_grounded_attack_action(action_id) ||
-      state_flags_2218_attack12_allow_interrupt_action(action_id)) {
-    return move_tables_grounded_attack_allow_interrupt(char_id, action_id, frame);
-  }
-  if (action_id == (uint16_t)MSL_ACT_ESCAPE_N || action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
-    return move_tables_escape_allow_interrupt(char_id, action_id, frame);
-  }
-  if (state_flags_2218_falcon_special_allow_interrupt_action(char_id, action_id)) {
-    return move_tables_special_allow_interrupt_at_frame(char_id,
-                                                        falcon_special_submotion(action_id), frame);
-  }
-  return 0u;
 }
 
 static inline uint8_t state_flags_2218_action_owns_reflecting(const MslBatch* batch, size_t idx,
@@ -189,22 +128,6 @@ static inline uint8_t state_flags_2218_action_owns_reflecting(const MslBatch* ba
     default:
       return 0u;
   }
-}
-
-static inline uint8_t state_flags_guard_setoff_hitlag_handoff_phase(const MslBatch* batch,
-                                                                    size_t idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  return batch->state.guard_setoff_hitlag_exit_phase_u8[idx];
-}
-
-static inline uint8_t state_flags_guard_setoff_post_hitlag_owner(const MslBatch* batch,
-                                                                 size_t idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  return batch->state.guard_setoff_post_hitlag_owner_u8[idx];
 }
 
 static inline uint8_t state_flags_221f_dead_start_action(uint16_t action_id) {
@@ -715,10 +638,8 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c (mv.co.guard.x14 = p_ftCommonData->x2A4)
   const MslCommonParams* c = msl_common_params();
   uint8_t guard_reflect_timer_x14_init = 0;
-  uint8_t guard_x10_init = 0;
   if (c != NULL) {
     guard_reflect_timer_x14_init = msl_guard_reflect_timer_x14_init(c);
-    guard_x10_init = msl_guard_x10_raw_init_u8(c);
   }
 
   const int num_players = (int)batch->config.num_players;
@@ -745,188 +666,14 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
       const uint16_t action_id = batch->state.action_id[idx];
       const uint16_t prev_action = batch->state.prev_action_id[idx];
 
-      // fp+0x2218 bit0 (mask 0x80): allow_interrupt.
-      // - Action command opcode handler `ftAction_80071950` sets fp->allow_interrupt = true.
-      // - Attack* entries clear fp->allow_interrupt = false, then IASA gates on this bit.
-      // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c
-      //
-      // Seed-bridge snapshot parity:
-      // - Slippi's post-frame byte can reflect the prior-frame allow_interrupt lane relative to our
-      //   one-step reseed snapshot ordering (Anim tick + callback side effects).
-      // - This probe is snapshot parity glue for evaluation; it is not live gameplay logic.
-      // TODO: replace this bridge with an explicit seed lane for fp+0x2218 bit0 (x2218_b0) once
-      // causal derivation/seeding is available.
+      // fp+0x2218 is real persistent Fighter state. Script opcodes and entry callbacks mutate this
+      // byte directly, so publication must not reconstruct it from action/frame history.
+      // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071950,ftAction_80071AE8,
+      //   ftAction_80071B28}
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
       const size_t flags_2218_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
       uint8_t f2218 = batch->state.state_flags[flags_2218_i];
-      const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-      float allow_interrupt_anim_probe = anim_frame_f32;
-      const uint32_t allow_interrupt_anim_u32 = batch->state.animation_index[idx];
-      const int16_t action_frame_i = batch->state.action_frame[idx];
-      // Restrict previous-frame probe to true no-submotion negative-lane snapshots.
-      // For normal in-motion rows, sample current anim frame so allow_interrupt windows are not
-      // shifted one frame late.
-      if (allow_interrupt_anim_u32 == 0xFFFFFFFFu && action_frame_i < 0 && anim_frame_f32 >= 1.0f) {
-        allow_interrupt_anim_probe = anim_frame_f32 - 1.0f;
-      }
-      uint8_t allow_interrupt_known = 0u;
-      uint8_t allow_interrupt = 0u;
-      if (state_flags_2218_allow_interrupt_attackair_action(action_id)) {
-        allow_interrupt_known = 1u;
-        allow_interrupt = move_tables_attackair_allow_interrupt(
-            batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
-      } else if (state_flags_2218_allow_interrupt_grounded_attack_action(action_id)) {
-        allow_interrupt_known = 1u;
-        allow_interrupt = move_tables_grounded_attack_allow_interrupt(
-            batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
-      } else if (state_flags_2218_attack12_allow_interrupt_action(action_id)) {
-        // Attack12 command ownership for fp+0x2218 bit0:
-        // - Attack12_Anim is script driven and Attack12_IASA can continue through the same
-        //   allow_interrupt lane as Attack11/S3/etc.
-        // - Keep this lane set-only until full Attack12 command-bit seeding is modeled; clearing
-        //   from a replay-seeded Attack12 snapshot loses unrelated x2218_b1/b2 history.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{
-        //   ftCo_Attack12_Anim,ftCo_Attack12_IASA,checkAttack13}
-        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
-        // data/moves/{fox,falco}.json moves["ftCo_SM_Attack12"]["events"]
-        if (move_tables_grounded_attack_allow_interrupt(batch->state.char_id[idx], action_id,
-                                                        allow_interrupt_anim_probe)) {
-          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
-        }
-      } else if (action_id == (uint16_t)MSL_ACT_ESCAPE_N ||
-                 action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
-        // EscapeN/EscapeAir `allow_interrupt` lane:
-        // - ftAction command script emits `allow_interrupt` (ftAction_80071950) during EscapeN and
-        //   EscapeAir.
-        // - Slippi state_flags[0] bit 0x80 mirrors fp->allow_interrupt (fp+0x2218 bit0).
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Anim
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Anim
-        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
-        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-        // data/moves/{fox,falco}.json moves["ftCo_SM_Escape{N,Air}"]["events"]
-        // Escape script timing is integer-framed in-suite; use action_frame to avoid float-timebase
-        // probe jitter on this lane.
-        //
-        // Keep this as a one-way command write (set-only). EscapeN can inherit a pre-existing
-        // allow_interrupt carry on entry snapshots; do not force-clear that carry when the script
-        // event is inactive.
-        if (move_tables_escape_allow_interrupt(batch->state.char_id[idx], action_id,
-                                               (float)batch->state.action_frame[idx])) {
-          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
-        }
-      } else if (state_flags_2218_falcon_special_allow_interrupt_action(batch->state.char_id[idx],
-                                                                        action_id)) {
-        // Falcon special scripts can set fp->allow_interrupt even when their IASA callback does
-        // not consume it. Falcon Punch is the motivating case: ftCa_SpecialN_IASA is empty, but
-        // its script emits allow_interrupt and Slippi publishes fp+0x2218_b0 post-frame.
-        // refs/melee/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c::{
-        //   ftCa_SpecialN_Anim,ftCa_SpecialN_IASA}
-        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
-        // data/moves/falcon.json specials_by_msid[301].events allow_interrupt
-        if (move_tables_special_allow_interrupt_at_frame(batch->state.char_id[idx],
-                                                         falcon_special_submotion(action_id),
-                                                         allow_interrupt_anim_probe)) {
-          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
-        }
-      }
-      if (allow_interrupt_known) {
-        if (allow_interrupt) {
-          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
-        } else {
-          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
-        }
-      }
-      const uint8_t capture_pulled_lw_b2_clear_owner =
-          (action_id == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW &&
-           (f2218 & (uint8_t)MSL_STATE_FLAG_2218_B2) != 0u)
-              ? 1u
-              : 0u;
-      if ((action_id == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI ||
-           capture_pulled_lw_b2_clear_owner != 0u) &&
-          (prev_action == (uint16_t)MSL_ACT_DASH ||
-           batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_DASH)) {
-        // Dash -> CapturePulled allow_interrupt clear:
-        // CapturePulledHi, and CapturePulledLw rows that already carry x2218_b2, carry command
-        // bits from the pulled source path while the destination does not own fp->allow_interrupt.
-        // Clear only x2218_b0 for that pulled-source owner. CapturePulledLw rows without x2218_b2
-        // can still carry source 0x80 from their interrupted motion/callback lane.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
-        //   ftCo_CapturePulledHi_Anim,ftCo_CapturePulledLw_Anim}
-        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
-        f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
-      }
       const uint16_t prev_action_2218 = batch->state.prev_action_id[idx];
-      if ((action_id == (uint16_t)MSL_ACT_LANDING || action_id == (uint16_t)MSL_ACT_FALL) &&
-          action_id != prev_action_2218 && batch->state.prev_action_frame[idx] >= 0 &&
-          state_flags_2218_allow_interrupt_attackair_action(prev_action_2218)) {
-        // AttackAir -> Landing/Fall command-bit carry:
-        // AttackAir's script may set fp+0x2218_b0 before the same fighter proc leaves AttackAir.
-        // The Coll callback can enter Landing, while AttackAir_Anim can enter Fall when animation
-        // frames run out. Neither destination synthesizes this raw bit; publish the source script
-        // result for the interrupted AttackAir frame instead of stale replay seed history.
-        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::{
-        //   ftCo_AttackAir_Anim,ftCo_AttackAir_Coll}
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
-        // data/scripts/{fox,falco,sheik}.bin AttackAir* events allow_interrupt
-        const float source_frame = (float)(batch->state.prev_action_frame[idx] + 1);
-        if (move_tables_attackair_allow_interrupt(batch->state.char_id[idx], prev_action_2218,
-                                                  source_frame)) {
-          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
-        } else {
-          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
-        }
-      }
-      // Jab command ownership (fp+0x2218 x2218_b1/x2218_b2):
-      // - ftAction_80071AE8 sets x2218_b1 from set_jab_combo script commands.
-      // - ftAction_80071B28 sets x2218_b2 from set_jab_rapid script commands.
-      // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071AE8,ftAction_80071B28}
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
-      // data/moves/{fox,falco}.json moves["ftCo_SM_Attack11"]["events"] set_jab_combo
-      // data/moves/{fox,falco}.json moves["ftCo_SM_Attack12"]["events"] set_jab_rapid
-      //
-      // Keep this lane narrow to Attack11/Attack12 where command windows are extracted.
-      if (action_id == (uint16_t)MSL_ACT_ATTACK_11 || action_id == (uint16_t)MSL_ACT_ATTACK_12) {
-        const uint8_t jab_combo_active = move_tables_jab_combo_active(
-            batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
-        const uint8_t jab_rapid_active = move_tables_jab_rapid_active(
-            batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
-        if (jab_combo_active) {
-          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_B1;
-        } else {
-          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B1;
-        }
-        if (jab_rapid_active) {
-          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_B2;
-        } else {
-          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B2;
-        }
-      } else if (action_id == (uint16_t)MSL_ACT_ATTACK_100_START &&
-                 (prev_action_2218 == (uint16_t)MSL_ACT_ATTACK_12 ||
-                  prev_action_2218 == (uint16_t)MSL_ACT_ATTACK_13) &&
-                 batch->state.prev_action_frame[idx] >= 0) {
-        // Attack12/Attack13 Anim can set x2218_b2 from the extracted set_jab_rapid command before
-        // IASA enters Attack100Start in the same fighter proc. Attack100Start itself does not
-        // author that command bit, so carry only the live source script result.
-        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071B28
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{
-        //   ftCo_Attack12_Anim,ftCo_Attack12_IASA,ftCo_Attack13_Anim,ftCo_Attack13_IASA}
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Start_IASA
-        // data/scripts/{fox,falco,sheik,falcon}.bin ftCo_SM_Attack{12,13} events set_jab_rapid
-        const float source_frame = (float)(batch->state.prev_action_frame[idx] + 1);
-        if (move_tables_jab_rapid_active(batch->state.char_id[idx], prev_action_2218,
-                                         source_frame)) {
-          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_B2;
-        }
-      }
       const uint8_t shine_start_kind =
           msl_motion_state_fx_special_kind(batch->state.char_id[idx], action_id);
       const uint8_t shine_start_platform_pass_reflecting =
@@ -986,80 +733,6 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
         f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
-      }
-      const uint8_t modeled_damage_entry_flag_owner =
-          (state_flags_is_damage_action(action_id) && action_id != prev_action &&
-           batch->state.prev_action_frame[idx] >= 0 &&
-           ((prev_action == (uint16_t)MSL_ACT_SQUAT && action_id == (uint16_t)MSL_ACT_DAMAGE_N_2) ||
-            (prev_action == (uint16_t)MSL_ACT_ATTACK_LW3 &&
-             action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N) ||
-            (prev_action == (uint16_t)MSL_ACT_ESCAPE_N &&
-             action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N)))
-              ? 1u
-              : 0u;
-      if (modeled_damage_entry_flag_owner) {
-        // ProcessHit/Damage entry does not synthesize allow_interrupt. For these bounded source
-        // owners, the post-frame fp+0x2218 bit0 mirrors the interrupted source action's
-        // command-script/source-state authority; otherwise stale seeded allow clears. Squat's
-        // source owner is not an action-script allow_interrupt event: when grounded Squat remains
-        // grounded through Fighter_ProcessHit -> ftCo_8008DCE0, Fighter_ChangeMotionState does not
-        // clear the live fp->allow_interrupt bit, so the destination DamageN2 row carries the
-        // frame-start byte. If the same Squat hit launches airborne, the stale seeded carry is not
-        // a grounded Damage entry owner and must clear.
-        // Broader Damage-entry flag inheritance needs hidden source phase that is not modeled for
-        // every DamageFly/DamageFall family yet.
-        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
-        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B62C
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-        const float source_frame = (float)(batch->state.prev_action_frame[idx] + 1);
-        const uint8_t grounded_squat_damage_entry_carries_source_allow =
-            (prev_action == (uint16_t)MSL_ACT_SQUAT && action_id == (uint16_t)MSL_ACT_DAMAGE_N_2 &&
-             batch->state.on_ground[idx] != 0u &&
-             (batch->state.state_flags_2218_frame_start[idx] &
-              (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) != 0u)
-                ? 1u
-                : 0u;
-        if (grounded_squat_damage_entry_carries_source_allow ||
-            state_flags_action_allow_interrupt_at_frame(batch->state.char_id[idx], prev_action,
-                                                        source_frame)) {
-          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
-        } else {
-          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
-        }
-      }
-      if (state_flags_is_damage_action(action_id) && action_id != prev_action &&
-          batch->state.prev_action_frame[idx] >= 0 &&
-          (prev_action == (uint16_t)MSL_ACT_ATTACK_11 ||
-           prev_action == (uint16_t)MSL_ACT_ATTACK_12)) {
-        // ProcessHit can interrupt Attack11/12 after the current source frame's command script has
-        // toggled x2218_b1. Damage entry itself does not clear that jab-combo bit, so the
-        // destination Damage* row carries the source script result rather than the stale seed byte.
-        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
-        // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{ftCo_Attack11_IASA,checkAttack12}
-        // data/moves/{fox,falco}.json moves["ftCo_SM_Attack11"]["events"] set_jab_combo
-        const float source_frame = (float)(batch->state.prev_action_frame[idx] + 1);
-        if (move_tables_jab_combo_active(batch->state.char_id[idx], prev_action, source_frame)) {
-          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_B1;
-        } else {
-          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B1;
-        }
-      }
-      if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N && prev_action == (uint16_t)MSL_ACT_WAIT &&
-          batch->state.prev_action_frame[idx] >= 0 &&
-          batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
-        // LandingFallSpecial -> Wait -> DamageFlyN x2218_b1 clear:
-        // the replay prefix can begin on the frame-0 Wait handoff from LandingFallSpecial. Wait has
-        // no set_jab_combo command source, and this landing-special handoff does not carry a live
-        // source owner for fp+0x2218_b1 into the destination DamageFlyN row. Do not apply this to
-        // continued Wait or Escape/Passive -> Wait prefixes: those aggregate controls keep the raw
-        // source byte.
-        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
-        // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_ProcessHit_8006D1EC}
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Anim
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-        f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B1;
       }
       batch->state.state_flags[flags_2218_i] = f2218;
 
@@ -1240,35 +913,8 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
       // refs/melee/src/melee/ft/types.h (fp+0x221C_u16_y : 3 at bits 7..9)
       const uint8_t seed_x221c_y_visible =
           (f221c & (uint8_t)MSL_STATE_FLAG_221C_IN_DAMAGE) != 0u ? 1u : 0u;
-      const uint32_t anim_u32 = batch->state.animation_index[idx];
-      if (anim_u32 <= 0xFFFFu) {
-        const uint16_t msid = (uint16_t)anim_u32;
-        const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-        const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
-        uint8_t y_flags = 0u;
-        uint16_t y_event_frame = 0u;
-        if (batch->state.action_frame[idx] == 0) {
-          // Fresh (frame-0) entries re-run the timeline from the start; drop any transition floor.
-          batch->state.x221c_y_event_floor[idx] = 0u;
-        }
-        if (move_tables_state_flags_221c_y_with_event_frame(batch->state.char_id[idx], msid, frame,
-                                                            &y_flags, &y_event_frame) != 0u) {
-          const uint16_t floor_f = batch->state.x221c_y_event_floor[idx];
-          if (floor_f != 0u && y_event_frame < floor_f) {
-            // The level's source event predates a frame-preserving transition that cleared
-            // fp->x221C_u16_y (no Ft_MF_Unk24); stay cleared until the next crossing.
-            // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
-            f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IN_DAMAGE;
-          } else if (y_flags & 0x4u) {
-            f221c |= (uint8_t)MSL_STATE_FLAG_221C_IN_DAMAGE;
-          } else {
-            f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IN_DAMAGE;
-          }
-        } else {
-          // No opcode-52 timeline for this (char, msid): keep x221C_u16_y visible bit cleared to
-          // avoid stale seeded carryover into states that do not script-drive this lane.
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IN_DAMAGE;
-        }
+      if ((batch->state.script_state_flags_221c_y[idx] & 0x4u) != 0u) {
+        f221c |= (uint8_t)MSL_STATE_FLAG_221C_IN_DAMAGE;
       } else {
         f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IN_DAMAGE;
       }
@@ -1399,188 +1045,6 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           }
         }
 
-        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-            batch->state.action_frame[idx] == 0 && batch->state.hitlag[idx] > 0u &&
-            batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            batch->state.guard_reflect_timer_x18[idx] > 0u &&
-            f221c == (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
-          // GuardReflect -> GuardSetOff active-timer handoff:
-          // - the destination GuardSetOff row still observes hitlag, so the powershield-active x18
-          //   lane can remain visible,
-          // - but ftCo_80093BC0 ties x221C_b1 to x14, and once the reflect-window timer has
-          //   expired on the destination row, that bit no longer has a live owner.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
-        }
-        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
-            state_flags_guard_setoff_hitlag_handoff_phase(batch, idx) == 3u &&
-            state_flags_guard_setoff_post_hitlag_owner(batch, idx) == 2u &&
-            batch->state.prev_action_frame[idx] > 0 &&
-            batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            (f221c & (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) ==
-                (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
-          // GuardSetOff stale reflect-window carry on the first steady post-hitlag row:
-          // - the current seeded GuardSetOff snapshot has already advanced off the frozen af0 lane,
-          // - GuardSetOff_Anim/ftCo_80093BC0 owns the steady row, and
-          // - once x14 is expired, ftCo_80093BC0 no longer owns x221C_b1 while x221C_b2 can
-          //   persist independently under its x18 lifetime.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
-        }
-        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-            batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u &&
-            batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            batch->state.guard_reflect_timer_x18[idx] > 0u &&
-            f221c == (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
-          // GuardSetOff hitlag-exit active-timer split:
-          // - Fighter_8006A1BC decrements hitlag before Fighter_8006A360 runs GuardSetOff_Anim.
-          // - GuardSetOff_Anim calls ftCo_80093BC0; that helper decrements/clears x221C_b1 from
-          //   mv.co.guard.x14 independently from the longer x18/x221C_b2 powershield-active lane.
-          // - Therefore a hitlag-exit GuardSetOff row can publish only x221C_b2 while x18 remains
-          //   live.
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
-        }
-        const uint8_t guardsetoff_first_steady_x10_phase =
-            (batch->state.guard_x10[idx] == 7u ||
-             (batch->state.guard_x10[idx] == 8u && batch->state.hitlag_pre_timer[idx] == 0u))
-                ? 1u
-                : 0u;
-        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
-            batch->state.prev_action_frame[idx] == 0 &&
-            batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            batch->state.guard_reflect_timer_x18[idx] == 0u && guardsetoff_first_steady_x10_phase &&
-            f221c == (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
-          // GuardSetOff first-steady reflect-window expiry:
-          // - after prio-0 hitlag decrement, GuardSetOff_Anim / ftCo_80093BC0 owns the first steady
-          //   post-hitlag row,
-          // - the reflect-window bit x221C_b1 is tied to the x14 lane and should be gone once that
-          //   timer has expired,
-          // - keep this restricted to rows where the separate powershield-active x18 lane is also
-          //   expired, so the destination no longer owns either GuardReflect timer,
-          // - and where mv.co.guard.x10 is on the first steady countdown tick after entry. The
-          //   canonical gx10==7 lane may be reached on the last hitlag-decrement row; the rollout
-          //   gx10==8 variant must have started outside hitlag because last frozen gx10==8 rows
-          //   retain x221C_b1 until the next steady callback tick.
-          // - so on the first steady GuardSetOff row, clear the stale x221C_b1 carry whenever the
-          //   destination still exposes both bits after both timer owners have ended.
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
-          // data/common/ft_common_data.json: guard_x10_init_frames
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
-        }
-        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-            prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
-            batch->state.prev_action_frame[idx] > 0 && batch->state.action_frame[idx] > 0 &&
-            batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
-            (uint16_t)batch->state.guard_x10[idx] + 1u < (uint16_t)guard_x10_init &&
-            f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
-          // GuardSetOff steady powershield-active expiry:
-          // - ftCo_80092F2C seeds mv.co.guard.x10 from ftCommonData on GuardSetOff entry,
-          // - after the initial af0 carry snapshot has already self-looped back into GuardSetOff,
-          //   the next steady callback pass carries a positive prev_action_frame into
-          //   ftCo_GuardSetOff_Anim / ftCo_80093BC0 ownership, and
-          // - when both GuardReflect timers are already expired, x221C_b2 no longer has a live
-          //   owner on that in-place GuardSetOff steady row and should not persist from the seeded
-          //   carry row.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-          //   ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800925A4}
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-          // data/common/ft_common_data.json: guard_x10_init_frames
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
-        }
-        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-            prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
-            batch->state.prev_action_frame[idx] > 0 && batch->state.action_frame[idx] > 0 &&
-            state_flags_guard_setoff_hitlag_handoff_phase(batch, idx) == 0u &&
-            state_flags_guard_setoff_post_hitlag_owner(batch, idx) == 0u &&
-            batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
-            (uint16_t)batch->state.guard_x10[idx] + 1u == (uint16_t)guard_x10_init &&
-            f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
-          // GuardSetOff second-steady powershield-active expiry at the init-1 countdown:
-          // - the first non-hitlag row after shield-hit can still expose x221C_b2 through the
-          //   explicit post-hitlag owner lane,
-          // - once that owner is gone, the in-place GuardSetOff self-loop is owned by
-          //   GuardSetOff_Anim / ftCo_80093BC0, and expired x18 means no live x221C_b2 source
-          //   remains even if mv.co.guard.x10 has not yet decremented below init-1.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-          //   ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_80092F2C}
-          // data/common/ft_common_data.json: guard_x10_init_frames
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
-        }
-        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-            (prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF ||
-             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF) &&
-            (batch->state.prev_action_frame[idx] > 0 ||
-             batch->state.seed_prev_action_frame[idx] > 0) &&
-            batch->state.action_frame[idx] <= 0 &&
-            batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
-            ((uint16_t)batch->state.guard_x10[idx] + 1u == (uint16_t)guard_x10_init ||
-             batch->state.guard_x10[idx] == guard_x10_init) &&
-            f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
-          // GuardSetOff carry-snapshot powershield-active expiry:
-          // - the prior steady GuardSetOff callback pass has already advanced (prev_action_frame>0),
-          // - the destination snapshot has re-entered a carry/entry tick with nonpositive
-          //   action_frame (`guard_x10 == guard_x10_init_frames - 1`, or a fresh GuardSetOff entry
-          //   reset back to init), and
-          // - once both GuardReflect timers are already expired, x221C_b2 no longer has a live
-          //   owner on that in-place GuardSetOff carry snapshot.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-          //   ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800925A4}
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360,Fighter_ChangeMotionState}
-          // data/common/ft_common_data.json: guard_x10_init_frames
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
-        }
-        if (action_id == (uint16_t)MSL_ACT_GUARD &&
-            prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-            batch->state.prev_action_frame[idx] > 0 && batch->state.action_frame[idx] <= 0 &&
-            batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
-            (uint16_t)batch->state.guard_x10[idx] + 2u == (uint16_t)guard_x10_init &&
-            f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
-          // GuardSetOff -> Guard destination carry-snapshot expiry:
-          // - ftCo_GuardSetOff_Anim first calls ftCo_80093BC0, then enters Guard through
-          //   ftCo_800928CC when GuardDamage has ended.
-          // - The destination Guard row can still expose the no-submotion carry snapshot, but once
-          //   the GuardSetOff countdown had already advanced past the init tick before transition
-          //   and both GuardReflect timers are expired, x221C_b2 has no live owner on that
-          //   destination snapshot.
-          // - The init-tick transition remains a valid carry lane; do not apply the in-place
-          //   GuardSetOff first-steady clear after the state has already changed to Guard.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-          //   ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800928CC}
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ChangeMotionState}
-          // data/common/ft_common_data.json: guard_x10_init_frames
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
-        }
-        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
-            state_flags_guard_setoff_hitlag_handoff_phase(batch, idx) == 2u &&
-            state_flags_guard_setoff_post_hitlag_owner(batch, idx) == 2u &&
-            batch->state.prev_action_frame[idx] == 0 &&
-            batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            batch->state.guard_reflect_timer_x18[idx] == 0u &&
-            batch->state.lightshield_amount[idx] >= 0.999f &&
-            batch->state.guard_setoff_hitlag_damage_min[idx] == 1u &&
-            batch->state.guard_x10[idx] == 5u && f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
-          // GuardSetOff first-steady powershield-active expiry:
-          // - after prio-0 hitlag decrement, GuardSetOff_Anim / ftCo_80093BC0 owns the first steady
-          //   row,
-          // - x221C_b2 persists only while the powershield-active x18 lane is live, and
-          // - on the narrow full-lightshield, low-damage GuardSetOff rows where x18 is already
-          //   expired and guard.x10 has advanced to the 5-frame steady window, clear the stale
-          //   seeded x221C_b2 carry.
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
-        }
         if (state_flags_is_damage_action(action_id) && action_id != prev_action &&
             batch->state.action_frame[idx] == 1 && batch->state.hitlag[idx] > 0u &&
             batch->state.hitstun[idx] > 0u &&

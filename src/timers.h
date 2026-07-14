@@ -15,6 +15,7 @@ void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch);
 // - Combo timer tick + victim clear (ftColl_800764DC)
 // - Hitstun decrement + end effects (ftCo_8008F744 family)
 void timers_update_post_anim(MslBatch* batch);
+void timers_update_post_anim_fighter(MslBatch* batch, int bi, int p);
 
 // Consume decomp-shaped damage hitlag callbacks that depend on current-frame inputs.
 // Current modeled subset:

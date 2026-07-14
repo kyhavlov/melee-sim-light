@@ -9,6 +9,7 @@
 #include "combat_internal.h"
 #include "ftcommon_ecb.h"
 #include "falcon_specials.h"
+#include "grab_attachment.h"
 #include "input_axis.h"
 #include "knockdown.h"
 #include "match_flow.h"
@@ -449,6 +450,19 @@ static void run_handler_transition(MslBatch* batch, int bi, int p, uint8_t insta
 // refs/melee/src/melee/ft/chara/{ftCaptain,ftMars,ftFox,ftSeak,ftZelda}::*_Coll
 static uint8_t run_special_floor_loss_transition(MslBatch* batch, size_t idx,
                                                  uint16_t source_action) {
+  if (msl_action_capture_high_from_low(source_action) != 0u) {
+    const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+    const int p = (int)(idx % (size_t)MSL_MAX_PLAYERS);
+    const uint8_t owner = batch->state.grab_owner_port[idx];
+    if (owner != 0xFFu && owner < batch->config.num_players && owner != (uint8_t)p) {
+      // CapturePulled/Wait/Damage Lw all use the constrained 4B108 wrapper, then enter the paired
+      // Hi state and republish fn_800DAA40's live anchor when the floor is lost.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+      //   ftCo_CapturePulledLw_Coll,fn_800DB230_inline,ftCo_CaptureWaitLw_Coll,
+      //   fn_800DBED4_inline,ftCo_CaptureDamageLw_Coll,fn_800DC624_inline}
+      return grab_attachment_capture_low_to_high_now(batch, bi, p, (int)owner);
+    }
+  }
   const uint8_t fx_kind =
       msl_motion_state_fx_special_kind(batch->state.char_id[idx], source_action);
   if (fx_kind == (uint8_t)MSL_FX_KIND_SPECIAL_HI_HOLD ||
@@ -975,6 +989,44 @@ static void source_ground_callback(MslBatch* batch, int bi, int p, uint8_t handl
   knockdown_update_post_collision_one(batch, bi, p);
 }
 
+uint8_t mpcoll_source_ground_run_installed_callback(MslBatch* batch, int bi, int p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
+      p >= (int)batch->config.num_players) {
+    return 0u;
+  }
+  const size_t idx = msl_idx_player(bi, p);
+  const uint8_t handler = batch->state.live_coll_handler_kind[idx];
+  const uint8_t selector = batch->state.live_coll_wrapper_selector_kind[idx];
+  const uint8_t fx_kind =
+      msl_motion_state_fx_special_kind(batch->state.char_id[idx], batch->state.action_id[idx]);
+  const uint8_t ground_shine_callback =
+      (uint8_t)(fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_LW_START &&
+                fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_LW_TURN);
+  if (!selector_has_ground_wrapper(selector) && !msl_coll_handler_is_source_ground(handler) &&
+      !msl_coll_handler_is_landing(handler) && !ground_shine_callback) {
+    return 0u;
+  }
+  if (selector_resolves_ground_from_live_ga(selector) && batch->state.on_ground[idx] == 0u) {
+    // These installed callbacks choose their low-level wrapper from live ground_or_air. Let the
+    // air kernel consume the same callback instead of claiming it here.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowF_Coll,
+    //   ftCo_ThrowB_Coll,ftCo_ThrowHi_Coll,ftCo_ThrowLw_Coll}
+    return 0u;
+  }
+  if (selector == (uint8_t)MSL_COLL_SELECTOR_GROUND_B108_CONSTRAINED &&
+      batch->state.grab_constraint_x2226_b2[idx] != 0u) {
+    // CapturePulled/Wait/Damage Lw suppress their installed 4B108 callback while constrained.
+    // data/motion_state/owners/*.bin::MSLMSO01 coll_source_plan
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    //   ftCo_CapturePulledLw_Coll,ftCo_CaptureWaitLw_Coll,ftCo_CaptureDamageLw_Coll}
+    return 0u;
+  }
+  batch->state.live_coll_callback_ran[idx] = 1u;
+  source_ground_callback(batch, bi, p, handler);
+  return 1u;
+}
+
 void mpcoll_source_ground_apply(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -984,45 +1036,7 @@ void mpcoll_source_ground_apply(MslBatch* batch) {
     for (int p = 0; p < players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       batch->state.live_coll_callback_ran[idx] = 0u;
-      const uint8_t handler = batch->state.live_coll_handler_kind[idx];
-      const uint8_t selector = batch->state.live_coll_wrapper_selector_kind[idx];
-      const uint8_t fx_kind =
-          msl_motion_state_fx_special_kind(batch->state.char_id[idx], batch->state.action_id[idx]);
-      const uint8_t ground_shine_callback =
-          (uint8_t)(fx_kind >= (uint8_t)MSL_FX_KIND_SPECIAL_LW_START &&
-                    fx_kind <= (uint8_t)MSL_FX_KIND_SPECIAL_LW_TURN);
-      if (!selector_has_ground_wrapper(selector) && !msl_coll_handler_is_source_ground(handler) &&
-          !msl_coll_handler_is_landing(handler) && !ground_shine_callback) {
-        continue;
-      }
-      if (selector_resolves_ground_from_live_ga(selector) && batch->state.on_ground[idx] == 0u) {
-        // These installed callbacks choose their low-level wrapper from live ground_or_air. Let
-        // the air kernel consume the same callback instead of running a ground wrapper first and
-        // setting live_coll_callback_ran.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowF_Coll,
-        //   ftCo_ThrowB_Coll,ftCo_ThrowHi_Coll,ftCo_ThrowLw_Coll}
-        continue;
-      }
-      // Ground Shine MotionStates retain their installed B108 callback even when the public GA
-      // lane is already air. That callback owns the floor/root publication before the generated
-      // ground-to-air kind remap below.
-      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::*_GroundToAir
-      // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
-      if ((selector == (uint8_t)MSL_COLL_SELECTOR_GROUND_B108_CONSTRAINED) &&
-          batch->state.grab_constraint_x2226_b2[idx] != 0u) {
-        // CapturePulledLw/WaitLw suppress their installed 4B108 callback while constrained.
-        // data/motion_state/owners/*.bin::MSLMSO01 coll_source_plan
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
-        //   ftCo_CapturePulledLw_Coll,ftCo_CaptureWaitLw_Coll}
-        continue;
-      }
-      // The installed Coll callback runs regardless of the public ground_or_air snapshot. Downed
-      // callbacks in particular retain and consume CollData.floor after publishing GA_Air.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
-      batch->state.live_coll_callback_ran[idx] = 1u;
-      source_ground_callback(batch, bi, p, handler);
+      (void)mpcoll_source_ground_run_installed_callback(batch, bi, p);
     }
   }
 }

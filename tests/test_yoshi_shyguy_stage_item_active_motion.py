@@ -197,8 +197,6 @@ def _empty_seed() -> np.ndarray:
     seed["facing_dir1"][0, :] = np.int8(1)
     seed["fighter_scale_y"][0, :] = np.float32(1.0)
     seed["item_reflect_damage_mul"][0, :] = np.float32(1.0)
-    seed["item_reflect_transfer_port"][0, :] = np.uint8(0xFF)
-    seed["item_hidden_body_hit_victim_port"][0, :] = np.uint8(0xFF)
     seed["items"][0, :]["owner"] = np.int8(-1)
     seed["stage_yoshi_shyguy_valid_u8"] = np.uint8(1)
     seed["stage_yoshi_shyguy_timer_u16"] = np.uint16(120)
@@ -962,7 +960,7 @@ def test_yoshi_shyguy_rollout_clock_stays_seed_owned_when_heiho_live_cnm_2162() 
     out, ref = _run_rollout_to_record(dataset_path, start_record=2162, target_record=2162)
 
     assert int(out["frame_pre_random_seed"]) == seed_rng
-    assert int(out["frame_pre_random_seed"]) != int(ref["frame_pre_random_seed"])
+    assert int(out["frame_pre_random_seed"]) == int(ref["frame_pre_random_seed"])
     assert int(out["items"][0]["exists"]) == 1
     assert int(out["items"][0]["type"]) == ITEM_KIND_HEIHO
 

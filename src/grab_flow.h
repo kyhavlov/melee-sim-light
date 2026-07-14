@@ -3,12 +3,15 @@
 #include "batch_internal.h"
 #include "common_params.h"
 
-// Decomp-shaped grab/capture flow glue (owner/victim motion-state synchronization).
-// Called once per frame before physics.
-void grab_flow_update_pre_physics(MslBatch* batch);
+// Run one live fighter's grab/capture IASA callback in priority-3 fighter-list order.
+void grab_flow_update_iasa(MslBatch* batch, int batch_index, int player);
 
-// Decomp-shaped grab/capture Anim-callback ownership before current-frame input.
-void grab_flow_update_anim_callbacks_pre_input(MslBatch* batch);
+// Run one live fighter's grab/capture Anim callback in priority-1 fighter-list order.
+void grab_flow_update_anim_callback_pre_input(MslBatch* batch, int batch_index, int player);
+
+// Accepted attached BODY damage enters/restarts CaptureDamage from Fighter_ProcessHit, not from
+// HitCapsule creation. Returns 1 when the live capture motion was replaced.
+uint8_t grab_flow_on_attached_body_damage(MslBatch* batch, size_t victim_idx);
 
 // Refresh the explicit ftCommon_8007E2D0/ftCommon_8007E2F4 catch descriptor lanes from generated
 // MotionState owner classes. Called after action transitions and before catch collision selection.

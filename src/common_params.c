@@ -511,6 +511,14 @@ int common_params_init(void) {
       json_get_f32(buf, "kb_min", &g_params.kb_min) != 0 ||
       json_get_f32(buf, "kb_squat_mul", &g_params.kb_squat_mul) != 0 ||
       json_get_f32(buf, "ftcoll_damage_mul_x128", &g_params.ftcoll_damage_mul_x128) != 0 ||
+      json_get_f32(buf, "damage_effect_async_kb_threshold",
+                   &g_params.damage_effect_async_kb_threshold) != 0 ||
+      json_get_i32(buf, "damage_effect_randi_range_kind0",
+                   &g_params.damage_effect_randi_range_kind0) != 0 ||
+      json_get_i32(buf, "damage_effect_randi_range_kind1",
+                   &g_params.damage_effect_randi_range_kind1) != 0 ||
+      json_get_u8(buf, "damage_effect_kind0_spawn_rng_steps",
+                  &g_params.damage_effect_kind0_spawn_rng_steps) != 0 ||
       json_get_f32(buf, "kb_ice_mul", &g_params.kb_ice_mul) != 0 ||
       json_get_f32(buf, "kb_smashcharge_mul", &g_params.kb_smashcharge_mul) != 0 ||
       json_get_i32(buf, "ftcoll_percent_base_x6d4", &g_params.ftcoll_percent_base_x6d4) != 0 ||
@@ -574,6 +582,8 @@ int common_params_init(void) {
       json_get_u16(buf, "combo_timer_post_hitstun_frames",
                    &g_params.combo_timer_post_hitstun_frames) != 0 ||
       json_get_u16(buf, "combo_push_timer_frames", &g_params.combo_push_timer_frames) != 0 ||
+      json_get_u16(buf, "damage_source_clear_frames_x814",
+                   &g_params.damage_source_clear_frames_x814) != 0 ||
       json_get_f32(buf, "combo_push_low_speed", &g_params.combo_push_low_speed) != 0 ||
       json_get_f32(buf, "combo_push_high_speed", &g_params.combo_push_high_speed) != 0 ||
       json_get_f32(buf, "down_wait_frames", &g_params.down_wait_frames) != 0 ||

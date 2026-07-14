@@ -9,7 +9,6 @@
 // - does not change gameplay state (percent/hitlag/hitstun/actions/etc.)
 void shields_refresh(MslBatch* batch);
 
-// Narrow pre-combat owner for no-submotion angled Guard BODY collision.
-// Updates only the live Guard tilt state and shield bubble for rows that need the
-// ftCo_Guard_Anim -> ftCo_80091E78 pose before BODY hurtcaps sample.
-void shields_refresh_guard_tilt_body_owner(MslBatch* batch);
+// ftCo_80091BC4 owner: advance mv.co.guard.{x8,x4} from the callback-visible (pre-input)
+// controller snapshot. Geometry refresh consumes this state but never advances it.
+void shields_guard_anim_update_tilt(MslBatch* batch, size_t idx);

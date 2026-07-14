@@ -42,6 +42,8 @@ def test_rebirth_wait_terminal_wait1_does_not_build_collision_capsules() -> None
     # Rebirth/RebirthWait set fp->x2219_b1. Vanilla skips common fighter collision while that bit
     # is live, and item-vs-fighter collision rejects x2219_b1 targets. The sim should preserve the
     # visible RebirthWait state without sampling BODY/catch capsules at terminal Wait1 frames.
+    # ftCo_8008A7A8 restarts the finished wait submotion while leaving RebirthWait itself active,
+    # so the public animation frame returns to zero at this boundary.
     # refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
     # refs/melee/src/melee/it/itcoll.c::it_80272460
@@ -75,7 +77,7 @@ def test_rebirth_wait_terminal_wait1_does_not_build_collision_capsules() -> None
 
     compare = out_compare.view(COMPARE_DTYPE).reshape((1,))[0]
     assert int(compare["action_id"][0]) == ACT_REBIRTH_WAIT
-    assert int(compare["action_frame"][0]) == 120
+    assert int(compare["action_frame"][0]) == 0
     assert int(hurtcap_count) == 0
     assert int(hitbox_count) == 0
     assert not np.any(hurtcaps)

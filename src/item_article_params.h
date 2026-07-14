@@ -159,6 +159,7 @@ const MslItemArticleParams* item_article_params_for_illusion_item_type(uint16_t 
 const MslItemArticleParams* item_article_params_for_sheik_needle_throw_item_type(uint16_t type);
 const MslItemArticleParams* item_article_params_for_zelda_din_item_type(uint16_t type);
 uint8_t item_article_params_is_illusion_item_type(uint16_t type);
+uint8_t item_article_params_body_hit_keeps_article(uint16_t type);
 
 #ifdef __cplusplus
 }  // extern "C"

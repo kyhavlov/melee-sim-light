@@ -8,7 +8,11 @@
 
 enum {
   MSL_MOTION_ENTRY_KEEP_FASTFALL = 1u << 0,
+  MSL_MOTION_ENTRY_KEEP_GFX = 1u << 1,
+  MSL_MOTION_ENTRY_KEEP_COLANIM_HIT_STATUS = 1u << 2,
   MSL_MOTION_ENTRY_SKIP_HIT = 1u << 3,
+  MSL_MOTION_ENTRY_KEEP_STATE_FLAGS_221C_Y = 1u << 24,
+  MSL_MOTION_ENTRY_SKIP_ANIM = 1u << 29,
 };
 
 // Install the selected MotionState row's callback identities into mutable live fighter lanes.

@@ -16,7 +16,6 @@ typedef struct MslDamageSourceEpisode {
   uint16_t victim_instance_hit_by;
   uint8_t instance_matches_source;
   uint8_t x18c8_active;
-  uint8_t fighter_8006cda4_pre_gate_count;
 } MslDamageSourceEpisode;
 
 static inline uint8_t msl_damage_source_port0_for_slot(const MslBatch* batch, size_t source_idx,
@@ -73,9 +72,6 @@ static inline MslDamageSourceEpisode msl_damage_source_episode_from_victim(const
   ep.source_port0 = batch->state.last_hit_by[victim_idx];
   ep.victim_instance_hit_by = batch->state.instance_hit_by[victim_idx];
   ep.x18c8_active = (batch->state.source_clear_timer_x18c8[victim_idx] != 0u) ? 1u : 0u;
-  ep.fighter_8006cda4_pre_gate_count =
-      batch->state.fighter_8006cda4_pre_gate_consume_count[victim_idx];
-
   const int source_slot = msl_damage_source_local_slot_from_port0(
       batch, bi, (int)batch->config.num_players, ep.source_port0);
   if (source_slot < 0 || source_slot == victim_slot) {
@@ -142,7 +138,11 @@ static inline void msl_damage_source_write_direct(MslBatch* batch, size_t victim
   if (batch == NULL) {
     return;
   }
+  // ftColl_8007861C writes the source log and unconditionally disables the old x18C8 run. A later
+  // grounded x9_b1 MotionState entry may start a new countdown.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007861C
   batch->state.last_hit_by[victim_idx] = source_port0;
+  batch->state.source_clear_timer_x18c8[victim_idx] = 0u;
 }
 
 static inline void msl_damage_source_commit_processhit(MslBatch* batch, size_t victim_idx,
@@ -154,9 +154,8 @@ static inline void msl_damage_source_commit_processhit(MslBatch* batch, size_t v
   // `ftCommon_800804FC` then clears `x18C4_source_ply` and disables `x18C8`.
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+  msl_damage_source_write_direct(batch, victim_idx, source_port0);
   if (batch->state.on_ground[victim_idx] != 0u) {
     msl_damage_source_clear(batch, victim_idx);
-    return;
   }
-  msl_damage_source_write_direct(batch, victim_idx, source_port0);
 }

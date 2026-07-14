@@ -15,6 +15,7 @@
 #include "dash_iasa.h"
 #include "grab_flow.h"
 #include "fighter_callbacks.h"
+#include "fighter_script.h"
 #include "ids.h"
 #include "items.h"
 #include "locomotion.h"
@@ -22,7 +23,6 @@
 #include "mpcoll_floor_skip.h"
 #include "mp_coll.h"
 #include "msl_math.h"
-#include "move_tables.h"
 #include "stage_collision.h"
 #include "state_flags.h"
 #include "trigger_input.h"
@@ -844,8 +844,7 @@ static void sk_update_specials(MslBatch* batch, const MslCommonParams* c, const 
         // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c::{
         //   ftSk_SpecialAirSStart_Anim,ftSk_SpecialAirSStart_Phys}
         // data/scripts/sheik.bin::MSLFTSC1 specials_by_msid[306] set_cmd_var(idx=0,value=1)
-        batch->state.special_cmd0[idx] = move_tables_special_cmd_var_value_at_frame(
-            batch->state.char_id[idx], sk_submotion(a), 0u, batch->state.anim_frame_f32[idx]);
+        batch->state.special_cmd0[idx] = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
       }
       // Source `mv.sk.specials.x0` is an int; the lite runtime stores only the threshold-relevant
       // byte, so saturate instead of wrapping during long held Chain sequences.
@@ -994,8 +993,7 @@ static void sk_update_specialhi(MslBatch* batch, const MslCommonParams* c, const
       // extracted MSLFTSC1 script timeline.
       // refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c::ftSk_SpecialAirHi_Phys
       // data/scripts/sheik.bin::MSLFTSC1 specials_by_msid[312] set_cmd_var(idx=0,value=1)
-      batch->state.special_cmd0[idx] = move_tables_special_cmd_var_value_at_frame(
-          batch->state.char_id[idx], sk_submotion(a), 0u, batch->state.anim_frame_f32[idx]);
+      batch->state.special_cmd0[idx] = fighter_script_cmd_var(batch, idx, 0u) != 0u ? 1u : 0u;
       if (sk_anim_finished(batch, idx, a)) {
         sk_enter_fallspecial(batch, ch, idx, ch->sheik_vanish_landing_lag_frames,
                              ch->sheik_vanish_fallspecial_mobility_mul);

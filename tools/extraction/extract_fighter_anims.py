@@ -1310,6 +1310,59 @@ def _read_model_scale_and_inv_part(character: str) -> tuple[float, int]:
     return float(model_scaling), inv_part
 
 
+def extract_static_x1a70(character: str) -> tuple[float, float]:
+    """Return Fighter_Create's unscaled ``x1A70.{y,z}`` rest-pose vector.
+
+    ``Fighter_UnkUpdateVecFromBones_8006876C`` samples the costume JObj tree after parts setup and
+    stores ``TransN.world - XRotN.world``.  This is model data, not a Wait-animation value: Marth,
+    Falcon, and Sheik have a nonzero rest-pose Z component that their Wait tracks overwrite.
+
+    Sources:
+    - refs/melee/src/melee/ft/fighter.c::Fighter_UnkUpdateVecFromBones_8006876C
+    - refs/melee/src/melee/ft/ftparts.c::ftParts_SetupParts
+    - refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjSetupMatrixSub
+    """
+    part_rot, part_scl, part_pos, parent_part, part_flags = _read_rest_srt_and_parents(character)
+    if len(parent_part) <= 2:
+        raise RuntimeError(f"{character}: fighter part table does not contain TransN/XRotN")
+
+    identity = (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+    world: list[tuple[float, ...] | None] = [None] * len(parent_part)
+    world_scl: list[tuple[float, float, float] | None] = [None] * len(parent_part)
+
+    def build(part: int) -> None:
+        if world[part] is not None:
+            return
+        parent = parent_part[part]
+        if parent >= 0:
+            build(parent)
+        parent_world = world[parent] if parent >= 0 else identity
+        parent_scale = world_scl[parent] if parent >= 0 else None
+        if parent_world is None:  # pragma: no cover - guarded by recursive build
+            raise RuntimeError(f"{character}: missing parent matrix for fighter part {part}")
+        local = _mtx_srt(part_scl[part], part_rot[part], part_pos[part], parent_scale)
+        world[part] = _mtx_concat(parent_world, local)
+
+        if (part_flags[part] & 8) != 0:
+            world_scl[part] = parent_scale
+        elif parent_scale is None:
+            world_scl[part] = part_scl[part]
+        else:
+            world_scl[part] = (
+                _f32_mul_fused(part_scl[part][0], parent_scale[0]),
+                _f32_mul_fused(part_scl[part][1], parent_scale[1]),
+                _f32_mul_fused(part_scl[part][2], parent_scale[2]),
+            )
+
+    build(1)  # FtPart_TransN
+    build(2)  # FtPart_XRotN
+    transn = world[1]
+    xrotn = world[2]
+    if transn is None or xrotn is None:  # pragma: no cover - guarded by build
+        raise RuntimeError(f"{character}: failed to materialize TransN/XRotN rest pose")
+    return (_f32(transn[7] - xrotn[7]), _f32(transn[11] - xrotn[11]))
+
+
 def _read_ftdata_x8_u8(character: str, rel_off: int) -> int:
     """Read a u8 from `ftData.x8` (refs/melee/src/melee/ft/types.h::ftData.x8) for this character."""
     prefix = _fighter_prefix(character)
@@ -1504,33 +1557,43 @@ def _write_fighter_dynamics_data(
     out_dir: Path,
     dynamic_sets: list[dict[str, object]],
     parent_part: list[int],
-    collision_msids: list[int] | None = None,
-    source_step_msids: list[int] | None = None,
-    cone_msids: list[int] | None = None,
-    catch_grabbable_msids: list[int] | None = None,
+    part_rot: list[tuple[float, float, float]],
+    part_pos: list[tuple[float, float, float]],
+    part_scl: list[tuple[float, float, float]],
+    disabled_msids: list[int] | None = None,
 ) -> Path:
     """Write extracted ftData.x2C dynamic-chain descriptors for runtime pose ownership.
 
-    Layout `SSDYNN01` v8:
+    Layout `SSDYNN01` v9:
     - set_count:u16, total_node_count:u16
     - per set: root_part:u16, node_count:u16, pos:vec3
-    - per node: part:u16, pad:u16, constants[15]:f32
-    - collision_msid_count:u16, reserved:u16, collision_msids:u16[]
-    - source_step_msid_count:u16, reserved:u16, source_step_msids:u16[]
-    - cone_msid_count:u16, reserved:u16, cone_msids:u16[]
-    - catch_grabbable_msid_count:u16, reserved:u16, catch_grabbable_msids:u16[]
+    - per node: part:u16, pad:u16, constants[15]:f32, rest_rot/pos/scl:vec3 each
+    - disabled_msid_count:u16, reserved:u16, disabled_msids:u16[]
     - collider_count:u16, reserved:u16
     - per collider: part:u16, pad:u16, offset:vec3, radius:f32
 
     The constants are the raw 0x3C-byte `lb_00F9_UnkDesc1Inner` entries copied by
     `lb_80011710`; runtime maps them onto the `lb_8001044C` dynamic-node fields. The
-    collision msid index is the audited owner predicate for submotions whose BODY collision
-    matrices consume this dynamic-chain state on every supported frame. The collider records are
-    ftData.x2C->x8 (`fp->x1670`) entries consumed by `lb_8001044C`'s segment/sphere avoidance.
+    disabled msids are the extracted ftData animation-entry x594_b3 owner. The collider records
+    are ftData.x2C->x8 (`fp->x1670`) entries consumed by `lb_8001044C`'s segment/sphere avoidance.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{character}.dyn.bin"
-    encoded_sets: list[tuple[int, tuple[float, float, float], list[tuple[int, tuple[float, ...]]]]] = []
+    encoded_sets: list[
+        tuple[
+            int,
+            tuple[float, float, float],
+            list[
+                tuple[
+                    int,
+                    tuple[float, ...],
+                    tuple[float, float, float],
+                    tuple[float, float, float],
+                    tuple[float, float, float],
+                ]
+            ],
+        ]
+    ] = []
     total_nodes = 0
     for dyn in dynamic_sets:
         root = int(dyn.get("root_part", -1))
@@ -1541,7 +1604,15 @@ def _write_fighter_dynamics_data(
         for i, part in enumerate(chain):
             if i >= len(entries):
                 break
-            nodes.append((int(part), tuple(float(x) for x in entries[i])))
+            nodes.append(
+                (
+                    int(part),
+                    tuple(float(x) for x in entries[i]),
+                    tuple(float(x) for x in part_rot[part]),
+                    tuple(float(x) for x in part_pos[part]),
+                    tuple(float(x) for x in part_scl[part]),
+                )
+            )
         if nodes:
             pos_raw = dyn.get("pos", (0.0, 0.0, 0.0))
             pos = tuple(float(x) for x in pos_raw)  # type: ignore[arg-type]
@@ -1550,36 +1621,33 @@ def _write_fighter_dynamics_data(
 
     with out_path.open("wb") as f:
         f.write(b"SSDYNN01")
-        f.write(struct.pack("<I", 8))
+        f.write(struct.pack("<I", 9))
         f.write(struct.pack("<H", len(encoded_sets)))
         f.write(struct.pack("<H", total_nodes))
         for root, pos, nodes in encoded_sets:
             f.write(struct.pack("<HH3f", int(root) & 0xFFFF, len(nodes), *pos))
-            for part, entry in nodes:
+            for part, entry, rest_rot, rest_pos, rest_scl in nodes:
                 if len(entry) != 15:
                     raise RuntimeError(f"{character}: dynamic node for part {part} has {len(entry)} constants")
-                f.write(struct.pack("<HH15f", int(part) & 0xFFFF, 0, *entry))
-        owner_msids = sorted({int(msid) & 0xFFFF for msid in (collision_msids or [])})
-        f.write(struct.pack("<HH", len(owner_msids), 0))
-        for msid in owner_msids:
-            f.write(struct.pack("<H", msid))
-        source_step_owner_msids = sorted({int(msid) & 0xFFFF for msid in (source_step_msids or [])})
-        if not set(source_step_owner_msids).issubset(set(owner_msids)):
-            extra = sorted(set(source_step_owner_msids) - set(owner_msids))
-            raise RuntimeError(f"{character}: source-step msids not in collision owner index: {extra}")
-        f.write(struct.pack("<HH", len(source_step_owner_msids), 0))
-        for msid in source_step_owner_msids:
-            f.write(struct.pack("<H", msid))
-        cone_owner_msids = sorted({int(msid) & 0xFFFF for msid in (cone_msids or [])})
-        if not set(cone_owner_msids).issubset(set(owner_msids)):
-            extra = sorted(set(cone_owner_msids) - set(owner_msids))
-            raise RuntimeError(f"{character}: cone msids not in collision owner index: {extra}")
-        f.write(struct.pack("<HH", len(cone_owner_msids), 0))
-        for msid in cone_owner_msids:
-            f.write(struct.pack("<H", msid))
-        catch_owner_msids = sorted({int(msid) & 0xFFFF for msid in (catch_grabbable_msids or [])})
-        f.write(struct.pack("<HH", len(catch_owner_msids), 0))
-        for msid in catch_owner_msids:
+                f.write(
+                    struct.pack(
+                        "<HH24f",
+                        int(part) & 0xFFFF,
+                        0,
+                        *entry,
+                        *rest_rot,
+                        *rest_pos,
+                        *rest_scl,
+                    )
+                )
+        disabled_owner_msids = sorted({int(msid) & 0xFFFF for msid in (disabled_msids or [])})
+        # v9 leaves the four v8 probe-owner slots empty so old artifacts cannot silently retain
+        # semantic motion allowlists during the source-flag cutover. The runtime loader removes
+        # these reserved slots once the v9 transition is complete.
+        for _reserved_index in range(4):
+            f.write(struct.pack("<HH", 0, 0))
+        f.write(struct.pack("<HH", len(disabled_owner_msids), 0))
+        for msid in disabled_owner_msids:
             f.write(struct.pack("<H", msid))
         colliders_raw = []
         for dyn in dynamic_sets:
@@ -1593,125 +1661,34 @@ def _write_fighter_dynamics_data(
     return out_path
 
 
-def _dynamic_collision_owner_msids(
-    character: str,
-    moves: dict[str, object],
-    dynamic_sets: list[dict[str, object]],
-) -> list[int]:
-    """Return submotions whose BODY collision matrices consume fighter dynamics state.
+def _dynamic_disabled_msids(character: str, msids: list[int]) -> list[int]:
+    """Return motions whose source x594_b3 disables ordinary fighter dynamics.
 
-    This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3`, `JumpB`,
-    `LandingFallSpecial`, `EscapeAir`, `Catch`, `CatchDash`, and `CliffAttackQuick` are the
-    audited RL1.0 dynamic-chain collision owners:
-    Dolphin
-    pre-`ftColl_80078C70` primitive probes show live hurtcap endpoints on the x2C chain consume
-    `ftData.x2C` / `lb_8001044C`, while the HIS:5029 AttackDash/AttackLw4 primitive probe selects a
-    static-chain low hurtcap and rejects the tail-chain contact when AttackDash dynamic matrices are
-    applied. Adding another submotion here requires the same owner evidence and keeps the runtime
-    predicate in extracted data instead of hardcoding record ids or cap/frame slices in C.
+    Fighter_ChangeMotionState copies the ftData animation-entry flags into ``fp->x594`` and
+    ftCo_8009E7B4 routes x594_b3 through ``ftCo_8009CB40(..., false, NULL)``.  The raw first byte
+    is big-endian bitfield storage, so x594_b3 is mask 0x10.  x594_b4 selects a separate dynamic
+    FigaTree owner that is not present in the extracted supported-character motion set; fail if it
+    appears instead of silently collapsing the two modes.
+
+    refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009CB40,ftCo_8009E7B4}
     """
-    if character != "fox" or not dynamic_sets:
+    if not msids:
         return []
-    move_map = (moves.get("moves") or {}) if isinstance(moves, dict) else {}
-    # `data/moves` only contains action move-script states; some common animation states that are
-    # baked through `_extra_anim_msids()` are source-backed by `ftCommon/forward.h` instead.
-    # refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_Submotion
-    common_submotion_id = {
-        "ftCo_SM_LandingFallSpecial": 36,
-        "ftCo_SM_EscapeAir": 44,
-        "ftCo_SM_CliffAttackQuick": 222,
-    }
     out: list[int] = []
-    for move_name in (
-        "ftCo_SM_JumpB",
-        "ftCo_SM_LandingFallSpecial",
-        "ftCo_SM_AttackHi3",
-        "ftCo_SM_EscapeAir",
-        "ftCo_SM_Catch",
-        "ftCo_SM_CatchDash",
-        "ftCo_SM_CliffAttackQuick",
-    ):
-        move_entry = move_map.get(move_name)
-        msid = move_entry.get("submotion_id") if isinstance(move_entry, dict) else None
-        if msid is None:
-            msid = common_submotion_id.get(move_name)
-        if isinstance(msid, int) and 0 <= msid <= 0xFFFF:
+    for msid in msids:
+        source_character = _figatree_source_character(character, int(msid))
+        entry = _msid_anim_entry_full(source_character, int(msid))
+        if entry is None:
+            continue
+        flags_u8 = int(entry[3])
+        if (flags_u8 & 0x08) != 0:
+            raise RuntimeError(
+                f"{character}: submotion {msid} uses unsupported x594_b4 dynamic FigaTree"
+            )
+        if (flags_u8 & 0x10) != 0:
             out.append(int(msid))
-    return out
-
-
-def _dynamic_source_step_owner_msids(
-    character: str,
-    moves: dict[str, object],
-    dynamic_sets: list[dict[str, object]],
-) -> list[int]:
-    """Return collision owners that use the source-step dynamic-chain solver mode.
-
-    This is deliberately a generated owner index instead of a C gameplay branch. The mode is only
-    enabled where primitive probes cover the `lb_8001044C` natural-dir/max-step/cone phase and
-    local dynamic JObj rotation writeback; other SSDYNN01 collision owners keep their previously
-    validated reconstruction until separately audited.
-    """
-    if character != "fox" or not dynamic_sets:
-        return []
-    del moves
-    return []
-
-
-def _dynamic_cone_owner_msids(
-    character: str,
-    moves: dict[str, object],
-    dynamic_sets: list[dict[str, object]],
-) -> list[int]:
-    """Return collision owners whose validated reconstruction uses descriptor +0x68 cone clamp.
-
-    This remains a generated owner index because the current-segment cone approximation is validated
-    for Fox Catch (MGS:4921..4923) but is not the full source-step/natural-direction owner for every
-    dynamic collision msid (SDS:299 is the CatchDash negative).
-    """
-    if character != "fox" or not dynamic_sets:
-        return []
-    move_map = (moves.get("moves") or {}) if isinstance(moves, dict) else {}
-    out: list[int] = []
-    for move_name in ("ftCo_SM_Catch",):
-        move_entry = move_map.get(move_name)
-        msid = move_entry.get("submotion_id") if isinstance(move_entry, dict) else None
-        if isinstance(msid, int) and 0 <= msid <= 0xFFFF:
-            out.append(int(msid))
-    return out
-
-
-def _dynamic_catch_grabbable_owner_msids(
-    character: str,
-    moves: dict[str, object],
-    dynamic_sets: list[dict[str, object]],
-) -> list[int]:
-    """Return submotions whose grabbable hurtcaps consume live fighter dynamics for Catch.
-
-    This index is intentionally separate from the BODY collision-owner index. Dolphin
-    `ftColl_80078A2C` / `lbColl_80007ECC` probes show Fox AttackDash's part-18 grabbable tail
-    capsule consumes the live `ftData.x2C` tail chain for Catch selection, while existing BODY
-    probes and locks keep AttackDash outside the `ftColl_80078C70` dynamic BODY owner. This is a
-    Fox tail dynamic-chain Catch owner, not a generic Catch/BODY dynamic owner.
-    """
-    if character != "fox" or not dynamic_sets:
-        return []
-    # Fox is the only supported character whose extracted `ftData.x2C` dynamic chain is rooted at
-    # the tail base. Falco has no extracted dynamic set and must remain a negative guard. If another
-    # character gets a dynamic grabbable Catch owner, add its primitive evidence and table predicate
-    # here rather than broadening this Fox-tail slice.
-    fox_tail_dynamic_root_part = 17
-    root_parts = {int(dyn.get("root_part", -1)) for dyn in dynamic_sets}
-    if fox_tail_dynamic_root_part not in root_parts:
-        return []
-    move_map = (moves.get("moves") or {}) if isinstance(moves, dict) else {}
-    out: list[int] = []
-    for move_name in ("ftCo_SM_AttackDash",):
-        move_entry = move_map.get(move_name)
-        msid = move_entry.get("submotion_id") if isinstance(move_entry, dict) else None
-        if isinstance(msid, int) and 0 <= msid <= 0xFFFF:
-            out.append(int(msid))
-    return out
+    return sorted(set(out))
 
 
 def _node_mapping_for_parts(
@@ -1881,13 +1858,10 @@ def extract_one_character(
     inv_model_scale = 1.0 / model_scaling if abs(model_scaling) > 1.0e-6 else 1.0
     dynamic_sets = _read_fighter_dynamics(character)
     moves = json.loads(moves_path.read_text())
-    # Runtime dynamic-pose state lanes (MSL_MAX_DYNAMIC_NODES per player) only carry chains that
-    # have extracted collision owners. Characters whose chains have no owner msids yet (everything
-    # but Fox's tail today) get an empty SSDYNN01 so the loader contract stays satisfied without
-    # publishing inert sets that exceed the per-player node capacity. NOTE (marth): hurtcaps on
-    # bones 60/70/71 may ride cape/hair chains; if a future validation row needs their dynamic
-    # pose, extend the runtime node lanes and drop this gate for that character.
-    if not _dynamic_collision_owner_msids(character, moves, dynamic_sets):
+    # The current fixed runtime state carries one descriptor chain. Keep every source set that fits
+    # that representation (Fox's tail today) and reject multi-set characters here until the state
+    # surface can represent all sets without collisions.
+    if len(dynamic_sets) != 1 or int(dynamic_sets[0].get("chain_count", 0)) > 16:
         dynamic_sets = []
     for dyn in dynamic_sets:
         for part in _dynamic_first_child_chain(
@@ -1895,17 +1869,6 @@ def extract_one_character(
         ):
             if 0 <= part < 256 and part not in needed_parts:
                 needed_parts.append(part)
-    _write_fighter_dynamics_data(
-        character,
-        out_dir,
-        dynamic_sets,
-        parent_part,
-        collision_msids=_dynamic_collision_owner_msids(character, moves, dynamic_sets),
-        source_step_msids=_dynamic_source_step_owner_msids(character, moves, dynamic_sets),
-        cone_msids=_dynamic_cone_owner_msids(character, moves, dynamic_sets),
-        catch_grabbable_msids=_dynamic_catch_grabbable_owner_msids(character, moves, dynamic_sets),
-    )
-
     # Capture victim alignment anchor (`mv.co.capturedamage.x18`) is set from `ftData.x8->x11`.
     # Decomp: refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800D9CE8
     #
@@ -1946,6 +1909,17 @@ def extract_one_character(
             base = set(int(m) for m in wanted_msids)
             extra = set(int(m) for m in add_msids if int(m) >= 0)
             wanted_msids = sorted(base | extra)
+
+    _write_fighter_dynamics_data(
+        character,
+        out_dir,
+        dynamic_sets,
+        parent_part,
+        part_rot,
+        part_pos,
+        part_scl,
+        disabled_msids=_dynamic_disabled_msids(character, wanted_msids) if dynamic_sets else [],
+    )
 
     prefix = _fighter_prefix(character)
     aj_path = ISO_DIR / f"{prefix}AJ.dat"

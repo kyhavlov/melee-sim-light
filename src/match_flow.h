@@ -19,6 +19,7 @@ void match_flow_update_pre_anim(MslBatch* batch);
 
 // Post anim-timebase clamp/overrides (e.g. EntryStart animation end-frame clamping).
 void match_flow_update_post_anim(MslBatch* batch);
+void match_flow_update_post_anim_fighter(MslBatch* batch, int bi, int p);
 
 // Match-flow IASA-style input exits (e.g. RebirthWait -> Fall on any action input).
 void match_flow_update_post_input(MslBatch* batch);

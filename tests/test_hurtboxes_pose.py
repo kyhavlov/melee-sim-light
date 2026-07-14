@@ -89,6 +89,13 @@ def _mtx34_mul_point(m: np.ndarray, v: np.ndarray) -> np.ndarray:
     )
 
 
+def _read_transn(
+    buf: bytes, *, base: int, frame_count: int, joint_count: int, frame: int
+) -> np.ndarray:
+    off = base + frame_count * joint_count * _MAT_BYTES + frame * 3 * 4
+    return np.frombuffer(buf, dtype="<f4", count=3, offset=off).copy()
+
+
 def test_hurtboxes_refresh_matches_pose_bytes() -> None:
     _require_local(Path("data/anims/fox.bin"))
     _require_local(Path("data/hurtcaps/fox.bin"))
@@ -137,6 +144,14 @@ def test_hurtboxes_refresh_matches_pose_bytes() -> None:
     scale = np.float32(scale_y * model_scaling)
     a *= scale
     b *= scale
+    # SSANIM01 stores closure matrices without the fighter TransN translation. The shared live-pose
+    # owner composes that extracted tail before the root facing rotation for attached parts.
+    # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    transn = _read_transn(
+        anim_buf, base=base, frame_count=frame_count, joint_count=joint_count, frame=frame
+    )
+    a += transn * scale
+    b += transn * scale
     ax = np.float32(facing_dir * a[2])
     az = np.float32(-facing_dir * a[0])
     bx = np.float32(facing_dir * b[2])
@@ -200,7 +215,10 @@ def test_hurtboxes_refresh_matches_pose_bytes() -> None:
     assert int(count) >= len(hurtcaps)
 
     got = caps_world[cap_i]
-    assert np.array_equal(got.view(np.uint32), ref_row.view(np.uint32))
+    # The runtime follows lb_8000B1CC's completed-JObj-matrix MTXMultVec path directly. Composing
+    # that matrix before the final point multiply can differ by one f32 rounding step from this
+    # Python reconstruction's local-point-then-root operation order.
+    np.testing.assert_array_max_ulp(got, ref_row, maxulp=1)
 
 
 def test_hurtboxes_refresh_falls_back_on_missing_msid() -> None:
@@ -295,6 +313,11 @@ def test_hurtboxes_refresh_applies_fighter_scale_y() -> None:
     scale = np.float32(scale_y * model_scaling)
     a = np.array([np.float32(a_local[0] * scale), np.float32(a_local[1] * scale), np.float32(a_local[2] * scale)], dtype=np.float32)
     b = np.array([np.float32(b_local[0] * scale), np.float32(b_local[1] * scale), np.float32(b_local[2] * scale)], dtype=np.float32)
+    transn = _read_transn(
+        anim_buf, base=base, frame_count=frame_count, joint_count=joint_count, frame=frame
+    )
+    a += transn * scale
+    b += transn * scale
 
     ax = np.float32(facing_dir * a[2])
     az = np.float32(-facing_dir * a[0])
@@ -354,4 +377,4 @@ def test_hurtboxes_refresh_applies_fighter_scale_y() -> None:
     assert 0 <= int(count) <= 32
     assert int(count) >= len(hurtcaps)
     got = caps_world[out_row_i]
-    assert np.array_equal(got.view(np.uint32), ref_row.view(np.uint32))
+    np.testing.assert_array_max_ulp(got, ref_row, maxulp=1)

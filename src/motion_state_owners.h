@@ -18,10 +18,17 @@ uint32_t motion_state_owners_format_version(void);
 
 enum {
   MSL_MOTION_FLAG_KEEP_FASTFALL = 1u << 0,
+  MSL_MOTION_FLAG_KEEP_GFX = 1u << 1,
+  MSL_MOTION_FLAG_KEEP_COLANIM_HIT_STATUS = 1u << 2,
   // refs/melee/src/melee/ft/forward.h::Ft_MF_SkipHit
   // Fighter_ChangeMotionState skips ftColl_8007AFF8 when this bit is set, preserving x914
   // HitCapsule state/victim lists across the motion transition.
   MSL_MOTION_FLAG_SKIP_HIT = 1u << 3,
+  MSL_MOTION_FLAG_KEEP_STATE_FLAGS_221C_Y = 1u << 24,
+  // refs/melee/src/melee/ft/forward.h::Ft_MF_SkipAnim
+  // Fighter_ChangeMotionState installs the destination callback row but leaves the fighter with
+  // no submotion/AObj/script owner. GuardOn/Guard/GuardReflect use this source path.
+  MSL_MOTION_FLAG_SKIP_ANIM = 1u << 29,
 };
 
 enum { MSL_MOTION_STATE_COMMON_ACTION_CAP = 1024 };

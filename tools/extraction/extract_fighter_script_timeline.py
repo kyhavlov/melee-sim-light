@@ -2,18 +2,10 @@ from __future__ import annotations
 
 import argparse
 
-from tools.extraction.char_registry import CHARS
 import json
 import struct
 from pathlib import Path
 
-from tools.extraction.extract_fighter_moves import (
-    _load_fighter_dat,
-    _load_special_msids,
-    _load_ftco_submotion_ids,
-    _parse_subaction_events,
-    _read_s_temp4_subaction_ptr,
-)
 from tools.extraction.known_data_artifacts import SCRIPT_MAGIC, SCRIPT_VERSION
 
 
@@ -39,6 +31,7 @@ EVENT_IDS = {
     "start_smash_charge": 19,
     "pseudo_random_sfx": 20,
     "set_throw_hitbox": 21,
+    "command_timer": 22,
 }
 
 _CREATE_HITBOX_FLAGS = {
@@ -65,10 +58,7 @@ RUNTIME_OWNER_EVENT_KINDS = {
     "set_state_flags_221c_u16_y",
 }
 
-UNSUPPORTED_EVENT_KINDS = {
-    "set_hitbox_size",
-    "remove_hitbox",
-}
+UNSUPPORTED_EVENT_KINDS: set[str] = set()
 
 
 class UnsupportedScriptEventKind(ValueError):
@@ -104,11 +94,12 @@ def _as_u32(value: object) -> int:
 
 
 def _encode_payload(kind: str, data: dict) -> bytes:
+    if kind == "command_timer":
+        return b""
     if kind in {
         "allow_interrupt",
         "clear_hitboxes",
         "set_throw_spawn_projectile",
-        "toggle_bone_physics",
     }:
         return b""
     if kind == "set_cmd_var":
@@ -117,6 +108,10 @@ def _encode_payload(kind: str, data: dict) -> bytes:
         return struct.pack("<Bxxx", _as_u8(data["hit_idx"]))
     if kind == "set_hitbox_damage":
         return struct.pack("<Bxxxf", _as_u8(data["idx"]), float(data["damage"]))
+    if kind == "set_hitbox_size":
+        return struct.pack("<Bxxxf", _as_u8(data["idx"]), float(data["size"]))
+    if kind == "remove_hitbox":
+        return struct.pack("<Bxxx", _as_u8(data["idx"]))
     if kind == "set_hitbox_interaction":
         return struct.pack(
             "<BBBx",
@@ -130,6 +125,8 @@ def _encode_payload(kind: str, data: dict) -> bytes:
         return struct.pack("<BBxx", _as_u8(data["bone_idx"]), _as_u8(data["state"]))
     if kind == "set_jab_combo":
         return struct.pack("<Bxxx", _as_u8(data["disabled"]))
+    if kind == "toggle_bone_physics":
+        return struct.pack("<Bxxx", _as_u8(data["bone_id"]))
     if kind == "set_state_flags_221c_u16_y":
         return struct.pack("<Hxx", _as_u16(data["flags"]))
     if kind == "start_smash_charge":
@@ -204,91 +201,15 @@ def _iter_entries_from_moves(moves: dict) -> list[tuple[int, str, list[dict]]]:
     return entries
 
 
-def _event_record(ev: object) -> dict:
-    if isinstance(ev, dict):
-        return ev
-    return {
-        "frame": int(getattr(ev, "frame")),
-        "kind": str(getattr(ev, "kind")),
-        "data": dict(getattr(ev, "data", {})),
-    }
-
-
-def _iter_entries_from_iso(
-    *,
-    character: str,
-    iso_dir: Path,
-    dol: Path,
-    special_msids_dir: Path,
-    max_frames: int,
-    max_steps_per_frame: int,
-) -> list[tuple[int, str, list[dict]]]:
-    char_to_dat = {name: (info.pl_dat, info.ftdata_symbol) for name, info in CHARS.items()}
-    if character not in char_to_dat:
-        raise RuntimeError(f"unknown character {character!r}")
-
-    enum_map = _load_ftco_submotion_ids(dol)
-    ftco_sm_count = int(enum_map.get("ftCo_SM_Count", 0))
-    if ftco_sm_count <= 0:
-        raise RuntimeError("missing common submotion domain from main.dol")
-    name_by_msid = {int(v): k for k, v in enum_map.items() if k.startswith("ftCo_SM_")}
-
-    dat_name, sym = char_to_dat[character]
-    arc = _load_fighter_dat(iso_dir, dat_name)
-    ft_off = arc.get_public_offset(sym)
-    if ft_off is None:
-        raise RuntimeError(f"{dat_name}: missing public symbol {sym!r}")
-    s_temp4_list = arc.ptr32(ft_off + 0x0C)
-
-    domain = sorted(set(range(ftco_sm_count)) | set(_load_special_msids(special_msids_dir, character)))
-    entries: list[tuple[int, str, list[dict]]] = []
-    for msid in domain:
-        if not (0 <= int(msid) <= 0xFFFF):
-            continue
-        sub_ptr = _read_s_temp4_subaction_ptr(arc, s_temp4_list, int(msid))
-        if sub_ptr is None:
-            continue
-        try:
-            parsed = _parse_subaction_events(
-                arc,
-                sub_ptr,
-                max_frames=int(max_frames),
-                max_steps_per_frame=int(max_steps_per_frame),
-            )
-        except RuntimeError:
-            continue
-        name = name_by_msid.get(int(msid), f"special_{int(msid)}")
-        entries.append((int(msid), name, [_event_record(ev) for ev in parsed]))
-    return entries
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description="Pack decoded stable fighter script events as MSLFTSC1.")
-    ap.add_argument("--moves", type=Path, default=None)
-    ap.add_argument("--character", type=str, default=None)
-    ap.add_argument("--iso_dir", type=Path, default=Path("_iso"))
-    ap.add_argument("--dol", type=Path, default=Path("_iso/main.dol"))
-    ap.add_argument("--special_msids_dir", type=Path, default=Path("data/special_msids"))
+    ap.add_argument("--moves", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--manifest", type=Path, default=None)
-    ap.add_argument("--max_frames", type=int, default=240)
-    ap.add_argument("--max_steps_per_frame", type=int, default=10000)
     args = ap.parse_args()
 
-    moves = json.loads(args.moves.read_text(encoding="utf-8")) if args.moves is not None else {}
-    if args.character is not None:
-        entries = _iter_entries_from_iso(
-            character=str(args.character),
-            iso_dir=args.iso_dir,
-            dol=args.dol,
-            special_msids_dir=args.special_msids_dir,
-            max_frames=int(args.max_frames),
-            max_steps_per_frame=int(args.max_steps_per_frame),
-        )
-    elif args.moves is not None:
-        entries = _iter_entries_from_moves(moves)
-    else:
-        raise SystemExit("either --character or --moves is required")
+    moves = json.loads(args.moves.read_text(encoding="utf-8"))
+    entries = _iter_entries_from_moves(moves)
 
     index_rows: list[tuple[int, int, int]] = []
     event_payloads: list[bytes] = []
@@ -309,7 +230,16 @@ def main() -> None:
                 unsupported_counts[kind] = unsupported_counts.get(kind, 0) + 1
                 continue
             event_payloads.append(
-                struct.pack("<HHI", _as_u16(ev.get("frame", 0)), kind_id, len(payload)) + payload
+                struct.pack(
+                    "<HHBBHI",
+                    _as_u16(ev.get("frame", 0)),
+                    kind_id,
+                    _as_u8(ev.get("timer_kind", 0)),
+                    0,
+                    _as_u16(ev.get("timer_value", 0)),
+                    len(payload),
+                )
+                + payload
             )
             event_count += 1
         index_rows.append((_as_u16(msid), start, event_count - start))
@@ -330,7 +260,7 @@ def main() -> None:
         payload = {
             "magic": SCRIPT_MAGIC.decode("ascii"),
             "version": SCRIPT_VERSION,
-            "character": str(args.character) if args.character is not None else moves.get("character"),
+            "character": moves.get("character"),
             "event_kinds": [{"id": v, "name": k} for k, v in sorted(EVENT_IDS.items(), key=lambda kv: kv[1])],
             "unknown_event_counts": unknown_counts,
             "unsupported_event_counts": unsupported_counts,

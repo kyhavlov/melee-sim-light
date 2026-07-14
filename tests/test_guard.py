@@ -303,64 +303,12 @@ def test_guardoff_special_chain_requires_seeded_x1c_timer() -> None:
         msl_binding.destroy(handle)
 
 
-def test_guardsetoff_hitlag_exit_consumes_hidden_exit_frame_speed_seed_owner() -> None:
-    # Fighter_8006A1BC exits hitlag before Fighter_8006A360 advances animation. A replay seed can
-    # carry GuardSetOff's hidden `fp->frame_speed_mul` through the frozen hitlag segment; the exit
-    # frame must consume that source-owned rate instead of the stale public frozen-segment rate.
+def test_guardsetoff_hitlag_exit_keeps_causal_frame_speed() -> None:
+    # Fighter_8006A1BC exits hitlag before Fighter_8006A360 advances animation. GuardSetOff keeps
+    # the live frame_speed_mul installed by ftCo_80092F2C; there is no separate future-row exit
+    # override.
     # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
-    import msl_binding
-
-    sizes = msl_binding.sizes()
-    input_stride = int(sizes["input"])
-
-    seed = _seed_base()
-    seed["action_id"][0, 0] = np.uint16(ACT_GUARD_SET_OFF)
-    seed["action_frame"][0, 0] = np.int16(0)
-    seed["animation_index"][0, 0] = np.uint32(SM_GUARD_SET_OFF)
-    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
-    seed["frame_speed_mul_f32"][0, 0] = np.float32(4.0)
-    seed["hitlag"][0, 0] = np.uint16(1)
-    seed["guard_setoff_exit_frame_speed_mul_f32"][0, 0] = np.float32(1.25)
-
-    neutral = _mk_input_bytes(1, input_stride)
-    out = _run_seed_one_step(seed, neutral)
-
-    assert int(out["hitlag"][0]) == 0
-    assert int(out["action_id"][0]) == ACT_GUARD_SET_OFF
-    assert int(out["action_frame"][0]) == 1
-
-
-def test_guardsetoff_exit_frame_speed_seed_lane_derives_frozen_segment_owner() -> None:
-    import msl_binding
-
-    action = np.array(
-        [
-            [ACT_GUARD],
-            [ACT_GUARD_SET_OFF],
-            [ACT_GUARD_SET_OFF],
-            [ACT_GUARD_SET_OFF],
-            [ACT_GUARD],
-        ],
-        dtype=np.uint16,
-    )
-    hitlag = np.array([[0], [3], [2], [0], [0]], dtype=np.uint16)
-    frame_speed = np.array([[1.0], [4.0], [4.0], [1.25], [1.0]], dtype=np.float32)
-
-    got = msl_binding.derive_guard_setoff_exit_frame_speed_seed_lane(
-        action,
-        hitlag,
-        frame_speed,
-        1,
-        ACT_GUARD_SET_OFF,
-    )
-
-    assert got[:, 0].tolist() == pytest.approx([1.25, 1.25, 1.25, 0.0, 0.0])
-
-
-def test_guardsetoff_hitlag_exit_without_hidden_exit_rate_keeps_public_frame_speed() -> None:
-    # Control: without the explicit hidden seed/provenance lane, natural runtime keeps the current
-    # public frame_speed_mul. This proves the bridge is not a broad GuardSetOff exit clamp.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -397,6 +345,7 @@ def test_active_guard_hitlag_does_not_recharge_shield() -> None:
     seed["anim_frame_f32"][0, 0] = np.float32(-1.0)
     seed["hitlag"][0, 0] = np.uint8(3)
     seed["shield_hp"][0, 0] = np.float32(55.0)
+    seed["state_flags"][0, 0, 1] = np.uint8(0x01)  # fp+0x221A ShieldDesc live
     seed["state_flags"][0, 0, 2] = np.uint8(0x80)  # fp+0x221B isShieldActive
 
     handle = msl_binding.init(batch_size=1, num_players=2)
@@ -547,6 +496,7 @@ def test_guardsetoff_iasa_does_not_platform_pass_while_guardon_can() -> None:
     guard_on_seed["animation_index"][0, 0] = np.uint32(SM_GUARD_ON)
     guard_on_seed["action_frame"][0, 0] = np.int16(2)
     guard_on_seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+    guard_on_seed["guard_anim_counter_x0"][0, 0] = np.uint16(2)
 
     # Source positive: when earlier GuardOn IASA branches are absent, ftCo_8009A080 enters Pass
     # while L/R is held and the current CollData floor is a platform.
@@ -740,6 +690,42 @@ def test_marth_turnrun_iasa_does_not_admit_guard_entry_synthetic_control() -> No
     out_row = _run_seed_one_step(seed, shield)
     assert int(out_row["action_id"][0]) == ACT_TURN_RUN
     assert int(out_row["animation_index"][0]) == SM_TURN_RUN
+
+
+@pytest.mark.parametrize(
+    ("facing", "seed_rate", "expected_frame"),
+    (
+        (0, 1.0, 9),
+        (1, 0.0, 10),
+    ),
+)
+def test_turnrun_reseed_reconstructs_live_freeze_and_resume_rate(
+    facing: int, seed_rate: float, expected_frame: int
+) -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_TURN_RUN)
+    seed["animation_index"][0, 0] = np.uint32(SM_TURN_RUN)
+    seed["action_frame"][0, 0] = np.int16(9)
+    seed["anim_frame_f32"][0, 0] = np.float32(9.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(seed_rate)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_TURN_RUN)
+    seed["facing"][0, 0] = np.uint8(facing)
+    seed["facing_dir1"][0, 0] = np.int8(-1)
+    seed["speed_ground_x_self"][0, 0] = np.float32(-0.2 if facing == 0 else 0.15)
+    seed["speed_air_x_self"][0, 0] = seed["speed_ground_x_self"][0, 0]
+
+    # The extracted frame-9 command arms TurnRun_Anim. Before the visible facing flip its live
+    # AObj rate is zero; after the flip it is one. The replay-derived incoming rate is deliberately
+    # the opposite edge value in both cases, matching the unobservable post-callback boundary.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
+    neutral = _mk_input_bytes(1, int(sizes["input"]))
+    out = _run_seed_one_step(seed, neutral)
+    assert int(out["action_id"][0]) == ACT_TURN_RUN
+    assert int(out["action_frame"][0]) == expected_frame
+    assert int(out["facing"][0]) == facing
 
 
 def test_run_iasa_still_admits_guard_entry_spacie_control() -> None:

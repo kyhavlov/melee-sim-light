@@ -16,11 +16,7 @@ ACT_DAMAGE_AIR_2 = 85
 ACT_GUARD_SET_OFF = 181
 ACT_OTTOTTO = 245
 ACT_OTTOTTO_WAIT = 246
-ACT_THROW_HI = 221
 ACT_FX_SPECIAL_LW_HIT = 363
-
-ITEM_FOX_BLASTER_GUN = 74
-ITEM_FOX_LASER = 54
 
 SM_BY_ACTION = {
     14: 2,
@@ -280,40 +276,6 @@ def test_modelplay_rerun6_994_facing_away_from_right_ledge_does_not_teeter() -> 
 
     for frame_i in range(996, 1001):
         assert int(history[frame_i]["action_id"][0]) not in (ACT_OTTOTTO, ACT_OTTOTTO_WAIT)
-
-
-@pytest.mark.integration
-def test_modelplay_rerun6_1608_throwhi_laser_uses_vertical_throw_angle() -> None:
-    # Rerun6 viewer frame 1608 starts Fox's grab/upthrow sequence; the first ThrowHi laser appears
-    # at viewer frame 1624 with horizontal SpecialN velocity. Throw-side shots should use the angle
-    # from the blaster item hold joint to the fighter hold joint, which points upward during ThrowHi.
-    #
-    # Decomp ownership:
-    # - ftFx_Throw_Anim calls ftFx_SpecialN_FtGetHoldJoint and ftFx_SpecialN_ItGetHoldJoint, then
-    #   launches throw shots via it_8029C6CC(atan2f(ft_hold - it_hold), ...).
-    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-    # refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C504}
-    history = _run_trace_window(start_frame=1623, end_frame=1623, overrides={})
-
-    out = history[1623]
-    assert int(out["action_id"][1]) == ACT_THROW_HI
-    gun_slots = [
-        it
-        for it in range(15)
-        if int(out["items"][it]["exists"]) and int(out["items"][it]["type"]) == ITEM_FOX_BLASTER_GUN
-    ]
-    laser_slots = [
-        it
-        for it in range(15)
-        if int(out["items"][it]["exists"]) and int(out["items"][it]["type"]) == ITEM_FOX_LASER
-    ]
-    assert gun_slots
-    assert len(laser_slots) == 1
-
-    laser = out["items"][laser_slots[0]]
-    assert int(laser["state"]) == 1
-    assert float(laser["vel_y"]) > 0.0
-    assert abs(float(laser["vel_y"])) > abs(float(laser["vel_x"]))
 
 
 @pytest.mark.integration

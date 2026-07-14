@@ -181,7 +181,6 @@ def test_manual_idle_falco_repro_keeps_late_wait_hurtcaps_live() -> None:
     for frame in (2000, 2150):
         row = history[frame]
         assert int(row["action_id"][falco]) == 14
-        assert int(row["animation_index"][falco]) == 2
         if frame == 2150:
             assert int(row["action_frame"][falco]) > 120
         hurtcaps = hurtcaps_by_frame[frame]

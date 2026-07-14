@@ -7,6 +7,7 @@
 #include "action_ids.h"
 #include "batch_internal.h"
 #include "combat.h"
+#include "fighter_script.h"
 #include "hit_elements.h"
 #include "hitlist.h"
 #include "ids.h"
@@ -14,14 +15,7 @@
 #include "item_article_params.h"
 #include "msl_math.h"
 #include "motion_state_owners.h"
-#include "move_tables.h"
 #include "stage_collision.h"
-
-enum {
-  MSL_ZELDA_DIN_HITBOX_FLAG_TARGET_GROUNDED = 1u << 0,
-  MSL_ZELDA_DIN_HITBOX_FLAG_TARGET_AERIAL = 1u << 1,
-  MSL_ZELDA_DIN_HITBOX_FLAG_BODY_ENABLED = 1u << 2,
-};
 
 static inline uint8_t zd_din_fighter_is_owner_din_loop(const MslBatch* batch, size_t idx) {
   const uint16_t a = batch->state.action_id[idx];
@@ -46,17 +40,7 @@ static inline uint8_t zd_din_fighter_end_script_releases_article(const MslBatch*
   // owned by the item callback instead of the fighter Loop IASA transition.
   // refs/melee/src/melee/it/items/itzeldadinfire.c::itZeldadinfire_UnkMotion0_Anim
   // refs/melee/src/melee/ft/chara/ftZelda/ftZd_SpecialLw.c::ftZd_SpecialLw_8013B574
-  return move_tables_special_cmd_var_value_at_frame(
-             batch->state.char_id[idx], msl_motion_state_submotion_id(batch->state.char_id[idx], a),
-             1u, batch->state.anim_frame_f32[idx]) == 1u
-             ? 1u
-             : 0u;
-}
-
-static inline uint8_t zd_din_targets_ground_state(uint32_t flags, uint8_t defender_grounded) {
-  return defender_grounded
-             ? ((flags & (uint32_t)MSL_ZELDA_DIN_HITBOX_FLAG_TARGET_GROUNDED) != 0u ? 1u : 0u)
-             : ((flags & (uint32_t)MSL_ZELDA_DIN_HITBOX_FLAG_TARGET_AERIAL) != 0u ? 1u : 0u);
+  return fighter_script_cmd_var(batch, idx, 1u) == 1u ? 1u : 0u;
 }
 
 static inline float zd_din_explode_visual_scale(const MslItemArticleParams* ap, float charge) {
@@ -208,7 +192,7 @@ static void zd_din_spawn_explosion(MslBatch* batch, int bi, size_t src_ii,
   batch->state.item_zelda_din_explode_base_size[ii] = ap->zelda_din_explode_hitbox_size;
 }
 
-static uint8_t zd_din_explosion_try_hit_fighters(MslBatch* batch, int bi, int item_slot,
+static uint8_t zd_din_explosion_collide_fighters(MslBatch* batch, int bi, int item_slot,
                                                  const MslItemArticleParams* ap) {
   if (batch == NULL || ap == NULL || ap->zelda_din_explode_hitbox_count == 0u) {
     return 0u;
@@ -216,10 +200,6 @@ static uint8_t zd_din_explosion_try_hit_fighters(MslBatch* batch, int bi, int it
   const size_t ii = msl_idx_item(bi, item_slot);
   const int owner = (int)batch->state.item_owner[ii];
   if (owner < 0 || owner >= (int)batch->config.num_players) {
-    return 0u;
-  }
-  const uint32_t flags = ap->zelda_din_explode_hitbox_flags;
-  if ((flags & (uint32_t)MSL_ZELDA_DIN_HITBOX_FLAG_BODY_ENABLED) == 0u) {
     return 0u;
   }
   const float charge = batch->state.item_zelda_din_charge[ii];
@@ -237,45 +217,106 @@ static uint8_t zd_din_explosion_try_hit_fighters(MslBatch* batch, int bi, int it
   const float radius = base_size * scale;
   const float hx = batch->state.item_pos_x[ii] + ap->zelda_din_explode_hitbox_x_offset;
   const float hy = batch->state.item_pos_y[ii] + ap->zelda_din_explode_hitbox_y_offset;
+  const float hz = ap->zelda_din_explode_hitbox_z_offset;
+  const MslItemHitCapsulePacket hit = {
+      .x0 = hx,
+      .y0 = hy,
+      .z0 = hz,
+      .x1 = hx,
+      .y1 = hy,
+      .z1 = hz,
+      .radius = radius,
+      .damage = msl_item_reflect_damage_lane(batch, ii, damage),
+      .flags = ap->zelda_din_explode_hitbox_flags,
+      .hitbox_id = 0u,
+      .element = ap->zelda_din_explode_hitbox_element,
+      .item_grounded = 0u,
+  };
+  uint8_t destroy_after_callback = 0u;
+  uint8_t body_callback_pending = 0u;
+  int pending_reflector = -1;
+  float pending_reflect_damage_mul = 1.0f;
   for (int def = 0; def < (int)batch->config.num_players; def++) {
     if (def == owner) {
       continue;
     }
     const size_t d_idx = msl_idx_player(bi, def);
-    if (batch->state.hurtbox_state[d_idx] != 0u ||
-        !zd_din_targets_ground_state(flags, (uint8_t)(batch->state.on_ground[d_idx] != 0u))) {
-      continue;
-    }
     const uint16_t def_iid = batch->state.instance_id[d_idx];
-    if (!hitlist_allows_item_hitbox_fighter(batch, bi, item_slot, 0, def, def_iid)) {
+    MslItemFighterContact contact;
+    const MslItemFighterContactKind kind =
+        item_hitcapsule_select_fighter_contact(batch, bi, item_slot, def, &hit, &contact);
+    if (kind == MSL_ITEM_FIGHTER_CONTACT_NONE) {
       continue;
     }
-    uint8_t hurt_height = 0u;
-    uint8_t hit = 0u;
-    for (uint8_t ci = 0; ci < batch->state.hurtcap_count[d_idx]; ci++) {
-      if (item_swept_sphere_capsule_intersects(batch, bi, def, hx, hy, hx, hy, radius, (int)ci,
-                                               &hurt_height)) {
-        hit = 1u;
-        break;
+    if (kind == MSL_ITEM_FIGHTER_CONTACT_REFLECT) {
+      hitlist_register_item_hitbox_fighter(batch, bi, item_slot, 0, def, def_iid,
+                                           (int)MSL_LBCOLL_INSERT_TODO_7, 0);
+      if (contact.reflect_max_damage >= 0 &&
+          combat_get_env_dmg(hit.damage) > contact.reflect_max_damage) {
+        body_callback_pending = 1u;
+      } else {
+        pending_reflector = def;
+        pending_reflect_damage_mul = contact.reflect_damage_mul;
       }
+      continue;
     }
-    if (hit == 0u) {
+    if (kind == MSL_ITEM_FIGHTER_CONTACT_CLANK) {
+      const uint8_t outcomes =
+          item_hitcapsule_apply_fighter_hitbox_contact(batch, bi, item_slot, def, &hit, &contact);
+      if ((outcomes & (uint8_t)MSL_ITEM_HITBOX_CONTACT_ITEM_RECEIVED) != 0u) {
+        destroy_after_callback = 1u;
+      }
+      continue;
+    }
+    if (kind == MSL_ITEM_FIGHTER_CONTACT_SHIELD || kind == MSL_ITEM_FIGHTER_CONTACT_COUNTER) {
+      combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
+                                   batch->state.item_attack_instance[ii], hit.damage,
+                                   ap->zelda_din_explode_hitbox_shield_damage, hit.element,
+                                   batch->state.item_pos_x[ii]);
+      hitlist_register_item_hitbox_fighter(batch, bi, item_slot, 0, def,
+                                           batch->state.instance_id[d_idx],
+                                           (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
+      destroy_after_callback = 1u;
+      continue;
+    }
+
+    hitlist_register_item_hitbox_fighter(batch, bi, item_slot, 0, def, def_iid,
+                                         (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+    body_callback_pending = 1u;
+    if (batch->state.hurtbox_state[d_idx] == (uint8_t)MSL_HURTCAPS_DISABLED ||
+        contact.hurt_status == (uint8_t)MSL_HURTCAPS_DISABLED) {
+      continue;
+    }
+    const MslCommonParams* common = msl_common_params();
+    if (common != NULL && contact.body_overlap > 0.0f &&
+        contact.body_overlap < common->phantom_overlap_max_x7a8) {
+      combat_apply_item_phantom_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
+                                    batch->state.item_instance_id[ii], hit.damage, hit.element);
       continue;
     }
     const MslItemHitResult res = combat_apply_item_hit(
         batch, bi, owner, def, batch->state.item_attack_id[ii],
         batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
-        batch->state.item_type[ii], batch->state.item_state[ii], damage,
+        batch->state.item_type[ii], batch->state.item_state[ii], hit.damage,
         ap->zelda_din_explode_hitbox_angle, ap->zelda_din_explode_hitbox_kbg,
-        ap->zelda_din_explode_hitbox_wsk, ap->zelda_din_explode_hitbox_bkb, hurt_height,
+        ap->zelda_din_explode_hitbox_wsk, ap->zelda_din_explode_hitbox_bkb, contact.hurt_height,
         ap->zelda_din_explode_hitbox_element, -1.0f, batch->state.item_pos_x[ii],
-        batch->state.item_pos_y[ii], radius, batch->state.item_vel_x[ii], 1u);
-    if (res != MSL_ITEM_HIT_NONE) {
-      const uint16_t def_iid_post = batch->state.instance_id[d_idx];
-      hitlist_register_item_fighter(batch, bi, item_slot, def, def_iid_post,
-                                    (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
-      return 1u;
+        batch->state.item_vel_x[ii], 1u);
+    if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
+      destroy_after_callback = 1u;
     }
+  }
+  // Item_8026A294 collapses the completed fighter traversal to one callback class. Din's
+  // shield/clank callbacks destroy, its DmgDealt callback is NULL, and its Reflected callback is
+  // NULL even though Item_80269F14 still transfers ownership and rebuilds HitCapsule damage.
+  // refs/melee/src/melee/it/item.c::{Item_80269DC8,Item_80269F14,Item_8026A294}
+  // refs/melee/src/melee/it/it_279C.c::itZeldaDinFireExplode
+  if (destroy_after_callback != 0u) {
+    return 1u;
+  }
+  if (body_callback_pending == 0u && pending_reflector >= 0) {
+    msl_item_reflect_apply_transfer_state(batch, ii, msl_idx_player(bi, pending_reflector),
+                                          pending_reflector, pending_reflect_damage_mul);
   }
   return 0u;
 }
@@ -328,9 +369,9 @@ static void zd_din_fire_update_one(MslBatch* batch, int bi, int it,
     batch->state.item_pos_y[ii] += batch->state.item_vel_y[ii];
     float hit_x = 0.0f;
     float hit_y = 0.0f;
-    if (stage_collision_item_line_hit_floor(batch->state.stage_id[bi], old_x, old_y,
-                                            batch->state.item_pos_x[ii],
-                                            batch->state.item_pos_y[ii], &hit_x, &hit_y)) {
+    if (stage_collision_item_line_hit_runtime(batch, bi, old_x, old_y, batch->state.item_pos_x[ii],
+                                              batch->state.item_pos_y[ii], &hit_x, &hit_y, NULL,
+                                              NULL)) {
       batch->state.item_pos_x[ii] = hit_x;
       batch->state.item_pos_y[ii] = hit_y;
       zd_din_enter_release_state(batch, ii, ap);
@@ -358,7 +399,10 @@ static void zd_din_explode_update_one(MslBatch* batch, int bi, int it,
     batch->state.item_hitlag[ii]--;
     return;
   }
-  (void)zd_din_explosion_try_hit_fighters(batch, bi, it, ap);
+  if (zd_din_explosion_collide_fighters(batch, bi, it, ap) != 0u) {
+    item_slot_clear(batch, ii);
+    return;
+  }
   batch->state.item_vel_x[ii] = 0.0f;
   batch->state.item_vel_y[ii] = 0.0f;
   if (batch->state.item_timer[ii] <= 1.0f) {

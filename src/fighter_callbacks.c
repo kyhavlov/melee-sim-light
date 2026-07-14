@@ -22,9 +22,11 @@
 #include "ledge.h"
 #include "locomotion.h"
 #include "match_flow.h"
-#include "move_tables.h"
 #include "motion_state_owners.h"
 #include "motion_state_runtime.h"
+#include "fighter_script.h"
+#include "fighter_contact.h"
+#include "fighter_pose.h"
 #include "knockdown.h"
 #include "physics.h"
 #include "shields.h"
@@ -36,7 +38,6 @@
 #include "timers.h"
 #include "reflector_bubbles.h"
 #include "state_flags.h"
-#include "throw_flow.h"
 
 // NOTE: `blaster_update_post_collision` is intentionally not part of the public blaster module API
 // yet; keep the forward declaration local to preserve the current include surface.
@@ -74,82 +75,18 @@ static inline void clear_begin_frame_anim_transients(MslBatch* batch) {
   }
 }
 
-static inline void clear_landing_status_after_anim_timebase(MslBatch* batch) {
+static inline void clear_landing_status_after_anim_timebase_fighter(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
   }
-  const int num_players = (int)batch->config.num_players;
-  for (int bi = 0; bi < batch->batch_size; bi++) {
-    for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      // Slippi post-frame `l_cancel` is a 1-frame status on LandingAir* entry. Preserve it through
-      // Fighter_8006A360 ordering so frame-0 LandingAir replay seeds can consume the same
-      // ftCo_LandingAir_EnterWithLag branch, then clear before current-frame gameplay/output
-      // unless collision enters a fresh LandingAir row later this step.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
-      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-      batch->state.l_cancel[idx] = 0;
-    }
-  }
-}
-
-static inline uint8_t step_keep_fighter_8006cda4_pre_gate_count(const MslBatch* batch, int bi,
-                                                                int p, int num_players) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const size_t idx = msl_idx_player(bi, p);
-  const uint8_t count = batch->state.fighter_8006cda4_pre_gate_consume_count[idx];
-  if (count == 0u || count > 4u) {
-    return 0u;
-  }
-
-  const uint16_t action = batch->state.action_id[idx];
-  if ((action == (uint16_t)MSL_ACT_ATTACK_AIR_N || action == (uint16_t)MSL_ACT_ATTACK_AIR_B) &&
-      batch->state.on_ground[idx] == 0u && batch->state.hitlag[idx] == 0u &&
-      batch->state.hitstun[idx] == 0u) {
-    return 1u;
-  }
-
-  if (count <= 3u && action == (uint16_t)MSL_ACT_DAMAGE_FALL && batch->state.on_ground[idx] == 0u &&
-      batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] == 0u) {
-    const int attacker = msl_damage_source_local_slot_from_port0(batch, bi, num_players,
-                                                                 batch->state.last_hit_by[idx]);
-    if (attacker >= 0 && attacker != p) {
-      // DamageFall IASA handoff owner:
-      // - DamageFly_IASA can enter DamageFall, then DamageFall_IASA can immediately admit
-      //   AttackAir through ftCo_AttackAir_CheckItemThrowInput.
-      // - The hidden Fighter_8006CDA4 stream phase belongs to the same damage-entry source
-      //   episode and must survive this one-frame IASA handoff until ftCo_8008DCE0 consumes it on
-      //   the accepted hit. Marker 4 is not stream phase and is intentionally excluded.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_IASA
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-      return 1u;
-    }
-  }
-
-  if (count <= 4u && action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
-      batch->state.on_ground[idx] == 0u && batch->state.hitstun[idx] != 0u &&
-      batch->state.instance_hit_by[idx] != 0u) {
-    const int attacker = msl_damage_source_local_slot_from_port0(batch, bi, num_players,
-                                                                 batch->state.last_hit_by[idx]);
-    if (attacker >= 0 && attacker != p) {
-      // DamageFlyTop hitlag-continuity owner:
-      // - The explicit Fighter_8006CDA4 stream phase is replay-seeded for delayed
-      //   ftCo_8008DCE0 DamageFlyRoll gates that can occur after a same-source active-hitlag
-      //   interval.
-      // - Hitlag is still part of the same common-damage source episode; dropping the lane while
-      //   frozen makes rollouts seeded before the later hit lose both the replay frame-start RNG
-      //   clock and the hidden pre-gate consume count before the source-owned gate runs.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-      //   ftCo_DamageFly_Anim,ftCo_DamageFly_Coll,ftCo_8008DCE0}
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-      return 1u;
-    }
-  }
-  return 0u;
+  // Slippi post-frame `l_cancel` is a 1-frame status on LandingAir* entry. Preserve it through
+  // Fighter_8006A360 ordering so frame-0 LandingAir replay seeds can consume the same
+  // ftCo_LandingAir_EnterWithLag branch, then clear before current-frame gameplay/output unless
+  // collision enters a fresh LandingAir row later this step.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  batch->state.l_cancel[idx] = 0;
 }
 
 static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
@@ -180,24 +117,8 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
     }
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      // `seed_t.throw_pulse_consumed` is a one-step seed bridge for throw_flags_b0 pulse ownership:
-      // consume within the current simulated frame, then clear so it cannot stale-carry into later
-      // rollout frames.
-      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-      // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-      batch->state.throw_pulse_consumed[idx] = 0u;
-      batch->state.throw_pulse_crossed_prev_frame[idx] =
-          batch->state.throw_pulse_crossed_curr_frame[idx];
-      batch->state.throw_command_pending_pulse_frame[idx] = 0u;
-      batch->state.throw_command_pending_seed_valid[idx] = 0u;
       batch->state.fall_fast_seed_frame_start[idx] = 0u;
       batch->state.fall_fast_seed_frame_start_valid[idx] = 0u;
-      const uint16_t action_id = batch->state.action_id[idx];
-      if (action_id != (uint16_t)MSL_ACT_THROW_B && action_id != (uint16_t)MSL_ACT_THROW_HI &&
-          action_id != (uint16_t)MSL_ACT_THROW_LW) {
-        batch->state.throw_command_deferred_pulse_frame[idx] = 0u;
-      }
-      batch->state.throw_pulse_crossed_curr_frame[idx] = 0u;
       batch->state.blaster_gun_spawned_this_frame[idx] = 0u;
       // DamageFly wall-ASDI provenance is allowed to arm on the SpecialAirHi wall-contact frame
       // before combat starts hitlag, but it must become live only if the frame actually enters or
@@ -211,45 +132,10 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       if (batch->state.hitlag_pre_timer[idx] == 0u && batch->state.hitlag[idx] == 0u) {
         batch->state.damageflyroll_runtime_x1994_on_exit[idx] = 0u;
       }
-      // `seed_t.source_clear_processhit_damage_pending_phase` is a one-step bridge for hidden
-      // ProcessHit-owned source clear. Consume within this frame only.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-      batch->state.source_clear_processhit_damage_pending_phase[idx] = 0u;
-      // `seed_t.fighter_8006cda4_pre_gate_consume_count` is usually a one-step pre-gate owner.
-      // Keep rollout continuity only across the source-owned airborne AttackAir*/DamageFall/
-      // DamageFlyTop episode that can still reach ftCo_8008DCE0. Marker 4 is still not stream
-      // phase, but for DamageFlyTop same-source AttackAirB segments it carries gate-admission
-      // provenance until the delayed hit consumes the zero-pre-gate DamageFlyRoll decision.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      if (!step_keep_fighter_8006cda4_pre_gate_count(batch, bi, p, num_players)) {
-        batch->state.fighter_8006cda4_pre_gate_consume_count[idx] = 0u;
-      }
-      if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_GUARD_SET_OFF ||
-          batch->state.hitlag[idx] == 0u) {
-        // `seed_t.guard_setoff_exit_frame_speed_mul_f32` initializes a hidden GuardSetOff
-        // hitlag-exit owner. Keep it only while the seeded/live fighter is actually in the frozen
-        // GuardSetOff segment; timers_update consumes it on the exit frame before animation ticks.
-        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-        //   ftCo_80092F2C,ftCo_GuardSetOff_Anim}
-        batch->state.guard_setoff_exit_rate_fp_q16_16[idx] = 0;
-      }
-      // `seed_t.source_clear_grounded_damage_clear_phase` is a one-step bridge for grounded
-      // source-owner clear ownership (`ftCommon_800804FC` path). Consume within this frame only.
-      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-      batch->state.source_clear_grounded_damage_clear_phase[idx] = 0u;
-      // `seed_t.source_clear_terminal_phase` is also one-step bridge ownership. Consume in
-      // timers_update_post_anim(), then clear to prevent sticky carry in rollout frames.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      batch->state.source_clear_terminal_phase[idx] = 0u;
       // One-step replay-facing locomotion / instance-order lanes. Runtime producers update the
       // causal state directly; seeded overrides are consumed within the current step only.
       batch->state.turn_kneebend_facing_override[idx] = 0u;
       batch->state.motion_entry_instance_id_override[idx] = 0u;
-      batch->state.combat_shield_hit_int_damage[idx] = 0u;
-      batch->state.combat_shield_damage_taken[idx] = 0u;
       if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_REBOUND_STOP &&
           batch->state.action_id[idx] != (uint16_t)MSL_ACT_REBOUND) {
         batch->state.rebound_ground_accel_2[idx] = 0.0f;
@@ -268,7 +154,7 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
     // Teacher-forced shield-contact lanes are one-step reseed surfaces. Normal rollouts must
     // return to live shield geometry / collision ordering after the seeded frame.
     // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
-    const size_t shield_base =
+    const size_t hb_seed_base =
         ((size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES * (size_t)MSL_MAX_PLAYERS);
     for (int attacker = 0; attacker < num_players; attacker++) {
       const size_t a_idx = msl_idx_player(bi, attacker);
@@ -293,10 +179,9 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
         }
         for (int victim = 0; victim < num_players; victim++) {
           const size_t si =
-              shield_base + (((size_t)attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb) *
-                                 (size_t)MSL_MAX_PLAYERS +
-                             (size_t)victim);
-          batch->state.combat_shield_contact_hb_kind[si] = 0u;
+              hb_seed_base + (((size_t)attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb) *
+                                  (size_t)MSL_MAX_PLAYERS +
+                              (size_t)victim);
           if (!preserve_hitlag_frozen_hitbox_seed) {
             batch->state.combat_hitlist_hb_cd[si] = 0u;
             batch->state.combat_hitlist_hb_victim_iid[si] = 0u;
@@ -321,32 +206,6 @@ static inline void promote_seed_prev_action_snapshot_post_frame(MslBatch* batch)
   }
 }
 
-static inline void sync_runbrake_cmd0_post_frame(MslBatch* batch) {
-  if (batch == NULL) {
-    return;
-  }
-  const int num_players = (int)batch->config.num_players;
-  for (int bi = 0; bi < batch->batch_size; bi++) {
-    for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_RUN_BRAKE) {
-        batch->state.runbrake_cmd0[idx] = 0u;
-        batch->state.runbrake_freeze_x0[idx] = 0u;
-        continue;
-      }
-      // Decomp: RunBrake cmd_vars[0] is owned by the common RunBrake action script and consumed by
-      // RunBrake_IASA before the TurnRun branch.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
-      //   ftCo_RunBrake_Enter,ftCo_RunBrake_IASA}
-      // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
-      // Source of truth:
-      // - data/moves/<char>.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
-      batch->state.runbrake_cmd0[idx] = move_tables_runbrake_cmd0_active(
-          batch->state.char_id[idx], batch->state.anim_frame_f32[idx]);
-    }
-  }
-}
-
 static inline void cache_prev_action_state(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -360,8 +219,6 @@ static inline void cache_prev_action_state(MslBatch* batch) {
       batch->state.frame_start_action_id[idx] = batch->state.action_id[idx];
       batch->state.frame_start_hitstun[idx] = batch->state.hitstun[idx];
       batch->state.frame_start_animation_index[idx] = batch->state.animation_index[idx];
-      batch->state.frame_start_attack_id[idx] = batch->state.attack_id[idx];
-      batch->state.frame_start_attack_instance[idx] = batch->state.attack_instance[idx];
       batch->state.frame_start_instance_id[idx] = batch->state.instance_id[idx];
       batch->state.frame_start_on_ground[idx] = batch->state.on_ground[idx] ? 1u : 0u;
       batch->state.sheik_special_timer_frame_start[idx] = batch->state.sheik_special_timer[idx];
@@ -619,51 +476,33 @@ static int fighter_callbacks_pre_input_anim_phase(MslBatch* batch, const uint8_t
   // animation timebase advancement.
   match_flow_update_pre_anim(batch);
 
-  // Decomp: animation/script timebase advances at proc prio 1 (Fighter_8006A360) before input
-  // (prio 3). Advance our deterministic cur_anim_frame accumulator here, after timers.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (ftAnim_8006EBA4 under !hitlag)
-  anim_timebase_update_pre_input(batch);
-  clear_landing_status_after_anim_timebase(batch);
-
-  // Post anim-timebase match flow clamps (e.g. EntryStart animation end-frame).
-  match_flow_update_post_anim(batch);
-
-  // Post-anim timer updates (decomp prio 1 under Fighter_8006A360's non-hitlag gate):
-  // - combo timer tick + victim clear (ftColl_800764DC)
-  // - hitstun decrement + end effects (ftCo_8008F744 family)
-  //
-  // NOTE(anim_timebase_mapping):
-  // `anim_timebase_update_pre_input()` in this sim only advances the deterministic `cur_anim_frame`
-  // timebase (Slippi `state_age`) and applies AObj loop wrap. It does *not* run per-action Anim
-  // callbacks. Those state-specific updates are modeled later in `action_update()`.
-  //
-  // This placement means timers_update_post_anim() observes the post-advance `action_frame`, while
-  // still running before action_update(), matching the decomp ordering where ftColl_800764DC runs
-  // before the per-action anim_cb within Fighter_8006A360.
-  timers_update_post_anim(batch);
-
-  // Per-action Anim-callback phase (subset) before input processing.
-  // Decomp: Fighter_8006A360 (prio 1) runs anim callbacks before Fighter_procUpdate input_cb (prio 3).
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-  //
-  // Ordering rationale vs ProcessHit consume:
-  // - This phase currently owns GuardReflect x14/x18 timer tick/expire (ftCo_GuardReflect_Anim path),
-  //   which is a prio-1 anim callback update.
-  // - combat_processhit_consume() models the post-collision ProcessHit-style cleanup (decomp prio 14),
-  //   so it should remain after prio-1 callback effects.
   items_update_pre_fighter_anim_phase(batch);
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
+      // Source priority-1 ownership is one complete Fighter_8006A360 procedure per fighter, not
+      // one global pass per subphase. This ordering is observable when a CatchPull or Throw Anim
+      // callback changes its linked peer before that peer's later procedure runs.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CatchPull_Anim
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+      const size_t idx = msl_idx_player(bi, p);
+      anim_timebase_update_pre_input_fighter(batch, bi, p);
+      fighter_pose_publish_animation_phase_fighter(batch, bi, p);
+      fighter_script_advance_fighter(batch, bi, p);
+      grab_attachment_refresh_xrotn_constraint_after_anim(batch, idx);
+      clear_landing_status_after_anim_timebase_fighter(batch, idx);
+      match_flow_update_post_anim_fighter(batch, bi, p);
+      timers_update_post_anim_fighter(batch, bi, p);
       const MslFighterCallbackContext ctx = msl_fighter_callback_context_make(
           batch, bi, p, num_players, MSL_FIGHTER_CALLBACK_PHASE_PRE_INPUT_ANIM);
       action_update_anim_callback_pre_input_fighter(&ctx);
+      items_spawn_fighter_anim_callback(batch, bi, p);
     }
   }
-  action_update_anim_callbacks_pre_input_global(batch);
+  items_blaster_gun_anim_phase(batch);
+  items_finish_fighter_anim_phase(batch);
 
-  // Decomp-shaped "ProcessHit" consume / cleanup (see combat_processhit_consume for references).
-  combat_processhit_consume(batch);
   return 0;
 }
 
@@ -702,26 +541,17 @@ static void fighter_callbacks_iasa_phase(MslBatch* batch) {
 }
 
 static void fighter_callbacks_phys_phase(MslBatch* batch) {
-  // Fighter-driven item spawns (blaster guns + shots) are evaluated before physics integration so
-  // they use the pre-physics fighter pose/position snapshot (decomp: prio1 Anim vs prio4 Update).
-  items_spawn_fighter_anim_phase(batch);
   state_flags_refresh_camera_targets_pre_physics(batch);
   physics_integrate(batch);
 }
 
 static void fighter_callbacks_collision_phase(MslBatch* batch) {
-  // NOTE(grabbed-victim-coll):
-  // - CapturePulled*/CaptureDamage* uses a Phys position driver (fn_800DAD18) before Coll.
-  // - In this simulator, the capture delta is applied in grab_attachment_update_pre_collision()
-  //   (pre-collision). physics_integrate() skips self/KB integration for those victims to avoid
-  //   double-moving them in a single frame.
-  // - Thrown victims are still updated in a post-collision "accessory callback" style slot.
-  grab_attachment_update_pre_collision(batch);
   cache_collision_stage_prev_pos(batch);
   motion_state_install_live_callbacks_before_map(batch);
   motion_state_finalize_seeded_coll_data_before_map(batch);
   stage_collision_apply(batch);
   cache_collision_stage_cur_pos(batch);
+  grab_attachment_update_thrown_accessory_phase(batch);
   grab_attachment_update_falcon_dive_accessory_phase(batch);
   // Collision environment flags (mpColl-shaped): owns Collide_LedgeGrabMask for scheduling ledge
   // catch after collision.
@@ -759,17 +589,6 @@ static void fighter_callbacks_primitive_refresh_phase(MslBatch* batch, uint8_t r
   // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
   anim_timebase_apply_deferred_tick_once_pre_collision(batch);
   grab_flow_refresh_catch_contract(batch);
-  // Fighter dynamic JObj chains update after animation/physics callbacks and before collision
-  // primitive refresh, matching ftCo_8009DD94 feeding lb_8000B1CC consumers.
-  // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
-  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
-  anim_pose_update_dynamic_state(batch);
-  // Guard/Shield animation owner:
-  // - ftCo_Guard_Anim calls ftCo_800925A4/ftCo_80091BC4 and ftCo_80091E78 before fighter
-  //   collision. Keep the pre-combat refresh scoped to the angled no-submotion Guard BODY owner;
-  //   the full ShieldDesc/state-flag refresh stays in its established post-hitlist slot below.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_Guard_Anim,ftCo_800925A4,ftCo_80091BC4,ftCo_80091E78}
-  shields_refresh_guard_tilt_body_owner(batch);
   if (run_combat) {
     // Fighter hitbox refresh needs the current-frame merged hurtbox state for no-damage contact
     // carry, but BODY/catch/item collision only consumes endpoint geometry when an item or opposing
@@ -794,12 +613,19 @@ static void fighter_callbacks_item_collision_and_combat_phase(MslBatch* batch, u
   shields_refresh(batch);
   reflector_bubbles_refresh(batch);
   if (run_combat) {
-    combat_processhit_pair_begin(batch);
+    combat_processhit_pending_begin(batch);
+    fighter_contact_resolve_catch(batch);
+    // Fighter_8006CB94 traverses fighter HitCapsules before the same fighter's item-HitCapsule
+    // contacts in ftColl_8007925C. This is observable when a fresh Vanish article appears after
+    // accessory publication: an aerial can first contact the invincible owner, then clank with
+    // the article without also reaching its BODY packet.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007925C}
+    fighter_contact_resolve_damage(batch);
   }
   items_update_collision_phase(batch);
-  throw_flow_update_post_items(batch);
   if (run_combat) {
-    combat_resolve(batch);
+    combat_processhit_resolve(batch);
     items_update_post_combat(batch);
   }
   knockdown_update_post_combat(batch);
@@ -807,7 +633,13 @@ static void fighter_callbacks_item_collision_and_combat_phase(MslBatch* batch, u
 
 static void fighter_callbacks_post_frame_phase(MslBatch* batch) {
   anim_timebase_apply_deferred_tick_once_post_combat(batch);
-  sync_runbrake_cmd0_post_frame(batch);
+  // Fighter_8006D9AC owns ftCo_8009E0A8 at GObj priority 0x10, after priority-0xD fighter
+  // collision and priority-0xE ProcessHit. The solved JObj rotation is persistent input to the
+  // next frame's collision pass; advancing it before primitive refresh makes the chain one frame
+  // early and is observably wrong at action transitions.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_Create,Fighter_8006D9AC}
+  // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009E0A8,ftCo_8009DD94}
+  anim_pose_update_dynamic_state(batch);
   state_flags_refresh_post_frame(batch);
   sheik_specials_cache_transform_twins_post_frame(batch);
   timers_update_magnify_damage_post_frame(batch);
