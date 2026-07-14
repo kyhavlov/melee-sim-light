@@ -1,0 +1,38 @@
+/**
+ * @file lbbgflash.h
+ * @brief Background flash effects for dramatic game events.
+ */
+
+#ifndef GALE01_01FC08
+#define GALE01_01FC08
+
+#include <placeholder.h>
+#include <platform.h>
+
+#include <dolphin/mtx.h>
+#include <baselib/gobj.h>
+
+/* 01FC08 */ void fn_8001FC08(void);
+/* 01FEC4 */ void fn_8001FEC4(HSD_GObj* gobj, s32 code);
+/* 0204C8 */ void fn_800204C8(void);
+/* 0205F0 */ void lbBgFlash_800205F0(s32 duration);
+/* 02063C */ void lbBgFlash_8002063C(int count);
+/* 020688 */ void lbBgFlash_80020688(int);
+/* 0206D4 */ void lbBgFlash_800206D4(GXColor*, GXColor*, int);
+/* 02087C */ void lbBgFlash_InitState(GXColor*);
+/* 0208B0 */ void fn_800208B0(u8 arg0);
+/* 0208EC */ void lbBgFlash_800208EC(int);
+/* 0209F4 */ void lbBgFlash_800209F4(void);
+/* 020AEC */ void fn_80020AEC(HSD_JObj*, Mtx);
+/* 020E38 */ void lbBgFlash_80020E38(HSD_JObj*, Vec3*, f32, f32, f32);
+/* 02113C */ void fn_8002113C(HSD_JObj*, Vec3*, f32);
+/* 021410 */ void lbBgFlash_80021410(void*);
+/* 0219E4 */ void fn_800219E4(void*);
+/* 021A10 */ void lbBgFlash_80021A10(f32);
+/* 021A18 */ void lbBgFlash_80021A18(int);
+/* 021B04 */ void fn_80021B04(HSD_GObj*);
+/* 021C1C */ void fn_80021C1C(void);
+/* 021C48 */ void lbBgFlash_80021C48(u32, u32);
+/* 021C80 */ void fn_80021C80(HSD_GObj* gobj);
+
+#endif

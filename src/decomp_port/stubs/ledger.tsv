@@ -1,0 +1,210 @@
+# symbol	classification	reached_by_phase1_tape	preserved_behavior	evidence
+_HSD_mkEnvelopeModelNodeMtx	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+Camera_80031144	camera presentation exclusion	reachable	returns 0.0	source camera mode is not gameplay state in Phase 1
+efAsync_QueueFlush	presentation/audio exclusion	reachable	no-op	headless bootstrap creates no renderer/audio/effect consumer
+efAsync_Spawn	presentation/audio exclusion	reachable	no-op	headless bootstrap creates no renderer/audio/effect consumer
+efLib_DestroyAll	presentation/audio exclusion	reachable	no-op	headless bootstrap creates no renderer/audio/effect consumer
+Fighter_PoisonMushroomEnd	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+Fighter_SuperMushroomEnd	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ft_8007C114	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ft_80087D0C	audio-only SFX remap	yes	identity result	refs/melee/src/melee/ft/ft_0877.c and ftaction.c; only excluded AX calls consume result
+ft_800880D8	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ft_800D2D0C	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ft_800D2E7C	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ft_PlaySFX	presentation/audio exclusion	reachable	no-op	headless bootstrap creates no renderer/audio/effect consumer
+ftCh_GrabUnk1_8015ADD0	unsupported fighter domain exclusion	no	abort with symbol name	Phase 1 constructs Fox only; any reach is a dispatch failure
+ftCh_GrabUnk1_8015BC88	unsupported fighter domain exclusion	no	abort with symbol name	Phase 1 constructs Fox only; any reach is a dispatch failure
+ftCo_80090780	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_80091A4C	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_80091AD8	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_80091B90	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_80091B9C	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_80094E54	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_80095328	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_80095744	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800957F4	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_80099264	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_80099794	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_80099A58	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_8009F834	presentation/audio exclusion	reachable	no-op	headless bootstrap creates no renderer/audio/effect consumer
+ftCo_800A17E4	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800A1874	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800A1904	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800A1948	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800A198C	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800A1994	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800A1A24	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800A2040	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800C0A28	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800C0A98	presentation/audio exclusion	reachable	no-op	headless bootstrap creates no renderer/audio/effect consumer
+ftCo_800C1E64	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800C3B10	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800C511C	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800C5240	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800C53E4	source-equivalent Hammer range predicate	yes	exact motion-id range predicate	refs/melee/src/melee/ft/chara/ftCommon/ftCo_HammerWait.c
+ftCo_800C5A50	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800C5D34	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800C703C	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800CEE70	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800D3158	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800D4F24	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_800D5FB0	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800D67C4	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800D6824	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800D688C	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800D68C0	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800D6928	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800D705C	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800D7100	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800D71D8	presentation/audio exclusion	reachable	no-op	headless bootstrap creates no renderer/audio/effect consumer
+ftCo_800D730C	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800D8A38	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_800DB500	presentation/audio exclusion	reachable	no-op	headless bootstrap creates no renderer/audio/effect consumer
+ftCo_800DE9D8	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_Attack1_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_Attack100_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_AttackAir_CheckItemThrowInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_AttackDash_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_AttackDash_SetMv0	excluded attack-state hook	no	no-op	attack states are outside Phase 1
+ftCo_AttackHi3_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_AttackHi4_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_AttackHi4_CheckInputNoD0	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_AttackLw3_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_AttackLw4_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_AttackS3_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_AttackS4_8008C114	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_AttackS4_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_Catch_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_DownSpot_Enter	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_HammerLanding_Enter	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_ItemScrew_Enter	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftCo_SpecialAir_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_SpecialS_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_SpecialS_HasInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftCo_SquatWait_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftFx_AppealS_CheckInput	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftKb_SpecialN_800F1D24	excluded special-state hook	yes	no-op	called from source map pass but has no effect outside its unsupported special state
+ftKb_SpecialN_800F1F1C	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+ftMh_MS_343_80151484	unsupported fighter domain exclusion	no	abort with symbol name	Phase 1 constructs Fox only; any reach is a dispatch failure
+ftMh_MS_389_80151018	unsupported fighter domain exclusion	no	abort with symbol name	Phase 1 constructs Fox only; any reach is a dispatch failure
+ftPe_8011BA54	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftPe_8011BAD8	Phase 1 input/state exclusion	reachable	false/zero result only	source predicate is outside the bounded locomotion input/state contract; returns false
+ftPe_8011D598	unsupported fighter domain exclusion	no	abort with symbol name	Phase 1 constructs Fox only; any reach is a dispatch failure
+gm_80167470	match-rule exclusion	reachable	false/zero result only	fixed two-Fox FD Phase 1 bootstrap does not enable this match rule
+GXBegin	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXCallDisplayList	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXClearVtxDesc	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXInitTexObj	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXInitTexObjCI	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXInitTexObjLOD	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXInitTlutObj	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXLoadNrmMtxImm	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXLoadPosMtxImm	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXLoadTexMtxImm	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXLoadTexObj	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXLoadTlut	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXPixModeSync	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetAlphaCompare	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetAlphaUpdate	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetArray	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetBlendMode	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetChanAmbColor	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetChanCtrl	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetChanMatColor	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetColorUpdate	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetCullMode	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetCurrentMtx	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetDither	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetDstAlpha	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetNumChans	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetNumTevStages	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetNumTexGens	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTevAlphaIn	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTevAlphaOp	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTevColor	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTevColorIn	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTevColorOp	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTevColorS10	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTevKAlphaSel	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTevKColor	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTevKColorSel	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTevOp	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTevOrder	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTevSwapMode	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetTexCoordGen2	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetVtxAttrFmt	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetVtxDesc	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetZCompLoc	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+GXSetZMode	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_ByteCodeEval	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_CObjGetCurrent	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_CObjGetInvViewingMtxPtrDirect	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_JObjDispSub	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_JObjMakePositionMtx	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_LObj_803668EC	unreached presentation/platform branch	no	abort with symbol name	no render/light graph is installed in the headless scheduler
+HSD_LObjAddCurrent	unreached presentation/platform branch	no	abort with symbol name	no render/light graph is installed in the headless scheduler
+HSD_LObjClearFlags	unreached presentation/platform branch	no	abort with symbol name	no render/light graph is installed in the headless scheduler
+HSD_LObjGetActiveByID	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_LObjGetActiveByIndex	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_LObjGetCurrentByType	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_LObjGetLightMaskAlpha	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_LObjGetLightMaskDiffuse	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_LObjGetLightMaskSpecular	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_LObjGetLightVector	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_LObjGetNbActive	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_LObjRemoveAll	unreached presentation/platform branch	no	abort with symbol name	no render/light graph is installed in the headless scheduler
+HSD_LObjSetCurrentAll	unreached presentation/platform branch	no	abort with symbol name	no render/light graph is installed in the headless scheduler
+HSD_LObjSetFlags	unreached presentation/platform branch	no	abort with symbol name	no render/light graph is installed in the headless scheduler
+HSD_LObjSetup	renderer/platform exclusion	no	abort with symbol name	GX/light/camera/display path is not scheduled by the headless bootstrap
+HSD_LObjSetupInit	unreached presentation/platform branch	no	abort with symbol name	no render/light graph is installed in the headless scheduler
+HSD_PadRumbleAdd	rumble presentation exclusion	reachable	returns 0	headless bootstrap has no rumble hardware/list
+HSD_PadRumbleRemoveId	presentation/audio exclusion	reachable	no-op	headless bootstrap creates no renderer/audio/effect consumer
+HSD_PerfCountEnvelopeBlending	render profiler exclusion	reachable	no-op	renderer-only performance counter
+ifMagnify_802FC998	presentation exclusion	reachable	false/zero result only	offscreen magnifier UI is not created by the headless bootstrap
+it_8026B320	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_8026B3F8	item/article registration exclusion	yes	no-op	Fox OnLoad registration reached; item/article creation is explicitly outside Phase 1
+it_8026B588	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_8026B6C8	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_8026B7A4	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_8026BC68	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_80284FC4	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_80285024	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_8028B08C	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_8028B618	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_8028B648	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_8028B6B0	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_8028B718	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_8028B780	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_8028B7E8	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_8028B850	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_802BDA40	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_802BDD40	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+it_802BDDB4	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+Item_8026A8EC	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+Item_8026ABD8	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+itGetKind	item/article domain exclusion	no	abort with symbol name	items/articles are outside Phase 1; any reach is a bootstrap/tape failure
+lbAudioAx_80023870	audio exclusion	yes	returns 0	AX side effects have no gameplay consumer
+lbAudioAx_800263E8	presentation/audio exclusion	reachable	no-op	headless bootstrap creates no renderer/audio/effect consumer
+lbAudioAx_800264E4	presentation/audio exclusion	reachable	no-op	headless bootstrap creates no renderer/audio/effect consumer
+lbBgFlash_80021C48	presentation/audio exclusion	reachable	no-op	headless bootstrap creates no renderer/audio/effect consumer
+lbRefract_80022998	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+lbRefract_80022BD0	unsupported/unresolved source branch	no	abort with symbol name	link-visible loud stub in unresolved_abort.c; import exact owner if reached
+lbRefract_PObjLoad	headless renderer adaptation	yes	base hsdPObj.load retained; GX refraction rewrite omitted	refs/melee/src/melee/lb/lbrefract.c; model topology retained
+pl_80037C60	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+pl_80037ECC	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+pl_8003EC9C	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+pl_8003FC44	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+pl_8003FE1C	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+pl_8003FFDC	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+pl_80040048	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+pl_800402D0	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+pl_80040330	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+pl_80040460	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+pl_80040B8C	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+pl_800411C4	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+pl_80041280	per-player statistics exclusion	yes	no-op	source pl statistics writes are not an observable Phase 1 gameplay owner
+plAttack_80037B08	combat/statistics exclusion	reachable	false/zero result only	player combat/stat owner is outside Phase 1 movement output
+plStale_IncrementAttackInstance	combat/statistics exclusion	reachable	false/zero result only	player combat/stat owner is outside Phase 1 movement output
+un_80322258	crowd-audio/statistics exclusion	reachable	false/zero result only	refs/melee/src/melee/sfx/crowdsfx.c; crowd response is not gameplay state
+un_803224DC	crowd-audio/statistics exclusion	reachable	false/zero result only	refs/melee/src/melee/sfx/crowdsfx.c; crowd response is not gameplay state
+un_80322598	crowd-audio/statistics exclusion	no	returns 0	refs/melee/src/melee/sfx/crowdsfx.c; result is not consumed

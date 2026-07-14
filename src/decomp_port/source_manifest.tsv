@@ -1,0 +1,102 @@
+# decomp_pin	507715a982c95992c271483c7e5be05a06689dff
+# upstream_path	local_path	upstream_match	local_copy	disposition
+extern/dolphin/include/	src/decomp_port/upstream/extern/dolphin/include/	header-substrate	exact-tree	Dolphin SDK declaration/type substrate
+src/**/*.h	src/decomp_port/upstream/src/**/*.h	header-substrate	exact-or-host-adapted-tree	decomp declaration/type substrate; only listed C owners compile
+src/melee/ft/chara/ftCommon/ftCo_09F4.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_09F4.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_Dash.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Dash.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_Fall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Fall.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_FallAerial.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_FallAerial.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_Jump.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Jump.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_KneeBend.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_Landing.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Landing.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_Ottotto.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_Run.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Run.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_RunBrake.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_RunDirect.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_StopCeil.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_StopCeil.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_StopWall.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_StopWall.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_Turn.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Turn.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_TurnRun.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_Wait.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Wait.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftCommon/ftCo_Walk.c	src/decomp_port/upstream/src/melee/ft/chara/ftCommon/ftCo_Walk.c	matching	exact	compiled common-action owner
+src/melee/ft/chara/ftFox/ftFx_Init.c	src/decomp_port/upstream/src/melee/ft/chara/ftFox/ftFx_Init.c	matching	exact	compiled Fox owner
+src/melee/ft/fighter.c	src/decomp_port/upstream/src/melee/ft/fighter.c	matching	host-adapted	compiled fighter-core owner
+src/melee/ft/ftCo_800C7CA0.c	src/decomp_port/upstream/src/melee/ft/ftCo_800C7CA0.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ft_0819.c	src/decomp_port/upstream/src/melee/ft/ft_0819.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ft_081B.c	src/decomp_port/upstream/src/melee/ft/ft_081B.c	matching	host-adapted	compiled fighter-core owner
+src/melee/ft/ft_084E.c	src/decomp_port/upstream/src/melee/ft/ft_084E.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ft_0852.c	src/decomp_port/upstream/src/melee/ft/ft_0852.c	nonmatching	host-adapted	compiled fighter-core owner
+src/melee/ft/ft_0881.c	src/decomp_port/upstream/src/melee/ft/ft_0881.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ft_0892.c	src/decomp_port/upstream/src/melee/ft/ft_0892.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ft_0899.c	src/decomp_port/upstream/src/melee/ft/ft_0899.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ft_08A1.c	src/decomp_port/upstream/src/melee/ft/ft_08A1.c	matching	host-adapted	compiled fighter-core owner
+src/melee/ft/ft_0C88.c	src/decomp_port/upstream/src/melee/ft/ft_0C88.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ft_0C8C.c	src/decomp_port/upstream/src/melee/ft/ft_0C8C.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ft_0DF0.c	src/decomp_port/upstream/src/melee/ft/ft_0DF0.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftaction.c	src/decomp_port/upstream/src/melee/ft/ftaction.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftanim.c	src/decomp_port/upstream/src/melee/ft/ftanim.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftchangeparam.c	src/decomp_port/upstream/src/melee/ft/ftchangeparam.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftcliffcommon.c	src/decomp_port/upstream/src/melee/ft/ftcliffcommon.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftcolanim.c	src/decomp_port/upstream/src/melee/ft/ftcolanim.c	matching	host-adapted	compiled fighter-core owner
+src/melee/ft/ftcoll.c	src/decomp_port/upstream/src/melee/ft/ftcoll.c	nonmatching	host-adapted	compiled fighter-core owner
+src/melee/ft/ftcommon.c	src/decomp_port/upstream/src/melee/ft/ftcommon.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftdata.c	src/decomp_port/upstream/src/melee/ft/ftdata.c	matching	host-adapted	compiled fighter-core owner
+src/melee/ft/ftdevice.c	src/decomp_port/upstream/src/melee/ft/ftdevice.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftdynamics.c	src/decomp_port/upstream/src/melee/ft/ftdynamics.c	nonmatching	exact	compiled fighter-core owner
+src/melee/ft/ftlib.c	src/decomp_port/upstream/src/melee/ft/ftlib.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftmaterial.c	src/decomp_port/upstream/src/melee/ft/ftmaterial.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftmetal.c	src/decomp_port/upstream/src/melee/ft/ftmetal.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftparts.c	src/decomp_port/upstream/src/melee/ft/ftparts.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftswing.c	src/decomp_port/upstream/src/melee/ft/ftswing.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftwaitanim.c	src/decomp_port/upstream/src/melee/ft/ftwaitanim.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftwalkcommon.c	src/decomp_port/upstream/src/melee/ft/ftwalkcommon.c	matching	exact	compiled fighter-core owner
+src/melee/ft/ftwalljump.c	src/decomp_port/upstream/src/melee/ft/ftwalljump.c	matching	exact	compiled fighter-core owner
+src/melee/gr/grdatfiles.c	src/decomp_port/upstream/src/melee/gr/grdatfiles.c	matching	exact	compiled ground/stage owner
+src/melee/gr/grdynamicattr.c	src/decomp_port/upstream/src/melee/gr/grdynamicattr.c	matching	exact	compiled ground/stage owner
+src/melee/gr/ground.c	src/decomp_port/upstream/src/melee/gr/ground.c	nonmatching	host-adapted	compiled ground/stage owner
+src/melee/lb/lb_00B0.c	src/decomp_port/upstream/src/melee/lb/lb_00B0.c	matching	exact	compiled library/data owner
+src/melee/lb/lb_00CE.c	src/decomp_port/upstream/src/melee/lb/lb_00CE.c	matching	exact	compiled library/data owner
+src/melee/lb/lbanim.c	src/decomp_port/upstream/src/melee/lb/lbanim.c	matching	exact	compiled library/data owner
+src/melee/lb/lbarchive.c	src/decomp_port/upstream/src/melee/lb/lbarchive.c	matching	host-adapted	compiled library/data owner
+src/melee/lb/lbcollision.c	src/decomp_port/upstream/src/melee/lb/lbcollision.c	nonmatching	exact	compiled library/data owner
+src/melee/lb/lbcommand.c	src/decomp_port/upstream/src/melee/lb/lbcommand.c	matching	exact	compiled library/data owner
+src/melee/lb/lbspdisplay.c	src/decomp_port/upstream/src/melee/lb/lbspdisplay.c	nonmatching	host-adapted	compiled library/data owner
+src/melee/lb/lbvector.c	src/decomp_port/upstream/src/melee/lb/lbvector.c	matching	host-adapted	compiled library/data owner
+src/melee/mp/mpcoll.c	src/decomp_port/upstream/src/melee/mp/mpcoll.c	nonmatching	exact	compiled stage-collision owner
+src/melee/mp/mpisland.c	src/decomp_port/upstream/src/melee/mp/mpisland.c	nonmatching	exact	compiled stage-collision owner
+src/melee/mp/mplib.c	src/decomp_port/upstream/src/melee/mp/mplib.c	nonmatching	exact	compiled stage-collision owner
+src/melee/pl/player.c	src/decomp_port/upstream/src/melee/pl/player.c	matching	exact	compiled player-state owner
+src/sysdolphin/baselib/aobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/aobj.c	matching	host-adapted	compiled HSD runtime owner
+src/sysdolphin/baselib/archive.c	src/decomp_port/upstream/src/sysdolphin/baselib/archive.c	matching	host-adapted	compiled HSD runtime owner
+src/sysdolphin/baselib/class.c	src/decomp_port/upstream/src/sysdolphin/baselib/class.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/dobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/dobj.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/fobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/fobj.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/gobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobj.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/gobjgxlink.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjgxlink.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/gobjinit.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjinit.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/gobjobject.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjobject.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/gobjplink.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjplink.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/gobjproc.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjproc.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/gobjuserdata.c	src/decomp_port/upstream/src/sysdolphin/baselib/gobjuserdata.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/hash.c	src/decomp_port/upstream/src/sysdolphin/baselib/hash.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/id.c	src/decomp_port/upstream/src/sysdolphin/baselib/id.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/jobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/jobj.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/list.c	src/decomp_port/upstream/src/sysdolphin/baselib/list.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/mobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/mobj.c	matching	host-adapted	compiled HSD runtime owner
+src/sysdolphin/baselib/mtx.c	src/decomp_port/upstream/src/sysdolphin/baselib/mtx.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/objalloc.c	src/decomp_port/upstream/src/sysdolphin/baselib/objalloc.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/object.c	src/decomp_port/upstream/src/sysdolphin/baselib/object.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/pobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/pobj.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/quatlib.c	src/decomp_port/upstream/src/sysdolphin/baselib/quatlib.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/random.c	src/decomp_port/upstream/src/sysdolphin/baselib/random.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/robj.c	src/decomp_port/upstream/src/sysdolphin/baselib/robj.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/spline.c	src/decomp_port/upstream/src/sysdolphin/baselib/spline.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/state.c	src/decomp_port/upstream/src/sysdolphin/baselib/state.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/tev.c	src/decomp_port/upstream/src/sysdolphin/baselib/tev.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/texp.c	src/decomp_port/upstream/src/sysdolphin/baselib/texp.c	nonmatching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/texpdag.c	src/decomp_port/upstream/src/sysdolphin/baselib/texpdag.c	nonmatching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/tobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/tobj.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/util.c	src/decomp_port/upstream/src/sysdolphin/baselib/util.c	matching	exact	compiled HSD runtime owner
+src/sysdolphin/baselib/wobj.c	src/decomp_port/upstream/src/sysdolphin/baselib/wobj.c	matching	exact	compiled HSD runtime owner
