@@ -26,6 +26,14 @@ PY ?= $(ROOT)/.venv/bin/python
 HOST_CC ?= cc
 MSL_DATA_DIR ?= $(ROOT)/data
 DATA ?= $(abspath $(MSL_DATA_DIR))/raw
+VALIDATION_SUITE ?= replays/suites/aggregate_recent.json
+VALIDATION_CHARACTERS ?= Fox,Falco
+VALIDATION_STAGES ?= 32,31,3
+VALIDATION_BACKEND ?= native
+VALIDATION_WORKERS ?= 0
+VALIDATION_BUILD_JOBS ?= 4
+VALIDATION_FRAMES ?= 0
+VALIDATION_ARGS ?=
 
 SOURCE_SYNC := $(ROOT)/tools/melee_core/source_sync.sh
 VENDOR_FILES := $(shell find $(CORE)/vendor -type f -print | LC_ALL=C sort)
@@ -142,7 +150,7 @@ $(PPC_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
 $(NATIVE_OBJ_DIR)/vendor/src/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast -mfma
 $(NATIVE_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast -mfma
 
-.PHONY: all runtime native source source-check validation validator clean run run-native toolchain data-check smoke native-smoke map-smoke validation-smoke test
+.PHONY: all runtime native source source-check validation validator validation-suite clean run run-native toolchain data-check smoke native-smoke map-smoke validation-smoke test
 
 all: runtime
 
@@ -166,7 +174,7 @@ $(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(CORE)/runtime/wire.h
 	@mkdir -p "$(@D)"
 	@PY_INCLUDE="$$($(PY) -c 'import sysconfig; print(sysconfig.get_path("include"))')"; \
 		"$(HOST_CC)" -O3 -std=c11 -fPIC -shared -Wall -Wextra \
-			-D_POSIX_C_SOURCE=200809L -I"$$PY_INCLUDE" \
+			-D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -I"$$PY_INCLUDE" \
 			-I"$(CORE)" "$<" -lm -o "$@"
 
 toolchain: $(TOOLCHAIN_STAMP)
@@ -286,6 +294,14 @@ map-smoke: data-check $(MAP_SMOKE)
 validation-smoke: validation native
 	@timeout 25s env OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
 		"$(PY)" -m pytest -q "$(ROOT)/tests/test_melee_core_validation.py"
+
+validation-suite:
+	@MSL_DATA_DIR="$(abspath $(MSL_DATA_DIR))" "$(PY)" -m tools.melee_core.validate_replay \
+		--suite "$(VALIDATION_SUITE)" \
+		--characters "$(VALIDATION_CHARACTERS)" --stages "$(VALIDATION_STAGES)" \
+		--backend "$(VALIDATION_BACKEND)" --workers "$(VALIDATION_WORKERS)" \
+		--build-jobs "$(VALIDATION_BUILD_JOBS)" --frames "$(VALIDATION_FRAMES)" \
+		--timing $(VALIDATION_ARGS)
 
 test: source-check smoke native-smoke validation-smoke
 

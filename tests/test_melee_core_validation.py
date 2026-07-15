@@ -10,6 +10,8 @@ from tools.melee_core.validate_replay import (
     PPC_BINARY,
     QEMU,
     load_native,
+    load_suite_cases,
+    run_cases,
     validate_one,
 )
 
@@ -58,3 +60,30 @@ def test_validation_streams_starter_replay_from_arrow(backend: str) -> None:
     assert result["first_mismatch_frame"] is None
     assert result["mismatch_count"] == 0
     assert result["details"] == []
+
+
+def test_native_validation_runs_current_oracle_replays_in_parallel() -> None:
+    required = [NATIVE, NATIVE_BINARY]
+    if not all(path.is_file() for path in required):
+        pytest.skip("native core validation artifacts are unavailable")
+    _suite, cases = load_suite_cases(
+        ROOT / "replays/suites/aggregate_recent.json",
+        characters=frozenset(("fox",)),
+        stages=frozenset((32,)),
+    )
+
+    outcomes, wall_seconds = run_cases(
+        load_native(),
+        cases,
+        workers=len(cases),
+        frames=256,
+        start_frame=None,
+        timeout=3.0,
+        backend="native",
+        signed_zero_equal=False,
+    )
+
+    assert len(outcomes) == 5
+    assert all(outcome.error is None for outcome in outcomes)
+    assert all(outcome.result is not None and outcome.result["pass"] for outcome in outcomes)
+    assert wall_seconds < 3.0

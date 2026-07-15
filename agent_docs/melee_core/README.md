@@ -296,13 +296,34 @@ only builds/loads it, asks Peppi for the replay, and formats the small returned 
 every preceding replay input, but begins comparison at frame `F`; this lets later source-owner gaps
 remain visible behind a known match-opening mismatch. Multiple replay paths can be supplied to one
 command, which builds and imports the validator once; `--no-build` skips even the no-op Make check
-for repeated runs. The raw game DAT directory remains `refs/melee-disc/files`.
+for repeated runs. Both runtimes resolve original archives from `$MSL_DATA_DIR/raw`.
 
-On the development host, the full 2,723-transition starter replay takes roughly 3--4 seconds and
-about 69 MiB maximum RSS through the direct path. The discarded validation-buffer implementation
-took about 304 MiB for the same replay. At this size QEMU executing the unoptimized PPC source is
-the dominant cost; a future native scalar build, not more Python preprocessing, is the next major
-throughput lever for million-frame suites.
+The canonical parallel suite command is:
+
+```bash
+make -f src/melee_core/Makefile validation-suite
+```
+
+It reads `replays/suites/aggregate_recent.json` rather than maintaining a second replay list. The
+default Phase 5 scope selects Fox/Falco on Final Destination, Battlefield, and frozen Pokemon
+Stadium: 23 of the aggregate suite's 97 entries. `VALIDATION_CHARACTERS`, `VALIDATION_STAGES`,
+`VALIDATION_BACKEND`, `VALIDATION_WORKERS`, and `VALIDATION_FRAMES` may narrow an exploratory run;
+the committed default remains the forward completion gate. For example, the current exact controls
+on both backends are:
+
+```bash
+make -f src/melee_core/Makefile validation-suite \
+  VALIDATION_CHARACTERS=Fox VALIDATION_STAGES=32 \
+  VALIDATION_BACKEND=both VALIDATION_FRAMES=1000
+```
+
+Auto worker selection uses up to 16 replay runners. A bounded Python thread owns Peppi loading for
+one replay at a time, then passes its Arrow buffers directly to the C extension; there is no
+per-frame Python work or Arrow/NumPy materialization. The C stream boundary releases the GIL and
+uses `posix_spawn` plus atomically close-on-exec pipes to launch isolated scalar runtimes safely
+from concurrent workers. Builds and raw-data verification happen once before fan-out. Results are
+printed in suite order with per-replay pass/fail/error, first mismatch, runner FPS, and a backend
+summary containing compared frames, wall time, aggregate FPS, and summed runner CPU time.
 
 The input wire carries Slippi's physical controller samples, not only the processed Fighter input
 floats. This distinction is required for UCF: `Recording/SendGamePreFrame.asm` records processed
@@ -813,6 +834,17 @@ Add Falco, Marth, Sheik, Zelda, Captain Falcon, the remaining five legal stages,
 items/articles and stage objects, character/stage-specific Slippi patch behavior, singles match
 rules, and four-player/doubles scheduling. Compile each new source-owner vertical for both PPC and
 native targets, and expand by shared source owner rather than replay row.
+
+The first Phase 5 packet is Falco plus Battlefield and frozen Pokemon Stadium. Its canonical
+23-replay gate is already active through `validation-suite`. Before gameplay expansion, the current
+native baseline reports the five existing Fox/Fox FD controls exact (41,354 transitions) and the 18
+future-scope entries as explicit unsupported errors: 11 Falco-containing FD replays, three
+Battlefield replays, and four frozen-Stadium replays. With 16 requested workers, that full baseline
+completed in 0.66 seconds while validating the runnable 41,354 frames at 62.7k aggregate FPS, with
+about 230 MiB peak process RSS. A controlled five-replay native comparison improved from 2.07
+seconds / 20.0k FPS with one worker to 0.60 seconds / 68.8k FPS with five workers. Five repeated
+concurrent native probes and a five-replay 1,000-transition native/PPC gate pass after replacing
+thread-unsafe `fork` launch with `posix_spawn`.
 
 ### Phase 6 — Production performance and API cutover
 

@@ -7,6 +7,7 @@
 #include <math.h>
 #include <poll.h>
 #include <signal.h>
+#include <spawn.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,8 @@
 #include <unistd.h>
 
 #include "runtime/wire.h"
+
+extern char** environ;
 
 // Stable Arrow C Data Interface ABI. Peppi's PyArrow StructArray exports these
 // trees without materializing NumPy columns or copying any frame data.
@@ -1106,33 +1109,51 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
   pid_t child = -1;
   double deadline = monotonic_seconds() + timeout;
   uint8_t read_buf[IO_CHUNK_BYTES];
+  posix_spawn_file_actions_t actions;
+  int actions_initialized = 0;
+  int spawn_error;
 
-  if (pipe(input_pipe) != 0 || pipe(output_pipe) != 0) {
+  // Replay validation fans out from Python threads. O_CLOEXEC must be installed atomically with
+  // pipe creation so a concurrently spawned runner cannot retain another runner's pipe endpoints
+  // across exec and indefinitely suppress EOF.
+  if (pipe2(input_pipe, O_CLOEXEC) != 0 || pipe2(output_pipe, O_CLOEXEC) != 0) {
     snprintf(error, error_size, "pipe: %s", strerror(errno));
     goto done;
   }
-  child = fork();
-  if (child < 0) {
-    snprintf(error, error_size, "fork: %s", strerror(errno));
+  spawn_error = posix_spawn_file_actions_init(&actions);
+  if (spawn_error != 0) {
+    snprintf(error, error_size, "posix_spawn_file_actions_init: %s", strerror(spawn_error));
     goto done;
   }
-  if (child == 0) {
-    if (dup2(input_pipe[0], STDIN_FILENO) < 0 || dup2(output_pipe[1], STDOUT_FILENO) < 0) {
-      _exit(126);
-    }
-    close(input_pipe[0]);
-    close(input_pipe[1]);
-    close(output_pipe[0]);
-    close(output_pipe[1]);
-    if (direct_native) {
-      execl(binary_path, binary_path, data_root, "--stream", (char*)NULL);
-    } else {
-      execl(qemu_path, qemu_path, "-L", sysroot, binary_path, data_root, "--stream", (char*)NULL);
-    }
-    fprintf(stderr, "failed to execute %s: %s\n", direct_native ? binary_path : qemu_path,
-            strerror(errno));
-    _exit(127);
+  actions_initialized = 1;
+  if ((spawn_error = posix_spawn_file_actions_adddup2(&actions, input_pipe[0], STDIN_FILENO)) !=
+          0 ||
+      (spawn_error = posix_spawn_file_actions_adddup2(&actions, output_pipe[1], STDOUT_FILENO)) !=
+          0 ||
+      (spawn_error = posix_spawn_file_actions_addclose(&actions, input_pipe[0])) != 0 ||
+      (spawn_error = posix_spawn_file_actions_addclose(&actions, input_pipe[1])) != 0 ||
+      (spawn_error = posix_spawn_file_actions_addclose(&actions, output_pipe[0])) != 0 ||
+      (spawn_error = posix_spawn_file_actions_addclose(&actions, output_pipe[1])) != 0) {
+    snprintf(error, error_size, "posix_spawn file action: %s", strerror(spawn_error));
+    goto done;
   }
+  if (direct_native) {
+    char* const argv[] = {(char*)binary_path, (char*)data_root, "--stream", NULL};
+    spawn_error = posix_spawn(&child, binary_path, &actions, NULL, argv, environ);
+  } else {
+    char* const argv[] = {
+        (char*)qemu_path, "-L", (char*)sysroot, (char*)binary_path, (char*)data_root,
+        "--stream",       NULL};
+    spawn_error = posix_spawn(&child, qemu_path, &actions, NULL, argv, environ);
+  }
+  if (spawn_error != 0) {
+    child = -1;
+    snprintf(error, error_size, "posix_spawn %s: %s", direct_native ? binary_path : qemu_path,
+             strerror(spawn_error));
+    goto done;
+  }
+  posix_spawn_file_actions_destroy(&actions);
+  actions_initialized = 0;
   close(input_pipe[0]);
   input_pipe[0] = -1;
   close(output_pipe[1]);
@@ -1266,6 +1287,9 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
   result = 0;
 
 done:
+  if (actions_initialized) {
+    posix_spawn_file_actions_destroy(&actions);
+  }
   if (input_fd >= 0) {
     close(input_fd);
   }
