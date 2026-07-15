@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import hashlib
 import importlib.util
 import json
 import os
@@ -28,7 +29,7 @@ TOOLCHAIN = BUILD / "toolchain" / "root"
 QEMU = TOOLCHAIN / "usr" / "bin" / "qemu-ppc-static"
 SYSROOT = TOOLCHAIN / "usr" / "powerpc-linux-gnu"
 DEFAULT_CHARACTERS = "Fox,Falco"
-DEFAULT_STAGES = "32,31,3"
+DEFAULT_STAGES = "32,31,3,2,8,28"
 MAX_AUTO_WORKERS = 16
 DEFAULT_CLASSIFICATIONS = ROOT / "replays/suites/melee_core_classifications.json"
 
@@ -84,6 +85,7 @@ CLASSIFICATION_SNAPSHOT_KEYS = (
     "first_render_visibility_mismatch_frame",
     "signed_zero_equal_count",
 )
+CLASSIFICATION_COMPACT_FIELD_KEY = "mismatch_fields_digest"
 
 
 @lru_cache(maxsize=1)
@@ -118,8 +120,19 @@ def load_classifications(path: Path) -> dict[str, ReplayClassification]:
         for backend, snapshot in expected.items():
             if backend not in {"native", "ppc"} or not isinstance(snapshot, dict):
                 raise ValueError(f"{path}: invalid classification backend for {replay}")
-            missing = set(CLASSIFICATION_SNAPSHOT_KEYS) - set(snapshot)
-            extra = set(snapshot) - set(CLASSIFICATION_SNAPSHOT_KEYS)
+            snapshot_keys = set(snapshot)
+            required = set(CLASSIFICATION_SNAPSHOT_KEYS) - {"mismatch_fields"}
+            missing = required - snapshot_keys
+            detail_keys = snapshot_keys & {
+                "mismatch_fields",
+                CLASSIFICATION_COMPACT_FIELD_KEY,
+            }
+            if len(detail_keys) != 1:
+                missing.add("mismatch_fields or mismatch_fields_digest")
+            allowed = set(CLASSIFICATION_SNAPSHOT_KEYS) | {
+                CLASSIFICATION_COMPACT_FIELD_KEY
+            }
+            extra = snapshot_keys - allowed
             if missing or extra:
                 raise ValueError(
                     f"{path}: invalid {backend} snapshot keys for {replay}; "
@@ -141,6 +154,22 @@ def load_classifications(path: Path) -> dict[str, ReplayClassification]:
 
 def classification_snapshot(result: dict[str, object]) -> dict[str, object]:
     return {key: result[key] for key in CLASSIFICATION_SNAPSHOT_KEYS}
+
+
+def mismatch_fields_digest(fields: object) -> str:
+    payload = json.dumps(fields, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def classification_matches(
+    result: dict[str, object], expected: dict[str, object]
+) -> bool:
+    actual = classification_snapshot(result)
+    if CLASSIFICATION_COMPACT_FIELD_KEY in expected:
+        actual[CLASSIFICATION_COMPACT_FIELD_KEY] = mismatch_fields_digest(
+            actual.pop("mismatch_fields")
+        )
+    return actual == expected
 
 
 def _has_full_replay_coverage(result: dict[str, object]) -> bool:
@@ -397,7 +426,7 @@ def _result_status(
         return ("pass" if bool(result["pass"]) else "fail"), classification
     if bool(result["pass"]):
         return "xpass", classification
-    if classification_snapshot(result) == expected:
+    if classification_matches(result, expected):
         return "classified", classification
     return "drift", classification
 

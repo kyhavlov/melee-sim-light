@@ -1,13 +1,13 @@
 # Source-Shaped Melee Core
 
-Status: Phase 5.5 canonical source promotion is complete. PPC32 and native x86-64 now compile the
-tracked repository-owned gameplay source directly; the ignored patched materialization and its
-vendor/patch build path are gone. The 23-replay Fox/Falco FD/Battlefield/frozen-Stadium gate remains
-19 strict passes plus four exact source-classified oracle residuals. The active autonomous goal now
-completes the remaining stages, Marth, Captain Falcon, combined Sheik/Zelda, and doubles domain:
-97 singles entries plus 21 doubles entries. Real multi-match context ownership, arbitrary
-savestates, the replacement API, and Wasm/viewer cutover remain deferred until that broader source
-closure is stable.
+Status: Phase 5.5 canonical source promotion and the Phase 5 remaining-stage Fox/Falco packet are
+complete. PPC32 and native x86-64 compile the tracked repository-owned gameplay source directly.
+All 32 Fox/Falco singles across the six legal stages run to completion: the parallel native gate is
+22 strict passes plus ten exact source classifications over 291,689 transitions. The active
+autonomous goal continues with Marth, Captain Falcon, combined Sheik/Zelda, and doubles until the
+97-singles/21-doubles domain is complete. Real multi-match context ownership, arbitrary savestates,
+the replacement API, and Wasm/viewer cutover remain deferred until that broader source closure is
+stable.
 
 Branch base: `core-rewrite` at `6fbcc9bc7719` (`Rewrite core contact and motion state ownership`).
 
@@ -316,8 +316,8 @@ make -f src/melee_core/Makefile validation-suite
 ```
 
 It reads `replays/suites/aggregate_recent.json` rather than maintaining a second replay list. The
-default Phase 5 scope selects Fox/Falco on Final Destination, Battlefield, and frozen Pokemon
-Stadium: 23 of the aggregate suite's 97 entries. `VALIDATION_CHARACTERS`, `VALIDATION_STAGES`,
+default Phase 5 scope selects Fox/Falco across all six legal stages: 32 of the aggregate suite's 97
+entries. `VALIDATION_CHARACTERS`, `VALIDATION_STAGES`,
 `VALIDATION_BACKEND`, `VALIDATION_WORKERS`, and `VALIDATION_FRAMES` may narrow an exploratory run;
 the committed default remains the forward completion gate. For example, the current exact controls
 on both backends are:
@@ -1123,6 +1123,32 @@ The first gate adds the nine aggregate entries containing only Fox/Falco on thos
 four Yoshi's, and two Dream Land) to the existing 23-entry control. Run every selected replay through
 its final transition without an unsupported exit, retaining strict results or explicit source-backed
 oracle classifications. Commit this stage packet independently.
+
+Subphase A result: complete. The canonical build now includes the complete reached `grIzumi`,
+`grStory`, `grOldPupupu`, stage-actor generator, Shy Guy/Heiho, food, freeze, and ambient-item source
+owners. Native DAT translation supplies stage params, spline/JObj/AObj graphs, and stage `itemdata`
+from ignored extracted archives. Slippi's recorded FoD platform and Dream Land Whispy events enter
+the corresponding source-owned fields; replay files with no event stream use the ordinary source
+state machine. A 64-bit `GroundVars` union alias was made explicit at the actual FoD moving-platform
+owner, eliminating an 8,934-row native-only divergence and restoring PPC/native parity.
+
+The nine-replay focused native gate is three strict passes plus six exact classifications over
+73,387 transitions. Five classifications are bounded float-only residuals with exact PPC/native
+fingerprints and exact suffixes; the Dream Land `FlippantEnchantedHorse` classification records an
+unresolved causal Falco-laser capsule gate where both source targets hit one frame before an
+unspecified Dolphin replay. It preserves the entire full-stream fingerprint and is not a tolerance
+or gameplay exception. The growing 32-replay Fox/Falco gate is 22 strict passes plus ten exact
+classifications over 291,689 transitions at roughly 188k aggregate native frames/second.
+
+Future ownership recorded by this packet:
+
+- `GameData`: immutable GrIz/GrSt/GrOp archive bytes and translated JObj/AObj/spline, params,
+  collision, stage-item article, and attribute graphs;
+- `MatchState`: `stage_info`, Ground/GObj pools, FoD actor state, Randall/Whispy state, wind-device
+  registrations, stage items, retained Slippi stage-event publications, camera state, and the
+  post-frame gameplay matrix publication;
+- explicit presentation exclusions: FoD EFB reflection, stage particles/lighting/audio, and
+  Shy-Guy result/bonus bookkeeping.
 
 #### Subphase B — Marth
 

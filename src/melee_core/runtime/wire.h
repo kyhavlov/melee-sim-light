@@ -26,9 +26,18 @@ typedef struct MslCoreInput {
     MslCoreInputPlayer p[MSL_CORE_MAX_PLAYERS];
 } MslCoreInput;
 
+typedef struct MslCoreStageEvents {
+    float fod_platform_height[2];
+    uint8_t fod_platform_mask;
+    uint8_t dreamland_whispy_valid;
+    uint8_t dreamland_whispy_direction;
+    uint8_t _pad0;
+} MslCoreStageEvents;
+
 typedef struct MslCoreStreamFrame {
     uint32_t frame_pre_random_seed;
     MslCoreInput input;
+    MslCoreStageEvents stage_events;
 } MslCoreStreamFrame;
 
 typedef struct MslCoreMatchPlayerConfig {
@@ -58,6 +67,10 @@ typedef struct MslCoreMatchConfig {
     uint8_t online_fnmsubs_zero;
     uint8_t brawl_offscreen_damage;
     uint8_t freeze_dead_up_fall_physics;
+    // Bit 0: Slippi 3.18+ FoD platform events; bit 1: Dream Land Whispy
+    // direction events. A present stream is authoritative even on frames with
+    // no event, where the last published value remains active.
+    uint8_t stage_event_streams;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
 
@@ -131,8 +144,9 @@ typedef struct MslCoreCompare {
 
 _Static_assert(sizeof(MslCoreInputPlayer) == 8, "MslCoreInputPlayer wire size");
 _Static_assert(sizeof(MslCoreInput) == 32, "MslCoreInput wire size");
-_Static_assert(sizeof(MslCoreStreamFrame) == 36, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 43, "MslCoreMatchConfig wire size");
+_Static_assert(sizeof(MslCoreStageEvents) == 12, "stage events wire size");
+_Static_assert(sizeof(MslCoreStreamFrame) == 48, "stream frame wire size");
+_Static_assert(sizeof(MslCoreMatchConfig) == 44, "MslCoreMatchConfig wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1022, "MslCoreCompare wire size");
 
@@ -143,6 +157,8 @@ void msl_core_put_le16(void* ptr, uint16_t value);
 void msl_core_put_le32(void* ptr, uint32_t value);
 void msl_core_put_lef32(void* ptr, float value);
 void msl_core_decode_match_config(MslCoreMatchConfig* config,
+                                  const uint8_t* wire);
+void msl_core_decode_stage_events(MslCoreStageEvents* events,
                                   const uint8_t* wire);
 
 #endif

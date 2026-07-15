@@ -44,6 +44,8 @@ ifStatus_802F6D10	presentation/audio exclusion	reachable	no-op	render/audio/part
 db_80225D64	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 db_80225DD8	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 gm_80167470	headless match-scene exclusion	reachable	no-op	scene/UI reset only in fixed VS bootstrap
+gm_8016B6E8	versus result bookkeeping exclusion	reachable	no-op	refs/melee/src/melee/{it/itzako.c::it_8027CE18,pl/plbonuslib.c::pl_8004049C,gm/gm_16AE.c::gm_8016B6E8}; result statistics do not feed gameplay
+it_8026D324	items-off source gate	reachable	source-equivalent false	refs/melee/src/melee/it/itspawn.c::it_8026D324; supported match rules leave the ambient-item mask zero
 lbAudioAx_80023870	audio exclusion	reachable	zero audio handle	AX playback omitted headlessly
 un_80322598	crowd/audio bookkeeping exclusion	reachable	zero result	refs/melee/src/melee/sfx/crowdsfx.c::un_80322598
 ifMagnify_802FB6E8	magnifier UI exclusion	reachable	zero result	magnifier presentation only; BrawlOffscreenDamage gameplay owner is retained

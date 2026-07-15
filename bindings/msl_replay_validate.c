@@ -118,6 +118,11 @@ typedef struct ReplayView {
   Primitive frame_seed;
   const struct ArrowArray* item_list;
   ReplayItem item;
+  const struct ArrowArray* fod_platform_list;
+  Primitive fod_platform;
+  Primitive fod_platform_height;
+  const struct ArrowArray* dreamland_whispy_list;
+  Primitive dreamland_whispy_direction;
   ReplayPlayer players[MSL_CORE_MAX_PLAYERS];
   int port_1based[MSL_CORE_MAX_PLAYERS];
   uint8_t team_id[MSL_CORE_MAX_PLAYERS];
@@ -209,6 +214,26 @@ static int node_child(ArrowNode parent, const char* name, ArrowNode* out, char* 
   }
   snprintf(error, error_size, "replay Arrow field is missing: %s", name);
   return -1;
+}
+
+static int node_child_optional(ArrowNode parent, const char* name, ArrowNode* out, char* error,
+                               size_t error_size) {
+  int64_t i;
+  if (parent.schema == NULL || parent.array == NULL ||
+      parent.schema->n_children != parent.array->n_children) {
+    snprintf(error, error_size, "invalid Arrow node while finding optional %s", name);
+    return -1;
+  }
+  for (i = 0; i < parent.schema->n_children; ++i) {
+    const struct ArrowSchema* schema = parent.schema->children[i];
+    if (schema != NULL && schema->name != NULL && strcmp(schema->name, name) == 0) {
+      out->schema = schema;
+      out->array = parent.array->children[i];
+      return 1;
+    }
+  }
+  memset(out, 0, sizeof(*out));
+  return 0;
 }
 
 static int primitive_from_node(ArrowNode node, const char* format, Primitive* out, char* error,
@@ -550,6 +575,46 @@ static int load_items(ArrowNode items, ReplayView* replay, char* error, size_t e
   return 0;
 }
 
+static int load_stage_events(ArrowNode frames, ReplayView* replay, char* error, size_t error_size) {
+  ArrowNode list;
+  ArrowNode values;
+  int present = node_child_optional(frames, "fod_platform", &list, error, error_size);
+  if (present < 0) {
+    return -1;
+  }
+  if (present != 0) {
+    if (list.schema->format == NULL || strcmp(list.schema->format, "+l") != 0 ||
+        list.array->n_buffers < 2 || list.array->buffers[1] == NULL ||
+        list.schema->n_children != 1 || list.array->n_children != 1 ||
+        node_child(list, "fod_platform", &values, error, error_size) != 0 ||
+        primitive_child(values, "platform", "C", &replay->fod_platform, error, error_size) != 0 ||
+        primitive_child(values, "height", "f", &replay->fod_platform_height, error, error_size) !=
+            0) {
+      snprintf(error, error_size, "unsupported Arrow FoD platform list");
+      return -1;
+    }
+    replay->fod_platform_list = list.array;
+  }
+
+  present = node_child_optional(frames, "dreamland_whispy", &list, error, error_size);
+  if (present < 0) {
+    return -1;
+  }
+  if (present != 0) {
+    if (list.schema->format == NULL || strcmp(list.schema->format, "+l") != 0 ||
+        list.array->n_buffers < 2 || list.array->buffers[1] == NULL ||
+        list.schema->n_children != 1 || list.array->n_children != 1 ||
+        node_child(list, "dreamland_whispy", &values, error, error_size) != 0 ||
+        primitive_child(values, "direction", "C", &replay->dreamland_whispy_direction, error,
+                        error_size) != 0) {
+      snprintf(error, error_size, "unsupported Arrow Dream Land Whispy list");
+      return -1;
+    }
+    replay->dreamland_whispy_list = list.array;
+  }
+  return 0;
+}
+
 static int load_replay(ArrowNode frames, ReplayView* replay, char* error, size_t error_size) {
   ArrowNode ports;
   ArrowNode start;
@@ -570,6 +635,9 @@ static int load_replay(ArrowNode frames, ReplayView* replay, char* error, size_t
     return -1;
   }
   if (load_items(items, replay, error, error_size) != 0) {
+    return -1;
+  }
+  if (load_stage_events(frames, replay, error, error_size) != 0) {
     return -1;
   }
   for (i = 0; i < replay->num_players; ++i) {
@@ -681,15 +749,23 @@ static int16_t frame_i16(float value) {
   return (int16_t)floorf(value);
 }
 
+static int64_t list_range_start(const struct ArrowArray* list, int64_t raw) {
+  const int32_t* offsets = (const int32_t*)(const void*)list->buffers[1];
+  return offsets[list->offset + raw];
+}
+
+static int64_t list_count(const struct ArrowArray* list, int64_t raw) {
+  const int32_t* offsets = (const int32_t*)(const void*)list->buffers[1];
+  int64_t i = list->offset + raw;
+  return (int64_t)offsets[i + 1] - offsets[i];
+}
+
 static int64_t item_range_start(const ReplayView* replay, int64_t raw) {
-  const int32_t* offsets = (const int32_t*)(const void*)replay->item_list->buffers[1];
-  return offsets[replay->item_list->offset + raw];
+  return list_range_start(replay->item_list, raw);
 }
 
 static int64_t item_count(const ReplayView* replay, int64_t raw) {
-  const int32_t* offsets = (const int32_t*)(const void*)replay->item_list->buffers[1];
-  int64_t i = replay->item_list->offset + raw;
-  return (int64_t)offsets[i + 1] - offsets[i];
+  return list_count(replay->item_list, raw);
 }
 
 static void build_expected(const ReplayView* replay, int64_t raw, MslCoreCompare* expected) {
@@ -1125,8 +1201,32 @@ static void refill_write_buffer(StreamState* state) {
          state->write_len + sizeof(MslCoreStreamFrame) <= sizeof(state->write_buf)) {
     MslCoreStreamFrame frame;
     int64_t raw = state->rows->raw[state->next_input_pos++];
+    int64_t event;
+    memset(&frame, 0, sizeof(frame));
     frame.frame_pre_random_seed = get_u32(&state->replay->frame_seed, raw);
     build_input(state->replay, raw, &frame.input);
+    if (state->replay->fod_platform_list != NULL) {
+      int64_t start = list_range_start(state->replay->fod_platform_list, raw);
+      int64_t count = list_count(state->replay->fod_platform_list, raw);
+      for (event = 0; event < count; ++event) {
+        int64_t index = start + event;
+        uint8_t platform = get_u8(&state->replay->fod_platform, index);
+        if (platform < 2) {
+          frame.stage_events.fod_platform_height[platform] =
+              get_f32(&state->replay->fod_platform_height, index);
+          frame.stage_events.fod_platform_mask |= (uint8_t)(1U << platform);
+        }
+      }
+    }
+    if (state->replay->dreamland_whispy_list != NULL) {
+      int64_t start = list_range_start(state->replay->dreamland_whispy_list, raw);
+      int64_t count = list_count(state->replay->dreamland_whispy_list, raw);
+      if (count != 0) {
+        frame.stage_events.dreamland_whispy_direction =
+            get_u8(&state->replay->dreamland_whispy_direction, start + count - 1);
+        frame.stage_events.dreamland_whispy_valid = 1;
+      }
+    }
     memcpy(state->write_buf + state->write_len, &frame, sizeof(frame));
     state->write_len += sizeof(frame);
   }
@@ -1611,10 +1711,9 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     PyErr_Format(PyExc_ValueError, "Melee core requires two players, got %d", replay.num_players);
     goto done;
   }
-  if (replay.stage_id != 3 && replay.stage_id != 31 && replay.stage_id != 32) {
-    PyErr_Format(PyExc_ValueError,
-                 "Melee core requires Pokemon Stadium (3), Battlefield (31), or Final "
-                 "Destination (32), got %u",
+  if (replay.stage_id != 2 && replay.stage_id != 3 && replay.stage_id != 8 &&
+      replay.stage_id != 28 && replay.stage_id != 31 && replay.stage_id != 32) {
+    PyErr_Format(PyExc_ValueError, "Melee core requires a legal stage id (2,3,8,28,31,32), got %u",
                  replay.stage_id);
     goto done;
   }
@@ -1680,6 +1779,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   state.config.online_fnmsubs_zero = replay.online_fnmsubs_zero;
   state.config.brawl_offscreen_damage = replay.brawl_offscreen_damage;
   state.config.freeze_dead_up_fall_physics = replay.freeze_dead_up_fall_physics;
+  state.config.stage_event_streams = (replay.fod_platform_list != NULL ? 1U : 0U) |
+                                     (replay.dreamland_whispy_list != NULL ? 2U : 0U);
   for (i = 0; i < replay.num_players; ++i) {
     const ReplayPlayer* player = &replay.players[i];
     uint8_t stocks = replay.start_stocks[i];

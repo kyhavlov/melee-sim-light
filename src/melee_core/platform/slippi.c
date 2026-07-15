@@ -1,5 +1,7 @@
 #include "platform/slippi.h"
 
+#include "runtime/wire.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,10 +14,80 @@ void msl_slippi_state_bind(MslCoreSlippiState* state)
     msl_bound_slippi_state = state;
 }
 
-void msl_slippi_state_init(MslCoreSlippiState* state)
+void msl_slippi_state_init(MslCoreSlippiState* state, u8 stage_event_streams)
 {
     memset(state, 0, sizeof(*state));
+    state->stage_event_streams = stage_event_streams;
     msl_slippi_state_bind(state);
+}
+
+void msl_slippi_stage_events_begin(const MslCoreStageEvents* events)
+{
+    msl_bound_slippi_state->fod_platform_pending_mask =
+        events->fod_platform_mask;
+    msl_bound_slippi_state->fod_platform_changed_mask =
+        events->fod_platform_mask;
+    msl_bound_slippi_state->fod_platform_applied_mask = 0;
+    if ((events->fod_platform_mask & 1) != 0) {
+        msl_bound_slippi_state->fod_platform_height[0] =
+            events->fod_platform_height[0];
+    }
+    if ((events->fod_platform_mask & 2) != 0) {
+        msl_bound_slippi_state->fod_platform_height[1] =
+            events->fod_platform_height[1];
+    }
+    if (events->dreamland_whispy_valid != 0) {
+        msl_bound_slippi_state->dreamland_whispy_direction =
+            events->dreamland_whispy_direction;
+    }
+}
+
+bool msl_slippi_fod_platform_height(u8 platform, f32 source_height,
+                                    f32* height, bool* changed)
+{
+    u8 bit;
+    if ((msl_bound_slippi_state->stage_event_streams & 1) == 0 ||
+        platform >= 2)
+    {
+        return false;
+    }
+    bit = (u8) (1U << platform);
+    *changed = (msl_bound_slippi_state->fod_platform_changed_mask & bit) != 0;
+    if ((msl_bound_slippi_state->fod_platform_pending_mask & bit) != 0) {
+        msl_bound_slippi_state->fod_platform_known_mask |= bit;
+        msl_bound_slippi_state->fod_platform_pending_mask &= (u8) ~bit;
+    } else if ((msl_bound_slippi_state->fod_platform_known_mask & bit) == 0) {
+        // The event only records changes, so the stage DAT's initial height
+        // owns the value until the first event for this platform.
+        msl_bound_slippi_state->fod_platform_height[platform] = source_height;
+        msl_bound_slippi_state->fod_platform_known_mask |= bit;
+    }
+    *height = msl_bound_slippi_state->fod_platform_height[platform];
+    return true;
+}
+
+bool msl_slippi_fod_platform_was_applied(u8 platform)
+{
+    return platform < 2 &&
+           (msl_bound_slippi_state->fod_platform_applied_mask &
+            (u8) (1U << platform)) != 0;
+}
+
+void msl_slippi_fod_platform_mark_applied(u8 platform)
+{
+    if (platform < 2) {
+        msl_bound_slippi_state->fod_platform_applied_mask |=
+            (u8) (1U << platform);
+    }
+}
+
+bool msl_slippi_dreamland_whispy_direction(u8* direction)
+{
+    if ((msl_bound_slippi_state->stage_event_streams & 2) == 0) {
+        return false;
+    }
+    *direction = msl_bound_slippi_state->dreamland_whispy_direction;
+    return true;
 }
 
 static MslCoreSlippiFighterState* find_state(const struct Fighter* fp,

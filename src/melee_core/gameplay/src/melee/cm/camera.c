@@ -10,6 +10,7 @@
 #include "baselib/lobj.h"
 #include "baselib/memory.h"
 #include "baselib/random.h"
+#include "baselib/util.h"
 
 #include "cm/forward.h"
 
@@ -4606,22 +4607,41 @@ static inline void compute_edge(Vec3* forward, Vec3* eye_pos, f32 fov,
 
 bool Camera_800307D0(f32* left, f32* center, f32* right)
 {
+#ifndef MSL_CORE_HOSTED
     HSD_CObj* cobj;
+#endif
     f32 half_fov;
+    f32 fov;
     Vec3 forward;
     Vec3 interest_pos;
     Vec3 eye_pos;
     bool b_r30;
     PAD_STACK(0x10);
 
+    b_r30 = true;
+#ifdef MSL_CORE_HOSTED
+    // The headless runtime publishes the exact render transform without
+    // constructing the presentation-owned HSD_CObj/WObj graph. Reproduce the
+    // CObj getters' eye-vector semantics from that source-owned transform.
+    // refs/melee/src/melee/cm/camera.c::{msl_camera_get_render_transform,
+    // Camera_800307D0}
+    // refs/melee/src/sysdolphin/baselib/cobj.c::HSD_CObjGetEyeVector
+    msl_camera_get_render_transform(&eye_pos, &interest_pos, &fov);
+    half_fov = 0.5 * (deg_to_rad * fov * cm_803BCB64.aspect);
+    VECSubtract(&interest_pos, &eye_pos, &forward);
+    if (vec_normalize_check(&forward, &forward) != 0) {
+        forward.x = 0.0F;
+        forward.y = 0.0F;
+        forward.z = -1.0F;
+    }
+#else
     cobj = GET_COBJ(cm_80452C68.gobj);
     half_fov =
         0.5 * (deg_to_rad * HSD_CObjGetFov(cobj) * HSD_CObjGetAspect(cobj));
-
-    b_r30 = true;
     HSD_CObjGetEyePosition(cobj, &eye_pos);
     HSD_CObjGetEyeVector(cobj, &forward);
     HSD_CObjGetInterest(cobj, &interest_pos);
+#endif
 
     if (ABS(forward.x) > 1e-4 && ABS(forward.z) > 1e-4) {
         // ray casts?

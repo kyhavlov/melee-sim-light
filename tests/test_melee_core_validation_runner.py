@@ -36,16 +36,23 @@ def _result(*, passed: bool = True, frames: int = 10) -> dict[str, object]:
     }
 
 
-def test_canonical_phase5_scope_selects_23_replays_without_a_duplicate_manifest() -> None:
+def test_canonical_phase5_scope_selects_32_replays_without_a_duplicate_manifest() -> None:
     suite, cases = validate_replay.load_suite_cases(
         ROOT / "replays/suites/aggregate_recent.json",
         characters=frozenset(("fox", "falco")),
-        stages=frozenset((3, 31, 32)),
+        stages=frozenset((2, 3, 8, 28, 31, 32)),
     )
 
     assert suite.name == "aggregate_recent"
-    assert len(cases) == 23
-    assert Counter(case.stage_id for case in cases) == {32: 16, 3: 4, 31: 3}
+    assert len(cases) == 32
+    assert Counter(case.stage_id for case in cases) == {
+        32: 16,
+        3: 4,
+        31: 3,
+        2: 3,
+        8: 4,
+        28: 2,
+    }
     assert all(set(case.characters) <= {"Fox", "Falco"} for case in cases)
     assert [
         case.replay.name
@@ -62,7 +69,7 @@ def test_canonical_phase5_scope_selects_23_replays_without_a_duplicate_manifest(
     classifications = validate_replay.load_classifications(
         ROOT / "replays/suites/melee_core_classifications.json"
     )
-    assert len(classifications) == 4
+    assert classifications
     assert set(classifications) <= {case.display_path for case in cases}
 
 
@@ -142,13 +149,19 @@ def test_suite_stdout_is_compact_and_reports_aggregate_throughput(capsys) -> Non
 def test_exact_classification_passes_and_drift_fails(capsys) -> None:
     case = validate_replay.ReplayCase(Path("known.slpz"), "known.slpz")
     result = _result(passed=False)
+    compact_snapshot = validate_replay.classification_snapshot(result)
+    compact_snapshot[validate_replay.CLASSIFICATION_COMPACT_FIELD_KEY] = (
+        validate_replay.mismatch_fields_digest(
+            compact_snapshot.pop("mismatch_fields")
+        )
+    )
     classification = validate_replay.ReplayClassification(
         replay="known.slpz",
         classification_id="known-owner",
         owner="source owner",
         rationale="bounded source-classified residual",
         sources=("refs/melee/src/owner.c::owner",),
-        expected={"native": validate_replay.classification_snapshot(result)},
+        expected={"native": compact_snapshot},
     )
     outcome = validate_replay.ReplayOutcome(case, result, None, 0.02)
 

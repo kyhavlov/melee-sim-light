@@ -74,6 +74,37 @@ typedef struct MslDatPokemonStadiumParams {
     int16_t x4E;
     int16_t x50;
 } MslDatPokemonStadiumParams;
+typedef struct MslDatFountainParams {
+    float x0;
+    int x4;
+    float values[19];
+} MslDatFountainParams;
+typedef struct MslDatYoshisStoryParams {
+    float timer_min;
+    float timer_rand;
+    float spawnmany_rarity;
+    float vpos[6];
+} MslDatYoshisStoryParams;
+typedef struct MslDatDreamLandParams {
+    int16_t x0;
+    int16_t x2;
+    int16_t x4;
+    int16_t x6;
+    int x8;
+    int xC;
+    float values[9];
+} MslDatDreamLandParams;
+typedef struct MslDatStageItemEntry {
+    int kind;
+    Article* article;
+} MslDatStageItemEntry;
+// Concrete authority for GrSt.dat's otherwise-void Article.x4. The first
+// source word is a relocated damage-threshold pointer, followed by six f32s.
+// refs/melee/src/melee/it/items/itheiho.c
+typedef struct MslDatHeihoAttrs {
+    int* damage_threshold;
+    float values[6];
+} MslDatHeihoAttrs;
 // Fox uses x48_items[0..2]; Falco shares those owners but stores Phantasm at
 // x48_items[3]. Both are direct consumers in their source OnLoad callbacks.
 // refs/melee/src/melee/ft/chara/{ftFox/ftFx_Init.c,ftFalco/ftFc_Init.c}
@@ -95,6 +126,7 @@ void* msl_native_dat_type_roots[] = {
     (UnkStage6B0*) 0,
     (DynamicModelDesc*) 0,
     (HSD_Joint*) 0,
+    (HSD_Spline*) 0,
     (HSD_MatAnimJoint*) 0,
     (EF_EffectDesc*) 0,
     (ftData*) 0,
@@ -115,6 +147,11 @@ void* msl_native_dat_type_roots[] = {
     (MslDatFoxAttrsPointer*) 0,
     (MslDatBattlefieldParams*) 0,
     (MslDatPokemonStadiumParams*) 0,
+    (MslDatFountainParams*) 0,
+    (MslDatYoshisStoryParams*) 0,
+    (MslDatDreamLandParams*) 0,
+    (MslDatStageItemEntry*) 0,
+    (MslDatHeihoAttrs*) 0,
     (MslDatArticleList*) 0,
     (MslDatFoxWaitAnimList*) 0,
     (MslDatFoxAnimByteList*) 0,

@@ -2,6 +2,7 @@
 #include "platform/memory.h"
 
 #include <baselib/memory.h>
+#include <baselib/jobj.h>
 #include <baselib/psstructs.h>
 #include <melee/ft/types.h>
 #include <melee/gr/ground.h>
@@ -471,6 +472,61 @@ static void translate_value(MslNativeArchive* context,
         translate_base(type, context->data + source_offset, native);
         return;
     case MSL_DAT_STRUCT:
+        if (strcmp(type->name, "HSD_Joint") == 0) {
+            uint32_t flags = read_be32(context->data + source_offset + 0x04);
+            for (i = 0; i < type->field_count; ++i) {
+                const MslDatField* field = &type->fields[i];
+                translate_value(context, field->type,
+                                source_offset + field->source_offset,
+                                (uint8_t*) native + field->native_offset);
+            }
+            if ((flags & JOBJ_SPLINE) != 0) {
+                uint32_t target = raw_pointer(context, source_offset + 0x10);
+                void* spline = NULL;
+                if (target != UINT32_MAX) {
+                    spline = translate_target(context, target,
+                                              msl_dat_root_HSD_Spline);
+                }
+                memcpy((uint8_t*) native + offsetof(HSD_Joint, u), &spline,
+                       sizeof(spline));
+            }
+            // The shared DWARF view omits HSD_Joint's anonymous union. Spline
+            // is gameplay-bearing through HSD_A_J_PATH; DObj and particle
+            // variants remain presentation-only in this headless graph.
+            // refs/melee/src/sysdolphin/baselib/{jobj.h,jobj.c::JObjUpdateFunc}
+            return;
+        }
+        if (strcmp(type->name, "HSD_AObjDesc") == 0) {
+            // AObjDesc::obj_id is declared u32 because retail uses either an
+            // object-table id or a relocated HSD_Joint address in the same
+            // word. When the DAT relocation table marks it, materialize the
+            // Joint graph and retain its low-arena address as the retail id.
+            // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjLoadDesc
+            // refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjLoadJoint
+            for (i = 0; i < type->field_count; ++i) {
+                const MslDatField* field = &type->fields[i];
+                uint32_t field_source = source_offset + field->source_offset;
+                if (field->source_offset == 0x0C) {
+                    uint32_t target = raw_pointer(context, field_source);
+                    if (target != UINT32_MAX) {
+                        uintptr_t joint = (uintptr_t) translate_target(
+                            context, target, msl_dat_root_HSD_Joint);
+                        if (joint > UINT32_MAX) {
+                            fprintf(stderr,
+                                    "native DAT AObj joint escaped low arena\n");
+                            abort();
+                        }
+                        write_integer((uint8_t*) native +
+                                          field->native_offset,
+                                      field->type->native_size, joint);
+                        continue;
+                    }
+                }
+                translate_value(context, field->type, field_source,
+                                (uint8_t*) native + field->native_offset);
+            }
+            return;
+        }
         if (strcmp(type->name, "DynamicsDesc") == 0) {
             const MslDatType* source_element = NULL;
             uint32_t count;
@@ -780,6 +836,12 @@ static void* translate_stage_params(MslNativeArchive* context,
         type = msl_dat_root_MslDatBattlefieldParams;
     } else if (stage_info.internal_stage_id == PSTADIUM) {
         type = msl_dat_root_MslDatPokemonStadiumParams;
+    } else if (stage_info.internal_stage_id == IZUMI) {
+        type = msl_dat_root_MslDatFountainParams;
+    } else if (stage_info.internal_stage_id == STORY) {
+        type = msl_dat_root_MslDatYoshisStoryParams;
+    } else if (stage_info.internal_stage_id == OLDPUPUPU) {
+        type = msl_dat_root_MslDatDreamLandParams;
     } else if (stage_info.internal_stage_id == LAST) {
         // The validated manual FD owner does not consume this presentation
         // parameter, matching the prior untranslated public projection.
@@ -791,6 +853,51 @@ static void* translate_stage_params(MslNativeArchive* context,
         abort();
     }
     return translate_target_count(context, offset, type, 1);
+}
+
+static void* translate_stage_item_public(MslNativeArchive* context,
+                                         uint32_t offset)
+{
+    enum {
+        STAGE_ITEM_KIND_SOURCE_OFFSET = 0x00,
+        STAGE_ITEM_ARTICLE_SOURCE_OFFSET = 0x04,
+        ARTICLE_SPECIAL_ATTRS_SOURCE_OFFSET = 0x04,
+    };
+    typedef struct MslNativeStageItemEntry {
+        int kind;
+        Article* article;
+    } MslNativeStageItemEntry;
+    uint32_t count = 0;
+    uint32_t i;
+    MslNativeStageItemEntry** result;
+
+    while (raw_pointer(context, offset + count * 4) != UINT32_MAX) {
+        count += 1;
+    }
+    result = native_alloc((size_t) (count + 1) * sizeof(*result));
+    for (i = 0; i < count; ++i) {
+        uint32_t entry_source = raw_pointer(context, offset + i * 4);
+        uint32_t article_source;
+        result[i] = translate_target_count(
+            context, entry_source, msl_dat_root_MslDatStageItemEntry, 1);
+        article_source = raw_pointer(
+            context, entry_source + STAGE_ITEM_ARTICLE_SOURCE_OFFSET);
+        if (result[i]->kind == It_Kind_Heiho && article_source != UINT32_MAX) {
+            uint32_t attrs_source = raw_pointer(
+                context,
+                article_source + ARTICLE_SPECIAL_ATTRS_SOURCE_OFFSET);
+            if (result[i]->article == NULL || attrs_source == UINT32_MAX) {
+                fprintf(stderr,
+                        "native GrSt.dat Heiho article is incomplete\n");
+                abort();
+            }
+            result[i]->article->x4_specialAttributes =
+                translate_target_count(context, attrs_source,
+                                       msl_dat_root_MslDatHeihoAttrs, 1);
+        }
+        (void) STAGE_ITEM_KIND_SOURCE_OFFSET;
+    }
+    return result;
 }
 
 static void* translate_item_public(MslNativeArchive* context,
@@ -997,6 +1104,8 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_space_animal_public(context, offset, 1);
     } else if (strcmp(symbol, "yakumono_param") == 0) {
         result = translate_stage_params(context, offset);
+    } else if (strcmp(symbol, "itemdata") == 0) {
+        result = translate_stage_item_public(context, offset);
     } else if (type != NULL) {
         result = translate_target_count(context, offset, type, 1);
     }

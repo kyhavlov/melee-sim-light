@@ -27,7 +27,7 @@ MSL_DATA_DIR ?= $(ROOT)/data
 DATA ?= $(abspath $(MSL_DATA_DIR))/raw
 VALIDATION_SUITE ?= replays/suites/aggregate_recent.json
 VALIDATION_CHARACTERS ?= Fox,Falco
-VALIDATION_STAGES ?= 32,31,3
+VALIDATION_STAGES ?= 32,31,3,2,8,28
 VALIDATION_BACKEND ?= native
 VALIDATION_WORKERS ?= 0
 VALIDATION_BUILD_JOBS ?= 4
@@ -44,7 +44,10 @@ UPSTREAM_REL_SRCS := $(filter-out melee/it/items/%.c,$(UPSTREAM_REL_SRCS))
 UPSTREAM_REL_SRCS += \
 	melee/it/items/itfoxblaster.c \
 	melee/it/items/itfoxillusion.c \
-	melee/it/items/itfoxlaser.c
+	melee/it/items/itfoxlaser.c \
+	melee/it/items/itfoods.c \
+	melee/it/items/itfreeze.c \
+	melee/it/items/itheiho.c
 UPSTREAM_SRCS := $(addprefix $(SOURCE_TREE)/src/,$(UPSTREAM_REL_SRCS))
 PPC_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(PPC_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
 NATIVE_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(NATIVE_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))

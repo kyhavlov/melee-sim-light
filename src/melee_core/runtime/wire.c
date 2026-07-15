@@ -71,6 +71,25 @@ void msl_core_decode_match_config(MslCoreMatchConfig* config,
         wire[offsetof(MslCoreMatchConfig, brawl_offscreen_damage)];
     config->freeze_dead_up_fall_physics =
         wire[offsetof(MslCoreMatchConfig, freeze_dead_up_fall_physics)];
+    config->stage_event_streams =
+        wire[offsetof(MslCoreMatchConfig, stage_event_streams)];
     memcpy(config->players, wire + offsetof(MslCoreMatchConfig, players),
            sizeof(config->players));
+}
+
+void msl_core_decode_stage_events(MslCoreStageEvents* events,
+                                  const uint8_t* wire)
+{
+    memset(events, 0, sizeof(*events));
+    events->fod_platform_height[0] = msl_core_get_lef32(
+        wire + offsetof(MslCoreStageEvents, fod_platform_height));
+    events->fod_platform_height[1] = msl_core_get_lef32(
+        wire + offsetof(MslCoreStageEvents, fod_platform_height) +
+        sizeof(float));
+    events->fod_platform_mask =
+        wire[offsetof(MslCoreStageEvents, fod_platform_mask)];
+    events->dreamland_whispy_valid =
+        wire[offsetof(MslCoreStageEvents, dreamland_whispy_valid)];
+    events->dreamland_whispy_direction =
+        wire[offsetof(MslCoreStageEvents, dreamland_whispy_direction)];
 }

@@ -1,9 +1,12 @@
 #include "it/it_279C.h"
 #include "it/it_3F14.h"
 #include "it/it_26B1.h"
+#include "it/it_2725.h"
+#include "it/itzako.h"
 #include "it/items/itfoxblaster.h"
 #include "it/items/itfoxillusion.h"
 #include "it/items/itfoxlaser.h"
+#include "it/items/itheiho.h"
 #include "pl/plattack.h"
 #include "pl/plstale.h"
 #include "pl/pltrick.h"
@@ -141,7 +144,25 @@ struct ItemLogicTable it_803F14C4[43];
 struct sdata_ItemGXLink it_803F2310[47];
 struct ItemLogicTable it_803F23CC[47];
 struct sdata_ItemGXLink it_803F4CA8[30];
-struct ItemLogicTable it_803F4D20[30];
+struct ItemLogicTable it_803F4D20[30] = {
+    [It_Kind_Heiho - It_Kind_Old_Kuri] = {
+        it_803F83F0,
+        it_802D8688,
+        it_2725_Logic9_Destroyed,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_802D8EC8,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_802D9A0C,
+    },
+};
 ItemKind it_803F2ED0[22];
 
 char it_803F1ED8[] = "ItCo.dat";

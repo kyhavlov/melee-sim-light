@@ -2898,7 +2898,19 @@ void ftCo_CaptureWaitLw_Phys(Fighter_GObj* gobj)
 
 void ftCo_CaptureWaitLw_Coll(Fighter_GObj* gobj)
 {
-    ftCo_CapturePulledLw_Coll(gobj);
+    Fighter* fp = GET_FIGHTER(gobj);
+
+    // CaptureWaitLw preserves the Wait family when its attachment delta
+    // carries the victim off the floor. GALE01 0x800DBE9C is the same 0x38
+    // collision-wrapper shape as CaptureWaitHi and is immediately followed by
+    // its Wait-family continuation, fn_800DBED4. Delegating to PulledLw would
+    // instead install fn_800DB230 and incorrectly enter CapturePulledHi.
+    // refs/melee/config/GALE01/symbols.txt::{
+    //   ftCo_CaptureWaitLw_Coll,fn_800DBED4}
+    // refs/melee/src/melee/ft/ft_081B.c::ft_8008403C
+    if (!fp->x2226_b2) {
+        ft_8008403C(gobj, fn_800DBED4);
+    }
 }
 
 static inline void fn_800DBED4_inline(Fighter_GObj* gobj)

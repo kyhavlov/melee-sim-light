@@ -9,6 +9,11 @@
 
 #include <dolphin/mtx.h>
 
+#ifdef MSL_CORE_HOSTED
+void msl_grizumi_apply_replay_platform_height(Ground_GObj* gobj, f32 height,
+                                               bool changed);
+#endif
+
 /* 1CBB84 */ void grIzumi_801CBB84(bool);
 /* 1CBB88 */ void grIzumi_801CBB88(void);
 /* 1CBC0C */ void grIzumi_OnLoad(void);

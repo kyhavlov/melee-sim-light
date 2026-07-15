@@ -11,7 +11,7 @@ from tools.melee_core.validate_replay import (
     PPC_BINARY,
     QEMU,
     ReplayCase,
-    classification_snapshot,
+    classification_matches,
     load_classifications,
     load_native,
     load_suite_cases,
@@ -123,7 +123,7 @@ def test_native_validation_compares_complete_classified_replays() -> None:
     for outcome in outcomes:
         assert outcome.result is not None
         expected = classifications[outcome.case.display_path].expected["native"]
-        assert classification_snapshot(outcome.result) == expected
+        assert classification_matches(outcome.result, expected)
         assert (
             int(outcome.result["matched_frames"])
             + int(outcome.result["mismatched_frames"])

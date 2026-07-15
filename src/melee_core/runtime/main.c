@@ -89,7 +89,11 @@ static int run_stream(const char* data_root)
     while ((count = fread(&frame, 1, sizeof(frame), stdin)) == sizeof(frame)) {
         uint32_t frame_seed =
             msl_core_get_le32(&frame.frame_pre_random_seed);
-        if (msl_core_match_step(&match, &frame.input, frame_seed) != 0 ||
+        MslCoreStageEvents stage_events;
+        msl_core_decode_stage_events(
+            &stage_events, (const uint8_t*) &frame.stage_events);
+        if (msl_core_match_step(&match, &frame.input, frame_seed,
+                                &stage_events) != 0 ||
             write_compare(stdout, msl_core_match_output(&match)) != 0)
         {
             return 1;
@@ -171,7 +175,9 @@ int main(int argc, char** argv)
     while ((count = fread(&input, 1, sizeof(input), input_file)) ==
            sizeof(input))
     {
-        if (msl_core_match_step(&match, &input, match.random_seed) != 0 ||
+        MslCoreStageEvents stage_events = { 0 };
+        if (msl_core_match_step(&match, &input, match.random_seed,
+                                &stage_events) != 0 ||
             write_compare(output_file, msl_core_match_output(&match)) != 0)
         {
             goto done;

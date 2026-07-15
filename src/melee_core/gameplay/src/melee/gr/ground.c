@@ -2182,7 +2182,14 @@ void Ground_801C39C0(void)
         phi_f1 = sp8.x;
         phi_f2 = sp8.y;
     } else {
+#ifndef MSL_CORE_HOSTED
         OSReport("use dummy CamRange ...!\n");
+#else
+        // Headless map presentation omits these optional camera-range points;
+        // retain the source fallback below without emitting a warning for the
+        // expected hosted archive projection.
+        // refs/melee/src/melee/gr/ground.c::Ground_801C2D24
+#endif
         switch (stage_info.internal_stage_id) {
         default:
             phi_f1 = 0;

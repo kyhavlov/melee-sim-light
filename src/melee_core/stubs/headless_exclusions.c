@@ -18,6 +18,27 @@ EXCLUDED_CHECK(ftCo_800A2040)
 
 void gm_80167470(void) {}
 
+// Versus result/bonus bookkeeping does not feed gameplay state. Shy Guy's
+// source destruction callback records this statistic after committing its
+// item state transition.
+// refs/melee/src/melee/{it/itzako.c::it_8027CE18,
+// pl/plbonuslib.c::pl_8004049C,gm/gm_16AE.c::gm_8016B6E8}
+void gm_8016B6E8(int player, int value)
+{
+    (void) player;
+    (void) value;
+}
+
+// The supported rules disable random items, leaving the source ambient-item
+// mask at zero. Heiho therefore cannot spawn its optional food decoration.
+// refs/melee/src/melee/it/itspawn.c::it_8026D324
+// refs/melee/src/melee/it/items/itfoods.c::it_8028FAF4
+bool it_8026D324(int kind)
+{
+    (void) kind;
+    return false;
+}
+
 int lbAudioAx_80023870() { return 0; }
 
 // Pokemon Stadium asks the scene DVD owner for an optional preloaded 0x50000
@@ -50,6 +71,7 @@ PRESENTATION_NOOP(efLib_ResumeAll)
 PRESENTATION_NOOP(efLib_SetParamAlpha)
 PRESENTATION_NOOP(HSD_PadRumbleRemoveId)
 PRESENTATION_NOOP(lbAudioAx_80024304)
+PRESENTATION_NOOP(grDisplay_801C5DB0)
 PRESENTATION_NOOP(lbBgFlash_80021C48)
 PRESENTATION_NOOP(lbBgFlash_80020E38)
 PRESENTATION_NOOP(lbBgFlash_80021410)

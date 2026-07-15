@@ -50,7 +50,8 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
                         const MslCoreMatchConfig* config,
                         const MslCoreInput* previous_input);
 int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
-                        uint32_t frame_seed);
+                        uint32_t frame_seed,
+                        const MslCoreStageEvents* stage_events);
 const MslCoreCompare* msl_core_match_output(const MslCoreMatch* match);
 
 #endif

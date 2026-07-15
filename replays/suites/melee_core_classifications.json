@@ -240,6 +240,260 @@
           "signed_zero_equal_count": 0
         }
       }
+    },
+    {
+      "replay": "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter velocity float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is three isolated rows containing only self-velocity rounding, with exact gameplay on both sides and 2,767 exact trailing transitions; the replay records Dolphin but not its build or execution profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11918,
+          "matched_frames": 11915,
+          "mismatched_frames": 3,
+          "exact_prefix_frames": 2827,
+          "strict_suffix_frames": 2767,
+          "first_mismatch_frame": 2705,
+          "last_mismatch_frame": 9028,
+          "mismatch_count": 5,
+          "mismatch_fingerprint": "b0e7834258dcdf4e",
+          "mismatch_fields_digest": "6ebfb05ae917389a450ccf8db7dcc67ab823351b054c27ae781bf147fe26ec2d",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": {
+          "frames": 11918,
+          "matched_frames": 11915,
+          "mismatched_frames": 3,
+          "exact_prefix_frames": 2827,
+          "strict_suffix_frames": 2767,
+          "first_mismatch_frame": 2705,
+          "last_mismatch_frame": 9028,
+          "mismatch_count": 5,
+          "mismatch_fingerprint": "b0e7834258dcdf4e",
+          "mismatch_fields_digest": "6ebfb05ae917389a450ccf8db7dcc67ab823351b054c27ae781bf147fe26ec2d",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter velocity float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit after preserving FoD's gp+0xDC union owner on 64-bit hosts. The remaining four isolated rows contain only self-velocity rounding and are followed by 1,508 exact transitions.",
+      "sources": [
+        "refs/melee/src/melee/gr/grizumi.c::grIzumi_801CBE64",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11202,
+          "matched_frames": 11198,
+          "mismatched_frames": 4,
+          "exact_prefix_frames": 4796,
+          "strict_suffix_frames": 1508,
+          "first_mismatch_frame": 4674,
+          "last_mismatch_frame": 9571,
+          "mismatch_count": 6,
+          "mismatch_fingerprint": "15c906dc69353821",
+          "mismatch_fields_digest": "d19bee6d491cfcbd2509b1dec339374543a1b0ee6e19e80a1beb59dd3243a493",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": {
+          "frames": 11202,
+          "matched_frames": 11198,
+          "mismatched_frames": 4,
+          "exact_prefix_frames": 4796,
+          "strict_suffix_frames": 1508,
+          "first_mismatch_frame": 4674,
+          "last_mismatch_frame": 9571,
+          "mismatch_count": 6,
+          "mismatch_fingerprint": "15c906dc69353821",
+          "mismatch_fields_digest": "d19bee6d491cfcbd2509b1dec339374543a1b0ee6e19e80a1beb59dd3243a493",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz",
+      "id": "unresolved-dolphin-laser-capsule-gate",
+      "owner": "Falco laser swept capsule versus fighter hurt-pose publication",
+      "rationale": "All compared state is exact before the gate. Both PPC and native source runtimes detect a 0.0535309-unit overlap and apply Falco laser damage one frame before this Dolphin replay; that causal difference changes the rest of the match. The replay does not identify its Dolphin build/execution profile. This exact full-stream fingerprint records an unresolved source boundary, not a tolerant pass or a replay-row gameplay patch.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C",
+        "refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C",
+        "refs/melee/src/melee/it/itcoll.c::it_8027137C",
+        "refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim"
+      ],
+      "expected": {
+        "native": {
+          "frames": 12471,
+          "matched_frames": 3840,
+          "mismatched_frames": 8631,
+          "exact_prefix_frames": 3840,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 3718,
+          "last_mismatch_frame": 12348,
+          "mismatch_count": 295069,
+          "mismatch_fingerprint": "342baf2fcd2db141",
+          "mismatch_fields_digest": "2e35c077866d15fa74590f18ddb3cda601918d26a621742d160dbaf87b505f28",
+          "render_visibility_mismatch_count": 11126,
+          "first_render_visibility_mismatch_frame": 873,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": {
+          "frames": 12471,
+          "matched_frames": 3840,
+          "mismatched_frames": 8631,
+          "exact_prefix_frames": 3840,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 3718,
+          "last_mismatch_frame": 12348,
+          "mismatch_count": 295069,
+          "mismatch_fingerprint": "342baf2fcd2db141",
+          "mismatch_fields_digest": "2e35c077866d15fa74590f18ddb3cda601918d26a621742d160dbaf87b505f28",
+          "render_visibility_mismatch_count": 11126,
+          "first_render_visibility_mismatch_frame": 873,
+          "signed_zero_equal_count": 0
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter position float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is confined to P2 X position for 86 transitions, all other gameplay lanes remain exact, and 1,308 exact transitions follow it.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 8459,
+          "matched_frames": 8373,
+          "mismatched_frames": 86,
+          "exact_prefix_frames": 7058,
+          "strict_suffix_frames": 1308,
+          "first_mismatch_frame": 6936,
+          "last_mismatch_frame": 7028,
+          "mismatch_count": 86,
+          "mismatch_fingerprint": "7f94ffaa39c093b2",
+          "mismatch_fields_digest": "7206d9a2a004b79f607befe2d9760cb728584dae30f67dcf62bb29610e4d5e5c",
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": {
+          "frames": 8459,
+          "matched_frames": 8373,
+          "mismatched_frames": 86,
+          "exact_prefix_frames": 7058,
+          "strict_suffix_frames": 1308,
+          "first_mismatch_frame": 6936,
+          "last_mismatch_frame": 7028,
+          "mismatch_count": 86,
+          "mismatch_fingerprint": "7f94ffaa39c093b2",
+          "mismatch_fields_digest": "7206d9a2a004b79f607befe2d9760cb728584dae30f67dcf62bb29610e4d5e5c",
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter position float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. Four isolated P1 X-position rows are the complete residual and 5,565 exact transitions follow it.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 5984,
+          "matched_frames": 5980,
+          "mismatched_frames": 4,
+          "exact_prefix_frames": 413,
+          "strict_suffix_frames": 5565,
+          "first_mismatch_frame": 291,
+          "last_mismatch_frame": 296,
+          "mismatch_count": 4,
+          "mismatch_fingerprint": "37d57dc85877b61d",
+          "mismatch_fields_digest": "c95330ed8aa83e7fba4c995f13304dc363557399457ee157d18da651236e0f86",
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": {
+          "frames": 5984,
+          "matched_frames": 5980,
+          "mismatched_frames": 4,
+          "exact_prefix_frames": 413,
+          "strict_suffix_frames": 5565,
+          "first_mismatch_frame": 291,
+          "last_mismatch_frame": 296,
+          "mismatch_count": 4,
+          "mismatch_fingerprint": "37d57dc85877b61d",
+          "mismatch_fields_digest": "c95330ed8aa83e7fba4c995f13304dc363557399457ee157d18da651236e0f86",
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter position float execution profile",
+      "rationale": "After restoring the retail render-time JObj matrix publication, PPC and native source runtimes agree bit-for-bit and the former combat divergence is exact. One P1 X-position ULP row remains, followed by 2,391 exact transitions.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18",
+        "refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjSetupMatrixSub"
+      ],
+      "expected": {
+        "native": {
+          "frames": 9439,
+          "matched_frames": 9438,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 7047,
+          "strict_suffix_frames": 2391,
+          "first_mismatch_frame": 6925,
+          "last_mismatch_frame": 6925,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "377241c36ae154ee",
+          "mismatch_fields_digest": "c887045506922f2f2d99bc698f2468d956af1627aa55537b4a39b3579c268bf7",
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": {
+          "frames": 9439,
+          "matched_frames": 9438,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 7047,
+          "strict_suffix_frames": 2391,
+          "first_mismatch_frame": 6925,
+          "last_mismatch_frame": 6925,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "377241c36ae154ee",
+          "mismatch_fields_digest": "c887045506922f2f2d99bc698f2468d956af1627aa55537b4a39b3579c268bf7",
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        }
+      }
     }
   ]
 }

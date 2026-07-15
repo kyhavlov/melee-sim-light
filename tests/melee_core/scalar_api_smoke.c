@@ -35,7 +35,8 @@ int main(int argc, char** argv)
     if (msl_core_game_data_init(&game_data, argv[1]) != 0 ||
         msl_core_match_init(&match, &game_data, &config, &previous_input) !=
             0 ||
-        msl_core_match_step(&match, &input, config.frame_pre_random_seed) !=
+        msl_core_match_step(&match, &input, config.frame_pre_random_seed,
+                            &(MslCoreStageEvents) { 0 }) !=
             0) {
         return 1;
     }

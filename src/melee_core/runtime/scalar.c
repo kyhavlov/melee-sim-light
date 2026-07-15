@@ -17,9 +17,11 @@
 #include "ft/ftdata.h"
 #include "ft/ftlib.h"
 #include "gr/grdatfiles.h"
+#include "gr/grizumi.h"
 #include "gr/ground.h"
 #include "gr/types.h"
 #include "it/inlines.h"
+#include "it/it_26B1.h"
 #include "it/item.h"
 #include "it/types.h"
 #include "lb/lbarchive.h"
@@ -49,7 +51,10 @@
 #include <string.h>
 
 enum {
+    MSL_CORE_STAGE_FOUNTAIN_OF_DREAMS = 2,
     MSL_CORE_STAGE_POKEMON_STADIUM = 3,
+    MSL_CORE_STAGE_YOSHIS_STORY = 8,
+    MSL_CORE_STAGE_DREAM_LAND = 28,
     MSL_CORE_STAGE_BATTLEFIELD = 31,
     MSL_CORE_STAGE_FINAL_DESTINATION = 32,
     MSL_CORE_CHAR_FOX = 1,
@@ -61,8 +66,11 @@ extern u32 seed;
 extern u32* seed_ptr;
 extern int mpColl_804D64AC;
 extern void Camera_8002B3D4(void* arg0);
+extern StageData grIz_803E0E5C;
 extern StageData grNBa_803E7E38;
+extern StageData grOp_803E6748;
 extern StageData grPs_803E1334;
+extern StageData grSt_803E274C;
 
 typedef struct MslCoreStageSpec {
     uint8_t external_id;
@@ -78,11 +86,26 @@ typedef struct MslCoreStageSpec {
 // refs/slippi-ssbm-asm/External/NeutralSpawn/NeutralSpawn.asm
 // refs/melee/src/melee/gr/{grbattle.c,grpstadium.c,ground.c}
 static const MslCoreStageSpec stage_specs[] = {
+    { MSL_CORE_STAGE_FOUNTAIN_OF_DREAMS,
+      IZUMI,
+      "/GrIz.dat",
+      &grIz_803E0E5C,
+      { { -41.25F, 21.0F, 0.0F }, { 41.25F, 27.0F, 0.0F } } },
     { MSL_CORE_STAGE_POKEMON_STADIUM,
       PSTADIUM,
       "/GrPs.dat",
       &grPs_803E1334,
       { { -40.0F, 32.0F, 0.0F }, { 40.0F, 32.0F, 0.0F } } },
+    { MSL_CORE_STAGE_YOSHIS_STORY,
+      STORY,
+      "/GrSt.dat",
+      &grSt_803E274C,
+      { { -42.0F, 26.6F, 0.0F }, { 42.0F, 28.0F, 0.0F } } },
+    { MSL_CORE_STAGE_DREAM_LAND,
+      OLDPUPUPU,
+      "/GrOp.dat",
+      &grOp_803E6748,
+      { { -46.6F, 37.2F, 0.0F }, { 47.4F, 37.3F, 0.0F } } },
     { MSL_CORE_STAGE_BATTLEFIELD,
       BATTLE,
       "/GrNBa.dat",
@@ -338,8 +361,8 @@ static int validate_config(MslCoreMatchConfig* config)
 
     if (stage_spec(config->stage_id) == NULL) {
         fprintf(stderr,
-                "current core supports stage_id=3,31,32 "
-                "(Pokemon Stadium, Battlefield, Final Destination)\n");
+                "current core supports the six legal stage ids "
+                "2,3,8,28,31,32\n");
         return -1;
     }
     if (config->num_players != 0 && config->num_players != 2) {
@@ -423,7 +446,7 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
                               match->config.brawl_offscreen_damage,
                               match->config.freeze_dead_up_fall_physics);
     msl_camera_state_init(&match->camera);
-    msl_slippi_state_init(&match->slippi);
+    msl_slippi_state_init(&match->slippi, match->config.stage_event_streams);
 
     msl_host_set_data_root(game_data->root);
     msl_effect_match_init(&game_data->effects, &match->effects);
@@ -476,6 +499,23 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
     Ground_801C3960(stage_info.param->x20);
     Ground_801C3950(stage_info.param->x24);
 
+    // Register stage-owned articles before OnInit can spawn them. This is the
+    // gameplay-bearing itemdata slice of the common source stage bootstrap;
+    // its adjacent fog/light/particle-bank setup remains headless.
+    // refs/melee/src/melee/gr/ground.c::Ground_801C0800
+    if (stage_info.itemdata != NULL) {
+        for (i = 0; stage_info.itemdata[i] != NULL; ++i) {
+            it_8026B40C(stage_info.itemdata[i]->unk4,
+                        stage_info.itemdata[i]->unk0);
+        }
+    }
+
+    // The versus bootstrap clears fighter/device registrations immediately
+    // before stage construction. Stage OnInit callbacks such as Dream Land's
+    // Whispy then register their source wind owner into the clean table.
+    // refs/melee/src/melee/gm/gm_16AE.c::fn_8016F088
+    // refs/melee/src/melee/ft/ftdevice.c::ftCo_800C06C0
+    ftCo_800C06C0();
     mpColl_80041C78();
     mpLibLoad(stage_info.coll_data);
     mpLib_80058820();
@@ -581,7 +621,6 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
     // Fighter_Create. Items are disabled in the current Fox/FD domain, so the
     // exact Item_80266FA8(false) entry is equivalent to Item_80266F70's source
     // gate without retaining the scene-owned item-switch aggregate.
-    ftCo_800C06C0();
     Item_80266FA8();
     Item_80266FCC();
     Player_80036DA4();
@@ -644,7 +683,11 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
     // pools; Falco plus animated Battlefield/Stadium raises the reached FObj
     // high-water mark above the original Fox/FD reserve.
     // refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,objalloc.c}
-    HSD_ObjAllocPreallocateAll(64);
+    // A five-Heiho Yoshi wave installs the source item process set in one
+    // callback, raising the GObjProc free-list demand above the static-stage
+    // bootstrap. Keep a fixed per-type reserve that covers the supported
+    // stage-actor high-water mark without permitting runtime heap growth.
+    HSD_ObjAllocPreallocateAll(256);
     HSD_ObjAllocAddFree(HSD_AObjGetAllocData(), 448);
     HSD_ObjAllocAddFree(HSD_FObjGetAllocData(), 1024);
     HSD_ObjAllocAddFree(HSD_IDGetAllocData(), 192);
@@ -903,12 +946,82 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
     }
 }
 
+static void apply_replay_stage_events(MslCoreMatch* match)
+{
+    int i;
+    if (match->config.stage_id == MSL_CORE_STAGE_FOUNTAIN_OF_DREAMS &&
+        (match->config.stage_event_streams & 1) != 0)
+    {
+        for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
+            Ground* gp = &match->stage_ground[i];
+            f32 height;
+            bool changed;
+            if (!match->stage_ground_used[i] || gp->map_id != 4) {
+                continue;
+            }
+            // grIzumi creates the left/right collision actors in the reverse
+            // order of Slippi's 0=right, 1=left event protocol. Publish the
+            // event through the source xD0/JObj/mpLib owner before fighter
+            // collision runs, then the source callback observes the same
+            // retained height later in the scheduler.
+            // refs/slippi-ssbm-asm/Recording/Stages/SendFountainInfo.asm
+            // refs/melee/src/melee/gr/grizumi.c::{
+            //   grIzumi_801CC358,grIzumi_801CCBDC}
+            if (msl_slippi_fod_platform_height(1 - gp->gv.izumi3.xC8,
+                                               gp->gv.izumi3.xD0, &height,
+                                               &changed))
+            {
+                msl_grizumi_apply_replay_platform_height(gp->gobj, height,
+                                                          changed);
+                msl_slippi_fod_platform_mark_applied(
+                    1 - gp->gv.izumi3.xC8);
+            }
+        }
+    } else if (match->config.stage_id == MSL_CORE_STAGE_DREAM_LAND &&
+               (match->config.stage_event_streams & 2) != 0)
+    {
+        u8 direction;
+        if (msl_slippi_dreamland_whispy_direction(&direction)) {
+            for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
+                Ground* gp = &match->stage_ground[i];
+                if (match->stage_ground_used[i] && gp->map_id == 7) {
+                    // The replay event is emitted when source xDC changes.
+                    // Make it visible before the fighter/device pass even
+                    // though Whispy's own stage process runs later.
+                    // refs/melee/src/melee/gr/groldpupupu.c::{
+                    //   grOldPupupu_8021119C,grOldPupupu_802113E0,
+                    //   fn_802112F4}
+                    gp->gv.oldpupupu.xDC = direction;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+static void publish_render_matrices(HSD_JObj* jobj)
+{
+    HSD_JObj* child;
+
+    if (jobj == NULL) {
+        return;
+    }
+    HSD_JObjSetupMatrix(jobj);
+    if (jobj->flags & JOBJ_INSTANCE) {
+        return;
+    }
+    for (child = jobj->child; child != NULL; child = child->next) {
+        publish_render_matrices(child);
+    }
+}
+
 int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
-                        uint32_t frame_seed)
+                        uint32_t frame_seed,
+                        const MslCoreStageEvents* stage_events)
 {
     int i;
 
-    if (match == NULL || input == NULL) {
+    if (match == NULL || input == NULL || stage_events == NULL) {
         fprintf(stderr, "Melee core scalar step received a null owner\n");
         return -1;
     }
@@ -916,7 +1029,9 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
     msl_camera_state_bind(&match->camera);
     msl_effect_projection_bind(&match->game_data->effects, &match->effects);
     msl_slippi_state_bind(&match->slippi);
+    msl_slippi_stage_events_begin(stage_events);
     bind_stage_match(match);
+    apply_replay_stage_events(match);
 
     // Slippi's pre-frame row owns the RNG value used by replay playback.
     // Restore it once here, then let all source gameplay consumers advance the
@@ -968,7 +1083,29 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
     // refs/slippi-ssbm-asm/console_lag_pd*.json
     // refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18
     for (i = 0; i < 2; ++i) {
+        // Retail's intervening fighter draw walks the complete visible JObj
+        // tree through HSD_JObjDispAll. The GX/DObj work is presentation, but
+        // its ordered lazy-matrix publication is observed by next-frame
+        // hit/hurt capsules, including RObj/IK-dependent bones. Preserve that
+        // source boundary without invoking the renderer.
+        // refs/melee/src/melee/ft/ftdrawcommon.c::{
+        //   ftDrawCommon_80080E18,ftDrawCommon_800805C8}
+        // refs/melee/src/sysdolphin/baselib/jobj.c::{
+        //   HSD_JObjDispAll,HSD_JObjSetupMatrixSub}
+        publish_render_matrices(match->fighters[i]->hsd_obj);
         msl_camera_publish_fighter_visibility(match->fighters[i]);
+    }
+    {
+        Item_GObj* item_gobj = (Item_GObj*) HSD_GObj_Entities->items;
+        while (item_gobj != NULL) {
+            // Item display callbacks likewise walk the gameplay JObj tree via
+            // HSD_JObjDispAll. Preserve the lazy matrix publication while
+            // omitting DObj/GX work; item hit/hurt capsules can observe it on
+            // the following gameplay frame.
+            // refs/melee/src/melee/it/itdraw.c::it_8026EB18
+            publish_render_matrices(item_gobj->hsd_obj);
+            item_gobj = (Item_GObj*) item_gobj->next;
+        }
     }
     // gm_8016AEDC is observed by fighter processes during this pass. The
     // source match owner advances it only after those processes have run.
