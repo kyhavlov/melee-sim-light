@@ -15,7 +15,7 @@ src/melee/ft/chara/ftCommon/ftCo_0C60.c	src/melee_core/vendor/src/melee/ft/chara
 src/melee/ft/chara/ftCommon/ftCo_AirCatch.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_AirCatch.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_AppealS.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_AppealS.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_Attack1.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_Attack1.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
-src/melee/ft/chara/ftCommon/ftCo_Attack100.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_Attack100.c	NonMatching	none	compiled from materialized source by src/melee_core/Makefile
+src/melee/ft/chara/ftCommon/ftCo_Attack100.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_Attack100.c	NonMatching	0041-capture-wait-floor-owner.patch	compiled from materialized source by src/melee_core/Makefile; corrected from GALE01 0x800DBA8C floor-continuation owner
 src/melee/ft/chara/ftCommon/ftCo_AttackAir.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_AttackDash.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
@@ -50,7 +50,7 @@ src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c	src/melee_core/vendor/src/melee/ft
 src/melee/ft/chara/ftCommon/ftCo_CliffEscape.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_CliffEscape.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_CliffJump.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_CliffWait.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
-src/melee/ft/chara/ftCommon/ftCo_Damage.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_Damage.c	NonMatching	0003-ppc-source-exactness.patch	compiled from materialized source by src/melee_core/Makefile; adapted by patches/0003-ppc-source-exactness.patch
+src/melee/ft/chara/ftCommon/ftCo_Damage.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_Damage.c	NonMatching	0003-ppc-source-exactness.patch,0043-damage-color-animation-owner.patch	compiled from materialized source by src/melee_core/Makefile; portable fields from patches/0003 and 0013; retail-DOL color-animation argument correction from patches/0043
 src/melee/ft/chara/ftCommon/ftCo_DamageBind.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_DamageBind.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_DamageFall.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c	Matching	0002-headless-fox-fd-runtime.patch	compiled from materialized source by src/melee_core/Makefile; adapted by patches/0002-headless-fox-fd-runtime.patch
 src/melee/ft/chara/ftCommon/ftCo_DamageIce.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_DamageIce.c	NonMatching	none	compiled from materialized source by src/melee_core/Makefile
@@ -71,7 +71,7 @@ src/melee/ft/chara/ftCommon/ftCo_FallAerial.c	src/melee_core/vendor/src/melee/ft
 src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_Furafura.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_Furafura.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
-src/melee/ft/chara/ftCommon/ftCo_Guard.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_Guard.c	NonMatching	0003-ppc-source-exactness.patch	compiled from materialized source by src/melee_core/Makefile; adapted by patches/0003-ppc-source-exactness.patch
+src/melee/ft/chara/ftCommon/ftCo_Guard.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_Guard.c	NonMatching	0003-ppc-source-exactness.patch,0046-guard-pose-float-exactness.patch	compiled from materialized source by src/melee_core/Makefile; hosted retail arithmetic from patches/0003 and 0046
 src/melee/ft/chara/ftCommon/ftCo_HammerFall.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_HammerFall.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_HammerJump.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_HammerJump.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_HammerKneeBend.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_HammerKneeBend.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
@@ -130,13 +130,14 @@ src/melee/ft/chara/ftCommon/ftCo_Walk.c	src/melee_core/vendor/src/melee/ft/chara
 src/melee/ft/chara/ftCommon/ftCo_WarpStar.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_WarpStar.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_YoshiEgg.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftCo_YoshiEgg.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftpickupitem.c	src/melee_core/vendor/src/melee/ft/chara/ftCommon/ftpickupitem.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
+src/melee/ft/chara/ftFalco/ftFc_Init.c	src/melee_core/vendor/src/melee/ft/chara/ftFalco/ftFc_Init.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftFox/ftFx_AppealS.c	src/melee_core/vendor/src/melee/ft/chara/ftFox/ftFx_AppealS.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftFox/ftFx_Init.c	src/melee_core/vendor/src/melee/ft/chara/ftFox/ftFx_Init.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftFox/ftFx_SpecialHi.c	src/melee_core/vendor/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c	Matching	0003-ppc-source-exactness.patch	compiled from materialized source by src/melee_core/Makefile; adapted by patches/0003-ppc-source-exactness.patch
 src/melee/ft/chara/ftFox/ftFx_SpecialLw.c	src/melee_core/vendor/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftFox/ftFx_SpecialN.c	src/melee_core/vendor/src/melee/ft/chara/ftFox/ftFx_SpecialN.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/chara/ftFox/ftFx_SpecialS.c	src/melee_core/vendor/src/melee/ft/chara/ftFox/ftFx_SpecialS.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
-src/melee/ft/fighter.c	src/melee_core/vendor/src/melee/ft/fighter.c	Matching	0002-headless-fox-fd-runtime.patch	compiled from materialized source by src/melee_core/Makefile; adapted by patches/0002-headless-fox-fd-runtime.patch
+src/melee/ft/fighter.c	src/melee_core/vendor/src/melee/ft/fighter.c	Matching	0002-headless-fox-fd-runtime.patch,0045-ground-shield-knockback-fmadds.patch	compiled from materialized source by src/melee_core/Makefile; headless adaptations from patches/0002 and retail fmadds translation for hosted builds from patches/0045
 src/melee/ft/ftCo_800C703C.c	src/melee_core/vendor/src/melee/ft/ftCo_800C703C.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/ftCo_800C7434.c	src/melee_core/vendor/src/melee/ft/ftCo_800C7434.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/ftCo_800C7590.c	src/melee_core/vendor/src/melee/ft/ftCo_800C7590.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
@@ -186,12 +187,17 @@ src/melee/ft/ftwaitanim.c	src/melee_core/vendor/src/melee/ft/ftwaitanim.c	Matchi
 src/melee/ft/ftwalkcommon.c	src/melee_core/vendor/src/melee/ft/ftwalkcommon.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/ft/ftwalljump.c	src/melee_core/vendor/src/melee/ft/ftwalljump.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/gm/gm_16F1.c	src/melee_core/vendor/src/melee/gm/gm_16F1.c	NonMatching	none	compiled from materialized source by src/melee_core/Makefile
+src/melee/gr/granime.c	src/melee_core/vendor/src/melee/gr/granime.c	NonMatching	0039-hosted-stage-animation-search.patch	compiled from materialized source by src/melee_core/Makefile; PPC setjmp early-exit adapted to a read-only hosted traversal by patches/0039-hosted-stage-animation-search.patch
+src/melee/gr/grbattle.c	src/melee_core/vendor/src/melee/gr/grbattle.c	Matching	0038-stage-headless-ownership.patch	compiled from materialized source by src/melee_core/Makefile; renderer/item-generator setup excluded by patches/0038-stage-headless-ownership.patch
 src/melee/gr/grdatfiles.c	src/melee_core/vendor/src/melee/gr/grdatfiles.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/gr/grdynamicattr.c	src/melee_core/vendor/src/melee/gr/grdynamicattr.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
-src/melee/gr/ground.c	src/melee_core/vendor/src/melee/gr/ground.c	NonMatching	0001-hosted-c-compatibility.patch	compiled from materialized source by src/melee_core/Makefile; adapted by patches/0001-hosted-c-compatibility.patch
+src/melee/gr/grlib.c	src/melee_core/vendor/src/melee/gr/grlib.c	Matching	0040-stage-presentation-particles.patch	compiled from materialized source by src/melee_core/Makefile; particle-generator presentation and unsupported-stage branches excluded by patches/0040-stage-presentation-particles.patch
+src/melee/gr/grmaterial.c	src/melee_core/vendor/src/melee/gr/grmaterial.c	NonMatching	none	compiled from materialized source by src/melee_core/Makefile
+src/melee/gr/ground.c	src/melee_core/vendor/src/melee/gr/ground.c	NonMatching	0001-hosted-c-compatibility.patch,0037-falco-battlefield-stadium.patch,0038-stage-headless-ownership.patch	compiled from materialized source by src/melee_core/Makefile; adapted by patches/0001-hosted-c-compatibility.patch, patches/0037-falco-battlefield-stadium.patch, and patches/0038-stage-headless-ownership.patch
+src/melee/gr/grpstadium.c	src/melee_core/vendor/src/melee/gr/grpstadium.c	NonMatching	0037-falco-battlefield-stadium.patch,0038-stage-headless-ownership.patch	compiled from materialized source by src/melee_core/Makefile; adapted by patches/0037-falco-battlefield-stadium.patch and patches/0038-stage-headless-ownership.patch
 src/melee/it/it_26B1.c	src/melee_core/vendor/src/melee/it/it_26B1.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/it/it_2725.c	src/melee_core/vendor/src/melee/it/it_2725.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
-src/melee/it/itanimlist.c	src/melee_core/vendor/src/melee/it/itanimlist.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
+src/melee/it/itanimlist.c	src/melee_core/vendor/src/melee/it/itanimlist.c	Matching	0044-portable-item-command-halfwords.patch	compiled source owner; native reads authored PPC item-command halfwords explicitly while PPC retains the source direct view
 src/melee/it/itcoll.c	src/melee_core/vendor/src/melee/it/itcoll.c	NonMatching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/it/iteffect.c	src/melee_core/vendor/src/melee/it/iteffect.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/it/item.c	src/melee_core/vendor/src/melee/it/item.c	Matching	0002-headless-fox-fd-runtime.patch	compiled from materialized source by src/melee_core/Makefile; adapted by patches/0002-headless-fox-fd-runtime.patch
@@ -201,7 +207,7 @@ src/melee/it/items/itfoxlaser.c	src/melee_core/vendor/src/melee/it/items/itfoxla
 src/melee/it/itgroundcoll.c	src/melee_core/vendor/src/melee/it/itgroundcoll.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/it/ithitbox.c	src/melee_core/vendor/src/melee/it/ithitbox.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/it/itmaplib.c	src/melee_core/vendor/src/melee/it/itmaplib.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
-src/melee/lb/lb_00B0.c	src/melee_core/vendor/src/melee/lb/lb_00B0.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
+src/melee/lb/lb_00B0.c	src/melee_core/vendor/src/melee/lb/lb_00B0.c	Matching	0046-guard-pose-float-exactness.patch	compiled from materialized source by src/melee_core/Makefile; hosted retail guard-pose blending from patches/0046
 src/melee/lb/lb_00CE.c	src/melee_core/vendor/src/melee/lb/lb_00CE.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/lb/lbanim.c	src/melee_core/vendor/src/melee/lb/lbanim.c	Matching	none	compiled from materialized source by src/melee_core/Makefile
 src/melee/lb/lbarchive.c	src/melee_core/vendor/src/melee/lb/lbarchive.c	Matching	0001-hosted-c-compatibility.patch	compiled from materialized source by src/melee_core/Makefile; adapted by patches/0001-hosted-c-compatibility.patch

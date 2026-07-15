@@ -8,6 +8,7 @@
 #include <baselib/forward.h>
 
 typedef struct _HSD_PSCmdList HSD_PSCmdList;
+typedef struct EF_EffectDesc EF_EffectDesc;
 
 typedef enum MslDatKind {
     MSL_DAT_VOID,
@@ -50,6 +51,7 @@ extern const MslDatType* const msl_dat_root_UnkStage6B0;
 extern const MslDatType* const msl_dat_root_DynamicModelDesc;
 extern const MslDatType* const msl_dat_root_HSD_Joint;
 extern const MslDatType* const msl_dat_root_HSD_MatAnimJoint;
+extern const MslDatType* const msl_dat_root_EF_EffectDesc;
 extern const MslDatType* const msl_dat_root_ftData;
 extern const MslDatType* const msl_dat_root_FigaTree;
 extern const MslDatType* const msl_dat_root_it_804D6D20_t;
@@ -65,6 +67,8 @@ extern const MslDatType* const msl_dat_root_MslDatByte;
 extern const MslDatType* const msl_dat_root_MslDatVec2Pointer;
 extern const MslDatType* const msl_dat_root_MslDatFighterPartsPointer;
 extern const MslDatType* const msl_dat_root_MslDatFighter6540Pointer;
+extern const MslDatType* const msl_dat_root_MslDatBattlefieldParams;
+extern const MslDatType* const msl_dat_root_MslDatPokemonStadiumParams;
 extern const MslDatType* const msl_dat_root_FoxLaserAttr;
 extern const MslDatType* const msl_dat_root_FoxBlasterAttr;
 extern const MslDatType* const msl_dat_root_FoxIllusionAttr;
@@ -86,6 +90,8 @@ void msl_native_archive_locate_extern(HSD_Archive* archive,
 
 int msl_native_effect_bank(HSD_Archive* archive, const char* symbol,
                            int* count, HSD_PSCmdList*** commands);
+EF_EffectDesc* msl_native_effect_models(HSD_Archive* archive,
+                                        const char* symbol, int count);
 void msl_native_dat_finish_initialization(void);
 int msl_native_dat_owns(const void* pointer);
 

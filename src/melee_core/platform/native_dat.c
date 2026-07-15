@@ -4,6 +4,7 @@
 #include <baselib/memory.h>
 #include <baselib/psstructs.h>
 #include <melee/ft/types.h>
+#include <melee/gr/ground.h>
 #include <melee/it/it_3F14.h>
 #include <melee/it/types.h>
 
@@ -159,6 +160,8 @@ static void require_dat_initialization(const char* operation)
 
 void msl_native_dat_finish_initialization(void)
 {
+    const size_t page_size = 4096;
+    size_t protected_size;
     uint32_t i;
 
     require_dat_initialization("native DAT seal");
@@ -167,6 +170,14 @@ void msl_native_dat_finish_initialization(void)
         // original big-endian file buffers inaccessible so a leaked raw
         // pointer or per-frame archive read fails immediately.
         msl_memory_protect_allocation(native_archive_cache[i].source);
+    }
+    protected_size =
+        (native_dat_arena_used + page_size - 1) & ~(page_size - 1);
+    if (protected_size != 0 &&
+        mprotect(native_dat_arena, protected_size, PROT_READ) != 0)
+    {
+        perror("mprotect immutable native DAT arena");
+        abort();
     }
     native_dat_initialization_complete = 1;
 }
@@ -734,7 +745,9 @@ static const MslDatType* public_type(const char* symbol)
     if (strcmp(symbol, "quake_model_set") == 0) {
         return msl_dat_root_DynamicModelDesc;
     }
-    if (strcmp(symbol, "ftDataFox") == 0) {
+    if (strcmp(symbol, "ftDataFox") == 0 ||
+        strcmp(symbol, "ftDataFalco") == 0)
+    {
         return msl_dat_root_ftData;
     }
     if (strcmp(symbol, "itPublicData") == 0) {
@@ -752,6 +765,32 @@ static const MslDatType* public_type(const char* symbol)
         return msl_dat_root_HSD_Joint;
     }
     return NULL;
+}
+
+static void* translate_stage_params(MslNativeArchive* context,
+                                    uint32_t offset)
+{
+    const MslDatType* type;
+
+    // Both imported stage owners publish the same DAT symbol with different
+    // anonymous source structs. The source internal-stage owner selected before
+    // grDatFiles_801C6038 is the concrete type authority for this public.
+    // refs/melee/src/melee/gr/{grbattle.c,grpstadium.c}
+    if (stage_info.internal_stage_id == BATTLE) {
+        type = msl_dat_root_MslDatBattlefieldParams;
+    } else if (stage_info.internal_stage_id == PSTADIUM) {
+        type = msl_dat_root_MslDatPokemonStadiumParams;
+    } else if (stage_info.internal_stage_id == LAST) {
+        // The validated manual FD owner does not consume this presentation
+        // parameter, matching the prior untranslated public projection.
+        return NULL;
+    } else {
+        fprintf(stderr,
+                "native DAT yakumono_param has unsupported internal stage %d\n",
+                stage_info.internal_stage_id);
+        abort();
+    }
+    return translate_target_count(context, offset, type, 1);
 }
 
 static void* translate_item_public(MslNativeArchive* context,
@@ -833,45 +872,53 @@ static void* translate_fighter_common_public(MslNativeArchive* context,
     return result;
 }
 
-static ftData* translate_fox_public(MslNativeArchive* context, uint32_t offset)
+static ftData* translate_space_animal_public(MslNativeArchive* context,
+                                             uint32_t offset, int falco)
 {
     enum {
         FT_DATA_X48_ITEMS_SOURCE_OFFSET = 0x48,
         ARTICLE_SPECIAL_ATTRS_SOURCE_OFFSET = 0x04,
-        FOX_ARTICLE_COUNT = 3,
+        SPACE_ANIMAL_ARTICLE_COUNT = 3,
     };
-    const MslDatType* const attr_types[FOX_ARTICLE_COUNT] = {
+    const MslDatType* const attr_types[SPACE_ANIMAL_ARTICLE_COUNT] = {
         msl_dat_root_FoxLaserAttr,
         msl_dat_root_FoxBlasterAttr,
         msl_dat_root_FoxIllusionAttr,
     };
+    const uint8_t fox_indices[SPACE_ANIMAL_ARTICLE_COUNT] = { 0, 1, 2 };
+    const uint8_t falco_indices[SPACE_ANIMAL_ARTICLE_COUNT] = { 0, 1, 3 };
+    const uint8_t* indices = falco ? falco_indices : fox_indices;
     ftData* result = translate_target_count(
         context, offset, msl_dat_root_ftData, 1);
     uint32_t list = raw_pointer(
         context, offset + FT_DATA_X48_ITEMS_SOURCE_OFFSET);
     uint32_t i;
 
-    // ftFx_Init_OnLoad installs these exact three articles as laser, blaster,
-    // and illusion. Article.x4 is still void in the decomp, so its consumer is
-    // the source-backed type authority for native DAT translation.
+    // Fox and Falco install the same source article families as laser, blaster,
+    // and illusion/phantasm. Falco's third reached article occupies x48_items[3].
+    // Article.x4 is still void in the decomp, so these consumers are the
+    // source-backed type authority for native DAT translation.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_OnLoad
+    // refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_OnLoad
     // refs/melee/src/melee/it/items/{itfoxlaser.c,itfoxblaster.c,itfoxillusion.c}
     if (list == UINT32_MAX || result->x48_items == NULL) {
-        fprintf(stderr, "native Fox DAT is missing its article list\n");
+        fprintf(stderr, "native space-animal DAT is missing its article list\n");
         abort();
     }
-    for (i = 0; i < FOX_ARTICLE_COUNT; ++i) {
-        uint32_t article = raw_pointer(context, list + i * 4);
+    for (i = 0; i < SPACE_ANIMAL_ARTICLE_COUNT; ++i) {
+        uint32_t index = indices[i];
+        uint32_t article = raw_pointer(context, list + index * 4);
         uint32_t attrs;
-        if (article == UINT32_MAX || result->x48_items[i] == NULL ||
+        if (article == UINT32_MAX || result->x48_items[index] == NULL ||
             (attrs = raw_pointer(
                  context, article + ARTICLE_SPECIAL_ATTRS_SOURCE_OFFSET)) ==
                 UINT32_MAX)
         {
-            fprintf(stderr, "native Fox DAT article %u is incomplete\n", i);
+            fprintf(stderr, "native space-animal DAT article %u is incomplete\n",
+                    index);
             abort();
         }
-        ((Article*) result->x48_items[i])->x4_specialAttributes =
+        ((Article*) result->x48_items[index])->x4_specialAttributes =
             translate_target_count(context, attrs, attr_types[i], 1);
     }
     return result;
@@ -945,7 +992,11 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
     } else if (strcmp(symbol, "ftLoadCommonData") == 0) {
         result = translate_fighter_common_public(context, offset);
     } else if (strcmp(symbol, "ftDataFox") == 0) {
-        result = translate_fox_public(context, offset);
+        result = translate_space_animal_public(context, offset, 0);
+    } else if (strcmp(symbol, "ftDataFalco") == 0) {
+        result = translate_space_animal_public(context, offset, 1);
+    } else if (strcmp(symbol, "yakumono_param") == 0) {
+        result = translate_stage_params(context, offset);
     } else if (type != NULL) {
         result = translate_target_count(context, offset, type, 1);
     }
@@ -1026,4 +1077,29 @@ int msl_native_effect_bank(HSD_Archive* archive, const char* symbol,
     *count = (int) total;
     *commands = result;
     return 0;
+}
+
+EF_EffectDesc* msl_native_effect_models(HSD_Archive* archive,
+                                        const char* symbol, int count)
+{
+    MslNativeArchive* context;
+    uint32_t table;
+
+    require_dat_initialization("native effect model translation");
+    if (archive == NULL || symbol == NULL || count <= 0) {
+        return NULL;
+    }
+    context = archive_context(archive);
+    table = raw_public_offset(archive, symbol);
+    if (table == UINT32_MAX) {
+        return NULL;
+    }
+    // The public effect table stores particle-bank pointers in its first two
+    // words, followed immediately by the EF_EffectDesc array used by
+    // efLib_Create. Translate the reached prefix before the DAT arena seals.
+    // refs/melee/src/melee/ef/{efasync.c::efAsync_LoadSync,
+    //     eflib.c::efLib_Create}
+    return translate_target_count(context, table + 8,
+                                  msl_dat_root_EF_EffectDesc,
+                                  (uint32_t) count);
 }

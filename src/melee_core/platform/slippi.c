@@ -2,20 +2,33 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-typedef struct MslSlippiFighterState {
-    const struct Fighter* fighter;
-    u8 lcancel;
-} MslSlippiFighterState;
+static MslCoreSlippiState* msl_bound_slippi_state;
 
-static MslSlippiFighterState fighter_state[8];
+// refs/slippi-ssbm-asm/Recording/GetLCancelStatus/GetLCancelStatus.asm
+void msl_slippi_state_bind(MslCoreSlippiState* state)
+{
+    msl_bound_slippi_state = state;
+}
 
-static MslSlippiFighterState* find_state(const struct Fighter* fp, bool create)
+void msl_slippi_state_init(MslCoreSlippiState* state)
+{
+    memset(state, 0, sizeof(*state));
+    msl_slippi_state_bind(state);
+}
+
+static MslCoreSlippiFighterState* find_state(const struct Fighter* fp,
+                                             bool create)
 {
     int i;
-    MslSlippiFighterState* free_state = NULL;
+    MslCoreSlippiFighterState* fighter_state =
+        msl_bound_slippi_state->fighters;
+    MslCoreSlippiFighterState* free_state = NULL;
 
-    for (i = 0; i < (int) (sizeof(fighter_state) / sizeof(fighter_state[0]));
+    for (i = 0;
+         i < (int) (sizeof(msl_bound_slippi_state->fighters) /
+                    sizeof(msl_bound_slippi_state->fighters[0]));
          ++i)
     {
         if (fighter_state[i].fighter == fp) {
@@ -43,6 +56,6 @@ void msl_slippi_lcancel_set(struct Fighter* fp, u8 value)
 
 u8 msl_slippi_lcancel_get(const struct Fighter* fp)
 {
-    MslSlippiFighterState* state = find_state(fp, false);
+    MslCoreSlippiFighterState* state = find_state(fp, false);
     return state == NULL ? 0 : state->lcancel;
 }

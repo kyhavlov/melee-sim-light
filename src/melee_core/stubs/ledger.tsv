@@ -13,8 +13,8 @@ efLib_PauseAll	presentation/audio exclusion	reachable	no-op	render/audio/particl
 efLib_ResumeAll	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 efLib_SetParamAlpha	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 HSD_PadRumbleRemoveId	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
-lbAudioAx_800263E8	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
-lbAudioAx_800264E4	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+lbAudioAx_800263E8	headless positional-audio projection	reachable	zero-direction HSD_Randi(2), null audio owner	refs/melee/src/melee/{ft/ftaction.c::ftAction_80072320,lb/lbaudio_ax.c::{lbAudioAx_800263E8,fn_80025FAC}}
+lbAudioAx_800264E4	headless positional-audio projection	reachable	source absent-owner result -1	refs/melee/src/melee/lb/lbaudio_ax.c::lbAudioAx_800264E4
 lbAudioAx_80024304	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 lbBgFlash_80021C48	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 lbBgFlash_80020E38	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c

@@ -368,6 +368,7 @@ src/melee/ft/chara/ftDonkey/ftDk_SpecialS.h
 src/melee/ft/chara/ftDonkey/types.h
 src/melee/ft/chara/ftDrMario/ftDr_Init.h
 src/melee/ft/chara/ftEmblem/ftFe_Init.h
+src/melee/ft/chara/ftFalco/ftFc_Init.c
 src/melee/ft/chara/ftFalco/ftFc_Init.h
 src/melee/ft/chara/ftFox/forward.h
 src/melee/ft/chara/ftFox/ftFx_AppealS.c
@@ -668,7 +669,11 @@ src/melee/gm/gmregclear.h
 src/melee/gm/gmtoulib.h
 src/melee/gm/types.h
 src/melee/gr/forward.h
+src/melee/gr/granime.c
 src/melee/gr/granime.h
+src/melee/gr/grbattle.c
+src/melee/gr/grbattle.h
+src/melee/gr/grbigblue.h
 src/melee/gr/grcastle.h
 src/melee/gr/grcorneria.h
 src/melee/gr/grdatfiles.c
@@ -678,15 +683,21 @@ src/melee/gr/grdynamicattr.c
 src/melee/gr/grdynamicattr.h
 src/melee/gr/grgarden.h
 src/melee/gr/grhomerun.h
+src/melee/gr/gricemt.h
 src/melee/gr/grizumi.h
 src/melee/gr/grkongo.h
+src/melee/gr/grlib.c
 src/melee/gr/grlib.h
+src/melee/gr/grmaterial.c
 src/melee/gr/grmaterial.h
 src/melee/gr/groldkongo.h
 src/melee/gr/ground.c
 src/melee/gr/ground.h
+src/melee/gr/grpstadium.c
 src/melee/gr/grpstadium.h
+src/melee/gr/grrcruise.h
 src/melee/gr/grshrineroute.h
+src/melee/gr/grzakogenerator.h
 src/melee/gr/grzebes.h
 src/melee/gr/inlines.h
 src/melee/gr/stage.h
@@ -721,6 +732,7 @@ src/melee/it/item.c
 src/melee/it/item.h
 src/melee/it/items/forward.h
 src/melee/it/items/it_2E5A.h
+src/melee/it/items/it_2E6A.h
 src/melee/it/items/itbat.h
 src/melee/it/items/itbombhei.h
 src/melee/it/items/itbox.h
@@ -886,6 +898,7 @@ src/sysdolphin/baselib/particle.h
 src/sysdolphin/baselib/perf.h
 src/sysdolphin/baselib/pobj.c
 src/sysdolphin/baselib/pobj.h
+src/sysdolphin/baselib/psappsrt.h
 src/sysdolphin/baselib/psstructs.h
 src/sysdolphin/baselib/quatlib.c
 src/sysdolphin/baselib/quatlib.h

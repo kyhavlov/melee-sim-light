@@ -165,7 +165,7 @@
          lbVector_Add(&transform->target_position, &cam_correction);
          lbVector_Add(&transform->target_interest, &cam_correction);
      }
-@@ -4554,6 +4556,21 @@
+@@ -4554,6 +4556,35 @@
      *arg0 = cm_80452C68.transform.interest;
  }
 
@@ -182,6 +182,20 @@
 +    interest->x += cm_80452C68.translation.x;
 +    interest->y += cm_80452C68.translation.y;
 +    *fov = cm_80452C68.transform.fov;
++}
++
++// Camera_800310B8 forces the separately maintained transform_copy CObj
++// matrix for DeadUpFall's render-owned world-position publication.
++void msl_camera_get_deadup_render_transform(Vec3* position, Vec3* interest,
++                                            float* fov)
++{
++    *position = cm_80452C68.transform_copy.position;
++    position->x += cm_80452C68.translation.x;
++    position->y += cm_80452C68.translation.y;
++    *interest = cm_80452C68.transform_copy.interest;
++    interest->x += cm_80452C68.translation.x;
++    interest->y += cm_80452C68.translation.y;
++    *fov = cm_80452C68.transform_copy.fov;
 +}
 +
  static inline void compute_edge(Vec3* forward, Vec3* eye_pos, f32 fov,

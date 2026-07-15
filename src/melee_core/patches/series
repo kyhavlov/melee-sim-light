@@ -34,3 +34,14 @@
 0034-silence-headless-effect-report.patch
 0035-widen-color-command-slots.patch
 0036-type-fighter-effect-part-cycle.patch
+0037-falco-battlefield-stadium.patch
+0038-stage-headless-ownership.patch
+0039-hosted-stage-animation-search.patch
+0040-stage-presentation-particles.patch
+0041-capture-wait-floor-owner.patch
+0042-shield-contact-float-exactness.patch
+0043-damage-color-animation-owner.patch
+0044-portable-item-command-halfwords.patch
+0045-ground-shield-knockback-fmadds.patch
+0046-guard-pose-float-exactness.patch
+0047-ftcoll-damage-effect-argument-order.patch

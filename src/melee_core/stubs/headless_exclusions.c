@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+#include <baselib/random.h>
 #include <baselib/pobj.h>
 #include "ft/types.h"
 #include "ftCommon/forward.h"
@@ -18,6 +19,17 @@ EXCLUDED_CHECK(ftCo_800A2040)
 void gm_80167470(void) {}
 
 int lbAudioAx_80023870() { return 0; }
+
+// Pokemon Stadium asks the scene DVD owner for an optional preloaded 0x50000
+// transformation scratch archive, then allocates the same-size scratch block
+// when it is absent. The scalar bootstrap has no asynchronous scene preloader,
+// so select that exact source fallback during initialization.
+// refs/melee/src/melee/gr/grpstadium.c::grStadium_801D13E0
+void* lbDvd_GetPreloadedArchive(int entry)
+{
+    (void) entry;
+    return NULL;
+}
 
 // Crowd recovery-call bookkeeping and audio only; callers do not consume the
 // result (refs/melee/src/melee/sfx/crowdsfx.c::un_80322598).
@@ -37,8 +49,6 @@ PRESENTATION_NOOP(efLib_PauseAll)
 PRESENTATION_NOOP(efLib_ResumeAll)
 PRESENTATION_NOOP(efLib_SetParamAlpha)
 PRESENTATION_NOOP(HSD_PadRumbleRemoveId)
-PRESENTATION_NOOP(lbAudioAx_800263E8)
-PRESENTATION_NOOP(lbAudioAx_800264E4)
 PRESENTATION_NOOP(lbAudioAx_80024304)
 PRESENTATION_NOOP(lbBgFlash_80021C48)
 PRESENTATION_NOOP(lbBgFlash_80020E38)
@@ -46,6 +56,43 @@ PRESENTATION_NOOP(lbBgFlash_80021410)
 PRESENTATION_NOOP(lbRefract_80022BB8)
 PRESENTATION_NOOP(psInitDataBank)
 PRESENTATION_NOOP(psInitDataBankLoad)
+
+HSD_GObj* lbAudioAx_800263E8(float direction, HSD_GObj* entity,
+                             int behavior, int sfx_id, int start_value,
+                             int end_value, int pan_left, int pan_right,
+                             int end_frame, int channel, int arg10)
+{
+    (void) entity;
+    (void) behavior;
+    (void) sfx_id;
+    (void) start_value;
+    (void) end_value;
+    (void) pan_left;
+    (void) pan_right;
+    (void) end_frame;
+    (void) channel;
+    (void) arg10;
+
+    // The AX/GObj result is presentation-only, but fn_80025FAC chooses a
+    // random left/right direction for every source request whose explicit
+    // direction is zero. This immediate draw shares the HSD stream with later
+    // gameplay consumers such as DamageFlyRoll, so retain it headlessly.
+    // refs/melee/src/melee/{ft/ftaction.c::ftAction_80072320,
+    // lb/lbaudio_ax.c::{lbAudioAx_800263E8,fn_80025FAC}}
+    if (direction == 0.0F) {
+        (void) HSD_Randi(2);
+    }
+    return NULL;
+}
+
+bool lbAudioAx_800264E4(void* data)
+{
+    (void) data;
+    // Source returns -1 for the absent audio owner. Fighter fields receiving
+    // the handle remain in their canonical inactive state.
+    // refs/melee/src/melee/lb/lbaudio_ax.c::lbAudioAx_800264E4
+    return -1;
+}
 
 #define AUDIO_ZERO(name) int name() { return 0; }
 AUDIO_ZERO(lbAudioAx_800230C8)

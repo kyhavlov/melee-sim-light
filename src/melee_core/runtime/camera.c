@@ -13,6 +13,7 @@
 #include "sc/types.h"
 
 #include "match.h"
+#include "runtime/camera.h"
 
 #include <baselib/controller.h>
 #include <baselib/aobj.h>
@@ -23,10 +24,28 @@
 #include <baselib/jobj.h>
 
 #include <math.h>
+#include <string.h>
 
 extern void msl_camera_get_render_transform(Vec3* position, Vec3* interest,
                                             float* fov);
-static bool msl_vanilla_magnify_offscreen[6];
+extern void msl_camera_get_deadup_render_transform(Vec3* position,
+                                                   Vec3* interest,
+                                                   float* fov);
+static MslCoreCameraState* msl_bound_camera_state;
+
+#define msl_vanilla_magnify_offscreen \
+    (msl_bound_camera_state->vanilla_magnify_offscreen)
+
+void msl_camera_state_bind(MslCoreCameraState* state)
+{
+    msl_bound_camera_state = state;
+}
+
+void msl_camera_state_init(MslCoreCameraState* state)
+{
+    memset(state, 0, sizeof(*state));
+    msl_camera_state_bind(state);
+}
 // camera.static.h documents this DOL data block but intentionally leaves its
 // definition commented out. Retain the exact source values for the standard
 // gameplay-camera owner.
@@ -152,59 +171,6 @@ u64 gm_GetButtonsTriggered(u8 slot)
     return slot < 4 ? HSD_PadCopyStatus[slot].trigger : 0;
 }
 
-static void msl_grlib_quake_loop(HSD_GObj* gobj)
-{
-    HSD_JObj* jobj = gobj->hsd_obj;
-    HSD_JObjAnimAll(jobj);
-    Camera_8002A278(HSD_JObjGetTranslationX(jobj),
-                    HSD_JObjGetTranslationY(jobj));
-}
-
-static void msl_grlib_quake_once(HSD_GObj* gobj)
-{
-    HSD_JObj* jobj = gobj->hsd_obj;
-    HSD_AObj* aobj = jobj->aobj;
-
-    HSD_JObjAnimAll(jobj);
-    Camera_8002A278(HSD_JObjGetTranslationX(jobj),
-                    HSD_JObjGetTranslationY(jobj));
-    if (aobj == NULL || aobj->flags & 0x40000000) {
-        HSD_GObjPLink_80390228(gobj);
-    }
-}
-
-HSD_GObj* grLib_801C9CEC(s32 kind)
-{
-    HSD_GObj* gobj;
-    HSD_JObj* jobj;
-    s32 anim_index;
-
-    // Gameplay-bearing source projection of the quake-model owner. Although
-    // the model is invisible headlessly, its animated X/Y translation feeds
-    // Camera_8002A278 and therefore the CObj used by Camera_80030BBC.
-    // refs/melee/src/melee/gr/grlib.c::grLib_801C9BC8,
-    // grLib_801C9C40,grLib_801C9CEC
-    if (kind < 1 || kind > 4 || stage_info.quake_model_set == NULL) {
-        return NULL;
-    }
-    anim_index = kind - 1;
-    gobj = GObj_Create(HSD_GOBJ_CLASS_STAGE, 18, (u8) kind);
-    jobj = HSD_JObjLoadJoint(stage_info.quake_model_set->joint);
-    HSD_GObjObject_80390A70(gobj, HSD_GObj_804D7849, jobj);
-    HSD_GObj_SetupProc(gobj,
-                       kind == 1 ? msl_grlib_quake_loop
-                                 : msl_grlib_quake_once,
-                       1);
-    HSD_JObjAddAnimAll(jobj, stage_info.quake_model_set->anims[anim_index],
-                       NULL, NULL);
-    HSD_JObjReqAnimAll(jobj, 0.0F);
-    if (kind == 1) {
-        HSD_ForeachAnim(jobj, 6, 0x20, HSD_AObjSetFlags, AOBJ_ARG_AU,
-                        AOBJ_LOOP);
-    }
-    return gobj;
-}
-
 // Exact source camera-subject maintenance. Drawing is absent, but these
 // callbacks are motion-state owners and feed fp->x221F_b0 and magnify logic.
 // refs/melee/src/melee/ft/ftcamera.c
@@ -290,43 +256,35 @@ void ftCamera_80076320(HSD_GObj* gobj)
     camera_box->x10.y = Stage_GetBlastZoneTopOffset();
 }
 
-static bool headless_camera_point_on_screen(const Vec3* point)
+static void headless_camera_build_view(Mtx view, Vec3* eye, float* fov,
+                                       bool deadup_camera)
 {
-    Mtx view;
-    Vec3 eye;
     Vec3 interest;
     Vec3 camera_forward;
     Vec3 camera_up;
     Vec3 look;
     Vec3 right;
+    Vec3 rotated_up;
     Vec3 up;
-    Vec3 projected_point;
-    Vec3 eye_point;
-    float angle;
-    float fov;
-    float cotangent;
-    float clip_x;
-    float clip_y;
-    float reciprocal_w;
-    float near_test;
-    float screen_x;
-    float screen_y;
-    int pixel_x;
-    int pixel_y;
+    Mtx roll_rotation;
 
     // Camera_8002AF68 adds the current quake translation when publishing the
     // HSD CObj used by Camera_80030BBC. The raw transform accessors omit it.
     // refs/melee/src/melee/cm/camera.c::Camera_8002AF68
-    msl_camera_get_render_transform(&eye, &interest, &fov);
+    if (deadup_camera) {
+        msl_camera_get_deadup_render_transform(eye, &interest, fov);
+    } else {
+        msl_camera_get_render_transform(eye, &interest, fov);
+    }
 
     // The standard CObj descriptor stores roll=0 rather than an explicit up
     // vector. HSD_CObjGetUpVector therefore derives and normalizes the up
     // vector from the current eye vector before C_MTXLookAt consumes it.
     // refs/melee/src/sysdolphin/baselib/cobj.c::{HSD_CObjGetEyeVector,
     // roll2upvec,HSD_CObjGetUpVector}
-    camera_forward.x = interest.x - eye.x;
-    camera_forward.y = interest.y - eye.y;
-    camera_forward.z = interest.z - eye.z;
+    camera_forward.x = interest.x - eye->x;
+    camera_forward.y = interest.y - eye->y;
+    camera_forward.z = interest.z - eye->z;
     PSVECNormalize(&camera_forward, &camera_forward);
     if (1.0F - fabsf(camera_forward.y) < 0.0001F) {
         camera_up.x = sqrtf(camera_forward.y * camera_forward.y +
@@ -343,14 +301,21 @@ static bool headless_camera_point_on_screen(const Vec3* point)
         camera_up.z = camera_forward.z *
                       (-camera_forward.y / camera_up.y);
     }
-    PSVECNormalize(&camera_up, &camera_up);
+    // The descriptor stores roll rather than an explicit up vector. Preserve
+    // roll2upvec's nominally-identity rotation and second normalization: its
+    // paired-single signed-zero and rounding steps are part of the matrix
+    // consumed by PSMTXInverse.
+    // refs/melee/src/sysdolphin/baselib/cobj.c::roll2upvec
+    PSMTXRotAxisRad(roll_rotation, &camera_forward, -0.0F);
+    PSMTXMultVecSR(roll_rotation, &camera_up, &rotated_up);
+    PSVECNormalize(&rotated_up, &camera_up);
 
     // Exact release-SDK C_MTXLookAt operation order. VECNormalize and
     // VECCrossProduct resolve to the paired-single implementations in retail.
     // refs/melee/extern/dolphin/src/dolphin/mtx/{mtx.c,vec.c}
-    look.x = eye.x - interest.x;
-    look.y = eye.y - interest.y;
-    look.z = eye.z - interest.z;
+    look.x = eye->x - interest.x;
+    look.y = eye->y - interest.y;
+    look.z = eye->z - interest.z;
     PSVECNormalize(&look, &look);
     PSVECCrossProduct(&camera_up, &look, &right);
     PSVECNormalize(&right, &right);
@@ -358,18 +323,40 @@ static bool headless_camera_point_on_screen(const Vec3* point)
     view[0][0] = right.x;
     view[0][1] = right.y;
     view[0][2] = right.z;
-    view[0][3] = -((eye.z * right.z) +
-                   ((eye.x * right.x) + (eye.y * right.y)));
+    view[0][3] =
+        -fmaf(eye->z, right.z,
+              fmaf(eye->x, right.x, eye->y * right.y));
     view[1][0] = up.x;
     view[1][1] = up.y;
     view[1][2] = up.z;
     view[1][3] =
-        -((eye.z * up.z) + ((eye.x * up.x) + (eye.y * up.y)));
+        -fmaf(eye->z, up.z, fmaf(eye->x, up.x, eye->y * up.y));
     view[2][0] = look.x;
     view[2][1] = look.y;
     view[2][2] = look.z;
     view[2][3] =
-        -((eye.z * look.z) + ((eye.x * look.x) + (eye.y * look.y)));
+        -fmaf(eye->z, look.z, fmaf(eye->x, look.x, eye->y * look.y));
+}
+
+static bool headless_camera_point_on_screen(const Vec3* point)
+{
+    Mtx view;
+    Vec3 eye;
+    Vec3 projected_point;
+    Vec3 eye_point;
+    float angle;
+    float fov;
+    float cotangent;
+    float clip_x;
+    float clip_y;
+    float reciprocal_w;
+    float near_test;
+    float screen_x;
+    float screen_y;
+    int pixel_x;
+    int pixel_y;
+
+    headless_camera_build_view(view, &eye, &fov, false);
 
     // Exact lbVector_WorldToScreen near-plane projection followed by the
     // perspective subset of SDK GXProject. cm_803BCB64 uses a 640x480
@@ -447,6 +434,34 @@ void msl_camera_publish_fighter_visibility(HSD_GObj* gobj)
         }
     }
 
+    // Offline retail DeadUpFall stores its visible trajectory in camera
+    // coordinates and publishes the inverse-view result through cur_pos in
+    // the fighter render callback. Slippi Online deliberately replaces that
+    // with a JObj-only transform so rollback gameplay never depends on the
+    // renderer; the match capability keeps those two source owners distinct.
+    // refs/melee/src/melee/ft/ftdrawcommon.c::
+    //     ftDrawCommon_80080E18_inline2
+    // refs/slippi-ssbm-asm/Online/Core/FreezeDeadUpFallPhysics/
+    //     UpdateModelPos.asm
+    // Camera_800311EC sets camera mode 1 only around the GX-link traversal
+    // that reaches this callback. The headless schedule invokes this owner
+    // directly, so that transient scheduler bit is represented by the call
+    // site rather than read from the otherwise-idle renderer global.
+    // refs/melee/src/melee/cm/camera.c::Camera_800311EC
+    if (!msl_core_freezes_dead_up_fall_physics() && !fp->x221F_b3 &&
+        fp->x2220_b7)
+    {
+        Mtx view;
+        Mtx inverse;
+        Vec3 eye;
+        float fov;
+
+        headless_camera_build_view(view, &eye, &fov, true);
+        if (PSMTXInverse(view, inverse)) {
+            PSMTXMultVec(inverse, &fp->mv.co.unk_deadup.x50,
+                         &fp->cur_pos);
+        }
+    }
 }
 
 bool ifMagnify_802FC998(s32 slot)

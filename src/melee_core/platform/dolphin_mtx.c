@@ -88,6 +88,59 @@ static double ppc_frsqrte(double value)
     return double_from_bits(sign | (uint64_t) exponent | fraction);
 }
 
+// Gekko fres estimate table. PSMTXInverse performs one Newton step from this
+// instruction result before scaling the adjugate matrix.
+// refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXInverse
+static double ppc_fres(double value)
+{
+    static const uint32_t base[32] = {
+        0x7ff800, 0x783800, 0x70ea00, 0x6a0800, 0x638800, 0x5d6200,
+        0x579000, 0x520800, 0x4cc800, 0x47ca00, 0x430800, 0x3e8000,
+        0x3a2c00, 0x360800, 0x321400, 0x2e4a00, 0x2aa800, 0x272c00,
+        0x23d600, 0x209e00, 0x1d8800, 0x1a9000, 0x17ae00, 0x14f800,
+        0x124400, 0x0fbe00, 0x0d3800, 0x0ade00, 0x088400, 0x065000,
+        0x041c00, 0x020c00,
+    };
+    static const uint16_t decrement[32] = {
+        0x3e1, 0x3a7, 0x371, 0x340, 0x313, 0x2ea, 0x2c4, 0x2a0,
+        0x27f, 0x261, 0x245, 0x22a, 0x212, 0x1fb, 0x1e5, 0x1d1,
+        0x1be, 0x1ac, 0x19b, 0x18b, 0x17c, 0x16e, 0x15b, 0x15b,
+        0x143, 0x143, 0x12d, 0x12d, 0x11a, 0x11a, 0x108, 0x106,
+    };
+    const uint64_t fraction_mask = (UINT64_C(1) << 52) - UINT64_C(1);
+    const uint64_t exponent_mask = UINT64_C(0x7ff) << 52;
+    const uint64_t sign_mask = UINT64_C(1) << 63;
+    uint64_t bits = double_bits(value);
+    uint64_t mantissa = bits & fraction_mask;
+    uint64_t exponent = bits & exponent_mask;
+    uint64_t sign = bits & sign_mask;
+    uint32_t interpolation;
+    uint32_t index;
+    uint64_t fraction;
+
+    if (mantissa == 0 && exponent == 0) {
+        return double_from_bits(sign | exponent_mask);
+    }
+    if (exponent == exponent_mask) {
+        if (mantissa == 0) {
+            return double_from_bits(sign);
+        }
+        return 0.0 + value;
+    }
+    if (exponent < (UINT64_C(895) << 52)) {
+        return double_from_bits(sign | UINT64_C(0x7fefffffffffffff));
+    }
+    if (exponent >= (UINT64_C(1149) << 52)) {
+        return double_from_bits(sign);
+    }
+    exponent = (UINT64_C(0x7fd) << 52) - exponent;
+    interpolation = (uint32_t) (mantissa >> 37);
+    index = interpolation / 1024U;
+    fraction = base[index] -
+               (decrement[index] * (interpolation % 1024U) + 1U) / 2U;
+    return double_from_bits(sign | exponent | (fraction << 29));
+}
+
 // Gekko scalar-single multiply rounds its FC operand to a 25-bit significand.
 // refs/Ishiiruka/Source/Core/Core/PowerPC/Interpreter/Interpreter_FPUtils.h
 static double ppc_force_25_bit(double value)
@@ -265,6 +318,148 @@ void PSMTXMultVecSR(Mtx44 matrix, Vec* src, Vec* dst)
     value.z = matrix[2][2] * src->z +
               (matrix[2][0] * src->x + matrix[2][1] * src->y);
     *dst = value;
+}
+
+u32 C_MTXInverse(Mtx src, Mtx inv)
+{
+    Mtx temporary;
+    float (*out)[4] = src == inv ? temporary : inv;
+    float determinant;
+
+    // Direct SDK C owner. The retail draw path calls the paired-single
+    // implementation; keeping the portable source formula here gives the
+    // hosted headless camera an explicit inverse until that operation needs
+    // a narrower paired-single exactness treatment.
+    // refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::C_MTXInverse
+    determinant = ((((src[2][1] * (src[0][2] * src[1][0])) +
+                     ((src[2][2] * (src[0][0] * src[1][1])) +
+                      (src[2][0] * (src[0][1] * src[1][2])))) -
+                    (src[0][2] * (src[2][0] * src[1][1]))) -
+                   (src[2][2] * (src[1][0] * src[0][1]))) -
+                  (src[1][2] * (src[0][0] * src[2][1]));
+    if (determinant == 0.0F) {
+        return 0;
+    }
+    determinant = 1.0F / determinant;
+    out[0][0] = determinant *
+                ((src[1][1] * src[2][2]) - (src[2][1] * src[1][2]));
+    out[0][1] = -determinant *
+                ((src[0][1] * src[2][2]) - (src[2][1] * src[0][2]));
+    out[0][2] = determinant *
+                ((src[0][1] * src[1][2]) - (src[1][1] * src[0][2]));
+    out[1][0] = -determinant *
+                ((src[1][0] * src[2][2]) - (src[2][0] * src[1][2]));
+    out[1][1] = determinant *
+                ((src[0][0] * src[2][2]) - (src[2][0] * src[0][2]));
+    out[1][2] = -determinant *
+                ((src[0][0] * src[1][2]) - (src[1][0] * src[0][2]));
+    out[2][0] = determinant *
+                ((src[1][0] * src[2][1]) - (src[2][0] * src[1][1]));
+    out[2][1] = -determinant *
+                ((src[0][0] * src[2][1]) - (src[2][0] * src[0][1]));
+    out[2][2] = determinant *
+                ((src[0][0] * src[1][1]) - (src[1][0] * src[0][1]));
+    out[0][3] = ((-out[0][0] * src[0][3]) -
+                 (out[0][1] * src[1][3])) -
+                (out[0][2] * src[2][3]);
+    out[1][3] = ((-out[1][0] * src[0][3]) -
+                 (out[1][1] * src[1][3])) -
+                (out[1][2] * src[2][3]);
+    out[2][3] = ((-out[2][0] * src[0][3]) -
+                 (out[2][1] * src[1][3])) -
+                (out[2][2] * src[2][3]);
+    if (out == temporary) {
+        memcpy(inv, temporary, sizeof(temporary));
+    }
+    return 1;
+}
+
+u32 PSMTXInverse(Mtx src, Mtx inv)
+{
+    Mtx temporary;
+    float (*out)[4] = src == inv ? temporary : inv;
+    float f11_0;
+    float f11_1;
+    float f13_0;
+    float f13_1;
+    float f12_0;
+    float f12_1;
+    float f10;
+    float f9;
+    float f8;
+    float determinant;
+    float estimate;
+    float estimate_twice;
+    float estimate_squared;
+    float reciprocal;
+    float translation;
+
+    // Scalar expansion of the SDK paired-single instruction stream. The
+    // intermediate names retain the source FPRs so multiply/subtract and
+    // multiply/add contraction boundaries remain visible and auditable.
+    // refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXInverse
+    f11_0 = fmaf(src[0][1], src[1][2],
+                 -(src[1][1] * src[0][2]));
+    f11_1 = fmaf(src[0][2], src[1][0],
+                 -(src[1][2] * src[0][0]));
+    f13_0 = fmaf(src[1][1], src[2][2],
+                 -(src[2][1] * src[1][2]));
+    f13_1 = fmaf(src[1][2], src[2][0],
+                 -(src[2][2] * src[1][0]));
+    f12_0 = fmaf(src[2][1], src[0][2],
+                 -(src[0][1] * src[2][2]));
+    f12_1 = fmaf(src[2][2], src[0][0],
+                 -(src[0][2] * src[2][0]));
+    f10 = fmaf(src[1][0], src[2][1],
+               -(src[1][1] * src[2][0]));
+    f9 = fmaf(src[0][1], src[2][0],
+              -(src[0][0] * src[2][1]));
+    f8 = fmaf(src[0][0], src[1][1],
+              -(src[0][1] * src[1][0]));
+    determinant = src[0][0] * f13_0;
+    determinant = fmaf(src[1][0], f12_0, determinant);
+    determinant = fmaf(src[2][0], f11_0, determinant);
+    if (determinant == 0.0F) {
+        return 0;
+    }
+
+    estimate = (float) ppc_fres((double) determinant);
+    estimate_twice = estimate + estimate;
+    estimate_squared = estimate * estimate;
+    reciprocal = fmaf(-determinant, estimate_squared, estimate_twice);
+    f13_0 *= reciprocal;
+    f13_1 *= reciprocal;
+    f12_0 *= reciprocal;
+    f12_1 *= reciprocal;
+    f11_0 *= reciprocal;
+    f11_1 *= reciprocal;
+    f10 *= reciprocal;
+    f9 *= reciprocal;
+    f8 *= reciprocal;
+
+    out[0][0] = f13_0;
+    out[0][1] = f12_0;
+    out[0][2] = f11_0;
+    translation = f13_0 * src[0][3];
+    translation = fmaf(f12_0, src[1][3], translation);
+    out[0][3] = -fmaf(f11_0, src[2][3], translation);
+    out[1][0] = f13_1;
+    out[1][1] = f12_1;
+    out[1][2] = f11_1;
+    translation = f13_1 * src[0][3];
+    translation = fmaf(f12_1, src[1][3], translation);
+    out[1][3] = -fmaf(f11_1, src[2][3], translation);
+    out[2][0] = f10;
+    out[2][1] = f9;
+    out[2][2] = f8;
+    translation = f10 * src[0][3];
+    translation = fmaf(f9, src[1][3], translation);
+    out[2][3] = -fmaf(f8, src[2][3], translation);
+
+    if (out == temporary) {
+        memcpy(inv, temporary, sizeof(temporary));
+    }
+    return 1;
 }
 
 void PSMTXScale(Mtx matrix, float x, float y, float z)

@@ -1,5 +1,6 @@
 #include "runtime/wire.h"
 
+#include <stddef.h>
 #include <string.h>
 
 uint16_t msl_core_get_le16(const void* ptr)
@@ -44,4 +45,32 @@ void msl_core_put_lef32(void* ptr, float value)
     uint32_t bits;
     memcpy(&bits, &value, sizeof(bits));
     msl_core_put_le32(ptr, bits);
+}
+
+void msl_core_decode_match_config(MslCoreMatchConfig* config,
+                                  const uint8_t* wire)
+{
+    memset(config, 0, sizeof(*config));
+    config->stage_id =
+        msl_core_get_le32(wire + offsetof(MslCoreMatchConfig, stage_id));
+    config->frame_id = (int32_t) msl_core_get_le32(
+        wire + offsetof(MslCoreMatchConfig, frame_id));
+    config->frame_pre_random_seed = msl_core_get_le32(
+        wire + offsetof(MslCoreMatchConfig, frame_pre_random_seed));
+    config->initial_random_seed = msl_core_get_le32(
+        wire + offsetof(MslCoreMatchConfig, initial_random_seed));
+    config->match_damage_ratio = msl_core_get_lef32(
+        wire + offsetof(MslCoreMatchConfig, match_damage_ratio));
+    config->num_players = wire[offsetof(MslCoreMatchConfig, num_players)];
+    config->is_teams = wire[offsetof(MslCoreMatchConfig, is_teams)];
+    config->stock_count = wire[offsetof(MslCoreMatchConfig, stock_count)];
+    config->camera_mode = wire[offsetof(MslCoreMatchConfig, camera_mode)];
+    config->online_fnmsubs_zero =
+        wire[offsetof(MslCoreMatchConfig, online_fnmsubs_zero)];
+    config->brawl_offscreen_damage =
+        wire[offsetof(MslCoreMatchConfig, brawl_offscreen_damage)];
+    config->freeze_dead_up_fall_physics =
+        wire[offsetof(MslCoreMatchConfig, freeze_dead_up_fall_physics)];
+    memcpy(config->players, wire + offsetof(MslCoreMatchConfig, players),
+           sizeof(config->players));
 }

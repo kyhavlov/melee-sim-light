@@ -134,7 +134,10 @@ Use completion terms precisely:
 ## Working Conventions
 
 - Do not commit unless the prompt explicitly says to.
-- Prefer adding newly learned mechanics to `agent_docs/SPEC.md`.
+- Treat `agent_docs/SPEC.md` as legacy old-simulator documentation; do not add source-shaped
+  Melee-core plans, mechanics, or investigation results there. Keep new-core documentation under
+  `agent_docs/melee_core/`, using its README for the current phase/worklog and adding a focused
+  document there only when a distinct durable subject outgrows that README.
 - Never hand-edit generator-owned validation reports.
 - Triage/debug outputs default under gitignored `reports/triage/`, not `/tmp`.
 - Never key gameplay behavior on dataset name or record id.

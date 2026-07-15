@@ -1,0 +1,20 @@
+--- a/src/melee/ft/chara/ftCommon/ftCo_Attack100.c
++++ b/src/melee/ft/chara/ftCommon/ftCo_Attack100.c
+@@ -2767,7 +2767,16 @@
+ 
+ void ftCo_CaptureWaitHi_Coll(Fighter_GObj* gobj)
+ {
+-    ftCo_CapturePulledHi_Coll(gobj);
++    Fighter* fp = GET_FIGHTER(gobj);
++
++    // CaptureWaitHi owns its Wait-family air-to-floor continuation. The
++    // current nonmatching decomp delegates to CapturePulledHi and therefore
++    // installs fn_800DAECC, which incorrectly enters CapturePulledLw.
++    // GALE01 0x800DBA8C instead installs fn_800DBAC4 -> fn_800DBBF8 and
++    // preserves CaptureWait across the Hi -> Lw floor handoff.
++    if (!fp->x2226_b2) {
++        ft_80083C00(gobj, fn_800DBAC4);
++    }
+ }
+ 
+ void fn_800DBAC4(Fighter_GObj* gobj)

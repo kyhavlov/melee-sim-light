@@ -41,9 +41,45 @@ typedef Vec2* MslDatVec2Pointer;
 typedef FighterPartsTable* MslDatFighterPartsPointer;
 typedef struct Fighter_804D6540_t* MslDatFighter6540Pointer;
 typedef ftFox_DatAttrs* MslDatFoxAttrsPointer;
-typedef Article* MslDatFoxArticles[3];
-typedef MslDatFoxArticles* MslDatArticleList;
-// ftData_Table_Unk0[FTKIND_FOX].count in the hosted source registry.
+// Anonymous yakumono_param owners in the two imported stage translation units.
+// refs/melee/src/melee/gr/{grbattle.c,grpstadium.c}
+typedef struct MslDatBattlefieldParams {
+    int unk0;
+    int unk4;
+} MslDatBattlefieldParams;
+typedef struct MslDatPokemonStadiumParams {
+    int x0;
+    int x4;
+    int x8;
+    int xC;
+    int x10;
+    int x14;
+    int x18;
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    uint32_t x20;
+    uint32_t x24;
+    uint32_t x28;
+    uint32_t x2C;
+    uint32_t x30;
+    uint32_t x34;
+    uint32_t x38;
+    uint32_t x3C;
+    uint32_t x40;
+    uint32_t x44;
+    int16_t x48;
+    int16_t x4A;
+    int16_t x4C;
+    int16_t x4E;
+    int16_t x50;
+} MslDatPokemonStadiumParams;
+// Fox uses x48_items[0..2]; Falco shares those owners but stores Phantasm at
+// x48_items[3]. Both are direct consumers in their source OnLoad callbacks.
+// refs/melee/src/melee/ft/chara/{ftFox/ftFx_Init.c,ftFalco/ftFc_Init.c}
+typedef Article* MslDatSpaceAnimalArticles[4];
+typedef MslDatSpaceAnimalArticles* MslDatArticleList;
+// ftData_Table_Unk0[FTKIND_FOX/FTKIND_FALCO].count in the hosted source registry.
 // refs/melee/src/melee/ft/ftdata.c
 typedef struct Fighter_WaitAnimData MslDatFoxWaitAnimArray[327];
 typedef MslDatFoxWaitAnimArray* MslDatFoxWaitAnimList;
@@ -60,6 +96,7 @@ void* msl_native_dat_type_roots[] = {
     (DynamicModelDesc*) 0,
     (HSD_Joint*) 0,
     (HSD_MatAnimJoint*) 0,
+    (EF_EffectDesc*) 0,
     (ftData*) 0,
     (FigaTree*) 0,
     (it_804D6D20_t*) 0,
@@ -76,6 +113,8 @@ void* msl_native_dat_type_roots[] = {
     (MslDatFighterPartsPointer*) 0,
     (MslDatFighter6540Pointer*) 0,
     (MslDatFoxAttrsPointer*) 0,
+    (MslDatBattlefieldParams*) 0,
+    (MslDatPokemonStadiumParams*) 0,
     (MslDatArticleList*) 0,
     (MslDatFoxWaitAnimList*) 0,
     (MslDatFoxAnimByteList*) 0,

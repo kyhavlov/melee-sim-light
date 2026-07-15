@@ -458,7 +458,110 @@
      }
  
      if (result >= ftd->x108) {
-@@ -3020,7 +3035,7 @@
+@@ -2395,16 +2410,18 @@
+             if (hit->x28 != 0) {
++                float growth;
+                 float x24_f;
+ 
+                 decay = ftd->xF8;
+                 result = (w * decay) / (1.0F + w);
+                 decay -= result;
+ 
+-                result = ftd->x118 * (float) (u32) hit->x28;
+-                result = ftd->x118 * ftd->x110 + ftd->x114 * result;
+-                result = decay * result;
+-                result = ftd->x11C * result + ftd->x120;
++                growth = ftd->x118 * (float) (u32) hit->x28;
++                growth = ftd->x114 * growth;
++                growth = __fmadds(ftd->x118, ftd->x110, growth);
++                result = decay * growth;
++                result = __fmadds(ftd->x11C, result, ftd->x120);
+                 x24_f = 0.01F * (float) (u32) hit->x24;
+-                result = x24_f * result + (float) (u32) hit->x2C;
++                result = __fmadds(x24_f, result, (float) (u32) hit->x2C);
+                 result = stage * result;
+                 result = attack * result;
+                 result = defense * result;
+@@ -2411,6 +2428,7 @@
+             } else {
+                 s32 count;
+                 float damage;
++                float growth;
+                 float x24_f;
+ 
+                 if (fp->x2225_b7) {
+@@ -2427,13 +2445,13 @@
+                 result = (w * decay) / (1.0F + w);
+                 decay -= result;
+                 damage = (float) count + fp->dmg.x1838_percentTemp;
+-                result = (float) (u32) entry->size_of_xC * damage;
+-                result = ftd->x110 * damage + ftd->x114 * result;
+-                result = decay * result;
+-                result = ftd->x11C * result + ftd->x120;
++                growth = (float) (u32) entry->size_of_xC * damage;
++                growth = ftd->x114 * growth;
++                growth = __fmadds(ftd->x110, damage, growth);
++                result = decay * growth;
++                result = __fmadds(ftd->x11C, result, ftd->x120);
+                 x24_f = 0.01F * (float) (u32) hit->x24;
+-                (void) x24_f;
+-                result = x24_f * result + (float) (u32) hit->x2C;
++                result = __fmadds(x24_f, result, (float) (u32) hit->x2C);
+                 result = stage * result;
+                 result = attack * result;
+                 result = defense * result;
+@@ -2489,16 +2507,18 @@
+             if (stack_hit.x28 != 0) {
++                float growth;
+                 float x24_f;
+ 
+                 decay = ftd->xF8;
+                 result = (w * decay) / (1.0F + w);
+                 decay -= result;
+ 
+-                result = ftd->x118 * (float) (u32) stack_hit.x28;
+-                result = ftd->x118 * ftd->x110 + ftd->x114 * result;
+-                result = decay * result;
+-                result = ftd->x11C * result + ftd->x120;
++                growth = ftd->x118 * (float) (u32) stack_hit.x28;
++                growth = ftd->x114 * growth;
++                growth = __fmadds(ftd->x118, ftd->x110, growth);
++                result = decay * growth;
++                result = __fmadds(ftd->x11C, result, ftd->x120);
+                 x24_f = 0.01F * (float) (u32) stack_hit.x24;
+-                result = x24_f * result + (float) (u32) stack_hit.x2C;
++                result = __fmadds(x24_f, result, (float) (u32) stack_hit.x2C);
+                 result = stage * result;
+                 result = attack * result;
+                 result = defense * result;
+@@ -2505,6 +2525,7 @@
+             } else {
+                 s32 count;
+                 float damage;
++                float growth;
+                 float x24_f;
+ 
+                 if (fp->x2225_b7) {
+@@ -2521,12 +2542,13 @@
+                 result = (w * decay) / (1.0F + w);
+                 decay -= result;
+                 damage = (float) count + fp->dmg.x1838_percentTemp;
+-                result = (float) (u32) stack_hit.unk_count * damage;
+-                result = ftd->x110 * damage + ftd->x114 * result;
+-                result = decay * result;
+-                result = ftd->x11C * result + ftd->x120;
++                growth = (float) (u32) stack_hit.unk_count * damage;
++                growth = ftd->x114 * growth;
++                growth = __fmadds(ftd->x110, damage, growth);
++                result = decay * growth;
++                result = __fmadds(ftd->x11C, result, ftd->x120);
+                 x24_f = 0.01F * (float) (u32) stack_hit.x24;
+-                result = x24_f * result + (float) (u32) stack_hit.x2C;
++                result = __fmadds(x24_f, result, (float) (u32) stack_hit.x2C);
+                 result = stage * result;
+                 result = attack * result;
+                 result = defense * result;
+@@ -3020,7 +3042,7 @@
      fp->x221A_b6 = true;
  }
  
@@ -467,6 +570,37 @@
  {
      Fighter* fp = GET_FIGHTER(gobj);
      fp->x1988 = arg1;
+--- a/src/melee/lb/lbvector.c
++++ b/src/melee/lb/lbvector.c
+@@ -6,6 +6,7 @@
+ #include "lb/lbrefract.h"
+ 
+ #include <math.h>
++#include <MetroTRK/intrinsics.h>
+ #include <math_ppc.h>
+ #include <dolphin/gx/GXTransform.h>
+ #include <dolphin/mtx.h>
+@@ -259,11 +260,16 @@
+ /// at the plane that is perpendicular to b and contains the origin.
+ void lbVector_Mirror(Vec3* a, Vec3* unit_mirror_axis)
+ {
+-    float f =
+-        (unit_mirror_axis->x * a->x + unit_mirror_axis->y * a->y) * -2.0f;
++    // Matching source compiles to fmadds at GALE01 0x8000DC74,
++    // 0x8000DC8C, and 0x8000DC9C. This owner drives shield-bounced article
++    // velocity, so preserve the retail scalar-single accumulation on host.
++    // refs/melee/src/melee/lb/lbvector.c::lbVector_Mirror
++    float dot = __fmadds(unit_mirror_axis->x, a->x,
++                         unit_mirror_axis->y * a->y);
++    float f = dot * -2.0f;
+ 
+-    a->x += unit_mirror_axis->x * f;
+-    a->y += unit_mirror_axis->y * f;
++    a->x = __fmadds(unit_mirror_axis->x, f, a->x);
++    a->y = __fmadds(unit_mirror_axis->y, f, a->y);
+ }
+ 
+ /// 8000DCA8 - returns <a/|a|, b/|b|>, which is the cosine of the angle between
 --- a/src/sysdolphin/baselib/fobj.c
 +++ b/src/sysdolphin/baselib/fobj.c
 @@ -4,6 +4,9 @@

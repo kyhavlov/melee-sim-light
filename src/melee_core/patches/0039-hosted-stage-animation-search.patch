@@ -1,0 +1,72 @@
+--- a/src/melee/gr/granime.c
++++ b/src/melee/gr/granime.c
+@@ -18,7 +18,9 @@
+ #include <baselib/mobj.h>
+ #include <baselib/robj.h>
+ #include <baselib/tobj.h>
++#ifndef MSL_CORE_HOSTED
+ #include <Runtime/Gecko_setjmp.h>
++#endif
+ 
+ /* 1C6620 */ static void grAnime_801C6620(HSD_PObj* arg0, HSD_ShapeAnim* arg1);
+ /* 1C6710 */ static void grAnime_801C6710(HSD_TObj* tobj,
+@@ -51,16 +53,22 @@
+                                           u32 type, void* param, int arg5);
+ ///* 1C7B24 */ static void grAnime_801C7B24(HSD_GObj* gobj, int arg1, u32 arg2,
+ ///                                          f32 arg8);
++#ifdef MSL_CORE_HOSTED
++/* 1C82E8 */ static void fn_801C82E8(HSD_AObj* arg0, HSD_AObj** arg1);
++#else
+ /* 1C82E8 */ static void fn_801C82E8(int arg0, int* arg1);
++#endif
+ /* 4D6958 */ static float grAnime_804D6958;
+ /* 4D695C */ static float grAnime_804D695C;
+ 
++#ifndef MSL_CORE_HOSTED
+ struct padded_jmp_buf {
+     __jmp_buf buf;
+     u8 pad[0x118 - 0xF8];
+ };
+ 
+ /* 49EE40 */ struct padded_jmp_buf grAnime_8049EE40;
++#endif
+ 
+ /// @todo .sdata order hack
+ static void order_sdata(void)
+@@ -1193,10 +1201,20 @@
+     HSD_JObjAnimAll(jobj);
+ }
+ 
++#ifdef MSL_CORE_HOSTED
++// Preserve the source's first-AObj result without the PPC register-image
++// setjmp buffer. Continuing the read-only traversal has no gameplay side effect.
++void fn_801C82E8(HSD_AObj* arg0, HSD_AObj** arg1)
++{
++    if (*arg1 == NULL) {
++        *arg1 = arg0;
++    }
++#else
+ void fn_801C82E8(int arg0, int* arg1)
+ {
+     *arg1 = arg0;
+     longjmp(&grAnime_8049EE40.buf, 1);
++#endif
+ }
+ 
+ HSD_AObj* grAnime_801C8318(HSD_GObj* gobj, int arg1, u32 arg2)
+@@ -1217,10 +1235,15 @@
+     if (arg2 & 4) {
+         var_r30 |= 0x100;
+     }
++#ifdef MSL_CORE_HOSTED
++    HSD_ForeachAnim(jobj, JOBJ_TYPE, var_r30, fn_801C82E8, AOBJ_ARG_AV,
++                    &sp14);
++#else
+     if (__setjmp(&grAnime_8049EE40.buf) == 0) {
+         HSD_ForeachAnim(jobj, JOBJ_TYPE, var_r30, fn_801C82E8, AOBJ_ARG_AV,
+                         &sp14);
+     }
++#endif
+     return sp14;
+ }
+ 

@@ -13,20 +13,40 @@
 #include "ft/ftlib.h"
 #include "it/inlines.h"
 
-// Source registry projection for the only character articles admitted by the
-// current Fox domain.  Indices are ItemKind - It_Kind_Kuriboh, matching
+// Source registry projection for the Fox/Falco character articles admitted by
+// the current domain. Indices are ItemKind - It_Kind_Kuriboh, matching
 // refs/melee/src/melee/it/item.c::Item_80267978 and the full tables in
 // refs/melee/src/melee/it/it_279C.c.
 struct sdata_ItemGXLink it_803F2F28[118] = {
     // Rendering is intentionally absent in the headless runtime. The source
     // values are it_8026EECC for laser/blaster and it_8029CD18 for illusion.
     [It_Kind_Fox_Laser - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Falco_Laser - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Fox_Illusion - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Falco_Phantasm - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Fox_Blaster - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Falco_Blaster - It_Kind_Kuriboh] = { NULL },
 };
 
 struct ItemLogicTable it_803F3100[118] = {
     [It_Kind_Fox_Laser - It_Kind_Kuriboh] = {
+        it_803F67D0,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        itFoxLaser_Logic94_Clanked,
+        NULL,
+        NULL,
+        itFoxLaser_Logic94_Reflected,
+        itFoxLaser_Logic94_Clanked,
+        itFoxLaser_Logic94_Absorbed,
+        itFoxLaser_Logic94_ShieldBounced,
+        itFoxLaser_Logic94_HitShield,
+        itFoxLaser_Logic94_EvtUnk,
+    },
+    [It_Kind_Falco_Laser - It_Kind_Kuriboh] = {
         it_803F67D0,
         NULL,
         NULL,
@@ -60,7 +80,41 @@ struct ItemLogicTable it_803F3100[118] = {
         NULL,
         it_8029D948,
     },
+    [It_Kind_Falco_Phantasm - It_Kind_Kuriboh] = {
+        it_803F6818,
+        NULL,
+        itFoxIllusion_Logic14_Destroyed,
+        NULL,
+        NULL,
+        NULL,
+        itFoxIllusion_Logic14_DmgDealt,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_8029D948,
+    },
     [It_Kind_Fox_Blaster - It_Kind_Kuriboh] = {
+        it_803F6CA8,
+        NULL,
+        NULL,
+        itFoxBlaster_Logic96_PickedUp,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        itFoxBlaster_Logic96_EvtUnk,
+    },
+    [It_Kind_Falco_Blaster - It_Kind_Kuriboh] = {
         it_803F6CA8,
         NULL,
         NULL,

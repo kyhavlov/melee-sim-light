@@ -1,10 +1,10 @@
 # Source-Shaped Melee Core
 
-Status: Phase 4 native x86-64 scalar parity is complete. All five tracked
-Fox/Fox FD replays retain the Phase 2.5 gameplay-exact result; the one unrecorded Nintendont
-render-publication difference remains an explicit diagnostic. Native is about 19.6x faster than
-PPC/QEMU on the equivalent starter runner workload. Data-root productionization is also complete;
-Phase 5 source-owner expansion is next. No production-core cutover has occurred.
+Status: Phase 4 native x86-64 scalar parity and data-root productionization are complete. The first
+Phase 5 source-owner packet now runs the full 23-replay Fox/Falco FD/Battlefield/frozen-Stadium
+gate: 19 replays are strict passes and four have bounded, source-classified oracle residuals. All
+five tracked Fox/Fox FD controls retain their Phase 2.5 gameplay-exact result. No production-core
+cutover has occurred.
 
 Branch base: `core-rewrite` at `6fbcc9bc7719` (`Rewrite core contact and motion state ownership`).
 
@@ -80,6 +80,14 @@ Track the imported set in the checked-in lock, exact file list, and manifest. Fi
 `vendor/` never receive local edits. Small necessary hosted/source-exact changes belong in the
 ordered patch series; true platform policy remains in `platform/` rather than being scattered
 through gameplay source.
+
+`src/melee_core/upstream_delta_ledger.tsv` classifies each new Phase 5 decomp-file delta while its
+evidence is fresh. `upstream-candidate` means the pinned nonmatching C body itself appears wrong and
+the fix can plausibly become a small isolated decomp contribution. Hosted portability, explicit
+float-operation spelling, source imports, and headless policy remain recorded beside those
+candidates so later upstream preparation does not confuse a correct port adaptation with a retail
+source correction. Add a row when a new patch is created; matching/build cleanup for an upstream PR
+can remain deferred until the Phase 5 behavior packet is stable.
 
 Use nonmatching C implementations when they exist and record their status. Inspect or port PPC
 assembly only when a reached gameplay owner has no adequate C body or produces relevant
@@ -763,11 +771,11 @@ gate, and the final deterministic replay gate pass. Phase 5 may expand source-ow
 
 #### Progress notifications
 
-Continue using the ignored Discord helper for material Phase 4 progress:
+Continue using the ignored Discord helper for material source-core progress through Phase 5:
 
 ```bash
 tools/melee_core/notify_discord.sh \
-  "Phase 4: MILESTONE, with current native/PPC parity and next blocker."
+  "Phase 5: MILESTONE, with current replay/source-owner progress and next blocker."
 ```
 
 Send an update when the native source closure first compiles or links, native DAT translation first
@@ -828,12 +836,86 @@ repository suite passed in bounded alphabetic shards, followed by the final focu
 extraction/data-contract gates. Four previously tracked ISO-derived JSON exceptions were removed;
 only the source-authored Slippi neutral-spawn table remains tracked under `data/`.
 
+### Phase 4.75 — Private scalar ownership seam
+
+The standalone executable is now an I/O adapter over the private C interface in
+`runtime/scalar.h`: `msl_core_game_data_init`, `msl_core_match_init`,
+`msl_core_match_step`, and `msl_core_match_output`. The typed interface consumes host-decoded match
+configuration and controller input; packed little-endian wire decoding and stdio remain outside
+the gameplay step. Output is retained in match storage and exposed by const pointer, so the seam
+does not add a per-frame allocation or intermediate copy.
+
+`MslCoreGameData` owns the immutable data root and translated effect-bank catalog. Native DAT
+translation still happens only during initialization, and the used native DAT arena is changed to
+read-only protection before the first public frame. `MslCoreMatch` owns the current scalar
+runtime's fighter/stage handles, configuration, frame/RNG state, output row, rule/UCF buffers,
+camera-publication state, effect queue, and Slippi fighter metadata. Source callbacks without a
+context argument bind to those caller-owned state blocks at init/step entry. A direct native/PPC C
+smoke initializes and steps this interface without the executable or wire adapter; the native
+allocation seal remains active during that step.
+
+This is the production-shaped ownership seam, not the final in-process multi-match conversion.
+Imported HSD/decomp globals, object lists, player/item tables, and allocator pools still retain
+their source process-global topology inside one scalar runner. They are intentionally not hidden
+behind a claim that two complete matches can already coexist in one address space. New Phase 5
+headless state must enter `GameData` or `MatchState`, rather than adding parallel local globals.
+Before persistent in-process validation workers, batching, or the public API cutover, the validated
+materialized source must be promoted to canonical gameplay source and those remaining source
+global owners must be context-promoted. SoA/AoSoA layout remains a later measured optimization.
+
+The five Fox/Fox FD controls remain exact through all 41,354 transitions after the seam, at about
+0.60 seconds / 69.4k aggregate native FPS with five workers. A 512-transition-per-replay bounded
+PPC/native differential passes, and the canonical 23-replay Phase 5 gate remains unchanged.
+
 ### Phase 5 — RL 1.0 supported domain
 
 Add Falco, Marth, Sheik, Zelda, Captain Falcon, the remaining five legal stages, relevant
 items/articles and stage objects, character/stage-specific Slippi patch behavior, singles match
 rules, and four-player/doubles scheduling. Compile each new source-owner vertical for both PPC and
 native targets, and expand by shared source owner rather than replay row.
+
+#### First packet — Falco, Battlefield, and frozen Pokemon Stadium
+
+Complete the gameplay-relevant source-owner closure needed for Fox/Falco singles on Final
+Destination, Battlefield, and frozen Pokemon Stadium. Extend the existing typed match
+configuration and source bootstrap rather than adding a parallel executable or stage/character
+path. Character data, animation/script data, articles, stage collision/joints, camera parameters,
+neutral spawns, and frozen-Stadium/Slippi behavior must come from `$MSL_DATA_DIR` and the pinned
+decomp/Slippi sources. Import complete owner translation units and tables where the reached call
+graph requires them; do not implement the packet as a list of replay mismatches.
+
+New immutable catalogs belong in `MslCoreGameData`; new headless mutable owners belong in
+`MslCoreMatch`. Do not add another core-owned process global. Existing imported source globals may
+retain their scalar-runner topology until canonical-source context promotion, but new source
+owners must not create a second host-side state model. Native initialization must preload and seal
+every newly reached archive/translation owner and size fixed pools for the expanded domain. A
+normal native step may not read game files, translate DAT fields, or allocate. PPC and native must
+continue compiling the same gameplay implementation, with PPC used for bounded differential
+checks rather than as a hidden runtime dependency.
+
+Keep the existing UCF 0.84/cardinals-1.0 input contract and implement any reached Falco/stage
+Slippi modifications at their shared patch/source owners. Generalize character/stage dispatch from
+configuration and data; do not branch in shared physics or collision code on Falco, Battlefield,
+Stadium, replay identity, or expected output as a proxy for missing state. Preserve the current
+strict float/signed-zero policy and the separately classified renderer/VI boundary; do not add a
+new tolerance to complete this packet.
+
+Completion requires:
+
+1. `make -f src/melee_core/Makefile validation-suite` selects the existing canonical 23 entries and
+   all 23 run through their final transitions without unsupported errors, matching under the
+   existing validation policy. The five Fox/Fox FD controls remain exact through all 41,354
+   transitions.
+2. Native and PPC source builds, source-sync/data checks, direct scalar API smoke, and the core test
+   target pass. Use bounded PPC/native replay differentials during development and a full native
+   23-replay gate at completion.
+3. Native allocation/DAT seals remain active for the complete suite. Any newly required raw or
+   generated data updates the full extraction/manifest/runtime-required-key contract and passes a
+   fresh-extract smoke; no game asset is checked into Git.
+4. Changes retain decomp/Slippi/data provenance, contain no replay/frame-specific gameplay branch,
+   and update the source manifest/patch ledger and this worklog. Record equivalent suite wall time,
+   aggregate FPS, and peak RSS, but defer SoA/AoSoA, in-process batching, public API cutover, and
+   broad performance restructuring.
 
 The first Phase 5 packet is Falco plus Battlefield and frozen Pokemon Stadium. Its canonical
 23-replay gate is already active through `validation-suite`. Before gameplay expansion, the current
@@ -846,10 +928,64 @@ seconds / 20.0k FPS with one worker to 0.60 seconds / 68.8k FPS with five worker
 concurrent native probes and a five-replay 1,000-transition native/PPC gate pass after replacing
 thread-unsafe `fork` launch with `posix_spawn`.
 
+#### First-packet progress
+
+The complete native gate now runs all 23 replays and 218,302 transitions without an unsupported
+runtime error. Nineteen replays pass strictly and four retain classified residuals. The latest
+16-worker gate completes in 1.22 seconds at 179.1k aggregate FPS (11.23 runner CPU-seconds) with
+205,040 KiB peak process-tree RSS.
+`MotionlessAggressiveJay` and `GracefulAttachedTurtle` advanced from their first laser
+shield-bounce mismatch through the replay end after patch `0046-guard-pose-float-exactness.patch`.
+`PriceyPartialAlbatross` then advanced to a strict 7,937/7,937 pass after
+`0047-ftcoll-damage-effect-argument-order.patch`, moving the gate from 16 pass / 7 fail to
+19 pass / 4 fail.
+
+The shared correction is source-owner exactness, not laser handling: GALE01 blends the live guard
+SRT in `lb_8000C490`/`lb_8000C868` with a rounded second term followed by scalar-single `fmadds`,
+and computes the live shield joint scale with two further `fmadds` in the
+`ftCo_80091D58` owner. Hosted `-ffp-contract=off` had split those expressions and displaced the
+shield contact normal by a few ULPs. The patch spells the retail boundaries explicitly and is
+classified as `hosted-exactness` in `upstream_delta_ledger.tsv`; the upstream MWCC source already
+emits the retail instructions.
+
+`PriceyPartialAlbatross` was not a persistent-particle or broad RNG reconstruction problem. A
+one-frame retail PC trace showed one normal-hit effect `HSD_Randi`, followed by the expected
+DamageFlyRoll `HSD_Randf`, while the imported nonmatching C made an extra random-effect draw. GALE01
+uses separate integer and floating ABI lanes at both DmgLog call sites: integer `r5` is
+`HitCapsule::sfx_severity`, and `f1` is the DmgLog damage passed to the effect. The decomp C had
+those arguments transposed. Patch `0047` corrects both call sites and is an `upstream-candidate` in
+`upstream_delta_ledger.tsv`.
+
+`PositiveRevolvingHyena` frame 5 is now source-classified rather than an open pose implementation
+gap. A bounded retail interpreter probe captured the Falco right-thumb world matrix and
+`PSMTXMultVec` result at laser creation. The port is bit-identical: the source spawn point is
+`(0xc15d8daa, 0x41878af0)`, and the exact `(5, 0)` laser velocity publishes
+`(0xc10d8daa, 0x41878af0)`. A direct JIT playback capture produced the same result. The replay,
+whose metadata says only `playedOn=dolphin`, records `(0xc10d8db3, 0x41878af2)` and carries that
+initial offset forward by exact five-unit X additions. Standard Slippi metadata does not identify
+the recording emulator build or its paired-single/JIT mode, so reproducing those bits would mean
+replacing source-correct matrix math with an unrecorded emulator-runtime profile. The strict
+comparator remains unchanged and the runtime retains the GALE01 result.
+
+The four classified gate entries are therefore the accepted terminal one-percent boundary in
+`HilariousVillainousGiraffe`, the unrecorded Dolphin float-runtime laser-anchor boundary in
+`PositiveRevolvingHyena`, and the DeadUp render-position ULP boundaries in
+`DelayedSuperbGuanaco` and `CornyDelayedOkapi`. Keep these classifications separate; do not add a
+global float tolerance, replay/frame gameplay branch, or expected-output correction.
+
+The packet completion checks pass: source snapshot/patch verification, raw-data validation,
+native and PPC scalar smokes, native scalar/API/DAT/allocation-seal smokes, validation-runner
+tests, and repository formatting. All five Fox/FD controls pass a 1,000-transition bounded
+native/PPC gate, and `PriceyPartialAlbatross` passes both runtimes through transition 4,352, beyond
+the corrected frame-4,351 RNG boundary. The four classified residuals intentionally keep the
+strict suite command nonzero; they are not hidden by comparator tolerances.
+
 ### Phase 6 — Production performance and API cutover
 
-Establish explicit per-world state, enforce initialization-only allocation, connect the native
-runtime to the batch-first C/Python API, and profile equivalent workloads before changing layout.
+Promote the validated materialized gameplay source to canonical repository-owned source, finish
+context-promoting the remaining imported HSD/decomp globals and allocator pools, and allow one
+immutable `GameData` to serve multiple independent in-process match states. Connect that native
+runtime to the batch-first C/Python API and profile equivalent workloads before changing layout.
 Apply SoA/AoSoA, batching, and other throughput work only where measured, preserving PPC/native
 correctness evidence after each change. Delete the displaced old core at complete supported-domain
 and API ownership rather than retaining a fallback runtime.

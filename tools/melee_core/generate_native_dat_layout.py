@@ -221,11 +221,11 @@ class PairBuilder:
                 if name == "Article" and src_name == "x4_specialAttributes":
                     continue
                 field_override = {
-                    # ftData is shared by all fighters, but Phase 4's native
-                    # public root is specifically ftDataFox. These two source
-                    # members are still declared as void in the decomp; their
-                    # exact Fox consumers supply the missing types.
-                    # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c
+                    # These ftData members remain void in the decomp. The
+                    # shared Fox/Falco source consumers provide their concrete
+                    # native translation types.
+                    # refs/melee/src/melee/ft/chara/{ftFox/ftFx_Init.c,
+                    # ftFalco/ftFc_Init.c}
                     ("ftData", "ext_attr"): "MslDatFoxAttrsPointer",
                     ("ftData", "xC"): "MslDatFoxWaitAnimList",
                     ("ftData", "x10"): "MslDatFoxAnimByteList",
@@ -412,6 +412,7 @@ def main() -> None:
         "DynamicModelDesc",
         "HSD_Joint",
         "HSD_MatAnimJoint",
+        "EF_EffectDesc",
         "ftData",
         "FigaTree",
         "it_804D6D20_t",
@@ -427,6 +428,8 @@ def main() -> None:
         "MslDatVec2Pointer",
         "MslDatFighterPartsPointer",
         "MslDatFighter6540Pointer",
+        "MslDatBattlefieldParams",
+        "MslDatPokemonStadiumParams",
         "MslDatFoxWaitAnimList",
         "MslDatFoxAnimByteList",
         "FoxLaserAttr",

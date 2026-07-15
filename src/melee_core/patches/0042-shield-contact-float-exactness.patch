@@ -1,0 +1,72 @@
+--- a/src/melee/lb/lbcollision.c
++++ b/src/melee/lb/lbcollision.c
+@@ -1453,7 +1453,7 @@
+     float x = a->x - b->x;
+     float y = a->y - b->y;
+     float z = a->z - b->z;
+-    return x * x + y * y + z * z;
++    return __fmadds(z, z, __fmadds(x, x, y * y));
+ }
+ 
+ static inline float sqrtf_store(float x, volatile float* y)
+@@ -1510,20 +1510,28 @@
+         diff_ba.y = b->y - a->y;
+         diff_ba.z = b->z - a->z;
+ 
+-        dot_diff_cb = diff_cb.x * diff_cb.x + diff_cb.y * diff_cb.y +
+-                      diff_cb.z * diff_cb.z;
++        // GALE01 0x80007900--0x80007924 keeps this direction length as
++        // separately rounded multiplies and adds. The later quadratic below
++        // is the part compiled to scalar-single fused operations.
++        // refs/melee/src/melee/lb/lbcollision.c::lbColl_800077A0
++        dot_diff_cb = diff_cb.x * diff_cb.x + diff_cb.y * diff_cb.y +
++                      diff_cb.z * diff_cb.z;
+ 
+         if (nearzero(dot_diff_cb)) {
+             scl = 0.0f;
+         } else {
+-            n0 = 2.0f * diff_cb.x * diff_ba.x + 2.0f * diff_cb.y * diff_ba.y +
+-                 2.0f * diff_cb.z * diff_ba.z;
++            n0 = __fmadds(2.0f * diff_cb.x, diff_ba.x,
++                          (2.0f * diff_cb.y) * diff_ba.y);
++            n0 = __fmadds(2.0f * diff_cb.z, diff_ba.z, n0);
+ 
+-            ba_dot = diff_ba.x * diff_ba.x + diff_ba.y * diff_ba.y +
+-                     diff_ba.z * diff_ba.z;
++            ba_dot = __fmadds(
++                diff_ba.z, diff_ba.z,
++                __fmadds(diff_ba.x, diff_ba.x, diff_ba.y * diff_ba.y));
+ 
+-            n1 = n0 * n0 -
+-                 (4.0f * dot_diff_cb * -(offset_dist * offset_dist - ba_dot));
++            n1 = __fmsubs(
++                n0, n0,
++                (4.0f * dot_diff_cb) *
++                    __fnmsubs(offset_dist, offset_dist, ba_dot));
+ 
+             if (n1 < 0.0f) {
+                 n1 = 0.0f;
+@@ -1534,16 +1542,17 @@
+             scl = (-n0 - sqrtf_store(n1, sqrt_tmp - 1)) / (2.0f * dot_diff_cb);
+         }
+ 
+-        normalize_e.x = scl * diff_cb.x + b->x - a->x;
+-        normalize_e.y = scl * diff_cb.y + b->y - a->y;
+-        normalize_e.z = scl * diff_cb.z + b->z - a->z;
++        normalize_e.x = __fmadds(scl, diff_cb.x, b->x) - a->x;
++        normalize_e.y = __fmadds(scl, diff_cb.y, b->y) - a->y;
++        normalize_e.z = __fmadds(scl, diff_cb.z, b->z) - a->z;
+ 
+         PSVECNormalize(&normalize_e, e);
+ 
+         *angle = lbVector_AngleXY(e, &diff_cb);
+-        d->x = dist * e->x + a->x;
+-        d->y = dist * e->y + a->y;
+-        d->z = dist * e->z + a->z;
++        // GALE01 0x80007AA0--0x80007AC0.
++        d->x = __fmadds(dist, e->x, a->x);
++        d->y = __fmadds(dist, e->y, a->y);
++        d->z = __fmadds(dist, e->z, a->z);
+     } else {
+         *angle = M_PI;
+        e->z = 0.0f;

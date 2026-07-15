@@ -125,9 +125,11 @@ typedef struct ReplayView {
   uint8_t costume_id[MSL_CORE_MAX_PLAYERS];
   int num_players;
   uint32_t stage_id;
+  uint32_t initial_random_seed;
   uint8_t is_teams;
   uint8_t online_fnmsubs_zero;
   uint8_t brawl_offscreen_damage;
+  uint8_t freeze_dead_up_fall_physics;
   float damage_ratio;
 } ReplayView;
 
@@ -270,6 +272,15 @@ static int parse_start(PyObject* start, ReplayView* replay) {
     return -1;
   }
   replay->stage_id = (uint32_t)PyLong_AsUnsignedLong(value);
+  value = PyDict_GetItemString(start, "random_seed");
+  if (value == NULL || !PyLong_Check(value)) {
+    PyErr_SetString(PyExc_ValueError, "replay start random_seed is missing");
+    return -1;
+  }
+  replay->initial_random_seed = (uint32_t)PyLong_AsUnsignedLong(value);
+  if (PyErr_Occurred()) {
+    return -1;
+  }
   value = PyDict_GetItemString(start, "is_teams");
   replay->is_teams = value != NULL && PyObject_IsTrue(value) > 0;
   scene = PyDict_GetItemString(start, "scene");
@@ -283,6 +294,7 @@ static int parse_start(PyObject* start, ReplayView* replay) {
   // refs/slippi-ssbm-asm/Output/InjectionLists/list_netplay.json
   replay->online_fnmsubs_zero = PyLong_AsLong(value) == 8;
   replay->brawl_offscreen_damage = replay->online_fnmsubs_zero;
+  replay->freeze_dead_up_fall_physics = replay->online_fnmsubs_zero;
   if (PyErr_Occurred()) {
     return -1;
   }
@@ -388,16 +400,18 @@ static int parse_metadata(PyObject* metadata, ReplayView* replay) {
 
   // `playedOn` is the Slippi metadata field that owns the execution
   // environment. Slippi's Dolphin configuration uses the netplay code set for
-  // netplay or other Dolphin play, including the BrawlOffscreenDamage call-site
-  // patch. The offline mainline-Dolphin case was independently established by
-  // a bounded retail-code probe at 0x8006A880 and the replay's exact damage
-  // timing. Keep that independent of the online capture's fnmsubs zero-sign
-  // behavior: the offline mainline-Dolphin replay retains retail zero signs.
+  // netplay or other Dolphin play, including the BrawlOffscreenDamage and
+  // FreezeDeadUpFallPhysics call-site patches. The offline mainline-Dolphin
+  // case was independently established by bounded code probes and exact
+  // replay behavior. Keep those capabilities independent of the online
+  // capture's fnmsubs zero-sign behavior: offline mainline Dolphin retains
+  // retail zero signs.
   // refs/slippi-ssbm-asm/README.md::Output/Netplay
   // refs/slippi-ssbm-asm/Online/Core/BrawlOffscreenDamage.asm
   if (strcmp(played_on, "dolphin") == 0 || strcmp(played_on, "mainline dolphin") == 0 ||
       strcmp(played_on, "network") == 0) {
     replay->brawl_offscreen_damage = 1;
+    replay->freeze_dead_up_fall_physics = 1;
   }
   return 0;
 }
@@ -914,16 +928,23 @@ static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemField
   enum {
     // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Laser.
     ITEM_KIND_FOX_LASER = 54,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Laser.
+    ITEM_KIND_FALCO_LASER = 55,
     // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Illusion.
     ITEM_KIND_FOX_ILLUSION = 56,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Phantasm.
+    ITEM_KIND_FALCO_PHANTASM = 57,
     // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Blaster.  Keep this
     // protocol value local to the native replay adapter rather than making it
     // depend on the PPC runtime's headers.
     ITEM_KIND_FOX_BLASTER = 74,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Blaster.
+    ITEM_KIND_FALCO_BLASTER = 75,
   };
 
-  if (item->type == ITEM_KIND_FOX_BLASTER && (spec->offset == offsetof(MslCoreItem, misc2) ||
-                                              spec->offset == offsetof(MslCoreItem, misc3))) {
+  if ((item->type == ITEM_KIND_FOX_BLASTER || item->type == ITEM_KIND_FALCO_BLASTER) &&
+      (spec->offset == offsetof(MslCoreItem, misc2) ||
+       spec->offset == offsetof(MslCoreItem, misc3))) {
     // SendItemInfo.s samples bytes xDEB/xDEF generically.  For Fox's blaster
     // those bytes are the low bytes of xDE4[1]/xDE4[2], effect-object
     // pointers populated by itfoxblaster.c::it_802ADF10.  Their numeric
@@ -931,13 +952,15 @@ static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemField
     // gameplay/article state in a headless process.
     return 0;
   }
-  if (item->type == ITEM_KIND_FOX_LASER && spec->offset == offsetof(MslCoreItem, misc3)) {
+  if ((item->type == ITEM_KIND_FOX_LASER || item->type == ITEM_KIND_FALCO_LASER) &&
+      spec->offset == offsetof(MslCoreItem, misc3)) {
     // SendItemInfo.s samples xDEF, but itFoxLaser_ItemVars ends at xDEC
     // (refs/melee/src/melee/it/itCharItems.h). For a laser this lane is
     // unowned allocator residue beyond the defined article state.
     return 0;
   }
-  if (item->type == ITEM_KIND_FOX_ILLUSION && spec->offset >= offsetof(MslCoreItem, misc0) &&
+  if ((item->type == ITEM_KIND_FOX_ILLUSION || item->type == ITEM_KIND_FALCO_PHANTASM) &&
+      spec->offset >= offsetof(MslCoreItem, misc0) &&
       spec->offset <= offsetof(MslCoreItem, misc3)) {
     // itFoxIllusion_ItemVars contains a model-joint pointer at xDD4, an
     // unused xDD8 lane, and a presentation JObj pointer at xDDC; it ends at
@@ -1482,14 +1505,17 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     PyErr_Format(PyExc_ValueError, "Melee core requires two players, got %d", replay.num_players);
     goto done;
   }
-  if (replay.stage_id != 32) {
-    PyErr_Format(PyExc_ValueError, "Melee core requires Final Destination (32), got %u",
+  if (replay.stage_id != 3 && replay.stage_id != 31 && replay.stage_id != 32) {
+    PyErr_Format(PyExc_ValueError,
+                 "Melee core requires Pokemon Stadium (3), Battlefield (31), or Final "
+                 "Destination (32), got %u",
                  replay.stage_id);
     goto done;
   }
   for (i = 0; i < replay.num_players; ++i) {
-    if (get_u8(&replay.players[i].character, rows.raw[0]) != 1) {
-      PyErr_SetString(PyExc_ValueError, "Melee core requires Fox/Fox");
+    uint8_t character = get_u8(&replay.players[i].character, rows.raw[0]);
+    if (character != 1 && character != 22) {
+      PyErr_SetString(PyExc_ValueError, "Melee core requires Fox or Falco players");
       goto done;
     }
   }
@@ -1537,11 +1563,17 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   // warm-up therefore starts from row 0's seed and advances it naturally.
   // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
   state.config.frame_pre_random_seed = get_u32(&replay.frame_seed, rows.raw[0]);
+  // Recording/SendGameInfo captures the seed restored by playback before
+  // stage construction. Keep it separate from online per-frame reseeds.
+  // refs/slippi-ssbm-asm/{Recording/SendGameInfo.asm,
+  // Playback/Core/RestoreGameInfo.asm,Online/Core/InitOnlinePlay.asm}
+  state.config.initial_random_seed = replay.initial_random_seed;
   state.config.match_damage_ratio = replay.damage_ratio;
   state.config.num_players = (uint8_t)replay.num_players;
   state.config.is_teams = replay.is_teams;
   state.config.online_fnmsubs_zero = replay.online_fnmsubs_zero;
   state.config.brawl_offscreen_damage = replay.brawl_offscreen_damage;
+  state.config.freeze_dead_up_fall_physics = replay.freeze_dead_up_fall_physics;
   for (i = 0; i < replay.num_players; ++i) {
     const ReplayPlayer* player = &replay.players[i];
     uint8_t stocks = replay.start_stocks[i];

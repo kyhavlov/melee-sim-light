@@ -1,0 +1,19 @@
+--- a/src/melee/ft/fighter.c
++++ b/src/melee/ft/fighter.c
+@@ -3092,9 +3092,16 @@
+             }
+         }
+ 
+         if (fp->dmg.x1928) {
++#ifdef MSL_CORE_HOSTED
++            // Retail DOL 0x8006D8D8 initializes grounded attacker shield
++            // knockback with one scalar-single fmadds.
++            float eval = __fmadds(fp->dmg.x1928, p_ftCommonData->x3E0,
++                                  p_ftCommonData->x3E4);
++#else
+             float eval =
+                 (fp->dmg.x1928 * p_ftCommonData->x3E0) + p_ftCommonData->x3E4;
++#endif
+             fp->xF4_ground_attacker_shield_kb_vel =
+                 (fp->dmg.x192c < 0.0f) ? eval : -eval;
+             ftCommon_8007E2A4(gobj);

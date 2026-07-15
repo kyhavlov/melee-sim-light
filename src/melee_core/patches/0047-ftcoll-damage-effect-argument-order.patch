@@ -1,0 +1,63 @@
+--- a/src/melee/ft/ftcoll.c
++++ b/src/melee/ft/ftcoll.c
+@@ -1320,20 +1320,23 @@
+     }
+ }
+ 
+-// dmg is probably a u32?
+-void ftColl_80078538(Fighter_GObj* gobj, Vec3* pos, u32 dmg, float ignored,
+-                     float scale)
++void ftColl_80078538(Fighter_GObj* gobj, Vec3* pos, u32 sfx_severity,
++                     float damage, float scale)
+ {
+     Fighter* fp = gobj->user_data;
+     PAD_STACK(20);
+ 
+     if (scale < p_ftCommonData->x3F0) {
+-        efSync_Spawn(0x3E8, 0, pos, &ignored);
++        efSync_Spawn(0x3E8, 0, pos, &damage);
+     } else {
+         efSync_Spawn(0x3F3, 0, pos);
+     }
+ 
+-    if (dmg >= 1) {
++    // GALE01 0x800785A0 tests integer r5, while the effect scale passed in
++    // f1 is stored at 0x14(r1). Callers at 0x8007A184/0x8007A200 and
++    // 0x8007A434/0x8007A4B4 pass HitCapsule::sfx_severity in r5 and the
++    // converted DmgLog damage in f1.
++    if (sfx_severity >= 1) {
+         switch (fp->co_attrs.xA0) {
+         case 0:
+             if (HSD_Randi((s32) p_ftCommonData->x3F4) == 0) {
+@@ -2346,13 +2349,12 @@
+                                  co->weight);
+ 
+             if (arg4 != 0) {
+-                u32 u_dmg = (u32) entry->x20;
+                 int sfx_id = ftColl_803C0CAC[hit->element];
+ 
+                 switch (sfx_id) {
+                 case 0x3E8:
+-                    ftColl_80078538(gobj, &entry->pos, u_dmg,
+-                                    hit->sfx_severity, kb);
++                    ftColl_80078538(gobj, &entry->pos, hit->sfx_severity,
++                                    entry->x20, kb);
+                     break;
+                 case 0x3E9:
+                 case 0x3EA:
+@@ -2446,13 +2448,12 @@
+             kb = result;
+ 
+             if (arg4 != 0) {
+-                u32 u_dmg = (u32) entry->x20;
+                 int sfx_id = ftColl_803C0CAC[hit->element];
+ 
+                 switch (sfx_id) {
+                 case 0x3E8:
+-                    ftColl_80078538(gobj, &entry->pos, u_dmg,
+-                                    hit->sfx_severity, kb);
++                    ftColl_80078538(gobj, &entry->pos, hit->sfx_severity,
++                                    entry->x20, kb);
+                     break;
+                 case 0x3E9:
+                 case 0x3EA:

@@ -1,0 +1,149 @@
+--- a/src/melee/gr/grpstadium.c
++++ b/src/melee/gr/grpstadium.c
+@@ -249,4 +249,10 @@ void grStadium_801D1290(Ground_GObj* gobj)
+ {
++#ifdef MSL_CORE_HOSTED
++    // The jumbotron model/material setup is renderer-owned. Its scheduled
++    // callback retains the source RNG projection below.
++    (void) gobj;
++    return;
++#else
+     HSD_MObj* mobj;
+     Ground* gp = GET_GROUND(gobj);
+ 
+@@ -269,5 +276,6 @@ void grStadium_801D1290(Ground_GObj* gobj)
+     gp->x11_flags.b012 = 1;
+     gobj->render_cb = fn_801D5074;
++#endif
+ }
+ 
+ bool grStadium_801D1388(Ground_GObj* gobj)
+@@ -278,7 +286,11 @@ bool grStadium_801D1388(Ground_GObj* gobj)
+ void grStadium_801D1390(Ground_GObj* gobj)
+ {
+     grStadium_801D1E20();
++#ifndef MSL_CORE_HOSTED
+     grStadium_801D2344(gobj);
++#else
++    (void) gobj;
++#endif
+ }
+ 
+ void grStadium_801D13C4(Ground_GObj* gobj) {}
+@@ -633,4 +645,12 @@ void grStadium_801D1E20(void)
+ {
++#ifdef MSL_CORE_HOSTED
++    // The fly-by is presentation-only, but its source RNG advances remain
++    // gameplay-visible to later consumers within a frame.
++    if (HSD_Randi(200) == 0) {
++        (void) HSD_Randi(2);
++        (void) HSD_Randi(200);
++    }
++#else
+     if (HSD_Randi(200) == 0) {
+         Vec3 spC = { 0, -100, -660 };
+         int a = HSD_Randi(2);
+@@ -644,6 +665,7 @@ void grStadium_801D1E20(void)
+ 
+         grLib_801C96F8(0x7530, 0x1E, &spC);
+     }
++#endif
+ }
+ 
+ typedef struct ImageDescWrapper {
+@@ -1301,7 +1323,7 @@ void grStadium_801D2FB4(ImageDescWrapper* wrapper)
+ 
+ /// @todo these are commonly used inlines; they should be moved to jobj.h
+ 
+-inline HSD_JObj* jobj_next(HSD_JObj* jobj)
++static inline HSD_JObj* jobj_next(HSD_JObj* jobj)
+ {
+     if (jobj == NULL) {
+         return NULL;
+@@ -1309,7 +1331,7 @@ inline HSD_JObj* jobj_next(HSD_JObj* jobj)
+     return jobj->next;
+ }
+ 
+-inline HSD_JObj* jobj_parent(HSD_JObj* jobj)
++static inline HSD_JObj* jobj_parent(HSD_JObj* jobj)
+ {
+     if (jobj == NULL) {
+         return NULL;
+@@ -1317,7 +1339,7 @@ inline HSD_JObj* jobj_parent(HSD_JObj* jobj)
+     return jobj->parent;
+ }
+ 
+-inline HSD_JObj* jobj_child(HSD_JObj* jobj)
++static inline HSD_JObj* jobj_child(HSD_JObj* jobj)
+ {
+     if (jobj == NULL) {
+         return NULL;
+@@ -2034,4 +2056,10 @@ void grStadium_801D4548(Ground_GObj* gobj)
+ {
++#ifdef MSL_CORE_HOSTED
++    // External/Frozen PS/Core/FreezePokemon.asm replaces the transformation
++    // decision at retail 0x801D45FC with a branch to 0x801D4FD8.
++    (void) gobj;
++    return;
++#else
+     s32 sp6C;
+     s32 sp68;
+     s32 sp64;
+@@ -2268,6 +2297,7 @@ void grStadium_801D4548(Ground_GObj* gobj)
+     if (gp->u.stadium.xE0 == 0xB) {
+         gp->u.stadium.xE0 = 0;
+     }
++#endif
+ }
+ 
+ void grStadium_801D4F14(Ground_GObj* gobj)
+--- a/src/melee/gr/ground.c
++++ b/src/melee/gr/ground.c
+@@ -812,5 +812,10 @@ Ground_GObj* Ground_GetStageGObj(int map_id)
+     s16* phi_r23;
+     int phi_r24;
+     int i;
++#ifdef MSL_CORE_HOSTED
++    extern Ground* msl_core_stage_ground_alloc(void);
++    extern void msl_core_stage_ground_free(void* ground);
++    extern StageCallbacks* msl_core_stage_callbacks(void);
++#endif
+ 
+     gobj = GObj_Create(HSD_GOBJ_CLASS_STAGE, 5, 0);
+@@ -820,12 +825,20 @@ Ground_GObj* Ground_GetStageGObj(int map_id)
+         OSReport("%s:%d: couldn t get gobj!\n", __FILE__, 0x522);
+         return NULL;
+     }
++#ifdef MSL_CORE_HOSTED
++    temp_r3 = msl_core_stage_ground_alloc();
++#else
+     temp_r3 = alloc_user_data_ground();
++#endif
+     if (temp_r3 == NULL) {
+         HSD_GObjPLink_80390228(gobj);
+         return NULL;
+     }
++#ifdef MSL_CORE_HOSTED
++    GObj_InitUserData(gobj, 3, msl_core_stage_ground_free, temp_r3);
++#else
+     GObj_InitUserData(gobj, 3, Ground_801C0478, temp_r3);
++#endif
+     temp_r3->map_id = map_id;
+     temp_r3->gobj = gobj;
+     temp_r3->x10_flags.b0 = 0;
+@@ -868,10 +881,15 @@ Ground_GObj* Ground_GetStageGObj(int map_id)
+             OSReport("%s:%d: couldn t get jobj\n", __FILE__, 0x55D);
+             return NULL;
+         }
++#ifdef MSL_CORE_HOSTED
++        if (msl_core_stage_callbacks()[map_id].flags_b2 == 1 &&
++            archive->unk4->unk8[map_id].x10 != NULL)
++#else
+         if (Ground_803DFEDC[stageinfo->internal_stage_id]
+                     ->callbacks[map_id]
+                     .flags_b2 == 1 &&
+             archive->unk4->unk8[map_id].x10 != NULL)
++#endif
+         {
+             HSD_GObj* temp_r23_2 = GObj_Create(17, 19, 0);
+             temp_r27 = lb_80013B14(archive->unk4->unk8[map_id].x10);

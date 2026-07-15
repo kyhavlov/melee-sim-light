@@ -44,6 +44,10 @@ typedef struct MslCoreMatchConfig {
     uint32_t stage_id;
     int32_t frame_id;
     uint32_t frame_pre_random_seed;
+    // Slippi's game-start event records the seed restored before match/stage
+    // construction. Online frame seeds subsequently add a per-frame high-word
+    // offset and must not initialize persistent stage state.
+    uint32_t initial_random_seed;
     float match_damage_ratio;
     uint8_t num_players;
     uint8_t is_teams;
@@ -53,6 +57,7 @@ typedef struct MslCoreMatchConfig {
     // distinguish Slippi's offline Dolphin patch set from Nintendont retail.
     uint8_t online_fnmsubs_zero;
     uint8_t brawl_offscreen_damage;
+    uint8_t freeze_dead_up_fall_physics;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
 
@@ -127,7 +132,7 @@ typedef struct MslCoreCompare {
 _Static_assert(sizeof(MslCoreInputPlayer) == 8, "MslCoreInputPlayer wire size");
 _Static_assert(sizeof(MslCoreInput) == 32, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 36, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 38, "MslCoreMatchConfig wire size");
+_Static_assert(sizeof(MslCoreMatchConfig) == 43, "MslCoreMatchConfig wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1022, "MslCoreCompare wire size");
 
@@ -137,5 +142,7 @@ float msl_core_get_lef32(const void* ptr);
 void msl_core_put_le16(void* ptr, uint16_t value);
 void msl_core_put_le32(void* ptr, uint32_t value);
 void msl_core_put_lef32(void* ptr, float value);
+void msl_core_decode_match_config(MslCoreMatchConfig* config,
+                                  const uint8_t* wire);
 
 #endif

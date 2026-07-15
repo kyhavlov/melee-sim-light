@@ -69,6 +69,7 @@ RUNTIME_SRCS := \
 	$(CORE)/runtime/items.c \
 	$(CORE)/runtime/match.c \
 	$(CORE)/runtime/math.c \
+	$(CORE)/runtime/scalar.c \
 	$(CORE)/runtime/wire.c
 STUB_SRCS := \
 	$(CORE)/stubs/headless_exclusions.c \
@@ -97,11 +98,13 @@ SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/data_load_smoke.c \
 	$(ROOT)/tests/melee_core/map_collision_smoke.c \
 	$(ROOT)/tests/melee_core/model_animation_smoke.c \
+	$(ROOT)/tests/melee_core/scalar_api_smoke.c \
 	$(ROOT)/tests/melee_core/scheduler_smoke.c
 NATIVE_SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/data_load_smoke.c \
 	$(ROOT)/tests/melee_core/map_collision_smoke.c \
 	$(ROOT)/tests/melee_core/model_animation_smoke.c \
+	$(ROOT)/tests/melee_core/scalar_api_smoke.c \
 	$(ROOT)/tests/melee_core/scheduler_smoke.c
 PPC_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(PPC_OBJ_DIR)/%.o,$(SMOKE_SRCS))
 NATIVE_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(NATIVE_SMOKE_SRCS))
@@ -115,10 +118,12 @@ DATA_SMOKE := $(PPC_BUILD)/data-smoke
 MAP_SMOKE := $(PPC_BUILD)/map-collision-smoke
 MODEL_SMOKE := $(PPC_BUILD)/model-animation-smoke
 SCHEDULER_SMOKE := $(PPC_BUILD)/scheduler-smoke
+SCALAR_API_SMOKE := $(PPC_BUILD)/scalar-api-smoke
 NATIVE_DATA_SMOKE := $(NATIVE_BUILD)/data-smoke
 NATIVE_MAP_SMOKE := $(NATIVE_BUILD)/map-collision-smoke
 NATIVE_MODEL_SMOKE := $(NATIVE_BUILD)/model-animation-smoke
 NATIVE_SCHEDULER_SMOKE := $(NATIVE_BUILD)/scheduler-smoke
+NATIVE_SCALAR_API_SMOKE := $(NATIVE_BUILD)/scalar-api-smoke
 VALIDATION_NATIVE_SRC := $(ROOT)/bindings/msl_replay_validate.c
 VALIDATION_NATIVE := $(VALIDATION_BUILD)/_msl_replay_validate.so
 
@@ -262,15 +267,17 @@ $(eval $(call link_smoke,$(DATA_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/data_load
 $(eval $(call link_smoke,$(MAP_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/map_collision_smoke.o))
 $(eval $(call link_smoke,$(MODEL_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/model_animation_smoke.o))
 $(eval $(call link_smoke,$(SCHEDULER_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/scheduler_smoke.o))
+$(eval $(call link_smoke,$(SCALAR_API_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/scalar_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_DATA_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/data_load_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_MAP_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/map_collision_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_MODEL_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/model_animation_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_SCHEDULER_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scheduler_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_SCALAR_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scalar_api_smoke.o))
 
 data-check:
 	@$(PY) -m tools.extraction.validate_raw_data --raw-dir "$(DATA)"
 
-smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE) $(SCHEDULER_SMOKE)
+smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE) $(SCHEDULER_SMOKE) $(SCALAR_API_SMOKE)
 	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(ARCHIVE_SMOKE)" \
 		"$(DATA)/PlCo.dat" \
 		"$(DATA)/PlFx.dat" \
@@ -280,12 +287,15 @@ smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE) $(S
 	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MODEL_SMOKE)" "$(DATA)"
 	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MAP_SMOKE)" "$(DATA)"
 	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCHEDULER_SMOKE)"
+	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
+		"$(DATA)"
 
-native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE)
+native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE)
 	@timeout 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_SCHEDULER_SMOKE)"
+	@timeout 5s "$(NATIVE_SCALAR_API_SMOKE)" "$(DATA)"
 
 map-smoke: data-check $(MAP_SMOKE)
 	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MAP_SMOKE)" \

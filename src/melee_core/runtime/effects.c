@@ -9,6 +9,7 @@
 
 #include <baselib/gobj.h>
 #include <baselib/gobjproc.h>
+#include <baselib/jobj.h>
 #include <baselib/psstructs.h>
 #include <baselib/random.h>
 #include <stdarg.h>
@@ -20,66 +21,110 @@
 #include "platform/native_dat.h"
 #endif
 
-enum { MSL_EFFECT_QUEUE_CAPACITY = 256 };
+static const MslCoreEffectData* msl_bound_effect_data;
+static MslCoreEffectState* msl_bound_effect_state;
 
-typedef struct MslEffectQueueNode {
-    struct MslEffectQueueNode* next;
-    u8 spawn_kind;
-    s32 gfx_id;
+#define msl_effect_banks (msl_bound_effect_data->banks)
+#define msl_effect_nodes (msl_bound_effect_state->nodes)
+#define msl_effect_free (msl_bound_effect_state->free)
+
+static void msl_effect_record_model_generator(int link_no, int bank,
+                                              int gfx_id, HSD_JObj* jobj)
+{
+    MslCoreEffectData* data = (MslCoreEffectData*) msl_bound_effect_data;
+    MslCoreEffectModelStart* start;
+    int index;
+
+    (void) link_no;
+    (void) jobj;
+    if (data == NULL || data->recording_common_model < 0 ||
+        data->recording_common_model >= 2)
+    {
+        return;
+    }
+    index = data->recording_common_model;
+    start = &data->common_model_start[index];
+    if (start->count >= MSL_CORE_EFFECT_MODEL_START_CAPACITY) {
+        fprintf(stderr, "common effect model %d has too many startup generators\n",
+                index + 9);
+        abort();
+    }
+    start->generator_ids[start->count++] = bank * 1000 + gfx_id;
+}
+
+static void msl_effect_record_model_start(MslCoreEffectData* data,
+                                          int model_id, int record_index)
+{
+    EF_EffectDesc* desc = &data->banks[0].models[model_id];
     HSD_JObj* jobj;
-    Vec3 params;
-} MslEffectQueueNode;
 
-typedef struct MslEffectGeneratorBank {
-    HSD_Archive* archive;
-    int* command_bank;
-    HSD_PSCmdList** commands;
-    s32 count;
-} MslEffectGeneratorBank;
+    if (desc->model_desc.joint == NULL) {
+        return;
+    }
+    jobj = HSD_JObjLoadJoint(desc->model_desc.joint);
+    if (jobj == NULL) {
+        fprintf(stderr, "failed to load common effect model %d\n", model_id);
+        abort();
+    }
+    HSD_JObjAddAnimAll(jobj, desc->model_desc.animjoint,
+                       desc->model_desc.matanim_joint,
+                       desc->model_desc.shapeanim_joint);
+    HSD_JObjReqAnimAll(jobj, 0.0F);
+    data->recording_common_model = (s8) record_index;
+    HSD_JObjAnimAll(jobj);
+    data->recording_common_model = -1;
+    HSD_JObjRemoveAll(jobj);
+}
 
-static MslEffectQueueNode msl_effect_nodes[MSL_EFFECT_QUEUE_CAPACITY];
-static MslEffectQueueNode* msl_effect_free;
-static MslEffectGeneratorBank msl_effect_banks[4];
-
-static void msl_effect_load_bank(int bank, const char* filename,
+static void msl_effect_load_bank(MslCoreEffectData* data, int bank,
+                                 const char* filename,
                                  const char* symbol)
 {
+    MslCoreEffectGeneratorBank* effect_bank = &data->banks[bank];
 #ifdef MSL_CORE_NATIVE
-    msl_effect_banks[bank].archive = lbArchive_LoadArchive(filename);
-    if (msl_native_effect_bank(msl_effect_banks[bank].archive, symbol,
-                               &msl_effect_banks[bank].count,
-                               &msl_effect_banks[bank].commands) != 0)
+    effect_bank->archive = lbArchive_LoadArchive(filename);
+    if (msl_native_effect_bank(effect_bank->archive, symbol,
+                               &effect_bank->count,
+                               &effect_bank->commands) != 0)
     {
         fprintf(stderr, "%s has invalid %s command data\n", filename,
                 symbol);
         abort();
+    }
+    if (bank == 0) {
+        effect_bank->models =
+            msl_native_effect_models(effect_bank->archive, symbol, 11);
+        if (effect_bank->models == NULL) {
+            fprintf(stderr, "%s has invalid common effect model data\n",
+                    filename);
+            abort();
+        }
     }
 #else
     void** table = NULL;
     int* command_bank;
     u16 version;
 
-    msl_effect_banks[bank].archive =
+    effect_bank->archive =
         lbArchive_80016DBC(filename, &table, symbol, NULL);
     if (table == NULL || table[0] == NULL) {
         fprintf(stderr, "%s is missing %s command data\n", filename, symbol);
         abort();
     }
     command_bank = table[0];
-    msl_effect_banks[bank].command_bank = command_bank;
+    effect_bank->command_bank = command_bank;
     version = *(u16*) command_bank;
     switch (version) {
     case 0:
-        msl_effect_banks[bank].count = command_bank[1];
-        msl_effect_banks[bank].commands =
-            (HSD_PSCmdList**) (command_bank + 2);
+        effect_bank->count = command_bank[1];
+        effect_bank->commands = (HSD_PSCmdList**) (command_bank + 2);
         break;
     case 0x40:
     case 0x41:
     case 0x42:
     case 0x43:
-        msl_effect_banks[bank].count = command_bank[1] + command_bank[2];
-        msl_effect_banks[bank].commands =
+        effect_bank->count = command_bank[1] + command_bank[2];
+        effect_bank->commands =
             (HSD_PSCmdList**) (command_bank + 3 - command_bank[1]);
         break;
     default:
@@ -87,30 +132,62 @@ static void msl_effect_load_bank(int bank, const char* filename,
                 filename, version);
         abort();
     }
+    if (bank == 0) {
+        // efAsync_LoadSync publishes &table[2] as the EF_EffectDesc array.
+        // refs/melee/src/melee/ef/efasync.c::efAsync_LoadSync
+        effect_bank->models = (EF_EffectDesc*) &table[2];
+    }
 #endif
 }
 
-void msl_effect_projection_init(void)
+void msl_effect_projection_bind(const MslCoreEffectData* data,
+                                MslCoreEffectState* state)
+{
+    msl_bound_effect_data = data;
+    msl_bound_effect_state = state;
+}
+
+void msl_effect_game_data_init(MslCoreEffectData* data)
+{
+    memset(data, 0, sizeof(*data));
+    data->recording_common_model = -1;
+    msl_effect_load_bank(data, 0, "/EfCoData.dat", "effCommonDataTable");
+    msl_effect_load_bank(data, 3, "/EfFxData.dat", "effFoxDataTable");
+    // efAsync_Dispatch effect 0x3E8 chooses common model 9 or 10, and
+    // efSync_Spawn immediately advances the chosen model's frame-zero
+    // animation. Record its data-defined DPtcl generator events once while
+    // allocation is legal; runtime replays only their RNG-bearing generator
+    // initialization through the immutable catalog below.
+    // refs/melee/src/melee/ef/{efasync.c::efAsync_Dispatch,
+    //     efsync.c::efSync_Spawn,eflib.c::efLib_Cb_DPtcl}
+    // refs/melee/src/sysdolphin/baselib/jobj.c::JObjUpdateFunc
+    msl_effect_projection_bind(data, NULL);
+    HSD_JObjSetDPtclCallback(msl_effect_record_model_generator);
+    msl_effect_record_model_start(data, 9, 0);
+    msl_effect_record_model_start(data, 10, 1);
+    HSD_JObjSetDPtclCallback(NULL);
+}
+
+void msl_effect_match_init(const MslCoreEffectData* data,
+                           MslCoreEffectState* state)
 {
     int i;
 
-    memset(msl_effect_banks, 0, sizeof(msl_effect_banks));
-    msl_effect_load_bank(0, "/EfCoData.dat", "effCommonDataTable");
-    msl_effect_load_bank(3, "/EfFxData.dat", "effFoxDataTable");
-
+    memset(state, 0, sizeof(*state));
+    msl_effect_projection_bind(data, state);
     msl_effect_free = NULL;
-    for (i = MSL_EFFECT_QUEUE_CAPACITY - 1; i >= 0; --i) {
+    for (i = MSL_CORE_EFFECT_QUEUE_CAPACITY - 1; i >= 0; --i) {
         msl_effect_nodes[i].next = msl_effect_free;
         msl_effect_free = &msl_effect_nodes[i];
     }
 }
 
-static MslEffectQueueNode* msl_effect_alloc(void)
+static MslCoreEffectQueueNode* msl_effect_alloc(void)
 {
-    MslEffectQueueNode* node = msl_effect_free;
+    MslCoreEffectQueueNode* node = msl_effect_free;
     if (node == NULL) {
         fprintf(stderr, "headless effect queue exhausted (%d nodes)\n",
-                MSL_EFFECT_QUEUE_CAPACITY);
+                MSL_CORE_EFFECT_QUEUE_CAPACITY);
         abort();
     }
     msl_effect_free = node->next;
@@ -118,7 +195,7 @@ static MslEffectQueueNode* msl_effect_alloc(void)
     return node;
 }
 
-static void msl_effect_release(MslEffectQueueNode* node)
+static void msl_effect_release(MslCoreEffectQueueNode* node)
 {
     node->next = msl_effect_free;
     msl_effect_free = node;
@@ -127,7 +204,8 @@ static void msl_effect_release(MslEffectQueueNode* node)
 static void msl_effect_consume_generator_rng(s32 generator_id)
 {
     int bank = generator_id / 1000;
-    MslEffectGeneratorBank* data;
+    int index = generator_id - bank * 1000;
+    const MslCoreEffectGeneratorBank* data;
     HSD_PSCmdList* command;
 
     if (bank < 0 || bank >= (int) (sizeof(msl_effect_banks) /
@@ -136,8 +214,7 @@ static void msl_effect_consume_generator_rng(s32 generator_id)
         return;
     }
     data = &msl_effect_banks[bank];
-    if (generator_id < 0 || generator_id >= data->count ||
-        data->commands == NULL)
+    if (index < 0 || index >= data->count || data->commands == NULL)
     {
         return;
     }
@@ -145,7 +222,7 @@ static void msl_effect_consume_generator_rng(s32 generator_id)
     // relocations. psInitDataBankLocate adds the command-bank base in place;
     // keep the immutable archive bytes and perform the same relocation here.
     // refs/melee/src/sysdolphin/baselib/particle.c::psInitDataBankLocate
-    command = data->commands[generator_id];
+    command = data->commands[index];
 #ifndef MSL_CORE_NATIVE
     if (command != NULL) {
         command = (HSD_PSCmdList*) ((u8*) data->command_bank + (u32) command);
@@ -155,6 +232,21 @@ static void msl_effect_consume_generator_rng(s32 generator_id)
     {
         // refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039F05C
         (void) HSD_Randf();
+    }
+}
+
+static void msl_effect_consume_common_model_start(int model_id)
+{
+    const MslCoreEffectModelStart* start;
+    int index = model_id - 9;
+    int i;
+
+    if (index < 0 || index >= 2) {
+        return;
+    }
+    start = &msl_bound_effect_data->common_model_start[index];
+    for (i = 0; i < start->count; ++i) {
+        msl_effect_consume_generator_rng(start->generator_ids[i]);
     }
 }
 
@@ -331,9 +423,11 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
     }
 
     switch (gfx_id) {
-    case 0x3E8:
-        (void) HSD_Randi(8);
+    case 0x3E8: {
+        int model_id = HSD_Randi(8) == 0 ? 9 : 10;
+        msl_effect_consume_common_model_start(model_id);
         break;
+    }
     case 0x3EC:
     case 0x3EE:
         (void) HSD_Randf();
@@ -360,7 +454,7 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
     return NULL;
 }
 
-static void msl_effect_process(HSD_GObj* gobj, MslEffectQueueNode* node)
+static void msl_effect_process(HSD_GObj* gobj, MslCoreEffectQueueNode* node)
 {
     if (node->spawn_kind == EF_SPAWN_CAMERA_SHAKE) {
         Vec3 position;
@@ -373,31 +467,31 @@ static void msl_effect_process(HSD_GObj* gobj, MslEffectQueueNode* node)
 
 void efAsync_QueueFlush(HSD_GObj* gobj, void* queue_head)
 {
-    MslEffectQueueNode* node = ((MslEffectQueueNode*) queue_head)->next;
+    MslCoreEffectQueueNode* node = ((MslCoreEffectQueueNode*) queue_head)->next;
     while (node != NULL) {
-        MslEffectQueueNode* next = node->next;
+        MslCoreEffectQueueNode* next = node->next;
         msl_effect_process(gobj, node);
         msl_effect_release(node);
         node = next;
     }
-    ((MslEffectQueueNode*) queue_head)->next = NULL;
+    ((MslCoreEffectQueueNode*) queue_head)->next = NULL;
 }
 
 void efAsync_QueueClear(void* queue_head)
 {
-    MslEffectQueueNode* node = ((MslEffectQueueNode*) queue_head)->next;
+    MslCoreEffectQueueNode* node = ((MslCoreEffectQueueNode*) queue_head)->next;
     while (node != NULL) {
-        MslEffectQueueNode* next = node->next;
+        MslCoreEffectQueueNode* next = node->next;
         msl_effect_release(node);
         node = next;
     }
-    ((MslEffectQueueNode*) queue_head)->next = NULL;
+    ((MslCoreEffectQueueNode*) queue_head)->next = NULL;
 }
 
 void efAsync_Spawn(HSD_GObj* gobj, void* queue_head, u32 spawn_kind,
                    u32 gfx_id, HSD_JObj* jobj, ...)
 {
-    MslEffectQueueNode* node = msl_effect_alloc();
+    MslCoreEffectQueueNode* node = msl_effect_alloc();
 
     node->spawn_kind = spawn_kind;
     node->gfx_id = gfx_id;
@@ -413,8 +507,8 @@ void efAsync_Spawn(HSD_GObj* gobj, void* queue_head, u32 spawn_kind,
     // running, then Fighter's queue owner flushes in that reverse order.
     // refs/melee/src/melee/ef/efasync.c::{efAsync_Spawn,efAsync_QueueFlush}
     if (HSD_GObj_804D7838 != NULL && HSD_GObj_804D7838->s_link < 9U) {
-        node->next = ((MslEffectQueueNode*) queue_head)->next;
-        ((MslEffectQueueNode*) queue_head)->next = node;
+        node->next = ((MslCoreEffectQueueNode*) queue_head)->next;
+        ((MslCoreEffectQueueNode*) queue_head)->next = node;
     } else {
         msl_effect_process(gobj, node);
         msl_effect_release(node);

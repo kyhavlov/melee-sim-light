@@ -1,3 +1,5 @@
+#include "runtime/match.h"
+
 #include "ft/ftdevice.h"
 #include "ft/fighter.h"
 #include "gr/ground.h"
@@ -10,27 +12,23 @@
 #include <dolphin/mtx.h>
 #include <string.h>
 
-// Fixed versus-rule projection for the current two-human Fox/FD domain. These
-// are the direct accessors in refs/melee/src/melee/gm/gm_16AE.c; the headless
-// bootstrap does not retain the menu/scene-owned lbl_8046B6A0 aggregate.
-static int msl_is_teams;
-static float msl_damage_ratio = 1.0F;
-static bool msl_online_fnmsubs_zero;
-static bool msl_brawl_offscreen_damage;
-static u32 msl_match_frame_count;
-static bool msl_match_ended;
+// Source callbacks do not carry a match argument. Bind them to the scalar
+// match selected by the private runtime API while keeping their mutable rule
+// and UCF ownership in caller-provided match storage.
+// refs/melee/src/melee/gm/gm_16AE.c
+// refs/ucf/src/pad_buffer/pad_buffer.cpp
+static MslCoreMatchRules* msl_bound_match_rules;
 
-typedef struct MslUcfPadBuffer {
-    s8 raw_x[3];
-    s8 raw_y[3];
-    s8 pending_x;
-    s8 pending_y;
-    s8 pending_cx;
-    s8 pending_cy;
-    u8 sdrop_up_frames;
-} MslUcfPadBuffer;
-
-static MslUcfPadBuffer msl_ucf_pad[4];
+#define msl_is_teams (msl_bound_match_rules->is_teams)
+#define msl_damage_ratio (msl_bound_match_rules->damage_ratio)
+#define msl_online_fnmsubs_zero (msl_bound_match_rules->online_fnmsubs_zero)
+#define msl_brawl_offscreen_damage \
+    (msl_bound_match_rules->brawl_offscreen_damage)
+#define msl_freeze_dead_up_fall_physics \
+    (msl_bound_match_rules->freeze_dead_up_fall_physics)
+#define msl_match_frame_count (msl_bound_match_rules->frame_count)
+#define msl_match_ended (msl_bound_match_rules->ended)
+#define msl_ucf_pad (msl_bound_match_rules->ucf_pad)
 
 void ftKb_SpecialN_800F1F1C(Fighter_GObj* gobj, Vec3* pos)
 {
@@ -74,17 +72,23 @@ static bool msl_ucf_check_xsmash(const Fighter* fp)
     return difference * difference > 75 * 75;
 }
 
-void msl_core_set_match_rules(int is_teams, float damage_ratio,
-                                int online_fnmsubs_zero,
-                                int brawl_offscreen_damage)
+void msl_core_bind_match_rules(MslCoreMatchRules* rules)
 {
+    msl_bound_match_rules = rules;
+}
+
+void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
+                               float damage_ratio, int online_fnmsubs_zero,
+                               int brawl_offscreen_damage,
+                               int freeze_dead_up_fall_physics)
+{
+    memset(rules, 0, sizeof(*rules));
+    msl_core_bind_match_rules(rules);
     msl_is_teams = is_teams;
     msl_damage_ratio = damage_ratio;
     msl_online_fnmsubs_zero = online_fnmsubs_zero != 0;
     msl_brawl_offscreen_damage = brawl_offscreen_damage != 0;
-    msl_match_frame_count = 0;
-    msl_match_ended = false;
-    memset(msl_ucf_pad, 0, sizeof(msl_ucf_pad));
+    msl_freeze_dead_up_fall_physics = freeze_dead_up_fall_physics != 0;
 }
 
 bool msl_core_uses_online_fnmsubs_zero(void)
@@ -97,11 +101,16 @@ bool msl_core_has_brawl_offscreen_damage(void)
     return msl_brawl_offscreen_damage;
 }
 
+bool msl_core_freezes_dead_up_fall_physics(void)
+{
+    return msl_freeze_dead_up_fall_physics;
+}
+
 void msl_core_advance_match_frame(void) { ++msl_match_frame_count; }
 
 void msl_ucf_seed_pad(int slot, s8 raw_x, s8 raw_y, s8 raw_cx, s8 raw_cy)
 {
-    MslUcfPadBuffer* buffer = &msl_ucf_pad[slot];
+    MslCoreUcfPadBuffer* buffer = &msl_ucf_pad[slot];
 
     // The runtime bootstrap represents the state immediately after its seed
     // frame. UCF's zero-initialized four-entry ring has therefore published
@@ -117,7 +126,7 @@ void msl_ucf_seed_pad(int slot, s8 raw_x, s8 raw_y, s8 raw_cx, s8 raw_cy)
 void msl_ucf_set_pending_pad(int slot, s8 raw_x, s8 raw_y, s8 raw_cx,
                              s8 raw_cy)
 {
-    MslUcfPadBuffer* buffer = &msl_ucf_pad[slot];
+    MslCoreUcfPadBuffer* buffer = &msl_ucf_pad[slot];
     buffer->pending_x = raw_x;
     buffer->pending_y = raw_y;
     buffer->pending_cx = raw_cx;
@@ -140,7 +149,7 @@ static void msl_ucf_apply_cardinal(s8 raw_x, s8 raw_y, Vec2* stick)
 void msl_ucf_apply_pad_buffer(Fighter* fp)
 {
     int slot = fp->x618_player_id;
-    MslUcfPadBuffer* buffer = &msl_ucf_pad[slot];
+    MslCoreUcfPadBuffer* buffer = &msl_ucf_pad[slot];
     int delta_y;
 
     // refs/ucf/src/pad_buffer/pad_buffer.cpp::gecko_entry, injected at
@@ -216,7 +225,7 @@ bool msl_ucf_damagefall_wiggle_check(const Fighter* fp)
 
 bool msl_ucf_sdi_check(const Fighter* fp)
 {
-    const MslUcfPadBuffer* buffer = &msl_ucf_pad[fp->x618_player_id];
+    const MslCoreUcfPadBuffer* buffer = &msl_ucf_pad[fp->x618_player_id];
     int dx = (int) buffer->raw_x[0] - (int) buffer->raw_x[2];
     int dy = (int) buffer->raw_y[0] - (int) buffer->raw_y[2];
     float threshold = p_ftCommonData->sdi_min_stick_mag;
@@ -234,7 +243,7 @@ bool msl_ucf_sdi_check(const Fighter* fp)
 
 bool msl_ucf_shield_sdi_check(const Fighter* fp)
 {
-    const MslUcfPadBuffer* buffer = &msl_ucf_pad[fp->x618_player_id];
+    const MslCoreUcfPadBuffer* buffer = &msl_ucf_pad[fp->x618_player_id];
     int dx = (int) buffer->raw_x[0] - (int) buffer->raw_x[2];
 
     // refs/ucf/src/shield_sdi/shield_sdi.cpp::check_f2_sdi. Preserve the
@@ -258,12 +267,14 @@ bool msl_ucf_suppress_spotdodge(const Fighter* fp)
     return msl_ucf_is_rim_coord(fp->input.lstick);
 }
 
-bool msl_ucf_pass_oos_check(const Fighter* fp)
+bool msl_ucf_pass_oos_stick_check(const Fighter* fp)
 {
-    // refs/ucf/src/shielddrop_extended/shielddrop_extended.cpp. Vanilla's
-    // threshold/window/platform check remains first at the source owner.
-    return msl_ucf_pad[fp->x618_player_id].sdrop_up_frames >= 2 &&
-           mpColl_IsOnPlatform((CollData*) &fp->coll_data);
+    // This is only the alternate stick-threshold result installed at
+    // ftCo_8009A080+0x38. The original tilt-timer and platform checks execute
+    // after the injection and remain owned by ftCo_Pass.c.
+    // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/
+    //     UCF Shield Drop Extended.asm
+    return msl_ucf_pad[fp->x618_player_id].sdrop_up_frames >= 2;
 }
 
 float msl_ucf_squatrv_threshold(const Fighter* fp, float vanilla_threshold)
@@ -439,15 +450,6 @@ void Stage_UnkSetVec3TCam_Offset(Vec3* out)
     out->x = stage_info.cam_info.cam_x_offset;
     out->y = stage_info.cam_info.cam_y_offset;
     out->z = 0.0F;
-}
-
-bool grLib_801C9E60(Vec3* out)
-{
-    // Exact default branch for every stage except RCRUISE/BIGBLUE/ICEMTN.
-    out->x = 0.0F;
-    out->y = 0.0F;
-    out->z = 0.0F;
-    return false;
 }
 
 // Corneria's Fox/Falco easter-egg gates are queried by common taunt input even
