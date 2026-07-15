@@ -1,8 +1,10 @@
 # Decomp Port Exploration
 
-Status: Phase 2 scalar Fox/Fox-on-FD vertical complete. The starter Slippi replay validates
-bit-exactly for all 2,723 transitions. No production-core cutover is implied by work on this
-branch.
+Status: Phase 2.5 source-owner closure is complete and ready to commit. All five tracked Fox/Fox
+FD replays validate end to end under the gameplay-strict gate: every gameplay/article field is
+bit-exact, while one unrecorded Nintendont render-publication phase difference remains visible as
+an explicit diagnostic. The source-shaped runtime is still the intended replacement core, but no
+production-core cutover has occurred.
 
 Branch base: `core-rewrite` at `6fbcc9bc7719` (`Rewrite core contact and motion state ownership`).
 
@@ -12,10 +14,26 @@ checkout under `refs/melee/` remains clean at this pin for the milestone.
 
 ## Goal
 
-Build a faithful, headless scalar Melee runtime from close copies of the original gameplay source.
-The first useful outcome is a correctness MVP and eventual oracle. Only after scalar correctness is
-established will the project decide whether to undertake the separate work required for a 64-bit,
-reentrant, allocation-free, batched production core.
+Build the replacement simulator core from faithful, headless copies of the original gameplay
+source. The PPC32 scalar runtime establishes the correctness oracle. A later native x86-64 build
+from the same gameplay source becomes the production path, followed by supported-domain expansion
+and measured batching/layout optimization.
+
+## Adoption decision
+
+The source-shaped runtime is the chosen direction for the future core rather than an experiment
+that will remain only an external oracle. This decision does not authorize an early runtime bridge
+or partial public cutover:
+
+- PPC32/QEMU remains the high-fidelity reference while the native runtime is brought up;
+- native and PPC targets must compile one gameplay implementation, not fork into parallel semantic
+  ports;
+- the existing simulator core remains available only until the native source-shaped runtime owns
+  the supported domain and public API, then the displaced implementation is deleted;
+- Phase 2.5 closes generalized Fox/Fox FD replay parity before any file movement;
+- the next checkpoint performs renaming, final source organization, and upstream-delta patch
+  standardization as one behavior-neutral change;
+- native x86-64 work begins only after those two checkpoints are independently validated.
 
 ## Agreed architecture
 
@@ -233,7 +251,7 @@ decomp-port Makefile remains the authoritative command for this vertical.
 melee-decomp-port GAME_DATA CONFIG PREV_INPUT_OR_- INPUT_TAPE OUTPUT
 ```
 
-The fixed wire sizes are 36-byte `MslMatchConfig`, 32-byte `MslInput`, and 1022-byte
+The fixed wire sizes are 38-byte `MslMatchConfig`, 32-byte `MslInput`, and 1022-byte
 `MslCompare`. Multibyte fields are explicitly decoded and encoded little-endian, so the files are
 directly compatible with the current NumPy dtypes even though the process is big-endian. The thin
 adapter is `melee_sim/decomp_port.py`; it writes one tape, invokes QEMU once, and reads the compare
@@ -295,7 +313,16 @@ a lossy preprocessing transform:
   `refs/ucf/src/pad_buffer/pad_buffer.cpp`;
 - Turn-frame dashback from `refs/ucf/src/dashback/dashback.cpp`;
 - shield-drop, SDI/shield-SDI, tumble, and DBOOC injections from their sibling `refs/ucf/src/`
-  owners.
+owners.
+
+The match wire also carries narrowly scoped runtime capabilities rather than treating scene ID as
+an execution profile. Scene major 8 selects the online capture's scalar-`fnmsubs` zero-sign
+behavior and installs `BrawlOffscreenDamage`. Slippi Dolphin profiles also select that call-site
+patch outside the online scene; the tracked offline `metadata.playedOn = "mainline dolphin"`
+replay retains retail zero signs, while the Nintendont profile retains the vanilla magnifier
+owner. This split is source-visible at
+`refs/slippi-ssbm-asm/Online/Core/BrawlOffscreenDamage.asm` and was confirmed at its
+`Fighter_8006A360` call site, rather than inferred from replay names.
 
 The current simulator's `src/ucf.c`, `src/input.c`, `src/locomotion.c`, and `src/action.c` were useful
 cross-checks for the wire semantics and phase placement, but remain independent gameplay code and
@@ -427,24 +454,165 @@ results-screen state or timer adjudication, and the declared boundary remains tw
 with ordinary items disabled. Those are later domain/frontend boundaries, not bridges to the old
 simulator or replay-keyed exceptions.
 
-### Phase 3 — RL 1.0 supported scalar domain
+### Phase 2.5 — Generalized Fox/Fox FD oracle closure
+
+#### Objective
+
+Close every source-owner gap exposed by all five tracked Fox/Fox Final Destination replays before
+renaming the runtime or introducing native-platform differences. The starter remains exact; the
+other four are generalization evidence, not row-local implementation boundaries.
+
+#### Initial evidence
+
+- `BlondHardHippopotamus.slpz` first differs at frame 515 in article Y position by two ULPs;
+- `FavorableSuperficialPig.slpz` first differs at frame 145 by `+0.0` versus `-0.0` attack Y
+  velocity;
+- `HungryImportantSnake.slpz`, the P1/P4 case, first differs at frame -113 in Entry timing,
+  position, animation, instance identity, and state flags;
+- `PutridJoyousOryx.slpz` first differs at frame 2347 by `+0.0` versus `-0.0` attack Y velocity.
+
+These are triage entry points. Fix their shared source owners and continue validation beyond each
+first mismatch until no later divergence remains.
+
+#### Scope
+
+- Record signed-zero equivalence only as an opt-in diagnostic comparison that reveals later
+  mismatches; gameplay-strict comparison remains the default and completion gate, with only the
+  separately reported render-owned bit excluded as defined below.
+- Complete source match bootstrap for arbitrary two-human port placement, including non-adjacent
+  P1/P4 identity, Entry, spawn, controller, and scheduler ownership.
+- Recover the exact source/PPC writers and operation order for attack velocity and article
+  position; do not add tolerance, normalization, or replay-keyed behavior to gameplay code.
+- Keep the current source paths and build organization stable during correctness work.
+- Update the documented result only after the complete five-replay run is known.
+
+#### Completion criteria
+
+1. All five Fox/Fox FD replays pass gameplay-strict fighter and article comparison from match
+   opening through their final recorded transition. Gameplay-strict means bit-exact comparison of
+   every exported field except only `state_flags[player * 5 + 4] & 0x80`
+   (`fp+0x221F_b0`), whose replay/render phase is not reconstructible and which remains separately
+   counted rather than silently ignored. Signed zero remains bit-strict.
+2. Repeated fresh-process runs are deterministic, the isolated decomp-port tests pass, and no
+   in-scope path reaches a loud stub.
+3. Every gameplay fix belongs to a decomp/source owner rather than a replay, frame, or port-pair
+   exception. The sole non-bit-exact classification is source-owner-wide and separately reported,
+   not selected by replay identity or expected output.
+4. The five-replay oracle result and any newly reached nonmatching/PPC seam are documented and the
+   checkpoint is ready to commit before reorganization begins.
+
+#### Progress notifications
+
+During autonomous Phase 2.5 work, send a concise Discord update after material progress using:
+
+```bash
+tools/decomp_port/notify_discord.sh \
+  "Phase 2.5: REPLAY advanced from FRAME_OLD to FRAME_NEW after OWNER summary."
+```
+
+Material progress includes a replay advancing beyond its previous first mismatch, a replay becoming
+strict-pass, a shared source-owner fix being validated across replays, or a genuine blocker that
+changes the work plan. Do not send routine attempts or per-frame noise. Include the replay, old and
+new first-divergence frames when applicable, and the source owner changed. The helper reads the
+webhook from `MSL_DECOMP_DISCORD_WEBHOOK_URL` or the ignored local
+`build/decomp_port/discord_webhook_url`; never put the credential in tracked documentation or
+reports.
+
+#### Final gameplay-strict result and Nintendont render boundary
+
+The full clean-build run currently has these results:
+
+- `BlondHardHippopotamus.slpz`: strict pass, 10,174 transitions;
+- `FavorableSuperficialPig.slpz`: strict pass, 12,185 transitions;
+- `PutridJoyousOryx.slpz`: strict pass, 7,543 transitions;
+- `Game_20260514T181413.slpz`: strict pass, 2,723 transitions, after classifying its offline
+  mainline-Dolphin `BrawlOffscreenDamage` patch independently of online-scene math behavior;
+- `HungryImportantSnake.slpz`: gameplay-strict pass, 8,729 transitions; one separately counted
+  `fp+0x221F_b0` render-visibility diagnostic at frame 6030 and no later gameplay mismatch.
+
+The starter discrepancy was not an unknowable render artifact. A bounded call-site probe showed
+that mainline Dolphin replaces `ifMagnify_802FC998` with Slippi's root/bounds test even in its
+offline versus scene. Passing `game.metadata.playedOn` through the native replay boundary and
+splitting that patch capability from online `fnmsubs` behavior makes the complete starter strict
+without changing Nintendont or online results.
+
+Hungry is different. At frame 6029, the exact retail `Camera_80030BBC` projection and the PPC port
+both project P4 to screen X `640.478271484375`, outside the source `[0, 640)` test. A normal retail
+render therefore publishes `fp+0x221F = 0x80` for post-frame 6030, and Slippi playback under retail
+code does so. The original Nintendont replay alone stores stale `0x00`, then stores `0x80` at 6031.
+
+The retained source identifies the missing boundary. `gm_801A4D34` reads
+`pad_queue_count = lb_80019894()`, advances `HSD_GObj_80390CFC` once for every queued sample, and
+only then calls `HSD_GObj_80390FC0` once to render. A delayed console outer loop can therefore emit
+two Slippi gameplay/post-frame records before the fighter draw republishes `x221F_b0`. Slippi's
+frame-start, pre-frame, post-frame, and frame-bookend commands all execute inside the gameplay
+process and contain neither the pad-queue depth nor a render-boundary marker. The optional console
+polling-drift/visual-buffer codes in `refs/slippi-ssbm-asm/console_lag_pd*.json` further change this
+scheduling profile, and their enabled state is also absent from the replay.
+
+The free-running simulator therefore retains the smallest deterministic, source-correct headless
+policy: one magnifier/fighter visibility render publication after each public simulator step. It
+does not emulate VI/XFB timing, infer a render skip from an expected output byte, or teacher-force
+the original replay's presentation schedule. Reproducing Hungry's stale byte strictly would
+otherwise require an unrecorded hardware-clock phase/lag-code profile or a replay/frame-specific
+exception.
+
+The adopted oracle policy classifies only `state_flags[player * 5 + 4] & 0x80`
+(`fp+0x221F_b0`) as a render-visibility diagnostic for every player. The runtime still computes and
+exports the bit; the native comparator reports its mismatch count and first frame, masks only that
+bit from the gameplay pass/fail result, and compares the other seven bits in the same byte
+strictly. This lets validation continue through the remainder of Hungry rather than stopping at
+6030. No gameplay behavior, replay/frame exception, tolerance, or signed-zero equivalence is
+introduced. Two fresh-process Hungry runs produced the same 8,729-frame pass and the same single
+diagnostic. The headless visibility/magnifier model remains because it can affect vanilla
+offscreen damage. A future replay format could instead record render boundaries explicitly;
+standard `.slp` files cannot reconstruct them.
+
+### Phase 3 — Core reorganization and upstream-delta standardization
+
+Adopt durable production naming and source boundaries in a behavior-neutral checkpoint:
+
+- remove exploratory `decomp_port`, `phase1`, and `phase2` naming from final runtime interfaces and
+  build outputs without retaining compatibility aliases for unreleased names;
+- keep a pristine, pinned, minimal upstream source snapshot in the repository;
+- represent necessary changes to decomp-owned files as a small ordered patch series, while keeping
+  true host/platform replacements in separate source files;
+- add a deterministic import/update/check command that records the upstream pin, verifies the
+  pristine snapshot, applies the patches, and reports conflicts explicitly;
+- remove build dependence on the ignored `refs/melee` checkout;
+- require all five gameplay-strict Fox/FD results and the exact render-visibility diagnostic
+  counts to remain unchanged across the reorganization.
+
+This phase does not introduce native layouts or alter gameplay behavior. It creates the final
+source shape in which native work will continue.
+
+### Phase 4 — Native x86-64 scalar parity
+
+Compile the same gameplay source natively for 64-bit little-endian hosts. Introduce explicit
+load-time game-data translation, pointer/layout ownership, endian conversion, and platform
+adapters without duplicating gameplay semantics. Use PPC32 as the differential oracle and retain
+strict Slippi comparison wherever the native floating-point target can reproduce it. Establish a
+measured native scalar baseline before batching or layout optimization; do not build a throwaway
+32-bit x86 port unless a concrete x86-64 blocker proves it necessary.
+
+### Phase 5 — RL 1.0 supported domain
 
 Add Falco, Marth, Sheik, Zelda, Captain Falcon, the remaining five legal stages, relevant
 items/articles and stage objects, character/stage-specific Slippi patch behavior, singles match
-rules, and four-player/doubles scheduling. Expand by shared source owner rather than by replay row.
+rules, and four-player/doubles scheduling. Compile each new source-owner vertical for both PPC and
+native targets, and expand by shared source owner rather than replay row.
 
-### Phase 4 — Scalar correctness hardening
+### Phase 6 — Production performance and API cutover
 
-Investigate reached nonmatching decomp owners, PPC float-sensitive paths, RNG streams, endian
-boundaries, unsupported stubs, and long-rollout divergence. Establish deterministic supported-domain
-validation and document explicit source-backed exclusions.
+Establish explicit per-world state, enforce initialization-only allocation, connect the native
+runtime to the batch-first C/Python API, and profile equivalent workloads before changing layout.
+Apply SoA/AoSoA, batching, and other throughput work only where measured, preserving PPC/native
+correctness evidence after each change. Delete the displaced old core at complete supported-domain
+and API ownership rather than retaining a fallback runtime.
 
-### Phase 5 — Production architecture decision
-
-Decide whether the scalar kernel remains an oracle or becomes the production core. A production
-port then owns 64-bit data/layout conversion, per-world state, allocation-free stepping,
-SoA/AoSoA storage, batching, CPython integration, validation-runner integration, and throughput.
-None of those optimizations may replace or narrow source behavior established by the scalar model.
+Correctness hardening remains continuous through Phases 4--6: reached nonmatching decomp owners,
+PPC/native float seams, RNG streams, endian boundaries, unsupported stubs, and long-rollout
+divergence must be corrected or explicitly source-classified when their owner enters scope.
 
 ## Local setup
 

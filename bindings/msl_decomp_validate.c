@@ -123,6 +123,8 @@ typedef struct ReplayView {
   int num_players;
   uint32_t stage_id;
   uint8_t is_teams;
+  uint8_t online_fnmsubs_zero;
+  uint8_t brawl_offscreen_damage;
   float damage_ratio;
 } ReplayView;
 
@@ -141,7 +143,10 @@ typedef struct MismatchDetail {
 
 typedef struct ValidationResult {
   int64_t first_mismatch_frame;
+  int64_t first_render_visibility_mismatch_frame;
   int64_t matched_frames;
+  int64_t render_visibility_mismatch_count;
+  int64_t signed_zero_equal_count;
   int mismatch_count;
   int detail_count;
   MismatchDetail details[MAX_DETAILS];
@@ -162,6 +167,7 @@ typedef struct StreamState {
   uint8_t header_written;
   MslDpMatchConfig config;
   MslDpInput previous;
+  uint8_t signed_zero_equal;
   ValidationResult result;
 } StreamState;
 
@@ -249,6 +255,7 @@ static int parse_port(PyObject* value) {
 static int parse_start(PyObject* start, ReplayView* replay) {
   PyObject* players;
   PyObject* value;
+  PyObject* scene;
   Py_ssize_t i;
   if (!PyDict_Check(start)) {
     PyErr_SetString(PyExc_TypeError, "Peppi game.start must be a dict");
@@ -262,6 +269,20 @@ static int parse_start(PyObject* start, ReplayView* replay) {
   replay->stage_id = (uint32_t)PyLong_AsUnsignedLong(value);
   value = PyDict_GetItemString(start, "is_teams");
   replay->is_teams = value != NULL && PyObject_IsTrue(value) > 0;
+  scene = PyDict_GetItemString(start, "scene");
+  value = scene != NULL && PyDict_Check(scene) ? PyDict_GetItemString(scene, "major") : NULL;
+  if (value == NULL || !PyLong_Check(value)) {
+    PyErr_SetString(PyExc_ValueError, "replay start scene major is missing");
+    return -1;
+  }
+  // Scene major 8 proves that the Slippi online code set, including
+  // BrawlOffscreenDamage, owns this match.
+  // refs/slippi-ssbm-asm/Output/InjectionLists/list_netplay.json
+  replay->online_fnmsubs_zero = PyLong_AsLong(value) == 8;
+  replay->brawl_offscreen_damage = replay->online_fnmsubs_zero;
+  if (PyErr_Occurred()) {
+    return -1;
+  }
   value = PyDict_GetItemString(start, "damage_ratio");
   if (value == NULL) {
     PyErr_SetString(PyExc_ValueError, "replay start damage_ratio is missing");
@@ -305,9 +326,7 @@ static int parse_start(PyObject* start, ReplayView* replay) {
     replay->start_stocks[slot] = (uint8_t)PyLong_AsUnsignedLong(stocks_obj);
     value = PyDict_GetItemString(player, "costume");
     replay->costume_id[slot] =
-        value != NULL && PyLong_Check(value)
-            ? (uint8_t)PyLong_AsUnsignedLong(value)
-            : 0;
+        value != NULL && PyLong_Check(value) ? (uint8_t)PyLong_AsUnsignedLong(value) : 0;
     replay->team_id[slot] = 0;
     if (replay->is_teams) {
       PyObject* team = PyDict_GetItemString(player, "team");
@@ -342,6 +361,40 @@ static int parse_start(PyObject* start, ReplayView* replay) {
         replay->costume_id[j] = costume;
       }
     }
+  }
+  return 0;
+}
+
+static int parse_metadata(PyObject* metadata, ReplayView* replay) {
+  PyObject* value;
+  const char* played_on;
+
+  if (!PyDict_Check(metadata)) {
+    PyErr_SetString(PyExc_TypeError, "Peppi game.metadata must be a dict");
+    return -1;
+  }
+  value = PyDict_GetItemString(metadata, "playedOn");
+  if (value == NULL || !PyUnicode_Check(value)) {
+    PyErr_SetString(PyExc_ValueError, "replay metadata playedOn is missing");
+    return -1;
+  }
+  played_on = PyUnicode_AsUTF8(value);
+  if (played_on == NULL) {
+    return -1;
+  }
+
+  // `playedOn` is the Slippi metadata field that owns the execution
+  // environment. Slippi's Dolphin configuration uses the netplay code set for
+  // netplay or other Dolphin play, including the BrawlOffscreenDamage call-site
+  // patch. The offline mainline-Dolphin case was independently established by
+  // a bounded retail-code probe at 0x8006A880 and the replay's exact damage
+  // timing. Keep that independent of the online capture's fnmsubs zero-sign
+  // behavior: the offline mainline-Dolphin replay retains retail zero signs.
+  // refs/slippi-ssbm-asm/README.md::Output/Netplay
+  // refs/slippi-ssbm-asm/Online/Core/BrawlOffscreenDamage.asm
+  if (strcmp(played_on, "dolphin") == 0 || strcmp(played_on, "mainline dolphin") == 0 ||
+      strcmp(played_on, "network") == 0) {
+    replay->brawl_offscreen_damage = 1;
   }
   return 0;
 }
@@ -428,7 +481,7 @@ static int load_items(ArrowNode items, ReplayView* replay, char* error, size_t e
   ArrowNode position;
   ArrowNode misc;
   int k;
-#define ITEM_FIELD(PARENT, NAME, FORMAT, TARGET)                                         \
+#define ITEM_FIELD(PARENT, NAME, FORMAT, TARGET)                                          \
   do {                                                                                    \
     if (primitive_child((PARENT), (NAME), (FORMAT), &(TARGET), error, error_size) != 0) { \
       return -1;                                                                          \
@@ -767,6 +820,15 @@ static uint32_t load_bits(const uint8_t* ptr, size_t width) {
   return value;
 }
 
+static int compare_bits_equal(FieldKind kind, uint32_t expected, uint32_t actual,
+                              int signed_zero_equal) {
+  if (expected == actual) {
+    return 1;
+  }
+  return signed_zero_equal && kind == FIELD_F32 && (expected & UINT32_C(0x7FFFFFFF)) == 0 &&
+         (actual & UINT32_C(0x7FFFFFFF)) == 0;
+}
+
 static void format_value(char* dst, size_t size, FieldKind kind, uint32_t bits) {
   float f;
   switch (kind) {
@@ -820,7 +882,8 @@ typedef struct ItemFieldSpec {
   uint8_t kind;
 } ItemFieldSpec;
 
-#define ITEM_SPEC(NAME, MEMBER, KIND) { NAME, offsetof(MslDpItem, MEMBER), KIND }
+#define ITEM_SPEC(NAME, MEMBER, KIND) \
+  { NAME, offsetof(MslDpItem, MEMBER), KIND }
 
 static const ItemFieldSpec item_compare_fields[] = {
     ITEM_SPEC("item.exists", exists, FIELD_U8),
@@ -857,8 +920,7 @@ static int item_field_is_gameplay_state(const MslDpItem* item, const ItemFieldSp
   };
 
   if (item->type == ITEM_KIND_FOX_BLASTER &&
-      (spec->offset == offsetof(MslDpItem, misc2) ||
-       spec->offset == offsetof(MslDpItem, misc3))) {
+      (spec->offset == offsetof(MslDpItem, misc2) || spec->offset == offsetof(MslDpItem, misc3))) {
     // SendItemInfo.s samples bytes xDEB/xDEF generically.  For Fox's blaster
     // those bytes are the low bytes of xDE4[1]/xDE4[2], effect-object
     // pointers populated by itfoxblaster.c::it_802ADF10.  Their numeric
@@ -866,15 +928,13 @@ static int item_field_is_gameplay_state(const MslDpItem* item, const ItemFieldSp
     // gameplay/article state in a headless process.
     return 0;
   }
-  if (item->type == ITEM_KIND_FOX_LASER &&
-      spec->offset == offsetof(MslDpItem, misc3)) {
+  if (item->type == ITEM_KIND_FOX_LASER && spec->offset == offsetof(MslDpItem, misc3)) {
     // SendItemInfo.s samples xDEF, but itFoxLaser_ItemVars ends at xDEC
     // (refs/melee/src/melee/it/itCharItems.h). For a laser this lane is
     // unowned allocator residue beyond the defined article state.
     return 0;
   }
-  if (item->type == ITEM_KIND_FOX_ILLUSION &&
-      spec->offset >= offsetof(MslDpItem, misc0) &&
+  if (item->type == ITEM_KIND_FOX_ILLUSION && spec->offset >= offsetof(MslDpItem, misc0) &&
       spec->offset <= offsetof(MslDpItem, misc3)) {
     // itFoxIllusion_ItemVars contains a model-joint pointer at xDD4, an
     // unused xDD8 lane, and a presentation JObj pointer at xDDC; it ends at
@@ -887,7 +947,7 @@ static int item_field_is_gameplay_state(const MslDpItem* item, const ItemFieldSp
 }
 
 static int compare_row(const ReplayView* replay, int64_t raw, const MslDpCompare* actual,
-                       ValidationResult* result) {
+                       int signed_zero_equal, ValidationResult* result) {
   MslDpCompare expected;
   size_t field_i;
   int mismatch_before = result->mismatch_count;
@@ -901,9 +961,30 @@ static int compare_row(const ReplayView* replay, int64_t raw, const MslDpCompare
     for (element = 0; element < spec->count; ++element) {
       uint32_t expected_bits = load_bits(expected_bytes + (size_t)element * width, width);
       uint32_t actual_bits = load_bits(actual_bytes + (size_t)element * width, width);
-      if (expected_bits != actual_bits) {
+      if (spec->offset == offsetof(MslDpCompare, state_flags) &&
+          element % MSL_DP_STATE_FLAGS_BYTES == MSL_DP_STATE_FLAGS_BYTES - 1 &&
+          ((expected_bits ^ actual_bits) & 0x80U) != 0) {
+        // fp+0x221F_b0 is published by the render traversal rather than the
+        // gameplay scheduler. Nintendont/Slippi may record a gameplay tick
+        // before this bit's next render publication, and the replay does not
+        // record the pad-queue/render boundary needed to reconstruct that
+        // phase. Keep the lane visible as a diagnostic while comparing every
+        // gameplay-owned bit in this byte strictly.
+        // refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34
+        // refs/melee/src/melee/ft/fighter.c::ft_80087BAC
+        result->render_visibility_mismatch_count += 1;
+        if (result->first_render_visibility_mismatch_frame == INT64_MIN) {
+          result->first_render_visibility_mismatch_frame = get_i32(&replay->frame_id, raw);
+        }
+        expected_bits &= ~0x80U;
+        actual_bits &= ~0x80U;
+      }
+      if (!compare_bits_equal((FieldKind)spec->kind, expected_bits, actual_bits,
+                              signed_zero_equal)) {
         record_detail(result, spec->name, spec->count == 1 ? -1 : element, (FieldKind)spec->kind,
                       expected_bits, actual_bits);
+      } else if (expected_bits != actual_bits) {
+        result->signed_zero_equal_count += 1;
       }
     }
   }
@@ -931,9 +1012,12 @@ static int compare_row(const ReplayView* replay, int64_t raw, const MslDpCompare
         if (!item_field_is_gameplay_state(&expected.items[slot], spec)) {
           continue;
         }
-        if (expected_bits != actual_bits) {
+        if (!compare_bits_equal((FieldKind)spec->kind, expected_bits, actual_bits,
+                                signed_zero_equal)) {
           record_detail(result, spec->name, slot, (FieldKind)spec->kind, expected_bits,
                         actual_bits);
+        } else if (expected_bits != actual_bits) {
+          result->signed_zero_equal_count += 1;
         }
       }
     }
@@ -981,7 +1065,7 @@ static int consume_output(StreamState* state, const uint8_t* data, size_t size, 
           state->result.first_mismatch_frame == INT64_MIN) {
         int64_t raw = state->rows->raw[logical_pos];
         const MslDpCompare* actual = (const MslDpCompare*)(const void*)state->output_row;
-        if (compare_row(state->replay, raw, actual, &state->result)) {
+        if (compare_row(state->replay, raw, actual, state->signed_zero_equal, &state->result)) {
           state->result.matched_frames += 1;
         } else {
           state->result.first_mismatch_frame = get_i32(&state->replay->frame_id, raw);
@@ -1163,8 +1247,7 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
              WIFEXITED(status) ? WEXITSTATUS(status) : -1);
     goto done;
   }
-  if (state->output_have != 0 ||
-      state->output_rows != state->process_end_pos + 1) {
+  if (state->output_have != 0 || state->output_rows != state->process_end_pos + 1) {
     snprintf(error, error_size,
              "PPC runner returned %" PRId64 "/%" PRId64 " complete rows and %zu trailing bytes",
              state->output_rows, state->process_end_pos, state->output_have);
@@ -1235,12 +1318,22 @@ static PyObject* result_object(const ReplayView* replay, const FrameRows* rows,
   PUT("seed_frame", PyLong_FromLong(get_i32(&replay->frame_id, seed_raw)));
   PUT("first_ref_frame", PyLong_FromLong(get_i32(&replay->frame_id, first_raw)));
   PUT("matched_frames", PyLong_FromLongLong(state->result.matched_frames));
+  PUT("render_visibility_mismatch_count",
+      PyLong_FromLongLong(state->result.render_visibility_mismatch_count));
+  PUT("signed_zero_equal_count", PyLong_FromLongLong(state->result.signed_zero_equal_count));
   PUT("mismatch_count", PyLong_FromLong(state->result.mismatch_count));
   if (passed) {
     Py_INCREF(Py_None);
     PUT("first_mismatch_frame", Py_None);
   } else {
     PUT("first_mismatch_frame", PyLong_FromLongLong(state->result.first_mismatch_frame));
+  }
+  if (state->result.first_render_visibility_mismatch_frame == INT64_MIN) {
+    Py_INCREF(Py_None);
+    PUT("first_render_visibility_mismatch_frame", Py_None);
+  } else {
+    PUT("first_render_visibility_mismatch_frame",
+        PyLong_FromLongLong(state->result.first_render_visibility_mismatch_frame));
   }
   details = PyList_New(state->result.detail_count);
   if (details == NULL) {
@@ -1271,11 +1364,12 @@ fail:
 
 static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwargs) {
   static char* keywords[] = {
-      "frames",   "start",       "qemu",         "sysroot", "binary",
-      "data_dir", "start_frame", "frames_limit", "timeout", NULL,
+      "frames",   "start",       "metadata",     "qemu",    "sysroot",           "binary",
+      "data_dir", "start_frame", "frames_limit", "timeout", "signed_zero_equal", NULL,
   };
   PyObject* frames_obj;
   PyObject* start_obj;
+  PyObject* metadata_obj;
   PyObject* start_frame_obj = Py_None;
   PyObject* arrow_pair = NULL;
   const char* qemu_path;
@@ -1284,6 +1378,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   const char* data_root;
   unsigned long long frames_limit = 0;
   double timeout = 60.0;
+  int signed_zero_equal = 0;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -1299,9 +1394,10 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   PyObject* result = NULL;
   (void)self;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOssss|OKd:validate_replay", keywords,
-                                   &frames_obj, &start_obj, &qemu_path, &sysroot, &binary_path,
-                                   &data_root, &start_frame_obj, &frames_limit, &timeout)) {
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOssss|OKdp:validate_replay", keywords,
+                                   &frames_obj, &start_obj, &metadata_obj, &qemu_path, &sysroot,
+                                   &binary_path, &data_root, &start_frame_obj, &frames_limit,
+                                   &timeout, &signed_zero_equal)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -1311,8 +1407,10 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   memset(&replay, 0, sizeof(replay));
   memset(&rows, 0, sizeof(rows));
   memset(&state, 0, sizeof(state));
+  state.signed_zero_equal = (uint8_t)signed_zero_equal;
   state.result.first_mismatch_frame = INT64_MIN;
-  if (parse_start(start_obj, &replay) != 0) {
+  state.result.first_render_visibility_mismatch_frame = INT64_MIN;
+  if (parse_start(start_obj, &replay) != 0 || parse_metadata(metadata_obj, &replay) != 0) {
     goto done;
   }
 
@@ -1403,6 +1501,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   state.config.match_damage_ratio = replay.damage_ratio;
   state.config.num_players = (uint8_t)replay.num_players;
   state.config.is_teams = replay.is_teams;
+  state.config.online_fnmsubs_zero = replay.online_fnmsubs_zero;
+  state.config.brawl_offscreen_damage = replay.brawl_offscreen_damage;
   for (i = 0; i < replay.num_players; ++i) {
     const ReplayPlayer* player = &replay.players[i];
     uint8_t stocks = replay.start_stocks[i];
@@ -1412,7 +1512,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     state.config.players[i].char_id = get_u8(&player->character, rows.raw[0]);
     state.config.players[i].team_id = replay.team_id[i];
     state.config.players[i].costume_id = replay.costume_id[i];
-    state.config.players[i].facing = get_f32(&player->direction, rows.raw[0]) > 0.0F;
+    state.config.players[i].facing_and_port =
+        (uint8_t)((replay.port_1based[i] << 1) | (get_f32(&player->direction, rows.raw[0]) > 0.0F));
   }
   if (state.config.stock_count == 0) {
     state.config.stock_count = 1;

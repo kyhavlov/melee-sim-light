@@ -5,6 +5,7 @@
 
 #include <MSL/math_ppc.h>
 #include <MSL/trigf.h>
+#include <MetroTRK/intrinsics.h>
 
 #define EPSILON 0.0000000001f
 #define FLOAT_MIN 1.1754943E-38f
@@ -400,11 +401,19 @@ void HSD_MtxSRT(Mtx m, Vec3* vec1, Vec3* vec2, Vec3* vec3, Vec3* vec4)
     m[0][0] = cosZ * (vec1x_2 * cosY);
     m[1][0] = sinZ * (vec1x_1 * cosY);
     m[2][0] = -vec1x * sinY;
-    m[0][1] = vec1y_2 * ((cosZ * (sinX * sinY)) - (cosX * sinZ));
-    m[1][1] = vec1y_1 * ((sinZ * (sinX * sinY)) + (cosX * cosZ));
+    // The matched DOL body uses scalar-single fmsubs/fmadds here.  Spell out
+    // those source operation boundaries because hosted GCC does not infer
+    // them from MWCC's matching expression at -O0.
+    // refs/melee/build/GALE01/asm/sysdolphin/baselib/mtx.s::HSD_MtxSRT
+    m[0][1] =
+        vec1y_2 * __fmsubs(cosZ, sinX * sinY, cosX * sinZ);
+    m[1][1] =
+        vec1y_1 * __fmadds(sinZ, sinX * sinY, cosX * cosZ);
     m[2][1] = cosY * (vec1y * sinX);
-    m[0][2] = vec1z_2 * ((cosZ * (cosX * sinY)) + (sinX * sinZ));
-    m[1][2] = vec1z_1 * ((sinZ * (cosX * sinY)) - (sinX * cosZ));
+    m[0][2] =
+        vec1z_2 * __fmadds(cosZ, cosX * sinY, sinX * sinZ);
+    m[1][2] =
+        vec1z_1 * __fmsubs(sinZ, cosX * sinY, sinX * cosZ);
     m[2][2] = cosY * (vec1z * cosX);
     m[0][3] = vec3->x;
     m[1][3] = vec3->y;

@@ -15,6 +15,8 @@
 // bootstrap does not retain the menu/scene-owned lbl_8046B6A0 aggregate.
 static int msl_is_teams;
 static float msl_damage_ratio = 1.0F;
+static bool msl_online_fnmsubs_zero;
+static bool msl_brawl_offscreen_damage;
 static u32 msl_match_frame_count;
 static bool msl_match_ended;
 
@@ -72,13 +74,27 @@ static bool msl_ucf_check_xsmash(const Fighter* fp)
     return difference * difference > 75 * 75;
 }
 
-void msl_phase2_set_match_rules(int is_teams, float damage_ratio)
+void msl_phase2_set_match_rules(int is_teams, float damage_ratio,
+                                int online_fnmsubs_zero,
+                                int brawl_offscreen_damage)
 {
     msl_is_teams = is_teams;
     msl_damage_ratio = damage_ratio;
+    msl_online_fnmsubs_zero = online_fnmsubs_zero != 0;
+    msl_brawl_offscreen_damage = brawl_offscreen_damage != 0;
     msl_match_frame_count = 0;
     msl_match_ended = false;
     memset(msl_ucf_pad, 0, sizeof(msl_ucf_pad));
+}
+
+bool msl_phase2_uses_online_fnmsubs_zero(void)
+{
+    return msl_online_fnmsubs_zero;
+}
+
+bool msl_phase2_has_brawl_offscreen_damage(void)
+{
+    return msl_brawl_offscreen_damage;
 }
 
 void msl_phase2_advance_match_frame(void) { ++msl_match_frame_count; }

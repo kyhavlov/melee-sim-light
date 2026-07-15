@@ -34,7 +34,9 @@ typedef struct MslDpStreamFrame {
 typedef struct MslDpMatchPlayerConfig {
     uint8_t char_id;
     uint8_t team_id;
-    uint8_t facing;
+    // Bit 0 is facing. Bits 1..3 optionally carry the one-based physical
+    // controller port; zero keeps the compact legacy slot default.
+    uint8_t facing_and_port;
     uint8_t costume_id;
 } MslDpMatchPlayerConfig;
 
@@ -47,6 +49,10 @@ typedef struct MslDpMatchConfig {
     uint8_t is_teams;
     uint8_t stock_count;
     uint8_t camera_mode;
+    // Runtime capabilities are explicit because scene major alone does not
+    // distinguish Slippi's offline Dolphin patch set from Nintendont retail.
+    uint8_t online_fnmsubs_zero;
+    uint8_t brawl_offscreen_damage;
     MslDpMatchPlayerConfig players[MSL_DP_MAX_PLAYERS];
 } MslDpMatchConfig;
 
@@ -121,7 +127,7 @@ typedef struct MslDpCompare {
 _Static_assert(sizeof(MslDpInputPlayer) == 8, "MslInputPlayer wire size");
 _Static_assert(sizeof(MslDpInput) == 32, "MslInput wire size");
 _Static_assert(sizeof(MslDpStreamFrame) == 36, "stream frame wire size");
-_Static_assert(sizeof(MslDpMatchConfig) == 36, "MslMatchConfig wire size");
+_Static_assert(sizeof(MslDpMatchConfig) == 38, "MslMatchConfig wire size");
 _Static_assert(sizeof(MslDpItem) == 48, "MslItem wire size");
 _Static_assert(sizeof(MslDpCompare) == 1022, "MslCompare wire size");
 

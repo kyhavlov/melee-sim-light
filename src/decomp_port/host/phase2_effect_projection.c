@@ -264,7 +264,6 @@ static void msl_effect_consume_common_dispatch_generator(s32 gfx_id)
 void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
 {
     (void) gobj;
-
     // Visual objects are excluded, but immediate generator initialization and
     // explicit dispatch randomness share the gameplay HSD stream. The lookup
     // above reads `kind` and `random` directly from EfCoData/EfFxData and

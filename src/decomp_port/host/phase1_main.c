@@ -1,6 +1,7 @@
 #include "host/files.h"
 #include "host/phase2_domain.h"
 #include "host/phase2_effect_projection.h"
+#include "host/phase2_fd_background.h"
 #include "host/wire.h"
 
 #include "ft/fighter.h"
@@ -26,6 +27,7 @@
 #include <baselib/controller.h>
 #include <baselib/fobj.h>
 #include <baselib/gobj.h>
+#include <baselib/gobjuserdata.h>
 #include <baselib/id.h>
 #include <baselib/jobj.h>
 #include <baselib/list.h>
@@ -42,6 +44,7 @@ enum {
     MSL_DP_STAGE_FINAL_DESTINATION = 32,
     MSL_DP_CHAR_FOX = 1,
     MSL_DP_STICK_SCALE = 80,
+    MSL_DP_FD_MAP_GOBJ_COUNT = 10,
 };
 
 extern u32 seed;
@@ -52,6 +55,8 @@ extern void Camera_8002B3D4(void* arg0);
 
 typedef struct Phase1Runtime {
     Fighter_GObj* fighters[2];
+    Ground stage_ground[MSL_DP_FD_MAP_GOBJ_COUNT];
+    uint8_t source_slots[2];
     MslDpMatchConfig config;
     int32_t frame_id;
 } Phase1Runtime;
@@ -241,6 +246,10 @@ static int decode_config(MslDpMatchConfig* config, const uint8_t* wire)
     config->is_teams = wire[offsetof(MslDpMatchConfig, is_teams)];
     config->stock_count = wire[offsetof(MslDpMatchConfig, stock_count)];
     config->camera_mode = wire[offsetof(MslDpMatchConfig, camera_mode)];
+    config->online_fnmsubs_zero =
+        wire[offsetof(MslDpMatchConfig, online_fnmsubs_zero)];
+    config->brawl_offscreen_damage =
+        wire[offsetof(MslDpMatchConfig, brawl_offscreen_damage)];
     memcpy(config->players, wire + offsetof(MslDpMatchConfig, players),
            sizeof(config->players));
 
@@ -284,8 +293,21 @@ static int runtime_init(Phase1Runtime* runtime, const char* data_root,
         return -1;
     }
     runtime->frame_id = runtime->config.frame_id;
+    for (i = 0; i < 2; ++i) {
+        uint8_t encoded = runtime->config.players[i].facing_and_port;
+        uint8_t port = encoded >> 1;
+        runtime->source_slots[i] = port == 0 ? (uint8_t) i : (uint8_t) (port - 1);
+        if (runtime->source_slots[i] >= MSL_DP_MAX_PLAYERS ||
+            (i != 0 && runtime->source_slots[i] == runtime->source_slots[0]))
+        {
+            fprintf(stderr, "invalid two-player physical port mapping\n");
+            return -1;
+        }
+    }
     msl_phase2_set_match_rules(runtime->config.is_teams,
-                               runtime->config.match_damage_ratio);
+                               runtime->config.match_damage_ratio,
+                               runtime->config.online_fnmsubs_zero,
+                               runtime->config.brawl_offscreen_damage);
 
     msl_host_set_data_root(data_root);
     init_hsd();
@@ -339,9 +361,21 @@ static int runtime_init(Phase1Runtime* runtime, const char* data_root,
         fprintf(stderr, "Final Destination map data is missing\n");
         return -1;
     }
+    if (stage_data->unk4->unkC != MSL_DP_FD_MAP_GOBJ_COUNT) {
+        fprintf(stderr, "unexpected Final Destination map GObj count %d\n",
+                stage_data->unk4->unkC);
+        return -1;
+    }
+    // Playback/Core/RestoreGameInfo.asm restores the replay's initial RNG
+    // before stage construction. grLast_8021AC30 consumes that stream to
+    // initialize the background-rotation state, while the first frame-start
+    // process restores the same seed again before gameplay callbacks.
+    seed = runtime->config.frame_pre_random_seed;
+    seed_ptr = &seed;
     for (i = 0; i < stage_data->unk4->unkC; ++i) {
         HSD_GObj* gobj;
         HSD_JObj* root;
+        Ground* gp = &runtime->stage_ground[i];
         stage_data = grDatFiles_801C6330(i);
         if (stage_data == NULL || stage_data->unk4 == NULL ||
             i >= stage_data->unk4->unkC ||
@@ -363,8 +397,16 @@ static int runtime_init(Phase1Runtime* runtime, const char* data_root,
                     i);
             return -1;
         }
+        gp->map_id = i;
+        gp->gobj = gobj;
+        gp->x10_flags.b2 = true;
+        memset(gp->x20, 0xFF, sizeof(gp->x20));
+        GObj_InitUserData(gobj, 3, NULL, gp);
         HSD_GObjObject_80390A70(gobj, HSD_GObj_804D7849, root);
         HSD_GObj_SetupProc(gobj, headless_ground_anim_proc, 1);
+        if (i == 7) {
+            msl_fd_background_init(gobj);
+        }
     }
     // grlast.c::grLast_OnInit gameplay-visible stage publication.
     stage_info.unk8C.b4 = true;
@@ -378,24 +420,28 @@ static int runtime_init(Phase1Runtime* runtime, const char* data_root,
     Player_InitAllPlayers();
     Player_80036DD8();
     for (i = 0; i < 2; ++i) {
-        Player_SetPlayerCharacter(i, CKIND_FOX);
-        Player_SetSlottype(i, Gm_PKind_Human);
-        Player_SetTeam(i, runtime->config.players[i].team_id);
-        Player_SetStocks(i, runtime->config.stock_count);
-        Player_SetCostumeId(i, runtime->config.players[i].costume_id);
-        Player_SetPlayerId(i, i);
-        Player_SetFacingDirection(i, i == 0 ? 1.0F : -1.0F);
-        Player_SetControllerIndex(i, i + 1);
+        int slot = runtime->source_slots[i];
+        uint8_t encoded = runtime->config.players[i].facing_and_port;
+        float facing = (encoded >> 1) == 0 ? (i == 0 ? 1.0F : -1.0F)
+                                            : ((encoded & 1) ? 1.0F : -1.0F);
+        Player_SetPlayerCharacter(slot, CKIND_FOX);
+        Player_SetSlottype(slot, Gm_PKind_Human);
+        Player_SetTeam(slot, runtime->config.players[i].team_id);
+        Player_SetStocks(slot, runtime->config.stock_count);
+        Player_SetCostumeId(slot, runtime->config.players[i].costume_id);
+        Player_SetPlayerId(slot, slot);
+        Player_SetFacingDirection(slot, facing);
+        Player_SetControllerIndex(slot, slot + 1);
         // Standard VS PlayerInitData leaves xD_b2 clear, enabling magnify
         // damage for ordinary human fighters.
         // refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC
-        Player_SetMoreFlagsBit3(i, 1);
+        Player_SetMoreFlagsBit3(slot, 1);
         // PlayerInitData.xC_b1 selects the normal versus-entry creation path.
         // Standard versus starts assign staggered five-frame Entry timers.
         // refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC
-        Player_SetFlagsBit3(i, 1);
-        Player_SetUnk4C(i, (i + 1) * 5);
-        Player_80032768(i, &spawns[i]);
+        Player_SetFlagsBit3(slot, 1);
+        Player_SetUnk4C(slot, (slot + 1) * 5);
+        Player_80032768(slot, &spawns[i]);
     }
     // The versus bootstrap initializes fighter/device/item allocation before
     // Fighter_Create. Items are disabled in the Phase 2 domain, so the exact
@@ -406,11 +452,12 @@ static int runtime_init(Phase1Runtime* runtime, const char* data_root,
     Item_80266FCC();
     Player_80036DA4();
     for (i = 0; i < 2; ++i) {
+        int slot = runtime->source_slots[i];
         // gm_16AE.c::fn_8016E2BC creates match fighters through the player
         // owner so player_entity/transformation state and scheduled player
         // bookkeeping refer to the same GObj.
-        Player_80031AD0(i);
-        runtime->fighters[i] = Player_GetEntityAtIndex(i, 0);
+        Player_80031AD0(slot);
+        runtime->fighters[i] = Player_GetEntityAtIndex(slot, 0);
         if (runtime->fighters[i] == NULL) {
             fprintf(stderr, "source Fighter_Create returned NULL for slot %d\n",
                     i);
@@ -418,8 +465,8 @@ static int runtime_init(Phase1Runtime* runtime, const char* data_root,
         }
         seed_previous_input(GET_FIGHTER(runtime->fighters[i]),
                             &previous_input->p[i]);
-        inject_pad_status(i, &previous_input->p[i]);
-        msl_ucf_seed_pad(i, previous_input->p[i].main_x,
+        inject_pad_status(slot, &previous_input->p[i]);
+        msl_ucf_seed_pad(slot, previous_input->p[i].main_x,
                          previous_input->p[i].main_y,
                          previous_input->p[i].c_x,
                          previous_input->p[i].c_y);
@@ -659,8 +706,9 @@ static int runtime_step(Phase1Runtime* runtime, const MslDpInput* input,
     }
 
     for (i = 0; i < 2; ++i) {
-        inject_pad_status(i, &input->p[i]);
-        msl_ucf_set_pending_pad(i, input->p[i].main_x,
+        int slot = runtime->source_slots[i];
+        inject_pad_status(slot, &input->p[i]);
+        msl_ucf_set_pending_pad(slot, input->p[i].main_x,
                                 input->p[i].main_y, input->p[i].c_x,
                                 input->p[i].c_y);
     }
@@ -674,7 +722,18 @@ static int runtime_step(Phase1Runtime* runtime, const MslDpInput* input,
 
     // The subsequent retail render pass invokes ftDrawCommon_80080E18.
     // Preserve its camera-visibility publication for the next gameplay/
-    // recording frame without retaining drawing.
+    // recording frame without retaining drawing. This is the canonical
+    // headless schedule: one render publication per public sim step.
+    //
+    // Retail gm_801A4D34 can drain more than one queued pad sample through
+    // HSD_GObj_80390CFC before a single HSD_GObj_80390FC0 render. Standard
+    // Slippi files do not record that pad-queue/render boundary (and console
+    // polling-drift codes change it), so reproducing an occasional stale
+    // presentation bit would require an external scheduler signal rather than
+    // a gameplay-state heuristic.
+    // refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34
+    // refs/melee/src/melee/lb/lb_0195.c::lb_80019894
+    // refs/slippi-ssbm-asm/console_lag_pd*.json
     // refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18
     for (i = 0; i < 2; ++i) {
         msl_camera_publish_fighter_visibility(runtime->fighters[i]);

@@ -6,7 +6,11 @@
 
 #include <platform.h>
 
-void msl_phase2_set_match_rules(int is_teams, float damage_ratio);
+void msl_phase2_set_match_rules(int is_teams, float damage_ratio,
+                                int online_fnmsubs_zero,
+                                int brawl_offscreen_damage);
+bool msl_phase2_uses_online_fnmsubs_zero(void);
+bool msl_phase2_has_brawl_offscreen_damage(void);
 void msl_phase2_advance_match_frame(void);
 bool msl_phase2_match_is_over(void);
 

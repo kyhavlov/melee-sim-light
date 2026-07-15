@@ -8,12 +8,25 @@
 #include "gr/ground.h"
 #include "gr/stage.h"
 #include "lb/lbvector.h"
+#include "lb/types.h"
 #include "pl/player.h"
+#include "sc/types.h"
+
+#include "phase2_domain.h"
 
 #include <baselib/controller.h>
+#include <baselib/aobj.h>
 #include <baselib/gobj.h>
+#include <baselib/gobjobject.h>
+#include <baselib/gobjplink.h>
+#include <baselib/gobjproc.h>
+#include <baselib/jobj.h>
 
 #include <math.h>
+
+extern void msl_camera_get_render_transform(Vec3* position, Vec3* interest,
+                                            float* fov);
+static bool msl_vanilla_magnify_offscreen[6];
 // camera.static.h documents this DOL data block but intentionally leaves its
 // definition commented out. Retain the exact source values for the standard
 // gameplay-camera owner.
@@ -139,12 +152,57 @@ u64 gm_GetButtonsTriggered(u8 slot)
     return slot < 4 ? HSD_PadCopyStatus[slot].trigger : 0;
 }
 
+static void msl_grlib_quake_loop(HSD_GObj* gobj)
+{
+    HSD_JObj* jobj = gobj->hsd_obj;
+    HSD_JObjAnimAll(jobj);
+    Camera_8002A278(HSD_JObjGetTranslationX(jobj),
+                    HSD_JObjGetTranslationY(jobj));
+}
+
+static void msl_grlib_quake_once(HSD_GObj* gobj)
+{
+    HSD_JObj* jobj = gobj->hsd_obj;
+    HSD_AObj* aobj = jobj->aobj;
+
+    HSD_JObjAnimAll(jobj);
+    Camera_8002A278(HSD_JObjGetTranslationX(jobj),
+                    HSD_JObjGetTranslationY(jobj));
+    if (aobj == NULL || aobj->flags & 0x40000000) {
+        HSD_GObjPLink_80390228(gobj);
+    }
+}
+
 HSD_GObj* grLib_801C9CEC(s32 kind)
 {
-    (void) kind;
-    // The return value only owns the optional quake presentation model.
-    // Camera_80030E44 retains the source camera-quake state independently.
-    return NULL;
+    HSD_GObj* gobj;
+    HSD_JObj* jobj;
+    s32 anim_index;
+
+    // Gameplay-bearing source projection of the quake-model owner. Although
+    // the model is invisible headlessly, its animated X/Y translation feeds
+    // Camera_8002A278 and therefore the CObj used by Camera_80030BBC.
+    // refs/melee/src/melee/gr/grlib.c::grLib_801C9BC8,
+    // grLib_801C9C40,grLib_801C9CEC
+    if (kind < 1 || kind > 4 || stage_info.quake_model_set == NULL) {
+        return NULL;
+    }
+    anim_index = kind - 1;
+    gobj = GObj_Create(HSD_GOBJ_CLASS_STAGE, 18, (u8) kind);
+    jobj = HSD_JObjLoadJoint(stage_info.quake_model_set->joint);
+    HSD_GObjObject_80390A70(gobj, HSD_GObj_804D7849, jobj);
+    HSD_GObj_SetupProc(gobj,
+                       kind == 1 ? msl_grlib_quake_loop
+                                 : msl_grlib_quake_once,
+                       1);
+    HSD_JObjAddAnimAll(jobj, stage_info.quake_model_set->anims[anim_index],
+                       NULL, NULL);
+    HSD_JObjReqAnimAll(jobj, 0.0F);
+    if (kind == 1) {
+        HSD_ForeachAnim(jobj, 6, 0x20, HSD_AObjSetFlags, AOBJ_ARG_AU,
+                        AOBJ_LOOP);
+    }
+    return gobj;
 }
 
 // Exact source camera-subject maintenance. Drawing is absent, but these
@@ -237,13 +295,15 @@ static bool headless_camera_point_on_screen(const Vec3* point)
     Mtx view;
     Vec3 eye;
     Vec3 interest;
-    Vec3 world_up = { 0.0F, 1.0F, 0.0F };
+    Vec3 camera_forward;
+    Vec3 camera_up;
     Vec3 look;
     Vec3 right;
     Vec3 up;
     Vec3 projected_point;
     Vec3 eye_point;
     float angle;
+    float fov;
     float cotangent;
     float clip_x;
     float clip_y;
@@ -254,8 +314,36 @@ static bool headless_camera_point_on_screen(const Vec3* point)
     int pixel_x;
     int pixel_y;
 
-    Camera_GetTransformPosition(&eye);
-    Camera_GetTransformInterest(&interest);
+    // Camera_8002AF68 adds the current quake translation when publishing the
+    // HSD CObj used by Camera_80030BBC. The raw transform accessors omit it.
+    // refs/melee/src/melee/cm/camera.c::Camera_8002AF68
+    msl_camera_get_render_transform(&eye, &interest, &fov);
+
+    // The standard CObj descriptor stores roll=0 rather than an explicit up
+    // vector. HSD_CObjGetUpVector therefore derives and normalizes the up
+    // vector from the current eye vector before C_MTXLookAt consumes it.
+    // refs/melee/src/sysdolphin/baselib/cobj.c::{HSD_CObjGetEyeVector,
+    // roll2upvec,HSD_CObjGetUpVector}
+    camera_forward.x = interest.x - eye.x;
+    camera_forward.y = interest.y - eye.y;
+    camera_forward.z = interest.z - eye.z;
+    PSVECNormalize(&camera_forward, &camera_forward);
+    if (1.0F - fabsf(camera_forward.y) < 0.0001F) {
+        camera_up.x = sqrtf(camera_forward.y * camera_forward.y +
+                            camera_forward.z * camera_forward.z);
+        camera_up.y = camera_forward.y *
+                      (-camera_forward.x / camera_up.x);
+        camera_up.z = camera_forward.z *
+                      (-camera_forward.x / camera_up.x);
+    } else {
+        camera_up.y = sqrtf(camera_forward.x * camera_forward.x +
+                            camera_forward.z * camera_forward.z);
+        camera_up.x = camera_forward.x *
+                      (-camera_forward.y / camera_up.y);
+        camera_up.z = camera_forward.z *
+                      (-camera_forward.y / camera_up.y);
+    }
+    PSVECNormalize(&camera_up, &camera_up);
 
     // Exact release-SDK C_MTXLookAt operation order. VECNormalize and
     // VECCrossProduct resolve to the paired-single implementations in retail.
@@ -264,7 +352,7 @@ static bool headless_camera_point_on_screen(const Vec3* point)
     look.y = eye.y - interest.y;
     look.z = eye.z - interest.z;
     PSVECNormalize(&look, &look);
-    PSVECCrossProduct(&world_up, &look, &right);
+    PSVECCrossProduct(&camera_up, &look, &right);
     PSVECNormalize(&right, &right);
     PSVECCrossProduct(&look, &right, &up);
     view[0][0] = right.x;
@@ -312,7 +400,7 @@ static bool headless_camera_point_on_screen(const Vec3* point)
         ((view[2][2] * projected_point.z) +
          ((view[2][0] * projected_point.x) +
           (view[2][1] * projected_point.y)));
-    angle = 0.5F * Ground_801C20D0();
+    angle = 0.5F * fov;
     angle = angle * 0.017453293F;
     cotangent = 1.0F / tanf(angle);
     clip_x = eye_point.x * (cotangent / 1.2173333F);
@@ -331,6 +419,16 @@ void msl_camera_publish_fighter_visibility(HSD_GObj* gobj)
     CmSubject* subject = fp->x890_cameraBox;
     Vec3* point;
 
+    // The magnifier camera is GX link 0 while fighter drawing is GX link 5.
+    // Its vanilla render callback therefore consumes the visibility bit left
+    // by the preceding fighter draw before this pass publishes a new one.
+    // refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC618
+    // refs/melee/src/melee/ft/fighter.c::Fighter_80068E64
+    if (fp->player_id >= 0 && fp->player_id < 6) {
+        msl_vanilla_magnify_offscreen[fp->player_id] =
+            fp->x221F_b0 && ftLib_80086ED0(gobj);
+    }
+
     // This is the gameplay-visible side effect at the head of
     // ftDrawCommon_80080E18, with Camera_80030CD8's viewport test projected
     // onto the source stage camera bounds. The HSD camera, scissor, and all
@@ -340,15 +438,15 @@ void msl_camera_publish_fighter_visibility(HSD_GObj* gobj)
     // refs/melee/src/melee/cm/camera.c::{Camera_80030BBC,Camera_80030CD8}
     if (subject == NULL || fp->x2229_b3 || fp->x2220_b7) {
         fp->x221F_b0 = false;
-        return;
+    } else {
+        point = &subject->x1C;
+        if (headless_camera_point_on_screen(point)) {
+            fp->x221F_b0 = false;
+        } else {
+            fp->x221F_b0 = true;
+        }
     }
 
-    point = &subject->x1C;
-    if (headless_camera_point_on_screen(point)) {
-        fp->x221F_b0 = false;
-    } else {
-        fp->x221F_b0 = true;
-    }
 }
 
 bool ifMagnify_802FC998(s32 slot)
@@ -359,10 +457,16 @@ bool ifMagnify_802FC998(s32 slot)
     // Slippi netplay replaces Fighter_8006A360's call at 0x8006A880 with
     // BrawlOffscreenDamage. It deliberately removes the render-owned vanilla
     // magnifier dependency and tests the fighter root against the stage camera
-    // bounds, while excluding dead/star-KO states. The headless runtime targets
-    // Slippi/UCF replays, so this symbol supplies that call-site replacement.
+    // bounds, while excluding dead/star-KO states. Offline versus retains the
+    // prior-render magnifier publication modeled above.
     // refs/slippi-ssbm-asm/Online/Core/BrawlOffscreenDamage.asm
+    // refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FBBDC,
+    //     ifMagnify_802FC998}
     // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    if (!msl_phase2_has_brawl_offscreen_damage()) {
+        return slot >= 0 && slot < 6 &&
+               msl_vanilla_magnify_offscreen[slot];
+    }
     if (gobj == NULL) {
         return false;
     }

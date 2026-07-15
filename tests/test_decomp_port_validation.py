@@ -44,6 +44,9 @@ def test_native_validation_streams_starter_replay_from_arrow() -> None:
     assert result["seed_frame"] == -123
     assert result["first_ref_frame"] == -122
     assert result["matched_frames"] == 2723
+    assert result["render_visibility_mismatch_count"] == 0
+    assert result["first_render_visibility_mismatch_frame"] is None
+    assert result["signed_zero_equal_count"] == 0
     assert result["first_mismatch_frame"] is None
     assert result["mismatch_count"] == 0
     assert result["details"] == []

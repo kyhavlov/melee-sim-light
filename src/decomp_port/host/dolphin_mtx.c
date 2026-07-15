@@ -146,9 +146,19 @@ float PSVECDotProduct(Vec* a, Vec* b)
 void PSVECCrossProduct(Vec* a, Vec* b, Vec* out)
 {
     Vec value;
-    value.x = a->y * b->z - a->z * b->y;
-    value.y = a->z * b->x - a->x * b->z;
-    value.z = a->x * b->y - a->y * b->x;
+    float az_bx = b->x * a->z;
+    float az_by = b->y * a->z;
+    float ax_by = b->y * a->x;
+
+    // The SDK paired-single routine rounds the ps_mul terms above, then uses
+    // ps_msub for the other product and subtraction. Preserve which side of
+    // each determinant owns the fused operation; reassociating it moves the
+    // gameplay camera's screen-edge publication.
+    // refs/melee/extern/dolphin/src/dolphin/mtx/vec.c::
+    //     PSVECCrossProduct
+    value.x = fmaf(a->y, b->z, -az_by);
+    value.y = -fmaf(a->x, b->z, -az_bx);
+    value.z = -fmaf(a->y, b->x, -ax_by);
     *out = value;
 }
 

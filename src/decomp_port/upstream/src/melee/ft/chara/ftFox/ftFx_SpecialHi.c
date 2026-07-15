@@ -288,13 +288,16 @@ void ftFx_SpecialAirHi_Phys(HSD_GObj* gobj)
     fp->mv.fx.SpecialHi.unk++;
 
     if (fp->mv.fx.SpecialHi.unk >= da->x70_FOX_FIREFOX_DURATION_END) {
-        fp->self_vel.x =
-            -((fp->facing_dir * (da->x78_FOX_FIREFOX_REVERSE_ACCEL *
-                                 cosf(fp->mv.fx.SpecialHi.rotateModel))) -
-              fp->self_vel.x);
-        fp->self_vel.y = -((da->x78_FOX_FIREFOX_REVERSE_ACCEL *
-                            sinf(fp->mv.fx.SpecialHi.rotateModel)) -
-                           fp->self_vel.y);
+        // DOL 0x800E77B8..0x800E77DC: the horizontal trig product is rounded
+        // by fmuls, then both velocity updates use scalar-single fnmsubs.
+        float decel_x = da->x78_FOX_FIREFOX_REVERSE_ACCEL *
+                        cosf(fp->mv.fx.SpecialHi.rotateModel);
+        fp->self_vel.x = msl_dolphin_fnmsubs(
+            fp->facing_dir, decel_x, fp->self_vel.x);
+
+        fp->self_vel.y = msl_dolphin_fnmsubs(da->x78_FOX_FIREFOX_REVERSE_ACCEL,
+                                             sinf(fp->mv.fx.SpecialHi.rotateModel),
+                                             fp->self_vel.y);
     }
 }
 

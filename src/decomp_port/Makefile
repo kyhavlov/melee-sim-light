@@ -40,6 +40,7 @@ HOST_SRCS := \
 	$(ROOT)/src/decomp_port/host/phase2_camera.c \
 	$(ROOT)/src/decomp_port/host/phase2_domain.c \
 	$(ROOT)/src/decomp_port/host/phase2_effect_projection.c \
+	$(ROOT)/src/decomp_port/host/phase2_fd_background.c \
 	$(ROOT)/src/decomp_port/host/phase2_common_projection.c \
 	$(ROOT)/src/decomp_port/host/phase2_ftco_0A01.c \
 	$(ROOT)/src/decomp_port/host/phase2_item_projection.c \

@@ -677,8 +677,16 @@ void ftCo_Damage_OnExitHitlag(Fighter_GObj* gobj)
         float kb_y = fp->x8c_kb_vel.y;
         if (kb_x || kb_y) {
             float kb_angle = atan2f(kb_y, kb_x);
+#ifdef MSL_DECOMP_PORT
+            // Retail GALE01 0x8008E858..0x8008E860 rounds kb_y^2, then
+            // accumulates kb_x^2 with one scalar-single fmadds before sqrt.
+            float kb_y_sq = kb_y * kb_y;
+            float scaled_kb_mag =
+                sqrtf(__fmadds(kb_x, kb_x, kb_y_sq)) * p_ftCommonData->x1AC;
+#else
             float scaled_kb_mag =
                 sqrtf(kb_x * kb_x + kb_y * kb_y) * p_ftCommonData->x1AC;
+#endif
             fp->x8c_kb_vel.x = scaled_kb_mag * cosf(kb_angle);
             fp->x8c_kb_vel.y = scaled_kb_mag * sinf(kb_angle);
         }
@@ -952,12 +960,20 @@ void ftCo_8008EC90(Fighter_GObj* gobj)
                    fp->x2222_b0)
         {
             ftDk_MS_349_800E06D8(gobj);
-        } else if (!ftCo_8009F0F0(gobj) && !ftCo_800C0CB8(gobj) &&
-                   fp->motion_id == ftCo_MS_DamageIce)
-        {
+        // Retail DOL 0x8008F650..0x8008F6B0 exits this resolver when either
+        // specialized handler succeeds. The decomp's combined negated
+        // condition fell through to generic damage and overwrote transitions
+        // such as DownBound -> DownDamage.
+        } else if (ftCo_8009F0F0(gobj)) {
+            goto ret_A8C;
+        } else if (ftCo_800C0CB8(gobj)) {
+            goto ret_A8C;
+        } else if (fp->motion_id == ftCo_MS_DamageIce) {
             ftCo_8008DCE0(gobj, ftCo_MS_DamageIce, fp->facing_dir);
             ftCo_DamageIce_HitWhileFrozen(gobj);
-        } else if (!ftCo_800C74F4(gobj)) {
+        } else if (ftCo_800C74F4(gobj)) {
+            goto ret_A8C;
+        } else {
             ftCommon_8007DB58(gobj);
             ftCo_8008E908(gobj, facing_dir);
         }

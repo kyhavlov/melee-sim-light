@@ -1,10 +1,125 @@
 --- camera.c
 +++ camera.c
-@@ -761,2 +761,3 @@ void Camera_80029CF8(CameraBounds* bounds, CameraTransformState* transform)
+@@ -443,2 +443,2 @@
+-                test_pos.x =
+-                    (subject->x2C.x * tracking_multiplier) + base_pos.x;
++                test_pos.x = __fmadds(subject->x2C.x, tracking_multiplier,
++                                      base_pos.x);
+@@ -471,2 +471,2 @@
+-                test_pos.x =
+-                    (subject->x2C.y * tracking_multiplier) + base_pos.x;
++                test_pos.x = __fmadds(subject->x2C.y, tracking_multiplier,
++                                      base_pos.x);
+@@ -499,2 +499,2 @@
+-                test_pos.y =
+-                    (subject->x34.y * tracking_multiplier) + base_pos.y;
++                test_pos.y = __fmadds(subject->x34.y, tracking_multiplier,
++                                      base_pos.y);
+@@ -527,2 +527,2 @@
+-                test_pos.y =
+-                    (subject->x34.x * tracking_multiplier) + base_pos.y;
++                test_pos.y = __fmadds(subject->x34.x, tracking_multiplier,
++                                      base_pos.y);
+@@ -575,3 +575,4 @@
+     new_bounds->x_min = min_x;
+-    new_bounds->y_min = min_y - ((390.0f * z_factor) + 10.0f);
++    new_bounds->y_min =
++        min_y - __fmadds(390.0f, z_factor, 10.0f);
+     new_bounds->x_max = max_x;
+@@ -588,9 +588,8 @@
+     } else if (spread < globals->x34) {
+         return globals->x2C;
+     } else {
+-        return (((spread - globals->x34) / (temp_f4 - globals->x34)) *
+-                (globals->x30 - globals->x2C)) +
+-               globals->x2C;
++        float ratio = (spread - globals->x34) / (temp_f4 - globals->x34);
++        return __fmadds(globals->x30 - globals->x2C, ratio, globals->x2C);
+     }
+ }
+
+@@ -643,8 +642,10 @@
+         lerp_factor = 0.0001f;
+     }
+
+-    transform->interest.x += offset_x * lerp_factor;
+-    transform->interest.y += offset_y * lerp_factor;
++    transform->interest.x =
++        __fmadds(offset_x, lerp_factor, transform->interest.x);
++    transform->interest.y =
++        __fmadds(offset_y, lerp_factor, transform->interest.y);
+ }
+
+ #pragma dont_inline on
+@@ -683,9 +684,9 @@
+         scale = 1.0f;
+     }
+
+-    transform->position.x += dist.x * scale;
+-    transform->position.y += dist.y * scale;
+-    transform->position.z += dist.z * scale;
++    transform->position.x = __fmadds(dist.x, scale, transform->position.x);
++    transform->position.y = __fmadds(dist.y, scale, transform->position.y);
++    transform->position.z = __fmadds(dist.z, scale, transform->position.z);
+ }
+ #pragma dont_inline reset
+
+@@ -721,16 +722,16 @@
+     } else if (len < cm_803BCCA0.x24) {
+         pitch_blend = cm_803BCCA0.x1C;
+     } else {
+-        pitch_blend =
+-            ((cm_803BCCA0.x20 - cm_803BCCA0.x1C) *
+-             ((len - cm_803BCCA0.x24) / (cm_803BCCA0.x28 - cm_803BCCA0.x24))) +
+-            cm_803BCCA0.x1C;
++        pitch_blend = __fmadds(
++            cm_803BCCA0.x20 - cm_803BCCA0.x1C,
++            (len - cm_803BCCA0.x24) /
++                (cm_803BCCA0.x28 - cm_803BCCA0.x24),
++            cm_803BCCA0.x1C);
+     }
+
+-    *pitch_angle = ((bounds->y_min - scroll_offset->y) +
+-                    (bounds->y_max - scroll_offset->y)) *
+-                       (0.5f - pitch_blend) +
+-                   scroll_offset->y;
++    *pitch_angle = __fmadds((bounds->y_min - scroll_offset->y) +
++                                (bounds->y_max - scroll_offset->y),
++                            0.5f - pitch_blend, scroll_offset->y);
+     {
+         f32 info_x24 = Stage_GetCamInfoX24();
+         *pitch_angle += cm_803BCCA0.x8;
+@@ -760,6 +761,8 @@
+     f32 vert_frustum_dist;
      Vec3 scroll_offset2;
      f32 vert_offset;
 +    f32 max_horiz_pan_angle;
-@@ -791,9 +792,9 @@ void Camera_80029CF8(CameraBounds* bounds, CameraTransformState* transform)
++    f32 fov_radians;
+
+     get_pitch_angle(bounds, &scroll_offset, &pitch_angle);
+     if (pitch_angle > (vert_offset = deg_to_rad * cm_803BCCA0.xC)) {
+@@ -773,10 +776,11 @@
+     pitch_angle = pitch_angle + Stage_GetCamPanAngleRadians();
+     pan_angle = pitch_angle;
+
+-    fov_u = (0.5f * (deg_to_rad * transform->fov)) + pan_angle;
++    fov_radians = deg_to_rad * transform->fov;
++    fov_u = __fmadds(0.5f, fov_radians, pan_angle);
+     HSD_ASSERTMSG(0x4FA, fov_u < (f32) M_PI_2, "fov_u<MTXDegToRad(90.0F)");
+
+-    fov_d = (0.5f * (deg_to_rad * transform->fov)) - pan_angle;
++    fov_d = __fmsubs(0.5f, fov_radians, pan_angle);
+     HSD_ASSERTMSG(0x4FB, fov_d < (f32) M_PI_2, "fov_d<MTXDegToRad(90.0F)");
+
+     tan_fov_u = tanf(fov_u);
+@@ -786,16 +790,17 @@
+     Stage_GetCamBoundsTopOffset();
+     vert_offset = vert_frustum_dist * tanf(pan_angle);
+     transform->target_interest.y =
+-        vert_offset + (bounds->y_max - vert_frustum_dist * tan_fov_u);
++        vert_offset +
++        __fnmsubs(vert_frustum_dist, tan_fov_u, bounds->y_max);
+     Stage_UnkSetVec3TCam_Offset(&scroll_offset2);
      mid_x = 0.5f * (bounds->x_min + bounds->x_max);
      {
          f32 info_x20 = Stage_GetCamInfoX20();
@@ -17,7 +132,31 @@
 +    if (pan_angle > max_horiz_pan_angle) {
 +        pan_angle = max_horiz_pan_angle;
      }
-@@ -1258,9 +1259,6 @@ void Camera_8002A768(CameraTransformState* transform, s32 arg1)
+
+     min_h = deg_to_rad * cm_803BCCA0.x18;
+@@ -803,9 +808,9 @@
+         pan_angle = min_h;
+     }
+
+-    fov_r = (0.5f * (deg_to_rad * transform->fov)) - pan_angle;
++    fov_r = __fmsubs(0.5f, fov_radians, pan_angle);
+     HSD_ASSERTMSG(0x508, fov_r < (f32) M_PI_2, "fov_r<MTXDegToRad(90.0F)");
+-    fov_l = (0.5f * (deg_to_rad * transform->fov)) + pan_angle;
++    fov_l = __fmadds(0.5f, fov_radians, pan_angle);
+     HSD_ASSERTMSG(0x509, fov_l < (f32) M_PI_2, "fov_l<MTXDegToRad(90.0F)");
+
+     tan_fov_r_aspect = cm_803BCB64.aspect * tanf(fov_r);
+@@ -818,7 +823,7 @@
+     Stage_GetCamBoundsRightOffset();
+     horiz_offset = cm_803BCB64.aspect * (horiz_frustum_dist * tanf(pan_angle));
+     transform->target_interest.x =
+-        -((horiz_frustum_dist * tan_fov_r_aspect) - bounds->x_max) -
++        __fnmsubs(horiz_frustum_dist, tan_fov_r_aspect, bounds->x_max) -
+         horiz_offset;
+     transform->target_interest.z = 0.0f;
+
+@@ -1258,9 +1263,6 @@
+         } else if (var_r31 & 2) {
              cam_correction.y = bottom_overlap;
          }
 -        cam_correction.x *= -1.0f;
@@ -26,3 +165,25 @@
          lbVector_Add(&transform->target_position, &cam_correction);
          lbVector_Add(&transform->target_interest, &cam_correction);
      }
+@@ -4554,6 +4556,21 @@
+     *arg0 = cm_80452C68.transform.interest;
+ }
+
++// Headless projection accessor for the exact CObj transform published by
++// Camera_8002AF68. Camera_GetTransform{Position,Interest} intentionally omit
++// the per-frame quake translation and retain their retail semantics.
++void msl_camera_get_render_transform(Vec3* position, Vec3* interest,
++                                     float* fov)
++{
++    *position = cm_80452C68.transform.position;
++    position->x += cm_80452C68.translation.x;
++    position->y += cm_80452C68.translation.y;
++    *interest = cm_80452C68.transform.interest;
++    interest->x += cm_80452C68.translation.x;
++    interest->y += cm_80452C68.translation.y;
++    *fov = cm_80452C68.transform.fov;
++}
++
+ static inline void compute_edge(Vec3* forward, Vec3* eye_pos, f32 fov,
+                                 f32* value)
+ {

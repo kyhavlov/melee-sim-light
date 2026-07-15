@@ -53,6 +53,7 @@ def validate_one(
     frames: int,
     start_frame: int | None,
     timeout: float,
+    signed_zero_equal: bool = False,
 ) -> dict[str, object]:
     # Python owns only the replay-loading boundary. The native extension consumes
     # Peppi's Arrow buffers through the Arrow C Data Interface without NumPy or
@@ -62,6 +63,7 @@ def validate_one(
         return native.validate_replay(
             game.frames,
             game.start,
+            game.metadata,
             qemu=str(QEMU),
             sysroot=str(SYSROOT),
             binary=str(BINARY),
@@ -69,6 +71,7 @@ def validate_one(
             start_frame=start_frame,
             frames_limit=frames,
             timeout=timeout,
+            signed_zero_equal=signed_zero_equal,
         )
 
 
@@ -80,6 +83,19 @@ def print_result(replay: Path, result: dict[str, object]) -> bool:
         f"seed_frame={result['seed_frame']} "
         f"first_ref_frame={result['first_ref_frame']}"
     )
+    if result["signed_zero_equal_count"]:
+        print(
+            "diagnostic: "
+            f"signed_zero_equal={result['signed_zero_equal_count']}"
+        )
+    if result["render_visibility_mismatch_count"]:
+        print(
+            "diagnostic: "
+            "render_visibility_mismatches="
+            f"{result['render_visibility_mismatch_count']} "
+            "first_frame="
+            f"{result['first_render_visibility_mismatch_frame']}"
+        )
     if result["pass"]:
         print(f"PASS matched_frames={result['matched_frames']}")
         return True
@@ -118,6 +134,11 @@ def main() -> int:
     parser.add_argument(
         "--no-build", action="store_true", help="Use the existing native and PPC binaries."
     )
+    parser.add_argument(
+        "--diagnostic-signed-zero-equal",
+        action="store_true",
+        help="Ignore only +0.0/-0.0 bit differences while finding the next mismatch.",
+    )
     args = parser.parse_args()
     if args.frames < 0:
         parser.error("--frames must be non-negative")
@@ -140,6 +161,7 @@ def main() -> int:
                 frames=args.frames,
                 start_frame=args.start_frame,
                 timeout=args.timeout,
+                signed_zero_equal=args.diagnostic_signed_zero_equal,
             )
             passed = print_result(replay, result) and passed
     except (ImportError, OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:

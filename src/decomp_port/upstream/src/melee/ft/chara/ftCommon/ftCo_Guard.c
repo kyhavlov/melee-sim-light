@@ -583,11 +583,13 @@ void ftCo_80092E50(Fighter_GObj* gobj)
 
 float ftCo_80092ED8(int arg0, float arg1)
 {
-    return p_ftCommonData->x28C *
-               (arg0 *
-                (1 - (arg1 * (p_ftCommonData->x2E8 - p_ftCommonData->x2E4) +
-                      p_ftCommonData->x2E4))) +
-           p_ftCommonData->x290;
+    float shield_scale =
+        __fmadds(arg1, p_ftCommonData->x2E8 - p_ftCommonData->x2E4,
+                 p_ftCommonData->x2E4);
+    // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Guard.s
+    // ftCo_80092ED8 uses fmadds for both affine stages.
+    return __fmadds(p_ftCommonData->x28C, arg0 * (1 - shield_scale),
+                    p_ftCommonData->x290);
 }
 
 void ftCo_80092F2C(HSD_GObj* gobj, bool arg1)
@@ -607,12 +609,13 @@ void ftCo_80092F2C(HSD_GObj* gobj, bool arg1)
         fp->x2219_b0 = true;
     }
     {
-        float f = (p_ftCommonData->x28C *
-                   (fp->x19A4 *
-                    (1.0f - ((fp->lightshield_amount *
-                              (p_ftCommonData->x2E8 - p_ftCommonData->x2E4)) +
-                             p_ftCommonData->x2E4)))) +
-                  p_ftCommonData->x290;
+        float shield_scale = __fmadds(
+            fp->lightshield_amount,
+            p_ftCommonData->x2E8 - p_ftCommonData->x2E4,
+            p_ftCommonData->x2E4);
+        float f = __fmadds(p_ftCommonData->x28C,
+                           fp->x19A4 * (1.0f - shield_scale),
+                           p_ftCommonData->x290);
         ftAnim_SetAnimRate(gobj,
                            (0.1f + lbGetJObjEndFrame(GET_JOBJ(gobj))) / f);
         if (!arg1) {

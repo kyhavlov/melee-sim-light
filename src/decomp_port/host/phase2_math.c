@@ -2,6 +2,8 @@
 
 #include <MetroTRK/intrinsics.h>
 
+#include "phase2_domain.h"
+
 // Gameplay math projection of refs/melee/src/melee/lb/lbrefract.c:742-961.
 // The refraction renderer is excluded, but these global libm replacements are
 // called throughout fighter, item, stage, and collision source.
@@ -29,6 +31,42 @@ float __fnmsubs(float a, float b, float c)
 {
     float result;
     __asm__("fnmsubs %0,%1,%2,%3" : "=f"(result) : "f"(a), "f"(b), "f"(c));
+    return result;
+}
+
+float msl_dolphin_fnmsubs(float a, float b, float c)
+{
+    float result = __fnmsubs(a, b, c);
+
+    // The tracked Slippi online captures use Dolphin's equivalent c - a*b
+    // exact-zero sign, while both offline profiles retain the retail PPC
+    // instruction's sign. Keep this capture/runtime capability independent of
+    // BrawlOffscreenDamage: the offline mainline-Dolphin profile has that
+    // patch but retains retail fnmsubs zero signs.
+    if (!msl_phase2_uses_online_fnmsubs_zero()) {
+        return result;
+    }
+
+    // A product of two binary32 values is exact in binary64, so this test
+    // distinguishes true cancellation from a small nonzero result that
+    // merely underflowed when rounded back to binary32.  The latter already
+    // has the correct sign in the retail instruction result.
+    if (result == 0.0F && (double) c == (double) a * (double) b) {
+        u32 product_sign = (BITWISE(a) ^ BITWISE(b)) & SIGN_BIT;
+        u32 c_sign = BITWISE(c) & SIGN_BIT;
+
+        // The DOL sites are scalar-single fnmsubs instructions
+        // (refs/melee/build/GALE01/asm/melee/ft/fighter.s at
+        // 0x8006B9C8/0x8006B9E4 and 0x8006BB34/0x8006BB50). Slippi Dolphin's
+        // JIT implements nmsub as the equivalent fused c - a*b expression.
+        // PPC's negate-after-subtract form differs only in the sign of an
+        // exact zero. Preserve a same-sign zero sum such as -0 - +0; exact
+        // cancellation uses the JIT's round-to-nearest +0.
+        if (c == 0.0F && c_sign != product_sign) {
+            return c;
+        }
+        return 0.0F;
+    }
     return result;
 }
 

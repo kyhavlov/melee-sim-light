@@ -2251,10 +2251,10 @@ void Fighter_procUpdate(Fighter_GObj* gobj)
                         // Original DOL 0x8006B9C8/0x8006B9E4 uses fnmsubs;
                         // GCC's exploratory build otherwise rounds the
                         // multiply before the subtract.
-                        p_kb_vel->x = __fnmsubs(
+                        p_kb_vel->x = msl_dolphin_fnmsubs(
                             p_ftCommonData->x204_knockbackFrameDecay,
                             cosf(kb_angle), p_kb_vel->x);
-                        p_kb_vel->y = __fnmsubs(
+                        p_kb_vel->y = msl_dolphin_fnmsubs(
                             p_ftCommonData->x204_knockbackFrameDecay,
                             sinf(kb_angle), p_kb_vel->y);
 #else
@@ -2316,10 +2316,10 @@ void Fighter_procUpdate(Fighter_GObj* gobj)
 #ifdef MSL_DECOMP_PORT
                     // Original DOL 0x8006BB34/0x8006BB50, same fused owner as
                     // ordinary knockback decay above.
-                    pAtkShieldKB->x = __fnmsubs(
+                    pAtkShieldKB->x = msl_dolphin_fnmsubs(
                         p_ftCommonData->x3E8_shieldKnockbackFrameDecay,
                         cosf(atkShieldKBAngle), pAtkShieldKB->x);
-                    pAtkShieldKB->y = __fnmsubs(
+                    pAtkShieldKB->y = msl_dolphin_fnmsubs(
                         p_ftCommonData->x3E8_shieldKnockbackFrameDecay,
                         sinf(atkShieldKBAngle), pAtkShieldKB->y);
 #else
