@@ -138,23 +138,38 @@ typedef struct FrameRows {
   int64_t count;
 } FrameRows;
 
-enum { MAX_DETAILS = 16, IO_CHUNK_BYTES = 65536 };
+enum { MAX_DETAILS = 16, MAX_MISMATCH_FIELDS = 128, IO_CHUNK_BYTES = 65536 };
 
 typedef struct MismatchDetail {
+  int64_t frame;
   char field[64];
   char expected[48];
   char actual[48];
 } MismatchDetail;
 
+typedef struct MismatchField {
+  char field[64];
+  int64_t count;
+  int64_t first_frame;
+  int64_t last_frame;
+} MismatchField;
+
 typedef struct ValidationResult {
   int64_t first_mismatch_frame;
+  int64_t last_mismatch_frame;
   int64_t first_render_visibility_mismatch_frame;
   int64_t matched_frames;
+  int64_t mismatched_frames;
+  int64_t exact_prefix_frames;
+  int64_t strict_suffix_frames;
   int64_t render_visibility_mismatch_count;
   int64_t signed_zero_equal_count;
-  int mismatch_count;
+  int64_t mismatch_count;
+  uint64_t mismatch_fingerprint;
   int detail_count;
+  int mismatch_field_count;
   MismatchDetail details[MAX_DETAILS];
+  MismatchField mismatch_fields[MAX_MISMATCH_FIELDS];
 } ValidationResult;
 
 typedef struct StreamState {
@@ -867,19 +882,63 @@ static void format_value(char* dst, size_t size, FieldKind kind, uint32_t bits) 
   }
 }
 
-static void record_detail(ValidationResult* result, const char* field, int index, FieldKind kind,
-                          uint32_t expected, uint32_t actual) {
+static void fingerprint_byte(ValidationResult* result, uint8_t value) {
+  result->mismatch_fingerprint ^= value;
+  result->mismatch_fingerprint *= UINT64_C(1099511628211);
+}
+
+static void fingerprint_u32(ValidationResult* result, uint32_t value) {
+  int i;
+  for (i = 0; i < 4; ++i) {
+    fingerprint_byte(result, (uint8_t)(value >> (i * 8)));
+  }
+}
+
+static void fingerprint_string(ValidationResult* result, const char* value) {
+  do {
+    fingerprint_byte(result, (uint8_t)*value);
+  } while (*value++ != '\0');
+}
+
+static void record_detail(ValidationResult* result, int64_t frame, const char* field, int index,
+                          FieldKind kind, uint32_t expected, uint32_t actual) {
+  char field_label[64];
   MismatchDetail* detail;
+  MismatchField* summary = NULL;
+  int i;
+
+  if (index < 0) {
+    snprintf(field_label, sizeof(field_label), "%s", field);
+  } else {
+    snprintf(field_label, sizeof(field_label), "%s[%d]", field, index);
+  }
   result->mismatch_count += 1;
+  fingerprint_u32(result, (uint32_t)frame);
+  fingerprint_string(result, field_label);
+  fingerprint_byte(result, (uint8_t)kind);
+  fingerprint_u32(result, expected);
+  fingerprint_u32(result, actual);
+  for (i = 0; i < result->mismatch_field_count; ++i) {
+    if (strcmp(result->mismatch_fields[i].field, field_label) == 0) {
+      summary = &result->mismatch_fields[i];
+      break;
+    }
+  }
+  if (summary == NULL && result->mismatch_field_count < MAX_MISMATCH_FIELDS) {
+    summary = &result->mismatch_fields[result->mismatch_field_count++];
+    snprintf(summary->field, sizeof(summary->field), "%s", field_label);
+    summary->first_frame = frame;
+  }
+  if (summary != NULL) {
+    summary->count += 1;
+    summary->last_frame = frame;
+  }
   if (result->detail_count >= MAX_DETAILS) {
     return;
   }
   detail = &result->details[result->detail_count++];
-  if (index < 0) {
-    snprintf(detail->field, sizeof(detail->field), "%s", field);
-  } else {
-    snprintf(detail->field, sizeof(detail->field), "%s[%d]", field, index);
-  }
+  detail->frame = frame;
+  snprintf(detail->field, sizeof(detail->field), "%s", field_label);
   format_value(detail->expected, sizeof(detail->expected), kind, expected);
   format_value(detail->actual, sizeof(detail->actual), kind, actual);
 }
@@ -975,8 +1034,9 @@ static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemField
 static int compare_row(const ReplayView* replay, int64_t raw, const MslCoreCompare* actual,
                        int signed_zero_equal, ValidationResult* result) {
   MslCoreCompare expected;
+  int64_t frame = get_i32(&replay->frame_id, raw);
   size_t field_i;
-  int mismatch_before = result->mismatch_count;
+  int64_t mismatch_before = result->mismatch_count;
   build_expected(replay, raw, &expected);
   for (field_i = 0; field_i < sizeof(compare_fields) / sizeof(compare_fields[0]); ++field_i) {
     const FieldSpec* spec = &compare_fields[field_i];
@@ -1007,8 +1067,8 @@ static int compare_row(const ReplayView* replay, int64_t raw, const MslCoreCompa
       }
       if (!compare_bits_equal((FieldKind)spec->kind, expected_bits, actual_bits,
                               signed_zero_equal)) {
-        record_detail(result, spec->name, spec->count == 1 ? -1 : element, (FieldKind)spec->kind,
-                      expected_bits, actual_bits);
+        record_detail(result, frame, spec->name, spec->count == 1 ? -1 : element,
+                      (FieldKind)spec->kind, expected_bits, actual_bits);
       } else if (expected_bits != actual_bits) {
         result->signed_zero_equal_count += 1;
       }
@@ -1018,7 +1078,7 @@ static int compare_row(const ReplayView* replay, int64_t raw, const MslCoreCompa
     int64_t expected_items = item_count(replay, raw);
     int actual_items = actual_item_count(actual);
     if (expected_items != actual_items) {
-      record_detail(result, "item_count", -1, FIELD_U32, (uint32_t)expected_items,
+      record_detail(result, frame, "item_count", -1, FIELD_U32, (uint32_t)expected_items,
                     (uint32_t)actual_items);
     }
   }
@@ -1040,7 +1100,7 @@ static int compare_row(const ReplayView* replay, int64_t raw, const MslCoreCompa
         }
         if (!compare_bits_equal((FieldKind)spec->kind, expected_bits, actual_bits,
                                 signed_zero_equal)) {
-          record_detail(result, spec->name, slot, (FieldKind)spec->kind, expected_bits,
+          record_detail(result, frame, spec->name, slot, (FieldKind)spec->kind, expected_bits,
                         actual_bits);
         } else if (expected_bits != actual_bits) {
           result->signed_zero_equal_count += 1;
@@ -1087,14 +1147,23 @@ static int consume_output(StreamState* state, const uint8_t* data, size_t size, 
         snprintf(error, error_size, "core runner produced too many rows");
         return -1;
       }
-      if (logical_pos >= state->compare_start_pos &&
-          state->result.first_mismatch_frame == INT64_MIN) {
+      if (logical_pos >= state->compare_start_pos) {
         int64_t raw = state->rows->raw[logical_pos];
+        int64_t frame = get_i32(&state->replay->frame_id, raw);
         const MslCoreCompare* actual = (const MslCoreCompare*)(const void*)state->output_row;
         if (compare_row(state->replay, raw, actual, state->signed_zero_equal, &state->result)) {
           state->result.matched_frames += 1;
+          state->result.strict_suffix_frames += 1;
+          if (state->result.first_mismatch_frame == INT64_MIN) {
+            state->result.exact_prefix_frames += 1;
+          }
         } else {
-          state->result.first_mismatch_frame = get_i32(&state->replay->frame_id, raw);
+          state->result.mismatched_frames += 1;
+          state->result.strict_suffix_frames = 0;
+          state->result.last_mismatch_frame = frame;
+          if (state->result.first_mismatch_frame == INT64_MIN) {
+            state->result.first_mismatch_frame = frame;
+          }
         }
       }
       state->output_have = 0;
@@ -1354,6 +1423,7 @@ static PyObject* result_object(const ReplayView* replay, const FrameRows* rows,
                                double runner_seconds) {
   PyObject* out = PyDict_New();
   PyObject* details = NULL;
+  PyObject* mismatch_fields = NULL;
   int i;
   int passed = state->result.first_mismatch_frame == INT64_MIN;
   int64_t seed_raw = rows->raw[0];
@@ -1376,16 +1446,29 @@ static PyObject* result_object(const ReplayView* replay, const FrameRows* rows,
   PUT("seed_frame", PyLong_FromLong(get_i32(&replay->frame_id, seed_raw)));
   PUT("first_ref_frame", PyLong_FromLong(get_i32(&replay->frame_id, first_raw)));
   PUT("matched_frames", PyLong_FromLongLong(state->result.matched_frames));
+  PUT("mismatched_frames", PyLong_FromLongLong(state->result.mismatched_frames));
+  PUT("exact_prefix_frames", PyLong_FromLongLong(state->result.exact_prefix_frames));
+  PUT("strict_suffix_frames", PyLong_FromLongLong(state->result.strict_suffix_frames));
   PUT("runner_seconds", PyFloat_FromDouble(runner_seconds));
   PUT("render_visibility_mismatch_count",
       PyLong_FromLongLong(state->result.render_visibility_mismatch_count));
   PUT("signed_zero_equal_count", PyLong_FromLongLong(state->result.signed_zero_equal_count));
-  PUT("mismatch_count", PyLong_FromLong(state->result.mismatch_count));
+  PUT("mismatch_count", PyLong_FromLongLong(state->result.mismatch_count));
   if (passed) {
     Py_INCREF(Py_None);
     PUT("first_mismatch_frame", Py_None);
+    Py_INCREF(Py_None);
+    PUT("last_mismatch_frame", Py_None);
+    Py_INCREF(Py_None);
+    PUT("mismatch_fingerprint", Py_None);
   } else {
     PUT("first_mismatch_frame", PyLong_FromLongLong(state->result.first_mismatch_frame));
+    PUT("last_mismatch_frame", PyLong_FromLongLong(state->result.last_mismatch_frame));
+    {
+      char fingerprint[17];
+      snprintf(fingerprint, sizeof(fingerprint), "%016" PRIx64, state->result.mismatch_fingerprint);
+      PUT("mismatch_fingerprint", PyUnicode_FromString(fingerprint));
+    }
   }
   if (state->result.first_render_visibility_mismatch_frame == INT64_MIN) {
     Py_INCREF(Py_None);
@@ -1400,8 +1483,9 @@ static PyObject* result_object(const ReplayView* replay, const FrameRows* rows,
   }
   for (i = 0; i < state->result.detail_count; ++i) {
     const MismatchDetail* detail = &state->result.details[i];
-    PyObject* row = Py_BuildValue("{s:s,s:s,s:s}", "field", detail->field, "expected",
-                                  detail->expected, "actual", detail->actual);
+    PyObject* row =
+        Py_BuildValue("{s:L,s:s,s:s,s:s}", "frame", (long long)detail->frame, "field",
+                      detail->field, "expected", detail->expected, "actual", detail->actual);
     if (row == NULL) {
       goto fail;
     }
@@ -1411,11 +1495,31 @@ static PyObject* result_object(const ReplayView* replay, const FrameRows* rows,
     goto fail;
   }
   Py_DECREF(details);
+  details = NULL;
+  mismatch_fields = PyList_New(state->result.mismatch_field_count);
+  if (mismatch_fields == NULL) {
+    goto fail;
+  }
+  for (i = 0; i < state->result.mismatch_field_count; ++i) {
+    const MismatchField* field = &state->result.mismatch_fields[i];
+    PyObject* row = Py_BuildValue(
+        "{s:s,s:L,s:L,s:L}", "field", field->field, "count", (long long)field->count, "first_frame",
+        (long long)field->first_frame, "last_frame", (long long)field->last_frame);
+    if (row == NULL) {
+      goto fail;
+    }
+    PyList_SET_ITEM(mismatch_fields, i, row);
+  }
+  if (PyDict_SetItemString(out, "mismatch_fields", mismatch_fields) != 0) {
+    goto fail;
+  }
+  Py_DECREF(mismatch_fields);
 #undef PUT
   return out;
 
 fail:
   Py_XDECREF(details);
+  Py_XDECREF(mismatch_fields);
   Py_DECREF(out);
 #undef PUT
   return NULL;
@@ -1472,7 +1576,9 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   memset(&state, 0, sizeof(state));
   state.signed_zero_equal = (uint8_t)signed_zero_equal;
   state.result.first_mismatch_frame = INT64_MIN;
+  state.result.last_mismatch_frame = INT64_MIN;
   state.result.first_render_visibility_mismatch_frame = INT64_MIN;
+  state.result.mismatch_fingerprint = UINT64_C(14695981039346656037);
   if (parse_start(start_obj, &replay) != 0 || parse_metadata(metadata_obj, &replay) != 0) {
     goto done;
   }

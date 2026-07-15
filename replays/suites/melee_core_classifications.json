@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "classifications": [
+    {
+      "replay": "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz",
+      "id": "vanilla-magnifier-render-schedule",
+      "owner": "ifMagnify/Fighter_8006A360 render-publication boundary",
+      "rationale": "The replay does not record the VI/render boundary that publishes x221F_b0. Its vanilla magnifier schedule differs for one gameplay tick, producing one 1% damage row; the following 2,403 transitions are exact.",
+      "sources": [
+        "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
+      ],
+      "expected": {
+        "native": {
+          "frames": 9328,
+          "matched_frames": 9327,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 6924,
+          "strict_suffix_frames": 2403,
+          "first_mismatch_frame": 6802,
+          "last_mismatch_frame": 6802,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "f874d3038285794c",
+          "mismatch_fields": [
+            {
+              "field": "percent[1]",
+              "count": 1,
+              "first_frame": 6802,
+              "last_frame": 6802
+            }
+          ],
+          "render_visibility_mismatch_count": 6,
+          "first_render_visibility_mismatch_frame": 1465,
+          "signed_zero_equal_count": 0
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
+      "id": "unrecorded-dolphin-float-profile",
+      "owner": "Dolphin PPC float/matrix execution profile",
+      "rationale": "The replay records only playedOn=dolphin, not its build or paired-single/JIT profile. Bounded current-Dolphin probes reproduce the runtime's exact thrown/root-motion and reflected-laser bits, while a 1,000-transition PPC/native comparison has an identical mismatch fingerprint. The complete residual is limited to float positions/velocities and laser-angle bytes derived from those floats; all other compared gameplay state is exact.",
+      "sources": [
+        "refs/melee/src/sysdolphin/baselib/mtx.c::PSMTXMultVec",
+        "refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced",
+        "refs/melee/src/melee/lb/lbvector.c::lbVector_Mirror"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11980,
+          "matched_frames": 10627,
+          "mismatched_frames": 1353,
+          "exact_prefix_frames": 127,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 5,
+          "last_mismatch_frame": 11857,
+          "mismatch_count": 2246,
+          "mismatch_fingerprint": "100afb09969ffbbc",
+          "mismatch_fields": [
+            {
+              "field": "item.pos_x[1]",
+              "count": 130,
+              "first_frame": 5,
+              "last_frame": 10973
+            },
+            {
+              "field": "item.pos_y[1]",
+              "count": 196,
+              "first_frame": 5,
+              "last_frame": 11857
+            },
+            {
+              "field": "item.pos_x[0]",
+              "count": 603,
+              "first_frame": 9,
+              "last_frame": 10986
+            },
+            {
+              "field": "item.pos_y[0]",
+              "count": 851,
+              "first_frame": 9,
+              "last_frame": 11120
+            },
+            {
+              "field": "pos_y[0]",
+              "count": 78,
+              "first_frame": 383,
+              "last_frame": 5525
+            },
+            {
+              "field": "pos_x[0]",
+              "count": 168,
+              "first_frame": 1061,
+              "last_frame": 10129
+            },
+            {
+              "field": "item.pos_x[2]",
+              "count": 16,
+              "first_frame": 1588,
+              "last_frame": 6621
+            },
+            {
+              "field": "item.pos_y[2]",
+              "count": 37,
+              "first_frame": 1588,
+              "last_frame": 10742
+            },
+            {
+              "field": "item.vel_x[0]",
+              "count": 4,
+              "first_frame": 6147,
+              "last_frame": 6150
+            },
+            {
+              "field": "item.vel_y[0]",
+              "count": 4,
+              "first_frame": 6147,
+              "last_frame": 6150
+            },
+            {
+              "field": "item.misc1[0]",
+              "count": 4,
+              "first_frame": 6147,
+              "last_frame": 6150
+            },
+            {
+              "field": "pos_y[1]",
+              "count": 125,
+              "first_frame": 6600,
+              "last_frame": 10738
+            },
+            {
+              "field": "item.pos_y[3]",
+              "count": 9,
+              "first_frame": 6619,
+              "last_frame": 10742
+            },
+            {
+              "field": "item.vel_x[2]",
+              "count": 7,
+              "first_frame": 8261,
+              "last_frame": 8267
+            },
+            {
+              "field": "item.vel_y[2]",
+              "count": 7,
+              "first_frame": 8261,
+              "last_frame": 8267
+            },
+            {
+              "field": "item.misc1[2]",
+              "count": 7,
+              "first_frame": 8261,
+              "last_frame": 8267
+            }
+          ],
+          "render_visibility_mismatch_count": 11,
+          "first_render_visibility_mismatch_frame": 1545,
+          "signed_zero_equal_count": 0
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz",
+      "id": "offline-deadup-render-transform",
+      "owner": "ftDrawCommon DeadUp inverse-camera publication",
+      "rationale": "Offline DeadUpFall publishes cur_pos through the render camera's inverse transform. The bounded residual contains only P2 X/Y render positions and is followed by 5,758 exact transitions.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18_inline2",
+        "refs/melee/src/melee/cm/camera.c::Camera_800311EC"
+      ],
+      "expected": {
+        "native": {
+          "frames": 12914,
+          "matched_frames": 12794,
+          "mismatched_frames": 120,
+          "exact_prefix_frames": 7028,
+          "strict_suffix_frames": 5758,
+          "first_mismatch_frame": 6906,
+          "last_mismatch_frame": 7033,
+          "mismatch_count": 183,
+          "mismatch_fingerprint": "23113abb0b5dba1a",
+          "mismatch_fields": [
+            {
+              "field": "pos_x[1]",
+              "count": 86,
+              "first_frame": 6906,
+              "last_frame": 7033
+            },
+            {
+              "field": "pos_y[1]",
+              "count": 97,
+              "first_frame": 6906,
+              "last_frame": 7033
+            }
+          ],
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz",
+      "id": "offline-deadup-render-transform",
+      "owner": "ftDrawCommon DeadUp inverse-camera publication",
+      "rationale": "Offline DeadUpFall publishes cur_pos through the render camera's inverse transform. The bounded residual contains only P2 X/Y render positions and is followed by 10,988 exact transitions.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18_inline2",
+        "refs/melee/src/melee/cm/camera.c::Camera_800311EC"
+      ],
+      "expected": {
+        "native": {
+          "frames": 13063,
+          "matched_frames": 12939,
+          "mismatched_frames": 124,
+          "exact_prefix_frames": 1947,
+          "strict_suffix_frames": 10988,
+          "first_mismatch_frame": 1825,
+          "last_mismatch_frame": 1952,
+          "mismatch_count": 191,
+          "mismatch_fingerprint": "4733a1866819dda7",
+          "mismatch_fields": [
+            {
+              "field": "pos_x[1]",
+              "count": 102,
+              "first_frame": 1825,
+              "last_frame": 1952
+            },
+            {
+              "field": "pos_y[1]",
+              "count": 89,
+              "first_frame": 1825,
+              "last_frame": 1952
+            }
+          ],
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        }
+      }
+    }
+  ]
+}

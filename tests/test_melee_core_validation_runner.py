@@ -14,13 +14,25 @@ def _result(*, passed: bool = True, frames: int = 10) -> dict[str, object]:
     return {
         "pass": passed,
         "frames": frames,
+        "total": frames,
         "matched_frames": frames if passed else frames - 1,
+        "mismatched_frames": 0 if passed else 1,
+        "exact_prefix_frames": frames if passed else frames - 1,
+        "strict_suffix_frames": frames if passed else 0,
         "runner_seconds": 0.01,
         "first_mismatch_frame": None if passed else 7,
+        "last_mismatch_frame": None if passed else 7,
         "mismatch_count": 0 if passed else 1,
+        "mismatch_fingerprint": None if passed else "0123456789abcdef",
+        "mismatch_fields": []
+        if passed
+        else [{"field": "pos_x", "count": 1, "first_frame": 7, "last_frame": 7}],
+        "render_visibility_mismatch_count": 0,
+        "first_render_visibility_mismatch_frame": None,
+        "signed_zero_equal_count": 0,
         "details": []
         if passed
-        else [{"field": "pos_x", "expected": "1", "actual": "2"}],
+        else [{"frame": 7, "field": "pos_x", "expected": "1", "actual": "2"}],
     }
 
 
@@ -46,6 +58,12 @@ def test_canonical_phase5_scope_selects_23_replays_without_a_duplicate_manifest(
         "HungryImportantSnake.slpz",
         "PutridJoyousOryx.slpz",
     ]
+
+    classifications = validate_replay.load_classifications(
+        ROOT / "replays/suites/melee_core_classifications.json"
+    )
+    assert len(classifications) == 4
+    assert set(classifications) <= {case.display_path for case in cases}
 
 
 def test_parallel_runner_preserves_manifest_order_and_isolates_errors(
@@ -116,6 +134,92 @@ def test_suite_stdout_is_compact_and_reports_aggregate_throughput(capsys) -> Non
     assert "PASS" in output
     assert "FAIL" in output
     assert "ERROR" in output
-    assert "first=7 fields=1" in output
-    assert "pass=1 fail=1 error=1 frames=20" in output
+    assert "first=7 last=7 fields=1" in output
+    assert "pass=1 classified=0 xpass=0 fail=1 error=1 frames=20" in output
     assert "aggregate_fps=400" in output
+
+
+def test_exact_classification_passes_and_drift_fails(capsys) -> None:
+    case = validate_replay.ReplayCase(Path("known.slpz"), "known.slpz")
+    result = _result(passed=False)
+    classification = validate_replay.ReplayClassification(
+        replay="known.slpz",
+        classification_id="known-owner",
+        owner="source owner",
+        rationale="bounded source-classified residual",
+        sources=("refs/melee/src/owner.c::owner",),
+        expected={"native": validate_replay.classification_snapshot(result)},
+    )
+    outcome = validate_replay.ReplayOutcome(case, result, None, 0.02)
+
+    assert validate_replay.print_backend_results(
+        "native",
+        [outcome],
+        workers=1,
+        wall_seconds=0.02,
+        show_timing=False,
+        classifications={case.display_path: classification},
+    )
+    output = capsys.readouterr().out
+    assert "CLASS" in output
+    assert "classified=1" in output
+
+    legacy_case = validate_replay.ReplayCase(Path("known.slpz"), "known.slp")
+    legacy_outcome = validate_replay.ReplayOutcome(legacy_case, result, None, 0.02)
+    status, _ = validate_replay._result_status(
+        "native",
+        legacy_outcome,
+        {"known.slpz": classification},
+        strict_classifications=False,
+    )
+    assert status == "classified"
+
+    result["mismatch_fingerprint"] = "fedcba9876543210"
+    assert not validate_replay.print_backend_results(
+        "native",
+        [outcome],
+        workers=1,
+        wall_seconds=0.02,
+        show_timing=False,
+        classifications={case.display_path: classification},
+    )
+    assert "classification drift" in capsys.readouterr().out
+
+
+def test_full_replay_xpass_rejects_stale_classification(capsys) -> None:
+    case = validate_replay.ReplayCase(Path("known.slpz"), "known.slpz")
+    failed_result = _result(passed=False)
+    classification = validate_replay.ReplayClassification(
+        replay="known.slpz",
+        classification_id="known-owner",
+        owner="source owner",
+        rationale="bounded source-classified residual",
+        sources=("refs/melee/src/owner.c::owner",),
+        expected={"native": validate_replay.classification_snapshot(failed_result)},
+    )
+    outcome = validate_replay.ReplayOutcome(case, _result(), None, 0.02)
+
+    assert not validate_replay.print_backend_results(
+        "native",
+        [outcome],
+        workers=1,
+        wall_seconds=0.02,
+        show_timing=False,
+        classifications={case.display_path: classification},
+    )
+    assert "XPASS" in capsys.readouterr().out
+
+    partial = _result(frames=5)
+    partial["total"] = 10
+    outcome = validate_replay.ReplayOutcome(case, partial, None, 0.02)
+    assert validate_replay.print_backend_results(
+        "native",
+        [outcome],
+        workers=1,
+        wall_seconds=0.02,
+        show_timing=False,
+        classifications={case.display_path: classification},
+    )
+    output = capsys.readouterr().out
+    assert "PASS" in output
+    assert "XPASS" not in output

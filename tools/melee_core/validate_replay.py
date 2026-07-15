@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import importlib.util
+import json
 import os
 import subprocess
 import time
@@ -29,6 +30,7 @@ SYSROOT = TOOLCHAIN / "usr" / "powerpc-linux-gnu"
 DEFAULT_CHARACTERS = "Fox,Falco"
 DEFAULT_STAGES = "32,31,3"
 MAX_AUTO_WORKERS = 16
+DEFAULT_CLASSIFICATIONS = ROOT / "replays/suites/melee_core_classifications.json"
 
 STAGE_NAMES = {
     2: "Fountain",
@@ -57,11 +59,92 @@ class ReplayOutcome:
     elapsed_seconds: float
 
 
+@dataclass(frozen=True)
+class ReplayClassification:
+    replay: str
+    classification_id: str
+    owner: str
+    rationale: str
+    sources: tuple[str, ...]
+    expected: dict[str, dict[str, object]]
+
+
+CLASSIFICATION_SNAPSHOT_KEYS = (
+    "frames",
+    "matched_frames",
+    "mismatched_frames",
+    "exact_prefix_frames",
+    "strict_suffix_frames",
+    "first_mismatch_frame",
+    "last_mismatch_frame",
+    "mismatch_count",
+    "mismatch_fingerprint",
+    "mismatch_fields",
+    "render_visibility_mismatch_count",
+    "first_render_visibility_mismatch_frame",
+    "signed_zero_equal_count",
+)
+
+
 @lru_cache(maxsize=1)
 def game_data_dir() -> Path:
     path = raw_data_dir(default=ROOT / "data")
     validate_raw_data_root(path, verify_hashes=True)
     return path
+
+
+def load_classifications(path: Path) -> dict[str, ReplayClassification]:
+    data = json.loads(path.read_text())
+    if data.get("version") != 1:
+        raise ValueError(f"{path}: unsupported classification manifest version")
+    classifications: dict[str, ReplayClassification] = {}
+    for entry in data.get("classifications", []):
+        replay = str(entry.get("replay", ""))
+        classification_id = str(entry.get("id", ""))
+        owner = str(entry.get("owner", ""))
+        rationale = str(entry.get("rationale", ""))
+        sources = tuple(str(source) for source in entry.get("sources", []))
+        expected = entry.get("expected")
+        replay_path = Path(replay)
+        if not replay or replay_path.is_absolute() or ".." in replay_path.parts:
+            raise ValueError(f"{path}: classification replay must be repo-relative")
+        if not resolve_replay_path(ROOT / replay_path).is_file():
+            raise ValueError(f"{path}: classification replay does not exist: {replay}")
+        if not classification_id or not owner or not rationale or not sources:
+            raise ValueError(f"{path}: incomplete classification for {replay}")
+        if not isinstance(expected, dict) or not expected:
+            raise ValueError(f"{path}: classification has no backend snapshot: {replay}")
+        snapshots: dict[str, dict[str, object]] = {}
+        for backend, snapshot in expected.items():
+            if backend not in {"native", "ppc"} or not isinstance(snapshot, dict):
+                raise ValueError(f"{path}: invalid classification backend for {replay}")
+            missing = set(CLASSIFICATION_SNAPSHOT_KEYS) - set(snapshot)
+            extra = set(snapshot) - set(CLASSIFICATION_SNAPSHOT_KEYS)
+            if missing or extra:
+                raise ValueError(
+                    f"{path}: invalid {backend} snapshot keys for {replay}; "
+                    f"missing={sorted(missing)} extra={sorted(extra)}"
+                )
+            snapshots[backend] = snapshot
+        if replay in classifications:
+            raise ValueError(f"{path}: duplicate classification replay: {replay}")
+        classifications[replay] = ReplayClassification(
+            replay=replay,
+            classification_id=classification_id,
+            owner=owner,
+            rationale=rationale,
+            sources=sources,
+            expected=snapshots,
+        )
+    return classifications
+
+
+def classification_snapshot(result: dict[str, object]) -> dict[str, object]:
+    return {key: result[key] for key in CLASSIFICATION_SNAPSHOT_KEYS}
+
+
+def _has_full_replay_coverage(result: dict[str, object]) -> bool:
+    return int(result["frames"]) == int(result["total"])
 
 
 def build_validation(*, backend: str, jobs: int = 4) -> None:
@@ -298,6 +381,55 @@ def _case_scope(case: ReplayCase) -> str:
     return f"{stage} {players} {ports}"
 
 
+def _result_status(
+    backend: str,
+    outcome: ReplayOutcome,
+    classifications: dict[str, ReplayClassification],
+    strict_classifications: bool,
+) -> tuple[str, ReplayClassification | None]:
+    assert outcome.result is not None
+    result = outcome.result
+    classification = classifications.get(outcome.case.display_path)
+    if classification is None:
+        classification = classifications.get(display_path_under_repo(outcome.case.replay, ROOT))
+    expected = classification.expected.get(backend) if classification is not None else None
+    if strict_classifications or expected is None or not _has_full_replay_coverage(result):
+        return ("pass" if bool(result["pass"]) else "fail"), classification
+    if bool(result["pass"]):
+        return "xpass", classification
+    if classification_snapshot(result) == expected:
+        return "classified", classification
+    return "drift", classification
+
+
+def _print_mismatch(result: dict[str, object]) -> None:
+    print(
+        "      "
+        f"mismatch_rows={int(result['mismatched_frames']):,} "
+        f"prefix={int(result['exact_prefix_frames']):,} "
+        f"suffix={int(result['strict_suffix_frames']):,} "
+        f"first={result['first_mismatch_frame']} "
+        f"last={result['last_mismatch_frame']} "
+        f"fields={int(result['mismatch_count']):,} "
+        f"fingerprint={result['mismatch_fingerprint']}"
+    )
+    for detail in list(result["details"])[:3]:
+        print(
+            f"      frame={detail['frame']} {detail['field']}: "
+            f"expected={detail['expected']} actual={detail['actual']}"
+        )
+    summaries = list(result["mismatch_fields"])
+    if summaries:
+        fields = ", ".join(
+            f"{field['field']}={int(field['count']):,}"
+            f"@{field['first_frame']}..{field['last_frame']}"
+            for field in summaries[:4]
+        )
+        if len(summaries) > 4:
+            fields += f", +{len(summaries) - 4} fields"
+        print(f"      mismatch_fields: {fields}")
+
+
 def print_backend_results(
     backend: str,
     outcomes: list[ReplayOutcome],
@@ -305,9 +437,14 @@ def print_backend_results(
     workers: int,
     wall_seconds: float,
     show_timing: bool,
+    classifications: dict[str, ReplayClassification] | None = None,
+    strict_classifications: bool = False,
 ) -> bool:
+    classifications = classifications or {}
     print(f"\n[{backend}] workers={workers}")
     passed = 0
+    classified = 0
+    xpassed = 0
     failed = 0
     errors = 0
     compared_frames = 0
@@ -318,7 +455,10 @@ def print_backend_results(
         if outcome.error is not None:
             errors += 1
             timing = f" {outcome.elapsed_seconds:7.3f}s" if show_timing else ""
-            print(f"ERROR {'-':>15}{timing}{scope_column} {outcome.case.display_path}")
+            print(
+                f"{'ERROR':<10} {'-':>15}{timing}{scope_column} "
+                f"{outcome.case.display_path}"
+            )
             print(f"      {outcome.error}")
             continue
 
@@ -333,35 +473,64 @@ def print_backend_results(
         if show_timing:
             fps = frames / runner if runner > 0.0 else 0.0
             timing = f" {runner:7.3f}s {fps:9,.0f} fps"
-        if bool(result["pass"]):
+        status, classification = _result_status(
+            backend, outcome, classifications, strict_classifications
+        )
+        if status == "pass":
             passed += 1
             print(
-                f"PASS  {matched:>7,}/{frames:<7,}{timing}{scope_column} "
+                f"{'PASS':<10} {matched:>7,}/{frames:<7,}{timing}{scope_column} "
                 f"{outcome.case.display_path}"
             )
+        elif status == "classified":
+            assert classification is not None
+            classified += 1
+            print(
+                f"{'CLASSIFIED':<10} {matched:>7,}/{frames:<7,}{timing}{scope_column} "
+                f"{outcome.case.display_path}"
+            )
+            print(
+                f"      id={classification.classification_id} owner={classification.owner}"
+            )
+            _print_mismatch(result)
+        elif status == "xpass":
+            assert classification is not None
+            xpassed += 1
+            print(
+                f"{'XPASS':<10} {matched:>7,}/{frames:<7,}{timing}{scope_column} "
+                f"{outcome.case.display_path}"
+            )
+            print(f"      stale classification: {classification.classification_id}")
         else:
             failed += 1
             print(
-                f"FAIL  {matched:>7,}/{frames:<7,}{timing}{scope_column} "
+                f"{'FAIL':<10} {matched:>7,}/{frames:<7,}{timing}{scope_column} "
                 f"{outcome.case.display_path}"
             )
-            print(
-                "      "
-                f"first={result['first_mismatch_frame']} fields={result['mismatch_count']}"
-            )
-            for detail in list(result["details"])[:3]:
+            if status == "drift":
+                assert classification is not None
+                expected = classification.expected[backend]
                 print(
-                    f"      {detail['field']}: expected={detail['expected']} "
-                    f"actual={detail['actual']}"
+                    f"      classification drift: {classification.classification_id} "
+                    f"expected_fingerprint={expected['mismatch_fingerprint']}"
                 )
+            _print_mismatch(result)
+        render_mismatches = int(result["render_visibility_mismatch_count"])
+        if render_mismatches:
+            print(
+                f"      render_visibility_diagnostic={render_mismatches:,} "
+                f"first={result['first_render_visibility_mismatch_frame']} "
+                "field=state_flags[*][4]&0x80"
+            )
 
     aggregate_fps = compared_frames / wall_seconds if wall_seconds > 0.0 else 0.0
     print(
-        f"[{backend}] summary: pass={passed} fail={failed} error={errors} "
+        f"[{backend}] summary: pass={passed} classified={classified} "
+        f"xpass={xpassed} fail={failed} error={errors} "
         f"frames={compared_frames:,} wall={wall_seconds:.3f}s "
         f"aggregate_fps={aggregate_fps:,.0f} runner_cpu={runner_seconds:.3f}s"
     )
-    return failed == 0 and errors == 0
+    return xpassed == 0 and failed == 0 and errors == 0
 
 
 def main() -> int:
@@ -419,6 +588,17 @@ def main() -> int:
         action="store_true",
         help="Ignore only +0.0/-0.0 bit differences while finding the next mismatch.",
     )
+    parser.add_argument(
+        "--classifications",
+        type=Path,
+        default=DEFAULT_CLASSIFICATIONS,
+        help="Exact known-mismatch manifest used for complete replay validation.",
+    )
+    parser.add_argument(
+        "--strict-classifications",
+        action="store_true",
+        help="Report every raw mismatch as FAIL without applying known classifications.",
+    )
     args = parser.parse_args()
     if bool(args.replay) == bool(args.suite):
         parser.error("provide either positional replay paths or --suite")
@@ -430,6 +610,10 @@ def main() -> int:
         parser.error("--build-jobs must be positive")
 
     try:
+        classification_path = args.classifications.expanduser()
+        if not classification_path.is_absolute():
+            classification_path = ROOT / classification_path
+        classifications = load_classifications(classification_path)
         suite: ReplaySuite | None = None
         if args.suite is not None:
             suite_path = args.suite.expanduser()
@@ -463,6 +647,11 @@ def main() -> int:
             )
         else:
             print(f"replays: {len(cases)}")
+        print(
+            f"classifications: entries={len(classifications)} "
+            f"policy={'strict' if args.strict_classifications else 'exact'} "
+            f"source={display_path_under_repo(classification_path, ROOT)}"
+        )
 
         all_passed = True
         backends = ("native", "ppc") if args.backend == "both" else (args.backend,)
@@ -485,6 +674,8 @@ def main() -> int:
                     workers=workers,
                     wall_seconds=wall_seconds,
                     show_timing=args.timing,
+                    classifications=classifications,
+                    strict_classifications=args.strict_classifications,
                 )
                 and all_passed
             )
