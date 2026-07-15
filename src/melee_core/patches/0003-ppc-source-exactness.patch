@@ -1,0 +1,556 @@
+--- a/src/melee/ft/chara/ftCommon/ftCo_Damage.c
++++ b/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+@@ -63,6 +63,10 @@
+ #include <MetroTRK/intrinsics.h>
+ #include <MSL/trigf.h>
+ 
++#ifdef MSL_CORE_HOSTED
++#include "runtime/match.h"
++#endif
++
+ int ftCo_803C5520[2][12] = {
+     { 81, 78, 75, 82, 79, 76, 83, 80, 77, 89, 88, 87 },
+     { 84, 84, 84, 85, 85, 85, 86, 86, 86, 89, 88, 87 },
+@@ -579,7 +583,11 @@
+         VEC2_SQ_LEN(fp->input.lstick) >=
+             SQ(p_ftCommonData->sdi_min_stick_mag) &&
+         (fp->x670_timer_lstick_tilt_x < p_ftCommonData->sdi_stick_window ||
+-         fp->x671_timer_lstick_tilt_y < p_ftCommonData->sdi_stick_window))
++         fp->x671_timer_lstick_tilt_y < p_ftCommonData->sdi_stick_window
++#ifdef MSL_CORE_HOSTED
++         || msl_ucf_sdi_check(fp)
++#endif
++             ))
+     {
+         float scaled_lstick_x =
+             fp->input.lstick.x * p_ftCommonData->sdi_pos_scale;
+@@ -600,10 +608,14 @@
+         float kb_x = fp->x8c_kb_vel.x;
+         float kb_y = fp->x8c_kb_vel.y;
+         float kb_vel_x_neg = -kb_x;
+-        float kb_mag = kb_vel_x_neg * kb_vel_x_neg + kb_y * kb_y;
++        // Retail GALE01 0x8008E5F4..0x8008E5FC keeps the squared
++        // magnitude's final add fused.
++        float kb_y_sq = kb_y * kb_y;
++        float kb_mag = __fmadds(kb_vel_x_neg, kb_vel_x_neg, kb_y_sq);
+         if (!(kb_mag < 0.00001f)) {
+-            float f3 =
+-                kb_y * fp->input.lstick.x + kb_vel_x_neg * fp->input.lstick.y;
++            // Retail GALE01 0x8008E618..0x8008E624.
++            float f3 = __fmadds(kb_y, fp->input.lstick.x,
++                                kb_vel_x_neg * fp->input.lstick.y);
+             float f30 = f3 * f3 / kb_mag;
+             Vec3 lstick_vec3, kb_vel_cross_lstick;
+             lstick_vec3.x = fp->input.lstick.x;
+@@ -617,9 +629,12 @@
+             {
+                 float angle = atan2f(kb_y, kb_x);
+                 float scale;
+-                kb_mag = sqrtf(kb_x * kb_x + kb_y * kb_y);
++                // Retail GALE01 0x8008E660 computes the radicand with an
++                // fmadd before the inlined MSL sqrt sequence.
++                kb_mag = sqrtf(__fmadds(kb_x, kb_x, kb_y_sq));
+                 scale = deg_to_rad * p_ftCommonData->x1A8;
+-                angle += scale * f30;
++                // Retail GALE01 0x8008E6CC.
++                angle = __fmadds(scale, f30, angle);
+                 fp->x8c_kb_vel.x = kb_mag * cosf(angle);
+                 fp->x8c_kb_vel.y = kb_mag * sinf(angle);
+             }
+@@ -662,8 +677,16 @@
+         float kb_y = fp->x8c_kb_vel.y;
+         if (kb_x || kb_y) {
+             float kb_angle = atan2f(kb_y, kb_x);
++#ifdef MSL_CORE_HOSTED
++            // Retail GALE01 0x8008E858..0x8008E860 rounds kb_y^2, then
++            // accumulates kb_x^2 with one scalar-single fmadds before sqrt.
++            float kb_y_sq = kb_y * kb_y;
++            float scaled_kb_mag =
++                sqrtf(__fmadds(kb_x, kb_x, kb_y_sq)) * p_ftCommonData->x1AC;
++#else
+             float scaled_kb_mag =
+                 sqrtf(kb_x * kb_x + kb_y * kb_y) * p_ftCommonData->x1AC;
++#endif
+             fp->x8c_kb_vel.x = scaled_kb_mag * cosf(kb_angle);
+             fp->x8c_kb_vel.y = scaled_kb_mag * sinf(kb_angle);
+         }
+@@ -937,12 +960,20 @@
+                    fp->x2222_b0)
+         {
+             ftDk_MS_349_800E06D8(gobj);
+-        } else if (!ftCo_8009F0F0(gobj) && !ftCo_800C0CB8(gobj) &&
+-                   fp->motion_id == ftCo_MS_DamageIce)
+-        {
++        // Retail DOL 0x8008F650..0x8008F6B0 exits this resolver when either
++        // specialized handler succeeds. The decomp's combined negated
++        // condition fell through to generic damage and overwrote transitions
++        // such as DownBound -> DownDamage.
++        } else if (ftCo_8009F0F0(gobj)) {
++            goto ret_A8C;
++        } else if (ftCo_800C0CB8(gobj)) {
++            goto ret_A8C;
++        } else if (fp->motion_id == ftCo_MS_DamageIce) {
+             ftCo_8008DCE0(gobj, ftCo_MS_DamageIce, fp->facing_dir);
+             ftCo_DamageIce_HitWhileFrozen(gobj);
+-        } else if (!ftCo_800C74F4(gobj)) {
++        } else if (ftCo_800C74F4(gobj)) {
++            goto ret_A8C;
++        } else {
+             ftCommon_8007DB58(gobj);
+             ftCo_8008E908(gobj, facing_dir);
+         }
+--- a/src/melee/ft/chara/ftCommon/ftCo_Guard.c
++++ b/src/melee/ft/chara/ftCommon/ftCo_Guard.c
+@@ -37,12 +37,17 @@
+ #include "pl/player.h"
+ #include "pl/plbonuslib.h"
+ 
++#include <MetroTRK/intrinsics.h>
+ #include <common_structs.h>
+ #include <math.h>
+ #include <math_ppc.h>
+ #include <baselib/gobj.h>
+ #include <baselib/jobj.h>
+ 
++#ifdef MSL_CORE_HOSTED
++#include "runtime/match.h"
++#endif
++
+ bool ftCo_80091A2C(Fighter_GObj* gobj)
+ {
+     Fighter* fp = gobj->user_data;
+@@ -335,10 +340,14 @@
+                     : (fp->input.x650 - p_ftCommonData->x10) /
+                           (1 - p_ftCommonData->x10);
+         }
+-        fp->shield_health -= p_ftCommonData->x278 *
+-                             ((fp->lightshield_amount *
+-                               (p_ftCommonData->x2F0 - p_ftCommonData->x2EC)) +
+-                              p_ftCommonData->x2EC);
++        // Retail GALE01 0x80092624 is a scalar-single fmadd. Keep that
++        // operation boundary explicit while this host build otherwise uses
++        // -ffp-contract=off.
++        fp->shield_health -=
++            p_ftCommonData->x278 *
++            __fmadds(fp->lightshield_amount,
++                     p_ftCommonData->x2F0 - p_ftCommonData->x2EC,
++                     p_ftCommonData->x2EC);
+         if (fp->shield_health < 0) {
+             fp->shield_health = 0;
+             fp->x221A_b7 = false;
+@@ -574,11 +583,13 @@
+ 
+ float ftCo_80092ED8(int arg0, float arg1)
+ {
+-    return p_ftCommonData->x28C *
+-               (arg0 *
+-                (1 - (arg1 * (p_ftCommonData->x2E8 - p_ftCommonData->x2E4) +
+-                      p_ftCommonData->x2E4))) +
+-           p_ftCommonData->x290;
++    float shield_scale =
++        __fmadds(arg1, p_ftCommonData->x2E8 - p_ftCommonData->x2E4,
++                 p_ftCommonData->x2E4);
++    // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Guard.s
++    // ftCo_80092ED8 uses fmadds for both affine stages.
++    return __fmadds(p_ftCommonData->x28C, arg0 * (1 - shield_scale),
++                    p_ftCommonData->x290);
+ }
+ 
+ void ftCo_80092F2C(HSD_GObj* gobj, bool arg1)
+@@ -598,12 +609,13 @@
+         fp->x2219_b0 = true;
+     }
+     {
+-        float f = (p_ftCommonData->x28C *
+-                   (fp->x19A4 *
+-                    (1.0f - ((fp->lightshield_amount *
+-                              (p_ftCommonData->x2E8 - p_ftCommonData->x2E4)) +
+-                             p_ftCommonData->x2E4)))) +
+-                  p_ftCommonData->x290;
++        float shield_scale = __fmadds(
++            fp->lightshield_amount,
++            p_ftCommonData->x2E8 - p_ftCommonData->x2E4,
++            p_ftCommonData->x2E4);
++        float f = __fmadds(p_ftCommonData->x28C,
++                           fp->x19A4 * (1.0f - shield_scale),
++                           p_ftCommonData->x290);
+         ftAnim_SetAnimRate(gobj,
+                            (0.1f + lbGetJObjEndFrame(GET_JOBJ(gobj))) / f);
+         if (!arg1) {
+@@ -642,7 +654,12 @@
+         if ((fp->input.lstick.x < 0
+                  ? -fp->input.lstick.x
+                  : fp->input.lstick.x) >= p_ftCommonData->sdi_min_stick_mag &&
+-            fp->x670_timer_lstick_tilt_x < p_ftCommonData->sdi_stick_window)
++            (fp->x670_timer_lstick_tilt_x <
++                 p_ftCommonData->sdi_stick_window
++#ifdef MSL_CORE_HOSTED
++             || msl_ucf_shield_sdi_check(fp)
++#endif
++                 ))
+         {
+             float scl = p_ftCommonData->x4C0 *
+                         (fp->input.lstick.x * p_ftCommonData->sdi_pos_scale);
+--- a/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c
++++ b/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c
+@@ -288,13 +288,16 @@
+     fp->mv.fx.SpecialHi.unk++;
+ 
+     if (fp->mv.fx.SpecialHi.unk >= da->x70_FOX_FIREFOX_DURATION_END) {
+-        fp->self_vel.x =
+-            -((fp->facing_dir * (da->x78_FOX_FIREFOX_REVERSE_ACCEL *
+-                                 cosf(fp->mv.fx.SpecialHi.rotateModel))) -
+-              fp->self_vel.x);
+-        fp->self_vel.y = -((da->x78_FOX_FIREFOX_REVERSE_ACCEL *
+-                            sinf(fp->mv.fx.SpecialHi.rotateModel)) -
+-                           fp->self_vel.y);
++        // DOL 0x800E77B8..0x800E77DC: the horizontal trig product is rounded
++        // by fmuls, then both velocity updates use scalar-single fnmsubs.
++        float decel_x = da->x78_FOX_FIREFOX_REVERSE_ACCEL *
++                        cosf(fp->mv.fx.SpecialHi.rotateModel);
++        fp->self_vel.x = msl_dolphin_fnmsubs(
++            fp->facing_dir, decel_x, fp->self_vel.x);
++
++        fp->self_vel.y = msl_dolphin_fnmsubs(da->x78_FOX_FIREFOX_REVERSE_ACCEL,
++                                             sinf(fp->mv.fx.SpecialHi.rotateModel),
++                                             fp->self_vel.y);
+     }
+ }
+ 
+--- a/src/melee/ft/ft_084E.c
++++ b/src/melee/ft/ft_084E.c
+@@ -1,6 +1,9 @@
+ #include "ft_084E.h"
+ 
+ #include <math.h>
++#ifdef MSL_CORE_HOSTED
++#include <MetroTRK/intrinsics.h>
++#endif
+ #include <melee/ft/fighter.h>
+ #include <melee/ft/ftcommon.h>
+ 
+@@ -79,8 +82,15 @@
+ {
+     Fighter* fp = gobj->user_data;
+     if (fp->x594_b0) {
++#ifdef MSL_CORE_HOSTED
++        // GALE01 0x8008505C is one PPC fmsubs instruction. Preserve that
++        // operation boundary in the GCC-hosted PPC runtime.
++        fp->xE4_ground_accel_1 =
++            __fmsubs(fp->x6A4_transNOffset.z, facing_dir, fp->gr_vel);
++#else
+         fp->xE4_ground_accel_1 =
+             fp->x6A4_transNOffset.z * facing_dir - fp->gr_vel;
++#endif
+     } else {
+         ftCommon_ApplyFrictionGround(fp, gr_friction);
+     }
+--- a/src/melee/ft/ftcoll.c
++++ b/src/melee/ft/ftcoll.c
+@@ -44,6 +44,7 @@
+ 
+ #include <common_structs.h>
+ #include <math.h>
++#include <MetroTRK/intrinsics.h>
+ #include <dolphin/mtx.h>
+ #include <baselib/debug.h>
+ #include <baselib/gobj.h>
+@@ -2095,25 +2096,32 @@
+     float decay;
+     float result;
+ 
++    // Retail DOL 0x80079AB0..0x80079C6C uses scalar-single fmadds for
++    // growth, base knockback, and the final damage/base blend. GCC's split
++    // operations change ordinary fighter-hit knockback by an ULP.
++    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80079AB0
+     if (hit->x28 != 0) {
++        float growth;
+         float x24_f;
+ 
+         decay = ftd->xF8;
+         result = (w * decay) / (1.0F + w);
+         decay -= result;
+ 
+-        result = ftd->x118 * (float) (u32) hit->x28;
+-        result = ftd->x118 * ftd->x110 + ftd->x114 * result;
+-        result = decay * result;
+-        result = ftd->x11C * result + ftd->x120;
++        growth = ftd->x118 * (float) (u32) hit->x28;
++        growth = ftd->x114 * growth;
++        growth = __fmadds(ftd->x118, ftd->x110, growth);
++        result = decay * growth;
++        result = __fmadds(ftd->x11C, result, ftd->x120);
+         x24_f = 0.01F * (float) (u32) hit->x24;
+-        result = x24_f * result + (float) (u32) hit->x2C;
++        result = __fmadds(x24_f, result, (float) (u32) hit->x2C);
+         result = arg3 * result;
+         result = attack * result;
+         result = defense * result;
+     } else {
+         s32 count;
+         float damage;
++        float growth;
+         float x24_f;
+ 
+         if (fp->x2225_b7) {
+@@ -2130,13 +2138,13 @@
+         result = (w * decay) / (1.0F + w);
+         decay -= result;
+         damage = (float) count + fp->dmg.x1838_percentTemp;
+-        result = (float) (u32) unk_count * damage;
+-        result = ftd->x110 * damage + ftd->x114 * result;
+-        result = decay * result;
+-        result = ftd->x11C * result + ftd->x120;
++        growth = (float) (u32) unk_count * damage;
++        growth = ftd->x114 * growth;
++        growth = __fmadds(ftd->x110, damage, growth);
++        result = decay * growth;
++        result = __fmadds(ftd->x11C, result, ftd->x120);
+         x24_f = 0.01F * (float) (u32) hit->x24;
+-        (void) x24_f;
+-        result = x24_f * result + (float) (u32) hit->x2C;
++        result = __fmadds(x24_f, result, (float) (u32) hit->x2C);
+         result = arg3 * result;
+         result = attack * result;
+         result = defense * result;
+@@ -2162,25 +2170,31 @@
+     float result;
+     PAD_STACK(8);
+ 
++    // Same retail scalar-single expression family as ftColl_80079AB0.
++    // Retail DOL 0x80079C70..0x80079EA4.
++    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80079C70
+     if (hit->x28 != 0) {
++        float growth;
+         float x24_f;
+ 
+         decay = ftd->xF8;
+         result = (w * decay) / (1.0F + w);
+         decay -= result;
+ 
+-        result = ftd->x118 * (float) (u32) hit->x28;
+-        result = ftd->x118 * ftd->x110 + ftd->x114 * result;
+-        result = decay * result;
+-        result = ftd->x11C * result + ftd->x120;
++        growth = ftd->x118 * (float) (u32) hit->x28;
++        growth = ftd->x114 * growth;
++        growth = __fmadds(ftd->x118, ftd->x110, growth);
++        result = decay * growth;
++        result = __fmadds(ftd->x11C, result, ftd->x120);
+         x24_f = 0.01F * (float) (u32) hit->x24;
+-        result = x24_f * result + (float) (u32) hit->x2C;
++        result = __fmadds(x24_f, result, (float) (u32) hit->x2C);
+         result = arg3 * result;
+         result = attack * result;
+         result = defense * result;
+     } else {
+         s32 count;
+         float damage;
++        float growth;
+         float x24_f;
+ 
+         if (fp->x2225_b7) {
+@@ -2197,13 +2211,13 @@
+         result = (w * decay) / (1.0F + w);
+         decay -= result;
+         damage = (float) count + fp->dmg.x1838_percentTemp;
+-        result = (float) (u32) unk_count * damage;
+-        result = ftd->x110 * damage + ftd->x114 * result;
+-        result = decay * result;
+-        result = ftd->x11C * result + ftd->x120;
++        growth = (float) (u32) unk_count * damage;
++        growth = ftd->x114 * growth;
++        growth = __fmadds(ftd->x110, damage, growth);
++        result = decay * growth;
++        result = __fmadds(ftd->x11C, result, ftd->x120);
+         x24_f = 0.01F * (float) (u32) hit->x24;
+-        (void) x24_f;
+-        result = x24_f * result + (float) (u32) hit->x2C;
++        result = __fmadds(x24_f, result, (float) (u32) hit->x2C);
+         result = arg3 * result;
+         result = attack * result;
+         result = defense * result;
+@@ -2219,30 +2233,38 @@
+ float ftColl_80079EA8(Fighter* fp, HitCapsule* hit, u32 unk_count)
+ {
+     ftCommonData* ftd = p_ftCommonData;
+-    float decay;
+     float result;
+     float w = fp->co_attrs.weight;
+     PAD_STACK(8);
+     w *= ftd->xF4;
+ 
++    // The matching source expression relies on three scalar-single fmadds.
++    // Spell out the DOL order because GCC otherwise splits them at -O0 and
++    // changes knockback by an ULP.
++    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80079EA8
++    // Retail DOL 0x80079EA8..0x8007A068.
+     if (hit->x28 != 0) {
+-        float x118;
+         float one = 1.0F;
+-
+-        decay = ftd->xF8;
+-        x118 = ftd->x118;
+-
+-        result =
+-            one *
+-            (one *
+-             (one * ((0.01F * hit->x24 *
+-                      (ftd->x11C * ((ftd->xF8 - ((w * ftd->xF8) / (one + w))) *
+-                                    (x118 * ftd->x110 +
+-                                     ftd->x114 * (x118 * hit->x28))) +
+-                       ftd->x120)) +
+-                     hit->x2C)));
++        float decay;
++        float growth;
++        float scale;
++
++        decay = ftd->xF8 - ((w * ftd->xF8) / (one + w));
++        growth = ftd->x118 * (float) (u32) hit->x28;
++        growth = ftd->x114 * growth;
++        growth = __fmadds(ftd->x118, ftd->x110, growth);
++        result = decay * growth;
++        result = __fmadds(ftd->x11C, result, ftd->x120);
++        scale = 0.01F * (float) (u32) hit->x24;
++        result = __fmadds(scale, result, (float) (u32) hit->x2C);
++        result = one * (one * (one * result));
+     } else {
+         s32 count;
++        float one = 1.0F;
++        float decay;
++        float damage;
++        float growth;
++        float scale;
+ 
+         if (fp->x2225_b7) {
+             if (fp->x2224_b2) {
+@@ -2254,23 +2276,16 @@
+             count = (s32) fp->dmg.x1830_percent;
+         }
+ 
+-        {
+-            float one = 1.0F;
+-
+-            result =
+-                one *
+-                (one *
+-                 (one *
+-                  ((0.01F * hit->x24 *
+-                    (ftd->x11C *
+-                         ((ftd->xF8 - ((w * ftd->xF8) / (one + w))) *
+-                          (ftd->x110 * (count + fp->dmg.x1838_percentTemp) +
+-                           ftd->x114 *
+-                               (unk_count *
+-                                (count + fp->dmg.x1838_percentTemp)))) +
+-                     ftd->x120)) +
+-                   hit->x2C)));
+-        }
++        decay = ftd->xF8 - ((w * ftd->xF8) / (one + w));
++        damage = (float) count + fp->dmg.x1838_percentTemp;
++        growth = (float) unk_count * damage;
++        growth = ftd->x114 * growth;
++        growth = __fmadds(ftd->x110, damage, growth);
++        result = decay * growth;
++        result = __fmadds(ftd->x11C, result, ftd->x120);
++        scale = 0.01F * (float) (u32) hit->x24;
++        result = __fmadds(scale, result, (float) (u32) hit->x2C);
++        result = one * (one * (one * result));
+     }
+ 
+     if (result >= ftd->x108) {
+@@ -3020,7 +3035,7 @@
+     fp->x221A_b6 = true;
+ }
+ 
+-void ftColl_8007B62C(Fighter_GObj* gobj, enum_t arg1)
++void ftColl_8007B62C(Fighter_GObj* gobj, bool arg1)
+ {
+     Fighter* fp = GET_FIGHTER(gobj);
+     fp->x1988 = arg1;
+--- a/src/sysdolphin/baselib/fobj.c
++++ b/src/sysdolphin/baselib/fobj.c
+@@ -4,6 +4,9 @@
+ #include "spline.h"
+ 
+ #include <__mem.h>
++#ifdef MSL_CORE_HOSTED
++#include <MetroTRK/intrinsics.h>
++#endif
+ 
+ HSD_ObjAllocData fobj_alloc_data;
+ 
+@@ -368,7 +371,13 @@
+                 fobj->p0 = fobj->p1;
+             }
+         }
++#ifdef MSL_CORE_HOSTED
++        // GALE01 baselib FObjUpdateAnim, 0x8036AF98: the linear-key
++        // interpolation is one scalar-single fmadds instruction.
++        fobjdata.fv = __fmadds(fobj->d0, fobj->time, fobj->p0);
++#else
+         fobjdata.fv = fobj->d0 * fobj->time + fobj->p0;
++#endif
+         break;
+     case HSD_A_OP_SPL0:
+     case HSD_A_OP_SPL:
+--- a/src/sysdolphin/baselib/mtx.c
++++ b/src/sysdolphin/baselib/mtx.c
+@@ -5,6 +5,7 @@
+ 
+ #include <MSL/math_ppc.h>
+ #include <MSL/trigf.h>
++#include <MetroTRK/intrinsics.h>
+ 
+ #define EPSILON 0.0000000001f
+ #define FLOAT_MIN 1.1754943E-38f
+@@ -400,11 +401,19 @@
+     m[0][0] = cosZ * (vec1x_2 * cosY);
+     m[1][0] = sinZ * (vec1x_1 * cosY);
+     m[2][0] = -vec1x * sinY;
+-    m[0][1] = vec1y_2 * ((cosZ * (sinX * sinY)) - (cosX * sinZ));
+-    m[1][1] = vec1y_1 * ((sinZ * (sinX * sinY)) + (cosX * cosZ));
++    // The matched DOL body uses scalar-single fmsubs/fmadds here.  Spell out
++    // those source operation boundaries because hosted GCC does not infer
++    // them from MWCC's matching expression at -O0.
++    // refs/melee/build/GALE01/asm/sysdolphin/baselib/mtx.s::HSD_MtxSRT
++    m[0][1] =
++        vec1y_2 * __fmsubs(cosZ, sinX * sinY, cosX * sinZ);
++    m[1][1] =
++        vec1y_1 * __fmadds(sinZ, sinX * sinY, cosX * cosZ);
+     m[2][1] = cosY * (vec1y * sinX);
+-    m[0][2] = vec1z_2 * ((cosZ * (cosX * sinY)) + (sinX * sinZ));
+-    m[1][2] = vec1z_1 * ((sinZ * (cosX * sinY)) - (sinX * cosZ));
++    m[0][2] =
++        vec1z_2 * __fmadds(cosZ, cosX * sinY, sinX * sinZ);
++    m[1][2] =
++        vec1z_1 * __fmsubs(sinZ, cosX * sinY, sinX * cosZ);
+     m[2][2] = cosY * (vec1z * cosX);
+     m[0][3] = vec3->x;
+     m[1][3] = vec3->y;
+--- a/src/sysdolphin/baselib/spline.c
++++ b/src/sysdolphin/baselib/spline.c
+@@ -23,9 +23,21 @@
+     _2t3_T3 = 2.0f * t3_T2 * fterm;
+     _3t2_T2 = 3.0f * _1_T2 * t2;
+ 
+-    return (d1 * (t3_T2 - t2_T)) + ((d0 * (time + ((t3_T2 - t2_T) - t2_T))) +
+-                                    ((p0 * (1.0f + (_2t3_T3 - _3t2_T2))) +
+-                                     (p1 * (-_2t3_T3 + _3t2_T2))));
++#ifdef MSL_CORE_HOSTED
++    // GALE01 splGetHelmite 0x80378A80-0x80378A8C accumulates these four
++    // terms with three scalar-single fmadds instructions. This interpolation
++    // drives fighter root motion, so preserve those exact PPC boundaries.
++    return __fmadds(
++        d1, t3_T2 - t2_T,
++        __fmadds(d0, time + ((t3_T2 - t2_T) - t2_T),
++                 __fmadds(p0, 1.0f + (_2t3_T3 - _3t2_T2),
++                          p1 * (-_2t3_T3 + _3t2_T2))));
++#else
++    return (d1 * (t3_T2 - t2_T)) +
++           ((d0 * (time + ((t3_T2 - t2_T) - t2_T))) +
++            ((p0 * (1.0f + (_2t3_T3 - _3t2_T2))) +
++             (p1 * (-_2t3_T3 + _3t2_T2))));
++#endif
+ }
+ 
+ inline void splGetCardinalPoint(Vec3* p, Vec3* cp, f32 tension, f32 u)

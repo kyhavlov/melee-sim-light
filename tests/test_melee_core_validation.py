@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from tools.melee_core.validate_replay import (
+    BINARY,
+    NATIVE,
+    QEMU,
+    load_native,
+    validate_one,
+)
+
+
+ROOT = Path(__file__).resolve().parents[1]
+STARTER_REPLAY = (
+    ROOT
+    / "replays"
+    / "validation"
+    / "aggregate_recent"
+    / "Game_20260514T181413.slpz"
+)
+
+
+@pytest.mark.skipif(
+    not all(path.is_file() for path in (STARTER_REPLAY, BINARY, NATIVE, QEMU)),
+    reason="PPC core validation artifacts or starter replay are unavailable",
+)
+def test_native_validation_streams_starter_replay_from_arrow() -> None:
+    result = validate_one(
+        load_native(),
+        # Preserve legacy .slp callers when storage has moved to .slpz.
+        STARTER_REPLAY.with_suffix(".slp"),
+        frames=0,
+        start_frame=None,
+        timeout=20.0,
+    )
+
+    assert result["pass"] is True
+    assert result["frames"] == 2723
+    assert result["available"] == 2723
+    assert result["raw_frames"] == 2724
+    assert result["seed_frame"] == -123
+    assert result["first_ref_frame"] == -122
+    assert result["matched_frames"] == 2723
+    assert result["render_visibility_mismatch_count"] == 0
+    assert result["first_render_visibility_mismatch_frame"] is None
+    assert result["signed_zero_equal_count"] == 0
+    assert result["first_mismatch_frame"] is None
+    assert result["mismatch_count"] == 0
+    assert result["details"] == []

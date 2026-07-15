@@ -1,0 +1,342 @@
+# symbol	classification	core reachability	preserved behavior	source/evidence
+efAsync_Spawn	headless effect projection	reachable	fixed-capacity source-order queue	refs/melee/src/melee/ef/efasync.c; immediate RNG and camera-quake effects retained
+efAsync_QueueFlush	headless effect projection	reachable	reverse spawn-order dispatch	refs/melee/src/melee/ef/efasync.c::efAsync_QueueFlush
+efAsync_QueueClear	headless effect projection	reachable	fixed-pool release	refs/melee/src/melee/ef/efasync.c::efAsync_QueueClear
+efSync_Spawn	headless effect projection	reachable	DAT-backed immediate RNG projection	refs/melee/src/melee/ef/{efsync.c,efasync.c,efalt.c}; EfCoData.dat/EfFxData.dat
+ftPe_8011BA54	source-gated outside-domain predicate	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
+ftPe_8011BAD8	source-gated outside-domain predicate	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
+un_80322258	crowd/audio bookkeeping exclusion	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
+un_803224DC	crowd/audio bookkeeping exclusion	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
+ftCo_800A2040	source-gated outside-domain predicate	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
+efLib_DestroyAll	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+efLib_PauseAll	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+efLib_ResumeAll	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+efLib_SetParamAlpha	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+HSD_PadRumbleRemoveId	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+lbAudioAx_800263E8	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+lbAudioAx_800264E4	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+lbAudioAx_80024304	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+lbBgFlash_80021C48	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+lbBgFlash_80020E38	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+lbBgFlash_80021410	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+lbRefract_80022BB8	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+psInitDataBank	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+psInitDataBankLoad	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+lbAudioAx_800230C8	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_80023130	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_80023220	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_800233EC	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_800237A8	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_80024184	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_80024B94	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_80024DC4	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_80024FDC	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_80024FF4	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_8002500C	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_80025038	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_80026510	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_800265C4	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+lbAudioAx_800236B8	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
+ifStatus_802F69C0	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+ifStatus_802F6AF8	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+ifStatus_802F6C04	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+ifStatus_802F6D10	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+db_80225D64	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+db_80225DD8	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
+gm_80167470	headless match-scene exclusion	reachable	no-op	scene/UI reset only in fixed VS bootstrap
+lbAudioAx_80023870	audio exclusion	reachable	zero audio handle	AX playback omitted headlessly
+un_80322598	crowd/audio bookkeeping exclusion	reachable	zero result	refs/melee/src/melee/sfx/crowdsfx.c::un_80322598
+ifMagnify_802FB6E8	magnifier UI exclusion	reachable	zero result	magnifier presentation only; BrawlOffscreenDamage gameplay owner is retained
+db_ShowItemPickupRange	debug UI exclusion	reachable	zero result	debug-only pickup-range display
+HSD_PadRumbleAdd	rumble exclusion	reachable	zero result	controller motor presentation only
+ftCo_800B3900	CPU-AI exclusion guard	unreachable for two human players	abort	refs/melee/src/melee/ft/chara/ftCommon/ftCo_0A01.c; caller is gated by ftCo_800A2040
+lbRefract_PObjLoad	renderer projection	reachable during init	base PObj load only	refs/melee/src/melee/lb/lbrefract.c; GX refraction rewrite excluded
+ftKb_SpecialN_800F1D24	non-Fox hook projection	reachable	source-equivalent no-op for Fox	refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c
+HSD_LObjAddCurrent	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
+HSD_LObjClearFlags	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
+HSD_LObjRemoveAll	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
+HSD_LObjSetCurrentAll	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
+HSD_LObjSetFlags	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
+HSD_LObjSetupInit	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
+HSD_LObj_803668EC	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
+ftCh_GrabUnk1_8015ADD0	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftCh_GrabUnk1_8015BC88	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_MS_343_80151484	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_MS_389_80151018	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftPe_8011D598	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+it_80284FC4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80285024	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8028B08C	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8028B618	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8028B648	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8028B6B0	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8028B718	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8028B780	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8028B7E8	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8028B850	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802BDA40	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802BDD40	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802BDDB4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+lbRefract_80022998	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
+lbRefract_80022BD0	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
+ftCh_Init_80156014	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftCl_Init_8014919C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftCl_Init_80149318	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftDk_MS_349_800E06D8	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftDr_Init_80149910	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftGw_Attack11_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftGw_AttackAirN_DecideAction	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftGw_AttackLw3_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftGw_AttackS4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialNFx_800FDC00	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialNFx_800FDC70	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialNFx_800FDD14	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialNFx_800FDD4C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialNFx_800FDDF4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialNFx_800FDEB4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F1CD8	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F1F68	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F5D04	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftLk_AttackAir_800EB3BC	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftLk_AttackAir_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_MS_341_8014FE58	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftNs_AttackHi4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftNs_AttackLw4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftNs_AttackS4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftPe_AttackS4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftPe_Init_8011B93C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftSs_SpecialLw_8012AEBC	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftSs_SpecialLw_8012AF38	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_Init_8012B8A4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_Init_8012BAC0	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_Init_8012BDA0	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_Init_8012BE3C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_Init_8012BECC	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_Shield_8012C600	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_Shield_8012C914	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_Shield_8012CC1C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftZd_Init_801395C8	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftCo_800CD350	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_800CD418	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_800CD4E0	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_800CD5A8	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_800CD82C	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_800CDAB4	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+it_8027D730	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802852B8	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80285314	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8028E774	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8028E79C	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8028E938	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8028FE90	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80291DAC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80291F14	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80292EAC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80292EF8	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80292F14	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80293660	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80293DCC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80293E34	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80294364	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80294430	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80294E78	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80294EB0	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8029A748	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8029A89C	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8029A8F4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_8029D968	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802A7840	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802BAA94	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802D09D0	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802E5EF4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802E5F8C	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802EAAEC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802EADD8	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802EAF28	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+grKongo_801D828C	unsupported-stage branch	unreachable	named abort	Final Destination cannot dispatch Kongo/Old Kongo owners
+grOldKongo_802105C8	unsupported-stage branch	unreachable	named abort	Final Destination cannot dispatch Kongo/Old Kongo owners
+ftCo_BatSwing_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_BatSwing_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_BatSwing_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_BatSwing_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureCrazyHand_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureCrazyHand_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureCrazyHand_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureCrazyHand_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureDamageCrazyHand_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureDamageCrazyHand_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureDamageCrazyHand_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureDamageCrazyHand_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureKirbyYoshi_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureKirbyYoshi_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureKirbyYoshi_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureKirbyYoshi_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureLikelike_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureLikelike_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureLikelike_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureLikelike_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureWaitCrazyHand_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureWaitCrazyHand_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureWaitCrazyHand_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_CaptureWaitCrazyHand_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_HarisenSwing_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_HarisenSwing_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_HarisenSwing_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_HarisenSwing_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_KirbyYoshiEgg_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_KirbyYoshiEgg_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_KirbyYoshiEgg_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_KirbyYoshiEgg_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_LipstickSwing_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_LipstickSwing_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_LipstickSwing_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_LipstickSwing_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_ParasolSwing_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_ParasolSwing_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_ParasolSwing_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_ParasolSwing_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_StarRodSwing_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_StarRodSwing_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_StarRodSwing_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_StarRodSwing_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_SwordSwing_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_SwordSwing_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_SwordSwing_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_SwordSwing_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_ThrownCrazyHand_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_ThrownCrazyHand_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_ThrownCrazyHand_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftCo_ThrownCrazyHand_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
+ftDk_MS_341_800DF980	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftGw_Attack100Start_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800EEEC4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F190C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F5874	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F5954	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F597C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F598C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F5A04	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F5A38	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F5A60	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F5A70	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F5A98	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F5AC0	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F5AD8	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F5B00	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialN_800F5B10	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKp_SpecialS_80132DD0	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKp_SpecialS_80132DE0	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKp_SpecialS_80132DF0	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKp_SpecialS_80132E00	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_CaptureDamageMasterHand_Anim	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_CaptureDamageMasterHand_Coll	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_CaptureDamageMasterHand_IASA	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_CaptureDamageMasterHand_Phys	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_CaptureMasterHand_Anim	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_CaptureMasterHand_Coll	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_CaptureMasterHand_IASA	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_CaptureMasterHand_Phys	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_CaptureWaitMasterHand_Anim	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_CaptureWaitMasterHand_Coll	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_CaptureWaitMasterHand_IASA	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_CaptureWaitMasterHand_Phys	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_ThrownMasterHand_Anim	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_ThrownMasterHand_Coll	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_ThrownMasterHand_IASA	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftMh_ThrownMasterHand_Phys	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftSb_Init_8014FBA4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftSs_Init_CreateThrowGrappleBeam	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_Shield_8012C1D4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_Shield_8012C49C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_Shield_8012C850	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_SpecialN_8012CD40	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_SpecialN_8012CD88	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_SpecialN_GetExtAttr28	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_SpecialN_GetExtAttr2C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_SpecialN_GetExtAttr34	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftYs_SpecialN_GetExtAttr38	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+grKongo_801D8270	unsupported-stage branch	unreachable	named abort	Final Destination cannot dispatch Kongo/Old Kongo owners
+grOldKongo_802105AC	unsupported-stage branch	unreachable	named abort	Final Destination cannot dispatch Kongo/Old Kongo owners
+it_80291CCC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80291CF4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80291FA8	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80292E64	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802944AC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802946B0	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802947CC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_80295F38	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802A2B10	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802A2BA4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802A77DC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802A78B8	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802A7AAC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802A7AF0	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802A7B34	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802B7B84	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802B7C18	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802BAA58	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802BAAE4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802BAC3C	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802BAC80	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802BACC4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802EAE80	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+GXBegin	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXCallDisplayList	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXClearVtxDesc	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXInitTexObj	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXInitTexObjCI	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXInitTexObjLOD	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXInitTlutObj	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXLoadNrmMtxImm	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXLoadPosMtxImm	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXLoadTexMtxImm	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXLoadTexObj	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXLoadTlut	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXPixModeSync	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetAlphaCompare	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetAlphaUpdate	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetArray	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetBlendMode	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetChanAmbColor	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetChanCtrl	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetChanMatColor	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetColorUpdate	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetCullMode	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetCurrentMtx	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetDither	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetDstAlpha	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetNumChans	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetNumTevStages	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetNumTexGens	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTevAlphaIn	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTevAlphaOp	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTevColor	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTevColorIn	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTevColorOp	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTevColorS10	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTevKAlphaSel	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTevKColor	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTevKColorSel	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTevOp	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTevOrder	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTevSwapMode	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetTexCoordGen2	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetVtxAttrFmt	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetVtxDesc	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetZCompLoc	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+GXSetZMode	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_CObjGetCurrent	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_CObjGetInvViewingMtxPtrDirect	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_JObjDispSub	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_JObjMakePositionMtx	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_LObjGetActiveByID	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_LObjGetActiveByIndex	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_LObjGetCurrentByType	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_LObjGetLightMaskAlpha	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_LObjGetLightMaskDiffuse	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_LObjGetLightMaskSpecular	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_LObjGetLightVector	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_LObjGetNbActive	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_LObjSetup	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+_HSD_mkEnvelopeModelNodeMtx	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_ByteCodeEval	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly

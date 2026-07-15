@@ -1,6 +1,0 @@
-#ifndef MSL_DECOMP_PORT_PHASE2_EFFECT_PROJECTION_H
-#define MSL_DECOMP_PORT_PHASE2_EFFECT_PROJECTION_H
-
-void msl_effect_projection_init(void);
-
-#endif

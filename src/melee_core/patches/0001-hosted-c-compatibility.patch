@@ -1,0 +1,404 @@
+--- a/src/MSL/math.h
++++ b/src/MSL/math.h
+@@ -5,6 +5,10 @@
+ 
+ #include <MetroTRK/intrinsics.h>
+ 
++#ifdef MSL_CORE_HOSTED
++#include <math.h>
++#endif
++
+ #define MSL_HI(x) *(int*) &x
+ #define MSL_LO(x) *(1 + (int*) &x)
+ 
+@@ -25,8 +29,10 @@
+ 
+ #define SIGNF(x) ((x) > 0.0f ? 1.0f : -1.0f)
+ 
++#ifndef MSL_CORE_HOSTED
+ static float const deg_to_rad = M_PI / 180;
+ static float const rad_to_deg = 180 / M_PI;
++#endif
+ 
+ #ifdef __MWERKS__
+ #pragma push
+@@ -39,6 +45,7 @@
+ #pragma pop
+ #endif
+ 
++#ifndef MSL_CORE_HOSTED
+ enum FloatType {
+     FP_NAN = 1,
+     FP_INFINITE = 2,
+@@ -90,6 +97,7 @@
+ {
+     return __fabs(f);
+ }
++#endif
+ 
+ double frexp(double x, int* exponent);
+ float fabsf__Ff(float);
+--- a/src/MSL/math_ppc.h
++++ b/src/MSL/math_ppc.h
+@@ -8,28 +8,15 @@
+ 
+ extern double __frsqrte(double);
+ 
+-extern inline float sqrtf(float x)
+-{
+-    volatile float y;
+-    if (x > 0.0f) {
+-        double guess = __frsqrte((double) x); // returns an approximation to
+-        guess =
+-            0.5 * guess * (3.0 - guess * guess * x); // now have 12 sig bits
+-        guess =
+-            0.5 * guess * (3.0 - guess * guess * x); // now have 24 sig bits
+-        guess =
+-            0.5 * guess * (3.0 - guess * guess * x); // now have 32 sig bits
+-        y = (float) (x * guess);
+-        return y;
+-    }
+-    return x;
+-}
++// Hosted PPC Linux supplies sqrtf through libc. The GameCube inline used a
++// hardware frsqrte seed; consequential float differences remain an explicit
++// validation item for the port rather than a duplicate libc declaration.
+ 
+ #ifdef __MWERKS__
+ #pragma pop
+ #endif
+ 
+-inline float sqrtf_accurate(float x)
++static inline float sqrtf_accurate(float x)
+ {
+     volatile float y;
+     if (x > 0.0f) {
+--- a/src/MetroTRK/intrinsics.h
++++ b/src/MetroTRK/intrinsics.h
+@@ -5,7 +5,9 @@
+ void __isync(void);
+ int __cntlzw(unsigned int);
+ float sqrtf__Ff(float);
++float __fmadds(float, float, float);
+ float __fnmsubs(float, float, float);
++float __fmsubs(float, float, float);
+ double __fabs(double);
+ float __fabsf(float);
+ double __frsqrte(double);
+--- a/src/melee/ft/chara/ftMario/ftMr_Init.h
++++ b/src/melee/ft/chara/ftMario/ftMr_Init.h
+@@ -8,7 +8,7 @@
+ #include "ftMario/forward.h"
+ #include <baselib/forward.h>
+ 
+-static usize_t const aux_states_count = 2;
++enum { aux_states_count = 2 };
+ 
+ /* 0E08CC */ void ftMr_Init_OnDeath(HSD_GObj* gobj);
+ /* 0E0920 */ void ftMr_Init_OnLoadForDrMario(Fighter*);
+--- a/src/melee/ft/inlines.h
++++ b/src/melee/ft/inlines.h
+@@ -274,7 +274,7 @@
+ #define gmScriptEventUpdatePtr(event, type)                                   \
+     (event = (void*) ((uintptr_t) event + 4))
+ 
+-inline CommandInfo* getCmdScript(Fighter* fp)
++static inline CommandInfo* getCmdScript(Fighter* fp)
+ {
+     return &fp->x3E4_fighterCmdScript;
+ }
+--- a/src/melee/gm/types.h
++++ b/src/melee/gm/types.h
+@@ -1138,16 +1138,16 @@
+         u8 done;  // +4
+         u8 loop;  // +5
+     } x2A[4];
+-    u8 _pad0[2];          // 0x42-0x43
+-    u8 x44[4];            // 0x44 per-player state
+-    struct MatchEnd* x48; // 0x48 current tournament match results
+-    u8 x4C;               // 0x4C
+-    u8 x4D;               // 0x4D
+-    u8 x4E[20];           // 0x4E
+-    u8 _pad1[2];          // 0x62-0x63
+-    Vec3 x64;             // 0x64
+-    Vec3 x70;             // 0x70
+-    u8 _pad2[4];          // 0x7C-0x7F
++    u8 _pad0[2]; // 0x42-0x43
++    u8 x44[4];   // 0x44 per-player state
++    u8* x48;     // 0x48
++    u8 x4C;      // 0x4C
++    u8 x4D;      // 0x4D
++    u8 x4E[20];  // 0x4E
++    u8 _pad1[2]; // 0x62-0x63
++    Vec3 x64;    // 0x64
++    Vec3 x70;    // 0x70
++    u8 _pad2[4]; // 0x7C-0x7F
+ };
+ 
+ /// @todo :: this isnt exactly right
+--- a/src/melee/gr/ground.c
++++ b/src/melee/gr/ground.c
+@@ -169,7 +169,7 @@
+ static u8* Ground_804D6950;
+ 
+ /// @todo Move elsewhere.
+-static inline f32 fabsf(f32 x)
++static inline f32 ground_fabsf(f32 x)
+ {
+     if (x < 0) {
+         return -x;
+@@ -2981,8 +2981,8 @@
+         }
+         if (sp74.z < 0) {
+             xz_inv_len = 1.0f / sqrtf((sp74.x * sp74.x) + (sp74.z * sp74.z));
+-            xz_x_weight = xz_inv_len * fabsf(sp74.x);
+-            xz_z_weight = xz_inv_len * fabsf(sp74.z);
++            xz_x_weight = xz_inv_len * ground_fabsf(sp74.x);
++            xz_z_weight = xz_inv_len * ground_fabsf(sp74.z);
+             sp50.x *= xz_x_weight;
+             sp50.y *= xz_x_weight;
+             sp50.z *= xz_x_weight;
+@@ -3322,13 +3322,13 @@
+ void Ground_801C5AEC(Vec3* v, Vec3* arg1, Vec3* arg2, Vec3* arg3)
+ {
+     lbVector_EulerAnglesFromONB(v, arg1, arg2, arg3);
+-    if (!(fabsf(v->x) < 30000)) {
++    if (!(ground_fabsf(v->x) < 30000)) {
+         v->x = 0;
+     }
+-    if (!(fabsf(v->y) < 30000)) {
++    if (!(ground_fabsf(v->y) < 30000)) {
+         v->y = 0;
+     }
+-    if (!(fabsf(v->z) < 30000)) {
++    if (!(ground_fabsf(v->z) < 30000)) {
+         v->z = 0;
+     }
+ }
+--- a/src/melee/ft/ft_081B.c
++++ b/src/melee/ft/ft_081B.c
+@@ -1233,7 +1233,7 @@
+     mpCopyCollData(&fp1->coll_data, &fp2->coll_data, 2);
+ }
+ 
+-int ft_80084A18(Fighter_GObj* gobj)
++bool ft_80084A18(Fighter_GObj* gobj)
+ {
+     Fighter* fp = GET_FIGHTER(gobj);
+     return mpLib_80054ED8(fp->coll_data.floor.index);
+--- a/src/melee/ft/ftcolanim.c
++++ b/src/melee/ft/ftcolanim.c
+@@ -108,7 +108,7 @@
+     lb_80014498(&fp->x488);
+ }
+ 
+-bool ftCo_800BFFD0(Fighter* fp, int arg1, int arg2)
++bool ftCo_800BFFD0(Fighter* fp, enum_t arg1, bool arg2)
+ {
+     long tmp;
+     if (arg1 >= 0x7B) {
+--- a/src/melee/it/items/itfoxlaser.c
++++ b/src/melee/it/items/itfoxlaser.c
+@@ -96,7 +96,9 @@
+     it_8029C504(parent, vec, 1, kind, angle, vel);
+ }
+ 
+-static inline f32 fabsf(f32 x)
++// Hosted libc declares fabsf; preserve the source helper's body under a local
++// name just as the port does for ground.c.
++static inline f32 itFoxlaser_fabsf(f32 x)
+ {
+     if (x < 0) {
+         return -x;
+@@ -137,7 +139,7 @@
+     }
+     HSD_JObjSetRotationX(jobj, M_PI + atan2f(item->x40_vel.y, vel_x));
+     item->xDD4_itemVar.foxlaser.scale +=
+-        fabsf(item->xDD4_itemVar.foxlaser.speed) / 11.25F;
++        itFoxlaser_fabsf(item->xDD4_itemVar.foxlaser.speed) / 11.25F;
+     if (item->xDD4_itemVar.foxlaser.scale > attr->scale) {
+         item->xDD4_itemVar.foxlaser.scale = attr->scale;
+     }
+--- a/src/melee/lb/lbarchive.c
++++ b/src/melee/lb/lbarchive.c
+@@ -255,7 +255,7 @@
+     return preloaded;
+ }
+ 
+-inline void Locate(HSD_Archive* archive, intptr_t base_addr)
++static inline void lbArchive_Locate(HSD_Archive* archive, intptr_t base_addr)
+ {
+     u32 i;
+     u32* ptr;
+@@ -312,7 +312,7 @@
+         archive->symbols = (char*) ((u8*) src + file_offset);
+     }
+ 
+-    Locate(archive, base_addr);
++    lbArchive_Locate(archive, base_addr);
+ 
+     return 0;
+ }
+--- a/src/melee/lb/lbspdisplay.c
++++ b/src/melee/lb/lbspdisplay.c
+@@ -1963,7 +1963,7 @@
+     return false;
+ }
+ 
+-bool lb_80013F78(ColorOverlay* arg0)
++int lb_80013F78(ColorOverlay* arg0)
+ {
+     arg0->x74_light_rot_x = arg0->x8_ptr1->light_rot1.x;
+     arg0->x78_light_rot_yz = arg0->x8_ptr1->light_rot1.yz;
+--- a/src/melee/lb/lbvector.c
++++ b/src/melee/lb/lbvector.c
+@@ -130,7 +130,7 @@
+ /// Procedure, which is described in the following paper:
+ /// https://math.berkeley.edu/~arash/54/notes/6_4.pdf
+ 
+-static float sin(float angle)
++static float lbVector_Sin(float angle)
+ {
+     if (angle > M_PI) {
+         angle -= M_TAU;
+@@ -142,7 +142,7 @@
+            0.0056429998949170113f * angle * angle * angle * angle * angle;
+ }
+ 
+-static float cos(float angle)
++static float lbVector_Cos(float angle)
+ {
+     angle += M_PI / 2;
+     if (angle > M_PI) {
+@@ -167,8 +167,8 @@
+     // z-axis by angle, and finally the first two rotations are reversed.
+ 
+     float len_axis_yz = sqrtf(axis->y * axis->y + axis->z * axis->z);
+-    float s = sin(angle);
+-    float c = cos(angle);
++    float s = lbVector_Sin(angle);
++    float c = lbVector_Cos(angle);
+     float unit_axis_yz_y;
+     float unit_axis_yz_z;
+     float x, y, z;
+@@ -222,8 +222,8 @@
+ 
+ void lbVector_Rotate(Vec3* v, int axis, float angle)
+ {
+-    float s = sin(angle);
+-    float c = cos(angle);
++    float s = lbVector_Sin(angle);
++    float c = lbVector_Cos(angle);
+     float x;
+     float y;
+     float z;
+@@ -456,12 +456,12 @@
+ /// there is no translational component.
+ void lbVector_CreateEulerMatrix(Mtx m, Quaternion* angles)
+ {
+-    float sx = sin(angles->x);
+-    float cx = cos(angles->x);
+-    float sy = sin(angles->y);
+-    float cy = cos(angles->y);
+-    float sz = sin(angles->z);
+-    float cz = cos(angles->z);
++    float sx = lbVector_Sin(angles->x);
++    float cx = lbVector_Cos(angles->x);
++    float sy = lbVector_Sin(angles->y);
++    float cy = lbVector_Cos(angles->y);
++    float sz = lbVector_Sin(angles->z);
++    float cz = lbVector_Cos(angles->z);
+ 
+     float sxsy = sx * sy;
+     float cxsy = cx * sy;
+--- a/src/melee/lb/lbvector.h
++++ b/src/melee/lb/lbvector.h
+@@ -20,8 +20,10 @@
+ float lbVector_Angle(Vec3* a, Vec3* b);
+ float lbVector_AngleXY(Vec3* a, Vec3* b);
+ 
+-static float sin(float angle);
+-static float cos(float angle);
++// These are private single-precision approximations in lbvector.c. Their
++// original private names collide with hosted libc's ISO C declarations.
++static float lbVector_Sin(float angle);
++static float lbVector_Cos(float angle);
+ 
+ void lbVector_RotateAboutUnitAxis(Vec3* v, Vec3* axis, float angle);
+ void lbVector_Rotate(Vec3* v, int axis, float angle);
+--- a/src/sysdolphin/baselib/aobj.c
++++ b/src/sysdolphin/baselib/aobj.c
+@@ -138,7 +138,7 @@
+             HSD_FObjStopAnimAll(aobj->fobj, obj, update_func, rate);
+             y = aobj->end_frame - aobj->rewind_frame;
+             x = aobj->curr_frame - aobj->rewind_frame;
+-            aobj->curr_frame = fmod(x, y) + aobj->rewind_frame;
++            aobj->curr_frame = HSD_FMod(x, y) + aobj->rewind_frame;
+             HSD_FObjReqAnimAll(aobj->fobj, aobj->curr_frame);
+         } else {
+             aobj->curr_frame = aobj->end_frame;
+@@ -169,7 +169,7 @@
+     }
+ }
+ 
+-float fmod(float a, float b)
++float HSD_FMod(float a, float b)
+ {
+     long long quotient;
+     if (__fabs(b) > __fabs(a)) {
+--- a/src/sysdolphin/baselib/aobj.h
++++ b/src/sysdolphin/baselib/aobj.h
+@@ -77,7 +77,10 @@
+ void HSD_AObjInterpretAnim(HSD_AObj* aobj, void* obj,
+                            HSD_ObjUpdateFunc update_func);
+ 
+-float fmod(float x, float y);
++// Hosted libc declares the ISO C double-precision fmod with this name. The
++// original HSD owner is a distinct single-precision helper; give that helper a
++// host-safe spelling and adapt its one source owner in aobj.c.
++float HSD_FMod(float x, float y);
+ HSD_AObj* HSD_AObjLoadDesc(HSD_AObjDesc* aobjdesc);
+ void HSD_AObjRemove(HSD_AObj* aobj);
+ HSD_AObj* HSD_AObjAlloc(void);
+--- a/src/sysdolphin/baselib/archive.c
++++ b/src/sysdolphin/baselib/archive.c
+@@ -3,7 +3,7 @@
+ #include <string.h>
+ #include <dolphin/os.h>
+ 
+-inline void Locate(HSD_Archive* archive)
++static inline void HSD_ArchiveLocate(HSD_Archive* archive)
+ {
+     u32 i;
+     u32* ptr;
+@@ -59,7 +59,7 @@
+     }
+ 
+     archive->top_ptr = (void*) src;
+-    Locate(archive);
++    HSD_ArchiveLocate(archive);
+ 
+     return 0;
+ }
+--- a/src/sysdolphin/baselib/jobj.h
++++ b/src/sysdolphin/baselib/jobj.h
+@@ -246,7 +246,7 @@
+     HSD_JObjSetMtxDirtyOutOfLineLeaf(jobj);
+ }
+ 
+-inline void HSD_JObjSetupMatrix(HSD_JObj* jobj)
++static inline void HSD_JObjSetupMatrix(HSD_JObj* jobj)
+ {
+     if (!jobj || !HSD_JObjMtxIsDirty(jobj)) {
+         return;
+--- a/src/sysdolphin/baselib/lobj.h
++++ b/src/sysdolphin/baselib/lobj.h
+@@ -110,7 +110,7 @@
+ #define HSD_LOBJ_INFO(i) ((HSD_LObjInfo*) (i))
+ #define HSD_LOBJ_METHOD(o) HSD_LOBJ_INFO(HSD_OBJECT_METHOD((o)))
+ 
+-inline u8 HSD_LObjGetPriority(HSD_LObj* lobj)
++static inline u8 HSD_LObjGetPriority(HSD_LObj* lobj)
+ {
+     HSD_ASSERT(367, lobj);
+     return lobj->priority;
