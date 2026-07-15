@@ -18,8 +18,9 @@ Collect before writing any code:
 - **Ids**: Melee internal id (ft/types.h FighterKind order; Fox=1, Marth=18,
   Falco=22) and Slippi/CSS external id (Fox=2, Marth=9, Falco=20). These are
   different id spaces; seeds/binding use internal, replay metadata external.
-- **Archives**: `PlXx.dat` + `PlXxAJ.dat` must exist in `_iso/` (extract via
-  `tools/extraction/iso_extract.py` if missing).
+- **Archives**: `PlXx.dat` + `PlXxAJ.dat` must be declared by the public extractor and present in
+  `$MSL_DATA_DIR/raw/`. Refresh them through `python -m melee_sim.extract_data`; use
+  `tools/extraction/iso_extract.py` only for isolated forensic work.
 - **Decomp anchors**: `refs/melee/src/melee/ft/chara/ftXxx/` directory, the
   `ftDataXxx` public symbol, the per-char function prefix, and — for clone
   characters — the **donor submotion enum** (Falco reuses ftFox's `ftFx_SM_*`;

@@ -113,7 +113,7 @@ static inline uint8_t opening_input_lock_active_for_step(const MslBatch* batch, 
   // semantics.
   // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B7F8
   // refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
-  // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+  // SSBM.iso::IfAll.dat::ScInfCnt_scene_models[3]
   if (batch->state.opening_input_lock_timer[bi] == 1u && batch->state.frame_id[bi] == -40) {
     return 0u;
   }

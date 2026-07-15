@@ -6,6 +6,7 @@ import struct
 from pathlib import Path
 
 from melee_sim.hsd_archive import parse_hsd_archive
+from melee_sim.raw_data import raw_data_dir
 
 
 def _u32_be(buf: bytes, off: int) -> int:
@@ -62,19 +63,17 @@ def _damage_effect_kind0_spawn_rng_steps(efco: Path) -> int:
 
 
 def main() -> None:
-    # Note: `data/common/ft_common_data.json` is tracked. Re-run this extractor after any changes
-    # here (or when switching ISO) so the committed constants stay in sync.
     ap = argparse.ArgumentParser(description="Extract ftCommonData constants from PlCo.dat (decomp-first).")
     ap.add_argument(
         "--plco",
         type=Path,
-        default=Path("_iso/PlCo.dat"),
+        default=raw_data_dir() / "PlCo.dat",
         help="path to PlCo.dat (HSD archive)",
     )
     ap.add_argument(
         "--efco",
         type=Path,
-        default=Path("_iso/EfCoData.dat"),
+        default=raw_data_dir() / "EfCoData.dat",
         help="path to EfCoData.dat (common effect/particle archive)",
     )
     ap.add_argument("--out", type=Path, default=Path("data/common/ft_common_data.json"))

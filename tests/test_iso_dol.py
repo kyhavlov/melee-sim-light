@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import struct
 from pathlib import Path
 
 import pytest
 
-from melee_sim.iso import extract_main_dol
+from melee_sim.iso import IsoFile, extract_files, extract_main_dol
 from tools.extraction.dol import DolImage
 
 
@@ -53,6 +54,60 @@ def test_extract_main_dol_rejects_non_gale01_revision_2(
 
     with pytest.raises(ValueError, match="GALE01 revision 2"):
         extract_main_dol(iso, tmp_path / "main.dol")
+
+
+def test_extract_main_dol_keeps_previous_destination_on_truncated_iso(
+    tmp_path: Path,
+) -> None:
+    iso = tmp_path / "truncated.iso"
+    iso.write_bytes(_iso(_dol(section_size=64)))
+    out = tmp_path / "main.dol"
+    out.write_bytes(b"previous")
+
+    with pytest.raises(EOFError, match="expected .* bytes"):
+        extract_main_dol(iso, out)
+
+    assert out.read_bytes() == b"previous"
+    assert not (tmp_path / ".main.dol.tmp").exists()
+
+
+def test_extract_files_copies_one_source_set_and_hashes_outputs(tmp_path: Path) -> None:
+    iso = tmp_path / "GALE01.iso"
+    iso.write_bytes(b"prefix-first-gap-second")
+    out = tmp_path / "raw"
+
+    digests = extract_files(
+        iso,
+        {
+            "first.dat": IsoFile("first.dat", 7, 5),
+            "second.dat": IsoFile("second.dat", 17, 6),
+        },
+        out,
+    )
+
+    assert (out / "first.dat").read_bytes() == b"first"
+    assert (out / "second.dat").read_bytes() == b"second"
+    assert digests == {
+        "first.dat": hashlib.sha256(b"first").hexdigest(),
+        "second.dat": hashlib.sha256(b"second").hexdigest(),
+    }
+
+
+def test_extract_files_keeps_previous_destination_on_truncated_iso(
+    tmp_path: Path,
+) -> None:
+    iso = tmp_path / "GALE01.iso"
+    iso.write_bytes(b"short")
+    out = tmp_path / "raw"
+    out.mkdir()
+    destination = out / "PlCo.dat"
+    destination.write_bytes(b"previous")
+
+    with pytest.raises(EOFError, match="truncated"):
+        extract_files(iso, {"PlCo.dat": IsoFile("PlCo.dat", 0, 10)}, out)
+
+    assert destination.read_bytes() == b"previous"
+    assert not (out / ".PlCo.dat.tmp").exists()
 
 
 def test_dol_image_maps_virtual_addresses_within_a_section(tmp_path: Path) -> None:

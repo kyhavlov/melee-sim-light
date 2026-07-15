@@ -32,15 +32,6 @@ datasets/
 
 # Extracted game data (generated; keep local)
 data/**
-!data/common/
-!data/common/ft_common_data.json
-!data/items/
-data/items/**
-!data/items/item_common.json
-!data/stage_items/
-data/stage_items/**
-!data/stage_items/yoshi_shyguy.json
-!data/stage_items/dream_whispy.json
 !data/stages/
 data/stages/**
 !data/stages/slippi_neutral_spawns.json

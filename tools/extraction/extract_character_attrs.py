@@ -8,6 +8,7 @@ from pathlib import Path
 
 from melee_sim.hsd_archive import parse_hsd_archive
 from melee_sim.iso import extract_file, find_files, list_files
+from melee_sim.raw_data import raw_data_dir
 from tools.extraction.char_registry import CHARS
 from tools.extraction import extract_fighter_anims
 from tools.extraction.extract_fighter_moves import _parse_subaction_events
@@ -1405,7 +1406,7 @@ def _extract_ftparts_rthumb_joint_index(pl_dir: Path, *, character: str) -> int 
     Decomp/source of truth:
     - refs/melee/src/melee/ft/ftparts.c::ftParts_GetBoneIndex
     - refs/melee/src/melee/ft/forward.h::FighterKind and Fighter_Part (FtPart_RThumbNb=49)
-    - `_iso/PlCo.dat` public symbol `ftLoadCommonData`, field p_ftCommonData->x10
+    - `MSL_DATA_DIR/raw/PlCo.dat` public symbol `ftLoadCommonData`, field p_ftCommonData->x10
       (`ftPartsTable`) loaded by ftLoadCommonData.
     """
     ftkind_by_name = {
@@ -1680,7 +1681,12 @@ def main() -> None:
         description="Extract per-character ftCo_DatAttrs from Pl*.dat (decomp-first) and update melee_sim character JSONs."
     )
     ap.add_argument("--iso", type=Path, default=None, help="optional path to SSBM.iso (used to extract missing Pl*.dat)")
-    ap.add_argument("--pl-dir", type=Path, default=Path("_iso"), help="directory containing extracted Pl*.dat")
+    ap.add_argument(
+        "--pl-dir",
+        type=Path,
+        default=raw_data_dir(),
+        help="directory containing extracted Pl*.dat",
+    )
     ap.add_argument(
         "--out-dir", type=Path, default=Path("data/characters"), help="directory for character JSON outputs"
     )

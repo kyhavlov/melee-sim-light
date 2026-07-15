@@ -675,7 +675,7 @@ uint8_t laser_try_shield_bounce_velocity_from_segment(float vx, float vy, float 
   const float angle = acosf(cos_angle);
   // Item_80269DC8 uses `(90 + it_804D6D28->unk_degrees)` as the shield-bounce limit.
   // refs/melee/src/melee/it/item.c::Item_80269DC8
-  // Extracted from `_iso/ItCo.dat` into `data/items/item_common.json`.
+  // Extracted from `MSL_DATA_DIR/raw/ItCo.dat` into `data/items/item_common.json`.
   const MslItemCommonParams* item_common = msl_item_common_params();
   const float shield_bounce_threshold =
       (item_common != NULL) ? item_common->shield_bounce_threshold_radians : 0.0f;

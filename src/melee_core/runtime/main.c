@@ -811,7 +811,7 @@ static int runtime_step(MslCoreRuntime* runtime, const MslCoreInput* input,
     // frame inherits that sample as input history rather than seeing a fresh
     // dash flick. The renderer-owned overlay itself is absent headlessly.
     // refs/melee/src/melee/{gm/gm_16AE.c,if/ifstatus.c,if/if_2F72.c}
-    // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+    // SSBM.iso::IfAll.dat::ScInfCnt_scene_models[3]
     if (runtime->frame_id == -40) {
         ftLib_800868A4();
     }

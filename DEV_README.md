@@ -46,30 +46,18 @@ tools default to it). There is **no ISO env var** — extraction takes `--iso` a
 a CLI argument. Then extract:
 
 ```bash
-uv run python -m melee_sim.extract_data \
-  --iso SSBM.iso --out-dir data --iso-dir _iso \
-  --chars fox,falco,marth,sheik,zelda
+uv run python -m melee_sim.extract_data --iso SSBM.iso
 ```
 
-Notes on the flags — both matter:
+The command uses `MSL_DATA_DIR` when set and otherwise writes to `data/`. Original retail archives
+go under `$MSL_DATA_DIR/raw/`; generated JSON/bin tables and both verification manifests live under
+the same root. The public command always builds the complete six-character/six-stage RL 1.0
+profile, so it cannot silently create a partial runtime root. Repeating it verifies the ISO, raw
+archives, and generated outputs and returns without rerunning generators when everything is
+current.
 
-- **`--out-dir data`** is required. `extract_data` defaults `--out-dir` to
-  `.msl`, but `EnvBatch` loads source-checkout `data/` by default. (The
-  top-level `README.md` claims the default is `data/`; the code says otherwise.)
-- **`--iso-dir _iso`** keeps the intermediate extracted DATs at the repo root,
-  matching the provenance path recorded in the two committed
-  `data/stage_items/*.json` files. Without it, the intermediates land in
-  `data/_iso/` and those committed files show a spurious `stage_dat` path diff.
-- **`--chars` must include `zelda`** whenever Sheik is in play. The default
-  char list omits it, but the runtime loads `data/characters/zelda.json` for the
-  Sheik/Zelda transform pair. If it's missing, `msl_batch_create` fails
-  **silently** (no stderr) — the loader just can't open the file and returns an
-  error. Symptom: `RuntimeError: msl_batch_create failed; see stderr for data
-  loading details` with nothing on stderr.
-
-Everything under `data/**` is gitignored except a handful of committed stub
-JSON files (see the gitignore whitelist), so a fresh checkout always needs this
-extraction step.
+All ISO-derived files under `data/**` are gitignored. The only tracked file there is the
+source-authored Slippi neutral-spawn table, so a fresh checkout always needs this extraction step.
 
 ### 4. Validation replays (Git LFS)
 

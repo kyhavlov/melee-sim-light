@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import argparse
-
-from tools.extraction.char_registry import CHARS
 import json
 import shutil
 import subprocess
@@ -10,6 +8,13 @@ import sys
 import time
 from pathlib import Path
 
+from melee_sim.raw_data import (
+    RawDataError,
+    resolve_data_root,
+    sha256_path,
+    validate_raw_data_root,
+)
+from tools.extraction.char_registry import CHARS
 from tools.extraction.extract_ecb_bottom import ECB_VERSION as ECB_BOTTOM_VERSION
 from tools.extraction.extract_ecb_extents import ECB_VERSION as ECB_EXTENTS_VERSION
 from tools.extraction.extract_fighter_anims import (
@@ -39,6 +44,27 @@ DATA_SCHEMA_VERSIONS = {
 }
 
 _RUN_TIMINGS: list[tuple[str, float]] | None = None
+GENERATED_DATA_DIRS = (
+    "anims",
+    "anims_ecb",
+    "attack_id",
+    "characters",
+    "common",
+    "ecb",
+    "hitboxes",
+    "hurtcaps",
+    "items",
+    "model_parts",
+    "motion_state",
+    "moves",
+    "scripts",
+    "shields",
+    "special_msids",
+    "stage_items",
+    "stages",
+    "staling",
+)
+_PRESERVED_GENERATED_PATHS = {Path("stages/slippi_neutral_spawns.json")}
 
 
 def _run(mod: str, argv: list[str], timings: list[tuple[str, float]] | None = None) -> None:
@@ -67,22 +93,85 @@ def _copy_anim_outputs(character: str, *, src_dir: Path, out_dir: Path) -> None:
             shutil.copyfile(src, out_dir / f"{character}{suffix}")
 
 
-def _write_data_manifest(out_root: Path, *, chars: list[str], stages: list[str]) -> None:
+def _clean_generated_outputs(out_root: Path) -> None:
+    for directory in GENERATED_DATA_DIRS:
+        root = out_root / directory
+        if not root.is_dir():
+            continue
+        for path in root.iterdir():
+            relative = path.relative_to(out_root)
+            if relative in _PRESERVED_GENERATED_PATHS:
+                continue
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+
+
+def _write_data_manifest(
+    out_root: Path,
+    *,
+    chars: list[str],
+    stages: list[str],
+    raw_manifest_sha256: str | None,
+) -> None:
+    files: list[dict[str, object]] = []
+    for directory in GENERATED_DATA_DIRS:
+        root = out_root / directory
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            relative = path.relative_to(out_root).as_posix()
+            if relative == "stages/slippi_neutral_spawns.json":
+                continue
+            files.append(
+                {
+                    "path": relative,
+                    "sha256": sha256_path(path),
+                    "size": path.stat().st_size,
+                }
+            )
     payload = {
         "magic": "MSLDATA1",
         "version": 1,
         "schemas": dict(DATA_SCHEMA_VERSIONS),
         "chars": list(chars),
         "stages": list(stages),
+        "files": files,
     }
-    (out_root / "manifest.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    if raw_manifest_sha256 is not None:
+        payload["raw_manifest_sha256"] = raw_manifest_sha256
+    manifest = out_root / "manifest.json"
+    temporary = manifest.with_name(f".{manifest.name}.tmp")
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    temporary.replace(manifest)
 
 
 def main(argv: list[str] | None = None) -> None:
     global _RUN_TIMINGS
     ap = argparse.ArgumentParser(description="Build ISO-derived `data/` artifacts.")
-    ap.add_argument("--iso-dir", type=Path, default=Path("_iso"), help="directory containing extracted *.dat files")
-    ap.add_argument("--out-dir", type=Path, default=Path("data"), help="directory for generated simulator data")
+    ap.add_argument(
+        "--iso-dir",
+        type=Path,
+        default=None,
+        help="source DAT directory; defaults to OUT_DIR/raw",
+    )
+    ap.add_argument(
+        "--out-dir",
+        type=Path,
+        default=None,
+        help="MSL data root; defaults to MSL_DATA_DIR or ./data",
+    )
+    ap.add_argument(
+        "--raw-manifest",
+        type=Path,
+        default=None,
+        help="raw extraction manifest to bind into the generated data manifest",
+    )
     ap.add_argument(
         "--chars",
         type=str,
@@ -112,8 +201,22 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--timings", action="store_true", help="print per-generator wall-clock timings")
     args = ap.parse_args(argv)
 
-    iso_dir = args.iso_dir
-    out_root = args.out_dir
+    out_root = resolve_data_root(args.out_dir)
+    iso_dir = (
+        args.iso_dir.expanduser().resolve()
+        if args.iso_dir is not None
+        else out_root / "raw"
+    )
+    raw_manifest_path: Path | None = None
+    raw_manifest_sha256: str | None = None
+    if args.raw_manifest is not None:
+        raw_manifest_path = args.raw_manifest.expanduser().resolve()
+        if not raw_manifest_path.is_file():
+            raise SystemExit(f"missing raw extraction manifest: {raw_manifest_path}")
+        if raw_manifest_path.parent != iso_dir:
+            raise SystemExit(
+                f"raw extraction manifest must belong to --iso-dir: {raw_manifest_path}"
+            )
 
     def out(rel: str) -> Path:
         return out_root / rel
@@ -137,22 +240,22 @@ def main(argv: list[str] | None = None) -> None:
     timings: list[tuple[str, float]] | None = [] if args.timings else None
     _RUN_TIMINGS = timings
 
-    # Sources we need in _iso.
+    # Sources we need in the raw extraction root.
     _require(
         iso_dir / "main.dol",
-        "uv run python -m melee_sim.extract_data --iso SSBM.iso --out-dir data --iso-dir _iso",
+        "uv run python -m melee_sim.extract_data --iso SSBM.iso --out-dir data",
     )
     _require(
         iso_dir / "PlCo.dat",
-        "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*PlCo.dat' --out-dir _iso",
+        "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*PlCo.dat' --out-dir data/raw",
     )
     _require(
         iso_dir / "ItCo.dat",
-        "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*ItCo.dat' --out-dir _iso",
+        "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*ItCo.dat' --out-dir data/raw",
     )
     _require(
         iso_dir / "EfCoData.dat",
-        "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*EfCoData.dat' --out-dir _iso",
+        "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*EfCoData.dat' --out-dir data/raw",
     )
     fighter_dats: list[str] = []
     for ch in chars:
@@ -167,7 +270,7 @@ def main(argv: list[str] | None = None) -> None:
     for dat in dict.fromkeys(fighter_dats):
         _require(
             iso_dir / dat,
-            f"uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*{dat}' --out-dir _iso",
+            f"uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*{dat}' --out-dir data/raw",
         )
 
     stage_dat_by_key = {
@@ -198,10 +301,30 @@ def main(argv: list[str] | None = None) -> None:
         stage_dat = stage_dat_by_key[stage_key]
         _require(
             iso_dir / stage_dat,
-            f"uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*{stage_dat}' --out-dir _iso",
+            f"uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*{stage_dat}' --out-dir data/raw",
         )
 
+    if raw_manifest_path is not None:
+        required_raw_names = {
+            "main.dol",
+            "PlCo.dat",
+            "ItCo.dat",
+            "EfCoData.dat",
+            *fighter_dats,
+            *(stage_dat_by_key[key] for key in stage_keys),
+        }
+        try:
+            validate_raw_data_root(
+                iso_dir, required_names=required_raw_names, verify_hashes=True
+            )
+        except RawDataError as exc:
+            raise SystemExit(str(exc)) from exc
+        raw_manifest_sha256 = sha256_path(raw_manifest_path)
+
     # Outputs.
+    out_root.mkdir(parents=True, exist_ok=True)
+    (out_root / "manifest.json").unlink(missing_ok=True)
+    _clean_generated_outputs(out_root)
     out_stage_by_key = {
         "grnla": out("stages/final_destination.json"),
         "grnba": out("stages/battlefield.json"),
@@ -487,7 +610,12 @@ def main(argv: list[str] | None = None) -> None:
         ],
     )
 
-    _write_data_manifest(out_root, chars=chars, stages=stage_keys)
+    _write_data_manifest(
+        out_root,
+        chars=chars,
+        stages=stage_keys,
+        raw_manifest_sha256=raw_manifest_sha256,
+    )
 
     summary = {
         "stages": [str(out_stage_by_key[key]) for key in stage_keys],

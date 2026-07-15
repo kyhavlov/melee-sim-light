@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
+from melee_sim.raw_data import raw_data_dir
 from tools.extraction import extract_fighter_anims
 from tools.extraction.extract_fighter_anims import _msid_anim_entry
 
@@ -315,8 +316,8 @@ def main() -> None:
         "--iso_dir",
         dest="iso_dir",
         type=Path,
-        default=Path("_iso"),
-        help="directory containing extracted *.dat files (default: _iso)",
+        default=raw_data_dir(),
+        help="directory containing extracted source DAT files",
     )
     ap.add_argument("--chars", type=str, default=None, help="comma-separated characters (fox,falco,...)")
     ap.add_argument("--character", type=str, default=None, help="single character (overridden by --chars)")

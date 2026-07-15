@@ -4,11 +4,13 @@ import argparse
 import importlib.util
 import subprocess
 import time
+from functools import lru_cache
 from pathlib import Path
 from types import ModuleType
 
 from peppi_py import _read_slippi
 
+from melee_sim.raw_data import raw_data_dir, validate_raw_data_root
 from tools.slippi.slpz import replay_path_for_peppi, resolve_replay_path
 
 
@@ -20,7 +22,13 @@ NATIVE_BINARY = BUILD / "native" / "melee-core-native"
 TOOLCHAIN = BUILD / "toolchain" / "root"
 QEMU = TOOLCHAIN / "usr" / "bin" / "qemu-ppc-static"
 SYSROOT = TOOLCHAIN / "usr" / "powerpc-linux-gnu"
-GAME_DATA = ROOT / "refs" / "melee-disc" / "files"
+
+
+@lru_cache(maxsize=1)
+def game_data_dir() -> Path:
+    path = raw_data_dir(default=ROOT / "data")
+    validate_raw_data_root(path, verify_hashes=True)
+    return path
 
 
 def build_validation(*, backend: str, jobs: int = 2) -> None:
@@ -72,7 +80,7 @@ def validate_one(
             qemu=str(QEMU),
             sysroot=str(SYSROOT),
             binary=str(NATIVE_BINARY if backend == "native" else PPC_BINARY),
-            data_dir=str(GAME_DATA),
+            data_dir=str(game_data_dir()),
             start_frame=start_frame,
             frames_limit=frames,
             timeout=timeout,

@@ -13,7 +13,7 @@ The contents are gitignored but should be present locally.
 | `slippi-wiki/` | https://github.com/project-slippi/slippi-wiki | Slippi replay format specification |
 | `Ishiiruka/` | git submodule | Pinned Slippi Dolphin fork with local engine-dump probe support |
 | `ucf/` | https://github.com/AltimorTASDK/UCF | UCF source code (pad buffer / 1.0 cardinals logic, etc.) |
-| `melee-disc/` | Extracted from SSBM.iso | Game filesystem (files/, sys/) - raw .dat file access |
+| `melee-disc/` | Extracted from SSBM.iso | Optional full game filesystem for forensics; normal runtime data comes from `$MSL_DATA_DIR/raw` |
 | `datasheet/` | slippi-wiki ID spreadsheet | Local export of character/stage/item IDs, action states, struct offsets, character attributes |
 | `slippilab/` | https://github.com/frankborden/slippilab | Slippi Lab replay viewer source. `public/zips/*.zip` are the pre-packaged per-character display assets consumed by `tools/viewer/assets/character_zips.tsv` - having this checkout present lets `tools/viewer/fetch_assets.sh` copy them locally instead of downloading from slippilab.com |
 
@@ -65,7 +65,7 @@ When investigating desyncs or implementing new game mechanics:
   - `tools/eval/run_rollout_suite_eval.py`
 - ISO-derived stage collision extraction (authoritative stage geometry):
   - `tools/extraction/extract_stage_collision.py`
-  - `_iso/` (output from `tools/extraction/iso_extract.py`)
+  - `$MSL_DATA_DIR/raw/` (output from `melee_sim.extract_data`)
 - Playback engine-dump forensic rows (for “what did the game do on this exact frame window?”):
   - `tools/dolphin/dolphin_engine_dump.py` (single dump capture)
   - `tools/dolphin/extract_engine_dump_rows.py` (dump window extraction)

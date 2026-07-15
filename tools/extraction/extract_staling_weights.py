@@ -5,6 +5,7 @@ import struct
 from pathlib import Path
 
 from melee_sim.hsd_archive import parse_hsd_archive
+from melee_sim.raw_data import raw_data_dir
 
 
 def _u32_be(buf: bytes, off: int) -> int:
@@ -25,7 +26,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description="Extract stale-move damage weights (Fighter_804D6548) from PlCo.dat (decomp-first)."
     )
-    ap.add_argument("--plco", type=Path, default=Path("_iso/PlCo.dat"), help="path to PlCo.dat (HSD archive)")
+    ap.add_argument(
+        "--plco",
+        type=Path,
+        default=raw_data_dir() / "PlCo.dat",
+        help="path to PlCo.dat (HSD archive)",
+    )
     ap.add_argument("--out", type=Path, default=Path("data/staling/weights.bin"))
     args = ap.parse_args()
 

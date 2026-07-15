@@ -2,7 +2,7 @@
 
 // Init-time loader for ItemCommonData constants used by item collision.
 //
-// Source of truth: `data/items/item_common.json` (ISO-derived from `_iso/ItCo.dat`).
+// Source of truth: `data/items/item_common.json` (ISO-derived from `MSL_DATA_DIR/raw/ItCo.dat`).
 // Extractor: `tools/extraction/extract_item_common_data.py`.
 //
 // IMPORTANT: item_common_params_init() may do IO/allocations; call only during batch init.

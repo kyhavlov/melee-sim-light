@@ -776,7 +776,7 @@ typedef struct MslSeed {
   // refs/melee/src/melee/gm/gm_16AE.c::{gm_8016E934_OnEnter,fn_8016B7F8}
   // refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
   // refs/melee/src/melee/if/if_2F72.c::if_802F73C4
-  // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+  // SSBM.iso::IfAll.dat::ScInfCnt_scene_models[3]
   //
   // Seed shape:
   // - Stored per player for schema/FFI stability, but live runtime aggregates to one batch-global

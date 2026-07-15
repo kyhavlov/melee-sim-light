@@ -6,6 +6,7 @@ import struct
 from pathlib import Path
 
 from melee_sim.hsd_archive import HsdArchive, parse_hsd_archive
+from melee_sim.raw_data import raw_data_dir
 from tools.extraction.extract_fighter_anims import _FObj
 from tools.extraction.known_data_artifacts import (
     STAGE_DREAM_LAND_N64,
@@ -42,16 +43,9 @@ def _ptr32(arc: HsdArchive, abs_off: int) -> int:
 
 
 def _audit_stage_dat_path(path: Path) -> str:
-    cwd = Path.cwd()
-    if path.is_absolute():
-        try:
-            return path.relative_to(cwd).as_posix()
-        except ValueError:
-            pass
-    try:
-        return path.resolve().relative_to(cwd.resolve()).as_posix()
-    except ValueError:
-        return path.as_posix()
+    # The raw manifest owns the ISO path and file hash. Audit output names the archive without
+    # embedding the caller's data-root location, keeping extraction byte-reproducible.
+    return path.name
 
 
 def _extract_heiho_article(
@@ -389,8 +383,9 @@ def _write_dream_whispy_bin(path: Path, data: dict) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Extract stage-owned item object data.")
-    ap.add_argument("--grst", type=Path, default=Path("_iso/GrSt.dat"), help="path to GrSt.dat")
-    ap.add_argument("--grop", type=Path, default=Path("_iso/GrOp.dat"), help="path to GrOp.dat")
+    default_raw = raw_data_dir()
+    ap.add_argument("--grst", type=Path, default=default_raw / "GrSt.dat", help="path to GrSt.dat")
+    ap.add_argument("--grop", type=Path, default=default_raw / "GrOp.dat", help="path to GrOp.dat")
     ap.add_argument("--out", type=Path, default=Path("data/stage_items/yoshi_shyguy.bin"))
     ap.add_argument("--audit", type=Path, default=Path("data/stage_items/yoshi_shyguy.json"))
     ap.add_argument("--dream-out", type=Path, default=Path("data/stage_items/dream_whispy.bin"))

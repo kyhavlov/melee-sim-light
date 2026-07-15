@@ -11,6 +11,7 @@ import numpy as np
 from . import _native
 from .buffers import Buffers
 from .config import Character, MatchConfig, PlayerConfig, Stage
+from .raw_data import resolve_data_root
 
 
 _DEFAULT_DATA_DIR = "data"
@@ -506,13 +507,13 @@ def _resolve_data_dir(data_dir: str | os.PathLike[str] | None) -> str | None:
     # tests) must never poison the process-global override for later native init calls.
     # The MSL_DATA_DIR env var is read-only input; os.environ is never written.
     if data_dir is not None:
-        return str(Path(data_dir).expanduser().resolve())
+        return str(resolve_data_root(data_dir))
 
     msl_data = os.environ.get("MSL_DATA_DIR")
     if msl_data:
-        return str(Path(msl_data).expanduser().resolve())
+        return str(resolve_data_root(msl_data))
 
-    default_data = Path(_DEFAULT_DATA_DIR).resolve()
+    default_data = resolve_data_root(default=_DEFAULT_DATA_DIR)
     if default_data.exists():
         return str(default_data)
 

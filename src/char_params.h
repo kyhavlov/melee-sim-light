@@ -160,7 +160,8 @@ typedef struct MslCharParams {
   //
   // Source of truth:
   // - ISO-extracted `data/characters/*.json` key `laser_spawn_joint_part_id`,
-  //   derived from `_iso/PlCo.dat` ftPartsTable[ftkind].part_to_joint[FtPart_RThumbNb].
+  //   derived from `MSL_DATA_DIR/raw/PlCo.dat`
+  //   ftPartsTable[ftkind].part_to_joint[FtPart_RThumbNb].
   uint16_t laser_spawn_joint_part_id;
   uint16_t _pad_u16_laser_spawn_0;
 

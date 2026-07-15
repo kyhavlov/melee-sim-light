@@ -385,14 +385,12 @@ Disallowed approximations (Initial Target / RL 1.0):
 
 ### Inputs
 
-- `SSBM.iso` (or extracted `_iso/` directory).
+- `SSBM.iso` (extracted into `$MSL_DATA_DIR/raw/` by the public setup command).
 
 ### Outputs (generated ISO-derived artifacts)
 
-- `data/**` is treated as generated and is gitignored by default, with explicit tracked
-  exceptions for tiny runtime-required contract files such as `data/common/ft_common_data.json`
-  and `data/items/item_common.json`.
-  - Exception: `data/common/ft_common_data.json` is tracked (small, deterministic, and a canonical constants source).
+- ISO-derived `data/**` is generated and gitignored. The source-authored
+  `data/stages/slippi_neutral_spawns.json` is the sole tracked exception.
 - Prefer `.bin` artifacts for new extracted tables (exact bytes; avoids JSON typing issues). JSON is acceptable only when it is
   small and intentionally human-readable.
 

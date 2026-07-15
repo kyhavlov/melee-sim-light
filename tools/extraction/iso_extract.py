@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from melee_sim.iso import extract_file, find_files, list_files
+from melee_sim.raw_data import raw_data_dir
 
 
 def main() -> None:
@@ -11,7 +12,7 @@ def main() -> None:
     ap.add_argument("--iso", type=Path, required=True, help="path to SSBM.iso")
     ap.add_argument("--list", action="store_true", help="list files and exit")
     ap.add_argument("--glob", type=str, default=None, help="glob pattern over ISO paths (e.g. '*GrIz.dat')")
-    ap.add_argument("--out-dir", type=Path, default=Path("_iso"), help="output directory")
+    ap.add_argument("--out-dir", type=Path, default=raw_data_dir(), help="output directory")
     ap.add_argument("--limit", type=int, default=0, help="limit number of matches (0 = no limit)")
     args = ap.parse_args()
 

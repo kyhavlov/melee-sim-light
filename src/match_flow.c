@@ -1713,6 +1713,6 @@ uint8_t match_flow_sim_init_opening_input_lock_timer(void) {
   // - That model's joint/material AObj end frame is 85.0.
   // - With the standard live init-match opening seed aligned to raw frame -122, the callback
   //   clears x221D_b4 before processing raw -39 inputs, i.e. after 83 remaining locked steps.
-  // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+  // SSBM.iso::IfAll.dat::ScInfCnt_scene_models[3]
   return (uint8_t)MSL_SIM_INIT_OPENING_INPUT_LOCK_TIMER;
 }

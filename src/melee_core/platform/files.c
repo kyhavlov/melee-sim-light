@@ -10,7 +10,7 @@
 #include "baselib/archive.h"
 #include "baselib/memory.h"
 
-static const char* data_root = "refs/melee-disc/files";
+static const char* data_root = "data/raw";
 
 void msl_host_set_data_root(const char* path)
 {

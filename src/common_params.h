@@ -4,7 +4,8 @@
 
 // Init-time loader for a small subset of ftCommonData constants used by locomotion/input gating.
 //
-// Source of truth: `data/common/ft_common_data.json` (ISO-derived from `_iso/PlCo.dat`).
+// Source of truth: `data/common/ft_common_data.json` (ISO-derived from
+// `MSL_DATA_DIR/raw/PlCo.dat`).
 // Extractor: `tools/extraction/extract_ftcommon_data.py` (decomp-first).
 //
 // IMPORTANT: common_params_init() may do IO/allocations; call only during batch init.

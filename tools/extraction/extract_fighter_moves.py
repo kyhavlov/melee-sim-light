@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from melee_sim.hsd_archive import HsdArchive, _u32_be, parse_hsd_archive
+from melee_sim.raw_data import raw_data_dir
 
 
 _U26_MASK = (1 << 26) - 1
@@ -793,8 +794,9 @@ def _load_special_msids(special_msids_dir: Path, character: str) -> list[int]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Extract fighter hitbox command timelines from Pl*.dat")
-    ap.add_argument("--iso_dir", type=Path, default=Path("_iso"))
-    ap.add_argument("--dol", type=Path, default=Path("_iso/main.dol"))
+    default_raw = raw_data_dir()
+    ap.add_argument("--iso_dir", type=Path, default=default_raw)
+    ap.add_argument("--dol", type=Path, default=default_raw / "main.dol")
     ap.add_argument("--out_dir", type=Path, default=Path("data/moves"))
     ap.add_argument(
         "--special_msids_dir",

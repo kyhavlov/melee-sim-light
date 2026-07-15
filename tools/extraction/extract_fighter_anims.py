@@ -9,10 +9,11 @@ from pathlib import Path
 import numpy as np
 
 from melee_sim.hsd_archive import HsdArchive, parse_hsd_archive
+from melee_sim.raw_data import raw_data_dir, resolve_data_root
 from tools.extraction.char_registry import CHARS
 
-ISO_DIR = Path("_iso")
-DATA_DIR = Path("data")
+ISO_DIR = raw_data_dir()
+DATA_DIR = resolve_data_root()
 DATA_SCHEMA_VERSION = 2
 SSANIM_VERSION = 5
 CAPTURE_CAPTAIN_ANIM_DONOR_CHARACTER = "falcon"
@@ -2257,9 +2258,19 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Extract per-move fighter bone matrices from FigaTree animations (decomp-first).")
     ap.add_argument("--character", type=str, required=True, help="one of: fox,falco,sheik,peach,marth,puff,falcon,zelda")
     ap.add_argument("--moves", type=Path, default=None, help="path to data/moves/<character>.json (default inferred)")
-    ap.add_argument("--data-dir", type=Path, default=Path("data"), help="directory containing generated character metadata")
-    ap.add_argument("--iso-dir", type=Path, default=Path("_iso"), help="directory containing extracted Pl*.dat files")
-    ap.add_argument("--out-dir", type=Path, default=Path("data/anims"), help="output directory")
+    ap.add_argument(
+        "--data-dir",
+        type=Path,
+        default=DATA_DIR,
+        help="directory containing generated character metadata",
+    )
+    ap.add_argument(
+        "--iso-dir",
+        type=Path,
+        default=ISO_DIR,
+        help="directory containing extracted Pl*.dat files",
+    )
+    ap.add_argument("--out-dir", type=Path, default=DATA_DIR / "anims", help="output directory")
     ap.add_argument(
         "--blend-only",
         action="store_true",

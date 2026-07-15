@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from melee_sim.hsd_archive import parse_hsd_archive
+from melee_sim.raw_data import raw_data_dir
 
 # Reuse decomp-first Pl*.dat parsers.
 from tools.extraction.extract_character_attrs import _extract_ftco_dattrs, _extract_fox_falco_laser
@@ -346,7 +347,12 @@ def _pack_record(rec: LaserRecord) -> bytes:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Extract Fox/Falco blaster laser params into a compact .bin (decomp-first).")
-    ap.add_argument("--iso_dir", type=Path, default=Path("_iso"), help="directory containing extracted Pl*.dat files")
+    ap.add_argument(
+        "--iso_dir",
+        type=Path,
+        default=raw_data_dir(),
+        help="directory containing extracted Pl*.dat files",
+    )
     ap.add_argument("--out", type=Path, default=Path("data/items/lasers.bin"))
     args = ap.parse_args()
 

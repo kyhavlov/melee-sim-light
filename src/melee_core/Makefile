@@ -24,6 +24,8 @@ SYSROOT := $(TOOLCHAIN_ROOT)
 QEMU_SYSROOT := $(TOOLCHAIN_ROOT)/usr/powerpc-linux-gnu
 PY ?= $(ROOT)/.venv/bin/python
 HOST_CC ?= cc
+MSL_DATA_DIR ?= $(ROOT)/data
+DATA ?= $(abspath $(MSL_DATA_DIR))/raw
 
 SOURCE_SYNC := $(ROOT)/tools/melee_core/source_sync.sh
 VENDOR_FILES := $(shell find $(CORE)/vendor -type f -print | LC_ALL=C sort)
@@ -140,7 +142,7 @@ $(PPC_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
 $(NATIVE_OBJ_DIR)/vendor/src/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast -mfma
 $(NATIVE_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast -mfma
 
-.PHONY: all runtime native source source-check validation validator clean run run-native toolchain smoke native-smoke map-smoke validation-smoke test
+.PHONY: all runtime native source source-check validation validator clean run run-native toolchain data-check smoke native-smoke map-smoke validation-smoke test
 
 all: runtime
 
@@ -257,26 +259,29 @@ $(eval $(call link_native_smoke,$(NATIVE_MAP_SMOKE),$(NATIVE_OBJ_DIR)/tests/mele
 $(eval $(call link_native_smoke,$(NATIVE_MODEL_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/model_animation_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_SCHEDULER_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scheduler_smoke.o))
 
-smoke: $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE) $(SCHEDULER_SMOKE)
+data-check:
+	@$(PY) -m tools.extraction.validate_raw_data --raw-dir "$(DATA)"
+
+smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE) $(SCHEDULER_SMOKE)
 	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(ARCHIVE_SMOKE)" \
-		"$(ROOT)/refs/melee-disc/files/PlCo.dat" \
-		"$(ROOT)/refs/melee-disc/files/PlFx.dat" \
-		"$(ROOT)/refs/melee-disc/files/PlFxNr.dat" \
-		"$(ROOT)/refs/melee-disc/files/GrNLa.dat"
-	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(DATA_SMOKE)" "$(ROOT)/refs/melee-disc/files"
-	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MODEL_SMOKE)" "$(ROOT)/refs/melee-disc/files"
-	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MAP_SMOKE)" "$(ROOT)/refs/melee-disc/files"
+		"$(DATA)/PlCo.dat" \
+		"$(DATA)/PlFx.dat" \
+		"$(DATA)/PlFxNr.dat" \
+		"$(DATA)/GrNLa.dat"
+	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(DATA_SMOKE)" "$(DATA)"
+	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MODEL_SMOKE)" "$(DATA)"
+	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MAP_SMOKE)" "$(DATA)"
 	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCHEDULER_SMOKE)"
 
-native-smoke: $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE)
-	@timeout 5s "$(NATIVE_DATA_SMOKE)" "$(ROOT)/refs/melee-disc/files"
-	@timeout 5s "$(NATIVE_MODEL_SMOKE)" "$(ROOT)/refs/melee-disc/files"
-	@timeout 5s "$(NATIVE_MAP_SMOKE)" "$(ROOT)/refs/melee-disc/files"
+native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE)
+	@timeout 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
+	@timeout 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
+	@timeout 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_SCHEDULER_SMOKE)"
 
-map-smoke: $(MAP_SMOKE)
+map-smoke: data-check $(MAP_SMOKE)
 	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MAP_SMOKE)" \
-		"$(ROOT)/refs/melee-disc/files"
+		"$(DATA)"
 
 validation-smoke: validation native
 	@timeout 25s env OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
@@ -287,14 +292,13 @@ test: source-check smoke native-smoke validation-smoke
 # Example:
 # make -f src/melee_core/Makefile run CONFIG=... INPUT=... OUTPUT=... PREV=-
 PREV ?= -
-DATA ?= $(ROOT)/refs/melee-disc/files
-run: $(BINARY)
+run: data-check $(BINARY)
 	@test -n "$(CONFIG)" -a -n "$(INPUT)" -a -n "$(OUTPUT)" || \
 		(echo 'CONFIG, INPUT, and OUTPUT are required' >&2; exit 2)
 	@"$(QEMU)" -L "$(QEMU_SYSROOT)" "$(BINARY)" \
 		"$(DATA)" "$(CONFIG)" "$(PREV)" "$(INPUT)" "$(OUTPUT)"
 
-run-native: $(NATIVE_BINARY)
+run-native: data-check $(NATIVE_BINARY)
 	@test -n "$(CONFIG)" -a -n "$(INPUT)" -a -n "$(OUTPUT)" || \
 		(echo 'CONFIG, INPUT, and OUTPUT are required' >&2; exit 2)
 	@"$(NATIVE_BINARY)" "$(DATA)" "$(CONFIG)" "$(PREV)" "$(INPUT)" "$(OUTPUT)"

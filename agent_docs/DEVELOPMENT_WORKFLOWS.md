@@ -12,9 +12,10 @@ make bootstrap ISO=/path/to/SSBM.iso
 ```
 
 `make bootstrap` pulls the tracked validation replays, syncs the development environment,
-extracts the generated runtime data into `data/` (with source DATs under `_iso/`), and builds the
-native extension. Heldout replays and forensic/debug replay trees remain local-only and are not
-needed by `make test`.
+extracts the ignored runtime data into `data/` (with original source archives under `data/raw/`),
+and builds the native extension. The same `MSL_DATA_DIR` root serves the current batch runtime and
+the source-shaped replacement core. Heldout replays and forensic/debug replay trees remain
+local-only and are not needed by `make test`.
 
 For an already-bootstrapped checkout, refresh dependencies and rebuild with:
 
@@ -45,18 +46,15 @@ read-only source/reference trees:
 cp -al ../melee-sim-light/datasets datasets
 cp -al ../melee-sim-light/replays/debug replays/debug
 rsync -a ../melee-sim-light/data/ data/
-ln -s ../melee-sim-light/_iso _iso
 find ../melee-sim-light/refs -mindepth 1 -maxdepth 1 -printf '%f\n' |
   while read -r name; do
     [ -e "refs/$name" ] || ln -s "../../melee-sim-light/refs/$name" "refs/$name"
   done
 ```
 
-Keep local ISO links out of `git status` with worktree-local excludes:
-
-```bash
-printf '/_iso\n' >> "$(git rev-parse --git-path info/exclude)"
-```
+Alternatively, point both runtimes at a shared read-only root with
+`MSL_DATA_DIR=../melee-sim-light/data`. Local `SSBM.iso` links and all extracted data are already
+covered by repository ignore rules.
 
 Validation no longer uses a persistent row-cache directory.
 
@@ -260,11 +258,16 @@ Then run the same dump/extract flow from `tools/dolphin/README.md`.
 
 ## Data Extraction
 
-Rebuild ISO-derived data artifacts:
+Extract or refresh the complete runtime data root:
 
 ```bash
-uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop
+uv run python -m melee_sim.extract_data --iso /path/to/SSBM.iso
 ```
+
+The command verifies GALE01 revision 2, extracts the declared source archive profile into
+`$MSL_DATA_DIR/raw` (or `--out-dir`), records SHA-256 provenance, and rebuilds derived tables only
+when their raw manifest or schema changes. `tools.extraction.build_data` remains the low-level
+derived-table entry point for extractor development.
 
 Data contract:
 - `agent_docs/DATA_CONTRACT.md`

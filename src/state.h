@@ -69,7 +69,7 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/gm/gm_16AE.c::{gm_8016E934_OnEnter,fn_8016B7F8}
   // refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
   // refs/melee/src/melee/if/if_2F72.c::if_802F73C4
-  // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+  // SSBM.iso::IfAll.dat::ScInfCnt_scene_models[3]
   uint8_t* opening_input_lock_timer;  // [batch]
   // Global six-slot respawn-platform cooldown table (`FighterMatchInfo[i].x8`).
   // refs/melee/src/melee/gm/gm_1601.c::{fn_8016758C,fn_80167638}

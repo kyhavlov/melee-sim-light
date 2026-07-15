@@ -1,9 +1,10 @@
 # Source-Shaped Melee Core
 
-Status: Phase 4 native x86-64 scalar parity is complete in the working tree. All five tracked
+Status: Phase 4 native x86-64 scalar parity is complete. All five tracked
 Fox/Fox FD replays retain the Phase 2.5 gameplay-exact result; the one unrecorded Nintendont
 render-publication difference remains an explicit diagnostic. Native is about 19.6x faster than
-PPC/QEMU on the equivalent starter runner workload. No production-core cutover has occurred.
+PPC/QEMU on the equivalent starter runner workload. Data-root productionization is also complete;
+Phase 5 source-owner expansion is next. No production-core cutover has occurred.
 
 Branch base: `core-rewrite` at `6fbcc9bc7719` (`Rewrite core contact and motion state ownership`).
 
@@ -755,6 +756,57 @@ equivalent throughput result is known. Do not send routine compile attempts, sma
 or repeated status noise. The helper reads `MSL_CORE_DISCORD_WEBHOOK_URL` or the ignored
 `build/melee_core/discord_webhook_url`; never put the credential in tracked files or command output.
 
+### Phase 4.5 — Data-root productionization
+
+Make the existing ISO extraction pipeline the single setup path for both simulator cores. This is
+contract cleanup, not a new gameplay-data representation: the source-shaped runtime continues to
+consume original retail DAT archives, while the existing runtime continues to consume its derived
+JSON/bin tables.
+
+Objectives:
+
+- use `MSL_DATA_DIR` as the canonical root, with original source archives under
+  `$MSL_DATA_DIR/raw/` and generated tables elsewhere under the same root;
+- extract the complete declared RL 1.0 source archive closure directly from a GALE01 revision 2
+  ISO, including archives reached only by the source-shaped runtime;
+- emit a deterministic local manifest with the ISO identity and exact source-file hashes, and
+  reject missing, stale, wrong-region, or partial roots before simulation;
+- keep the ISO, raw archives, and every ISO-derived output ignored and reproducible rather than
+  committing game assets;
+- make repeated extraction a fast no-op and keep fresh full-domain setup within the normal bounded
+  command policy on the development host;
+- remove normal build, smoke, and replay-validation dependence on `refs/melee-disc` or `_iso`
+  symlinks while retaining explicit low-level extractor overrides for forensic work.
+
+Completion requires a fresh one-command ISO setup, a measured incremental no-op, both native and
+PPC source-core smoke/validation through `$MSL_DATA_DIR/raw`, the existing runtime's data-manifest
+preflight, focused malformed/stale-root tests, and updated public setup documentation. Do not add a
+persistent native DAT cache unless startup profiling later establishes a need.
+
+#### Phase 4.5 result
+
+Phase 4.5 is complete. `python -m melee_sim.extract_data --iso ...` now creates one ignored
+`MSL_DATA_DIR` contract for both cores. Its `raw/manifest.json` identifies the full GALE01 revision
+2 ISO by SHA-256 and records the exact path, offset, size, and SHA-256 of 63 source files. The
+40 MiB raw profile covers all six supported fighters/costumes, six legal stages, common/player/item
+archives, and the supported character effect banks; this closes the prior source-core omissions of
+`PdPm.dat`, `ItCo.usd`, and `EfFxData.dat`.
+
+The existing generated table manifest binds 184 outputs to the raw-manifest digest and records
+their sizes and hashes. Extraction writes manifests last and atomically, repairs missing or changed
+files, removes obsolete generated outputs while preserving the source-authored Slippi spawn table,
+rejects non-GALE01 revision 2 input or partial profiles, and skips every derived generator when the
+raw profile, schemas, and exact output inventory are current. Audit output is independent of the
+chosen root path. Normal source-core builds, smoke tests, runs, and replay validation resolve
+`$MSL_DATA_DIR/raw`; no normal path uses `refs/melee-disc` or `_iso`.
+
+Fresh full-domain runs on the development host completed in 6.31--8.05 seconds. Verified
+incremental runs completed in 0.81--0.85 seconds at about 39 MiB maximum RSS. PPC and native smoke
+passed from the new root, and the complete starter replay remained exact on both targets. The full
+repository suite passed in bounded alphabetic shards, followed by the final focused
+extraction/data-contract gates. Four previously tracked ISO-derived JSON exceptions were removed;
+only the source-authored Slippi neutral-spawn table remains tracked under `data/`.
+
 ### Phase 5 — RL 1.0 supported domain
 
 Add Falco, Marth, Sheik, Zelda, Captain Falcon, the remaining five legal stages, relevant
@@ -791,10 +843,12 @@ bounded, and improve a repeatedly needed slow tool instead of normalizing long-r
 
 - `refs/melee/` is an optional independent clean clone used only by explicit source import/update
   commands; normal build and test targets do not depend on it.
-- `refs/melee-disc` and `SSBM.iso` are symlinks to existing local assets.
+- `SSBM.iso` is an ignored local input. `python -m melee_sim.extract_data --iso ...` creates the
+  canonical ignored `$MSL_DATA_DIR/raw` archive profile; `refs/melee-disc` is optional forensic
+  access to a full disc filesystem and is not used by normal builds or validation.
 - `refs/slippi-ssbm-asm` and `refs/ucf` are symlinks to existing reference checkouts.
-- The Melee core replay validator is independent of the existing simulator's generated `data/`
-  package. It reads replay-visible columns directly and the runtime reads original game DATs.
+- The Melee core replay validator reads replay-visible columns directly and resolves original game
+  DATs from the same `MSL_DATA_DIR` root used by the existing simulator.
 - Phase 1's repository-local PPC32 cross-toolchain and sysroot live under ignored
   `build/melee_core/`; the documented setup target downloads Debian cross packages without
   installing or modifying host packages.

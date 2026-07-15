@@ -24,7 +24,7 @@ make viewer-build
 Build the full registry data root before building:
 
 ```bash
-uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop
+uv run python -m melee_sim.extract_data --iso /path/to/SSBM.iso
 ```
 
 `make viewer-build` writes a self-contained browser asset tree under

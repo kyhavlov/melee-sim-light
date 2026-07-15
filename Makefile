@@ -1,6 +1,8 @@
 .PHONY: bootstrap build build-native clean-native clean-native-shadow test test-parallel test-serial package-smoke slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-falcon validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-falcon validate-rollout-sheik validate-all validate-heldout rollout-summary rollout-diff build_data viewer-build viewer fmt fmt-check check dolphin-engine-dump dolphin-extract build-bench-sim build-bench-sim-native bench-sim bench-sim-native benchmark-report FORCE
 
 PY := uv run python
+MSL_DATA_DIR ?= data
+RAW_DATA_DIR := $(MSL_DATA_DIR)/raw
 SUITE ?= replays/suites/fox_falco_fd_ucf084_recent.json
 AGG_SUITE ?= replays/suites/aggregate_recent.json
 DOUBLES_SUITE ?= replays/suites/doubles_recent.json
@@ -165,7 +167,7 @@ bootstrap:
 	@git lfs install --local
 	@git lfs pull
 	@uv sync --dev
-	@$(PY) -m melee_sim.extract_data --iso "$(ISO)" --out-dir data --iso-dir _iso
+	@$(PY) -m melee_sim.extract_data --iso "$(ISO)" --out-dir "$(MSL_DATA_DIR)"
 	@$(MAKE) --no-print-directory build
 
 test: build
@@ -234,7 +236,9 @@ rollout-diff:
 	@$(PY) -m tools.eval.diff_rollout_streaks --before "$(ROLLOUT_BEFORE)" --after "$(ROLLOUT_AFTER)" --top "$(ROLLOUT_TOP)" $(ROLLOUT_DIFF_OUT_ARG)
 
 build_data:
-	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop
+	@$(PY) -m tools.extraction.build_data --iso-dir "$(RAW_DATA_DIR)" \
+		--raw-manifest "$(RAW_DATA_DIR)/manifest.json" --out-dir "$(MSL_DATA_DIR)" \
+		--stages grnla,grnba,griz,grps,grst,grop
 
 viewer-build:
 	@tools/viewer/build.sh

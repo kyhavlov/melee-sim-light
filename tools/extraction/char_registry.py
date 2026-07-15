@@ -21,9 +21,10 @@ class CharInfo:
     name: str  # pipeline name (file stem for data artifacts)
     internal_id: int
     external_id: int
-    pl_dat: str  # main fighter data archive in _iso
-    aj_dat: str  # animation archive in _iso
-    costume_dat: str  # costume-0 model/skeleton archive in _iso
+    pl_dat: str  # main fighter data archive in MSL_DATA_DIR/raw
+    aj_dat: str  # animation archive in MSL_DATA_DIR/raw
+    costume_dat: str  # costume-0 model/skeleton archive in MSL_DATA_DIR/raw
+    effect_dat: str  # effect bank from melee/ef/efasync.c::efAsync_803C025C
     costume_joint: str  # public root joint symbol in costume_dat
     ftdata_symbol: str  # public symbol of the ftData root in pl_dat
     decomp_dir: str  # refs/melee/src/melee/ft/chara/<dir>
@@ -48,6 +49,7 @@ CHARS: dict[str, CharInfo] = {
         pl_dat="PlFx.dat",
         aj_dat="PlFxAJ.dat",
         costume_dat="PlFxNr.dat",
+        effect_dat="EfFxData.dat",
         costume_joint="PlyFox5K_Share_joint",
         ftdata_symbol="ftDataFox",
         decomp_dir="ftFox",
@@ -68,6 +70,7 @@ CHARS: dict[str, CharInfo] = {
         pl_dat="PlFc.dat",
         aj_dat="PlFcAJ.dat",
         costume_dat="PlFcNr.dat",
+        effect_dat="EfFxData.dat",
         costume_joint="PlyFalco5K_Share_joint",
         ftdata_symbol="ftDataFalco",
         decomp_dir="ftFalco",
@@ -88,6 +91,7 @@ CHARS: dict[str, CharInfo] = {
         pl_dat="PlMs.dat",
         aj_dat="PlMsAJ.dat",
         costume_dat="PlMsNr.dat",
+        effect_dat="EfMsData.dat",
         costume_joint="PlyMars5K_Share_joint",
         ftdata_symbol="ftDataMars",
         decomp_dir="ftMars",
@@ -108,6 +112,7 @@ CHARS: dict[str, CharInfo] = {
         pl_dat="PlCa.dat",
         aj_dat="PlCaAJ.dat",
         costume_dat="PlCaNr.dat",
+        effect_dat="EfCaData.dat",
         costume_joint="PlyCaptain5K_Share_joint",
         ftdata_symbol="ftDataCaptain",
         decomp_dir="ftCaptain",
@@ -128,6 +133,7 @@ CHARS: dict[str, CharInfo] = {
         pl_dat="PlSk.dat",
         aj_dat="PlSkAJ.dat",
         costume_dat="PlSkNr.dat",
+        effect_dat="EfZdData.dat",
         costume_joint="PlySeak5K_Share_joint",
         ftdata_symbol="ftDataSeak",
         decomp_dir="ftSeak",
@@ -148,6 +154,7 @@ CHARS: dict[str, CharInfo] = {
         pl_dat="PlZd.dat",
         aj_dat="PlZdAJ.dat",
         costume_dat="PlZdNr.dat",
+        effect_dat="EfZdData.dat",
         costume_joint="PlyZelda5K_Share_joint",
         ftdata_symbol="ftDataZelda",
         decomp_dir="ftZelda",

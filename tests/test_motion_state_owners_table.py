@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from melee_sim.raw_data import raw_data_dir
 from tools.extraction.char_registry import CHARS as CHAR_REGISTRY
 from tools.extraction.extract_motion_state_tables import (
     CLASS_ATTACK_AIR,
@@ -265,9 +266,9 @@ def test_motion_state_semantic_lanes_match_reviewed_digest() -> None:
 
 @pytest.mark.integration
 def test_iso_motion_state_extractor_matches_generated_semantic_lanes() -> None:
-    dol = Path("_iso/main.dol")
+    dol = raw_data_dir() / "main.dol"
     if not dol.is_file():
-        pytest.skip("run make bootstrap to extract _iso/main.dol")
+        pytest.skip("run make bootstrap to extract data/raw/main.dol")
     extracted = load_motion_state_rows(dol)
     for char, rows in extracted.items():
         table = _table(char)

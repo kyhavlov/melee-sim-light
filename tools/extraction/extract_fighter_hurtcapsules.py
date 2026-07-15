@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from melee_sim.hsd_archive import _u32_be, parse_hsd_archive
+from melee_sim.raw_data import raw_data_dir
 
 HURTCAPS_BIN_MAGIC = b"MSLHURT1"
 HURTCAPS_BIN_VERSION = 1
@@ -240,7 +241,7 @@ def _write_hurtcaps_bin(out_path: Path, *, capsules: list[HurtCapsuleInit]) -> N
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Extract fighter hurt capsule init data (ftHurtboxInit) from ISO-extracted Pl??.dat.")
-    parser.add_argument("--iso_dir", type=Path, default=Path("_iso"))
+    parser.add_argument("--iso_dir", type=Path, default=raw_data_dir())
     parser.add_argument("--out_dir", type=Path, default=Path("data/hurtcaps"))
     parser.add_argument(
         "--out_bin_dir",

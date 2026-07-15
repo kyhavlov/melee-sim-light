@@ -173,7 +173,8 @@ int laser_params_init(void) {
     // - msid/state=0 uses HitElement_Normal (0)
     // - msid/state=1 uses HitElement_Electric (2)
     // refs/melee/src/melee/lb/forward.h::HitElement
-    // _iso/PlFx.dat and _iso/PlFc.dat blaster-shot article ItemStateDesc scripts (see tools/extraction/extract_character_attrs.py)
+    // MSL_DATA_DIR/raw/{PlFx,PlFc}.dat blaster-shot article ItemStateDesc scripts
+    // (see tools/extraction/extract_character_attrs.py)
     rec.shield_damage = (int8_t)p[off + 16];
     rec.element = (version >= 4) ? p[off + 17] : 0u;
     // MSLLASR1 v4+ source-derived zero applied-KB damage class for this laser state.

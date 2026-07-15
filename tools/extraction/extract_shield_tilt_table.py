@@ -5,6 +5,7 @@ import struct
 from pathlib import Path
 
 from melee_sim.hsd_archive import parse_hsd_archive
+from melee_sim.raw_data import raw_data_dir
 from tools.extraction.char_registry import CHARS
 
 
@@ -123,7 +124,7 @@ def _write_table(
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Extract the Guard live-JObj target tree.")
-    ap.add_argument("--iso-dir", type=Path, default=Path("_iso"))
+    ap.add_argument("--iso-dir", type=Path, default=raw_data_dir())
     ap.add_argument("--character", required=True, choices=sorted(CHARS))
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()

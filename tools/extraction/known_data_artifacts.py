@@ -726,8 +726,8 @@ def yoshi_shyguy_metadata(data_root: Path | str = Path("data")) -> YoshiShyguyMe
     """Return generated Yoshi's Story Shy Guy stage-owned item data.
 
     Source data:
-    - `_iso/GrSt.dat::yakumono_param`
-    - `_iso/GrSt.dat::itemdata` Heiho Article attrs, fixed ECB, and child-JObj FObjDesc
+    - `MSL_DATA_DIR/raw/GrSt.dat::yakumono_param`
+    - `MSL_DATA_DIR/raw/GrSt.dat::itemdata` Heiho Article attrs, fixed ECB, and child-JObj FObjDesc
     refs/melee/src/melee/gr/grstory.c::{reset_shyguy_timer,grStory_801E3418}
     refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion*_Phys,it_802D98C4}
     refs/melee/src/melee/it/it_2725.c::{it_80275DFC,it_80276308}
@@ -766,7 +766,7 @@ def dream_whispy_metadata(data_root: Path | str = Path("data")) -> DreamWhispyMe
     """Return generated Dream Land Whispy wind data.
 
     Source data:
-    - `_iso/GrOp.dat::yakumono_param`
+    - `MSL_DATA_DIR/raw/GrOp.dat::yakumono_param`
     refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
     refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec
     """

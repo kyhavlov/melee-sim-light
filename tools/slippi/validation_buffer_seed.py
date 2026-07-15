@@ -387,7 +387,7 @@ def _derive_opening_input_lock_timer(*, frame_id_i32: np.ndarray) -> np.ndarray:
     refs/melee/src/melee/gm/gm_16AE.c::{gm_8016E934_OnEnter,fn_8016B7F8}
     refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
     refs/melee/src/melee/if/if_2F72.c::if_802F73C4
-    refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+    SSBM.iso::IfAll.dat::ScInfCnt_scene_models[3]
     """
     frame_id = np.asarray(frame_id_i32, dtype=np.int32).reshape(-1)
     out = np.zeros(frame_id.shape[0], dtype=np.uint8)

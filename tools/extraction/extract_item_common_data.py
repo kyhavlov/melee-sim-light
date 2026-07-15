@@ -6,6 +6,7 @@ import struct
 from pathlib import Path
 
 from melee_sim.hsd_archive import parse_hsd_archive
+from melee_sim.raw_data import raw_data_dir
 
 
 def _u32_be(buf: bytes, off: int) -> int:
@@ -17,10 +18,13 @@ def _f32_be(buf: bytes, off: int) -> float:
 
 
 def main() -> None:
-    # Note: `data/items/item_common.json` is tracked. Re-run this extractor after any changes here
-    # or when switching ISO so item-common gameplay constants stay source-backed.
     ap = argparse.ArgumentParser(description="Extract ItemCommonData constants from ItCo.dat.")
-    ap.add_argument("--itco", type=Path, default=Path("_iso/ItCo.dat"), help="path to ItCo.dat")
+    ap.add_argument(
+        "--itco",
+        type=Path,
+        default=raw_data_dir() / "ItCo.dat",
+        help="path to ItCo.dat",
+    )
     ap.add_argument("--out", type=Path, default=Path("data/items/item_common.json"))
     args = ap.parse_args()
 

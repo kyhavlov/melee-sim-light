@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import os
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import BinaryIO, Iterable
+from typing import BinaryIO, Iterable, Mapping
 
 
 @dataclass(frozen=True)
@@ -11,6 +13,12 @@ class IsoFile:
     path: str
     offset: int
     size: int
+
+
+@dataclass(frozen=True)
+class DiscIdentity:
+    game_id: str
+    revision: int
 
 
 def _u32_be(b: bytes, off: int) -> int:
@@ -95,6 +103,15 @@ def list_files(iso_path: Path) -> list[IsoFile]:
     return _parse_fst(fst)
 
 
+def read_disc_identity(iso_path: Path) -> DiscIdentity:
+    with iso_path.open("rb") as f:
+        header = _read_exact(f, 8)
+    return DiscIdentity(
+        game_id=header[:6].decode("ascii", errors="replace"),
+        revision=header[7],
+    )
+
+
 def find_files(files: Iterable[IsoFile], pattern: str) -> list[IsoFile]:
     return [x for x in files if fnmatch(x.path, pattern)]
 
@@ -110,6 +127,42 @@ def read_file_bytes(iso_path: Path, entry: IsoFile) -> bytes:
 def extract_file(iso_path: Path, entry: IsoFile, out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_bytes(read_file_bytes(iso_path, entry))
+
+
+def extract_files(
+    iso_path: Path, entries: Mapping[str, IsoFile], out_dir: Path
+) -> dict[str, str]:
+    """Extract an ISO file set with one source handle and atomic destinations."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    digests: dict[str, str] = {}
+    with iso_path.open("rb") as source:
+        for name, entry in sorted(entries.items(), key=lambda item: item[1].offset):
+            if Path(name).name != name:
+                raise ValueError(f"ISO extraction destination must be a basename: {name!r}")
+            if entry.offset < 0 or entry.size < 0:
+                raise ValueError(f"invalid ISO file entry: {entry.path}")
+            destination = out_dir / name
+            temporary = destination.with_name(f".{destination.name}.tmp")
+            digest = hashlib.sha256()
+            source.seek(entry.offset)
+            remaining = entry.size
+            try:
+                with temporary.open("wb") as output:
+                    while remaining:
+                        chunk = source.read(min(1024 * 1024, remaining))
+                        if not chunk:
+                            raise EOFError(
+                                f"ISO file {entry.path!r} is truncated by {remaining} bytes"
+                            )
+                        output.write(chunk)
+                        digest.update(chunk)
+                        remaining -= len(chunk)
+                os.replace(temporary, destination)
+            except BaseException:
+                temporary.unlink(missing_ok=True)
+                raise
+            digests[name] = digest.hexdigest()
+    return digests
 
 
 def extract_main_dol(iso_path: Path, out_path: Path) -> None:
@@ -138,4 +191,10 @@ def extract_main_dol(iso_path: Path, out_path: Path) -> None:
         f.seek(dol_offset)
         data = _read_exact(f, dol_size)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_bytes(data)
+    temporary = out_path.with_name(f".{out_path.name}.tmp")
+    try:
+        temporary.write_bytes(data)
+        os.replace(temporary, out_path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
