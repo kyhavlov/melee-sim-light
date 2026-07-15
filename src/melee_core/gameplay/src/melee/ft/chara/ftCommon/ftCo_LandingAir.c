@@ -1,0 +1,98 @@
+#include "ftCo_LandingAir.h"
+
+#include <platform.h>
+#ifdef MSL_CORE_HOSTED
+#include "platform/slippi.h"
+#endif
+
+#include "ft/fighter.h"
+
+#include "ft/forward.h"
+
+#include "ft/ftanim.h"
+#include "ft/ftcommon.h"
+#include "ft/types.h"
+
+#include "ftCommon/forward.h"
+
+#include "ftCommon/ftCo_Landing.h"
+
+void ftCo_LandingAir_EnterWithLag(Fighter_GObj* gobj)
+{
+    u8 _[20] = { 0 };
+    float lag;
+    FtMotionId msid = ftCo_MS_None;
+    Fighter* fp = GET_FIGHTER(gobj);
+    if (fp->cmd_vars[0]) {
+        switch (fp->motion_id) {
+        case ftCo_MS_AttackAirN:
+            lag = fp->co_attrs.landingairn_lag;
+            msid = ftCo_MS_LandingAirN;
+            break;
+        case ftCo_MS_AttackAirF:
+            lag = fp->co_attrs.landingairf_lag;
+            msid = ftCo_MS_LandingAirF;
+            break;
+        case ftCo_MS_AttackAirB:
+            lag = fp->co_attrs.landingairb_lag;
+            msid = ftCo_MS_LandingAirB;
+            break;
+        case ftCo_MS_AttackAirHi:
+            lag = fp->co_attrs.landingairhi_lag;
+            msid = ftCo_MS_LandingAirHi;
+            break;
+        case ftCo_MS_AttackAirLw:
+            msid = ftCo_MS_LandingAirLw;
+            lag = fp->co_attrs.landingairlw_lag;
+            break;
+        }
+#ifdef MSL_CORE_HOSTED
+        // Slippi Recording/GetLCancelStatus/GetLCancelStatus.asm hooks the
+        // x67F/window comparison and records its result in the extended
+        // player block for this post-frame row.
+        if (msid != ftCo_MS_None) {
+            msl_slippi_lcancel_set(
+                fp, fp->x67F < p_ftCommonData->xE4 ? 1 : 2);
+        }
+#endif
+        if (msid != ftCo_MS_None && fp->x67F < p_ftCommonData->xE4) {
+            float div_lag = lag / p_ftCommonData->xE8;
+            int int_lag = div_lag;
+            if ((int) div_lag == 0) {
+                int_lag = 1;
+            }
+            lag = int_lag;
+        }
+    }
+    if (msid != ftCo_MS_None) {
+        ftCo_LandingAir_EnterWithMsidLag(gobj, msid, lag);
+    } else {
+        ftCo_Landing_Enter_Basic(gobj);
+    }
+}
+
+void ftCo_LandingAir_EnterWithMsidLag(Fighter_GObj* gobj, FtMotionId msid,
+                                      float lag)
+{
+    u8 _[8] = { 0 };
+    ftCommon_8007D7FC(GET_FIGHTER(gobj));
+    Fighter_ChangeMotionState(gobj, msid, Ft_MF_None, 0, 1, 0, NULL);
+    ftAnim_SetAnimRate(gobj, (ftAnim_8006F484(gobj) + 0.1f) / lag);
+}
+
+void ftCo_LandingAir_Anim(Fighter_GObj* gobj)
+{
+    ftCo_Landing_Anim(gobj);
+}
+
+void ftCo_LandingAir_IASA(Fighter_GObj* gobj) {}
+
+void ftCo_LandingAir_Phys(Fighter_GObj* gobj)
+{
+    ftCo_Landing_Phys(gobj);
+}
+
+void ftCo_LandingAir_Coll(Fighter_GObj* gobj)
+{
+    ftCo_Landing_Coll(gobj);
+}

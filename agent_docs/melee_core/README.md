@@ -1,13 +1,13 @@
 # Source-Shaped Melee Core
 
-Status: Phase 4 native x86-64 scalar parity and data-root productionization are complete. The first
-Phase 5 source-owner packet now runs the full 23-replay Fox/Falco FD/Battlefield/frozen-Stadium
-gate: 19 replays are strict passes and four have bounded, source-classified oracle residuals. All
-five tracked Fox/Fox FD controls retain their Phase 2.5 gameplay-exact result. No production-core
-cutover has occurred. The next autonomous goal promotes the validated source and completes the
-current six-character/six-stage source domain: 97 singles entries plus 21 doubles entries. Real
-multi-match context ownership, arbitrary savestates, the replacement API, and Wasm/viewer cutover
-remain deferred until that broader source closure is stable.
+Status: Phase 5.5 canonical source promotion is complete. PPC32 and native x86-64 now compile the
+tracked repository-owned gameplay source directly; the ignored patched materialization and its
+vendor/patch build path are gone. The 23-replay Fox/Falco FD/Battlefield/frozen-Stadium gate remains
+19 strict passes plus four exact source-classified oracle residuals. The active autonomous goal now
+completes the remaining stages, Marth, Captain Falcon, combined Sheik/Zelda, and doubles domain:
+97 singles entries plus 21 doubles entries. Real multi-match context ownership, arbitrary
+savestates, the replacement API, and Wasm/viewer cutover remain deferred until that broader source
+closure is stable.
 
 Branch base: `core-rewrite` at `6fbcc9bc7719` (`Rewrite core contact and motion state ownership`).
 
@@ -43,11 +43,10 @@ or partial public cutover:
 ### Parallel source tree
 
 The replacement core lives under `src/melee_core/` and does not link existing simulator gameplay
-objects. `vendor/` is a pristine minimal snapshot preserving upstream paths; `patches/` contains
-the ordered adaptations applied only to the ignored materialized build tree. Core-owned headless
-behavior lives under `runtime/`, hosted OS/ABI replacements live under `platform/`, and audited
-exclusions remain under `stubs/`. Neither the pristine snapshot nor host/platform policy is mixed
-into the other boundary.
+objects. `gameplay/` is the canonical repository-owned source tree and preserves upstream-relative
+paths. PPC and native compile it directly. Core-owned headless behavior lives under `runtime/`,
+hosted OS/ABI replacements live under `platform/`, and audited exclusions remain under `stubs/`.
+The locked upstream commit and inventory remain provenance inputs, not a second gameplay tree.
 
 Existing build and test conventions may be reused. Existing gameplay implementations, including
 `src/decomp/lb/lb_00ce.c`, are not runtime dependencies of the new kernel; the corresponding latest
@@ -79,18 +78,19 @@ Import complete translation units and source-owner families, not selected functi
 dependency closure for two Fox fighters on Final Destination and expand when a real source call
 graph requires it. Do not import every supported fighter and stage merely to silence link errors.
 
-Track the imported set in the checked-in lock, exact file list, and manifest. Files under
-`vendor/` never receive local edits. Small necessary hosted/source-exact changes belong in the
-ordered patch series; true platform policy remains in `platform/` rather than being scattered
-through gameplay source.
+Track the imported set in the checked-in lock, exact file list, and manifest. Import new complete
+source owners with `tools/melee_core/source_sync.sh add`; then edit the canonical files directly.
+Keep true platform policy in `platform/` rather than scattering it through gameplay source, and
+keep each gameplay delta source-backed beside the code and in the delta ledger when it matters for
+later upstream contribution.
 
 `src/melee_core/upstream_delta_ledger.tsv` classifies each new Phase 5 decomp-file delta while its
 evidence is fresh. `upstream-candidate` means the pinned nonmatching C body itself appears wrong and
 the fix can plausibly become a small isolated decomp contribution. Hosted portability, explicit
 float-operation spelling, source imports, and headless policy remain recorded beside those
 candidates so later upstream preparation does not confuse a correct port adaptation with a retail
-source correction. Add a row when a new patch is created; matching/build cleanup for an upstream PR
-can remain deferred until the Phase 5 behavior packet is stable.
+source correction. Historical patch identifiers remain in the ledger for provenance; new rows name
+the canonical source owner or focused change directly.
 
 Use nonmatching C implementations when they exist and record their status. Inspect or port PPC
 assembly only when a reached gameplay owner has no adequate C body or produces relevant
@@ -620,9 +620,9 @@ Adopt durable production naming and source boundaries in a behavior-neutral chec
 This phase does not introduce native layouts or alter gameplay behavior. It creates the final
 source shape in which native work will continue.
 
-#### Phase 3 result
+#### Phase 3 historical result
 
-The durable core now has explicit ownership boundaries:
+At the Phase 3 checkpoint, the core had these ownership boundaries:
 
 - `src/melee_core/vendor/` is a pristine 914-file snapshot of the exact compiled upstream
   dependency closure at the locked commit: 249 C translation units and 665 headers;
@@ -636,25 +636,16 @@ The durable core now has explicit ownership boundaries:
   the executable live under `build/melee_core/ppc/` and the native streaming validator lives
   under `build/melee_core/validation/`.
 
-`tools/melee_core/source_sync.sh check` verifies the exact file list, count, content digest, and
-complete patch series. `import CHECKOUT` reconstructs the current pin, `update CHECKOUT COMMIT`
-tests the patches against a deliberate new pin before replacing the snapshot, and `materialize`
-creates the ignored build input. Normal build and test targets no longer read `refs/melee`; a clean
-test run also succeeds with that checkout temporarily absent. The checkout is needed only when a
-developer explicitly imports or updates the pin.
+At that checkpoint, `tools/melee_core/source_sync.sh` verified and materialized the pristine-plus-
+patch representation. Phase 5.5 supersedes those commands and paths with the canonical-source
+workflow documented below.
 
 All five replay gates retain the Phase 2.5 counts: 2,723, 10,174, 12,185, 8,729, and 7,543
 transitions pass gameplay-strict comparison. Hungry retains exactly one separately reported
 render-visibility diagnostic at frame 6030; signed zero remains strict and has no diagnostics.
 
-The patch series is the durable provenance and upstream-update mechanism during PPC/native scalar
-parity work. It is not intended to encode later whole-core architecture changes as an ever-growing
-diff against pristine decomp files. Before Phase 6 introduces cross-cutting per-match state,
-initialization-only allocation, SoA/AoSoA layout, or batching, the then-validated patched result
-will be promoted to repository-owned canonical gameplay source. PPC and native oracle targets must
-continue to compile that same canonical implementation so layout optimization cannot create a
-second semantic port. Small future upstream changes can still be reviewed and applied deliberately
-through the pinned snapshot and patch provenance.
+The patch series served as provenance during PPC/native scalar parity work. Phase 5.5 promoted its
+validated result to canonical source before later whole-core ownership and layout changes.
 
 ### Phase 4 — Native x86-64 scalar parity
 
@@ -1065,6 +1056,25 @@ fresh-process startup is not the main full-replay cost.
 Completion requires direct canonical PPC/native builds, source inventory/delta checks, current
 smokes, a bounded PPC/native differential, and the full native 23-replay result unchanged. Commit
 this phase independently before importing another fighter or stage owner.
+
+#### Phase 5.5 result
+
+`src/melee_core/gameplay/` is now the sole tracked gameplay-source authority. Its 927-file inventory
+matches `upstream-files.txt`; 71 files differ from the pinned decomp after promotion of the exact
+validated materialization. `tools/melee_core/source_sync.sh check` verifies the canonical inventory
+and, when the locked checkout is available, its commit, pristine digest, and delta count. `diff`
+exports a deterministic binary-capable patch against the pin, while `add` imports new source-owner
+paths and refreshes the inventory lock. Builds do not require the checkout.
+
+The old tracked pristine `vendor/`, 47-file patch series, and ignored materialization rule were
+deleted. Their focused change history remains in Git and in `source_manifest.tsv` /
+`upstream_delta_ledger.tsv`; future source expansion edits canonical owners normally.
+
+A clean direct-source PPC/native build and both smoke paths pass. The five Fox/FD controls pass a
+1,000-transition PPC/native gate, and the full native 23-replay gate remains 19 strict passes plus
+the same four exact classification snapshots across 218,302 transitions. A bounded native `-O2`
+build changed broad gameplay/float results, so it was rejected and removed; the proven source-exact
+native compile profile remains the default.
 
 ### Phase 5 continuation — Current supported source domain
 

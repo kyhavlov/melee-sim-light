@@ -11,8 +11,7 @@ BUILD_ROOT := $(ROOT)/build/melee_core
 PPC_BUILD := $(BUILD_ROOT)/ppc
 NATIVE_BUILD := $(BUILD_ROOT)/native
 VALIDATION_BUILD := $(BUILD_ROOT)/validation
-SOURCE_TREE := $(BUILD_ROOT)/source
-SOURCE_STAMP := $(SOURCE_TREE)/.materialized
+SOURCE_TREE := $(CORE)/gameplay
 PPC_OBJ_DIR := $(PPC_BUILD)/obj
 NATIVE_OBJ_DIR := $(NATIVE_BUILD)/obj
 NATIVE_GENERATED_DIR := $(NATIVE_BUILD)/generated
@@ -36,9 +35,7 @@ VALIDATION_FRAMES ?= 0
 VALIDATION_ARGS ?=
 
 SOURCE_SYNC := $(ROOT)/tools/melee_core/source_sync.sh
-VENDOR_FILES := $(shell find $(CORE)/vendor -type f -print | LC_ALL=C sort)
-PATCH_FILES := $(shell find $(CORE)/patches -type f -print | LC_ALL=C sort)
-UPSTREAM_REL_SRCS := $(shell find $(CORE)/vendor/src -type f -name '*.c' -printf '%P\n' | LC_ALL=C sort)
+UPSTREAM_REL_SRCS := $(shell find $(SOURCE_TREE)/src -type f -name '*.c' -printf '%P\n' | LC_ALL=C sort)
 UPSTREAM_REL_SRCS := $(filter-out \
 	melee/ft/chara/ftCommon/ftCo_0A01.c \
 	melee/it/it_279C.c, \
@@ -49,8 +46,8 @@ UPSTREAM_REL_SRCS += \
 	melee/it/items/itfoxillusion.c \
 	melee/it/items/itfoxlaser.c
 UPSTREAM_SRCS := $(addprefix $(SOURCE_TREE)/src/,$(UPSTREAM_REL_SRCS))
-PPC_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(PPC_OBJ_DIR)/vendor/%.o,$(UPSTREAM_SRCS))
-NATIVE_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(NATIVE_OBJ_DIR)/vendor/%.o,$(UPSTREAM_SRCS))
+PPC_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(PPC_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
+NATIVE_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(NATIVE_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
 
 PLATFORM_SRCS := \
 	$(CORE)/platform/dolphin_mtx.c \
@@ -150,9 +147,9 @@ LDLIBS := -lm
 # range-reduction and polynomial expressions to fmadds/fnmsubs (DOL
 # 0x80326240). Preserve those operation boundaries without enabling
 # contraction indiscriminately in the hosted core.
-$(PPC_OBJ_DIR)/vendor/src/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
+$(PPC_OBJ_DIR)/gameplay/src/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
 $(PPC_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
-$(NATIVE_OBJ_DIR)/vendor/src/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast -mfma
+$(NATIVE_OBJ_DIR)/gameplay/src/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast -mfma
 $(NATIVE_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast -mfma
 
 .PHONY: all runtime native source source-check validation validator validation-suite clean run run-native toolchain data-check smoke native-smoke map-smoke validation-smoke test
@@ -163,7 +160,7 @@ runtime: $(BINARY)
 
 native: $(NATIVE_BINARY)
 
-source: $(SOURCE_STAMP)
+source: source-check
 
 source-check:
 	@$(SOURCE_SYNC) check
@@ -171,9 +168,6 @@ source-check:
 validation: runtime validator
 
 validator: $(VALIDATION_NATIVE)
-
-$(SOURCE_STAMP): $(VENDOR_FILES) $(PATCH_FILES) $(CORE)/upstream-files.txt $(CORE)/upstream.lock $(SOURCE_SYNC)
-	@$(SOURCE_SYNC) materialize "$(SOURCE_TREE)"
 
 $(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(CORE)/runtime/wire.h
 	@mkdir -p "$(@D)"
@@ -187,14 +181,7 @@ toolchain: $(TOOLCHAIN_STAMP)
 $(TOOLCHAIN_STAMP): $(ROOT)/tools/melee_core/setup_ppc32_toolchain.sh
 	@$(ROOT)/tools/melee_core/setup_ppc32_toolchain.sh
 
-$(UPSTREAM_SRCS): | $(SOURCE_STAMP)
-	@test -f "$@"
-
-$(PPC_LOCAL_OBJS) $(PPC_MAIN_OBJ) $(PPC_SMOKE_OBJS) \
-$(NATIVE_LOCAL_OBJS) $(NATIVE_PLATFORM_OBJS) $(NATIVE_MAIN_OBJ) \
-$(NATIVE_SMOKE_OBJS): | $(SOURCE_STAMP)
-
-$(PPC_UPSTREAM_OBJS): $(PPC_OBJ_DIR)/vendor/%.o: $(SOURCE_TREE)/%.c $(TOOLCHAIN_STAMP)
+$(PPC_UPSTREAM_OBJS): $(PPC_OBJ_DIR)/gameplay/%.o: $(SOURCE_TREE)/%.c $(TOOLCHAIN_STAMP)
 	@mkdir -p "$(@D)"
 	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
 		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
@@ -214,7 +201,7 @@ $(BINARY): $(PPC_OBJS)
 		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
 		"$(CC)" --sysroot="$(SYSROOT)" -Wl,--gc-sections $^ $(LDLIBS) -o "$@"
 
-$(NATIVE_UPSTREAM_OBJS): $(NATIVE_OBJ_DIR)/vendor/%.o: $(SOURCE_TREE)/%.c
+$(NATIVE_UPSTREAM_OBJS): $(NATIVE_OBJ_DIR)/gameplay/%.o: $(SOURCE_TREE)/%.c
 	@mkdir -p "$(@D)"
 	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) $(NATIVE_CFLAGS) -MMD -MP \
 		-c "$(SOURCE_TREE)/$*.c" -o "$@"
@@ -223,14 +210,14 @@ $(NATIVE_OBJ_DIR)/%.o: $(ROOT)/%.c
 	@mkdir -p "$(@D)"
 	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) $(NATIVE_CFLAGS) -MMD -MP -c "$<" -o "$@"
 
-$(NATIVE_DAT_PPC_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(SOURCE_STAMP) $(TOOLCHAIN_STAMP)
+$(NATIVE_DAT_PPC_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(TOOLCHAIN_STAMP)
 	@mkdir -p "$(@D)"
 	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
 		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
 		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) -g -gdwarf-4 \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
-$(NATIVE_DAT_NATIVE_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(SOURCE_STAMP)
+$(NATIVE_DAT_NATIVE_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC)
 	@mkdir -p "$(@D)"
 	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) -g -gdwarf-4 -w \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
@@ -330,6 +317,6 @@ run-native: data-check $(NATIVE_BINARY)
 	@"$(NATIVE_BINARY)" "$(DATA)" "$(CONFIG)" "$(PREV)" "$(INPUT)" "$(OUTPUT)"
 
 clean:
-	@rm -rf "$(PPC_BUILD)" "$(NATIVE_BUILD)" "$(VALIDATION_BUILD)" "$(SOURCE_TREE)"
+	@rm -rf "$(PPC_BUILD)" "$(NATIVE_BUILD)" "$(VALIDATION_BUILD)"
 
 -include $(DEPS)
