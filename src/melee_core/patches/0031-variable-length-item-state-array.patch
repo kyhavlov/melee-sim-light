@@ -1,0 +1,15 @@
+--- a/src/melee/it/types.h
++++ b/src/melee/it/types.h
+@@ -159,7 +159,11 @@ struct ItemStateDesc {
+ };
+ 
+ struct ItemStateArray {
+-    struct ItemStateDesc x0_itemStateDesc[8];
++    // DAT article state lists are packed variable-length arrays. Fox's
++    // blaster alone has eleven source-owned states, so an eight-entry object
++    // declaration truncates native materialization.
++    // refs/melee/src/melee/it/items/itfoxblaster.c::it_803F6CA8
++    struct ItemStateDesc x0_itemStateDesc[0];
+ };
+ 
+ /// @sz{10}

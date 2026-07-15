@@ -1058,7 +1058,7 @@ static int consume_output(StreamState* state, const uint8_t* data, size_t size, 
     if (state->output_have == sizeof(state->output_row)) {
       int64_t logical_pos = state->output_rows++;
       if (logical_pos > state->process_end_pos) {
-        snprintf(error, error_size, "PPC runner produced too many rows");
+        snprintf(error, error_size, "core runner produced too many rows");
         return -1;
       }
       if (logical_pos >= state->compare_start_pos &&
@@ -1095,8 +1095,8 @@ static int set_nonblocking(int fd, char* error, size_t error_size) {
 }
 
 static int stream_runner(const char* qemu_path, const char* sysroot, const char* binary_path,
-                         const char* data_root, double timeout, StreamState* state, char* error,
-                         size_t error_size) {
+                         const char* data_root, int direct_native, double timeout,
+                         StreamState* state, char* error, size_t error_size) {
   int input_pipe[2] = {-1, -1};
   int output_pipe[2] = {-1, -1};
   int input_fd = -1;
@@ -1124,8 +1124,13 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
     close(input_pipe[1]);
     close(output_pipe[0]);
     close(output_pipe[1]);
-    execl(qemu_path, qemu_path, "-L", sysroot, binary_path, data_root, "--stream", (char*)NULL);
-    fprintf(stderr, "failed to execute %s: %s\n", qemu_path, strerror(errno));
+    if (direct_native) {
+      execl(binary_path, binary_path, data_root, "--stream", (char*)NULL);
+    } else {
+      execl(qemu_path, qemu_path, "-L", sysroot, binary_path, data_root, "--stream", (char*)NULL);
+    }
+    fprintf(stderr, "failed to execute %s: %s\n", direct_native ? binary_path : qemu_path,
+            strerror(errno));
     _exit(127);
   }
   close(input_pipe[0]);
@@ -1151,7 +1156,7 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
     int wait_ms;
     int polled;
     if (remaining <= 0.0) {
-      snprintf(error, error_size, "PPC validation timed out after %.1f seconds", timeout);
+      snprintf(error, error_size, "core validation timed out after %.1f seconds", timeout);
       goto done;
     }
     wait_ms = remaining >= 1.0 ? 1000 : (int)ceil(remaining * 1000.0);
@@ -1192,7 +1197,7 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
         if (wrote > 0) {
           state->write_off += (size_t)wrote;
         } else if (wrote < 0 && errno != EAGAIN && errno != EINTR) {
-          snprintf(error, error_size, "write to PPC runner: %s", strerror(errno));
+          snprintf(error, error_size, "write to core runner: %s", strerror(errno));
           goto done;
         }
       }
@@ -1217,7 +1222,7 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
         if (errno == EAGAIN) {
           break;
         }
-        snprintf(error, error_size, "read from PPC runner: %s", strerror(errno));
+        snprintf(error, error_size, "read from core runner: %s", strerror(errno));
         goto done;
       }
     }
@@ -1236,20 +1241,25 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
       goto done;
     }
     if (deadline - monotonic_seconds() <= 0.0) {
-      snprintf(error, error_size, "PPC validation timed out after %.1f seconds", timeout);
+      snprintf(error, error_size, "core validation timed out after %.1f seconds", timeout);
       goto done;
     }
     (void)poll(NULL, 0, 10);
   }
   child = -1;
   if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-    snprintf(error, error_size, "PPC runner exited with status %d",
-             WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+    if (WIFSIGNALED(status)) {
+      snprintf(error, error_size, "core runner terminated by signal %d (%s)", WTERMSIG(status),
+               strsignal(WTERMSIG(status)));
+    } else {
+      snprintf(error, error_size, "core runner exited with status %d",
+               WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+    }
     goto done;
   }
   if (state->output_have != 0 || state->output_rows != state->process_end_pos + 1) {
     snprintf(error, error_size,
-             "PPC runner returned %" PRId64 "/%" PRId64 " complete rows and %zu trailing bytes",
+             "core runner returned %" PRId64 "/%" PRId64 " complete rows and %zu trailing bytes",
              state->output_rows, state->process_end_pos, state->output_have);
     goto done;
   }
@@ -1293,7 +1303,8 @@ static int dict_set_owned(PyObject* dict, const char* key, PyObject* value) {
 }
 
 static PyObject* result_object(const ReplayView* replay, const FrameRows* rows,
-                               const StreamState* state, int64_t compare_count) {
+                               const StreamState* state, int64_t compare_count,
+                               double runner_seconds) {
   PyObject* out = PyDict_New();
   PyObject* details = NULL;
   int i;
@@ -1318,6 +1329,7 @@ static PyObject* result_object(const ReplayView* replay, const FrameRows* rows,
   PUT("seed_frame", PyLong_FromLong(get_i32(&replay->frame_id, seed_raw)));
   PUT("first_ref_frame", PyLong_FromLong(get_i32(&replay->frame_id, first_raw)));
   PUT("matched_frames", PyLong_FromLongLong(state->result.matched_frames));
+  PUT("runner_seconds", PyFloat_FromDouble(runner_seconds));
   PUT("render_visibility_mismatch_count",
       PyLong_FromLongLong(state->result.render_visibility_mismatch_count));
   PUT("signed_zero_equal_count", PyLong_FromLongLong(state->result.signed_zero_equal_count));
@@ -1365,7 +1377,8 @@ fail:
 static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwargs) {
   static char* keywords[] = {
       "frames",   "start",       "metadata",     "qemu",    "sysroot",           "binary",
-      "data_dir", "start_frame", "frames_limit", "timeout", "signed_zero_equal", NULL,
+      "data_dir", "start_frame", "frames_limit", "timeout", "signed_zero_equal", "native",
+      NULL,
   };
   PyObject* frames_obj;
   PyObject* start_obj;
@@ -1379,6 +1392,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   unsigned long long frames_limit = 0;
   double timeout = 60.0;
   int signed_zero_equal = 0;
+  int direct_native = 0;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -1390,14 +1404,16 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int64_t available;
   int64_t i;
   int stream_result;
+  double runner_started;
+  double runner_seconds;
   char error[512] = {0};
   PyObject* result = NULL;
   (void)self;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOssss|OKdp:validate_replay", keywords,
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOssss|OKdpp:validate_replay", keywords,
                                    &frames_obj, &start_obj, &metadata_obj, &qemu_path, &sysroot,
                                    &binary_path, &data_root, &start_frame_obj, &frames_limit,
-                                   &timeout, &signed_zero_equal)) {
+                                   &timeout, &signed_zero_equal, &direct_native)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -1439,18 +1455,17 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     goto done;
   }
   if (replay.num_players != 2) {
-    PyErr_Format(PyExc_ValueError, "PPC reference requires two players, got %d",
-                 replay.num_players);
+    PyErr_Format(PyExc_ValueError, "Melee core requires two players, got %d", replay.num_players);
     goto done;
   }
   if (replay.stage_id != 32) {
-    PyErr_Format(PyExc_ValueError, "PPC reference requires Final Destination (32), got %u",
+    PyErr_Format(PyExc_ValueError, "Melee core requires Final Destination (32), got %u",
                  replay.stage_id);
     goto done;
   }
   for (i = 0; i < replay.num_players; ++i) {
     if (get_u8(&replay.players[i].character, rows.raw[0]) != 1) {
-      PyErr_SetString(PyExc_ValueError, "PPC reference requires Fox/Fox");
+      PyErr_SetString(PyExc_ValueError, "Melee core requires Fox/Fox");
       goto done;
     }
   }
@@ -1520,13 +1535,16 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   }
   build_input(&replay, rows.raw[0], &state.previous);
 
-  Py_BEGIN_ALLOW_THREADS stream_result = stream_runner(qemu_path, sysroot, binary_path, data_root,
-                                                       timeout, &state, error, sizeof(error));
-  Py_END_ALLOW_THREADS if (stream_result != 0) {
+  runner_started = monotonic_seconds();
+  Py_BEGIN_ALLOW_THREADS stream_result =
+      stream_runner(qemu_path, sysroot, binary_path, data_root, direct_native, timeout, &state,
+                    error, sizeof(error));
+  Py_END_ALLOW_THREADS runner_seconds = monotonic_seconds() - runner_started;
+  if (stream_result != 0) {
     PyErr_SetString(PyExc_RuntimeError, error);
     goto done;
   }
-  result = result_object(&replay, &rows, &state, compare_count);
+  result = result_object(&replay, &rows, &state, compare_count, runner_seconds);
 
 done:
   free(rows.raw);
@@ -1536,14 +1554,14 @@ done:
 
 static PyMethodDef module_methods[] = {
     {"validate_replay", (PyCFunction)(void*)validate_replay, METH_VARARGS | METH_KEYWORDS,
-     "Stream a Peppi Arrow replay through the PPC Melee core reference."},
+     "Stream a Peppi Arrow replay through a Melee core scalar runtime."},
     {NULL, NULL, 0, NULL},
 };
 
 static struct PyModuleDef module_definition = {
     .m_base = PyModuleDef_HEAD_INIT,
     .m_name = "_msl_replay_validate",
-    .m_doc = "Native zero-copy validation for the PPC Melee core reference.",
+    .m_doc = "Native zero-copy validation for Melee core scalar runtimes.",
     .m_size = -1,
     .m_methods = module_methods,
 };

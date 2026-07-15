@@ -1,0 +1,354 @@
+--- a/src/melee/ft/types.h
++++ b/src/melee/ft/types.h
+@@ -1819,6 +1819,32 @@
+         /* fp+2340 */ union ftZelda_MotionVars zd;
+     } mv;
+ };
++
++/*
++ * Fighter_ChangeMotionState copies MotionState.x10_animCurrFlags as one u32.
++ * Decode that source word numerically so the PPC bit numbering does not depend
++ * on the host compiler's bitfield layout.
++ * refs/melee/src/melee/ft/{fighter.c,types.h}
++ */
++static inline bool Fighter_AnimFlag(const Fighter* fp, u32 bit)
++{
++    return (((u32) fp->x594_s32 >> (31U - bit)) & 1U) != 0;
++}
++
++static inline u32 Fighter_AnimBoneIndex(const Fighter* fp)
++{
++    return ((u32) fp->x594_s32 >> 6) & 7U;
++}
++
++static inline u32 Fighter_AnimSourceParts(const Fighter* fp)
++{
++    return ((u32) fp->x594_s32 >> 9) & 0x1FFFU;
++}
++
++static inline FighterKind Fighter_AnimSourceKind(const Fighter* fp)
++{
++    return (FighterKind) ((u32) fp->x594_s32 & 0x3FU);
++}
+ STATIC_ASSERT(sizeof(struct Fighter) == 0x23EC);
+ 
+ struct gmScriptEventDefault {
+--- a/src/melee/ft/ft_084E.c
++++ b/src/melee/ft/ft_084E.c
+@@ -81,7 +81,7 @@
+ void ft_80085030(Fighter_GObj* gobj, float gr_friction, float facing_dir)
+ {
+     Fighter* fp = gobj->user_data;
+-    if (fp->x594_b0) {
++    if (Fighter_AnimFlag(fp, 0)) {
+ #ifdef MSL_CORE_HOSTED
+         // GALE01 0x8008505C is one PPC fmsubs instruction. Preserve that
+         // operation boundary in the GCC-hosted PPC runtime.
+@@ -118,7 +118,7 @@
+ void ft_800850E0(Fighter_GObj* gobj, float arg8, float arg9)
+ {
+     Fighter* fp = gobj->user_data;
+-    if (fp->x594_b0) {
++    if (Fighter_AnimFlag(fp, 0)) {
+         fp->gr_vel = fp->x6A4_transNOffset.z * arg9;
+     } else {
+         ftCommon_ApplyFrictionGround(fp, arg8);
+--- a/src/melee/ft/ftdynamics.c
++++ b/src/melee/ft/ftdynamics.c
+@@ -704,7 +704,7 @@
+     float speed = fp->frame_speed_mul;
+     int i;
+ 
+-    if (fp->x594_b4) {
++    if (Fighter_AnimFlag(fp, 4)) {
+         FigaTree** tree = fp->ft_data->x2C->x10[fp->x28[fp->anim_id][1]];
+         if (tree != NULL) {
+             for (i = 0; i < fp->dynamics_num; i++) {
+@@ -716,7 +716,7 @@
+                 }
+             }
+         }
+-    } else if (fp->x594_b3) {
++    } else if (Fighter_AnimFlag(fp, 3)) {
+         for (i = 0; i < fp->dynamics_num; i++) {
+             ftCo_8009CB40(fp, i, 0, NULL);
+             if (fp->x590 != NULL) {
+@@ -744,7 +744,7 @@
+             float frame_speed_mul, cur_anim_frame;
+             cur_anim_frame = fp->cur_anim_frame;
+             frame_speed_mul = fp->frame_speed_mul;
+-            if (fp->x594_b4 || fp->x594_b3) {
++            if (Fighter_AnimFlag(fp, 4) || Fighter_AnimFlag(fp, 3)) {
+                 for (i = 0; i < data->x2C->dynamicsNum; i++) {
+                     ftCo_8009CB40(fp, i, 1, NULL);
+                 }
+@@ -815,7 +815,7 @@
+                         }
+                     }
+                 }
+-            } else if (fp->x594_b4) {
++            } else if (Fighter_AnimFlag(fp, 4)) {
+                 FigaTree*** dyn;
+                 FigaTree** tree;
+                 u8 blend_slot = arg1[0][1];
+@@ -844,7 +844,7 @@
+                 return;
+             } else {
+                 s32 i;
+-                if (fp->x594_b3) {
++                if (Fighter_AnimFlag(fp, 3)) {
+                     if (fp->kind != FTKIND_KIRBY) {
+                         if (fp->kind == FTKIND_PURIN) {
+                             ftCo_8009CB40(fp, 0, 0, NULL);
+--- a/src/melee/ft/ftcommon.c
++++ b/src/melee/ft/ftcommon.c
+@@ -555,7 +555,7 @@
+ 
+ void ftCommon_8007D6A4(Fighter* fp)
+ {
+-    if (fp->x594_b0) {
++    if (Fighter_AnimFlag(fp, 0)) {
+         fp->self_vel.x = fp->x6A4_transNOffset.z * fp->facing_dir;
+     }
+     ftCommon_ClampGrVel(fp, fp->co_attrs.ground_max_horizontal_velocity);
+--- a/src/melee/ft/fighter.c
++++ b/src/melee/ft/fighter.c
+@@ -1300,7 +1300,7 @@
+         fp->cur_anim_frame = (anim_start - fp->frame_speed_mul);
+         fp->x898_unk = 0.0f;
+ 
+-        if ((fp->x594_b0) || (fp->x594_b5)) {
++        if (Fighter_AnimFlag(fp, 0) || Fighter_AnimFlag(fp, 5)) {
+             animflags_bool = true;
+         } else {
+             animflags_bool = false;
+@@ -1310,7 +1310,7 @@
+             Vec3 translation;
+             Quaternion quat;
+ 
+-            bone_index = fp->x596_bits.x7;
++            bone_index = Fighter_AnimBoneIndex(fp);
+ 
+             if ((flags & Ft_MF_FreezeState) != 0) {
+                 fp->x2223_b0 = 1;
+@@ -1349,14 +1349,14 @@
+                                                        : (*unk_byte_ptr)[0]);
+                     }
+                     ftAnim_8006E9B4(gobj);
+-                    if (fp->x594_b0 != 0U) {
++                    if (Fighter_AnimFlag(fp, 0)) {
+                         fp->x6B0.x = fp->x6B0.y = fp->x6B0.z = 0.0F;
+                         fp->x6A4_transNOffset.x = fp->x6A4_transNOffset.y =
+                             fp->x6A4_transNOffset.z = 0.0F;
+                         fp->x698 = fp->x68C_transNPos;
+                     }
+ 
+-                    if (fp->x594_b5 != 0U) {
++                    if (Fighter_AnimFlag(fp, 5)) {
+                         fp->x6E4.x = fp->x6E4.y = fp->x6E4.z = 0.0F;
+                         fp->x6D8.x = fp->x6D8.y = fp->x6D8.z = 0.0F;
+                         fp->x6CC = fp->x6C0;
+@@ -1384,7 +1384,7 @@
+                                             &quat);
+                 }
+ 
+-                if (fp->x594_b0 != 0U) {
++                if (Fighter_AnimFlag(fp, 0)) {
+                     if (!anim_start) {
+                         float c = 0.0f;
+                         fp->x6B0.x = fp->x6B0.y = fp->x6B0.z = c;
+@@ -1401,7 +1401,7 @@
+                     }
+                 }
+ 
+-                if (fp->x594_b5 != 0U) {
++                if (Fighter_AnimFlag(fp, 5)) {
+                     if (!anim_start) {
+                         float c = 0.0f;
+                         fp->x6E4.x = fp->x6E4.y = fp->x6E4.z = c;
+@@ -1438,7 +1438,7 @@
+         }
+ 
+         if (animflags_bool) {
+-            if (!fp->x594_b0 && !fp->x594_b0) {
++            if (!Fighter_AnimFlag(fp, 0) && !Fighter_AnimFlag(fp, 0)) {
+                 !fp;
+                 ftCommon_ClampGrVel(fp,
+                                     fp->co_attrs.dash_run_terminal_velocity);
+@@ -2425,7 +2425,7 @@
+             }
+ 
+             /// @todo @c incompatible-pointer-types because bad headers
+-            if (bit || ftAnim_80070FD0(fp) || fp->x594_b7) {
++            if (bit || ftAnim_80070FD0(fp) || Fighter_AnimFlag(fp, 7)) {
+                 // fp->xB0_position += fp->xD4_unk_vel
+                 PSVECAdd(&fp->cur_pos, &fp->xD4_unk_vel, &fp->cur_pos);
+                 /// @todo We set this velocity to 0 after applying it.
+--- a/src/melee/ft/ftanim.c
++++ b/src/melee/ft/ftanim.c
+@@ -176,7 +176,7 @@
+                 HSD_JObjAnim(jobj);
+                 fp->x698 = fp->x68C_transNPos;
+                 HSD_JObjGetTranslation(jobj, &fp->x68C_transNPos);
+-                if (!fp->x594_b6) {
++                if (!Fighter_AnimFlag(fp, 6)) {
+                     float temp_f1 = ftCommon_GetModelScale(fp);
+                     fp->x68C_transNPos.x *= temp_f1;
+                     fp->x68C_transNPos.y *= temp_f1;
+@@ -192,13 +192,13 @@
+                               &fp->x6A4_transNOffset);
+                 HSD_JObjSetTranslate(jobj, &sp50);
+             }
+-        } else if (fp->x594_b5 && jobj == arg3) {
++        } else if (Fighter_AnimFlag(fp, 5) && jobj == arg3) {
+             if (jobj != NULL) {
+                 sp44.x = sp44.y = sp44.z = 0.0F;
+                 HSD_JObjAnim(jobj);
+                 fp->x6CC = fp->x6C0;
+                 HSD_JObjGetTranslation(jobj, &fp->x6C0);
+-                if (!fp->x594_b6) {
++                if (!Fighter_AnimFlag(fp, 6)) {
+                     float temp_f1_3 = ftCommon_GetModelScale(fp);
+                     fp->x6C0.x *= temp_f1_3;
+                     fp->x6C0.y *= temp_f1_3;
+@@ -237,7 +237,7 @@
+             }
+         }
+     }
+-    if (fp->x594_b5) {
++    if (Fighter_AnimFlag(fp, 5)) {
+         sp5C.x = fp->x68C_transNPos.x - fp->x6C0.x;
+         sp5C.y = fp->x68C_transNPos.y - fp->x6C0.y;
+         sp5C.z = fp->x68C_transNPos.z - fp->x6C0.z;
+@@ -252,7 +252,7 @@
+         ftCommon_GetModelScale(fp);
+         HSD_JObjGetTranslation(jobj, &sp2C);
+         sp38 = fp->x68C_transNPos;
+-        if (!fp->x594_b6) {
++        if (!Fighter_AnimFlag(fp, 6)) {
+             scale_inline(ftCommon_GetModelScale(fp), &sp38);
+         } else {
+             scale_inline(fp->co_attrs.model_scaling, &sp38);
+@@ -330,7 +330,7 @@
+     jobj = GET_JOBJ(gobj);
+     if (fp->x8A4_animBlendFrames == 0.0F) {
+         HSD_JObjClearFlagsAll(jobj, JOBJ_USE_QUATERNION);
+-        if (fp->x594_b0) {
++        if (Fighter_AnimFlag(fp, 0)) {
+             ftAnim_8006E054(
+                 fp, jobj,
+                 fp->parts[ftParts_GetBoneIndex(fp, FtPart_TransN)].joint,
+@@ -353,7 +353,7 @@
+             blend_t_inv = 1.0F - blend_t;
+         }
+         ftAnim_8006E7B8(fp, FtPart_TopN);
+-        if (fp->x594_b0) {
++        if (Fighter_AnimFlag(fp, 0)) {
+             ftAnim_8006E054(
+                 fp, anim_jobj,
+                 fp->parts[ftParts_GetBoneIndex(fp, FtPart_TransN)].x4_jobj2,
+@@ -368,7 +368,7 @@
+         }
+     }
+ 
+-    if (fp->x594_b2) {
++    if (Fighter_AnimFlag(fp, 2)) {
+         if (ftAnim_8006F3DC(gobj) < fp->cur_anim_frame) {
+             fp->x898_unk += fp->cur_anim_frame + fp->frame_speed_mul;
+         }
+@@ -402,7 +402,7 @@
+         ftAnim_8006FA58(fp, FtPart_TransN, fp->x108_costume_joint->child);
+         ftAnim_8006FE08(fp, false);
+         ftAnim_80070710(root_jobj, anim_start);
+-        if (fp->x594_b1_loop) {
++        if (Fighter_AnimFlag(fp, 1)) {
+             HSD_ForeachAnim(root_jobj, JOBJ_TYPE, mask, HSD_AObjSetFlags,
+                             AOBJ_ARG_AU, AOBJ_LOOP);
+         }
+@@ -413,7 +413,7 @@
+         ftAnim_8006FE08(fp, true);
+         ftAnim_80070710(anim_jobj, anim_start);
+         ftAnim_80070710(root_jobj, anim_start);
+-        if (fp->x594_b1_loop) {
++        if (Fighter_AnimFlag(fp, 1)) {
+             HSD_ForeachAnim(anim_jobj, JOBJ_TYPE, mask, HSD_AObjSetFlags,
+                             AOBJ_ARG_AU, AOBJ_LOOP);
+             HSD_ForeachAnim(root_jobj, JOBJ_TYPE, mask, HSD_AObjSetFlags,
+@@ -474,7 +474,7 @@
+     ftAnim_8006F954(fp, arg1, 1, arg2);
+     ftAnim_80070710(temp_r26, frame);
+     ftAnim_80070710(temp_r31, frame);
+-    if (fp->x594_b1_loop) {
++    if (Fighter_AnimFlag(fp, 1)) {
+         HSD_ForeachAnim(temp_r26, JOBJ_TYPE, 0xFB7F, HSD_AObjSetFlags,
+                         AOBJ_ARG_AU, AOBJ_LOOP);
+         HSD_ForeachAnim(temp_r31, JOBJ_TYPE, 0xFB7F, HSD_AObjSetFlags,
+@@ -606,7 +606,7 @@
+     cur_node = tree->nodes;
+     cur_track = tree->tracks;
+ 
+-    flags = fp->x594_bits;
++    flags = Fighter_AnimSourceParts(fp);
+ 
+     while (*cur_node != -1) {
+         while (!fp->parts[i].flags_b1) {
+@@ -655,9 +655,9 @@
+     i = 0;
+     tree = fp->x590;
+     cur_node = tree->nodes;
+-    x594_bits = fp->x594_bits;
++    x594_bits = Fighter_AnimSourceParts(fp);
+     cur_track = tree->tracks;
+-    kind = fp->x597_bits;
++    kind = Fighter_AnimSourceKind(fp);
+     temp_r25 = fp->parts[part].xC;
+ 
+     while (i < part) {
+@@ -713,7 +713,7 @@
+ 
+     nodes = tree->nodes;
+     tracks = tree->tracks;
+-    r29 = ft->x594_bits;
++    r29 = Fighter_AnimSourceParts(ft);
+     r27 = ft->parts[part].xC;
+ 
+     for (i = 0; i < part; i++) {
+@@ -778,7 +778,7 @@
+ void ftAnim_8006F954(Fighter* fp, Fighter_Part part, bool do_blending,
+                      FigaTree* unused)
+ {
+-    if (fp->kind != fp->x597_bits) {
++    if (fp->kind != Fighter_AnimSourceKind(fp)) {
+         ftAnim_8006F628(fp, part, do_blending);
+     } else {
+         ftAnim_8006F7C8(fp, part, do_blending, fp->x590);
+@@ -873,9 +873,9 @@
+     i = 0;
+     tree = fp->x590;
+     cur_node = tree->nodes;
+-    x594_bits = fp->x594_bits;
++    x594_bits = Fighter_AnimSourceParts(fp);
+     cur_track = tree->tracks;
+-    kind = fp->x597_bits;
++    kind = Fighter_AnimSourceKind(fp);
+ 
+     while (*cur_node != -1) {
+         int part;
+@@ -910,7 +910,7 @@
+ 
+ void ftAnim_8006FE08(Fighter* fp, bool do_blending)
+ {
+-    if (fp->kind != fp->x597_bits) {
++    if (fp->kind != Fighter_AnimSourceKind(fp)) {
+         ftAnim_8006FCE4(fp, do_blending);
+     } else {
+         ftAnim_8006F4C8(fp, do_blending, fp->x590);
+@@ -1201,7 +1201,7 @@
+ 
+     nodes = tree->nodes;
+     tracks = tree->tracks;
+-    r29 = ft->x594_bits;
++    r29 = Fighter_AnimSourceParts(ft);
+     r27 = ft->parts[part].xC;
+ 
+     for (i = 0; i < part; i++) {

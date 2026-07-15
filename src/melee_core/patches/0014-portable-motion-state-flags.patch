@@ -1,0 +1,47 @@
+--- a/src/melee/ft/types.h
++++ b/src/melee/ft/types.h
+@@ -887,6 +887,19 @@
+     HSD_GObjEvent cam_cb;
+ };
+ 
++// Motion-state tables initialize this union as one PPC source word. Decode
++// its authored fields numerically so bitfield allocation order is host-neutral.
++// refs/melee/src/melee/ft/{types.h,ftmotionstates.c}
++static inline u8 MotionState_MoveId(const struct MotionState* state)
++{
++    return (u8) (state->_ >> 24);
++}
++
++static inline bool MotionState_Flag(const struct MotionState* state, u32 bit)
++{
++    return ((state->_ >> (23U - bit)) & 1U) != 0;
++}
++
+ struct Fighter_WaitAnimData {
+     char* x0;
+     s32 x4;
+--- a/src/melee/ft/fighter.c
++++ b/src/melee/ft/fighter.c
+@@ -1258,7 +1258,9 @@
+ 
+     if (fp->ground_or_air == GA_Ground) {
+         if ((flags & 0x40) == 0) {
+-            if (new_motion_state->x9_b1 != 0 && fp->dmg.x18C8 == -1) {
++            if (MotionState_Flag(new_motion_state, 1) &&
++                fp->dmg.x18C8 == -1)
++            {
+                 if (p_ftCommonData->x814 > 0) {
+                     fp->dmg.x18C8 = p_ftCommonData->x814;
+                 } else {
+@@ -1271,9 +1273,9 @@
+     {
+         // load in the union.
+         x2070 = fp->x2070;
+-        ft_800890D0(fp, new_motion_state->move_id);
++        ft_800890D0(fp, MotionState_MoveId(new_motion_state));
+         ft_800895E0(fp, new_motion_state->x4_flags);
+-        fp->x2225_b3 = new_motion_state->x9_b0;
++        fp->x2225_b3 = MotionState_Flag(new_motion_state, 0);
+ 
+         if (fp->x2226_b4) {
+             if (fp->x2070.x2071_b5) {

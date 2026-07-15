@@ -21,17 +21,27 @@ static inline float lbRefract_80022DF8(float x);
 
 float __fmadds(float a, float b, float c)
 {
+#ifdef MSL_CORE_NATIVE
+    return __builtin_fmaf(a, b, c);
+#else
     float result;
     __asm__("fmadds %0,%1,%2,%3" : "=f"(result) : "f"(a), "f"(b), "f"(c));
     return result;
+#endif
 }
 
 // MetroWerks emits a scalar-single fnmsubs instruction for this intrinsic.
 float __fnmsubs(float a, float b, float c)
 {
+#ifdef MSL_CORE_NATIVE
+    // Retail fnmsubs negates a fused (a*b-c), including the result sign of an
+    // exact zero. refs/melee/build/GALE01/asm/melee/ft/fighter.s.
+    return -__builtin_fmaf(a, b, -c);
+#else
     float result;
     __asm__("fnmsubs %0,%1,%2,%3" : "=f"(result) : "f"(a), "f"(b), "f"(c));
     return result;
+#endif
 }
 
 float msl_dolphin_fnmsubs(float a, float b, float c)
@@ -72,9 +82,13 @@ float msl_dolphin_fnmsubs(float a, float b, float c)
 
 float __fmsubs(float a, float b, float c)
 {
+#ifdef MSL_CORE_NATIVE
+    return __builtin_fmaf(a, b, -c);
+#else
     float result;
     __asm__("fmsubs %0,%1,%2,%3" : "=f"(result) : "f"(a), "f"(b), "f"(c));
     return result;
+#endif
 }
 
 float atan2f(float y, float x)

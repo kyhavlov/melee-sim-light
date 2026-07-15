@@ -1,0 +1,46 @@
+--- a/src/melee/ft/ftdata.c
++++ b/src/melee/ft/ftdata.c
+@@ -1793,6 +1793,13 @@ void ftData_80085CD8(Fighter* fp, Fighter* arg1, int msid)
+                     }
+                 } else {
+                     temp_r4_2 = temp_r3->x14;
++#ifdef MSL_CORE_NATIVE
++                    // The loaded PlFxAJ.dat subarchive is immutable and is the
++                    // initialization-cache key for native graph translation.
++                    // refs/melee/src/melee/ft/ftdata.c::ftData_80085A14
++                    temp_ret_2 = HSD_ArchiveParse(
++                        &sp14, (void*) temp_r4_2, temp_r3->x8);
++#else
+ #ifdef MSL_CORE_HOSTED
+                     memcpy(fp->x59C, (void*) temp_r4_2, temp_r3->x8);
+ #else
+@@ -1805,6 +1812,7 @@ void ftData_80085CD8(Fighter* fp, Fighter* arg1, int msid)
+ #endif
+                     temp_ret_2 =
+                         HSD_ArchiveParse(&sp14, fp->x59C->x0, temp_r3->x8);
++#endif
+                     if (temp_ret_2 == -1) {
+                         HSD_ASSERTREPORT(0xA0F, 0,
+                                          "HSD_ArchiveParse error! %x\n", msid);
+@@ -1850,6 +1858,13 @@ FigaTree* ftData_80085E50(Fighter* arg0, int msid)
+                     }
+                 } else {
+                     temp_r4_2 = temp_r3->x14;
++#ifdef MSL_CORE_NATIVE
++                    // Share the same immutable subarchive translation cache
++                    // with ftData_80085CD8's primary animation owner.
++                    // refs/melee/src/melee/ft/ftdata.c::ftData_80085A14
++                    temp_ret_2 = HSD_ArchiveParse(
++                        &sp10, (void*) temp_r4_2, temp_r3->x8);
++#else
+ #ifdef MSL_CORE_HOSTED
+                     memcpy(arg0->x5A0, (void*) temp_r4_2, temp_r3->x8);
+ #else
+@@ -1862,6 +1877,7 @@ FigaTree* ftData_80085E50(Fighter* arg0, int msid)
+ #endif
+                     temp_ret_2 =
+                         HSD_ArchiveParse(&sp10, arg0->x5A0->x0, temp_r3->x8);
++#endif
+                     if (temp_ret_2 == -1) {
+                         HSD_ASSERTREPORT(0xA45, 0,
+                                          "HSD_ArchiveParse error! %x\n", msid);

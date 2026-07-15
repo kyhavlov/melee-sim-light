@@ -1,0 +1,23 @@
+--- a/src/melee/lb/types.h
++++ b/src/melee/lb/types.h
+@@ -368,6 +368,8 @@ struct ColorOverlay_UnkInner {
+     /* +7B */ u8 x7B;
+ };
+ 
++union CmdUnion;
++
+ #ifdef MSL_CORE_NATIVE
+ #pragma scalar_storage_order big-endian
+ #endif
+@@ -392,6 +394,11 @@ union ColorOverlay_x8_t {
+         u32 unk : 6;
+         u32 timer : 26;
+     } unk;
++    // Color scripts run through Command_Execute by overlaying ColorOverlay
++    // with CommandInfo. Give each native command word room for the same
++    // widened pointer-bearing slot as CmdUnion; PPC remains four bytes.
++    // refs/melee/src/melee/lb/{lbspdisplay.c,lbcommand.c,types.h}
++    union CmdUnion* command_ptr;
+ };
+ #ifdef MSL_CORE_NATIVE
+ #pragma scalar_storage_order default

@@ -1,0 +1,40 @@
+--- a/src/melee/ft/ftwaitanim.h
++++ b/src/melee/ft/ftwaitanim.h
+@@ -8,16 +8,11 @@
+ #include <dolphin/mtx.h>
+ 
+ typedef struct WaitStruct {
+-    union {
+-        struct {
+-            int* x;
+-            int* y;
+-        } p;
+-        struct {
+-            int x;
+-            int y;
+-        } i;
+-    } u;
++    // PlFx.dat authors these as two numeric words. The decomp's pointer union
++    // is a PPC matching artifact; retaining it widens each record on native.
++    // refs/melee/src/melee/ft/ftwaitanim.c::getAnimID
++    int x;
++    int y;
+ } WaitStruct;
+ 
+ /* 08A698 */ bool ftCo_8008A698(Fighter* fp);
+--- a/src/melee/ft/ftwaitanim.c
++++ b/src/melee/ft/ftwaitanim.c
+@@ -52,10 +52,10 @@
+     WaitStruct* wait_data = arg1;
+     int max = HSD_Randi(100) + 1;
+     int count = 0;
+-    while (wait_data->u.i.x != -1) {
+-        count += wait_data->u.i.y;
++    while (wait_data->x != -1) {
++        count += wait_data->y;
+         if (max <= count) {
+-            return (enum_t) wait_data->u.p.x;
++            return wait_data->x;
+         }
+         wait_data += 1;
+     }

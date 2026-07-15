@@ -1,0 +1,31 @@
+--- a/src/melee/lb/types.h
++++ b/src/melee/lb/types.h
+@@ -368,6 +368,9 @@
+     /* +7B */ u8 x7B;
+ };
+ 
++#ifdef MSL_CORE_NATIVE
++#pragma scalar_storage_order big-endian
++#endif
+ union ColorOverlay_x8_t {
+     GXColor light_color;
+     struct {
+@@ -392,6 +395,9 @@
+         u32 timer : 26;
+     } unk;
+ };
++#ifdef MSL_CORE_NATIVE
++#pragma scalar_storage_order default
++#endif
+ STATIC_ASSERT(sizeof(union ColorOverlay_x8_t) == 0x4);
+ 
+ struct ColorOverlay {
+@@ -472,7 +478,7 @@
+ STATIC_ASSERT(sizeof(struct lb_80014638_arg1_t) == 0x14);
+ 
+ struct Fighter_804D653C_t {
+-    void* unk;
++    union ColorOverlay_x8_t* unk;
+     u8 unk4;
+     u8 unk5;
+ };

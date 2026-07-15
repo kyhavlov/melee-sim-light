@@ -1,0 +1,50 @@
+--- a/src/sysdolphin/baselib/class.c
++++ b/src/sysdolphin/baselib/class.c
+@@ -225,6 +225,37 @@ void hsdFreeMemPiece(void* mem, s32 size)
+     }
+ }
+ 
++void hsdPreallocateMemPieces(u32 minimum_free)
++{
++    enum { MAXIMUM_RESERVE = 64 };
++    void* pieces[MAXIMUM_RESERVE];
++    s32 size_class_count = nb_memory_list;
++    s32 i;
++
++    HSD_ASSERT(0x1000, minimum_free <= MAXIMUM_RESERVE);
++    // Class objects use a shared size-class allocator that otherwise grows
++    // lazily from HSD_MemAlloc. Populate every registered class size during
++    // hosted bootstrap; hsdNew/hsdDelete keep the ordinary source ownership.
++    // refs/melee/src/sysdolphin/baselib/class.c::hsdAllocMemPiece
++    for (i = 0; i < size_class_count; ++i) {
++        HSD_MemoryEntry* entry = GetMemoryEntry(i);
++        u32 needed;
++        u32 j;
++
++        HSD_ASSERT(0x1001, entry != NULL);
++        needed = entry->nb_free < minimum_free
++                     ? minimum_free - entry->nb_free
++                     : 0;
++        for (j = 0; j < needed; ++j) {
++            pieces[j] = hsdAllocMemPiece((i + 1) * 32);
++            HSD_ASSERT(0x1002, pieces[j] != NULL);
++        }
++        for (j = 0; j < needed; ++j) {
++            hsdFreeMemPiece(pieces[j], (i + 1) * 32);
++        }
++    }
++}
++
+ /// _hsdClassAlloc
+ HSD_Class* _hsdClassAlloc(HSD_ClassInfo* info)
+ {
+--- a/src/sysdolphin/baselib/class.h
++++ b/src/sysdolphin/baselib/class.h
+@@ -59,6 +59,7 @@ void OSReport_PrintSpaces(s32 count);
+ 
+ void* hsdAllocMemPiece(s32 size);
+ void hsdFreeMemPiece(void* mem, s32 size);
++void hsdPreallocateMemPieces(u32 minimum_free);
+ void* hsdNew(HSD_ClassInfo*);
+ bool hsdChangeClass(void* object, void* class_info);
+ bool hsdIsDescendantOf(void* info, void* p);

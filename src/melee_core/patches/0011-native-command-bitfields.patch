@@ -1,0 +1,58 @@
+--- a/src/melee/lb/types.h
++++ b/src/melee/lb/types.h
+@@ -563,6 +563,10 @@
+     Vec3 x14;
+ };
+ 
++#ifdef MSL_CORE_NATIVE
++#pragma scalar_storage_order big-endian
++#endif
++
+ struct Command_00 {
+     u32 code : 6;
+     u32 value : 26;
+@@ -578,12 +582,18 @@
+ struct Command_04 {
+     u32 x;
+ };
++#ifdef MSL_CORE_NATIVE
++#pragma scalar_storage_order default
++#endif
+ struct Command_05 {
+     union CmdUnion* ptr;
+ };
+ struct Command_07 {
+     union CmdUnion* ptr;
+ };
++#ifdef MSL_CORE_NATIVE
++#pragma scalar_storage_order big-endian
++#endif
+ struct Command_09 {
+     u32 id : 6;
+     u32 param_1 : 8;
+@@ -961,6 +971,10 @@
+     s16 decay : 16;
+ };
+ 
++#ifdef MSL_CORE_NATIVE
++#pragma scalar_storage_order default
++#endif
++
+ struct CommandInfo {
+     f32 timer;       // 0x00
+     f32 frame_count; // 0x04
+--- a/src/melee/ft/types.h
++++ b/src/melee/ft/types.h
+@@ -1870,7 +1870,12 @@
+ }
+ STATIC_ASSERT(sizeof(struct Fighter) == 0x23EC);
+ 
++#ifdef MSL_CORE_NATIVE
++struct __attribute__((scalar_storage_order("big-endian")))
++    gmScriptEventDefault {
++#else
+ struct gmScriptEventDefault {
++#endif
+     u32 opcode : 6;
+     u32 value1 : 26;
+ };

@@ -1,0 +1,22 @@
+--- a/src/melee/lb/types.h
++++ b/src/melee/lb/types.h
+@@ -973,6 +973,8 @@
+ 
+ #ifdef MSL_CORE_NATIVE
+ #pragma scalar_storage_order default
++#pragma GCC diagnostic push
++#pragma GCC diagnostic ignored "-Wscalar-storage-order"
+ #endif
+ 
+ struct CommandInfo {
+@@ -1075,6 +1077,10 @@
+     u32 unk_x18;         // 0x18
+ };
+ 
++#ifdef MSL_CORE_NATIVE
++#pragma GCC diagnostic pop
++#endif
++
+ struct LbShadow {
+     u8 x0_b0 : 1;
+     u8 x0_b1 : 1;

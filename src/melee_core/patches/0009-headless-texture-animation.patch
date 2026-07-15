@@ -1,0 +1,44 @@
+--- a/src/melee/ft/ftanim.c
++++ b/src/melee/ft/ftanim.c
+@@ -1051,11 +1051,22 @@
+ void ftAnim_80070458(Fighter* fp, CostumeTObjList* tobj_list, u32 tobj_idx,
+                      float frame)
+ {
++#ifdef MSL_CORE_HOSTED
++    // Texture animation only mutates renderer-owned TObj/AObj state. Action
++    // script advancement and the fighter's x221E_b7 lifetime remain owned by
++    // ftAction_800726F4, ftAnim_800704F0, and ftAnim_80070654.
++    // refs/melee/src/melee/ft/ftanim.c::{ftAnim_80070458,ftAnim_800704F0}
++    (void) fp;
++    (void) tobj_list;
++    (void) tobj_idx;
++    (void) frame;
++#else
+     if (tobj_idx >= tobj_list->n_costume_tobjs) {
+         HSD_ASSERTREPORT(1264, 0, "texture no exist! %d %d\n", fp->player_id,
+                          tobj_idx);
+     }
+     tobjAnim(&tobj_list->costume_tobjs[tobj_idx], frame);
++#endif
+ }
+ 
+ void ftAnim_800704F0(Fighter_GObj* gobj, int tobj_idx, float frame)
+@@ -1073,12 +1084,18 @@
+ 
+ void ftAnim_800705E0(CostumeTObjList* tobj_list)
+ {
++#ifdef MSL_CORE_HOSTED
++    // Paired renderer-only reset for the hosted omission above.
++    // refs/melee/src/melee/ft/ftanim.c::ftAnim_800705E0
++    (void) tobj_list;
++#else
+     int i;
+ 
+     for (i = 0; i < tobj_list->n_costume_tobjs; i++) {
+         HSD_AObjReqAnim(tobj_list->costume_tobjs[i]->aobj, 0.0F);
+         HSD_TObjAnim(tobj_list->costume_tobjs[i]);
+     }
++#endif
+ }
+ 
+ void ftAnim_80070654(Fighter_GObj* fighter_gobj)

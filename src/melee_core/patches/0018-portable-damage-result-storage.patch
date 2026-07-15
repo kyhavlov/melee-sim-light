@@ -1,0 +1,37 @@
+--- a/src/melee/ft/ftcoll.c
++++ b/src/melee/ft/ftcoll.c
+@@ -2301,6 +2301,10 @@ void ftColl_8007A06C(Fighter_GObj* gobj, void* dmg_ptr, void* log, size_t idx,
+                      int arg4)
+ {
+-    struct DmgResult {
++    // Both Fighter damage-result overlays begin on a PPC 4-byte boundary.
++    // Keep their explicit source layout when native pointers widen rather
++    // than adding pointer padding relative to an assumed 8-byte-aligned base.
++    // refs/melee/src/melee/ft/{ftcoll.c,types.h}
++    struct __attribute__((packed, aligned(4))) DmgResult {
+         /* 0x00 */ float dir;
+         /* 0x04 */ int angle;
+         /* 0x08 */ int hurt_height;
+--- a/src/melee/ft/types.h
++++ b/src/melee/ft/types.h
+@@ -1411,7 +1411,10 @@ struct Fighter {
+         /* fp+1864 */ int x1864;
+         /* fp+1868 */ HSD_GObj* x1868_source;
+         /* fp+186C */ int x186c;
+-        /* fp+1870 */ struct DmgLogEntry* x1870;
++        // Second DmgResult overlay written by ftColl_8007A06C.  Its first
++        // word is direction, not a pointer.
++        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
++        /* fp+1870 */ float x1870;
+         /* fp+1874 */ int x1874;
+         /* fp+1878 */ int x1878;
+         /* fp+187C */ float x187c;
+@@ -1419,7 +1422,7 @@ struct Fighter {
+         /* fp+1880 */ Vec3 x1880;
+         /* fp+188C */ int x188c;
+         /* fp+1890 */ int x1890;
+-        /* fp+1894 */ int x1894;
++        /* fp+1894 */ HSD_GObj* x1894;
+         /* fp+1898 */ float x1898;
+         /* fp+189C */ float x189C_unk_num_frames;
+         /* fp+18A0 */ float x18a0;

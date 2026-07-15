@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import subprocess
+import time
 from pathlib import Path
 from types import ModuleType
 
@@ -14,21 +15,23 @@ from tools.slippi.slpz import replay_path_for_peppi, resolve_replay_path
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build" / "melee_core"
 NATIVE = BUILD / "validation" / "_msl_replay_validate.so"
-BINARY = BUILD / "ppc" / "melee-core-ppc"
+PPC_BINARY = BUILD / "ppc" / "melee-core-ppc"
+NATIVE_BINARY = BUILD / "native" / "melee-core-native"
 TOOLCHAIN = BUILD / "toolchain" / "root"
 QEMU = TOOLCHAIN / "usr" / "bin" / "qemu-ppc-static"
 SYSROOT = TOOLCHAIN / "usr" / "powerpc-linux-gnu"
 GAME_DATA = ROOT / "refs" / "melee-disc" / "files"
 
 
-def build_validation(*, jobs: int = 2) -> None:
+def build_validation(*, backend: str, jobs: int = 2) -> None:
+    targets = ["validator", "native"] if backend == "native" else ["validation"]
     subprocess.run(
         [
             "make",
             "-f",
             "src/melee_core/Makefile",
             f"-j{max(1, jobs)}",
-            "validation",
+            *targets,
         ],
         cwd=ROOT,
         check=True,
@@ -53,29 +56,36 @@ def validate_one(
     frames: int,
     start_frame: int | None,
     timeout: float,
+    backend: str = "ppc",
     signed_zero_equal: bool = False,
 ) -> dict[str, object]:
     # Python owns only the replay-loading boundary. The native extension consumes
     # Peppi's Arrow buffers through the Arrow C Data Interface without NumPy or
     # per-frame Python work.
+    started = time.perf_counter()
     with replay_path_for_peppi(replay) as peppi_path:
         game = _read_slippi(str(peppi_path), False)
-        return native.validate_replay(
+        result = native.validate_replay(
             game.frames,
             game.start,
             game.metadata,
             qemu=str(QEMU),
             sysroot=str(SYSROOT),
-            binary=str(BINARY),
+            binary=str(NATIVE_BINARY if backend == "native" else PPC_BINARY),
             data_dir=str(GAME_DATA),
             start_frame=start_frame,
             frames_limit=frames,
             timeout=timeout,
             signed_zero_equal=signed_zero_equal,
+            native=backend == "native",
         )
+    result["end_to_end_seconds"] = time.perf_counter() - started
+    return result
 
 
-def print_result(replay: Path, result: dict[str, object]) -> bool:
+def print_result(
+    replay: Path, result: dict[str, object], *, show_timing: bool = False
+) -> bool:
     print(f"replay: {replay}")
     print(
         f"frames: {result['frames']}/{result['available']} "
@@ -95,6 +105,17 @@ def print_result(replay: Path, result: dict[str, object]) -> bool:
             f"{result['render_visibility_mismatch_count']} "
             "first_frame="
             f"{result['first_render_visibility_mismatch_frame']}"
+        )
+    if show_timing:
+        runner_seconds = float(result["runner_seconds"])
+        frames_per_second = (
+            int(result["frames"]) / runner_seconds if runner_seconds > 0 else 0.0
+        )
+        print(
+            "timing: "
+            f"runner_seconds={runner_seconds:.6f} "
+            f"frames_per_second={frames_per_second:.1f} "
+            f"end_to_end_seconds={float(result['end_to_end_seconds']):.6f}"
         )
     if result["pass"]:
         print(f"PASS matched_frames={result['matched_frames']}")
@@ -117,7 +138,7 @@ def print_result(replay: Path, result: dict[str, object]) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Stream Slippi replays through the PPC Melee core reference."
+        description="Stream Slippi replays through a Melee core scalar runtime."
     )
     parser.add_argument("replay", type=Path, nargs="+")
     parser.add_argument(
@@ -129,7 +150,11 @@ def main() -> int:
         default=None,
         help="Warm from replay start, then begin comparison at this frame.",
     )
-    parser.add_argument("--timeout", type=float, default=60.0)
+    parser.add_argument("--timeout", type=float, default=8.0)
+    parser.add_argument("--backend", choices=("ppc", "native"), default="ppc")
+    parser.add_argument(
+        "--timing", action="store_true", help="Print runner and replay timing."
+    )
     parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument(
         "--no-build", action="store_true", help="Use the existing native and PPC binaries."
@@ -151,7 +176,7 @@ def main() -> int:
             parser.error(f"replay does not exist: {replay}")
     try:
         if not args.no_build:
-            build_validation(jobs=args.jobs)
+            build_validation(backend=args.backend, jobs=args.jobs)
         native = load_native()
         passed = True
         for replay in replays:
@@ -161,9 +186,10 @@ def main() -> int:
                 frames=args.frames,
                 start_frame=args.start_frame,
                 timeout=args.timeout,
+                backend=args.backend,
                 signed_zero_equal=args.diagnostic_signed_zero_equal,
             )
-            passed = print_result(replay, result) and passed
+            passed = print_result(replay, result, show_timing=args.timing) and passed
     except (ImportError, OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
         parser.error(str(exc))
     return 0 if passed else 1

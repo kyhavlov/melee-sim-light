@@ -1,0 +1,1029 @@
+#include "platform/native_dat.h"
+#include "platform/memory.h"
+
+#include <baselib/memory.h>
+#include <baselib/psstructs.h>
+#include <melee/ft/types.h>
+#include <melee/it/it_3F14.h>
+#include <melee/it/types.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+
+// HSD DAT stores a 32-bit big-endian graph. On retail/PPC,
+// HSD_ArchiveParse relocates that graph in place. A 64-bit little-endian
+// process instead materializes native objects once at archive initialization.
+// Source: refs/melee/src/sysdolphin/baselib/archive.c::HSD_ArchiveParse.
+
+typedef struct MslDatMemo {
+    uint32_t source_offset;
+    const MslDatType* type;
+    void* native;
+} MslDatMemo;
+
+typedef struct MslNativePublic {
+    char* symbol;
+    void* address;
+} MslNativePublic;
+
+typedef struct MslNativeArchive {
+    HSD_Archive* archive;
+    uint8_t* source;
+    uint8_t* data;
+    uint32_t data_size;
+    uint32_t* reloc_fields;
+    uint32_t reloc_count;
+    uint32_t* boundaries;
+    uint32_t boundary_count;
+    MslDatMemo* memo;
+    uint32_t memo_count;
+    uint32_t memo_capacity;
+    MslNativePublic* publics;
+    uint32_t public_count;
+    uint32_t public_capacity;
+} MslNativeArchive;
+
+typedef struct MslNativeArchiveCacheEntry {
+    const uint8_t* source;
+    size_t file_size;
+    HSD_Archive archive;
+} MslNativeArchiveCacheEntry;
+
+enum {
+    // The Fox/FD bootstrap opens only a few dozen archives. The fixed table
+    // keeps ownership deterministic and leaves expansion headroom without a
+    // host-side container allocation.
+    MSL_NATIVE_ARCHIVE_CACHE_CAPACITY = 512,
+    // Native graph nodes contain widened pointers and HSD data may request
+    // 32-byte alignment. No per-type padding is required.
+    MSL_NATIVE_DAT_ARENA_ALIGN = 32,
+    // Reserve a bounded low-address arena because HSD_JObjLoadJoint uses DAT
+    // descriptor addresses as retail u32 IDs. The current domain uses a small
+    // fraction of this initialization-only capacity.
+    // refs/melee/src/sysdolphin/baselib/{jobj.c,robj.c,id.c}
+    MSL_NATIVE_DAT_ARENA_BYTES = 256 * 1024 * 1024,
+};
+
+static MslNativeArchiveCacheEntry
+    native_archive_cache[MSL_NATIVE_ARCHIVE_CACHE_CAPACITY];
+static uint32_t native_archive_cache_count;
+static uint8_t* native_dat_arena;
+static size_t native_dat_arena_used;
+static int native_dat_initialization_complete;
+
+enum {
+    DW_ATE_BOOLEAN = 2,
+    DW_ATE_FLOAT = 4,
+    DW_ATE_SIGNED = 5,
+    DW_ATE_SIGNED_CHAR = 6,
+};
+
+static uint16_t read_be16(const void* source)
+{
+    const uint8_t* bytes = source;
+    return (uint16_t) ((uint16_t) bytes[0] << 8 | bytes[1]);
+}
+
+static uint32_t read_be32(const void* source)
+{
+    const uint8_t* bytes = source;
+    return (uint32_t) bytes[0] << 24 | (uint32_t) bytes[1] << 16 |
+           (uint32_t) bytes[2] << 8 | bytes[3];
+}
+
+static uint64_t read_be64(const void* source)
+{
+    return (uint64_t) read_be32(source) << 32 |
+           read_be32((const uint8_t*) source + 4);
+}
+
+static int compare_u32(const void* lhs, const void* rhs)
+{
+    uint32_t a = *(const uint32_t*) lhs;
+    uint32_t b = *(const uint32_t*) rhs;
+    return a < b ? -1 : a > b;
+}
+
+static void* native_alloc(size_t size)
+{
+    size_t aligned;
+    void* result;
+
+    if (native_dat_initialization_complete) {
+        fprintf(stderr,
+                "native DAT translation reached after match initialization\n");
+        abort();
+    }
+    if (native_dat_arena == NULL) {
+        void* mapping = mmap((void*) 0x50000000, MSL_NATIVE_DAT_ARENA_BYTES,
+                             PROT_READ | PROT_WRITE,
+                             MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE,
+                             -1, 0);
+        if (mapping == MAP_FAILED) {
+            fprintf(stderr, "native DAT arena reservation failed\n");
+            abort();
+        }
+        native_dat_arena = mapping;
+    }
+    if (size == 0) {
+        size = 1;
+    }
+    if (size > MSL_NATIVE_DAT_ARENA_BYTES - MSL_NATIVE_DAT_ARENA_ALIGN) {
+        fprintf(stderr, "native DAT allocation is too large: %zu bytes\n",
+                size);
+        abort();
+    }
+    aligned = (size + MSL_NATIVE_DAT_ARENA_ALIGN - 1) &
+              ~(size_t) (MSL_NATIVE_DAT_ARENA_ALIGN - 1);
+    if (aligned > MSL_NATIVE_DAT_ARENA_BYTES - native_dat_arena_used) {
+        fprintf(stderr, "native DAT arena exhausted: request=%zu used=%zu/%u\n",
+                size, native_dat_arena_used, MSL_NATIVE_DAT_ARENA_BYTES);
+        abort();
+    }
+    result = native_dat_arena + native_dat_arena_used;
+    native_dat_arena_used += aligned;
+    memset(result, 0, size);
+    return result;
+}
+
+static void require_dat_initialization(const char* operation)
+{
+    if (native_dat_initialization_complete) {
+        fprintf(stderr, "%s reached after native DAT initialization\n",
+                operation);
+        abort();
+    }
+}
+
+void msl_native_dat_finish_initialization(void)
+{
+    uint32_t i;
+
+    require_dat_initialization("native DAT seal");
+    for (i = 0; i < native_archive_cache_count; ++i) {
+        // The runtime graph and byte streams live in the native arena. Make
+        // original big-endian file buffers inaccessible so a leaked raw
+        // pointer or per-frame archive read fails immediately.
+        msl_memory_protect_allocation(native_archive_cache[i].source);
+    }
+    native_dat_initialization_complete = 1;
+}
+
+int msl_native_dat_owns(const void* pointer)
+{
+    uintptr_t address = (uintptr_t) pointer;
+    uintptr_t begin = (uintptr_t) native_dat_arena;
+    return native_dat_arena != NULL && address >= begin &&
+           address - begin < native_dat_arena_used;
+}
+
+static int contains_u32(const uint32_t* values, uint32_t count, uint32_t value)
+{
+    uint32_t lo = 0;
+    uint32_t hi = count;
+    while (lo < hi) {
+        uint32_t mid = lo + (hi - lo) / 2;
+        if (values[mid] < value) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo < count && values[lo] == value;
+}
+
+static uint32_t next_boundary(const MslNativeArchive* context,
+                              uint32_t offset)
+{
+    uint32_t lo = 0;
+    uint32_t hi = context->boundary_count;
+    while (lo < hi) {
+        uint32_t mid = lo + (hi - lo) / 2;
+        if (context->boundaries[mid] <= offset) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo < context->boundary_count ? context->boundaries[lo]
+                                        : context->data_size;
+}
+
+static MslNativeArchive* archive_context(HSD_Archive* archive)
+{
+    return (MslNativeArchive*) archive->top_ptr;
+}
+
+static uint32_t raw_public_offset(HSD_Archive* archive, const char* symbol)
+{
+    uint32_t i;
+    for (i = 0; i < archive->header.nb_public; ++i) {
+        if (strcmp(archive->symbols + archive->public_info[i].symbol, symbol) ==
+            0)
+        {
+            return archive->public_info[i].offset;
+        }
+    }
+    return UINT32_MAX;
+}
+
+static uint32_t raw_pointer(const MslNativeArchive* context,
+                            uint32_t field_offset)
+{
+    if (field_offset + 4 > context->data_size ||
+        !contains_u32(context->reloc_fields, context->reloc_count,
+                      field_offset))
+    {
+        return UINT32_MAX;
+    }
+    return read_be32(context->data + field_offset);
+}
+
+static void translate_value(MslNativeArchive* context,
+                            const MslDatType* type, uint32_t source_offset,
+                            void* native);
+
+static MslDatMemo* find_memo(MslNativeArchive* context, uint32_t source_offset)
+{
+    uint32_t i;
+    for (i = 0; i < context->memo_count; ++i) {
+        if (context->memo[i].source_offset == source_offset) {
+            return &context->memo[i];
+        }
+    }
+    return NULL;
+}
+
+static void add_memo(MslNativeArchive* context, uint32_t source_offset,
+                     const MslDatType* type, void* native)
+{
+    if (context->memo_count == context->memo_capacity) {
+        uint32_t capacity = context->memo_capacity == 0
+                                ? 256
+                                : context->memo_capacity * 2;
+        MslDatMemo* replacement = native_alloc(
+            (size_t) capacity * sizeof(*replacement));
+        if (context->memo != NULL) {
+            memcpy(replacement, context->memo,
+                   (size_t) context->memo_count * sizeof(*replacement));
+        }
+        context->memo = replacement;
+        context->memo_capacity = capacity;
+    }
+    context->memo[context->memo_count++] =
+        (MslDatMemo) { source_offset, type, native };
+}
+
+static void* translate_target_count(MslNativeArchive* context,
+                                    uint32_t source_offset,
+                                    const MslDatType* type, uint32_t count)
+{
+    MslDatMemo* memo;
+    uint8_t* result;
+    uint32_t i;
+
+    if (source_offset >= context->data_size) {
+        fprintf(stderr, "native DAT pointer %x is outside %x-byte body\n",
+                source_offset, context->data_size);
+        abort();
+    }
+    memo = find_memo(context, source_offset);
+    if (memo != NULL) {
+        if (memo->type != type) {
+            fprintf(stderr,
+                    "native DAT offset %x requested as both %s and %s\n",
+                    source_offset, memo->type->name, type->name);
+            abort();
+        }
+        return memo->native;
+    }
+    if (strcmp(type->name, "ItemStateArray") == 0) {
+        const MslDatType* array;
+        const MslDatType* element;
+        uint32_t span;
+
+        if (type->field_count != 1 ||
+            (array = type->fields[0].type)->kind != MSL_DAT_ARRAY ||
+            (element = array->element)->source_size == 0)
+        {
+            fprintf(stderr, "native DAT ItemStateArray lacks an element view\n");
+            abort();
+        }
+        span = next_boundary(context, source_offset) - source_offset;
+        if (span == 0 || span % element->source_size != 0) {
+            fprintf(stderr,
+                    "native DAT ItemStateArray has invalid %u-byte extent\n",
+                    span);
+            abort();
+        }
+        count = span / element->source_size;
+        result = native_alloc((size_t) count * element->native_size);
+        add_memo(context, source_offset, type, result);
+        for (i = 0; i < count; ++i) {
+            translate_value(context, element,
+                            source_offset + i * element->source_size,
+                            result + (size_t) i * element->native_size);
+        }
+        return result;
+    }
+    if (type->kind == MSL_DAT_VOID) {
+        uint32_t end = next_boundary(context, source_offset);
+        size_t size = end > source_offset ? end - source_offset : 1;
+        result = native_alloc(size);
+        add_memo(context, source_offset, type, result);
+        memcpy(result, context->data + source_offset, size);
+        return result;
+    }
+    if (count == 0) {
+        count = 1;
+    }
+    if (type->native_size == 0 ||
+        (size_t) count > SIZE_MAX / type->native_size)
+    {
+        fprintf(stderr, "invalid native DAT extent for %s\n", type->name);
+        abort();
+    }
+    result = native_alloc((size_t) count * type->native_size);
+    add_memo(context, source_offset, type, result);
+    for (i = 0; i < count; ++i) {
+        translate_value(context, type,
+                        source_offset + i * type->source_size,
+                        result + (size_t) i * type->native_size);
+    }
+    return result;
+}
+
+static void* translate_target(MslNativeArchive* context,
+                              uint32_t source_offset,
+                              const MslDatType* type)
+{
+    uint32_t span = next_boundary(context, source_offset) - source_offset;
+    uint32_t count = 1;
+    int graph_node =
+        type->kind == MSL_DAT_STRUCT &&
+        (strncmp(type->name, "HSD_", 4) == 0 ||
+         strncmp(type->name, "_HSD_", 5) == 0);
+    if (!graph_node && type->source_size != 0 && span >= type->source_size &&
+        span % type->source_size == 0)
+    {
+        count = span / type->source_size;
+    }
+    return translate_target_count(context, source_offset, type, count);
+}
+
+static uint64_t read_unsigned(const uint8_t* source, uint32_t size)
+{
+    switch (size) {
+    case 1: return source[0];
+    case 2: return read_be16(source);
+    case 4: return read_be32(source);
+    case 8: return read_be64(source);
+    default:
+        fprintf(stderr, "unsupported native DAT scalar width %u\n", size);
+        abort();
+    }
+}
+
+static void write_integer(void* native, uint32_t size, uint64_t value)
+{
+    switch (size) {
+    case 1: *(uint8_t*) native = (uint8_t) value; break;
+    case 2: *(uint16_t*) native = (uint16_t) value; break;
+    case 4: *(uint32_t*) native = (uint32_t) value; break;
+    case 8: *(uint64_t*) native = value; break;
+    default:
+        fprintf(stderr, "unsupported native integer width %u\n", size);
+        abort();
+    }
+}
+
+static void translate_base(const MslDatType* type, const uint8_t* source,
+                           void* native)
+{
+    uint64_t value = read_unsigned(source, type->source_size);
+    if (type->base_encoding == DW_ATE_FLOAT) {
+        if (type->source_size != type->native_size) {
+            fprintf(stderr, "native DAT float width changed for %s\n",
+                    type->name);
+            abort();
+        }
+        write_integer(native, type->native_size, value);
+        return;
+    }
+    if ((type->base_encoding == DW_ATE_SIGNED ||
+         type->base_encoding == DW_ATE_SIGNED_CHAR) &&
+        type->source_size < 8)
+    {
+        uint32_t bits = type->source_size * 8;
+        value = (uint64_t) ((int64_t) (value << (64 - bits)) >> (64 - bits));
+    }
+    write_integer(native, type->native_size, value);
+}
+
+static void translate_bitfield(const MslDatType* type,
+                               const uint8_t* source, uint8_t* native)
+{
+    uint64_t value = 0;
+    uint32_t i;
+    for (i = 0; i < type->bit_size; ++i) {
+        uint32_t bit = type->source_bit_offset + i;
+        value = value << 1 | ((source[bit / 8] >> (7 - bit % 8)) & 1U);
+    }
+    for (i = 0; i < type->bit_size; ++i) {
+        uint32_t bit = type->native_bit_offset + i;
+        uint8_t mask = (uint8_t) (1U << (bit % 8));
+        if ((value >> i) & 1U) {
+            native[bit / 8] |= mask;
+        } else {
+            native[bit / 8] &= (uint8_t) ~mask;
+        }
+    }
+}
+
+static void translate_value(MslNativeArchive* context,
+                            const MslDatType* type, uint32_t source_offset,
+                            void* native)
+{
+    uint32_t i;
+    if (source_offset + type->source_size > context->data_size &&
+        type->kind != MSL_DAT_VOID)
+    {
+        fprintf(stderr, "native DAT %s at %x exceeds body\n", type->name,
+                source_offset);
+        abort();
+    }
+    switch (type->kind) {
+    case MSL_DAT_VOID: return;
+    case MSL_DAT_BASE:
+        translate_base(type, context->data + source_offset, native);
+        return;
+    case MSL_DAT_STRUCT:
+        if (strcmp(type->name, "DynamicsDesc") == 0) {
+            const MslDatType* source_element = NULL;
+            uint32_t count;
+
+            // Archive DynamicsDesc::data points at a packed array of
+            // lb_00F9_UnkDesc1Inner records.  Its declared DynamicsData* type
+            // is the runtime view used after lb_8000FD48 allocates a linked
+            // list; lb_80011710 deliberately recovers the packed source view
+            // and indexes it through the archive-owned count.  Translating a
+            // widened DynamicsData would split that packed array at the PPC
+            // union/pointer boundary, so materialize the actual source view.
+            // refs/melee/src/melee/lb/lbspdisplay.c::{lb_8000FD48,lb_80011710}
+            count = read_be32(context->data + source_offset +
+                              type->fields[1].source_offset);
+            for (i = 0; i < type->field_count; ++i) {
+                const MslDatField* field = &type->fields[i];
+                if (field->type->kind == MSL_DAT_POINTER) {
+                    const MslDatType* dynamics_data = field->type->element;
+                    uint32_t j;
+                    for (j = 0; j < dynamics_data->field_count; ++j) {
+                        const MslDatType* candidate =
+                            dynamics_data->fields[j].type;
+                        uint32_t k;
+                        if (strcmp(candidate->name, "PolymorphicDesc") != 0) {
+                            continue;
+                        }
+                        for (k = 0; k < candidate->field_count; ++k) {
+                            const MslDatType* view = candidate->fields[k].type;
+                            if (strcmp(view->name, "lb_00F9_UnkDesc1") == 0 &&
+                                view->field_count == 1 &&
+                                view->fields[0].type->kind == MSL_DAT_ARRAY)
+                            {
+                                source_element =
+                                    view->fields[0].type->element;
+                                break;
+                            }
+                        }
+                    }
+                    if (source_element == NULL) {
+                        fprintf(stderr,
+                                "native DAT DynamicsDesc lacks source view\n");
+                        abort();
+                    }
+                    {
+                        uint32_t target = raw_pointer(
+                            context, source_offset + field->source_offset);
+                        void* pointer = NULL;
+                        if (target != UINT32_MAX) {
+                            pointer = translate_target_count(
+                                context, target, source_element, count);
+                        }
+                        memcpy((uint8_t*) native + field->native_offset,
+                               &pointer, sizeof(pointer));
+                    }
+                } else {
+                    translate_value(context, field->type,
+                                    source_offset + field->source_offset,
+                                    (uint8_t*) native + field->native_offset);
+                }
+            }
+            return;
+        }
+        for (i = 0; i < type->field_count; ++i) {
+            const MslDatField* field = &type->fields[i];
+            translate_value(context, field->type,
+                            source_offset + field->source_offset,
+                            (uint8_t*) native + field->native_offset);
+        }
+        return;
+    case MSL_DAT_UNION:
+        if (strcmp(type->name, "CmdUnion") == 0 ||
+            strcmp(type->name, "ColorOverlay_x8_t") == 0)
+        {
+            uint32_t target = raw_pointer(context, source_offset);
+
+            // Action and color scripts are streams of overlapping PPC
+            // bitfield views.
+            // Preserve each source word's big-endian storage so every command
+            // view observes the same bits under the native scalar-storage-order
+            // declarations. Relocation words used by Subroutine/Goto instead
+            // become native command-stream pointers in the widened union slot.
+            // refs/melee/src/melee/lb/{types.h,lbcommand.c}
+            if (target != UINT32_MAX) {
+                void* pointer = translate_target(context, target, type);
+                memcpy(native, &pointer, sizeof(pointer));
+            } else {
+                memcpy(native, context->data + source_offset,
+                       type->source_size);
+            }
+            return;
+        }
+        if (type->field_count != 0) {
+            const MslDatField* field = &type->fields[0];
+            translate_value(context, field->type,
+                            source_offset + field->source_offset,
+                            (uint8_t*) native + field->native_offset);
+        }
+        return;
+    case MSL_DAT_POINTER: {
+        uint32_t target = raw_pointer(context, source_offset);
+        void* pointer = NULL;
+        if (target != UINT32_MAX) {
+            if (type->element->kind == MSL_DAT_FUNCTION) {
+                fprintf(stderr,
+                        "native DAT contains a non-null function pointer at %x\n",
+                        source_offset);
+                abort();
+            }
+            pointer = translate_target(context, target, type->element);
+        }
+        memcpy(native, &pointer, sizeof(pointer));
+        return;
+    }
+    case MSL_DAT_ARRAY:
+    {
+        uint32_t count = type->count;
+        uint32_t boundary = next_boundary(context, source_offset);
+        uint32_t span = boundary - source_offset;
+
+        // Several DAT declarations are fixed-capacity runtime containers whose
+        // archive instance stores only the populated prefix (notably
+        // ItemStateArray). The next relocation target is the next packed
+        // object; leave the native capacity's unused tail zero-initialized.
+        if (type->element->source_size != 0 &&
+            span / type->element->source_size < count)
+        {
+            count = span / type->element->source_size;
+        }
+        for (i = 0; i < count; ++i) {
+            translate_value(context, type->element,
+                            source_offset + i * type->element->source_size,
+                            (uint8_t*) native +
+                                (size_t) i * type->element->native_size);
+        }
+        return;
+    }
+    case MSL_DAT_FUNCTION:
+        return;
+    case MSL_DAT_BITFIELD:
+        translate_bitfield(type, context->data + source_offset,
+                           (uint8_t*) native);
+        return;
+    }
+}
+
+int msl_native_archive_parse(HSD_Archive* archive, uint8_t* source,
+                             size_t file_size)
+{
+    MslNativeArchive* context;
+    uint32_t offset;
+    uint32_t i;
+    uint32_t boundaries_capacity;
+
+    for (i = 0; i < native_archive_cache_count; ++i) {
+        MslNativeArchiveCacheEntry* entry = &native_archive_cache[i];
+        if (entry->source == source && entry->file_size == file_size) {
+            *archive = entry->archive;
+            return 0;
+        }
+    }
+    require_dat_initialization("uncached native archive parse");
+
+    if (archive == NULL || source == NULL || file_size < 0x20) {
+        fprintf(stderr, "native DAT invalid parse arguments\n");
+        return -1;
+    }
+    memset(archive, 0, sizeof(*archive));
+    archive->header.file_size = read_be32(source + 0x00);
+    archive->header.data_size = read_be32(source + 0x04);
+    archive->header.nb_reloc = read_be32(source + 0x08);
+    archive->header.nb_public = read_be32(source + 0x0C);
+    archive->header.nb_extern = read_be32(source + 0x10);
+    memcpy(archive->header.version, source + 0x14,
+           sizeof(archive->header.version));
+    if (archive->header.file_size != file_size ||
+        archive->header.data_size > file_size - 0x20)
+    {
+        fprintf(stderr,
+                "native DAT invalid header: file=%u/%zu data=%u\n",
+                archive->header.file_size, file_size,
+                archive->header.data_size);
+        return -1;
+    }
+    archive->flags = HSD_ARCHIVE_DONT_FREE;
+    archive->data = source + 0x20;
+    offset = 0x20 + archive->header.data_size;
+
+    context = native_alloc(sizeof(*context));
+    context->archive = archive;
+    context->source = source;
+    context->data = archive->data;
+    context->data_size = archive->header.data_size;
+    context->reloc_count = archive->header.nb_reloc;
+    context->reloc_fields = native_alloc(
+        (size_t) context->reloc_count * sizeof(*context->reloc_fields));
+    boundaries_capacity = context->reloc_count + archive->header.nb_public + 1;
+    context->boundaries = native_alloc(
+        (size_t) boundaries_capacity * sizeof(*context->boundaries));
+
+    for (i = 0; i < context->reloc_count; ++i) {
+        uint32_t field = read_be32(source + offset + i * 4);
+        uint32_t target;
+        if (field + 4 > context->data_size) {
+            fprintf(stderr, "native DAT relocation %u field %x out of body %x\n",
+                    i, field, context->data_size);
+            return -1;
+        }
+        context->reloc_fields[i] = field;
+        target = read_be32(context->data + field);
+        if (target < context->data_size) {
+            context->boundaries[context->boundary_count++] = target;
+        }
+    }
+    qsort(context->reloc_fields, context->reloc_count, sizeof(uint32_t),
+          compare_u32);
+    offset += archive->header.nb_reloc * 4;
+
+    archive->public_info = native_alloc(
+        (size_t) archive->header.nb_public * sizeof(*archive->public_info));
+    for (i = 0; i < archive->header.nb_public; ++i) {
+        archive->public_info[i].offset = read_be32(source + offset + i * 8);
+        archive->public_info[i].symbol =
+            read_be32(source + offset + i * 8 + 4);
+        if (archive->public_info[i].offset < context->data_size) {
+            context->boundaries[context->boundary_count++] =
+                archive->public_info[i].offset;
+        }
+    }
+    offset += archive->header.nb_public * 8;
+
+    archive->extern_info = native_alloc(
+        (size_t) archive->header.nb_extern * sizeof(*archive->extern_info));
+    for (i = 0; i < archive->header.nb_extern; ++i) {
+        archive->extern_info[i].offset = read_be32(source + offset + i * 8);
+        archive->extern_info[i].symbol =
+            read_be32(source + offset + i * 8 + 4);
+    }
+    offset += archive->header.nb_extern * 8;
+    if (offset > file_size) {
+        fprintf(stderr, "native DAT metadata end %x exceeds file %zx\n", offset,
+                file_size);
+        return -1;
+    }
+    archive->symbols = (char*) source + offset;
+    context->boundaries[context->boundary_count++] = context->data_size;
+    qsort(context->boundaries, context->boundary_count, sizeof(uint32_t),
+          compare_u32);
+    archive->top_ptr = context;
+    if (native_archive_cache_count == MSL_NATIVE_ARCHIVE_CACHE_CAPACITY) {
+        fprintf(stderr, "native DAT archive cache exhausted\n");
+        abort();
+    }
+    native_archive_cache[native_archive_cache_count].source = source;
+    native_archive_cache[native_archive_cache_count].file_size = file_size;
+    native_archive_cache[native_archive_cache_count].archive = *archive;
+    native_archive_cache_count += 1;
+    return 0;
+}
+
+static const MslDatType* public_type(const char* symbol)
+{
+    size_t length = strlen(symbol);
+    if (strcmp(symbol, "map_head") == 0) {
+        return msl_dat_root_UnkStageDat;
+    }
+    if (strcmp(symbol, "coll_data") == 0) {
+        return msl_dat_root_MapCollData;
+    }
+    if (strcmp(symbol, "grGroundParam") == 0) {
+        return msl_dat_root_UnkStage6B0;
+    }
+    if (strcmp(symbol, "quake_model_set") == 0) {
+        return msl_dat_root_DynamicModelDesc;
+    }
+    if (strcmp(symbol, "ftDataFox") == 0) {
+        return msl_dat_root_ftData;
+    }
+    if (strcmp(symbol, "itPublicData") == 0) {
+        return msl_dat_root_it_804D6D20_t;
+    }
+    if (length >= 9 && strcmp(symbol + length - 9, "_figatree") == 0) {
+        return msl_dat_root_FigaTree;
+    }
+    if (length >= 14 &&
+        strcmp(symbol + length - 14, "_matanim_joint") == 0)
+    {
+        return msl_dat_root_HSD_MatAnimJoint;
+    }
+    if (length >= 6 && strcmp(symbol + length - 6, "_joint") == 0) {
+        return msl_dat_root_HSD_Joint;
+    }
+    return NULL;
+}
+
+static void* translate_item_public(MslNativeArchive* context,
+                                   uint32_t offset)
+{
+    enum {
+        COMMON_ITEM_COUNT = 43,
+        CHARACTER_ITEM_COUNT = 118,
+        POKEMON_ITEM_COUNT = 47,
+    };
+    it_804D6D20_t* result = native_alloc(sizeof(*result));
+    uint32_t target;
+
+    add_memo(context, offset, msl_dat_root_it_804D6D20_t, result);
+    target = raw_pointer(context, offset + 0x00);
+    if (target != UINT32_MAX) {
+        result->x0 = translate_target_count(
+            context, target, msl_dat_root_ItemCommonData, 1);
+    }
+    // Items are disabled in the current Fox/FD match domain. Keep the three
+    // source table capacities, while Fox's exact character articles are
+    // installed later by ftFx_OnLoad through it_8026B3F8.
+    // Source: refs/melee/src/melee/it/item.c::Item_80267978 and
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_OnLoad.
+    result->x4 = native_alloc(COMMON_ITEM_COUNT * sizeof(*result->x4));
+    result->x8 = native_alloc(CHARACTER_ITEM_COUNT * sizeof(*result->x8));
+    result->xC = native_alloc(POKEMON_ITEM_COUNT * sizeof(*result->xC));
+    target = raw_pointer(context, offset + 0x10);
+    if (target != UINT32_MAX) {
+        result->x10 = translate_target_count(
+            context, target, msl_dat_root_it_804D6D40_t, 1);
+    }
+    target = raw_pointer(context, offset + 0x14);
+    if (target != UINT32_MAX) {
+        result->x14 = translate_target(
+            context, target, msl_dat_root_Fighter_804D653C_t);
+    }
+    return result;
+}
+
+static void* translate_fighter_common_public(MslNativeArchive* context,
+                                             uint32_t offset)
+{
+    const MslDatType* const element_types[23] = {
+        msl_dat_root_ftCommonData,
+        msl_dat_root_MslDatIntPointer,
+        msl_dat_root_MslDatFloat5,
+        msl_dat_root_MslDatFloat,
+        msl_dat_root_MslDatFighterPartsPointer,
+        msl_dat_root_MslDatFighter6540Pointer,
+        msl_dat_root_Fighter_804D653C_t,
+        msl_dat_root_Fighter_804D653C_t,
+        // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_800D4FF4
+        msl_dat_root_Fighter_804D6534_t,
+        msl_dat_root_MslDatVec2Pointer,
+        msl_dat_root_MslDatByte,
+        msl_dat_root_Fighter_804D6528_t,
+        msl_dat_root_Fighter_804D6524_t,
+        msl_dat_root_Fighter_804D6520_t,
+        msl_dat_root_Fighter_804D651C_t,
+        msl_dat_root_Fighter_804D6518_t,
+        msl_dat_root_HSD_Joint,
+        msl_dat_root_MslDatByte,
+        msl_dat_root_MslDatByte,
+        msl_dat_root_MslDatByte,
+        msl_dat_root_HSD_Joint,
+        msl_dat_root_CrowdConfig,
+        msl_dat_root_Fighter_804D64FC_t,
+    };
+    void** result = native_alloc(sizeof(*result) * 23);
+    uint32_t i;
+
+    for (i = 0; i < 23; ++i) {
+        uint32_t target = raw_pointer(context, offset + i * 4);
+        if (target != UINT32_MAX) {
+            result[i] = translate_target(context, target, element_types[i]);
+        }
+    }
+    return result;
+}
+
+static ftData* translate_fox_public(MslNativeArchive* context, uint32_t offset)
+{
+    enum {
+        FT_DATA_X48_ITEMS_SOURCE_OFFSET = 0x48,
+        ARTICLE_SPECIAL_ATTRS_SOURCE_OFFSET = 0x04,
+        FOX_ARTICLE_COUNT = 3,
+    };
+    const MslDatType* const attr_types[FOX_ARTICLE_COUNT] = {
+        msl_dat_root_FoxLaserAttr,
+        msl_dat_root_FoxBlasterAttr,
+        msl_dat_root_FoxIllusionAttr,
+    };
+    ftData* result = translate_target_count(
+        context, offset, msl_dat_root_ftData, 1);
+    uint32_t list = raw_pointer(
+        context, offset + FT_DATA_X48_ITEMS_SOURCE_OFFSET);
+    uint32_t i;
+
+    // ftFx_Init_OnLoad installs these exact three articles as laser, blaster,
+    // and illusion. Article.x4 is still void in the decomp, so its consumer is
+    // the source-backed type authority for native DAT translation.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_OnLoad
+    // refs/melee/src/melee/it/items/{itfoxlaser.c,itfoxblaster.c,itfoxillusion.c}
+    if (list == UINT32_MAX || result->x48_items == NULL) {
+        fprintf(stderr, "native Fox DAT is missing its article list\n");
+        abort();
+    }
+    for (i = 0; i < FOX_ARTICLE_COUNT; ++i) {
+        uint32_t article = raw_pointer(context, list + i * 4);
+        uint32_t attrs;
+        if (article == UINT32_MAX || result->x48_items[i] == NULL ||
+            (attrs = raw_pointer(
+                 context, article + ARTICLE_SPECIAL_ATTRS_SOURCE_OFFSET)) ==
+                UINT32_MAX)
+        {
+            fprintf(stderr, "native Fox DAT article %u is incomplete\n", i);
+            abort();
+        }
+        ((Article*) result->x48_items[i])->x4_specialAttributes =
+            translate_target_count(context, attrs, attr_types[i], 1);
+    }
+    return result;
+}
+
+static MslNativePublic* find_public(MslNativeArchive* context,
+                                    const char* symbol)
+{
+    uint32_t i;
+    for (i = 0; i < context->public_count; ++i) {
+        if (strcmp(context->publics[i].symbol, symbol) == 0) {
+            return &context->publics[i];
+        }
+    }
+    return NULL;
+}
+
+static void cache_public(MslNativeArchive* context, const char* symbol,
+                         void* address)
+{
+    size_t length;
+    char* symbol_copy;
+
+    if (context->public_count == context->public_capacity) {
+        uint32_t capacity = context->public_capacity == 0
+                                ? 16
+                                : context->public_capacity * 2;
+        MslNativePublic* replacement =
+            native_alloc((size_t) capacity * sizeof(*replacement));
+        if (context->publics != NULL) {
+            memcpy(replacement, context->publics,
+                   (size_t) context->public_count * sizeof(*replacement));
+        }
+        context->publics = replacement;
+        context->public_capacity = capacity;
+    }
+    length = strlen(symbol) + 1;
+    symbol_copy = native_alloc(length);
+    memcpy(symbol_copy, symbol, length);
+    context->publics[context->public_count++] =
+        (MslNativePublic) { symbol_copy, address };
+}
+
+void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
+{
+    MslNativeArchive* context = archive_context(archive);
+    MslNativePublic* cached = find_public(context, symbol);
+    const MslDatType* type;
+    uint32_t offset;
+    void* result = NULL;
+
+    if (cached != NULL) {
+        return cached->address;
+    }
+    require_dat_initialization("uncached native archive public lookup");
+    type = public_type(symbol);
+    offset = raw_public_offset(archive, symbol);
+    if (offset == UINT32_MAX) {
+        cache_public(context, symbol, NULL);
+        return NULL;
+    } else if (strcmp(symbol, "plLoadCommonData") == 0) {
+        void** table = native_alloc(sizeof(*table));
+        uint32_t target = raw_pointer(context, offset);
+        if (target != UINT32_MAX) {
+            table[0] = translate_target_count(
+                context, target, msl_dat_root_pl_804D6470_t, 1);
+            result = table;
+        }
+    } else if (strcmp(symbol, "itPublicData") == 0) {
+        result = translate_item_public(context, offset);
+    } else if (strcmp(symbol, "ftLoadCommonData") == 0) {
+        result = translate_fighter_common_public(context, offset);
+    } else if (strcmp(symbol, "ftDataFox") == 0) {
+        result = translate_fox_public(context, offset);
+    } else if (type != NULL) {
+        result = translate_target_count(context, offset, type, 1);
+    }
+    cache_public(context, symbol, result);
+    return result;
+}
+
+char* msl_native_archive_get_extern(HSD_Archive* archive, int index)
+{
+    require_dat_initialization("native archive extern lookup");
+    if (index < 0 || (uint32_t) index >= archive->header.nb_extern) {
+        return NULL;
+    }
+    return archive->symbols + archive->extern_info[index].symbol;
+}
+
+void msl_native_archive_locate_extern(HSD_Archive* archive,
+                                      const char* symbol, void* address)
+{
+    require_dat_initialization("native archive extern relocation");
+    // Reached game archives resolve their externs to null during the source
+    // loader. Generic graph translation treats non-relocation pointer fields
+    // as null, which is the same result. A non-null external graph owner must
+    // gain an explicit translation description before it is admitted.
+    (void) archive;
+    (void) symbol;
+    if (address != NULL) {
+        fprintf(stderr, "native DAT non-null external symbols are unsupported\n");
+        abort();
+    }
+}
+
+int msl_native_effect_bank(HSD_Archive* archive, const char* symbol,
+                           int* count, HSD_PSCmdList*** commands)
+{
+    require_dat_initialization("native effect bank translation");
+    MslNativeArchive* context = archive_context(archive);
+    uint32_t table = raw_public_offset(archive, symbol);
+    uint32_t bank;
+    uint32_t entries;
+    uint32_t first_count;
+    uint32_t total;
+    uint16_t version;
+    HSD_PSCmdList** result;
+    uint32_t i;
+
+    if (table == UINT32_MAX || (bank = raw_pointer(context, table)) == UINT32_MAX)
+    {
+        return -1;
+    }
+    version = read_be16(context->data + bank);
+    first_count = read_be32(context->data + bank + 4);
+    if (version == 0) {
+        total = first_count;
+        entries = bank + 8;
+    } else if (version >= 0x40 && version <= 0x43) {
+        total = first_count + read_be32(context->data + bank + 8);
+        entries = bank + 12;
+    } else {
+        return -1;
+    }
+    if (total > 65536 ||
+        entries + (version == 0 ? total : total - first_count) * 4 >
+            context->data_size)
+    {
+        return -1;
+    }
+    result = native_alloc((size_t) total * sizeof(*result));
+    for (i = version == 0 ? 0 : first_count; i < total; ++i) {
+        uint32_t relative = read_be32(
+            context->data + entries +
+            (version == 0 ? i : i - first_count) * 4);
+        if (relative != 0) {
+            result[i] = translate_target_count(
+                context, bank + relative, msl_dat_root_HSD_PSCmdList, 1);
+        }
+    }
+    *count = (int) total;
+    *commands = result;
+    return 0;
+}

@@ -1,9 +1,9 @@
 # Source-Shaped Melee Core
 
-Status: Phase 3 behavior-neutral organization is complete and ready to commit. All five tracked
-Fox/Fox FD replays retain their Phase 2.5 result: every gameplay/article field is bit-exact, while
-one unrecorded Nintendont render-publication phase difference remains visible as an explicit
-diagnostic. No production-core cutover or native x86-64 work has occurred.
+Status: Phase 4 native x86-64 scalar parity is complete in the working tree. All five tracked
+Fox/Fox FD replays retain the Phase 2.5 gameplay-exact result; the one unrecorded Nintendont
+render-publication difference remains an explicit diagnostic. Native is about 19.6x faster than
+PPC/QEMU on the equivalent starter runner workload. No production-core cutover has occurred.
 
 Branch base: `core-rewrite` at `6fbcc9bc7719` (`Rewrite core contact and motion state ownership`).
 
@@ -14,9 +14,9 @@ checkout under `refs/melee/` remains clean at this pin for the milestone.
 ## Goal
 
 Build the replacement simulator core from faithful, headless copies of the original gameplay
-source. The PPC32 scalar runtime establishes the correctness oracle. A later native x86-64 build
-from the same gameplay source becomes the production path, followed by supported-domain expansion
-and measured batching/layout optimization.
+source. The PPC32 scalar runtime establishes the correctness oracle. The native x86-64 scalar
+runtime compiles the same gameplay implementation and is the future production path, followed by
+supported-domain expansion and measured batching/layout optimization.
 
 ## Adoption decision
 
@@ -58,9 +58,10 @@ original pointer widths, byte order, ABI-sized Dolphin typedefs, and substantial
 to runtime structures and archive relocation logic.
 
 The first implementation is not embedded in CPython. Input and state comparison use the existing
-packed validation wire layouts through a standalone file interface. A later production phase owns
-64-bit conversion, per-world state, allocation removal, SoA/AoSoA storage, batching, Python
-integration, and throughput.
+packed validation wire layouts through a standalone file interface. Phase 4 owns explicit native
+64-bit runtime layouts and initialization-time DAT translation. A later production phase owns
+per-world state, SoA/AoSoA storage, batching, Python integration, and measured structural
+optimization.
 
 The build uses a repository-local cross-toolchain/sysroot and QEMU runner so it does not mutate the
 host toolchain. A native 32-bit x86 build was proven feasible, but rejected for Phase 1 because it
@@ -624,12 +625,135 @@ through the pinned snapshot and patch provenance.
 
 ### Phase 4 — Native x86-64 scalar parity
 
-Compile the same gameplay source natively for 64-bit little-endian hosts. Introduce explicit
-load-time game-data translation, pointer/layout ownership, endian conversion, and platform
-adapters without duplicating gameplay semantics. Use PPC32 as the differential oracle and retain
-strict Slippi comparison wherever the native floating-point target can reproduce it. Establish a
-measured native scalar baseline before batching or layout optimization; do not build a throwaway
-32-bit x86 port unless a concrete x86-64 blocker proves it necessary.
+#### Objective
+
+Produce a scalar x86-64 little-endian runtime that boots the same Fox/Fox FD domain from original
+game data and reproduces the complete PPC oracle result. Native and PPC must compile one gameplay
+implementation; native bring-up must not become a second semantic port.
+
+#### Scope
+
+- Add an isolated native build target and `build/melee_core/native/melee-core-native` executable
+  with the same file and streaming wire interface as the PPC executable. Keep the PPC build and
+  validation path working throughout.
+- Begin with a bounded compile/layout inventory. Classify each failure as a disk-layout, pointer
+  width, endian, ABI typedef, PPC instruction/math, or platform replacement issue before changing
+  source. Do not paper over failures with broad casts, packed runtime structures, or permissive
+  stubs.
+- Separate raw game-file representation from native runtime ownership at initialization. Parse
+  the original 32-bit big-endian DAT/archive representation explicitly, translate every reached
+  pointer and scalar owner into native-owned data, and perform no endian or pointer bridge work in
+  the per-frame gameplay path.
+- Reuse source archive metadata, relocation information, declarations, and object ownership where
+  sufficient. Add source-backed translation descriptions only where the raw format does not carry
+  enough type information; do not add fighter/replay-specific object graphs merely to boot Fox.
+- Correct reached 32-bit layout assumptions and PPC floating-point seams at their shared owners.
+  Preserve explicit `f32` storage and source operation order. Do not introduce native-only replay
+  tolerances, signed-zero equivalence, expected-output branches, or teacher-forced state.
+- Extend the native streaming validator to select PPC or native execution without adding Python
+  frame loops or materialization. PPC remains the differential oracle during bring-up; the Slippi
+  replay result remains the final behavioral gate.
+- Record equivalent-work PPC and native scalar throughput, including core frame throughput and
+  end-to-end replay time. A native build that is not materially faster than QEMU/PPC requires
+  investigation before Phase 4 is called complete, but batching and structural optimization remain
+  out of scope.
+
+Phase 4 does not add fighters or stages, promote per-match globals, redesign allocator/pool
+layouts, introduce SoA/AoSoA or batching, integrate the production Python API, or cut over/delete
+the old simulator. Normal native frame execution nevertheless obeys initialization-only
+allocation. Do not build a throwaway 32-bit x86 runtime unless a concrete x86-64 blocker is first
+demonstrated and documented.
+
+#### Completion criteria
+
+1. Clean PPC32 and native x86-64 targets build from the same materialized gameplay source, and the
+   isolated source/smoke tests pass for both applicable platform paths.
+2. Native passes all five Fox/Fox FD replays through their final recorded transitions with the
+   exact current gameplay-strict results: signed zero remains bit-exact and Hungry reports exactly
+   one separately classified render-visibility mismatch at frame 6030.
+3. Repeated fresh native runs are deterministic. There are no native-only gameplay exceptions,
+   replay/frame branches, tolerances, hidden PPC subprocesses, or bridges to the old simulator.
+4. Every reached DAT/archive object is translated once during initialization into explicitly owned
+   native data. The normal native frame step performs no raw big-endian field reads or pointer
+   reconstruction.
+5. The PPC result remains unchanged, the native/PPC differential is clean for bounded development
+   probes, and the full replay gate uses the existing Arrow/native validation path without Python
+   per-frame work.
+6. Equivalent-work scalar timings are recorded. Native is materially faster than PPC/QEMU, or any
+   contrary result remains a Phase 4 blocker with its measured owner identified rather than being
+   deferred as generic future optimization.
+
+#### Phase 4 result
+
+Both `runtime` and `native` now compile the same materialized source closure. The native executable
+retains the PPC file/stream wire protocol and the Arrow validator selects it directly; Python only
+loads each replay with Peppi and hands its Arrow buffers to C. There is no PPC child, old-simulator
+link, replay/frame behavior branch, native tolerance, or signed-zero relaxation in the native
+path.
+
+Native DAT ownership is explicit and initialization-only:
+
+- the same decomp type-root translation unit is compiled for PPC32 and x86-64 with complete DWARF,
+  and `generate_native_dat_layout.py` derives paired source/native field descriptions rather than
+  maintaining a second hand-written layout tree;
+- the original archive header, relocation table, public table, and packed big-endian body drive
+  translation into a fixed-capacity, 32-byte-aligned native graph arena below 4 GiB. The low
+  address is required only where HSD uses descriptor pointers as retail `u32` IDs;
+- archive parses, public lookups, pointer targets, and action/color command streams are memoized.
+  Fox action archives and effect banks are preloaded before the first public frame;
+- initialization then protects every raw archive allocation with `PROT_NONE` and seals both DAT
+  translation and `HSD_MemAlloc`. Source object/class pools are reserved up front, and normal
+  stdio uses caller-owned buffers. The complete replay suite runs with all seals active.
+
+The reached layout work was closed at source owners: pointer-sized HSD/class data, DAT bitfields,
+command streams and loop state, fighter/item/stage tables, floor-line ownership, effect command
+banks, PPC fused operations, and the typed decomp gaps exposed by native execution. In particular,
+removing temporary arena padding exposed and fixed the shared color-command slot representation and
+the misdeclared `ftData.x54` effect-part table; exact replay results no longer depend on allocator
+spacing.
+
+The clean validation result is:
+
+- starter: 2,723/2,723 gameplay-strict transitions;
+- `BlondHardHippopotamus.slpz`: 10,174/10,174;
+- `FavorableSuperficialPig.slpz`: 12,185/12,185;
+- `HungryImportantSnake.slpz`: 8,729/8,729 plus exactly one render-visibility diagnostic at frame
+  6030;
+- `PutridJoyousOryx.slpz`: 7,543/7,543.
+
+Two consecutive fresh-process five-replay runs produced identical summaries. Signed zero remains
+bit-exact. A clean dual-target build passed PPC and native data-load, model-animation,
+map-collision, and scheduler smoke coverage (the raw in-place archive-layout smoke is PPC-only by
+design). All five 1,000-transition PPC/native probes were identical, and the complete PPC starter
+remained exact.
+
+Equivalent full-starter timings were recorded over three runs with scalar `-O0` gameplay builds;
+the table reports medians and includes match initialization and stream IPC in the runner boundary:
+
+| Target | Runner seconds | Frames/second | Replay end-to-end | Relative |
+| --- | ---: | ---: | ---: | ---: |
+| PPC32/QEMU | 3.342378 | 814.7 | 3.372580 s | 1.0x |
+| native x86-64 | 0.170300 | 15,989.4 | 0.177585 s | 19.6x runner / 19.0x end-to-end |
+
+`make -C src/melee_core test -j4`, `make fmt-check`, `source_sync.sh check`, the clean build/smoke
+gate, and the final deterministic replay gate pass. Phase 5 may expand source-owner coverage; Phase
+6 still owns per-world state, batch integration, and measured layout optimization.
+
+#### Progress notifications
+
+Continue using the ignored Discord helper for material Phase 4 progress:
+
+```bash
+tools/melee_core/notify_discord.sh \
+  "Phase 4: MILESTONE, with current native/PPC parity and next blocker."
+```
+
+Send an update when the native source closure first compiles or links, native DAT translation first
+boots the match, a replay advances materially or becomes exact, a shared native/PPC owner is
+closed, a blocker changes the architecture or schedule, the five-replay gate passes, or the first
+equivalent throughput result is known. Do not send routine compile attempts, small frame advances,
+or repeated status noise. The helper reads `MSL_CORE_DISCORD_WEBHOOK_URL` or the ignored
+`build/melee_core/discord_webhook_url`; never put the credential in tracked files or command output.
 
 ### Phase 5 — RL 1.0 supported domain
 
@@ -649,6 +773,19 @@ and API ownership rather than retaining a fallback runtime.
 Correctness hardening remains continuous through Phases 4--6: reached nonmatching decomp owners,
 PPC/native float seams, RNG streams, endian boundaries, unsupported stubs, and long-rollout
 divergence must be corrected or explicitly source-classified when their owner enters scope.
+
+## Command runtime policy
+
+Routine development commands should normally complete in under five seconds and must be scoped to
+finish within ten seconds. Prefer one translation unit, one subsystem, a short frame window, or one
+replay over broad rebuilds and suites. Set timeout ceilings close to the expected runtime; a large
+timeout is not a substitute for narrowing the command.
+
+A fresh simulator compile is the expected exception and should be announced before it starts. Full
+replay gates run only at material parity checkpoints; during bring-up, use bounded native/PPC
+differentials and retain C/Arrow frame processing rather than Python loops. By Phase 4 completion,
+the native five-replay gate itself should be fast enough for routine local use. Keep CPU and memory
+bounded, and improve a repeatedly needed slow tool instead of normalizing long-running commands.
 
 ## Local setup
 

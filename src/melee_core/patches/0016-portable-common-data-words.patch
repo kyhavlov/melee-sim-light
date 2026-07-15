@@ -1,0 +1,124 @@
+--- a/src/melee/ft/types.h
++++ b/src/melee/ft/types.h
+@@ -57,2 +57,5 @@
+ /// Points to data in PlCo.dat
++// ftLoadCommonData is one scalar block with no archive relocations. Preserve
++// still-unknown slots as 32-bit source words rather than host-sized pointers.
++// refs/melee/src/melee/ft/fighter.c::Fighter_FirstInitialize_80067A84
+ struct ftCommonData {
+@@ -177,3 +180,3 @@
+     /* +1D8 */ float x1D8;
+-    /* +1DC */ UNK_T x1DC;
++    /* +1DC */ u32 x1DC;
+     /* +1E0 */ float x1E0;
+@@ -201,3 +204,3 @@
+     /* +238 */ float x238_radians;
+-    /* +23C */ UNK_T x23C;
++    /* +23C */ u32 x23C;
+     /* +240 */ float x240;
+@@ -215,3 +218,3 @@
+     /* +270 */ float x270;
+-    /* +274 */ UNK_T x274;
++    /* +274 */ u32 x274;
+     /* +278 */ float x278;
+@@ -302,4 +305,4 @@
+     /* +3F0 */ float x3F0;
+-    /* +3F4 */ UNK_T x3F4;
+-    /* +3F8 */ UNK_T x3F8;
++    /* +3F4 */ u32 x3F4;
++    /* +3F8 */ u32 x3F8;
+     /* +3FC */ int x3FC;
+@@ -366,20 +369,20 @@
+     /* +4FC */ u32 x4FC;
+-    /* +500 */ UNK_T x500;
++    /* +500 */ u32 x500;
+     /* +504 */ int x504;
+-    /* +508 */ UNK_T x508;
+-    /* +50C */ UNK_T x50C;
++    /* +508 */ u32 x508;
++    /* +50C */ u32 x50C;
+     /* +510 */ float x510;
+     /* +514 */ float x514;
+-    /* +518 */ UNK_T x518;
++    /* +518 */ u32 x518;
+     /* +51C */ float x51C_radians;
+     /* +520 */ int x520;
+-    /* +524 */ UNK_T x524;
+-    /* +528 */ UNK_T x528;
+-    /* +52C */ UNK_T x52C;
+-    /* +530 */ UNK_T x530;
+-    /* +534 */ UNK_T x534;
+-    /* +538 */ UNK_T x538;
++    /* +524 */ u32 x524;
++    /* +528 */ u32 x528;
++    /* +52C */ u32 x52C;
++    /* +530 */ u32 x530;
++    /* +534 */ u32 x534;
++    /* +538 */ u32 x538;
+     /* +53C */ float x53C;
+     /* +540 */ float x540;
+-    /* +544 */ UNK_T x544;
++    /* +544 */ u32 x544;
+     /* +548 */ float x548;
+@@ -413,9 +416,9 @@
+     /* +5B8 */ float x5B8;
+-    /* +5BC */ UNK_T x5BC;
++    /* +5BC */ u32 x5BC;
+     /* +5C0 */ float x5C0;
+-    /* +5C4 */ UNK_T x5C4;
++    /* +5C4 */ u32 x5C4;
+     /* +5C8 */ int x5C8;
+     /* +5CC */ float x5CC;
+-    /* +5D0 */ UNK_T x5D0;
+-    /* +5D4 */ UNK_T x5D4;
++    /* +5D0 */ u32 x5D0;
++    /* +5D4 */ u32 x5D4;
+     /* +5D8 */ int x5D8;
+@@ -425,3 +428,3 @@
+     /* +5E8 */ float x5E8;
+-    /* +5EC */ UNK_T x5EC;
++    /* +5EC */ u32 x5EC;
+     /* +5F0 */ u32 x5F0;
+--- a/src/melee/ft/chara/ftCommon/ftCo_Damage.c
++++ b/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+@@ -375,4 +375,3 @@
+         if (!(temp_f1_2 >
+-              (float) (M_PI_2 +
+-                       (double) M2C_FIELD(p_ftCommonData, float*, 0x1E8))))
++              (float) (M_PI_2 + (double) p_ftCommonData->x1E8_radians)))
+         {
+@@ -406,6 +405,6 @@
+         }
+-        if (!(kb_angle > M2C_FIELD(p_ftCommonData, float*, 0x234))) {
++        if (!(kb_angle > p_ftCommonData->x234_radians)) {
+             goto block_33;
+         }
+-        if (!(kb_angle < M2C_FIELD(p_ftCommonData, float*, 0x238))) {
++        if (!(kb_angle < p_ftCommonData->x238_radians)) {
+             goto block_33;
+@@ -415,4 +414,3 @@
+     block_33:
+-        if (!(fp->dmg.x1830_percent >=
+-              (float) M2C_FIELD(p_ftCommonData, s32*, 0x23C)))
++        if (!(fp->dmg.x1830_percent >= (float) p_ftCommonData->x23C))
+         {
+@@ -420,3 +418,3 @@
+         }
+-        if (!(HSD_Randf() < M2C_FIELD(p_ftCommonData, float*, 0x240))) {
++        if (!(HSD_Randf() < p_ftCommonData->x240)) {
+             goto block_36;
+@@ -500,3 +498,3 @@
+     }
+-    if (!(temp_f30 >= M2C_FIELD(p_ftCommonData, float*, 0x20C))) {
++    if (!(temp_f30 >= p_ftCommonData->x20C)) {
+         goto block_73;
+@@ -507,3 +505,3 @@
+ block_73:
+-    if (!(temp_f30 >= M2C_FIELD(p_ftCommonData, float*, 0x208))) {
++    if (!(temp_f30 >= p_ftCommonData->x208)) {
+         goto block_75;
+@@ -519,3 +517,3 @@
+     }
+-    if (!(temp_f30 >= M2C_FIELD(p_ftCommonData, float*, 0x174))) {
++    if (!(temp_f30 >= p_ftCommonData->x174)) {
+         goto block_79;

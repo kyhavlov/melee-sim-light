@@ -16,6 +16,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef MSL_CORE_NATIVE
+#include "platform/native_dat.h"
+#endif
+
 enum { MSL_EFFECT_QUEUE_CAPACITY = 256 };
 
 typedef struct MslEffectQueueNode {
@@ -40,6 +44,17 @@ static MslEffectGeneratorBank msl_effect_banks[4];
 static void msl_effect_load_bank(int bank, const char* filename,
                                  const char* symbol)
 {
+#ifdef MSL_CORE_NATIVE
+    msl_effect_banks[bank].archive = lbArchive_LoadArchive(filename);
+    if (msl_native_effect_bank(msl_effect_banks[bank].archive, symbol,
+                               &msl_effect_banks[bank].count,
+                               &msl_effect_banks[bank].commands) != 0)
+    {
+        fprintf(stderr, "%s has invalid %s command data\n", filename,
+                symbol);
+        abort();
+    }
+#else
     void** table = NULL;
     int* command_bank;
     u16 version;
@@ -72,6 +87,7 @@ static void msl_effect_load_bank(int bank, const char* filename,
                 filename, version);
         abort();
     }
+#endif
 }
 
 void msl_effect_projection_init(void)
@@ -130,9 +146,11 @@ static void msl_effect_consume_generator_rng(s32 generator_id)
     // keep the immutable archive bytes and perform the same relocation here.
     // refs/melee/src/sysdolphin/baselib/particle.c::psInitDataBankLocate
     command = data->commands[generator_id];
+#ifndef MSL_CORE_NATIVE
     if (command != NULL) {
         command = (HSD_PSCmdList*) ((u8*) data->command_bank + (u32) command);
     }
+#endif
     if (command != NULL && !(command->kind & 0x100) && command->random >= 0.0F)
     {
         // refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039F05C

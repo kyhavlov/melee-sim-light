@@ -1,0 +1,105 @@
+--- a/src/melee/ft/chara/ftCommon/ftCo_Damage.c
++++ b/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+@@ -327,7 +327,7 @@
+         if (kb_level_base < 2) {
+             goto block_17;
+         }
+-        if ((u32) M2C_FIELD(fp, u32*, 0x1860) != 5U) {
++        if (fp->dmg.x1860_element != 5U) {
+             goto block_17;
+         }
+         kb_angle = calcAngle(kb_angle);
+@@ -434,22 +434,22 @@
+         if (kb_level_base < 2) {
+             goto block_42;
+         }
+-        if ((u32) M2C_FIELD(fp, u32*, 0x1860) != 5U) {
++        if (fp->dmg.x1860_element != 5U) {
+             goto block_42;
+         }
+         msid = 0x5A;
+     block_42:
+-        M2C_FIELD(fp, float*, 0x18A4) = un_803222EC(kb_applied, kb_angle);
+-        un_8032233C(M2C_FIELD(fp, s32*, 0x18C0), M2C_FIELD(fp, s32*, 8));
++        fp->dmg.x18A4_knockbackMagnitude = un_803222EC(kb_applied, kb_angle);
++        un_8032233C(fp->dmg.x18C0, fp->x8_spawnNum);
+         if (!facing_dir) {
+             goto block_44;
+         }
+-        M2C_FIELD(fp, float*, 0x2C) = facing_dir;
++        fp->facing_dir = facing_dir;
+     }
+ block_44:
+ 
+     ftCo_8008DA4C(gobj, kb_level, 0);
+-    ftCo_8008DB10(gobj, (s32) M2C_FIELD(fp, u32*, 0x1860), kb_applied);
++    ftCo_8008DB10(gobj, (s32) fp->dmg.x1860_element, kb_applied);
+     Fighter_ChangeMotionState(gobj, msid, 0x40U, 0, 1, 0, NULL);
+     ftAnim_8006EBA4(gobj);
+     if (!gm_8016B014()) {
+@@ -466,22 +466,23 @@
+ block_62:
+     var_r0 = 0;
+ block_63:
+-    M2C_FIELD(fp, s32*, 0x2344) = var_r0;
+-    M2C_FIELD(fp, s8*, 0x2359) = 0;
+-    M2C_FIELD(fp, void (**)(Fighter_GObj*), 0x21D0) =
+-        ftCo_Damage_OnEveryHitlag;
++    // refs/melee/src/melee/ft/{types.h,chara/ftCommon/types.h}
++    // Named owners preserve these PPC fields when native pointers widen.
++    fp->mv.co.damage.x4 = var_r0;
++    fp->mv.co.damage.x19 = 0;
++    fp->hitlag_cb = ftCo_Damage_OnEveryHitlag;
+     fp->x670_timer_lstick_tilt_x = 0xFE;
+     fp->x671_timer_lstick_tilt_y = 0xFE;
+-    M2C_FIELD(fp, void (**)(Fighter_GObj*), 0x21D8) = ftCo_Damage_OnExitHitlag;
+-    M2C_FIELD(fp, float*, 0x18A8) = (float) M2C_FIELD(fp, float*, 0x1850);
++    fp->post_hitlag_cb = ftCo_Damage_OnExitHitlag;
++    fp->dmg.x18A8 = fp->dmg.kb_applied;
+     fp->x221C_b6 = true;
+-    M2C_FIELD(fp, s32*, 0x18AC) = (s32) 0;
++    fp->dmg.x18ac_time_since_hit = 0;
+     if (msid == 0x5B) {
+         inlineA1(gobj);
+     }
+     fp->x67F = 0xFF;
+     ftCo_Damage_SetMv8FromKbThreshold(fp);
+-    if (M2C_FIELD(fp, s32*, 0x2348) == 0) {
++    if (fp->mv.co.damage.x8 == 0) {
+         goto block_67;
+     }
+     fp->mv.co.damage.x8 = 1;
+@@ -500,17 +501,15 @@
+     if (!(temp_f30 >= M2C_FIELD(p_ftCommonData, float*, 0x20C))) {
+         goto block_73;
+     }
+-    M2C_FIELD(fp, s32*, 0x1908) = 0x4F;
+-    M2C_FIELD(fp, s32*, 0x190C) = (s32) M2C_FIELD(
+-        M2C_FIELD(M2C_FIELD(fp, void**, 0x10C), void**, 0x4C), s32*, 0x20);
++    fp->dmg.x1908 = 0x4F;
++    fp->dmg.x190C = fp->ft_data->x4C_sfx->x20;
+     goto block_75;
+ block_73:
+     if (!(temp_f30 >= M2C_FIELD(p_ftCommonData, float*, 0x208))) {
+         goto block_75;
+     }
+-    M2C_FIELD(fp, s32*, 0x1908) = 0x50;
+-    M2C_FIELD(fp, s32*, 0x190C) = (s32) M2C_FIELD(
+-        M2C_FIELD(M2C_FIELD(fp, void**, 0x10C), void**, 0x4C), s32*, 0x1C);
++    fp->dmg.x1908 = 0x50;
++    fp->dmg.x190C = fp->ft_data->x4C_sfx->x1C;
+ block_75:
+     if (kb_level != 3) {
+         goto block_83;
+--- a/src/melee/ft/types.h
++++ b/src/melee/ft/types.h
+@@ -576,8 +576,8 @@ struct FtSFX {
+     int x14;
+     int x18;
+-    int x1C;
+-    int x20;
++    FtSFXArr* x1C;
++    FtSFXArr* x20;
+     int x24;
+     int x28;
+     int x2C;

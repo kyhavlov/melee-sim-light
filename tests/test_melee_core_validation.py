@@ -5,8 +5,9 @@ from pathlib import Path
 import pytest
 
 from tools.melee_core.validate_replay import (
-    BINARY,
     NATIVE,
+    NATIVE_BINARY,
+    PPC_BINARY,
     QEMU,
     load_native,
     validate_one,
@@ -23,11 +24,15 @@ STARTER_REPLAY = (
 )
 
 
-@pytest.mark.skipif(
-    not all(path.is_file() for path in (STARTER_REPLAY, BINARY, NATIVE, QEMU)),
-    reason="PPC core validation artifacts or starter replay are unavailable",
-)
-def test_native_validation_streams_starter_replay_from_arrow() -> None:
+@pytest.mark.parametrize("backend", ["ppc", "native"])
+def test_validation_streams_starter_replay_from_arrow(backend: str) -> None:
+    binary = NATIVE_BINARY if backend == "native" else PPC_BINARY
+    required = [STARTER_REPLAY, NATIVE, binary]
+    if backend == "ppc":
+        required.append(QEMU)
+    if not all(path.is_file() for path in required):
+        pytest.skip(f"{backend} core validation artifacts are unavailable")
+
     result = validate_one(
         load_native(),
         # Preserve legacy .slp callers when storage has moved to .slpz.
@@ -35,6 +40,7 @@ def test_native_validation_streams_starter_replay_from_arrow() -> None:
         frames=0,
         start_frame=None,
         timeout=20.0,
+        backend=backend,
     )
 
     assert result["pass"] is True
@@ -44,6 +50,8 @@ def test_native_validation_streams_starter_replay_from_arrow() -> None:
     assert result["seed_frame"] == -123
     assert result["first_ref_frame"] == -122
     assert result["matched_frames"] == 2723
+    assert float(result["runner_seconds"]) > 0.0
+    assert float(result["end_to_end_seconds"]) >= float(result["runner_seconds"])
     assert result["render_visibility_mismatch_count"] == 0
     assert result["first_render_visibility_mismatch_frame"] is None
     assert result["signed_zero_equal_count"] == 0

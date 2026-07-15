@@ -1,11 +1,18 @@
 #include "platform/files.h"
+#ifdef MSL_CORE_NATIVE
+#include "platform/native_dat.h"
+#include "platform/memory.h"
+#endif
+#include "platform/slippi.h"
 #include "runtime/match.h"
 #include "runtime/effects.h"
 #include "runtime/final_destination.h"
 #include "runtime/wire.h"
 
+#include "cm/camera.h"
 #include "ft/fighter.h"
 #include "ft/ftdevice.h"
+#include "ft/ftdata.h"
 #include "ft/ftlib.h"
 #include "gr/grdatfiles.h"
 #include "gr/ground.h"
@@ -24,6 +31,7 @@
 #include <MSL/math.h>
 
 #include <baselib/aobj.h>
+#include <baselib/class.h>
 #include <baselib/controller.h>
 #include <baselib/fobj.h>
 #include <baselib/gobj.h>
@@ -45,6 +53,7 @@ enum {
     MSL_CORE_CHAR_FOX = 1,
     MSL_CORE_STICK_SCALE = 80,
     MSL_CORE_FD_MAP_GOBJ_COUNT = 10,
+    MSL_CORE_IO_BUFFER_BYTES = 64 * 1024,
 };
 
 extern u32 seed;
@@ -472,6 +481,27 @@ static int runtime_init(MslCoreRuntime* runtime, const char* data_root,
                          previous_input->p[i].c_y);
     }
 
+#ifdef MSL_CORE_NATIVE
+    {
+        Fighter* fp = GET_FIGHTER(runtime->fighters[0]);
+        FigaTree* active_tree = fp->x590;
+        void* active_archive = fp->x5A4;
+        int msid;
+
+        // Native DAT graphs widen pointers once during match initialization.
+        // Preload the complete Fox action archive owner so frame-step motion
+        // changes are allocation-free cache lookups.
+        // refs/melee/src/melee/ft/ftdata.c::{ftData_80085A14,ftData_80085CD8}
+        for (msid = 0; msid < fp->x58C; ++msid) {
+            if (ftData_80085FD4(fp, msid)->x14 != 0) {
+                ftData_80085CD8(fp, fp, msid);
+            }
+        }
+        fp->x590 = active_tree;
+        fp->x5A4 = active_archive;
+    }
+#endif
+
     Camera_80030730(Ground_801C20D0());
     Ground_EnableMatchCamera();
     Camera_8002F3AC();
@@ -481,6 +511,26 @@ static int runtime_init(MslCoreRuntime* runtime, const char* data_root,
     // refs/melee/src/melee/gm/gm_16AE.c::fn_8016E730
     // refs/slippi-ssbm-asm/External/OnFrame.asm::OnGameFirstFrame
     Camera_8002F3AC();
+
+#ifdef MSL_CORE_NATIVE
+    // Baselib's animation allocators grow one object at a time on demand.
+    // Reserve the bounded two-fighter/FD scalar domain before sealing the HSD
+    // heap so later motion, article, and quake objects only recycle source
+    // free lists. Animation graphs have more nodes than the general pools.
+    // refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,objalloc.c}
+    HSD_ObjAllocPreallocateAll(64);
+    HSD_ObjAllocAddFree(HSD_AObjGetAllocData(), 448);
+    HSD_ObjAllocAddFree(HSD_FObjGetAllocData(), 448);
+    HSD_ObjAllocAddFree(HSD_IDGetAllocData(), 192);
+    hsdPreallocateMemPieces(64);
+
+    // All reached archive graphs and source allocation pools are complete.
+    // Seal both boundaries before the first public frame; the full replay gate
+    // then acts as a runtime proof that no lazy translation, raw game-file
+    // access, or HSD heap growth remains.
+    msl_native_dat_finish_initialization();
+    msl_memory_finish_initialization();
+#endif
 
     // MslCoreMatchConfig names this as the seed immediately before the first
     // simulated frame, so constructor-time random choices do not consume it.
@@ -528,20 +578,39 @@ static int16_t state_age_i16(float value)
     return (int16_t) floorf(value);
 }
 
+static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
+{
+#ifdef MSL_CORE_NATIVE
+    uint32_t word;
+    size_t word_offset = source_offset & ~(size_t) 3;
+    unsigned int shift = (unsigned int) (3 - (source_offset & 3)) * 8;
+
+    // Slippi exports bytes from the retail big-endian item-variable union.
+    // The reached Fox article variables are 32-bit scalar/vector lanes through
+    // these offsets, so serialize the numeric source word in PPC byte order.
+    // refs/melee/src/melee/it/{types.h,itCharItems.h}
+    // refs/slippi-ssbm-asm/Recording/SendItemInfo.s
+    memcpy(&word, (const uint8_t*) &item->xDD4_itemVar + word_offset,
+           sizeof(word));
+    return (uint8_t) (word >> shift);
+#else
+    return ((const uint8_t*) item)[0xDD4 + source_offset];
+#endif
+}
+
 static void write_item_compare(uint8_t* out, int slot, Item_GObj* gobj)
 {
     Item* item = GET_ITEM(gobj);
     uint8_t* item_out =
         out + offsetof(MslCoreCompare, items) +
         (size_t) slot * sizeof(MslCoreItem);
-    uint8_t* item_bytes = (uint8_t*) item;
     int8_t owner = -1;
 
     // Recording/SendItemInfo.s follows the owner GObj and reads the player
     // slot from user-data byte 0xC. Fox articles retain their fighter owner for
     // their complete lifetime, so the same source layout applies here.
     if (item->owner != NULL && item->owner->user_data != NULL) {
-        owner = ((int8_t*) item->owner->user_data)[0xC];
+        owner = GET_FIGHTER(item->owner)->player_id;
     }
 
     item_out[offsetof(MslCoreItem, exists)] = 1;
@@ -569,10 +638,59 @@ static void write_item_compare(uint8_t* out, int slot, Item_GObj* gobj)
                     (uint32_t) item->x1C);
     // These four bytes are the exact metadata lanes exported by Slippi.
     // refs/slippi-ssbm-asm/Recording/SendItemInfo.s
-    item_out[offsetof(MslCoreItem, misc0)] = item_bytes[0xDD7];
-    item_out[offsetof(MslCoreItem, misc1)] = item_bytes[0xDDB];
-    item_out[offsetof(MslCoreItem, misc2)] = item_bytes[0xDEB];
-    item_out[offsetof(MslCoreItem, misc3)] = item_bytes[0xDEF];
+    item_out[offsetof(MslCoreItem, misc0)] = item_var_source_byte(item, 3);
+    item_out[offsetof(MslCoreItem, misc1)] = item_var_source_byte(item, 7);
+    item_out[offsetof(MslCoreItem, misc2)] = item_var_source_byte(item, 0x17);
+    item_out[offsetof(MslCoreItem, misc3)] = item_var_source_byte(item, 0x1B);
+}
+
+static uint8_t ppc_state_bit(unsigned int value, unsigned int index)
+{
+    return value != 0 ? (uint8_t) (0x80U >> index) : 0;
+}
+
+static void pack_fighter_state_flags(const Fighter* fp, uint8_t flags[5])
+{
+    flags[0] = ppc_state_bit(fp->allow_interrupt, 0) |
+               ppc_state_bit(fp->x2218_b1, 1) |
+               ppc_state_bit(fp->x2218_b2, 2) |
+               ppc_state_bit(fp->reflecting, 3) |
+               ppc_state_bit(fp->x2218_b4, 4) |
+               ppc_state_bit(fp->x2218_b5, 5) |
+               ppc_state_bit(fp->x2218_b6, 6) |
+               ppc_state_bit(fp->x2218_b7, 7);
+    flags[1] = ppc_state_bit(fp->x221A_b0, 0) |
+               ppc_state_bit(fp->x221A_b1, 1) |
+               ppc_state_bit(fp->allow_sdi, 2) |
+               ppc_state_bit(fp->x221A_b3, 3) |
+               ppc_state_bit(fp->fall_fast, 4) |
+               ppc_state_bit(fp->x221A_b5, 5) |
+               ppc_state_bit(fp->x221A_b6, 6) |
+               ppc_state_bit(fp->x221A_b7, 7);
+    flags[2] = ppc_state_bit(fp->x221B_b0, 0) |
+               ppc_state_bit(fp->x221B_b1, 1) |
+               ppc_state_bit(fp->x221B_b2, 2) |
+               ppc_state_bit(fp->x221B_b3, 3) |
+               ppc_state_bit(fp->x221B_b4, 4) |
+               ppc_state_bit(fp->x221B_b5, 5) |
+               ppc_state_bit(fp->x221B_b6, 6) |
+               ppc_state_bit(fp->x221B_b7, 7);
+    flags[3] = ppc_state_bit(fp->x221C_b0, 0) |
+               ppc_state_bit(fp->x221C_b1, 1) |
+               ppc_state_bit(fp->x221C_b2, 2) |
+               ppc_state_bit(fp->x221C_b3, 3) |
+               ppc_state_bit(fp->x221C_b4, 4) |
+               ppc_state_bit(fp->x221C_b5, 5) |
+               ppc_state_bit(fp->x221C_b6, 6) |
+               ppc_state_bit(fp->x221C_u16_y & 4U, 7);
+    flags[4] = ppc_state_bit(fp->x221F_b0, 0) |
+               ppc_state_bit(fp->x221F_b1, 1) |
+               ppc_state_bit(fp->x221F_b2, 2) |
+               ppc_state_bit(fp->x221F_b3, 3) |
+               ppc_state_bit(fp->x221F_b4, 4) |
+               ppc_state_bit(fp->x221F_b5, 5) |
+               ppc_state_bit(fp->x221F_b6, 6) |
+               ppc_state_bit(fp->x221F_b7, 7);
 }
 
 static void write_compare(const MslCoreRuntime* runtime, uint32_t frame_seed,
@@ -597,9 +715,8 @@ static void write_compare(const MslCoreRuntime* runtime, uint32_t frame_seed,
 
     for (i = 0; i < 2; ++i) {
         Fighter* fp = GET_FIGHTER(runtime->fighters[i]);
-        uint8_t* fighter_bytes = (uint8_t*) fp;
-        float hitstun =
-            (fighter_bytes[0x221C] & 0x02) ? fp->mv.co.damage.x0 : 0.0F;
+        uint8_t state_flags[5];
+        float hitstun = fp->x221C_b6 ? fp->mv.co.damage.x0 : 0.0F;
         int hurtbox = fp->x1988 != 0 ? fp->x1988 : fp->x198C;
         int jumps_left = fp->co_attrs.max_jumps - fp->x1968_jumpsUsed;
 
@@ -643,7 +760,8 @@ static void write_compare(const MslCoreRuntime* runtime, uint32_t frame_seed,
                        float_frames_u16(hitstun));
         // Slippi's ExtendPlayerBlock/GetLCancelStatus patches own this byte.
         // refs/slippi-ssbm-asm/Recording/{Recording.s,GetLCancelStatus/}
-        out[offsetof(MslCoreCompare, l_cancel) + i] = fighter_bytes[0x25FF];
+        out[offsetof(MslCoreCompare, l_cancel) + i] =
+            msl_slippi_lcancel_get(fp);
         out[offsetof(MslCoreCompare, hurtbox_state) + i] = (uint8_t) hurtbox;
         put_player_u16(out, offsetof(MslCoreCompare, ground_id), i,
                        (uint16_t) fp->coll_data.floor.index);
@@ -658,16 +776,9 @@ static void write_compare(const MslCoreRuntime* runtime, uint32_t frame_seed,
         out[offsetof(MslCoreCompare, combo_count) + i] = (uint8_t) fp->x2090;
         out[offsetof(MslCoreCompare, last_hit_by) + i] =
             (uint8_t) fp->dmg.x18c4_source_ply;
-        out[offsetof(MslCoreCompare, state_flags) + i * 5 + 0] =
-            fighter_bytes[0x2218];
-        out[offsetof(MslCoreCompare, state_flags) + i * 5 + 1] =
-            fighter_bytes[0x221A];
-        out[offsetof(MslCoreCompare, state_flags) + i * 5 + 2] =
-            fighter_bytes[0x221B];
-        out[offsetof(MslCoreCompare, state_flags) + i * 5 + 3] =
-            fighter_bytes[0x221C];
-        out[offsetof(MslCoreCompare, state_flags) + i * 5 + 4] =
-            fighter_bytes[0x221F];
+        pack_fighter_state_flags(fp, state_flags);
+        memcpy(out + offsetof(MslCoreCompare, state_flags) + i * 5,
+               state_flags, sizeof(state_flags));
     }
 
     {
@@ -758,12 +869,22 @@ static void usage(const char* argv0)
 
 static int run_stream(const char* data_root)
 {
+    char input_buffer[MSL_CORE_IO_BUFFER_BYTES];
+    char output_buffer[MSL_CORE_IO_BUFFER_BYTES];
     uint8_t config_wire[sizeof(MslCoreMatchConfig)];
     MslCoreInput previous_input;
     MslCoreStreamFrame frame;
     MslCoreRuntime runtime;
     size_t count;
 
+    // Supply libc's stream storage before match initialization so normal
+    // frame reads/writes cannot trigger a hidden stdio allocation.
+    if (setvbuf(stdin, input_buffer, _IOFBF, sizeof(input_buffer)) != 0 ||
+        setvbuf(stdout, output_buffer, _IOFBF, sizeof(output_buffer)) != 0)
+    {
+        fprintf(stderr, "could not configure Melee core stream buffers\n");
+        return 1;
+    }
     if (fread(config_wire, 1, sizeof(config_wire), stdin) !=
             sizeof(config_wire) ||
         fread(&previous_input, 1, sizeof(previous_input), stdin) !=
@@ -794,6 +915,8 @@ static int run_stream(const char* data_root)
 
 int main(int argc, char** argv)
 {
+    char input_buffer[MSL_CORE_IO_BUFFER_BYTES];
+    char output_buffer[MSL_CORE_IO_BUFFER_BYTES];
     uint8_t config_wire[sizeof(MslCoreMatchConfig)];
     MslCoreInput previous_input;
     MslCoreInput input;
@@ -829,6 +952,12 @@ int main(int argc, char** argv)
         fprintf(stderr, "could not open %s: %s\n", argv[5], strerror(errno));
         fclose(input_file);
         return 2;
+    }
+    if (setvbuf(input_file, input_buffer, _IOFBF, sizeof(input_buffer)) != 0 ||
+        setvbuf(output_file, output_buffer, _IOFBF, sizeof(output_buffer)) != 0)
+    {
+        fprintf(stderr, "could not configure Melee core file buffers\n");
+        goto done;
     }
     if (runtime_init(&runtime, argv[1], config_wire, &previous_input) != 0) {
         goto done;

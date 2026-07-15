@@ -1,0 +1,43 @@
+--- a/src/melee/ft/ftaction.c
++++ b/src/melee/ft/ftaction.c
+@@ -287,6 +287,23 @@ void ftAction_800711DC(Fighter_GObj* gobj, CommandInfo* cmd)
+     SKIP_CMD(cmd, 5);
+ }
+ 
++static inline bool ftAction_ShouldSkipUnownedHitbox(CommandInfo* cmd)
++{
++#ifdef MSL_CORE_NATIVE
++    // Source reads bit 124 of the six-word hitbox command through a packed
++    // overlay. Native CmdUnion records are widened for Subroutine/Goto
++    // pointers, so address the same fourth script word through stream stride.
++    // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
++    // refs/melee/src/melee/lb/types.h::{CmdUnion,spawn_hitbox_skip}
++    u8* fourth_word = (u8*) &cmd->u[3];
++    return (fourth_word[3] & 0x08) != 0;
++#else
++    struct spawn_hitbox_skip* skip =
++        (struct spawn_hitbox_skip*) cmd->u;
++    return skip->xF_b4;
++#endif
++}
++
+ /// @brief Spawns Hitboxes
+ void ftAction_8007121C(Fighter_GObj* gobj, CommandInfo* cmd)
+ {
+@@ -293,14 +310,11 @@ void ftAction_8007121C(Fighter_GObj* gobj, CommandInfo* cmd)
+     HitCapsule* hitbox;
+     u32 hit_group;
+     u32 idx;
+-    struct spawn_hitbox_skip* skip;
+     PAD_STACK(8);
+ 
+     fp = GET_FIGHTER(gobj);
+-    /// @todo this matches but isnt pretty. maybe an inline/macro as
+-    // we dont have enough stack in general?
+-    skip = (struct spawn_hitbox_skip*) cmd->u;
+-    if ((skip->xF_b4) && (fp->x1064_thrownHitbox.owner == NULL)) {
++    if (ftAction_ShouldSkipUnownedHitbox(cmd) &&
++        fp->x1064_thrownHitbox.owner == NULL) {
+         ftAction_800715EC(gobj, cmd);
+     } else {
+         hit_group = cmd->u->create_hitbox_0.hit_group;

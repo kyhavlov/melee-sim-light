@@ -1,0 +1,91 @@
+--- a/src/melee/cm/camera.c
++++ b/src/melee/cm/camera.c
+@@ -850,12 +850,6 @@
+     f32 input_x;
+     f32 input_y;
+     f32 depth_ratio;
+-    struct CameraStaticData {
+-        CameraModeCallbacks callbacks;
+-        HSD_WObjDesc interest;
+-        HSD_WObjDesc eyepos;
+-        HSD_CameraDescPerspective desc;
+-    }* data = (struct CameraStaticData*) &cm_803BCB18;
+ 
+     input_x = cm_80452C68.xA4 * cm_80452C68.xAC;
+     input_y = cm_80452C68.xA8 * cm_80452C68.xAC;
+@@ -873,12 +867,14 @@
+     half_view_height =
+         bounds->z_pos * tanf(0.5f * (0.017453292f * state->fov));
+     viewport_x_scale =
+-        data->desc.aspect *
++        cm_803BCB64.aspect *
+         (half_view_height /
+-         (0.5f * (f32) (data->desc.viewport.xmax - data->desc.viewport.xmin)));
++         (0.5f *
++          (f32) (cm_803BCB64.viewport.xmax - cm_803BCB64.viewport.xmin)));
+     viewport_y_scale =
+         half_view_height /
+-        (0.5f * (f32) (data->desc.viewport.ymax - data->desc.viewport.ymin));
++        (0.5f *
++         (f32) (cm_803BCB64.viewport.ymax - cm_803BCB64.viewport.ymin));
+     depth_factor_y = Stage_GetCamZoomRate();
+     depth_factor_x = Stage_GetCamMaxDepth() - depth_factor_y;
+ 
+--- a/src/melee/ft/fighter.c
++++ b/src/melee/ft/fighter.c
+@@ -20,6 +20,9 @@
+ #include "placeholder.h"
+ 
+ #include <platform.h>
++#ifdef MSL_CORE_HOSTED
++#include "platform/slippi.h"
++#endif
+ 
+ #include "cm/camera.h"
+ #include "db/db.h"
+@@ -163,14 +166,8 @@
+ {
+     s32 i;
+ 
+     /// @warning don't hardcode the allocation sizes
+-#ifdef MSL_CORE_HOSTED
+-    // Slippi Recording/ExtendPlayerBlock.asm replaces sizeof(Fighter) with
+-    // PlayerBlockSize so its recording-owned state at 0x25FF is addressable.
+-    HSD_ObjAllocInit(&fighter_alloc_data, 0x2600, /*align*/ 4);
+-#else
+     HSD_ObjAllocInit(&fighter_alloc_data, sizeof(Fighter), /*align*/ 4);
+-#endif
+     HSD_ObjAllocInit(&fighter_dat_attrs_alloc_data, /*size*/ 0x424,
+                      /*align*/ 4);
+     ft_800852B0();
+@@ -2573,7 +2568,7 @@
+ #ifdef MSL_CORE_HOSTED
+         // Slippi Recording/GetLCancelStatus/ResetLCancelStatus.asm hooks this
+         // exact map-pass seam before the collision callback.
+-        ((u8*) fp)[0x25FF] = 0;
++        msl_slippi_lcancel_set(fp, 0);
+ #endif
+         HSD_JObjSetTranslate(gobj->hsd_obj, &fp->cur_pos);
+ 
+--- a/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
++++ b/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
+@@ -1,6 +1,9 @@
+ #include "ftCo_LandingAir.h"
+ 
+ #include <platform.h>
++#ifdef MSL_CORE_HOSTED
++#include "platform/slippi.h"
++#endif
+ 
+ #include "ft/fighter.h"
+ 
+@@ -48,7 +51,8 @@
+         // x67F/window comparison and records its result in the extended
+         // player block for this post-frame row.
+         if (msid != ftCo_MS_None) {
+-            ((u8*) fp)[0x25FF] = fp->x67F < p_ftCommonData->xE4 ? 1 : 2;
++            msl_slippi_lcancel_set(
++                fp, fp->x67F < p_ftCommonData->xE4 ? 1 : 2);
+         }
+ #endif
+         if (msid != ftCo_MS_None && fp->x67F < p_ftCommonData->xE4) {

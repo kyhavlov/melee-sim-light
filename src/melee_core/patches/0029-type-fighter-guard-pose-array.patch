@@ -1,0 +1,13 @@
+--- a/src/melee/ft/types.h
++++ b/src/melee/ft/types.h
+@@ -633,7 +633,9 @@ struct ftData {
+         HSD_AnimJoint** x8;
+     }** x1C;
+     /* +20 */ struct {
+-        /* +0 */ UNK_T x0;
++        // Guard pose variants consumed as an HSD_Joint pointer array.
++        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091E78
++        /* +0 */ HSD_Joint** x0;
+         /* +4 */ HSD_Joint* x8;
+     }* x20;
+     // refs/melee/src/melee/ft/{ftwaitanim.c,ft/types.h::WaitStruct}

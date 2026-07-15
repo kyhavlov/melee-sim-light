@@ -1,0 +1,25 @@
+--- a/src/Runtime/platform.h
++++ b/src/Runtime/platform.h
+@@ -103,7 +103,9 @@
+ #ifndef _Static_assert
+ #define _Static_assert static_assert
+ #endif
+ #endif
+-#ifdef M2CTX
++#if defined(MSL_CORE_NATIVE)
++#define STATIC_ASSERT(cond)
++#elif defined(M2CTX)
+ #define STATIC_ASSERT(cond)
+ #elif defined(__MWERKS__)
+ #define STATIC_ASSERT(cond)                                                   \
+--- a/src/melee/lb/lb_00B0.c
++++ b/src/melee/lb/lb_00B0.c
+@@ -395,7 +395,7 @@ void lb_8000C160(void* mem, ssize_t size)
+     }
+ }
+ 
+-void memzero(void* mem, int size)
++void memzero(void* mem, ssize_t size)
+ {
+     u8* start = mem;
+     if (size > 0x10) {
