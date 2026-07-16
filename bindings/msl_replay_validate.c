@@ -1294,48 +1294,48 @@ static const ItemFieldSpec item_compare_fields[] = {
 
 #undef ITEM_SPEC
 
-static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemFieldSpec* spec) {
-  enum {
-    // refs/melee/src/melee/it/forward.h::It_Kind_Dosei.
-    ITEM_KIND_MR_SATURN = 7,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Laser.
-    ITEM_KIND_FOX_LASER = 54,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Laser.
-    ITEM_KIND_FALCO_LASER = 55,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Illusion.
-    ITEM_KIND_FOX_ILLUSION = 56,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Phantasm.
-    ITEM_KIND_FALCO_PHANTASM = 57,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Blaster.  Keep this
-    // protocol value local to the native replay adapter rather than making it
-    // depend on the PPC runtime's headers.
-    ITEM_KIND_FOX_BLASTER = 74,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Blaster.
-    ITEM_KIND_FALCO_BLASTER = 75,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Seak_NeedleHeld.
-    ITEM_KIND_SHEIK_NEEDLE_HELD = 80,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Seak_NeedleThrow.
-    ITEM_KIND_SHEIK_NEEDLE_THROWN = 79,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Seak_Vanish.
-    ITEM_KIND_SHEIK_VANISH = 85,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Seak_Chain.
-    ITEM_KIND_SHEIK_CHAIN = 97,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Explode.
-    ITEM_KIND_PEACH_EXPLODE = 98,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Turnip.
-    ITEM_KIND_PEACH_TURNIP = 99,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Parasol.
-    ITEM_KIND_PEACH_PARASOL = 103,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Toad.
-    ITEM_KIND_PEACH_TOAD = 104,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Peach_ToadSpore.
-    ITEM_KIND_PEACH_TOAD_SPORE = 111,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Zelda_DinFire.
-    ITEM_KIND_ZELDA_DIN_FIRE = 108,
-    // refs/melee/src/melee/it/forward.h::It_Kind_Zelda_DinFire_Explode.
-    ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE = 109,
-  };
+enum {
+  // refs/melee/src/melee/it/forward.h::It_Kind_Dosei.
+  ITEM_KIND_MR_SATURN = 7,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Laser.
+  ITEM_KIND_FOX_LASER = 54,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Laser.
+  ITEM_KIND_FALCO_LASER = 55,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Illusion.
+  ITEM_KIND_FOX_ILLUSION = 56,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Phantasm.
+  ITEM_KIND_FALCO_PHANTASM = 57,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Blaster.  Keep this
+  // protocol value local to the native replay adapter rather than making it
+  // depend on the PPC runtime's headers.
+  ITEM_KIND_FOX_BLASTER = 74,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Blaster.
+  ITEM_KIND_FALCO_BLASTER = 75,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Seak_NeedleHeld.
+  ITEM_KIND_SHEIK_NEEDLE_HELD = 80,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Seak_NeedleThrow.
+  ITEM_KIND_SHEIK_NEEDLE_THROWN = 79,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Seak_Vanish.
+  ITEM_KIND_SHEIK_VANISH = 85,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Seak_Chain.
+  ITEM_KIND_SHEIK_CHAIN = 97,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Explode.
+  ITEM_KIND_PEACH_EXPLODE = 98,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Turnip.
+  ITEM_KIND_PEACH_TURNIP = 99,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Parasol.
+  ITEM_KIND_PEACH_PARASOL = 103,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Toad.
+  ITEM_KIND_PEACH_TOAD = 104,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Peach_ToadSpore.
+  ITEM_KIND_PEACH_TOAD_SPORE = 111,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Zelda_DinFire.
+  ITEM_KIND_ZELDA_DIN_FIRE = 108,
+  // refs/melee/src/melee/it/forward.h::It_Kind_Zelda_DinFire_Explode.
+  ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE = 109,
+};
 
+static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemFieldSpec* spec) {
   if (item->type == ITEM_KIND_MR_SATURN &&
       (item->state == 1 || item->state == 4 || item->state == 5) &&
       (spec->offset == offsetof(MslCoreItem, misc2) ||
@@ -1541,7 +1541,17 @@ static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t 
         uint32_t actual_bits = load_bits(actual_item + spec->offset, width);
         if ((!replay->item.instance_id_present &&
              spec->offset == offsetof(MslCoreItem, instance_id)) ||
-            !item_field_is_gameplay_state(&expected.items[slot], spec)) {
+            !item_field_is_gameplay_state(&expected.items[slot], spec) ||
+            (!expected.items[slot].exists &&
+             actual->items[slot].type == ITEM_KIND_SHEIK_NEEDLE_THROWN &&
+             !item_field_is_gameplay_state(&actual->items[slot], spec))) {
+          // When a classified item-count divergence places a thrown needle
+          // against an empty expected slot, its xDD4/xDD8 bytes are still
+          // uninitialized fixed-pool residue rather than gameplay state.
+          // Compare all owned fields for the extra needle, but do not make
+          // the fingerprint depend on native arena placement.
+          // refs/melee/src/melee/it/{itCharItems.h,
+          //   items/itseakneedlethrown.c::it_802AFD8C}
           continue;
         }
         if (!compare_bits_equal((FieldKind)spec->kind, expected_bits, actual_bits,

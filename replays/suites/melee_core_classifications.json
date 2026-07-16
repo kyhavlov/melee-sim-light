@@ -2541,14 +2541,14 @@
       "replay": "replays/validation/peach/HumiliatingCreamyReindeer.slpz",
       "id": "dolphin-float-motion-profile",
       "owner": "fighter and item position float execution",
-      "rationale": "The complete residual is confined to float-derived fighter/item motion under the imported source callback order; the action, combat, and article owners remain data/source driven. The exact fingerprint, including 1,212 strict trailing transitions, keeps this broad capture profile from becoming a numerical tolerance.",
+      "rationale": "The complete residual is confined to float-derived fighter/item motion under the imported source callback order; the action, combat, and article owners remain data/source driven. The exact fingerprint, including 1,212 strict trailing transitions, keeps this broad capture profile from becoming a numerical tolerance. When its classified item-count divergence places an extra thrown needle against an empty replay slot, xDD4/xDD8 fixed-pool residue is excluded because the needle source does not own those bytes as gameplay state.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/it/item.c",
         "refs/melee/src/melee/mp/mpcoll.c",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 16501, "matched_frames": 13480, "mismatched_frames": 3021, "exact_prefix_frames": 1698, "strict_suffix_frames": 1212, "first_mismatch_frame": 1576, "last_mismatch_frame": 15166, "mismatch_count": 7324, "mismatch_fingerprint": "4679c93d555b3262", "render_visibility_mismatch_count": 7, "first_render_visibility_mismatch_frame": 2941, "signed_zero_equal_count": 0, "mismatch_fields_digest": "8aa5ba220ca2b92c8095ab81c4e8bfc9c839f46b9460902868d65c2e2f24c5e1"}}
+      "expected": {"native": {"frames": 16501, "matched_frames": 13480, "mismatched_frames": 3021, "exact_prefix_frames": 1698, "strict_suffix_frames": 1212, "first_mismatch_frame": 1576, "last_mismatch_frame": 15166, "mismatch_count": 7022, "mismatch_fingerprint": "490081b0268db2f8", "render_visibility_mismatch_count": 7, "first_render_visibility_mismatch_frame": 2941, "signed_zero_equal_count": 0, "mismatch_fields_digest": "2197065a5ba7e4561e5fe8ae838364aa2b2084df50acd5f9541cbf19c7be4f27"}}
     },
     {
       "replay": "replays/validation/peach/peach_demo_1.slpz",
