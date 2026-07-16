@@ -13,6 +13,7 @@
 enum {
     MSL_CORE_EFFECT_BANK_CAPACITY = 4,
     MSL_CORE_EFFECT_QUEUE_CAPACITY = 256,
+    MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY = 0x28,
     MSL_CORE_EFFECT_MODEL_START_CAPACITY = 4,
 };
 
@@ -39,7 +40,8 @@ typedef struct MslCoreEffectGeneratorBank {
 
 typedef struct MslCoreEffectData {
     MslCoreEffectGeneratorBank banks[MSL_CORE_EFFECT_BANK_CAPACITY];
-    MslCoreEffectModelStart common_model_start[2];
+    MslCoreEffectModelStart
+        common_model_start[MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY];
     s8 recording_common_model;
 } MslCoreEffectData;
 

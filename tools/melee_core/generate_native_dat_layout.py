@@ -220,17 +220,19 @@ class PairBuilder:
                 # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c
                 if name == "Article" and src_name == "x4_specialAttributes":
                     continue
-                field_override = {
-                    # These ftData members remain void in the decomp. The
-                    # shared Fox/Falco source consumers provide their concrete
-                    # native translation types.
-                    # refs/melee/src/melee/ft/chara/{ftFox/ftFx_Init.c,
-                    # ftFalco/ftFc_Init.c}
-                    ("ftData", "ext_attr"): "MslDatFoxAttrsPointer",
-                    ("ftData", "xC"): "MslDatFoxWaitAnimList",
-                    ("ftData", "x10"): "MslDatFoxAnimByteList",
-                    ("ftData", "x48_items"): "MslDatArticleList",
-                }.get((name, src_name))
+                # These ftData members have character-dependent concrete
+                # types/counts. The public-root translator supplies them from
+                # the selected character's source registry row rather than
+                # imposing one fighter's graph shape on every archive.
+                # refs/melee/src/melee/ft/ftdata.c::ftData_Table_Unk0
+                if name == "ftData" and src_name in {
+                    "ext_attr",
+                    "xC",
+                    "x10",
+                    "x48_items",
+                }:
+                    continue
+                field_override = None
                 src_offset = self.src_dwarf.integer(
                     src_member, "DW_AT_data_member_location", 0
                 )
@@ -436,8 +438,11 @@ def main() -> None:
         "MslDatDreamLandParams",
         "MslDatStageItemEntry",
         "MslDatHeihoAttrs",
-        "MslDatFoxWaitAnimList",
-        "MslDatFoxAnimByteList",
+        "Fighter_WaitAnimData",
+        "MslDatAnimBytePair",
+        "MslDatSpaceAnimalArticles",
+        "ftFox_DatAttrs",
+        "MarsAttributes",
         "FoxLaserAttr",
         "FoxBlasterAttr",
         "FoxIllusionAttr",

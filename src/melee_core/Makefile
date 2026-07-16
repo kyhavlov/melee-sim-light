@@ -26,7 +26,7 @@ HOST_CC ?= cc
 MSL_DATA_DIR ?= $(ROOT)/data
 DATA ?= $(abspath $(MSL_DATA_DIR))/raw
 VALIDATION_SUITE ?= replays/suites/aggregate_recent.json
-VALIDATION_CHARACTERS ?= Fox,Falco
+VALIDATION_CHARACTERS ?= Fox,Falco,Marth
 VALIDATION_STAGES ?= 32,31,3,2,8,28
 VALIDATION_BACKEND ?= native
 VALIDATION_WORKERS ?= 0
@@ -61,6 +61,7 @@ PLATFORM_SRCS := \
 	$(CORE)/platform/slippi.c
 NATIVE_PLATFORM_SRCS := $(CORE)/platform/native_dat.c
 RUNTIME_SRCS := \
+	$(CORE)/runtime/audio.c \
 	$(CORE)/runtime/camera.c \
 	$(CORE)/runtime/common.c \
 	$(CORE)/runtime/effects.c \

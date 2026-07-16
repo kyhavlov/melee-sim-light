@@ -71,6 +71,8 @@ void msl_core_decode_match_config(MslCoreMatchConfig* config,
         wire[offsetof(MslCoreMatchConfig, brawl_offscreen_damage)];
     config->freeze_dead_up_fall_physics =
         wire[offsetof(MslCoreMatchConfig, freeze_dead_up_fall_physics)];
+    config->ucf_cardinals_1_0_enabled =
+        wire[offsetof(MslCoreMatchConfig, ucf_cardinals_1_0_enabled)];
     config->stage_event_streams =
         wire[offsetof(MslCoreMatchConfig, stage_event_streams)];
     memcpy(config->players, wire + offsetof(MslCoreMatchConfig, players),

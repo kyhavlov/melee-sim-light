@@ -140,8 +140,17 @@ void ft_80085154(Fighter_GObj* gobj)
     f32 lstick_y = sinf(fp->lstick_angle);
     f32 temp_f0 = fp->x6A4_transNOffset.y;
     f32 temp_f3 = fp->x6A4_transNOffset.z * fp->facing_dir;
+#ifdef MSL_CORE_HOSTED
+    // GALE01 0x80085198..0x8008519C publishes the rotated animation velocity
+    // with one fmsubs and one fmadds. GCC otherwise splits both expressions
+    // and changes the last bit of SpecialHi launch velocity.
+    // refs/melee/build/GALE01/asm/melee/ft/ft_084E.s::ft_80085154
+    fp->self_vel.x = __fmsubs(temp_f3, lstick_x, temp_f0 * lstick_y);
+    fp->self_vel.y = __fmadds(temp_f3, lstick_y, temp_f0 * lstick_x);
+#else
     fp->self_vel.x = (temp_f3 * lstick_x) - (temp_f0 * lstick_y);
     fp->self_vel.y = (temp_f3 * lstick_y) + (temp_f0 * lstick_x);
+#endif
 }
 
 void ft_800851C0(Fighter_GObj* gobj)

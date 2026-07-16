@@ -8,6 +8,7 @@
 
 #include "ef/types.h"
 #include "ft/chara/ftFox/types.h"
+#include "ft/chara/ftMars/types.h"
 #include "ft/types.h"
 #include "ft/fighter.h"
 #include "gr/types.h"
@@ -40,7 +41,6 @@ typedef uint8_t MslDatByte;
 typedef Vec2* MslDatVec2Pointer;
 typedef FighterPartsTable* MslDatFighterPartsPointer;
 typedef struct Fighter_804D6540_t* MslDatFighter6540Pointer;
-typedef ftFox_DatAttrs* MslDatFoxAttrsPointer;
 // Anonymous yakumono_param owners in the two imported stage translation units.
 // refs/melee/src/melee/gr/{grbattle.c,grpstadium.c}
 typedef struct MslDatBattlefieldParams {
@@ -110,12 +110,7 @@ typedef struct MslDatHeihoAttrs {
 // refs/melee/src/melee/ft/chara/{ftFox/ftFx_Init.c,ftFalco/ftFc_Init.c}
 typedef Article* MslDatSpaceAnimalArticles[4];
 typedef MslDatSpaceAnimalArticles* MslDatArticleList;
-// ftData_Table_Unk0[FTKIND_FOX/FTKIND_FALCO].count in the hosted source registry.
-// refs/melee/src/melee/ft/ftdata.c
-typedef struct Fighter_WaitAnimData MslDatFoxWaitAnimArray[327];
-typedef MslDatFoxWaitAnimArray* MslDatFoxWaitAnimList;
-typedef uint8_t MslDatFoxAnimByteArray[327][2];
-typedef MslDatFoxAnimByteArray* MslDatFoxAnimByteList;
+typedef uint8_t MslDatAnimBytePair[2];
 
 // Keeping an address of each root forces GCC to emit its complete reachable
 // type graph even when debug-type elimination is enabled by the toolchain.
@@ -144,7 +139,6 @@ void* msl_native_dat_type_roots[] = {
     (MslDatVec2Pointer*) 0,
     (MslDatFighterPartsPointer*) 0,
     (MslDatFighter6540Pointer*) 0,
-    (MslDatFoxAttrsPointer*) 0,
     (MslDatBattlefieldParams*) 0,
     (MslDatPokemonStadiumParams*) 0,
     (MslDatFountainParams*) 0,
@@ -153,8 +147,11 @@ void* msl_native_dat_type_roots[] = {
     (MslDatStageItemEntry*) 0,
     (MslDatHeihoAttrs*) 0,
     (MslDatArticleList*) 0,
-    (MslDatFoxWaitAnimList*) 0,
-    (MslDatFoxAnimByteList*) 0,
+    (MslDatSpaceAnimalArticles*) 0,
+    (struct Fighter_WaitAnimData*) 0,
+    (MslDatAnimBytePair*) 0,
+    (ftFox_DatAttrs*) 0,
+    (MarsAttributes*) 0,
     (FoxLaserAttr*) 0,
     (FoxBlasterAttr*) 0,
     (FoxIllusionAttr*) 0,

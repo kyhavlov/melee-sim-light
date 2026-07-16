@@ -33,6 +33,9 @@
 #include "mp/mplib.h"
 
 #include <math.h>
+#ifdef MSL_CORE_HOSTED
+#include <MetroTRK/intrinsics.h>
+#endif
 #include <baselib/gobj.h>
 #include <baselib/jobj.h>
 #include <baselib/random.h>
@@ -2257,9 +2260,20 @@ float ftCo_800DA824(Fighter* fp)
     handicap = Player_GetHandicap(fp->player_id);
     temp = (f32) handicap;
     temp = co->x35C - temp;
+#ifdef MSL_CORE_HOSTED
+    // GALE01 0x800DA8B8 and 0x800DA8C0 use scalar-single fmadds. The exact
+    // timer boundary owns capture release and must not inherit GCC's split
+    // multiply/add rounding.
+    // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::
+    //     ftCo_800DA824
+    temp = __fmadds(co->x358, temp, co->x354);
+    temp += value;
+    return __fmadds(fp->dmg.x1830_percent, co->x368, temp);
+#else
     temp = co->x358 * temp + co->x354;
     temp += value;
     return fp->dmg.x1830_percent * co->x368 + temp;
+#endif
 }
 
 void fn_800DA8E4(Fighter_GObj* gobj, Fighter_GObj* victim_gobj, s32 arg2)
@@ -2283,9 +2297,18 @@ void fn_800DA8E4(Fighter_GObj* gobj, Fighter_GObj* victim_gobj, s32 arg2)
     v = (*cd2) * (cd->x364 - ((f32) (Player_80033BB8(fp->player_id) + 1)));
     {
         f32 s3 = (cd->x35C - (f32) Player_GetHandicap(fp->player_id));
+#ifdef MSL_CORE_HOSTED
+        // Same retail grab-timer expression as ftCo_800DA824; GALE01
+        // 0x800DA9CC and 0x800DA9D4 are fmadds.
+        s3 = __fmadds(cd->x358, s3, cd->x354);
+        s3 = s3 + v;
+        ftCommon_InitGrab(
+            fp, 0, __fmadds(fp->dmg.x1830_percent, cd->x368, s3));
+#else
         s3 = cd->x358 * s3 + cd->x354;
         s3 = s3 + v;
         ftCommon_InitGrab(fp, 0, (fp->dmg.x1830_percent * cd->x368) + s3);
+#endif
     }
     fp->mv.ca.specials.grav = 0.0f;
     fp->mv._[0xC] = 0;

@@ -28,7 +28,7 @@ NATIVE_BINARY = BUILD / "native" / "melee-core-native"
 TOOLCHAIN = BUILD / "toolchain" / "root"
 QEMU = TOOLCHAIN / "usr" / "bin" / "qemu-ppc-static"
 SYSROOT = TOOLCHAIN / "usr" / "powerpc-linux-gnu"
-DEFAULT_CHARACTERS = "Fox,Falco"
+DEFAULT_CHARACTERS = "Fox,Falco,Marth"
 DEFAULT_STAGES = "32,31,3,2,8,28"
 MAX_AUTO_WORKERS = 16
 DEFAULT_CLASSIFICATIONS = ROOT / "replays/suites/melee_core_classifications.json"
@@ -50,6 +50,7 @@ class ReplayCase:
     ports: tuple[int, ...] = ()
     stage_id: int | None = None
     characters: tuple[str, ...] = ()
+    ucf_cardinals_1_0_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -117,8 +118,14 @@ def load_classifications(path: Path) -> dict[str, ReplayClassification]:
         if not isinstance(expected, dict) or not expected:
             raise ValueError(f"{path}: classification has no backend snapshot: {replay}")
         snapshots: dict[str, dict[str, object]] = {}
+        aliases: dict[str, str] = {}
         for backend, snapshot in expected.items():
-            if backend not in {"native", "ppc"} or not isinstance(snapshot, dict):
+            if backend not in {"native", "ppc"}:
+                raise ValueError(f"{path}: invalid classification backend for {replay}")
+            if isinstance(snapshot, str):
+                aliases[backend] = snapshot
+                continue
+            if not isinstance(snapshot, dict):
                 raise ValueError(f"{path}: invalid classification backend for {replay}")
             snapshot_keys = set(snapshot)
             required = set(CLASSIFICATION_SNAPSHOT_KEYS) - {"mismatch_fields"}
@@ -139,6 +146,12 @@ def load_classifications(path: Path) -> dict[str, ReplayClassification]:
                     f"missing={sorted(missing)} extra={sorted(extra)}"
                 )
             snapshots[backend] = snapshot
+        for backend, target in aliases.items():
+            if target == backend or target not in snapshots:
+                raise ValueError(
+                    f"{path}: invalid {backend} snapshot alias {target!r} for {replay}"
+                )
+            snapshots[backend] = snapshots[target]
         if replay in classifications:
             raise ValueError(f"{path}: duplicate classification replay: {replay}")
         classifications[replay] = ReplayClassification(
@@ -220,6 +233,7 @@ def validate_one(
     timeout: float,
     backend: str = "ppc",
     signed_zero_equal: bool = False,
+    ucf_cardinals_1_0_enabled: bool = True,
 ) -> dict[str, object]:
     # Python owns only the replay-loading boundary. The native extension consumes
     # Peppi's Arrow buffers through the Arrow C Data Interface without NumPy or
@@ -240,6 +254,7 @@ def validate_one(
             timeout=timeout,
             signed_zero_equal=signed_zero_equal,
             native=backend == "native",
+            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
         )
     result["end_to_end_seconds"] = time.perf_counter() - started
     return result
@@ -270,9 +285,9 @@ def load_suite_cases(
     root: Path = ROOT,
 ) -> tuple[ReplaySuite, list[ReplayCase]]:
     suite = load_suite(suite_path)
-    if suite.ucf_enabled is not True or suite.ucf_cardinals_1_0_enabled is not True:
+    if suite.ucf_enabled is not True or suite.ucf_cardinals_1_0_enabled is None:
         raise ValueError(
-            f"{suite_path}: Melee core validation currently requires UCF 0.84 and 1.0 cardinals"
+            f"{suite_path}: Melee core validation requires an explicit UCF/cardinal profile"
         )
 
     cases: list[ReplayCase] = []
@@ -303,6 +318,11 @@ def load_suite_cases(
                 ports=entry.ports,
                 stage_id=int(entry.stage_id),
                 characters=tuple(entry_characters),
+                ucf_cardinals_1_0_enabled=(
+                    entry.ucf_cardinals_1_0_enabled
+                    if entry.ucf_cardinals_1_0_enabled is not None
+                    else suite.ucf_cardinals_1_0_enabled
+                ),
             )
         )
     if not cases:
@@ -356,6 +376,7 @@ def _validate_case(
             timeout=timeout,
             backend=backend,
             signed_zero_equal=signed_zero_equal,
+            ucf_cardinals_1_0_enabled=case.ucf_cardinals_1_0_enabled,
         )
         return ReplayOutcome(case, result, None, time.perf_counter() - started)
     except Exception as exc:
@@ -672,7 +693,7 @@ def main() -> int:
             print(
                 f"scope: characters={','.join(sorted(args.characters.split(',')))} "
                 f"stages={','.join(str(stage) for stage in sorted(stages))} "
-                "profile=UCF-0.84+cardinals-1.0"
+                "profile=UCF-0.84+manifest-cardinals"
             )
         else:
             print(f"replays: {len(cases)}")

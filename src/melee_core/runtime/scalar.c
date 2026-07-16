@@ -58,6 +58,7 @@ enum {
     MSL_CORE_STAGE_BATTLEFIELD = 31,
     MSL_CORE_STAGE_FINAL_DESTINATION = 32,
     MSL_CORE_CHAR_FOX = 1,
+    MSL_CORE_CHAR_MARTH = 18,
     MSL_CORE_CHAR_FALCO = 22,
     MSL_CORE_STICK_SCALE = 80,
 };
@@ -144,7 +145,14 @@ static const MslCoreStageSpec* stage_spec(uint8_t external_id)
 
 static CharacterKind source_character_kind(uint8_t external_id)
 {
-    return external_id == MSL_CORE_CHAR_FALCO ? CKIND_FALCO : CKIND_FOX;
+    switch (external_id) {
+    case MSL_CORE_CHAR_MARTH:
+        return CKIND_MARS;
+    case MSL_CORE_CHAR_FALCO:
+        return CKIND_FALCO;
+    default:
+        return CKIND_FOX;
+    }
 }
 
 static void bind_stage_match(MslCoreMatch* match)
@@ -372,10 +380,17 @@ static int validate_config(MslCoreMatchConfig* config)
     }
     for (i = 0; i < 2; ++i) {
         if (config->players[i].char_id != MSL_CORE_CHAR_FOX &&
+            config->players[i].char_id != MSL_CORE_CHAR_MARTH &&
             config->players[i].char_id != MSL_CORE_CHAR_FALCO) {
             fprintf(stderr,
-                    "current core supports external char_id=1 Fox and "
-                    "char_id=22 Falco only\n");
+                    "current core supports external char_id=1 Fox, "
+                    "char_id=18 Marth, and char_id=22 Falco only\n");
+            return -1;
+        }
+        if (config->players[i].handicap == 0) {
+            config->players[i].handicap = 9;
+        } else if (config->players[i].handicap > 9) {
+            fprintf(stderr, "player handicap must be in the source range 1..9\n");
             return -1;
         }
     }
@@ -444,7 +459,8 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
                               match->config.match_damage_ratio,
                               match->config.online_fnmsubs_zero,
                               match->config.brawl_offscreen_damage,
-                              match->config.freeze_dead_up_fall_physics);
+                              match->config.freeze_dead_up_fall_physics,
+                              match->config.ucf_cardinals_1_0_enabled);
     msl_camera_state_init(&match->camera);
     msl_slippi_state_init(&match->slippi, match->config.stage_event_streams);
 
@@ -603,6 +619,10 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
         Player_SetTeam(slot, match->config.players[i].team_id);
         Player_SetStocks(slot, match->config.stock_count);
         Player_SetCostumeId(slot, match->config.players[i].costume_id);
+        // Standard VS forwards PlayerInitData.handicap into the player owner;
+        // grab duration and several damage formulas read it at runtime.
+        // refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC
+        Player_SetHandicap(slot, match->config.players[i].handicap);
         Player_SetPlayerId(slot, slot);
         Player_SetFacingDirection(slot, facing);
         Player_SetControllerIndex(slot, slot + 1);

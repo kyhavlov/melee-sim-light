@@ -64,6 +64,7 @@ typedef struct ReplayPlayer {
   Primitive main_y;
   Primitive c_x;
   Primitive c_y;
+  uint8_t cstick_from_processed;
   Primitive trigger_l;
   Primitive trigger_r;
   Primitive character;
@@ -128,6 +129,7 @@ typedef struct ReplayView {
   uint8_t team_id[MSL_CORE_MAX_PLAYERS];
   uint8_t start_stocks[MSL_CORE_MAX_PLAYERS];
   uint8_t costume_id[MSL_CORE_MAX_PLAYERS];
+  uint8_t handicap[MSL_CORE_MAX_PLAYERS];
   int num_players;
   uint32_t stage_id;
   uint32_t initial_random_seed;
@@ -356,6 +358,7 @@ static int parse_start(PyObject* start, ReplayView* replay) {
     PyObject* player = PyList_GET_ITEM(players, i);
     PyObject* type;
     PyObject* stocks_obj;
+    PyObject* handicap_obj;
     int slot;
     int port;
     if (!PyDict_Check(player)) {
@@ -368,7 +371,9 @@ static int parse_start(PyObject* start, ReplayView* replay) {
     }
     port = parse_port(PyDict_GetItemString(player, "port"));
     stocks_obj = PyDict_GetItemString(player, "stocks");
-    if (port < 1 || stocks_obj == NULL || !PyLong_Check(stocks_obj)) {
+    handicap_obj = PyDict_GetItemString(player, "handicap");
+    if (port < 1 || stocks_obj == NULL || !PyLong_Check(stocks_obj) || handicap_obj == NULL ||
+        !PyLong_Check(handicap_obj)) {
       PyErr_SetString(PyExc_ValueError, "human replay player metadata is incomplete");
       return -1;
     }
@@ -379,6 +384,7 @@ static int parse_start(PyObject* start, ReplayView* replay) {
     }
     replay->port_1based[slot] = port;
     replay->start_stocks[slot] = (uint8_t)PyLong_AsUnsignedLong(stocks_obj);
+    replay->handicap[slot] = (uint8_t)PyLong_AsUnsignedLong(handicap_obj);
     value = PyDict_GetItemString(player, "costume");
     replay->costume_id[slot] =
         value != NULL && PyLong_Check(value) ? (uint8_t)PyLong_AsUnsignedLong(value) : 0;
@@ -406,14 +412,17 @@ static int parse_start(PyObject* start, ReplayView* replay) {
         uint8_t stocks = replay->start_stocks[i];
         uint8_t team = replay->team_id[i];
         uint8_t costume = replay->costume_id[i];
+        uint8_t handicap = replay->handicap[i];
         replay->port_1based[i] = replay->port_1based[j];
         replay->start_stocks[i] = replay->start_stocks[j];
         replay->team_id[i] = replay->team_id[j];
         replay->costume_id[i] = replay->costume_id[j];
+        replay->handicap[i] = replay->handicap[j];
         replay->port_1based[j] = port;
         replay->start_stocks[j] = stocks;
         replay->team_id[j] = team;
         replay->costume_id[j] = costume;
+        replay->handicap[j] = handicap;
       }
     }
   }
@@ -466,6 +475,11 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
   ArrowNode node;
   ArrowNode flags;
   ArrowNode velocities;
+  ArrowNode raw_c_x;
+  ArrowNode raw_c_y;
+  ArrowNode cstick;
+  int has_raw_c_x;
+  int has_raw_c_y;
   int k;
 #define FIELD(PARENT, NAME, FORMAT, TARGET)                                               \
   do {                                                                                    \
@@ -482,8 +496,33 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
   FIELD(pre, "buttons_physical", "S", player->buttons);
   FIELD(pre, "raw_analog_x", "c", player->main_x);
   FIELD(pre, "raw_analog_y", "c", player->main_y);
-  FIELD(pre, "raw_analog_cstick_x", "c", player->c_x);
-  FIELD(pre, "raw_analog_cstick_y", "c", player->c_y);
+  has_raw_c_x = node_child_optional(pre, "raw_analog_cstick_x", &raw_c_x, error, error_size);
+  has_raw_c_y = node_child_optional(pre, "raw_analog_cstick_y", &raw_c_y, error, error_size);
+  if (has_raw_c_x < 0 || has_raw_c_y < 0) {
+    return -1;
+  }
+  if (has_raw_c_x != has_raw_c_y) {
+    snprintf(error, error_size, "replay has only one raw C-stick axis");
+    return -1;
+  }
+  if (has_raw_c_x) {
+    if (primitive_from_node(raw_c_x, "c", &player->c_x, error, error_size) != 0 ||
+        primitive_from_node(raw_c_y, "c", &player->c_y, error, error_size) != 0) {
+      return -1;
+    }
+  } else {
+    // Pre-v3.15 Slippi event payloads do not contain the two raw C-stick
+    // bytes. Their recorded processed C-stick axes are HSD's normalized
+    // signed-byte values, so trunc(axis * 80) reconstructs the same input
+    // admitted by replay playback without Python row materialization.
+    // refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm
+    if (node_child(pre, "cstick", &cstick, error, error_size) != 0 ||
+        primitive_child(cstick, "x", "f", &player->c_x, error, error_size) != 0 ||
+        primitive_child(cstick, "y", "f", &player->c_y, error, error_size) != 0) {
+      return -1;
+    }
+    player->cstick_from_processed = 1;
+  }
   if (node_child(pre, "triggers_physical", &node, error, error_size) != 0) {
     return -1;
   }
@@ -713,6 +752,16 @@ static uint8_t trigger_u8(float value) {
   return (uint8_t)lrintf(value * 140.0F);
 }
 
+static int8_t processed_stick_i8(float value) {
+  if (value <= -1.0F) {
+    return -80;
+  }
+  if (value >= 1.0F) {
+    return 80;
+  }
+  return (int8_t)(value * 80.0F);
+}
+
 static void build_input(const ReplayView* replay, int64_t raw, MslCoreInput* input) {
   int player;
   memset(input, 0, sizeof(*input));
@@ -722,8 +771,13 @@ static void build_input(const ReplayView* replay, int64_t raw, MslCoreInput* inp
     dst->buttons = get_u16(&src->buttons, raw);
     dst->main_x = get_i8(&src->main_x, raw);
     dst->main_y = get_i8(&src->main_y, raw);
-    dst->c_x = get_i8(&src->c_x, raw);
-    dst->c_y = get_i8(&src->c_y, raw);
+    if (src->cstick_from_processed) {
+      dst->c_x = processed_stick_i8(get_f32(&src->c_x, raw));
+      dst->c_y = processed_stick_i8(get_f32(&src->c_y, raw));
+    } else {
+      dst->c_x = get_i8(&src->c_x, raw);
+      dst->c_y = get_i8(&src->c_y, raw);
+    }
     dst->l = trigger_u8(get_f32(&src->trigger_l, raw));
     dst->r = trigger_u8(get_f32(&src->trigger_r, raw));
   }
@@ -1627,8 +1681,19 @@ fail:
 
 static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwargs) {
   static char* keywords[] = {
-      "frames",   "start",       "metadata",     "qemu",    "sysroot",           "binary",
-      "data_dir", "start_frame", "frames_limit", "timeout", "signed_zero_equal", "native",
+      "frames",
+      "start",
+      "metadata",
+      "qemu",
+      "sysroot",
+      "binary",
+      "data_dir",
+      "start_frame",
+      "frames_limit",
+      "timeout",
+      "signed_zero_equal",
+      "native",
+      "ucf_cardinals_1_0_enabled",
       NULL,
   };
   PyObject* frames_obj;
@@ -1644,6 +1709,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   double timeout = 60.0;
   int signed_zero_equal = 0;
   int direct_native = 0;
+  int ucf_cardinals_1_0_enabled = 1;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -1661,10 +1727,11 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   PyObject* result = NULL;
   (void)self;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOssss|OKdpp:validate_replay", keywords,
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOssss|OKdppp:validate_replay", keywords,
                                    &frames_obj, &start_obj, &metadata_obj, &qemu_path, &sysroot,
                                    &binary_path, &data_root, &start_frame_obj, &frames_limit,
-                                   &timeout, &signed_zero_equal, &direct_native)) {
+                                   &timeout, &signed_zero_equal, &direct_native,
+                                   &ucf_cardinals_1_0_enabled)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -1719,8 +1786,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   }
   for (i = 0; i < replay.num_players; ++i) {
     uint8_t character = get_u8(&replay.players[i].character, rows.raw[0]);
-    if (character != 1 && character != 22) {
-      PyErr_SetString(PyExc_ValueError, "Melee core requires Fox or Falco players");
+    if (character != 1 && character != 18 && character != 22) {
+      PyErr_SetString(PyExc_ValueError, "Melee core requires Fox, Marth, or Falco players");
       goto done;
     }
   }
@@ -1779,6 +1846,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   state.config.online_fnmsubs_zero = replay.online_fnmsubs_zero;
   state.config.brawl_offscreen_damage = replay.brawl_offscreen_damage;
   state.config.freeze_dead_up_fall_physics = replay.freeze_dead_up_fall_physics;
+  state.config.ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
   state.config.stage_event_streams = (replay.fod_platform_list != NULL ? 1U : 0U) |
                                      (replay.dreamland_whispy_list != NULL ? 2U : 0U);
   for (i = 0; i < replay.num_players; ++i) {
@@ -1790,6 +1858,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     state.config.players[i].char_id = get_u8(&player->character, rows.raw[0]);
     state.config.players[i].team_id = replay.team_id[i];
     state.config.players[i].costume_id = replay.costume_id[i];
+    state.config.players[i].handicap = replay.handicap[i];
     state.config.players[i].facing_and_port =
         (uint8_t)((replay.port_1based[i] << 1) | (get_f32(&player->direction, rows.raw[0]) > 0.0F));
   }

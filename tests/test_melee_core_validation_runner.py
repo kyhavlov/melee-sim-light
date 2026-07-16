@@ -70,7 +70,13 @@ def test_canonical_phase5_scope_selects_32_replays_without_a_duplicate_manifest(
         ROOT / "replays/suites/melee_core_classifications.json"
     )
     assert classifications
-    assert set(classifications) <= {case.display_path for case in cases}
+    assert set(classifications) <= {
+        replay.replay for replay in suite.replays
+    }
+    marth = classifications[
+        "replays/validation/marth/InternalPowerlessWallaby.slpz"
+    ]
+    assert marth.expected["ppc"] is marth.expected["native"]
 
 
 def test_parallel_runner_preserves_manifest_order_and_isolates_errors(

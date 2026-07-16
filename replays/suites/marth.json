@@ -138,6 +138,7 @@
     },
     {
       "replay": "replays/validation/marth/WingedGorgeousPanther.slpz",
+      "ucf_cardinals_1_0_enabled": false,
       "ports": [
         3,
         4
@@ -210,6 +211,7 @@
     },
     {
       "replay": "replays/validation/marth/FemaleWorthyAlpaca.slpz",
+      "ucf_cardinals_1_0_enabled": false,
       "ports": [
         1,
         2

@@ -117,10 +117,6 @@ bool lbAudioAx_800264E4(void* data)
 }
 
 #define AUDIO_ZERO(name) int name() { return 0; }
-AUDIO_ZERO(lbAudioAx_800230C8)
-AUDIO_ZERO(lbAudioAx_80023130)
-AUDIO_ZERO(lbAudioAx_80023220)
-AUDIO_ZERO(lbAudioAx_800233EC)
 AUDIO_ZERO(lbAudioAx_800237A8)
 AUDIO_ZERO(lbAudioAx_80024184)
 AUDIO_ZERO(lbAudioAx_80024B94)

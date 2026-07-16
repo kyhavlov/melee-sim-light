@@ -494,6 +494,265 @@
           "signed_zero_equal_count": 0
         }
       }
+    },
+    {
+      "replay": "replays/validation/marth/InternalPowerlessWallaby.slpz",
+      "id": "vanilla-magnifier-render-schedule",
+      "owner": "ifMagnify/Fighter_8006A360 render-publication boundary",
+      "rationale": "Two isolated 1% camera-damage ticks are the complete residual; native and PPC agree exactly and the following 5,369 transitions are strict. The replay does not record the VI/render boundary that republishes x221F_b0.",
+      "sources": [
+        "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10165,
+          "matched_frames": 10163,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 4735,
+          "strict_suffix_frames": 5369,
+          "first_mismatch_frame": 4613,
+          "last_mismatch_frame": 4673,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "2253a5952de1a1c9",
+          "mismatch_fields_digest": "19a7ee3b6caf82b66161a0af7369ef53cabb5e0b57d1262dbe302eab9bfacf14",
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": 3372,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/ParallelFamiliarZebra.slpz",
+      "id": "dolphin-ulp-shield-motion-profile",
+      "owner": "GuardSetOff hitlag-exit velocity integration",
+      "rationale": "The complete residual is two one-ULP P1 X-position rows at GuardSetOff hitlag exit. Native and PPC agree bit-for-bit, every other compared field is exact, and 4,038 strict transitions follow.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Phys",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate"
+      ],
+      "expected": {
+        "native": {
+          "frames": 8357,
+          "matched_frames": 8355,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 4317,
+          "strict_suffix_frames": 4038,
+          "first_mismatch_frame": 4195,
+          "last_mismatch_frame": 4196,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "21f588f9912d56cc",
+          "mismatch_fields_digest": "8ac68a6b2800ceb7c9da43192d117992acda96adf3cb6fd857d10662e49d8d12",
+          "render_visibility_mismatch_count": 1,
+          "first_render_visibility_mismatch_frame": 8213,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/QuestionableHarmfulPanther.slpz",
+      "id": "unmodeled-presentation-rng-stream-phase",
+      "owner": "DamageFlyRoll gate versus post-input particle/effect RNG scheduler",
+      "rationale": "Deterministic damage setup is exact at the source HSD_Randf gate. Native and PPC take the same neighboring stream outcome; the recorded match is one presentation-owned draw later and selects DamageFlyRoll. The resulting 74-row action interval is followed by 572 strict transitions. This records excluded renderer/particle stream phase rather than altering free-running RNG.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+      ],
+      "expected": {
+        "native": {
+          "frames": 9184,
+          "matched_frames": 9110,
+          "mismatched_frames": 74,
+          "exact_prefix_frames": 8538,
+          "strict_suffix_frames": 572,
+          "first_mismatch_frame": 8416,
+          "last_mismatch_frame": 8489,
+          "mismatch_count": 201,
+          "mismatch_fingerprint": "032d48eb0f409584",
+          "mismatch_fields_digest": "0b86004a88a9f12a67c0eaea73f08fb81d8ec19c9085027813b2070248f681e1",
+          "render_visibility_mismatch_count": 17,
+          "first_render_visibility_mismatch_frame": 325,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/WellWornSmallGoshawk.slpz",
+      "id": "unmodeled-presentation-rng-stream-phase",
+      "owner": "DamageFlyRoll gate versus post-input particle/effect RNG scheduler",
+      "rationale": "The first causal difference is the source DamageFlyRoll HSD_Randf gate with exact deterministic setup. Native and PPC agree on the neighboring stream outcome; the recorded presentation-owned phase selects the other action, which legitimately changes later action and instance state. The manifest locks the complete consequence rather than fitting the replay row or changing free-running RNG.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+      ],
+      "expected": {
+        "native": {
+          "frames": 13272,
+          "matched_frames": 11506,
+          "mismatched_frames": 1766,
+          "exact_prefix_frames": 11506,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 11384,
+          "last_mismatch_frame": 13149,
+          "mismatch_count": 6837,
+          "mismatch_fingerprint": "f943054f405742a5",
+          "mismatch_fields_digest": "818dc6b3695e9b55d21e61b0258d7d63ccd8680ec89645a0f8ffc38d09235a54",
+          "render_visibility_mismatch_count": 6,
+          "first_render_visibility_mismatch_frame": 3481,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/ExtraLargeScaryHornet.slpz",
+      "id": "mixed-unrecorded-render-rng-profile",
+      "owner": "DeadUp render publication, magnifier schedule, and presentation RNG phase",
+      "rationale": "Three already-bounded excluded-presentation families make up the complete residual: offline DeadUp render positions at frames 4832..4959, one magnifier damage tick at 7051, and a late DamageFlyRoll stream-phase action interval at 10766..10836. Native and PPC fingerprints are identical; no replay-local gameplay correction is applied.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18_inline2",
+        "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10973,
+          "matched_frames": 10777,
+          "mismatched_frames": 196,
+          "exact_prefix_frames": 4954,
+          "strict_suffix_frames": 14,
+          "first_mismatch_frame": 4832,
+          "last_mismatch_frame": 10836,
+          "mismatch_count": 403,
+          "mismatch_fingerprint": "2902340a17fd062e",
+          "mismatch_fields_digest": "bf060706fd9aa42d5f8ec9bbd90fafd42346bf8a4523287ee0070028065bd21d",
+          "render_visibility_mismatch_count": 27,
+          "first_render_visibility_mismatch_frame": 2041,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/WingedGorgeousPanther.slpz",
+      "id": "incomplete-nintendont-post-frame-stream",
+      "owner": "legacy Nintendont/Slippi post-frame publication",
+      "rationale": "At frame 9793 the legacy Nintendont recording abruptly replaces P3 post-only fields with absence sentinels (animation_index UINT_MAX and state_age -1) while retaining three stocks and frozen fighter values through game end. The source runtime continues the live fighter. Those missing post-frame observations cannot be reconstructed as gameplay; native and PPC agree on the complete 710-row boundary.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm",
+        "refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10625,
+          "matched_frames": 9915,
+          "mismatched_frames": 710,
+          "exact_prefix_frames": 9915,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 9793,
+          "last_mismatch_frame": 10502,
+          "mismatch_count": 2937,
+          "mismatch_fingerprint": "3d95a3cb4754c703",
+          "mismatch_fields_digest": "6f6f16982e0d6937fa3bb79571e4d1cdf0f4f8bcae1b28a7686477986b4985a1",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/ColossalYellowishBison.slpz",
+      "id": "unmodeled-presentation-rng-stream-phase",
+      "owner": "DamageFlyRoll gate versus post-input particle/effect RNG scheduler",
+      "rationale": "Deterministic damage setup is exact at the source HSD_Randf gate. Native and PPC agree on the neighboring stream outcome; the recorded match is one presentation-owned draw later and takes the other damage action. The resulting interval is bounded and followed by 2,574 strict transitions.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10613,
+          "matched_frames": 10378,
+          "mismatched_frames": 235,
+          "exact_prefix_frames": 7804,
+          "strict_suffix_frames": 2574,
+          "first_mismatch_frame": 7682,
+          "last_mismatch_frame": 7916,
+          "mismatch_count": 386,
+          "mismatch_fingerprint": "684e3faed3026724",
+          "mismatch_fields_digest": "b6f3e3c97eac0ab1c42420467a9003f31822f92e3e75b57c5418595eba6b01c1",
+          "render_visibility_mismatch_count": 6,
+          "first_render_visibility_mismatch_frame": 3388,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/FemaleFarOffSalmon.slpz",
+      "id": "unmodeled-presentation-rng-stream-phase",
+      "owner": "DamageFlyRoll gate versus post-input particle/effect RNG scheduler",
+      "rationale": "The first causal difference is the source DamageFlyRoll HSD_Randf gate with exact contact, damage, position, and grounded state. Native and PPC agree on the neighboring stream outcome; the recorded presentation-owned phase selects DamageFlyRoll. The downstream interval reconverges for the final 1,870 transitions.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11699,
+          "matched_frames": 10334,
+          "mismatched_frames": 1365,
+          "exact_prefix_frames": 8464,
+          "strict_suffix_frames": 1870,
+          "first_mismatch_frame": 8342,
+          "last_mismatch_frame": 9706,
+          "mismatch_count": 1999,
+          "mismatch_fingerprint": "d7baeae2000ec287",
+          "mismatch_fields_digest": "53876007d250a4d5a73fa060842faea6190b50a772752227735a882166ca2b40",
+          "render_visibility_mismatch_count": 14,
+          "first_render_visibility_mismatch_frame": 8384,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/marth/FemaleWorthyAlpaca.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter position float execution profile",
+      "rationale": "Native and PPC agree bit-for-bit. Four isolated P2 X-position ULP rows are the complete residual, every other gameplay field is exact, and 2,440 strict transitions follow; the replay records Dolphin without its build or execution profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7508,
+          "matched_frames": 7504,
+          "mismatched_frames": 4,
+          "exact_prefix_frames": 5056,
+          "strict_suffix_frames": 2440,
+          "first_mismatch_frame": 4934,
+          "last_mismatch_frame": 4945,
+          "mismatch_count": 4,
+          "mismatch_fingerprint": "64715930e314e1bc",
+          "mismatch_fields_digest": "37fe0d810c20421f44f9d63be3ae282414538922f2fd7dbe85694549f1a3c39f",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
     }
   ]
 }

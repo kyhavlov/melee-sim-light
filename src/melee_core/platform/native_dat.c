@@ -802,6 +802,7 @@ static const MslDatType* public_type(const char* symbol)
         return msl_dat_root_DynamicModelDesc;
     }
     if (strcmp(symbol, "ftDataFox") == 0 ||
+        strcmp(symbol, "ftDataMars") == 0 ||
         strcmp(symbol, "ftDataFalco") == 0)
     {
         return msl_dat_root_ftData;
@@ -979,8 +980,11 @@ static void* translate_fighter_common_public(MslNativeArchive* context,
     return result;
 }
 
-static ftData* translate_space_animal_public(MslNativeArchive* context,
-                                             uint32_t offset, int falco)
+static ftData* translate_fighter_public(MslNativeArchive* context,
+                                        uint32_t offset,
+                                        const MslDatType* attrs_type,
+                                        uint32_t anim_count, int space_animal,
+                                        int falco)
 {
     enum {
         FT_DATA_X48_ITEMS_SOURCE_OFFSET = 0x48,
@@ -997,9 +1001,46 @@ static ftData* translate_space_animal_public(MslNativeArchive* context,
     const uint8_t* indices = falco ? falco_indices : fox_indices;
     ftData* result = translate_target_count(
         context, offset, msl_dat_root_ftData, 1);
+    uint32_t target = raw_pointer(context, offset + 0x04);
     uint32_t list = raw_pointer(
         context, offset + FT_DATA_X48_ITEMS_SOURCE_OFFSET);
     uint32_t i;
+
+    if (target == UINT32_MAX) {
+        fprintf(stderr, "native fighter DAT is missing special attributes\n");
+        abort();
+    }
+    result->ext_attr =
+        translate_target_count(context, target, attrs_type, 1);
+    target = raw_pointer(context, offset + 0x0C);
+    if (target == UINT32_MAX) {
+        fprintf(stderr, "native fighter DAT is missing its animation table\n");
+        abort();
+    }
+    result->xC = translate_target_count(
+        context, target, msl_dat_root_Fighter_WaitAnimData, anim_count);
+    target = raw_pointer(context, offset + 0x10);
+    if (target == UINT32_MAX) {
+        fprintf(stderr, "native fighter DAT is missing animation metadata\n");
+        abort();
+    }
+    result->x10 = translate_target_count(
+        context, target, msl_dat_root_MslDatAnimBytePair, anim_count);
+
+    if (!space_animal) {
+        if (list != UINT32_MAX) {
+            fprintf(stderr,
+                    "native fighter DAT has an untyped character article list\n");
+            abort();
+        }
+        return result;
+    }
+    if (list == UINT32_MAX) {
+        fprintf(stderr, "native space-animal DAT is missing its article list\n");
+        abort();
+    }
+    result->x48_items = translate_target(
+        context, list, msl_dat_root_MslDatSpaceAnimalArticles);
 
     // Fox and Falco install the same source article families as laser, blaster,
     // and illusion/phantasm. Falco's third reached article occupies x48_items[3].
@@ -1008,7 +1049,7 @@ static ftData* translate_space_animal_public(MslNativeArchive* context,
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_OnLoad
     // refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_OnLoad
     // refs/melee/src/melee/it/items/{itfoxlaser.c,itfoxblaster.c,itfoxillusion.c}
-    if (list == UINT32_MAX || result->x48_items == NULL) {
+    if (result->x48_items == NULL) {
         fprintf(stderr, "native space-animal DAT is missing its article list\n");
         abort();
     }
@@ -1099,9 +1140,17 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
     } else if (strcmp(symbol, "ftLoadCommonData") == 0) {
         result = translate_fighter_common_public(context, offset);
     } else if (strcmp(symbol, "ftDataFox") == 0) {
-        result = translate_space_animal_public(context, offset, 0);
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftFox_DatAttrs, 327, 1,
+                                          0);
+    } else if (strcmp(symbol, "ftDataMars") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_MarsAttributes, 327, 0,
+                                          0);
     } else if (strcmp(symbol, "ftDataFalco") == 0) {
-        result = translate_space_animal_public(context, offset, 1);
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftFox_DatAttrs, 327, 1,
+                                          1);
     } else if (strcmp(symbol, "yakumono_param") == 0) {
         result = translate_stage_params(context, offset);
     } else if (strcmp(symbol, "itemdata") == 0) {

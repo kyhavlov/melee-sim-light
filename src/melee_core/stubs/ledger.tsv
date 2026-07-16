@@ -22,10 +22,6 @@ lbBgFlash_80021410	presentation/audio exclusion	reachable	no-op	render/audio/par
 lbRefract_80022BB8	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 psInitDataBank	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 psInitDataBankLoad	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
-lbAudioAx_800230C8	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
-lbAudioAx_80023130	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
-lbAudioAx_80023220	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
-lbAudioAx_800233EC	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
 lbAudioAx_800237A8	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
 lbAudioAx_80024184	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners
 lbAudioAx_80024B94	audio exclusion	reachable	zero audio handle	AX playback result is consumed only by excluded audio owners

@@ -436,10 +436,15 @@ src/melee/ft/chara/ftMario/ftMr_SpecialS.h
 src/melee/ft/chara/ftMario/ftMr_Strings.h
 src/melee/ft/chara/ftMario/types.h
 src/melee/ft/chara/ftMars/forward.h
+src/melee/ft/chara/ftMars/ftMs_Init.c
 src/melee/ft/chara/ftMars/ftMs_Init.h
+src/melee/ft/chara/ftMars/ftMs_SpecialHi.c
 src/melee/ft/chara/ftMars/ftMs_SpecialHi.h
+src/melee/ft/chara/ftMars/ftMs_SpecialLw.c
 src/melee/ft/chara/ftMars/ftMs_SpecialLw.h
+src/melee/ft/chara/ftMars/ftMs_SpecialN.c
 src/melee/ft/chara/ftMars/ftMs_SpecialN.h
+src/melee/ft/chara/ftMars/ftMs_SpecialS.c
 src/melee/ft/chara/ftMars/ftMs_SpecialS.h
 src/melee/ft/chara/ftMars/types.h
 src/melee/ft/chara/ftMasterHand/forward.h

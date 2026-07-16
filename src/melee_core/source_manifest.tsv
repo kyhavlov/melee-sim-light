@@ -137,6 +137,11 @@ src/melee/ft/chara/ftFox/ftFx_SpecialHi.c	src/melee_core/gameplay/src/melee/ft/c
 src/melee/ft/chara/ftFox/ftFx_SpecialLw.c	src/melee_core/gameplay/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile
 src/melee/ft/chara/ftFox/ftFx_SpecialN.c	src/melee_core/gameplay/src/melee/ft/chara/ftFox/ftFx_SpecialN.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile
 src/melee/ft/chara/ftFox/ftFx_SpecialS.c	src/melee_core/gameplay/src/melee/ft/chara/ftFox/ftFx_SpecialS.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile
+src/melee/ft/chara/ftMars/ftMs_Init.c	src/melee_core/gameplay/src/melee/ft/chara/ftMars/ftMs_Init.c	Matching	marth-source-packet	compiled canonical Marth lifecycle, state registry, and data-owner callbacks
+src/melee/ft/chara/ftMars/ftMs_SpecialHi.c	src/melee_core/gameplay/src/melee/ft/chara/ftMars/ftMs_SpecialHi.c	Matching	marth-source-packet	compiled canonical Marth up-special owner
+src/melee/ft/chara/ftMars/ftMs_SpecialLw.c	src/melee_core/gameplay/src/melee/ft/chara/ftMars/ftMs_SpecialLw.c	Matching	marth-source-packet	compiled canonical Marth counter owner
+src/melee/ft/chara/ftMars/ftMs_SpecialN.c	src/melee_core/gameplay/src/melee/ft/chara/ftMars/ftMs_SpecialN.c	Matching	marth-source-packet	compiled canonical Marth neutral-special owner
+src/melee/ft/chara/ftMars/ftMs_SpecialS.c	src/melee_core/gameplay/src/melee/ft/chara/ftMars/ftMs_SpecialS.c	Matching	marth-source-packet	compiled canonical Marth side-special owner
 src/melee/ft/fighter.c	src/melee_core/gameplay/src/melee/ft/fighter.c	Matching	0002-headless-fox-fd-runtime.patch,0045-ground-shield-knockback-fmadds.patch	compiled directly from canonical source by src/melee_core/Makefile; headless adaptations from historical patch 0002 and retail fmadds translation for hosted builds from historical patch 0045
 src/melee/ft/ftCo_800C703C.c	src/melee_core/gameplay/src/melee/ft/ftCo_800C703C.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile
 src/melee/ft/ftCo_800C7434.c	src/melee_core/gameplay/src/melee/ft/ftCo_800C7434.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile

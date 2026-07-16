@@ -38,7 +38,7 @@ static void msl_effect_record_model_generator(int link_no, int bank,
     (void) link_no;
     (void) jobj;
     if (data == NULL || data->recording_common_model < 0 ||
-        data->recording_common_model >= 2)
+        data->recording_common_model >= MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY)
     {
         return;
     }
@@ -53,7 +53,7 @@ static void msl_effect_record_model_generator(int link_no, int bank,
 }
 
 static void msl_effect_record_model_start(MslCoreEffectData* data,
-                                          int model_id, int record_index)
+                                          int model_id)
 {
     EF_EffectDesc* desc = &data->banks[0].models[model_id];
     HSD_JObj* jobj;
@@ -70,7 +70,7 @@ static void msl_effect_record_model_start(MslCoreEffectData* data,
                        desc->model_desc.matanim_joint,
                        desc->model_desc.shapeanim_joint);
     HSD_JObjReqAnimAll(jobj, 0.0F);
-    data->recording_common_model = (s8) record_index;
+    data->recording_common_model = (s8) model_id;
     HSD_JObjAnimAll(jobj);
     data->recording_common_model = -1;
     HSD_JObjRemoveAll(jobj);
@@ -93,7 +93,9 @@ static void msl_effect_load_bank(MslCoreEffectData* data, int bank,
     }
     if (bank == 0) {
         effect_bank->models =
-            msl_native_effect_models(effect_bank->archive, symbol, 11);
+            msl_native_effect_models(
+                effect_bank->archive, symbol,
+                MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY);
         if (effect_bank->models == NULL) {
             fprintf(stderr, "%s has invalid common effect model data\n",
                     filename);
@@ -153,18 +155,21 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     data->recording_common_model = -1;
     msl_effect_load_bank(data, 0, "/EfCoData.dat", "effCommonDataTable");
     msl_effect_load_bank(data, 3, "/EfFxData.dat", "effFoxDataTable");
-    // efAsync_Dispatch effect 0x3E8 chooses common model 9 or 10, and
-    // efSync_Spawn immediately advances the chosen model's frame-zero
-    // animation. Record its data-defined DPtcl generator events once while
-    // allocation is legal; runtime replays only their RNG-bearing generator
-    // initialization through the immutable catalog below.
+    // efLib_Create queues each common model's frame-zero animation, and both
+    // efAsync_Dispatch and efSync_Spawn drain that queue before returning.
+    // Record its data-defined DPtcl generator events once while allocation is
+    // legal; runtime replays only their RNG-bearing generator initialization
+    // through the immutable catalog below.
     // refs/melee/src/melee/ef/{efasync.c::efAsync_Dispatch,
     //     efsync.c::efSync_Spawn,eflib.c::efLib_Cb_DPtcl}
     // refs/melee/src/sysdolphin/baselib/jobj.c::JObjUpdateFunc
     msl_effect_projection_bind(data, NULL);
     HSD_JObjSetDPtclCallback(msl_effect_record_model_generator);
-    msl_effect_record_model_start(data, 9, 0);
-    msl_effect_record_model_start(data, 10, 1);
+    for (int model_id = 0;
+         model_id < MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY; ++model_id)
+    {
+        msl_effect_record_model_start(data, model_id);
+    }
     HSD_JObjSetDPtclCallback(NULL);
 }
 
@@ -238,13 +243,14 @@ static void msl_effect_consume_generator_rng(s32 generator_id)
 static void msl_effect_consume_common_model_start(int model_id)
 {
     const MslCoreEffectModelStart* start;
-    int index = model_id - 9;
     int i;
 
-    if (index < 0 || index >= 2) {
+    if (model_id < 0 ||
+        model_id >= MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY)
+    {
         return;
     }
-    start = &msl_bound_effect_data->common_model_start[index];
+    start = &msl_bound_effect_data->common_model_start[model_id];
     for (i = 0; i < start->count; ++i) {
         msl_effect_consume_generator_rng(start->generator_ids[i]);
     }
@@ -429,7 +435,11 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
         break;
     }
     case 0x3EC:
+        msl_effect_consume_common_model_start(8);
+        (void) HSD_Randf();
+        break;
     case 0x3EE:
+        msl_effect_consume_common_model_start(0x27);
         (void) HSD_Randf();
         break;
     case 0x427: {

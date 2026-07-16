@@ -1161,6 +1161,42 @@ across the legal-stage aggregate. Retain all prior stage/space-animal results, c
 run bounded cross-target differentials while bringing owners up, then run every newly supported
 Marth replay to completion. Commit the Marth packet independently.
 
+Subphase B result: complete. The canonical build now compiles all five matching Marth source units:
+fighter lifecycle/data registration plus neutral, side, up, and down special owners. The hosted
+source registry publishes the complete admitted Marth callback rows, native DAT translation loads
+Marth attributes, animation tables, costumes, and reached article graphs directly from `PlMs.dat`,
+and the scalar/bootstrap character mapping admits Marth without a shared-system character proxy.
+
+The common closure gained source-exact handicap and live match-standing publication for grab escape
+timers, retail fmadds in both grab-timer expressions, and the retail fmsubs/fmadds boundary for
+rotated animation velocity used by Marth SpecialHi. Old Slippi streams can disable the later
+Cardinals 1.0 normalization per manifest entry while retaining UCF 0.84; the source dashback gate
+uses signed facing-relative input. Headless effect initialization now catalogs every reached common
+effect model's frame-zero generator events, and pure SSM metadata remains live even though audio
+playback is excluded, preserving gameplay-visible HSD RNG ownership without a sound device.
+
+The 19-replay focused gate is ten strict passes plus nine exact classifications across 179,882
+transitions, with zero open failures. Native and PPC produce identical complete fingerprints. The
+classifications comprise two magnifier damage ticks, two bounded Dolphin ULP profiles, four
+DamageFlyRoll decisions whose deterministic pre-gate state is exact but whose excluded post-input
+particle scheduler leaves replay stream phase unavailable, one mixed DeadUp/magnifier/RNG replay,
+and one 2008 Nintendont stream whose P3 post-frame-only fields become absence sentinels for its final
+710 rows. The RNG cases remain visible exact classifications rather than a bridge that would change
+free-running rollout semantics.
+
+The growing legal-stage singles gate now selects 51 aggregate entries and reports 32 strict passes,
+19 exact classifications, zero failures, and zero errors over 471,571 transitions at roughly 175k
+aggregate native frames/second. `Fox,Falco,Marth` is now the default validation character scope.
+
+Future ownership recorded by this packet:
+
+- `GameData`: immutable Marth fighter/archive attributes, motion and animation tables, costume
+  graphs, reached article graphs, common effect model/generator catalog, and SSM metadata tables;
+- `MatchState`: Marth fighter/special state, live match standings, player handicap/configuration,
+  capture timers, effect queues, controller/UCF history, and per-frame RNG state;
+- explicit presentation exclusions: audio playback/device handles, ongoing particle simulation,
+  magnifier render publication, and legacy replay rows that omit post-frame observations.
+
 #### Subphase C — Captain Falcon
 
 Add the complete reached Captain Falcon source closure with the same data, callback, scheduler, and

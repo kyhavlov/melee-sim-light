@@ -26,6 +26,8 @@ static MslCoreMatchRules* msl_bound_match_rules;
     (msl_bound_match_rules->brawl_offscreen_damage)
 #define msl_freeze_dead_up_fall_physics \
     (msl_bound_match_rules->freeze_dead_up_fall_physics)
+#define msl_ucf_cardinals_1_0_enabled \
+    (msl_bound_match_rules->ucf_cardinals_1_0_enabled)
 #define msl_match_frame_count (msl_bound_match_rules->frame_count)
 #define msl_match_ended (msl_bound_match_rules->ended)
 #define msl_ucf_pad (msl_bound_match_rules->ucf_pad)
@@ -80,7 +82,8 @@ void msl_core_bind_match_rules(MslCoreMatchRules* rules)
 void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
                                float damage_ratio, int online_fnmsubs_zero,
                                int brawl_offscreen_damage,
-                               int freeze_dead_up_fall_physics)
+                               int freeze_dead_up_fall_physics,
+                               int ucf_cardinals_1_0_enabled)
 {
     memset(rules, 0, sizeof(*rules));
     msl_core_bind_match_rules(rules);
@@ -89,6 +92,7 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
     msl_online_fnmsubs_zero = online_fnmsubs_zero != 0;
     msl_brawl_offscreen_damage = brawl_offscreen_damage != 0;
     msl_freeze_dead_up_fall_physics = freeze_dead_up_fall_physics != 0;
+    msl_ucf_cardinals_1_0_enabled = ucf_cardinals_1_0_enabled != 0;
 }
 
 bool msl_core_uses_online_fnmsubs_zero(void)
@@ -161,12 +165,17 @@ void msl_ucf_apply_pad_buffer(Fighter* fp)
     buffer->raw_y[1] = buffer->raw_y[0];
     buffer->raw_y[0] = buffer->pending_y;
 
-    // Fox always takes should_apply_cardinals' default branch. Zelda's
-    // teleport exception belongs to the later supported-character phase.
-    msl_ucf_apply_cardinal(buffer->pending_x, buffer->pending_y,
-                           &fp->input.lstick);
-    msl_ucf_apply_cardinal(buffer->pending_cx, buffer->pending_cy,
-                           &fp->input.cstick);
+    // UCF 1.0 cardinals is a separate patch from the UCF 0.84 mechanics that
+    // own this buffer. Preserve recordings made before the cardinal patch was
+    // enabled instead of inferring their input profile from replay rows.
+    // refs/ucf/src/pad_buffer/pad_buffer.cpp::gecko_entry
+    if (msl_ucf_cardinals_1_0_enabled) {
+        // Zelda's teleport exception belongs to the Sheik/Zelda packet.
+        msl_ucf_apply_cardinal(buffer->pending_x, buffer->pending_y,
+                               &fp->input.lstick);
+        msl_ucf_apply_cardinal(buffer->pending_cx, buffer->pending_cy,
+                               &fp->input.cstick);
+    }
 
     delta_y = (int) buffer->raw_y[0] - (int) buffer->raw_y[2];
     if (fp->input.lstick.y <= -0.6125F &&
@@ -191,7 +200,7 @@ void msl_ucf_apply_dashback(Fighter* fp)
     // ftCo_Turn_IASA 0x800C9A44 injection. The assembly reads the physical
     // current and two-frames-past raw X samples from HSD's five-entry ring.
     if (fp->x221F_b4 || fp->cur_anim_frame != 2.0F ||
-        (stick_x < 0.0F ? -stick_x : stick_x) < p_ftCommonData->x3C ||
+        stick_x * fp->facing_dir < p_ftCommonData->x3C ||
         fp->x670_timer_lstick_tilt_x > 1)
     {
         return;
@@ -301,10 +310,85 @@ int gm_8016B168(void) { return msl_is_teams; }
 int gm_8016B1C4(void) { return 0; }
 int gm_8016B204(void) { return 1; }
 float gm_8016B248(void) { return msl_damage_ratio; }
+static int msl_match_standings_score(int slot)
+{
+    int other;
+    int kos = 0;
+    int falls = Player_GetFalls(slot);
+    int self_destructs = (int) Player_GetSuicideCount(slot);
+
+    for (other = 0; other < 4; ++other) {
+        int count;
+        if (Player_GetPlayerSlotType(other) == Gm_PKind_NA) {
+            continue;
+        }
+        count = Player_GetKOsByPlayerIndex(slot, other);
+        if (other == slot) {
+            self_destructs += count;
+            falls += count;
+        } else if (!msl_is_teams ||
+                   Player_GetTeam(other) != Player_GetTeam(slot)) {
+            kos += count;
+        } else {
+            self_destructs += count;
+            falls += count;
+        }
+    }
+
+    // Standard stock VS uses -1 for the self-destruct score rule.
+    // refs/melee/src/melee/gm/gm_1601.c::{fn_8016588C,gm_80165AC0,
+    //     fn_80165E7C,fn_80165FA4}
+    return kos - (falls - self_destructs) - self_destructs;
+}
+
 int gm_8016C5C0(int slot)
 {
-    (void) slot;
-    return 0;
+    int other;
+    int score = msl_match_standings_score(slot);
+    int loser_rank = 0;
+    u8 seen_teams = 0;
+
+    // gm_8016C5C0 publishes MatchPlayerData::is_big_loser in singles and the
+    // equivalent team standing in teams. Recompute the bounded source table
+    // from the live Player statistics instead of retaining the scene-owned
+    // MatchEnd reporting aggregate.
+    // refs/melee/src/melee/gm/{gm_16AE.c::gm_8016C5C0,
+    //     gm_1601.c::gm_80166378}
+    for (other = 0; other < 4; ++other) {
+        if (other == slot ||
+            Player_GetPlayerSlotType(other) == Gm_PKind_NA) {
+            continue;
+        }
+        if (!msl_is_teams) {
+            if (score < msl_match_standings_score(other)) {
+                ++loser_rank;
+            }
+        } else if (Player_GetTeam(other) != Player_GetTeam(slot)) {
+            int i;
+            int own_team_score = 0;
+            int other_team_score = 0;
+            int other_team = Player_GetTeam(other);
+            if ((seen_teams & (1U << other_team)) != 0) {
+                continue;
+            }
+            seen_teams |= (u8) (1U << other_team);
+            for (i = 0; i < 4; ++i) {
+                if (Player_GetPlayerSlotType(i) == Gm_PKind_NA) {
+                    continue;
+                }
+                if (Player_GetTeam(i) == Player_GetTeam(slot)) {
+                    own_team_score += msl_match_standings_score(i);
+                }
+                if (Player_GetTeam(i) == other_team) {
+                    other_team_score += msl_match_standings_score(i);
+                }
+            }
+            if (own_team_score < other_team_score) {
+                ++loser_rank;
+            }
+        }
+    }
+    return loser_rank;
 }
 unsigned int gm_801A4BB8(void) { return 0; }
 bool gm_801693BC(int slot)

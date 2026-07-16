@@ -47,6 +47,7 @@ typedef struct MslCoreMatchPlayerConfig {
     // controller port; zero keeps the compact legacy slot default.
     uint8_t facing_and_port;
     uint8_t costume_id;
+    uint8_t handicap;
 } MslCoreMatchPlayerConfig;
 
 typedef struct MslCoreMatchConfig {
@@ -67,6 +68,11 @@ typedef struct MslCoreMatchConfig {
     uint8_t online_fnmsubs_zero;
     uint8_t brawl_offscreen_damage;
     uint8_t freeze_dead_up_fall_physics;
+    // UCF 0.84 and its 1.0 cardinal-coordinate patch are independently
+    // selectable in real Slippi recordings. Older recordings may contain
+    // UCF dashback/shield-drop behavior without cardinal snapping.
+    // refs/slippi-ssbm-asm/Output/InjectionLists/list_netplay.json
+    uint8_t ucf_cardinals_1_0_enabled;
     // Bit 0: Slippi 3.18+ FoD platform events; bit 1: Dream Land Whispy
     // direction events. A present stream is authoritative even on frames with
     // no event, where the last published value remains active.
@@ -146,7 +152,7 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 8, "MslCoreInputPlayer wire size");
 _Static_assert(sizeof(MslCoreInput) == 32, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 12, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 48, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 44, "MslCoreMatchConfig wire size");
+_Static_assert(sizeof(MslCoreMatchConfig) == 49, "MslCoreMatchConfig wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1022, "MslCoreCompare wire size");
 

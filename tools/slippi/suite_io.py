@@ -12,6 +12,7 @@ class SuiteReplay:
     ports: tuple[int, ...]
     stage_id: int | None = None
     characters: dict[str, str] | None = None
+    ucf_cardinals_1_0_enabled: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,11 @@ def load_suite(path: str | Path) -> ReplaySuite:
                 ports=ports,
                 stage_id=r.get("stage_id"),
                 characters=r.get("characters"),
+                ucf_cardinals_1_0_enabled=(
+                    bool(r["ucf_cardinals_1_0_enabled"])
+                    if "ucf_cardinals_1_0_enabled" in r
+                    else None
+                ),
             )
         )
     if any(len(r.ports) > 2 for r in replays) and team_attack_on is not True:
