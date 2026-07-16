@@ -194,3 +194,26 @@ Current census results:
 Correctness gate: the complete 153-replay native suite retained 63 exact passes, 90 existing exact
 classifications, zero XPASS/fail/error, and all full-output locks over 1,415,476 compared frames.
 No classification or output lock changed.
+
+### Production projection boundary
+
+The scalar step no longer builds the complete 1,022-byte replay-forensic row on every production
+frame. Policy observations now read fighter, stage, item, and terminal owners directly. A compact
+per-match snapshot retains only post-gameplay/pre-render values that the following headless render
+publication can mutate (offline DeadUp position and camera visibility), so lazy forensic output
+continues to represent Slippi's recorder boundary exactly. The benchmark setup also verifies a
+bounded original-versus-restored replay continuation after destroying the source Match; this makes
+destination-independent savestate relocation a prerequisite for every accepted timing run.
+
+Slippi's four generic item-variable bytes sometimes expose presentation pointers, padding, or
+fixed-pool residue rather than gameplay. The existing source-backed validation ownership policy is
+now shared with production projection. Forensic rows remain raw; policy observations and viewer
+output zero only the lanes already excluded from exact output fingerprints. This removed native
+address dependence from production digests without adding or widening a classification.
+
+On CPU 8 with the still-sharded 256-logical/16-resident workload, the retained result is 16,997
+complete FPS and 17,307 step-only FPS with digest `7cdab0237948d61f`. A repeat produced the same
+digest. This is only a small improvement over the 16,722 FPS Phase 7 baseline, as expected: the
+forensic projection was measurable but not the dominant cost. The complete 153-replay gate remains
+63 exact passes, 90 existing exact classifications, zero XPASS/fail/error, and unchanged output
+locks over 1,415,476 compared frames.

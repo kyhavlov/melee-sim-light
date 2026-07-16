@@ -1056,8 +1056,14 @@ static int match_construct(MslCoreMatch* match,
     // simulated frame, so constructor-time random choices do not consume it.
     seed = match->config.frame_pre_random_seed;
     seed_ptr = &seed;
+    match->last_frame_seed = seed;
+    for (i = 0; i < match->config.num_players; ++i) {
+        Fighter* fp = GET_FIGHTER(match->fighters[i]);
+        match->output_pos_x[i] = fp->cur_pos.x;
+        match->output_pos_y[i] = fp->cur_pos.y;
+        match->output_render_visibility[i] = fp->x221F_b0;
+    }
     match->random_seed = seed;
-    write_compare(match, seed, &match->output);
     return 0;
 }
 
@@ -1235,11 +1241,9 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
 #endif
 }
 
-static void write_item_compare(uint8_t* out, int slot, Item_GObj* gobj)
+static void write_item_compare(uint8_t* item_out, Item_GObj* gobj)
 {
     Item* item = GET_ITEM(gobj);
-    uint8_t* item_out = out + offsetof(MslCoreCompare, items) +
-                        (size_t) slot * sizeof(MslCoreItem);
     int8_t owner = -1;
 
     // Recording/SendItemInfo.s follows the owner GObj and reads the player
@@ -1280,6 +1284,21 @@ static void write_item_compare(uint8_t* out, int slot, Item_GObj* gobj)
     item_out[offsetof(MslCoreItem, misc1)] = item_var_source_byte(item, 7);
     item_out[offsetof(MslCoreItem, misc2)] = item_var_source_byte(item, 0x17);
     item_out[offsetof(MslCoreItem, misc3)] = item_var_source_byte(item, 0x1B);
+}
+
+void msl_core_match_write_items(const MslCoreMatch* match,
+                                MslCoreItem items[MSL_CORE_MAX_ITEMS])
+{
+    Item_GObj* item_gobj;
+    int item_slot = 0;
+
+    memset(items, 0, sizeof(MslCoreItem) * MSL_CORE_MAX_ITEMS);
+    msl_core_bind_match((MslCoreMatch*) match);
+    item_gobj = (Item_GObj*) HSD_GObj_Entities->items;
+    while (item_gobj != NULL && item_slot < MSL_CORE_MAX_ITEMS) {
+        write_item_compare((uint8_t*) &items[item_slot++], item_gobj);
+        item_gobj = (Item_GObj*) item_gobj->next;
+    }
 }
 
 static uint8_t ppc_state_bit(unsigned int value, unsigned int index)
@@ -1344,8 +1363,10 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
 
         out[offsetof(MslCoreCompare, team_id) + i] = fp->team;
         out[offsetof(MslCoreCompare, char_id) + i] = fp->kind;
-        put_player_f32(out, offsetof(MslCoreCompare, pos_x), i, fp->cur_pos.x);
-        put_player_f32(out, offsetof(MslCoreCompare, pos_y), i, fp->cur_pos.y);
+        put_player_f32(out, offsetof(MslCoreCompare, pos_x), i,
+                       match->output_pos_x[i]);
+        put_player_f32(out, offsetof(MslCoreCompare, pos_y), i,
+                       match->output_pos_y[i]);
         put_player_f32(out, offsetof(MslCoreCompare, speed_air_x_self), i,
                        fp->self_vel.x);
         put_player_f32(out, offsetof(MslCoreCompare, speed_ground_x_self), i,
@@ -1399,18 +1420,14 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
         out[offsetof(MslCoreCompare, last_hit_by) + i] =
             (uint8_t) fp->dmg.x18c4_source_ply;
         pack_fighter_state_flags(fp, state_flags);
+        state_flags[4] =
+            (state_flags[4] & 0x7FU) |
+            ppc_state_bit(match->output_render_visibility[i], 0);
         memcpy(out + offsetof(MslCoreCompare, state_flags) + i * 5, state_flags,
                sizeof(state_flags));
     }
 
-    {
-        Item_GObj* item_gobj = (Item_GObj*) HSD_GObj_Entities->items;
-        int item_slot = 0;
-        while (item_gobj != NULL && item_slot < MSL_CORE_MAX_ITEMS) {
-            write_item_compare(out, item_slot++, item_gobj);
-            item_gobj = (Item_GObj*) item_gobj->next;
-        }
-    }
+    msl_core_match_write_items(match, compare->items);
 }
 
 static void apply_replay_stage_events(MslCoreMatch* match)
@@ -1590,7 +1607,13 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
     // preceding render in the exported row.
     // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     match->frame_id += 1;
-    write_compare(match, frame_seed, &match->output);
+    match->last_frame_seed = frame_seed;
+    for (i = 0; i < match->config.num_players; ++i) {
+        Fighter* fp = GET_FIGHTER(match->fighters[i]);
+        match->output_pos_x[i] = fp->cur_pos.x;
+        match->output_pos_y[i] = fp->cur_pos.y;
+        match->output_render_visibility[i] = fp->x221F_b0;
+    }
 
     // The subsequent retail render pass invokes ftDrawCommon_80080E18.
     // Preserve its camera-visibility publication for the next gameplay/
@@ -1641,5 +1664,8 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
 
 const MslCoreCompare* msl_core_match_output(const MslCoreMatch* match)
 {
+    msl_core_bind_match((MslCoreMatch*) match);
+    write_compare(match, match->last_frame_seed,
+                  &((MslCoreMatch*) match)->output);
     return &match->output;
 }

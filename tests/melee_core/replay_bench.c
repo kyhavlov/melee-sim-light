@@ -328,8 +328,12 @@ static int run_sharded_pass(const MslCoreGameData* game_data, ReplayCase* cases,
 static int reset_seed_create(const MslCoreGameData* game_data, ReplayCase* cases,
                              uint32_t case_count, uint32_t ticks, ResetSeed* seed) {
   MslCoreBatch* batch = NULL;
+  MslCoreState* expected_states = NULL;
+  MslCoreObservation* expected_observations = NULL;
+  MslCoreTerminal* expected_terminals = NULL;
   uint32_t case_index = 0;
   uint32_t prefix;
+  uint32_t verify_count;
   uint32_t i;
   size_t written = 0;
   memset(seed, 0, sizeof(*seed));
@@ -362,15 +366,103 @@ static int reset_seed_create(const MslCoreGameData* game_data, ReplayCase* cases
       written != seed->snapshot_size) {
     goto fail;
   }
+  verify_count = cases[case_index].header->frame_count - prefix;
+  if (verify_count > 128) {
+    verify_count = 128;
+  }
+  if (verify_count != 0) {
+    uint8_t viewpoint = 0;
+    expected_states = calloc(verify_count, sizeof(*expected_states));
+    expected_observations = calloc(verify_count, sizeof(*expected_observations));
+    expected_terminals = calloc(verify_count, sizeof(*expected_terminals));
+    if (expected_states == NULL || expected_observations == NULL || expected_terminals == NULL) {
+      goto fail;
+    }
+    for (i = 0; i < verify_count; ++i) {
+      if (msl_core_batch_step_matches(batch, &cases[case_index].inputs[prefix + i],
+                                      sizeof(MslCoreInput), NULL, 0) != MSL_CORE_OK ||
+          msl_core_batch_write_state(batch, &expected_states[i], sizeof(expected_states[i]), NULL,
+                                     0) != MSL_CORE_OK ||
+          msl_core_batch_write_observation(batch, &viewpoint, sizeof(viewpoint),
+                                           &expected_observations[i],
+                                           sizeof(expected_observations[i]), NULL, 0) !=
+              MSL_CORE_OK ||
+          msl_core_batch_write_terminal(batch, &expected_terminals[i],
+                                        sizeof(expected_terminals[i]), -1, NULL, 0) != MSL_CORE_OK) {
+        goto fail;
+      }
+    }
+  }
+  msl_core_batch_destroy(batch);
+  batch = NULL;
+  if (verify_count != 0) {
+    uint8_t viewpoint = 0;
+    MslCoreState actual_state;
+    MslCoreObservation actual_observation;
+    MslCoreTerminal actual_terminal;
+    if (msl_core_batch_create(game_data, 1, &batch) != MSL_CORE_OK ||
+        msl_core_batch_restore_match(batch, 0, seed->snapshot, seed->snapshot_size) != MSL_CORE_OK) {
+      goto fail;
+    }
+    for (i = 0; i < verify_count; ++i) {
+      const char* projection = NULL;
+      const uint8_t* expected = NULL;
+      const uint8_t* actual = NULL;
+      size_t size = 0;
+      size_t byte;
+      if (msl_core_batch_step_matches(batch, &cases[case_index].inputs[prefix + i],
+                                      sizeof(MslCoreInput), NULL, 0) != MSL_CORE_OK ||
+          msl_core_batch_write_state(batch, &actual_state, sizeof(actual_state), NULL, 0) !=
+              MSL_CORE_OK ||
+          msl_core_batch_write_observation(batch, &viewpoint, sizeof(viewpoint),
+                                           &actual_observation, sizeof(actual_observation), NULL,
+                                           0) != MSL_CORE_OK ||
+          msl_core_batch_write_terminal(batch, &actual_terminal, sizeof(actual_terminal), -1, NULL,
+                                        0) != MSL_CORE_OK) {
+        goto fail;
+      }
+      if (memcmp(&actual_state, &expected_states[i], sizeof(actual_state)) != 0) {
+        projection = "state";
+        expected = (const uint8_t*)&expected_states[i];
+        actual = (const uint8_t*)&actual_state;
+        size = sizeof(actual_state);
+      } else if (memcmp(&actual_observation, &expected_observations[i],
+                        sizeof(actual_observation)) != 0) {
+        projection = "observation";
+        expected = (const uint8_t*)&expected_observations[i];
+        actual = (const uint8_t*)&actual_observation;
+        size = sizeof(actual_observation);
+      } else if (memcmp(&actual_terminal, &expected_terminals[i], sizeof(actual_terminal)) != 0) {
+        projection = "terminal";
+        expected = (const uint8_t*)&expected_terminals[i];
+        actual = (const uint8_t*)&actual_terminal;
+        size = sizeof(actual_terminal);
+      }
+      if (projection != NULL) {
+        for (byte = 0; byte < size && expected[byte] == actual[byte]; ++byte) {
+        }
+        fprintf(stderr,
+                "savestate continuation differs: case=%u frame=%u projection=%s byte=%zu:%02x/%02x\n",
+                case_index, prefix + i, projection, byte, expected[byte], actual[byte]);
+        goto fail;
+      }
+    }
+  }
   seed->case_index = case_index;
   seed->frame_index = prefix;
   msl_core_batch_destroy(batch);
+  free(expected_states);
+  free(expected_observations);
+  free(expected_terminals);
   return 0;
 
 fail:
   if (batch != NULL) {
     msl_core_batch_destroy(batch);
   }
+  free(expected_states);
+  free(expected_observations);
+  free(expected_terminals);
   free(seed->snapshot);
   memset(seed, 0, sizeof(*seed));
   return -1;

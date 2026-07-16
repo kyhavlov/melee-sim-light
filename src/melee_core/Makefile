@@ -343,7 +343,7 @@ validation: runtime validator
 
 validator: $(VALIDATION_NATIVE)
 
-$(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(CORE)/runtime/wire.h $(CORE)/runtime/benchmark_wire.h
+$(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(CORE)/runtime/wire.h $(CORE)/runtime/benchmark_wire.h $(CORE)/runtime/item_projection.h
 	@mkdir -p "$(@D)"
 	@PY_INCLUDE="$$($(PY) -c 'import sysconfig; print(sysconfig.get_path("include"))')"; \
 		"$(HOST_CC)" -O3 -std=c11 -fPIC -shared -Wall -Wextra \

@@ -1,4 +1,5 @@
 #include "runtime/scalar.h"
+#include "runtime/observation.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -136,6 +137,39 @@ static void config_init(MslCoreMatchConfig* config, uint8_t stage_id,
     config->players[1].char_id = char_id;
 }
 
+static int observation_projection_matches(const MslCoreMatch* match,
+                                          const char* phase)
+{
+    MslCoreObservation direct;
+    MslCoreObservation reference;
+    uint8_t viewpoint;
+    for (viewpoint = 0; viewpoint < match->config.num_players; ++viewpoint) {
+        size_t byte;
+        if (msl_core_match_write_observation(match, viewpoint, &direct) != 0 ||
+            msl_core_match_write_observation_from_compare(
+                match, viewpoint, &reference) != 0)
+        {
+            return 0;
+        }
+        if (memcmp(&direct, &reference, sizeof(direct)) == 0) {
+            continue;
+        }
+        for (byte = 0; byte < sizeof(direct) &&
+                       ((const uint8_t*) &direct)[byte] ==
+                           ((const uint8_t*) &reference)[byte];
+             ++byte)
+        {
+        }
+        fprintf(stderr,
+                "%s observation projection differs: viewpoint=%u "
+                "byte=%zu direct=%02x reference=%02x\n",
+                phase, viewpoint, byte, ((const uint8_t*) &direct)[byte],
+                ((const uint8_t*) &reference)[byte]);
+        return 0;
+    }
+    return 1;
+}
+
 int main(int argc, char** argv)
 {
     enum {
@@ -219,6 +253,11 @@ int main(int argc, char** argv)
             }
         }
         expected[match_index] = *msl_core_match_output(&reference);
+        if (!observation_projection_matches(&reference,
+                                            "isolated stepping"))
+        {
+            return 1;
+        }
         if (!raw_objects_have_no_managed_pointers(&reference,
                                                   "isolated stepping"))
         {

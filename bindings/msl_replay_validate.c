@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 #include "runtime/benchmark_wire.h"
+#include "runtime/item_projection.h"
 #include "runtime/wire.h"
 
 extern char** environ;
@@ -1378,166 +1379,20 @@ static const ItemFieldSpec item_compare_fields[] = {
 
 #undef ITEM_SPEC
 
-enum {
-  // refs/melee/src/melee/it/forward.h::It_Kind_Dosei.
-  ITEM_KIND_MR_SATURN = 7,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Laser.
-  ITEM_KIND_FOX_LASER = 54,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Laser.
-  ITEM_KIND_FALCO_LASER = 55,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Illusion.
-  ITEM_KIND_FOX_ILLUSION = 56,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Phantasm.
-  ITEM_KIND_FALCO_PHANTASM = 57,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Blaster.  Keep this
-  // protocol value local to the native replay adapter rather than making it
-  // depend on the PPC runtime's headers.
-  ITEM_KIND_FOX_BLASTER = 74,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Blaster.
-  ITEM_KIND_FALCO_BLASTER = 75,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Seak_NeedleHeld.
-  ITEM_KIND_SHEIK_NEEDLE_HELD = 80,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Seak_NeedleThrow.
-  ITEM_KIND_SHEIK_NEEDLE_THROWN = 79,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Seak_Vanish.
-  ITEM_KIND_SHEIK_VANISH = 85,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Seak_Chain.
-  ITEM_KIND_SHEIK_CHAIN = 97,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Explode.
-  ITEM_KIND_PEACH_EXPLODE = 98,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Turnip.
-  ITEM_KIND_PEACH_TURNIP = 99,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Parasol.
-  ITEM_KIND_PEACH_PARASOL = 103,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Toad.
-  ITEM_KIND_PEACH_TOAD = 104,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Peach_ToadSpore.
-  ITEM_KIND_PEACH_TOAD_SPORE = 111,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Zelda_DinFire.
-  ITEM_KIND_ZELDA_DIN_FIRE = 108,
-  // refs/melee/src/melee/it/forward.h::It_Kind_Zelda_DinFire_Explode.
-  ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE = 109,
-};
-
 static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemFieldSpec* spec) {
-  if (item->type == ITEM_KIND_MR_SATURN &&
-      (item->state == 1 || item->state == 4 || item->state == 5) &&
-      (spec->offset == offsetof(MslCoreItem, misc2) ||
-       spec->offset == offsetof(MslCoreItem, misc3))) {
-    // Mr. Saturn's held/thrown callbacks do not initialize or update xDE4.
-    // SendItemInfo.s therefore exposes fixed-pool residue at xDEB/xDEF until
-    // an article state that explicitly owns the historical-position vector.
-    // Keep those bytes strict in states 0, 2, 3, and 6..11. State 1's entry
-    // row precedes its first animation-owned xDE4 publication, so the generic
-    // bytes are not uniformly initialized across that state either.
-    // refs/melee/src/melee/it/items/itdosei.c::{
-    //   itDosei_Logic7_PickedUp,itDosei_UnkMotion5_Anim,
-    //   itDosei_UnkMotion6_Anim,itDosei_80281C6C}
-    // refs/slippi-ssbm-asm/Recording/SendItemInfo.s
-    return 0;
+  int misc_index;
+  if (spec->offset == offsetof(MslCoreItem, misc0)) {
+    misc_index = 0;
+  } else if (spec->offset == offsetof(MslCoreItem, misc1)) {
+    misc_index = 1;
+  } else if (spec->offset == offsetof(MslCoreItem, misc2)) {
+    misc_index = 2;
+  } else if (spec->offset == offsetof(MslCoreItem, misc3)) {
+    misc_index = 3;
+  } else {
+    return 1;
   }
-
-  if ((item->type == ITEM_KIND_FOX_BLASTER || item->type == ITEM_KIND_FALCO_BLASTER) &&
-      (spec->offset == offsetof(MslCoreItem, misc2) ||
-       spec->offset == offsetof(MslCoreItem, misc3))) {
-    // SendItemInfo.s samples bytes xDEB/xDEF generically.  For Fox's blaster
-    // those bytes are the low bytes of xDE4[1]/xDE4[2], effect-object
-    // pointers populated by itfoxblaster.c::it_802ADF10.  Their numeric
-    // values are presentation allocator addresses, not deterministic
-    // gameplay/article state in a headless process.
-    return 0;
-  }
-  if ((item->type == ITEM_KIND_FOX_LASER || item->type == ITEM_KIND_FALCO_LASER) &&
-      spec->offset == offsetof(MslCoreItem, misc3)) {
-    // SendItemInfo.s samples xDEF, but itFoxLaser_ItemVars ends at xDEC
-    // (refs/melee/src/melee/it/itCharItems.h). For a laser this lane is
-    // unowned allocator residue beyond the defined article state.
-    return 0;
-  }
-  if ((item->type == ITEM_KIND_FOX_ILLUSION || item->type == ITEM_KIND_FALCO_PHANTASM) &&
-      spec->offset >= offsetof(MslCoreItem, misc0) &&
-      spec->offset <= offsetof(MslCoreItem, misc3)) {
-    // itFoxIllusion_ItemVars contains a model-joint pointer at xDD4, an
-    // unused xDD8 lane, and a presentation JObj pointer at xDDC; it ends at
-    // xDE0. SendItemInfo.s therefore records pointer bytes or unowned
-    // allocator residue in all four generic misc positions for this kind.
-    // refs/melee/src/melee/it/{itCharItems.h,items/itfoxillusion.c}
-    return 0;
-  }
-  if (item->type == ITEM_KIND_SHEIK_NEEDLE_HELD && spec->offset >= offsetof(MslCoreItem, misc0) &&
-      spec->offset <= offsetof(MslCoreItem, misc3)) {
-    // The held-needle union owns only a fighter pointer at xDD4. The four
-    // generic Slippi samples are therefore allocator-address bytes or bytes
-    // beyond the declared article state; neither is deterministic gameplay.
-    // refs/melee/src/melee/it/{itCharItems.h,
-    //   items/itseakneedleheld.c}
-    return 0;
-  }
-  if (item->type == ITEM_KIND_SHEIK_NEEDLE_THROWN &&
-      (spec->offset == offsetof(MslCoreItem, misc0) ||
-       spec->offset == offsetof(MslCoreItem, misc1))) {
-    // The thrown-needle constructor never initializes xDD4/xDD8. Slippi's
-    // first two generic samples expose those allocator-residue bytes; later
-    // samples come from the initialized historical-position vector and remain
-    // gameplay-bearing.
-    // refs/melee/src/melee/it/{itCharItems.h,
-    //   items/itseakneedlethrown.c::it_802AFD8C}
-    return 0;
-  }
-  if (item->type == ITEM_KIND_SHEIK_VANISH && spec->offset >= offsetof(MslCoreItem, misc0) &&
-      spec->offset <= offsetof(MslCoreItem, misc3)) {
-    // Vanish owns no item-variable struct. SendItemInfo's generic bytes are
-    // untouched fixed-pool residue rather than source gameplay state.
-    // refs/melee/src/melee/it/items/itseakvanish.c
-    return 0;
-  }
-  if (item->type == ITEM_KIND_SHEIK_CHAIN && (spec->offset == offsetof(MslCoreItem, misc0) ||
-                                              spec->offset == offsetof(MslCoreItem, misc1))) {
-    // The first two generic samples are low bytes of ItemLink pointers. Their
-    // allocator addresses are process-local; the later x14/x18 scalar lanes
-    // remain compared through the source-layout serializer.
-    // refs/melee/src/melee/it/itCharItems.h::itSeakChain_ItemVars
-    return 0;
-  }
-  if ((item->type == ITEM_KIND_PEACH_EXPLODE || item->type == ITEM_KIND_PEACH_PARASOL ||
-       item->type == ITEM_KIND_PEACH_TOAD || item->type == ITEM_KIND_PEACH_TOAD_SPORE) &&
-      spec->offset >= offsetof(MslCoreItem, misc0) &&
-      spec->offset <= offsetof(MslCoreItem, misc3)) {
-    // These article owners declare no item-variable payload. SendItemInfo's
-    // generic xDD7/xDDB/xDEB/xDEF samples are fixed-pool residue rather than
-    // gameplay state.
-    // refs/melee/src/melee/it/items/{itpeachexplode.c,
-    //   itpeachparasol.c,itpeachtoad.c,itpeachtoadspore.c}
-    return 0;
-  }
-  if (item->type == ITEM_KIND_PEACH_TURNIP && (spec->offset == offsetof(MslCoreItem, misc0) ||
-                                               spec->offset == offsetof(MslCoreItem, misc2) ||
-                                               spec->offset == offsetof(MslCoreItem, misc3))) {
-    // xDD7 is padding after the one-byte flag, xDEB belongs to the Bob-omb-only
-    // scale lane and is not initialized for turnips, and xDEF lies beyond the
-    // declared turnip variables. The xDDB sample remains the gameplay-bearing
-    // turnip face index.
-    // refs/melee/src/melee/it/itCharItems.h::itPeachTurnip_ItemVars
-    // refs/melee/src/melee/it/items/itpeachturnip.c::it_802BD4AC
-    return 0;
-  }
-  if (item->type == ITEM_KIND_ZELDA_DIN_FIRE && spec->offset == offsetof(MslCoreItem, misc0)) {
-    // The projectile's first source word is explicitly padding and is not
-    // initialized by it_802C1590. Slippi exposes fixed-pool residue there.
-    // refs/melee/src/melee/it/{itCommonItems.h,
-    //   items/itzeldadinfire.c::it_802C1590}
-    return 0;
-  }
-  if (item->type == ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE &&
-      (spec->offset == offsetof(MslCoreItem, misc2) ||
-       spec->offset == offsetof(MslCoreItem, misc3))) {
-    // The declared explosion variables end at source offset +0x10. Slippi's
-    // +0x17/+0x1B samples are unowned fixed-pool residue beyond that struct.
-    // refs/melee/src/melee/it/itCharItems.h::
-    //   itZeldaDinFireExplode_ItemVars
-    return 0;
-  }
-  return 1;
+  return (msl_core_item_gameplay_misc_mask(item->type, item->state) & (1U << misc_index)) != 0;
 }
 
 static void fingerprint_actual_output(ValidationResult* result, const MslCoreCompare* actual) {
@@ -1652,7 +1507,7 @@ static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t 
              spec->offset == offsetof(MslCoreItem, instance_id)) ||
             !item_field_is_gameplay_state(&expected.items[slot], spec) ||
             (!expected.items[slot].exists &&
-             actual->items[slot].type == ITEM_KIND_SHEIK_NEEDLE_THROWN &&
+             actual->items[slot].type == MSL_CORE_ITEM_KIND_SHEIK_NEEDLE_THROWN &&
              !item_field_is_gameplay_state(&actual->items[slot], spec))) {
           // When a classified item-count divergence places a thrown needle
           // against an empty expected slot, its xDD4/xDD8 bytes are still

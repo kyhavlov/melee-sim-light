@@ -98,6 +98,10 @@ typedef struct MslCoreMatch {
 #endif
     MslMemoryContext memory;
     int32_t frame_id;
+    uint32_t last_frame_seed;
+    float output_pos_x[MSL_CORE_MAX_PLAYERS];
+    float output_pos_y[MSL_CORE_MAX_PLAYERS];
+    uint8_t output_render_visibility[MSL_CORE_MAX_PLAYERS];
     uint32_t random_seed;
     MslCoreCompare output;
 } MslCoreMatch;
@@ -116,5 +120,7 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
                         uint32_t frame_seed,
                         const MslCoreStageEvents* stage_events);
 const MslCoreCompare* msl_core_match_output(const MslCoreMatch* match);
+void msl_core_match_write_items(const MslCoreMatch* match,
+                                MslCoreItem items[MSL_CORE_MAX_ITEMS]);
 
 #endif

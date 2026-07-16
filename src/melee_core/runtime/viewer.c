@@ -7,6 +7,7 @@
 #include "gr/types.h"
 #include "lb/types.h"
 #include "runtime/context.h"
+#include "runtime/observation.h"
 #include "runtime/scalar.h"
 
 #include <math.h>
@@ -289,6 +290,7 @@ void msl_core_match_write_viewer(const MslCoreMatch* match,
     }
     memcpy(out + offsetof(MslCoreViewerState, items), compare->items,
            sizeof(compare->items));
+    msl_core_canonicalize_production_items(output->items);
     write_stage(match, out + offsetof(MslCoreViewerState, stage));
     msl_camera_get_render_transform(&eye, &interest, &fov);
     put_f32(out,
