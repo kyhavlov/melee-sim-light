@@ -15,6 +15,7 @@ class SuiteReplay:
     ucf_cardinals_1_0_enabled: bool | None = None
     ucf_shield_sdi_enabled: bool | None = None
     ucf_sdi_enabled: bool | None = None
+    played_on: str | None = None
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,7 @@ def load_suite(path: str | Path) -> ReplaySuite:
                     if "ucf_sdi_enabled" in r
                     else None
                 ),
+                played_on=(str(r["played_on"]) if "played_on" in r else None),
             )
         )
     if any(len(r.ports) > 2 for r in replays) and team_attack_on is not True:

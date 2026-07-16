@@ -64,8 +64,12 @@ typedef struct ReplayPlayer {
   Primitive buttons;
   Primitive main_x;
   Primitive main_y;
+  Primitive nml_main_x;
+  Primitive nml_main_y;
   Primitive c_x;
   Primitive c_y;
+  Primitive nml_c_x;
+  Primitive nml_c_y;
   uint8_t cstick_from_processed;
   Primitive trigger_l;
   Primitive trigger_r;
@@ -503,6 +507,7 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
   ArrowNode velocities;
   ArrowNode raw_c_x;
   ArrowNode raw_c_y;
+  ArrowNode joystick;
   ArrowNode cstick;
   int has_raw_c_x;
   int has_raw_c_y;
@@ -523,6 +528,14 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
   FIELD(pre, "buttons_physical", "S", player->buttons);
   FIELD(pre, "raw_analog_x", "c", player->main_x);
   FIELD(pre, "raw_analog_y", "c", player->main_y);
+  // Slippi playback restores normalized gameplay axes to Fighter input state
+  // and physical bytes to UCF's raw-input buffer as separate observations.
+  // refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm
+  if (node_child(pre, "joystick", &joystick, error, error_size) != 0 ||
+      primitive_child(joystick, "x", "f", &player->nml_main_x, error, error_size) != 0 ||
+      primitive_child(joystick, "y", "f", &player->nml_main_y, error, error_size) != 0) {
+    return -1;
+  }
   has_raw_c_x = node_child_optional(pre, "raw_analog_cstick_x", &raw_c_x, error, error_size);
   has_raw_c_y = node_child_optional(pre, "raw_analog_cstick_y", &raw_c_y, error, error_size);
   if (has_raw_c_x < 0 || has_raw_c_y < 0) {
@@ -549,6 +562,11 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
       return -1;
     }
     player->cstick_from_processed = 1;
+  }
+  if (node_child(pre, "cstick", &cstick, error, error_size) != 0 ||
+      primitive_child(cstick, "x", "f", &player->nml_c_x, error, error_size) != 0 ||
+      primitive_child(cstick, "y", "f", &player->nml_c_y, error, error_size) != 0) {
+    return -1;
   }
   if (node_child(pre, "triggers_physical", &node, error, error_size) != 0) {
     return -1;
@@ -866,6 +884,11 @@ static void build_input(const ReplayView* replay, const FrameRows* rows, int64_t
       dst->c_x = get_i8(&src->c_x, raw);
       dst->c_y = get_i8(&src->c_y, raw);
     }
+    dst->nml_main_x = processed_stick_i8(get_f32(&src->nml_main_x, raw));
+    dst->nml_main_y = processed_stick_i8(get_f32(&src->nml_main_y, raw));
+    dst->nml_c_x = processed_stick_i8(get_f32(&src->nml_c_x, raw));
+    dst->nml_c_y = processed_stick_i8(get_f32(&src->nml_c_y, raw));
+    dst->nml_valid = MSL_CORE_INPUT_NML_MAIN_VALID | MSL_CORE_INPUT_NML_C_VALID;
     dst->l = trigger_u8(get_f32(&src->trigger_l, raw));
     dst->r = trigger_u8(get_f32(&src->trigger_r, raw));
   }
@@ -1976,11 +1999,11 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   }
   for (i = 0; i < replay.num_players; ++i) {
     uint8_t character = get_u8(&replay.players[i].character, rows.player_raw[i][0]);
-    if (character != 1 && character != 2 && character != 7 && character != 18 && character != 19 &&
-        character != 22) {
+    if (character != 1 && character != 2 && character != 7 && character != 15 && character != 18 &&
+        character != 19 && character != 22) {
       PyErr_SetString(PyExc_ValueError,
-                      "Melee core requires Fox, Captain Falcon, Sheik, Marth, Zelda, or Falco "
-                      "players");
+                      "Melee core requires Fox, Captain Falcon, Sheik, Jigglypuff, Marth, Zelda, "
+                      "or Falco players");
       goto done;
     }
   }

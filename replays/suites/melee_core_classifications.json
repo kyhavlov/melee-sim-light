@@ -1997,6 +1997,353 @@
         },
         "ppc": "native"
       }
+    },
+    {
+      "replay": "replays/validation/puff/specials.slpz",
+      "id": "scene-standings-cache-gap",
+      "owner": "MatchEnd loser-rank cache used by DamageSong",
+      "rationale": "Puff's imported Sing and common DamageSong callbacks are source-exact. The residual starts when the minimal headless gm_8016C5C0 projection supplies a loser rank one above retail's scene-owned MatchEnd cache, shortening one Sing timer by exactly 15 frames; action and timer consequences reconverge for the final 977 transitions. This classification leaves the scene standings aggregate as explicit debt rather than fitting Sing or the replay row.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c::ftCo_800C318C",
+        "refs/melee/src/melee/gm/gm_16AE.c::gm_8016C5C0",
+        "refs/melee/src/melee/gm/gm_1601.c::gm_80166378"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7653,
+          "matched_frames": 7245,
+          "mismatched_frames": 408,
+          "exact_prefix_frames": 4737,
+          "strict_suffix_frames": 977,
+          "first_mismatch_frame": 4615,
+          "last_mismatch_frame": 6553,
+          "mismatch_count": 849,
+          "mismatch_fingerprint": "6ac6d51e10636772",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "6ef48957e2e1841a78db5c00358f7f0754a1187e3c481acd44a1c785e021315f"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/rollout_ends_ys.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "Puff Rollout and fighter-motion float execution profile",
+      "rationale": "The matching Puff Rollout source and common fighter callbacks leave only forty isolated rows of one-ULP self velocity or carried position. Native and PPC agree on the complete fingerprint, discrete gameplay remains aligned, and the replay returns to exact output after every interval.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 5528,
+          "matched_frames": 5488,
+          "mismatched_frames": 40,
+          "exact_prefix_frames": 2504,
+          "strict_suffix_frames": 27,
+          "first_mismatch_frame": 2382,
+          "last_mismatch_frame": 5378,
+          "mismatch_count": 73,
+          "mismatch_fingerprint": "1ebcb1215bfbbaf4",
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "a6448d8fa41783c630647f8af472ec07234d64248e06542068ce991605225cfc"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/wallbounce_teeter_ys.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "Puff Rollout wall-contact and fighter-position float execution profile",
+      "rationale": "The matching Rollout source and imported wall-collision owner produce the same discrete wall-bounce and teeter sequence. The complete residual is a bounded one-to-two-ULP position interval followed by 596 exact transitions; native and PPC agree bit-for-bit.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c",
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "refs/melee/src/melee/lb/lbcollision.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 2412,
+          "matched_frames": 2213,
+          "mismatched_frames": 199,
+          "exact_prefix_frames": 1049,
+          "strict_suffix_frames": 596,
+          "first_mismatch_frame": 927,
+          "last_mismatch_frame": 1693,
+          "mismatch_count": 202,
+          "mismatch_fingerprint": "424e672a36b6112a",
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "d2868526e51fb66c6f7640b9548222cfe6d77d55b52fde8e7f83f2a7b513c50d"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20250705T002244.slpz",
+      "id": "dolphin-signed-zero-motion-profile",
+      "owner": "fighter attack-velocity signed-zero publication",
+      "rationale": "Every residual differs only by the sign bit of zero attack velocity. The signed-zero diagnostic is otherwise exact for the complete replay, while strict validation retains the PPC bits and native and PPC produce the same fingerprint.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10417,
+          "matched_frames": 10314,
+          "mismatched_frames": 103,
+          "exact_prefix_frames": 6468,
+          "strict_suffix_frames": 1524,
+          "first_mismatch_frame": 6346,
+          "last_mismatch_frame": 8770,
+          "mismatch_count": 103,
+          "mismatch_fingerprint": "ee023c6e2ecaa29b",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "401427a1d5a96d64c351e5ebbadf23393ddf9c1c84707737afe587d7acf9fc07"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20251218T162123.slpz",
+      "id": "dolphin-signed-zero-motion-profile",
+      "owner": "fighter attack-velocity signed-zero publication",
+      "rationale": "All forty-four residual rows are one signed-zero attack-velocity interval. The diagnostic comparison is otherwise exact, and a complete PPC run reproduces the native strict fingerprint.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 2128,
+          "matched_frames": 2084,
+          "mismatched_frames": 44,
+          "exact_prefix_frames": 2083,
+          "strict_suffix_frames": 1,
+          "first_mismatch_frame": 1961,
+          "last_mismatch_frame": 2004,
+          "mismatch_count": 44,
+          "mismatch_fingerprint": "75c44ca84088a7cd",
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "0668e963e225d1f4a79c2a58f569f4819a70d53079ec47935ec35ce764f63641"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20260313T121034.slpz",
+      "id": "signed-zero-and-unmodeled-presentation-rng-phase",
+      "owner": "fighter signed-zero publication and DamageFlyRoll presentation RNG phase",
+      "rationale": "Signed-zero-only intervals precede the causal gameplay residual. At frame 2488 all deterministic pre-gate fighter state is exact, but the excluded effect/particle scheduler is at the neighboring RNG phase and selects DamageFlyRoll instead of DamageFlyHi. Native and PPC agree on the bounded consequence, which reconverges for the final 802 transitions.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+      ],
+      "expected": {
+        "native": {
+          "frames": 5153,
+          "matched_frames": 4877,
+          "mismatched_frames": 276,
+          "exact_prefix_frames": 182,
+          "strict_suffix_frames": 802,
+          "first_mismatch_frame": 60,
+          "last_mismatch_frame": 4228,
+          "mismatch_count": 358,
+          "mismatch_fingerprint": "fd943bbf3e257aa6",
+          "render_visibility_mismatch_count": 1,
+          "first_render_visibility_mismatch_frame": 2519,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "68e4b758ada2fd5750904b1a83b55228ce3eba0e21c0190025bb68ab2b957c5d"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20260318T101341.slpz",
+      "id": "dolphin-ulp-and-signed-zero-profile",
+      "owner": "Puff Rollout motion and fighter signed-zero publication",
+      "rationale": "The complete residual consists of signed-zero publication plus seventeen bounded one-ULP Rollout self-velocity rows. The matching Puff source preserves every discrete transition, exact output resumes for the final 917 rows, and native/PPC fingerprints agree.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 8804,
+          "matched_frames": 8696,
+          "mismatched_frames": 108,
+          "exact_prefix_frames": 1981,
+          "strict_suffix_frames": 917,
+          "first_mismatch_frame": 1859,
+          "last_mismatch_frame": 7764,
+          "mismatch_count": 124,
+          "mismatch_fingerprint": "9adec853cab4cb28",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "ac4dc49c56944933e4b01dc2b78c1b1280d253e502f642477b5297bc5e31d530"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20260325T101917.slpz",
+      "id": "signed-zero-needle-and-deadup-profile",
+      "owner": "fighter signed-zero/DeadUp publication and Sheik thrown-needle historical pose",
+      "rationale": "The complete source-classified residual combines signed-zero motion publication, isolated one-byte Sheik needle historical-position samples, and bounded DeadUp self-velocity ULPs. The diagnostic comparison exposes no discrete gameplay split, exact output resumes for the final 354 transitions, and native/PPC agree.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c",
+        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
+      ],
+      "expected": {
+        "native": {
+          "frames": 16556,
+          "matched_frames": 16240,
+          "mismatched_frames": 316,
+          "exact_prefix_frames": 1068,
+          "strict_suffix_frames": 354,
+          "first_mismatch_frame": 946,
+          "last_mismatch_frame": 16079,
+          "mismatch_count": 316,
+          "mismatch_fingerprint": "5663a187564da74b",
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": 3424,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "5ad2361bf3bfd53f8687f114e169c64c9d4ae68123e2f1fdd89739355674ab31"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20260602T221603.slpz",
+      "id": "signed-zero-and-source-pose-contact-gate",
+      "owner": "fighter signed-zero/DeadUp publication and BODY-versus-shield collision pose",
+      "rationale": "Signed-zero and DeadUp ULP rows occur before the causal split. At frame 5509 the source-shaped runtime resolves Puff back-air against Fox BODY one frame before the replay's shield contact; all public state is exact immediately before that geometry gate, and native/PPC take the same downstream path. The lock records the complete consequence while leaving the headless JObj/hurtbox/shield publication boundary as explicit debt.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_800805C8",
+        "refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70",
+        "refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC",
+        "refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C"
+      ],
+      "expected": {
+        "native": {
+          "frames": 12141,
+          "matched_frames": 5487,
+          "mismatched_frames": 6654,
+          "exact_prefix_frames": 947,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 825,
+          "last_mismatch_frame": 12018,
+          "mismatch_count": 214426,
+          "mismatch_fingerprint": "1c72df856e25d9b6",
+          "render_visibility_mismatch_count": 7624,
+          "first_render_visibility_mismatch_frame": 1276,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "8326c25a2ec7283216460f82feb1d8caa6f9d57141c8efcef1b8aebafb40c272"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20260612T031848.slpz",
+      "id": "dolphin-signed-zero-motion-profile",
+      "owner": "fighter attack-velocity signed-zero publication",
+      "rationale": "All sixty-three residual rows differ only by the sign bit of zero attack velocity. Signed-zero diagnostic comparison is exact for the complete replay, while strict validation preserves the PPC publication bits.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11267,
+          "matched_frames": 11204,
+          "mismatched_frames": 63,
+          "exact_prefix_frames": 2386,
+          "strict_suffix_frames": 488,
+          "first_mismatch_frame": 2264,
+          "last_mismatch_frame": 10656,
+          "mismatch_count": 63,
+          "mismatch_fingerprint": "1e15dad6d05392ea",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "2b6e7681ed9ed7743fd982fba7eacf2c50f080d94cf268ea9fb800ff17cfb4ef"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/diamond-diamond-78251f79d12df3bcdb1d4abe.slpz",
+      "id": "legacy-fod-hitlag-platform-publication",
+      "owner": "Fountain moving-platform translation carried through hitlag exit",
+      "rationale": "This Slippi 3.16 capture predates recorded Fountain platform-event rows. One post-hitlag airborne Y publication differs by 0.0375; both runtimes then carry identical velocities and discrete state, and the offset is erased by source collision with 6,230 exact trailing transitions. Native and PPC agree on the full residual without a stage-id or replay-row correction.",
+      "sources": [
+        "refs/melee/src/melee/gr/grizumi.c::grIzumi_801CBE64",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10788,
+          "matched_frames": 10418,
+          "mismatched_frames": 370,
+          "exact_prefix_frames": 4188,
+          "strict_suffix_frames": 6230,
+          "first_mismatch_frame": 4066,
+          "last_mismatch_frame": 4435,
+          "mismatch_count": 370,
+          "mismatch_fingerprint": "64e937d387a75b61",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "181bf18090f0a8a0ebbe9d6025124085f57392aa9358880e34d74b7551c055fe"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/master-diamond-d514ba67193e53290c8d1b83.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter self-velocity float execution profile",
+      "rationale": "Selecting the capture's explicit pre-Cardinals UCF profile closes the former causal input divergence. The complete residual is four rows of one-to-eight-ULP self velocity followed by 263 exact transitions; complete native and PPC runs produce the same fingerprint.",
+      "sources": [
+        "refs/ucf/src/pad_buffer/pad_buffer.cpp::apply_cardinals",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10763,
+          "matched_frames": 10759,
+          "mismatched_frames": 4,
+          "exact_prefix_frames": 10486,
+          "strict_suffix_frames": 263,
+          "first_mismatch_frame": 10364,
+          "last_mismatch_frame": 10377,
+          "mismatch_count": 6,
+          "mismatch_fingerprint": "b49db8283071d5cd",
+          "render_visibility_mismatch_count": 10,
+          "first_render_visibility_mismatch_frame": 819,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "26b35a0667da9d631e29fb1df143c220739da86a21f865d30e074d3cc6dda533"
+        },
+        "ppc": "native"
+      }
     }
   ]
 }

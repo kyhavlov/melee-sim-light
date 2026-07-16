@@ -5,8 +5,8 @@
 Implement a **high-performance, batched, deterministic** SSBM-like simulator for RL.
 
 Current target domain:
-- Included fighters are **Fox, Falco, Marth, Sheik, Zelda, and Captain Falcon**. Fox/Falco remains
-  the mature control surface; UCF is enabled by default.
+- Included fighters are **Fox, Falco, Marth, Sheik, Zelda, Captain Falcon, and Jigglypuff**.
+  Fox/Falco remains the mature control surface; UCF is enabled by default.
 - RL 1.0 correctness covers the supported legal-stage aggregate: Final Destination, Battlefield,
   Fountain of Dreams, frozen Pokemon Stadium, Yoshi's Story, and Dream Land N64.
 - Singles (2 players) remains the primary/control workflow, but the suite includes doubles

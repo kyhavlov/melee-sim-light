@@ -16,9 +16,11 @@ int DbLevel;
 UnkCostumeStruct ft_80459B28[4];
 UnkCostumeStruct ft_80459A98[6];
 UnkCostumeStruct ft_80459D18[5];
+UnkCostumeStruct ft_8045A1F8[5];
 UnkCostumeStruct ft_8045A0F0[5];
 UnkCostumeStruct ft_8045A168[5];
 UnkCostumeStruct ft_8045A420[4];
+HSD_Joint* ft_8045A1E0[6];
 
 // These match-mode queries are false for a normal local human match.
 int gm_8016B0FC(void) { return 0; }

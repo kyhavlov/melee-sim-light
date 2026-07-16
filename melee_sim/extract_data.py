@@ -44,11 +44,24 @@ _STAGE_DAT_BY_KEY = {
     "grop": "GrOp.dat",
 }
 
+_DERIVED_SIM_CHARS = tuple(CHARS)
+_SOURCE_CORE_ONLY_CHAR_GLOBS = {
+    # The canonical decomp core consumes Puff's original archives directly.
+    # The legacy derived simulator remains on its existing six-character
+    # registry until public cutover, so keep this raw-only closure explicit.
+    # refs/melee/src/melee/ft/chara/ftPurin/ftPr_Init.c
+    "puff": "*PlPr*.dat",
+}
 _RUNTIME_CHARS = RL_1_0_CHARS
 _RUNTIME_STAGES = RL_1_0_STAGES
-if tuple(CHARS) != _RUNTIME_CHARS or tuple(_STAGE_DAT_BY_KEY) != _RUNTIME_STAGES:
+if (
+    tuple(ch for ch in _RUNTIME_CHARS if ch not in _SOURCE_CORE_ONLY_CHAR_GLOBS)
+    != _DERIVED_SIM_CHARS
+    or tuple(_STAGE_DAT_BY_KEY) != _RUNTIME_STAGES
+):
     raise RuntimeError("raw-data profile and extraction registries disagree")
 _CHAR_GLOBS = {name: f"*{Path(info.pl_dat).stem}*.dat" for name, info in CHARS.items()}
+_CHAR_GLOBS.update(_SOURCE_CORE_ONLY_CHAR_GLOBS)
 _SOURCE_CORE_COMMON_FILES = (
     "PlCo.dat",
     "PdPm.dat",
@@ -56,7 +69,9 @@ _SOURCE_CORE_COMMON_FILES = (
     "ItCo.usd",
     "EfCoData.dat",
 )
-_SOURCE_CORE_EFFECT_FILES = tuple(dict.fromkeys(info.effect_dat for info in CHARS.values()))
+_SOURCE_CORE_EFFECT_FILES = tuple(
+    dict.fromkeys((*[info.effect_dat for info in CHARS.values()], "EfPrData.dat"))
+)
 
 
 def _path_from_direct_url() -> Path | None:
@@ -354,6 +369,7 @@ def main(argv: list[str] | None = None) -> None:
             "debug subsets."
         )
     stages = list(_RUNTIME_STAGES)
+    derived_chars = list(_DERIVED_SIM_CHARS)
 
     started = time.perf_counter()
     identity = read_disc_identity(iso)
@@ -393,7 +409,7 @@ def main(argv: list[str] | None = None) -> None:
 
     raw_digest = raw_manifest_digest(iso_dir)
     if not args.force and _derived_data_is_current(
-        out_dir, raw_digest=raw_digest, chars=chars, stages=stages
+        out_dir, raw_digest=raw_digest, chars=derived_chars, stages=stages
     ):
         print(f"derived simulator data current: {out_dir}")
         if args.timings:
@@ -412,7 +428,7 @@ def main(argv: list[str] | None = None) -> None:
         "--stages",
         ",".join(stages),
         "--chars",
-        ",".join(chars),
+        ",".join(derived_chars),
         "--raw-manifest",
         str(iso_dir / RAW_MANIFEST),
     ]

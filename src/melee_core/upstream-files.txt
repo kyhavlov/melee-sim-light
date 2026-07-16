@@ -506,10 +506,15 @@ src/melee/ft/chara/ftPopo/ftPp_SpecialN.h
 src/melee/ft/chara/ftPopo/ftPp_SpecialS.h
 src/melee/ft/chara/ftPopo/types.h
 src/melee/ft/chara/ftPurin/forward.h
+src/melee/ft/chara/ftPurin/ftPr_Init.c
 src/melee/ft/chara/ftPurin/ftPr_Init.h
+src/melee/ft/chara/ftPurin/ftPr_SpecialHi.c
 src/melee/ft/chara/ftPurin/ftPr_SpecialHi.h
+src/melee/ft/chara/ftPurin/ftPr_SpecialLw.c
 src/melee/ft/chara/ftPurin/ftPr_SpecialLw.h
+src/melee/ft/chara/ftPurin/ftPr_SpecialN.c
 src/melee/ft/chara/ftPurin/ftPr_SpecialN.h
+src/melee/ft/chara/ftPurin/ftPr_SpecialS.c
 src/melee/ft/chara/ftPurin/ftPr_SpecialS.h
 src/melee/ft/chara/ftPurin/types.h
 src/melee/ft/chara/ftSamus/forward.h

@@ -387,6 +387,9 @@ int gm_8016B0E8(void) { return 0; }
 int gm_8016B110(void) { return 0; }
 int gm_8016B168(void) { return msl_is_teams; }
 int gm_8016B1C4(void) { return 0; }
+// refs/melee/src/melee/gm/gm_16AE.c::gm_8016B1D8. Standard replay rules do
+// not enable the x5_3 special-mode flag consumed by Sing's Stadium hook.
+bool gm_8016B1D8(void) { return false; }
 int gm_8016B204(void) { return 1; }
 float gm_8016B248(void) { return msl_damage_ratio; }
 static int msl_match_standings_score(int slot)

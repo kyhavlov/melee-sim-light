@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import threading
 from collections import Counter
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 from tools.melee_core import validate_replay
 
@@ -70,13 +72,66 @@ def test_canonical_phase5_scope_selects_32_replays_without_a_duplicate_manifest(
         ROOT / "replays/suites/melee_core_classifications.json"
     )
     assert classifications
-    assert set(classifications) <= {
-        replay.replay for replay in suite.replays
-    }
+    supported_replays = {replay.replay for replay in suite.replays}
+    for suite_name in ("doubles_recent.json", "puff.json"):
+        supported_replays.update(
+            replay.replay
+            for replay in validate_replay.load_suite(
+                ROOT / "replays/suites" / suite_name
+            ).replays
+        )
+    assert set(classifications) <= supported_replays
     marth = classifications[
         "replays/validation/marth/InternalPowerlessWallaby.slpz"
     ]
     assert marth.expected["ppc"] is marth.expected["native"]
+
+
+def test_suite_replay_execution_metadata_reaches_native_validator(
+    monkeypatch, tmp_path: Path
+) -> None:
+    original_metadata = {"source": "legacy-capture"}
+    game = SimpleNamespace(frames=object(), start={}, metadata=original_metadata)
+    captured: dict[str, object] = {}
+
+    @contextmanager
+    def fake_replay_path(_path: Path):
+        yield tmp_path / "legacy.slp"
+
+    class FakeNative:
+        @staticmethod
+        def validate_replay(_frames, _start, metadata, **_kwargs):
+            captured.update(metadata)
+            return {}
+
+    monkeypatch.setattr(validate_replay, "replay_path_for_peppi", fake_replay_path)
+    monkeypatch.setattr(validate_replay, "_read_slippi", lambda _path, _flag: game)
+    monkeypatch.setattr(validate_replay, "game_data_dir", lambda: tmp_path)
+
+    validate_replay.validate_one(
+        FakeNative(),
+        tmp_path / "legacy.slpz",
+        frames=0,
+        start_frame=None,
+        timeout=1.0,
+        backend="native",
+        played_on="network",
+    )
+
+    assert original_metadata == {"source": "legacy-capture"}
+    assert captured == {"source": "legacy-capture", "playedOn": "network"}
+
+
+def test_puff_legacy_capture_profiles_are_explicit() -> None:
+    suite = validate_replay.load_suite(ROOT / "replays/suites/puff.json")
+    by_name = {Path(entry.replay).name: entry for entry in suite.replays}
+
+    diamond = by_name["diamond-diamond-78251f79d12df3bcdb1d4abe.slpz"]
+    master = by_name["master-diamond-d514ba67193e53290c8d1b83.slpz"]
+    assert diamond.played_on == "network"
+    assert diamond.ucf_cardinals_1_0_enabled is None
+    assert master.played_on == "network"
+    assert master.ucf_cardinals_1_0_enabled is False
 
 
 def test_parallel_runner_preserves_manifest_order_and_isolates_errors(

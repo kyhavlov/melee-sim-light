@@ -1,11 +1,12 @@
 # Source-Shaped Melee Core
 
-Status: Phase 5.5 canonical source promotion and every Phase 5 supported-domain packet are
-complete. PPC32 and native x86-64 compile the tracked repository-owned gameplay source directly.
-The terminal 118-replay inventory completes as 58 strict passes plus 60 exact source
-classifications over 1,032,182 transitions: 50/47 across the 97 legal-stage singles and 8/13
-across the 21 doubles. Real multi-match context ownership, arbitrary savestates, the replacement
-API, and Wasm/viewer cutover remain deferred until the next agreed phase.
+Status: Phase 5.5 canonical source promotion, every original Phase 5 supported-domain packet, and
+the post-goal Jigglypuff source packet are complete. PPC32 and native x86-64 compile the tracked
+repository-owned gameplay source directly. The current 133-replay inventory completes as 61 strict
+passes plus 72 exact source classifications over 1,146,353 transitions: 50/47 across the 97
+legal-stage singles, 8/13 across the 21 doubles, and 3/12 across the 15-replay Puff extension. Real
+multi-match context ownership, arbitrary savestates, the replacement API, and Wasm/viewer cutover
+remain deferred until the next agreed phase.
 
 Branch base: `core-rewrite` at `6fbcc9bc7719` (`Rewrite core contact and motion state ownership`).
 
@@ -808,10 +809,10 @@ persistent native DAT cache unless startup profiling later establishes a need.
 
 Phase 4.5 is complete. `python -m melee_sim.extract_data --iso ...` now creates one ignored
 `MSL_DATA_DIR` contract for both cores. Its `raw/manifest.json` identifies the full GALE01 revision
-2 ISO by SHA-256 and records the exact path, offset, size, and SHA-256 of 63 source files. The
-40 MiB raw profile covers all six supported fighters/costumes, six legal stages, common/player/item
-archives, and the supported character effect banks; this closes the prior source-core omissions of
-`PdPm.dat`, `ItCo.usd`, and `EfFxData.dat`.
+2 ISO by SHA-256 and records the exact path, offset, size, and SHA-256 of 72 source files. The
+41.4 MiB raw profile covers all seven supported fighters/costumes, six legal stages,
+common/player/item archives, and the supported character effect banks; this closes the prior
+source-core omissions of `PdPm.dat`, `ItCo.usd`, `EfFxData.dat`, and `EfPrData.dat`.
 
 The existing generated table manifest binds 184 outputs to the raw-manifest digest and records
 their sizes and hashes. Extraction writes manifests last and atomically, repairs missing or changed
@@ -1057,8 +1058,8 @@ this phase independently before importing another fighter or stage owner.
 
 #### Phase 5.5 result
 
-`src/melee_core/gameplay/` is now the sole tracked gameplay-source authority. Its 927-file inventory
-matches `upstream-files.txt`; 71 files differ from the pinned decomp after promotion of the exact
+`src/melee_core/gameplay/` is now the sole tracked gameplay-source authority. Its 988-file inventory
+matches `upstream-files.txt`; 88 files differ from the pinned decomp after promotion of the exact
 validated materialization. `tools/melee_core/source_sync.sh check` verifies the canonical inventory
 and, when the locked checkout is available, its commit, pristine digest, and delta count. `diff`
 exports a deterministic binary-capable patch against the pin, while `add` imports new source-owner
@@ -1076,31 +1077,33 @@ native compile profile remains the default.
 
 ### Phase 5 continuation — Current supported source domain
 
-After source promotion, complete the declared Fox, Falco, Marth, Captain Falcon, Sheik, and Zelda
-domain across Final Destination, Battlefield, Fountain of Dreams, frozen Pokemon Stadium, Yoshi's
-Story, and Dream Land N64. Work by source-owner packet, not mismatch row. Import complete reached
-fighter/stage/article/scheduler owners, preserve direct source structure, update DAT translation and
-extraction contracts when new archive fields are required, and keep PPC/native compiling the same
-canonical gameplay implementation.
+After source promotion, complete the declared Fox, Falco, Marth, Captain Falcon, Sheik, Zelda, and
+Jigglypuff domain across Final Destination, Battlefield, Fountain of Dreams, frozen Pokemon
+Stadium, Yoshi's Story, and Dream Land N64. Work by source-owner packet, not mismatch row. Import
+complete reached fighter/stage/article/scheduler owners, preserve direct source structure, update
+DAT translation and extraction contracts when new archive fields are required, and keep PPC/native
+compiling the same canonical gameplay implementation.
 
-The committed validation inventory contains 118 distinct replays:
+The committed validation inventory contains 133 distinct replays:
 
 - `aggregate_recent.json`: 97 two-player entries across all six legal stages;
 - `doubles_recent.json`: 21 four-player entries across FD, Battlefield, frozen Stadium, Yoshi's,
   and Dream Land;
+- `puff.json`: 15 two-player Jigglypuff entries imported from the dedicated new-character capture
+  branch;
 - the current Fox/Falco FD/Battlefield/frozen-Stadium gate selects 23 singles, leaving 74 additional
   singles plus all 21 doubles, or 95 new entries for this goal.
 
 Use the character/stage suite manifests as focused development selections, but treat the 97-entry
-aggregate and 21-entry doubles manifests as the terminal inventories. Existing heldout manifests
-remain evidence against owner-local overfitting; do not implement replay-specific branches or add a
-second state model to satisfy them.
+aggregate, 21-entry doubles, and 15-entry Puff manifests as the current terminal inventories.
+Existing heldout manifests remain evidence against owner-local overfitting; do not implement
+replay-specific branches or add a second state model to satisfy them.
 
 Advance the default character/stage selection as each packet becomes supported, and add one
-canonical supported-domain validation target that schedules both terminal manifests through the
+canonical supported-domain validation target that schedules all three terminal manifests through the
 existing parallel native/Arrow path with deterministic stdout. Keep focused per-owner selections
 for development, but do not require manual replay lists or a Python per-frame path to run the whole
-118-replay gate.
+133-replay gate.
 
 During source expansion, maintain a lightweight future-ownership ledger without restructuring the
 runtime. Classify each newly reached mutable global, persistent pointer-bearing type, callback
@@ -1286,7 +1289,8 @@ evaluation moves a terminal Fox hurt capsule by about 0.01 units at one needle c
 bounded 662-row consequence and the same 3,382-transition exact suffix. Both backend snapshots are
 locked explicitly. The complete legal-stage singles gate now reports 50 strict passes, 47 exact
 classifications, zero failures, and zero errors over 848,202 transitions at roughly 177k aggregate
-native frames/second. All six supported fighters are now the default validation scope.
+native frames/second. These original six fighters became the default validation scope at this
+subphase boundary; the later Puff extension expands that default to seven.
 
 Future ownership recorded by this packet:
 
@@ -1317,8 +1321,8 @@ and masks only source-valid absent post-frame rows for already eliminated player
 publishes all four Slippi neutral-spawn entries, applies the retail team-ordered spawn permutation,
 loads the recorded Team Attack bit, and carries friendly fire through the source rules. The runtime
 also implements the reached START-button team stock-share path directly from `gm_8016B918` rather
-than treating eliminated teammates as absent inputs. A single canonical target runs both terminal
-inventories through the existing parallel Arrow/native runner:
+than treating eliminated teammates as absent inputs. A single canonical target runs the current
+terminal inventories through the existing parallel Arrow/native runner:
 
 ```bash
 make -f src/melee_core/Makefile validation-supported-domain
@@ -1359,6 +1363,40 @@ Future ownership recorded by this packet:
 - explicit presentation exclusions: renderer/VI visibility publication, effect/audio RNG work,
   and backend-specific float execution profiles already locked by exact classifications.
 
+#### Subphase F — Jigglypuff extension
+
+The post-goal Jigglypuff packet imports the five matching `ftPurin` lifecycle and special-state
+source owners, publishes the exact fighter callback/data registry, and translates the reached
+fighter, costume, attribute, and `EfPrData.dat` graphs into the fixed native initialization arena.
+The separately allocated costume-hat JObj remains an explicit presentation-only headless exclusion;
+the ordinary skeleton, live pose, collision, and gameplay callbacks are retained. Both PPC32 and
+native x86-64 compile the same canonical packet.
+
+Slippi replay playback now carries normalized gameplay axes separately from the physical raw pad
+bytes consumed by UCF. This follows `refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm`:
+fighter input receives the recorded normalized axes while UCF's pending-input ring receives the
+recorded raw bytes. Legacy captures may also declare `metadata.playedOn` and independent Cardinals
+1.0 enablement once in the suite manifest. These are source-profile inputs, not per-frame Python
+derivation or replay-row gameplay branches.
+
+The 15-entry `puff.json` gate reaches every final transition as three strict passes plus twelve
+exact classifications, zero failures, and zero errors over 114,171 transitions at roughly 135k
+aggregate native frames/second. The classifications retain full-stream fingerprints and exact
+suffix evidence where the stream returns to parity. Most residuals are signed-zero, bounded
+hosted-float, or already-modeled DamageFlyRoll presentation RNG profiles. Three explicit headless
+debts remain visible rather than being replay-fitted:
+
+- the scene-owned standings cache behind `gm_8016C5C0` changes Sing's DamageSong timer rank;
+- missing retail JObj/contact-matrix fidelity can choose Puff back-air BODY contact one frame before
+  the replay's shield contact in one stream;
+- an old Slippi 3.16 Fountain capture lacks the later platform-event publication and carries one
+  0.0375-unit platform-Y offset after hitlag before returning to an exact suffix.
+
+Future ownership recorded by this packet adds immutable Puff fighter/costume/effect graphs to
+`GameData`, and Puff special state plus the distinct normalized/raw replay pad observations to
+`MatchState`. The packet introduces no post-initialization allocation and no new process-global
+mutable gameplay owner.
+
 #### Autonomous goal and commit policy
 
 The source-promotion phase and each source-domain subphase above is an authorized autonomous commit
@@ -1368,26 +1406,26 @@ focused message, and continue to the next subphase without waiting for confirmat
 partially linked owner, a replay-row workaround, or bare diagnostic artifacts.
 
 Use focused native windows and bounded PPC/native differentials during bring-up. Run the growing
-full native selection at each packet boundary and both terminal inventories after doubles. Keep
+full native selection at each packet boundary and all current terminal inventories after doubles. Keep
 routine commands under the existing five/ten-second policy; announce genuine fresh full builds.
 If the optimized native validation profile is exact, use it for broad gates while retaining PPC and
 native-debug as bounded correctness oracles.
 
-The autonomous goal is complete when canonical source is the direct build input, all 97 singles and
-21 doubles run through their final transitions without unsupported errors, every residual is either
-strictly matched or source-classified, all packet commits exist, and the worktree is clean. Peach,
-Jigglypuff, other new fighter scope, real context promotion, arbitrary savestates, the replacement
-API, Wasm, the browser viewer, public cutover, and SoA/AoSoA optimization are explicitly outside this
-goal.
+The original autonomous goal completed when canonical source became the direct build input and all
+97 singles plus 21 doubles reached their final transitions with every residual either strict or
+source-classified. Jigglypuff was then authorized as the first post-goal source-domain extension and
+adds the 15-entry terminal manifest described above. Peach and other new fighter scope, real context
+promotion, arbitrary savestates, the replacement API, Wasm, the browser viewer, public cutover, and
+SoA/AoSoA optimization remain outside the reached goal.
 
-After this goal, reconvene to choose between expanding the canonical source domain further (likely
-Peach, Jigglypuff, and possibly other fighters) or locking the reached state closure and starting the
+After the Puff extension, reconvene to choose between expanding the canonical source domain further
+(likely Peach and possibly other fighters) or locking the reached state closure and starting the
 deferred context/API/savestate/Wasm phase.
 
 ### Deferred Phase 6 — Match ownership, arbitrary savestates, API, and Wasm
 
 Begin this phase only after the autonomous supported-domain goal and the explicit decision about
-Peach/Jigglypuff or other additional pre-context fighter scope. It changes ownership and build
+Peach or other additional pre-context fighter scope. It changes ownership and build
 structure while the complete reached replay corpus provides the correctness lock. It must not become
 a gameplay rewrite: source file boundaries, function bodies, source structs, callback signatures,
 the scalar scheduler, pointer-rich AoS representation, object ordering, and floating-point operation

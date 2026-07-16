@@ -10,6 +10,7 @@
 #include "ft/chara/ftCaptain/types.h"
 #include "ft/chara/ftFox/types.h"
 #include "ft/chara/ftMars/types.h"
+#include "ft/chara/ftPurin/types.h"
 #include "ft/chara/ftSeak/types.h"
 #include "ft/chara/ftZelda/types.h"
 #include "ft/types.h"
@@ -122,6 +123,17 @@ typedef struct MslDatSheikArticles {
     HSD_Joint** chain_joint_tables[2];
 } MslDatSheikArticles;
 typedef Article* MslDatZeldaArticles[2];
+// PlPr.dat's ftData.x48_items[1] points at a leading reserved word followed
+// by the FtPartsDesc consumed by ftPr_Init_8013C360 for non-default hats.
+// refs/melee/src/melee/ft/chara/ftPurin/ftPr_Init.c
+typedef struct MslDatPurinCostumeParts {
+    uint32_t reserved;
+    FtPartsDesc desc;
+} MslDatPurinCostumeParts;
+typedef struct MslDatPurinAuxList {
+    void* reserved;
+    MslDatPurinCostumeParts* costume_parts;
+} MslDatPurinAuxList;
 typedef MslDatSpaceAnimalArticles* MslDatArticleList;
 typedef uint8_t MslDatAnimBytePair[2];
 // itzeldadinfire.c consumes the otherwise-void Article.x4 as twelve f32s.
@@ -169,11 +181,13 @@ void* msl_native_dat_type_roots[] = {
     (MslDatSpaceAnimalArticles*) 0,
     (MslDatSheikArticles*) 0,
     (MslDatZeldaArticles*) 0,
+    (MslDatPurinAuxList*) 0,
     (struct Fighter_WaitAnimData*) 0,
     (MslDatAnimBytePair*) 0,
     (ftFox_DatAttrs*) 0,
     (ftCaptain_DatAttrs*) 0,
     (MarsAttributes*) 0,
+    (ftPurinAttributes*) 0,
     (ftSeakAttributes*) 0,
     (ftZelda_DatAttrs*) 0,
     (FoxLaserAttr*) 0,

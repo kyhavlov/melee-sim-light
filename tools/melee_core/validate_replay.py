@@ -28,7 +28,7 @@ NATIVE_BINARY = BUILD / "native" / "melee-core-native"
 TOOLCHAIN = BUILD / "toolchain" / "root"
 QEMU = TOOLCHAIN / "usr" / "bin" / "qemu-ppc-static"
 SYSROOT = TOOLCHAIN / "usr" / "powerpc-linux-gnu"
-DEFAULT_CHARACTERS = "Fox,Falco,Marth,Captain Falcon,Sheik,Zelda"
+DEFAULT_CHARACTERS = "Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff"
 DEFAULT_STAGES = "32,31,3,2,8,28"
 MAX_AUTO_WORKERS = 16
 DEFAULT_CLASSIFICATIONS = ROOT / "replays/suites/melee_core_classifications.json"
@@ -53,6 +53,7 @@ class ReplayCase:
     ucf_cardinals_1_0_enabled: bool = True
     ucf_shield_sdi_enabled: bool = True
     ucf_sdi_enabled: bool = True
+    played_on: str | None = None
 
 
 @dataclass(frozen=True)
@@ -238,6 +239,7 @@ def validate_one(
     ucf_cardinals_1_0_enabled: bool = True,
     ucf_shield_sdi_enabled: bool = True,
     ucf_sdi_enabled: bool = True,
+    played_on: str | None = None,
 ) -> dict[str, object]:
     # Python owns only the replay-loading boundary. The native extension consumes
     # Peppi's Arrow buffers through the Arrow C Data Interface without NumPy or
@@ -245,10 +247,14 @@ def validate_one(
     started = time.perf_counter()
     with replay_path_for_peppi(replay) as peppi_path:
         game = _read_slippi(str(peppi_path), False)
+        metadata = game.metadata
+        if played_on is not None:
+            metadata = dict(metadata)
+            metadata["playedOn"] = played_on
         result = native.validate_replay(
             game.frames,
             game.start,
-            game.metadata,
+            metadata,
             qemu=str(QEMU),
             sysroot=str(SYSROOT),
             binary=str(NATIVE_BINARY if backend == "native" else PPC_BINARY),
@@ -347,6 +353,7 @@ def load_suite_cases(
                         else True
                     )
                 ),
+                played_on=entry.played_on,
             )
         )
     if not cases:
@@ -403,6 +410,7 @@ def _validate_case(
             ucf_cardinals_1_0_enabled=case.ucf_cardinals_1_0_enabled,
             ucf_shield_sdi_enabled=case.ucf_shield_sdi_enabled,
             ucf_sdi_enabled=case.ucf_sdi_enabled,
+            played_on=case.played_on,
         )
         return ReplayOutcome(case, result, None, time.perf_counter() - started)
     except Exception as exc:

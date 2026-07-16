@@ -1,0 +1,191 @@
+{
+  "name": "puff",
+  "notes": "Jigglypuff validation suite (vs Fox/Falco/Marth/Sheik/Falcon and a Puff ditto across all six legal stages; frozen-PS only). Curated from the user's top14 netplay dump by scanning 168 games for ftPr char-range action-state coverage (341-372): five midair jumps everywhere, grounded Rollout family (346/348/350/351 in the FoD vs Fox game), Pound (363/364), both Sing variants (365-368), and the Rest family (369-372). specials.slpz is a user-recorded Puff-ditto Battlefield session (2026-07) exercising the former gaps: air Rollout (354-358), SpecialNFull (349), air Sing/Rest, DamageSong victim rows (297-299), and Sing/ledge interactions. Three more user-recorded ditto sessions (2026-07-11) closed the rest: rollout_ends_ys.slpz (YS: SpecialNStartL 347 + SpecialNEndL 353 on both ports, multi-Turn budget-exhaust chains, platform/edge roll-offs into air release, long NHit segments), rollout_air_bf.slpz (BF: AirNFull 357, AirNEndL 361 twice after ~100f shared-budget air releases, all five jump rungs), wallbounce_teeter_ys.slpz (YS: AirNEndR 360, two air-release wall bounces off the YS side walls at f1095-1145 and f1828-1864, and an isolated Ottotto/OttottoWait->Fall teeter walk-off witness at f3-101 on the left side platform inner edge). REMAINING GAP with zero replay coverage: AirNTurn 359 only - unreachable in play (entered solely via floor-loss during a high-speed ground Turn; unit tests carry it).",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/puff/specials.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Jigglypuff",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/rollout_ends_ys.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Jigglypuff",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/rollout_air_bf.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Jigglypuff",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/wallbounce_teeter_ys.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Jigglypuff",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20250705T002244.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Marth",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20251218T162123.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Jigglypuff",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20260313T121034.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Fox",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20260318T101341.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Fox",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20260325T101917.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Sheik",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20260522T210033.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Fox",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20260602T221603.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Jigglypuff",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20260612T031848.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Fox",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/Game_20260616T153208.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Jigglypuff",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/diamond-diamond-78251f79d12df3bcdb1d4abe.slpz",
+      "played_on": "network",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Jigglypuff",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/puff/master-diamond-d514ba67193e53290c8d1b83.slpz",
+      "played_on": "network",
+      "ucf_cardinals_1_0_enabled": false,
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Falco",
+        "2": "Jigglypuff"
+      }
+    }
+  ]
+}

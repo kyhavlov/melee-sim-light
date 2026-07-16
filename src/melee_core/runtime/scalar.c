@@ -60,6 +60,7 @@ enum {
     MSL_CORE_CHAR_FOX = 1,
     MSL_CORE_CHAR_CAPTAIN_FALCON = 2,
     MSL_CORE_CHAR_SHEIK = 7,
+    MSL_CORE_CHAR_JIGGLYPUFF = 15,
     MSL_CORE_CHAR_MARTH = 18,
     MSL_CORE_CHAR_ZELDA = 19,
     MSL_CORE_CHAR_FALCO = 22,
@@ -203,6 +204,8 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_CAPTAIN;
     case MSL_CORE_CHAR_SHEIK:
         return CKIND_SEAK;
+    case MSL_CORE_CHAR_JIGGLYPUFF:
+        return CKIND_PURIN;
     case MSL_CORE_CHAR_MARTH:
         return CKIND_MARS;
     case MSL_CORE_CHAR_ZELDA:
@@ -371,6 +374,28 @@ static uint32_t source_held_buttons(const MslCoreInputPlayer* input)
     return buttons;
 }
 
+static void input_main_stick(const MslCoreInputPlayer* input, int8_t* x,
+                             int8_t* y)
+{
+    if (input->nml_valid & MSL_CORE_INPUT_NML_MAIN_VALID) {
+        *x = input->nml_main_x;
+        *y = input->nml_main_y;
+    } else {
+        source_clamp_stick(input->main_x, input->main_y, x, y);
+    }
+}
+
+static void input_c_stick(const MslCoreInputPlayer* input, int8_t* x,
+                          int8_t* y)
+{
+    if (input->nml_valid & MSL_CORE_INPUT_NML_C_VALID) {
+        *x = input->nml_c_x;
+        *y = input->nml_c_y;
+    } else {
+        source_clamp_stick(input->c_x, input->c_y, x, y);
+    }
+}
+
 static void inject_pad_status(int slot, const MslCoreInputPlayer* input)
 {
     HSD_PadStatus* game = &HSD_PadGameStatus[slot];
@@ -382,8 +407,8 @@ static void inject_pad_status(int slot, const MslCoreInputPlayer* input)
     uint32_t previous = game->button;
     uint32_t buttons = input_buttons(input);
 
-    source_clamp_stick(input->main_x, input->main_y, &main_x, &main_y);
-    source_clamp_stick(input->c_x, input->c_y, &c_x, &c_y);
+    input_main_stick(input, &main_x, &main_y);
+    input_c_stick(input, &c_x, &c_y);
     memset(game, 0, sizeof(*game));
     game->last_button = previous;
     game->button = buttons;
@@ -411,8 +436,8 @@ static void seed_previous_input(Fighter* fp, const MslCoreInputPlayer* input)
     int8_t c_x;
     int8_t c_y;
 
-    source_clamp_stick(input->main_x, input->main_y, &main_x, &main_y);
-    source_clamp_stick(input->c_x, input->c_y, &c_x, &c_y);
+    input_main_stick(input, &main_x, &main_y);
+    input_c_stick(input, &c_x, &c_y);
     fp->input.x630 = (float) main_x / (float) MSL_CORE_STICK_SCALE;
     fp->input.x634 = (float) main_y / (float) MSL_CORE_STICK_SCALE;
     fp->input.x648 = (float) c_x / (float) MSL_CORE_STICK_SCALE;
@@ -445,13 +470,14 @@ static int validate_config(MslCoreMatchConfig* config)
         if (config->players[i].char_id != MSL_CORE_CHAR_FOX &&
             config->players[i].char_id != MSL_CORE_CHAR_CAPTAIN_FALCON &&
             config->players[i].char_id != MSL_CORE_CHAR_SHEIK &&
+            config->players[i].char_id != MSL_CORE_CHAR_JIGGLYPUFF &&
             config->players[i].char_id != MSL_CORE_CHAR_MARTH &&
             config->players[i].char_id != MSL_CORE_CHAR_ZELDA &&
             config->players[i].char_id != MSL_CORE_CHAR_FALCO) {
             fprintf(stderr,
                     "current core supports external char_id=1 Fox, "
                     "char_id=2 Captain Falcon, "
-                    "char_id=7 Sheik, char_id=18 Marth, "
+                    "char_id=7 Sheik, char_id=15 Jigglypuff, char_id=18 Marth, "
                     "char_id=19 Zelda, and char_id=22 Falco only\n");
             return -1;
         }

@@ -26,7 +26,7 @@ HOST_CC ?= cc
 MSL_DATA_DIR ?= $(ROOT)/data
 DATA ?= $(abspath $(MSL_DATA_DIR))/raw
 VALIDATION_SUITE ?= replays/suites/aggregate_recent.json
-VALIDATION_CHARACTERS ?= Fox,Falco,Marth,Captain Falcon,Sheik,Zelda
+VALIDATION_CHARACTERS ?= Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff
 VALIDATION_STAGES ?= 32,31,3,2,8,28
 VALIDATION_BACKEND ?= native
 VALIDATION_WORKERS ?= 0
@@ -317,6 +317,9 @@ validation-supported-domain:
 		VALIDATION_SUITE=replays/suites/aggregate_recent.json
 	@$(MAKE) --no-print-directory -f "$(CORE)/Makefile" validation-suite \
 		VALIDATION_SUITE=replays/suites/doubles_recent.json \
+		VALIDATION_ARGS="$(VALIDATION_ARGS) --no-build"
+	@$(MAKE) --no-print-directory -f "$(CORE)/Makefile" validation-suite \
+		VALIDATION_SUITE=replays/suites/puff.json \
 		VALIDATION_ARGS="$(VALIDATION_ARGS) --no-build"
 
 test: source-check smoke native-smoke validation-smoke

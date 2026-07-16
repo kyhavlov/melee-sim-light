@@ -1058,6 +1058,7 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_FALCO,
     MSL_FIGHTER_ARTICLES_SHEIK,
     MSL_FIGHTER_ARTICLES_ZELDA,
+    MSL_FIGHTER_AUX_PURIN_PARTS,
 } MslFighterArticleProfile;
 
 static ftData* translate_fighter_public(
@@ -1133,6 +1134,12 @@ static ftData* translate_fighter_public(
         indices[1] = 1;
         attr_types[0] = msl_dat_root_MslDatZeldaDinFireAttrs;
         attr_types[1] = msl_dat_root_itZeldaDinFireExplodeAttributes;
+        break;
+    case MSL_FIGHTER_AUX_PURIN_PARTS:
+        // x48_items is not an article table for Purin. Its second pointer owns
+        // the costume FtPartsDesc consumed by ftPr_Init_8013C360.
+        // refs/melee/src/melee/ft/chara/ftPurin/ftPr_Init.c
+        article_list_type = msl_dat_root_MslDatPurinAuxList;
         break;
     }
 
@@ -1269,6 +1276,10 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_MarsAttributes, 327,
                                           MSL_FIGHTER_ARTICLES_NONE);
+    } else if (strcmp(symbol, "ftDataPurin") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftPurinAttributes, 327,
+                                          MSL_FIGHTER_AUX_PURIN_PARTS);
     } else if (strcmp(symbol, "ftDataZelda") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftZelda_DatAttrs, 311,

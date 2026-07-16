@@ -14,13 +14,26 @@ enum {
 
 typedef struct MslCoreInputPlayer {
     uint16_t buttons;
+    // Physical signed bytes retained for UCF's raw-input consumers.
     int8_t main_x;
     int8_t main_y;
     int8_t c_x;
     int8_t c_y;
     uint8_t l;
     uint8_t r;
+    // Optional post-clamp HSD axes. Slippi playback restores these floats to
+    // Fighter input state independently of the physical bytes above.
+    int8_t nml_main_x;
+    int8_t nml_main_y;
+    int8_t nml_c_x;
+    int8_t nml_c_y;
+    uint8_t nml_valid;
 } MslCoreInputPlayer;
+
+enum {
+    MSL_CORE_INPUT_NML_MAIN_VALID = 1 << 0,
+    MSL_CORE_INPUT_NML_C_VALID = 1 << 1,
+};
 
 typedef struct MslCoreInput {
     MslCoreInputPlayer p[MSL_CORE_MAX_PLAYERS];
@@ -163,10 +176,10 @@ typedef struct MslCoreCompare {
 
 #pragma pack(pop)
 
-_Static_assert(sizeof(MslCoreInputPlayer) == 8, "MslCoreInputPlayer wire size");
-_Static_assert(sizeof(MslCoreInput) == 32, "MslCoreInput wire size");
+_Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size");
+_Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 16, "stage events wire size");
-_Static_assert(sizeof(MslCoreStreamFrame) == 52, "stream frame wire size");
+_Static_assert(sizeof(MslCoreStreamFrame) == 72, "stream frame wire size");
 _Static_assert(sizeof(MslCoreMatchConfig) == 52, "MslCoreMatchConfig wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1022, "MslCoreCompare wire size");

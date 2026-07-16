@@ -11,7 +11,7 @@ RAW_DATA_DIR = "raw"
 RAW_MANIFEST = "manifest.json"
 RAW_MANIFEST_MAGIC = "MSLRAW1"
 RAW_MANIFEST_VERSION = 1
-RL_1_0_CHARS = ("fox", "falco", "marth", "falcon", "sheik", "zelda")
+RL_1_0_CHARS = ("fox", "falco", "marth", "falcon", "sheik", "zelda", "puff")
 RL_1_0_STAGES = ("grnla", "grnba", "griz", "grps", "grst", "grop")
 
 
