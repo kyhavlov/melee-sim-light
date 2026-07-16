@@ -10,7 +10,7 @@
 #include <string.h>
 
 enum {
-    MSL_CORE_BATCH_MATCH_LIMIT = 4096
+    MSL_CORE_BATCH_MATCH_LIMIT = 16384
 };
 
 struct MslCoreBatch {

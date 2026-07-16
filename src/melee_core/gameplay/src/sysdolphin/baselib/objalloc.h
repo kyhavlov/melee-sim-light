@@ -111,6 +111,7 @@ static inline void HSD_ObjAllocDisableNumLimit(HSD_ObjAllocData* data)
 
 void HSD_ObjSetHeap(u32 size, void* ptr);
 void HSD_ObjAllocPreallocateAll(u32 minimum_free, size_t maximum_free_bytes);
+void HSD_ObjAllocEnsureFree(HSD_ObjAllocData* data, u32 minimum_free);
 s32 HSD_ObjAllocAddFree(HSD_ObjAllocData* data, u32 num);
 void* HSD_ObjAlloc(HSD_ObjAllocData* data);
 void HSD_ObjFree(HSD_ObjAllocData* data, void* obj);

@@ -1032,15 +1032,39 @@ static int match_construct(MslCoreMatch* match,
     //   HSD_ObjAllocAddFree}
     // refs/melee/src/melee/it/item.c::{Item_80266FA8,it_8026B3A8}
     // refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,objalloc.c}
-    // A five-Heiho Yoshi wave installs the source item process set in one
-    // callback, raising the GObjProc free-list demand above the static-stage
-    // bootstrap. Keep a fixed per-type reserve that covers the supported
-    // stage-actor high-water mark without permitting runtime heap growth.
-    HSD_ObjAllocPreallocateAll(256, MSL_CORE_MAX_ITEMS * sizeof(Item));
-    HSD_ObjAllocAddFree(HSD_AObjGetAllocData(), 448);
-    HSD_ObjAllocAddFree(HSD_FObjGetAllocData(), 1024);
-    HSD_ObjAllocAddFree(HSD_IDGetAllocData(), 192);
-    hsdPreallocateMemPieces(64);
+    // Bound ordinary pools by the public simultaneous-item capacity. The
+    // animation/identity and Yoshi Heiho-process owners need larger full-
+    // replay reserves than one object per item, so retain explicit target
+    // free counts rather than adding them on top of a uniform floor.
+    // tests/melee_core/runtime_census.c
+    // refs/melee/src/melee/gr/grstory.c
+    HSD_ObjAllocPreallocateAll(MSL_CORE_MAX_ITEMS,
+                               MSL_CORE_MAX_ITEMS * sizeof(Item));
+    HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(), 704);
+    HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(), 1280);
+    HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 448);
+    HSD_ObjAllocEnsureFree(HSD_SListGetAllocData(), 256);
+    HSD_ObjAllocEnsureFree(HSD_DListGetAllocData(), 256);
+    HSD_ObjAllocEnsureFree(HSD_RObjGetAllocData(), 256);
+    HSD_ObjAllocEnsureFree(HSD_RvalueObjGetAllocData(), 256);
+    HSD_ObjAllocEnsureFree(&gobj_alloc_data, 256);
+    HSD_ObjAllocEnsureFree(&gobjproc_alloc_data, 256);
+    // The reached Peach article graph consumes twelve temporary matrix-pool
+    // slots. The resulting fifteen-item bound rounds to the established
+    // 256-slot small-object reserve.
+    // refs/melee/src/sysdolphin/baselib/mtx.c::{HSD_MtxAlloc,HSD_MtxFree}
+    HSD_ObjAllocEnsureFree(HSD_MtxGetAllocData(), 256);
+    // Transient effect and collision paths can retain Vec nodes across many
+    // frames; the source object is only twelve bytes, so keep the established
+    // full-replay reserve without imposing that count on large pools.
+    // refs/melee/src/sysdolphin/baselib/mtx.c::{HSD_VecAlloc,HSD_VecFree}
+    HSD_ObjAllocEnsureFree(HSD_VecGetAllocData(), 256);
+    // Sheik's chain owns one ItemLink per source attribute link, independent
+    // of the fifteen top-level item slots; four-player construction can reach
+    // the original byte-bounded pool ceiling.
+    // refs/melee/src/melee/it/items/itseakchain.c::it_802BAF2C
+    HSD_ObjAllocEnsureFree(&item_link_alloc_data, 151);
+    hsdPreallocateMemPieces(32);
 
     // This Match's source allocation pools are complete. Shared DAT graphs
     // are sealed once, after GameData has preloaded the supported domain;

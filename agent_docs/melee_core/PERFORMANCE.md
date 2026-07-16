@@ -163,33 +163,37 @@ AObj/FObj/ID reserves. The census covers singles and doubles for all eight admit
 all six legal stages.
 
 The large relocation registry and allocation ledger are no longer embedded in every Match. A
-thread-local construction registry emits a bounded 256 KiB runtime relocation image containing all
-16,384 possible compact records and a 32,768-entry 16-bit address index. This remains mutable so
-source pool alloc/free transitions can change an object's exact relocation type without scanning
-raw/stale words. Match allocation provenance similarly uses thread-local construction scratch and
-is discarded when the bump arena seals; immutable shared GameData retains its own ledger. These are
-representation-only changes: arbitrary-index save/restore, cross-match copy, runtime pool reuse,
-and the no-allocation step contract remain covered by the native smokes.
+thread-local construction registry emits an exactly sized runtime relocation image plus 512 spare
+records for the source class allocator's bounded runtime splitting. Its address index is the next
+power of two above twice that record capacity. This remains mutable so source pool alloc/free
+transitions can change an object's exact relocation type without scanning raw/stale words. Match
+allocation provenance similarly uses thread-local construction scratch and is discarded when the
+bump arena seals; immutable shared GameData retains its own ledger. These are representation-only
+changes: arbitrary-index save/restore, cross-match copy, runtime pool reuse, and the no-allocation
+step contract remain covered by the native smokes.
 
 Current census results:
 
-- `MslCoreMatch`: 61,168 bytes, down from 781,768; `MslMemoryContext`: 56 bytes, down from
-  196,648; compact relocation residency: 262,144 bytes, down from the 524,296-byte embedded
-  registry. Shared `MslCoreGameData` also fell from 568,296 to 371,712 bytes.
-- Match arena: 8 MiB virtual reserve, down from 32 MiB. The supported singles/doubles maximum is
-  4,075,264 bytes used with 3,968 construction allocations and 11,284 live relocation records.
-  The maximum configuration is four-player frozen Stadium with Sheik.
-- The representative Peach/FD arena is 2,996,704 bytes and remains exactly stable over gameplay.
-  Its savestate is 3,058,000 bytes = 128-byte header + 61,168-byte Match value + 2,996,704-byte
+- `MslCoreMatch`: 61,208 bytes, down from 781,768; `MslMemoryContext`: 56 bytes, down from
+  196,648. The maximum configuration's exactly sized relocation image is 124,676 bytes, versus the
+  former 524,296-byte embedded registry. Shared `MslCoreGameData` also fell from 568,296 to 371,712
+  bytes.
+- Match arena: 3 MiB virtual reserve, down from 32 MiB. The supported singles/doubles maximum is
+  2,733,136 bytes used with 3,312 construction allocations and 9,588 live relocation records. The
+  maximum configuration is four-player frozen Stadium with Sheik.
+- The representative Peach/FD arena is 1,886,788 bytes and remains exactly stable over gameplay.
+  Its savestate is 1,948,124 bytes = 128-byte header + 61,208-byte Match value + 1,886,788-byte
   arena, versus the 17,347,368-byte Phase 7 representative.
-- Maximum source object-pool residency across the census is 1,667,600 bytes. The largest remaining
-  pools are the 32,768-byte fighter scratch family (589,824 bytes), fighters (173,400 bytes),
-  fighter bones (107,520 bytes), FObjs (94,784 bytes), attributes (89,040 bytes), and fighter
-  pointer arrays (88,288 bytes).
-- At the measured maximum, runtime state plus a 128-frame observation ring is about 1.02 GiB for
-  256, 2.03 GiB for 512, 16.27 GiB for 4,096, and 65.06 GiB for 16,384 environments. The
-  corresponding 8 MiB arena virtual reservations plus rings are 2.05, 4.09, 32.72, and 130.88 GiB.
-  These are capacity projections; resident lifecycle measurements still need to replace them.
+- Maximum source object-pool residency across the census is 1,374,804 bytes. Large cold object
+  families use the public 15-item capacity while replay-proven small animation, identity,
+  scheduler, matrix/vector, and Sheik-chain pools retain explicit bounded reserves. The largest
+  remaining pools are the 32,768-byte fighter scratch family (589,824 bytes), fighters (173,400
+  bytes), FObjs (94,784 bytes), items (86,656 bytes), and Sheik-chain links (80,936 bytes).
+- At the measured maximum, runtime state plus a 128-frame observation ring is about 0.70 GiB for
+  256, 1.39 GiB for 512, 11.15 GiB for 4,096, and 44.58 GiB for 16,384 environments. The
+  corresponding 3 MiB arena virtual reservations plus Match values and rings are 0.79, 1.59,
+  12.72, and 50.88 GiB. These are capacity projections; resident lifecycle measurements still
+  need to replace them.
 
 Correctness gate: the complete 153-replay native suite retained 63 exact passes, 90 existing exact
 classifications, zero XPASS/fail/error, and all full-output locks over 1,415,476 compared frames.

@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include <dolphin/pad.h>
+#include <baselib/class.h>
 #include <baselib/gobjproc.h>
 #include <baselib/objalloc.h>
 
@@ -141,6 +142,66 @@ static void print_pool_high_water(const PoolHighWater* high_water, uint32_t high
   printf("pool_maximum total_reserved_bytes=%zu\n", total_bytes);
 }
 
+static void print_relocation_storage(const MslCoreMatch* match) {
+  typedef struct RawSize {
+    uint32_t stride;
+    uint32_t records;
+    uint32_t objects;
+    size_t bytes;
+  } RawSize;
+  size_t bytes[MSL_RELOC_TYPE_COUNT] = {0};
+  uint32_t counts[MSL_RELOC_TYPE_COUNT] = {0};
+  RawSize raw_sizes[256] = {{0}};
+  uint32_t raw_size_count = 0;
+  const MslRelocRecord* records = msl_reloc_records(match);
+  uint32_t i;
+  for (i = 0; i < match->relocation_count; ++i) {
+    const MslRelocRecord* record = &records[i];
+    if (record->type < MSL_RELOC_TYPE_COUNT) {
+      bytes[record->type] += (size_t)record->count * record->stride;
+      ++counts[record->type];
+    }
+    if (record->type == MSL_RELOC_RAW) {
+      uint32_t size_index;
+      for (size_index = 0; size_index < raw_size_count; ++size_index) {
+        if (raw_sizes[size_index].stride == record->stride) {
+          break;
+        }
+      }
+      if (size_index == raw_size_count && raw_size_count < 256) {
+        raw_sizes[raw_size_count++].stride = record->stride;
+      }
+      if (size_index < raw_size_count) {
+        ++raw_sizes[size_index].records;
+        raw_sizes[size_index].objects += record->count;
+        raw_sizes[size_index].bytes += (size_t)record->count * record->stride;
+      }
+    }
+  }
+  for (i = 0; i < MSL_RELOC_TYPE_COUNT; ++i) {
+    if (counts[i] != 0) {
+      printf("relocation_storage type=%u:%s records=%u bytes=%zu\n", i,
+             relocation_type_name(i), counts[i], bytes[i]);
+    }
+  }
+  for (i = 0; i < raw_size_count; ++i) {
+    printf("raw_storage stride=%u records=%u objects=%u bytes=%zu\n",
+           raw_sizes[i].stride, raw_sizes[i].records, raw_sizes[i].objects,
+           raw_sizes[i].bytes);
+  }
+}
+
+static void print_class_storage(const MslCoreMatch* match) {
+  int i;
+  for (i = 0; i < match->class_state.nb_memory_list; ++i) {
+    const HSD_MemoryEntry* entry = match->class_state.memory_list[i];
+    if (entry != NULL) {
+      printf("class_storage size=%u allocated=%u free=%u active=%u\n", entry->size,
+             entry->nb_alloc, entry->nb_free, entry->nb_alloc - entry->nb_free);
+    }
+  }
+}
+
 int main(int argc, char** argv) {
   static const uint8_t characters[] = {1, 22, 18, 2, 7, 19, 15, 9};
   static const uint8_t stages[] = {32, 31, 3, 2, 8, 28};
@@ -202,6 +263,12 @@ int main(int argc, char** argv) {
     }
   }
 
+  config_init(&config, max_stage, max_character, max_player_count);
+  if (msl_core_match_reset(match, game_data, &config, &previous) != 0) {
+    goto done;
+  }
+  print_relocation_storage(match);
+
   config_init(&config, 32, 9, 2);
   if (msl_core_match_reset(match, game_data, &config, &previous) != 0) {
     goto done;
@@ -227,6 +294,7 @@ int main(int argc, char** argv) {
     }
   }
   capture_pool_high_water(match, pool_high_water, &pool_high_water_count);
+  print_class_storage(match);
   save_size = msl_core_match_save_size(match);
   header_size = save_size - sizeof(*match) - match->memory.used;
 

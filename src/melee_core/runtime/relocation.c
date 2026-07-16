@@ -3,12 +3,21 @@
 #include "runtime/context.h"
 #include "runtime/scalar.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <baselib/class.h>
 
 static _Thread_local MslRelocRegistry build_registry;
 static _Thread_local MslCoreMatch* build_match;
+
+enum {
+    // The class size allocator can split an already-registered free piece at
+    // runtime, creating a new typed subobject address without growing the
+    // sealed arena. Bound that metadata separately from construction records.
+    // refs/melee/src/sysdolphin/baselib/class.c::hsdAllocMemPiece
+    MSL_RELOC_RUNTIME_RECORD_RESERVE = 512,
+};
 
 static uint32_t build_address_hash(const void* address)
 {
@@ -140,14 +149,21 @@ int msl_reloc_seal_match(MslCoreMatch* match)
     size_t record_bytes;
     size_t index_bytes;
     size_t storage_bytes;
-    uint32_t record_capacity = MSL_RELOC_OBJECT_CAPACITY;
-    uint32_t index_capacity = MSL_RELOC_INDEX_CAPACITY;
+    uint32_t record_capacity;
+    uint32_t index_capacity = 1;
     uint32_t i;
 
     if (match == NULL || build_match != match || build_registry.count == 0 ||
         build_registry.count >= UINT16_MAX)
     {
         return -1;
+    }
+    record_capacity = build_registry.count + MSL_RELOC_RUNTIME_RECORD_RESERVE;
+    if (record_capacity > MSL_RELOC_OBJECT_CAPACITY) {
+        record_capacity = MSL_RELOC_OBJECT_CAPACITY;
+    }
+    while (index_capacity < record_capacity * 2) {
+        index_capacity *= 2;
     }
     record_bytes = (size_t) record_capacity * sizeof(MslRelocRecord);
     index_bytes = (size_t) index_capacity * sizeof(uint16_t);
@@ -212,6 +228,11 @@ void msl_reloc_register(void* address, MslRelocType type, uint32_t count,
             if (match->relocation_count ==
                 match->relocation_record_capacity)
             {
+                fprintf(stderr,
+                        "Melee core runtime relocation reserve exhausted: "
+                        "records=%u capacity=%u address=%08x type=%u\n",
+                        match->relocation_count,
+                        match->relocation_record_capacity, encoded, type);
                 abort();
             }
             record = &records[match->relocation_count];

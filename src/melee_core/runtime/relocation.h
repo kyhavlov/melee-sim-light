@@ -45,9 +45,11 @@ typedef struct MslRelocRegistry {
     uint32_t count;
 } MslRelocRegistry;
 
-// Runtime relocation ownership retains only the records actually reached by
-// a Match plus a compact 16-bit address index. The large registry above is a
-// thread-local construction scratch and is never resident per environment.
+// Runtime relocation ownership retains the records reached during sealed
+// Match construction, a bounded class-piece split reserve, and a compact
+// 16-bit address index. Runtime allocations consume preallocated arena/pool
+// storage; the only permitted new record address is a subobject split from
+// that storage. The large registry above is thread-local construction scratch.
 typedef struct MslRelocRecord {
     uint32_t address;
     uint32_t stride;

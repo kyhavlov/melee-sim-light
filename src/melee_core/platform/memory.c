@@ -19,11 +19,11 @@
 
 enum {
     MSL_MEMORY_GAME_DATA_BYTES = 64 * 1024 * 1024,
-    // Supported singles/doubles construction currently reaches 3.89 MiB,
-    // including the compact relocation image. Preserve roughly 2x headroom
-    // without reserving 32 MiB per resident environment.
+    // Supported singles/doubles construction remains below 2.5 MiB after
+    // bounded source pools and exact relocation metadata. Keep a measured
+    // 3 MiB hard ceiling; runtime allocation is forbidden after sealing.
     // tests/melee_core/runtime_census.c
-    MSL_MEMORY_MATCH_BYTES = 8 * 1024 * 1024,
+    MSL_MEMORY_MATCH_BYTES = 3 * 1024 * 1024,
 };
 
 // Allocation provenance is needed while a Match graph is constructed, but
@@ -175,11 +175,16 @@ void* msl_memory_alloc(MslMemoryContext* context, size_t size)
     }
     aligned_used = (context->used + MSL_MEMORY_ARENA_ALIGNMENT - 1) &
                    ~(size_t) (MSL_MEMORY_ARENA_ALIGNMENT - 1);
-    if (context->sealed ||
-        context->allocations == NULL ||
+    if (context->sealed || context->allocations == NULL ||
         context->allocation_count == context->allocation_capacity ||
         size > context->capacity - aligned_used)
     {
+        fprintf(stderr,
+                "Melee core arena allocation failed: owner=%u sealed=%u "
+                "size=%zu used=%zu capacity=%zu allocations=%zu/%zu\n",
+                context->owner, context->sealed, size, context->used,
+                context->capacity, context->allocation_count,
+                context->allocation_capacity);
         abort();
     }
     result = context->arena + aligned_used;

@@ -78,6 +78,14 @@ void HSD_ObjAllocPreallocateAll(u32 minimum_free, size_t maximum_free_bytes)
     }
 }
 
+void HSD_ObjAllocEnsureFree(HSD_ObjAllocData* data, u32 minimum_free)
+{
+    data = HSD_ObjAllocResolve(data);
+    if (data != NULL && data->free < minimum_free) {
+        HSD_ObjAllocAddFree(data, minimum_free - data->free);
+    }
+}
+
 void HSD_ObjSetHeap(u32 size, void* ptr)
 {
     obj_heap.curr = (uintptr_t) ptr;

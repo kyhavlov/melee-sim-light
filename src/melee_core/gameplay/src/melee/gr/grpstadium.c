@@ -338,9 +338,17 @@ void grStadium_801D13E0(Ground_GObj* gobj)
     grAnime_801C8138(gobj, gr->map_id, 0);
     mobj = (void*) lbDvd_GetPreloadedArchive(0x7D5);
     gr->u.stadium.xCC = mobj;
+#ifndef MSL_CORE_HOSTED
     if (mobj == NULL) {
         gr->u.stadium.xCC = HSD_MemAlloc(0x50000);
     }
+#else
+    // Frozen Stadium's hosted owner disables the transformation loader in
+    // grStadium_801D1518. Its 320 KiB DVD scratch buffer is therefore never
+    // read by gameplay and must not be replicated in every environment.
+    // refs/melee/src/melee/gr/grpstadium.c::{grStadium_801D1518,
+    //   grStadium_801D2344}
+#endif
     gr->u.stadium.xC4_b1 = false;
     gr->u.stadium.xD0 = NULL;
     gr->u.stadium.xD4 = 0.0F;
