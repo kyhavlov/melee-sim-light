@@ -17,6 +17,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "runtime/benchmark_wire.h"
 #include "runtime/wire.h"
 
 extern char** environ;
@@ -950,6 +951,78 @@ static void build_input(const ReplayView* replay, const FrameRows* rows, int64_t
     dst->l = trigger_u8(get_f32(&src->trigger_l, raw));
     dst->r = trigger_u8(get_f32(&src->trigger_r, raw));
   }
+}
+
+static int build_match_config(const ReplayView* replay, const FrameRows* rows,
+                              int ucf_cardinals_1_0_enabled, int ucf_shield_sdi_enabled,
+                              int ucf_sdi_enabled, MslCoreMatchConfig* config, char* error,
+                              size_t error_size) {
+  int64_t i;
+  if (rows->count == 0) {
+    snprintf(error, error_size, "replay has no finalized frames");
+    return -1;
+  }
+  if (replay->num_players != 2 && replay->num_players != 4) {
+    snprintf(error, error_size, "Melee core requires two or four players, got %d",
+             replay->num_players);
+    return -1;
+  }
+  if (replay->stage_id != 2 && replay->stage_id != 3 && replay->stage_id != 8 &&
+      replay->stage_id != 28 && replay->stage_id != 31 && replay->stage_id != 32) {
+    snprintf(error, error_size, "Melee core requires a legal stage id (2,3,8,28,31,32), got %u",
+             replay->stage_id);
+    return -1;
+  }
+  memset(config, 0, sizeof(*config));
+  config->stage_id = replay->stage_id;
+  config->frame_id = get_i32(&replay->frame_id, rows->raw[0]) - 1;
+  // Slippi records RNG before the frame's source callbacks. A fresh match
+  // runs row 0 as its hidden warm-up and advances this seed naturally.
+  // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+  config->frame_pre_random_seed = get_u32(&replay->frame_seed, rows->raw[0]);
+  // Game info captures the seed restored before stage construction; it is
+  // distinct from online frame seeds.
+  // refs/slippi-ssbm-asm/{Recording/SendGameInfo.asm,
+  // Playback/Core/RestoreGameInfo.asm,Online/Core/InitOnlinePlay.asm}
+  config->initial_random_seed = replay->initial_random_seed;
+  config->match_damage_ratio = replay->damage_ratio;
+  config->num_players = (uint8_t)replay->num_players;
+  config->is_teams = replay->is_teams;
+  config->friendly_fire = replay->friendly_fire;
+  config->online_fnmsubs_zero = replay->online_fnmsubs_zero;
+  config->brawl_offscreen_damage = replay->brawl_offscreen_damage;
+  config->freeze_dead_up_fall_physics = replay->freeze_dead_up_fall_physics;
+  config->ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
+  config->ucf_shield_sdi_enabled = (uint8_t)ucf_shield_sdi_enabled;
+  config->ucf_sdi_enabled = (uint8_t)ucf_sdi_enabled;
+  config->stage_event_streams = (replay->fod_platform_list != NULL ? 1U : 0U) |
+                                (replay->dreamland_whispy_list != NULL ? 2U : 0U);
+  for (i = 0; i < replay->num_players; ++i) {
+    const ReplayPlayer* player = &replay->players[i];
+    int64_t player_raw = rows->player_raw[i][0];
+    uint8_t character = get_u8(&player->character, player_raw);
+    uint8_t stocks = replay->start_stocks[i];
+    if (character != 1 && character != 2 && character != 7 && character != 9 && character != 15 &&
+        character != 18 && character != 19 && character != 22) {
+      snprintf(error, error_size,
+               "Melee core requires Fox, Captain Falcon, Sheik, Peach, Jigglypuff, Marth, "
+               "Zelda, or Falco players");
+      return -1;
+    }
+    if (stocks > config->stock_count) {
+      config->stock_count = stocks;
+    }
+    config->players[i].char_id = character;
+    config->players[i].team_id = replay->team_id[i];
+    config->players[i].costume_id = replay->costume_id[i];
+    config->players[i].handicap = replay->handicap[i];
+    config->players[i].facing_and_port =
+        (uint8_t)((replay->port_1based[i] << 1) | (get_f32(&player->direction, player_raw) > 0.0F));
+  }
+  if (config->stock_count == 0) {
+    config->stock_count = 1;
+  }
+  return 0;
 }
 
 static uint16_t frame_u16(float value) {
@@ -2275,30 +2348,11 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   frames.schema = schema;
   frames.array = array;
   if (load_replay(frames, &replay, error, sizeof(error)) != 0 ||
-      build_finalized_rows(&replay, &rows, error, sizeof(error)) != 0) {
+      build_finalized_rows(&replay, &rows, error, sizeof(error)) != 0 ||
+      build_match_config(&replay, &rows, ucf_cardinals_1_0_enabled, ucf_shield_sdi_enabled,
+                         ucf_sdi_enabled, &state.config, error, sizeof(error)) != 0) {
     PyErr_SetString(PyExc_ValueError, error);
     goto done;
-  }
-  if (replay.num_players != 2 && replay.num_players != 4) {
-    PyErr_Format(PyExc_ValueError, "Melee core requires two or four players, got %d",
-                 replay.num_players);
-    goto done;
-  }
-  if (replay.stage_id != 2 && replay.stage_id != 3 && replay.stage_id != 8 &&
-      replay.stage_id != 28 && replay.stage_id != 31 && replay.stage_id != 32) {
-    PyErr_Format(PyExc_ValueError, "Melee core requires a legal stage id (2,3,8,28,31,32), got %u",
-                 replay.stage_id);
-    goto done;
-  }
-  for (i = 0; i < replay.num_players; ++i) {
-    uint8_t character = get_u8(&replay.players[i].character, rows.player_raw[i][0]);
-    if (character != 1 && character != 2 && character != 7 && character != 9 && character != 15 &&
-        character != 18 && character != 19 && character != 22) {
-      PyErr_SetString(PyExc_ValueError,
-                      "Melee core requires Fox, Captain Falcon, Sheik, Peach, Jigglypuff, Marth, "
-                      "Zelda, or Falco players");
-      goto done;
-    }
   }
   if (start_frame_obj != Py_None) {
     long long requested = PyLong_AsLongLong(start_frame_obj);
@@ -2338,46 +2392,6 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   // warm-up so Entry timers, scheduler state, and RNG consumers reach the
   // pre-frame state for the first compared transition (row 1).
   state.next_input_pos = 0;
-  state.config.stage_id = replay.stage_id;
-  state.config.frame_id = get_i32(&replay.frame_id, rows.raw[0]) - 1;
-  // Slippi records RNG before the frame's source callbacks. The hidden row-0
-  // warm-up therefore starts from row 0's seed and advances it naturally.
-  // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
-  state.config.frame_pre_random_seed = get_u32(&replay.frame_seed, rows.raw[0]);
-  // Recording/SendGameInfo captures the seed restored by playback before
-  // stage construction. Keep it separate from online per-frame reseeds.
-  // refs/slippi-ssbm-asm/{Recording/SendGameInfo.asm,
-  // Playback/Core/RestoreGameInfo.asm,Online/Core/InitOnlinePlay.asm}
-  state.config.initial_random_seed = replay.initial_random_seed;
-  state.config.match_damage_ratio = replay.damage_ratio;
-  state.config.num_players = (uint8_t)replay.num_players;
-  state.config.is_teams = replay.is_teams;
-  state.config.friendly_fire = replay.friendly_fire;
-  state.config.online_fnmsubs_zero = replay.online_fnmsubs_zero;
-  state.config.brawl_offscreen_damage = replay.brawl_offscreen_damage;
-  state.config.freeze_dead_up_fall_physics = replay.freeze_dead_up_fall_physics;
-  state.config.ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
-  state.config.ucf_shield_sdi_enabled = (uint8_t)ucf_shield_sdi_enabled;
-  state.config.ucf_sdi_enabled = (uint8_t)ucf_sdi_enabled;
-  state.config.stage_event_streams = (replay.fod_platform_list != NULL ? 1U : 0U) |
-                                     (replay.dreamland_whispy_list != NULL ? 2U : 0U);
-  for (i = 0; i < replay.num_players; ++i) {
-    const ReplayPlayer* player = &replay.players[i];
-    int64_t player_raw = rows.player_raw[i][0];
-    uint8_t stocks = replay.start_stocks[i];
-    if (stocks > state.config.stock_count) {
-      state.config.stock_count = stocks;
-    }
-    state.config.players[i].char_id = get_u8(&player->character, player_raw);
-    state.config.players[i].team_id = replay.team_id[i];
-    state.config.players[i].costume_id = replay.costume_id[i];
-    state.config.players[i].handicap = replay.handicap[i];
-    state.config.players[i].facing_and_port =
-        (uint8_t)((replay.port_1based[i] << 1) | (get_f32(&player->direction, player_raw) > 0.0F));
-  }
-  if (state.config.stock_count == 0) {
-    state.config.stock_count = 1;
-  }
   build_input(&replay, &rows, 0, &state.previous);
 
   runner_started = monotonic_seconds();
@@ -2406,9 +2420,144 @@ done:
   return result;
 }
 
+static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* kwargs) {
+  static char* keywords[] = {
+      "frames",
+      "start",
+      "metadata",
+      "output",
+      "ucf_cardinals_1_0_enabled",
+      "ucf_shield_sdi_enabled",
+      "ucf_sdi_enabled",
+      NULL,
+  };
+  PyObject* frames_obj;
+  PyObject* start_obj;
+  PyObject* metadata_obj;
+  PyObject* arrow_pair = NULL;
+  const char* output_path;
+  int ucf_cardinals_1_0_enabled = 1;
+  int ucf_shield_sdi_enabled = 1;
+  int ucf_sdi_enabled = 1;
+  struct ArrowSchema* schema;
+  struct ArrowArray* array;
+  ArrowNode frames;
+  ReplayView replay;
+  FrameRows rows;
+  MslCoreBenchmarkCaseHeader header;
+  FILE* output = NULL;
+  int opened_output = 0;
+  int64_t i;
+  char error[512] = {0};
+  PyObject* result = NULL;
+  (void)self;
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|ppp:write_benchmark_case", keywords,
+                                   &frames_obj, &start_obj, &metadata_obj, &output_path,
+                                   &ucf_cardinals_1_0_enabled, &ucf_shield_sdi_enabled,
+                                   &ucf_sdi_enabled)) {
+    return NULL;
+  }
+  memset(&replay, 0, sizeof(replay));
+  memset(&rows, 0, sizeof(rows));
+  if (parse_start(start_obj, &replay) != 0 || parse_metadata(metadata_obj, &replay) != 0) {
+    goto done;
+  }
+  arrow_pair = PyObject_CallMethod(frames_obj, "__arrow_c_array__", NULL);
+  if (arrow_pair == NULL) {
+    goto done;
+  }
+  if (!PyTuple_Check(arrow_pair) || PyTuple_GET_SIZE(arrow_pair) != 2) {
+    PyErr_SetString(PyExc_TypeError, "frames.__arrow_c_array__() returned an invalid pair");
+    goto done;
+  }
+  schema =
+      (struct ArrowSchema*)PyCapsule_GetPointer(PyTuple_GET_ITEM(arrow_pair, 0), "arrow_schema");
+  if (schema == NULL) {
+    goto done;
+  }
+  array = (struct ArrowArray*)PyCapsule_GetPointer(PyTuple_GET_ITEM(arrow_pair, 1), "arrow_array");
+  if (array == NULL) {
+    goto done;
+  }
+  frames.schema = schema;
+  frames.array = array;
+  if (load_replay(frames, &replay, error, sizeof(error)) != 0 ||
+      build_finalized_rows(&replay, &rows, error, sizeof(error)) != 0 ||
+      build_match_config(&replay, &rows, ucf_cardinals_1_0_enabled, ucf_shield_sdi_enabled,
+                         ucf_sdi_enabled, &header.config, error, sizeof(error)) != 0) {
+    PyErr_SetString(PyExc_ValueError, error);
+    goto done;
+  }
+  if (rows.count > UINT32_MAX) {
+    PyErr_SetString(PyExc_OverflowError, "benchmark replay exceeds the case format");
+    goto done;
+  }
+
+  // The benchmark is an ordinary free-running workload: the replay supplies
+  // controller inputs, not per-frame Slippi RNG or moving-stage authority.
+  header.config.stage_event_streams = 0;
+  memcpy(header.magic, msl_core_benchmark_case_magic, sizeof(header.magic));
+  header.version = MSL_CORE_BENCHMARK_CASE_VERSION;
+  header.header_size = sizeof(header);
+  header.input_size = sizeof(MslCoreInput);
+  header.frame_count = (uint32_t)rows.count;
+  output = fopen(output_path, "wb");
+  if (output == NULL) {
+    PyErr_Format(PyExc_OSError, "cannot create benchmark case %s: %s", output_path,
+                 strerror(errno));
+    goto done;
+  }
+  opened_output = 1;
+  if (fwrite(&header, sizeof(header), 1, output) != 1) {
+    snprintf(error, sizeof(error), "cannot write benchmark case header: %s", strerror(errno));
+    goto write_error;
+  }
+  for (i = 0; i < rows.count; ++i) {
+    MslCoreInput input;
+    build_input(&replay, &rows, i, &input);
+    if (fwrite(&input, sizeof(input), 1, output) != 1) {
+      snprintf(error, sizeof(error), "cannot write benchmark case input: %s", strerror(errno));
+      goto write_error;
+    }
+  }
+  if (fclose(output) != 0) {
+    output = NULL;
+    snprintf(error, sizeof(error), "cannot close benchmark case: %s", strerror(errno));
+    goto write_error;
+  }
+  output = NULL;
+  result = PyLong_FromLongLong(rows.count);
+  goto done;
+
+write_error:
+  if (output != NULL) {
+    fclose(output);
+    output = NULL;
+  }
+  PyErr_SetString(PyExc_OSError, error);
+
+done:
+  if (output != NULL) {
+    fclose(output);
+  }
+  if (opened_output && result == NULL) {
+    unlink(output_path);
+  }
+  for (i = 0; i < MSL_CORE_MAX_PLAYERS; ++i) {
+    free(rows.player_raw[i]);
+    free(rows.player_present[i]);
+  }
+  free(rows.raw);
+  Py_XDECREF(arrow_pair);
+  return result;
+}
+
 static PyMethodDef module_methods[] = {
     {"validate_replay", (PyCFunction)(void*)validate_replay, METH_VARARGS | METH_KEYWORDS,
      "Stream a Peppi Arrow replay through a Melee core scalar runtime."},
+    {"write_benchmark_case", (PyCFunction)(void*)write_benchmark_case, METH_VARARGS | METH_KEYWORDS,
+     "Write an ordinary-input benchmark tape from Peppi Arrow buffers."},
     {NULL, NULL, 0, NULL},
 };
 

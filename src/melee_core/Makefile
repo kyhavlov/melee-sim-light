@@ -10,6 +10,7 @@ CORE := $(ROOT)/src/melee_core
 BUILD_ROOT := $(ROOT)/build/melee_core
 PPC_BUILD := $(BUILD_ROOT)/ppc
 NATIVE_BUILD := $(BUILD_ROOT)/native
+NATIVE_RELEASE_BUILD := $(BUILD_ROOT)/native-release
 WASM_BUILD := $(BUILD_ROOT)/wasm
 VALIDATION_BUILD := $(BUILD_ROOT)/validation
 SOURCE_TREE := $(CORE)/gameplay
@@ -40,6 +41,13 @@ VALIDATION_WORKERS ?= 0
 VALIDATION_BUILD_JOBS ?= 4
 VALIDATION_FRAMES ?= 0
 VALIDATION_ARGS ?=
+BENCHMARK_MANIFEST ?= $(BUILD_ROOT)/benchmark/cases.tsv
+BENCHMARK_CPU ?= 8
+BENCHMARK_MATCHES ?= 256
+BENCHMARK_RESIDENT_MATCHES ?= 16
+BENCHMARK_MATCH_FRAMES ?= 32768
+BENCHMARK_WARMUP_TICKS ?= 8
+RELEASE_ARCH_FLAGS ?= -march=native -mtune=native
 
 SOURCE_SYNC := $(ROOT)/tools/melee_core/source_sync.sh
 UPSTREAM_REL_SRCS := $(shell find $(SOURCE_TREE)/src -type f -name '*.c' -printf '%P\n' | LC_ALL=C sort)
@@ -167,8 +175,16 @@ NATIVE_SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/lifecycle_bench.c
 PPC_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(PPC_OBJ_DIR)/%.o,$(SMOKE_SRCS))
 NATIVE_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(NATIVE_SMOKE_SRCS))
+NATIVE_REPLAY_BENCH_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/replay_bench.o
+NATIVE_RUNTIME_CENSUS_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/runtime_census.o
+NATIVE_FLAGS_STAMP := $(NATIVE_BUILD)/compile-flags.stamp
+NATIVE_COMPILE_OBJS := $(NATIVE_UPSTREAM_OBJS) $(NATIVE_LOCAL_OBJS) \
+	$(NATIVE_PLATFORM_OBJS) $(NATIVE_MAIN_OBJ) $(NATIVE_SMOKE_OBJS) \
+	$(NATIVE_REPLAY_BENCH_OBJ) $(NATIVE_RUNTIME_CENSUS_OBJ) \
+	$(NATIVE_DAT_LAYOUT_OBJ) \
+	$(NATIVE_MATCH_RELOC_LAYOUT_OBJ)
 DEPS := $(PPC_OBJS:.o=.d) $(PPC_SMOKE_OBJS:.o=.d) $(NATIVE_OBJS:.o=.d) \
-	$(NATIVE_SMOKE_OBJS:.o=.d) $(WASM_CORE_OBJS:.o=.d) \
+	$(NATIVE_SMOKE_OBJS:.o=.d) $(NATIVE_REPLAY_BENCH_OBJ:.o=.d) $(WASM_CORE_OBJS:.o=.d) \
 	$(NATIVE_DAT_PPC_TYPES_OBJ:.o=.d) \
 	$(NATIVE_DAT_NATIVE_TYPES_OBJ:.o=.d) \
 	$(NATIVE_MATCH_RELOC_TYPES_OBJ:.o=.d) \
@@ -196,6 +212,10 @@ NATIVE_CONTEXT_SMOKE := $(NATIVE_BUILD)/context-smoke
 NATIVE_BATCH_API_SMOKE := $(NATIVE_BUILD)/batch-api-smoke
 NATIVE_WASM_PARITY := $(NATIVE_BUILD)/wasm-parity
 NATIVE_LIFECYCLE_BENCH := $(NATIVE_BUILD)/lifecycle-bench
+NATIVE_REPLAY_BENCH := $(NATIVE_BUILD)/replay-bench
+NATIVE_RUNTIME_CENSUS := $(NATIVE_BUILD)/runtime-census
+NATIVE_RELEASE_BINARY := $(NATIVE_RELEASE_BUILD)/melee-core-native
+NATIVE_RELEASE_REPLAY_BENCH := $(NATIVE_RELEASE_BUILD)/replay-bench
 VIEWER_SCHEMA_TOOL := $(NATIVE_BUILD)/viewer-schema
 VIEWER_SCHEMA_JS := $(ROOT)/tools/viewer/live/schema.generated.js
 VALIDATION_NATIVE_SRC := $(ROOT)/bindings/msl_replay_validate.c
@@ -220,6 +240,16 @@ CFLAGS := \
 	-fno-strict-aliasing -ffp-contract=off -ffunction-sections \
 	-fdata-sections -w
 NATIVE_CFLAGS = $(CFLAGS) -fno-pie
+NATIVE_LINK_FLAGS ?=
+# The source-shaped gameplay TUs still contain optimizer-sensitive decomp C.
+# Keep them at the validation reference profile until Phase 8 closes those UB
+# boundaries; Phase 7 optimizes the audited host/API shell below and requires
+# the complete output-lock suite before expanding that allowlist.
+NATIVE_RELEASE_CFLAGS := \
+	-O0 -g -std=gnu11 -fgnu89-inline -fno-short-enums \
+	-fno-strict-aliasing -ffp-contract=off -ffunction-sections \
+	-fdata-sections -fno-pie -w
+NATIVE_BASE_CFLAGS := $(NATIVE_CFLAGS)
 WASM_CFLAGS = $(CFLAGS) -Wno-implicit-function-declaration -Wno-int-conversion \
 	-Wno-incompatible-pointer-types -Wno-return-mismatch
 LDLIBS := -lm
@@ -230,13 +260,31 @@ LDLIBS := -lm
 # contraction indiscriminately in the hosted core.
 $(PPC_OBJ_DIR)/gameplay/src/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
 $(PPC_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
-$(NATIVE_OBJ_DIR)/gameplay/src/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast -mfma
-$(NATIVE_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast -mfma
+$(NATIVE_OBJ_DIR)/gameplay/src/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
+$(NATIVE_OBJ_DIR)/src/melee_core/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
 $(NATIVE_OBJ_DIR)/src/melee_core/runtime/savestate.o: NATIVE_CPPFLAGS += -D_GNU_SOURCE
+$(NATIVE_RUNTIME_CENSUS_OBJ): NATIVE_CPPFLAGS += -D_GNU_SOURCE
 $(WASM_OBJ_DIR)/gameplay/src/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
 $(WASM_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
 
-.PHONY: all runtime native wasm wasm-smoke viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source source-check validation validator validation-suite validation-supported-domain clean run run-native toolchain data-check smoke native-smoke map-smoke validation-smoke test
+ifeq ($(NATIVE_RELEASE_PROFILE),1)
+NATIVE_RELEASE_OPT_OBJS := \
+	$(NATIVE_OBJ_DIR)/src/melee_core/api.o \
+	$(NATIVE_OBJ_DIR)/src/melee_core/runtime/observation.o \
+	$(NATIVE_OBJ_DIR)/src/melee_core/runtime/relocation.o \
+	$(NATIVE_OBJ_DIR)/src/melee_core/runtime/savestate.o \
+	$(NATIVE_OBJ_DIR)/src/melee_core/runtime/viewer.o \
+	$(NATIVE_OBJ_DIR)/src/melee_core/runtime/wire.o \
+	$(NATIVE_OBJ_DIR)/src/melee_core/runtime/main.o \
+	$(NATIVE_OBJ_DIR)/generated/native_dat_layout.o \
+	$(NATIVE_OBJ_DIR)/generated/match_reloc_layout.o \
+	$(NATIVE_OBJ_DIR)/tests/melee_core/replay_bench.o
+$(NATIVE_RELEASE_OPT_OBJS): override NATIVE_CFLAGS += -O3 $(RELEASE_ARCH_FLAGS)
+endif
+
+NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_RELEASE_OPT_OBJS)
+
+.PHONY: all runtime native native-release replay-benchmark-binary runtime-census benchmark-prepare benchmark-native benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source source-check validation validator validation-suite validation-supported-domain clean run run-native toolchain data-check smoke native-smoke map-smoke validation-smoke test FORCE
 
 all: runtime
 
@@ -244,9 +292,34 @@ runtime: $(BINARY)
 
 native: $(NATIVE_BINARY)
 
+native-release:
+	@case "$(NATIVE_RELEASE_CFLAGS) $(RELEASE_ARCH_FLAGS) $(NATIVE_LINK_FLAGS)" in \
+		*Ofast*|*fast-math*|*unsafe-math*|*finite-math*|*associative-math*|*reciprocal-math*|*fp-contract=fast*) \
+			echo "unsafe floating-point flag in strict release build" >&2; exit 2;; \
+		*flto*) \
+			echo "LTO is not validated for the source-shaped gameplay build" >&2; exit 2;; \
+	esac
+	@$(MAKE) --no-print-directory -f "$(CORE)/Makefile" native replay-benchmark-binary \
+		NATIVE_BUILD="$(NATIVE_RELEASE_BUILD)" \
+		NATIVE_CFLAGS="$(NATIVE_RELEASE_CFLAGS)" NATIVE_RELEASE_PROFILE=1
+
+replay-benchmark-binary: $(NATIVE_REPLAY_BENCH)
+
+runtime-census: data-check $(NATIVE_RUNTIME_CENSUS)
+	@"$(NATIVE_RUNTIME_CENSUS)" "$(DATA)"
+
 wasm: $(WASM_MODULE)
 
 viewer-schema: $(VIEWER_SCHEMA_JS)
+
+FORCE:
+
+$(NATIVE_FLAGS_STAMP): FORCE
+	@mkdir -p "$(@D)"
+	@printf '%s\n' '$(NATIVE_FLAGS_SIGNATURE)' > "$@.tmp"
+	@cmp -s "$@.tmp" "$@" && rm "$@.tmp" || mv "$@.tmp" "$@"
+
+$(NATIVE_COMPILE_OBJS): $(NATIVE_FLAGS_STAMP)
 
 $(VIEWER_SCHEMA_TOOL): $(ROOT)/tools/melee_core/viewer_schema.c $(CORE)/runtime/wire.h
 	@mkdir -p "$(@D)"
@@ -269,7 +342,7 @@ validation: runtime validator
 
 validator: $(VALIDATION_NATIVE)
 
-$(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(CORE)/runtime/wire.h
+$(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(CORE)/runtime/wire.h $(CORE)/runtime/benchmark_wire.h
 	@mkdir -p "$(@D)"
 	@PY_INCLUDE="$$($(PY) -c 'import sysconfig; print(sysconfig.get_path("include"))')"; \
 		"$(HOST_CC)" -O3 -std=c11 -fPIC -shared -Wall -Wextra \
@@ -410,7 +483,7 @@ $(PPC_MATCH_RELOC_LAYOUT_OBJ): $(PPC_MATCH_RELOC_LAYOUT_SRC) $(TOOLCHAIN_STAMP)
 
 $(NATIVE_BINARY): $(NATIVE_OBJS)
 	@mkdir -p "$(@D)"
-	@"$(HOST_CC)" -no-pie -Wl,--gc-sections $^ $(LDLIBS) -o "$@"
+	@"$(HOST_CC)" -no-pie $(NATIVE_LINK_FLAGS) -Wl,--gc-sections $^ $(LDLIBS) -o "$@"
 
 $(WASM_MODULE): $(WASM_CORE_OBJS)
 	@mkdir -p "$(@D)"
@@ -443,7 +516,7 @@ endef
 define link_native_smoke
 $(1): $(NATIVE_CORE_OBJS) $(2)
 	@mkdir -p "$$(@D)"
-	@"$(HOST_CC)" -no-pie -Wl,--gc-sections $$^ $(LDLIBS) -o "$$@"
+	@"$(HOST_CC)" -no-pie $(NATIVE_LINK_FLAGS) -Wl,--gc-sections $$^ $(LDLIBS) -o "$$@"
 endef
 
 $(eval $(call link_smoke,$(ARCHIVE_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/archive_smoke.o))
@@ -461,6 +534,12 @@ $(eval $(call link_native_smoke,$(NATIVE_CONTEXT_SMOKE),$(NATIVE_OBJ_DIR)/tests/
 $(eval $(call link_native_smoke,$(NATIVE_BATCH_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/batch_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_WASM_PARITY),$(NATIVE_OBJ_DIR)/tests/melee_core/wasm_parity.o))
 $(eval $(call link_native_smoke,$(NATIVE_LIFECYCLE_BENCH),$(NATIVE_OBJ_DIR)/tests/melee_core/lifecycle_bench.o))
+$(eval $(call link_native_smoke,$(NATIVE_REPLAY_BENCH),$(NATIVE_REPLAY_BENCH_OBJ)))
+
+$(NATIVE_RUNTIME_CENSUS): $(NATIVE_CORE_OBJS) $(NATIVE_RUNTIME_CENSUS_OBJ)
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" -no-pie -Wl,--gc-sections $^ \
+		$(LDLIBS) -ldl -o "$@"
 
 data-check:
 	@$(PY) -m tools.extraction.validate_raw_data --raw-dir "$(DATA)"
@@ -503,6 +582,34 @@ viewer-production-smoke: viewer-smoke
 
 lifecycle-benchmark: data-check $(NATIVE_LIFECYCLE_BENCH)
 	@timeout 5s "$(NATIVE_LIFECYCLE_BENCH)" "$(DATA)"
+
+benchmark-prepare: validator
+	@"$(PY)" -m tools.melee_core.prepare_replay_benchmark \
+		--suite "$(VALIDATION_SUITE)" --output "$(BENCHMARK_MANIFEST)" \
+		--characters "$(VALIDATION_CHARACTERS)" --stages "$(VALIDATION_STAGES)"
+
+benchmark-native: data-check benchmark-prepare native-release
+	@taskset -c "$(BENCHMARK_CPU)" "$(NATIVE_RELEASE_REPLAY_BENCH)" \
+		"$(DATA)" "$(BENCHMARK_MANIFEST)" --matches "$(BENCHMARK_MATCHES)" \
+		--resident-matches "$(BENCHMARK_RESIDENT_MATCHES)" \
+		--match-frames "$(BENCHMARK_MATCH_FRAMES)" \
+		--warmup-ticks "$(BENCHMARK_WARMUP_TICKS)"
+
+benchmark-9950x3d-vcache-256:
+	@$(MAKE) --no-print-directory -f "$(CORE)/Makefile" benchmark-native \
+		BENCHMARK_CPU=0 BENCHMARK_MATCHES=256
+
+benchmark-9950x3d-vcache-512:
+	@$(MAKE) --no-print-directory -f "$(CORE)/Makefile" benchmark-native \
+		BENCHMARK_CPU=0 BENCHMARK_MATCHES=512
+
+benchmark-9950x3d-frequency-256:
+	@$(MAKE) --no-print-directory -f "$(CORE)/Makefile" benchmark-native \
+		BENCHMARK_CPU=8 BENCHMARK_MATCHES=256
+
+benchmark-9950x3d-frequency-512:
+	@$(MAKE) --no-print-directory -f "$(CORE)/Makefile" benchmark-native \
+		BENCHMARK_CPU=8 BENCHMARK_MATCHES=512
 
 map-smoke: data-check $(MAP_SMOKE)
 	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MAP_SMOKE)" \

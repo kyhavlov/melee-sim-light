@@ -1788,6 +1788,157 @@ Correctness hardening remains continuous: reached nonmatching decomp owners, PPC
 seams, RNG streams, endian boundaries, unsupported stubs, and long-rollout divergence must be
 corrected or explicitly source-classified when their owner enters scope.
 
+### Maximum-throughput program
+
+The next three phases turn the validated source-shaped core into the production RL runtime. The
+first major throughput target is at least 500,000 complete environment-frames per second on one
+pinned physical core of the local AMD Ryzen 9 9950X3D at a batch size of 256 or 512. A complete
+frame includes controller ingestion, all gameplay systems, terminal calculation, and the normal RL
+observation write; validation compare rows, viewer projection, skipped systems, or inflated frame
+accounting do not count toward the target.
+
+The execution model remains deliberately simple: one single-threaded simulator process owns one
+logical batch, and users run independently pinned processes when they want multiple cores. Large
+batches may be tiled internally for cache locality, but the core will not create a worker pool,
+manage processes, or schedule work across CPU cores in these phases. One process must eventually be
+able to own 4,096 to 16,384 environments without pathological virtual, resident, or observation
+memory use.
+
+The local target has two L3 domains: physical CPUs 0–7 share 96 MiB and physical CPUs 8–15 share
+32 MiB; CPUs 16–31 are their SMT siblings. Phase 7 measures a pinned physical core from each domain
+before selecting and locking the official 500k benchmark core. The secondary AMD EPYC 9655P host
+(`gigaserver`) has 96 physical cores, 384 MiB L3 across twelve domains, and the same useful broad
+AVX-512 families as the local target. It is a compatibility and many-process scaling target, not a
+500k single-core completion target. Produce host-tuned native builds rather than weakening the
+local target for a lowest-common-denominator binary.
+
+Optimization must preserve the character-admission path. Shared runtime systems may not encode the
+currently supported character set as a performance shortcut. Batch dispatch and specialization use
+source/data-backed callback or owner identities so a future character primarily adds extracted
+data and genuinely new character callbacks rather than requiring a new state layout, scheduler, or
+observation design. All retained speedups perform equivalent gameplay computation and preserve the
+153-replay output locks without new or widened classifications.
+
+#### Phase 7 — Production contract, benchmark, and optimized baseline
+
+Phase 7 establishes the only workload and evidence on which later architectural optimizations are
+judged. It intentionally stops before broad mutable-state or scheduler restructuring so Phase 8 is
+chosen from trustworthy measurements.
+
+The accepted baseline, compiler experiments, runtime census, and the current 32-bit resident-batch
+blocker are recorded in [`PERFORMANCE.md`](PERFORMANCE.md). Keep future retained and rejected
+optimization results in that worklog rather than overwriting the baseline.
+
+1. Add a typed production observation projection semantically equivalent to the old simulator's
+   980-byte `MeleeGamestate`, which was selected for Slippi-AI compatibility. It must include
+   viewpoint-relative self/ally/opponent ordering, presence/source/team metadata, the existing
+   fighter kinematics/action/combat fields, items, Randall, Fountain platform heights, and derived
+   invulnerability. Do not expose the 1,560-byte viewer schema or the replay-forensic compare row as
+   the RL contract. Restore the detailed terminal result rather than the current one-byte `done`
+   projection. Lock field-by-field parity with the old production projection for the supported
+   domain while allowing a cleaner new API/layout.
+2. Implement one native replay-driven production benchmark. Decode and stage the aggregate-suite
+   match configs and controller streams before timing, assign replay streams cyclically across
+   every match, and repeat them as needed to fill the batch. Each environment resets and restarts
+   when its input stream ends. The timed loop uses ordinary free-running gameplay semantics: it
+   must not invoke validation comparison, per-frame replay RNG authority, teacher forcing, Python
+   row loops, or Wasm/viewer output.
+3. Make the benchmark write the production observation and terminal output into a caller-owned
+   128-frame ring. The core owns only the current match state and writes one ring position per
+   frame; it does not retain or copy observation history internally. Include reset cost in the main
+   throughput number and report a step-only diagnostic separately. Lock deterministic state and
+   observation digests so a candidate cannot claim speed by omitting equivalent computation.
+4. Run the primary benchmark at batches 256 and 512 on one pinned physical core with SMT excluded.
+   Measure both the 96 MiB and 32 MiB local L3 domains once, choose the faster repeatable target,
+   and record affinity, compiler, CPU, clocks/governor context, wall time, aggregate FPS,
+   cycles/environment-frame, reset frequency, and observation bytes written. The benchmark must be
+   fast enough for iterative use and have bounded warmup/sample durations.
+5. Add an optimized strict-float native configuration. Evaluate `-O3`, host architecture tuning,
+   LTO, section garbage collection, and similarly behavior-neutral compiler/linker choices without
+   enabling fast-math, unsafe contraction, or a different gameplay workload. Keep debug/forensic
+   builds available but make the production benchmark use the release configuration explicitly.
+6. Produce a source-backed reachability and cost census: per-phase CPU samples/cycles, reached
+   scheduled callbacks, headless/presentation work still running, compiled/link-retained source,
+   allocation and fixed-pool high-water marks, `MslCoreMatch`/arena reserved and touched bytes,
+   savestate component sizes, and immutable data duplicated per match. Distinguish code that merely
+   compiles from work that executes every frame.
+7. Keep a performance worklog with the baseline and every retained/rejected candidate. A speedup is
+   accepted only with the same benchmark workload/digest and full correctness gates. Do not retain
+   speculative flags, alternate implementations, or rejected experiments.
+
+Phase 7 is complete when the production observation/terminal contract is covered and Slippi-AI
+compatible, the replay benchmark is reproducible on both local cache domains, the optimized build
+has an equivalent-computation baseline, and the profiling/memory census is sufficient to propose
+concrete Phase 8 storage and scheduler boundaries. The full 153-replay native gate, output locks,
+native/PPC smokes, native/Wasm differential, no-allocation runtime contract, and browser viewer must
+remain green with no new classification. Phase 7 does not need to reach 500k FPS or make 16k
+environments practical.
+
+#### Phase 8 — Memory compaction and batched execution substrate
+
+Phase 8 makes the runtime structurally capable of large RL batches before introducing widespread
+SIMD-specific layout. Use the Phase 7 census rather than replay names or guessed hot fields to set
+the exact memory budgets and owner boundaries.
+
+1. Remove source-backed headless-irrelevant files, callbacks, scheduler entries, presentation work,
+   diagnostic projection, and initialization machinery that remains reached in production without
+   contributing gameplay state. Let linker garbage collection handle merely unused functions;
+   prioritize work that consumes runtime cycles, memory, or build ownership.
+2. Move every proven immutable archive, translated DAT graph, table, callback descriptor, and stage
+   or character catalog into shared `GameData`. Replace mutable per-match copies only after proving
+   the source owner and save/restore behavior.
+3. Replace the 32 MiB per-match arena and oversized fixed pools with bounded, measured storage.
+   Separate compact hot per-frame state from cold mutable scheduler/object/pool state, retain no
+   heap allocation after initialization, and update typed relocation/savestate metadata rather than
+   weakening arbitrary-index restore.
+4. Remove the 4,096-match API ceiling once the representation supports it. Add bounded memory and
+   lifecycle coverage for 4,096 and 16,384 initialized environments with a 128-frame caller-owned
+   observation ring; report virtual, resident, touched, hot-state, cold-state, and observation
+   bytes separately.
+5. Tile one logical batch into cache-sized groups while remaining single-threaded. Step scheduler
+   phases across matches and group divergent lanes by generated source callback/owner identity;
+   preserve deterministic lane order and tie-breaking. Do not add an internal worker pool.
+6. Keep shared physics, collision, combat, stage, item, and observation paths character-generic.
+   Any specialization must be keyed by real extracted/source owner data rather than a current
+   character-id list, and future characters must retain a correct canonical execution path.
+
+Phase 8 is complete when a single process can create, reset, step, observe, save/restore, and destroy
+4k and 16k batches within the measured memory budget; production paths still allocate nothing;
+cache-tiled owner scheduling is the canonical runtime path; and all Phase 7 benchmark/correctness
+locks remain equivalent. Record the new 256/512 single-core throughput and memory scaling, but do
+not call Phase 8 complete merely for an FPS gain if large-batch memory remains impractical.
+
+#### Phase 9 — SoA/AoSoA, SIMD, and 500k completion
+
+Phase 9 optimizes the measured hot path after the production contract and state ownership are
+stable. The public batch, observation, terminal, and arbitrary-match savestate semantics remain
+unchanged while internal physical storage may be reorganized aggressively.
+
+1. Promote measured hot fields to aligned SoA/AoSoA storage in cache-sized tiles. Keep cold or
+   rarely active source structures out of unconditional tick streams and avoid broad gathers from
+   pointer-rich graphs.
+2. Make hot loops compiler-vectorizable first, using 64-byte alignment, clear aliasing/restrict
+   contracts, compact masks, deterministic lane order, and contiguous owner groups. Inspect emitted
+   code and counters rather than treating a vectorization report as proof of useful SIMD.
+3. Add explicit AVX-512 kernels where they win on the 9950X3D: likely input normalization, timers,
+   unconditional integration, collision candidate math, masks/bitsets, observation packing, and
+   other shared systems with coherent lanes. Compare AVX2 and scalar forms when divergence,
+   gather/scatter cost, or frequency behavior makes wider vectors questionable. Keep target-specific
+   instructions behind internal kernels, not character or public-API branches.
+4. Evaluate measured late-stage techniques such as software prefetch, active-lane compaction,
+   branchless bitsets, huge pages, first-touch placement, PGO, and post-link optimization. Retain
+   only equivalent-computation wins and keep host-specific tuning reproducible.
+5. Verify that a large logical batch still tiles correctly and efficiently in one process, then run
+   independent pinned processes for an out-of-band many-core smoke on the local CPU and EPYC. Do
+   not make internal multi-core orchestration a completion dependency.
+
+Phase 9 completes at a repeatable minimum of 500,000 complete environment-frames per second on the
+selected pinned physical 9950X3D core at batch 256 or 512, including resets and the 128-frame
+production observation/terminal ring writes. The 4k/16k per-process memory contract, future-character
+admission boundary, full validation/output locks, native/Wasm parity, save/restore exactness, and
+no-allocation runtime contract must remain intact. Report the EPYC result as portability/scaling
+evidence, not as a substitute for the local single-core target.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to

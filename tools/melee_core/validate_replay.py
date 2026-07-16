@@ -26,7 +26,9 @@ ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build" / "melee_core"
 NATIVE = BUILD / "validation" / "_msl_replay_validate.so"
 PPC_BINARY = BUILD / "ppc" / "melee-core-ppc"
-NATIVE_BINARY = BUILD / "native" / "melee-core-native"
+NATIVE_BINARY = Path(
+    os.environ.get("MSL_CORE_NATIVE_BINARY", BUILD / "native" / "melee-core-native")
+)
 TOOLCHAIN = BUILD / "toolchain" / "root"
 QEMU = TOOLCHAIN / "usr" / "bin" / "qemu-ppc-static"
 SYSROOT = TOOLCHAIN / "usr" / "powerpc-linux-gnu"
