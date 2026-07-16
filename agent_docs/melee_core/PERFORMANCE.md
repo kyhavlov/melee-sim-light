@@ -253,16 +253,28 @@ physically touches a caller-owned 128-frame observation/terminal ring, saves Mat
 complete step/output pass over every environment, restores the snapshot into the last arbitrary
 index, checks exact output equality, and destroys the batch. At 4,096 environments it measured:
 
+```bash
+# Safe routine smoke; defaults to 256 environments.
+make -f src/melee_core/Makefile large-batch-smoke
+
+# Explicit high-memory release gates.
+make -f src/melee_core/Makefile large-batch-smoke LARGE_BATCH_MATCHES=4096
+make -f src/melee_core/Makefile large-batch-smoke LARGE_BATCH_MATCHES=16384
+```
+
 - 12.55 GiB virtual and 7.97 GiB resident/private after reset;
 - 13.04 GiB virtual and 8.46 GiB resident after touching the 0.49 GiB output ring;
 - 0.49 GiB resident after destroying GameData and the batch while retaining the caller's ring;
 - 0.218 s create, 9.140 s reset, and 0.302 s complete step/output (13,545 FPS).
 
-The 16,384-environment representative mix projects to roughly 31.5 GiB initialized resident state
-plus a 1.94 GiB output ring from the measured 4,096 slope, while the conservative all-maximum bound
-is 44.75 GiB touched and 50.88 GiB virtual. A full 16,384 lifecycle gate is intentionally explicit:
-it must not be launched as a routine background command because it materially pressures host
-memory and takes longer than the normal development-command budget.
+The same complete gate at 16,384 environments measured 49.25 GiB virtual and 31.62 GiB resident
+after reset, then 51.20 GiB virtual and 33.57 GiB resident after physically touching the 1.95 GiB
+output ring. Create took 0.233 s, reset took 31.454 s, and one complete step/output pass took 1.198 s
+(13,676 FPS). Destruction returned resident memory to the caller-owned 1.95 GiB ring. The measured
+31.46 GiB initialized-state component agrees with the 4,096 slope and remains below the
+conservative all-maximum 44.75 GiB touched bound. Because this materially pressures host memory and
+exceeds the normal command-time budget, the 16,384 gate must remain an explicit supervised release
+check rather than a routine background command.
 
 The complete 153-replay native suite after scheduler cutover retained 63 exact passes, 90 existing
 classifications, zero XPASS/fail/error, and 1,415,476 compared frames. Native and PPC smokes,

@@ -1911,9 +1911,10 @@ not call Phase 8 complete merely for an FPS gain if large-batch memory remains i
 Phase 8 evidence is accumulated in [`PERFORMANCE.md`](PERFORMANCE.md). The retained implementation
 now has a 3 MiB bounded Match arena, compact generated relocation state, one contiguous arena map
 per batch, same-config reset cloning, true resident 256/512 measurements, a complete 4,096-Match
-lifecycle/memory gate, and canonical two-Match source-owner scheduling. The final 16,384 lifecycle
-gate remains an explicit high-memory/long-running completion check; do not run it unattended or
-mistake its process for a routine benchmark.
+lifecycle/memory gate, and canonical two-Match source-owner scheduling. The supervised 16,384-Match
+lifecycle also passes at 33.57 GiB peak RSS including a physically touched 128-frame output ring;
+retain it as an explicit high-memory release check and do not run it unattended or mistake its
+process for a routine benchmark.
 
 #### Phase 9 — SoA/AoSoA, SIMD, and 500k completion
 
