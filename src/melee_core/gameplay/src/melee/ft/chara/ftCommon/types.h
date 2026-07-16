@@ -183,8 +183,10 @@ union ftCommon_MotionVars {
         /* fp+234C */ int xC;
         /* fp+2350 */ float x10;
         /* fp+2354 */ int x14;
-        /* fp+2358 */ UNK_T x18;
-        /* fp+235C */ UNK_T x1C;
+        // These are opaque 32-bit motion-state lanes, not host pointers.
+        // refs/melee/src/melee/ft/chara/ftCommon/types.h
+        /* fp+2358 */ u32 x18;
+        /* fp+235C */ u32 x1C;
         /* fp+2360 */ int x20;
     } itemthrow;
     struct {
@@ -445,6 +447,7 @@ union ftCommon_MotionVars {
         /* fp+234C */ u8 xC;
     } capturewait;
 };
+STATIC_ASSERT(sizeof(((union ftCommon_MotionVars*) 0)->itemthrow) == 0x24);
 
 /// @todo Fake, need to find real size of #HitCapsule
 struct SmallerHitCapsule {

@@ -4,15 +4,25 @@ import argparse
 from pathlib import Path
 
 from tools.slippi.slpz import compress_path
-from tools.slippi.suite_io import load_suite, repo_root
+from tools.slippi.suite_io import load_suite, repo_root, suite_manifest_paths
 
 
 def _suite_paths(root: Path, args) -> list[Path]:
     if args.all_validation_suites:
-        return sorted((root / "replays" / "suites").glob("*.json"))
-    if not args.suite:
+        requested = sorted((root / "replays" / "suites").glob("*.json"))
+    elif not args.suite:
         raise SystemExit("pass --suite or --all-validation-suites")
-    return [(root / suite).resolve() for suite in args.suite]
+    else:
+        requested = [(root / suite).resolve() for suite in args.suite]
+
+    paths: list[Path] = []
+    seen: set[Path] = set()
+    for suite in requested:
+        for path in suite_manifest_paths(suite):
+            if path not in seen:
+                seen.add(path)
+                paths.append(path)
+    return paths
 
 
 def _rewrite_suite_replays(path: Path, replacements: dict[str, str]) -> bool:

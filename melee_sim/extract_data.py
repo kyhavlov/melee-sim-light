@@ -51,6 +51,8 @@ _SOURCE_CORE_ONLY_CHAR_GLOBS = {
     # registry until public cutover, so keep this raw-only closure explicit.
     # refs/melee/src/melee/ft/chara/ftPurin/ftPr_Init.c
     "puff": "*PlPr*.dat",
+    # refs/melee/src/melee/ft/chara/ftPeach/ftPe_Init.c
+    "peach": "*PlPe*.dat",
 }
 _RUNTIME_CHARS = RL_1_0_CHARS
 _RUNTIME_STAGES = RL_1_0_STAGES
@@ -70,7 +72,9 @@ _SOURCE_CORE_COMMON_FILES = (
     "EfCoData.dat",
 )
 _SOURCE_CORE_EFFECT_FILES = tuple(
-    dict.fromkeys((*[info.effect_dat for info in CHARS.values()], "EfPrData.dat"))
+    dict.fromkeys(
+        (*[info.effect_dat for info in CHARS.values()], "EfPrData.dat", "EfPeData.dat")
+    )
 )
 
 

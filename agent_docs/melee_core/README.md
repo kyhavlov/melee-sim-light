@@ -1,12 +1,13 @@
 # Source-Shaped Melee Core
 
 Status: Phase 5.5 canonical source promotion, every original Phase 5 supported-domain packet, and
-the post-goal Jigglypuff source packet are complete. PPC32 and native x86-64 compile the tracked
-repository-owned gameplay source directly. The current 133-replay inventory completes as 61 strict
-passes plus 72 exact source classifications over 1,146,353 transitions: 50/47 across the 97
-legal-stage singles, 8/13 across the 21 doubles, and 3/12 across the 15-replay Puff extension. Real
-multi-match context ownership, arbitrary savestates, the replacement API, and Wasm/viewer cutover
-remain deferred until the next agreed phase.
+the post-goal Jigglypuff and Peach source packets are complete. PPC32 and native x86-64 compile the
+tracked repository-owned gameplay source directly. The current 153-replay inventory completes as
+63 strict passes plus 90 exact source classifications over 1,415,476 transitions: 50/47 across the
+97 legal-stage singles, 8/13 across the 21 doubles, 3/12 across the 15-replay Puff extension, and
+2/18 across the 20-replay Peach extension. Real multi-match context ownership, arbitrary
+savestates, the replacement API, and Wasm/viewer cutover remain deferred until the next agreed
+phase.
 
 Branch base: `core-rewrite` at `6fbcc9bc7719` (`Rewrite core contact and motion state ownership`).
 
@@ -1077,33 +1078,36 @@ native compile profile remains the default.
 
 ### Phase 5 continuation — Current supported source domain
 
-After source promotion, complete the declared Fox, Falco, Marth, Captain Falcon, Sheik, Zelda, and
-Jigglypuff domain across Final Destination, Battlefield, Fountain of Dreams, frozen Pokemon
-Stadium, Yoshi's Story, and Dream Land N64. Work by source-owner packet, not mismatch row. Import
+After source promotion, complete the declared Fox, Falco, Marth, Captain Falcon, Sheik, Zelda,
+Jigglypuff, and Peach domain across Final Destination, Battlefield, Fountain of Dreams, frozen
+Pokemon Stadium, Yoshi's Story, and Dream Land N64. Work by source-owner packet, not mismatch row. Import
 complete reached fighter/stage/article/scheduler owners, preserve direct source structure, update
 DAT translation and extraction contracts when new archive fields are required, and keep PPC/native
 compiling the same canonical gameplay implementation.
 
-The committed validation inventory contains 133 distinct replays:
+The active validation inventory contains 153 distinct replays behind one composed
+`melee_core_aggregate.json` manifest:
 
 - `aggregate_recent.json`: 97 two-player entries across all six legal stages;
-- `doubles_recent.json`: 21 four-player entries across FD, Battlefield, frozen Stadium, Yoshi's,
-  and Dream Land;
 - `puff.json`: 15 two-player Jigglypuff entries imported from the dedicated new-character capture
   branch;
+- `peach.json`: 20 two-player Peach entries spanning every source-reachable character-specific
+  action-state row, including the two local special/item coverage demos;
+- `doubles_recent.json`: 21 four-player entries across FD, Battlefield, frozen Stadium, Yoshi's,
+  and Dream Land;
 - the current Fox/Falco FD/Battlefield/frozen-Stadium gate selects 23 singles, leaving 74 additional
   singles plus all 21 doubles, or 95 new entries for this goal.
 
-Use the character/stage suite manifests as focused development selections, but treat the 97-entry
-aggregate, 21-entry doubles, and 15-entry Puff manifests as the current terminal inventories.
+Use the character/stage suite manifests as focused development selections, but treat
+`melee_core_aggregate.json` as the canonical union rather than maintaining another replay list.
+The default supported-character filter executes all 153 entries.
 Existing heldout manifests remain evidence against owner-local overfitting; do not implement
 replay-specific branches or add a second state model to satisfy them.
 
-Advance the default character/stage selection as each packet becomes supported, and add one
-canonical supported-domain validation target that schedules all three terminal manifests through the
-existing parallel native/Arrow path with deterministic stdout. Keep focused per-owner selections
-for development, but do not require manual replay lists or a Python per-frame path to run the whole
-133-replay gate.
+Advance the default character/stage selection as each packet becomes supported. The canonical
+supported-domain validation target schedules the composed aggregate through the existing parallel
+native/Arrow path with deterministic stdout. Keep focused per-owner selections for development,
+but do not require manual replay lists or a Python per-frame path to run the whole gate.
 
 During source expansion, maintain a lightweight future-ownership ledger without restructuring the
 runtime. Classify each newly reached mutable global, persistent pointer-bearing type, callback
@@ -1397,6 +1401,39 @@ Future ownership recorded by this packet adds immutable Puff fighter/costume/eff
 `MatchState`. The packet introduces no post-initialization allocation and no new process-global
 mutable gameplay owner.
 
+#### Subphase G — Peach extension
+
+The Peach packet imports the complete reached `ftPeach` lifecycle, float, smash, and special-state
+owners plus the Peach turnip, parasol, Toad, spore, and explosion articles. Peach's rare down-B
+outcomes also promote the reached Bob-omb, Mr. Saturn, Beam Sword, and Parasol swing common-item
+owners rather than substituting simplified item behavior. Native DAT initialization translates
+`PlPe.dat`, costume graphs, fighter attributes, all five Peach article graphs, and the required
+common-item articles/attributes into fixed arenas. Both PPC32 and native x86-64 compile the same
+canonical source packet.
+
+Two shared native source-layout defects were fixed before accepting classifications. The
+`ftCommon_MotionVars::itemthrow` opaque lanes now retain their retail 32-bit widths, which removes a
+wrong shield item-throw action and 12,584 downstream mismatch rows in the motivating replay.
+Peach's live turnip-owner source pointer likewise remains one 32-bit word (native gameplay objects
+already live below `UINT32_MAX`), keeping the following Bob-omb scale lane at retail offset `+0x14`.
+Mr. Saturn validation excludes only generic Slippi bytes sampled from its uninitialized xDE4 lane
+in states that do not own it; states that publish/consume the historical position remain strict.
+
+The 20-entry `peach.json` gate reaches every final transition as two strict passes plus eighteen
+exact classifications, zero failures, and zero errors over 269,123 transitions in about 3.6 seconds
+on the 16-worker native runner. A bounded PPC/native probe agrees exactly at the first direct
+DamageFlyRoll RNG-phase gate, and another agrees on the demo's first turnip-gravity ULP. Remaining
+full-stream fingerprints use the same narrow source/profile classes as the established suite:
+Dolphin/PPC float execution, presentation-owned DamageFlyRoll stream phase, legacy magnifier or
+item-publication scheduling, signed zero, and source-owned historical article bytes. The composed
+153-replay aggregate completes as 63 strict passes plus 90 exact classifications, zero failures,
+and zero errors over 1,415,476 transitions in about 8.3 seconds.
+
+Future ownership recorded by this packet adds immutable Peach fighter/costume/article and common
+item catalogs to `GameData`; Peach float/special state, live article links, rare-pull item state, and
+their fixed pools belong to `MatchState`. No post-initialization allocation or replay-keyed gameplay
+branch was introduced.
+
 #### Autonomous goal and commit policy
 
 The source-promotion phase and each source-domain subphase above is an authorized autonomous commit
@@ -1413,19 +1450,18 @@ native-debug as bounded correctness oracles.
 
 The original autonomous goal completed when canonical source became the direct build input and all
 97 singles plus 21 doubles reached their final transitions with every residual either strict or
-source-classified. Jigglypuff was then authorized as the first post-goal source-domain extension and
-adds the 15-entry terminal manifest described above. Peach and other new fighter scope, real context
-promotion, arbitrary savestates, the replacement API, Wasm, the browser viewer, public cutover, and
-SoA/AoSoA optimization remain outside the reached goal.
+source-classified. Jigglypuff and Peach were then added as post-goal source-domain extensions with
+15- and 20-entry terminal manifests. Other new fighter scope, real context promotion, arbitrary
+savestates, the replacement API, Wasm, the browser viewer, public cutover, and SoA/AoSoA
+optimization remain outside the reached goal.
 
-After the Puff extension, reconvene to choose between expanding the canonical source domain further
-(likely Peach and possibly other fighters) or locking the reached state closure and starting the
-deferred context/API/savestate/Wasm phase.
+After the Peach extension, reconvene to choose between expanding the canonical source domain again
+or locking the reached state closure and starting the deferred context/API/savestate/Wasm phase.
 
 ### Deferred Phase 6 — Match ownership, arbitrary savestates, API, and Wasm
 
 Begin this phase only after the autonomous supported-domain goal and the explicit decision about
-Peach or other additional pre-context fighter scope. It changes ownership and build
+any additional pre-context fighter scope. It changes ownership and build
 structure while the complete reached replay corpus provides the correctness lock. It must not become
 a gameplay rewrite: source file boundaries, function bodies, source structs, callback signatures,
 the scalar scheduler, pointer-rich AoS representation, object ordering, and floating-point operation
@@ -1565,8 +1601,8 @@ viewer-only projection fields without revisiting engine lifetime or build archit
 
 1. PPC32, native x86-64, and wasm32 compile the same canonical gameplay files directly; no ignored
    materialized gameplay tree is a build input.
-2. PPC/native smokes and bounded differentials pass, and the complete reached 97-singles/21-doubles
-   baseline retains every strict result and documented source-classified first-mismatch position.
+2. PPC/native smokes and bounded differentials pass, and the complete reached 153-replay aggregate
+   retains every strict result and documented source-classified fingerprint.
 3. One immutable `GameData` serves multiple resettable matches with interleaved, state-isolated
    stepping and four-player-capable storage.
 4. Normal reset/step/output/copy/save/restore paths perform no heap allocation, file access, DAT

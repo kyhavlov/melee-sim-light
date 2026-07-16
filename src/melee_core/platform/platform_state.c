@@ -16,6 +16,7 @@ int DbLevel;
 UnkCostumeStruct ft_80459B28[4];
 UnkCostumeStruct ft_80459A98[6];
 UnkCostumeStruct ft_80459D18[5];
+UnkCostumeStruct ft_80459DF0[5];
 UnkCostumeStruct ft_8045A1F8[5];
 UnkCostumeStruct ft_8045A0F0[5];
 UnkCostumeStruct ft_8045A168[5];

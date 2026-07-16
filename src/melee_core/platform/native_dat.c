@@ -874,6 +874,7 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataCaptain") == 0 ||
         strcmp(symbol, "ftDataSeak") == 0 ||
         strcmp(symbol, "ftDataMars") == 0 ||
+        strcmp(symbol, "ftDataPeach") == 0 ||
         strcmp(symbol, "ftDataZelda") == 0 ||
         strcmp(symbol, "ftDataFalco") == 0)
     {
@@ -983,6 +984,8 @@ static void* translate_item_public(MslNativeArchive* context,
     };
     it_804D6D20_t* result = native_alloc(sizeof(*result));
     uint32_t target;
+    uint32_t article_source;
+    uint32_t attrs_source;
 
     add_memo(context, offset, msl_dat_root_it_804D6D20_t, result);
     target = raw_pointer(context, offset + 0x00);
@@ -990,12 +993,41 @@ static void* translate_item_public(MslNativeArchive* context,
         result->x0 = translate_target_count(
             context, target, msl_dat_root_ItemCommonData, 1);
     }
-    // Items are disabled in the current Fox/FD match domain. Keep the three
-    // source table capacities, while Fox's exact character articles are
-    // installed later by ftFx_OnLoad through it_8026B3F8.
-    // Source: refs/melee/src/melee/it/item.c::Item_80267978 and
-    // refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_OnLoad.
-    result->x4 = native_alloc(COMMON_ITEM_COUNT * sizeof(*result->x4));
+    // Translate the source-owned common Article table. Stage item spawning is
+    // disabled, but Peach's SpecialLw directly selects BombHei, Dosei, or
+    // Sword from this table. Article.x4 is void in the decomp, so install the
+    // three concrete source attribute layouts explicitly after translating
+    // the shared Article graphs.
+    // refs/melee/src/melee/it/iteffect.c::it_802787B4
+    // refs/melee/src/melee/ft/chara/ftPeach/ftPe_SpecialLw.c
+    target = raw_pointer(context, offset + 0x04);
+    if (target != UINT32_MAX) {
+        result->x4 = translate_target_count(
+            context, target, msl_dat_root_MslDatCommonItemArticles, 1);
+#define TRANSLATE_COMMON_ITEM_ATTRS(kind, type)                              \
+        do {                                                                 \
+            article_source = raw_pointer(context, target + (kind) * 4);      \
+            if (article_source != UINT32_MAX && result->x4[(kind)] != NULL) {\
+                attrs_source = raw_pointer(context, article_source + 0x04);  \
+                if (attrs_source != UINT32_MAX) {                            \
+                    result->x4[(kind)]->x4_specialAttributes =               \
+                        translate_target_count(context, attrs_source,         \
+                                               (type), 1);                    \
+                }                                                            \
+            }                                                                \
+        } while (0)
+        TRANSLATE_COMMON_ITEM_ATTRS(It_Kind_BombHei,
+                                    msl_dat_root_itBombHeiAttributes);
+        TRANSLATE_COMMON_ITEM_ATTRS(It_Kind_Dosei,
+                                    msl_dat_root_itDoseiAttributes);
+        TRANSLATE_COMMON_ITEM_ATTRS(It_Kind_Sword,
+                                    msl_dat_root_itSword_UnkArticle1);
+#undef TRANSLATE_COMMON_ITEM_ATTRS
+    } else {
+        result->x4 = native_alloc(COMMON_ITEM_COUNT * sizeof(*result->x4));
+    }
+    // Character articles are installed later by each fighter's OnLoad path.
+    // refs/melee/src/melee/it/item.c::Item_80267978
     result->x8 = native_alloc(CHARACTER_ITEM_COUNT * sizeof(*result->x8));
     result->xC = native_alloc(POKEMON_ITEM_COUNT * sizeof(*result->xC));
     target = raw_pointer(context, offset + 0x10);
@@ -1016,7 +1048,11 @@ static void* translate_fighter_common_public(MslNativeArchive* context,
 {
     const MslDatType* const element_types[23] = {
         msl_dat_root_ftCommonData,
-        msl_dat_root_MslDatIntPointer,
+        // PlCo.dat's second public pointer is the 26-entry throw-attribute
+        // table consumed across ftCo_MS_LightThrowF..HeavyThrowLw4.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c::{
+        //   ftCo_80095D5C,ftCo_80095EFC}
+        msl_dat_root_MslDatItemThrowAttrs,
         msl_dat_root_MslDatFloat5,
         msl_dat_root_MslDatFloat,
         msl_dat_root_MslDatFighterPartsPointer,
@@ -1057,6 +1093,7 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_FOX,
     MSL_FIGHTER_ARTICLES_FALCO,
     MSL_FIGHTER_ARTICLES_SHEIK,
+    MSL_FIGHTER_ARTICLES_PEACH,
     MSL_FIGHTER_ARTICLES_ZELDA,
     MSL_FIGHTER_AUX_PURIN_PARTS,
 } MslFighterArticleProfile;
@@ -1069,7 +1106,7 @@ static ftData* translate_fighter_public(
     enum {
         FT_DATA_X48_ITEMS_SOURCE_OFFSET = 0x48,
         ARTICLE_SPECIAL_ATTRS_SOURCE_OFFSET = 0x04,
-        MAX_REACHED_ARTICLE_COUNT = 4,
+        MAX_REACHED_ARTICLE_COUNT = 5,
     };
     const MslDatType* article_list_type = NULL;
     const MslDatType* attr_types[MAX_REACHED_ARTICLE_COUNT] = { NULL };
@@ -1127,6 +1164,17 @@ static ftData* translate_fighter_public(
         attr_types[0] = msl_dat_root_itSeakNeedleThrownAttributes;
         attr_types[3] = msl_dat_root_itSeakChain_Attrs;
         break;
+    case MSL_FIGHTER_ARTICLES_PEACH:
+        article_list_type = msl_dat_root_MslDatPeachArticles;
+        article_count = 5;
+        indices[0] = 0;
+        indices[1] = 1;
+        indices[2] = 2;
+        indices[3] = 3;
+        indices[4] = 4;
+        attr_types[1] = msl_dat_root_MslDatPeachTurnipAttrs;
+        attr_types[4] = msl_dat_root_itPeachToadSporeAttributes;
+        break;
     case MSL_FIGHTER_ARTICLES_ZELDA:
         article_list_type = msl_dat_root_MslDatZeldaArticles;
         article_count = 2;
@@ -1160,10 +1208,12 @@ static ftData* translate_fighter_public(
     // Article.x4 is void in the decomp. The character OnLoad registrations and
     // reached item implementations are its concrete source type authority.
     // refs/melee/src/melee/ft/chara/{ftFox/ftFx_Init.c,
-    //   ftFalco/ftFc_Init.c,ftSeak/ftSk_Init.c,ftZelda/ftZd_Init.c}
+    //   ftFalco/ftFc_Init.c,ftSeak/ftSk_Init.c,ftPeach/ftPe_Init.c,
+    //   ftZelda/ftZd_Init.c}
     // refs/melee/src/melee/it/items/{itfoxlaser.c,itfoxblaster.c,
     //   itfoxillusion.c,itseakneedlethrown.c,itseakchain.c,
-    //   itzeldadinfire.c,itzeldadinfireexplode.c}
+    //   itpeachturnip.c,itpeachtoadspore.c,itzeldadinfire.c,
+    //   itzeldadinfireexplode.c}
     if (result->x48_items == NULL) {
         fprintf(stderr, "native fighter DAT is missing its article list\n");
         abort();
@@ -1276,6 +1326,10 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_MarsAttributes, 327,
                                           MSL_FIGHTER_ARTICLES_NONE);
+    } else if (strcmp(symbol, "ftDataPeach") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftPe_DatAttrs, 318,
+                                          MSL_FIGHTER_ARTICLES_PEACH);
     } else if (strcmp(symbol, "ftDataPurin") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftPurinAttributes, 327,

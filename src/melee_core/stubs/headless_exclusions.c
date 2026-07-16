@@ -10,8 +10,6 @@
 // Fox gameplay predicates are linked from their copied source units.
 #define EXCLUDED_CHECK(name) int name() { return 0; }
 
-EXCLUDED_CHECK(ftPe_8011BA54)
-EXCLUDED_CHECK(ftPe_8011BAD8)
 EXCLUDED_CHECK(un_80322258)
 EXCLUDED_CHECK(un_803224DC)
 EXCLUDED_CHECK(ftCo_800A2040)

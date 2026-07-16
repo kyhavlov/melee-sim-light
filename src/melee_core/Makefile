@@ -25,8 +25,8 @@ PY ?= $(ROOT)/.venv/bin/python
 HOST_CC ?= cc
 MSL_DATA_DIR ?= $(ROOT)/data
 DATA ?= $(abspath $(MSL_DATA_DIR))/raw
-VALIDATION_SUITE ?= replays/suites/aggregate_recent.json
-VALIDATION_CHARACTERS ?= Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff
+VALIDATION_SUITE ?= replays/suites/melee_core_aggregate.json
+VALIDATION_CHARACTERS ?= Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach
 VALIDATION_STAGES ?= 32,31,3,2,8,28
 VALIDATION_BACKEND ?= native
 VALIDATION_WORKERS ?= 0
@@ -45,14 +45,23 @@ UPSTREAM_REL_SRCS += \
 	melee/it/items/itfoxblaster.c \
 	melee/it/items/itfoxillusion.c \
 	melee/it/items/itfoxlaser.c \
+	melee/it/items/itbombhei.c \
+	melee/it/items/itdosei.c \
 	melee/it/items/itfoods.c \
 	melee/it/items/itfreeze.c \
+	melee/it/items/itharisen.c \
 	melee/it/items/itheiho.c \
 	melee/it/items/itlinkhookshot.c \
+	melee/it/items/itpeachexplode.c \
+	melee/it/items/itpeachparasol.c \
+	melee/it/items/itpeachtoad.c \
+	melee/it/items/itpeachtoadspore.c \
+	melee/it/items/itpeachturnip.c \
 	melee/it/items/itseakchain.c \
 	melee/it/items/itseakneedleheld.c \
 	melee/it/items/itseakneedlethrown.c \
 	melee/it/items/itseakvanish.c \
+	melee/it/items/itsword.c \
 	melee/it/items/itzeldadinfire.c \
 	melee/it/items/itzeldadinfireexplode.c
 UPSTREAM_SRCS := $(addprefix $(SOURCE_TREE)/src/,$(UPSTREAM_REL_SRCS))
@@ -314,13 +323,7 @@ validation-suite:
 
 validation-supported-domain:
 	@$(MAKE) --no-print-directory -f "$(CORE)/Makefile" validation-suite \
-		VALIDATION_SUITE=replays/suites/aggregate_recent.json
-	@$(MAKE) --no-print-directory -f "$(CORE)/Makefile" validation-suite \
-		VALIDATION_SUITE=replays/suites/doubles_recent.json \
-		VALIDATION_ARGS="$(VALIDATION_ARGS) --no-build"
-	@$(MAKE) --no-print-directory -f "$(CORE)/Makefile" validation-suite \
-		VALIDATION_SUITE=replays/suites/puff.json \
-		VALIDATION_ARGS="$(VALIDATION_ARGS) --no-build"
+		VALIDATION_SUITE=replays/suites/melee_core_aggregate.json
 
 test: source-check smoke native-smoke validation-smoke
 

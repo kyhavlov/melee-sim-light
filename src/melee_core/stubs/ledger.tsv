@@ -3,8 +3,6 @@ efAsync_Spawn	headless effect projection	reachable	fixed-capacity source-order q
 efAsync_QueueFlush	headless effect projection	reachable	reverse spawn-order dispatch	refs/melee/src/melee/ef/efasync.c::efAsync_QueueFlush
 efAsync_QueueClear	headless effect projection	reachable	fixed-pool release	refs/melee/src/melee/ef/efasync.c::efAsync_QueueClear
 efSync_Spawn	headless effect projection	reachable	DAT-backed immediate RNG projection	refs/melee/src/melee/ef/{efsync.c,efasync.c,efalt.c}; EfCoData.dat/EfFxData.dat
-ftPe_8011BA54	source-gated outside-domain predicate	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
-ftPe_8011BAD8	source-gated outside-domain predicate	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
 un_80322258	crowd/audio bookkeeping exclusion	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
 un_803224DC	crowd/audio bookkeeping exclusion	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
 un_80322314	crowd/audio bookkeeping exclusion	reachable	no-op	refs/melee/src/melee/{ft/ftcommon.c::ftCommon_8007EFC8,sfx/crowdsfx.c::un_80322314}; only arms crowd audio state
@@ -60,9 +58,6 @@ ftCh_GrabUnk1_8015ADD0	unsupported-fighter branch	unreachable	named abort	Fox ki
 ftCh_GrabUnk1_8015BC88	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftMh_MS_343_80151484	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftMh_MS_389_80151018	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftPe_8011D598	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-it_80284FC4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_80285024	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8028B08C	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8028B618	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8028B648	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
@@ -71,9 +66,6 @@ it_8028B718	disabled item/non-Fox article branch	unreachable	named abort	items-o
 it_8028B780	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8028B7E8	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8028B850	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_802BDA40	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_802BDD40	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_802BDDB4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 lbRefract_80022998	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
 lbRefract_80022BD0	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
 ftCh_Init_80156014	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
@@ -101,8 +93,6 @@ ftLk_AttackAir_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind
 ftMh_MS_341_8014FE58	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftNs_AttackLw4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftNs_AttackS4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftPe_AttackS4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftPe_Init_8011B93C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftSs_SpecialLw_8012AEBC	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftSs_SpecialLw_8012AF38	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftYs_Init_8012B8A4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
@@ -113,15 +103,8 @@ ftYs_Init_8012BECC	unsupported-fighter branch	unreachable	named abort	Fox kind d
 ftYs_Shield_8012C600	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftYs_Shield_8012C914	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftYs_Shield_8012CC1C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftCo_800CD350	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_800CD418	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_800CD4E0	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_800CD5A8	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_800CD82C	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_800CDAB4	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-it_8027D730	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_802852B8	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_80285314	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8028E774	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8028E79C	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8028E938	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
@@ -152,10 +135,6 @@ it_802EADD8	disabled item/non-Fox article branch	unreachable	named abort	items-o
 it_802EAF28	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 grKongo_801D828C	unsupported-stage branch	unreachable	named abort	Final Destination cannot dispatch Kongo/Old Kongo owners
 grOldKongo_802105C8	unsupported-stage branch	unreachable	named abort	Final Destination cannot dispatch Kongo/Old Kongo owners
-ftCo_BatSwing_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_BatSwing_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_BatSwing_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_BatSwing_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_CaptureCrazyHand_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_CaptureCrazyHand_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_CaptureCrazyHand_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
@@ -176,10 +155,6 @@ ftCo_CaptureWaitCrazyHand_Anim	outside-domain common MotionState/item branch	unr
 ftCo_CaptureWaitCrazyHand_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_CaptureWaitCrazyHand_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_CaptureWaitCrazyHand_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_HarisenSwing_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_HarisenSwing_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_HarisenSwing_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_HarisenSwing_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_KirbyYoshiEgg_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_KirbyYoshiEgg_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_KirbyYoshiEgg_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
@@ -188,18 +163,10 @@ ftCo_LipstickSwing_Anim	outside-domain common MotionState/item branch	unreachabl
 ftCo_LipstickSwing_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_LipstickSwing_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_LipstickSwing_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_ParasolSwing_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_ParasolSwing_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_ParasolSwing_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_ParasolSwing_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_StarRodSwing_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_StarRodSwing_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_StarRodSwing_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_StarRodSwing_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_SwordSwing_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_SwordSwing_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_SwordSwing_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
-ftCo_SwordSwing_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_ThrownCrazyHand_Anim	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_ThrownCrazyHand_Coll	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_ThrownCrazyHand_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback

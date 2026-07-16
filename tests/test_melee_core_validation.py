@@ -106,7 +106,12 @@ def test_native_validation_compares_complete_classified_replays() -> None:
         pytest.skip("native core validation artifacts are unavailable")
     classifications = load_classifications(DEFAULT_CLASSIFICATIONS)
     suite_cases: list[ReplayCase] = []
-    for suite_name in ("aggregate_recent.json", "doubles_recent.json", "puff.json"):
+    for suite_name in (
+        "aggregate_recent.json",
+        "doubles_recent.json",
+        "puff.json",
+        "peach.json",
+    ):
         _suite, loaded_cases = load_suite_cases(
             ROOT / "replays/suites" / suite_name,
             characters=frozenset(
@@ -125,7 +130,7 @@ def test_native_validation_compares_complete_classified_replays() -> None:
         workers=min(MAX_AUTO_WORKERS, len(cases)),
         frames=0,
         start_frame=None,
-        timeout=3.0,
+        timeout=5.0,
         backend="native",
         signed_zero_equal=False,
     )
@@ -140,4 +145,4 @@ def test_native_validation_compares_complete_classified_replays() -> None:
             + int(outcome.result["mismatched_frames"])
             == int(outcome.result["frames"])
         )
-    assert wall_seconds < 5.0
+    assert wall_seconds < 8.0

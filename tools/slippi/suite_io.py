@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -37,8 +38,49 @@ def team_attack_on_from_start(start: dict[str, Any]) -> bool | None:
     return None
 
 
-def load_suite(path: str | Path) -> ReplaySuite:
-    p = Path(path)
+def repo_root() -> Path:
+    # tools/slippi/suite_io.py -> tools/slippi -> tools -> repo root
+    return Path(__file__).resolve().parents[2]
+
+
+def _resolve_included_suite(parent: Path, include: str) -> Path:
+    path = Path(include)
+    if path.is_absolute():
+        return path.resolve()
+    sibling = parent.parent / path
+    if sibling.is_file():
+        return sibling.resolve()
+    return (repo_root() / path).resolve()
+
+
+def suite_manifest_paths(path: str | Path) -> tuple[Path, ...]:
+    """Return a suite manifest and its recursive includes in stable order."""
+
+    ordered: list[Path] = []
+    seen: set[Path] = set()
+
+    def visit(current: Path, stack: tuple[Path, ...]) -> None:
+        current = current.resolve()
+        if current in stack:
+            cycle = " -> ".join(str(p) for p in (*stack, current))
+            raise ValueError(f"suite include cycle: {cycle}")
+        if current in seen:
+            return
+        data = json.loads(current.read_text())
+        seen.add(current)
+        ordered.append(current)
+        for include in data.get("include_suites", []):
+            visit(_resolve_included_suite(current, str(include)), (*stack, current))
+
+    visit(Path(path), ())
+    return tuple(ordered)
+
+
+def _load_suite(path: Path, stack: tuple[Path, ...]) -> ReplaySuite:
+    p = path.resolve()
+    if p in stack:
+        cycle = " -> ".join(str(item) for item in (*stack, p))
+        raise ValueError(f"suite include cycle: {cycle}")
     data = json.loads(p.read_text())
     name = str(data["name"])
     notes = data.get("notes")
@@ -47,8 +89,34 @@ def load_suite(path: str | Path) -> ReplaySuite:
     ucf_shield_sdi_enabled = data.get("ucf_shield_sdi_enabled")
     ucf_sdi_enabled = data.get("ucf_sdi_enabled")
     team_attack_on = data.get("team_attack_on")
-    replays = []
-    for r in data["replays"]:
+    replays: list[SuiteReplay] = []
+    for include in data.get("include_suites", []):
+        included = _load_suite(
+            _resolve_included_suite(p, str(include)),
+            (*stack, p),
+        )
+        for replay in included.replays:
+            replays.append(
+                replace(
+                    replay,
+                    ucf_cardinals_1_0_enabled=(
+                        replay.ucf_cardinals_1_0_enabled
+                        if replay.ucf_cardinals_1_0_enabled is not None
+                        else included.ucf_cardinals_1_0_enabled
+                    ),
+                    ucf_shield_sdi_enabled=(
+                        replay.ucf_shield_sdi_enabled
+                        if replay.ucf_shield_sdi_enabled is not None
+                        else included.ucf_shield_sdi_enabled
+                    ),
+                    ucf_sdi_enabled=(
+                        replay.ucf_sdi_enabled
+                        if replay.ucf_sdi_enabled is not None
+                        else included.ucf_sdi_enabled
+                    ),
+                )
+            )
+    for r in data.get("replays", []):
         replay = str(r["replay"])
         ports = tuple(int(x) for x in r.get("ports", []))
         if not ports:
@@ -77,6 +145,10 @@ def load_suite(path: str | Path) -> ReplaySuite:
                 played_on=(str(r["played_on"]) if "played_on" in r else None),
             )
         )
+    replay_path_counts = Counter(replay.replay for replay in replays)
+    duplicates = sorted(path for path, count in replay_path_counts.items() if count > 1)
+    if duplicates:
+        raise ValueError(f"{p}: duplicate replay paths: {', '.join(duplicates)}")
     if any(len(r.ports) > 2 for r in replays) and team_attack_on is not True:
         raise ValueError(
             f"{p}: suites selecting more than two ports must declare \"team_attack_on\": true; "
@@ -100,9 +172,8 @@ def load_suite(path: str | Path) -> ReplaySuite:
     )
 
 
-def repo_root() -> Path:
-    # tools/slippi/suite_io.py -> tools/slippi -> tools -> repo root
-    return Path(__file__).resolve().parents[2]
+def load_suite(path: str | Path) -> ReplaySuite:
+    return _load_suite(Path(path), ())
 
 
 def display_path_under_repo(path: str | Path, root: str | Path | None = None) -> str:

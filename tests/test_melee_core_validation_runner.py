@@ -72,19 +72,40 @@ def test_canonical_phase5_scope_selects_32_replays_without_a_duplicate_manifest(
         ROOT / "replays/suites/melee_core_classifications.json"
     )
     assert classifications
-    supported_replays = {replay.replay for replay in suite.replays}
-    for suite_name in ("doubles_recent.json", "puff.json"):
-        supported_replays.update(
-            replay.replay
-            for replay in validate_replay.load_suite(
-                ROOT / "replays/suites" / suite_name
-            ).replays
-        )
+    supported_replays = {
+        replay.replay
+        for replay in validate_replay.load_suite(
+            ROOT / "replays/suites/melee_core_aggregate.json"
+        ).replays
+    }
     assert set(classifications) <= supported_replays
     marth = classifications[
         "replays/validation/marth/InternalPowerlessWallaby.slpz"
     ]
     assert marth.expected["ppc"] is marth.expected["native"]
+
+
+def test_melee_core_aggregate_filters_pending_characters_without_losing_inventory() -> None:
+    suite, cases = validate_replay.load_suite_cases(
+        ROOT / "replays/suites/melee_core_aggregate.json",
+        characters=frozenset(
+            (
+                "fox",
+                "falco",
+                "marth",
+                "captain falcon",
+                "sheik",
+                "zelda",
+                "jigglypuff",
+            )
+        ),
+        stages=frozenset((2, 3, 8, 28, 31, 32)),
+    )
+
+    assert suite.name == "melee_core_aggregate"
+    assert len(suite.replays) == 153
+    assert len(cases) == 133
+    assert all("Peach" not in case.characters for case in cases)
 
 
 def test_suite_replay_execution_metadata_reaches_native_validator(

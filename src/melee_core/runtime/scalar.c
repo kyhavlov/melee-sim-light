@@ -60,6 +60,7 @@ enum {
     MSL_CORE_CHAR_FOX = 1,
     MSL_CORE_CHAR_CAPTAIN_FALCON = 2,
     MSL_CORE_CHAR_SHEIK = 7,
+    MSL_CORE_CHAR_PEACH = 9,
     MSL_CORE_CHAR_JIGGLYPUFF = 15,
     MSL_CORE_CHAR_MARTH = 18,
     MSL_CORE_CHAR_ZELDA = 19,
@@ -204,6 +205,8 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_CAPTAIN;
     case MSL_CORE_CHAR_SHEIK:
         return CKIND_SEAK;
+    case MSL_CORE_CHAR_PEACH:
+        return CKIND_PEACH;
     case MSL_CORE_CHAR_JIGGLYPUFF:
         return CKIND_PURIN;
     case MSL_CORE_CHAR_MARTH:
@@ -470,6 +473,7 @@ static int validate_config(MslCoreMatchConfig* config)
         if (config->players[i].char_id != MSL_CORE_CHAR_FOX &&
             config->players[i].char_id != MSL_CORE_CHAR_CAPTAIN_FALCON &&
             config->players[i].char_id != MSL_CORE_CHAR_SHEIK &&
+            config->players[i].char_id != MSL_CORE_CHAR_PEACH &&
             config->players[i].char_id != MSL_CORE_CHAR_JIGGLYPUFF &&
             config->players[i].char_id != MSL_CORE_CHAR_MARTH &&
             config->players[i].char_id != MSL_CORE_CHAR_ZELDA &&
@@ -477,7 +481,8 @@ static int validate_config(MslCoreMatchConfig* config)
             fprintf(stderr,
                     "current core supports external char_id=1 Fox, "
                     "char_id=2 Captain Falcon, "
-                    "char_id=7 Sheik, char_id=15 Jigglypuff, char_id=18 Marth, "
+                    "char_id=7 Sheik, char_id=9 Peach, "
+                    "char_id=15 Jigglypuff, char_id=18 Marth, "
                     "char_id=19 Zelda, and char_id=22 Falco only\n");
             return -1;
         }

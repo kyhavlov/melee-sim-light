@@ -1,6 +1,6 @@
 {
   "name": "doubles_recent",
-  "notes": "Recent 4-player Team Attack ON doubles suite. Includes the original smoke replay plus 20 recent 2-bot/2-human supported-character games from the discordbot replay pool; keep separate from aggregate_recent until 4p validation is promoted to the normal gate.",
+  "notes": "Recent 4-player Team Attack ON doubles suite. Includes the original smoke replay plus 20 recent 2-bot/2-human supported-character games from the discordbot replay pool. Remains a focused manifest and is included by the canonical melee_core_aggregate suite.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "team_attack_on": true,

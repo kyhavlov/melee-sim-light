@@ -2344,6 +2344,236 @@
         },
         "ppc": "native"
       }
+    },
+    {
+      "replay": "replays/validation/peach/HeartyStiffMallard.slpz",
+      "id": "legacy-fod-float-and-parasol-publication-profile",
+      "owner": "Dolphin float execution and Peach parasol item-scheduler publication",
+      "rationale": "After selecting this old capture's explicit pre-Cardinals input profile, the first residual is a one-ULP fighter position. The later Peach parasol boundary records destruction one post-frame row before the source item scheduler publishes it, shifting subsequent item-slot history. The exact complete fingerprint records those execution/publication boundaries without changing Peach gameplay or fitting a replay row.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/it/items/itpeachparasol.c",
+        "refs/melee/src/melee/it/item.c::Item_8026A8EC",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
+      ],
+      "expected": {"native": {"frames": 15634, "matched_frames": 6418, "mismatched_frames": 9216, "exact_prefix_frames": 907, "strict_suffix_frames": 0, "first_mismatch_frame": 785, "last_mismatch_frame": 15511, "mismatch_count": 337691, "mismatch_fingerprint": "179f7a2a9224dd62", "render_visibility_mismatch_count": 12589, "first_render_visibility_mismatch_frame": 6678, "signed_zero_equal_count": 0, "mismatch_fields_digest": "25d251b389259bfc9194f93113e55cc867d0d03b6f6395738b97b6a7e2160163"}}
+    },
+    {
+      "replay": "replays/validation/peach/MadeUpEnchantedStingray.slpz",
+      "id": "dolphin-float-and-presentation-rng-profile",
+      "owner": "landing velocity float execution and DamageFlyRoll presentation RNG phase",
+      "rationale": "The first causal residual is a 16-ULP self-velocity result at a source landing projection; a bounded PPC probe produces the same bits as native. A later damage event reaches the source DamageFlyRoll gate on the neighboring presentation-owned RNG phase. The manifest locks the complete consequence instead of altering free-running RNG or adding replay-local gameplay.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+      ],
+      "expected": {"native": {"frames": 11073, "matched_frames": 5804, "mismatched_frames": 5269, "exact_prefix_frames": 1900, "strict_suffix_frames": 0, "first_mismatch_frame": 1778, "last_mismatch_frame": 10950, "mismatch_count": 181244, "mismatch_fingerprint": "c6173add9a734d20", "render_visibility_mismatch_count": 6658, "first_render_visibility_mismatch_frame": 5768, "signed_zero_equal_count": 0, "mismatch_fields_digest": "da6810779f56bcad1ba1e3f936002e8890f503f137b29977af989e402f91d370"}}
+    },
+    {
+      "replay": "replays/validation/peach/TameEmbellishedSparrow.slpz",
+      "id": "dolphin-ulp-item-and-motion-profile",
+      "owner": "item transform and fighter self-velocity float execution",
+      "rationale": "The complete residual consists of sparse ULP-scale item positions and fighter velocities produced by the imported source transform, gravity, and integration paths. Discrete gameplay remains source-driven; the exact fingerprint prevents this execution profile from becoming a tolerance.",
+      "sources": [
+        "refs/melee/src/melee/it/item.c",
+        "refs/melee/src/melee/it/it_2725.c",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {"native": {"frames": 14352, "matched_frames": 13248, "mismatched_frames": 1104, "exact_prefix_frames": 7509, "strict_suffix_frames": 0, "first_mismatch_frame": 7387, "last_mismatch_frame": 14229, "mismatch_count": 2709, "mismatch_fingerprint": "aceed9c38805abd0", "render_visibility_mismatch_count": 25, "first_render_visibility_mismatch_frame": 4778, "signed_zero_equal_count": 0, "mismatch_fields_digest": "a3e29ed0911cdb7017dd9d34c656e75d09a9e9161979974e0684513f883dafcb"}}
+    },
+    {
+      "replay": "replays/validation/peach/HummingDismalCat.slpz",
+      "id": "unmodeled-presentation-rng-stream-phase",
+      "owner": "DamageFlyRoll gate versus post-input particle/effect RNG scheduler",
+      "rationale": "The first causal difference is the source DamageFlyRoll HSD_Randf gate with exact deterministic contact, damage, position, and input setup. Bounded native and PPC runs produce the same neighboring-stream DamageFlyHi result while the recording selects DamageFlyRoll. The exact downstream fingerprint records excluded presentation RNG phase rather than changing free-running gameplay RNG.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+      ],
+      "expected": {"native": {"frames": 6803, "matched_frames": 4291, "mismatched_frames": 2512, "exact_prefix_frames": 3843, "strict_suffix_frames": 0, "first_mismatch_frame": 3721, "last_mismatch_frame": 6680, "mismatch_count": 72754, "mismatch_fingerprint": "2178f2dd2fd334d0", "render_visibility_mismatch_count": 624, "first_render_visibility_mismatch_frame": 3716, "signed_zero_equal_count": 0, "mismatch_fields_digest": "e1a6caa0363ff0f506872994fee59447a46e4bd2d277d0557441535674e6ef68"}}
+    },
+    {
+      "replay": "replays/validation/peach/ScaryFrankPorcupine.slpz",
+      "id": "dolphin-ulp-item-motion-profile",
+      "owner": "thrown-item gravity and position float execution",
+      "rationale": "After selecting this old capture's explicit pre-Cardinals profile, all residuals are sparse ULP-scale item velocity/position lanes from source gravity and integration. The final 570 transitions are strict, and the exact fingerprint preserves bit-level drift detection.",
+      "sources": [
+        "refs/melee/src/melee/it/it_2725.c::it_80272860",
+        "refs/melee/src/melee/it/item.c::Item_80268E5C",
+        "refs/melee/src/melee/it/items/itpeachturnip.c"
+      ],
+      "expected": {"native": {"frames": 26844, "matched_frames": 26428, "mismatched_frames": 416, "exact_prefix_frames": 2311, "strict_suffix_frames": 570, "first_mismatch_frame": 2189, "last_mismatch_frame": 26151, "mismatch_count": 696, "mismatch_fingerprint": "e8dba20d26ba2331", "render_visibility_mismatch_count": 0, "first_render_visibility_mismatch_frame": null, "signed_zero_equal_count": 0, "mismatch_fields_digest": "1d6c7ccb96e144930c282b0c8916bc9a6347dc4a70a7c6aa19f524306f92c675"}}
+    },
+    {
+      "replay": "replays/validation/peach/StridentRedSandpiper.slpz",
+      "id": "dolphin-ulp-item-transform-profile",
+      "owner": "held/thrown item root transform execution",
+      "rationale": "The complete residual is one 15-row interval of ULP-scale item X/Y positions followed by 3,999 strict transitions. The imported item and matrix paths retain source behavior; this exact fingerprint records only the capture's float execution profile.",
+      "sources": [
+        "refs/melee/src/melee/it/item.c",
+        "refs/melee/src/melee/it/it_2725.c",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {"native": {"frames": 11114, "matched_frames": 11099, "mismatched_frames": 15, "exact_prefix_frames": 7100, "strict_suffix_frames": 3999, "first_mismatch_frame": 6978, "last_mismatch_frame": 6992, "mismatch_count": 30, "mismatch_fingerprint": "3174e8266b283466", "render_visibility_mismatch_count": 14, "first_render_visibility_mismatch_frame": 2036, "signed_zero_equal_count": 0, "mismatch_fields_digest": "8e7997cf98725adede82d885d44e9957cb95e01493ebb3d6d93c56153572c895"}}
+    },
+    {
+      "replay": "replays/validation/peach/DisgustingLivelyRaven.slpz",
+      "id": "dolphin-ulp-item-motion-profile",
+      "owner": "thrown-item gravity and position float execution",
+      "rationale": "The residual is limited to bounded ULP-scale thrown-item velocity and position intervals produced by source gravity/integration, followed by 5,013 strict transitions. No item state or Peach mechanic is fitted.",
+      "sources": [
+        "refs/melee/src/melee/it/it_2725.c::it_80272860",
+        "refs/melee/src/melee/it/item.c",
+        "refs/melee/src/melee/it/items/itpeachturnip.c"
+      ],
+      "expected": {"native": {"frames": 12960, "matched_frames": 12750, "mismatched_frames": 210, "exact_prefix_frames": 6523, "strict_suffix_frames": 5013, "first_mismatch_frame": 6401, "last_mismatch_frame": 7824, "mismatch_count": 378, "mismatch_fingerprint": "e5d0edb5ac03c879", "render_visibility_mismatch_count": 11, "first_render_visibility_mismatch_frame": 505, "signed_zero_equal_count": 0, "mismatch_fields_digest": "37327be844285a7eb154500f6b2ed78f253354aad893bf72b226c19820435361"}}
+    },
+    {
+      "replay": "replays/validation/peach/DryLimitedWoodcock.slpz",
+      "id": "needle-pose-and-dolphin-float-profile",
+      "owner": "Sheik thrown-needle historical position and fighter float execution",
+      "rationale": "One source-owned historical-position byte from a thrown needle precedes sparse ULP-scale fighter positions. The runtime retains strict needle bytes where the article owns them and exact source fighter integration; the complete fingerprint prevents either family from becoming a broad exception.",
+      "sources": [
+        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {"native": {"frames": 10458, "matched_frames": 9695, "mismatched_frames": 763, "exact_prefix_frames": 654, "strict_suffix_frames": 1454, "first_mismatch_frame": 532, "last_mismatch_frame": 8881, "mismatch_count": 939, "mismatch_fingerprint": "da41964656e7b77f", "render_visibility_mismatch_count": 6, "first_render_visibility_mismatch_frame": -122, "signed_zero_equal_count": 0, "mismatch_fields_digest": "42a697027e91ea00d147f830d20b444715ff0ebfd2af8c2b5b45b0872011b34e"}}
+    },
+    {
+      "replay": "replays/validation/peach/SmugConfusedTermite.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter and item position float execution",
+      "rationale": "Correcting the shared 32-bit item-throw motion-var layout removed the wrong shield-throw action and 12,584 downstream mismatch rows. The complete remainder is 25 isolated ULP-scale fighter/item position rows with 2,353 strict trailing transitions.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/types.h::ftCommon_MotionVars",
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c::ftCo_8009515C",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/it/item.c"
+      ],
+      "expected": {"native": {"frames": 12898, "matched_frames": 12873, "mismatched_frames": 25, "exact_prefix_frames": 3014, "strict_suffix_frames": 2353, "first_mismatch_frame": 2892, "last_mismatch_frame": 10422, "mismatch_count": 40, "mismatch_fingerprint": "2d59b2d1a3a27a47", "render_visibility_mismatch_count": 9, "first_render_visibility_mismatch_frame": -122, "signed_zero_equal_count": 0, "mismatch_fields_digest": "14dd3e35b2938cec52ba21b6a968d4bcfe7a0bd65d82d0ffeeed4b2f34c862b7"}}
+    },
+    {
+      "replay": "replays/validation/peach/HappyGoLuckyScentedButterfly.slpz",
+      "id": "mixed-item-float-magnifier-and-needle-profile",
+      "owner": "item float execution, magnifier damage schedule, and Sheik needle publication",
+      "rationale": "The complete residual combines bounded item-position ULPs, one already-modeled 1% magnifier damage publication, and source-owned Sheik needle historical bytes plus their item-lifetime consequence. The exact fingerprint records the capture/runtime profile without changing Peach, camera damage, or needle gameplay.",
+      "sources": [
+        "refs/melee/src/melee/it/item.c",
+        "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
+        "refs/melee/src/melee/it/items/itseakneedlethrown.c",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
+      ],
+      "expected": {"native": {"frames": 14098, "matched_frames": 14009, "mismatched_frames": 89, "exact_prefix_frames": 5186, "strict_suffix_frames": 256, "first_mismatch_frame": 5064, "last_mismatch_frame": 13719, "mismatch_count": 1826, "mismatch_fingerprint": "9841fad731083fe5", "render_visibility_mismatch_count": 19, "first_render_visibility_mismatch_frame": 500, "signed_zero_equal_count": 0, "mismatch_fields_digest": "4010253504a29b52e01af1f1eec5aa9cf6af3d22f4338eecf8e950a5a832f7ff"}}
+    },
+    {
+      "replay": "replays/validation/peach/MarvelousLopsidedOryx.slpz",
+      "id": "presentation-rng-and-item-float-profile",
+      "owner": "DamageFlyRoll presentation RNG phase and item transform execution",
+      "rationale": "The first causal difference is the source DamageFlyRoll RNG gate with aligned deterministic setup; the bounded action interval reconverges. A later independent interval contains only item-position ULPs, and 3,635 strict transitions follow the complete residual.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24",
+        "refs/melee/src/melee/it/item.c",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {"native": {"frames": 16873, "matched_frames": 16718, "mismatched_frames": 155, "exact_prefix_frames": 5011, "strict_suffix_frames": 3635, "first_mismatch_frame": 4889, "last_mismatch_frame": 13115, "mismatch_count": 274, "mismatch_fingerprint": "506a13d8f0632ebd", "render_visibility_mismatch_count": 0, "first_render_visibility_mismatch_frame": null, "signed_zero_equal_count": 0, "mismatch_fields_digest": "73928bec8f35455c95f39a2c12b47f457672a70311a2c2a077e77972e26128d0"}}
+    },
+    {
+      "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
+      "id": "dolphin-ulp-item-motion-profile",
+      "owner": "Mr. Saturn and turnip gravity/position float execution",
+      "rationale": "State-aware validation excludes only Mr. Saturn's uninitialized held/thrown xDE4 bytes; all remaining residuals are bounded ULP-scale common-item velocities and positions from imported source gravity/integration. The final 3,439 transitions are strict.",
+      "sources": [
+        "refs/melee/src/melee/it/items/itdosei.c",
+        "refs/melee/src/melee/it/items/itpeachturnip.c",
+        "refs/melee/src/melee/it/it_2725.c::it_80272860",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
+      ],
+      "expected": {"native": {"frames": 14007, "matched_frames": 13779, "mismatched_frames": 228, "exact_prefix_frames": 2383, "strict_suffix_frames": 3439, "first_mismatch_frame": 2261, "last_mismatch_frame": 10445, "mismatch_count": 422, "mismatch_fingerprint": "314b3b824103c3a3", "render_visibility_mismatch_count": 7, "first_render_visibility_mismatch_frame": 1839, "signed_zero_equal_count": 0, "mismatch_fields_digest": "2ad5be03b582dde9ce60b04fcd214cd81bc8bf2aebfb64a9f339e815636e0c4a"}}
+    },
+    {
+      "replay": "replays/validation/peach/PerfectJollyMagpie.slpz",
+      "id": "item-float-and-presentation-rng-profile",
+      "owner": "item root transform and DamageFlyRoll presentation RNG phase",
+      "rationale": "A 36-row ULP-scale item transform interval is followed by an independent source DamageFlyRoll gate whose deterministic fighter setup is aligned but presentation-owned RNG phase selects the neighboring action. The action interval reconverges, leaving 7,489 strict transitions.",
+      "sources": [
+        "refs/melee/src/melee/it/item.c",
+        "refs/melee/src/sysdolphin/baselib/mtx.c",
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+      ],
+      "expected": {"native": {"frames": 10838, "matched_frames": 10747, "mismatched_frames": 91, "exact_prefix_frames": 519, "strict_suffix_frames": 7489, "first_mismatch_frame": 397, "last_mismatch_frame": 3226, "mismatch_count": 217, "mismatch_fingerprint": "f131461b7eb6ce1f", "render_visibility_mismatch_count": 0, "first_render_visibility_mismatch_frame": null, "signed_zero_equal_count": 0, "mismatch_fields_digest": "11040c31eecc52e09a2256037c62c01a559abd216e320dc4c9300d90f0921292"}}
+    },
+    {
+      "replay": "replays/validation/peach/CapitalPristineTarsier.slpz",
+      "id": "dolphin-ulp-fighter-and-item-profile",
+      "owner": "fighter root motion and thrown-item gravity float execution",
+      "rationale": "The complete residual contains bounded ULP-scale fighter root motion and thrown-item velocity/position intervals. Source discrete state remains aligned, and the exact fingerprint includes 158 strict trailing transitions.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/it/it_2725.c::it_80272860",
+        "refs/melee/src/melee/it/item.c",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {"native": {"frames": 16491, "matched_frames": 16261, "mismatched_frames": 230, "exact_prefix_frames": 3835, "strict_suffix_frames": 158, "first_mismatch_frame": 3713, "last_mismatch_frame": 16210, "mismatch_count": 362, "mismatch_fingerprint": "85501af886f5bf13", "render_visibility_mismatch_count": 8, "first_render_visibility_mismatch_frame": 7181, "signed_zero_equal_count": 0, "mismatch_fields_digest": "0b445c929c39d1b81bac8e0c2b1824d7853c7f4d48da8e34793806dbd4c2fbb9"}}
+    },
+    {
+      "replay": "replays/validation/peach/ExpertWorthlessFinch.slpz",
+      "id": "dolphin-ulp-item-motion-profile",
+      "owner": "turnip/common-item gravity and position float execution",
+      "rationale": "Restoring Peach's 32-bit source owner-pointer layout places the Bob-omb scale lane correctly and removes the prior metadata displacement. The complete remainder is bounded ULP-scale source item gravity/position with 352 strict trailing transitions.",
+      "sources": [
+        "refs/melee/src/melee/it/itCharItems.h::itPeachTurnip_ItemVars",
+        "refs/melee/src/melee/it/items/itpeachturnip.c::it_802BD4AC",
+        "refs/melee/src/melee/it/items/itbombhei.c",
+        "refs/melee/src/melee/it/it_2725.c::it_80272860"
+      ],
+      "expected": {"native": {"frames": 12032, "matched_frames": 11758, "mismatched_frames": 274, "exact_prefix_frames": 2299, "strict_suffix_frames": 352, "first_mismatch_frame": 2177, "last_mismatch_frame": 11557, "mismatch_count": 461, "mismatch_fingerprint": "cd6428688741de53", "render_visibility_mismatch_count": 10, "first_render_visibility_mismatch_frame": 1637, "signed_zero_equal_count": 0, "mismatch_fields_digest": "2699512416729798ada5865e3c093c1852baf74e4ba51047c6ee46bf520edb6e"}}
+    },
+    {
+      "replay": "replays/validation/peach/HumiliatingCreamyReindeer.slpz",
+      "id": "dolphin-float-motion-profile",
+      "owner": "fighter and item position float execution",
+      "rationale": "The complete residual is confined to float-derived fighter/item motion under the imported source callback order; the action, combat, and article owners remain data/source driven. The exact fingerprint, including 1,212 strict trailing transitions, keeps this broad capture profile from becoming a numerical tolerance.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/it/item.c",
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {"native": {"frames": 16501, "matched_frames": 13480, "mismatched_frames": 3021, "exact_prefix_frames": 1698, "strict_suffix_frames": 1212, "first_mismatch_frame": 1576, "last_mismatch_frame": 15166, "mismatch_count": 7324, "mismatch_fingerprint": "4679c93d555b3262", "render_visibility_mismatch_count": 7, "first_render_visibility_mismatch_frame": 2941, "signed_zero_equal_count": 0, "mismatch_fields_digest": "8aa5ba220ca2b92c8095ab81c4e8bfc9c839f46b9460902868d65c2e2f24c5e1"}}
+    },
+    {
+      "replay": "replays/validation/peach/peach_demo_1.slpz",
+      "id": "ppc-item-float-and-signed-zero-profile",
+      "owner": "turnip gravity float execution and signed-zero attack velocity publication",
+      "rationale": "A bounded PPC probe reproduces native's one-ULP turnip vertical velocity at the first residual. The only later family is ten signed-zero-only attack-velocity rows; 1,856 strict transitions follow. Both remain locked by an exact fingerprint rather than a global float or signed-zero tolerance.",
+      "sources": [
+        "refs/melee/src/melee/it/it_2725.c::it_80272860",
+        "refs/melee/src/melee/it/items/itpeachturnip.c",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate"
+      ],
+      "expected": {"native": {"frames": 6174, "matched_frames": 6088, "mismatched_frames": 86, "exact_prefix_frames": 2008, "strict_suffix_frames": 1856, "first_mismatch_frame": 1886, "last_mismatch_frame": 4195, "mismatch_count": 147, "mismatch_fingerprint": "a40e05a73225abd5", "render_visibility_mismatch_count": 0, "first_render_visibility_mismatch_frame": null, "signed_zero_equal_count": 0, "mismatch_fields_digest": "a62618c728f72f99babbf9492b09f057f5b99ecad06a26662b8a5453482165fa"}}
+    },
+    {
+      "replay": "replays/validation/peach/peach_demo_2.slpz",
+      "id": "dolphin-float-motion-profile",
+      "owner": "floor-loss fighter motion and item transform float execution",
+      "rationale": "The demo's six grounded-to-airborne down-B floor-loss transitions execute through the imported Peach and collision owners. The residual is confined to float-derived fighter/item positions and velocities and ends with 334 strict transitions; no floor-loss or special-state exception is applied.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftPeach/ftPe_SpecialLw.c",
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/it/item.c"
+      ],
+      "expected": {"native": {"frames": 8234, "matched_frames": 7698, "mismatched_frames": 536, "exact_prefix_frames": 1081, "strict_suffix_frames": 334, "first_mismatch_frame": 959, "last_mismatch_frame": 7777, "mismatch_count": 655, "mismatch_fingerprint": "bc61820ec5bf713c", "render_visibility_mismatch_count": 3, "first_render_visibility_mismatch_frame": -122, "signed_zero_equal_count": 0, "mismatch_fields_digest": "16e09bb048a58301f97de4fcacf88a9d5af401196d0348ff3d31e4f1b8cb57fa"}}
     }
   ]
 }

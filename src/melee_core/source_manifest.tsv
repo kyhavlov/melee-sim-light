@@ -248,6 +248,27 @@ src/melee/pl/plbonus.c	src/melee_core/gameplay/src/melee/pl/plbonus.c	Matching	n
 src/melee/pl/plbonuslib.c	src/melee_core/gameplay/src/melee/pl/plbonuslib.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile
 src/melee/pl/plstale.c	src/melee_core/gameplay/src/melee/pl/plstale.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile
 src/melee/pl/pltrick.c	src/melee_core/gameplay/src/melee/pl/pltrick.c	NonMatching	none	compiled directly from canonical source by src/melee_core/Makefile
+src/melee/ft/chara/ftKirby/ftkirbyspecialpeach.c	src/melee_core/gameplay/src/melee/ft/chara/ftKirby/ftkirbyspecialpeach.c	not-listed	peach-source-packet	compiled canonical Kirby-copy Peach neutral-special dependency
+src/melee/ft/chara/ftPeach/ftPe_AttackS4.c	src/melee_core/gameplay/src/melee/ft/chara/ftPeach/ftPe_AttackS4.c	not-listed	peach-source-packet	compiled canonical Peach forward-smash owner
+src/melee/ft/chara/ftPeach/ftPe_Float.c	src/melee_core/gameplay/src/melee/ft/chara/ftPeach/ftPe_Float.c	not-listed	peach-source-packet	compiled canonical Peach float owner
+src/melee/ft/chara/ftPeach/ftPe_FloatAttack.c	src/melee_core/gameplay/src/melee/ft/chara/ftPeach/ftPe_FloatAttack.c	not-listed	peach-source-packet	compiled canonical Peach float-attack owner
+src/melee/ft/chara/ftPeach/ftPe_FloatFall.c	src/melee_core/gameplay/src/melee/ft/chara/ftPeach/ftPe_FloatFall.c	not-listed	peach-source-packet	compiled canonical Peach float-fall owner
+src/melee/ft/chara/ftPeach/ftPe_Init.c	src/melee_core/gameplay/src/melee/ft/chara/ftPeach/ftPe_Init.c	not-listed	peach-source-packet	compiled canonical Peach lifecycle and callback registry owner
+src/melee/ft/chara/ftPeach/ftPe_SpecialHi.c	src/melee_core/gameplay/src/melee/ft/chara/ftPeach/ftPe_SpecialHi.c	not-listed	peach-source-packet	compiled canonical Peach parasol special owner
+src/melee/ft/chara/ftPeach/ftPe_SpecialLw.c	src/melee_core/gameplay/src/melee/ft/chara/ftPeach/ftPe_SpecialLw.c	not-listed	peach-source-packet	compiled canonical Peach item-pull special owner
+src/melee/ft/chara/ftPeach/ftPe_SpecialN.c	src/melee_core/gameplay/src/melee/ft/chara/ftPeach/ftPe_SpecialN.c	not-listed	peach-source-packet	compiled canonical Peach Toad special owner
+src/melee/ft/chara/ftPeach/ftPe_SpecialS.c	src/melee_core/gameplay/src/melee/ft/chara/ftPeach/ftPe_SpecialS.c	not-listed	peach-source-packet	compiled canonical Peach Bomber special owner
+src/melee/ft/ft_0CD1.c	src/melee_core/gameplay/src/melee/ft/ft_0CD1.c	not-listed	peach-common-item-packet	compiled canonical swing-item callback owner
+src/melee/ft/ft_0CD3.c	src/melee_core/gameplay/src/melee/ft/ft_0CD3.c	not-listed	peach-common-item-packet	compiled canonical swing-item state owner
+src/melee/it/items/itbombhei.c	src/melee_core/gameplay/src/melee/it/items/itbombhei.c	not-listed	peach-common-item-packet	compiled canonical Bob-omb owner reached by Peach item pull
+src/melee/it/items/itdosei.c	src/melee_core/gameplay/src/melee/it/items/itdosei.c	not-listed	peach-common-item-packet	compiled canonical Mr. Saturn owner reached by Peach item pull
+src/melee/it/items/itharisen.c	src/melee_core/gameplay/src/melee/it/items/itharisen.c	not-listed	peach-common-item-packet	compiled canonical fan swing-item dependency
+src/melee/it/items/itpeachexplode.c	src/melee_core/gameplay/src/melee/it/items/itpeachexplode.c	not-listed	peach-source-packet	compiled canonical Peach explosion article owner
+src/melee/it/items/itpeachparasol.c	src/melee_core/gameplay/src/melee/it/items/itpeachparasol.c	not-listed	peach-source-packet	compiled canonical Peach parasol article owner
+src/melee/it/items/itpeachtoad.c	src/melee_core/gameplay/src/melee/it/items/itpeachtoad.c	not-listed	peach-source-packet	compiled canonical Peach Toad article owner
+src/melee/it/items/itpeachtoadspore.c	src/melee_core/gameplay/src/melee/it/items/itpeachtoadspore.c	not-listed	peach-source-packet	compiled canonical Peach Toad-spore article owner
+src/melee/it/items/itpeachturnip.c	src/melee_core/gameplay/src/melee/it/items/itpeachturnip.c	not-listed	peach-source-packet	compiled canonical Peach turnip and rare-pull constructor owner
+src/melee/it/items/itsword.c	src/melee_core/gameplay/src/melee/it/items/itsword.c	not-listed	peach-common-item-packet	compiled canonical Beam Sword owner reached by Peach item pull
 src/sysdolphin/baselib/aobj.c	src/melee_core/gameplay/src/sysdolphin/baselib/aobj.c	Matching	0001-hosted-c-compatibility.patch	compiled directly from canonical source by src/melee_core/Makefile; adapted by historical patch 0001-hosted-c-compatibility.patch
 src/sysdolphin/baselib/archive.c	src/melee_core/gameplay/src/sysdolphin/baselib/archive.c	Matching	0001-hosted-c-compatibility.patch	compiled directly from canonical source by src/melee_core/Makefile; adapted by historical patch 0001-hosted-c-compatibility.patch
 src/sysdolphin/baselib/class.c	src/melee_core/gameplay/src/sysdolphin/baselib/class.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile

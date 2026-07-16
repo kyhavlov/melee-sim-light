@@ -10,6 +10,7 @@
 #include "ft/chara/ftCaptain/types.h"
 #include "ft/chara/ftFox/types.h"
 #include "ft/chara/ftMars/types.h"
+#include "ft/chara/ftPeach/types.h"
 #include "ft/chara/ftPurin/types.h"
 #include "ft/chara/ftSeak/types.h"
 #include "ft/chara/ftZelda/types.h"
@@ -17,7 +18,10 @@
 #include "ft/fighter.h"
 #include "gr/types.h"
 #include "it/it_3F14.h"
+#include "it/itCommonItems.h"
 #include "it/itCharItems.h"
+#include "it/items/itdosei.h"
+#include "it/items/types.h"
 #include "it/items/itseakneedlethrown.h"
 #include "lb/lbanim.h"
 #include "mp/types.h"
@@ -40,6 +44,11 @@
 #include <baselib/wobj.h>
 
 typedef int* MslDatIntPointer;
+typedef struct MslDatItemThrowAttr {
+    float velocity_mul;
+    float angle;
+    float smash_scale;
+} MslDatItemThrowAttrs[26];
 typedef float MslDatFloat;
 typedef float MslDatFloat5[5];
 typedef uint8_t MslDatByte;
@@ -122,7 +131,24 @@ typedef struct MslDatSheikArticles {
     Article* articles[4];
     HSD_Joint** chain_joint_tables[2];
 } MslDatSheikArticles;
+typedef Article* MslDatPeachArticles[5];
 typedef Article* MslDatZeldaArticles[2];
+// ItCo.dat's public x4 table owns the 43 common-item Article graphs. Peach's
+// SpecialLw can reach BombHei, Dosei, and Sword even when stage items are off.
+// refs/melee/src/melee/it/iteffect.c::it_802787B4
+// refs/melee/src/melee/ft/chara/ftPeach/ftPe_SpecialLw.c
+typedef Article* MslDatCommonItemArticles[43];
+// Peach's turnip attributes end in a source-owned eight-entry inline table;
+// the decomp declaration is flexible because Article.x4 is otherwise void.
+// refs/melee/src/melee/it/items/itpeachturnip.c::it_802BD32C
+typedef struct MslDatPeachTurnipAttrs {
+    float lifetime;
+    int count;
+    struct {
+        int odds;
+        int damage;
+    } faces[8];
+} MslDatPeachTurnipAttrs;
 // PlPr.dat's ftData.x48_items[1] points at a leading reserved word followed
 // by the FtPartsDesc consumed by ftPr_Init_8013C360 for non-default hats.
 // refs/melee/src/melee/ft/chara/ftPurin/ftPr_Init.c
@@ -164,6 +190,7 @@ void* msl_native_dat_type_roots[] = {
     (pl_804D6470_t*) 0,
     (ftCommonData*) 0,
     (MslDatIntPointer*) 0,
+    (MslDatItemThrowAttrs*) 0,
     (MslDatFloat*) 0,
     (MslDatFloat5*) 0,
     (MslDatByte*) 0,
@@ -180,13 +207,19 @@ void* msl_native_dat_type_roots[] = {
     (MslDatArticleList*) 0,
     (MslDatSpaceAnimalArticles*) 0,
     (MslDatSheikArticles*) 0,
+    (MslDatPeachArticles*) 0,
     (MslDatZeldaArticles*) 0,
+    (MslDatCommonItemArticles*) 0,
+    (itBombHeiAttributes*) 0,
+    (itDoseiAttributes*) 0,
+    (itSword_UnkArticle1*) 0,
     (MslDatPurinAuxList*) 0,
     (struct Fighter_WaitAnimData*) 0,
     (MslDatAnimBytePair*) 0,
     (ftFox_DatAttrs*) 0,
     (ftCaptain_DatAttrs*) 0,
     (MarsAttributes*) 0,
+    (ftPe_DatAttrs*) 0,
     (ftPurinAttributes*) 0,
     (ftSeakAttributes*) 0,
     (ftZelda_DatAttrs*) 0,
@@ -195,6 +228,8 @@ void* msl_native_dat_type_roots[] = {
     (FoxIllusionAttr*) 0,
     (itSeakNeedleThrownAttributes*) 0,
     (itSeakChain_Attrs*) 0,
+    (MslDatPeachTurnipAttrs*) 0,
+    (itPeachToadSporeAttributes*) 0,
     (MslDatZeldaDinFireAttrs*) 0,
     (itZeldaDinFireExplodeAttributes*) 0,
     (struct Fighter_804D6518_t*) 0,

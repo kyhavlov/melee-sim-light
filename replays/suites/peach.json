@@ -1,0 +1,130 @@
+{
+  "name": "peach",
+  "notes": "Peach validation suite: 18 public SlippiLab singles (three per legal stage, frozen Pokemon Stadium only) plus two local demo fixtures. Opponents cover every currently supported fighter plus Peach dittos. peach_demo_1 covers Battlefield specials/items; peach_demo_2 supplies six grounded SpecialLw -> airborne SpecialAirLw floor-loss transitions on Yoshi's Story. The combined corpus reaches all eight float states, all three forward-smash variants, all 16 source-reachable serialized special/parasol states, successful grounded and aerial Toad counters, grounded and aerial Peach Bomber hit/miss paths, all eight recorded turnip face ids including dot-eyes and stitch-face, and down-B pulls of Bob-omb, Mr. Saturn, and Beam Sword. Source inspection finds no entry transition for the remaining SpecialSJump (356), SpecialHiEnd (362), or SpecialAirHiEnd (364) dormant state-table rows.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/peach/HeartyStiffMallard.slpz",
+      "ports": [1, 2],
+      "stage_id": 2,
+      "characters": {"1": "Peach", "2": "Peach"},
+      "ucf_cardinals_1_0_enabled": false
+    },
+    {
+      "replay": "replays/validation/peach/MadeUpEnchantedStingray.slpz",
+      "ports": [2, 4],
+      "stage_id": 2,
+      "characters": {"2": "Marth", "4": "Peach"}
+    },
+    {
+      "replay": "replays/validation/peach/TameEmbellishedSparrow.slpz",
+      "ports": [2, 4],
+      "stage_id": 2,
+      "characters": {"2": "Peach", "4": "Marth"}
+    },
+    {
+      "replay": "replays/validation/peach/HummingDismalCat.slpz",
+      "ports": [1, 2],
+      "stage_id": 3,
+      "characters": {"1": "Fox", "2": "Peach"}
+    },
+    {
+      "replay": "replays/validation/peach/ScaryFrankPorcupine.slpz",
+      "ports": [1, 2],
+      "stage_id": 3,
+      "characters": {"1": "Zelda", "2": "Peach"},
+      "ucf_cardinals_1_0_enabled": false
+    },
+    {
+      "replay": "replays/validation/peach/StridentRedSandpiper.slpz",
+      "ports": [1, 2],
+      "stage_id": 3,
+      "characters": {"1": "Jigglypuff", "2": "Peach"}
+    },
+    {
+      "replay": "replays/validation/peach/DisgustingLivelyRaven.slpz",
+      "ports": [1, 3],
+      "stage_id": 8,
+      "characters": {"1": "Peach", "3": "Peach"}
+    },
+    {
+      "replay": "replays/validation/peach/DryLimitedWoodcock.slpz",
+      "ports": [2, 3],
+      "stage_id": 8,
+      "characters": {"2": "Peach", "3": "Sheik"}
+    },
+    {
+      "replay": "replays/validation/peach/SmugConfusedTermite.slpz",
+      "ports": [3, 4],
+      "stage_id": 8,
+      "characters": {"3": "Jigglypuff", "4": "Peach"}
+    },
+    {
+      "replay": "replays/validation/peach/FaintMintyShark.slpz",
+      "ports": [1, 2],
+      "stage_id": 28,
+      "characters": {"1": "Captain Falcon", "2": "Peach"}
+    },
+    {
+      "replay": "replays/validation/peach/HappyGoLuckyScentedButterfly.slpz",
+      "ports": [2, 3],
+      "stage_id": 28,
+      "characters": {"2": "Zelda", "3": "Peach"}
+    },
+    {
+      "replay": "replays/validation/peach/MarvelousLopsidedOryx.slpz",
+      "ports": [2, 4],
+      "stage_id": 28,
+      "characters": {"2": "Marth", "4": "Peach"}
+    },
+    {
+      "replay": "replays/validation/peach/BareJovialChinchilla.slpz",
+      "ports": [1, 3],
+      "stage_id": 31,
+      "characters": {"1": "Peach", "3": "Peach"}
+    },
+    {
+      "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
+      "ports": [2, 4],
+      "stage_id": 31,
+      "characters": {"2": "Peach", "4": "Jigglypuff"}
+    },
+    {
+      "replay": "replays/validation/peach/PerfectJollyMagpie.slpz",
+      "ports": [1, 2],
+      "stage_id": 31,
+      "characters": {"1": "Falco", "2": "Peach"}
+    },
+    {
+      "replay": "replays/validation/peach/CapitalPristineTarsier.slpz",
+      "ports": [1, 2],
+      "stage_id": 32,
+      "characters": {"1": "Fox", "2": "Peach"}
+    },
+    {
+      "replay": "replays/validation/peach/ExpertWorthlessFinch.slpz",
+      "ports": [2, 4],
+      "stage_id": 32,
+      "characters": {"2": "Peach", "4": "Jigglypuff"}
+    },
+    {
+      "replay": "replays/validation/peach/HumiliatingCreamyReindeer.slpz",
+      "ports": [2, 3],
+      "stage_id": 32,
+      "characters": {"2": "Peach", "3": "Sheik"}
+    },
+    {
+      "replay": "replays/validation/peach/peach_demo_1.slpz",
+      "ports": [1, 2],
+      "stage_id": 31,
+      "characters": {"1": "Peach", "2": "Fox"}
+    },
+    {
+      "replay": "replays/validation/peach/peach_demo_2.slpz",
+      "ports": [1, 2],
+      "stage_id": 8,
+      "characters": {"1": "Peach", "2": "Fox"}
+    }
+  ]
+}

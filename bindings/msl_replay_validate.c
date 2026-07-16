@@ -71,6 +71,7 @@ typedef struct ReplayPlayer {
   Primitive nml_c_x;
   Primitive nml_c_y;
   uint8_t cstick_from_processed;
+  uint8_t main_y_from_processed;
   Primitive trigger_l;
   Primitive trigger_r;
   Primitive character;
@@ -92,6 +93,8 @@ typedef struct ReplayPlayer {
   Primitive animation_index;
   Primitive instance_hit_by;
   Primitive instance_id;
+  uint8_t instance_hit_by_present;
+  uint8_t instance_id_present;
   Primitive last_attack;
   Primitive combo_count;
   Primitive last_hit_by;
@@ -117,6 +120,7 @@ typedef struct ReplayItem {
   Primitive misc[4];
   Primitive owner;
   Primitive instance_id;
+  uint8_t instance_id_present;
 } ReplayItem;
 
 typedef struct ReplayView {
@@ -507,6 +511,7 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
   ArrowNode velocities;
   ArrowNode raw_c_x;
   ArrowNode raw_c_y;
+  ArrowNode raw_main_y;
   ArrowNode joystick;
   ArrowNode cstick;
   int has_raw_c_x;
@@ -527,7 +532,23 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
   FIELD(pre, "random_seed", "I", player->random_seed);
   FIELD(pre, "buttons_physical", "S", player->buttons);
   FIELD(pre, "raw_analog_x", "c", player->main_x);
-  FIELD(pre, "raw_analog_y", "c", player->main_y);
+  {
+    int present = node_child_optional(pre, "raw_analog_y", &raw_main_y, error, error_size);
+    if (present < 0) {
+      return -1;
+    }
+    if (present != 0) {
+      if (primitive_from_node(raw_main_y, "c", &player->main_y, error, error_size) != 0) {
+        return -1;
+      }
+    } else {
+      // Pre-v3.15 Slippi did not record the physical Y byte. Playback still
+      // restores the normalized gameplay axis, so use its exact signed-byte
+      // projection for the unavailable UCF raw lane.
+      // refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm
+      player->main_y_from_processed = 1;
+    }
+  }
   // Slippi playback restores normalized gameplay axes to Fighter input state
   // and physical bytes to UCF's raw-input buffer as separate observations.
   // refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm
@@ -594,8 +615,29 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
   FIELD(post, "hitlag", "f", player->hitlag);
   FIELD(post, "misc_as", "f", player->misc_as);
   FIELD(post, "animation_index", "I", player->animation_index);
-  FIELD(post, "last_hit_by_instance", "S", player->instance_hit_by);
-  FIELD(post, "instance_id", "S", player->instance_id);
+  {
+    ArrowNode value;
+    int present = node_child_optional(post, "last_hit_by_instance", &value, error, error_size);
+    if (present < 0) {
+      return -1;
+    }
+    if (present != 0) {
+      if (primitive_from_node(value, "S", &player->instance_hit_by, error, error_size) != 0) {
+        return -1;
+      }
+      player->instance_hit_by_present = 1;
+    }
+    present = node_child_optional(post, "instance_id", &value, error, error_size);
+    if (present < 0) {
+      return -1;
+    }
+    if (present != 0) {
+      if (primitive_from_node(value, "S", &player->instance_id, error, error_size) != 0) {
+        return -1;
+      }
+      player->instance_id_present = 1;
+    }
+  }
   FIELD(post, "last_attack_landed", "C", player->last_attack);
   FIELD(post, "combo_count", "C", player->combo_count);
   FIELD(post, "last_hit_by", "C", player->last_hit_by);
@@ -650,7 +692,20 @@ static int load_items(ArrowNode items, ReplayView* replay, char* error, size_t e
   ITEM_FIELD(values, "timer", "f", replay->item.timer);
   ITEM_FIELD(values, "id", "I", replay->item.spawn_id);
   ITEM_FIELD(values, "owner", "c", replay->item.owner);
-  ITEM_FIELD(values, "instance_id", "S", replay->item.instance_id);
+  {
+    ArrowNode instance_id;
+    int present = node_child_optional(values, "instance_id", &instance_id, error, error_size);
+    if (present < 0) {
+      return -1;
+    }
+    if (present != 0) {
+      if (primitive_from_node(instance_id, "S", &replay->item.instance_id, error, error_size) !=
+          0) {
+        return -1;
+      }
+      replay->item.instance_id_present = 1;
+    }
+  }
   for (k = 0; k < 4; ++k) {
     char name[2] = {(char)('0' + k), '\0'};
     ITEM_FIELD(misc, name, "C", replay->item.misc[k]);
@@ -876,7 +931,8 @@ static void build_input(const ReplayView* replay, const FrameRows* rows, int64_t
     int64_t raw = rows->player_raw[player][logical_pos];
     dst->buttons = get_u16(&src->buttons, raw);
     dst->main_x = get_i8(&src->main_x, raw);
-    dst->main_y = get_i8(&src->main_y, raw);
+    dst->main_y = src->main_y_from_processed ? processed_stick_i8(get_f32(&src->nml_main_y, raw))
+                                             : get_i8(&src->main_y, raw);
     if (src->cstick_from_processed) {
       dst->c_x = processed_stick_i8(get_f32(&src->c_x, raw));
       dst->c_y = processed_stick_i8(get_f32(&src->c_y, raw));
@@ -976,8 +1032,12 @@ static void build_expected(const ReplayView* replay, const FrameRows* rows, int6
     expected->hurtbox_state[player] = get_u8(&src->hurtbox, player_raw);
     expected->ground_id[player] = get_u16(&src->ground, player_raw);
     expected->animation_index[player] = get_u32(&src->animation_index, player_raw);
-    expected->instance_hit_by[player] = get_u16(&src->instance_hit_by, player_raw);
-    expected->instance_id[player] = get_u16(&src->instance_id, player_raw);
+    if (src->instance_hit_by_present) {
+      expected->instance_hit_by[player] = get_u16(&src->instance_hit_by, player_raw);
+    }
+    if (src->instance_id_present) {
+      expected->instance_id[player] = get_u16(&src->instance_id, player_raw);
+    }
     expected->last_attack_landed[player] = get_u8(&src->last_attack, player_raw);
     expected->combo_count[player] = get_u8(&src->combo_count, player_raw);
     expected->last_hit_by[player] = get_u8(&src->last_hit_by, player_raw);
@@ -1000,7 +1060,9 @@ static void build_expected(const ReplayView* replay, const FrameRows* rows, int6
       dst->state = get_u8(&src->state, item);
       dst->type = get_u16(&src->type, item);
       dst->owner = get_i8(&src->owner, item);
-      dst->instance_id = get_u16(&src->instance_id, item);
+      if (src->instance_id_present) {
+        dst->instance_id = get_u16(&src->instance_id, item);
+      }
       dst->direction = get_f32(&src->direction, item);
       dst->vel_x = get_f32(&src->vel_x, item);
       dst->vel_y = get_f32(&src->vel_y, item);
@@ -1234,6 +1296,8 @@ static const ItemFieldSpec item_compare_fields[] = {
 
 static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemFieldSpec* spec) {
   enum {
+    // refs/melee/src/melee/it/forward.h::It_Kind_Dosei.
+    ITEM_KIND_MR_SATURN = 7,
     // refs/melee/src/melee/it/forward.h::It_Kind_Fox_Laser.
     ITEM_KIND_FOX_LASER = 54,
     // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Laser.
@@ -1256,11 +1320,38 @@ static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemField
     ITEM_KIND_SHEIK_VANISH = 85,
     // refs/melee/src/melee/it/forward.h::It_Kind_Seak_Chain.
     ITEM_KIND_SHEIK_CHAIN = 97,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Explode.
+    ITEM_KIND_PEACH_EXPLODE = 98,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Turnip.
+    ITEM_KIND_PEACH_TURNIP = 99,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Parasol.
+    ITEM_KIND_PEACH_PARASOL = 103,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Peach_Toad.
+    ITEM_KIND_PEACH_TOAD = 104,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Peach_ToadSpore.
+    ITEM_KIND_PEACH_TOAD_SPORE = 111,
     // refs/melee/src/melee/it/forward.h::It_Kind_Zelda_DinFire.
     ITEM_KIND_ZELDA_DIN_FIRE = 108,
     // refs/melee/src/melee/it/forward.h::It_Kind_Zelda_DinFire_Explode.
     ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE = 109,
   };
+
+  if (item->type == ITEM_KIND_MR_SATURN &&
+      (item->state == 1 || item->state == 4 || item->state == 5) &&
+      (spec->offset == offsetof(MslCoreItem, misc2) ||
+       spec->offset == offsetof(MslCoreItem, misc3))) {
+    // Mr. Saturn's held/thrown callbacks do not initialize or update xDE4.
+    // SendItemInfo.s therefore exposes fixed-pool residue at xDEB/xDEF until
+    // an article state that explicitly owns the historical-position vector.
+    // Keep those bytes strict in states 0, 2, 3, and 6..11. State 1's entry
+    // row precedes its first animation-owned xDE4 publication, so the generic
+    // bytes are not uniformly initialized across that state either.
+    // refs/melee/src/melee/it/items/itdosei.c::{
+    //   itDosei_Logic7_PickedUp,itDosei_UnkMotion5_Anim,
+    //   itDosei_UnkMotion6_Anim,itDosei_80281C6C}
+    // refs/slippi-ssbm-asm/Recording/SendItemInfo.s
+    return 0;
+  }
 
   if ((item->type == ITEM_KIND_FOX_BLASTER || item->type == ITEM_KIND_FALCO_BLASTER) &&
       (spec->offset == offsetof(MslCoreItem, misc2) ||
@@ -1324,6 +1415,28 @@ static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemField
     // refs/melee/src/melee/it/itCharItems.h::itSeakChain_ItemVars
     return 0;
   }
+  if ((item->type == ITEM_KIND_PEACH_EXPLODE || item->type == ITEM_KIND_PEACH_PARASOL ||
+       item->type == ITEM_KIND_PEACH_TOAD || item->type == ITEM_KIND_PEACH_TOAD_SPORE) &&
+      spec->offset >= offsetof(MslCoreItem, misc0) &&
+      spec->offset <= offsetof(MslCoreItem, misc3)) {
+    // These article owners declare no item-variable payload. SendItemInfo's
+    // generic xDD7/xDDB/xDEB/xDEF samples are fixed-pool residue rather than
+    // gameplay state.
+    // refs/melee/src/melee/it/items/{itpeachexplode.c,
+    //   itpeachparasol.c,itpeachtoad.c,itpeachtoadspore.c}
+    return 0;
+  }
+  if (item->type == ITEM_KIND_PEACH_TURNIP && (spec->offset == offsetof(MslCoreItem, misc0) ||
+                                               spec->offset == offsetof(MslCoreItem, misc2) ||
+                                               spec->offset == offsetof(MslCoreItem, misc3))) {
+    // xDD7 is padding after the one-byte flag, xDEB belongs to the Bob-omb-only
+    // scale lane and is not initialized for turnips, and xDEF lies beyond the
+    // declared turnip variables. The xDDB sample remains the gameplay-bearing
+    // turnip face index.
+    // refs/melee/src/melee/it/itCharItems.h::itPeachTurnip_ItemVars
+    // refs/melee/src/melee/it/items/itpeachturnip.c::it_802BD4AC
+    return 0;
+  }
   if (item->type == ITEM_KIND_ZELDA_DIN_FIRE && spec->offset == offsetof(MslCoreItem, misc0)) {
     // The projectile's first source word is explicitly padding and is not
     // initialized by it_802C1590. Slippi exposes fixed-pool residue there.
@@ -1367,6 +1480,13 @@ static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t 
       }
       if (player >= 0 && player < replay->num_players &&
           !rows->player_present[player][logical_pos]) {
+        continue;
+      }
+      if (player >= 0 && player < replay->num_players &&
+          ((spec->offset == offsetof(MslCoreCompare, instance_hit_by) &&
+            !replay->players[player].instance_hit_by_present) ||
+           (spec->offset == offsetof(MslCoreCompare, instance_id) &&
+            !replay->players[player].instance_id_present))) {
         continue;
       }
       uint32_t expected_bits = load_bits(expected_bytes + (size_t)element * width, width);
@@ -1419,7 +1539,9 @@ static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t 
         size_t width = field_width((FieldKind)spec->kind);
         uint32_t expected_bits = load_bits(expected_item + spec->offset, width);
         uint32_t actual_bits = load_bits(actual_item + spec->offset, width);
-        if (!item_field_is_gameplay_state(&expected.items[slot], spec)) {
+        if ((!replay->item.instance_id_present &&
+             spec->offset == offsetof(MslCoreItem, instance_id)) ||
+            !item_field_is_gameplay_state(&expected.items[slot], spec)) {
           continue;
         }
         if (!compare_bits_equal((FieldKind)spec->kind, expected_bits, actual_bits,
@@ -1999,11 +2121,11 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   }
   for (i = 0; i < replay.num_players; ++i) {
     uint8_t character = get_u8(&replay.players[i].character, rows.player_raw[i][0]);
-    if (character != 1 && character != 2 && character != 7 && character != 15 && character != 18 &&
-        character != 19 && character != 22) {
+    if (character != 1 && character != 2 && character != 7 && character != 9 && character != 15 &&
+        character != 18 && character != 19 && character != 22) {
       PyErr_SetString(PyExc_ValueError,
-                      "Melee core requires Fox, Captain Falcon, Sheik, Jigglypuff, Marth, Zelda, "
-                      "or Falco players");
+                      "Melee core requires Fox, Captain Falcon, Sheik, Peach, Jigglypuff, Marth, "
+                      "Zelda, or Falco players");
       goto done;
     }
   }
