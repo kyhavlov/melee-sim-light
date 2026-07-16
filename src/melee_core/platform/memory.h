@@ -26,15 +26,19 @@ typedef struct MslMemoryAllocation {
 
 typedef struct MslMemoryContext {
     uint8_t* arena;
+    MslMemoryAllocation* allocations;
     size_t capacity;
     size_t used;
-    MslMemoryAllocation allocations[MSL_MEMORY_ALLOCATION_CAPACITY];
     size_t allocation_count;
+    size_t allocation_capacity;
+    uint8_t owner;
     uint8_t sealed;
 } MslMemoryContext;
 
 int msl_memory_context_init(MslMemoryContext* context, MslMemoryOwner owner);
 void msl_memory_context_reset(MslMemoryContext* context);
+void msl_memory_context_reuse_match(MslMemoryContext* context,
+                                    uint8_t* arena, size_t capacity);
 void msl_memory_context_destroy(MslMemoryContext* context);
 void* msl_memory_alloc(MslMemoryContext* context, size_t size);
 #ifdef MSL_CORE_NATIVE

@@ -568,8 +568,8 @@ typedef struct itPeachTurnip_ItemVars {
     /*  +8 ip+DDC */ s32 xDDC_damage;
     /*  +C ip+DE0 */ f32 xDE0_scl; // Scale - Mr. Saturn, Turnip
     // Retail stores this live owner pointer in one 32-bit source word. The
-    // hosted runtime allocates gameplay objects below UINT32_MAX; retaining
-    // the source width keeps the Bob-omb scale lane at +0x14.
+    // hosted full-width owner is kept outside this source-layout union in
+    // Item::hosted_peach_turnip_owner so xDE8 remains at its retail offset.
     // refs/melee/src/melee/it/{itCharItems.h,items/itpeachturnip.c}
     /*  +10 ip+DE4 */ u32 xDE4_owner;
     /*  +14 ip+DE8 */ f32 xDE8_scl; // Scale - Bob-omb

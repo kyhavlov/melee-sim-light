@@ -153,3 +153,44 @@ scheduled work are prime Phase 8 reachability/cost boundaries.
    256/512 measurements, add 4,096/16,384 memory gates, and profile the canonical batch by source
    scheduler phase before choosing SoA/AoSoA fields.
 
+## Phase 8 memory substrate — 2026-07-16
+
+The first retained Phase 8 packet removed the native Match graph from Linux's low-2-GiB mapping
+window. Raw archive construction remains low-address because the imported `lbFile` APIs still carry
+source-width words; mutable Match allocations now use ordinary native mappings. The uniform
+256-object free-list floor was replaced with a bounded byte budget plus the existing explicit
+AObj/FObj/ID reserves. The census covers singles and doubles for all eight admitted characters on
+all six legal stages.
+
+The large relocation registry and allocation ledger are no longer embedded in every Match. A
+thread-local construction registry emits a bounded 256 KiB runtime relocation image containing all
+16,384 possible compact records and a 32,768-entry 16-bit address index. This remains mutable so
+source pool alloc/free transitions can change an object's exact relocation type without scanning
+raw/stale words. Match allocation provenance similarly uses thread-local construction scratch and
+is discarded when the bump arena seals; immutable shared GameData retains its own ledger. These are
+representation-only changes: arbitrary-index save/restore, cross-match copy, runtime pool reuse,
+and the no-allocation step contract remain covered by the native smokes.
+
+Current census results:
+
+- `MslCoreMatch`: 61,168 bytes, down from 781,768; `MslMemoryContext`: 56 bytes, down from
+  196,648; compact relocation residency: 262,144 bytes, down from the 524,296-byte embedded
+  registry. Shared `MslCoreGameData` also fell from 568,296 to 371,712 bytes.
+- Match arena: 8 MiB virtual reserve, down from 32 MiB. The supported singles/doubles maximum is
+  4,075,264 bytes used with 3,968 construction allocations and 11,284 live relocation records.
+  The maximum configuration is four-player frozen Stadium with Sheik.
+- The representative Peach/FD arena is 2,996,704 bytes and remains exactly stable over gameplay.
+  Its savestate is 3,058,000 bytes = 128-byte header + 61,168-byte Match value + 2,996,704-byte
+  arena, versus the 17,347,368-byte Phase 7 representative.
+- Maximum source object-pool residency across the census is 1,667,600 bytes. The largest remaining
+  pools are the 32,768-byte fighter scratch family (589,824 bytes), fighters (173,400 bytes),
+  fighter bones (107,520 bytes), FObjs (94,784 bytes), attributes (89,040 bytes), and fighter
+  pointer arrays (88,288 bytes).
+- At the measured maximum, runtime state plus a 128-frame observation ring is about 1.02 GiB for
+  256, 2.03 GiB for 512, 16.27 GiB for 4,096, and 65.06 GiB for 16,384 environments. The
+  corresponding 8 MiB arena virtual reservations plus rings are 2.05, 4.09, 32.72, and 130.88 GiB.
+  These are capacity projections; resident lifecycle measurements still need to replace them.
+
+Correctness gate: the complete 153-replay native suite retained 63 exact passes, 90 existing exact
+classifications, zero XPASS/fail/error, and all full-output locks over 1,415,476 compared frames.
+No classification or output lock changed.

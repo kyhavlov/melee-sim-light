@@ -9,8 +9,29 @@
 #include "it/itcoll.h"
 #include "it/item.h"
 #include "it/itmaplib.h"
+#ifdef MSL_CORE_NATIVE
+#include "runtime/context.h"
+#endif
 
 #include <baselib/random.h>
+
+static HSD_GObj* turnip_owner(const Item* item)
+{
+#ifdef MSL_CORE_NATIVE
+    return msl_core_peach_turnip_owner_get(item);
+#else
+    return (HSD_GObj*) (uintptr_t)
+        item->xDD4_itemVar.peachturnip.xDE4_owner;
+#endif
+}
+
+static void set_turnip_owner(Item* item, HSD_GObj* owner)
+{
+#ifdef MSL_CORE_NATIVE
+    msl_core_peach_turnip_owner_set(item, owner);
+#endif
+    item->xDD4_itemVar.peachturnip.xDE4_owner = (u32) (uintptr_t) owner;
+}
 
 ItemStateTable it_803F74A8[] = {
     {
@@ -97,9 +118,8 @@ void itPeachTurnip_Logic56_Destroyed(Item_GObj* item_gobj)
     Item* item;
 
     item = GET_ITEM(item_gobj);
-    if (item->xDD4_itemVar.peachturnip.xDE4_owner != 0) {
-        ftPe_SpecialLw_UnsetVeg((HSD_GObj*) (uintptr_t)
-                                   item->xDD4_itemVar.peachturnip.xDE4_owner);
+    if (turnip_owner(item) != NULL) {
+        ftPe_SpecialLw_UnsetVeg(turnip_owner(item));
     }
 }
 
@@ -133,8 +153,7 @@ Item_GObj* it_802BD4AC(Item_GObj* item_gobj, Vec3* pos, Fighter_Part part,
             item->xDD4_itemVar.peachturnip.xDDC_damage =
                 attr->x8[item->xDD4_itemVar.peachturnip.xDD8].x4_damage;
             item->xDD4_itemVar.peachturnip.xDD4.b0 = 0;
-            item->xDD4_itemVar.peachturnip.xDE4_owner =
-                (u32) (uintptr_t) item->owner;
+            set_turnip_owner(item, item->owner);
             it_8026BD0C(spawn_gobj);
         }
 
@@ -296,10 +315,8 @@ void itPeachTurnip_Logic56_EvtUnk(Item_GObj* item_gobj, HSD_GObj* ref_gobj)
     Item* item;
 
     item = GET_ITEM(item_gobj);
-    if (item->xDD4_itemVar.peachturnip.xDE4_owner ==
-        (u32) (uintptr_t) ref_gobj)
-    {
-        item->xDD4_itemVar.peachturnip.xDE4_owner = 0;
+    if (turnip_owner(item) == ref_gobj) {
+        set_turnip_owner(item, NULL);
     }
     it_8026B894(item_gobj, ref_gobj);
 }

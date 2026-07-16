@@ -19,8 +19,33 @@
 
 enum {
     MSL_MEMORY_GAME_DATA_BYTES = 64 * 1024 * 1024,
-    MSL_MEMORY_MATCH_BYTES = 32 * 1024 * 1024,
+    // Supported singles/doubles construction currently reaches 3.89 MiB,
+    // including the compact relocation image. Preserve roughly 2x headroom
+    // without reserving 32 MiB per resident environment.
+    // tests/melee_core/runtime_census.c
+    MSL_MEMORY_MATCH_BYTES = 8 * 1024 * 1024,
 };
+
+// Allocation provenance is needed while a Match graph is constructed, but
+// the sealed bump arena never frees or grows during gameplay. One thread-local
+// construction ledger is therefore reused across sequential Match resets;
+// immutable GameData retains its own initialization ledger.
+static _Thread_local MslMemoryAllocation
+    match_allocations[MSL_MEMORY_ALLOCATION_CAPACITY];
+
+static int bind_allocation_ledger(MslMemoryContext* context,
+                                  MslMemoryOwner owner)
+{
+    context->owner = (uint8_t) owner;
+    context->allocation_capacity = MSL_MEMORY_ALLOCATION_CAPACITY;
+    if (owner == MSL_MEMORY_MATCH) {
+        context->allocations = match_allocations;
+        return 0;
+    }
+    context->allocations = calloc(MSL_MEMORY_ALLOCATION_CAPACITY,
+                                  sizeof(*context->allocations));
+    return context->allocations != NULL ? 0 : -1;
+}
 
 int msl_memory_context_init(MslMemoryContext* context, MslMemoryOwner owner)
 {
@@ -32,20 +57,43 @@ int msl_memory_context_init(MslMemoryContext* context, MslMemoryOwner owner)
         return -1;
     }
     memset(context, 0, sizeof(*context));
+    if (bind_allocation_ledger(context, owner) != 0) {
+        return -1;
+    }
 #ifdef MSL_CORE_NATIVE
 #ifdef MSL_CORE_WASM
     context->arena = malloc(capacity);
     if (context->arena == NULL) {
+        if (owner == MSL_MEMORY_GAME_DATA) {
+            free(context->allocations);
+        }
+        context->allocations = NULL;
         return -1;
     }
 #else
     {
-        void* mapping = mmap(NULL, capacity, PROT_READ | PROT_WRITE,
-                             MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
-        if (mapping == MAP_FAILED || (uintptr_t) mapping > UINT32_MAX) {
+        int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+        void* mapping;
+        // Raw retail archives still pass through 32-bit source APIs while
+        // GameData is built. Match graphs use native pointers throughout and
+        // must not consume the process-wide low-address window.
+        // refs/melee/src/melee/lb/lbfile.c::{lbFile_80016580,
+        //   lbFile_800168A0}
+        if (owner == MSL_MEMORY_GAME_DATA) {
+            flags |= MAP_32BIT;
+        }
+        mapping = mmap(NULL, capacity, PROT_READ | PROT_WRITE, flags, -1, 0);
+        if (mapping == MAP_FAILED ||
+            (owner == MSL_MEMORY_GAME_DATA &&
+             (uintptr_t) mapping > UINT32_MAX))
+        {
             if (mapping != MAP_FAILED) {
                 munmap(mapping, capacity);
             }
+            if (owner == MSL_MEMORY_GAME_DATA) {
+                free(context->allocations);
+            }
+            context->allocations = NULL;
             return -1;
         }
         context->arena = mapping;
@@ -54,6 +102,10 @@ int msl_memory_context_init(MslMemoryContext* context, MslMemoryOwner owner)
 #else
     context->arena = malloc(capacity);
     if (context->arena == NULL) {
+        if (owner == MSL_MEMORY_GAME_DATA) {
+            free(context->allocations);
+        }
+        context->allocations = NULL;
         return -1;
     }
 #endif
@@ -69,22 +121,46 @@ void msl_memory_context_reset(MslMemoryContext* context)
     context->used = 0;
     context->allocation_count = 0;
     context->sealed = 0;
+    if (context->owner == MSL_MEMORY_MATCH) {
+        context->allocations = match_allocations;
+        context->allocation_capacity = MSL_MEMORY_ALLOCATION_CAPACITY;
+    }
+}
+
+void msl_memory_context_reuse_match(MslMemoryContext* context,
+                                    uint8_t* arena, size_t capacity)
+{
+    memset(context, 0, sizeof(*context));
+    context->arena = arena;
+    context->capacity = capacity;
+    context->owner = MSL_MEMORY_MATCH;
+    context->allocations = match_allocations;
+    context->allocation_capacity = MSL_MEMORY_ALLOCATION_CAPACITY;
 }
 
 void msl_memory_context_destroy(MslMemoryContext* context)
 {
-    if (context == NULL || context->arena == NULL) {
+    MslMemoryAllocation* allocations;
+    uint8_t owner;
+    if (context == NULL) {
         return;
     }
+    allocations = context->allocations;
+    owner = context->owner;
+    if (context->arena != NULL) {
 #ifdef MSL_CORE_NATIVE
 #ifdef MSL_CORE_WASM
-    free(context->arena);
+        free(context->arena);
 #else
-    munmap(context->arena, context->capacity);
+        munmap(context->arena, context->capacity);
 #endif
 #else
-    free(context->arena);
+        free(context->arena);
 #endif
+    }
+    if (owner == MSL_MEMORY_GAME_DATA) {
+        free(allocations);
+    }
     memset(context, 0, sizeof(*context));
 }
 
@@ -100,7 +176,8 @@ void* msl_memory_alloc(MslMemoryContext* context, size_t size)
     aligned_used = (context->used + MSL_MEMORY_ARENA_ALIGNMENT - 1) &
                    ~(size_t) (MSL_MEMORY_ARENA_ALIGNMENT - 1);
     if (context->sealed ||
-        context->allocation_count == MSL_MEMORY_ALLOCATION_CAPACITY ||
+        context->allocations == NULL ||
+        context->allocation_count == context->allocation_capacity ||
         size > context->capacity - aligned_used)
     {
         abort();
@@ -151,7 +228,12 @@ void* HSD_MemAllocReloc(size_t size, MslRelocType type, uint32_t count,
 
 void msl_memory_finish_initialization(void)
 {
-    msl_core_memory_context()->sealed = 1;
+    MslMemoryContext* context = msl_core_memory_context();
+    context->sealed = 1;
+    if (context->owner == MSL_MEMORY_MATCH) {
+        context->allocations = NULL;
+        context->allocation_capacity = 0;
+    }
 }
 
 void msl_memory_protect_allocation(const void* pointer)
@@ -172,7 +254,9 @@ void msl_memory_protect_allocation(const void* pointer)
         if (pass != 0 && owner == context) {
             continue;
         }
-        for (i = 0; i < owner->allocation_count; ++i) {
+        for (i = 0; owner->allocations != NULL &&
+                    i < owner->allocation_count; ++i)
+        {
             MslMemoryAllocation* allocation = &owner->allocations[i];
             uintptr_t begin = (uintptr_t) allocation->address;
             if (allocation->address != NULL && address >= begin &&
@@ -200,6 +284,11 @@ void HSD_Free(void* ptr)
 #endif
         context = msl_core_memory_context();
         game_context = msl_core_game_memory_context();
+        if (context->owner == MSL_MEMORY_MATCH &&
+            msl_memory_context_owns(context, ptr))
+        {
+            return;
+        }
         {
             int pass;
             for (pass = 0; pass < 2; ++pass) {
@@ -207,7 +296,9 @@ void HSD_Free(void* ptr)
                 if (pass != 0 && owner == context) {
                     continue;
                 }
-                for (i = 0; i < owner->allocation_count; ++i) {
+                for (i = 0; owner->allocations != NULL &&
+                            i < owner->allocation_count; ++i)
+                {
                     MslMemoryAllocation* allocation = &owner->allocations[i];
                     if (allocation->address == ptr) {
                         if (allocation->protected) {

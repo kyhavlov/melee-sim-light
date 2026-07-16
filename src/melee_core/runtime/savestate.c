@@ -17,7 +17,7 @@
 #endif
 
 enum {
-    MSL_SAVESTATE_VERSION = 3,
+    MSL_SAVESTATE_VERSION = 4,
 };
 
 typedef struct MslSavestateHeader {
@@ -41,7 +41,7 @@ typedef struct MslSavestateHeader {
 } MslSavestateHeader;
 
 static const uint8_t savestate_magic[8] = {
-    'M', 'S', 'L', 'S', 'S', '0', '3', 0,
+    'M', 'S', 'L', 'S', 'S', '0', '4', 0,
 };
 
 typedef struct RelocBases {
@@ -215,63 +215,93 @@ static void relocate_slot(void* address, const RelocBases* bases)
     memcpy(address, &value, sizeof(value));
 }
 
-static void relocate_typed_object(void* address, const MslRelocObject* object,
-                                  const RelocBases* bases)
+static void relocate_typed_object(void* address, uint32_t type,
+                                  uint32_t count, uint32_t stride,
+                                  uint32_t flags, const RelocBases* bases)
 {
     uint32_t element;
-    if (object->type == MSL_RELOC_POINTER_ARRAY) {
-        for (element = 0; element < object->count; ++element) {
+    if (type == MSL_RELOC_POINTER_ARRAY) {
+        for (element = 0; element < count; ++element) {
             relocate_slot(
-                (uint8_t*) address + (size_t) element * object->stride, bases);
+                (uint8_t*) address + (size_t) element * stride, bases);
         }
-    } else if (object->type < MSL_RELOC_TYPE_COUNT &&
-               object->type != MSL_RELOC_RAW)
+    } else if (type < MSL_RELOC_TYPE_COUNT && type != MSL_RELOC_RAW)
     {
-        const MslRelocTypeDesc* desc = &msl_reloc_type_descs[object->type];
-        for (element = 0; element < object->count; ++element) {
+        const MslRelocTypeDesc* desc = &msl_reloc_type_descs[type];
+        for (element = 0; element < count; ++element) {
             uint8_t* base =
-                (uint8_t*) address + (size_t) element * object->stride;
+                (uint8_t*) address + (size_t) element * stride;
             uint32_t field;
             for (field = 0; field < desc->pointer_count; ++field) {
-                if (desc->pointer_offsets[field] + sizeof(void*) <=
-                    object->stride)
+                if (desc->pointer_offsets[field] + sizeof(void*) <= stride)
                 {
                     relocate_slot(base + desc->pointer_offsets[field], bases);
                 }
             }
         }
     }
-    if ((object->flags & MSL_RELOC_INTRUSIVE_FIRST_POINTER) != 0) {
+    if ((flags & MSL_RELOC_INTRUSIVE_FIRST_POINTER) != 0) {
         relocate_slot(address, bases);
     }
 }
 
-static void relocate_match(MslCoreMatch* match, const RelocBases* bases)
+static int relocate_match(MslCoreMatch* match, const RelocBases* bases)
 {
     const MslRelocTypeDesc* root = &msl_reloc_type_descs[MSL_RELOC_MATCH];
+    const MslRelocRecord* records;
+    size_t record_bytes;
+    size_t index_bytes;
     uint32_t i;
 
-    // The copied registry still names source addresses here; use it to find
-    // the corresponding destination object before rewriting the registry.
-    for (i = 0; i < match->relocation.count; ++i) {
-        const MslRelocObject* object = &match->relocation.objects[i];
-        uintptr_t destination =
-            relocate_value((uintptr_t) object->address, bases);
-        relocate_typed_object((void*) destination, object, bases);
+    record_bytes = (size_t) match->relocation_record_capacity *
+                   sizeof(MslRelocRecord);
+    index_bytes = (size_t) match->relocation_index_capacity * sizeof(uint16_t);
+    if (match->relocation_count == 0 ||
+        match->relocation_record_capacity == 0 ||
+        match->relocation_count > match->relocation_record_capacity ||
+        match->relocation_index_capacity == 0 ||
+        (match->relocation_index_capacity &
+         (match->relocation_index_capacity - 1)) != 0 ||
+        match->relocation_records_offset > bases->match_arena_size ||
+        record_bytes > bases->match_arena_size -
+                           match->relocation_records_offset ||
+        match->relocation_index_offset !=
+            match->relocation_records_offset + record_bytes ||
+        match->relocation_index_offset > bases->match_arena_size ||
+        index_bytes > bases->match_arena_size - match->relocation_index_offset)
+    {
+        return -1;
+    }
+    records = (const MslRelocRecord*)
+        (bases->destination_match_arena +
+         match->relocation_records_offset);
+    for (i = 0; i < match->relocation_count; ++i) {
+        const MslRelocRecord* record = &records[i];
+        uintptr_t destination;
+        uint32_t offset =
+            record->address & MSL_RELOC_ADDRESS_OFFSET_MASK;
+        if ((record->address & MSL_RELOC_ADDRESS_MATCH) != 0) {
+            if (offset > sizeof(*match) - sizeof(void*)) {
+                return -1;
+            }
+            destination = bases->destination_match + offset;
+        } else {
+            if (offset > bases->match_arena_size - sizeof(void*)) {
+                return -1;
+            }
+            destination = bases->destination_match_arena + offset;
+        }
+        relocate_typed_object((void*) destination, record->type,
+                              record->count, record->stride, record->flags,
+                              bases);
     }
     for (i = 0; i < root->pointer_count; ++i) {
         relocate_slot((uint8_t*) match + root->pointer_offsets[i], bases);
     }
-    for (i = 0; i < match->memory.allocation_count; ++i) {
-        match->memory.allocations[i].address = (uint8_t*) relocate_value(
-            (uintptr_t) match->memory.allocations[i].address, bases);
-    }
-    for (i = 0; i < match->relocation.count; ++i) {
-        match->relocation.objects[i].address = (void*) relocate_value(
-            (uintptr_t) match->relocation.objects[i].address, bases);
-    }
-    msl_reloc_rebuild_index(&match->relocation);
     match->memory.arena = (uint8_t*) bases->destination_match_arena;
+    match->memory.allocations = NULL;
+    match->memory.allocation_capacity = 0;
+    return 0;
 }
 
 static void fill_header(MslSavestateHeader* header, const MslCoreMatch* match)
@@ -438,7 +468,9 @@ int msl_core_match_restore(MslCoreMatch* match, const void* buffer,
     memcpy(arena, (const uint8_t*) buffer + sizeof(header) + sizeof(*match),
            header.arena_used);
     memcpy(match, (const uint8_t*) buffer + sizeof(header), sizeof(*match));
-    relocate_match(match, &bases);
+    if (relocate_match(match, &bases) != 0) {
+        return -1;
+    }
     match->game_data = game_data;
     match->memory.arena = arena;
     match->memory.capacity = capacity;
@@ -471,7 +503,9 @@ int msl_core_match_copy(MslCoreMatch* destination, const MslCoreMatch* source)
     fill_bases(&bases, &header, destination);
     memcpy(arena, source->memory.arena, source->memory.used);
     memcpy(destination, source, sizeof(*destination));
-    relocate_match(destination, &bases);
+    if (relocate_match(destination, &bases) != 0) {
+        return -1;
+    }
     destination->game_data = game_data;
     destination->memory.arena = arena;
     destination->memory.capacity = capacity;

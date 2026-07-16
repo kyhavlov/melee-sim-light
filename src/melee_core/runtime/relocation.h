@@ -45,10 +45,32 @@ typedef struct MslRelocRegistry {
     uint32_t count;
 } MslRelocRegistry;
 
+// Runtime relocation ownership retains only the records actually reached by
+// a Match plus a compact 16-bit address index. The large registry above is a
+// thread-local construction scratch and is never resident per environment.
+typedef struct MslRelocRecord {
+    uint32_t address;
+    uint32_t stride;
+    uint16_t count;
+    uint8_t type;
+    uint8_t flags;
+} MslRelocRecord;
+
+enum {
+    MSL_RELOC_ADDRESS_MATCH = UINT32_C(0x80000000),
+    MSL_RELOC_ADDRESS_OFFSET_MASK = UINT32_C(0x7FFFFFFF),
+};
+
+typedef struct MslCoreMatch MslCoreMatch;
+void msl_reloc_begin_match(MslCoreMatch* match);
+int msl_reloc_seal_match(MslCoreMatch* match);
 void msl_reloc_register(void* address, MslRelocType type, uint32_t count,
                         uint32_t stride, uint32_t flags);
 typedef struct _HSD_ClassInfo HSD_ClassInfo;
 void msl_reloc_register_hsd_class(void* address, HSD_ClassInfo* info);
-void msl_reloc_rebuild_index(MslRelocRegistry* registry);
+const MslRelocRecord* msl_reloc_records(const MslCoreMatch* match);
+void* msl_reloc_record_address(const MslCoreMatch* match,
+                               const MslRelocRecord* record);
+size_t msl_reloc_resident_bytes(const MslCoreMatch* match);
 
 #endif

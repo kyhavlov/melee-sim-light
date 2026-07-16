@@ -75,6 +75,49 @@ MslCoreMatch* msl_core_try_active_match(void)
     return active.match;
 }
 
+#ifdef MSL_CORE_NATIVE
+HSD_GObj* msl_core_peach_turnip_owner_get(const Item* item)
+{
+    size_t i;
+    MslCoreMatch* match = msl_core_active_match();
+    for (i = 0; i < MSL_CORE_PEACH_TURNIP_OWNER_CAPACITY; ++i) {
+        if (match->peach_turnip_owners[i].item == item) {
+            return match->peach_turnip_owners[i].owner;
+        }
+    }
+    return NULL;
+}
+
+void msl_core_peach_turnip_owner_set(Item* item, HSD_GObj* owner)
+{
+    size_t i;
+    size_t empty = MSL_CORE_PEACH_TURNIP_OWNER_CAPACITY;
+    MslCoreMatch* match = msl_core_active_match();
+    for (i = 0; i < MSL_CORE_PEACH_TURNIP_OWNER_CAPACITY; ++i) {
+        if (match->peach_turnip_owners[i].item == item) {
+            if (owner == NULL) {
+                match->peach_turnip_owners[i].item = NULL;
+            }
+            match->peach_turnip_owners[i].owner = owner;
+            return;
+        }
+        if (empty == MSL_CORE_PEACH_TURNIP_OWNER_CAPACITY &&
+            match->peach_turnip_owners[i].item == NULL)
+        {
+            empty = i;
+        }
+    }
+    if (owner == NULL) {
+        return;
+    }
+    if (empty == MSL_CORE_PEACH_TURNIP_OWNER_CAPACITY) {
+        abort();
+    }
+    match->peach_turnip_owners[empty].item = item;
+    match->peach_turnip_owners[empty].owner = owner;
+}
+#endif
+
 HSD_RandomContext* msl_core_random_context(void)
 {
     if (active.random == NULL) {

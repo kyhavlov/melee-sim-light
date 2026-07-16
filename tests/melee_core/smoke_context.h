@@ -26,6 +26,9 @@ static int msl_smoke_context_init(MslSmokeContext* context,
     context->match.random.value = 1;
     context->match.random.active = &context->match.random.value;
     msl_core_bind_match(&context->match);
+#ifdef MSL_CORE_NATIVE
+    msl_reloc_begin_match(&context->match);
+#endif
     if (data_root != NULL) {
         msl_host_set_data_root(data_root);
     }

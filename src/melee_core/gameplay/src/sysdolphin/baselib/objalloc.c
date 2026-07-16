@@ -56,7 +56,7 @@ void HSD_ObjAllocSetRelocType(HSD_ObjAllocData* data, u32 type, u32 count,
 }
 #endif
 
-void HSD_ObjAllocPreallocateAll(u32 minimum_free)
+void HSD_ObjAllocPreallocateAll(u32 minimum_free, size_t maximum_free_bytes)
 {
     HSD_ObjAllocData* data;
 
@@ -65,24 +65,31 @@ void HSD_ObjAllocPreallocateAll(u32 minimum_free)
     // consumes and returns the original intrusive free lists.
     // refs/melee/src/sysdolphin/baselib/objalloc.c::HSD_ObjAlloc
     for (data = alloc_datas; data != NULL; data = data->next) {
-        if (data->free < minimum_free) {
-            HSD_ObjAllocAddFree(data, minimum_free - data->free);
+        u32 bounded_free = minimum_free;
+        if (data->size != 0 && maximum_free_bytes / data->size < bounded_free) {
+            bounded_free = maximum_free_bytes / data->size;
+        }
+        if (bounded_free == 0) {
+            bounded_free = 1;
+        }
+        if (data->free < bounded_free) {
+            HSD_ObjAllocAddFree(data, bounded_free - data->free);
         }
     }
 }
 
 void HSD_ObjSetHeap(u32 size, void* ptr)
 {
-    obj_heap.curr = (u32) ptr;
-    obj_heap.top = (u32) ptr;
+    obj_heap.curr = (uintptr_t) ptr;
+    obj_heap.top = (uintptr_t) ptr;
     obj_heap.remain = size;
     obj_heap.size = size;
 }
 
 s32 HSD_ObjAllocAddFree(HSD_ObjAllocData* data, u32 num)
 {
-    u32 computed_start;
-    u32 pool_end;
+    uintptr_t computed_start;
+    uintptr_t pool_end;
     u32 pool_size;
     u8* pool_start;
 
@@ -98,15 +105,15 @@ s32 HSD_ObjAllocAddFree(HSD_ObjAllocData* data, u32 num)
         if (computed_start > pool_end) {
             return 0;
         }
-        if (pool_end - (u32) pool_start < pool_size) {
-            pool_size = pool_end - (u32) pool_start -
-                        (pool_end - (u32) pool_start) % data->size;
+        if (pool_end - (uintptr_t) pool_start < pool_size) {
+            pool_size = pool_end - (uintptr_t) pool_start -
+                        (pool_end - (uintptr_t) pool_start) % data->size;
         }
         num = pool_size / data->size;
         if (num == 0) {
             return 0;
         }
-        obj_heap.curr = (u32) pool_start + pool_size;
+        obj_heap.curr = (uintptr_t) pool_start + pool_size;
         obj_heap.remain = pool_end - obj_heap.curr;
     } else {
         pool_start = HSD_MemAlloc(pool_size);

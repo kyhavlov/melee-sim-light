@@ -18,6 +18,8 @@ typedef struct mpCollisionBox mpCollisionBox;
 struct mpIsland_80458E88_t;
 #ifdef MSL_CORE_NATIVE
 typedef struct MslNativeDatContext MslNativeDatContext;
+typedef struct Item Item;
+typedef struct HSD_GObj HSD_GObj;
 #endif
 
 void msl_core_bind_game_data(MslCoreGameData* game_data);
@@ -43,6 +45,8 @@ mpCollisionBox* msl_core_mp_collision_boxes(void);
 struct mpIsland_80458E88_t* msl_core_mp_island_root(void);
 #ifdef MSL_CORE_NATIVE
 MslNativeDatContext* msl_core_native_dat_context(void);
+HSD_GObj* msl_core_peach_turnip_owner_get(const Item* item);
+void msl_core_peach_turnip_owner_set(Item* item, HSD_GObj* owner);
 #endif
 
 #endif

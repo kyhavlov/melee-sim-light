@@ -29,14 +29,24 @@ static const char* relocation_type_name(uint32_t type) {
   return "UNKNOWN";
 }
 
-static void config_init(MslCoreMatchConfig* config, uint8_t stage, uint8_t character) {
+typedef struct PoolHighWater {
+  uint32_t object_bytes;
+  uint32_t used;
+  uint32_t free;
+  uint32_t peak;
+  uint32_t reloc_type;
+} PoolHighWater;
+
+static void config_init(MslCoreMatchConfig* config, uint8_t stage, uint8_t character,
+                        uint8_t player_count) {
+  uint8_t player;
   memset(config, 0, sizeof(*config));
   config->stage_id = stage;
   config->frame_id = -123;
   config->frame_pre_random_seed = 1;
   config->initial_random_seed = 1;
   config->match_damage_ratio = 1.0F;
-  config->num_players = 2;
+  config->num_players = player_count;
   config->stock_count = 4;
   config->online_fnmsubs_zero = 1;
   config->brawl_offscreen_damage = 1;
@@ -44,8 +54,9 @@ static void config_init(MslCoreMatchConfig* config, uint8_t stage, uint8_t chara
   config->ucf_cardinals_1_0_enabled = 1;
   config->ucf_shield_sdi_enabled = 1;
   config->ucf_sdi_enabled = 1;
-  config->players[0].char_id = character;
-  config->players[1].char_id = character;
+  for (player = 0; player < player_count; ++player) {
+    config->players[player].char_id = character;
+  }
 }
 
 static int step(MslCoreMatch* match, const MslCoreInput* input) {
@@ -91,9 +102,49 @@ static void print_pools(const MslCoreMatch* match) {
   }
 }
 
+static void capture_pool_high_water(const MslCoreMatch* match, PoolHighWater* high_water,
+                                    uint32_t* high_water_count) {
+  uint32_t i;
+  if (match->objalloc.count > *high_water_count) {
+    *high_water_count = match->objalloc.count;
+  }
+  for (i = 0; i < match->objalloc.count; ++i) {
+    const HSD_ObjAllocData* pool = &match->objalloc.values[i];
+    PoolHighWater* maximum = &high_water[i];
+    maximum->object_bytes = pool->size;
+    maximum->reloc_type = match->objalloc.reloc_types[i];
+    if (pool->used > maximum->used) {
+      maximum->used = pool->used;
+    }
+    if (pool->free > maximum->free) {
+      maximum->free = pool->free;
+    }
+    if (pool->peak > maximum->peak) {
+      maximum->peak = pool->peak;
+    }
+  }
+}
+
+static void print_pool_high_water(const PoolHighWater* high_water, uint32_t high_water_count) {
+  uint32_t i;
+  size_t total_bytes = 0;
+  for (i = 0; i < high_water_count; ++i) {
+    const PoolHighWater* pool = &high_water[i];
+    size_t bytes = (size_t)pool->object_bytes * (pool->used + pool->free);
+    total_bytes += bytes;
+    printf(
+        "pool_maximum index=%u object_bytes=%u used=%u free=%u "
+        "peak=%u reserved_bytes=%zu reloc_type=%u:%s\n",
+        i, pool->object_bytes, pool->used, pool->free, pool->peak, bytes, pool->reloc_type,
+        relocation_type_name(pool->reloc_type));
+  }
+  printf("pool_maximum total_reserved_bytes=%zu\n", total_bytes);
+}
+
 int main(int argc, char** argv) {
   static const uint8_t characters[] = {1, 22, 18, 2, 7, 19, 15, 9};
   static const uint8_t stages[] = {32, 31, 3, 2, 8, 28};
+  static const uint8_t player_counts[] = {2, 4};
   MslCoreGameData* game_data = NULL;
   MslCoreMatch* match = NULL;
   MslCoreMatchConfig config;
@@ -104,6 +155,9 @@ int main(int argc, char** argv) {
   uint32_t max_relocations = 0;
   uint8_t max_stage = 0;
   uint8_t max_character = 0;
+  uint8_t max_player_count = 0;
+  PoolHighWater pool_high_water[HSD_OBJALLOC_CONTEXT_CAPACITY] = {{0}};
+  uint32_t pool_high_water_count = 0;
   size_t allocation_before_steps;
   size_t used_before_steps;
   size_t save_size;
@@ -123,27 +177,32 @@ int main(int argc, char** argv) {
       msl_core_match_storage_init(match) != 0) {
     goto done;
   }
-  for (i = 0; i < sizeof(stages); ++i) {
-    for (j = 0; j < sizeof(characters); ++j) {
-      config_init(&config, stages[i], characters[j]);
-      if (msl_core_match_reset(match, game_data, &config, &previous) != 0) {
-        goto done;
-      }
-      if (match->memory.used > max_arena_used) {
-        max_arena_used = match->memory.used;
-        max_stage = stages[i];
-        max_character = characters[j];
-      }
-      if (match->memory.allocation_count > max_allocations) {
-        max_allocations = match->memory.allocation_count;
-      }
-      if (match->relocation.count > max_relocations) {
-        max_relocations = match->relocation.count;
+  for (i = 0; i < sizeof(player_counts); ++i) {
+    size_t stage_index;
+    for (stage_index = 0; stage_index < sizeof(stages); ++stage_index) {
+      for (j = 0; j < sizeof(characters); ++j) {
+        config_init(&config, stages[stage_index], characters[j], player_counts[i]);
+        if (msl_core_match_reset(match, game_data, &config, &previous) != 0) {
+          goto done;
+        }
+        capture_pool_high_water(match, pool_high_water, &pool_high_water_count);
+        if (match->memory.used > max_arena_used) {
+          max_arena_used = match->memory.used;
+          max_stage = stages[stage_index];
+          max_character = characters[j];
+          max_player_count = player_counts[i];
+        }
+        if (match->memory.allocation_count > max_allocations) {
+          max_allocations = match->memory.allocation_count;
+        }
+        if (match->relocation_count > max_relocations) {
+          max_relocations = match->relocation_count;
+        }
       }
     }
   }
 
-  config_init(&config, 32, 9);
+  config_init(&config, 32, 9, 2);
   if (msl_core_match_reset(match, game_data, &config, &previous) != 0) {
     goto done;
   }
@@ -167,13 +226,15 @@ int main(int argc, char** argv) {
       goto done;
     }
   }
+  capture_pool_high_water(match, pool_high_water, &pool_high_water_count);
   save_size = msl_core_match_save_size(match);
   header_size = save_size - sizeof(*match) - match->memory.used;
 
   printf(
       "layout match_bytes=%zu game_data_bytes=%zu source_match_bytes=%zu "
       "relocation_registry_bytes=%zu memory_context_bytes=%zu\n",
-      sizeof(*match), sizeof(*game_data), sizeof(match->source), sizeof(match->relocation),
+      sizeof(*match), sizeof(*game_data), sizeof(match->source),
+      msl_reloc_resident_bytes(match),
       sizeof(match->memory));
   printf(
       "game_data arena_reserved=%zu arena_used=%zu allocations=%zu "
@@ -184,9 +245,9 @@ int main(int argc, char** argv) {
   printf(
       "match maximum_arena_reserved=%zu maximum_arena_used=%zu "
       "maximum_allocations=%zu maximum_relocations=%u stage=%u "
-      "character=%u\n",
+      "character=%u players=%u\n",
       match->memory.capacity, max_arena_used, max_allocations, max_relocations, max_stage,
-      max_character);
+      max_character, max_player_count);
   printf(
       "runtime_allocation_lock before_used=%zu after_used=%zu "
       "before_allocations=%zu after_allocations=%zu\n",
@@ -208,6 +269,7 @@ int main(int argc, char** argv) {
         gobjs->used, gobjs->peak, procs->used, procs->peak);
   }
   print_pools(match);
+  print_pool_high_water(pool_high_water, pool_high_water_count);
   print_callbacks(match);
   result = 0;
 

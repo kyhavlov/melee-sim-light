@@ -702,8 +702,7 @@ int msl_core_match_reset(MslCoreMatch* match, const MslCoreGameData* game_data,
     arena = match->memory.arena;
     capacity = match->memory.capacity;
     memset(match, 0, sizeof(*match));
-    match->memory.arena = arena;
-    match->memory.capacity = capacity;
+    msl_memory_context_reuse_match(&match->memory, arena, capacity);
     return match_construct(match, game_data, config, previous_input);
 }
 
@@ -729,6 +728,9 @@ static int match_construct(MslCoreMatch* match,
     match->random.active = &match->random.value;
     match->game_data = game_data;
     msl_core_bind_match(match);
+#ifdef MSL_CORE_NATIVE
+    msl_reloc_begin_match(match);
+#endif
     init_hsd();
 #ifdef MSL_CORE_NATIVE
     init_relocation_types();
@@ -1021,18 +1023,20 @@ static int match_construct(MslCoreMatch* match,
     Camera_8002F3AC();
 
 #ifdef MSL_CORE_NATIVE
-    // Baselib's animation allocators grow one object at a time on demand.
-    // Reserve the bounded two-fighter Phase 5 scalar domain before sealing the
-    // HSD heap so later motion, article, stage, and quake objects only recycle
-    // source free lists. Animation graphs have more nodes than the general
-    // pools; Falco plus animated Battlefield/Stadium raises the reached FObj
-    // high-water mark above the original Fox/FD reserve.
+    // Baselib's source allocators grow one object at a time on demand. Before
+    // sealing the HSD heap, reserve up to the public output's simultaneous
+    // item capacity in every ordinary pool. This retains source free-list
+    // ownership without multiplying large Fighter/x59C objects by a uniform
+    // 256-object floor. Animation graphs have separate measured reserves.
+    // refs/melee/src/sysdolphin/baselib/objalloc.c::{HSD_ObjAlloc,
+    //   HSD_ObjAllocAddFree}
+    // refs/melee/src/melee/it/item.c::{Item_80266FA8,it_8026B3A8}
     // refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,objalloc.c}
     // A five-Heiho Yoshi wave installs the source item process set in one
     // callback, raising the GObjProc free-list demand above the static-stage
     // bootstrap. Keep a fixed per-type reserve that covers the supported
     // stage-actor high-water mark without permitting runtime heap growth.
-    HSD_ObjAllocPreallocateAll(256);
+    HSD_ObjAllocPreallocateAll(256, MSL_CORE_MAX_ITEMS * sizeof(Item));
     HSD_ObjAllocAddFree(HSD_AObjGetAllocData(), 448);
     HSD_ObjAllocAddFree(HSD_FObjGetAllocData(), 1024);
     HSD_ObjAllocAddFree(HSD_IDGetAllocData(), 192);
@@ -1042,6 +1046,9 @@ static int match_construct(MslCoreMatch* match,
     // are sealed once, after GameData has preloaded the supported domain;
     // sealing them here would make the first Match configuration determine
     // which characters and stages later Match instances may construct.
+    if (msl_reloc_seal_match(match) != 0) {
+        return -1;
+    }
     msl_memory_finish_initialization();
 #endif
 

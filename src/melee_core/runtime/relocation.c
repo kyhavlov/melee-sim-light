@@ -7,7 +7,10 @@
 #include <string.h>
 #include <baselib/class.h>
 
-static uint32_t address_hash(const void* address)
+static _Thread_local MslRelocRegistry build_registry;
+static _Thread_local MslCoreMatch* build_match;
+
+static uint32_t build_address_hash(const void* address)
 {
     uintptr_t value = (uintptr_t) address >> 4;
     value ^= value >> 17;
@@ -19,7 +22,7 @@ static uint32_t address_hash(const void* address)
 static uint32_t* find_index_slot(MslRelocRegistry* registry,
                                  const void* address)
 {
-    uint32_t slot = address_hash(address);
+    uint32_t slot = build_address_hash(address);
     for (;;) {
         uint32_t entry = registry->index[slot];
         if (entry == 0 || registry->objects[entry - 1].address == address) {
@@ -29,18 +32,160 @@ static uint32_t* find_index_slot(MslRelocRegistry* registry,
     }
 }
 
-void msl_reloc_rebuild_index(MslRelocRegistry* registry)
+static uint32_t compact_address_hash(uint32_t address, uint32_t mask)
 {
-    uint32_t i;
-    memset(registry->index, 0, sizeof(registry->index));
-    for (i = 0; i < registry->count; ++i) {
-        uint32_t* slot =
-            find_index_slot(registry, registry->objects[i].address);
-        if (*slot != 0) {
+    uint32_t value = address;
+    value ^= value >> 16;
+    value *= UINT32_C(0x7FEB352D);
+    value ^= value >> 15;
+    return value & mask;
+}
+
+static uint32_t encode_address(const MslCoreMatch* match, const void* address)
+{
+    uintptr_t value = (uintptr_t) address;
+    uintptr_t match_begin = (uintptr_t) match;
+    uintptr_t arena_begin = (uintptr_t) match->memory.arena;
+    uintptr_t offset;
+
+    if (value >= match_begin && value - match_begin < sizeof(*match)) {
+        offset = value - match_begin;
+        if (offset > MSL_RELOC_ADDRESS_OFFSET_MASK) {
             abort();
         }
-        *slot = i + 1;
+        return MSL_RELOC_ADDRESS_MATCH | (uint32_t) offset;
     }
+    if (value >= arena_begin && value - arena_begin < match->memory.used) {
+        offset = value - arena_begin;
+        if (offset > MSL_RELOC_ADDRESS_OFFSET_MASK) {
+            abort();
+        }
+        return (uint32_t) offset;
+    }
+    abort();
+}
+
+const MslRelocRecord* msl_reloc_records(const MslCoreMatch* match)
+{
+    if (match == NULL || match->memory.arena == NULL ||
+        match->relocation_count == 0)
+    {
+        return NULL;
+    }
+    return (const MslRelocRecord*)
+        (match->memory.arena + match->relocation_records_offset);
+}
+
+void* msl_reloc_record_address(const MslCoreMatch* match,
+                               const MslRelocRecord* record)
+{
+    uint32_t offset;
+    if (match == NULL || record == NULL) {
+        return NULL;
+    }
+    offset = record->address & MSL_RELOC_ADDRESS_OFFSET_MASK;
+    if ((record->address & MSL_RELOC_ADDRESS_MATCH) != 0) {
+        return (uint8_t*) (uintptr_t) match + offset;
+    }
+    return match->memory.arena + offset;
+}
+
+size_t msl_reloc_resident_bytes(const MslCoreMatch* match)
+{
+    if (match == NULL) {
+        return 0;
+    }
+    return (size_t) match->relocation_record_capacity *
+               sizeof(MslRelocRecord) +
+           (size_t) match->relocation_index_capacity * sizeof(uint16_t);
+}
+
+static uint16_t* compact_find_index_slot(MslCoreMatch* match,
+                                         uint32_t address)
+{
+    MslRelocRecord* records = (MslRelocRecord*) msl_reloc_records(match);
+    uint16_t* index = (uint16_t*)
+        (match->memory.arena + match->relocation_index_offset);
+    uint32_t mask = match->relocation_index_capacity - 1;
+    uint32_t slot = compact_address_hash(address, mask);
+    for (;;) {
+        uint16_t entry = index[slot];
+        if (entry == 0 || records[entry - 1].address == address) {
+            return &index[slot];
+        }
+        slot = (slot + 1) & mask;
+    }
+}
+
+void msl_reloc_begin_match(MslCoreMatch* match)
+{
+    if (match == NULL) {
+        abort();
+    }
+    build_match = match;
+    build_registry.count = 0;
+    memset(build_registry.index, 0, sizeof(build_registry.index));
+    match->relocation_records_offset = 0;
+    match->relocation_index_offset = 0;
+    match->relocation_count = 0;
+    match->relocation_record_capacity = 0;
+    match->relocation_index_capacity = 0;
+}
+
+int msl_reloc_seal_match(MslCoreMatch* match)
+{
+    MslRelocRecord* records;
+    uint16_t* index;
+    uint8_t* storage;
+    size_t record_bytes;
+    size_t index_bytes;
+    size_t storage_bytes;
+    uint32_t record_capacity = MSL_RELOC_OBJECT_CAPACITY;
+    uint32_t index_capacity = MSL_RELOC_INDEX_CAPACITY;
+    uint32_t i;
+
+    if (match == NULL || build_match != match || build_registry.count == 0 ||
+        build_registry.count >= UINT16_MAX)
+    {
+        return -1;
+    }
+    record_bytes = (size_t) record_capacity * sizeof(MslRelocRecord);
+    index_bytes = (size_t) index_capacity * sizeof(uint16_t);
+    storage_bytes = record_bytes + index_bytes;
+    storage = msl_memory_alloc(&match->memory, storage_bytes);
+    if (storage == NULL) {
+        return -1;
+    }
+    match->relocation_records_offset =
+        (uint32_t) (storage - match->memory.arena);
+    match->relocation_index_offset =
+        match->relocation_records_offset + (uint32_t) record_bytes;
+    match->relocation_count = build_registry.count;
+    match->relocation_record_capacity = record_capacity;
+    match->relocation_index_capacity = index_capacity;
+    records = (MslRelocRecord*) storage;
+    index = (uint16_t*) (storage + record_bytes);
+
+    for (i = 0; i < build_registry.count; ++i) {
+        const MslRelocObject* source = &build_registry.objects[i];
+        uint16_t* slot;
+        if (source->type >= UINT8_MAX || source->flags >= UINT8_MAX ||
+            source->count >= UINT16_MAX)
+        {
+            return -1;
+        }
+        records[i].address = encode_address(match, source->address);
+        records[i].stride = source->stride;
+        records[i].count = (uint16_t) source->count;
+        records[i].type = (uint8_t) source->type;
+        records[i].flags = (uint8_t) source->flags;
+        slot = compact_find_index_slot(match, records[i].address);
+        if (*slot != 0) {
+            return -1;
+        }
+        *slot = (uint16_t) (i + 1);
+    }
+    return 0;
 }
 
 void msl_reloc_register(void* address, MslRelocType type, uint32_t count,
@@ -53,7 +198,39 @@ void msl_reloc_register(void* address, MslRelocType type, uint32_t count,
     if (match == NULL || address == NULL || count == 0) {
         return;
     }
-    registry = &match->relocation;
+    if (match->memory.sealed) {
+        uint32_t encoded = encode_address(match, address);
+        uint16_t* compact_slot = compact_find_index_slot(match, encoded);
+        MslRelocRecord* records =
+            (MslRelocRecord*) msl_reloc_records(match);
+        MslRelocRecord* record;
+        if (type >= UINT8_MAX || flags >= UINT8_MAX || count >= UINT16_MAX)
+        {
+            abort();
+        }
+        if (*compact_slot == 0) {
+            if (match->relocation_count ==
+                match->relocation_record_capacity)
+            {
+                abort();
+            }
+            record = &records[match->relocation_count];
+            record->address = encoded;
+            *compact_slot = (uint16_t) (match->relocation_count + 1);
+            ++match->relocation_count;
+        } else {
+            record = &records[*compact_slot - 1];
+        }
+        record->type = (uint8_t) type;
+        record->count = (uint16_t) count;
+        record->stride = stride;
+        record->flags = (uint8_t) flags;
+        return;
+    }
+    if (build_match != match) {
+        abort();
+    }
+    registry = &build_registry;
     slot = find_index_slot(registry, address);
     if (*slot != 0) {
         MslRelocObject* object = &registry->objects[*slot - 1];

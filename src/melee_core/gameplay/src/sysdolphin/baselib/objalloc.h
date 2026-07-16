@@ -8,8 +8,13 @@
 #include <common_structs.h>
 
 typedef struct _objheap {
+#ifdef MSL_CORE_HOSTED
+    uintptr_t top;
+    uintptr_t curr;
+#else
     u32 top;
     u32 curr;
+#endif
     u32 size;
     u32 remain;
 } objheap;
@@ -105,7 +110,7 @@ static inline void HSD_ObjAllocDisableNumLimit(HSD_ObjAllocData* data)
 }
 
 void HSD_ObjSetHeap(u32 size, void* ptr);
-void HSD_ObjAllocPreallocateAll(u32 minimum_free);
+void HSD_ObjAllocPreallocateAll(u32 minimum_free, size_t maximum_free_bytes);
 s32 HSD_ObjAllocAddFree(HSD_ObjAllocData* data, u32 num);
 void* HSD_ObjAlloc(HSD_ObjAllocData* data);
 void HSD_ObjFree(HSD_ObjAllocData* data, void* obj);

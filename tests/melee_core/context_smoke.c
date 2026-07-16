@@ -44,18 +44,20 @@ static int raw_objects_have_no_managed_pointers(const MslCoreMatch* match,
                                                 const char* phase)
 {
     uint32_t object_index;
-    for (object_index = 0; object_index < match->relocation.count;
+    const MslRelocRecord* records = msl_reloc_records(match);
+    for (object_index = 0; object_index < match->relocation_count;
          ++object_index)
     {
-        const MslRelocObject* object =
-            &match->relocation.objects[object_index];
+        const MslRelocRecord* object = &records[object_index];
+        const void* object_address =
+            msl_reloc_record_address(match, object);
         size_t offset;
-        if (object->type != MSL_RELOC_RAW || object->address == NULL) {
+        if (object->type != MSL_RELOC_RAW || object_address == NULL) {
             continue;
         }
         if ((object->flags & MSL_RELOC_INTRUSIVE_FIRST_POINTER) != 0) {
             uintptr_t first;
-            memcpy(&first, object->address, sizeof(first));
+            memcpy(&first, object_address, sizeof(first));
             // A raw intrusive object whose first word is NULL or another
             // Match allocation is on a source free list. Its remaining bytes
             // are intentionally stale and not part of live pointer state.
@@ -74,7 +76,7 @@ static int raw_objects_have_no_managed_pointers(const MslCoreMatch* match,
             {
                 continue;
             }
-            memcpy(&value, (const uint8_t*) object->address + offset,
+            memcpy(&value, (const uint8_t*) object_address + offset,
                    sizeof(value));
             // Managed C objects are at least word-aligned. Requiring that
             // avoids treating a scalar f32 followed by zero padding as a
@@ -97,11 +99,11 @@ static int raw_objects_have_no_managed_pointers(const MslCoreMatch* match,
                         "%s found unmanaged pointer in raw relocation: "
                         "object=%u address=%p offset=%zu value=%p stride=%u "
                         "flags=%u\n",
-                        phase, object_index, object->address, offset,
+                        phase, object_index, object_address, offset,
                         (void*) value, object->stride, object->flags);
                 if ((object->flags & MSL_RELOC_INTRUSIVE_FIRST_POINTER) != 0) {
                     HSD_ClassInfo* info;
-                    memcpy(&info, object->address, sizeof(info));
+                    memcpy(&info, object_address, sizeof(info));
                     if (in_range((uintptr_t) info, __data_start,
                                  (size_t) (_end - __data_start)))
                     {

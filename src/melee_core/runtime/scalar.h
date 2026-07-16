@@ -14,6 +14,7 @@
 #include "platform/native_dat.h"
 #endif
 #include "ft/forward.h"
+#include "it/forward.h"
 
 #include "gr/types.h"
 
@@ -29,7 +30,17 @@
 enum {
     MSL_CORE_DATA_ROOT_CAPACITY = 1024,
     MSL_CORE_STAGE_GROUND_CAPACITY = 10,
+#ifdef MSL_CORE_NATIVE
+    MSL_CORE_PEACH_TURNIP_OWNER_CAPACITY = 16,
+#endif
 };
+
+#ifdef MSL_CORE_NATIVE
+typedef struct MslCorePeachTurnipOwner {
+    Item* item;
+    HSD_GObj* owner;
+} MslCorePeachTurnipOwner;
+#endif
 
 // Private scalar ownership boundary. GameData is initialized once and passed
 // read-only to matches; mutable headless/runtime ownership belongs to the
@@ -72,8 +83,20 @@ typedef struct MslCoreMatch {
     HSD_ClassContext class_state;
     HSD_IDContext id;
     HSD_AObjContext aobj;
+#ifdef MSL_CORE_NATIVE
+    // Retail stores Peach's live vegetable owner in a u32 source-layout
+    // union. Native Match graphs can live above 4 GiB, so retain the complete
+    // owner in relocatable match side state without changing Item offsets.
+    // refs/melee/src/melee/it/{itCharItems.h,items/itpeachturnip.c}
+    MslCorePeachTurnipOwner
+        peach_turnip_owners[MSL_CORE_PEACH_TURNIP_OWNER_CAPACITY];
+    uint32_t relocation_records_offset;
+    uint32_t relocation_index_offset;
+    uint32_t relocation_count;
+    uint32_t relocation_record_capacity;
+    uint32_t relocation_index_capacity;
+#endif
     MslMemoryContext memory;
-    MslRelocRegistry relocation;
     int32_t frame_id;
     uint32_t random_seed;
     MslCoreCompare output;
