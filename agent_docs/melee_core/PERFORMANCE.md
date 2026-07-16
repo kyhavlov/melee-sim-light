@@ -174,15 +174,15 @@ step contract remain covered by the native smokes.
 
 Current census results:
 
-- `MslCoreMatch`: 61,208 bytes, down from 781,768; `MslMemoryContext`: 56 bytes, down from
-  196,648. The maximum configuration's exactly sized relocation image is 124,676 bytes, versus the
-  former 524,296-byte embedded registry. Shared `MslCoreGameData` also fell from 568,296 to 371,712
+- `MslCoreMatch`: 61,224 bytes, down from 781,768; `MslMemoryContext`: 56 bytes, down from
+  196,648. The maximum configuration's exactly sized relocation image is 165,856 bytes, versus the
+  former 524,296-byte embedded registry. Shared `MslCoreGameData` also fell from 568,296 to 371,728
   bytes.
 - Match arena: 3 MiB virtual reserve, down from 32 MiB. The supported singles/doubles maximum is
-  2,733,136 bytes used with 3,312 construction allocations and 9,588 live relocation records. The
+  2,743,864 bytes used with 3,312 construction allocations and 10,482 live relocation records. The
   maximum configuration is four-player frozen Stadium with Sheik.
-- The representative Peach/FD arena is 1,886,788 bytes and remains exactly stable over gameplay.
-  Its savestate is 1,948,124 bytes = 128-byte header + 61,208-byte Match value + 1,886,788-byte
+- The representative Peach/FD arena is 1,927,968 bytes and remains exactly stable over gameplay.
+  Its savestate is 1,989,320 bytes = 128-byte header + 61,224-byte Match value + 1,927,968-byte
   arena, versus the 17,347,368-byte Phase 7 representative.
 - Maximum source object-pool residency across the census is 1,374,804 bytes. Large cold object
   families use the public 15-item capacity while replay-proven small animation, identity,
@@ -190,10 +190,11 @@ Current census results:
   remaining pools are the 32,768-byte fighter scratch family (589,824 bytes), fighters (173,400
   bytes), FObjs (94,784 bytes), items (86,656 bytes), and Sheik-chain links (80,936 bytes).
 - At the measured maximum, runtime state plus a 128-frame observation ring is about 0.70 GiB for
-  256, 1.39 GiB for 512, 11.15 GiB for 4,096, and 44.58 GiB for 16,384 environments. The
+  256, 1.40 GiB for 512, 11.19 GiB for 4,096, and 44.75 GiB for 16,384 environments. The
   corresponding 3 MiB arena virtual reservations plus Match values and rings are 0.79, 1.59,
-  12.72, and 50.88 GiB. These are capacity projections; resident lifecycle measurements still
-  need to replace them.
+  12.72, and 50.88 GiB. These deliberately conservative figures use the largest reached supported
+  configuration for every environment; the mixed-domain resident measurement below is materially
+  smaller.
 
 Correctness gate: the complete 153-replay native suite retained 63 exact passes, 90 existing exact
 classifications, zero XPASS/fail/error, and all full-output locks over 1,415,476 compared frames.
@@ -221,3 +222,53 @@ digest. This is only a small improvement over the 16,722 FPS Phase 7 baseline, a
 forensic projection was measurable but not the dominant cost. The complete 153-replay gate remains
 63 exact passes, 90 existing exact classifications, zero XPASS/fail/error, and unchanged output
 locks over 1,415,476 compared frames.
+
+### Resident batches and tiled source scheduling
+
+One contiguous virtual arena mapping now backs every Match in a batch. Match roots remain compact
+separate values and each memory context binds one fixed 3 MiB slice, avoiding thousands of mapping
+syscalls without first-touching unused arena capacity. Batch reset constructs each distinct packed
+configuration once and relocates that canonical image into same-config environments. Newly split
+HSD class-allocator free-list tails are registered as intrusive pointer owners at their source
+creation sites; this closes arbitrary-index copy/restore for every allocator subobject without
+raw-word pointer scanning.
+
+The hosted source scheduler is decomposed at its existing priority and callback invocation
+boundaries. The canonical batch path prepares a two-Match cache tile, preserves each Match's exact
+priority/proc order, groups neighboring runnable callbacks by the imported `on_invoke` function
+pointer, and finishes both Matches. Tile widths 1, 2, 4, and 8 were measured on the resident replay
+workload; two was the best of that bounded sweep. This is Phase 9 execution substrate rather than a
+current throughput win: the source-shaped per-callback context bindings and pointer-rich state
+still dominate.
+
+True resident CPU-8 results for 32,768 complete environment-frames are:
+
+| Resident environments | Complete FPS | Step-only FPS | Digest |
+|---:|---:|---:|---|
+| 256 | 13,270 | 13,824 | `7579e5fc270dd660` |
+| 512 | 15,881 | 17,090 | `0bd4fdd9cfdec765` |
+
+The new `large-batch-smoke` gate creates one GameData and batch, resets a supported-domain mix,
+physically touches a caller-owned 128-frame observation/terminal ring, saves Match 0, executes one
+complete step/output pass over every environment, restores the snapshot into the last arbitrary
+index, checks exact output equality, and destroys the batch. At 4,096 environments it measured:
+
+- 12.55 GiB virtual and 7.97 GiB resident/private after reset;
+- 13.04 GiB virtual and 8.46 GiB resident after touching the 0.49 GiB output ring;
+- 0.49 GiB resident after destroying GameData and the batch while retaining the caller's ring;
+- 0.218 s create, 9.140 s reset, and 0.302 s complete step/output (13,545 FPS).
+
+The 16,384-environment representative mix projects to roughly 31.5 GiB initialized resident state
+plus a 1.94 GiB output ring from the measured 4,096 slope, while the conservative all-maximum bound
+is 44.75 GiB touched and 50.88 GiB virtual. A full 16,384 lifecycle gate is intentionally explicit:
+it must not be launched as a routine background command because it materially pressures host
+memory and takes longer than the normal development-command budget.
+
+The complete 153-replay native suite after scheduler cutover retained 63 exact passes, 90 existing
+classifications, zero XPASS/fail/error, and 1,415,476 compared frames. Native and PPC smokes,
+native/Wasm API parity, and the browser viewer smoke also remained green.
+
+Rejected candidates are recorded rather than retained: transparent huge-page advice made the
+256-environment reset about five times slower, and a file-backed copy-on-write template did not
+reduce proportional/private memory because relocation necessarily dirtied the pointer-bearing
+pages. Both experiments were removed.

@@ -19,11 +19,17 @@
 
 enum {
     MSL_MEMORY_GAME_DATA_BYTES = 64 * 1024 * 1024,
-    // Supported singles/doubles construction remains below 2.5 MiB after
+    // Native supported-domain construction remains below 2.75 MiB after
     // bounded source pools and exact relocation metadata. Keep a measured
     // 3 MiB hard ceiling; runtime allocation is forbidden after sealing.
+    // The PPC compatibility oracle still constructs source-width DAT graphs
+    // inside its Match arena and is not a resident production-batch target.
     // tests/melee_core/runtime_census.c
+#ifdef MSL_CORE_NATIVE
     MSL_MEMORY_MATCH_BYTES = 3 * 1024 * 1024,
+#else
+    MSL_MEMORY_MATCH_BYTES = 8 * 1024 * 1024,
+#endif
 };
 
 // Allocation provenance is needed while a Match graph is constructed, but
@@ -110,6 +116,7 @@ int msl_memory_context_init(MslMemoryContext* context, MslMemoryOwner owner)
     }
 #endif
     context->capacity = capacity;
+    context->arena_owned = 1;
     return 0;
 }
 
@@ -128,14 +135,22 @@ void msl_memory_context_reset(MslMemoryContext* context)
 }
 
 void msl_memory_context_reuse_match(MslMemoryContext* context,
-                                    uint8_t* arena, size_t capacity)
+                                    uint8_t* arena, size_t capacity,
+                                    uint8_t arena_owned)
 {
     memset(context, 0, sizeof(*context));
     context->arena = arena;
     context->capacity = capacity;
     context->owner = MSL_MEMORY_MATCH;
+    context->arena_owned = arena_owned;
     context->allocations = match_allocations;
     context->allocation_capacity = MSL_MEMORY_ALLOCATION_CAPACITY;
+}
+
+void msl_memory_context_bind_match(MslMemoryContext* context, uint8_t* arena,
+                                   size_t capacity)
+{
+    msl_memory_context_reuse_match(context, arena, capacity, 0);
 }
 
 void msl_memory_context_destroy(MslMemoryContext* context)
@@ -147,7 +162,7 @@ void msl_memory_context_destroy(MslMemoryContext* context)
     }
     allocations = context->allocations;
     owner = context->owner;
-    if (context->arena != NULL) {
+    if (context->arena != NULL && context->arena_owned) {
 #ifdef MSL_CORE_NATIVE
 #ifdef MSL_CORE_WASM
         free(context->arena);
@@ -162,6 +177,49 @@ void msl_memory_context_destroy(MslMemoryContext* context)
         free(allocations);
     }
     memset(context, 0, sizeof(*context));
+}
+
+size_t msl_memory_match_capacity(void)
+{
+    return MSL_MEMORY_MATCH_BYTES;
+}
+
+void* msl_memory_map_match_arenas(size_t count)
+{
+    size_t bytes;
+    if (count == 0 || count > SIZE_MAX / MSL_MEMORY_MATCH_BYTES) {
+        return NULL;
+    }
+    bytes = count * MSL_MEMORY_MATCH_BYTES;
+#ifdef MSL_CORE_NATIVE
+#ifdef MSL_CORE_WASM
+    return malloc(bytes);
+#else
+    {
+        void* mapping = mmap(NULL, bytes, PROT_READ | PROT_WRITE,
+                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        return mapping == MAP_FAILED ? NULL : mapping;
+    }
+#endif
+#else
+    return malloc(bytes);
+#endif
+}
+
+void msl_memory_unmap_match_arenas(void* mapping, size_t count)
+{
+    if (mapping == NULL || count == 0) {
+        return;
+    }
+#ifdef MSL_CORE_NATIVE
+#ifdef MSL_CORE_WASM
+    free(mapping);
+#else
+    munmap(mapping, count * MSL_MEMORY_MATCH_BYTES);
+#endif
+#else
+    free(mapping);
+#endif
 }
 
 void* msl_memory_alloc(MslMemoryContext* context, size_t size)

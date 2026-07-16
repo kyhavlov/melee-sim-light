@@ -33,13 +33,20 @@ typedef struct MslMemoryContext {
     size_t allocation_capacity;
     uint8_t owner;
     uint8_t sealed;
+    uint8_t arena_owned;
 } MslMemoryContext;
 
 int msl_memory_context_init(MslMemoryContext* context, MslMemoryOwner owner);
 void msl_memory_context_reset(MslMemoryContext* context);
 void msl_memory_context_reuse_match(MslMemoryContext* context,
-                                    uint8_t* arena, size_t capacity);
+                                    uint8_t* arena, size_t capacity,
+                                    uint8_t arena_owned);
+void msl_memory_context_bind_match(MslMemoryContext* context, uint8_t* arena,
+                                   size_t capacity);
 void msl_memory_context_destroy(MslMemoryContext* context);
+size_t msl_memory_match_capacity(void);
+void* msl_memory_map_match_arenas(size_t count);
+void msl_memory_unmap_match_arenas(void* mapping, size_t count);
 void* msl_memory_alloc(MslMemoryContext* context, size_t size);
 #ifdef MSL_CORE_NATIVE
 void* HSD_MemAllocReloc(size_t size, MslRelocType type, uint32_t count,

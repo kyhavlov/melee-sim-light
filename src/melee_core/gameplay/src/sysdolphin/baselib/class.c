@@ -276,6 +276,16 @@ void* hsdAllocMemPiece(s32 size)
             temp_r4_2 = (void*) ((char*) temp_r5 + temp_r3_3->size);
             temp_r4_2->next = temp_r3_4->free_list;
             temp_r3_4->free_list = temp_r4_2;
+#ifdef MSL_CORE_NATIVE
+            // This tail is a new source allocator subobject; it does not pass
+            // through hsdFreeMemPiece before becoming a live free-list node.
+            // Give savestate/cross-match relocation the same intrusive owner
+            // metadata as an ordinarily freed piece.
+            // refs/melee/src/sysdolphin/baselib/class.c::hsdAllocMemPiece
+            msl_reloc_register(temp_r4_2, MSL_RELOC_RAW, 1,
+                               temp_r3_4->size,
+                               MSL_RELOC_INTRUSIVE_FIRST_POINTER);
+#endif
             temp_r3_4->nb_alloc += 1;
             temp_r3_4->nb_free += 1;
             temp_r3_3->nb_alloc += 1;
@@ -299,6 +309,13 @@ void* hsdAllocMemPiece(s32 size)
         temp_r4 = (void*) ((char*) temp_r3 + temp_r3_3->size);
         temp_r4->next = var_r30->free_list;
         var_r30->free_list = temp_r4;
+#ifdef MSL_CORE_NATIVE
+        // The remainder of a fresh source allocation likewise enters its
+        // size-class free list directly rather than through hsdFreeMemPiece.
+        // refs/melee/src/sysdolphin/baselib/class.c::hsdAllocMemPiece
+        msl_reloc_register(temp_r4, MSL_RELOC_RAW, 1, var_r30->size,
+                           MSL_RELOC_INTRUSIVE_FIRST_POINTER);
+#endif
         var_r30->nb_alloc += 1;
         var_r30->nb_free += 1;
     }

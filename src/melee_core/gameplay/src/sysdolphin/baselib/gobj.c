@@ -87,6 +87,7 @@ void HSD_GObj_80390CD4(HSD_GObj* gobj)
 }
 
 /// GObj_RunProcs
+#ifndef MSL_CORE_HOSTED
 void HSD_GObj_80390CFC(void)
 {
     s32 i;
@@ -141,6 +142,104 @@ void HSD_GObj_80390CFC(void)
         }
     }
 }
+#else
+void msl_hsd_gobj_run_procs_begin(void)
+{
+    HSD_GObjContext* context = msl_core_gobj_context();
+    context->proc_link_mask = HSD_GObjLibInitData.unk_2 != NULL
+                                  ? *HSD_GObjLibInitData.unk_2
+                                  : 0;
+    HSD_GObj_804D783C += 1;
+    if (HSD_GObj_804D783C > 2) {
+        HSD_GObj_804D783C = 0;
+    }
+    context->scheduled_proc = NULL;
+}
+
+void msl_hsd_gobj_run_procs_priority_begin(s32 priority)
+{
+    HSD_GObjContext* context = msl_core_gobj_context();
+    HSD_GObj_804D7834 = priority;
+    HSD_GObj_804D7830 = HSD_GObj_804D7840[priority];
+    context->scheduled_proc = NULL;
+}
+
+HSD_GObjEvent msl_hsd_gobj_run_procs_next_owner(void)
+{
+    HSD_GObjContext* context = msl_core_gobj_context();
+    HSD_GObjProc* proc;
+
+    if (context->scheduled_proc != NULL) {
+        return context->scheduled_proc->on_invoke;
+    }
+    while ((proc = HSD_GObj_804D7830) != NULL) {
+        HSD_GObj* gobj;
+        HSD_GObj_804D7830 = proc->next;
+        if (proc->flags_3 == HSD_GObj_804D783C) {
+            continue;
+        }
+        proc->flags_3 = HSD_GObj_804D783C;
+        gobj = proc->gobj;
+        if (!(context->proc_link_mask & (1LL << gobj->p_link)) &&
+            !(proc->flags_1) && !(proc->flags_2))
+        {
+            context->scheduled_proc = proc;
+            return proc->on_invoke;
+        }
+    }
+    return NULL;
+}
+
+void msl_hsd_gobj_run_procs_invoke(void)
+{
+    HSD_GObjContext* context = msl_core_gobj_context();
+    HSD_GObjProc* proc = context->scheduled_proc;
+    HSD_GObj* gobj;
+
+    if (proc == NULL) {
+        return;
+    }
+    context->scheduled_proc = NULL;
+    gobj = proc->gobj;
+    HSD_GObj_804D781C = gobj;
+    HSD_GObj_804D7838 = proc;
+    proc->on_invoke(gobj);
+    HSD_GObj_804D7830 = proc->next;
+    if (HSD_GObj_804CE3E4.flags != 0) {
+        HSD_GObj_804CE3E4.b0 = 1;
+        if (HSD_GObj_804CE3E4.b1) {
+            HSD_GObjPLink_80390228(proc->gobj);
+        } else {
+            if (HSD_GObj_804CE3E4.b3) {
+                HSD_GObjPLink_8039032C(
+                    HSD_GObj_804CE3E4.type, proc->gobj,
+                    HSD_GObj_804CE3E4.p_link,
+                    HSD_GObj_804CE3E4.p_prio, HSD_GObj_804CE3E4.gobj);
+            }
+            if (HSD_GObj_804CE3E4.b2) {
+                HSD_GObjProc_8038FE24(proc);
+            }
+        }
+        HSD_GObj_804CE3E4.flags = 0;
+    }
+    HSD_GObj_804D781C = NULL;
+    HSD_GObj_804D7838 = NULL;
+}
+
+void HSD_GObj_80390CFC(void)
+{
+    s32 priority;
+    msl_hsd_gobj_run_procs_begin();
+    for (priority = 0; priority <= HSD_GObjLibInitData.gproc_pri_max;
+         ++priority)
+    {
+        msl_hsd_gobj_run_procs_priority_begin(priority);
+        while (msl_hsd_gobj_run_procs_next_owner() != NULL) {
+            msl_hsd_gobj_run_procs_invoke();
+        }
+    }
+}
+#endif
 
 /// GObj_GetFlagFromArray
 u32 HSD_GObj_80390EB8(s32 i)

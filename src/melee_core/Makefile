@@ -177,10 +177,12 @@ PPC_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(PPC_OBJ_DIR)/%.o,$(SMOKE_SRCS))
 NATIVE_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(NATIVE_SMOKE_SRCS))
 NATIVE_REPLAY_BENCH_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/replay_bench.o
 NATIVE_RUNTIME_CENSUS_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/runtime_census.o
+NATIVE_LARGE_BATCH_SMOKE_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/large_batch_smoke.o
 NATIVE_FLAGS_STAMP := $(NATIVE_BUILD)/compile-flags.stamp
 NATIVE_COMPILE_OBJS := $(NATIVE_UPSTREAM_OBJS) $(NATIVE_LOCAL_OBJS) \
 	$(NATIVE_PLATFORM_OBJS) $(NATIVE_MAIN_OBJ) $(NATIVE_SMOKE_OBJS) \
 	$(NATIVE_REPLAY_BENCH_OBJ) $(NATIVE_RUNTIME_CENSUS_OBJ) \
+	$(NATIVE_LARGE_BATCH_SMOKE_OBJ) \
 	$(NATIVE_DAT_LAYOUT_OBJ) \
 	$(NATIVE_MATCH_RELOC_LAYOUT_OBJ)
 DEPS := $(PPC_OBJS:.o=.d) $(PPC_SMOKE_OBJS:.o=.d) $(NATIVE_OBJS:.o=.d) \
@@ -215,6 +217,7 @@ NATIVE_WASM_PARITY := $(NATIVE_BUILD)/wasm-parity
 NATIVE_LIFECYCLE_BENCH := $(NATIVE_BUILD)/lifecycle-bench
 NATIVE_REPLAY_BENCH := $(NATIVE_BUILD)/replay-bench
 NATIVE_RUNTIME_CENSUS := $(NATIVE_BUILD)/runtime-census
+NATIVE_LARGE_BATCH_SMOKE := $(NATIVE_BUILD)/large-batch-smoke
 NATIVE_RELEASE_BINARY := $(NATIVE_RELEASE_BUILD)/melee-core-native
 NATIVE_RELEASE_REPLAY_BENCH := $(NATIVE_RELEASE_BUILD)/replay-bench
 VIEWER_SCHEMA_TOOL := $(NATIVE_BUILD)/viewer-schema
@@ -285,7 +288,7 @@ endif
 
 NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_RELEASE_OPT_OBJS)
 
-.PHONY: all runtime native native-release replay-benchmark-binary runtime-census benchmark-prepare benchmark-native benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source source-check validation validator validation-suite validation-supported-domain clean run run-native toolchain data-check smoke native-smoke map-smoke validation-smoke test FORCE
+.PHONY: all runtime native native-release replay-benchmark-binary runtime-census large-batch-smoke benchmark-prepare benchmark-native benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source source-check validation validator validation-suite validation-supported-domain clean run run-native toolchain data-check smoke native-smoke map-smoke validation-smoke test FORCE
 
 all: runtime
 
@@ -308,6 +311,9 @@ replay-benchmark-binary: $(NATIVE_REPLAY_BENCH)
 
 runtime-census: data-check $(NATIVE_RUNTIME_CENSUS)
 	@"$(NATIVE_RUNTIME_CENSUS)" "$(DATA)"
+
+large-batch-smoke: data-check $(NATIVE_LARGE_BATCH_SMOKE)
+	@"$(NATIVE_LARGE_BATCH_SMOKE)" "$(DATA)" "$(LARGE_BATCH_MATCHES)"
 
 wasm: $(WASM_MODULE)
 
@@ -541,6 +547,8 @@ $(NATIVE_RUNTIME_CENSUS): $(NATIVE_CORE_OBJS) $(NATIVE_RUNTIME_CENSUS_OBJ)
 	@mkdir -p "$(@D)"
 	@"$(HOST_CC)" -no-pie -Wl,--gc-sections $^ \
 		$(LDLIBS) -ldl -o "$@"
+
+$(eval $(call link_native_smoke,$(NATIVE_LARGE_BATCH_SMOKE),$(NATIVE_LARGE_BATCH_SMOKE_OBJ)))
 
 data-check:
 	@$(PY) -m tools.extraction.validate_raw_data --raw-dir "$(DATA)"

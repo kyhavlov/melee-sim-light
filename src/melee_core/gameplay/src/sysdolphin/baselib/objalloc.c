@@ -5,7 +5,7 @@
 
 #include <__mem.h>
 #include <dolphin/os/OSAlloc.h>
-#ifdef MSL_CORE_HOSTED
+#ifdef MSL_CORE_NATIVE
 #include <runtime/relocation.h>
 
 #endif
@@ -142,7 +142,7 @@ s32 HSD_ObjAllocAddFree(HSD_ObjAllocData* data, u32 num)
 
     data->freehead = (HSD_ObjAllocLink*) pool_start;
     data->free += num;
-#ifdef MSL_CORE_HOSTED
+#ifdef MSL_CORE_NATIVE
     {
         u32 i;
         for (i = 0; i < num; ++i) {
@@ -202,7 +202,7 @@ void* HSD_ObjAlloc(HSD_ObjAllocData* data)
     if (data->used > data->peak) {
         data->peak = data->used;
     }
-#ifdef MSL_CORE_HOSTED
+#ifdef MSL_CORE_NATIVE
     {
         HSD_ObjAllocContext* context = msl_core_objalloc_context();
         u32 index = (u32) (data - context->values);
@@ -226,7 +226,7 @@ void HSD_ObjFree(HSD_ObjAllocData* data, void* obj)
     data->freehead = link;
     data->free += 1;
     data->used -= 1;
-#ifdef MSL_CORE_HOSTED
+#ifdef MSL_CORE_NATIVE
     msl_reloc_register(obj, MSL_RELOC_RAW, 1, data->size,
                        MSL_RELOC_INTRUSIVE_FIRST_POINTER);
 #endif

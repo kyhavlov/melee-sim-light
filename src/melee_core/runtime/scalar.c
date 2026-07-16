@@ -687,12 +687,28 @@ int msl_core_match_storage_init(MslCoreMatch* match)
     return msl_memory_context_init(&match->memory, MSL_MEMORY_MATCH);
 }
 
+int msl_core_match_storage_bind(MslCoreMatch* match, uint8_t* arena,
+                                size_t capacity)
+{
+    if (match == NULL || arena == NULL ||
+        capacity < msl_memory_match_capacity() || match->memory.arena != NULL)
+    {
+        return -1;
+    }
+    // Batch storage is zero-filled by its enclosing allocation. Bind only the
+    // compact memory context here so creating a large uninitialized batch does
+    // not first-touch every cold byte in every Match value.
+    msl_memory_context_bind_match(&match->memory, arena, capacity);
+    return 0;
+}
+
 int msl_core_match_reset(MslCoreMatch* match, const MslCoreGameData* game_data,
                          const MslCoreMatchConfig* config,
                          const MslCoreInput* previous_input)
 {
     uint8_t* arena;
     size_t capacity;
+    uint8_t arena_owned;
 
     if (match == NULL || game_data == NULL || config == NULL ||
         previous_input == NULL || match->memory.arena == NULL)
@@ -701,8 +717,10 @@ int msl_core_match_reset(MslCoreMatch* match, const MslCoreGameData* game_data,
     }
     arena = match->memory.arena;
     capacity = match->memory.capacity;
+    arena_owned = match->memory.arena_owned;
     memset(match, 0, sizeof(*match));
-    msl_memory_context_reuse_match(&match->memory, arena, capacity);
+    msl_memory_context_reuse_match(&match->memory, arena, capacity,
+                                   arena_owned);
     return match_construct(match, game_data, config, previous_input);
 }
 
@@ -1560,9 +1578,31 @@ static void publish_render_matrices(HSD_JObj* jobj)
     }
 }
 
-int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
-                        uint32_t frame_seed,
-                        const MslCoreStageEvents* stage_events)
+static void bind_step_owners(MslCoreMatch* match)
+{
+    msl_core_bind_match(match);
+    msl_core_bind_match_rules(&match->rules);
+    msl_camera_state_bind(&match->camera);
+    msl_effect_projection_bind(&match->game_data->effects, &match->effects);
+    msl_slippi_state_bind(&match->slippi);
+    bind_stage_match(match);
+}
+
+static void bind_scheduler_owners(MslCoreMatch* match)
+{
+    // Scheduler interleaving changes owners often, but the next-owner and
+    // invoke halves for a lane can be adjacent. The active Match is the
+    // authority for the complete owner bundle bound above, so avoid writing
+    // every TLS owner twice when that lane is already current.
+    if (msl_core_try_active_match() != match) {
+        bind_step_owners(match);
+    }
+}
+
+int msl_core_match_step_prepare(MslCoreMatch* match,
+                                const MslCoreInput* input,
+                                uint32_t frame_seed,
+                                const MslCoreStageEvents* stage_events)
 {
     int i;
 
@@ -1570,13 +1610,8 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
         fprintf(stderr, "Melee core scalar step received a null owner\n");
         return -1;
     }
-    msl_core_bind_match(match);
-    msl_core_bind_match_rules(&match->rules);
-    msl_camera_state_bind(&match->camera);
-    msl_effect_projection_bind(&match->game_data->effects, &match->effects);
-    msl_slippi_state_bind(&match->slippi);
+    bind_step_owners(match);
     msl_slippi_stage_events_begin(stage_events);
-    bind_stage_match(match);
     apply_replay_stage_events(match);
 
     // Slippi's pre-frame row owns the RNG value used by replay playback.
@@ -1611,7 +1646,46 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
     // refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34
     // refs/melee/src/melee/gm/gm_16AE.c::{fn_8016CFE0,fn_8016B918}
     msl_core_apply_team_stock_steal();
-    HSD_GObj_80390CFC();
+    return 0;
+}
+
+void msl_core_match_scheduler_begin(MslCoreMatch* match)
+{
+    bind_scheduler_owners(match);
+    msl_hsd_gobj_run_procs_begin();
+}
+
+uint32_t msl_core_match_scheduler_priority_count(const MslCoreMatch* match)
+{
+    return (uint32_t) match->gobj.init_data.gproc_pri_max + 1;
+}
+
+void msl_core_match_scheduler_priority_begin(MslCoreMatch* match,
+                                             uint32_t priority)
+{
+    bind_scheduler_owners(match);
+    msl_hsd_gobj_run_procs_priority_begin((s32) priority);
+}
+
+HSD_GObjEvent msl_core_match_scheduler_next_owner(MslCoreMatch* match)
+{
+    bind_scheduler_owners(match);
+    return msl_hsd_gobj_run_procs_next_owner();
+}
+
+void msl_core_match_scheduler_invoke(MslCoreMatch* match)
+{
+    bind_scheduler_owners(match);
+    msl_hsd_gobj_run_procs_invoke();
+}
+
+int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
+{
+    int i;
+    if (match == NULL) {
+        return -1;
+    }
+    bind_step_owners(match);
     for (i = 0; i < match->config.num_players; ++i) {
         // Player_SwapTransformedStates keeps the active Sheik/Zelda half in
         // source entity slot zero. Refresh this convenience pointer after the
@@ -1684,6 +1758,29 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
     msl_core_advance_match_frame();
     match->random_seed = *seed_ptr;
     return 0;
+}
+
+int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
+                        uint32_t frame_seed,
+                        const MslCoreStageEvents* stage_events)
+{
+    uint32_t priority;
+    if (msl_core_match_step_prepare(match, input, frame_seed, stage_events) !=
+        0)
+    {
+        return -1;
+    }
+    msl_core_match_scheduler_begin(match);
+    for (priority = 0;
+         priority < msl_core_match_scheduler_priority_count(match);
+         ++priority)
+    {
+        msl_core_match_scheduler_priority_begin(match, priority);
+        while (msl_core_match_scheduler_next_owner(match) != NULL) {
+            msl_core_match_scheduler_invoke(match);
+        }
+    }
+    return msl_core_match_step_finish(match, frame_seed);
 }
 
 const MslCoreCompare* msl_core_match_output(const MslCoreMatch* match)

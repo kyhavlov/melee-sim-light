@@ -142,7 +142,9 @@ typedef struct HSD_GObjContext {
     HSD_GObjProc* next_proc;
     s32 current_proc_priority;
     HSD_GObjProc* current_proc;
+    HSD_GObjProc* scheduled_proc;
     s32 proc_epoch;
+    u64 proc_link_mask;
     HSD_GObjProc** proc_heads;
     HSD_GObjProc** proc_tails;
     s8 obj_none;
@@ -187,6 +189,12 @@ HSD_GObj* GObj_Create(u16 classifier, u8 p_link, u8 priority);
 void HSD_GObj_JObjCallback(HSD_GObj* gobj, int arg1);
 void HSD_GObj_80390CD4(HSD_GObj* gobj);
 void HSD_GObj_80390CFC(void);
+#ifdef MSL_CORE_HOSTED
+void msl_hsd_gobj_run_procs_begin(void);
+void msl_hsd_gobj_run_procs_priority_begin(s32 priority);
+HSD_GObjEvent msl_hsd_gobj_run_procs_next_owner(void);
+void msl_hsd_gobj_run_procs_invoke(void);
+#endif
 void render_gobj(HSD_GObj* cur, int i);
 void HSD_GObj_80390FC0(void);
 void HSD_GObj_LObjCallback(HSD_GObj* gobj, int unused);

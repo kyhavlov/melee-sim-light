@@ -361,6 +361,33 @@ static void fill_bases(RelocBases* bases, const MslSavestateHeader* header,
     bases->image_size = image_size;
 }
 
+static void fill_copy_bases(RelocBases* bases,
+                            const MslCoreMatch* source,
+                            MslCoreMatch* destination)
+{
+    memset(bases, 0, sizeof(*bases));
+    bases->source_match = (uintptr_t) source;
+    bases->destination_match = (uintptr_t) destination;
+    bases->source_match_arena = (uintptr_t) source->memory.arena;
+    bases->destination_match_arena = (uintptr_t) destination->memory.arena;
+    bases->match_arena_size = source->memory.used;
+    bases->source_game_data = (uintptr_t) source->game_data;
+    bases->destination_game_data = (uintptr_t) destination->game_data;
+    bases->source_game_arena = (uintptr_t) source->game_data->memory.arena;
+    bases->destination_game_arena =
+        (uintptr_t) destination->game_data->memory.arena;
+    bases->game_arena_size = source->game_data->memory.used;
+#ifdef MSL_CORE_NATIVE
+    bases->source_native_dat = (uintptr_t) source->game_data->native_dat.arena;
+    bases->destination_native_dat =
+        (uintptr_t) destination->game_data->native_dat.arena;
+    bases->native_dat_size = source->game_data->native_dat.arena_used;
+#endif
+    // An in-process copy cannot change the executable image base. Leaving the
+    // image range empty avoids a dynamic-loader walk for every cloned Match;
+    // callback and static-table pointers are already destination-valid.
+}
+
 size_t msl_core_match_save_size(const MslCoreMatch* match)
 {
     return match != NULL ? sizeof(MslSavestateHeader) + sizeof(*match) +
@@ -449,6 +476,7 @@ int msl_core_match_restore(MslCoreMatch* match, const void* buffer,
     const MslCoreGameData* game_data;
     uint8_t* arena;
     size_t capacity;
+    uint8_t arena_owned;
     if (match == NULL || buffer == NULL || buffer_size < sizeof(header)) {
         return -1;
     }
@@ -459,6 +487,7 @@ int msl_core_match_restore(MslCoreMatch* match, const void* buffer,
     game_data = match->game_data;
     arena = match->memory.arena;
     capacity = match->memory.capacity;
+    arena_owned = match->memory.arena_owned;
     // Capture destination bases before copying the source image. Do not seed
     // destination pointers into that image before relocation: a fresh host
     // allocation may numerically overlap one of the old source ranges and be
@@ -474,17 +503,18 @@ int msl_core_match_restore(MslCoreMatch* match, const void* buffer,
     match->game_data = game_data;
     match->memory.arena = arena;
     match->memory.capacity = capacity;
+    match->memory.arena_owned = arena_owned;
     msl_core_bind_match(match);
     return 0;
 }
 
 int msl_core_match_copy(MslCoreMatch* destination, const MslCoreMatch* source)
 {
-    MslSavestateHeader header;
     RelocBases bases;
     const MslCoreGameData* game_data;
     uint8_t* arena;
     size_t capacity;
+    uint8_t arena_owned;
     if (destination == NULL || source == NULL ||
         destination->game_data == NULL || source->game_data == NULL ||
         destination->game_data->fingerprint !=
@@ -496,11 +526,11 @@ int msl_core_match_copy(MslCoreMatch* destination, const MslCoreMatch* source)
     if (destination == source) {
         return 0;
     }
-    fill_header(&header, source);
     game_data = destination->game_data;
     arena = destination->memory.arena;
     capacity = destination->memory.capacity;
-    fill_bases(&bases, &header, destination);
+    arena_owned = destination->memory.arena_owned;
+    fill_copy_bases(&bases, source, destination);
     memcpy(arena, source->memory.arena, source->memory.used);
     memcpy(destination, source, sizeof(*destination));
     if (relocate_match(destination, &bases) != 0) {
@@ -509,6 +539,7 @@ int msl_core_match_copy(MslCoreMatch* destination, const MslCoreMatch* source)
     destination->game_data = game_data;
     destination->memory.arena = arena;
     destination->memory.capacity = capacity;
+    destination->memory.arena_owned = arena_owned;
     msl_core_bind_match(destination);
     return 0;
 }
