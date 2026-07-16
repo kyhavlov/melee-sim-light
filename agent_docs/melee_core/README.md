@@ -1947,6 +1947,30 @@ admission boundary, full validation/output locks, native/Wasm parity, save/resto
 no-allocation runtime contract must remain intact. Report the EPYC result as portability/scaling
 evidence, not as a substitute for the local single-core target.
 
+##### Phase 9 execution and commit policy
+
+Begin with one bounded pre-SoA packet: profile the true resident 256/512 production workload by
+source phase/owner, close the highest-cost optimizer-sensitive type/ownership boundaries, and
+expand the strict `-O3` allowlist only where the complete output locks prove equivalence. Establish
+the best safe compiler/dispatch baseline before promoting broad mutable state. The following packet
+uses that evidence for the hot/cold and SoA/AoSoA cut; explicit AVX2/AVX-512 kernels and late-stage
+tuning follow only after the scalar tiled layout is demonstrably vectorizable.
+
+Start each candidate from a clean retained commit and keep experiments uncommitted while measuring
+them. Rejected candidates are removed completely and recorded in `PERFORMANCE.md`; do not retain
+alternate paths, speculative flags, or dead scaffolding. Commit a candidate only when it is a
+coherent measurable improvement with the same workload/digest and its proportionate correctness
+gates pass. Keep implementation, focused tests, worklog numbers, and relevant source/delta ledger
+updates in that commit. Combine behavior-neutral substrate with its first real consumer rather than
+committing unused machinery. Completed packet boundaries must leave a clean worktree; if work stops
+inside a packet, leave the scoped work uncommitted and report it explicitly.
+
+Use the ignored `tools/melee_core/notify_discord.sh` helper after each concrete retained performance
+win, reporting the before/after complete FPS, batch size/core, digest-equivalence status, and gates
+completed. Do not send progress notifications for merely attempted or rejected candidates. Send a
+separate update at a material architectural closure such as the hot/cold cut, canonical SoA/AoSoA
+execution, first retained SIMD kernel, or final 500k lock.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to
