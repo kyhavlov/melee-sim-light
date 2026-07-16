@@ -20,6 +20,8 @@ const INVALID_STATE = 3;
 const CONFIG_SIZE = 52;
 const INPUT_SIZE = 52;
 const STATE_SIZE = 1022;
+const OBSERVATION_SIZE = 980;
+const TERMINAL_SIZE = 16;
 const VIEWER_SIZE = VIEWER_STATE_SIZE;
 const MATCH_COUNT = 2;
 
@@ -75,8 +77,10 @@ const snapshotWrittenOut = alloc(4);
 const configs = alloc(CONFIG_SIZE * MATCH_COUNT);
 const inputs = alloc(INPUT_SIZE * MATCH_COUNT);
 const states = alloc(STATE_SIZE * MATCH_COUNT);
+const observations = alloc(OBSERVATION_SIZE * MATCH_COUNT);
 const viewers = alloc(VIEWER_SIZE * MATCH_COUNT);
-const terminal = alloc(MATCH_COUNT);
+const terminal = alloc(TERMINAL_SIZE * MATCH_COUNT);
+const viewpoints = alloc(MATCH_COUNT);
 const mask = alloc(MATCH_COUNT);
 const copyDestination = alloc(4);
 const copySource = alloc(4);
@@ -99,6 +103,8 @@ writeConfig(0, 32, 1);
 writeConfig(1, 2, 9);
 module.HEAPU8[inputs + 2] = 80;
 module.HEAPU8[inputs + INPUT_SIZE + 2] = 80;
+module.HEAPU8[viewpoints] = 1;
+module.HEAPU8[viewpoints + 1] = 0;
 
 let gameData = 0;
 let batch = 0;
@@ -157,12 +163,36 @@ try {
     step(batch, inputs, mask, `suffix ${frame}`);
   }
   callOk('msl_core_batch_write_state', batch, states, STATE_SIZE, 0, 0);
+  callOk(
+    'msl_core_batch_write_observation',
+    batch,
+    viewpoints,
+    1,
+    observations,
+    OBSERVATION_SIZE,
+    0,
+    0,
+  );
   callOk('msl_core_batch_write_viewer', batch, viewers, VIEWER_SIZE, 0, 0);
   const expected = bytes(states, STATE_SIZE);
   const expectedViewer = bytes(viewers, VIEWER_SIZE);
   assert.equal(view().getUint32(viewers + 8, true), 32);
   assert.equal(module.HEAPU8[viewers + 16], 2);
-  callOk('msl_core_batch_write_terminal', batch, terminal, 1, 0, 0);
+  assert.equal(module.HEAPU8[observations + 13], 1);
+  assert.equal(module.HEAPU8[observations + 36 + 1], 1);
+  assert.equal(
+    module.HEAPU8[observations + OBSERVATION_SIZE + 36 + 1],
+    0,
+  );
+  callOk(
+    'msl_core_batch_write_terminal',
+    batch,
+    terminal,
+    TERMINAL_SIZE,
+    -1,
+    0,
+    0,
+  );
 
   // The artifact has no source-index affinity: restore match 0 into index 1,
   // advance with the same input suffix, and require byte-identical output.

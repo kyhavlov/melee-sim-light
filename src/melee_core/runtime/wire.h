@@ -184,6 +184,84 @@ typedef struct MslCoreCompare {
     MslCoreItem items[MSL_CORE_MAX_ITEMS];
 } MslCoreCompare;
 
+// Policy-facing observation. Its semantic fields and compact byte layout
+// match the established MeleeGamestate contract consumed by Slippi-AI, while
+// remaining independent of replay-forensic and viewer-only projections.
+typedef struct MslCoreObservationPlayer {
+    uint8_t present;
+    uint8_t source_player;
+    uint8_t team_relation;
+    uint8_t team_id;
+
+    float pos_x;
+    float pos_y;
+    float speed_air_x_self;
+    float speed_ground_x_self;
+    float speed_y_self;
+    float speed_x_attack;
+    float speed_y_attack;
+    float percent;
+    float shield_hp;
+
+    uint16_t action_id;
+    int16_t action_frame;
+    uint16_t hitlag;
+    uint16_t hitstun;
+
+    uint8_t char_id;
+    uint8_t stocks;
+    uint8_t facing;
+    uint8_t on_ground;
+    uint8_t jumps_left;
+    uint8_t hurtbox_state;
+    uint8_t invulnerable;
+    uint8_t _pad0;
+} MslCoreObservationPlayer;
+
+typedef struct MslCoreObservationRandall {
+    uint8_t exists;
+    uint8_t _pad0[3];
+    float x;
+    float y;
+} MslCoreObservationRandall;
+
+typedef struct MslCoreObservationFodPlatforms {
+    float left;
+    float right;
+} MslCoreObservationFodPlatforms;
+
+typedef struct MslCoreObservationStage {
+    MslCoreObservationRandall randall;
+    MslCoreObservationFodPlatforms fod_platforms;
+} MslCoreObservationStage;
+
+typedef struct MslCoreObservation {
+    int32_t frame_id;
+    uint32_t frame_pre_random_seed;
+    uint32_t stage_id;
+    uint8_t num_players;
+    uint8_t viewpoint_player;
+    uint8_t is_teams;
+    uint8_t _pad0;
+
+    MslCoreObservationStage stage;
+    MslCoreObservationPlayer slots[MSL_CORE_MAX_PLAYERS];
+    MslCoreItem items[MSL_CORE_MAX_ITEMS];
+} MslCoreObservation;
+
+typedef struct MslCoreTerminal {
+    int32_t frame_id;
+    uint32_t stage_id;
+    uint8_t done;
+    uint8_t match_ended;
+    uint8_t stockout;
+    uint8_t max_frame_reached;
+    uint8_t alive_count;
+    uint8_t alive_team_count;
+    uint8_t team_alive_mask;
+    uint8_t _pad0;
+} MslCoreTerminal;
+
 // Stable production projection used by interactive consumers. This is a
 // separate schema from MslCoreCompare: replay-forensic lanes can evolve
 // independently without becoming part of the render/API contract.
@@ -291,6 +369,14 @@ _Static_assert(sizeof(MslCoreStreamJobHeader) == 108,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1022, "MslCoreCompare wire size");
+_Static_assert(sizeof(MslCoreObservationPlayer) == 56,
+               "MslCoreObservationPlayer wire size");
+_Static_assert(sizeof(MslCoreObservationStage) == 20,
+               "MslCoreObservationStage wire size");
+_Static_assert(sizeof(MslCoreObservation) == 980,
+               "MslCoreObservation wire size");
+_Static_assert(sizeof(MslCoreTerminal) == 16,
+               "MslCoreTerminal wire size");
 _Static_assert(sizeof(MslCoreViewerHitbox) == 24,
                "MslCoreViewerHitbox wire size");
 _Static_assert(sizeof(MslCoreViewerPlayer) == 192,

@@ -52,9 +52,14 @@ MslCoreResult msl_core_batch_write_state(const MslCoreBatch* batch,
                                          size_t output_stride,
                                          const uint8_t* match_mask,
                                          size_t mask_stride);
+MslCoreResult msl_core_batch_write_observation(
+    const MslCoreBatch* batch, const uint8_t* viewpoint_players,
+    size_t viewpoint_stride, MslCoreObservation* output,
+    size_t output_stride, const uint8_t* match_mask, size_t mask_stride);
 MslCoreResult msl_core_batch_write_terminal(const MslCoreBatch* batch,
-                                            uint8_t* output,
+                                            MslCoreTerminal* output,
                                             size_t output_stride,
+                                            int32_t max_frame_id,
                                             const uint8_t* match_mask,
                                             size_t mask_stride);
 MslCoreResult msl_core_batch_write_viewer(const MslCoreBatch* batch,

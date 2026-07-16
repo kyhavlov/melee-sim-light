@@ -1,5 +1,6 @@
 #include "api.h"
 
+#include "runtime/observation.h"
 #include "runtime/savestate.h"
 #include "runtime/scalar.h"
 #include "runtime/viewer.h"
@@ -262,8 +263,9 @@ MslCoreResult msl_core_batch_write_state(const MslCoreBatch* batch,
 }
 
 MslCoreResult msl_core_batch_write_terminal(const MslCoreBatch* batch,
-                                            uint8_t* output,
+                                            MslCoreTerminal* output,
                                             size_t output_stride,
+                                            int32_t max_frame_id,
                                             const uint8_t* match_mask,
                                             size_t mask_stride)
 {
@@ -278,8 +280,46 @@ MslCoreResult msl_core_batch_write_terminal(const MslCoreBatch* batch,
             if (!batch->initialized[i]) {
                 return MSL_CORE_INVALID_STATE;
             }
-            *(uint8_t*) row_mutable(output, output_stride, i) =
-                batch->matches[i].rules.ended != 0;
+            msl_core_match_write_terminal(
+                &batch->matches[i], max_frame_id,
+                row_mutable(output, output_stride, i));
+        }
+    }
+    return MSL_CORE_OK;
+}
+
+MslCoreResult msl_core_batch_write_observation(
+    const MslCoreBatch* batch, const uint8_t* viewpoint_players,
+    size_t viewpoint_stride, MslCoreObservation* output,
+    size_t output_stride, const uint8_t* match_mask, size_t mask_stride)
+{
+    uint32_t i;
+    if (validate_mask(batch, match_mask, mask_stride) != MSL_CORE_OK ||
+        viewpoint_players == NULL || viewpoint_stride < sizeof(uint8_t) ||
+        output == NULL || output_stride < sizeof(*output))
+    {
+        return MSL_CORE_INVALID_ARGUMENT;
+    }
+    for (i = 0; i < batch->match_count; ++i) {
+        if (selected(match_mask, mask_stride, i)) {
+            uint8_t viewpoint = viewpoint_players[(size_t) i * viewpoint_stride];
+            if (!batch->initialized[i]) {
+                return MSL_CORE_INVALID_STATE;
+            }
+            if (viewpoint >= batch->matches[i].config.num_players) {
+                return MSL_CORE_INVALID_ARGUMENT;
+            }
+        }
+    }
+    for (i = 0; i < batch->match_count; ++i) {
+        if (selected(match_mask, mask_stride, i)) {
+            uint8_t viewpoint = viewpoint_players[(size_t) i * viewpoint_stride];
+            if (msl_core_match_write_observation(
+                    &batch->matches[i], viewpoint,
+                    row_mutable(output, output_stride, i)) != 0)
+            {
+                return MSL_CORE_INVALID_STATE;
+            }
         }
     }
     return MSL_CORE_OK;

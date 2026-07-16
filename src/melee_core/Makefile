@@ -96,6 +96,7 @@ RUNTIME_SRCS := \
 	$(CORE)/runtime/items.c \
 	$(CORE)/runtime/match.c \
 	$(CORE)/runtime/math.c \
+	$(CORE)/runtime/observation.c \
 	$(CORE)/runtime/relocation.c \
 	$(CORE)/runtime/savestate.c \
 	$(CORE)/runtime/scalar.c \
@@ -418,7 +419,7 @@ $(WASM_MODULE): $(WASM_CORE_OBJS)
 		-sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createMslCoreModule \
 		-sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 \
 		-sINITIAL_MEMORY=536870912 -sMAXIMUM_MEMORY=1073741824 \
-		-sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_core_game_data_create","_msl_core_game_data_destroy","_msl_core_batch_create","_msl_core_batch_destroy","_msl_core_batch_match_count","_msl_core_batch_reset_matches","_msl_core_batch_step_matches","_msl_core_batch_write_state","_msl_core_batch_write_terminal","_msl_core_batch_write_viewer","_msl_core_batch_copy_matches","_msl_core_batch_match_save_size","_msl_core_batch_save_match","_msl_core_batch_restore_match"]' \
+		-sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_core_game_data_create","_msl_core_game_data_destroy","_msl_core_batch_create","_msl_core_batch_destroy","_msl_core_batch_match_count","_msl_core_batch_reset_matches","_msl_core_batch_step_matches","_msl_core_batch_write_state","_msl_core_batch_write_observation","_msl_core_batch_write_terminal","_msl_core_batch_write_viewer","_msl_core_batch_copy_matches","_msl_core_batch_match_save_size","_msl_core_batch_save_match","_msl_core_batch_restore_match"]' \
 		-sEXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
 		--preload-file "$(DATA)@/data/raw" -o "$@" 2>"$$log"; then \
 		cat "$$log" >&2; exit 1; \

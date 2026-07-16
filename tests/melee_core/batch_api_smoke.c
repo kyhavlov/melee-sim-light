@@ -1,9 +1,27 @@
 #include "api.h"
+#include "../../src/api.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <dolphin/pad.h>
+
+_Static_assert(sizeof(MslCoreObservation) == sizeof(MeleeGamestate),
+               "production observation contract drift");
+_Static_assert(sizeof(MslCoreObservationPlayer) == sizeof(MeleePlayer),
+               "production player contract drift");
+_Static_assert(sizeof(MslCoreObservationStage) == sizeof(MeleeStage),
+               "production stage contract drift");
+_Static_assert(sizeof(MslCoreItem) == sizeof(MeleeItem),
+               "production item contract drift");
+_Static_assert(sizeof(MslCoreTerminal) == sizeof(MslTerminal),
+               "production terminal contract drift");
+_Static_assert(offsetof(MslCoreObservation, slots) ==
+                   offsetof(MeleeGamestate, slots),
+               "production slot layout drift");
+_Static_assert(offsetof(MslCoreObservation, items) ==
+                   offsetof(MeleeGamestate, items),
+               "production item layout drift");
 
 static int viewer_has_item(const MslCoreViewerState* viewer)
 {
@@ -50,6 +68,7 @@ int main(int argc, char** argv)
     MslCoreState first[MATCH_COUNT];
     MslCoreState second[MATCH_COUNT];
     MslCoreViewerState viewer[MATCH_COUNT];
+    MslCoreObservation observation[MATCH_COUNT];
     struct {
         MslCoreState state;
         uint32_t guard;
@@ -65,7 +84,8 @@ int main(int argc, char** argv)
     uint8_t mask0[MATCH_COUNT] = { 1, 0, 0, 0 };
     uint8_t mask3[MATCH_COUNT] = { 0, 0, 0, 1 };
     uint8_t mask01[MATCH_COUNT] = { 1, 1, 0, 0 };
-    uint8_t terminal[MATCH_COUNT];
+    MslCoreTerminal terminal[MATCH_COUNT];
+    uint8_t viewpoint[MATCH_COUNT] = { 1, 0, 0, 1 };
     uint32_t copy_destination = 1;
     uint32_t copy_source = 0;
     void* snapshot = NULL;
@@ -152,7 +172,12 @@ int main(int argc, char** argv)
                                     0) != MSL_CORE_INVALID_ARGUMENT ||
         msl_core_batch_write_state(batch, first, sizeof(first[0]) - 1, NULL,
                                    0) != MSL_CORE_INVALID_ARGUMENT ||
-        msl_core_batch_write_terminal(batch, terminal, 0, NULL, 0) !=
+        msl_core_batch_write_terminal(batch, terminal,
+                                      sizeof(terminal[0]) - 1, -1, NULL, 0) !=
+            MSL_CORE_INVALID_ARGUMENT ||
+        msl_core_batch_write_observation(
+            batch, viewpoint, sizeof(viewpoint[0]), observation,
+            sizeof(observation[0]) - 1, NULL, 0) !=
             MSL_CORE_INVALID_ARGUMENT ||
         msl_core_batch_write_viewer(batch, viewer, sizeof(viewer[0]) - 1, NULL,
                                     0) != MSL_CORE_INVALID_ARGUMENT ||
@@ -178,7 +203,10 @@ int main(int argc, char** argv)
     if (msl_core_batch_write_state(batch, first, sizeof(first[0]), NULL, 0) !=
             MSL_CORE_OK ||
         msl_core_batch_write_terminal(batch, terminal, sizeof(terminal[0]),
-                                      NULL, 0) != MSL_CORE_OK ||
+                                      -1, NULL, 0) != MSL_CORE_OK ||
+        msl_core_batch_write_observation(
+            batch, viewpoint, sizeof(viewpoint[0]), observation,
+            sizeof(observation[0]), NULL, 0) != MSL_CORE_OK ||
         msl_core_batch_match_save_size(batch, 0, &snapshot_size) !=
             MSL_CORE_OK ||
         (snapshot = malloc(snapshot_size)) == NULL ||
@@ -188,6 +216,35 @@ int main(int argc, char** argv)
     {
         goto done;
     }
+    for (i = 0; i < MATCH_COUNT; ++i) {
+        int self = viewpoint[i];
+        int opponent = self == 0 ? 1 : 0;
+        if (observation[i].frame_id != first[i].frame_id ||
+            observation[i].stage_id != first[i].stage_id ||
+            observation[i].num_players != 2 ||
+            observation[i].viewpoint_player != self ||
+            observation[i].slots[0].source_player != self ||
+            observation[i].slots[0].team_relation != 0 ||
+            observation[i].slots[1].source_player != opponent ||
+            observation[i].slots[1].team_relation != 2 ||
+            memcmp(&observation[i].items, &first[i].items,
+                   sizeof(observation[i].items)) != 0 ||
+            terminal[i].frame_id != first[i].frame_id ||
+            terminal[i].stage_id != first[i].stage_id ||
+            terminal[i].alive_count != 2)
+        {
+            goto done;
+        }
+    }
+    viewpoint[2] = 4;
+    if (msl_core_batch_write_observation(
+            batch, viewpoint, sizeof(viewpoint[0]), observation,
+            sizeof(observation[0]), mask, sizeof(mask[0])) !=
+        MSL_CORE_INVALID_ARGUMENT)
+    {
+        goto done;
+    }
+    viewpoint[2] = 0;
     phase = "reject damaged checkpoint";
     ((uint8_t*) snapshot)[snapshot_size - 1] ^= 0x80;
     if (msl_core_batch_restore_match(other_batch, 0, snapshot,
@@ -366,6 +423,10 @@ int main(int argc, char** argv)
                                      sizeof(mask01[0])) != MSL_CORE_OK ||
         msl_core_batch_write_viewer(batch, viewer, sizeof(viewer[0]), mask0,
                                     sizeof(mask0[0])) != MSL_CORE_OK ||
+        msl_core_batch_write_observation(
+            batch, viewpoint, sizeof(viewpoint[0]), observation,
+            sizeof(observation[0]), mask0, sizeof(mask0[0])) != MSL_CORE_OK ||
+        !observation[0].stage.randall.exists ||
         msl_core_batch_step_matches(batch, inputs, sizeof(inputs[0]), mask01,
                                     sizeof(mask01[0])) != MSL_CORE_OK ||
         msl_core_batch_write_state(batch, first, sizeof(first[0]), mask01,
