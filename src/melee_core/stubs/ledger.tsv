@@ -7,6 +7,7 @@ ftPe_8011BA54	source-gated outside-domain predicate	reachable	source-equivalent 
 ftPe_8011BAD8	source-gated outside-domain predicate	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
 un_80322258	crowd/audio bookkeeping exclusion	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
 un_803224DC	crowd/audio bookkeeping exclusion	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
+un_80322314	crowd/audio bookkeeping exclusion	reachable	no-op	refs/melee/src/melee/{ft/ftcommon.c::ftCommon_8007EFC8,sfx/crowdsfx.c::un_80322314}; only arms crowd audio state
 ftCo_800A2040	source-gated outside-domain predicate	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
 efLib_DestroyAll	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 efLib_PauseAll	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
@@ -92,13 +93,14 @@ ftKb_SpecialNFx_800FDD14	unsupported-fighter branch	unreachable	named abort	Fox 
 ftKb_SpecialNFx_800FDD4C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialNFx_800FDDF4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialNFx_800FDEB4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialNSk_80105FF0	unsupported-fighter branch	unreachable	named abort	Sheik needle-held dispatch selects this callback only for Kirby's copied neutral special
+ftKb_SpecialNSk_80106020	unsupported-fighter branch	unreachable	named abort	Sheik needle-held dispatch selects this callback only for Kirby's copied neutral special
 ftKb_SpecialN_800F1CD8	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialN_800F1F68	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialN_800F5D04	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftLk_AttackAir_800EB3BC	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftLk_AttackAir_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftMh_MS_341_8014FE58	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftNs_AttackHi4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftNs_AttackLw4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftNs_AttackS4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftPe_AttackS4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
@@ -113,7 +115,6 @@ ftYs_Init_8012BECC	unsupported-fighter branch	unreachable	named abort	Fox kind d
 ftYs_Shield_8012C600	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftYs_Shield_8012C914	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftYs_Shield_8012CC1C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftZd_Init_801395C8	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftCo_800CD350	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_800CD418	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_800CD4E0	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
@@ -139,11 +140,11 @@ it_80294364	disabled item/non-Fox article branch	unreachable	named abort	items-o
 it_80294430	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_80294E78	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_80294EB0	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
+it_802950D4	disabled item branch	unreachable	named abort	transform copying calls this rabbit-hood model toggle only when an items-off match carries the absent common article
 it_8029A748	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8029A89C	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8029A8F4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8029D968	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_802A7840	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_802BAA94	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_802D09D0	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_802E5EF4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
@@ -263,13 +264,6 @@ it_802944AC	disabled item/non-Fox article branch	unreachable	named abort	items-o
 it_802946B0	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_802947CC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_80295F38	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_802A2B10	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_802A2BA4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_802A77DC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_802A78B8	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_802A7AAC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_802A7AF0	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_802A7B34	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_802B7B84	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_802B7C18	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_802BAA58	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
@@ -325,6 +319,7 @@ GXSetZCompLoc	renderer/platform exclusion	unreachable	named abort	GX/light/displ
 GXSetZMode	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
 HSD_CObjGetCurrent	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
 HSD_CObjGetInvViewingMtxPtrDirect	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+HSD_JObjDisp	renderer/platform exclusion	unreachable	named abort	DObj/GX display callback is retained only for link closure and is not scheduled headlessly
 HSD_JObjDispSub	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
 HSD_JObjMakePositionMtx	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
 HSD_LObjGetActiveByID	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly

@@ -28,7 +28,7 @@ NATIVE_BINARY = BUILD / "native" / "melee-core-native"
 TOOLCHAIN = BUILD / "toolchain" / "root"
 QEMU = TOOLCHAIN / "usr" / "bin" / "qemu-ppc-static"
 SYSROOT = TOOLCHAIN / "usr" / "powerpc-linux-gnu"
-DEFAULT_CHARACTERS = "Fox,Falco,Marth,Captain Falcon"
+DEFAULT_CHARACTERS = "Fox,Falco,Marth,Captain Falcon,Sheik,Zelda"
 DEFAULT_STAGES = "32,31,3,2,8,28"
 MAX_AUTO_WORKERS = 16
 DEFAULT_CLASSIFICATIONS = ROOT / "replays/suites/melee_core_classifications.json"
@@ -51,6 +51,8 @@ class ReplayCase:
     stage_id: int | None = None
     characters: tuple[str, ...] = ()
     ucf_cardinals_1_0_enabled: bool = True
+    ucf_shield_sdi_enabled: bool = True
+    ucf_sdi_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -234,6 +236,8 @@ def validate_one(
     backend: str = "ppc",
     signed_zero_equal: bool = False,
     ucf_cardinals_1_0_enabled: bool = True,
+    ucf_shield_sdi_enabled: bool = True,
+    ucf_sdi_enabled: bool = True,
 ) -> dict[str, object]:
     # Python owns only the replay-loading boundary. The native extension consumes
     # Peppi's Arrow buffers through the Arrow C Data Interface without NumPy or
@@ -255,6 +259,8 @@ def validate_one(
             signed_zero_equal=signed_zero_equal,
             native=backend == "native",
             ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+            ucf_shield_sdi_enabled=ucf_shield_sdi_enabled,
+            ucf_sdi_enabled=ucf_sdi_enabled,
         )
     result["end_to_end_seconds"] = time.perf_counter() - started
     return result
@@ -323,6 +329,24 @@ def load_suite_cases(
                     if entry.ucf_cardinals_1_0_enabled is not None
                     else suite.ucf_cardinals_1_0_enabled
                 ),
+                ucf_shield_sdi_enabled=(
+                    entry.ucf_shield_sdi_enabled
+                    if entry.ucf_shield_sdi_enabled is not None
+                    else (
+                        suite.ucf_shield_sdi_enabled
+                        if suite.ucf_shield_sdi_enabled is not None
+                        else True
+                    )
+                ),
+                ucf_sdi_enabled=(
+                    entry.ucf_sdi_enabled
+                    if entry.ucf_sdi_enabled is not None
+                    else (
+                        suite.ucf_sdi_enabled
+                        if suite.ucf_sdi_enabled is not None
+                        else True
+                    )
+                ),
             )
         )
     if not cases:
@@ -377,6 +401,8 @@ def _validate_case(
             backend=backend,
             signed_zero_equal=signed_zero_equal,
             ucf_cardinals_1_0_enabled=case.ucf_cardinals_1_0_enabled,
+            ucf_shield_sdi_enabled=case.ucf_shield_sdi_enabled,
+            ucf_sdi_enabled=case.ucf_sdi_enabled,
         )
         return ReplayOutcome(case, result, None, time.perf_counter() - started)
     except Exception as exc:

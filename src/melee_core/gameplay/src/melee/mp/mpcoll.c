@@ -3378,7 +3378,13 @@ bool mpColl_80049EAC_LeftWall(CollData* coll)
     int i;
 
     mpColl_804D6490_max_x = F32_MAX;
-    for (i = 0; i < mpColl_804D6488; arr++, i++) {
+    // GALE01 0x8004A3C0 loads mpColl_804D648C, the left-wall candidate
+    // count. The current nonmatching decomp source names the adjacent
+    // right-wall count here, which skips left-wall projection whenever no
+    // right-wall candidate happened to be published in the same pass.
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_80049EAC_LeftWall
+    // data/raw/main.dol (GALE01 0x8004A3C0)
+    for (i = 0; i < mpColl_804D648C; arr++, i++) {
         float top;
         float mid;
         float bot;

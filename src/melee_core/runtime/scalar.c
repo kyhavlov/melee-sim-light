@@ -59,7 +59,9 @@ enum {
     MSL_CORE_STAGE_FINAL_DESTINATION = 32,
     MSL_CORE_CHAR_FOX = 1,
     MSL_CORE_CHAR_CAPTAIN_FALCON = 2,
+    MSL_CORE_CHAR_SHEIK = 7,
     MSL_CORE_CHAR_MARTH = 18,
+    MSL_CORE_CHAR_ZELDA = 19,
     MSL_CORE_CHAR_FALCO = 22,
     MSL_CORE_STICK_SCALE = 80,
 };
@@ -149,8 +151,12 @@ static CharacterKind source_character_kind(uint8_t external_id)
     switch (external_id) {
     case MSL_CORE_CHAR_CAPTAIN_FALCON:
         return CKIND_CAPTAIN;
+    case MSL_CORE_CHAR_SHEIK:
+        return CKIND_SEAK;
     case MSL_CORE_CHAR_MARTH:
         return CKIND_MARS;
+    case MSL_CORE_CHAR_ZELDA:
+        return CKIND_ZELDA;
     case MSL_CORE_CHAR_FALCO:
         return CKIND_FALCO;
     default:
@@ -384,12 +390,15 @@ static int validate_config(MslCoreMatchConfig* config)
     for (i = 0; i < 2; ++i) {
         if (config->players[i].char_id != MSL_CORE_CHAR_FOX &&
             config->players[i].char_id != MSL_CORE_CHAR_CAPTAIN_FALCON &&
+            config->players[i].char_id != MSL_CORE_CHAR_SHEIK &&
             config->players[i].char_id != MSL_CORE_CHAR_MARTH &&
+            config->players[i].char_id != MSL_CORE_CHAR_ZELDA &&
             config->players[i].char_id != MSL_CORE_CHAR_FALCO) {
             fprintf(stderr,
                     "current core supports external char_id=1 Fox, "
                     "char_id=2 Captain Falcon, "
-                    "char_id=18 Marth, and char_id=22 Falco only\n");
+                    "char_id=7 Sheik, char_id=18 Marth, "
+                    "char_id=19 Zelda, and char_id=22 Falco only\n");
             return -1;
         }
         if (config->players[i].handicap == 0) {
@@ -465,7 +474,9 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
                               match->config.online_fnmsubs_zero,
                               match->config.brawl_offscreen_damage,
                               match->config.freeze_dead_up_fall_physics,
-                              match->config.ucf_cardinals_1_0_enabled);
+                              match->config.ucf_cardinals_1_0_enabled,
+                              match->config.ucf_shield_sdi_enabled,
+                              match->config.ucf_sdi_enabled);
     msl_camera_state_init(&match->camera);
     msl_slippi_state_init(&match->slippi, match->config.stage_event_streams);
 
@@ -671,22 +682,36 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
 
 #ifdef MSL_CORE_NATIVE
     for (i = 0; i < 2; ++i) {
-        Fighter* fp = GET_FIGHTER(match->fighters[i]);
-        FigaTree* active_tree = fp->x590;
-        void* active_archive = fp->x5A4;
-        int msid;
+        int entity_index;
+        for (entity_index = 0; entity_index < 2; ++entity_index) {
+            Fighter_GObj* fighter_gobj = Player_GetEntityAtIndex(
+                match->source_slots[i], entity_index);
+            Fighter* fp;
+            FigaTree* active_tree;
+            void* active_archive;
+            int msid;
 
-        // Native DAT graphs widen pointers once during match initialization.
-        // Preload each fighter's complete action archive owner so frame-step
-        // motion changes are allocation-free cache lookups.
-        // refs/melee/src/melee/ft/ftdata.c::{ftData_80085A14,ftData_80085CD8}
-        for (msid = 0; msid < fp->x58C; ++msid) {
-            if (ftData_80085FD4(fp, msid)->x14 != 0) {
-                ftData_80085CD8(fp, fp, msid);
+            if (fighter_gobj == NULL) {
+                continue;
             }
+            fp = GET_FIGHTER(fighter_gobj);
+            active_tree = fp->x590;
+            active_archive = fp->x5A4;
+            // Native DAT graphs widen pointers once during match
+            // initialization. Preload both halves of the Sheik/Zelda source
+            // transformation pair as well as every ordinary fighter so a
+            // runtime swap cannot trigger lazy archive translation.
+            // refs/melee/src/melee/ft/ftdata.c::{ftData_80085A14,
+            //   ftData_80085CD8}
+            // refs/melee/src/melee/pl/player.c::Player_80031AD0
+            for (msid = 0; msid < fp->x58C; ++msid) {
+                if (ftData_80085FD4(fp, msid)->x14 != 0) {
+                    ftData_80085CD8(fp, fp, msid);
+                }
+            }
+            fp->x590 = active_tree;
+            fp->x5A4 = active_archive;
         }
-        fp->x590 = active_tree;
-        fp->x5A4 = active_archive;
     }
 #endif
 
@@ -779,6 +804,35 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
     uint32_t word;
     size_t word_offset = source_offset & ~(size_t) 3;
     unsigned int shift = (unsigned int) (3 - (source_offset & 3)) * 8;
+
+    // Preserve source offsets after native pointer widening. These generic
+    // Slippi lanes land after pointers in the Chain and Din's Fire structs,
+    // so indexing the native union by the retail byte offset would sample a
+    // different member. The selected source bytes are the low bytes of the
+    // named 32-bit gameplay scalars.
+    // refs/melee/src/melee/it/{itCommonItems.h,itCharItems.h}
+    // refs/slippi-ssbm-asm/Recording/SendItemInfo.s
+    if (item->kind == It_Kind_Seak_Chain) {
+        if (source_offset == 0x17) {
+            memcpy(&word, &item->xDD4_itemVar.seakchain.x14, sizeof(word));
+            return (uint8_t) word;
+        }
+        if (source_offset == 0x1B) {
+            memcpy(&word, &item->xDD4_itemVar.seakchain.x18, sizeof(word));
+            return (uint8_t) word;
+        }
+    } else if (item->kind == It_Kind_Zelda_DinFire) {
+        if (source_offset == 0x17) {
+            memcpy(&word, &item->xDD4_itemVar.zeldadinfire.xDE8,
+                   sizeof(word));
+            return (uint8_t) word;
+        }
+        if (source_offset == 0x1B) {
+            memcpy(&word, &item->xDD4_itemVar.zeldadinfire.xDEC,
+                   sizeof(word));
+            return (uint8_t) word;
+        }
+    }
 
     // Slippi exports bytes from the retail big-endian item-variable union.
     // The reached Fox article variables are 32-bit scalar/vector lanes through
@@ -900,8 +954,7 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
         int jumps_left = fp->co_attrs.max_jumps - fp->x1968_jumpsUsed;
 
         out[offsetof(MslCoreCompare, team_id) + i] = fp->team;
-        out[offsetof(MslCoreCompare, char_id) + i] =
-            match->config.players[i].char_id;
+        out[offsetof(MslCoreCompare, char_id) + i] = fp->kind;
         put_player_f32(out, offsetof(MslCoreCompare, pos_x), i, fp->cur_pos.x);
         put_player_f32(out, offsetof(MslCoreCompare, pos_y), i, fp->cur_pos.y);
         put_player_f32(out, offsetof(MslCoreCompare, speed_air_x_self), i,
@@ -1085,6 +1138,20 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
                                 input->p[i].c_x, input->p[i].c_y);
     }
     HSD_GObj_80390CFC();
+    for (i = 0; i < 2; ++i) {
+        // Player_SwapTransformedStates keeps the active Sheik/Zelda half in
+        // source entity slot zero. Refresh this convenience pointer after the
+        // gameplay scheduler so output and the headless render publication
+        // observe the newly active fighter in the transformation frame.
+        // refs/melee/src/melee/pl/player.c::Player_SwapTransformedStates
+        match->fighters[i] =
+            Player_GetEntityAtIndex(match->source_slots[i], 0);
+        if (match->fighters[i] == NULL) {
+            fprintf(stderr, "source player slot %d lost its active fighter\n",
+                    match->source_slots[i]);
+            return -1;
+        }
+    }
     // Slippi's post-frame recorder snapshots fighter state after gameplay
     // processes but before the render pass. x221F_b0 therefore reflects the
     // preceding render in the exported row.

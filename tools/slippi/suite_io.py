@@ -13,6 +13,8 @@ class SuiteReplay:
     stage_id: int | None = None
     characters: dict[str, str] | None = None
     ucf_cardinals_1_0_enabled: bool | None = None
+    ucf_shield_sdi_enabled: bool | None = None
+    ucf_sdi_enabled: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,8 @@ class ReplaySuite:
     replays: tuple[SuiteReplay, ...]
     ucf_enabled: bool | None = None
     ucf_cardinals_1_0_enabled: bool | None = None
+    ucf_shield_sdi_enabled: bool | None = None
+    ucf_sdi_enabled: bool | None = None
     team_attack_on: bool | None = None
 
 
@@ -39,6 +43,8 @@ def load_suite(path: str | Path) -> ReplaySuite:
     notes = data.get("notes")
     ucf_enabled = data.get("ucf_enabled")
     ucf_cardinals_1_0_enabled = data.get("ucf_cardinals_1_0_enabled")
+    ucf_shield_sdi_enabled = data.get("ucf_shield_sdi_enabled")
+    ucf_sdi_enabled = data.get("ucf_sdi_enabled")
     team_attack_on = data.get("team_attack_on")
     replays = []
     for r in data["replays"]:
@@ -57,6 +63,16 @@ def load_suite(path: str | Path) -> ReplaySuite:
                     if "ucf_cardinals_1_0_enabled" in r
                     else None
                 ),
+                ucf_shield_sdi_enabled=(
+                    bool(r["ucf_shield_sdi_enabled"])
+                    if "ucf_shield_sdi_enabled" in r
+                    else None
+                ),
+                ucf_sdi_enabled=(
+                    bool(r["ucf_sdi_enabled"])
+                    if "ucf_sdi_enabled" in r
+                    else None
+                ),
             )
         )
     if any(len(r.ports) > 2 for r in replays) and team_attack_on is not True:
@@ -70,6 +86,12 @@ def load_suite(path: str | Path) -> ReplaySuite:
         ucf_enabled=bool(ucf_enabled) if ucf_enabled is not None else None,
         ucf_cardinals_1_0_enabled=bool(ucf_cardinals_1_0_enabled)
         if ucf_cardinals_1_0_enabled is not None
+        else None,
+        ucf_shield_sdi_enabled=bool(ucf_shield_sdi_enabled)
+        if ucf_shield_sdi_enabled is not None
+        else None,
+        ucf_sdi_enabled=bool(ucf_sdi_enabled)
+        if ucf_sdi_enabled is not None
         else None,
         team_attack_on=bool(team_attack_on) if team_attack_on is not None else None,
         replays=tuple(replays),

@@ -15,7 +15,9 @@ int DbLevel;
 // refs/melee/src/melee/ft/ftdata.c::CostumeListsForeachCharacter
 UnkCostumeStruct ft_80459B28[4];
 UnkCostumeStruct ft_80459A98[6];
+UnkCostumeStruct ft_80459D18[5];
 UnkCostumeStruct ft_8045A0F0[5];
+UnkCostumeStruct ft_8045A168[5];
 UnkCostumeStruct ft_8045A420[4];
 
 // These match-mode queries are false for a normal local human match.

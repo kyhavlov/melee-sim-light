@@ -27,6 +27,7 @@
 #include "lb/lbaudio_ax.h"
 #include "lb/lbcollision.h"
 #include "lb/lbvector.h"
+#include "MetroTRK/intrinsics.h"
 
 #include <math.h>
 #include <baselib/cobj.h>
@@ -758,35 +759,49 @@ void it_802706D0(Item_GObj* arg_item_gobj)
     }
 }
 
-f32 it_80270CD8(Item* ip, HitCapsule* hit)
+static f32 itCalcDamageKnockback(Item* ip, HitCapsule* hit)
 {
     ItemAttr* attr = ip->xCC_item_attr;
-    f32 f0;
-    f32 f1;
+    f32 damage;
+    f32 growth;
+    f32 scale;
 
+    // The matching source expressions depend on scalar-single fusion from
+    // MetroWerks. GALE01 0x80270D38..0x80270D64 and
+    // 0x80270DEC..0x80270E0C (duplicated at
+    // 0x80270EF0..0x80270F18 and 0x80270FA0..0x80270FB0) use three fmadds
+    // for the growth term, base knockback, and final scale/offset. GCC and
+    // native compilers otherwise split these operations and can move a
+    // damaged item's launch velocity by one ULP.
+    // refs/melee/src/melee/it/itcoll.c::it_80270CD8,it_80270E30
+    // data/raw/main.dol (GALE01 addresses above)
     if (hit->x28 != 0) {
-        f1 = (0.01f * hit->x24 *
-              ((it_804D6D28->x80_float[11] *
-                (attr->x1C_damage_mul *
-                 ((it_804D6D28->x80_float[10] * it_804D6D28->x80_float[8]) +
-                  (it_804D6D28->x80_float[9] *
-                   (it_804D6D28->x80_float[10] * hit->x28))))) +
-               it_804D6D28->x80_float[12])) +
-             hit->x2C;
+        growth = it_804D6D28->x80_float[10] * hit->x28;
+        growth = it_804D6D28->x80_float[9] * growth;
+        growth = __fmadds(it_804D6D28->x80_float[10],
+                          it_804D6D28->x80_float[8], growth);
     } else {
-        f1 = ((0.01f * hit->x24) *
-              ((it_804D6D28->x80_float[11] *
-                (attr->x1C_damage_mul *
-                 ((it_804D6D28->x80_float[8] * (ip->xC9C + (f32) ip->xCA0)) +
-                  (it_804D6D28->x80_float[9] *
-                   (hit->damage * (ip->xC9C + (f32) ip->xCA0)))))) +
-               it_804D6D28->x80_float[12])) +
-             hit->x2C;
+        damage = ip->xC9C + (f32) ip->xCA0;
+        growth = hit->damage * damage;
+        growth = it_804D6D28->x80_float[9] * growth;
+        growth = __fmadds(it_804D6D28->x80_float[8], damage, growth);
     }
-    if (f1 >= it_804D6D28->x80_float[7]) {
-        f1 = it_804D6D28->x80_float[7];
+
+    growth = attr->x1C_damage_mul * growth;
+    growth = __fmadds(it_804D6D28->x80_float[11], growth,
+                      it_804D6D28->x80_float[12]);
+    scale = 0.01f * hit->x24;
+    return __fmadds(scale, growth, hit->x2C);
+}
+
+f32 it_80270CD8(Item* ip, HitCapsule* hit)
+{
+    f32 knockback = itCalcDamageKnockback(ip, hit);
+
+    if (knockback >= it_804D6D28->x80_float[7]) {
+        knockback = it_804D6D28->x80_float[7];
     }
-    return f1;
+    return knockback;
 }
 
 void it_80270E30(Item_GObj* arg_item_gobj)
@@ -828,28 +843,7 @@ void it_80270E30(Item_GObj* arg_item_gobj)
             hit = damage_log->x8;
             attr = arg_item->xCC_item_attr;
             (void) attr;
-            if (hit->x28 != 0) {
-                knockback = (0.01f * hit->x24 *
-                             ((it_804D6D28->x80_float[11] *
-                               (attr->x1C_damage_mul *
-                                ((it_804D6D28->x80_float[10] *
-                                  it_804D6D28->x80_float[8]) +
-                                 (it_804D6D28->x80_float[9] *
-                                  (it_804D6D28->x80_float[10] * hit->x28))))) +
-                              it_804D6D28->x80_float[12])) +
-                            hit->x2C;
-            } else {
-                knockback = ((0.01f * hit->x24) *
-                             ((it_804D6D28->x80_float[11] *
-                               (attr->x1C_damage_mul *
-                                ((it_804D6D28->x80_float[8] *
-                                  (arg_item->xC9C + (f32) arg_item->xCA0)) +
-                                 (it_804D6D28->x80_float[9] *
-                                  (hit->damage * (arg_item->xC9C +
-                                                  (f32) arg_item->xCA0)))))) +
-                              it_804D6D28->x80_float[12])) +
-                            hit->x2C;
-            }
+            knockback = itCalcDamageKnockback(arg_item, hit);
             knockback_cap = it_804D6D28->x80_float[7];
             if (knockback >= knockback_cap) {
                 knockback = knockback_cap;

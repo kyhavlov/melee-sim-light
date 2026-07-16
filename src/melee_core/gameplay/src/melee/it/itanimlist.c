@@ -33,13 +33,6 @@ ItCmd it_803F22A8[16] = {
     it_802798D4, it_8027990C, it_80279958, it_802799A8,
 };
 
-typedef struct itAnimlistCmdUnk {
-    u16 x0_b0 : 6;
-    u16 opcode : 8;
-    u16 x0_b14 : 2;
-    u16 x2;
-} itAnimlistCmdUnk;
-
 static inline u16 itAnimlist_GetU16(const CommandInfo* cmd, int index)
 {
 #ifdef MSL_CORE_NATIVE
@@ -58,6 +51,26 @@ static inline u16 itAnimlist_GetU16(const CommandInfo* cmd, int index)
 static inline s16 itAnimlist_GetS16(const CommandInfo* cmd, int index)
 {
     return (s16) itAnimlist_GetU16(cmd, index);
+}
+
+static inline u32 itAnimlist_GetU32(const CommandInfo* cmd)
+{
+#ifdef MSL_CORE_NATIVE
+    const u8* bytes = (const u8*) cmd->u;
+
+    // Native DAT translation keeps authored PPC command words in source byte
+    // order inside widened CmdUnion slots. Decode the word explicitly: GCC's
+    // scalar-storage-order bitfield views are not reliable for every signed /
+    // unsigned overlay used by the item command interpreter.
+    // refs/melee/src/melee/it/itanimlist.c::it_802790C0
+    // refs/melee/src/melee/lb/types.h::{it_create_hitbox_0,
+    //                                  spawn_hitbox_1,spawn_hitbox_2,
+    //                                  spawn_hitbox_3,it_create_hitbox_4}
+    return ((u32) bytes[0] << 24) | ((u32) bytes[1] << 16) |
+           ((u32) bytes[2] << 8) | bytes[3];
+#else
+    return *(const u32*) cmd->u;
+#endif
 }
 
 void it_80278F2C(Item_GObj* item_gobj, CommandInfo* cmd)
@@ -96,9 +109,9 @@ void it_802790C0(Item_GObj* item_gobj, CommandInfo* cmd)
     Item* item = item_gobj->user_data;
     struct ItemHitbox* hb;
     HitCapsule* hit;
-    union CmdUnion* u = cmd->u;
-    u32 hitbox_idx = u->it_create_hitbox_0.id;
-    u32 x4 = u->it_create_hitbox_0.hit_group;
+    u32 word = itAnimlist_GetU32(cmd);
+    u32 hitbox_idx = (word >> 23) & 7;
+    u32 x4 = (word >> 20) & 7;
     u32 bone_idx;
     hb = &item->x5D4_hitboxes[hitbox_idx];
     hit = &hb->hit;
@@ -111,7 +124,7 @@ void it_802790C0(Item_GObj* item_gobj, CommandInfo* cmd)
         it_8026FCF8(item, hit);
     }
 
-    bone_idx = cmd->u->it_create_hitbox_0.bone;
+    bone_idx = (word >> 13) & 0x7F;
     if (bone_idx != 0) {
         if (item->xBBC_dynamicBoneTable == NULL) {
             HSD_ASSERTREPORT(0x8B, 0, "item can\'t set attack!\n");
@@ -122,34 +135,38 @@ void it_802790C0(Item_GObj* item_gobj, CommandInfo* cmd)
     }
     it_80272460(hit,
                 item->xC3C *
-                    ((f32) cmd->u->it_create_hitbox_0.damage * item->xC40),
+                    ((f32) (word & 0x1FFF) * item->xC40),
                 item_gobj);
     ++cmd->u;
 
-    hit->scale = 0.003906f * cmd->u->create_hitbox_1.size;
+    word = itAnimlist_GetU32(cmd);
+    hit->scale = 0.003906f * (word >> 16);
     item->x3C = hit->scale;
     it_80275594(item_gobj, hitbox_idx, 1.0f / item->scl);
-    hit->b_offset.x = 0.003906f * cmd->u->create_hitbox_1.z_offset;
+    hit->b_offset.x = 0.003906f * (s16) (word & 0xFFFF);
     ++cmd->u;
-    hit->b_offset.y = 0.003906f * cmd->u->create_hitbox_2.y_offset;
-    hit->b_offset.z = 0.003906f * cmd->u->create_hitbox_2.x_offset;
+    word = itAnimlist_GetU32(cmd);
+    hit->b_offset.y = 0.003906f * (s16) (word >> 16);
+    hit->b_offset.z = 0.003906f * (s16) (word & 0xFFFF);
     ++cmd->u;
 
-    hit->kb_angle = cmd->u->create_hitbox_3.angle;
-    hit->x24 = cmd->u->create_hitbox_3.knockback_growth;
-    hit->x28 = cmd->u->create_hitbox_3.weight_set_knockback;
+    word = itAnimlist_GetU32(cmd);
+    hit->kb_angle = (word >> 23) & 0x1FF;
+    hit->x24 = (word >> 14) & 0x1FF;
+    hit->x28 = (word >> 5) & 0x1FF;
     hit->x43_b1 = 0;
     ++cmd->u;
 
-    hit->x2C = cmd->u->it_create_hitbox_4.base_knockback;
-    hit->element = cmd->u->it_create_hitbox_4.element;
-    hit->x40_b0 = cmd->u->it_create_hitbox_4.x40_b0;
+    word = itAnimlist_GetU32(cmd);
+    hit->x2C = (word >> 23) & 0x1FF;
+    hit->element = (word >> 18) & 0x1F;
+    hit->x40_b0 = (word >> 17) & 1;
     hit->x40_b1 = 0;
-    hit->x34 = cmd->u->it_create_hitbox_4.shield_damage;
-    hit->sfx_severity = cmd->u->it_create_hitbox_4.sfx_severity;
-    hit->sfx_kind = cmd->u->it_create_hitbox_4.sfx_kind;
-    hit->x40_b2 = cmd->u->it_create_hitbox_4.x40_b2;
-    hit->x40_b3 = cmd->u->it_create_hitbox_4.x40_b3;
+    hit->x34 = (s8) ((word >> 9) & 0xFF);
+    hit->sfx_severity = (word >> 6) & 7;
+    hit->sfx_kind = (word >> 2) & 0xF;
+    hit->x40_b2 = word & 1;
+    hit->x40_b3 = (word >> 1) & 1;
     ++cmd->u;
 
     hit->x40_b4 = ((u8*) cmd->u)[0];
@@ -254,13 +271,18 @@ void it_80279768(Item_GObj* gobj, CommandInfo* cmd)
 void it_8027978C(Item_GObj* item_gobj, CommandInfo* cmd)
 {
     Item* item = item_gobj->user_data;
-    itAnimlistCmdUnk* ptr = (itAnimlistCmdUnk*) cmd->u;
-    s32 opcode = ptr->opcode;
+    u32 word = itAnimlist_GetU32(cmd);
+    s32 opcode = (word >> 18) & 0xFF;
     u32 arg1;
     u8 arg2;
     u8 arg3;
     PAD_STACK(8);
-    cmd->u = (union CmdUnion*) (ptr + 1);
+    // The source cursor advances one 4-byte CmdUnion. Native CmdUnion is
+    // widened to hold translated control-flow pointers, so advancing the
+    // temporary 4-byte command view would land in slot padding.
+    // refs/melee/src/melee/it/itanimlist.c::it_8027978C
+    // refs/melee/src/melee/lb/types.h::CmdUnion
+    ++cmd->u;
     if (opcode < 10) {
         if (opcode < 3) {
             if (opcode >= 0) {
@@ -276,7 +298,7 @@ void it_8027978C(Item_GObj* item_gobj, CommandInfo* cmd)
     }
 
 low_opcode:
-    arg1 = *(u32*) cmd->u;
+    arg1 = itAnimlist_GetU32(cmd);
     ++cmd->u;
     arg2 = ((u8*) cmd->u)[2];
     arg3 = ((u8*) cmd->u)[3];

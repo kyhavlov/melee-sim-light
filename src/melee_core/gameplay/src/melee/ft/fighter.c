@@ -955,7 +955,14 @@ Fighter_GObj* Fighter_Create(struct plAllocInfo* input)
     HSD_GObj_SetupProc(gobj, &Fighter_UnkCallCameraCallback_8006D9EC, 0x12);
     HSD_GObj_SetupProc(gobj, &Fighter_8006DA4C, 0x16);
     Fighter_UnkProcessDeath_80068354(gobj);
-    if (Player_GetFlagsBit3(fp->player_id) != 0) {
+    // Preserve the retail inactive half of a Sheik/Zelda pair. Presentation
+    // setup remains omitted above, but transformation ownership is gameplay:
+    // the secondary entity must enter Sleep rather than the versus Entry
+    // state or it remains scheduled/collidable beside the active fighter.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_Create
+    if (input->has_transformation) {
+        ftCo_800BFD04(gobj);
+    } else if (Player_GetFlagsBit3(fp->player_id) != 0) {
         ftCo_800C61B0(gobj);
     } else {
         ftCommon_8007D92C(gobj);
@@ -1858,6 +1865,13 @@ void Fighter_Spaghetti_8006AD10(Fighter_GObj* gobj)
     Fighter* fp = GET_FIGHTER(gobj);
     float tempf1;
     float tempf0;
+
+#ifdef MSL_CORE_HOSTED
+    {
+        extern void msl_slippi_apply_fighter_pre_random_seed(void);
+        msl_slippi_apply_fighter_pre_random_seed();
+    }
+#endif
 
     if (!fp->x221F_b3) {
         if (!fp->x2224_b2) {
@@ -2939,7 +2953,6 @@ void Fighter_ProcessHit_8006D1EC(Fighter_GObj* gobj)
         if (forceAppliedOnHit) {
             s32 ground_or_air = fp->ground_or_air;
             bool damage_bool;
-
             fp->dmg.x189C_unk_num_frames = 0.0f;
             Fighter_UnkTakeDamage_8006CC30(fp, fp->dmg.x1838_percentTemp);
             ftCo_Damage_CalcKnockback(fp);

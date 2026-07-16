@@ -19,6 +19,8 @@ typedef struct MslCoreSlippiState {
     u8 fod_platform_changed_mask;
     u8 fod_platform_applied_mask;
     u8 dreamland_whispy_direction;
+    u8 fighter_pre_random_seed_pending;
+    u32 fighter_pre_random_seed;
 } MslCoreSlippiState;
 
 struct MslCoreStageEvents;
@@ -31,6 +33,7 @@ bool msl_slippi_fod_platform_height(u8 platform, f32 source_height,
 bool msl_slippi_fod_platform_was_applied(u8 platform);
 void msl_slippi_fod_platform_mark_applied(u8 platform);
 bool msl_slippi_dreamland_whispy_direction(u8* direction);
+void msl_slippi_apply_fighter_pre_random_seed(void);
 void msl_slippi_lcancel_set(struct Fighter* fp, u8 value);
 u8 msl_slippi_lcancel_get(const struct Fighter* fp);
 

@@ -23,6 +23,8 @@ typedef struct MslCoreMatchRules {
     bool brawl_offscreen_damage;
     bool freeze_dead_up_fall_physics;
     bool ucf_cardinals_1_0_enabled;
+    bool ucf_shield_sdi_enabled;
+    bool ucf_sdi_enabled;
     u32 frame_count;
     bool ended;
     u8 respawn_reservation_timer[6];
@@ -35,7 +37,9 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
                                float damage_ratio, int online_fnmsubs_zero,
                                int brawl_offscreen_damage,
                                int freeze_dead_up_fall_physics,
-                               int ucf_cardinals_1_0_enabled);
+                               int ucf_cardinals_1_0_enabled,
+                               int ucf_shield_sdi_enabled,
+                               int ucf_sdi_enabled);
 bool msl_core_uses_online_fnmsubs_zero(void);
 bool msl_core_has_brawl_offscreen_damage(void);
 bool msl_core_freezes_dead_up_fall_physics(void);

@@ -11,6 +11,7 @@
 #include "ft/ftcommon.h"
 #include "ft/types.h"
 #include "ftKirby/ftkirby.h"
+#include "MetroTRK/intrinsics.h"
 
 #include <common_structs.h>
 #include <dolphin/mtx.h>
@@ -53,8 +54,14 @@ void ftCo_8009EE30(Fighter_GObj* gobj)
         ftKb_SpecialN_800F1F1C(gobj, &vec);
         Fighter_ChangeMotionState(gobj, ftCo_MS_StopWall, Ft_MF_None, 0, 1, 0,
                                   NULL);
-        fp->cur_pos.x = -(fp->x68C_transNPos.z * -fp->facing_dir -
-                          (fp->cur_pos.x + vec.x));
+        // GALE01 0x8009EED4..0x8009EEDC adds the wall contact offset, then
+        // projects TransN with one scalar-single fnmsubs. Preserve that
+        // operation boundary on hosted builds as well as PPC.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_StopWall.c
+        // data/raw/main.dol (GALE01 0x8009EED4..0x8009EEDC)
+        fp->cur_pos.x =
+            __fnmsubs(fp->x68C_transNPos.z, -fp->facing_dir,
+                      fp->cur_pos.x + vec.x);
     }
     ft_800843FC(gobj);
     ftCommon_8007E2FC(gobj);

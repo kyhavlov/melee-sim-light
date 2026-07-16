@@ -1,12 +1,11 @@
 # Source-Shaped Melee Core
 
-Status: Phase 5.5 canonical source promotion and the Phase 5 Fox/Falco stages, Marth, and Captain
-Falcon packets are complete. PPC32 and native x86-64 compile the tracked repository-owned gameplay
-source directly. The growing supported singles gate selects 70 aggregate entries and completes as
-43 strict passes plus 27 exact source classifications over 628,119 transitions. The active
-autonomous goal continues with combined Sheik/Zelda and doubles until the 97-singles/21-doubles
-domain is complete. Real multi-match context ownership, arbitrary savestates, the replacement API,
-and Wasm/viewer cutover remain deferred until that broader source closure is stable.
+Status: Phase 5.5 canonical source promotion and the Phase 5 singles packets are complete. PPC32
+and native x86-64 compile the tracked repository-owned gameplay source directly. The full
+97-replay legal-stage singles gate completes as 50 strict passes plus 47 exact source
+classifications over 848,202 transitions. The active autonomous goal continues with the 21-replay
+doubles packet. Real multi-match context ownership, arbitrary savestates, the replacement API, and
+Wasm/viewer cutover remain deferred until that broader source closure is stable.
 
 Branch base: `core-rewrite` at `6fbcc9bc7719` (`Rewrite core contact and motion state ownership`).
 
@@ -1255,6 +1254,49 @@ common-callback closure. Run the Sheik and Zelda manifests, the deferred Falcon 
 entire 97-entry singles aggregate. Preserve strict matching where the replay records the source
 runtime and classify only bounded source/emulator boundaries with concrete evidence. Commit the
 combined Sheik/Zelda packet independently.
+
+Subphase D result: complete. The canonical build now compiles the complete reached Sheik and Zelda
+lifecycle and special-state units together with thrown/held needles, Chain, Vanish, Din's Fire, and
+Din's Fire explosion article owners. Transformation uses the retail two-entity player mapping: the
+inactive half enters Sleep, the active entity pointer follows the source swap, and native
+initialization translates and preloads both fighters' immutable DAT graphs before runtime. The
+hosted registry, source item tables, article attributes, generic Slippi byte serializer, and
+little-endian item-command decoder now cover the complete admitted transformation boundary.
+
+Two shared source corrections were proven while closing the packet. Every `ftMapping_list`
+consumer now reads the real character mapping rather than a nonmatching linker-layout alias. More
+importantly, GALE01 `mpColl_80049EAC_LeftWall` loads the left-wall candidate count, while the pinned
+nonmatching C used the adjacent right-wall count; correcting that owner removes the former
+Yoshi's collision divergences in both `StraightScratchyCheetah` and `falcon_demo`. The latter falls
+from 5,869 divergent rows with no suffix to 50 isolated ULP/signed-zero rows followed by 2,189 exact
+transitions. The correction is recorded as an upstream candidate.
+
+Replay playback now carries the source RNG observation at the fighter-pre scheduler boundary in
+addition to frame-start RNG. This recreates the stream phase observed by Slippi after earlier
+stage/effect callbacks without changing ordinary free-running semantics. Per-replay UCF metadata
+can independently select Cardinals 1.0, Shield SDI, and SDI patches; the old pre-UCF Zelda/Falcon
+stream therefore runs through the corresponding vanilla source gates rather than through an input
+workaround.
+
+The 20-entry Sheik gate is two strict passes plus eighteen exact classifications, and all four
+Zelda fixtures pass strictly. The three deferred Falcon-versus-transformation streams add one
+strict pass and two exact classifications. PPC/native fingerprints are identical for every replay
+except `MixedAllQuetzal`: PPC has one isolated historical-needle byte, while native's FObj/JObj
+evaluation moves a terminal Fox hurt capsule by about 0.01 units at one needle contact, producing a
+bounded 662-row consequence and the same 3,382-transition exact suffix. Both backend snapshots are
+locked explicitly. The complete legal-stage singles gate now reports 50 strict passes, 47 exact
+classifications, zero failures, and zero errors over 848,202 transitions at roughly 177k aggregate
+native frames/second. All six supported fighters are now the default validation scope.
+
+Future ownership recorded by this packet:
+
+- `GameData`: immutable Sheik/Zelda fighter archives, paired motion/animation tables, costume
+  graphs, article catalogs and attributes, item command streams, and transformation mapping;
+- `MatchState`: both transformation entities and active selector, needle/Chain/Din's Fire article
+  state, fixed pools, player/UCF histories, frame-start and fighter-pre replay RNG observations,
+  scheduler state, collision candidates, and live pose matrices;
+- explicit presentation exclusions: Chain's unassigned fixed-pool metadata residue, render/VI
+  magnifier publication, audio/particles, and emulator-build-specific float execution profiles.
 
 #### Subphase E — Four-player and doubles
 

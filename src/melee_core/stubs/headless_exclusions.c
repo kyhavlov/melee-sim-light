@@ -78,6 +78,11 @@ PRESENTATION_NOOP(lbBgFlash_80021410)
 PRESENTATION_NOOP(lbRefract_80022BB8)
 PRESENTATION_NOOP(psInitDataBank)
 PRESENTATION_NOOP(psInitDataBankLoad)
+// Transform-state copying only asks the crowd owner to arm a gasp. Its two
+// source writes are audio scheduling and are not read by gameplay.
+// refs/melee/src/melee/{ft/ftcommon.c::ftCommon_8007EFC8,
+// sfx/crowdsfx.c::un_80322314}
+PRESENTATION_NOOP(un_80322314)
 
 HSD_GObj* lbAudioAx_800263E8(float direction, HSD_GObj* entity,
                              int behavior, int sfx_id, int start_value,

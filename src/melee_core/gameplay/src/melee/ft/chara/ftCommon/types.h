@@ -34,7 +34,11 @@ union ftCommon_MotionVars {
     struct {
         /* fp+2340 */ int x0;
         /* fp+2344 */ Vec3 x4;
-        /* fp+2350 */ UNK_T x10;
+        // This is an opaque 32-bit motion-state lane, not a host pointer.
+        // Widening it shifts x14..x58 away from every character motion-var
+        // overlay on native builds.
+        // refs/melee/src/melee/ft/{types.h,ft_0D27.c,ft_0D31.c}
+        /* fp+2350 */ u32 x10;
         /* fp+2354 */ float x14;
         /* fp+2358 */ float x18;
         /* fp+235C */ float x1C;

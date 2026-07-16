@@ -795,7 +795,12 @@ typedef struct itSeakChain_Attrs {
     /* +40 */ f32 x40;
     /* +44 */ f32 x44;
     /* +48 */ f32 x48;
-    /* +4C */ u8 pad_4C[0x8];
+    // Sheik's fighter-side chain view consumes these authored scalars,
+    // including x50 as the initial chain launch speed. They are not padding.
+    // refs/melee/src/melee/ft/chara/ftSeak/
+    //   {types.h::itChainSegment,ftSk_SpecialS.c::ftSk_SpecialS_CheckInitChain}
+    /* +4C */ f32 x4C;
+    /* +50 */ f32 x50;
     /* +54 */ f32 x54;
     /* +58 */ f32 x58;
     /* +5C */ f32 x5C;

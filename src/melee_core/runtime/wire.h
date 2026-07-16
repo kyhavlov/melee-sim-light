@@ -28,10 +28,15 @@ typedef struct MslCoreInput {
 
 typedef struct MslCoreStageEvents {
     float fod_platform_height[2];
+    // Slippi records the global RNG both at the frame-start scheduler boundary
+    // and again when the first fighter input callback begins. The latter
+    // closes over earlier stage/effect consumers without making them fighter
+    // logic.
+    uint32_t fighter_pre_random_seed;
     uint8_t fod_platform_mask;
     uint8_t dreamland_whispy_valid;
     uint8_t dreamland_whispy_direction;
-    uint8_t _pad0;
+    uint8_t fighter_pre_random_seed_valid;
 } MslCoreStageEvents;
 
 typedef struct MslCoreStreamFrame {
@@ -73,6 +78,15 @@ typedef struct MslCoreMatchConfig {
     // UCF dashback/shield-drop behavior without cardinal snapping.
     // refs/slippi-ssbm-asm/Output/InjectionLists/list_netplay.json
     uint8_t ucf_cardinals_1_0_enabled;
+    // UCF's shield-SDI injection was not present in every Slippi UCF profile.
+    // Keep it independent of dashback, shield drop, and cardinal snapping so
+    // older recordings do not receive a second, unrecorded SDI displacement.
+    // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF Shield SDI.asm
+    uint8_t ucf_shield_sdi_enabled;
+    // UCF's ordinary hitlag-SDI injection is a separate rollout/capability
+    // from shield SDI and from the original dashback/shield-drop mechanics.
+    // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF SDI.asm
+    uint8_t ucf_sdi_enabled;
     // Bit 0: Slippi 3.18+ FoD platform events; bit 1: Dream Land Whispy
     // direction events. A present stream is authoritative even on frames with
     // no event, where the last published value remains active.
@@ -150,9 +164,9 @@ typedef struct MslCoreCompare {
 
 _Static_assert(sizeof(MslCoreInputPlayer) == 8, "MslCoreInputPlayer wire size");
 _Static_assert(sizeof(MslCoreInput) == 32, "MslCoreInput wire size");
-_Static_assert(sizeof(MslCoreStageEvents) == 12, "stage events wire size");
-_Static_assert(sizeof(MslCoreStreamFrame) == 48, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 49, "MslCoreMatchConfig wire size");
+_Static_assert(sizeof(MslCoreStageEvents) == 16, "stage events wire size");
+_Static_assert(sizeof(MslCoreStreamFrame) == 52, "stream frame wire size");
+_Static_assert(sizeof(MslCoreMatchConfig) == 51, "MslCoreMatchConfig wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1022, "MslCoreCompare wire size");
 

@@ -28,6 +28,9 @@ static MslCoreMatchRules* msl_bound_match_rules;
     (msl_bound_match_rules->freeze_dead_up_fall_physics)
 #define msl_ucf_cardinals_1_0_enabled \
     (msl_bound_match_rules->ucf_cardinals_1_0_enabled)
+#define msl_ucf_shield_sdi_enabled \
+    (msl_bound_match_rules->ucf_shield_sdi_enabled)
+#define msl_ucf_sdi_enabled (msl_bound_match_rules->ucf_sdi_enabled)
 #define msl_match_frame_count (msl_bound_match_rules->frame_count)
 #define msl_match_ended (msl_bound_match_rules->ended)
 #define msl_respawn_reservation_timer                                         \
@@ -87,7 +90,9 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
                                float damage_ratio, int online_fnmsubs_zero,
                                int brawl_offscreen_damage,
                                int freeze_dead_up_fall_physics,
-                               int ucf_cardinals_1_0_enabled)
+                               int ucf_cardinals_1_0_enabled,
+                               int ucf_shield_sdi_enabled,
+                               int ucf_sdi_enabled)
 {
     memset(rules, 0, sizeof(*rules));
     msl_core_bind_match_rules(rules);
@@ -97,6 +102,8 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
     msl_brawl_offscreen_damage = brawl_offscreen_damage != 0;
     msl_freeze_dead_up_fall_physics = freeze_dead_up_fall_physics != 0;
     msl_ucf_cardinals_1_0_enabled = ucf_cardinals_1_0_enabled != 0;
+    msl_ucf_shield_sdi_enabled = ucf_shield_sdi_enabled != 0;
+    msl_ucf_sdi_enabled = ucf_sdi_enabled != 0;
 }
 
 bool msl_core_uses_online_fnmsubs_zero(void)
@@ -184,8 +191,13 @@ void msl_ucf_apply_pad_buffer(Fighter* fp)
     // own this buffer. Preserve recordings made before the cardinal patch was
     // enabled instead of inferring their input profile from replay rows.
     // refs/ucf/src/pad_buffer/pad_buffer.cpp::gecko_entry
-    if (msl_ucf_cardinals_1_0_enabled) {
-        // Zelda's teleport exception belongs to the Sheik/Zelda packet.
+    if (msl_ucf_cardinals_1_0_enabled &&
+        !(fp->kind == FTKIND_ZELDA && fp->motion_id == 349))
+    {
+        // UCF deliberately preserves Zelda's unsnapped raw stick during the
+        // Farore's Wind startup state so the teleport angle is not changed.
+        // refs/ucf/src/pad_buffer/pad_buffer.cpp::should_apply_cardinals
+        // refs/ucf/include/melee/characters/zelda.h::AS_Zelda_SpecialHiStart
         msl_ucf_apply_cardinal(buffer->pending_x, buffer->pending_y,
                                &fp->input.lstick);
         msl_ucf_apply_cardinal(buffer->pending_cx, buffer->pending_cy,
@@ -256,7 +268,7 @@ bool msl_ucf_sdi_check(const Fighter* fp)
 
     // refs/ucf/src/sdi/sdi.cpp::check_f2_sdi. The caller invokes this only
     // after allow_sdi and the current-stick magnitude gate have succeeded.
-    if (fp->x673 >= 2 && fp->x674 >= 2) {
+    if (!msl_ucf_sdi_enabled || (fp->x673 >= 2 && fp->x674 >= 2)) {
         return false;
     }
     return fp->input.lstick1.x * fp->input.lstick1.x +
@@ -272,7 +284,7 @@ bool msl_ucf_shield_sdi_check(const Fighter* fp)
 
     // refs/ucf/src/shield_sdi/shield_sdi.cpp::check_f2_sdi. Preserve the
     // patch's signed last-X comparison; it intentionally does not use abs.
-    return fp->x673 < 2 &&
+    return msl_ucf_shield_sdi_enabled && fp->x673 < 2 &&
            fp->input.lstick1.x < p_ftCommonData->sdi_min_stick_mag &&
            dx * dx > 62 * 62;
 }

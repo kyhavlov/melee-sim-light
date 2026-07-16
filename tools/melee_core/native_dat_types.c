@@ -10,11 +10,14 @@
 #include "ft/chara/ftCaptain/types.h"
 #include "ft/chara/ftFox/types.h"
 #include "ft/chara/ftMars/types.h"
+#include "ft/chara/ftSeak/types.h"
+#include "ft/chara/ftZelda/types.h"
 #include "ft/types.h"
 #include "ft/fighter.h"
 #include "gr/types.h"
 #include "it/it_3F14.h"
 #include "it/itCharItems.h"
+#include "it/items/itseakneedlethrown.h"
 #include "lb/lbanim.h"
 #include "mp/types.h"
 #include "pl/types.h"
@@ -110,8 +113,23 @@ typedef struct MslDatHeihoAttrs {
 // x48_items[3]. Both are direct consumers in their source OnLoad callbacks.
 // refs/melee/src/melee/ft/chara/{ftFox/ftFx_Init.c,ftFalco/ftFc_Init.c}
 typedef Article* MslDatSpaceAnimalArticles[4];
+// PlSk.dat's ftData.x48_items is a mixed six-word table. The first four
+// entries are character articles; ftSk_SpecialS_80110610 consumes entries
+// four and five as pointers to Chain animation-joint pointer tables.
+// refs/melee/src/melee/ft/chara/ftSeak/ftSk_SpecialS.c
+typedef struct MslDatSheikArticles {
+    Article* articles[4];
+    HSD_Joint** chain_joint_tables[2];
+} MslDatSheikArticles;
+typedef Article* MslDatZeldaArticles[2];
 typedef MslDatSpaceAnimalArticles* MslDatArticleList;
 typedef uint8_t MslDatAnimBytePair[2];
+// itzeldadinfire.c consumes the otherwise-void Article.x4 as twelve f32s.
+// Its anonymous local declaration is the source authority for this DAT graph.
+// refs/melee/src/melee/it/items/itzeldadinfire.c
+typedef struct MslDatZeldaDinFireAttrs {
+    float values[12];
+} MslDatZeldaDinFireAttrs;
 
 // Keeping an address of each root forces GCC to emit its complete reachable
 // type graph even when debug-type elimination is enabled by the toolchain.
@@ -149,14 +167,22 @@ void* msl_native_dat_type_roots[] = {
     (MslDatHeihoAttrs*) 0,
     (MslDatArticleList*) 0,
     (MslDatSpaceAnimalArticles*) 0,
+    (MslDatSheikArticles*) 0,
+    (MslDatZeldaArticles*) 0,
     (struct Fighter_WaitAnimData*) 0,
     (MslDatAnimBytePair*) 0,
     (ftFox_DatAttrs*) 0,
     (ftCaptain_DatAttrs*) 0,
     (MarsAttributes*) 0,
+    (ftSeakAttributes*) 0,
+    (ftZelda_DatAttrs*) 0,
     (FoxLaserAttr*) 0,
     (FoxBlasterAttr*) 0,
     (FoxIllusionAttr*) 0,
+    (itSeakNeedleThrownAttributes*) 0,
+    (itSeakChain_Attrs*) 0,
+    (MslDatZeldaDinFireAttrs*) 0,
+    (itZeldaDinFireExplodeAttributes*) 0,
     (struct Fighter_804D6518_t*) 0,
     (struct Fighter_804D651C_t*) 0,
     (struct Fighter_804D6520_t*) 0,

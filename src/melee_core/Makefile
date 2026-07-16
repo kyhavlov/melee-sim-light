@@ -26,7 +26,7 @@ HOST_CC ?= cc
 MSL_DATA_DIR ?= $(ROOT)/data
 DATA ?= $(abspath $(MSL_DATA_DIR))/raw
 VALIDATION_SUITE ?= replays/suites/aggregate_recent.json
-VALIDATION_CHARACTERS ?= Fox,Falco,Marth,Captain Falcon
+VALIDATION_CHARACTERS ?= Fox,Falco,Marth,Captain Falcon,Sheik,Zelda
 VALIDATION_STAGES ?= 32,31,3,2,8,28
 VALIDATION_BACKEND ?= native
 VALIDATION_WORKERS ?= 0
@@ -47,7 +47,14 @@ UPSTREAM_REL_SRCS += \
 	melee/it/items/itfoxlaser.c \
 	melee/it/items/itfoods.c \
 	melee/it/items/itfreeze.c \
-	melee/it/items/itheiho.c
+	melee/it/items/itheiho.c \
+	melee/it/items/itlinkhookshot.c \
+	melee/it/items/itseakchain.c \
+	melee/it/items/itseakneedleheld.c \
+	melee/it/items/itseakneedlethrown.c \
+	melee/it/items/itseakvanish.c \
+	melee/it/items/itzeldadinfire.c \
+	melee/it/items/itzeldadinfireexplode.c
 UPSTREAM_SRCS := $(addprefix $(SOURCE_TREE)/src/,$(UPSTREAM_REL_SRCS))
 PPC_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(PPC_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
 NATIVE_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(NATIVE_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
@@ -110,7 +117,8 @@ NATIVE_SMOKE_SRCS := \
 PPC_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(PPC_OBJ_DIR)/%.o,$(SMOKE_SRCS))
 NATIVE_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(NATIVE_SMOKE_SRCS))
 DEPS := $(PPC_OBJS:.o=.d) $(PPC_SMOKE_OBJS:.o=.d) $(NATIVE_OBJS:.o=.d) \
-	$(NATIVE_SMOKE_OBJS:.o=.d)
+	$(NATIVE_SMOKE_OBJS:.o=.d) $(NATIVE_DAT_PPC_TYPES_OBJ:.o=.d) \
+	$(NATIVE_DAT_NATIVE_TYPES_OBJ:.o=.d)
 
 BINARY := $(PPC_BUILD)/melee-core-ppc
 NATIVE_BINARY := $(NATIVE_BUILD)/melee-core-native
@@ -218,12 +226,12 @@ $(NATIVE_DAT_PPC_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(TOOLCHAIN_STAMP)
 	@mkdir -p "$(@D)"
 	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
 		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
-		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) -g -gdwarf-4 \
+		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) -MMD -MP -g -gdwarf-4 \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
 $(NATIVE_DAT_NATIVE_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC)
 	@mkdir -p "$(@D)"
-	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) -g -gdwarf-4 -w \
+	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
 $(NATIVE_DAT_LAYOUT_SRC): $(NATIVE_DAT_PPC_TYPES_OBJ) $(NATIVE_DAT_NATIVE_TYPES_OBJ) $(NATIVE_DAT_LAYOUT_GENERATOR)

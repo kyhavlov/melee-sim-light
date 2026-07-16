@@ -59,6 +59,7 @@ typedef struct Primitive {
 } Primitive;
 
 typedef struct ReplayPlayer {
+  Primitive random_seed;
   Primitive buttons;
   Primitive main_x;
   Primitive main_y;
@@ -493,6 +494,7 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
       node_child(leader, "post", &post, error, error_size) != 0) {
     return -1;
   }
+  FIELD(pre, "random_seed", "I", player->random_seed);
   FIELD(pre, "buttons_physical", "S", player->buttons);
   FIELD(pre, "raw_analog_x", "c", player->main_x);
   FIELD(pre, "raw_analog_y", "c", player->main_y);
@@ -1063,7 +1065,11 @@ static void record_detail(ValidationResult* result, int64_t frame, const char* f
     summary->count += 1;
     summary->last_frame = frame;
   }
-  if (result->detail_count >= MAX_DETAILS) {
+  // Keep the forensic sample useful when an early persistent field (for
+  // example an instance id) differs on every later row: retain the first
+  // occurrence of each distinct field instead of filling the bounded detail
+  // array with repeats. Aggregate counts and fingerprints remain unchanged.
+  if (summary == NULL || summary->count != 1 || result->detail_count >= MAX_DETAILS) {
     return;
   }
   detail = &result->details[result->detail_count++];
@@ -1129,6 +1135,18 @@ static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemField
     ITEM_KIND_FOX_BLASTER = 74,
     // refs/melee/src/melee/it/forward.h::It_Kind_Falco_Blaster.
     ITEM_KIND_FALCO_BLASTER = 75,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Seak_NeedleHeld.
+    ITEM_KIND_SHEIK_NEEDLE_HELD = 80,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Seak_NeedleThrow.
+    ITEM_KIND_SHEIK_NEEDLE_THROWN = 79,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Seak_Vanish.
+    ITEM_KIND_SHEIK_VANISH = 85,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Seak_Chain.
+    ITEM_KIND_SHEIK_CHAIN = 97,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Zelda_DinFire.
+    ITEM_KIND_ZELDA_DIN_FIRE = 108,
+    // refs/melee/src/melee/it/forward.h::It_Kind_Zelda_DinFire_Explode.
+    ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE = 109,
   };
 
   if ((item->type == ITEM_KIND_FOX_BLASTER || item->type == ITEM_KIND_FALCO_BLASTER) &&
@@ -1156,6 +1174,57 @@ static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemField
     // xDE0. SendItemInfo.s therefore records pointer bytes or unowned
     // allocator residue in all four generic misc positions for this kind.
     // refs/melee/src/melee/it/{itCharItems.h,items/itfoxillusion.c}
+    return 0;
+  }
+  if (item->type == ITEM_KIND_SHEIK_NEEDLE_HELD && spec->offset >= offsetof(MslCoreItem, misc0) &&
+      spec->offset <= offsetof(MslCoreItem, misc3)) {
+    // The held-needle union owns only a fighter pointer at xDD4. The four
+    // generic Slippi samples are therefore allocator-address bytes or bytes
+    // beyond the declared article state; neither is deterministic gameplay.
+    // refs/melee/src/melee/it/{itCharItems.h,
+    //   items/itseakneedleheld.c}
+    return 0;
+  }
+  if (item->type == ITEM_KIND_SHEIK_NEEDLE_THROWN &&
+      (spec->offset == offsetof(MslCoreItem, misc0) ||
+       spec->offset == offsetof(MslCoreItem, misc1))) {
+    // The thrown-needle constructor never initializes xDD4/xDD8. Slippi's
+    // first two generic samples expose those allocator-residue bytes; later
+    // samples come from the initialized historical-position vector and remain
+    // gameplay-bearing.
+    // refs/melee/src/melee/it/{itCharItems.h,
+    //   items/itseakneedlethrown.c::it_802AFD8C}
+    return 0;
+  }
+  if (item->type == ITEM_KIND_SHEIK_VANISH && spec->offset >= offsetof(MslCoreItem, misc0) &&
+      spec->offset <= offsetof(MslCoreItem, misc3)) {
+    // Vanish owns no item-variable struct. SendItemInfo's generic bytes are
+    // untouched fixed-pool residue rather than source gameplay state.
+    // refs/melee/src/melee/it/items/itseakvanish.c
+    return 0;
+  }
+  if (item->type == ITEM_KIND_SHEIK_CHAIN && (spec->offset == offsetof(MslCoreItem, misc0) ||
+                                              spec->offset == offsetof(MslCoreItem, misc1))) {
+    // The first two generic samples are low bytes of ItemLink pointers. Their
+    // allocator addresses are process-local; the later x14/x18 scalar lanes
+    // remain compared through the source-layout serializer.
+    // refs/melee/src/melee/it/itCharItems.h::itSeakChain_ItemVars
+    return 0;
+  }
+  if (item->type == ITEM_KIND_ZELDA_DIN_FIRE && spec->offset == offsetof(MslCoreItem, misc0)) {
+    // The projectile's first source word is explicitly padding and is not
+    // initialized by it_802C1590. Slippi exposes fixed-pool residue there.
+    // refs/melee/src/melee/it/{itCommonItems.h,
+    //   items/itzeldadinfire.c::it_802C1590}
+    return 0;
+  }
+  if (item->type == ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE &&
+      (spec->offset == offsetof(MslCoreItem, misc2) ||
+       spec->offset == offsetof(MslCoreItem, misc3))) {
+    // The declared explosion variables end at source offset +0x10. Slippi's
+    // +0x17/+0x1B samples are unowned fixed-pool residue beyond that struct.
+    // refs/melee/src/melee/it/itCharItems.h::
+    //   itZeldaDinFireExplode_ItemVars
     return 0;
   }
   return 1;
@@ -1258,6 +1327,9 @@ static void refill_write_buffer(StreamState* state) {
     int64_t event;
     memset(&frame, 0, sizeof(frame));
     frame.frame_pre_random_seed = get_u32(&state->replay->frame_seed, raw);
+    frame.stage_events.fighter_pre_random_seed =
+        get_u32(&state->replay->players[0].random_seed, raw);
+    frame.stage_events.fighter_pre_random_seed_valid = 1;
     build_input(state->replay, raw, &frame.input);
     if (state->replay->fod_platform_list != NULL) {
       int64_t start = list_range_start(state->replay->fod_platform_list, raw);
@@ -1694,6 +1766,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "signed_zero_equal",
       "native",
       "ucf_cardinals_1_0_enabled",
+      "ucf_shield_sdi_enabled",
+      "ucf_sdi_enabled",
       NULL,
   };
   PyObject* frames_obj;
@@ -1710,6 +1784,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int signed_zero_equal = 0;
   int direct_native = 0;
   int ucf_cardinals_1_0_enabled = 1;
+  int ucf_shield_sdi_enabled = 1;
+  int ucf_sdi_enabled = 1;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -1727,11 +1803,11 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   PyObject* result = NULL;
   (void)self;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOssss|OKdppp:validate_replay", keywords,
-                                   &frames_obj, &start_obj, &metadata_obj, &qemu_path, &sysroot,
-                                   &binary_path, &data_root, &start_frame_obj, &frames_limit,
-                                   &timeout, &signed_zero_equal, &direct_native,
-                                   &ucf_cardinals_1_0_enabled)) {
+  if (!PyArg_ParseTupleAndKeywords(
+          args, kwargs, "OOOssss|OKdppppp:validate_replay", keywords, &frames_obj, &start_obj,
+          &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
+          &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
+          &ucf_shield_sdi_enabled, &ucf_sdi_enabled)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -1786,9 +1862,11 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   }
   for (i = 0; i < replay.num_players; ++i) {
     uint8_t character = get_u8(&replay.players[i].character, rows.raw[0]);
-    if (character != 1 && character != 2 && character != 18 && character != 22) {
+    if (character != 1 && character != 2 && character != 7 && character != 18 && character != 19 &&
+        character != 22) {
       PyErr_SetString(PyExc_ValueError,
-                      "Melee core requires Fox, Captain Falcon, Marth, or Falco players");
+                      "Melee core requires Fox, Captain Falcon, Sheik, Marth, Zelda, or Falco "
+                      "players");
       goto done;
     }
   }
@@ -1848,6 +1926,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   state.config.brawl_offscreen_damage = replay.brawl_offscreen_damage;
   state.config.freeze_dead_up_fall_physics = replay.freeze_dead_up_fall_physics;
   state.config.ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
+  state.config.ucf_shield_sdi_enabled = (uint8_t)ucf_shield_sdi_enabled;
+  state.config.ucf_sdi_enabled = (uint8_t)ucf_sdi_enabled;
   state.config.stage_event_streams = (replay.fod_platform_list != NULL ? 1U : 0U) |
                                      (replay.dreamland_whispy_list != NULL ? 2U : 0U);
   for (i = 0; i < replay.num_players; ++i) {

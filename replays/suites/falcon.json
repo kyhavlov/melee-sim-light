@@ -150,6 +150,9 @@
     },
     {
       "replay": "replays/validation/falcon/OddballCleanViper.slpz",
+      "ucf_cardinals_1_0_enabled": false,
+      "ucf_shield_sdi_enabled": false,
+      "ucf_sdi_enabled": false,
       "ports": [
         1,
         2

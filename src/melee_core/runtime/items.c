@@ -7,6 +7,12 @@
 #include "it/items/itfoxillusion.h"
 #include "it/items/itfoxlaser.h"
 #include "it/items/itheiho.h"
+#include "it/items/itseakchain.h"
+#include "it/items/itseakneedleheld.h"
+#include "it/items/itseakneedlethrown.h"
+#include "it/items/itseakvanish.h"
+#include "it/items/itzeldadinfire.h"
+#include "it/items/itzeldadinfireexplode.h"
 #include "pl/plattack.h"
 #include "pl/plstale.h"
 #include "pl/pltrick.h"
@@ -16,8 +22,8 @@
 #include "ft/ftlib.h"
 #include "it/inlines.h"
 
-// Source registry projection for the Fox/Falco character articles admitted by
-// the current domain. Indices are ItemKind - It_Kind_Kuriboh, matching
+// Source registry projection for the admitted character articles. Indices are
+// ItemKind - It_Kind_Kuriboh, matching
 // refs/melee/src/melee/it/item.c::Item_80267978 and the full tables in
 // refs/melee/src/melee/it/it_279C.c.
 struct sdata_ItemGXLink it_803F2F28[118] = {
@@ -29,6 +35,12 @@ struct sdata_ItemGXLink it_803F2F28[118] = {
     [It_Kind_Falco_Phantasm - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Fox_Blaster - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Falco_Blaster - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Seak_NeedleThrow - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Seak_NeedleHeld - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Seak_Vanish - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Seak_Chain - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Zelda_DinFire - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Zelda_DinFire_Explode - It_Kind_Kuriboh] = { NULL },
 };
 
 struct ItemLogicTable it_803F3100[118] = {
@@ -134,9 +146,116 @@ struct ItemLogicTable it_803F3100[118] = {
         NULL,
         itFoxBlaster_Logic96_EvtUnk,
     },
+    [It_Kind_Seak_NeedleThrow - It_Kind_Kuriboh] = {
+        it_803F6F50,
+        NULL,
+        itSeakNeedleThrown_Logic109_Destroyed,
+        NULL,
+        NULL,
+        NULL,
+        it_2725_Logic109_DmgDealt,
+        it_2725_Logic109_DmgReceived,
+        NULL,
+        it_2725_Logic109_Reflected,
+        it_2725_Logic109_Clanked,
+        NULL,
+        it_2725_Logic109_ShieldBounced,
+        it_2725_Logic109_HitShield,
+        itSeakNeedleThrown_Logic109_EvtUnk,
+    },
+    [It_Kind_Seak_NeedleHeld - It_Kind_Kuriboh] = {
+        it_803F70A8,
+        NULL,
+        NULL,
+        itSeakNeedleHeld_Logic110_PickedUp,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        itSeakNeedleHeld_Logic110_EvtUnk,
+    },
+    [It_Kind_Seak_Vanish - It_Kind_Kuriboh] = {
+        it_803F70B8,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        itSeakVanish_Logic42_DmgDealt,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_802B1DCC,
+    },
+    [It_Kind_Seak_Chain - It_Kind_Kuriboh] = {
+        it_803F7438,
+        NULL,
+        NULL,
+        it_2725_Logic54_PickedUp,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        itSeakChain_Logic54_EvtUnk,
+    },
+    [It_Kind_Zelda_DinFire - It_Kind_Kuriboh] = {
+        ItemStateTable_ZeldaDinFire,
+        NULL,
+        itZeldaDinFire_Logic65_Destroyed,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        itZeldaDinFire_Logic65_Reflected,
+        itZeldaDinFire_Logic65_Clanked,
+        itZeldaDinFire_Logic65_Absorbed,
+        NULL,
+        NULL,
+        itZeldaDinFire_Logic65_EvtUnk,
+    },
+    [It_Kind_Zelda_DinFire_Explode - It_Kind_Kuriboh] = {
+        it_803F7740,
+        NULL,
+        itZeldaDinFireExplode_Logic66_Destroyed,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        itZeldaDinFireExplode_Logic66_Clanked,
+        itZeldaDinFireExplode_Logic66_Absorbed,
+        itZeldaDinFireExplode_Logic66_ShieldBounced,
+        itZeldaDinFireExplode_Logic66_HitShield,
+        itZeldaDinFireExplode_Logic66_EvtUnk,
+    },
 };
 
-// The other item classes are outside the items-off Fox/FD boundary. Their
+// The shared item-link constructor used by Sheik's chain copies this zero
+// vector from DOL rodata. The decomp exposes the symbol but not its definition.
+// data/raw/main.dol::0x803B8650 (refs/melee/config/GALE01/symbols.txt)
+Vec3 it_803B8650;
+
+// The other item classes are outside the admitted items-off domain. Their
 // registries remain present so the source item constructor retains its exact
 // class dispatch without keeping unrelated item implementations alive.
 struct sdata_ItemGXLink it_803F1418[43];

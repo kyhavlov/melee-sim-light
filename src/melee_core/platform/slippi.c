@@ -2,11 +2,14 @@
 
 #include "runtime/wire.h"
 
+#include <baselib/random.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static MslCoreSlippiState* msl_bound_slippi_state;
+extern u32* seed_ptr;
 
 // refs/slippi-ssbm-asm/Recording/GetLCancelStatus/GetLCancelStatus.asm
 void msl_slippi_state_bind(MslCoreSlippiState* state)
@@ -40,6 +43,10 @@ void msl_slippi_stage_events_begin(const MslCoreStageEvents* events)
         msl_bound_slippi_state->dreamland_whispy_direction =
             events->dreamland_whispy_direction;
     }
+    msl_bound_slippi_state->fighter_pre_random_seed_pending =
+        events->fighter_pre_random_seed_valid;
+    msl_bound_slippi_state->fighter_pre_random_seed =
+        events->fighter_pre_random_seed;
 }
 
 bool msl_slippi_fod_platform_height(u8 platform, f32 source_height,
@@ -88,6 +95,21 @@ bool msl_slippi_dreamland_whispy_direction(u8* direction)
     }
     *direction = msl_bound_slippi_state->dreamland_whispy_direction;
     return true;
+}
+
+void msl_slippi_apply_fighter_pre_random_seed(void)
+{
+    if (msl_bound_slippi_state->fighter_pre_random_seed_pending != 0) {
+        // Recording/SendFrameStart.s runs at the beginning of the source
+        // scheduler. SendGamePreFrame.asm observes the same stream later at
+        // Fighter_Spaghetti_8006AD10+0x3D0 (GALE01 0x8006B0E0), after any
+        // earlier stage/effect callbacks. Replay validation supplies both
+        // source observations; ordinary free-running steps leave this lane
+        // invalid and advance HSD RNG without intervention.
+        // refs/slippi-ssbm-asm/Recording/{SendFrameStart.s,SendGamePreFrame.asm}
+        *seed_ptr = msl_bound_slippi_state->fighter_pre_random_seed;
+        msl_bound_slippi_state->fighter_pre_random_seed_pending = 0;
+    }
 }
 
 static MslCoreSlippiFighterState* find_state(const struct Fighter* fp,
