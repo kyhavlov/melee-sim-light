@@ -1786,8 +1786,9 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   }
   for (i = 0; i < replay.num_players; ++i) {
     uint8_t character = get_u8(&replay.players[i].character, rows.raw[0]);
-    if (character != 1 && character != 18 && character != 22) {
-      PyErr_SetString(PyExc_ValueError, "Melee core requires Fox, Marth, or Falco players");
+    if (character != 1 && character != 2 && character != 18 && character != 22) {
+      PyErr_SetString(PyExc_ValueError,
+                      "Melee core requires Fox, Captain Falcon, Marth, or Falco players");
       goto done;
     }
   }

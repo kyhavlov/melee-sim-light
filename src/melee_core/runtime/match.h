@@ -25,6 +25,8 @@ typedef struct MslCoreMatchRules {
     bool ucf_cardinals_1_0_enabled;
     u32 frame_count;
     bool ended;
+    u8 respawn_reservation_timer[6];
+    s8 respawn_reservation_character[6];
     MslCoreUcfPadBuffer ucf_pad[4];
 } MslCoreMatchRules;
 

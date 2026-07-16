@@ -1,13 +1,12 @@
 # Source-Shaped Melee Core
 
-Status: Phase 5.5 canonical source promotion and the Phase 5 remaining-stage Fox/Falco packet are
-complete. PPC32 and native x86-64 compile the tracked repository-owned gameplay source directly.
-All 32 Fox/Falco singles across the six legal stages run to completion: the parallel native gate is
-22 strict passes plus ten exact source classifications over 291,689 transitions. The active
-autonomous goal continues with Marth, Captain Falcon, combined Sheik/Zelda, and doubles until the
-97-singles/21-doubles domain is complete. Real multi-match context ownership, arbitrary savestates,
-the replacement API, and Wasm/viewer cutover remain deferred until that broader source closure is
-stable.
+Status: Phase 5.5 canonical source promotion and the Phase 5 Fox/Falco stages, Marth, and Captain
+Falcon packets are complete. PPC32 and native x86-64 compile the tracked repository-owned gameplay
+source directly. The growing supported singles gate selects 70 aggregate entries and completes as
+43 strict passes plus 27 exact source classifications over 628,119 transitions. The active
+autonomous goal continues with combined Sheik/Zelda and doubles until the 97-singles/21-doubles
+domain is complete. Real multi-match context ownership, arbitrary savestates, the replacement API,
+and Wasm/viewer cutover remain deferred until that broader source closure is stable.
 
 Branch base: `core-rewrite` at `6fbcc9bc7719` (`Rewrite core contact and motion state ownership`).
 
@@ -1206,6 +1205,43 @@ packet closes those owners.
 
 Retain every prior result, run the newly supported Falcon subset through completion, and revisit the
 full 22-entry Falcon manifest after Sheik/Zelda support lands. Commit the Falcon packet independently.
+
+Subphase C result: complete for every Falcon replay whose opponent is in the admitted source
+domain. The canonical build now compiles all five matching Captain Falcon source units: lifecycle
+and data registration plus neutral, side, up, and down special owners. Falcon Dive's source capture,
+release, and victim callbacks remain direct common/Captain call-graph owners rather than a validation
+bridge. The hosted registry and native DAT translator load Captain attributes, motion tables,
+costumes, scripts, and reached graphs directly from `PlCa.dat`.
+
+Two shared source owners were completed while exercising the packet. Native DAT translation now
+mirrors an archive's complete four-byte command-word address space into widened `CmdUnion` slots;
+this preserves sequential script cursors and interior relocation targets when several actions share
+a script suffix. Match state now owns the six retail respawn reservations, their 0x90-frame timers,
+and the source `lbl_803B7A44` platform offsets used by stages with a shared spawn point. The latter
+replaces the earlier FD-only spawn shortcut and fixes simultaneous Fountain/Yoshi's respawns without
+character or replay conditions.
+
+The immediately supported 19-replay Falcon gate is eleven strict passes plus eight exact
+classifications over 156,548 transitions, with zero open failures. Complete native and PPC runs
+produce identical fingerprints for all eight residual streams. Six are bounded Dolphin ULP motion
+profiles with exact trailing intervals, one Nintendont stream contains only two accepted magnifier
+damage ticks, and the manual `falcon_demo` records an unresolved Dolphin one-ULP root-motion result
+that later changes a Yoshi's collision branch. That last classification locks the entire resulting
+stream and stays explicitly unresolved; no tolerance or replay-keyed gameplay behavior was added.
+
+The growing legal-stage singles gate now selects 70 aggregate entries and reports 43 strict passes,
+27 exact classifications, zero failures, and zero errors over 628,119 transitions.
+`Fox,Falco,Marth,Captain Falcon` is now the default validation character scope. The three Falcon
+replays versus Sheik/Zelda remain intentionally deferred to the combined transformation packet.
+
+Future ownership recorded by this packet:
+
+- `GameData`: immutable Captain fighter/archive attributes, motion/animation command address space,
+  costume graphs, and reached effect/data catalogs;
+- `MatchState`: Captain fighter/special/capture state, the six respawn reservation timers and
+  character owners, live spawn offsets, player state, effects, controller/UCF history, and RNG;
+- explicit presentation exclusions: audio/rumble, particle rendering, magnifier publication, and
+  emulator-build-specific paired-single/JIT results not present in replay metadata.
 
 #### Subphase D — Sheik and Zelda
 

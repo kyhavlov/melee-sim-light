@@ -442,6 +442,7 @@ def main() -> None:
         "MslDatAnimBytePair",
         "MslDatSpaceAnimalArticles",
         "ftFox_DatAttrs",
+        "ftCaptain_DatAttrs",
         "MarsAttributes",
         "FoxLaserAttr",
         "FoxBlasterAttr",

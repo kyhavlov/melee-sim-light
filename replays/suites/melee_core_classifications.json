@@ -753,6 +753,235 @@
         },
         "ppc": "native"
       }
+    },
+    {
+      "replay": "replays/validation/falcon/Game_20260505T215428.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter velocity and position float execution profile",
+      "rationale": "The first residual is a one-ULP DeadUpFall self-velocity result; later float-derived contact differences reconverge for the final 3,998 transitions. Native and PPC agree on the complete exact fingerprint, while the replay records Dolphin without its build or execution profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11776,
+          "matched_frames": 10721,
+          "mismatched_frames": 1055,
+          "exact_prefix_frames": 4298,
+          "strict_suffix_frames": 3998,
+          "first_mismatch_frame": 4176,
+          "last_mismatch_frame": 7655,
+          "mismatch_count": 1495,
+          "mismatch_fingerprint": "ebf979de0efb3e76",
+          "mismatch_fields_digest": "40c50e893e378293b075421e8d63df5da0823b6827d958b1508ce6fe224aa14a",
+          "render_visibility_mismatch_count": 5,
+          "first_render_visibility_mismatch_frame": 4249,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/Game_20260506T213015.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter velocity float execution profile",
+      "rationale": "Native and PPC agree bit-for-bit. The complete residual is seven sparse rows of self-velocity rounding, with 2,737 exact trailing transitions; the replay records Dolphin without its build or execution profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/ft/ftcommon.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7418,
+          "matched_frames": 7411,
+          "mismatched_frames": 7,
+          "exact_prefix_frames": 2640,
+          "strict_suffix_frames": 2737,
+          "first_mismatch_frame": 2518,
+          "last_mismatch_frame": 4558,
+          "mismatch_count": 12,
+          "mismatch_fingerprint": "335b1359e71e4e18",
+          "mismatch_fields_digest": "409daf1163b7b468fb850ec3fbe339d792c5d91908c5d8f6867742dc7a492805",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/Game_20260501T233530.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter position float execution profile",
+      "rationale": "Native and PPC agree bit-for-bit. One isolated X-position ULP is the complete residual and 3,131 exact transitions follow; the replay records Dolphin without its build or execution profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7277,
+          "matched_frames": 7276,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 4145,
+          "strict_suffix_frames": 3131,
+          "first_mismatch_frame": 4023,
+          "last_mismatch_frame": 4023,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "7df60b2652301ee8",
+          "mismatch_fields_digest": "a0473ab0694d2fbb2e4d6f2cda8274757ac56fdcf6b85137041d6de640824b70",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/Game_20260509T035613.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter position and stage-collision float execution profile",
+      "rationale": "The exact residual consists of bounded one-to-two-ULP position intervals on Yoshi's Story and reconverges for the final 953 transitions. Native and PPC produce the same complete fingerprint; the replay records Dolphin without its build or execution profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "refs/melee/src/melee/mp/mplib.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7955,
+          "matched_frames": 7319,
+          "mismatched_frames": 636,
+          "exact_prefix_frames": 1229,
+          "strict_suffix_frames": 953,
+          "first_mismatch_frame": 1107,
+          "last_mismatch_frame": 6879,
+          "mismatch_count": 661,
+          "mismatch_fingerprint": "eff073ab9f84191b",
+          "mismatch_fields_digest": "a618c878077cad83bd215de50bf34a55642ce1d789e333e02821baa993c5277c",
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/LegitimateTemptingPanther.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter position float execution profile",
+      "rationale": "Native and PPC agree bit-for-bit. Three isolated Y-position ULP rows are the complete residual and 863 exact transitions follow; the replay records Dolphin without its build or execution profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11638,
+          "matched_frames": 11635,
+          "mismatched_frames": 3,
+          "exact_prefix_frames": 10766,
+          "strict_suffix_frames": 863,
+          "first_mismatch_frame": 10644,
+          "last_mismatch_frame": 10652,
+          "mismatch_count": 3,
+          "mismatch_fingerprint": "0d91ab08acafbd1f",
+          "mismatch_fields_digest": "60e12dafb09e675f32679de18fcfe0f7bcea74ee48114f0e174bd53277820b0f",
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/LankyFreshGorilla.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter velocity and position float execution profile",
+      "rationale": "Native and PPC agree bit-for-bit. The complete residual is eight sparse position or self-velocity ULP rows, followed by 1,367 exact transitions; the replay records Dolphin without its build or execution profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/ft/ftcommon.c",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 6618,
+          "matched_frames": 6610,
+          "mismatched_frames": 8,
+          "exact_prefix_frames": 2022,
+          "strict_suffix_frames": 1367,
+          "first_mismatch_frame": 1900,
+          "last_mismatch_frame": 5128,
+          "mismatch_count": 13,
+          "mismatch_fingerprint": "299a02cb463a7c7c",
+          "mismatch_fields_digest": "cd83dfa17e144433b833cb05e1d1af7e99da37f3363e1bddabfefe9fc99551a8",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/EmotionalNaturalLemur.slpz",
+      "id": "vanilla-magnifier-render-schedule",
+      "owner": "ifMagnify/Fighter_8006A360 render-publication boundary",
+      "rationale": "The Nintendont replay does not record the VI/render boundary that publishes x221F_b0. Its magnifier schedule differs for two isolated 1% damage ticks; every other compared transition is exact and native/PPC fingerprints agree.",
+      "sources": [
+        "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
+      ],
+      "expected": {
+        "native": {
+          "frames": 9958,
+          "matched_frames": 9956,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 1318,
+          "strict_suffix_frames": 152,
+          "first_mismatch_frame": 1196,
+          "last_mismatch_frame": 9683,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "872e7d1f1eeac285",
+          "mismatch_fields_digest": "f73471cbdf66498dbf0d97736298f5472b0ad8c3f3a03f2c576c6bf8a3b622b1",
+          "render_visibility_mismatch_count": 12,
+          "first_render_visibility_mismatch_frame": 1136,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/falcon/falcon_demo.slpz",
+      "id": "unresolved-dolphin-root-motion-collision-gate",
+      "owner": "fighter root-motion publication versus Yoshi's stage collision",
+      "rationale": "The first causal residual is a one-ULP Captain Falcon X-position result with every other compared field exact. It remains float-only until Yoshi's collision selects a different branch, after which the match diverges. Native and PPC agree on the complete exact fingerprint, while the manual replay records only Dolphin and not its build or paired-single/JIT execution profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/jobj.c",
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "refs/melee/src/melee/mp/mplib.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7402,
+          "matched_frames": 1533,
+          "mismatched_frames": 5869,
+          "exact_prefix_frames": 622,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 500,
+          "last_mismatch_frame": 7279,
+          "mismatch_count": 120930,
+          "mismatch_fingerprint": "5e73f2a6b24cad4a",
+          "mismatch_fields_digest": "df99fadab86dad61918e6f3e858d9ba923a15670f9e33ccac83ad0ec6c5d83d7",
+          "render_visibility_mismatch_count": 2757,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
     }
   ]
 }

@@ -42,6 +42,8 @@ typedef struct MslNativeArchive {
     MslDatMemo* memo;
     uint32_t memo_count;
     uint32_t memo_capacity;
+    uint8_t* command_words;
+    const MslDatType* command_word_type;
     MslNativePublic* publics;
     uint32_t public_count;
     uint32_t public_capacity;
@@ -288,6 +290,69 @@ static void add_memo(MslNativeArchive* context, uint32_t source_offset,
         (MslDatMemo) { source_offset, type, native };
 }
 
+static void* translate_command_address(MslNativeArchive* context,
+                                       uint32_t source_offset,
+                                       const MslDatType* type)
+{
+    uint32_t count;
+    uint32_t i;
+
+    if (type->source_size != 4 || type->native_size < sizeof(void*) ||
+        source_offset % type->source_size != 0)
+    {
+        fprintf(stderr, "native DAT has an invalid command-word layout\n");
+        abort();
+    }
+    count = (context->data_size + type->source_size - 1) / type->source_size;
+    if (context->command_words == NULL) {
+        context->command_words =
+            native_alloc((size_t) count * type->native_size);
+        context->command_word_type = type;
+
+        // A fighter script may share a suffix with another script, so a
+        // relocation target can lie inside a sequential command stream. A
+        // boundary-sized translation would split that stream into unrelated
+        // allocations once native pointers widen CmdUnion from four to eight
+        // bytes. Mirror the archive's source-word address space once instead:
+        // sequential cursor increments and every interior control-flow target
+        // then retain the retail topology exactly.
+        // refs/melee/src/melee/lb/{types.h,lbcommand.c}
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80073240
+        for (i = 0; i < count; ++i) {
+            uint32_t offset = i * type->source_size;
+            uint32_t remaining = context->data_size - offset;
+            uint32_t size = remaining < type->source_size ? remaining
+                                                          : type->source_size;
+            memcpy(context->command_words + (size_t) i * type->native_size,
+                   context->data + offset, size);
+        }
+        for (i = 0; i < context->reloc_count; ++i) {
+            uint32_t field = context->reloc_fields[i];
+            uint32_t target = read_be32(context->data + field);
+            void* pointer;
+
+            if (field % type->source_size != 0 ||
+                target >= context->data_size ||
+                target % type->source_size != 0)
+            {
+                continue;
+            }
+            pointer = context->command_words +
+                      (size_t) (target / type->source_size) *
+                          type->native_size;
+            memcpy(context->command_words +
+                       (size_t) (field / type->source_size) *
+                           type->native_size,
+                   &pointer, sizeof(pointer));
+        }
+    } else if (context->command_word_type != type) {
+        fprintf(stderr, "native DAT command word requested with two types\n");
+        abort();
+    }
+    return context->command_words +
+           (size_t) (source_offset / type->source_size) * type->native_size;
+}
+
 static void* translate_target_count(MslNativeArchive* context,
                                     uint32_t source_offset,
                                     const MslDatType* type, uint32_t count)
@@ -300,6 +365,9 @@ static void* translate_target_count(MslNativeArchive* context,
         fprintf(stderr, "native DAT pointer %x is outside %x-byte body\n",
                 source_offset, context->data_size);
         abort();
+    }
+    if (strcmp(type->name, "CmdUnion") == 0) {
+        return translate_command_address(context, source_offset, type);
     }
     memo = find_memo(context, source_offset);
     if (memo != NULL) {
@@ -802,6 +870,7 @@ static const MslDatType* public_type(const char* symbol)
         return msl_dat_root_DynamicModelDesc;
     }
     if (strcmp(symbol, "ftDataFox") == 0 ||
+        strcmp(symbol, "ftDataCaptain") == 0 ||
         strcmp(symbol, "ftDataMars") == 0 ||
         strcmp(symbol, "ftDataFalco") == 0)
     {
@@ -1143,6 +1212,10 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftFox_DatAttrs, 327, 1,
                                           0);
+    } else if (strcmp(symbol, "ftDataCaptain") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftCaptain_DatAttrs, 318,
+                                          0, 0);
     } else if (strcmp(symbol, "ftDataMars") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_MarsAttributes, 327, 0,

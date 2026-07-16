@@ -7,6 +7,11 @@ src/MSL/float.c	src/melee_core/gameplay/src/MSL/float.c	Matching	none	compiled d
 src/MSL/math_1.c	src/melee_core/gameplay/src/MSL/math_1.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile
 src/MSL/math_data.c	src/melee_core/gameplay/src/MSL/math_data.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile
 src/MSL/trigf.c	src/melee_core/gameplay/src/MSL/trigf.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile
+src/melee/ft/chara/ftCaptain/ftCa_Init.c	src/melee_core/gameplay/src/melee/ft/chara/ftCaptain/ftCa_Init.c	Matching	captain-source-packet	compiled canonical Captain Falcon lifecycle, state registry, and data-owner callbacks
+src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c	src/melee_core/gameplay/src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c	Matching	captain-source-packet	compiled canonical Captain Falcon up-special and capture/release owner
+src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c	src/melee_core/gameplay/src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c	Matching	captain-source-packet	compiled canonical Captain Falcon down-special owner
+src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c	src/melee_core/gameplay/src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c	Matching	captain-source-packet	compiled canonical Captain Falcon neutral-special owner
+src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c	src/melee_core/gameplay/src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c	Matching	captain-source-packet	compiled canonical Captain Falcon side-special owner
 src/melee/ft/chara/ftCommon/ftCo_09C4.c	src/melee_core/gameplay/src/melee/ft/chara/ftCommon/ftCo_09C4.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_09F4.c	src/melee_core/gameplay/src/melee/ft/chara/ftCommon/ftCo_09F4.c	Matching	none	compiled directly from canonical source by src/melee_core/Makefile
 src/melee/ft/chara/ftCommon/ftCo_09F7.c	src/melee_core/gameplay/src/melee/ft/chara/ftCommon/ftCo_09F7.c	NonMatching	none	compiled directly from canonical source by src/melee_core/Makefile

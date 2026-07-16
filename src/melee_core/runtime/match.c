@@ -30,6 +30,10 @@ static MslCoreMatchRules* msl_bound_match_rules;
     (msl_bound_match_rules->ucf_cardinals_1_0_enabled)
 #define msl_match_frame_count (msl_bound_match_rules->frame_count)
 #define msl_match_ended (msl_bound_match_rules->ended)
+#define msl_respawn_reservation_timer                                         \
+    (msl_bound_match_rules->respawn_reservation_timer)
+#define msl_respawn_reservation_character                                     \
+    (msl_bound_match_rules->respawn_reservation_character)
 #define msl_ucf_pad (msl_bound_match_rules->ucf_pad)
 
 void ftKb_SpecialN_800F1F1C(Fighter_GObj* gobj, Vec3* pos)
@@ -110,7 +114,18 @@ bool msl_core_freezes_dead_up_fall_physics(void)
     return msl_freeze_dead_up_fall_physics;
 }
 
-void msl_core_advance_match_frame(void) { ++msl_match_frame_count; }
+void msl_core_advance_match_frame(void)
+{
+    int i;
+
+    // refs/melee/src/melee/gm/gm_1601.c::fn_8016758C
+    for (i = 0; i < ARRAY_SIZE(msl_respawn_reservation_timer); ++i) {
+        if (msl_respawn_reservation_timer[i] != 0) {
+            --msl_respawn_reservation_timer[i];
+        }
+    }
+    ++msl_match_frame_count;
+}
 
 void msl_ucf_seed_pad(int slot, s8 raw_x, s8 raw_y, s8 raw_cx, s8 raw_cy)
 {
@@ -402,18 +417,51 @@ u32 gm_8016AEEC(void) { return 0; }
 int gm_8017E068(void) { return -1; }
 bool gm_8018841C(void) { return false; }
 
-// Exact Fox/Final Destination branch of
-// refs/melee/src/melee/gm/gm_1601.c::{fn_8016719C,gm_80167320}. The omitted
-// branches belong to single-player modes, transformed/sub-character fighters,
-// and stages whose respawn points move. Final Destination publishes b4/b5 in
-// grLast_OnInit, so its source branch selects the player's fixed spawn index,
-// uses a zero platform offset, and does not retain a moving-ground index.
+static int msl_respawn_position(int slot, Vec3* position, Vec3* offset)
+{
+    static const f32 offsets[6] = { 0.0F, 1.0F, -1.0F,
+                                    2.0F, 0.0F, 0.0F };
+    int character = Player_GetPlayerCharacter(slot);
+    int index;
+
+    // refs/melee/src/melee/gm/gm_1601.c::fn_80167638
+    // data/raw/main.dol::lbl_803B7A44 (symbols.txt address 0x803B7A44)
+    if (stage_info.unk8C.b4) {
+        Stage_80224E38(position, slot);
+        memset(offset, 0, sizeof(*offset));
+        return slot;
+    }
+
+    index = 0;
+    while (index < ARRAY_SIZE(msl_respawn_reservation_timer) &&
+           msl_respawn_reservation_timer[index] != 0)
+    {
+        ++index;
+    }
+    if (index == ARRAY_SIZE(msl_respawn_reservation_timer)) {
+        index = 0;
+    }
+    Stage_80224E38(position, 0);
+    offset->x = 16.0F * offsets[index];
+    offset->y = 0.0F;
+    offset->z = 0.0F;
+    msl_respawn_reservation_timer[index] = 0x90;
+    msl_respawn_reservation_character[index] = character;
+    return 0;
+}
+
+// Source respawn owner for the supported local-stock match domain. The
+// single-player and transformed sub-character teardown branches remain
+// outside this boundary.
+// refs/melee/src/melee/gm/gm_1601.c::{fn_8016719C,fn_80167638,gm_80167320}
 void gm_80167320(int slot, bool subchar)
 {
     Vec3 respawn_pos;
+    Vec3 offset;
+    int ground_index;
 
     if (Player_GetFlagsBit1(slot) != 0) {
-        // Spectator/wireframe teardown is outside the two-human Fox/FD
+        // Spectator/wireframe teardown is outside the supported local-match
         // domain. Normal human Fighter creation leaves this flag clear.
         return;
     }
@@ -426,8 +474,13 @@ void gm_80167320(int slot, bool subchar)
         return;
     }
 
-    Stage_80224E38(&respawn_pos, slot);
+    ground_index = msl_respawn_position(slot, &respawn_pos, &offset);
+    respawn_pos.x += offset.x;
     Player_SetSpawnPlatformPos(slot, &respawn_pos);
+    if (!stage_info.unk8C.b5) {
+        Player_80032FA4(slot, ground_index);
+        Player_SetSomePos(slot, &offset);
+    }
     respawn_pos.y = Stage_GetCamBoundsTopOffset();
     Player_80032768(slot, &respawn_pos);
     Player_SetFacingDirection(slot,

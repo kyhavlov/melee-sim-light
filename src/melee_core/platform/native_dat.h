@@ -79,6 +79,7 @@ extern const MslDatType* const msl_dat_root_Fighter_WaitAnimData;
 extern const MslDatType* const msl_dat_root_MslDatAnimBytePair;
 extern const MslDatType* const msl_dat_root_MslDatSpaceAnimalArticles;
 extern const MslDatType* const msl_dat_root_ftFox_DatAttrs;
+extern const MslDatType* const msl_dat_root_ftCaptain_DatAttrs;
 extern const MslDatType* const msl_dat_root_MarsAttributes;
 extern const MslDatType* const msl_dat_root_FoxLaserAttr;
 extern const MslDatType* const msl_dat_root_FoxBlasterAttr;

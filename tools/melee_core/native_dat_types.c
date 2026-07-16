@@ -7,6 +7,7 @@
 // the public-root consumers named below.
 
 #include "ef/types.h"
+#include "ft/chara/ftCaptain/types.h"
 #include "ft/chara/ftFox/types.h"
 #include "ft/chara/ftMars/types.h"
 #include "ft/types.h"
@@ -151,6 +152,7 @@ void* msl_native_dat_type_roots[] = {
     (struct Fighter_WaitAnimData*) 0,
     (MslDatAnimBytePair*) 0,
     (ftFox_DatAttrs*) 0,
+    (ftCaptain_DatAttrs*) 0,
     (MarsAttributes*) 0,
     (FoxLaserAttr*) 0,
     (FoxBlasterAttr*) 0,

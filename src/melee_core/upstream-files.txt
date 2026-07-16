@@ -93,9 +93,15 @@ src/melee/ef/forward.h
 src/melee/ef/types.h
 src/melee/ft/chara/ftCLink/ftCl_Init.h
 src/melee/ft/chara/ftCaptain/forward.h
+src/melee/ft/chara/ftCaptain/ftCa_Init.c
 src/melee/ft/chara/ftCaptain/ftCa_Init.h
+src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c
+src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.h
+src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c
 src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.h
+src/melee/ft/chara/ftCaptain/ftCa_SpecialN.c
 src/melee/ft/chara/ftCaptain/ftCa_SpecialN.h
+src/melee/ft/chara/ftCaptain/ftCa_SpecialS.c
 src/melee/ft/chara/ftCaptain/ftCa_SpecialS.h
 src/melee/ft/chara/ftCaptain/types.h
 src/melee/ft/chara/ftCommon/forward.h

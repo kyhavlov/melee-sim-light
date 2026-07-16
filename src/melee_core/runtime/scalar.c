@@ -58,6 +58,7 @@ enum {
     MSL_CORE_STAGE_BATTLEFIELD = 31,
     MSL_CORE_STAGE_FINAL_DESTINATION = 32,
     MSL_CORE_CHAR_FOX = 1,
+    MSL_CORE_CHAR_CAPTAIN_FALCON = 2,
     MSL_CORE_CHAR_MARTH = 18,
     MSL_CORE_CHAR_FALCO = 22,
     MSL_CORE_STICK_SCALE = 80,
@@ -146,6 +147,8 @@ static const MslCoreStageSpec* stage_spec(uint8_t external_id)
 static CharacterKind source_character_kind(uint8_t external_id)
 {
     switch (external_id) {
+    case MSL_CORE_CHAR_CAPTAIN_FALCON:
+        return CKIND_CAPTAIN;
     case MSL_CORE_CHAR_MARTH:
         return CKIND_MARS;
     case MSL_CORE_CHAR_FALCO:
@@ -380,10 +383,12 @@ static int validate_config(MslCoreMatchConfig* config)
     }
     for (i = 0; i < 2; ++i) {
         if (config->players[i].char_id != MSL_CORE_CHAR_FOX &&
+            config->players[i].char_id != MSL_CORE_CHAR_CAPTAIN_FALCON &&
             config->players[i].char_id != MSL_CORE_CHAR_MARTH &&
             config->players[i].char_id != MSL_CORE_CHAR_FALCO) {
             fprintf(stderr,
                     "current core supports external char_id=1 Fox, "
+                    "char_id=2 Captain Falcon, "
                     "char_id=18 Marth, and char_id=22 Falco only\n");
             return -1;
         }

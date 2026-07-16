@@ -105,7 +105,7 @@ def test_native_validation_compares_complete_classified_replays() -> None:
     classifications = load_classifications(DEFAULT_CLASSIFICATIONS)
     _suite, suite_cases = load_suite_cases(
         ROOT / "replays/suites/aggregate_recent.json",
-        characters=frozenset(("fox", "falco", "marth")),
+        characters=frozenset(("fox", "falco", "marth", "captain falcon")),
         stages=frozenset((2, 3, 8, 28, 31, 32)),
     )
     cases_by_path = {case.display_path: case for case in suite_cases}

@@ -14,6 +14,7 @@ int DbLevel;
 // explicitly instead of relying on adjacent DOL BSS symbols.
 // refs/melee/src/melee/ft/ftdata.c::CostumeListsForeachCharacter
 UnkCostumeStruct ft_80459B28[4];
+UnkCostumeStruct ft_80459A98[6];
 UnkCostumeStruct ft_8045A0F0[5];
 UnkCostumeStruct ft_8045A420[4];
 
