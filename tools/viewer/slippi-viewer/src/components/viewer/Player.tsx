@@ -41,9 +41,7 @@ function Shield(props: { renderData: RenderData }) {
     props.renderData.animationName === "GuardDamage"
       ? getPlayerOnFrame(
           props.renderData.playerSettings.playerIndex,
-          getStartOfAction(
-            props.renderData.playerState
-          )
+          getStartOfAction(props.renderData.playerState)
         ).inputs.processed.anyTrigger
       : props.renderData.playerInputs.processed.anyTrigger === 0
       ? 1
@@ -56,20 +54,27 @@ function Shield(props: { renderData: RenderData }) {
   const shieldSizeMultiplier = createMemo(
     () => ((shieldHealth() * triggerStrengthMultiplier()) / 60) * 0.85 + 0.15
   );
+  const shieldTiltDistance = createMemo(
+    () => props.renderData.characterData.shieldSize * 0.25
+  );
   const shieldX = createMemo(() => {
     const x = props.renderData.playerState.shieldX;
     return typeof x === "number" && Number.isFinite(x)
       ? x
       : props.renderData.playerState.xPosition +
           props.renderData.characterData.shieldOffset[0] *
-            props.renderData.playerState.facingDirection;
+            props.renderData.playerState.facingDirection +
+          (props.renderData.playerState.shieldTiltX ?? 0) *
+            shieldTiltDistance();
   });
   const shieldY = createMemo(() => {
     const y = props.renderData.playerState.shieldY;
     return typeof y === "number" && Number.isFinite(y)
       ? y
       : props.renderData.playerState.yPosition +
-          props.renderData.characterData.shieldOffset[1];
+          props.renderData.characterData.shieldOffset[1] +
+          (props.renderData.playerState.shieldTiltY ?? 0) *
+            shieldTiltDistance();
   });
   const shieldRadius = createMemo(() => {
     const r = props.renderData.playerState.shieldRadius;

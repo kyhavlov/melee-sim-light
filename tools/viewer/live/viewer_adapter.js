@@ -1,12 +1,14 @@
 import {
   BUTTONS,
-  HITBOX_PLAYER_SIZE,
-  HITBOX_SIZE,
   ITEM_SIZE,
-  compareOffsets,
-  hitboxOffsets,
+  VIEWER_HITBOX_SIZE,
+  VIEWER_PLAYER_SIZE,
   itemOffsets,
-  stageStateOffsets,
+  viewerCameraOffsets,
+  viewerHitboxOffsets,
+  viewerOffsets,
+  viewerPlayerOffsets,
+  viewerStageOffsets,
 } from "./schema.js";
 
 const HURTBOX_STATES = ["vulnerable", "invulnerable", "intangible"];
@@ -35,30 +37,11 @@ function f32(view, offset) {
   return view.getFloat32(offset, true);
 }
 
-function arrU8(view, base, index) {
-  return u8(view, base + index);
-}
-
-function arrU16(view, base, index) {
-  return u16(view, base + index * 2);
-}
-
-function arrI16(view, base, index) {
-  return i16(view, base + index * 2);
-}
-
-function arrU32(view, base, index) {
-  return u32(view, base + index * 4);
-}
-
-function arrF32(view, base, index) {
-  return f32(view, base + index * 4);
-}
-
 function externalCharId(internalCharId) {
   if (internalCharId === 1) return 2;
   if (internalCharId === 2) return 0;
   if (internalCharId === 7) return 19;
+  if (internalCharId === 9) return 12;
   if (internalCharId === 18) return 9;
   if (internalCharId === 19) return 18;
   if (internalCharId === 22) return 20;
@@ -110,22 +93,23 @@ function controllerInput(frameNumber, playerIndex, controller) {
   };
 }
 
-export function viewerSettingsFromCompare(compare, { startStocks = 4 } = {}) {
-  const numPlayers = u8(compare, compareOffsets.numPlayers);
+export function viewerSettingsFromState(state) {
+  const numPlayers = u8(state, viewerOffsets.numPlayers);
   const playerSettings = [];
   for (let idx = 0; idx < numPlayers; idx += 1) {
-    const charId = arrU8(compare, compareOffsets.charId, idx);
+    const base = viewerOffsets.players + idx * VIEWER_PLAYER_SIZE;
+    const charId = u8(state, base + viewerPlayerOffsets.charId);
     playerSettings.push({
       playerIndex: idx,
       port: idx + 1,
       externalCharacterId: externalCharId(charId),
       internalCharacterIds: [charId],
       playerType: idx === 0 ? 0 : 1,
-      startStocks,
+      startStocks: u8(state, viewerOffsets.stockCount),
       costumeIndex: 0,
       teamShade: 0,
       handicap: 9,
-      teamId: arrU8(compare, compareOffsets.teamId, idx),
+      teamId: u8(state, base + viewerPlayerOffsets.teamId),
       staminaMode: false,
       silentCharacter: false,
       lowGravity: false,
@@ -144,19 +128,20 @@ export function viewerSettingsFromCompare(compare, { startStocks = 4 } = {}) {
       connectCode: "",
     });
   }
+  const stageId = u32(state, viewerOffsets.stageId);
   return {
     replayFormatVersion: "3.9.0.0",
     startTimestamp: "2026-04-08T00:00:00Z",
-    isTeams: Boolean(u8(compare, compareOffsets.isTeams)),
-    stageId: u32(compare, compareOffsets.stageId),
+    isTeams: Boolean(u8(state, viewerOffsets.isTeams)),
+    stageId,
     isPal: false,
-    isFrozenStadium: u32(compare, compareOffsets.stageId) === 3,
+    isFrozenStadium: stageId === 3,
     platform: "dolphin",
     consoleNickname: "melee-sim-light-browser",
     timerType: "counting down",
     characterUiPlacesCount: numPlayers,
     gameType: "stock",
-    friendlyFireOn: false,
+    friendlyFireOn: Boolean(u8(state, viewerOffsets.friendlyFire)),
     isBreakTheTargetsOrTitleDemo: false,
     isClassicOrAdventureMode: false,
     isHomeRunContestOrEventMatch: false,
@@ -166,31 +151,51 @@ export function viewerSettingsFromCompare(compare, { startStocks = 4 } = {}) {
     itemSpawnRate: "off",
     selfDestructScoreValue: -1,
     timerStart: 480,
-    damageRatio: 1.0,
+    damageRatio: f32(state, viewerOffsets.damageRatio),
     playerSettings,
   };
 }
 
-export function viewerFrameFromCompare(
-  compare,
-  frameNumber,
-  controllersByPlayer,
-  stageState = null,
-  shieldBubbles = null,
-  hitboxes = null
-) {
-  const numPlayers = u8(compare, compareOffsets.numPlayers);
+function playerHitboxes(state, playerBase) {
+  const hitboxes = [];
+  const base = playerBase + viewerPlayerOffsets.hitboxes;
+  for (let id = 0; id < 4; id += 1) {
+    const off = base + id * VIEWER_HITBOX_SIZE;
+    const radius = f32(state, off + viewerHitboxOffsets.radius);
+    if (!u8(state, off + viewerHitboxOffsets.enabled) || !(radius > 0)) {
+      continue;
+    }
+    hitboxes.push({
+      id,
+      x: f32(state, off + viewerHitboxOffsets.x),
+      y: f32(state, off + viewerHitboxOffsets.y),
+      z: f32(state, off + viewerHitboxOffsets.z),
+      radius,
+      damage: f32(state, off + viewerHitboxOffsets.damage),
+      bonePartId: u16(state, off + viewerHitboxOffsets.bonePartId),
+    });
+  }
+  return hitboxes;
+}
+
+export function viewerFrameFromState(state, frameNumber, controllersByPlayer) {
+  const numPlayers = u8(state, viewerOffsets.numPlayers);
   const players = [];
   for (let idx = 0; idx < numPlayers; idx += 1) {
-    const flagsBase = compareOffsets.stateFlags + idx * 5;
-    const flags2218 = u8(compare, flagsBase);
-    const flags221a = u8(compare, flagsBase + 1);
-    const flags221b = u8(compare, flagsBase + 2);
-    const flags221c = u8(compare, flagsBase + 3);
-    const hurtboxState = arrU8(compare, compareOffsets.hurtboxState, idx);
-    const controller = controllersByPlayer[idx] ?? {};
-    const shieldRadius = shieldBubbles ? arrF32(shieldBubbles, 0, idx * 4 + 3) : 0;
+    const base = viewerOffsets.players + idx * VIEWER_PLAYER_SIZE;
+    const flags = base + viewerPlayerOffsets.stateFlags;
+    const flags2218 = u8(state, flags);
+    const flags221a = u8(state, flags + 1);
+    const flags221b = u8(state, flags + 2);
+    const flags221c = u8(state, flags + 3);
+    const hurtboxState = u8(state, base + viewerPlayerOffsets.hurtboxState);
+    const shieldRadius = f32(state, base + viewerPlayerOffsets.shieldRadius);
     const hasShieldBubble = Number.isFinite(shieldRadius) && shieldRadius > 0;
+    const sourceShieldX = f32(state, base + viewerPlayerOffsets.shieldX);
+    const sourceShieldY = f32(state, base + viewerPlayerOffsets.shieldY);
+    const hasShieldCenter =
+      hasShieldBubble && Number.isFinite(sourceShieldX) && Number.isFinite(sourceShieldY);
+    const controller = controllersByPlayer[idx] ?? {};
     players.push({
       frameNumber,
       playerIndex: idx,
@@ -199,42 +204,48 @@ export function viewerFrameFromCompare(
         frameNumber,
         playerIndex: idx,
         isNana: false,
-        internalCharacterId: arrU8(compare, compareOffsets.charId, idx),
-        actionStateId: arrU16(compare, compareOffsets.actionId, idx),
-        xPosition: arrF32(compare, compareOffsets.posX, idx),
-        yPosition: arrF32(compare, compareOffsets.posY, idx),
-        facingDirection: arrU8(compare, compareOffsets.facing, idx) === 0 ? -1.0 : 1.0,
-        percent: arrF32(compare, compareOffsets.percent, idx),
-        shieldSize: arrF32(compare, compareOffsets.shieldHp, idx),
-        shieldX: hasShieldBubble ? arrF32(shieldBubbles, 0, idx * 4) : undefined,
-        shieldY: hasShieldBubble ? arrF32(shieldBubbles, 0, idx * 4 + 1) : undefined,
+        internalCharacterId: u8(state, base + viewerPlayerOffsets.charId),
+        actionStateId: u16(state, base + viewerPlayerOffsets.actionId),
+        xPosition: f32(state, base + viewerPlayerOffsets.posX),
+        yPosition: f32(state, base + viewerPlayerOffsets.posY),
+        facingDirection: u8(state, base + viewerPlayerOffsets.facing) === 0 ? -1.0 : 1.0,
+        percent: f32(state, base + viewerPlayerOffsets.percent),
+        shieldSize: f32(state, base + viewerPlayerOffsets.shieldHp),
+        shieldX: hasShieldCenter ? sourceShieldX : undefined,
+        shieldY: hasShieldCenter ? sourceShieldY : undefined,
         shieldRadius: hasShieldBubble ? shieldRadius : undefined,
-        lastHittingAttackId: 0,
-        currentComboCount: 0,
-        lastHitBy: 0,
-        stocksRemaining: arrU8(compare, compareOffsets.stocks, idx),
-        actionStateFrameCounter: arrI16(compare, compareOffsets.actionFrame, idx),
-        hitstunRemaining: arrU16(compare, compareOffsets.hitstun, idx),
-        isGrounded: Boolean(arrU8(compare, compareOffsets.onGround, idx)),
-        lastGroundId: 0,
-        jumpsRemaining: arrU8(compare, compareOffsets.jumpsLeft, idx),
+        shieldTiltX: hasShieldBubble
+          ? f32(state, base + viewerPlayerOffsets.shieldTiltX)
+          : undefined,
+        shieldTiltY: hasShieldBubble
+          ? f32(state, base + viewerPlayerOffsets.shieldTiltY)
+          : undefined,
+        lastHittingAttackId: u8(state, base + viewerPlayerOffsets.lastAttackLanded),
+        currentComboCount: u8(state, base + viewerPlayerOffsets.comboCount),
+        lastHitBy: u8(state, base + viewerPlayerOffsets.lastHitBy),
+        stocksRemaining: u8(state, base + viewerPlayerOffsets.stocks),
+        actionStateFrameCounter: i16(state, base + viewerPlayerOffsets.actionFrame),
+        hitstunRemaining: u16(state, base + viewerPlayerOffsets.hitstun),
+        isGrounded: Boolean(u8(state, base + viewerPlayerOffsets.onGround)),
+        lastGroundId: u16(state, base + viewerPlayerOffsets.groundId),
+        jumpsRemaining: u8(state, base + viewerPlayerOffsets.jumpsLeft),
         lCancelStatus: null,
         hurtboxCollisionState: HURTBOX_STATES[hurtboxState] ?? "vulnerable",
-        animationIndex: arrU32(compare, compareOffsets.animationIndex, idx),
-        selfInducedAirXSpeed: arrF32(compare, compareOffsets.speedAirXSelf, idx),
-        selfInducedAirYSpeed: arrF32(compare, compareOffsets.speedYSelf, idx),
-        attackBasedXSpeed: arrF32(compare, compareOffsets.speedXAttack, idx),
-        attackBasedYSpeed: arrF32(compare, compareOffsets.speedYAttack, idx),
-        selfInducedGroundXSpeed: arrF32(compare, compareOffsets.speedGroundXSelf, idx),
-        hitlagRemaining: arrU16(compare, compareOffsets.hitlag, idx),
-        hitboxes: playerHitboxes(hitboxes, idx),
+        animationIndex: u32(state, base + viewerPlayerOffsets.animationIndex),
+        selfInducedAirXSpeed: f32(state, base + viewerPlayerOffsets.speedAirXSelf),
+        selfInducedAirYSpeed: f32(state, base + viewerPlayerOffsets.speedYSelf),
+        attackBasedXSpeed: f32(state, base + viewerPlayerOffsets.speedXAttack),
+        attackBasedYSpeed: f32(state, base + viewerPlayerOffsets.speedYAttack),
+        selfInducedGroundXSpeed: f32(state, base + viewerPlayerOffsets.speedGroundXSelf),
+        hitlagRemaining: u16(state, base + viewerPlayerOffsets.hitlag),
+        hitboxes: playerHitboxes(state, base),
         isReflectActive: Boolean(flags2218 & 0x10),
         isFastfalling: Boolean(flags221a & 0x08),
         isShieldActive: Boolean(flags221b & 0x80),
         isInHitstun: Boolean(flags221c & 0x02),
         isHittingShield: false,
         isPowershieldActive: Boolean(flags221c & 0x20),
-        isDead: Boolean(arrU8(compare, compareOffsets.isDead, idx)),
+        isDead: Boolean(u8(state, base + viewerPlayerOffsets.isDead)),
         isOffscreen: false,
       },
     });
@@ -242,81 +253,66 @@ export function viewerFrameFromCompare(
 
   const items = [];
   for (let idx = 0; idx < 15; idx += 1) {
-    const off = compareOffsets.items + idx * ITEM_SIZE;
-    if (!u8(compare, off + itemOffsets.exists)) {
+    const off = viewerOffsets.items + idx * ITEM_SIZE;
+    if (!u8(state, off + itemOffsets.exists)) {
       continue;
     }
     items.push({
       frameNumber,
       slot: idx,
-      typeId: u16(compare, off + itemOffsets.type),
-      state: u8(compare, off + itemOffsets.state),
-      facingDirection: f32(compare, off + itemOffsets.direction),
-      xVelocity: f32(compare, off + itemOffsets.velX),
-      yVelocity: f32(compare, off + itemOffsets.velY),
-      xPosition: f32(compare, off + itemOffsets.posX),
-      yPosition: f32(compare, off + itemOffsets.posY),
-      damageTaken: u16(compare, off + itemOffsets.damage),
-      expirationTimer: f32(compare, off + itemOffsets.timer),
-      spawnId: u32(compare, off + itemOffsets.spawnId),
-      samusMissileType: u8(compare, off + itemOffsets.misc0),
-      peachTurnipFace: u8(compare, off + itemOffsets.misc1),
+      typeId: u16(state, off + itemOffsets.type),
+      state: u8(state, off + itemOffsets.state),
+      facingDirection: f32(state, off + itemOffsets.direction),
+      xVelocity: f32(state, off + itemOffsets.velX),
+      yVelocity: f32(state, off + itemOffsets.velY),
+      xPosition: f32(state, off + itemOffsets.posX),
+      yPosition: f32(state, off + itemOffsets.posY),
+      damageTaken: u16(state, off + itemOffsets.damage),
+      expirationTimer: f32(state, off + itemOffsets.timer),
+      spawnId: u32(state, off + itemOffsets.spawnId),
+      samusMissileType: u8(state, off + itemOffsets.misc0),
+      peachTurnipFace: u8(state, off + itemOffsets.misc1),
       isChargeShotLaunched: false,
-      chargeShotChargeLevel: u8(compare, off + itemOffsets.misc2),
-      owner: i8(compare, off + itemOffsets.owner),
+      chargeShotChargeLevel: u8(state, off + itemOffsets.misc2),
+      owner: i8(state, off + itemOffsets.owner),
     });
   }
 
+  const stage = viewerOffsets.stage;
+  const camera = viewerOffsets.camera;
   return {
     frameNumber,
-    randomSeed: u32(compare, compareOffsets.randomSeed),
+    randomSeed: u32(state, viewerOffsets.randomSeed),
     players,
     items,
     stage: {
       frameNumber,
-      // Debug stage-state platform order follows C runtime owner: 0=right, 1=left.
-      fodLeftPlatformHeight:
-        stageState && stageState.getUint8(stageStateOffsets.fodValid + 1)
-          ? f32(stageState, stageStateOffsets.fodHeight + 4)
-          : undefined,
-      fodRightPlatformHeight:
-        stageState && stageState.getUint8(stageStateOffsets.fodValid)
-          ? f32(stageState, stageStateOffsets.fodHeight)
-          : undefined,
-      randall:
-        stageState && stageState.getUint8(stageStateOffsets.randallExists)
-          ? {
-              exists: true,
-              x: f32(stageState, stageStateOffsets.randallX),
-              y: f32(stageState, stageStateOffsets.randallY),
-            }
-          : undefined,
+      fodLeftPlatformHeight: u8(state, stage + viewerStageOffsets.fodValid + 1)
+        ? f32(state, stage + viewerStageOffsets.fodHeight + 4)
+        : undefined,
+      fodRightPlatformHeight: u8(state, stage + viewerStageOffsets.fodValid)
+        ? f32(state, stage + viewerStageOffsets.fodHeight)
+        : undefined,
+      randall: u8(state, stage + viewerStageOffsets.randallExists)
+        ? {
+            exists: true,
+            x: f32(state, stage + viewerStageOffsets.randallX),
+            y: f32(state, stage + viewerStageOffsets.randallY),
+          }
+        : undefined,
+    },
+    camera: {
+      eye: {
+        x: f32(state, camera + viewerCameraOffsets.eyeX),
+        y: f32(state, camera + viewerCameraOffsets.eyeY),
+        z: f32(state, camera + viewerCameraOffsets.eyeZ),
+      },
+      interest: {
+        x: f32(state, camera + viewerCameraOffsets.interestX),
+        y: f32(state, camera + viewerCameraOffsets.interestY),
+        z: f32(state, camera + viewerCameraOffsets.interestZ),
+      },
+      fov: f32(state, camera + viewerCameraOffsets.fov),
     },
   };
-}
-
-function playerHitboxes(hitboxes, playerIndex) {
-  if (!hitboxes) {
-    return [];
-  }
-  const out = [];
-  const base = playerIndex * HITBOX_PLAYER_SIZE;
-  for (let hb = 0; hb < 4; hb += 1) {
-    const off = base + hb * HITBOX_SIZE;
-    const enabled = f32(hitboxes, off + hitboxOffsets.enabled) !== 0;
-    const radius = f32(hitboxes, off + hitboxOffsets.radius);
-    if (!enabled || !(radius > 0)) {
-      continue;
-    }
-    out.push({
-      id: hb,
-      x: f32(hitboxes, off + hitboxOffsets.x),
-      y: f32(hitboxes, off + hitboxOffsets.y),
-      z: f32(hitboxes, off + hitboxOffsets.z),
-      radius,
-      damage: f32(hitboxes, off + hitboxOffsets.damage),
-      bonePartId: f32(hitboxes, off + hitboxOffsets.bonePartId),
-    });
-  }
-  return out;
 }

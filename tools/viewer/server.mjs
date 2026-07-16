@@ -42,9 +42,9 @@ function checkAssets() {
   const required = [
     urlPath === "/tools/viewer/" ? "tools/viewer/index.html" : "tools/viewer/live/index.html",
     "tools/viewer/msltrace1.js",
-    "tools/viewer/live/public/msl_sim.js",
-    "tools/viewer/live/public/msl_sim.wasm",
-    "tools/viewer/live/public/msl_sim.data",
+    "tools/viewer/live/public/melee-core.js",
+    "tools/viewer/live/public/melee-core.wasm",
+    "tools/viewer/live/public/melee-core.data",
     "tools/viewer/slippi-viewer/dist/index.js",
   ];
   const missing = required.filter((rel) => !fs.existsSync(path.join(staticRoot, rel)));

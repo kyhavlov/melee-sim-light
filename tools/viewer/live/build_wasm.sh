@@ -3,117 +3,47 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 OUT_DIR="$ROOT/tools/viewer/live/public"
+DATA_ROOT="${MSL_DATA_DIR:-$ROOT/data}"
+RAW_DIR="$DATA_ROOT/raw"
 
-DATA_DIR="${MSL_DATA_DIR:-}"
-if [[ -z "$DATA_DIR" ]]; then
-  DATA_DIR="$ROOT/data"
-fi
-if [[ ! -d "$DATA_DIR" ]]; then
-  echo "error: extracted simulator data directory not found: $DATA_DIR" >&2
+if [[ ! -d "$RAW_DIR" ]]; then
+  echo "error: extracted raw game data not found: $RAW_DIR" >&2
   echo "Set MSL_DATA_DIR, or run python -m melee_sim.extract_data --iso /path/to/SSBM.iso." >&2
   exit 1
 fi
-DATA_DIR="$(cd "$DATA_DIR" && pwd)"
+DATA_ROOT="$(cd "$DATA_ROOT" && pwd)"
+RAW_DIR="$DATA_ROOT/raw"
 
 if ! command -v emcc >/dev/null 2>&1; then
   echo "error: emcc is not on PATH. Install/activate Emscripten before building the live viewer." >&2
   exit 1
 fi
 
-required_data=(
-  "$DATA_DIR/common/ft_common_data.json"
-  "$DATA_DIR/stages/battlefield.json"
-  "$DATA_DIR/stages/dream_land_n64.json"
-  "$DATA_DIR/stages/final_destination.json"
-  "$DATA_DIR/stages/fountain_of_dreams.json"
-  "$DATA_DIR/stages/pokemon_stadium.json"
-  "$DATA_DIR/stages/yoshis_story.json"
-  "$DATA_DIR/stages/bin/grnla.bin"
-  "$DATA_DIR/stages/bin/grnba.bin"
-  "$DATA_DIR/stages/bin/griz.bin"
-  "$DATA_DIR/stages/bin/grps.bin"
-  "$DATA_DIR/stages/bin/grst.bin"
-  "$DATA_DIR/stages/bin/grop.bin"
-  "$DATA_DIR/items/item_common.json"
-  "$DATA_DIR/items/lasers.bin"
-  "$DATA_DIR/items/articles/fox_falco.bin"
-  "$DATA_DIR/stage_items/yoshi_shyguy.bin"
-  "$DATA_DIR/stage_items/yoshi_shyguy.json"
-  "$DATA_DIR/stage_items/dream_whispy.bin"
-  "$DATA_DIR/stage_items/dream_whispy.json"
-  "$DATA_DIR/staling/weights.bin"
-)
-
-viewer_chars=(fox falco marth falcon sheik zelda)
-for char in "${viewer_chars[@]}"; do
-  required_data+=(
-    "$DATA_DIR/characters/$char.json"
-    "$DATA_DIR/scripts/$char.bin"
-    "$DATA_DIR/motion_state/owners/$char.bin"
-    "$DATA_DIR/anims/$char.bin"
-    "$DATA_DIR/anims/$char.locals.bin"
-    "$DATA_DIR/anims/$char.dyn.bin"
-    "$DATA_DIR/anims/$char.tracks.bin"
-    "$DATA_DIR/hitboxes/$char.bin"
-    "$DATA_DIR/hurtcaps/$char.bin"
-    "$DATA_DIR/ecb/${char}_bottom.bin"
-    "$DATA_DIR/ecb/${char}_extents.bin"
-    "$DATA_DIR/attack_id/move_id/$char.bin"
-    "$DATA_DIR/shields/$char.bin"
-    "$DATA_DIR/special_msids/$char.json"
-    "$DATA_DIR/staling/move_id/$char.bin"
-  )
-done
-
-missing=0
-for path in "${required_data[@]}"; do
-  if [[ ! -f "$path" ]]; then
-    echo "missing required data: ${path#$DATA_DIR/}" >&2
-    missing=1
-  fi
-done
-if [[ "$missing" != 0 ]]; then
-  echo "Generate/extract data first, then rerun this script." >&2
-  exit 1
+jobs="${MSL_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
+if (( jobs > 16 )); then
+  jobs=16
+fi
+make_jobs=()
+if [[ "${MAKEFLAGS:-}" != *jobserver* ]]; then
+  make_jobs=(-j"$jobs")
 fi
 
+# The canonical melee_core target owns compilation, exports, and data
+# packaging. The ignored raw profile contains only the supported fighter,
+# stage, effect, and common archives produced by the normal extraction
+# contract; no game asset is copied into the repository source tree.
+make --no-print-directory -f "$ROOT/src/melee_core/Makefile" \
+  viewer-schema wasm "${make_jobs[@]}" MSL_DATA_DIR="$DATA_ROOT" DATA="$RAW_DIR"
+
 mkdir -p "$OUT_DIR"
-mkdir -p "$ROOT/build/cache"
-
-PACKAGE_DIR="$(mktemp -d "$ROOT/build/cache/viewer-data.XXXXXX")"
-cleanup() {
-  rm -rf "$PACKAGE_DIR"
-}
-trap cleanup EXIT
-
-for path in "${required_data[@]}"; do
-  rel="${path#$DATA_DIR/}"
-  mkdir -p "$PACKAGE_DIR/$(dirname "$rel")"
-  cp "$path" "$PACKAGE_DIR/$rel"
+for artifact in melee-core.js melee-core.wasm melee-core.data; do
+  source="$ROOT/build/melee_core/wasm/$artifact"
+  if [[ ! -f "$source" ]]; then
+    echo "error: expected Wasm artifact missing: $source" >&2
+    exit 1
+  fi
+  cp "$source" "$OUT_DIR/$artifact"
 done
 
-SRC_FILES=()
-while IFS= read -r -d '' f; do
-  SRC_FILES+=("$f")
-done < <(find "$ROOT/src" -maxdepth 1 -type f -name '*.c' -print0 | sort -z)
-SRC_FILES+=("$ROOT/src/decomp/lb/lb_00ce.c")
-
-emcc "${SRC_FILES[@]}" \
-  -I"$ROOT/src" \
-  -O3 \
-  -Wall \
-  -Wextra \
-  -std=c11 \
-  -ffp-contract=off \
-  -sMODULARIZE=1 \
-  -sEXPORT_ES6=1 \
-  -sEXPORT_NAME=createMslModule \
-  -sENVIRONMENT=web,worker \
-  -sALLOW_MEMORY_GROWTH=1 \
-  -sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_batch_create","_msl_batch_destroy","_msl_batch_init_match","_msl_batch_step_input","_msl_batch_write_compare","_msl_batch_debug_write_processed_input","_msl_batch_debug_write_stage_state","_msl_batch_debug_shield_display_bubbles_world","_msl_batch_debug_hitboxes_world"]' \
-  -sEXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
-  --preload-file "$PACKAGE_DIR@/data" \
-  -o "$OUT_DIR/msl_sim.js"
-
-echo "bundled simulator data from $DATA_DIR ($(du -sh "$PACKAGE_DIR" | awk '{print $1}'))"
-echo "wrote $OUT_DIR/msl_sim.js"
+echo "bundled supported raw profile from $RAW_DIR ($(du -sh "$RAW_DIR" | awk '{print $1}'))"
+echo "wrote $OUT_DIR/melee-core.{js,wasm,data}"

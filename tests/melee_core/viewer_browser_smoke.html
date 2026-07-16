@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>melee_core browser smoke</title>
+  </head>
+  <body data-smoke="PENDING">
+    <slippi-viewer></slippi-viewer>
+    <p id="status"></p>
+    <p id="input-status"></p>
+    <button id="reset"></button>
+    <button id="save-trace"></button>
+    <button id="connect-adapter"></button>
+    <select id="adapter-port"><option value="0">1</option></select>
+    <button id="control-p1"></button>
+    <button id="control-p2"></button>
+    <select id="p1-character"></select>
+    <select id="p2-character"></select>
+    <div id="stage-selector"></div>
+    <pre id="result">PENDING</pre>
+    <script>
+      class SmokeViewer extends HTMLElement {
+        setLiveReplayData(data) { this.replayData = data; }
+        pausePlayback() {}
+        setFrame(frame) { this.frame = frame; }
+        setFrameData(frame, data) { this.frame = frame; this.frameData = data; }
+      }
+      customElements.define("slippi-viewer", SmokeViewer);
+
+      let keyboardStarted = false;
+      let selectorChanged = false;
+      const deadline = performance.now() + 5000;
+      const check = () => {
+        const result = document.querySelector("#result");
+        const status = document.querySelector("#status");
+        const replay = window.__mslViewerReplayData;
+        if (status.classList.contains("error")) {
+          document.body.dataset.smoke = "FAIL";
+          result.textContent = `FAIL ${status.textContent}`;
+          return;
+        }
+        const current = replay?.frames?.[window.__mslViewerFrameCount];
+        const keyboardSeen = current?.players?.[0]?.inputs?.processed?.joystickX === 1;
+        if (!keyboardStarted && window.__mslViewerFrameCount >= 2) {
+          keyboardStarted = true;
+          window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", bubbles: true }));
+        } else if (!selectorChanged && keyboardSeen) {
+          selectorChanged = true;
+          window.dispatchEvent(new KeyboardEvent("keyup", { key: "d", bubbles: true }));
+          window.prompt = () => "phase6-browser-smoke";
+          URL.createObjectURL = () => "blob:phase6-browser-smoke";
+          URL.revokeObjectURL = () => {};
+          HTMLAnchorElement.prototype.click = function () {
+            window.__mslTraceSaved = this.download.endsWith(".msltrace.json");
+          };
+          document.querySelector("#save-trace").click();
+          const character = document.querySelector("#p1-character");
+          character.value = "15";
+          character.dispatchEvent(new Event("change"));
+          document.querySelector('button[data-stage-id="8"]').click();
+        } else if (
+          selectorChanged &&
+          window.__mslViewerFrameCount >= 2 &&
+          replay?.settings?.stageId === 8 &&
+          replay.settings.playerSettings?.[0]?.internalCharacterIds?.[0] === 15 &&
+          window.__mslTraceSaved === true &&
+          Number.isFinite(replay.frames?.[window.__mslViewerFrameCount]?.players?.[0]?.state?.xPosition)
+        ) {
+          document.body.dataset.smoke = "PASS";
+          result.textContent = "PASS browser Wasm reset, selector, step, projection";
+          return;
+        }
+        if (performance.now() >= deadline) {
+          document.body.dataset.smoke = "FAIL";
+          result.textContent = `FAIL timeout ${status.textContent}`;
+          return;
+        }
+        requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    </script>
+    <script type="module" src="/tools/viewer/live/main.js"></script>
+  </body>
+</html>

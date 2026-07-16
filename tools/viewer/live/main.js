@@ -9,7 +9,7 @@ import {
 } from "./schema.js";
 import { MslWasmSim } from "./sim.js";
 import { saveLiveTrace, traceInputFromControllers } from "./trace_export.js";
-import { viewerFrameFromCompare, viewerSettingsFromCompare } from "./viewer_adapter.js";
+import { viewerFrameFromState, viewerSettingsFromState } from "./viewer_adapter.js";
 
 const viewer = document.querySelector("slippi-viewer");
 const statusEl = document.querySelector("#status");
@@ -160,15 +160,7 @@ function installStageSelector() {
 }
 
 function currentViewerFrame(frameNumber, controllers) {
-  const compare = sim.compareView();
-  return viewerFrameFromCompare(
-    compare,
-    frameNumber,
-    controllers,
-    sim.stageStateView(),
-    sim.shieldBubblesView(),
-    sim.hitboxesView()
-  );
+  return viewerFrameFromState(sim.viewerView(), frameNumber, controllers);
 }
 
 function frameHasDeadPlayer(frame) {
@@ -193,7 +185,7 @@ function snapshotWasmTimings() {
   return {
     inputMs: timings.inputMs,
     stepInputMs: timings.stepInputMs,
-    writeCompareMs: timings.writeCompareMs,
+    writeViewerMs: timings.writeViewerMs,
     totalMs: timings.totalMs,
   };
 }
@@ -236,7 +228,7 @@ function appendCurrentFrame(controllers, { render = true } = {}) {
 function reset() {
   if (!sim) return;
   seed = (seed + 1) >>> 0;
-  const compare = sim.reset({
+  const state = sim.reset({
     seed,
     stageId: selectedStageId,
     p1Char: selectedCharacterIds[0],
@@ -248,7 +240,7 @@ function reset() {
   const frames = new Array(MAX_RENDER_FRAMES);
   frames[0] = firstFrame;
   replayData = {
-    settings: viewerSettingsFromCompare(compare),
+    settings: viewerSettingsFromState(state),
     frames,
     ending: {
       gameEndMethod: "GAME!",

@@ -49,6 +49,8 @@ cp "$ROOT/tools/viewer/live/main.js" "$OUT_DIR/tools/viewer/live/main.js"
 cp "$ROOT/tools/viewer/live/build_info.js" "$OUT_DIR/tools/viewer/live/build_info.js"
 cp "$ROOT/tools/viewer/live/sim.js" "$OUT_DIR/tools/viewer/live/sim.js"
 cp "$ROOT/tools/viewer/live/schema.js" "$OUT_DIR/tools/viewer/live/schema.js"
+cp "$ROOT/tools/viewer/live/schema.generated.js" \
+  "$OUT_DIR/tools/viewer/live/schema.generated.js"
 cp "$ROOT/tools/viewer/live/keyboard.js" "$OUT_DIR/tools/viewer/live/keyboard.js"
 cp "$ROOT/tools/viewer/live/gamecube_adapter.js" "$OUT_DIR/tools/viewer/live/gamecube_adapter.js"
 cp "$ROOT/tools/viewer/live/trace_export.js" "$OUT_DIR/tools/viewer/live/trace_export.js"

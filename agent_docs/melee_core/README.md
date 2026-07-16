@@ -1,13 +1,12 @@
 # Source-Shaped Melee Core
 
-Status: Phase 5.5 canonical source promotion, every original Phase 5 supported-domain packet, and
-the post-goal Jigglypuff and Peach source packets are complete. PPC32 and native x86-64 compile the
-tracked repository-owned gameplay source directly. The current 153-replay inventory completes as
-63 strict passes plus 90 exact source classifications over 1,415,476 transitions: 50/47 across the
-97 legal-stage singles, 8/13 across the 21 doubles, 3/12 across the 15-replay Puff extension, and
-2/18 across the 20-replay Peach extension. Real multi-match context ownership, arbitrary
-savestates, the replacement API, and Wasm/viewer cutover remain deferred until the next agreed
-phase.
+Status: Phase 6 is complete. PPC32, native x86-64, and wasm32 compile the tracked canonical
+gameplay source directly. One immutable `GameData` now serves independent resettable matches; the
+parallel batch-first C API, location-independent same-build savestates, persistent validation
+workers, Wasm lifetime/differential target, and production live-viewer cutover are implemented.
+The 153-replay inventory remains locked at 63 strict passes plus 90 exact source classifications
+over 1,415,476 transitions, with no new or widened exception. The existing public `src/api.h` and
+Python simulator remain untouched pending the explicit replacement cutover.
 
 Branch base: `core-rewrite` at `6fbcc9bc7719` (`Rewrite core contact and motion state ownership`).
 
@@ -83,6 +82,12 @@ source owners with `tools/melee_core/source_sync.sh add`; then edit the canonica
 Keep true platform policy in `platform/` rather than scattering it through gameplay source, and
 keep each gameplay delta source-backed beside the code and in the delta ledger when it matters for
 later upstream contribution.
+
+The canonical gameplay tree carries a local `.clang-format` with `DisableFormat: true`; source-sync
+treats that file as repository metadata rather than part of the pinned upstream inventory. The root
+`make fmt` also prunes `src/melee_core`. This prevents recursive or direct file-based clang-format
+runs from rewriting decomp-shaped gameplay source while leaving local runtime/platform formatting
+under explicit review.
 
 `src/melee_core/upstream_delta_ledger.tsv` classifies each new Phase 5 decomp-file delta while its
 evidence is fresh. `upstream-candidate` means the pinned nonmatching C body itself appears wrong and
@@ -1456,29 +1461,52 @@ savestates, the replacement API, Wasm, the browser viewer, public cutover, and S
 optimization remain outside the reached goal.
 
 After the Peach extension, reconvene to choose between expanding the canonical source domain again
-or locking the reached state closure and starting the deferred context/API/savestate/Wasm phase.
+or locking the reached state closure and starting the context/API/savestate/Wasm phase.
 
-### Deferred Phase 6 — Match ownership, arbitrary savestates, API, and Wasm
+### Phase 6 — Match ownership, arbitrary savestates, API, Wasm, and live viewer
 
-Begin this phase only after the autonomous supported-domain goal and the explicit decision about
-any additional pre-context fighter scope. It changes ownership and build
-structure while the complete reached replay corpus provides the correctness lock. It must not become
-a gameplay rewrite: source file boundaries, function bodies, source structs, callback signatures,
-the scalar scheduler, pointer-rich AoS representation, object ordering, and floating-point operation
-order remain recognizable against the pinned decomp.
+The supported source boundary is now locked at the 153-replay aggregate. This phase changes
+ownership and build structure while that complete reached corpus provides the correctness lock. It
+must not become a gameplay rewrite: source file boundaries, function bodies, source structs,
+callback signatures, the scalar scheduler, pointer-rich AoS representation, object ordering, and
+floating-point operation order remain recognizable against the pinned decomp.
 
 The phase ends with the same canonical gameplay implementation compiling for PPC32, native x86-64,
 and wasm32; a resettable batch-first C API; location-independent on-demand match savestates; and a
-Node-hosted Wasm smoke. The browser adapter may then cut over as the final small integration packet.
-It does **not** replace `src/api.h`, connect the existing Python package, introduce SoA/AoSoA, or
-optimize snapshot size.
+Node-hosted Wasm smoke. It then cuts the existing browser live-play viewer over to the new core as a
+batch of one. It does **not** replace `src/api.h`, connect the existing Python package, introduce
+SoA/AoSoA, optimize snapshot size, or attempt the later maximum-throughput rewrite.
 
-#### Packet 1 — Lock the canonical state closure
+Functional multi-environment execution is in scope: several independent matches must coexist,
+reset, step, copy, save, and restore inside one process and one Wasm module. Performance-oriented
+batch representation is not: the first implementation may dispatch the existing scalar,
+pointer-rich match representation across selected matches. Keep the API and ownership opaque so a
+later dense SoA/AoSoA implementation can replace those internals without another public cutover.
+
+#### Packet 1 — Lock behavior, state closure, and performance baselines
 
 Freeze the chosen supported source boundary and inventory its complete mutable symbol, allocation,
 pool, callback, persistent pointer, immutable data, and presentation-exclusion closure. Confirm PPC
-and native compile the same canonical files directly and record the full singles/doubles baseline
-before changing ownership. This is an internal checkpoint, not a standalone phase result.
+and native compile the same canonical files directly before changing ownership. This is an internal
+checkpoint, not a standalone phase result.
+
+Context promotion is behavior-neutral. Record a direct per-replay digest of the simulator's complete
+actual output stream in addition to the validation result, and require that digest to remain exact
+for strict and classified replays alike. Every currently strict replay must remain strict and every
+classified replay must also retain its classification id, mismatch rows, field digest, first/last
+mismatch, and fingerprint. Timing is excluded. Do not add or widen a classification, tolerance, or
+signed-zero exception to land this refactor. A real source-backed change that removes a
+classification or strictly narrows its residual belongs in a separate correctness commit, followed
+by a newly locked digest; it must not be mixed into ownership movement.
+
+Record separate native baselines for one-time `GameData` initialization, fresh match construction,
+reset, steady-state scalar step with production output, validation step with forensic output, the
+full aggregate wall/CPU/RSS result, and Wasm only when that target exists. The current runtime
+already aborts on HSD heap growth after match initialization; the principal lifecycle waste is
+per-replay process creation, archive translation, and match reconstruction. Context promotion is
+expected to remove that waste but is not expected to close the scalar 16k FPS versus optimized
+300–400k+ FPS gap by itself. Investigate and resolve any repeatable steady-state scalar regression
+greater than five percent before completing the phase.
 
 #### Packet 2 — Context-promote mutable engine ownership
 
@@ -1500,7 +1528,9 @@ Keep existing source names and types where practical. Source callbacks whose sig
 carry a context may resolve a scoped non-owning active match binding installed at API init/reset/step
 entry. That binding owns no gameplay state; all referenced mutable bytes live in the selected match.
 Use a thread-local binding where native parallel execution requires it. Do not rewrite gameplay
-algorithms around a new abstraction merely to remove a global symbol.
+algorithms around a new abstraction merely to remove a global symbol. Keep this compatibility
+binding internal, measurable, and removable from later hot owners; it must not enter the public API
+or force per-frame pointer relocation.
 
 Batch creation preallocates fixed-capacity storage for four players and the complete current-domain
 object high-water marks. Match reset, stepping, output, copying, saving, and restoring perform no
@@ -1510,7 +1540,8 @@ allocation order, zero-initialization, and callback-list order.
 
 Prove one `GameData` can serve at least two simultaneously alive matches, that interleaved stepping
 does not leak state, and that repeated reset produces the same bytes as a fresh match. Do not treat a
-process-global state snapshot/restore bridge as context promotion.
+process-global state snapshot/restore bridge as context promotion. The completed runtime must no
+longer need one isolated process per replay merely to obtain clean source globals.
 
 #### Packet 3 — Parallel replacement API
 
@@ -1545,6 +1576,11 @@ The initial API surface must cover create/destroy `GameData`, create/destroy bat
 count, reset all or masked matches, step matches, write state/terminal/viewer output, copy matches,
 and save/restore a match. Public calls must not expose POSIX handles, host-sized wire fields,
 internal engine pointers, or Python types.
+
+This packet delivers real multi-environment behavior, not only future scaffolding. A batch owns the
+requested number of complete `MatchState` regions and steps every selected match deterministically.
+The initial loop may remain scalar and caller-controlled native threads may provide parallelism;
+cross-match SIMD, scheduler fusion, and SoA/AoSoA storage remain later measured optimizations.
 
 #### Packet 4 — Exact match save/restore
 
@@ -1593,16 +1629,49 @@ without recreating the module. Compare a bounded deterministic input stream bit-
 output, including the source-exact float and signed-zero policy. A successful link alone is not
 completion.
 
-The existing Web viewer UI is not changed in this phase. Once this Wasm/API smoke passes, the next
-work may replace its old-sim adapter with a batch-of-one new-core adapter and add any missing
-viewer-only projection fields without revisiting engine lifetime or build architecture.
+#### Packet 6 — Browser live-viewer cutover
+
+Replace the old simulator behind `tools/viewer/live/sim.js` and
+`tools/viewer/live/build_wasm.sh` with the new wasm32 batch API. Reuse the existing viewer UI,
+keyboard/GameCube-adapter input, Slippi-viewer rendering, controls, and trace export. A single
+long-lived Wasm module owns one `GameData` and a batch of one; reset must reuse that module and match
+storage rather than reload Wasm or repeat DAT translation.
+
+Expose one compact allocation-free viewer projection for the gameplay-bearing fighter, item,
+stage-platform, shield, hitbox, camera, and terminal fields already consumed by
+`viewer_adapter.js`. Keep forensic replay compare output private. Use one fixed-width wire schema as
+the authority for native and Wasm, and generate or mechanically verify the JavaScript sizes and
+offsets rather than maintaining an unrelated hand-written layout.
+
+Package only the raw archives required by the current supported fighters/stages from ignored
+`$MSL_DATA_DIR/raw`; reuse the normal extraction contract and do not copy game assets into Git. The
+viewer character/stage controls must expose the complete supported aggregate scope, including Puff
+and Peach. Keep simulator I/O buffers allocated once at viewer creation; normal input, step,
+projection, render handoff, and reset must not call the Wasm allocator.
+
+Complete a browser smoke covering module initialization, two-character reset, keyboard/controller
+input stepping, stage and character selection, visible fighter/item/hitbox/shield output, death/reset,
+and trace export. Retain the Node native/Wasm differential as the deterministic engine gate; the UI
+smoke verifies integration rather than substituting rendered appearance for state equality.
+
+#### Execution and commit boundaries
+
+Work in the packet order above and preserve a green direct-output differential throughout. Packet 1
+is baseline infrastructure for Packet 2, not a standalone checkpoint. Under an autonomous Phase 6
+goal, commit coherent closures after context ownership/multi-match isolation (Packets 1–2), the
+batch API plus arbitrary savestates (Packets 3–4), the wasm32/Node differential (Packet 5), and the
+live-viewer cutover (Packet 6). Do not commit a half-promoted owner, a second runtime bridge, or a
+classification workaround merely to create a checkpoint. Send a concise update through the ignored
+Discord helper after each material closure or meaningful replay/Wasm/viewer advance.
 
 #### Phase 6 completion criteria
 
 1. PPC32, native x86-64, and wasm32 compile the same canonical gameplay files directly; no ignored
    materialized gameplay tree is a build input.
-2. PPC/native smokes and bounded differentials pass, and the complete reached 153-replay aggregate
-   retains every strict result and documented source-classified fingerprint.
+2. PPC/native smokes and bounded differentials pass, and every replay in the complete reached
+   153-replay aggregate retains its exact actual-output digest and strict/classified result. The only
+   permitted change is a separately committed source-backed reduction of an existing residual,
+   followed by a newly locked digest; no new or widened classification is introduced.
 3. One immutable `GameData` serves multiple resettable matches with interleaved, state-isolated
    stepping and four-player-capable storage.
 4. Normal reset/step/output/copy/save/restore paths perform no heap allocation, file access, DAT
@@ -1613,12 +1682,107 @@ viewer-only projection fields without revisiting engine lifetime or build archit
    continuation; cross-match copy is exact and source-pointer-safe.
 7. The Wasm module passes the Node lifetime/savestate smoke and the bounded native/Wasm output
    differential without module recreation or game assets in Git.
-8. `src/api.h`, the existing Python runtime, and the browser viewer remain untouched; the plan and
-   upstream/source delta ledgers describe retained structure and any new target-specific deltas.
+8. The live browser viewer runs the new core as a resettable batch of one across the complete
+   supported fighter/stage scope, preserves input/render/trace behavior, and allocates no Wasm
+   gameplay memory after initialization.
+9. Native lifecycle and production-step benchmarks are recorded; repeated initialization is
+   removed and no repeatable steady-state scalar regression greater than five percent remains.
+10. `src/api.h` and the existing Python runtime remain untouched; the plan and upstream/source delta
+    ledgers describe retained structure and any new target-specific deltas.
 
-After the Wasm/API smoke, switch the browser live viewer to the new batch-of-one module. Once that
-integration is stable, connect the replacement to the public C/Python API, delete the displaced old
-core, and profile equivalent workloads before SoA/AoSoA or other measured throughput work.
+#### Phase 6 result — 2026-07-16
+
+The canonical source now has explicit lifetime ownership without changing its gameplay algorithms
+or pointer-rich scalar representation. `MslCoreGameData` owns immutable extracted archives,
+translated DAT graphs, and initialization catalogs. Each `MslCoreMatch` owns the complete reached
+mutable source closure, HSD scheduler/allocator topology, fixed pools, controllers/UCF, RNG,
+fighters, articles, stage/collision, camera, and headless effect state. A scoped thread-local binding
+keeps source callbacks recognizable while selecting one match; it owns no gameplay bytes. Native
+validation workers use the same boundary to initialize `GameData` once and reset match storage for
+successive replay jobs rather than restarting and retranslating DAT data per game. PPC validation
+remains the isolated QEMU oracle path.
+
+The new `src/melee_core/api.h` is batch-first and uses match terminology throughout. It supports
+masked reset/step/output, terminal and compact viewer projections, cross-match copy, and save or
+restore into any compatible match index. Save artifacts contain the `MslCoreMatch` image plus only
+the used match arena; immutable `GameData` is fingerprinted but not copied. Generated typed
+relocation metadata rebases match-arena, `GameData`, translated-DAT, scheduler, pool, and callback
+pointers without raw-word scanning. Native callbacks, HSD descriptors, and compile-time table
+pointers are additionally rebased by their ELF image load bias, so a same-build artifact does not
+depend on its originating process's ASLR address. `runtime/relocation_ambiguities.tsv` records every
+reached union/`void*` family and its typed relocation policy. The artifact header hashes its header
+and payload, rejects truncation/corruption or incompatible GameData before destination mutation,
+and has no originating-batch or originating-index affinity. Snapshot size optimization and stable
+cross-version serialization remain intentionally deferred.
+
+The ownership smoke byte-locks the complete `GameData` object, its used source-data arena, and its
+used translated-DAT arena across isolated construction, interleaved stepping, and reset. The
+safety lock exposed the remaining mutable source `gFtDataList` registry: archive/catalog roots stay
+in immutable `GameData`, while each match now owns its loaded-fighter registry and reference state.
+The generated native, PPC, and wasm32 relocation layouts include that per-match pointer array; the
+Wasm layout generator's dependency file is part of the normal build graph, so a context layout
+change cannot leave a stale snapshot pointer map. The savestate smoke checkpoints a live Peach item
+graph, destroys the article, reuses the source fixed pools for another pull, restores into an
+unrelated match, and requires identical state and viewer
+continuation. Reached retail `OSReport` calls are diagnostic-only and are silent headlessly; fatal
+panic paths remain loud, while normal reset/step performs no formatting or logging.
+
+The wasm32 target uses the same canonical gameplay files, generated command-field and relocation
+layouts, bounded linear-memory platform owners, and initialization-only DAT translation. The Node
+lifetime/differential smoke creates multiple matches, resets, copies, saves/restores, and compares
+native and Wasm state exactly without recreating the module. Its locked state digest is
+`cef96ff32edfe898`; current initialization is about 740 ms and the tested snapshot is 15,506,200
+bytes. The packaged supported raw profile is 49,862,928 bytes, with a 1,240,243-byte Wasm module
+and 69,556-byte loader. These are uncompressed development artifacts, not a bundle-size target.
+PPC-DWARF-generated accessors cover both fighter/item `CmdUnion` streams and color-overlay command
+streams because Clang/wasm32 does not implement GCC's big-endian scalar-storage-order pragma. A
+deterministic Peach/Falco mixed-input soak locks the color-animation path that exposed this seam.
+
+The production live viewer now owns one long-lived Wasm module, one `GameData`, and a batch of one.
+Its fixed 1,560-byte generated projection covers fighters, hitboxes, shields, items, moving stage
+actors, camera, and terminal state without exposing forensic replay rows. Reset reuses every Wasm
+buffer. Node coverage spans all eight fighters and six legal stages plus visible hitbox, shield,
+Peach item, death/reset, trace, and no-memory-growth paths. A real headless-Chrome smoke loads the
+assembled Slippi renderer, switches to Puff on Yoshi's Story, steps projected frames, observes the
+rendered SVG, drives a real keyboard sample through the input recorder, and verifies a trace
+artifact through the UI control. Puff and Peach renderer archives join the other
+fighters in the checksum-pinned asset manifest; archives resolve from the ignored SlippiLab
+checkout/cache and no game or model asset is tracked by Git.
+
+Lifecycle medians on the native scalar target are: 248.514 ms `GameData` initialization, 0.040 ms
+batch allocation, 3.627 ms first match construction, 0.718 ms reset, 28,574 FPS step with compare
+state, 28,801 FPS step plus production state, and 28,597 FPS step plus viewer projection. Save and
+restore of a 17,303,848-byte exercised match image take about 14.0 ms each. The
+full 153-replay native gate completes in 8.652 seconds at 163,594 aggregate FPS and 123.352 runner
+CPU-seconds. The pre-refactor locked run was 8.315 seconds / 170,236 aggregate FPS and 119.839 CPU
+seconds, so current wall time is 4.1% higher and remains inside the five-percent phase limit;
+the large temporary regression from paying initialization once per replay was removed by persistent
+workers.
+
+All 153 full-output fingerprints remain locked. The one validation-classification snapshot change
+is a strict reduction from 7,324 to 7,022 compared fields for
+`HumiliatingCreamyReindeer.slpz`: when its already-classified item-count divergence compares an
+extra thrown needle against an empty replay slot, the needle source does not own the stale
+`xDD4/xDD8` fixed-pool bytes. The replay's rows, first/last mismatch, and gameplay output lock are
+unchanged; no classification was added or widened. This source-backed validation-only reduction is
+kept as an isolated review hunk rather than being used to justify any runtime behavior change.
+
+Final gates:
+
+```bash
+make -f src/melee_core/Makefile source-check smoke native-smoke -j16
+make -f src/melee_core/Makefile viewer-production-smoke -j16
+make -f src/melee_core/Makefile validation-supported-domain \
+  VALIDATION_BACKEND=native VALIDATION_ARGS=--no-build
+make -f src/melee_core/Makefile lifecycle-benchmark
+```
+
+After this phase, connect the replacement to the public C/Python API, delete the displaced old core,
+and begin the dedicated maximum-throughput program. Profile equivalent production workloads first,
+then remove source-clear presentation work, densify fixed pools, promote hot state to SoA/AoSoA,
+step scheduler phases across matches, vectorize, and add native parallel execution. The Phase 6
+opaque batch API and correctness digests are the stable boundary for that work; the scalar
+source-shaped representation is not presumed to be the final performance ceiling.
 
 Correctness hardening remains continuous: reached nonmatching decomp owners, PPC/native/Wasm float
 seams, RNG streams, endian boundaries, unsupported stubs, and long-rollout divergence must be

@@ -1,4 +1,3 @@
-public/msl_sim.data
-public/msl_sim.js
-public/msl_sim.wasm
-public/msl_sim.worker.js
+public/melee-core.data
+public/melee-core.js
+public/melee-core.wasm
