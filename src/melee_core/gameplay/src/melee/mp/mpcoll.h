@@ -123,6 +123,11 @@
 /* 04CC00 */ void mpCopyCollData(CollData* src, CollData* dst, int);
 /* 04D024 */ bool mpColl_8004D024(Vec3*);
 /* 04F42C */ s32 mpColl_8004F42C(int joint, int index);
+#ifdef MSL_CORE_NATIVE
+#include <runtime/context.h>
+#define mpColl_804D64AC (*msl_core_mp_collision_epoch_ref())
+#else
 /* 4D64AC */ extern int mpColl_804D64AC;
+#endif
 
 #endif

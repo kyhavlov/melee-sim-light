@@ -1,23 +1,24 @@
 #include "runtime/match.h"
 
-#include "ft/ftdevice.h"
 #include "ft/fighter.h"
+#include "ft/ftdevice.h"
+#include "gm/gm_1601.h"
 #include "gr/ground.h"
 #include "gr/stage.h"
 #include "mp/mpcoll.h"
 #include "pl/player.h"
 #include "sfx/crowdsfx.h"
 
-#include <MetroTRK/intrinsics.h>
-#include <dolphin/mtx.h>
 #include <string.h>
+#include <dolphin/mtx.h>
+#include <MetroTRK/intrinsics.h>
 
 // Source callbacks do not carry a match argument. Bind them to the scalar
 // match selected by the private runtime API while keeping their mutable rule
 // and UCF ownership in caller-provided match storage.
 // refs/melee/src/melee/gm/gm_16AE.c
 // refs/ucf/src/pad_buffer/pad_buffer.cpp
-static MslCoreMatchRules* msl_bound_match_rules;
+static _Thread_local MslCoreMatchRules* msl_bound_match_rules;
 
 #define msl_is_teams (msl_bound_match_rules->is_teams)
 #define msl_friendly_fire (msl_bound_match_rules->friendly_fire)
@@ -586,8 +587,9 @@ enum_t lbLang_GetLanguageSetting(void) { return 1; }
 bool lbLang_IsSettingJP(void) { return false; }
 bool lbLang_IsSettingUS(void) { return true; }
 
-// Source stage accessors. the hosted core initializes stage_info directly from the
-// loaded Final Destination archive instead of retaining the scene frontend.
+// Source stage accessors. the hosted core initializes stage_info directly from
+// the loaded Final Destination archive instead of retaining the scene
+// frontend.
 float Stage_GetCamBoundsBottomOffset(void)
 {
     return stage_info.cam_info.cam_bounds.bottom +
@@ -685,8 +687,6 @@ void un_8032233C(u32 source, u32 victim)
 // These source declarations rely on adjacent DOL data placement. Hosted ELF
 // gives them explicit zero-initialized storage; Final Destination registers no
 // fighter catch/bury devices.
-struct ftDeviceUnk5 ftDevice_BuryThings[2];
-struct ftDeviceUnk3 ft_80459A8C;
 
 // Debug sound enables the source grounded IK pass when nonzero.
 int db_804D4AF8 = 1;

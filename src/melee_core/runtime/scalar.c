@@ -2,19 +2,13 @@
 
 #include "platform/files.h"
 #ifdef MSL_CORE_NATIVE
-#include "platform/native_dat.h"
 #include "platform/memory.h"
+#include "platform/native_dat.h"
 #endif
-#include "platform/slippi.h"
-#include "runtime/match.h"
-#include "runtime/effects.h"
-#include "runtime/final_destination.h"
-#include "runtime/wire.h"
-
 #include "cm/camera.h"
 #include "ft/fighter.h"
-#include "ft/ftdevice.h"
 #include "ft/ftdata.h"
+#include "ft/ftdevice.h"
 #include "ft/ftlib.h"
 #include "gr/grdatfiles.h"
 #include "gr/grizumi.h"
@@ -22,6 +16,7 @@
 #include "gr/types.h"
 #include "it/inlines.h"
 #include "it/it_26B1.h"
+#include "it/itCharItems.h"
 #include "it/item.h"
 #include "it/types.h"
 #include "lb/lbarchive.h"
@@ -31,24 +26,32 @@
 #include "mp/types.h"
 #include "pl/player.h"
 #include "pl/types.h"
+#include "platform/slippi.h"
+#include "runtime/context.h"
+#include "runtime/effects.h"
+#include "runtime/final_destination.h"
+#include "runtime/match.h"
+#include "runtime/wire.h"
 
-#include <MSL/math.h>
-
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <baselib/aobj.h>
 #include <baselib/class.h>
 #include <baselib/controller.h>
 #include <baselib/fobj.h>
 #include <baselib/gobj.h>
+#include <baselib/gobjobject.h>
+#include <baselib/gobjproc.h>
 #include <baselib/gobjuserdata.h>
 #include <baselib/id.h>
 #include <baselib/jobj.h>
 #include <baselib/list.h>
 #include <baselib/mtx.h>
+#include <baselib/random.h>
 #include <baselib/robj.h>
-
-#include <math.h>
-#include <stdio.h>
-#include <string.h>
+#include <MSL/math.h>
 
 enum {
     MSL_CORE_STAGE_FOUNTAIN_OF_DREAMS = 2,
@@ -68,9 +71,6 @@ enum {
     MSL_CORE_STICK_SCALE = 80,
 };
 
-extern u32 seed;
-extern u32* seed_ptr;
-extern int mpColl_804D64AC;
 extern void Camera_8002B3D4(void* arg0);
 extern StageData grIz_803E0E5C;
 extern StageData grNBa_803E7E38;
@@ -86,6 +86,35 @@ typedef struct MslCoreStageSpec {
     Vec3 singles_spawn[MSL_CORE_MAX_PLAYERS];
     Vec3 teams_spawn[MSL_CORE_MAX_PLAYERS];
 } MslCoreStageSpec;
+
+#ifdef MSL_CORE_NATIVE
+static int preload_supported_game_data(MslCoreGameData* game_data);
+#endif
+
+static uint64_t fingerprint_game_data(const MslCoreGameData* game_data)
+{
+    uint64_t hash = UINT64_C(1469598103934665603);
+    uint32_t i;
+    for (i = 0; i < game_data->files.raw_count; ++i) {
+        const MslRawFileEntry* entry = &game_data->files.raw[i];
+        const uint8_t* cursor = (const uint8_t*) entry->basename;
+        size_t remaining = strlen(entry->basename) + 1;
+        while (remaining-- != 0) {
+            hash = (hash ^ *cursor++) * UINT64_C(1099511628211);
+        }
+        cursor = (const uint8_t*) &entry->size;
+        remaining = sizeof(entry->size);
+        while (remaining-- != 0) {
+            hash = (hash ^ *cursor++) * UINT64_C(1099511628211);
+        }
+        cursor = entry->data;
+        remaining = entry->size;
+        while (remaining-- != 0) {
+            hash = (hash ^ *cursor++) * UINT64_C(1099511628211);
+        }
+    }
+    return hash;
+}
 
 // External list ids and singles spawn coordinates are the source-backed
 // Slippi neutral-spawn contract. Archive/internal ids and stage entrypoints
@@ -153,7 +182,7 @@ static StageData fd_stage_data = {
     .x30 = 1,
 };
 
-static MslCoreMatch* bound_stage_match;
+static _Thread_local MslCoreMatch* bound_stage_match;
 
 static const MslCoreStageSpec* stage_spec(uint8_t external_id)
 {
@@ -311,8 +340,57 @@ static void init_hsd(void)
 
     // Source match bootstrap initializes this fixed fighter-dynamics pool
     // before constructing fighters (refs/melee/src/melee/gm/gm_1832.c).
-    lb_8000FCDC();
+    // GameData runs the shared class/catalog initialization above once too,
+    // but has no mutable fighter-dynamics owner.
+    if (msl_core_try_active_match() != NULL) {
+        lb_8000FCDC();
+    }
 }
+
+#ifdef MSL_CORE_NATIVE
+static void init_relocation_types(void)
+{
+    // Each source allocator owns a fixed concrete object family. Record that
+    // source type at pool construction so savestate relocation visits only
+    // compiler-described pointer slots (plus the allocator's explicit first
+    // word free-list overlay).
+    HSD_ObjAllocSetRelocType(HSD_AObjGetAllocData(), MSL_RELOC_HSD_AOBJ, 1,
+                             sizeof(HSD_AObj));
+    HSD_ObjAllocSetRelocType(HSD_FObjGetAllocData(), MSL_RELOC_HSD_FOBJ, 1,
+                             sizeof(HSD_FObj));
+    HSD_ObjAllocSetRelocType(HSD_IDGetAllocData(), MSL_RELOC_ID_ENTRY, 1,
+                             sizeof(IDEntry));
+    HSD_ObjAllocSetRelocType(HSD_RObjGetAllocData(), MSL_RELOC_HSD_ROBJ, 1,
+                             sizeof(HSD_RObj));
+    HSD_ObjAllocSetRelocType(HSD_RvalueObjGetAllocData(), MSL_RELOC_HSD_RVALUE,
+                             1, sizeof(HSD_Rvalue));
+    HSD_ObjAllocSetRelocType(HSD_SListGetAllocData(), MSL_RELOC_HSD_SLIST, 1,
+                             sizeof(HSD_SList));
+    HSD_ObjAllocSetRelocType(HSD_DListGetAllocData(), MSL_RELOC_HSD_DLIST, 1,
+                             sizeof(HSD_DList));
+    HSD_ObjAllocSetRelocType(&gobj_alloc_data, MSL_RELOC_HSD_GOBJ, 1,
+                             sizeof(HSD_GObj));
+    HSD_ObjAllocSetRelocType(&gobjproc_alloc_data, MSL_RELOC_HSD_GOBJPROC, 1,
+                             sizeof(HSD_GObjProc));
+    HSD_ObjAllocSetRelocType(&fighter_alloc_data, MSL_RELOC_FIGHTER, 1,
+                             sizeof(Fighter));
+    HSD_ObjAllocSetRelocType(&fighter_dat_attrs_alloc_data, MSL_RELOC_RAW, 1,
+                             0x424);
+    HSD_ObjAllocSetRelocType(&fighter_parts_alloc_data, MSL_RELOC_FIGHTER_BONE,
+                             FIGHTER_PARTS_ALLOC_COUNT, sizeof(FighterBone));
+    HSD_ObjAllocSetRelocType(&fighter_dobj_list_alloc_data,
+                             MSL_RELOC_POINTER_ARRAY, FIGHTER_DOBJ_ALLOC_COUNT,
+                             sizeof(void*));
+    HSD_ObjAllocSetRelocType(&fighter_x2040_alloc_data,
+                             MSL_RELOC_POINTER_ARRAY,
+                             FIGHTER_X2040_ALLOC_COUNT, sizeof(void*));
+    HSD_ObjAllocSetRelocType(&fighter_x59C_alloc_data, MSL_RELOC_RAW, 1,
+                             0x8000);
+    HSD_ObjAllocSetRelocType(&msl_core_source_match_state()->player.alloc_data,
+                             MSL_RELOC_POINTER_ARRAY, 8 / sizeof(void*),
+                             sizeof(void*));
+}
+#endif
 
 static void source_clamp_stick(int8_t raw_x, int8_t raw_y, int8_t* out_x,
                                int8_t* out_y)
@@ -517,28 +595,144 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
         return -1;
     }
     memset(game_data, 0, sizeof(*game_data));
+    game_data->source.fighter.costume_lists[FTKIND_FOX] =
+        (struct UnkCostumeList){ game_data->source.fighter.fox_costumes, 4 };
+    game_data->source.fighter.costume_lists[FTKIND_CAPTAIN] =
+        (struct UnkCostumeList){ game_data->source.fighter.falcon_costumes,
+                                 6 };
+    game_data->source.fighter.costume_lists[FTKIND_SEAK] =
+        (struct UnkCostumeList){ game_data->source.fighter.sheik_costumes, 5 };
+    game_data->source.fighter.costume_lists[FTKIND_PEACH] =
+        (struct UnkCostumeList){ game_data->source.fighter.peach_costumes, 5 };
+    game_data->source.fighter.costume_lists[FTKIND_PURIN] =
+        (struct UnkCostumeList){ game_data->source.fighter.puff_costumes, 5 };
+    game_data->source.fighter.costume_lists[FTKIND_MARS] =
+        (struct UnkCostumeList){ game_data->source.fighter.marth_costumes, 5 };
+    game_data->source.fighter.costume_lists[FTKIND_ZELDA] =
+        (struct UnkCostumeList){ game_data->source.fighter.zelda_costumes, 5 };
+    game_data->source.fighter.costume_lists[FTKIND_FALCO] =
+        (struct UnkCostumeList){ game_data->source.fighter.falco_costumes, 4 };
+    game_data->source.item.x38 = game_data->source.item.character_articles;
+    if (msl_memory_context_init(&game_data->memory, MSL_MEMORY_GAME_DATA) != 0)
+    {
+        return -1;
+    }
     memcpy(game_data->root, data_root, length + 1);
+    game_data->bootstrap_random.value = 1;
+    game_data->bootstrap_random.active = &game_data->bootstrap_random.value;
+    msl_core_bind_game_data(game_data);
     msl_host_set_data_root(game_data->root);
+    msl_core_fighter_animation_data_init();
     init_hsd();
     msl_effect_game_data_init(&game_data->effects);
+#ifdef MSL_CORE_NATIVE
+    if (preload_supported_game_data(game_data) != 0) {
+        return -1;
+    }
+    game_data->fingerprint = fingerprint_game_data(game_data);
+    msl_core_bind_game_data(game_data);
+    msl_host_finish_initialization();
+    msl_native_dat_finish_initialization();
+    msl_memory_finish_initialization();
+#endif
     return 0;
 }
+
+void msl_core_game_data_deinit(MslCoreGameData* game_data)
+{
+    if (game_data == NULL) {
+        return;
+    }
+#ifdef MSL_CORE_NATIVE
+    msl_native_dat_context_destroy(&game_data->native_dat);
+#endif
+    msl_memory_context_destroy(&game_data->memory);
+    memset(game_data, 0, sizeof(*game_data));
+}
+
+static int match_construct(MslCoreMatch* match,
+                           const MslCoreGameData* game_data,
+                           const MslCoreMatchConfig* config,
+                           const MslCoreInput* previous_input);
+static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
+                          MslCoreCompare* compare);
 
 int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
                         const MslCoreMatchConfig* config,
                         const MslCoreInput* previous_input)
 {
+    int result;
+
+    if (match == NULL || game_data == NULL || config == NULL ||
+        previous_input == NULL)
+    {
+        return -1;
+    }
+    if (msl_core_match_storage_init(match) != 0) {
+        return -1;
+    }
+    result = match_construct(match, game_data, config, previous_input);
+    if (result != 0) {
+        msl_memory_context_destroy(&match->memory);
+    }
+    return result;
+}
+
+int msl_core_match_storage_init(MslCoreMatch* match)
+{
+    if (match == NULL) {
+        return -1;
+    }
+    memset(match, 0, sizeof(*match));
+    return msl_memory_context_init(&match->memory, MSL_MEMORY_MATCH);
+}
+
+int msl_core_match_reset(MslCoreMatch* match, const MslCoreGameData* game_data,
+                         const MslCoreMatchConfig* config,
+                         const MslCoreInput* previous_input)
+{
+    uint8_t* arena;
+    size_t capacity;
+
+    if (match == NULL || game_data == NULL || config == NULL ||
+        previous_input == NULL || match->memory.arena == NULL)
+    {
+        return -1;
+    }
+    arena = match->memory.arena;
+    capacity = match->memory.capacity;
+    memset(match, 0, sizeof(*match));
+    match->memory.arena = arena;
+    match->memory.capacity = capacity;
+    return match_construct(match, game_data, config, previous_input);
+}
+
+void msl_core_match_destroy(MslCoreMatch* match)
+{
+    if (match == NULL) {
+        return;
+    }
+    msl_memory_context_destroy(&match->memory);
+    memset(match, 0, sizeof(*match));
+}
+
+static int match_construct(MslCoreMatch* match,
+                           const MslCoreGameData* game_data,
+                           const MslCoreMatchConfig* config,
+                           const MslCoreInput* previous_input)
+{
     const MslCoreStageSpec* spec;
     UnkArchiveStruct* map_data;
     int i;
 
-    if (match == NULL || game_data == NULL || config == NULL ||
-        previous_input == NULL) {
-        fprintf(stderr, "Melee core scalar init received a null owner\n");
-        return -1;
-    }
-    memset(match, 0, sizeof(*match));
+    match->random.value = 1;
+    match->random.active = &match->random.value;
     match->game_data = game_data;
+    msl_core_bind_match(match);
+    init_hsd();
+#ifdef MSL_CORE_NATIVE
+    init_relocation_types();
+#endif
     match->config = *config;
     if (validate_config(&match->config) != 0) {
         return -1;
@@ -672,41 +866,43 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
             return -1;
         }
         for (i = 0; i < map_data->unk4->unkC; ++i) {
-        HSD_GObj* gobj;
-        HSD_JObj* root;
-        Ground* gp = &match->stage_ground[i];
-        map_data = grDatFiles_801C6330(i);
-        if (map_data == NULL || map_data->unk4 == NULL ||
-            i >= map_data->unk4->unkC ||
-            map_data->unk4->unk8[i].unk0 == NULL) {
-            fprintf(stderr, "Final Destination map joint %d is missing\n", i);
-            return -1;
+            HSD_GObj* gobj;
+            HSD_JObj* root;
+            Ground* gp = &match->stage_ground[i];
+            map_data = grDatFiles_801C6330(i);
+            if (map_data == NULL || map_data->unk4 == NULL ||
+                i >= map_data->unk4->unkC ||
+                map_data->unk4->unk8[i].unk0 == NULL)
+            {
+                fprintf(stderr, "Final Destination map joint %d is missing\n",
+                        i);
+                return -1;
+            }
+            root = HSD_JObjLoadJoint(map_data->unk4->unk8[i].unk0);
+            if (root == NULL) {
+                fprintf(stderr,
+                        "failed to load Final Destination map joint %d\n", i);
+                return -1;
+            }
+            Ground_801C34AC(i, root, map_data->unk4->unk8[i].unk0);
+            gobj = GObj_Create(HSD_GOBJ_CLASS_STAGE, 5, 0);
+            if (gobj == NULL) {
+                fprintf(stderr,
+                        "failed to create Final Destination map GObj %d\n", i);
+                return -1;
+            }
+            gp->map_id = i;
+            gp->gobj = gobj;
+            gp->x10_flags.b2 = true;
+            memset(gp->x20, 0xFF, sizeof(gp->x20));
+            GObj_InitUserData(gobj, 3, NULL, gp);
+            HSD_GObjObject_80390A70(gobj, HSD_GObj_804D7849, root);
+            HSD_GObj_SetupProc(gobj, headless_ground_anim_proc, 1);
+            if (i == 7) {
+                msl_fd_background_init(gobj);
+            }
+            match->stage_ground_used[i] = 1;
         }
-        root = HSD_JObjLoadJoint(map_data->unk4->unk8[i].unk0);
-        if (root == NULL) {
-            fprintf(stderr, "failed to load Final Destination map joint %d\n",
-                    i);
-            return -1;
-        }
-        Ground_801C34AC(i, root, map_data->unk4->unk8[i].unk0);
-        gobj = GObj_Create(HSD_GOBJ_CLASS_STAGE, 5, 0);
-        if (gobj == NULL) {
-            fprintf(stderr, "failed to create Final Destination map GObj %d\n",
-                    i);
-            return -1;
-        }
-        gp->map_id = i;
-        gp->gobj = gobj;
-        gp->x10_flags.b2 = true;
-        memset(gp->x20, 0xFF, sizeof(gp->x20));
-        GObj_InitUserData(gobj, 3, NULL, gp);
-        HSD_GObjObject_80390A70(gobj, HSD_GObj_804D7849, root);
-        HSD_GObj_SetupProc(gobj, headless_ground_anim_proc, 1);
-        if (i == 7) {
-            msl_fd_background_init(gobj);
-        }
-        match->stage_ground_used[i] = 1;
-    }
         // grlast.c::grLast_OnInit gameplay-visible stage publication.
         stage_info.unk8C.b4 = true;
         stage_info.unk8C.b5 = true;
@@ -842,11 +1038,10 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
     HSD_ObjAllocAddFree(HSD_IDGetAllocData(), 192);
     hsdPreallocateMemPieces(64);
 
-    // All reached archive graphs and source allocation pools are complete.
-    // Seal both boundaries before the first public frame; the full replay gate
-    // then acts as a runtime proof that no lazy translation, raw game-file
-    // access, or HSD heap growth remains.
-    msl_native_dat_finish_initialization();
+    // This Match's source allocation pools are complete. Shared DAT graphs
+    // are sealed once, after GameData has preloaded the supported domain;
+    // sealing them here would make the first Match configuration determine
+    // which characters and stages later Match instances may construct.
     msl_memory_finish_initialization();
 #endif
 
@@ -855,8 +1050,95 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
     seed = match->config.frame_pre_random_seed;
     seed_ptr = &seed;
     match->random_seed = seed;
+    write_compare(match, seed, &match->output);
     return 0;
 }
+
+#ifdef MSL_CORE_NATIVE
+static int preload_match_configuration(MslCoreGameData* game_data,
+                                       uint8_t stage_id, uint8_t char_id)
+{
+    MslCoreMatch* match;
+    MslCoreMatchConfig config;
+    MslCoreInput previous_input;
+    int result;
+
+    match = calloc(1, sizeof(*match));
+    if (match == NULL) {
+        return -1;
+    }
+    memset(&config, 0, sizeof(config));
+    memset(&previous_input, 0, sizeof(previous_input));
+    config.stage_id = stage_id;
+    config.frame_id = -123;
+    config.frame_pre_random_seed = 1;
+    config.initial_random_seed = 1;
+    config.match_damage_ratio = 1.0F;
+    config.num_players = 2;
+    config.stock_count = 4;
+    config.players[0].char_id = char_id;
+    config.players[1].char_id = char_id;
+    result = msl_core_match_init(match, game_data, &config, &previous_input);
+    if (result == 0) {
+        int costume_id;
+
+        // Fighter_Create reaches only the configured costume, while a public
+        // Match may select any source-declared costume after immutable
+        // GameData is sealed. Translate every costume archive once during
+        // the owning fighter-family preload.
+        // refs/melee/src/melee/ft/{fighter.c::Fighter_Create,
+        //   ftdata.c::ftData_80085820}
+        for (costume_id = 0;
+             costume_id < CostumeListsForeachCharacter[char_id].numCostumes;
+             ++costume_id)
+        {
+            ftData_80085820((FighterKind) char_id, costume_id);
+        }
+    }
+    msl_memory_context_destroy(&match->memory);
+    free(match);
+    return result;
+}
+
+static int preload_supported_game_data(MslCoreGameData* game_data)
+{
+    static const uint8_t characters[] = {
+        MSL_CORE_CHAR_FOX,        MSL_CORE_CHAR_FALCO,
+        MSL_CORE_CHAR_MARTH,      MSL_CORE_CHAR_CAPTAIN_FALCON,
+        MSL_CORE_CHAR_SHEIK,      MSL_CORE_CHAR_ZELDA,
+        MSL_CORE_CHAR_JIGGLYPUFF, MSL_CORE_CHAR_PEACH,
+    };
+    size_t i;
+
+    // Preload one source-shaped match per fighter family on FD, then one Fox
+    // match for every remaining supported stage. Archive/raw bytes and native
+    // DAT graphs are cached in GameData, while the temporary runtime arenas
+    // are discarded. This keeps ordinary Match construction free of file I/O
+    // and makes the immutable domain independent of the first public config.
+    // refs/melee/src/melee/gm/gm_16AE.c::fn_8016E730
+    // refs/melee/src/melee/lb/lbarchive.c::{lbArchive_LoadArchive,
+    //   lbArchive_LoadSymbols}
+    for (i = 0; i < sizeof(characters) / sizeof(characters[0]); ++i) {
+        if (preload_match_configuration(game_data,
+                                        MSL_CORE_STAGE_FINAL_DESTINATION,
+                                        characters[i]) != 0)
+        {
+            return -1;
+        }
+    }
+    for (i = 0; i < sizeof(stage_specs) / sizeof(stage_specs[0]); ++i) {
+        if (stage_specs[i].external_id == MSL_CORE_STAGE_FINAL_DESTINATION) {
+            continue;
+        }
+        if (preload_match_configuration(game_data, stage_specs[i].external_id,
+                                        MSL_CORE_CHAR_FOX) != 0)
+        {
+            return -1;
+        }
+    }
+    return 0;
+}
+#endif
 
 static void put_player_u16(uint8_t* out, size_t field, int player,
                            uint16_t value)
@@ -954,8 +1236,8 @@ static void write_item_compare(uint8_t* out, int slot, Item_GObj* gobj)
     int8_t owner = -1;
 
     // Recording/SendItemInfo.s follows the owner GObj and reads the player
-    // slot from user-data byte 0xC. Fox articles retain their fighter owner for
-    // their complete lifetime, so the same source layout applies here.
+    // slot from user-data byte 0xC. Fox articles retain their fighter owner
+    // for their complete lifetime, so the same source layout applies here.
     if (item->owner != NULL && item->owner->user_data != NULL) {
         owner = GET_FIGHTER(item->owner)->player_id;
     }
@@ -1240,6 +1522,7 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
         fprintf(stderr, "Melee core scalar step received a null owner\n");
         return -1;
     }
+    msl_core_bind_match(match);
     msl_core_bind_match_rules(&match->rules);
     msl_camera_state_bind(&match->camera);
     msl_effect_projection_bind(&match->game_data->effects, &match->effects);

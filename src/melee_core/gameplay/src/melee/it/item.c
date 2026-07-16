@@ -1,4 +1,7 @@
 #include "item.h"
+#ifdef MSL_CORE_NATIVE
+#include <runtime/relocation.h>
+#endif
 
 #include "it_266F.h"
 #include "it_26B1.h"
@@ -106,9 +109,11 @@ static HSD_ObjAllocData item_alloc_data;
 static HSD_ObjAllocData item_dynamic_bones_alloc_data;
 
 HSD_ObjAllocData item_link_alloc_data;
+#ifndef MSL_CORE_HOSTED
 HSD_ObjAllocUnk Item_804A0C64;
 Item_FtTrack Item_804A0CCC;
 S32Vec3 Item_804A0E24;
+#endif
 
 /// Init item struct?
 void Item_80266FCC(void)
@@ -117,6 +122,15 @@ void Item_80266FCC(void)
     HSD_ObjAllocInit(&item_dynamic_bones_alloc_data, sizeof(DynamicBoneTable),
                      4);
     HSD_ObjAllocInit(&item_link_alloc_data, sizeof(ItemLink), 4);
+#ifdef MSL_CORE_NATIVE
+    HSD_ObjAllocSetRelocType(&item_alloc_data, MSL_RELOC_ITEM, 1,
+                             sizeof(Item));
+    HSD_ObjAllocSetRelocType(&item_dynamic_bones_alloc_data,
+                             MSL_RELOC_DYNAMIC_BONE_TABLE, 1,
+                             sizeof(DynamicBoneTable));
+    HSD_ObjAllocSetRelocType(&item_link_alloc_data, MSL_RELOC_ITEM_LINK, 1,
+                             sizeof(ItemLink));
+#endif
 
     Item_804A0C64.x0 = 0;
     Item_804A0C64.x8 = 0;

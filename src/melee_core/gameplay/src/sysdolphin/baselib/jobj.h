@@ -745,6 +745,10 @@ void JObjUpdateFunc(void* obj, enum_t type, HSD_ObjData* val);
 void HSD_JObjAnim(HSD_JObj* jobj);
 void JObjAnimAll(HSD_JObj* jobj);
 s32 JObjLoad(HSD_JObj* jobj, HSD_Joint* joint, HSD_JObj* parent);
+#ifdef MSL_CORE_HOSTED
+s32 msl_core_JObjLoadWithoutDObj(HSD_JObj* jobj, HSD_Joint* joint,
+                                 HSD_JObj* parent);
+#endif
 
 void HSD_JObjAddAnim(HSD_JObj*, HSD_AnimJoint* an_joint,
                      HSD_MatAnimJoint* mat_joint,

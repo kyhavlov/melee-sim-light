@@ -48,6 +48,11 @@
 /* 3C595C */ extern char ftMr_Init_AnimDatFilename[];
 /* 3C5A28 */ extern Fighter_CostumeStrings ftMr_Init_CostumeStrings[];
 /* 459B88 */ extern struct ft_80459B88_t ft_80459B88;
+#ifdef MSL_CORE_HOSTED
+HSD_Joint** msl_core_puff_hat_joints(void);
+#define ft_8045A1E0 (msl_core_puff_hat_joints())
+#else
 /* 45A1E0 */ extern HSD_Joint* ft_8045A1E0[6];
+#endif
 
 #endif

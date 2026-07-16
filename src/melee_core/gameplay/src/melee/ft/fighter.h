@@ -12,7 +12,13 @@
 #include <dolphin/mtx.h>
 #include <baselib/objalloc.h>
 
-extern struct Fighter_804D64FC_t {
+enum {
+    FIGHTER_PARTS_ALLOC_COUNT = 0x8C0 / 0x10,
+    FIGHTER_DOBJ_ALLOC_COUNT = 0x1F0 / 4,
+    FIGHTER_X2040_ALLOC_COUNT = 0x80 / 4,
+};
+
+struct Fighter_804D64FC_t {
     u8** cmdscripts; ///< +00 per-character command script arrays
     void** x4;       ///< +04 ground attack tables (per character)
     void** x8;       ///< +08 air attack tables (per character)
@@ -23,7 +29,7 @@ extern struct Fighter_804D64FC_t {
     void** x1C;      ///< +1C edge guard tables (per character)
     float* x20;      ///< +20 distance thresholds (per character)
     void* x24;       ///< +24 weapon reach bonus table
-}* Fighter_804D64FC;
+};
 
 struct plAllocInfo;
 
@@ -79,105 +85,100 @@ struct plAllocInfo;
 /* 459054 */ extern HSD_ObjAllocData fighter_dobj_list_alloc_data;
 /* 459080 */ extern HSD_ObjAllocData fighter_x2040_alloc_data;
 /* 4590AC */ extern HSD_ObjAllocData fighter_x59C_alloc_data;
+#ifndef MSL_CORE_HOSTED
 /* 4598B8 */ extern ftData* gFtDataList[FTKIND_MAX];
-/* 4D6504 */ extern HSD_Joint* Fighter_804D6504;
-/* 4D6508 */ extern u8* Fighter_804D6508;
-/* 4D650C */ extern u8* Fighter_804D650C;
-/* 4D6510 */ extern UNK_T Fighter_804D6510;
-/* 4D6514 */ extern HSD_Joint*
-    Fighter_804D6514; ///< trophy platform model when characters spawn
-
-/* 4D6518 */ extern struct Fighter_804D6518_t {
+#endif
+/* 4D6518 */ struct Fighter_804D6518_t {
     f32 x0; ///< gravity mult
     f32 x4; ///< weight mult
-}* Fighter_804D6518;
+};
 
-/* 4D651C */ extern struct Fighter_804D651C_t {
+/* 4D651C */ struct Fighter_804D651C_t {
     f32 x0;
-    f32 x4;          ///< jump y impulse fullhop
-    f32 x8;          ///< jump y impulse shorthop
-    f32 xC;          ///< gravity
-    f32 x10;         ///< fall speed
-    f32 x14;         ///< fast fall speed
-    f32 x18;         ///< weight
-    f32 x1C;         ///< ledge jump y impulse
-    f32 x20;         ///< wall jump y impulse
-}* Fighter_804D651C; ///< metal modifiers - used in 0x800d105c
+    f32 x4;  ///< jump y impulse fullhop
+    f32 x8;  ///< jump y impulse shorthop
+    f32 xC;  ///< gravity
+    f32 x10; ///< fall speed
+    f32 x14; ///< fast fall speed
+    f32 x18; ///< weight
+    f32 x1C; ///< ledge jump y impulse
+    f32 x20; ///< wall jump y impulse
+}; ///< metal modifiers - used in 0x800d105c
 
-/* 4D6520 */ extern struct Fighter_804D6520_t {
-    f32 x0;          ///< walk speed scale
-    f32 x4;          ///< dash accel a
-    f32 x8;          ///< dash accel b
-    f32 xC;          ///< dash max speed
-    f32 x10;         ///< jump x impulse
-    f32 x14;         ///< jump y impulse fullhop
-    f32 x18;         ///< jump y impulse shorthop
-    f32 x1C;         ///< jump x max speed
-    f32 x20;         ///< gravity
-    f32 x24;         ///< fall speed
-    f32 x28;         ///< fast fall speed
-    f32 x2C;         ///< ledge jump x impulse
-    f32 x30;         ///< ledge jump y impulse
-    f32 x34;         ///< wall jump x impulse
-    f32 x38;         ///< wall jump y impulse
-}* Fighter_804D6520; ///< bunnyhood modifiers - used in 0x800d105c
+/* 4D6520 */ struct Fighter_804D6520_t {
+    f32 x0;  ///< walk speed scale
+    f32 x4;  ///< dash accel a
+    f32 x8;  ///< dash accel b
+    f32 xC;  ///< dash max speed
+    f32 x10; ///< jump x impulse
+    f32 x14; ///< jump y impulse fullhop
+    f32 x18; ///< jump y impulse shorthop
+    f32 x1C; ///< jump x max speed
+    f32 x20; ///< gravity
+    f32 x24; ///< fall speed
+    f32 x28; ///< fast fall speed
+    f32 x2C; ///< ledge jump x impulse
+    f32 x30; ///< ledge jump y impulse
+    f32 x34; ///< wall jump x impulse
+    f32 x38; ///< wall jump y impulse
+}; ///< bunnyhood modifiers - used in 0x800d105c
 
-/* 4D6524 */ extern struct Fighter_804D6524_t {
+/* 4D6524 */ struct Fighter_804D6524_t {
     /// @warning not all comments not confirmed - from altimors ghidra db
-    float x0;        ///< knockback recieved mult
-    float x4;        ///< damage dealt mult
-    float x8;        ///<
-    float xC;        ///<
-    float x10;       ///< walk anim scale
-    float x14;       ///< walk middle speed
-    float x18;       ///< walk fast speed mult
-    float x1C;       ///< dash max speed
-    float x20;       ///<
-    float x24;       ///< jump squat mult
-    float x28;       ///< jump y impulse fullhop mult
-    float x2C;       ///< jump y impulse shorthop mult
-    float x30;       ///< gravity mult
-    float x34;       ///< fall speed mult
-    float x38;       ///< air accel a mult
-    float x3C;       ///< air accel b mult
-    float x40;       ///< air speed mult
-    float x44;       ///< fast fall speed mult
-    float x48;       ///< weight mult
-    float x4C;       ///< shield break y vel mult
-    float x50;       ///<
-    float x54;       ///<
-    float x58;       ///<
-    float x5C;       ///<
-    float x60;       ///<
-    float x64;       ///<
-    float x68;       ///<
-    float x6C;       ///< empty land lag mult
-    float x70;       ///< nair land lag mult
-    float x74;       ///< fair land lag mult
-    float x78;       ///< bair land lag mult
-    float x7C;       ///< uair land lag mult
-    float x80;       ///< dair land lag mult
-    float x84;       ///<
-    float x88;       ///<
-    float x8C;       ///<
-    float x90;       ///<
-    float x94;       ///< cmsubject offset mult
-    float x98;       ///<
-}* Fighter_804D6524; ///< fighter scale modifiers - used in 0x800d105c
-/* 4D6528 */ extern struct Fighter_804D6528_t {
+    float x0;  ///< knockback recieved mult
+    float x4;  ///< damage dealt mult
+    float x8;  ///<
+    float xC;  ///<
+    float x10; ///< walk anim scale
+    float x14; ///< walk middle speed
+    float x18; ///< walk fast speed mult
+    float x1C; ///< dash max speed
+    float x20; ///<
+    float x24; ///< jump squat mult
+    float x28; ///< jump y impulse fullhop mult
+    float x2C; ///< jump y impulse shorthop mult
+    float x30; ///< gravity mult
+    float x34; ///< fall speed mult
+    float x38; ///< air accel a mult
+    float x3C; ///< air accel b mult
+    float x40; ///< air speed mult
+    float x44; ///< fast fall speed mult
+    float x48; ///< weight mult
+    float x4C; ///< shield break y vel mult
+    float x50; ///<
+    float x54; ///<
+    float x58; ///<
+    float x5C; ///<
+    float x60; ///<
+    float x64; ///<
+    float x68; ///<
+    float x6C; ///< empty land lag mult
+    float x70; ///< nair land lag mult
+    float x74; ///< fair land lag mult
+    float x78; ///< bair land lag mult
+    float x7C; ///< uair land lag mult
+    float x80; ///< dair land lag mult
+    float x84; ///<
+    float x88; ///<
+    float x8C; ///<
+    float x90; ///<
+    float x94; ///< cmsubject offset mult
+    float x98; ///<
+}; ///< fighter scale modifiers - used in 0x800d105c
+/* 4D6528 */ struct Fighter_804D6528_t {
     Vec2* x0;
     int x4;
-}* Fighter_804D6528;
-
-/* 4D6530 */ extern Vec2** Fighter_804D6530;
+};
+struct Fighter_804D652C_t {
+    Vec2* x0;
+    s32 x4;
+};
 // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_800D4FF4
-/* 4D6534 */ extern struct Fighter_804D6534_t {
+/* 4D6534 */ struct Fighter_804D6534_t {
     HSD_Joint* joint;
     HSD_AnimJoint* anim_joint;
-}* Fighter_804D6534;
-/* 4D6538 */ extern struct Fighter_804D653C_t* Fighter_804D6538;
-/* 4D653C */ extern struct Fighter_804D653C_t* Fighter_804D653C;
-/* 4D6540 */ extern struct Fighter_804D6540_t {
+};
+/* 4D6540 */ struct Fighter_804D6540_t {
     struct Fighter_804D6540_x0_t {
         u8 x0;
         u8 x1;
@@ -185,11 +186,62 @@ struct plAllocInfo;
         u8 x3;
     }* x0;
     int x4;
-}** Fighter_804D6540;
-/* 4D6544 */ extern FighterPartsTable** ftPartsTable;
-/* 4D6548 */ extern float* Fighter_804D6548;
-/* 4D654C */ extern float (*Fighter_804D654C)[5];
-/* 4D6550 */ extern int** Fighter_804D6550;
-/* 4D6554 */ extern ftCommonData* p_ftCommonData;
+};
+
+#ifdef MSL_CORE_HOSTED
+// PlCo.dat's 23 published symbols are immutable GameData. Preserve the source
+// names at use sites while resolving them through the active shared owner.
+// refs/melee/src/melee/ft/fighter.c::Fighter_LoadCommonData
+void** msl_core_fighter_common_data(void);
+#define MSL_FIGHTER_COMMON(type, index)                                       \
+    ((type) msl_core_fighter_common_data()[index])
+#define p_ftCommonData MSL_FIGHTER_COMMON(ftCommonData*, 0)
+#define Fighter_804D6550 MSL_FIGHTER_COMMON(int**, 1)
+#define Fighter_804D654C MSL_FIGHTER_COMMON(float(*)[5], 2)
+#define Fighter_804D6548 MSL_FIGHTER_COMMON(float*, 3)
+#define ftPartsTable MSL_FIGHTER_COMMON(FighterPartsTable**, 4)
+#define Fighter_804D6540 MSL_FIGHTER_COMMON(struct Fighter_804D6540_t**, 5)
+#define Fighter_804D653C MSL_FIGHTER_COMMON(struct Fighter_804D653C_t*, 6)
+#define Fighter_804D6538 MSL_FIGHTER_COMMON(struct Fighter_804D653C_t*, 7)
+#define Fighter_804D6534 MSL_FIGHTER_COMMON(struct Fighter_804D6534_t*, 8)
+#define Fighter_804D6530 MSL_FIGHTER_COMMON(Vec2**, 9)
+#define Fighter_804D652C MSL_FIGHTER_COMMON(struct Fighter_804D652C_t*, 10)
+#define Fighter_804D6528 MSL_FIGHTER_COMMON(struct Fighter_804D6528_t*, 11)
+#define Fighter_804D6524 MSL_FIGHTER_COMMON(struct Fighter_804D6524_t*, 12)
+#define Fighter_804D6520 MSL_FIGHTER_COMMON(struct Fighter_804D6520_t*, 13)
+#define Fighter_804D651C MSL_FIGHTER_COMMON(struct Fighter_804D651C_t*, 14)
+#define Fighter_804D6518 MSL_FIGHTER_COMMON(struct Fighter_804D6518_t*, 15)
+#define Fighter_804D6514 MSL_FIGHTER_COMMON(HSD_Joint*, 16)
+#define Fighter_804D6510 MSL_FIGHTER_COMMON(UNK_T, 17)
+#define Fighter_804D650C MSL_FIGHTER_COMMON(u8*, 18)
+#define Fighter_804D6508 MSL_FIGHTER_COMMON(u8*, 19)
+#define Fighter_804D6504 MSL_FIGHTER_COMMON(HSD_Joint*, 20)
+#define gCrowdConfig MSL_FIGHTER_COMMON(CrowdConfig*, 21)
+#define Fighter_804D64FC MSL_FIGHTER_COMMON(struct Fighter_804D64FC_t*, 22)
+#else
+extern struct Fighter_804D64FC_t* Fighter_804D64FC;
+extern CrowdConfig* gCrowdConfig;
+extern HSD_Joint* Fighter_804D6504;
+extern u8* Fighter_804D6508;
+extern u8* Fighter_804D650C;
+extern UNK_T Fighter_804D6510;
+extern HSD_Joint* Fighter_804D6514;
+extern struct Fighter_804D6518_t* Fighter_804D6518;
+extern struct Fighter_804D651C_t* Fighter_804D651C;
+extern struct Fighter_804D6520_t* Fighter_804D6520;
+extern struct Fighter_804D6524_t* Fighter_804D6524;
+extern struct Fighter_804D6528_t* Fighter_804D6528;
+extern struct Fighter_804D652C_t* Fighter_804D652C;
+extern Vec2** Fighter_804D6530;
+extern struct Fighter_804D6534_t* Fighter_804D6534;
+extern struct Fighter_804D653C_t* Fighter_804D6538;
+extern struct Fighter_804D653C_t* Fighter_804D653C;
+extern struct Fighter_804D6540_t** Fighter_804D6540;
+extern FighterPartsTable** ftPartsTable;
+extern float* Fighter_804D6548;
+extern float (*Fighter_804D654C)[5];
+extern int** Fighter_804D6550;
+extern ftCommonData* p_ftCommonData;
+#endif
 
 #endif

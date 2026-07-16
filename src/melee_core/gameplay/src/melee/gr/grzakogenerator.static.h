@@ -3,6 +3,11 @@
 
 #include "gr/types.h"
 
+#ifdef MSL_CORE_HOSTED
+#include "runtime/context.h"
+#include "runtime/source_state.h"
+#define lbl_8049F030 (msl_core_ground_state()->zako_generator)
+#else
 static struct {
     /* +0 */ grZakoGenerator_SpawnDesc* x0;
     /* +4 */ grZakoGenerator_Data* x4;
@@ -16,5 +21,6 @@ static struct {
     /* +A:6 */ u8 xA_b6 : 1;
     /* +A:7 */ u8 xA_b7 : 1;
 } lbl_8049F030;
+#endif
 
 #endif

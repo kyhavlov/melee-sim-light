@@ -6,6 +6,9 @@
 #include "ft/types.h"
 
 #include "it/forward.h"
+
+#include "it/it_3F14.h"
+
 #include <baselib/forward.h>
 
 #include <dolphin/mtx.h>
@@ -57,8 +60,14 @@ struct ItemStateDesc;
 /* 26B074 */ void Item_8026B074(Item* item_data);
 /* 26B1A4 */ bool Item_IsGrabbable(Item_GObj* gobj);
 /* 4A0C38 */ extern HSD_ObjAllocData item_link_alloc_data;
+#ifndef MSL_CORE_HOSTED
 /* 4A0C64 */ extern HSD_ObjAllocUnk Item_804A0C64;
 /* 4A0CCC */ extern Item_FtTrack Item_804A0CCC;
 /* 4A0E24 */ extern S32Vec3 Item_804A0E24;
+#else
+#define Item_804A0C64 (msl_core_item_state()->alloc_state)
+#define Item_804A0CCC (msl_core_item_state()->fighter_track)
+#define Item_804A0E24 (msl_core_item_state()->item_position)
+#endif
 
 #endif

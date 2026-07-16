@@ -439,10 +439,27 @@ void ftPe_Init_OnDeath(HSD_GObj* gobj)
 void ftPe_Init_OnLoad(HSD_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
-    ftPe_DatAttrs* extAtrrs = fp->ft_data->ext_attr;
     UNK_T* items = fp->ft_data->x48_items;
+    ftPe_DatAttrs* extAtrrs = fp->ft_data->ext_attr;
+#ifdef MSL_CORE_HOSTED
+    float floatfallf_anim_start = lbAnim_8001E8F8(ftData_80085E50(fp, 18));
+    float floatfallb_anim_start = lbAnim_8001E8F8(ftData_80085E50(fp, 19));
+
+    // The source derives these two archive attributes during fighter load.
+    // GameData preload performs the first mutation; later Match construction
+    // repeats the derivation but must not write the now-read-only DAT page.
+    // Preserve source evaluation/PUSH order and skip only an idempotent store.
+    // refs/melee/src/melee/ft/chara/ftPeach/ftPe_Init.c::ftPe_Init_OnLoad
+    if (extAtrrs->floatfallf_anim_start != floatfallf_anim_start) {
+        extAtrrs->floatfallf_anim_start = floatfallf_anim_start;
+    }
+    if (extAtrrs->floatfallb_anim_start != floatfallb_anim_start) {
+        extAtrrs->floatfallb_anim_start = floatfallb_anim_start;
+    }
+#else
     extAtrrs->floatfallf_anim_start = lbAnim_8001E8F8(ftData_80085E50(fp, 18));
     extAtrrs->floatfallb_anim_start = lbAnim_8001E8F8(ftData_80085E50(fp, 19));
+#endif
     PUSH_ATTRS(fp, ftPe_DatAttrs);
     it_8026B3F8(items[0], It_Kind_Peach_Explode);
     it_8026B3F8(items[1], It_Kind_Peach_Turnip);

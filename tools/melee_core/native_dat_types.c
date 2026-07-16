@@ -14,27 +14,28 @@
 #include "ft/chara/ftPurin/types.h"
 #include "ft/chara/ftSeak/types.h"
 #include "ft/chara/ftZelda/types.h"
-#include "ft/types.h"
 #include "ft/fighter.h"
+#include "ft/types.h"
 #include "gr/types.h"
 #include "it/it_3F14.h"
-#include "it/itCommonItems.h"
 #include "it/itCharItems.h"
+#include "it/itCommonItems.h"
 #include "it/items/itdosei.h"
-#include "it/items/types.h"
 #include "it/items/itseakneedlethrown.h"
+#include "it/items/types.h"
 #include "lb/lbanim.h"
+#include "lb/types.h"
 #include "mp/types.h"
 #include "pl/types.h"
 #include "sc/types.h"
 #include "sfx/crowdsfx.h"
 
-#include <baselib/jobj.h>
-#include <baselib/lobj.h>
 #include <baselib/aobj.h>
 #include <baselib/cobj.h>
 #include <baselib/dobj.h>
 #include <baselib/fog.h>
+#include <baselib/jobj.h>
+#include <baselib/lobj.h>
 #include <baselib/mobj.h>
 #include <baselib/pobj.h>
 #include <baselib/psstructs.h>
@@ -172,6 +173,7 @@ typedef struct MslDatZeldaDinFireAttrs {
 // Keeping an address of each root forces GCC to emit its complete reachable
 // type graph even when debug-type elimination is enabled by the toolchain.
 void* msl_native_dat_type_roots[] = {
+    (union CmdUnion*) 0,
     (HSD_PSCmdList*) 0,
     (UnkStageDat*) 0,
     (MapCollData*) 0,

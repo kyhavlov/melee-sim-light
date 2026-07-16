@@ -3,6 +3,21 @@
 
 #include <platform.h>
 
+#ifdef MSL_CORE_HOSTED
+typedef struct HSD_RandomContext {
+    u32 value;
+    u32* active;
+} HSD_RandomContext;
+
+HSD_RandomContext* msl_core_random_context(void);
+
+#define seed (msl_core_random_context()->value)
+#define seed_ptr (msl_core_random_context()->active)
+#else
+extern u32 seed;
+extern u32* seed_ptr;
+#endif
+
 s32 HSD_Rand(void);
 f32 HSD_Randf(void);
 s32 HSD_Randi(s32 max_val);

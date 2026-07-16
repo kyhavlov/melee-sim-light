@@ -12,6 +12,17 @@
 #include "ft/forward.h"
 
 /* 4599F0 */ extern UnkCostumeStruct lbl_804599F0;
+#ifdef MSL_CORE_HOSTED
+UnkCostumeStruct* msl_core_fighter_costumes(FighterKind kind);
+#define ft_80459A98 (*msl_core_fighter_costumes(FTKIND_CAPTAIN))
+#define ft_80459B28 (*msl_core_fighter_costumes(FTKIND_FOX))
+#define ft_80459D18 (*msl_core_fighter_costumes(FTKIND_SEAK))
+#define ft_80459DF0 (*msl_core_fighter_costumes(FTKIND_PEACH))
+#define ft_8045A0F0 (*msl_core_fighter_costumes(FTKIND_MARS))
+#define ft_8045A168 (*msl_core_fighter_costumes(FTKIND_ZELDA))
+#define ft_8045A1F8 (*msl_core_fighter_costumes(FTKIND_PURIN))
+#define ft_8045A420 (*msl_core_fighter_costumes(FTKIND_FALCO))
+#else
 /* 459A98 */ extern UnkCostumeStruct ft_80459A98;
 /* 459B28 */ extern UnkCostumeStruct ft_80459B28;
 /* 459C10 */ extern UnkCostumeStruct ft_80459C10;
@@ -33,6 +44,7 @@
 /* 45A330 */ extern UnkCostumeStruct ft_8045A330;
 /* 45A3A8 */ extern UnkCostumeStruct ft_8045A3A8;
 /* 45A420 */ extern UnkCostumeStruct ft_8045A420;
+#endif
 /* 45A480 */ extern UnkCostumeStruct ft_8045A480;
 /* 45A4E0 */ extern UnkCostumeStruct ft_8045A4E0;
 /* 45A540 */ extern UnkCostumeStruct ft_8045A540;

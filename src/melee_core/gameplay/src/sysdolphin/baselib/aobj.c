@@ -17,13 +17,22 @@
 #include <__mem.h>
 #include <stdarg.h>
 #include <MetroTRK/intrinsics.h>
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#endif
+
 
 HSD_ObjAllocData aobj_alloc_data;
 
+#ifdef MSL_CORE_HOSTED
+#define endcallback_list (msl_core_aobj_context()->endcallback_list)
+#define HSD_AObj_804D762C (msl_core_aobj_context()->ended_count)
+#define HSD_AObj_804D7630 (msl_core_aobj_context()->active_count)
+#else
 static HSD_SList* endcallback_list;
-
 static s32 HSD_AObj_804D762C;
 static s32 HSD_AObj_804D7630;
+#endif
 
 void HSD_AObjInitAllocData(void)
 {

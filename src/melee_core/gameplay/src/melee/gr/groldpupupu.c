@@ -26,8 +26,12 @@
 #include <baselib/gobjproc.h>
 #include <baselib/jobj.h>
 #include <baselib/random.h>
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#include <runtime/source_state.h>
+#endif
 
-static struct {
+typedef struct DreamLandParams {
     s16 x0;
     s16 x2;
     s16 x4;
@@ -43,9 +47,17 @@ static struct {
     f32 x28;
     f32 x2C;
     f32 x30;
-}* grOp_804D6A98;
-
+} DreamLandParams;
+#ifdef MSL_CORE_HOSTED
+#define grOp_804D6A98                                                         \
+    (*(DreamLandParams**) msl_core_stage_pointer_ref(                         \
+        MSL_STAGE_POINTER_DREAMLAND_PARAMS))
+#define grOp_804D6A9C                                                         \
+    (*msl_core_stage_pointer_ref(MSL_STAGE_POINTER_DREAMLAND_EFFECT))
+#else
+static DreamLandParams* grOp_804D6A98;
 static void* grOp_804D6A9C;
+#endif
 
 static int grOp_804D48A0[1][2] = { { 4, 0 } };
 static int grOp_804D48A8[1][2] = { { 5, 1 } };

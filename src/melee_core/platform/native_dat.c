@@ -1,18 +1,20 @@
 #include "platform/native_dat.h"
 #include "platform/memory.h"
+#include "runtime/context.h"
 
-#include <baselib/memory.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <baselib/jobj.h>
+#include <baselib/memory.h>
 #include <baselib/psstructs.h>
 #include <melee/ft/types.h>
 #include <melee/gr/ground.h>
 #include <melee/it/it_3F14.h>
 #include <melee/it/types.h>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#ifndef MSL_CORE_WASM
 #include <sys/mman.h>
+#endif
 
 // HSD DAT stores a 32-bit big-endian graph. On retail/PPC,
 // HSD_ArchiveParse relocates that graph in place. A 64-bit little-endian
@@ -49,34 +51,19 @@ typedef struct MslNativeArchive {
     uint32_t public_capacity;
 } MslNativeArchive;
 
-typedef struct MslNativeArchiveCacheEntry {
-    const uint8_t* source;
-    size_t file_size;
-    HSD_Archive archive;
-} MslNativeArchiveCacheEntry;
-
 enum {
-    // Preloading both halves of a Sheik/Zelda pair plus an opponent can open
-    // roughly one archive per motion-table row during initialization. Keep a
-    // fixed, allocation-free ceiling above that bounded source-domain total.
-    // refs/melee/src/melee/ft/ftdata.c::ftData_Table_Unk0
-    MSL_NATIVE_ARCHIVE_CACHE_CAPACITY = 2048,
     // Native graph nodes contain widened pointers and HSD data may request
     // 32-byte alignment. No per-type padding is required.
     MSL_NATIVE_DAT_ARENA_ALIGN = 32,
-    // Reserve a bounded low-address arena because HSD_JObjLoadJoint uses DAT
-    // descriptor addresses as retail u32 IDs. The current domain uses a small
-    // fraction of this initialization-only capacity.
-    // refs/melee/src/sysdolphin/baselib/{jobj.c,robj.c,id.c}
-    MSL_NATIVE_DAT_ARENA_BYTES = 256 * 1024 * 1024,
 };
 
-static MslNativeArchiveCacheEntry
-    native_archive_cache[MSL_NATIVE_ARCHIVE_CACHE_CAPACITY];
-static uint32_t native_archive_cache_count;
-static uint8_t* native_dat_arena;
-static size_t native_dat_arena_used;
-static int native_dat_initialization_complete;
+#define native_archive_cache (msl_core_native_dat_context()->archive_cache)
+#define native_archive_cache_count                                            \
+    (msl_core_native_dat_context()->archive_cache_count)
+#define native_dat_arena (msl_core_native_dat_context()->arena)
+#define native_dat_arena_used (msl_core_native_dat_context()->arena_used)
+#define native_dat_initialization_complete                                    \
+    (msl_core_native_dat_context()->initialization_complete)
 
 enum {
     DW_ATE_BOOLEAN = 2,
@@ -122,15 +109,23 @@ static void* native_alloc(size_t size)
         abort();
     }
     if (native_dat_arena == NULL) {
-        void* mapping = mmap((void*) 0x50000000, MSL_NATIVE_DAT_ARENA_BYTES,
-                             PROT_READ | PROT_WRITE,
-                             MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE,
-                             -1, 0);
+#ifdef MSL_CORE_WASM
+        native_dat_arena = malloc(MSL_NATIVE_DAT_ARENA_BYTES);
+        if (native_dat_arena == NULL) {
+            fprintf(stderr, "native DAT arena reservation failed\n");
+            abort();
+        }
+#else
+        void* mapping =
+            mmap((void*) 0x50000000, MSL_NATIVE_DAT_ARENA_BYTES,
+                 PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
         if (mapping == MAP_FAILED) {
             fprintf(stderr, "native DAT arena reservation failed\n");
             abort();
         }
         native_dat_arena = mapping;
+#endif
     }
     if (size == 0) {
         size = 1;
@@ -168,7 +163,9 @@ void msl_native_dat_finish_initialization(void)
     size_t protected_size;
     uint32_t i;
 
-    require_dat_initialization("native DAT seal");
+    if (native_dat_initialization_complete) {
+        return;
+    }
     for (i = 0; i < native_archive_cache_count; ++i) {
         // The runtime graph and byte streams live in the native arena. Make
         // original big-endian file buffers inaccessible so a leaked raw
@@ -177,12 +174,18 @@ void msl_native_dat_finish_initialization(void)
     }
     protected_size =
         (native_dat_arena_used + page_size - 1) & ~(page_size - 1);
+#ifdef MSL_CORE_WASM
+    // Wasm linear memory has no page-level read-only mapping. The logical seal
+    // below still rejects every later DAT allocation/translation attempt.
+    (void) protected_size;
+#else
     if (protected_size != 0 &&
         mprotect(native_dat_arena, protected_size, PROT_READ) != 0)
     {
         perror("mprotect immutable native DAT arena");
         abort();
     }
+#endif
     native_dat_initialization_complete = 1;
 }
 
@@ -192,6 +195,19 @@ int msl_native_dat_owns(const void* pointer)
     uintptr_t begin = (uintptr_t) native_dat_arena;
     return native_dat_arena != NULL && address >= begin &&
            address - begin < native_dat_arena_used;
+}
+
+void msl_native_dat_context_destroy(MslNativeDatContext* context)
+{
+    if (context == NULL || context->arena == NULL) {
+        return;
+    }
+#ifdef MSL_CORE_WASM
+    free(context->arena);
+#else
+    munmap(context->arena, MSL_NATIVE_DAT_ARENA_BYTES);
+#endif
+    memset(context, 0, sizeof(*context));
 }
 
 static int contains_u32(const uint32_t* values, uint32_t count, uint32_t value)
@@ -674,9 +690,10 @@ static void translate_value(MslNativeArchive* context,
             // Action and color scripts are streams of overlapping PPC
             // bitfield views.
             // Preserve each source word's big-endian storage so every command
-            // view observes the same bits under the native scalar-storage-order
-            // declarations. Relocation words used by Subroutine/Goto instead
-            // become native command-stream pointers in the widened union slot.
+            // view observes the same bits under the native
+            // scalar-storage-order declarations. Relocation words used by
+            // Subroutine/Goto instead become native command-stream pointers in
+            // the widened union slot.
             // refs/melee/src/melee/lb/{types.h,lbcommand.c}
             if (target != UINT32_MAX) {
                 void* pointer = translate_target(context, target, type);
@@ -903,9 +920,9 @@ static void* translate_stage_params(MslNativeArchive* context,
     const MslDatType* type;
 
     // Both imported stage owners publish the same DAT symbol with different
-    // anonymous source structs. The source internal-stage owner selected before
-    // grDatFiles_801C6038 is the concrete type authority for this public.
-    // refs/melee/src/melee/gr/{grbattle.c,grpstadium.c}
+    // anonymous source structs. The source internal-stage owner selected
+    // before grDatFiles_801C6038 is the concrete type authority for this
+    // public. refs/melee/src/melee/gr/{grbattle.c,grpstadium.c}
     if (stage_info.internal_stage_id == BATTLE) {
         type = msl_dat_root_MslDatBattlefieldParams;
     } else if (stage_info.internal_stage_id == PSTADIUM) {
@@ -1004,18 +1021,17 @@ static void* translate_item_public(MslNativeArchive* context,
     if (target != UINT32_MAX) {
         result->x4 = translate_target_count(
             context, target, msl_dat_root_MslDatCommonItemArticles, 1);
-#define TRANSLATE_COMMON_ITEM_ATTRS(kind, type)                              \
-        do {                                                                 \
-            article_source = raw_pointer(context, target + (kind) * 4);      \
-            if (article_source != UINT32_MAX && result->x4[(kind)] != NULL) {\
-                attrs_source = raw_pointer(context, article_source + 0x04);  \
-                if (attrs_source != UINT32_MAX) {                            \
-                    result->x4[(kind)]->x4_specialAttributes =               \
-                        translate_target_count(context, attrs_source,         \
-                                               (type), 1);                    \
-                }                                                            \
-            }                                                                \
-        } while (0)
+#define TRANSLATE_COMMON_ITEM_ATTRS(kind, type)                               \
+    do {                                                                      \
+        article_source = raw_pointer(context, target + (kind) * 4);           \
+        if (article_source != UINT32_MAX && result->x4[(kind)] != NULL) {     \
+            attrs_source = raw_pointer(context, article_source + 0x04);       \
+            if (attrs_source != UINT32_MAX) {                                 \
+                result->x4[(kind)]->x4_specialAttributes =                    \
+                    translate_target_count(context, attrs_source, (type), 1); \
+            }                                                                 \
+        }                                                                     \
+    } while (0)
         TRANSLATE_COMMON_ITEM_ATTRS(It_Kind_BombHei,
                                     msl_dat_root_itBombHeiAttributes);
         TRANSLATE_COMMON_ITEM_ATTRS(It_Kind_Dosei,
@@ -1355,7 +1371,6 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
 
 char* msl_native_archive_get_extern(HSD_Archive* archive, int index)
 {
-    require_dat_initialization("native archive extern lookup");
     if (index < 0 || (uint32_t) index >= archive->header.nb_extern) {
         return NULL;
     }
@@ -1365,7 +1380,6 @@ char* msl_native_archive_get_extern(HSD_Archive* archive, int index)
 void msl_native_archive_locate_extern(HSD_Archive* archive,
                                       const char* symbol, void* address)
 {
-    require_dat_initialization("native archive extern relocation");
     // Reached game archives resolve their externs to null during the source
     // loader. Generic graph translation treats non-relocation pointer fields
     // as null, which is the same result. A non-null external graph owner must

@@ -630,7 +630,8 @@ inline HSD_JObj* JObjLoadJointSub(HSD_Joint* joint, HSD_JObj* parent)
     return jobj;
 }
 
-s32 JObjLoad(HSD_JObj* jobj, HSD_Joint* joint, HSD_JObj* parent)
+static s32 JObjLoadCore(HSD_JObj* jobj, HSD_Joint* joint, HSD_JObj* parent,
+                        bool skip_dobj)
 {
     if (!(joint->flags & JOBJ_INSTANCE)) {
         jobj->child = JObjLoadJointSub(joint->child, jobj);
@@ -639,17 +640,17 @@ s32 JObjLoad(HSD_JObj* jobj, HSD_Joint* joint, HSD_JObj* parent)
     jobj->parent = parent;
     jobj->flags |= joint->flags;
     if (union_type_spline(jobj)) {
-        jobj->u.spline = joint->u.spline;
+        jobj->u.spline = skip_dobj ? NULL : joint->u.spline;
     } else if (union_type_ptcl(jobj)) {
         HSD_SList* slist;
-        jobj->u.ptcl = joint->u.ptcl;
-        slist = joint->u.ptcl;
+        jobj->u.ptcl = skip_dobj ? NULL : joint->u.ptcl;
+        slist = jobj->u.ptcl;
         while (slist != NULL) {
             *(u32*) &slist->data |= 0x80000000;
             slist = slist->next;
         }
     } else {
-        jobj->u.dobj = HSD_DObjLoadDesc(joint->u.dobjdesc);
+        jobj->u.dobj = HSD_DObjLoadDesc(skip_dobj ? NULL : joint->u.dobjdesc);
     }
     jobj->robj = HSD_RObjLoadDesc(joint->robjdesc);
     jobj->rotate.x = joint->rotation.x;
@@ -667,6 +668,24 @@ s32 JObjLoad(HSD_JObj* jobj, HSD_Joint* joint, HSD_JObj* parent)
     jobj->id = (u32) joint;
     return 0;
 }
+
+s32 JObjLoad(HSD_JObj* jobj, HSD_Joint* joint, HSD_JObj* parent)
+{
+    return JObjLoadCore(jobj, joint, parent, false);
+}
+
+#ifdef MSL_CORE_HOSTED
+s32 msl_core_JObjLoadWithoutDObj(HSD_JObj* jobj, HSD_Joint* joint,
+                                 HSD_JObj* parent)
+{
+    // ftParts_IntpJObjLoad temporarily nulls this descriptor field in the
+    // source runtime. Keep shared GameData immutable without changing the
+    // descriptor identity used by HSD_IDInsertToTable/reference resolution.
+    // refs/melee/src/{melee/ft/ftparts.c::ftParts_IntpJObjLoad,
+    //   sysdolphin/baselib/jobj.c::JObjLoad}
+    return JObjLoadCore(jobj, joint, parent, true);
+}
+#endif
 
 HSD_JObj* HSD_JObjLoadJoint(HSD_Joint* arg0)
 {

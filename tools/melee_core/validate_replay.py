@@ -6,6 +6,8 @@ import hashlib
 import importlib.util
 import json
 import os
+import queue
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -32,6 +34,7 @@ DEFAULT_CHARACTERS = "Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peac
 DEFAULT_STAGES = "32,31,3,2,8,28"
 MAX_AUTO_WORKERS = 16
 DEFAULT_CLASSIFICATIONS = ROOT / "replays/suites/melee_core_classifications.json"
+DEFAULT_OUTPUT_LOCKS = ROOT / "replays/suites/melee_core_output_locks.json"
 
 STAGE_NAMES = {
     2: "Fountain",
@@ -72,6 +75,85 @@ class ReplayClassification:
     rationale: str
     sources: tuple[str, ...]
     expected: dict[str, dict[str, object]]
+
+
+@dataclass(frozen=True)
+class ReplayOutputLock:
+    replay: str
+    expected: dict[str, dict[str, object]]
+
+
+@dataclass(frozen=True)
+class _NativeRunner:
+    process: subprocess.Popen[bytes]
+    stdin_fd: int
+    stdout_fd: int
+
+
+class _NativeRunnerPool:
+    def __init__(self, count: int) -> None:
+        self._available: queue.LifoQueue[_NativeRunner] = queue.LifoQueue()
+        self._runners: list[_NativeRunner] = []
+        try:
+            for _ in range(count):
+                process = subprocess.Popen(
+                    [str(NATIVE_BINARY), str(game_data_dir()), "--server"],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    bufsize=0,
+                )
+                assert process.stdin is not None and process.stdout is not None
+                runner = _NativeRunner(
+                    process=process,
+                    stdin_fd=process.stdin.fileno(),
+                    stdout_fd=process.stdout.fileno(),
+                )
+                self._runners.append(runner)
+                self._available.put(runner)
+        except Exception:
+            self.close()
+            raise
+
+    def acquire(self) -> _NativeRunner:
+        return self._available.get()
+
+    def release(self, runner: _NativeRunner) -> None:
+        self._available.put(runner)
+
+    def close(self) -> None:
+        errors: list[str] = []
+        for runner in self._runners:
+            if runner.process.stdin is not None and not runner.process.stdin.closed:
+                runner.process.stdin.close()
+        for runner in self._runners:
+            try:
+                returncode = runner.process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                runner.process.kill()
+                returncode = runner.process.wait()
+            stderr = b""
+            if runner.process.stderr is not None:
+                stderr = runner.process.stderr.read()
+                runner.process.stderr.close()
+            if runner.process.stdout is not None:
+                runner.process.stdout.close()
+            if returncode != 0:
+                detail = stderr.decode(errors="replace").strip()
+                errors.append(detail or f"native validation worker exited {returncode}")
+        self._runners.clear()
+        if errors:
+            raise RuntimeError("; ".join(errors))
+
+    def __enter__(self) -> _NativeRunnerPool:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        try:
+            self.close()
+        except RuntimeError:
+            if exc is None:
+                raise
 
 
 CLASSIFICATION_SNAPSHOT_KEYS = (
@@ -168,6 +250,75 @@ def load_classifications(path: Path) -> dict[str, ReplayClassification]:
     return classifications
 
 
+def load_output_locks(path: Path) -> dict[str, ReplayOutputLock]:
+    data = json.loads(path.read_text())
+    if data.get("version") != 1 or data.get("algorithm") != "fnv1a64":
+        raise ValueError(f"{path}: unsupported output-lock manifest")
+    if data.get("wire") != {"name": "MslCoreCompare", "size": 1022}:
+        raise ValueError(f"{path}: output-lock wire contract does not match MslCoreCompare")
+    locks: dict[str, ReplayOutputLock] = {}
+    for entry in data.get("locks", []):
+        replay = str(entry.get("replay", ""))
+        expected = entry.get("expected")
+        replay_path = Path(replay)
+        if not replay or replay_path.is_absolute() or ".." in replay_path.parts:
+            raise ValueError(f"{path}: output-lock replay must be repo-relative")
+        if not resolve_replay_path(ROOT / replay_path).is_file():
+            raise ValueError(f"{path}: output-lock replay does not exist: {replay}")
+        if not isinstance(expected, dict) or not expected:
+            raise ValueError(f"{path}: output lock has no backend snapshot: {replay}")
+        snapshots: dict[str, dict[str, object]] = {}
+        for backend, snapshot in expected.items():
+            if backend not in {"native", "ppc"} or not isinstance(snapshot, dict):
+                raise ValueError(f"{path}: invalid output-lock backend for {replay}")
+            if set(snapshot) != {"frames", "actual_output_fingerprint"}:
+                raise ValueError(f"{path}: invalid {backend} output lock for {replay}")
+            frames = snapshot["frames"]
+            fingerprint = snapshot["actual_output_fingerprint"]
+            if not isinstance(frames, int) or frames <= 0 or not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{16}", fingerprint):
+                raise ValueError(f"{path}: malformed {backend} output lock for {replay}")
+            snapshots[backend] = snapshot
+        if replay in locks:
+            raise ValueError(f"{path}: duplicate output-lock replay: {replay}")
+        locks[replay] = ReplayOutputLock(replay=replay, expected=snapshots)
+    return locks
+
+
+def write_output_locks(
+    path: Path,
+    locks: dict[str, ReplayOutputLock],
+    backend: str,
+    outcomes: list[ReplayOutcome],
+) -> dict[str, ReplayOutputLock]:
+    updated = dict(locks)
+    for outcome in outcomes:
+        if outcome.error is not None or outcome.result is None:
+            raise ValueError(f"cannot lock failed replay: {outcome.case.display_path}")
+        result = outcome.result
+        if not _has_full_replay_coverage(result):
+            raise ValueError(f"cannot lock partial replay: {outcome.case.display_path}")
+        replay = outcome.case.display_path
+        current = updated.get(replay)
+        expected = dict(current.expected) if current is not None else {}
+        expected[backend] = {
+            "frames": int(result["frames"]),
+            "actual_output_fingerprint": str(result["actual_output_fingerprint"]),
+        }
+        updated[replay] = ReplayOutputLock(replay=replay, expected=expected)
+    payload = {
+        "version": 1,
+        "algorithm": "fnv1a64",
+        "wire": {"name": "MslCoreCompare", "size": 1022},
+        "locks": [
+            {"replay": lock.replay, "expected": lock.expected}
+            for lock in sorted(updated.values(), key=lambda lock: lock.replay)
+        ],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n")
+    return updated
+
+
 def classification_snapshot(result: dict[str, object]) -> dict[str, object]:
     return {key: result[key] for key in CLASSIFICATION_SNAPSHOT_KEYS}
 
@@ -240,6 +391,7 @@ def validate_one(
     ucf_shield_sdi_enabled: bool = True,
     ucf_sdi_enabled: bool = True,
     played_on: str | None = None,
+    runner: _NativeRunner | None = None,
 ) -> dict[str, object]:
     # Python owns only the replay-loading boundary. The native extension consumes
     # Peppi's Arrow buffers through the Arrow C Data Interface without NumPy or
@@ -267,6 +419,8 @@ def validate_one(
             ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
             ucf_shield_sdi_enabled=ucf_shield_sdi_enabled,
             ucf_sdi_enabled=ucf_sdi_enabled,
+            runner_stdin=runner.stdin_fd if runner is not None else -1,
+            runner_stdout=runner.stdout_fd if runner is not None else -1,
         )
     result["end_to_end_seconds"] = time.perf_counter() - started
     return result
@@ -396,22 +550,29 @@ def _validate_case(
     timeout: float,
     backend: str,
     signed_zero_equal: bool,
+    runner_pool: _NativeRunnerPool | None = None,
 ) -> ReplayOutcome:
     started = time.perf_counter()
     try:
-        result = validate_one(
-            native,
-            case.replay,
-            frames=frames,
-            start_frame=start_frame,
-            timeout=timeout,
-            backend=backend,
-            signed_zero_equal=signed_zero_equal,
-            ucf_cardinals_1_0_enabled=case.ucf_cardinals_1_0_enabled,
-            ucf_shield_sdi_enabled=case.ucf_shield_sdi_enabled,
-            ucf_sdi_enabled=case.ucf_sdi_enabled,
-            played_on=case.played_on,
-        )
+        runner = runner_pool.acquire() if runner_pool is not None else None
+        try:
+            result = validate_one(
+                native,
+                case.replay,
+                frames=frames,
+                start_frame=start_frame,
+                timeout=timeout,
+                backend=backend,
+                signed_zero_equal=signed_zero_equal,
+                ucf_cardinals_1_0_enabled=case.ucf_cardinals_1_0_enabled,
+                ucf_shield_sdi_enabled=case.ucf_shield_sdi_enabled,
+                ucf_sdi_enabled=case.ucf_sdi_enabled,
+                played_on=case.played_on,
+                runner=runner,
+            )
+        finally:
+            if runner is not None:
+                runner_pool.release(runner)
         return ReplayOutcome(case, result, None, time.perf_counter() - started)
     except Exception as exc:
         return ReplayOutcome(
@@ -433,8 +594,9 @@ def run_cases(
     backend: str,
     signed_zero_equal: bool,
 ) -> tuple[list[ReplayOutcome], float]:
-    # Warm the manifest/hash check before workers fan out. Each C call then starts an isolated
-    # scalar runtime process and releases the GIL for the complete stream boundary.
+    # Warm the manifest/hash check before workers fan out. Native workers keep
+    # immutable GameData and resettable match storage alive across jobs; PPC
+    # remains an isolated QEMU oracle process per replay.
     game_data_dir()
     started = time.perf_counter()
     kwargs = {
@@ -444,15 +606,22 @@ def run_cases(
         "backend": backend,
         "signed_zero_equal": signed_zero_equal,
     }
-    if workers == 1:
-        outcomes = [_validate_case(native, case, **kwargs) for case in cases]
-    else:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = [
-                executor.submit(_validate_case, native, case, **kwargs) for case in cases
-            ]
-            # Resolve in manifest order so stdout and regressions remain deterministic.
-            outcomes = [future.result() for future in futures]
+    pool = _NativeRunnerPool(workers) if backend == "native" else None
+    try:
+        kwargs["runner_pool"] = pool
+        if workers == 1:
+            outcomes = [_validate_case(native, case, **kwargs) for case in cases]
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = [
+                    executor.submit(_validate_case, native, case, **kwargs)
+                    for case in cases
+                ]
+                # Resolve in manifest order so stdout and regressions remain deterministic.
+                outcomes = [future.result() for future in futures]
+    finally:
+        if pool is not None:
+            pool.close()
     return outcomes, time.perf_counter() - started
 
 
@@ -470,9 +639,27 @@ def _result_status(
     outcome: ReplayOutcome,
     classifications: dict[str, ReplayClassification],
     strict_classifications: bool,
+    output_locks: dict[str, ReplayOutputLock] | None = None,
+    require_output_lock: bool = False,
 ) -> tuple[str, ReplayClassification | None]:
     assert outcome.result is not None
     result = outcome.result
+    output_locks = output_locks or {}
+    replay_key = outcome.case.display_path
+    output_lock = output_locks.get(replay_key)
+    if output_lock is None:
+        replay_key = display_path_under_repo(outcome.case.replay, ROOT)
+        output_lock = output_locks.get(replay_key)
+    expected_output = output_lock.expected.get(backend) if output_lock is not None else None
+    if _has_full_replay_coverage(result):
+        if expected_output is None and require_output_lock:
+            return "unlocked", None
+        if expected_output is not None and (
+            int(result["frames"]) != int(expected_output["frames"])
+            or result["actual_output_fingerprint"]
+            != expected_output["actual_output_fingerprint"]
+        ):
+            return "output-drift", None
     classification = classifications.get(outcome.case.display_path)
     if classification is None:
         classification = classifications.get(display_path_under_repo(outcome.case.replay, ROOT))
@@ -523,6 +710,8 @@ def print_backend_results(
     show_timing: bool,
     classifications: dict[str, ReplayClassification] | None = None,
     strict_classifications: bool = False,
+    output_locks: dict[str, ReplayOutputLock] | None = None,
+    require_output_lock: bool = False,
 ) -> bool:
     classifications = classifications or {}
     print(f"\n[{backend}] workers={workers}")
@@ -558,7 +747,12 @@ def print_backend_results(
             fps = frames / runner if runner > 0.0 else 0.0
             timing = f" {runner:7.3f}s {fps:9,.0f} fps"
         status, classification = _result_status(
-            backend, outcome, classifications, strict_classifications
+            backend,
+            outcome,
+            classifications,
+            strict_classifications,
+            output_locks,
+            require_output_lock,
         )
         if status == "pass":
             passed += 1
@@ -591,7 +785,22 @@ def print_backend_results(
                 f"{'FAIL':<10} {matched:>7,}/{frames:<7,}{timing}{scope_column} "
                 f"{outcome.case.display_path}"
             )
-            if status == "drift":
+            if status == "unlocked":
+                print("      missing required full-output lock")
+            elif status == "output-drift":
+                replay_key = outcome.case.display_path
+                lock = (output_locks or {}).get(replay_key)
+                if lock is None:
+                    lock = (output_locks or {}).get(
+                        display_path_under_repo(outcome.case.replay, ROOT)
+                    )
+                expected_output = lock.expected[backend] if lock is not None else {}
+                print(
+                    "      output drift: "
+                    f"expected={expected_output.get('actual_output_fingerprint')} "
+                    f"actual={result['actual_output_fingerprint']}"
+                )
+            elif status == "drift":
                 assert classification is not None
                 expected = classification.expected[backend]
                 print(
@@ -683,6 +892,17 @@ def main() -> int:
         action="store_true",
         help="Report every raw mismatch as FAIL without applying known classifications.",
     )
+    parser.add_argument(
+        "--output-locks",
+        type=Path,
+        default=DEFAULT_OUTPUT_LOCKS,
+        help="Exact full-simulator-output locks for behavior-neutral refactors.",
+    )
+    parser.add_argument(
+        "--write-output-locks",
+        action="store_true",
+        help="Write full replay output locks from this run.",
+    )
     args = parser.parse_args()
     if bool(args.replay) == bool(args.suite):
         parser.error("provide either positional replay paths or --suite")
@@ -698,6 +918,15 @@ def main() -> int:
         if not classification_path.is_absolute():
             classification_path = ROOT / classification_path
         classifications = load_classifications(classification_path)
+        output_lock_path = args.output_locks.expanduser()
+        if not output_lock_path.is_absolute():
+            output_lock_path = ROOT / output_lock_path
+        if output_lock_path.is_file():
+            output_locks = load_output_locks(output_lock_path)
+        elif args.write_output_locks:
+            output_locks = {}
+        else:
+            raise ValueError(f"output-lock manifest does not exist: {output_lock_path}")
         suite: ReplaySuite | None = None
         if args.suite is not None:
             suite_path = args.suite.expanduser()
@@ -736,6 +965,10 @@ def main() -> int:
             f"policy={'strict' if args.strict_classifications else 'exact'} "
             f"source={display_path_under_repo(classification_path, ROOT)}"
         )
+        print(
+            f"output_locks: entries={len(output_locks)} "
+            f"source={display_path_under_repo(output_lock_path, ROOT)}"
+        )
 
         all_passed = True
         backends = ("native", "ppc") if args.backend == "both" else (args.backend,)
@@ -751,6 +984,10 @@ def main() -> int:
                 backend=backend,
                 signed_zero_equal=args.diagnostic_signed_zero_equal,
             )
+            if args.write_output_locks:
+                output_locks = write_output_locks(
+                    output_lock_path, output_locks, backend, outcomes
+                )
             all_passed = (
                 print_backend_results(
                     backend,
@@ -760,6 +997,13 @@ def main() -> int:
                     show_timing=args.timing,
                     classifications=classifications,
                     strict_classifications=args.strict_classifications,
+                    output_locks=output_locks,
+                    require_output_lock=(
+                        suite is not None
+                        and suite.name == "melee_core_aggregate"
+                        and args.frames == 0
+                        and args.start_frame is None
+                    ),
                 )
                 and all_passed
             )

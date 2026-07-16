@@ -22,6 +22,13 @@
 #include "pl/plstale.h"
 #include "pl/types.h"
 
+#ifdef MSL_CORE_HOSTED
+#include "runtime/context.h"
+#include "runtime/source_state.h"
+#define player_slots (msl_core_source_match_state()->player.slots)
+#define Player_AllocData (msl_core_source_match_state()->player.alloc_data)
+#endif
+
 #include <dolphin/mtx.h>
 #include <dolphin/os.h>
 #include <baselib/debug.h>
@@ -80,10 +87,12 @@ ftMapping ftMapping_list[CHKIND_MAX] = { //////ftMapping_list
 };
 
 ////.bss
+#ifndef MSL_CORE_HOSTED
 StaticPlayer player_slots[PL_SLOT_MAX];
 HSD_ObjAllocData Player_AllocData;
 
 pl_804D6470_t* pl_804D6470;
+#endif
 
 /// @todo This can be used in more places when functions are fixed to use
 ///       correct structs.

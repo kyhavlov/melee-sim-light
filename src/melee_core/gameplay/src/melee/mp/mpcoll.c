@@ -26,6 +26,9 @@
 #include <baselib/debug.h>
 #include <baselib/gobj.h>
 #include <MSL/trigf.h>
+#ifdef MSL_CORE_NATIVE
+#include <runtime/source_state.h>
+#endif
 
 struct mpColl_80458810_t {
     /*  +0 */ int right[9];
@@ -34,6 +37,19 @@ struct mpColl_80458810_t {
     /* +54 */ u8 x54_pad[4];
 };
 
+#ifdef MSL_CORE_NATIVE
+#define MSL_MP_COLL (msl_core_source_match_state()->mp_coll)
+#define mpColl_80458810 MSL_MP_COLL.scratch
+#define mpColl_IsEcbTiny MSL_MP_COLL.is_ecb_tiny
+#define mpColl_804D64A0 MSL_MP_COLL.floor_callback
+#define mpColl_804D64A4 MSL_MP_COLL.floor_callback_gobj
+#define mpColl_804D64A8 MSL_MP_COLL.event
+#define mpColl_804D6488 MSL_MP_COLL.right_candidate_count
+#define mpColl_804D648C MSL_MP_COLL.left_candidate_count
+#define mpColl_804D6490_max_x MSL_MP_COLL.candidate_max_x
+#define mpColl_804D6494_line_id MSL_MP_COLL.candidate_line_id
+#define mpColl_804D6498_flags MSL_MP_COLL.candidate_flags
+#else
 static struct mpColl_80458810_t mpColl_80458810;
 static bool mpColl_IsEcbTiny;
 static bool (*mpColl_804D64A0)(Fighter_GObj*, int);
@@ -42,6 +58,7 @@ static Event mpColl_804D64A8;
 int mpColl_804D64AC;
 int mpColl_804D6488;
 int mpColl_804D648C;
+#endif
 
 /// @todo float order hack
 const float mpColl_804D7F9C = -F32_MAX;
@@ -1749,9 +1766,11 @@ bool mpColl_80044E10_RightWall(CollData* coll)
     return hit_wall;
 }
 
+#ifndef MSL_CORE_NATIVE
 float mpColl_804D6490_max_x;
 int mpColl_804D6494_line_id;
 u32 mpColl_804D6498_flags;
+#endif
 
 bool mpColl_800454A4_RightWall(CollData* coll)
 {

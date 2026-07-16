@@ -1,4 +1,5 @@
 # symbol	classification	core reachability	preserved behavior	source/evidence
+OSReport	diagnostic/platform exclusion	reachable	none; fatal panic paths remain loud	Retail source calls only format diagnostics; headless reset/step performs no logging or formatting
 efAsync_Spawn	headless effect projection	reachable	fixed-capacity source-order queue	refs/melee/src/melee/ef/efasync.c; immediate RNG and camera-quake effects retained
 efAsync_QueueFlush	headless effect projection	reachable	reverse spawn-order dispatch	refs/melee/src/melee/ef/efasync.c::efAsync_QueueFlush
 efAsync_QueueClear	headless effect projection	reachable	fixed-pool release	refs/melee/src/melee/ef/efasync.c::efAsync_QueueClear

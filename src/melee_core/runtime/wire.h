@@ -7,6 +7,7 @@
 enum {
     MSL_CORE_MAX_PLAYERS = 4,
     MSL_CORE_MAX_ITEMS = 15,
+    MSL_CORE_MAX_HITBOXES = 4,
     MSL_CORE_STATE_FLAGS_BYTES = 5,
 };
 
@@ -108,6 +109,15 @@ typedef struct MslCoreMatchConfig {
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
 
+// Native validation workers keep immutable GameData alive across jobs. The
+// frame count gives each job an explicit boundary without closing the stream;
+// config remains the same little-endian wire consumed by the one-shot runner.
+typedef struct MslCoreStreamJobHeader {
+    uint32_t frame_count;
+    MslCoreMatchConfig config;
+    MslCoreInput previous;
+} MslCoreStreamJobHeader;
+
 typedef struct MslCoreItem {
     uint8_t exists;
     uint8_t state;
@@ -174,15 +184,123 @@ typedef struct MslCoreCompare {
     MslCoreItem items[MSL_CORE_MAX_ITEMS];
 } MslCoreCompare;
 
+// Stable production projection used by interactive consumers. This is a
+// separate schema from MslCoreCompare: replay-forensic lanes can evolve
+// independently without becoming part of the render/API contract.
+typedef struct MslCoreViewerHitbox {
+    float x;
+    float y;
+    float z;
+    float radius;
+    float damage;
+    uint16_t bone_part_id;
+    uint8_t enabled;
+    uint8_t _pad0;
+} MslCoreViewerHitbox;
+
+typedef struct MslCoreViewerPlayer {
+    uint8_t char_id;
+    uint8_t team_id;
+    uint8_t facing;
+    uint8_t on_ground;
+    uint8_t is_dead;
+    uint8_t jumps_left;
+    uint8_t stocks;
+    uint8_t hurtbox_state;
+    uint8_t l_cancel;
+    uint8_t last_attack_landed;
+    uint8_t combo_count;
+    uint8_t last_hit_by;
+    uint8_t state_flags[MSL_CORE_STATE_FLAGS_BYTES];
+    uint8_t _pad0[3];
+    uint16_t action_id;
+    int16_t action_frame;
+    uint16_t hitlag;
+    uint16_t hitstun;
+    uint16_t ground_id;
+    uint16_t _pad1;
+    uint32_t animation_index;
+    float pos_x;
+    float pos_y;
+    float speed_air_x_self;
+    float speed_ground_x_self;
+    float speed_y_self;
+    float speed_x_attack;
+    float speed_y_attack;
+    float percent;
+    float shield_hp;
+    float shield_x;
+    float shield_y;
+    float shield_z;
+    float shield_radius;
+    // Unit-space visual direction from ftCo Guard's smoothed angle/magnitude.
+    // The viewer combines this with its per-character render offset; it is not
+    // a gameplay collision coordinate.
+    float shield_tilt_x;
+    float shield_tilt_y;
+    MslCoreViewerHitbox hitboxes[MSL_CORE_MAX_HITBOXES];
+} MslCoreViewerPlayer;
+
+typedef struct MslCoreViewerStage {
+    // Source actor order is 0=right and 1=left, matching Slippi's FoD event
+    // protocol and the existing viewer adapter.
+    float fod_platform_height[2];
+    uint8_t fod_platform_valid[2];
+    uint8_t randall_exists;
+    uint8_t _pad0;
+    float randall_x;
+    float randall_y;
+} MslCoreViewerStage;
+
+typedef struct MslCoreViewerCamera {
+    float eye_x;
+    float eye_y;
+    float eye_z;
+    float interest_x;
+    float interest_y;
+    float interest_z;
+    float fov;
+} MslCoreViewerCamera;
+
+typedef struct MslCoreViewerState {
+    int32_t frame_id;
+    uint32_t random_seed;
+    uint32_t stage_id;
+    float damage_ratio;
+    uint8_t num_players;
+    uint8_t is_teams;
+    uint8_t friendly_fire;
+    uint8_t terminal;
+    uint8_t stock_count;
+    uint8_t _pad0[3];
+    MslCoreViewerPlayer players[MSL_CORE_MAX_PLAYERS];
+    MslCoreItem items[MSL_CORE_MAX_ITEMS];
+    MslCoreViewerStage stage;
+    MslCoreViewerCamera camera;
+} MslCoreViewerState;
+
 #pragma pack(pop)
 
 _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size");
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 16, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 72, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 52, "MslCoreMatchConfig wire size");
+_Static_assert(sizeof(MslCoreMatchConfig) == 52,
+               "MslCoreMatchConfig wire size");
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 108,
+               "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1022, "MslCoreCompare wire size");
+_Static_assert(sizeof(MslCoreViewerHitbox) == 24,
+               "MslCoreViewerHitbox wire size");
+_Static_assert(sizeof(MslCoreViewerPlayer) == 192,
+               "MslCoreViewerPlayer wire size");
+_Static_assert(sizeof(MslCoreViewerStage) == 20,
+               "MslCoreViewerStage wire size");
+_Static_assert(sizeof(MslCoreViewerCamera) == 28,
+               "MslCoreViewerCamera wire size");
+_Static_assert(sizeof(MslCoreViewerState) == 1560,
+               "MslCoreViewerState wire size");
 
 uint16_t msl_core_get_le16(const void* ptr);
 uint32_t msl_core_get_le32(const void* ptr);

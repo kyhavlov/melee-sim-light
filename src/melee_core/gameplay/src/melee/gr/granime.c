@@ -58,8 +58,18 @@
 #else
 /* 1C82E8 */ static void fn_801C82E8(int arg0, int* arg1);
 #endif
+/*
+ * Dynamic callback parameters used only during grAnime_801C775C's tree walk.
+ * They are not persistent match state, but must not race across hosted worker
+ * threads. refs/melee/src/melee/gr/granime.c::grAnime_801C775C
+ */
+#ifdef MSL_CORE_HOSTED
+/* 4D6958 */ static _Thread_local float grAnime_804D6958;
+/* 4D695C */ static _Thread_local float grAnime_804D695C;
+#else
 /* 4D6958 */ static float grAnime_804D6958;
 /* 4D695C */ static float grAnime_804D695C;
+#endif
 
 #ifndef MSL_CORE_HOSTED
 struct padded_jmp_buf {
@@ -505,16 +515,30 @@ enum {
 
 typedef void (*Callback1)(HSD_AObj* aobj, HSD_TObj* obj, u32 flags,
                           float param);
+typedef void (*Callback0)(HSD_AObj* aobj);
 typedef void (*Callback2)(HSD_AObj* aobj, int param);
 typedef void (*Callback4)(HSD_AObj* aobj, HSD_TObj* obj, u32 flags, int param);
 typedef void (*Callback3)(HSD_AObj* aobj, HSD_TObj* obj, int param);
+
+static void grAnime_SetRateCallback(HSD_AObj* aobj, HSD_TObj* obj, u32 flags,
+                                    float rate)
+{
+    (void) obj;
+    (void) flags;
+    HSD_AObjSetRate(aobj, rate);
+}
 
 void grAnime_801C6F50(HSD_AObj* aobj, void* obj, u32 flags, void* func,
                       u32 type, void* param)
 {
     switch (type) {
     case 0:
-        ((Event) func)();
+        // Retail leaves the current AObj in r3 for this callback family;
+        // fn_801C6EE4/fn_801C6F2C both consume it. Name that ABI contract so
+        // hosted targets with typed function tables preserve the same call.
+        // refs/melee/src/melee/gr/granime.c::{grAnime_801C6F50,
+        //   fn_801C6EE4,fn_801C6F2C}
+        ((Callback0) func)(aobj);
         break;
     case 1:
         ((Callback1) func)(aobj, obj, flags, *(float*) param);
@@ -526,10 +550,10 @@ void grAnime_801C6F50(HSD_AObj* aobj, void* obj, u32 flags, void* func,
         ((Callback2) func)(aobj, *(int*) param);
         break;
     case 4:
-        ((Event) func)();
+        ((Callback0) func)(aobj);
         break;
     case 8:
-        ((Event) func)();
+        ((Callback0) func)(aobj);
         break;
     case 5:
         ((Callback1) func)(aobj, obj, flags, *(float*) param);
@@ -878,7 +902,7 @@ void grAnime_801C7A04(HSD_GObj* gobj, int arg1, u32 arg2, f32 val)
     if (arg2 & 4) {
         var_r31 |= 0x100;
     }
-    grAnime_801C752C(jobj, 1, var_r31, HSD_AObjSetRate, 1, val);
+    grAnime_801C752C(jobj, 1, var_r31, grAnime_SetRateCallback, 1, val);
 }
 
 void grAnime_801C7A94(HSD_GObj* gobj, int arg1, u32 arg2, f32 val)
@@ -897,7 +921,7 @@ void grAnime_801C7A94(HSD_GObj* gobj, int arg1, u32 arg2, f32 val)
     if (arg2 & 4) {
         var_r31 |= 0x100;
     }
-    grAnime_801C752C(jobj, 0, var_r31, HSD_AObjSetRate, 1, val);
+    grAnime_801C752C(jobj, 0, var_r31, grAnime_SetRateCallback, 1, val);
 }
 
 void grAnime_801C7B24(HSD_GObj* gobj, int arg1, u32 arg2, f32 arg8)
@@ -1094,7 +1118,8 @@ void grAnime_801C7C1C(HSD_JObj* jobj, s32 map_id, s32 arg2, s32 arg3, s32 arg4,
         }
         HSD_JObjReqAnimByFlags(jobj, var_r30, farg0);
     }
-    grAnime_801C752C(jobj, arg5, anim_flags, HSD_AObjSetRate, 1, farg1);
+    grAnime_801C752C(jobj, arg5, anim_flags, grAnime_SetRateCallback, 1,
+                     farg1);
     archive = grDatFiles_801C6330(map_id);
     HSD_ASSERT(0x148, archive);
     eflags = (u8*) archive->unk4->unk8[map_id].x28;
@@ -1203,7 +1228,8 @@ void grAnime_801C8138(HSD_GObj* gobj, enum_t arg1, bool arg2)
 
 #ifdef MSL_CORE_HOSTED
 // Preserve the source's first-AObj result without the PPC register-image
-// setjmp buffer. Continuing the read-only traversal has no gameplay side effect.
+// setjmp buffer. Continuing the read-only traversal has no gameplay side
+// effect.
 void fn_801C82E8(HSD_AObj* arg0, HSD_AObj** arg1)
 {
     if (*arg1 == NULL) {

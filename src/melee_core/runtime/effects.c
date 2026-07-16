@@ -7,22 +7,22 @@
 #include "lb/lb_00B0.h"
 #include "lb/lbarchive.h"
 
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <baselib/gobj.h>
 #include <baselib/gobjproc.h>
 #include <baselib/jobj.h>
 #include <baselib/psstructs.h>
 #include <baselib/random.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #ifdef MSL_CORE_NATIVE
 #include "platform/native_dat.h"
 #endif
 
-static const MslCoreEffectData* msl_bound_effect_data;
-static MslCoreEffectState* msl_bound_effect_state;
+static _Thread_local const MslCoreEffectData* msl_bound_effect_data;
+static _Thread_local MslCoreEffectState* msl_bound_effect_state;
 
 #define msl_effect_banks (msl_bound_effect_data->banks)
 #define msl_effect_nodes (msl_bound_effect_state->nodes)

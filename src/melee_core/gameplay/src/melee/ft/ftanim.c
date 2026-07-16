@@ -20,9 +20,17 @@
 #include <melee/lb/lbanim.h>
 #include <melee/lb/lbvector.h>
 
+#ifdef MSL_CORE_HOSTED
+#include "runtime/context.h"
+#include "runtime/source_state.h"
+#define ftAnim_804590D8 (msl_core_ft_anim_scratch()->anim_joints)
+#define ftAnim_804590D8_unk (msl_core_ft_anim_scratch()->mat_anim_joints)
+#define ftAnim_804590D8_F0 (msl_core_ft_anim_scratch()->joints)
+#else
 static HSD_AnimJoint* ftAnim_804590D8[30];
 static HSD_MatAnimJoint* ftAnim_804590D8_unk[30];
 static HSD_Joint* ftAnim_804590D8_F0[30];
+#endif
 
 void ftAnim_GetNextAnimJointInTree(HSD_AnimJoint** panimjoint, int* pdepth)
 {

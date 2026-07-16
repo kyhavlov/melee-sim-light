@@ -8,6 +8,9 @@
 #include <baselib/archive.h>
 #include <baselib/debug.h>
 #include <melee/lb/lbdvd.h>
+#ifdef MSL_CORE_NATIVE
+#include <platform/files.h>
+#endif
 
 #pragma push
 #pragma dont_inline on
@@ -56,10 +59,19 @@ static inline HSD_Archive* lbArchive_LoadArchive_inline(const char* filename)
     void* data;
     u32 length;
 
+#ifdef MSL_CORE_NATIVE
+    archive = msl_host_archive_find(filename);
+    if (archive != NULL) {
+        return archive;
+    }
+#endif
     data = lbHeap_80015BD0(0, OSRoundUp32B(lbFile_800163D8(filename)));
     archive = lbHeap_80015BD0(0, sizeof(HSD_Archive));
     lbFile_8001668C(filename, data, &length);
     lbArchive_InitializeDAT(archive, data, length);
+#ifdef MSL_CORE_NATIVE
+    msl_host_archive_store(filename, archive);
+#endif
     return archive;
 }
 
@@ -109,10 +121,18 @@ HSD_Archive* lbArchive_LoadSymbols(const char* filename, void* symbols, ...)
 
     va_start(sections, symbols);
 
-    data = lbHeap_80015BD0(0, OSRoundUp32B(lbFile_800163D8(filename)));
-    archive = lbHeap_80015BD0(0, sizeof(HSD_Archive));
-    lbFile_8001668C(filename, data, &length);
-    lbArchive_InitializeDAT(archive, data, length);
+#ifdef MSL_CORE_NATIVE
+    archive = msl_host_archive_find(filename);
+    if (archive == NULL) {
+#endif
+        data = lbHeap_80015BD0(0, OSRoundUp32B(lbFile_800163D8(filename)));
+        archive = lbHeap_80015BD0(0, sizeof(HSD_Archive));
+        lbFile_8001668C(filename, data, &length);
+        lbArchive_InitializeDAT(archive, data, length);
+#ifdef MSL_CORE_NATIVE
+        msl_host_archive_store(filename, archive);
+    }
+#endif
     lbArchive_vLoadSectionsFatal(archive, symbols, sections);
 
     va_end(sections);
@@ -129,10 +149,18 @@ HSD_Archive* lbArchive_80016DBC(const char* filename, void* symbols, ...)
 
     va_start(sections, symbols);
 
-    data = lbHeap_80015BD0(0, OSRoundUp32B(lbFile_800163D8(filename)));
-    archive = lbHeap_80015BD0(0, sizeof(HSD_Archive));
-    lbFile_8001668C(filename, data, &length);
-    lbArchive_InitializeDAT(archive, data, length);
+#ifdef MSL_CORE_NATIVE
+    archive = msl_host_archive_find(filename);
+    if (archive == NULL) {
+#endif
+        data = lbHeap_80015BD0(0, OSRoundUp32B(lbFile_800163D8(filename)));
+        archive = lbHeap_80015BD0(0, sizeof(HSD_Archive));
+        lbFile_8001668C(filename, data, &length);
+        lbArchive_InitializeDAT(archive, data, length);
+#ifdef MSL_CORE_NATIVE
+        msl_host_archive_store(filename, archive);
+    }
+#endif
     lbArchive_vLoadSections(archive, symbols, sections);
 
     va_end(sections);
@@ -165,6 +193,9 @@ bool lbArchive_80016F80(HSD_Archive** archive, const char* filename)
         lbFile_8001668C(filename, data, &length);
         lbArchive_InitializeDAT(tmp, data, length);
         var_r3 = tmp;
+#ifdef MSL_CORE_NATIVE
+        msl_host_archive_store(filename, var_r3);
+#endif
         result = false;
     }
     if (archive != NULL) {
@@ -200,6 +231,9 @@ bool lbArchive_80017040(HSD_Archive** dst, const char* filename, void* symbols,
             lbFile_8001668C(filename, tmp, &length);
             lbArchive_InitializeDAT(archive2, tmp, length);
             archive = archive2;
+#ifdef MSL_CORE_NATIVE
+            msl_host_archive_store(filename, archive);
+#endif
         }
         preloaded = false;
     }
@@ -241,6 +275,9 @@ bool lbArchive_800171CC(HSD_Archive** dst, const char* filename, void* symbols,
             lbFile_8001668C(filename, tmp, &length);
             lbArchive_InitializeDAT(archive2, tmp, length);
             archive = archive2;
+#ifdef MSL_CORE_NATIVE
+            msl_host_archive_store(filename, archive);
+#endif
         }
         preloaded = false;
     }

@@ -186,6 +186,7 @@ typedef struct ValidationResult {
   int64_t signed_zero_equal_count;
   int64_t mismatch_count;
   uint64_t mismatch_fingerprint;
+  uint64_t actual_output_fingerprint;
   int detail_count;
   int mismatch_field_count;
   MismatchDetail details[MAX_DETAILS];
@@ -205,6 +206,7 @@ typedef struct StreamState {
   uint8_t output_row[sizeof(MslCoreCompare)];
   size_t output_have;
   uint8_t header_written;
+  uint8_t server_protocol;
   MslCoreMatchConfig config;
   MslCoreInput previous;
   uint8_t signed_zero_equal;
@@ -1207,6 +1209,15 @@ static void fingerprint_string(ValidationResult* result, const char* value) {
   } while (*value++ != '\0');
 }
 
+static void fingerprint_actual_output_bytes(ValidationResult* result, const uint8_t* bytes,
+                                            size_t size) {
+  size_t i;
+  for (i = 0; i < size; ++i) {
+    result->actual_output_fingerprint ^= bytes[i];
+    result->actual_output_fingerprint *= UINT64_C(1099511628211);
+  }
+}
+
 static void record_detail(ValidationResult* result, int64_t frame, const char* field, int index,
                           FieldKind kind, uint32_t expected, uint32_t actual) {
   char field_label[64];
@@ -1456,6 +1467,31 @@ static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemField
   return 1;
 }
 
+static void fingerprint_actual_output(ValidationResult* result, const MslCoreCompare* actual) {
+  MslCoreCompare canonical = *actual;
+  size_t item_field;
+  int slot;
+
+  // The direct output lock is intentionally bit exact for every published
+  // gameplay lane, including floating-point signed zero. A few Slippi item
+  // misc bytes expose presentation pointers or unowned fixed-pool residue;
+  // canonicalize only those source-proven non-gameplay lanes so the lock is
+  // location independent across native processes.
+  // refs/slippi-ssbm-asm/Recording/SendItemInfo.s
+  for (slot = 0; slot < MSL_CORE_MAX_ITEMS; ++slot) {
+    uint8_t* item_bytes = (uint8_t*)(void*)&canonical.items[slot];
+    for (item_field = 0; item_field < sizeof(item_compare_fields) / sizeof(item_compare_fields[0]);
+         ++item_field) {
+      const ItemFieldSpec* spec = &item_compare_fields[item_field];
+      if (!item_field_is_gameplay_state(&canonical.items[slot], spec)) {
+        memset(item_bytes + spec->offset, 0, field_width((FieldKind)spec->kind));
+      }
+    }
+  }
+  fingerprint_actual_output_bytes(result, (const uint8_t*)(const void*)&canonical,
+                                  sizeof(canonical));
+}
+
 static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t logical_pos,
                        const MslCoreCompare* actual, int signed_zero_equal,
                        ValidationResult* result) {
@@ -1571,6 +1607,13 @@ static void refill_write_buffer(StreamState* state) {
   state->write_len = 0;
   state->write_off = 0;
   if (!state->header_written) {
+    if (state->server_protocol) {
+      uint32_t frame_count = (uint32_t)(state->process_end_pos + 1);
+      state->write_buf[state->write_len++] = (uint8_t)frame_count;
+      state->write_buf[state->write_len++] = (uint8_t)(frame_count >> 8);
+      state->write_buf[state->write_len++] = (uint8_t)(frame_count >> 16);
+      state->write_buf[state->write_len++] = (uint8_t)(frame_count >> 24);
+    }
     memcpy(state->write_buf + state->write_len, &state->config, sizeof(state->config));
     state->write_len += sizeof(state->config);
     memcpy(state->write_buf + state->write_len, &state->previous, sizeof(state->previous));
@@ -1644,6 +1687,7 @@ static int consume_output(StreamState* state, const uint8_t* data, size_t size, 
         int64_t raw = state->rows->raw[logical_pos];
         int64_t frame = get_i32(&state->replay->frame_id, raw);
         const MslCoreCompare* actual = (const MslCoreCompare*)(const void*)state->output_row;
+        fingerprint_actual_output(&state->result, actual);
         if (compare_row(state->replay, state->rows, logical_pos, actual, state->signed_zero_equal,
                         &state->result)) {
           state->result.matched_frames += 1;
@@ -1678,6 +1722,108 @@ static int set_nonblocking(int fd, char* error, size_t error_size) {
   int flags = fcntl(fd, F_GETFL, 0);
   if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
     snprintf(error, error_size, "fcntl(O_NONBLOCK): %s", strerror(errno));
+    return -1;
+  }
+  return 0;
+}
+
+static int stream_runner_session(int input_fd, int output_fd, double timeout, StreamState* state,
+                                 char* error, size_t error_size) {
+  int64_t expected_rows = state->process_end_pos + 1;
+  int input_complete = 0;
+  double deadline = monotonic_seconds() + timeout;
+  uint8_t read_buf[IO_CHUNK_BYTES];
+
+  if (input_fd < 0 || output_fd < 0 || set_nonblocking(input_fd, error, error_size) != 0 ||
+      set_nonblocking(output_fd, error, error_size) != 0) {
+    return -1;
+  }
+  state->server_protocol = 1;
+  refill_write_buffer(state);
+  while (state->output_rows < expected_rows) {
+    struct pollfd fds[2];
+    nfds_t count = 0;
+    int input_index = -1;
+    int output_index;
+    double remaining;
+    int wait_ms;
+    int polled;
+
+    if (!input_complete && state->write_off == state->write_len) {
+      refill_write_buffer(state);
+      input_complete = state->write_off == state->write_len;
+    }
+    remaining = deadline - monotonic_seconds();
+    if (remaining <= 0.0) {
+      snprintf(error, error_size, "core validation timed out after %.1f seconds", timeout);
+      return -1;
+    }
+    wait_ms = remaining >= 1.0 ? 1000 : (int)ceil(remaining * 1000.0);
+    if (!input_complete) {
+      input_index = (int)count;
+      fds[count].fd = input_fd;
+      fds[count].events = POLLOUT;
+      fds[count].revents = 0;
+      ++count;
+    }
+    output_index = (int)count;
+    fds[count].fd = output_fd;
+    fds[count].events = POLLIN;
+    fds[count].revents = 0;
+    ++count;
+    polled = poll(fds, count, wait_ms);
+    if (polled < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      snprintf(error, error_size, "poll persistent core runner: %s", strerror(errno));
+      return -1;
+    }
+    if (polled == 0) {
+      continue;
+    }
+    if (input_index >= 0 && (fds[input_index].revents & (POLLOUT | POLLHUP | POLLERR)) != 0) {
+      ssize_t wrote =
+          write(input_fd, state->write_buf + state->write_off, state->write_len - state->write_off);
+      if (wrote > 0) {
+        state->write_off += (size_t)wrote;
+        if (state->write_off == state->write_len) {
+          refill_write_buffer(state);
+          input_complete = state->write_off == state->write_len;
+        }
+      } else if (wrote < 0 && errno != EAGAIN && errno != EINTR) {
+        snprintf(error, error_size, "write to persistent core runner: %s", strerror(errno));
+        return -1;
+      }
+    }
+    if ((fds[output_index].revents & (POLLIN | POLLHUP | POLLERR)) != 0) {
+      for (;;) {
+        ssize_t got = read(output_fd, read_buf, sizeof(read_buf));
+        if (got > 0) {
+          if (consume_output(state, read_buf, (size_t)got, error, error_size) != 0) {
+            return -1;
+          }
+          continue;
+        }
+        if (got == 0) {
+          snprintf(error, error_size, "persistent core runner closed its output");
+          return -1;
+        }
+        if (errno == EINTR) {
+          continue;
+        }
+        if (errno == EAGAIN) {
+          break;
+        }
+        snprintf(error, error_size, "read from persistent core runner: %s", strerror(errno));
+        return -1;
+      }
+    }
+  }
+  if (!input_complete || state->output_have != 0 || state->output_rows != expected_rows) {
+    snprintf(error, error_size,
+             "persistent core runner returned %" PRId64 "/%" PRId64 " rows with %zu trailing bytes",
+             state->output_rows, expected_rows, state->output_have);
     return -1;
   }
   return 0;
@@ -1948,6 +2094,12 @@ static PyObject* result_object(const ReplayView* replay, const FrameRows* rows,
       PyLong_FromLongLong(state->result.render_visibility_mismatch_count));
   PUT("signed_zero_equal_count", PyLong_FromLongLong(state->result.signed_zero_equal_count));
   PUT("mismatch_count", PyLong_FromLongLong(state->result.mismatch_count));
+  {
+    char fingerprint[17];
+    snprintf(fingerprint, sizeof(fingerprint), "%016" PRIx64,
+             state->result.actual_output_fingerprint);
+    PUT("actual_output_fingerprint", PyUnicode_FromString(fingerprint));
+  }
   if (passed) {
     Py_INCREF(Py_None);
     PUT("first_mismatch_frame", Py_None);
@@ -2036,6 +2188,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "ucf_cardinals_1_0_enabled",
       "ucf_shield_sdi_enabled",
       "ucf_sdi_enabled",
+      "runner_stdin",
+      "runner_stdout",
       NULL,
   };
   PyObject* frames_obj;
@@ -2054,6 +2208,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int ucf_cardinals_1_0_enabled = 1;
   int ucf_shield_sdi_enabled = 1;
   int ucf_sdi_enabled = 1;
+  int runner_stdin = -1;
+  int runner_stdout = -1;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -2072,14 +2228,18 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdppppp:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppii:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
-          &ucf_shield_sdi_enabled, &ucf_sdi_enabled)) {
+          &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &runner_stdin, &runner_stdout)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
     PyErr_SetString(PyExc_ValueError, "timeout must be positive");
+    return NULL;
+  }
+  if ((runner_stdin >= 0) != (runner_stdout >= 0) || (runner_stdin >= 0 && !direct_native)) {
+    PyErr_SetString(PyExc_ValueError, "persistent runner descriptors require the native backend");
     return NULL;
   }
   memset(&replay, 0, sizeof(replay));
@@ -2090,6 +2250,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   state.result.last_mismatch_frame = INT64_MIN;
   state.result.first_render_visibility_mismatch_frame = INT64_MIN;
   state.result.mismatch_fingerprint = UINT64_C(14695981039346656037);
+  state.result.actual_output_fingerprint = UINT64_C(14695981039346656037);
   if (parse_start(start_obj, &replay) != 0 || parse_metadata(metadata_obj, &replay) != 0) {
     goto done;
   }
@@ -2220,9 +2381,14 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   build_input(&replay, &rows, 0, &state.previous);
 
   runner_started = monotonic_seconds();
-  Py_BEGIN_ALLOW_THREADS stream_result =
-      stream_runner(qemu_path, sysroot, binary_path, data_root, direct_native, timeout, &state,
-                    error, sizeof(error));
+  Py_BEGIN_ALLOW_THREADS if (runner_stdin >= 0) {
+    stream_result =
+        stream_runner_session(runner_stdin, runner_stdout, timeout, &state, error, sizeof(error));
+  }
+  else {
+    stream_result = stream_runner(qemu_path, sysroot, binary_path, data_root, direct_native,
+                                  timeout, &state, error, sizeof(error));
+  }
   Py_END_ALLOW_THREADS runner_seconds = monotonic_seconds() - runner_started;
   if (stream_result != 0) {
     PyErr_SetString(PyExc_RuntimeError, error);

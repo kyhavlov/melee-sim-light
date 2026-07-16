@@ -7,6 +7,7 @@ canonical="$core/gameplay"
 files="$core/upstream-files.txt"
 lock="$core/upstream.lock"
 default_checkout="$root/refs/melee"
+canonical_metadata=".clang-format"
 
 lock_value() {
     awk -F '\t' -v key="$1" \
@@ -78,7 +79,8 @@ add_paths() {
     copy_tree "$scratch" "$canonical"
 
     new_files=$(mktemp "$core/.upstream-files.XXXXXX")
-    LC_ALL=C find "$canonical" -type f -printf '%P\n' | sort > "$new_files"
+    LC_ALL=C find "$canonical" -type f \
+        ! -path "$canonical/$canonical_metadata" -printf '%P\n' | sort > "$new_files"
     mv "$new_files" "$files"
 
     upstream=$(mktemp -d "${TMPDIR:-/tmp}/msl-core-upstream.XXXXXX")
@@ -98,7 +100,8 @@ verify_inventory() {
     local label=$2
     local actual
     actual=$(mktemp)
-    LC_ALL=C find "$tree" -type f -printf '%P\n' | sort > "$actual"
+    LC_ALL=C find "$tree" -type f \
+        ! -path "$tree/$canonical_metadata" -printf '%P\n' | sort > "$actual"
     if ! diff -u "$files" "$actual"; then
         echo "$label file set differs from upstream-files.txt" >&2
         rm -f "$actual"
@@ -137,6 +140,7 @@ prepare_comparison() {
         -c user.email=source-sync.invalid \
         commit -q --no-gpg-sign -m upstream
     copy_tree "$canonical" "$tree"
+    rm -f "$tree/$canonical_metadata"
     git -C "$tree" add -A
 }
 

@@ -1,7 +1,9 @@
 #include "random.h"
 
+#ifndef MSL_CORE_HOSTED
 u32 seed = 1;
 u32* seed_ptr = &seed;
+#endif
 
 s32 HSD_Rand(void)
 {

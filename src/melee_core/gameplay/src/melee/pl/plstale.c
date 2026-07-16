@@ -8,7 +8,14 @@
 #include "pl/player.h"
 #include "pl/types.h"
 
+#ifdef MSL_CORE_HOSTED
+#include "runtime/context.h"
+#include "runtime/source_state.h"
+#define staleAttackInstance                                                   \
+    (msl_core_source_match_state()->stale_attack_instance_counter)
+#else
 u16 staleAttackInstance;
+#endif
 
 void plStale_InitAttackInstance(void)
 {

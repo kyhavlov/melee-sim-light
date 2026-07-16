@@ -136,8 +136,15 @@
 /* 031328 */ void Camera_80031328(HSD_GObj*, u64);
 /* 0313E0 */ void Camera_800313E0(HSD_GObj*, u64);
 
+#ifndef MSL_CORE_HOSTED
 extern CmSubject* cm_804D6468;
 extern CameraDebugMode cm_80453004;
+#else
+CmSubject** msl_core_camera_last_subject_ref(void);
+CameraDebugMode* msl_core_camera_debug(void);
+#define cm_804D6468 (*msl_core_camera_last_subject_ref())
+#define cm_80453004 (*msl_core_camera_debug())
+#endif
 extern CameraUnkGlobals cm_803BCCA0;
 
 #endif

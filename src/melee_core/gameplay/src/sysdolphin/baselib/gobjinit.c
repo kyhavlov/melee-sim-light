@@ -2,6 +2,19 @@
 #include "gobjplink.h"
 #include "gobjproc.h"
 #include "memory.h"
+#ifdef MSL_CORE_NATIVE
+#include <platform/memory.h>
+#endif
+
+static void* alloc_pointer_array(size_t count)
+{
+#ifdef MSL_CORE_NATIVE
+    return HSD_MemAllocReloc(count * sizeof(void*), MSL_RELOC_POINTER_ARRAY,
+                             (u32) count, sizeof(void*), 0);
+#else
+    return HSD_MemAlloc(count * sizeof(void*));
+#endif
+}
 
 static HSD_GObjLibInitDataType HSD_GObj_80408620 = {
     0x3F,
@@ -13,10 +26,6 @@ void HSD_GObj_803912E0(HSD_GObjLibInitDataType* arg0)
 {
     *arg0 = HSD_GObj_80408620;
 }
-
-extern HSD_ObjAllocData gobj_alloc_data;
-extern HSD_ObjAllocData gobjproc_alloc_data;
-extern struct _unk_gobj_struct HSD_GObj_804CE3E4;
 
 void HSD_GObj_80391304(HSD_GObjLibInitDataType* arg0)
 {
@@ -30,32 +39,27 @@ void HSD_GObj_80391304(HSD_GObjLibInitDataType* arg0)
 
     HSD_GObjLibInitData = *arg0;
 
-    HSD_GObj_Entities =
-        HSD_MemAlloc(sizeof(HSD_GObj*) * (arg0->p_link_max + 1));
-    plinklow_gobjs = HSD_MemAlloc(sizeof(HSD_GObj*) * (arg0->p_link_max + 1));
+    HSD_GObj_Entities = alloc_pointer_array(arg0->p_link_max + 1);
+    plinklow_gobjs = alloc_pointer_array(arg0->p_link_max + 1);
     for (i = 0; i < arg0->p_link_max + 1; i++) {
         ((HSD_GObj**) HSD_GObj_Entities)[i] = plinklow_gobjs[i] = NULL;
     }
 
-    HSD_GObjGXLinkHead =
-        HSD_MemAlloc(sizeof(HSD_GObj*) * (arg0->gx_link_max + 2));
-    HSD_GObj_804D7820 =
-        HSD_MemAlloc(sizeof(HSD_GObj*) * (arg0->gx_link_max + 2));
+    HSD_GObjGXLinkHead = alloc_pointer_array(arg0->gx_link_max + 2);
+    HSD_GObj_804D7820 = alloc_pointer_array(arg0->gx_link_max + 2);
 
     for (i = 0; i < arg0->gx_link_max + 2; i++) {
         HSD_GObjGXLinkHead[i] = HSD_GObj_804D7820[i] = 0;
     }
 
-    HSD_GObj_804D7840 =
-        HSD_MemAlloc(sizeof(HSD_GObjProc*) * (arg0->gproc_pri_max + 1));
+    HSD_GObj_804D7840 = alloc_pointer_array(arg0->gproc_pri_max + 1);
 
     for (i = 0; i < arg0->gproc_pri_max + 1; i++) {
         HSD_GObj_804D7840[i] = 0;
     }
 
-    HSD_GObj_804D7844 =
-        HSD_MemAlloc(sizeof(HSD_GObjProc*) * (arg0->gproc_pri_max + 1) *
-                     (arg0->p_link_max + 1));
+    HSD_GObj_804D7844 = alloc_pointer_array((arg0->gproc_pri_max + 1) *
+                                            (arg0->p_link_max + 1));
 
     for (i = 0; i < (arg0->gproc_pri_max + 1) * (arg0->p_link_max + 1); i++) {
         HSD_GObj_804D7844[i] = 0;

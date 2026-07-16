@@ -76,7 +76,9 @@ typedef struct CrowdConfig {
 /* 3224DC */ bool un_803224DC(s32 spawn_id, f32 pos_x, f32 kb_mag);
 /* 322598 */ int un_80322598(int, float);
 /* 4A2F08 */ extern CrowdSFX_UnkStruct un_804A2F08;
+#ifndef MSL_CORE_HOSTED
 /* 4D6500 */ extern CrowdConfig* gCrowdConfig;
+#endif
 /* 4D7050 */ extern CrowdSFX_UnkStruct* un_804D7050;
 
 #endif

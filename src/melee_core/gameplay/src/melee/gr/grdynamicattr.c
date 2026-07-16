@@ -8,12 +8,22 @@
 #include <math.h>
 #include <math_ppc.h>
 #include <baselib/debug.h>
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#include <runtime/source_state.h>
+#endif
 
 static const s32 GC_Id_None = -1;
 
+#ifdef MSL_CORE_HOSTED
+#define grDynamicAttr_8049EFA0 (msl_core_ground_state()->dynamic_pool)
+#define grDynamicAttr_804D6960 (msl_core_ground_state()->dynamic_active)
+#define grDynamicAttr_804D6964 (msl_core_ground_state()->dynamic_free)
+#else
 static grDynamicAttr_UnkStruct grDynamicAttr_8049EFA0[4];
 static grDynamicAttr_UnkStruct* grDynamicAttr_804D6960;
 static grDynamicAttr_UnkStruct* grDynamicAttr_804D6964;
+#endif
 
 void grDynamicAttr_801CA0B4(void)
 {

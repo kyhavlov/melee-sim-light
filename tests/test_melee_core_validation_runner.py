@@ -26,6 +26,7 @@ def _result(*, passed: bool = True, frames: int = 10) -> dict[str, object]:
         "last_mismatch_frame": None if passed else 7,
         "mismatch_count": 0 if passed else 1,
         "mismatch_fingerprint": None if passed else "0123456789abcdef",
+        "actual_output_fingerprint": "1111222233334444",
         "mismatch_fields": []
         if passed
         else [{"field": "pos_x", "count": 1, "first_frame": 7, "last_frame": 7}],
@@ -171,8 +172,22 @@ def test_parallel_runner_preserves_manifest_order_and_isolates_errors(
             raise RuntimeError("unsupported owner")
         return _result()
 
+    class FakeRunnerPool:
+        def __init__(self, _count: int) -> None:
+            self.runner = object()
+
+        def acquire(self):
+            return self.runner
+
+        def release(self, _runner) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
     monkeypatch.setattr(validate_replay, "validate_one", fake_validate_one)
     monkeypatch.setattr(validate_replay, "game_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(validate_replay, "_NativeRunnerPool", FakeRunnerPool)
 
     outcomes, _wall = validate_replay.run_cases(
         object(),
@@ -318,3 +333,39 @@ def test_full_replay_xpass_rejects_stale_classification(capsys) -> None:
     output = capsys.readouterr().out
     assert "PASS" in output
     assert "XPASS" not in output
+
+
+def test_full_output_lock_rejects_behavior_drift(capsys) -> None:
+    case = validate_replay.ReplayCase(Path("known.slpz"), "known.slpz")
+    result = _result()
+    outcome = validate_replay.ReplayOutcome(case, result, None, 0.02)
+    lock = validate_replay.ReplayOutputLock(
+        replay=case.display_path,
+        expected={
+            "native": {
+                "frames": 10,
+                "actual_output_fingerprint": "1111222233334444",
+            }
+        },
+    )
+
+    assert validate_replay.print_backend_results(
+        "native",
+        [outcome],
+        workers=1,
+        wall_seconds=0.02,
+        show_timing=False,
+        output_locks={case.display_path: lock},
+        require_output_lock=True,
+    )
+    result["actual_output_fingerprint"] = "aaaaaaaaaaaaaaaa"
+    assert not validate_replay.print_backend_results(
+        "native",
+        [outcome],
+        workers=1,
+        wall_seconds=0.02,
+        show_timing=False,
+        output_locks={case.display_path: lock},
+        require_output_lock=True,
+    )
+    assert "output drift" in capsys.readouterr().out

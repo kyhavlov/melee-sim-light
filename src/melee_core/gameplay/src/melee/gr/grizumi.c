@@ -38,6 +38,10 @@
 #include <baselib/state.h>
 #include <baselib/tobj.h>
 #include <baselib/wobj.h> // IWYU pragma: keep
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#include <runtime/source_state.h>
+#endif
 
 /// context stuff
 typedef struct FountainParams {
@@ -73,7 +77,13 @@ typedef struct IzumiUnkCC {
 } IzumiUnkCC;
 #define GET_REFLECTION(gobj) ((IzumiReflection*) HSD_GObjGetUserData(gobj))
 
+#ifdef MSL_CORE_HOSTED
+#define grIz_804D6968                                                         \
+    (*(FountainParams**) msl_core_stage_pointer_ref(                          \
+        MSL_STAGE_POINTER_FOUNTAIN_PARAMS))
+#else
 FountainParams* grIz_804D6968;
+#endif
 S16Vec3 grIz_803E0D60[] = { { 0, 3, 1 }, { 1, 3, 2 }, { 2, 3, 3 } };
 StageCallbacks grIz_803E0D74[] = {
     {

@@ -203,6 +203,11 @@
 /* 05A220 */ void mpLib_DrawSpecialPoints(void);
 /* 05A2DC */ void mpLib_8005A2DC(void);
 /* 05A340 */ void mpLib_DrawZones(void);
+#ifdef MSL_CORE_NATIVE
+#include <runtime/context.h>
+#define mpLib_80458868 (msl_core_mp_collision_boxes())
+#else
 /* 458868 */ extern mpCollisionBox mpLib_80458868[2];
+#endif
 
 #endif

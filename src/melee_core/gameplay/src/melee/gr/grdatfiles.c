@@ -1,5 +1,6 @@
 #include "gr/grdatfiles.h"
 
+#include "gr/ground.h"
 #include "gr/types.h"
 #include "lb/lb_00B0.h"
 #include "lb/lbarchive.h"
@@ -9,13 +10,19 @@
 #include <baselib/debug.h>
 #include <baselib/particle.h>
 #include <baselib/psstructs.h>
-
-extern StageInfo stage_info;
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#include <runtime/source_state.h>
+#endif
 
 /// @todo Bad split?
 /* static */ extern UnkStage6B0 grDatFiles_803E0848;
 
+#ifdef MSL_CORE_HOSTED
+#define grDatFiles_8049EE10 (msl_core_ground_state()->dat_files)
+#else
 static UnkArchiveStruct grDatFiles_8049EE10[4];
+#endif
 
 /// @todo Bad split?
 /* static */ extern UnkStageDat grDatFiles_803E0924;
@@ -103,7 +110,12 @@ static void grDatFiles_801C6228(UnkStageDat* arg0)
         s32 i;
         for (i = 0; i < arg0->unk2C; i++) {
             UnkStageDatInternal* temp_r4 = arg0->unk28[i];
-            if (temp_r4 != NULL) {
+            if (temp_r4 != NULL && !(temp_r4->unk4 & 0x4000000)) {
+                // The native GameData graph is shared by every match and
+                // sealed after its first source initialization. This source
+                // publication is idempotent, so avoid a redundant write on
+                // later resets without changing the resulting flag state.
+                // refs/melee/src/melee/gr/grdatfiles.c::grDatFiles_801C6228
                 temp_r4->unk4 |= 0x4000000;
             }
         }

@@ -9,13 +9,72 @@
 #include <stddef.h>
 #include <string.h>
 #include <dolphin/os.h>
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#endif
+#ifdef MSL_CORE_NATIVE
+#include <platform/memory.h>
+#include <runtime/relocation.h>
+#endif
 
 void _hsdClassInfoInit(void);
 HSD_ClassInfo hsdClass = { _hsdClassInfoInit };
 
+#ifdef MSL_CORE_HOSTED
+#define memory_list (msl_core_class_context()->memory_list)
+#define nb_memory_list (msl_core_class_context()->nb_memory_list)
+#define current_hash (msl_core_class_context()->current_hash)
+#else
 static HSD_MemoryEntry** memory_list;
 static s32 nb_memory_list;
 static HSD_Hash* current_hash;
+#endif
+
+#ifdef MSL_CORE_HOSTED
+static u32 class_count_index(HSD_ClassInfo* info)
+{
+    HSD_ClassContext* context = msl_core_class_context();
+    u32 i;
+
+    for (i = 0; i < context->class_count; ++i) {
+        if (context->class_keys[i] == info) {
+            return i;
+        }
+    }
+    if (context->class_count == HSD_CLASS_CONTEXT_CAPACITY) {
+        abort();
+    }
+    i = context->class_count++;
+    context->class_keys[i] = info;
+    return i;
+}
+
+static void class_count_alloc(HSD_ClassInfo* info)
+{
+    HSD_ClassContext* context = msl_core_class_context();
+    u32 i = class_count_index(info);
+    context->class_nb_exist[i] += 1;
+    if (context->class_nb_exist[i] > context->class_nb_peak[i]) {
+        context->class_nb_peak[i] = context->class_nb_exist[i];
+    }
+}
+
+static void class_count_free(HSD_ClassInfo* info)
+{
+    HSD_ClassContext* context = msl_core_class_context();
+    u32 i = class_count_index(info);
+    HSD_ASSERT(0x1003, context->class_nb_exist[i] != 0);
+    context->class_nb_exist[i] -= 1;
+}
+
+static void class_count_reset(HSD_ClassInfo* info)
+{
+    HSD_ClassContext* context = msl_core_class_context();
+    u32 i = class_count_index(info);
+    context->class_nb_exist[i] = 0;
+    context->class_nb_peak[i] = 0;
+}
+#endif
 
 #pragma push
 #pragma dont_inline on
@@ -85,8 +144,14 @@ HSD_MemoryEntry* GetMemoryEntry(s32 idx)
 
             for (new_nb = 32; idx >= new_nb; new_nb *= 2) {
             }
+#ifdef MSL_CORE_NATIVE
+            memory_list = HSD_MemAllocReloc(new_nb * sizeof(*memory_list),
+                                            MSL_RELOC_POINTER_ARRAY, new_nb,
+                                            sizeof(*memory_list), 0);
+#else
             memory_list = (HSD_MemoryEntry**) HSD_MemAlloc(
                 new_nb * sizeof(*memory_list));
+#endif
             if (memory_list == NULL) {
                 return NULL;
             }
@@ -102,7 +167,13 @@ HSD_MemoryEntry* GetMemoryEntry(s32 idx)
                 new_nb *= 2;
             }
 
+#ifdef MSL_CORE_NATIVE
+            new_list = HSD_MemAllocReloc(sizeof(*new_list) * new_nb,
+                                         MSL_RELOC_POINTER_ARRAY, new_nb,
+                                         sizeof(*new_list), 0);
+#else
             new_list = HSD_MemAlloc(sizeof(*new_list) * new_nb);
+#endif
             if (new_list == NULL) {
                 return NULL;
             }
@@ -130,7 +201,13 @@ HSD_MemoryEntry* GetMemoryEntry(s32 idx)
         HSD_MemoryEntry* entry;
         usize_t size = idx * 4;
         if (memory_list[idx] == NULL) {
+#ifdef MSL_CORE_NATIVE
+            entry = HSD_MemAllocReloc(sizeof(HSD_MemoryEntry),
+                                      MSL_RELOC_HSD_MEMORY_ENTRY, 1,
+                                      sizeof(HSD_MemoryEntry), 0);
+#else
             entry = HSD_MemAlloc(sizeof(HSD_MemoryEntry));
+#endif
             if (entry == NULL) {
                 return NULL;
             }
@@ -239,6 +316,10 @@ void hsdFreeMemPiece(void* mem, s32 size)
         piece->next = entry->free_list;
         entry->free_list = piece;
         entry->nb_free += 1;
+#ifdef MSL_CORE_NATIVE
+        msl_reloc_register(mem, MSL_RELOC_RAW, 1, (u32) size,
+                           MSL_RELOC_INTRUSIVE_FIRST_POINTER);
+#endif
     }
 }
 
@@ -278,10 +359,14 @@ HSD_Class* _hsdClassAlloc(HSD_ClassInfo* info)
 {
     HSD_Class* mem_piece = hsdAllocMemPiece(info->head.obj_size);
     if (mem_piece != NULL) {
+#ifdef MSL_CORE_HOSTED
+        class_count_alloc(info);
+#else
         info->head.nb_exist += 1;
         if (info->head.nb_exist > info->head.nb_peak) {
             info->head.nb_peak = info->head.nb_exist;
         }
+#endif
     }
     return mem_piece;
 }
@@ -296,14 +381,22 @@ void _hsdClassRelease(HSD_Class* cls) {}
 void _hsdClassDestroy(HSD_Class* cls)
 {
     HSD_ClassInfo* info = cls->class_info;
+#ifdef MSL_CORE_HOSTED
+    class_count_free(info);
+#else
     info->head.nb_exist -= 1;
+#endif
     hsdFreeMemPiece(cls, info->head.obj_size);
 }
 
 void _hsdClassAmnesia(HSD_ClassInfo* info)
 {
+#ifdef MSL_CORE_HOSTED
+    class_count_reset(info);
+#else
     info->head.nb_exist = 0;
     info->head.nb_peak = 0;
+#endif
     if (info == &hsdClass) {
         nb_memory_list = 0;
         memory_list = NULL;
@@ -337,6 +430,9 @@ void* hsdNew(HSD_ClassInfo* i)
     ClassInfoInit(info);
     memset(cls, 0, info->head.obj_size);
     cls->class_info = info;
+#ifdef MSL_CORE_NATIVE
+    msl_reloc_register_hsd_class(cls, info);
+#endif
     if (info->init(cls) < 0) {
         info->destroy(cls);
         return NULL;
@@ -382,11 +478,16 @@ inline bool hsdChangeClass_inline(HSD_Obj* object, HSD_ClassInfo* class_info)
         var_r28 = var_r28->head.parent;
     }
     if (var_r29 == var_r28) {
+#ifdef MSL_CORE_HOSTED
+        class_count_free(var_r29);
+        class_count_alloc(class_info);
+#else
         var_r29->head.nb_exist--;
         class_info->head.nb_exist++;
         if (class_info->head.nb_exist > class_info->head.nb_peak) {
             class_info->head.nb_peak = class_info->head.nb_exist;
         }
+#endif
         object->parent.class_info = class_info;
         return true;
     }

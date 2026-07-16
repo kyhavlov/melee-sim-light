@@ -7,10 +7,12 @@
 #include <dolphin/os/OSError.h>
 #include <baselib/debug.h>
 
+#ifndef MSL_CORE_HOSTED
 struct ftDeviceUnk3 ft_80459A68[4];
 struct ftDeviceUnk4 ft_804D6578;
 int ftDevice_BuryThingCount;
 int ft_804D6570;
+#endif
 
 ColorOverlay* ftCo_800C0658(Fighter* fp)
 {

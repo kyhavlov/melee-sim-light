@@ -83,7 +83,7 @@ typedef struct _HSD_GObjList {
     /* +48 */ HSD_GObj* x48;
 } HSD_GObjList;
 
-extern struct _unk_gobj_struct {
+struct _unk_gobj_struct {
     union {
         u32 flags;
         struct {
@@ -97,8 +97,10 @@ extern struct _unk_gobj_struct {
     u8 p_link;
     u8 p_prio;
     HSD_GObj* gobj;
-} HSD_GObj_804CE3E4;
+};
 
+#ifndef MSL_CORE_HOSTED
+extern struct _unk_gobj_struct HSD_GObj_804CE3E4;
 extern GObjFunc* HSD_GObj_804D7810;
 extern HSD_GObj* HSD_GObj_804D7814;
 extern HSD_GObj* HSD_GObj_804D7818;
@@ -121,6 +123,59 @@ extern s8 HSD_GObj_804D784A;
 extern u8 HSD_GObj_804D784B;
 
 extern HSD_GObjLibInitDataType HSD_GObjLibInitData;
+extern HSD_ObjAllocData gobjproc_alloc_data;
+extern HSD_ObjAllocData gobj_alloc_data;
+#else
+typedef struct HSD_GObjContext {
+    struct _unk_gobj_struct pending;
+    HSD_ObjAllocData proc_alloc;
+    HSD_ObjAllocData gobj_alloc;
+    HSD_GObjLibInitDataType init_data;
+    GObjFunc* funcs;
+    HSD_GObj* current_render;
+    HSD_GObj* current_render_max;
+    HSD_GObj* current_proc_gobj;
+    HSD_GObj** gx_link_tail;
+    HSD_GObj** gx_link_head;
+    HSD_GObj** p_link_tail;
+    HSD_GObjList* entities;
+    HSD_GObjProc* next_proc;
+    s32 current_proc_priority;
+    HSD_GObjProc* current_proc;
+    s32 proc_epoch;
+    HSD_GObjProc** proc_heads;
+    HSD_GObjProc** proc_tails;
+    s8 obj_none;
+    u8 jobj_kind;
+    s8 lobj_kind;
+    u8 cobj_kind;
+} HSD_GObjContext;
+
+HSD_GObjContext* msl_core_gobj_context(void);
+
+#define HSD_GObj_804CE3E4 (msl_core_gobj_context()->pending)
+#define gobjproc_alloc_data (msl_core_gobj_context()->proc_alloc)
+#define gobj_alloc_data (msl_core_gobj_context()->gobj_alloc)
+#define HSD_GObjLibInitData (msl_core_gobj_context()->init_data)
+#define HSD_GObj_804D7810 (msl_core_gobj_context()->funcs)
+#define HSD_GObj_804D7814 (msl_core_gobj_context()->current_render)
+#define HSD_GObj_804D7818 (msl_core_gobj_context()->current_render_max)
+#define HSD_GObj_804D781C (msl_core_gobj_context()->current_proc_gobj)
+#define HSD_GObj_804D7820 (msl_core_gobj_context()->gx_link_tail)
+#define HSD_GObjGXLinkHead (msl_core_gobj_context()->gx_link_head)
+#define plinklow_gobjs (msl_core_gobj_context()->p_link_tail)
+#define HSD_GObj_Entities (msl_core_gobj_context()->entities)
+#define HSD_GObj_804D7830 (msl_core_gobj_context()->next_proc)
+#define HSD_GObj_804D7834 (msl_core_gobj_context()->current_proc_priority)
+#define HSD_GObj_804D7838 (msl_core_gobj_context()->current_proc)
+#define HSD_GObj_804D783C (msl_core_gobj_context()->proc_epoch)
+#define HSD_GObj_804D7840 (msl_core_gobj_context()->proc_heads)
+#define HSD_GObj_804D7844 (msl_core_gobj_context()->proc_tails)
+#define HSD_GObj_804D7848 (msl_core_gobj_context()->obj_none)
+#define HSD_GObj_804D7849 (msl_core_gobj_context()->jobj_kind)
+#define HSD_GObj_804D784A (msl_core_gobj_context()->lobj_kind)
+#define HSD_GObj_804D784B (msl_core_gobj_context()->cobj_kind)
+#endif
 
 void HSD_GObj_80390C5C(HSD_GObj* gobj);
 void HSD_GObj_80390C84(HSD_GObj* gobj);

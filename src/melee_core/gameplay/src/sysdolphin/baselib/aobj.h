@@ -63,6 +63,20 @@ struct HSD_AnimJoint {
     u32 flags;
 };
 
+#ifdef MSL_CORE_HOSTED
+// Animation end-callback accounting is reset and accumulated by the frame
+// scheduler, so it must follow the active Match during interleaved stepping.
+// refs/melee/src/sysdolphin/baselib/aobj.c::{HSD_AObjInitEndCallBack,
+//   HSD_AObjInterpretAnim,HSD_AObjInvokeCallBacks}
+typedef struct HSD_AObjContext {
+    struct _HSD_SList* endcallback_list;
+    s32 ended_count;
+    s32 active_count;
+} HSD_AObjContext;
+
+HSD_AObjContext* msl_core_aobj_context(void);
+#endif
+
 void HSD_AObjInitAllocData(void);
 HSD_ObjAllocData* HSD_AObjGetAllocData(void);
 u32 HSD_AObjGetFlags(HSD_AObj* aobj);

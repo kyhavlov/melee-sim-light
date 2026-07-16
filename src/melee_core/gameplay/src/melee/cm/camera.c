@@ -9,6 +9,9 @@
 #include "baselib/gobj.h"
 #include "baselib/lobj.h"
 #include "baselib/memory.h"
+#ifdef MSL_CORE_NATIVE
+#include <platform/memory.h>
+#endif
 #include "baselib/random.h"
 #include "baselib/util.h"
 
@@ -53,7 +56,11 @@
                                          CameraTransformState* transform,
                                          f32 speed);
 /* 0301D0 */ static void fn_800301D0(HSD_GObj*, int);
+#ifndef MSL_CORE_HOSTED
 /* 4D6464 */ static HSD_CObj* cm_804D6464;
+#else
+#define cm_804D6464 (msl_core_source_match_state()->camera.cobj)
+#endif
 
 static inline float vec_len(Vec3* offset)
 {
@@ -118,7 +125,13 @@ void Camera_80028B9C(int n_subjects)
     cm_80452C68.x39A_b1 = 0;
     cm_80452C68.x39A_b2 = 0;
     cm_80452C68.gobj = NULL;
+#ifdef MSL_CORE_NATIVE
+    cam_box =
+        HSD_MemAllocReloc(n_subjects * sizeof(CmSubject), MSL_RELOC_CM_SUBJECT,
+                          n_subjects, sizeof(CmSubject), 0);
+#else
     cam_box = HSD_MemAlloc(n_subjects * sizeof(CmSubject));
+#endif
     cm_804D6458 = cam_box;
     cm_804D645C = cam_box;
     memzero(cm_804D6458, n_subjects * sizeof(CmSubject));

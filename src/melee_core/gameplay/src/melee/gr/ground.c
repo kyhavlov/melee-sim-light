@@ -69,6 +69,10 @@
 #include <baselib/random.h>
 #include <baselib/spline.h>
 #include <baselib/wobj.h>
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#include <runtime/source_state.h>
+#endif
 
 /* 1BFFA8 */ static void Ground_OnStart(void);
 /* 1BFFAC */ static void Ground_801BFFAC(bool);
@@ -88,7 +92,9 @@
 /* 1C55AC */ static void Ground_801C55AC(Ground*);
 /* 1C5878 */ static void Ground_801C5878(void);
 
+#ifndef MSL_CORE_HOSTED
 /* 49E6C8 */ StageInfo stage_info;
+#endif
 
 /* 3DFEA8 */ static StageData Ground_803DFEA8 = {
     0,
@@ -172,7 +178,12 @@ extern StageData* msl_core_selected_stage_data(void);
 
 #define _BUFFER_SZ (64)
 
+#ifdef MSL_CORE_HOSTED
+#define Ground_804D6950 (msl_core_ground_state()->map_flags)
+#define Ground_804D6954 (msl_core_ground_state()->map_epoch)
+#else
 static u8* Ground_804D6950;
+#endif
 
 /// @todo Move elsewhere.
 static inline f32 ground_fabsf(f32 x)
@@ -1689,7 +1700,9 @@ bool Ground_801C2ED0(HSD_JObj* jobj, s32 arg1)
     return result;
 }
 
+#ifndef MSL_CORE_HOSTED
 static s16 Ground_804D6954;
+#endif
 
 bool Ground_801C2FE0(Ground_GObj* arg0)
 {

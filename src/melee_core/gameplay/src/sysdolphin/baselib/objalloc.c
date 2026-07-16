@@ -5,10 +5,56 @@
 
 #include <__mem.h>
 #include <dolphin/os/OSAlloc.h>
+#ifdef MSL_CORE_HOSTED
+#include <runtime/relocation.h>
 
+#endif
+
+#ifdef MSL_CORE_HOSTED
+#define obj_heap (msl_core_objalloc_context()->heap)
+#define alloc_datas (msl_core_objalloc_context()->alloc_datas)
+#else
 static objheap obj_heap = { 0, 0, -1, -1 };
-
 static HSD_ObjAllocData* alloc_datas;
+#endif
+
+#ifdef MSL_CORE_HOSTED
+HSD_ObjAllocData* HSD_ObjAllocResolve(HSD_ObjAllocData* data)
+{
+    HSD_ObjAllocContext* context = msl_core_objalloc_context();
+    u32 i;
+
+    if (data == NULL) {
+        return NULL;
+    }
+    if (data >= context->values &&
+        data < context->values + HSD_OBJALLOC_CONTEXT_CAPACITY)
+    {
+        return data;
+    }
+    for (i = 0; i < context->count; ++i) {
+        if (context->keys[i] == data) {
+            return &context->values[i];
+        }
+    }
+    if (context->count == HSD_OBJALLOC_CONTEXT_CAPACITY) {
+        abort();
+    }
+    context->keys[context->count] = data;
+    return &context->values[context->count++];
+}
+
+void HSD_ObjAllocSetRelocType(HSD_ObjAllocData* data, u32 type, u32 count,
+                              u32 stride)
+{
+    HSD_ObjAllocContext* context = msl_core_objalloc_context();
+    HSD_ObjAllocData* resolved = HSD_ObjAllocResolve(data);
+    u32 index = (u32) (resolved - context->values);
+    context->reloc_types[index] = type;
+    context->reloc_counts[index] = count;
+    context->reloc_strides[index] = stride;
+}
+#endif
 
 void HSD_ObjAllocPreallocateAll(u32 minimum_free)
 {
@@ -42,6 +88,7 @@ s32 HSD_ObjAllocAddFree(HSD_ObjAllocData* data, u32 num)
 
     u8 _[4];
 
+    data = HSD_ObjAllocResolve(data);
     HSD_ASSERT(0xEE, data);
     pool_size = data->size * num;
     if (obj_heap.top != 0) {
@@ -80,6 +127,17 @@ s32 HSD_ObjAllocAddFree(HSD_ObjAllocData* data, u32 num)
 
     data->freehead = (HSD_ObjAllocLink*) pool_start;
     data->free += num;
+#ifdef MSL_CORE_HOSTED
+    {
+        u32 i;
+        for (i = 0; i < num; ++i) {
+            // A newly added slot is an intrusive free-list node, not a live
+            // instance of the allocator's object type yet.
+            msl_reloc_register(pool_start + data->size * i, MSL_RELOC_RAW, 1,
+                               data->size, MSL_RELOC_INTRUSIVE_FIRST_POINTER);
+        }
+    }
+#endif
     return num;
 }
 
@@ -88,6 +146,7 @@ void* HSD_ObjAlloc(HSD_ObjAllocData* data)
     HSD_ObjAllocLink* cur;
     u32 size;
 
+    data = HSD_ObjAllocResolve(data);
     if (data->num_limit_flag && data->used >= data->num_limit) {
         return NULL;
     }
@@ -128,20 +187,39 @@ void* HSD_ObjAlloc(HSD_ObjAllocData* data)
     if (data->used > data->peak) {
         data->peak = data->used;
     }
+#ifdef MSL_CORE_HOSTED
+    {
+        HSD_ObjAllocContext* context = msl_core_objalloc_context();
+        u32 index = (u32) (data - context->values);
+        msl_reloc_register(
+            cur, context->reloc_types[index],
+            context->reloc_counts[index] != 0 ? context->reloc_counts[index]
+                                              : 1,
+            context->reloc_strides[index] != 0 ? context->reloc_strides[index]
+                                               : data->size,
+            0);
+    }
+#endif
     return cur;
 }
 
 void HSD_ObjFree(HSD_ObjAllocData* data, void* obj)
 {
+    data = HSD_ObjAllocResolve(data);
     HSD_ObjAllocLink* link = obj;
     link->next = data->freehead;
     data->freehead = link;
     data->free += 1;
     data->used -= 1;
+#ifdef MSL_CORE_HOSTED
+    msl_reloc_register(obj, MSL_RELOC_RAW, 1, data->size,
+                       MSL_RELOC_INTRUSIVE_FIRST_POINTER);
+#endif
 }
 
 inline void removeAll(HSD_ObjAllocData* data)
 {
+    data = HSD_ObjAllocResolve(data);
     HSD_ObjAllocData** cur = &alloc_datas;
     while (*cur != NULL) {
         if (*cur == data) {
@@ -154,6 +232,7 @@ inline void removeAll(HSD_ObjAllocData* data)
 
 void HSD_ObjAllocInit(HSD_ObjAllocData* data, size_t size, u32 align)
 {
+    data = HSD_ObjAllocResolve(data);
     HSD_ASSERT(0x185, data);
     if (data != NULL) {
         removeAll(data);

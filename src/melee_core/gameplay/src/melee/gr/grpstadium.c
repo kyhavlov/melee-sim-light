@@ -37,8 +37,12 @@
 #include <melee/lb/lbvector.h>
 #include <melee/mp/mplib.h>
 #include <melee/pl/player.h>
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#include <runtime/source_state.h>
+#endif
 
-static struct {
+typedef struct StadiumParams {
     int x0;
     int x4;
     int x8;
@@ -62,7 +66,14 @@ static struct {
     s16 x4C;
     s16 x4E;
     s16 x50;
-}* yaku;
+} StadiumParams;
+#ifdef MSL_CORE_HOSTED
+#define yaku                                                                  \
+    (*(StadiumParams**) msl_core_stage_pointer_ref(                           \
+        MSL_STAGE_POINTER_STADIUM_PARAMS))
+#else
+static StadiumParams* yaku;
+#endif
 
 S16Vec3 grPs_803E1248[] = {
     { 1, 3, 0 }, { 2, 3, 0 }, { 3, 4, 0 },

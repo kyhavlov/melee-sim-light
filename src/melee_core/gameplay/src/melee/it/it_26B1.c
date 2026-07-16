@@ -198,7 +198,14 @@ int it_8026B3C0(ItemKind kind) // Count identical item GObj entities?
 void it_8026B3F8(Article* article,
                  s32 kind) // Store Item article pointer to table
 {
-    it_804D6D38[kind - It_Kind_Kuriboh] = article;
+    Article** slot = &it_804D6D38[kind - It_Kind_Kuriboh];
+    // Fighter OnLoad republishes the same immutable article pointer on every
+    // match construction. GameData owns this catalog after the first load, so
+    // later matches avoid an idempotent write into its sealed DAT arena.
+    // refs/melee/src/melee/it/it_26B1.c::it_8026B3F8
+    if (*slot != article) {
+        *slot = article;
+    }
 }
 
 void it_8026B40C(Article* article,

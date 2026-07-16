@@ -30,10 +30,14 @@
 /* 1C9BC8 */ static void grLib_801C9BC8(HSD_GObj*);
 /* 1C9C40 */ static void grLib_801C9C40(HSD_GObj*);
 
-extern StageInfo stage_info;
 extern HSD_Generator* hsd_804D78FC;
 
+#ifdef MSL_CORE_HOSTED
+#include "runtime/context.h"
+#define grLib_8049EF58 ((VecMtxPtr) msl_core_ground_stage_positions())
+#else
 static VecMtx grLib_8049EF58;
+#endif
 static Vec3 grLib_unusedvec1;
 static Vec3 grLib_unusedvec2;
 

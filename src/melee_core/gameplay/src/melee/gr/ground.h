@@ -66,6 +66,7 @@
 /* 1C2374 */ void Ground_801C2374(HSD_LObj* lobj);
 /* 1C247C */ HSD_Spline* Ground_801C247C(s32, s32);
 /* 1C28AC */ bool Ground_801C28AC(s32, u32, s32*);
+/* 1C28CC */ void Ground_801C28CC(void*, s32);
 /* 1C2AD8 */ s32* Ground_801C2AD8(void);
 /* 1C2AE8 */ f32 Ground_801C2AE8(s32);
 /* 1C2BA4 */ HSD_GObj* Ground_801C2BA4(s32);
@@ -81,6 +82,7 @@
 /* 1C32AC */ void Ground_801C32AC(s32);
 /* 1C32D4 */ s32 Ground_801C32D4(s32, s32);
 /* 1C33C0 */ s32 Ground_801C33C0(s32, s32);
+/* 1C34AC */ void Ground_801C34AC(s32, HSD_JObj*, struct HSD_Joint*);
 /* 1C36F4 */ void Ground_801C36F4(int map_id, HSD_JObj* jobj, UNK_T joint);
 /* 1C3880 */ void Ground_801C3880(f32);
 /* 1C3890 */ void Ground_801C3890(f32);
@@ -157,6 +159,11 @@
 /* 1C5ABC */ bool Ground_801C5ABC(void);
 /* 1C5AD0 */ u32 Ground_801C5AD0(s32 i);
 /* 1C5AEC */ void Ground_801C5AEC(Vec3* v, Vec3*, Vec3*, Vec3*);
+#ifndef MSL_CORE_HOSTED
 /* 49E6C8 */ extern StageInfo stage_info;
+#else
+StageInfo* msl_core_stage_info(void);
+#define stage_info (*msl_core_stage_info())
+#endif
 
 #endif

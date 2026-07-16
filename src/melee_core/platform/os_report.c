@@ -6,11 +6,11 @@
 
 void OSReport(char* format, ...)
 {
-    va_list args;
-
-    va_start(args, format);
-    vfprintf(stderr, format, args);
-    va_end(args);
+    // Retail diagnostic reports have no gameplay side effects. Keeping them
+    // silent in the headless runtime avoids formatting and stdio work on
+    // reached reset/frame paths such as the source fallback camera ranges.
+    // Fatal OSPanic/HSD_Panic paths below remain loud.
+    (void) format;
 }
 
 void OSPanic(char* file, int line, char* format, ...)

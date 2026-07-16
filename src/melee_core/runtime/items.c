@@ -1,13 +1,16 @@
-#include "it/it_279C.h"
-#include "it/it_3F14.h"
+#include "ft/fighter.h"
+#include "ft/ft_0892.h"
+#include "ft/ftlib.h"
+#include "it/inlines.h"
 #include "it/it_26B1.h"
 #include "it/it_2725.h"
-#include "it/itzako.h"
+#include "it/it_279C.h"
+#include "it/it_3F14.h"
+#include "it/items/itbombhei.h"
+#include "it/items/itdosei.h"
 #include "it/items/itfoxblaster.h"
 #include "it/items/itfoxillusion.h"
 #include "it/items/itfoxlaser.h"
-#include "it/items/itbombhei.h"
-#include "it/items/itdosei.h"
 #include "it/items/itheiho.h"
 #include "it/items/itpeachexplode.h"
 #include "it/items/itpeachparasol.h"
@@ -21,14 +24,10 @@
 #include "it/items/itsword.h"
 #include "it/items/itzeldadinfire.h"
 #include "it/items/itzeldadinfireexplode.h"
+#include "it/itzako.h"
 #include "pl/plattack.h"
 #include "pl/plstale.h"
 #include "pl/pltrick.h"
-
-#include "ft/fighter.h"
-#include "ft/ft_0892.h"
-#include "ft/ftlib.h"
-#include "it/inlines.h"
 
 // Source registry projection for the admitted character articles. Indices are
 // ItemKind - It_Kind_Kuriboh, matching
@@ -349,8 +348,9 @@ struct ItemLogicTable it_803F3100[118] = {
 };
 
 // The shared item-link constructor used by Sheik's chain copies this zero
-// vector from DOL rodata. The decomp exposes the symbol but not its definition.
-// data/raw/main.dol::0x803B8650 (refs/melee/config/GALE01/symbols.txt)
+// vector from DOL rodata. The decomp exposes the symbol but not its
+// definition. data/raw/main.dol::0x803B8650
+// (refs/melee/config/GALE01/symbols.txt)
 Vec3 it_803B8650;
 
 // The other item classes are outside the admitted items-off domain. Their
@@ -441,6 +441,7 @@ char it_803F1ED8[] = "ItCo.dat";
 char it_803F1EE4[] = "ItCo.usd";
 char it_803F1EF0[] = "itPublicData";
 
+#ifndef MSL_CORE_HOSTED
 Article* it_804A0F60[30];
 DamageLogEntry it_804A0E70[15];
 ItemPickTable it_804A0E60;
@@ -462,6 +463,7 @@ s32 it_804D6D0C;
 s32 it_804D6D08;
 Fighter_804D653C_t* it_804D6D04;
 s8 it_804D6D00;
+#endif
 
 // Exact reached source slice from it_279C.c. This records attack ownership and
 // fighter/item interaction metadata; it is gameplay bookkeeping even in a

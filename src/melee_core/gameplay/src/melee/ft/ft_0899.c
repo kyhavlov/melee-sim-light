@@ -189,8 +189,19 @@ void ft_80089B08(Fighter_GObj* gobj)
                 guess = 0.5 * guess * (3.0 - guess * guess * line_len);
                 guess = 0.5 * guess * (3.0 - guess * guess * line_len);
                 guess = 0.5 * guess * (3.0 - guess * guess * line_len);
+#ifdef MSL_CORE_HOSTED
+                // The matching source addresses line_len_sqrt through
+                // sp1C[-1] to force the original MWCC stack slot. A hosted
+                // compiler may place an unrelated local there (Wasm places
+                // fp there), so name the intended volatile slot directly.
+                // The conversion and reload remain in the same source order.
+                // refs/melee/src/melee/ft/ft_0899.c::ft_80089B08
+                line_len_sqrt = (f32) ((f64) line_len * guess);
+                line_len = line_len_sqrt;
+#else
                 ((volatile f32*) &sp1C)[-1] = (f32) ((f64) line_len * guess);
                 line_len = ((volatile f32*) &sp1C)[-1];
+#endif
             }
             if (line_len < 5.0f) {
                 adj_angle = 0.0f;

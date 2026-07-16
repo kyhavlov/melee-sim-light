@@ -1,6 +1,7 @@
-#include "platform/files.h"
+#include "smoke_context.h"
 
 #include "lb/lbarchive.h"
+#include "platform/files.h"
 
 #include <stdio.h>
 
@@ -20,14 +21,21 @@ static int load_symbol(const char* file, const char* name)
 
 int main(int argc, char** argv)
 {
+    static MslSmokeContext context;
+    int result;
+
     if (argc != 2) {
         fprintf(stderr, "usage: %s GAME_DATA_DIRECTORY\n", argv[0]);
         return 2;
     }
-    msl_host_set_data_root(argv[1]);
-    return load_symbol("PlCo.dat", "ftLoadCommonData") |
-           load_symbol("PlFx.dat", "ftDataFox") |
-           load_symbol("PlFxNr.dat", "PlyFox5K_Share_joint") |
-           load_symbol("GrNLa.dat", "coll_data") |
-           load_symbol("GrNLa.dat", "map_head");
+    if (msl_smoke_context_init(&context, argv[1]) != 0) {
+        return 1;
+    }
+    result = load_symbol("PlCo.dat", "ftLoadCommonData") |
+             load_symbol("PlFx.dat", "ftDataFox") |
+             load_symbol("PlFxNr.dat", "PlyFox5K_Share_joint") |
+             load_symbol("GrNLa.dat", "coll_data") |
+             load_symbol("GrNLa.dat", "map_head");
+    msl_smoke_context_destroy(&context);
+    return result;
 }

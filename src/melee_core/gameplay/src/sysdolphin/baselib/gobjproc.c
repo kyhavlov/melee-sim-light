@@ -6,8 +6,6 @@
 
 #include <placeholder.h>
 
-extern HSD_ObjAllocData gobjproc_alloc_data;
-
 /**
  * Inserts a new GObjProc
  */

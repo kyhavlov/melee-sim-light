@@ -26,8 +26,6 @@ void GObj_PReorder(HSD_GObj* gobj, HSD_GObj* hiprio_gobj)
     }
 }
 
-extern HSD_ObjAllocData gobj_alloc_data;
-
 inline HSD_GObj* gobj_allocate(void)
 {
     return HSD_ObjAlloc(&gobj_alloc_data);
@@ -100,8 +98,6 @@ HSD_GObj* GObj_Create(u16 classifier, u8 p_link, u8 priority)
     return CreateGObj(0, classifier, p_link, priority, NULL);
 }
 
-extern HSD_GObj* HSD_GObj_804D781C;
-
 void HSD_GObjPLink_80390228(HSD_GObj* gobj)
 {
     HSD_ASSERT(0x171, gobj);
@@ -127,8 +123,6 @@ void HSD_GObjPLink_80390228(HSD_GObj* gobj)
     }
     HSD_ObjFree(&gobj_alloc_data, gobj);
 }
-
-extern s32 HSD_GObj_804D783C;
 
 void HSD_GObjPLink_8039032C(u32 arg0, HSD_GObj* gobj, u8 p_link, u8 priority,
                             HSD_GObj* position)

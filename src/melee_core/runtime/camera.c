@@ -1,37 +1,38 @@
 #include "cm/camera.h"
+
+#include "match.h"
+
 #include "cm/types.h"
+
+#include "ft/chara/ftCommon/forward.h"
+
 #include "ft/fighter.h"
 #include "ft/ftcamera.h"
 #include "ft/ftlib.h"
 #include "ft/types.h"
-#include "ft/chara/ftCommon/forward.h"
 #include "gr/ground.h"
 #include "gr/stage.h"
 #include "lb/lbvector.h"
 #include "lb/types.h"
 #include "pl/player.h"
+#include "runtime/camera.h"
 #include "sc/types.h"
 
-#include "match.h"
-#include "runtime/camera.h"
-
-#include <baselib/controller.h>
+#include <math.h>
+#include <string.h>
 #include <baselib/aobj.h>
+#include <baselib/controller.h>
 #include <baselib/gobj.h>
 #include <baselib/gobjobject.h>
 #include <baselib/gobjplink.h>
 #include <baselib/gobjproc.h>
 #include <baselib/jobj.h>
 
-#include <math.h>
-#include <string.h>
-
 extern void msl_camera_get_render_transform(Vec3* position, Vec3* interest,
                                             float* fov);
 extern void msl_camera_get_deadup_render_transform(Vec3* position,
-                                                   Vec3* interest,
-                                                   float* fov);
-static MslCoreCameraState* msl_bound_camera_state;
+                                                   Vec3* interest, float* fov);
+static _Thread_local MslCoreCameraState* msl_bound_camera_state;
 
 #define msl_vanilla_magnify_offscreen \
     (msl_bound_camera_state->vanilla_magnify_offscreen)

@@ -3,7 +3,13 @@
 #include "pl/player.h"
 #include "pl/types.h"
 
+#ifdef MSL_CORE_HOSTED
+#include "runtime/context.h"
+#include "runtime/source_state.h"
+#define unk_804D6480 (msl_core_source_match_state()->attack_instance_counter)
+#else
 u16 unk_804D6480;
+#endif
 
 void plAttack_80037590(void)
 {

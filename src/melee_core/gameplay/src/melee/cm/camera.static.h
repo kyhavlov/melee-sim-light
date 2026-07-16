@@ -12,8 +12,14 @@
 #include <melee/cm/types.h>
 
 /// .bss
+#ifndef MSL_CORE_HOSTED
 /* 452C68 */ static Camera cm_80452C68;
 /* 453004 */ CameraDebugMode cm_80453004;
+#else
+#include "runtime/context.h"
+#include "runtime/source_state.h"
+#define cm_80452C68 (msl_core_source_match_state()->camera.camera)
+#endif
 
 /// .data
 /* 3BCB18 */ static CameraModeCallbacks cm_803BCB18 = { Camera_8002B3D4,
@@ -84,10 +90,16 @@
 /* 3B73DC */ static Vec3 const cm_803B73DC = { 0.0f, 1.0f, 0.0f };
 
 /// .sbss
+#ifndef MSL_CORE_HOSTED
 /* 4D6458 */ static CmSubject* cm_804D6458;
 /* 4D645C */ static CmSubject* cm_804D645C;
 /* 4D6460 */ static CmSubject* cm_804D6460;
 /* 4D6468 */ CmSubject* cm_804D6468; // requires a size of 8?
+#else
+#define cm_804D6458 (msl_core_source_match_state()->camera.free_subject)
+#define cm_804D645C (msl_core_source_match_state()->camera.subject_array)
+#define cm_804D6460 (msl_core_source_match_state()->camera.first_subject)
+#endif
 
 /// .sdata
 /* 4D3938 */ static char cm_804D3938[0x8] = "0";

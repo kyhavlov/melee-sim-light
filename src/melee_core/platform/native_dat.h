@@ -1,14 +1,35 @@
 #ifndef MSL_CORE_NATIVE_DAT_H
 #define MSL_CORE_NATIVE_DAT_H
 
+#include <baselib/forward.h>
+
+
 #include <stddef.h>
 #include <stdint.h>
-
 #include <baselib/archive.h>
-#include <baselib/forward.h>
 
 typedef struct _HSD_PSCmdList HSD_PSCmdList;
 typedef struct EF_EffectDesc EF_EffectDesc;
+
+enum {
+    MSL_NATIVE_ARCHIVE_CACHE_CAPACITY = 2048,
+    MSL_NATIVE_DAT_ARENA_BYTES = 256 * 1024 * 1024,
+};
+
+typedef struct MslNativeArchiveCacheEntry {
+    const uint8_t* source;
+    size_t file_size;
+    HSD_Archive archive;
+} MslNativeArchiveCacheEntry;
+
+typedef struct MslNativeDatContext {
+    MslNativeArchiveCacheEntry
+        archive_cache[MSL_NATIVE_ARCHIVE_CACHE_CAPACITY];
+    uint32_t archive_cache_count;
+    uint8_t* arena;
+    size_t arena_used;
+    uint8_t initialization_complete;
+} MslNativeDatContext;
 
 typedef enum MslDatKind {
     MSL_DAT_VOID,
@@ -125,5 +146,6 @@ EF_EffectDesc* msl_native_effect_models(HSD_Archive* archive,
                                         const char* symbol, int count);
 void msl_native_dat_finish_initialization(void);
 int msl_native_dat_owns(const void* pointer);
+void msl_native_dat_context_destroy(MslNativeDatContext* context);
 
 #endif

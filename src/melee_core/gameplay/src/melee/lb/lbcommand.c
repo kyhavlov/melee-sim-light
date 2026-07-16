@@ -19,14 +19,14 @@ void Command_00(CommandInfo* info)
 /// SynchronousTimer
 void Command_01(CommandInfo* info)
 {
-    info->timer += info->u->Command_00.value;
+    info->timer += MSL_CMD_FIELD(info, Command_00, value);
     NEXT_CMD(info);
 }
 
 /// AsynchronousTimer
 void Command_02(CommandInfo* info)
 {
-    info->timer = info->u->Command_02.value - info->frame_count;
+    info->timer = MSL_CMD_FIELD(info, Command_02, value) - info->frame_count;
     NEXT_CMD(info);
 }
 
@@ -35,7 +35,7 @@ void Command_03(CommandInfo* info)
 {
     info->event_return[info->loop_count++] = info->u + 1;
     info->event_return[info->loop_count++] =
-        (union CmdUnion*) info->u->Command_03.value;
+        (union CmdUnion*) MSL_CMD_FIELD(info, Command_03, value);
     NEXT_CMD(info);
 }
 
@@ -89,8 +89,8 @@ void Command_08(CommandInfo* info)
 
 void Command_09(CommandInfo* info)
 {
-    lbBgFlash_80021C48(info->u->Command_09.param_1,
-                       info->u->Command_09.param_2);
+    lbBgFlash_80021C48(MSL_CMD_FIELD(info, Command_09, param_1),
+                       MSL_CMD_FIELD(info, Command_09, param_2));
     NEXT_CMD(info);
 }
 

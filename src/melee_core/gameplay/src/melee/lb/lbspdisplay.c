@@ -26,6 +26,7 @@
 #include "lb/lbcollision.h"
 #include "lb/lbcommand.h"
 #include "lb/lbdvd.h"
+#include "lb/inlines.h"
 #include "lb/lbvector.h"
 #include "lb/types.h"
 
@@ -44,6 +45,9 @@
 #include <melee/mp/mplib.h>
 #include <melee/sc/types.h>
 #include <MSL/trigf.h> // IWYU pragma: keep
+#ifdef MSL_CORE_NATIVE
+#include <platform/memory.h>
+#endif
 
 typedef bool (*lb_803BA248_fn)(ColorOverlay*);
 
@@ -120,8 +124,17 @@ void lb_8000FA94(void)
 
 void lb_8000FCDC(void)
 {
+#ifdef MSL_CORE_NATIVE
+    lb_804D63A0 =
+        HSD_MemAllocReloc(sizeof(*lb_804D63A0), MSL_RELOC_LB_DYNAMICS_DATA,
+                          0x140, sizeof(struct DynamicsData), 0);
+    lb_804D63A8 =
+        HSD_MemAllocReloc(sizeof(*lb_804D63A8), MSL_RELOC_LB_EFFECT_ENTRY, 8,
+                          sizeof(struct lb_80011A50_t), 0);
+#else
     lb_804D63A0 = HSD_MemAlloc(sizeof(*lb_804D63A0));
     lb_804D63A8 = HSD_MemAlloc(sizeof(*lb_804D63A8));
+#endif
     lb_8000FA94();
 }
 
@@ -1894,7 +1907,7 @@ bool lb_80013BB0(ColorOverlay* arg)
 
 bool lb_80013BB8(ColorOverlay* arg0)
 {
-    arg0->x0_timer += arg0->x8_ptr1->unk.timer;
+    arg0->x0_timer += MSL_COLOR_FIELD(arg0->x8_ptr1, unk, timer);
     ++arg0->x8_ptr1;
     return false;
 }
@@ -1908,9 +1921,12 @@ bool lb_80013BE4(ColorOverlay* arg0)
 
 bool lb_80013C18(ColorOverlay* arg0)
 {
-    arg0->x7C_light_enable = arg0->x8_ptr1->light_rot2.light_enable;
-    arg0->x74_light_rot_x = arg0->x8_ptr1->light_rot2.x;
-    arg0->x78_light_rot_yz = arg0->x8_ptr1->light_rot2.yz;
+    arg0->x7C_light_enable =
+        MSL_COLOR_FIELD(arg0->x8_ptr1, light_rot2, light_enable);
+    arg0->x74_light_rot_x =
+        MSL_COLOR_FIELD(arg0->x8_ptr1, light_rot2, x);
+    arg0->x78_light_rot_yz =
+        MSL_COLOR_FIELD(arg0->x8_ptr1, light_rot2, yz);
     ++arg0->x8_ptr1;
     arg0->x50_light_color.r = arg0->x8_ptr1->light_color.r;
     arg0->x50_light_color.g = arg0->x8_ptr1->light_color.g;
@@ -1950,7 +1966,8 @@ bool lb_80013D68(ColorOverlay* arg0)
 
 bool lb_80013E3C(ColorOverlay* arg0)
 {
-    float f = arg0->x8_ptr1++->unk.timer;
+    float f = MSL_COLOR_FIELD(arg0->x8_ptr1, unk, timer);
+    ++arg0->x8_ptr1;
     arg0->x64_lightblend_red =
         ((0.5f + arg0->x8_ptr1->light_color.r) - arg0->x50_light_color.r) / f;
     arg0->x68_lightblend_green =
@@ -1965,8 +1982,10 @@ bool lb_80013E3C(ColorOverlay* arg0)
 
 int lb_80013F78(ColorOverlay* arg0)
 {
-    arg0->x74_light_rot_x = arg0->x8_ptr1->light_rot1.x;
-    arg0->x78_light_rot_yz = arg0->x8_ptr1->light_rot1.yz;
+    arg0->x74_light_rot_x =
+        MSL_COLOR_FIELD(arg0->x8_ptr1, light_rot1, x);
+    arg0->x78_light_rot_yz =
+        MSL_COLOR_FIELD(arg0->x8_ptr1, light_rot1, yz);
     ++arg0->x8_ptr1;
     return false;
 }
@@ -2000,7 +2019,8 @@ bool lb_80014014(ColorOverlay* arg0)
 
 bool lb_800140F8(ColorOverlay* arg0)
 {
-    float f = arg0->x8_ptr1++->unk.timer;
+    float f = MSL_COLOR_FIELD(arg0->x8_ptr1, unk, timer);
+    ++arg0->x8_ptr1;
     arg0->x40_colorblend_red =
         ((0.5f + arg0->x8_ptr1->light_color.r) - arg0->x2C_hex.r) / f;
     arg0->x44_colorblend_green =
@@ -2032,7 +2052,7 @@ bool lb_80014258(HSD_GObj* gobj, void* arg1, FtCmd2 cmd)
     }
 
     while (co->x8_ptr1 != NULL && co->x0_timer == 0) {
-        u32 opcode = co->x8_ptr1->unk.unk;
+        u32 opcode = MSL_COLOR_FIELD(co->x8_ptr1, unk, unk);
         if (!Command_Execute((CommandInfo*) co, opcode)) {
             if (opcode < 0x15U) {
                 u32 idx = opcode - 0xA;

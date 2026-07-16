@@ -1,17 +1,17 @@
-#include "platform/files.h"
+#include "smoke_context.h"
 
 #include "lb/lbarchive.h"
+#include "platform/files.h"
 
-#include <baselib/jobj.h>
-#include <baselib/list.h>
-#include <baselib/mobj.h>
+#include <stdio.h>
 #include <baselib/aobj.h>
 #include <baselib/fobj.h>
 #include <baselib/id.h>
+#include <baselib/jobj.h>
+#include <baselib/list.h>
+#include <baselib/mobj.h>
 #include <baselib/mtx.h>
 #include <baselib/robj.h>
-
-#include <stdio.h>
 
 static int count_joints(HSD_JObj* jobj)
 {
@@ -27,6 +27,7 @@ static int count_joints(HSD_JObj* jobj)
 
 int main(int argc, char** argv)
 {
+    static MslSmokeContext context;
     HSD_Joint* joint_desc = NULL;
     HSD_MatAnimJoint* matanim_desc = NULL;
     HSD_Archive* archive;
@@ -37,7 +38,9 @@ int main(int argc, char** argv)
         fprintf(stderr, "usage: %s GAME_DATA_DIRECTORY\n", argv[0]);
         return 2;
     }
-    msl_host_set_data_root(argv[1]);
+    if (msl_smoke_context_init(&context, argv[1]) != 0) {
+        return 1;
+    }
     HSD_AObjInitAllocData();
     HSD_FObjInitAllocData();
     HSD_IDInitAllocData();
@@ -63,5 +66,6 @@ int main(int argc, char** argv)
     HSD_JObjAnimAll(jobj);
 
     printf("source Fox model/animation: %d JObjs\n", joint_count);
+    msl_smoke_context_destroy(&context);
     return 0;
 }

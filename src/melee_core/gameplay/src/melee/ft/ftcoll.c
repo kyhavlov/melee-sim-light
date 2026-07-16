@@ -44,13 +44,17 @@
 
 #include <common_structs.h>
 #include <math.h>
-#include <MetroTRK/intrinsics.h>
 #include <dolphin/mtx.h>
 #include <baselib/debug.h>
 #include <baselib/gobj.h>
 #include <baselib/random.h>
+#include <MetroTRK/intrinsics.h>
 #include <MSL/trigf.h>
 #include <Runtime/runtime.h>
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#include <runtime/source_state.h>
+#endif
 
 /* 07A06C */ void ftColl_8007A06C(Fighter_GObj*, void*, void*, size_t, int);
 /// /* 076808 */ static void ftColl_80076808(Fighter* fp, HitCapsule* hit, int,
@@ -61,6 +65,13 @@ int ftColl_803C0C40[] = { 141, 142, 143 };
 int ftColl_803C0C4C[] = { 107, 108, 109 };
 
 /// .bss
+#ifdef MSL_CORE_HOSTED
+#define dmg_log0 (msl_core_ft_coll_state()->damage_log0)
+#define dmg_log1 (msl_core_ft_coll_state()->damage_log1)
+#define dmg_log0_idx (msl_core_ft_coll_state()->damage_log0_count)
+#define dmg_log1_idx (msl_core_ft_coll_state()->damage_log1_count)
+#define ftColl_804D6560 (msl_core_ft_coll_state()->contact_scratch)
+#else
 static DmgLogEntry dmg_log0[20];
 struct DmgLogEntry dmg_log1[20];
 
@@ -68,6 +79,7 @@ struct DmgLogEntry dmg_log1[20];
 static int dmg_log0_idx;
 static int dmg_log1_idx;
 static s8 ftColl_804D6560[8];
+#endif
 
 /// Combo Count Logic
 void ftColl_800763C0(Fighter_GObj* attacker, Fighter_GObj* victim,
@@ -3208,7 +3220,9 @@ void ftColl_8007BA0C(Fighter_GObj* gobj)
     }
 }
 
+#ifndef MSL_CORE_HOSTED
 extern int ft_804D6570;
+#endif
 
 void ftColl_8007BAC0(Fighter_GObj* gobj)
 {

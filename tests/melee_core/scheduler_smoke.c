@@ -1,3 +1,5 @@
+#include "smoke_context.h"
+
 #include "baselib/gobj.h"
 #include "baselib/gobjplink.h"
 #include "baselib/gobjproc.h"
@@ -28,10 +30,14 @@ static void record_c(HSD_GObj* gobj)
 
 int main(void)
 {
+    static MslSmokeContext context;
     HSD_GObjLibInitDataType init;
     HSD_GObj* first;
     HSD_GObj* second;
 
+    if (msl_smoke_context_init(&context, NULL) != 0) {
+        return 1;
+    }
     HSD_GObj_803912E0(&init);
     init.gproc_pri_max = 0x18;
     HSD_GObj_80391304(&init);
@@ -49,5 +55,6 @@ int main(void)
         return 1;
     }
     printf("source scheduler order: %s\n", calls);
+    msl_smoke_context_destroy(&context);
     return 0;
 }

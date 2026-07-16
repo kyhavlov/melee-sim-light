@@ -3,10 +3,17 @@
 #include "debug.h"
 
 #include <__mem.h>
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#endif
 
 HSD_ObjAllocData hsd_iddata;
 
+#ifdef MSL_CORE_HOSTED
+#define default_table (msl_core_id_context()->default_table)
+#else
 HSD_IDTable default_table;
+#endif
 
 HSD_ObjAllocData* HSD_IDGetAllocData(void)
 {

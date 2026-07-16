@@ -200,7 +200,8 @@ void it_802790C0(Item_GObj* item_gobj, CommandInfo* cmd)
 void it_80279544(Item_GObj* item_gobj, CommandInfo* cmd)
 {
     Item* item = item_gobj->user_data;
-    HitCapsule* hit = &item->x5D4_hitboxes[cmd->u->set_hitbox_damage.idx].hit;
+    HitCapsule* hit =
+        &item->x5D4_hitboxes[MSL_CMD_FIELD(cmd, set_hitbox_damage, idx)].hit;
     u32 val = itAnimlist_GetU16(cmd, 1) & 0x1FFF;
     PAD_STACK(8);
     it_80272460(hit, (u32) (item->xC3C * ((f32) val * item->xC40)), item_gobj);
@@ -209,11 +210,11 @@ void it_80279544(Item_GObj* item_gobj, CommandInfo* cmd)
 
 void it_802795EC(Item_GObj* item_gobj, CommandInfo* cmd)
 {
-    s32 idx = cmd->u->set_hitbox_scale.idx;
+    s32 idx = MSL_CMD_FIELD(cmd, set_hitbox_scale, idx);
     Item* item = item_gobj->user_data;
     HitCapsule* hit = &item->x5D4_hitboxes[idx].hit;
     PAD_STACK(8);
-    hit->scale = 0.003906f * cmd->u->set_hitbox_scale.value;
+    hit->scale = 0.003906f * MSL_CMD_FIELD(cmd, set_hitbox_scale, value);
     item->x3C = hit->scale;
     it_80275594(item_gobj, idx, 1.0f / item->scl);
     ++cmd->u;
@@ -226,7 +227,7 @@ void it_802795EC(Item_GObj* item_gobj, CommandInfo* cmd)
 
 void it_80279680(Item_GObj* item_gobj, CommandInfo* cmd)
 {
-    it_80272560(item_gobj, cmd->u->set_throw_flags.hit_idx);
+    it_80272560(item_gobj, MSL_CMD_FIELD(cmd, set_throw_flags, hit_idx));
     ++cmd->u;
 }
 
@@ -241,21 +242,21 @@ void it_802796C4(Item_GObj* item_gobj, CommandInfo* cmd)
 void it_802796FC(Item_GObj* item_gobj, CommandInfo* cmd)
 {
     Item* it = GET_ITEM(item_gobj);
-    it->xDAC_itcmd_var0 = cmd->u->set_throw_flags.hit_idx;
+    it->xDAC_itcmd_var0 = MSL_CMD_FIELD(cmd, set_throw_flags, hit_idx);
     ++cmd->u;
 }
 
 void it_80279720(Item_GObj* item_gobj, CommandInfo* cmd)
 {
     Item* it = GET_ITEM(item_gobj);
-    it->xDB0_itcmd_var1 = cmd->u->set_throw_flags.hit_idx;
+    it->xDB0_itcmd_var1 = MSL_CMD_FIELD(cmd, set_throw_flags, hit_idx);
     ++cmd->u;
 }
 
 void it_80279744(Item_GObj* item_gobj, CommandInfo* cmd)
 {
     Item* it = GET_ITEM(item_gobj);
-    it->xDB4_itcmd_var2 = cmd->u->set_throw_flags.hit_idx;
+    it->xDB4_itcmd_var2 = MSL_CMD_FIELD(cmd, set_throw_flags, hit_idx);
     ++cmd->u;
 }
 
@@ -337,7 +338,8 @@ done:
 void it_80279888(Item_GObj* item_gobj, CommandInfo* cmd)
 {
     PAD_STACK(4);
-    it_80273598(item_gobj, cmd->u->unk33.unk0, cmd->u->unk33.unk1);
+    it_80273598(item_gobj, MSL_CMD_FIELD(cmd, unk33, unk0),
+                MSL_CMD_FIELD(cmd, unk33, unk1));
     NEXT_CMD(cmd);
 }
 
@@ -351,7 +353,8 @@ void it_802798D4(Item_GObj* item_gobj, CommandInfo* cmd)
 void it_8027990C(Item_GObj* item_gobj, CommandInfo* cmd)
 {
     PAD_STACK(4);
-    it_80273648(item_gobj, cmd->u->unk33.unk0, cmd->u->unk33.unk1);
+    it_80273648(item_gobj, MSL_CMD_FIELD(cmd, unk33, unk0),
+                MSL_CMD_FIELD(cmd, unk33, unk1));
     NEXT_CMD(cmd);
 }
 
@@ -360,7 +363,8 @@ void it_8027990C(Item_GObj* item_gobj, CommandInfo* cmd)
 void it_80279958(Item_GObj* item_gobj, CommandInfo* cmd)
 {
     Item* it = GET_ITEM(item_gobj);
-    it_80279B88(it, cmd->u->unk13.unk1, cmd->u->unk13.unk2);
+    it_80279B88(it, MSL_CMD_FIELD(cmd, unk13, unk1),
+                MSL_CMD_FIELD(cmd, unk13, unk2));
     NEXT_CMD(cmd);
 }
 
@@ -400,7 +404,7 @@ loop:
         return;
     }
 
-    opcode = cmd->u->unk0.opcode;
+    opcode = MSL_CMD_FIELD(cmd, unk0, opcode);
     if (Command_Execute(cmd, opcode) != 0) {
         goto loop;
     }

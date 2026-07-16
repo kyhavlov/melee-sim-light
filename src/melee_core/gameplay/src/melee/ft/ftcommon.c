@@ -676,11 +676,6 @@ void ftCommon_8007DB58(HSD_GObj* gobj)
     }
 }
 
-extern struct {
-    Vec2* x0;
-    s32 x4;
-}* Fighter_804D652C;
-
 void ftCommon_InitGrab(Fighter* fp, bool arg1, float timer)
 {
     fp->grab_timer = timer;

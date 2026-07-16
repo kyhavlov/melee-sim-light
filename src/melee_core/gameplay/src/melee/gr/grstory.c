@@ -18,11 +18,13 @@
 #include <melee/it/items/itheiho.h>
 #include <melee/lb/lb_00B0.h>
 #include <melee/lb/lbspdisplay.h>
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#include <runtime/source_state.h>
+#endif
 
 /* 1E302C */ static void grStory_801E302C(bool);
 /* 1E36D0 */ static DynamicsDesc* grStory_801E36D0(enum_t);
-
-extern StageInfo stage_info;
 
 static StageCallbacks grSt_803E26F0[] = {
     { NULL, NULL, NULL, NULL, 0 },
@@ -36,12 +38,19 @@ static StageCallbacks grSt_803E26F0[] = {
       (1 << 30) | (1 << 31) },
 };
 
-static struct {
+typedef struct ShyGuyParams {
     float timer_min;
     float timer_rand;
     float spawnmany_rarity;
     float vpos[6];
-}* shyguy_vars;
+} ShyGuyParams;
+#ifdef MSL_CORE_HOSTED
+#define shyguy_vars                                                           \
+    (*(ShyGuyParams**) msl_core_stage_pointer_ref(                            \
+        MSL_STAGE_POINTER_YOSHI_PARAMS))
+#else
+static ShyGuyParams* shyguy_vars;
+#endif
 
 StageData grSt_803E274C = {
     STORY,

@@ -26,9 +26,20 @@
 /* 085FD4 */ struct Fighter_WaitAnimData* ftData_80085FD4(Fighter* fp,
                                                           FtMotionId msid);
 /* 086060 */ Fighter* ftData_80086060(Fighter* arg0);
+#ifdef MSL_CORE_HOSTED
+struct UnkCostumeList* msl_core_fighter_costume_lists(void);
+#define CostumeListsForeachCharacter (msl_core_fighter_costume_lists())
+#else
 /* 3C0EC0 */ extern struct UnkCostumeList
     CostumeListsForeachCharacter[FTKIND_MAX];
+#endif
+#ifdef MSL_CORE_HOSTED
+struct ftData_UnkCountStruct* msl_core_fighter_animation_data(void);
+void msl_core_fighter_animation_data_init(void);
+#define ftData_Table_Unk0 (msl_core_fighter_animation_data())
+#else
 /* 3C0FC8 */ extern struct ftData_UnkCountStruct ftData_Table_Unk0[FTKIND_MAX];
+#endif
 /* 3C10D0 */ extern Event ftData_Table_Unk1[FTKIND_MAX];
 /* 3C10D0 */ extern struct ftData_UnkCountStruct
     ftData_UnkIntPairs[FTKIND_MAX];

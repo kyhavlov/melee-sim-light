@@ -4,12 +4,14 @@
 #include <platform.h>
 
 struct lb_80011A50_t;
+typedef struct lb_80011A50_t lb_80011A50_t;
 
 typedef struct AbsorbDesc AbsorbDesc;
 typedef struct CollData CollData;
 typedef struct ColorOverlay ColorOverlay;
 typedef struct CommandInfo CommandInfo;
 typedef struct DynamicsDesc DynamicsDesc;
+typedef struct DynamicsData DynamicsData;
 typedef struct FigaTrack FigaTrack;
 typedef struct FigaTree FigaTree;
 typedef struct FighterHurtCapsule FighterHurtCapsule;

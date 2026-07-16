@@ -69,9 +69,14 @@ s32 ftParts_IntpJObjLoad(HSD_JObj* jobj, HSD_Joint* joint, HSD_JObj* parent)
 {
     HSD_DObjDesc* dobjdesc = joint->u.dobjdesc;
     s32 ret;
+#ifdef MSL_CORE_HOSTED
+    ret = msl_core_JObjLoadWithoutDObj(jobj, joint, parent);
+#else
     joint->u.dobjdesc = NULL;
     ret = hsdJObj.load(jobj, joint, parent);
     joint->u.dobjdesc = dobjdesc;
+#endif
+    (void) dobjdesc;
     return ret;
 }
 

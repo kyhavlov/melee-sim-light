@@ -22,6 +22,8 @@
 #include <platform.h>
 #ifdef MSL_CORE_HOSTED
 #include "platform/slippi.h"
+#include "runtime/context.h"
+#include "runtime/source_state.h"
 #endif
 
 #include "cm/camera.h"
@@ -69,6 +71,7 @@
 #include "ftMasterHand/ftMh_Wait1_0.h"
 #include "ftPeach/types.h"
 #include "gm/gm_unsplit.h"
+#include "gr/ground.h"
 #include "gr/stage.h"
 #include "if/ifmagnify.h"
 #include "it/it_26B1.h"
@@ -105,19 +108,19 @@
 #ifdef MSL_CORE_HOSTED
 #include "runtime/match.h"
 #endif
-#include <MetroTRK/intrinsics.h>
 #include <baselib/mtx.h>
 #include <baselib/random.h>
+#include <MetroTRK/intrinsics.h>
 #include <MSL/math.h>
 #include <MSL/math_ppc.h>
 #include <MSL/trigf.h>
 
+#ifndef MSL_CORE_HOSTED
 extern struct UnkCostumeList CostumeListsForeachCharacter[FTKIND_MAX];
+#endif
 
 extern MotionState ftData_MotionStateList[ftCo_MS_Count];
 extern MotionState* ftData_CharacterStateTables[FTKIND_MAX];
-
-extern StageInfo stage_info; // from asm/melee/gm_1A36.s
 
 /// ==== fighter.c variables ====
 /// =============================
@@ -134,10 +137,15 @@ HSD_ObjAllocData fighter_x59C_alloc_data;
 
 /// @todo verify that this is really a spawn number counter, then rename this
 /// var globally
+#ifndef MSL_CORE_HOSTED
 u32 Fighter_804D64F8 = 0;
+#else
+#define Fighter_804D64F8 (msl_core_source_match_state()->fighter_spawn_counter)
+#endif
 #define g_spawnNumCounter Fighter_804D64F8
 
 /// the following seems to be an array, initialized in reverse in
+#ifndef MSL_CORE_HOSTED
 struct Fighter_804D64FC_t* Fighter_804D64FC = NULL;
 CrowdConfig* gCrowdConfig = NULL;
 HSD_Joint* Fighter_804D6504 = NULL;
@@ -150,7 +158,7 @@ struct Fighter_804D651C_t* Fighter_804D651C = NULL;
 struct Fighter_804D6520_t* Fighter_804D6520 = NULL;
 struct Fighter_804D6524_t* Fighter_804D6524 = NULL;
 struct Fighter_804D6528_t* Fighter_804D6528 = NULL;
-UNK_T Fighter_804D652C = NULL;
+struct Fighter_804D652C_t* Fighter_804D652C = NULL;
 Vec2** Fighter_804D6530 = NULL;
 struct Fighter_804D6534_t* Fighter_804D6534 = NULL;
 struct Fighter_804D653C_t* Fighter_804D6538 = NULL;
@@ -161,6 +169,7 @@ float* Fighter_804D6548 = NULL;
 float (*Fighter_804D654C)[5] = NULL;
 int** Fighter_804D6550 = NULL;
 ftCommonData* p_ftCommonData;
+#endif
 
 void Fighter_800679B0(void)
 {
@@ -187,10 +196,23 @@ void Fighter_800679B0(void)
                      ///< in the fighter.s
     // data section, how does this work?
 #endif
+#ifdef MSL_CORE_NATIVE
+    // The source byte counts encode fixed arrays of 32-bit pointer-bearing
+    // records. Preserve their element counts when native pointers widen.
+    // refs/melee/src/melee/ft/{fighter.c::Fighter_800679B0,
+    //   ftparts.c::ftParts_80074E58}
+    HSD_ObjAllocInit(&fighter_parts_alloc_data,
+                     FIGHTER_PARTS_ALLOC_COUNT * sizeof(FighterBone), 4);
+    HSD_ObjAllocInit(&fighter_dobj_list_alloc_data,
+                     FIGHTER_DOBJ_ALLOC_COUNT * sizeof(void*), 4);
+    HSD_ObjAllocInit(&fighter_x2040_alloc_data,
+                     FIGHTER_X2040_ALLOC_COUNT * sizeof(void*), 4);
+#else
     HSD_ObjAllocInit(&fighter_parts_alloc_data, /*size*/ 0x8c0, /*align*/ 4);
     HSD_ObjAllocInit(&fighter_dobj_list_alloc_data, /*size*/ 0x1f0,
                      /*align*/ 4);
     HSD_ObjAllocInit(&fighter_x2040_alloc_data, /*size*/ 0x80, /*align*/ 4);
+#endif
 
     g_spawnNumCounter = 1;
 
@@ -216,6 +238,9 @@ void Fighter_LoadCommonData(void)
     // equivalent to this: for(i=0; i<23; i++)
     //   (&Fighter_804D64FC)[23-1-i] = pData[i];
     // loop unrolling doesn't work (only up to 8 elements)
+#ifdef MSL_CORE_HOSTED
+    memcpy(msl_core_fighter_common_data(), pData, sizeof(void*) * 23);
+#else
     p_ftCommonData = pData[0]; // p_ftCommonData
     Fighter_804D6550 = pData[1];
     Fighter_804D654C = pData[2];
@@ -239,6 +264,7 @@ void Fighter_LoadCommonData(void)
     Fighter_804D6504 = pData[20];
     gCrowdConfig = pData[21];
     Fighter_804D64FC = pData[22];
+#endif
 }
 
 void Fighter_UpdateModelScale(Fighter_GObj* gobj)

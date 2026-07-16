@@ -111,11 +111,91 @@ static int run_stream(const char* data_root)
     return 0;
 }
 
+static int run_server(const char* data_root)
+{
+    char input_buffer[MSL_CORE_IO_BUFFER_BYTES];
+    char output_buffer[MSL_CORE_IO_BUFFER_BYTES];
+    MslCoreGameData game_data;
+    MslCoreMatch match;
+    MslCoreStreamJobHeader header;
+    int match_storage_ready = 0;
+    int result = 1;
+
+    if (setvbuf(stdin, input_buffer, _IOFBF, sizeof(input_buffer)) != 0 ||
+        setvbuf(stdout, output_buffer, _IOFBF, sizeof(output_buffer)) != 0)
+    {
+        fprintf(stderr, "could not configure Melee core server buffers\n");
+        return 1;
+    }
+    if (msl_core_game_data_init(&game_data, data_root) != 0 ||
+        msl_core_match_storage_init(&match) != 0)
+    {
+        return 1;
+    }
+    match_storage_ready = 1;
+    for (;;) {
+        size_t header_bytes = fread(&header, 1, sizeof(header), stdin);
+        uint32_t frame_count;
+        uint32_t frame_index;
+        MslCoreMatchConfig config;
+
+        if (header_bytes == 0 && feof(stdin)) {
+            result = 0;
+            break;
+        }
+        if (header_bytes != sizeof(header)) {
+            fprintf(stderr, "short Melee core server job header\n");
+            break;
+        }
+        frame_count = msl_core_get_le32(&header.frame_count);
+        if (frame_count == 0) {
+            fprintf(stderr, "empty Melee core server job\n");
+            break;
+        }
+        msl_core_decode_match_config(&config, (const uint8_t*) &header.config);
+        if (msl_core_match_reset(&match, &game_data, &config,
+                                 &header.previous) != 0)
+        {
+            break;
+        }
+        for (frame_index = 0; frame_index < frame_count; ++frame_index) {
+            MslCoreStreamFrame frame;
+            MslCoreStageEvents stage_events;
+            uint32_t frame_seed;
+            if (fread(&frame, 1, sizeof(frame), stdin) != sizeof(frame)) {
+                fprintf(stderr, "short Melee core server frame stream\n");
+                goto done;
+            }
+            frame_seed = msl_core_get_le32(&frame.frame_pre_random_seed);
+            msl_core_decode_stage_events(&stage_events,
+                                         (const uint8_t*) &frame.stage_events);
+            if (msl_core_match_step(&match, &frame.input, frame_seed,
+                                    &stage_events) != 0 ||
+                write_compare(stdout, msl_core_match_output(&match)) != 0)
+            {
+                goto done;
+            }
+        }
+        if (fflush(stdout) != 0) {
+            fprintf(stderr, "failed to flush server output: %s\n",
+                    strerror(errno));
+            break;
+        }
+    }
+
+done:
+    if (match_storage_ready) {
+        msl_core_match_destroy(&match);
+    }
+    msl_core_game_data_deinit(&game_data);
+    return result;
+}
+
 static void usage(const char* argv0)
 {
     fprintf(stderr,
             "usage: %s GAME_DATA CONFIG PREV_INPUT_OR_- INPUT_TAPE OUTPUT\n"
-            "       %s GAME_DATA --stream\n",
+            "       %s GAME_DATA {--stream|--server}\n",
             argv0, argv0);
 }
 
@@ -135,6 +215,9 @@ int main(int argc, char** argv)
 
     if (argc == 3 && strcmp(argv[2], "--stream") == 0) {
         return run_stream(argv[1]);
+    }
+    if (argc == 3 && strcmp(argv[2], "--server") == 0) {
+        return run_server(argv[1]);
     }
     if (argc != 6) {
         usage(argv[0]);

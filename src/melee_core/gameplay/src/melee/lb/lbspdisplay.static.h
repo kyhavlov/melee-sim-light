@@ -42,6 +42,20 @@ struct CameraBlurData {
 /* 4D3768 */ static GXColor lb_804D3768;
 /* 4D376C */ static GXColor lb_804D376C;
 /* 4D3770 */ static GXColor yellow;
+#ifdef MSL_CORE_HOSTED
+#include "runtime/context.h"
+#include "runtime/source_state.h"
+#define lb_804D63A0                                                           \
+    (msl_core_source_match_state()->lb_sp_display.dynamics_pool)
+#define cur_data (msl_core_source_match_state()->lb_sp_display.dynamics_free)
+#define lb_804D63A8 (msl_core_source_match_state()->lb_sp_display.effect_pool)
+#define lb_804D63AC (msl_core_source_match_state()->lb_sp_display.effect_free)
+#define lb_804D63B0                                                           \
+    (msl_core_source_match_state()->lb_sp_display.effect_active)
+#define lb_804D63B4 (msl_core_source_match_state()->lb_sp_display.effect_state)
+#define lb_804D63B8 (msl_core_source_match_state()->lb_sp_display.effect_flag)
+#define lb_804D63C0 (msl_core_source_game_data()->rumble_data)
+#else
 /* 4D63A0 */ static struct lb_804D63A0_t* lb_804D63A0;
 /* 4D63A4 */ static struct DynamicsData* cur_data;
 /* 4D63A8 */ static struct lb_804D63A8_t* lb_804D63A8;
@@ -50,5 +64,6 @@ struct CameraBlurData {
 /* 4D63B4 */ static enum_t lb_804D63B4;
 /* 4D63B8 */ static u8 lb_804D63B8;
 /* 4D63C0 */ static struct Fighter_804D653C_t* lb_804D63C0;
+#endif
 
 #endif

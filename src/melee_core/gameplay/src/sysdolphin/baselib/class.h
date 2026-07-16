@@ -50,6 +50,28 @@ typedef struct _HSD_MemoryEntry {
     struct _HSD_MemoryEntry* next;
 } HSD_MemoryEntry;
 
+#ifdef MSL_CORE_HOSTED
+// The source allocator keeps these three owners in class.c BSS. Hosted
+// matches must not share its size-class free lists: hsdNew/hsdDelete can run
+// after initialization and therefore this state is part of a resumable match.
+// refs/melee/src/sysdolphin/baselib/class.c::{GetMemoryEntry,
+//   hsdAllocMemPiece,hsdFreeMemPiece}
+enum {
+    HSD_CLASS_CONTEXT_CAPACITY = 128
+};
+typedef struct HSD_ClassContext {
+    HSD_MemoryEntry** memory_list;
+    s32 nb_memory_list;
+    HSD_Hash* current_hash;
+    HSD_ClassInfo* class_keys[HSD_CLASS_CONTEXT_CAPACITY];
+    u32 class_nb_exist[HSD_CLASS_CONTEXT_CAPACITY];
+    u32 class_nb_peak[HSD_CLASS_CONTEXT_CAPACITY];
+    u32 class_count;
+} HSD_ClassContext;
+
+HSD_ClassContext* msl_core_class_context(void);
+#endif
+
 extern HSD_ClassInfo hsdClass;
 
 /// void hsdDelete(void* object);

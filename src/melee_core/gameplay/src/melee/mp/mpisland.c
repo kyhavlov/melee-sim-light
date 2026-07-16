@@ -7,6 +7,19 @@
 
 #include <baselib/debug.h>
 #include <baselib/memory.h>
+#ifdef MSL_CORE_NATIVE
+#include <platform/memory.h>
+#endif
+
+static mp_UnkStruct0* alloc_island(void)
+{
+#ifdef MSL_CORE_NATIVE
+    return HSD_MemAllocReloc(sizeof(mp_UnkStruct0), MSL_RELOC_MP_ISLAND, 1,
+                             sizeof(mp_UnkStruct0), 0);
+#else
+    return HSD_MemAlloc(0x2C);
+#endif
+}
 
 /* 3B73E8 */ mpIsland_Palette mpIsland_TerrainPalette = { {
     { mp_Terrain_Rock, { 0x80, 0x60, 0x60, 0xFF } },
@@ -32,7 +45,9 @@
 } };
 
 /* 4D8158 */ const float mpIsland_804D8158 = 0.0F;
+#ifndef MSL_CORE_HOSTED
 /* 458E88 */ struct mpIsland_80458E88_t mpIsland_80458E88;
+#endif
 
 void mpIsland_8005A6F8(void)
 {
@@ -78,7 +93,7 @@ void mpIsland_8005A728(void)
         line_idx = map->floor_start;
         z_val = mpIsland_804D8158;
         while (count != 0) {
-            mpisp = HSD_MemAlloc(0x2C);
+            mpisp = alloc_island();
             HSD_ASSERT(62, mpisp);
             if (prev) {
                 prev->next = mpisp;
@@ -142,7 +157,7 @@ void mpIsland_8005A728(void)
         line_idx = map->ceiling_start;
         z_val = mpIsland_804D8158;
         while (count != 0) {
-            mpisp = HSD_MemAlloc(0x2C);
+            mpisp = alloc_island();
             HSD_ASSERT(0x3E, mpisp);
             if (prev) {
                 prev->next = mpisp;
@@ -548,7 +563,7 @@ void mpIsland_8005B004(mp_UnkStruct0** arg0, mp_UnkStruct0** arg1, int arg2,
         if (mpisp != NULL) {
             *arg1 = mpisp->next;
         } else {
-            mpisp = HSD_MemAlloc(0x2C);
+            mpisp = alloc_island();
             HSD_ASSERT(0x3E, mpisp);
         }
 

@@ -25,6 +25,10 @@
 #include <baselib/gobjproc.h>
 #include <baselib/jobj.h>
 #include <baselib/random.h>
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#include <runtime/source_state.h>
+#endif
 
 static void grBattle_OnDemoInit(bool);
 static void grBattle_OnInit(void);
@@ -62,12 +66,17 @@ static void grBattle_8021A60C(Ground_GObj*);
 static DynamicsDesc* grBattle_OnTouchLine(enum_t);
 static bool grBattle_OnCheckShadowRender(Vec3*, int, HSD_JObj*);
 
-extern StageInfo stage_info;
-
-struct {
+typedef struct BattlefieldParams {
     int unk0;
     int unk4;
-}* grNBa_804D6ACC;
+} BattlefieldParams;
+#ifdef MSL_CORE_HOSTED
+#define grNBa_804D6ACC                                                        \
+    (*(BattlefieldParams**) msl_core_stage_pointer_ref(                       \
+        MSL_STAGE_POINTER_BATTLEFIELD_PARAMS))
+#else
+BattlefieldParams* grNBa_804D6ACC;
+#endif
 
 static u8 isDemoFight;
 

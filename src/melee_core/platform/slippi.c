@@ -2,14 +2,12 @@
 
 #include "runtime/wire.h"
 
-#include <baselib/random.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <baselib/random.h>
 
-static MslCoreSlippiState* msl_bound_slippi_state;
-extern u32* seed_ptr;
+static _Thread_local MslCoreSlippiState* msl_bound_slippi_state;
 
 // refs/slippi-ssbm-asm/Recording/GetLCancelStatus/GetLCancelStatus.asm
 void msl_slippi_state_bind(MslCoreSlippiState* state)

@@ -15,6 +15,18 @@ typedef struct _HSD_IDTable {
     struct _IDEntry* table[101];
 } HSD_IDTable;
 
+#ifdef MSL_CORE_HOSTED
+// The default ID table indexes the live JObj graph, so it belongs to the
+// Match that allocated those entries rather than process BSS.
+// refs/melee/src/sysdolphin/baselib/id.c::{HSD_IDInsertToTable,
+//   HSD_IDRemoveByIDFromTable,HSD_IDGetDataFromTable}
+typedef struct HSD_IDContext {
+    HSD_IDTable default_table;
+} HSD_IDContext;
+
+HSD_IDContext* msl_core_id_context(void);
+#endif
+
 HSD_ObjAllocData* HSD_IDGetAllocData(void);
 void HSD_IDInitAllocData(void);
 void HSD_IDSetup(void);

@@ -134,33 +134,28 @@
 #include <baselib/debug.h>
 #include <baselib/objalloc.h>
 
+#ifndef MSL_CORE_HOSTED
 extern int ft_8045996C[FTKIND_MAX];
+#endif
 
 #ifdef MSL_CORE_HOSTED
-// The hosted core preserves the source registries' shapes but only publishes
-// rows for the admitted fighter domain. This prevents an indexed lookup from
-// retaining every unsupported character owner in the standalone core.
-struct UnkCostumeList CostumeListsForeachCharacter[FTKIND_MAX] = {
-    [FTKIND_FOX] = { &ft_80459B28, 4 },
-    [FTKIND_CAPTAIN] = { &ft_80459A98, 6 },
-    [FTKIND_SEAK] = { &ft_80459D18, 5 },
-    [FTKIND_PEACH] = { &ft_80459DF0, 5 },
-    [FTKIND_PURIN] = { &ft_8045A1F8, 5 },
-    [FTKIND_MARS] = { &ft_8045A0F0, 5 },
-    [FTKIND_ZELDA] = { &ft_8045A168, 5 },
-    [FTKIND_FALCO] = { &ft_8045A420, 4 },
-};
+// The hosted core preserves the source registry's shape but stores its loaded
+// animation-DAT pointer in GameData. The source DOL owns this as one process
+// global; a host may destroy and recreate equivalent immutable GameData.
+// refs/melee/src/melee/ft/ftdata.c:ftData_Table_Unk0
+static const ftData_UnkCountStruct
+    hosted_animation_data_template[FTKIND_MAX] = {
+        [FTKIND_FOX] = { 0, 327 },   [FTKIND_CAPTAIN] = { 0, 318 },
+        [FTKIND_SEAK] = { 0, 317 },  [FTKIND_PEACH] = { 0, 318 },
+        [FTKIND_PURIN] = { 0, 327 }, [FTKIND_MARS] = { 0, 327 },
+        [FTKIND_ZELDA] = { 0, 311 }, [FTKIND_FALCO] = { 0, 327 },
+    };
 
-ftData_UnkCountStruct ftData_Table_Unk0[FTKIND_MAX] = {
-    [FTKIND_FOX] = { 0, 327 },
-    [FTKIND_CAPTAIN] = { 0, 318 },
-    [FTKIND_SEAK] = { 0, 317 },
-    [FTKIND_PEACH] = { 0, 318 },
-    [FTKIND_PURIN] = { 0, 327 },
-    [FTKIND_MARS] = { 0, 327 },
-    [FTKIND_ZELDA] = { 0, 311 },
-    [FTKIND_FALCO] = { 0, 327 },
-};
+void msl_core_fighter_animation_data_init(void)
+{
+    memcpy(ftData_Table_Unk0, hosted_animation_data_template,
+           sizeof(hosted_animation_data_template));
+}
 Event ftData_Table_Unk1[FTKIND_MAX] = {
     [FTKIND_PURIN] = ftPr_Init_8013C2F8,
 };

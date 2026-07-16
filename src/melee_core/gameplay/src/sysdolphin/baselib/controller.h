@@ -81,9 +81,18 @@ struct PadLibData {
     /*0x2C*/ RumbleInfo rumble_info;
 };
 
+#ifndef MSL_CORE_HOSTED
 extern HSD_PadStatus HSD_PadMasterStatus[4];
 extern HSD_PadStatus HSD_PadGameStatus[4];
 extern HSD_PadStatus HSD_PadCopyStatus[4];
+#else
+HSD_PadStatus* msl_core_pad_master_status(void);
+HSD_PadStatus* msl_core_pad_game_status(void);
+HSD_PadStatus* msl_core_pad_copy_status(void);
+#define HSD_PadMasterStatus (msl_core_pad_master_status())
+#define HSD_PadGameStatus (msl_core_pad_game_status())
+#define HSD_PadCopyStatus (msl_core_pad_copy_status())
+#endif
 
 static inline float HSD_PadGetNmlStickY(u8 slot)
 {

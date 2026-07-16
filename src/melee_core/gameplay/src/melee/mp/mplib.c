@@ -44,12 +44,15 @@
 #include <melee/cm/types.h>
 #include <melee/gr/stage.h>
 #include <melee/lb/types.h>
+#ifdef MSL_CORE_NATIVE
+#include <platform/memory.h>
+#include <runtime/source_state.h>
+#endif
 
 #define LINEID_CHECK(line, line_id)                                           \
     do {                                                                      \
         if ((line_id) == -1 || (line_id) >= mpLib_804D64B4->line_count)       \
-            HSD_ASSERTREPORT(line, 0, "%s:%d:not found lineID=%d\n",          \
-                             __FILE__, line, line_id);                                   \
+            HSD_ASSERTREPORT(line, 0, "%s:%d:not found lineID=%d\n", __FILE__, line, line_id);                                   \
     } while (0)
 
 struct mpLib_803BF248_t_x4 {
@@ -67,12 +70,32 @@ struct mpLib_803BF248_t {
     struct mpLib_803BF248_t_x4* (*x4)[20];
 };
 
+#ifndef MSL_CORE_NATIVE
 /* 458868 */ mpCollisionBox mpLib_80458868[2];
+#endif
 
 /* 04E97C */ static bool mpLineIntersection(float a0x, float a0y, float a1x,
                                             float a1y, float b0x, float b0y,
                                             float b1x, float b1y, float* int_x,
                                             float* int_y);
+#ifdef MSL_CORE_NATIVE
+#define MSL_MP_LIB (msl_core_source_match_state()->mp_lib)
+#define didCheckBounding MSL_MP_LIB.did_check_bounding
+#define mpLib_804D64B4 MSL_MP_LIB.data
+#define groundCollVtx MSL_MP_LIB.vertices
+#define groundCollLine MSL_MP_LIB.lines
+#define groundCollJoint MSL_MP_LIB.joints
+#define jointListStart MSL_MP_LIB.joint_list_start
+#define jointListEnd MSL_MP_LIB.joint_list_end
+#define mpLib_804D64CC MSL_MP_LIB.debug_count
+#define mpLib_804D64D0 MSL_MP_LIB.debug_printed
+#define mpLib_804D64D4 MSL_MP_LIB.debug_values[0]
+#define mpLib_804D64D8 MSL_MP_LIB.debug_values[1]
+#define mpLib_804D64DC MSL_MP_LIB.debug_values[2]
+#define mpLib_804D64E0 MSL_MP_LIB.debug_values[3]
+#define mpLib_804D64E4 MSL_MP_LIB.debug_values[4]
+#define mpLib_80458888 MSL_MP_LIB.draw_vertices
+#else
 /* 4D64B0 */ static bool didCheckBounding;
 /* 4D64B4 */ static MapCollData* mpLib_804D64B4;
 /* 4D64B8 */ static CollVtx* groundCollVtx;
@@ -88,6 +111,7 @@ struct mpLib_803BF248_t {
 /* 4D64E0 */ static s32 mpLib_804D64E0;
 /* 4D64E4 */ static s32 mpLib_804D64E4;
 /* 458888 */ Vec3 mpLib_80458888[0x80];
+#endif
 
 struct mpLib_803BF248_t_x4 mpLib_803BD3D8 = {
     1.0F,         { -1, -1, -1, -1 }, { 0, -1, 0 }, { -1, -1, -1, -1 },
@@ -900,14 +924,46 @@ void mpLibLoad(MapCollData* coll_data)
     joint_prev = NULL;
     groundCollVtx = HSD_MemAlloc(0xC000);
     HSD_ASSERT(412, groundCollVtx);
+#ifdef MSL_CORE_NATIVE
+    groundCollLine =
+        HSD_MemAllocReloc(0x3000, MSL_RELOC_COLL_LINE,
+                          0x3000 / sizeof(CollLine), sizeof(CollLine), 0);
+#else
     groundCollLine = HSD_MemAlloc(0x3000);
+#endif
     HSD_ASSERT(413, groundCollLine);
+#ifdef MSL_CORE_NATIVE
+    groundCollJoint =
+        HSD_MemAllocReloc(0x3400, MSL_RELOC_COLL_JOINT,
+                          0x3400 / sizeof(CollJoint), sizeof(CollJoint), 0);
+#else
     groundCollJoint = HSD_MemAlloc(0x3400);
+#endif
     HSD_ASSERT(414, groundCollJoint);
     grDynamicAttr_801CA0B4();
     if (coll_data == NULL) {
         coll_data = &mpLib_803BF760;
     }
+#ifdef MSL_CORE_NATIVE
+    {
+        MslMpLibState* state = &msl_core_source_match_state()->mp_lib;
+
+        // Retail owns one writable archive graph for one running match.
+        // Hosted GameData is shared and immutable, so retain the source
+        // MapCollData shape while giving mpPruneEmptyLines and stage stitching
+        // their per-Match writable MapLine owner.
+        // refs/melee/src/melee/mp/mplib.c::{mpLibLoad,
+        //   mpPruneEmptyLines,mpLib_800581DC}
+        state->data_copy = *coll_data;
+        state->map_lines = HSD_MemAlloc((ssize_t) coll_data->line_count *
+                                        sizeof(*state->map_lines));
+        HSD_ASSERT(415, state->map_lines != NULL);
+        memcpy(state->map_lines, coll_data->lines,
+               (size_t) coll_data->line_count * sizeof(*state->map_lines));
+        state->data_copy.lines = state->map_lines;
+        coll_data = &state->data_copy;
+    }
+#endif
     f31 = Ground_801C0498();
     mpLib_80458868[0].right = F32_MAX;
     mpLib_80458868[0].top = F32_MAX;

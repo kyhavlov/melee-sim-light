@@ -9,6 +9,7 @@
 #include "lobj.h"
 #include "object.h"
 
+#ifndef MSL_CORE_HOSTED
 u8 HSD_GObj_804D784B;
 s8 HSD_GObj_804D784A;
 u8 HSD_GObj_804D7849;
@@ -27,6 +28,7 @@ HSD_GObj* HSD_GObj_804D781C;
 HSD_GObj* HSD_GObj_804D7818;
 HSD_GObj* HSD_GObj_804D7814;
 GObjFunc* HSD_GObj_804D7810;
+#endif
 
 int HSD_GObj_804085F0[] = { 1, 4, 2, 0 };
 
@@ -264,7 +266,9 @@ u8 HSD_GObj_803912A8(HSD_GObjLibInitDataType* arg0, GObjFuncs* arg1)
     return var_r3;
 }
 
+#ifndef MSL_CORE_HOSTED
 struct _unk_gobj_struct HSD_GObj_804CE3E4;
 HSD_ObjAllocData gobjproc_alloc_data;
 HSD_ObjAllocData gobj_alloc_data;
 HSD_GObjLibInitDataType HSD_GObjLibInitData;
+#endif

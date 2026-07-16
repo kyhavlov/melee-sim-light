@@ -1,16 +1,18 @@
-#include "platform/files.h"
+#include "smoke_context.h"
 
 #include "gr/ground.h"
 #include "lb/lbarchive.h"
 #include "mp/mpcoll.h"
 #include "mp/mplib.h"
 #include "mp/types.h"
+#include "platform/files.h"
 
 #include <math.h>
 #include <stdio.h>
 
 int main(int argc, char** argv)
 {
+    static MslSmokeContext context;
     static const float spawn_x[] = { -60.0F, 0.0F, 60.0F };
     HSD_Archive* archive;
     MapCollData* coll_data = NULL;
@@ -26,10 +28,12 @@ int main(int argc, char** argv)
         return 2;
     }
 
-    msl_host_set_data_root(argv[1]);
-    archive = lbArchive_LoadSymbols("GrNLa.dat", (void**) &coll_data,
-                                    "coll_data", (void**) &ground_param,
-                                    "grGroundParam", NULL);
+    if (msl_smoke_context_init(&context, argv[1]) != 0) {
+        return 1;
+    }
+    archive =
+        lbArchive_LoadSymbols("GrNLa.dat", (void**) &coll_data, "coll_data",
+                              (void**) &ground_param, "grGroundParam", NULL);
     if (archive == NULL || coll_data == NULL || ground_param == NULL) {
         fprintf(stderr, "failed to load Final Destination collision data\n");
         return 1;
@@ -79,5 +83,6 @@ int main(int argc, char** argv)
                "normal=(%.3f,%.3f)\n",
                line_id, contact.x, contact.y, normal.x, normal.y);
     }
+    msl_smoke_context_destroy(&context);
     return 0;
 }
