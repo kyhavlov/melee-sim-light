@@ -846,6 +846,7 @@ src/melee/lb/lbarchive.c
 src/melee/lb/lbarchive.h
 src/melee/lb/lbarq.h
 src/melee/lb/lbaudio_ax.h
+src/melee/lb/lbbgflash.c
 src/melee/lb/lbbgflash.h
 src/melee/lb/lbcollision.c
 src/melee/lb/lbcollision.h

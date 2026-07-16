@@ -506,6 +506,40 @@ void PSMTXRotAxisRad(Mtx matrix, Vec* axis, float radians)
     matrix[2][3] = 0.0F;
 }
 
+void MTXRotRad(Mtx matrix, char axis, float radians)
+{
+    float sine = sinf(radians);
+    float cosine = cosf(radians);
+
+    // Scalar spelling of the SDK's paired-single MTXRotTrig owner. Ground IK
+    // reaches the z-axis case; retaining all three source cases keeps this
+    // platform primitive complete.
+    // refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::{
+    //   MTXRotRad,PSMTXRotTrig}
+    axis |= 0x20;
+    PSMTXIdentity(matrix);
+    switch (axis) {
+    case 'x':
+        matrix[1][1] = cosine;
+        matrix[1][2] = -sine;
+        matrix[2][1] = sine;
+        matrix[2][2] = cosine;
+        break;
+    case 'y':
+        matrix[0][0] = cosine;
+        matrix[0][2] = sine;
+        matrix[2][0] = -sine;
+        matrix[2][2] = cosine;
+        break;
+    case 'z':
+        matrix[0][0] = cosine;
+        matrix[0][1] = -sine;
+        matrix[1][0] = sine;
+        matrix[1][1] = cosine;
+        break;
+    }
+}
+
 void PSMTXQuat(Mtx matrix, Quaternion* q)
 {
     float scale = 2.0F /

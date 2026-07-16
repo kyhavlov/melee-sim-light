@@ -20,6 +20,7 @@
 static MslCoreMatchRules* msl_bound_match_rules;
 
 #define msl_is_teams (msl_bound_match_rules->is_teams)
+#define msl_friendly_fire (msl_bound_match_rules->friendly_fire)
 #define msl_damage_ratio (msl_bound_match_rules->damage_ratio)
 #define msl_online_fnmsubs_zero (msl_bound_match_rules->online_fnmsubs_zero)
 #define msl_brawl_offscreen_damage \
@@ -87,7 +88,8 @@ void msl_core_bind_match_rules(MslCoreMatchRules* rules)
 }
 
 void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
-                               float damage_ratio, int online_fnmsubs_zero,
+                               int friendly_fire, float damage_ratio,
+                               int online_fnmsubs_zero,
                                int brawl_offscreen_damage,
                                int freeze_dead_up_fall_physics,
                                int ucf_cardinals_1_0_enabled,
@@ -97,6 +99,7 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
     memset(rules, 0, sizeof(*rules));
     msl_core_bind_match_rules(rules);
     msl_is_teams = is_teams;
+    msl_friendly_fire = friendly_fire != 0;
     msl_damage_ratio = damage_ratio;
     msl_online_fnmsubs_zero = online_fnmsubs_zero != 0;
     msl_brawl_offscreen_damage = brawl_offscreen_damage != 0;
@@ -132,6 +135,55 @@ void msl_core_advance_match_frame(void)
         }
     }
     ++msl_match_frame_count;
+}
+
+void msl_core_apply_team_stock_steal(void)
+{
+    int slot;
+
+    if (!msl_is_teams) {
+        return;
+    }
+
+    for (slot = 0; slot < 4; ++slot) {
+        int donor;
+        int controller;
+
+        if (Player_GetPlayerSlotType(slot) == Gm_PKind_NA ||
+            Player_GetEntity(slot) == NULL || !Player_8003219C(slot) ||
+            Player_GetStocks(slot) != 0)
+        {
+            continue;
+        }
+        controller = Player_GetPlayerId(slot);
+        if ((HSD_PadCopyStatus[controller].trigger & HSD_PAD_START) == 0) {
+            continue;
+        }
+
+        for (donor = 0; donor < 4; ++donor) {
+            if (donor != slot &&
+                Player_GetPlayerSlotType(donor) != Gm_PKind_NA &&
+                Player_GetTeam(donor) == Player_GetTeam(slot) &&
+                Player_GetStocks(donor) > 1)
+            {
+                break;
+            }
+        }
+        if (donor == 4) {
+            continue;
+        }
+
+        // Direct headless projection of the standard team-stock transfer.
+        // ifStock_802F7EFC only reserves and animates HUD stock icons; its
+        // gameplay gate is already guaranteed here by donor stocks > 1.
+        // The source updates stocks and creates the fighter before the GObj
+        // scheduler for this frame.
+        // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B918
+        // refs/melee/src/melee/if/ifstock.c::ifStock_802F7EFC
+        Player_LoseStock(donor);
+        Player_SetStocks(slot, Player_GetStocks(slot) + 1);
+        gm_80167320(slot, false);
+    }
 }
 
 void msl_ucf_seed_pad(int slot, s8 raw_x, s8 raw_y, s8 raw_cx, s8 raw_cy)
@@ -330,7 +382,7 @@ int gm_8016B014(void) { return 0; }
 // ordinary stock-VS ruleset, so stock loss and final-stock gates are active.
 int gm_8016B094(void) { return 1; }
 int gm_8016B0B4(void) { return 0; }
-int gm_8016B0D4(void) { return 0; }
+int gm_8016B0D4(void) { return msl_friendly_fire; }
 int gm_8016B0E8(void) { return 0; }
 int gm_8016B110(void) { return 0; }
 int gm_8016B168(void) { return msl_is_teams; }

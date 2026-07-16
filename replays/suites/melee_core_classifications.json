@@ -455,44 +455,68 @@
     },
     {
       "replay": "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "fighter position float execution profile",
-      "rationale": "After restoring the retail render-time JObj matrix publication, PPC and native source runtimes agree bit-for-bit and the former combat divergence is exact. One P1 X-position ULP row remains, followed by 2,391 exact transitions.",
+      "id": "nonmatching-ground-ik-capsule-gate",
+      "owner": "nonmatching lbbgflash ground-IK pose publication",
+      "rationale": "Promoting the current upstream ground-IK source fixes the reached four-player ground-pose owner, but upstream still marks the complete lbbgflash object NonMatching. PPC and native agree bit-for-bit: after the prior isolated P1 X-position ULP, the reconstructed IK pose creates one hit at frame 7627 that the Dolphin replay does not, followed by 1,501 exact transitions. The full bounded consequence is locked pending assembly matching of the shared IK owner.",
       "sources": [
-        "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18",
-        "refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjSetupMatrixSub"
+        "refs/melee/configure.py::Object(NonMatching, melee/lb/lbbgflash.c)",
+        "refs/melee/src/melee/lb/lbbgflash.c::lbBgFlash_80021410",
+        "refs/melee/src/melee/ft/ft_0899.c::ft_80089B08"
       ],
       "expected": {
         "native": {
           "frames": 9439,
-          "matched_frames": 9438,
-          "mismatched_frames": 1,
+          "matched_frames": 9249,
+          "mismatched_frames": 190,
           "exact_prefix_frames": 7047,
-          "strict_suffix_frames": 2391,
+          "strict_suffix_frames": 1501,
           "first_mismatch_frame": 6925,
-          "last_mismatch_frame": 6925,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "377241c36ae154ee",
-          "mismatch_fields_digest": "c887045506922f2f2d99bc698f2468d956af1627aa55537b4a39b3579c268bf7",
-          "render_visibility_mismatch_count": 4,
+          "last_mismatch_frame": 7815,
+          "mismatch_count": 193,
+          "mismatch_fingerprint": "1dde95408771cea4",
+          "mismatch_fields": [
+            {
+              "field": "pos_x[0]",
+              "count": 1,
+              "first_frame": 6925,
+              "last_frame": 6925
+            },
+            {
+              "field": "hitlag[1]",
+              "count": 1,
+              "first_frame": 7627,
+              "last_frame": 7627
+            },
+            {
+              "field": "instance_hit_by[1]",
+              "count": 1,
+              "first_frame": 7627,
+              "last_frame": 7627
+            },
+            {
+              "field": "last_hit_by[1]",
+              "count": 1,
+              "first_frame": 7627,
+              "last_frame": 7627
+            },
+            {
+              "field": "state_flags[6]",
+              "count": 1,
+              "first_frame": 7627,
+              "last_frame": 7627
+            },
+            {
+              "field": "pos_x[1]",
+              "count": 188,
+              "first_frame": 7628,
+              "last_frame": 7815
+            }
+          ],
+          "render_visibility_mismatch_count": 7,
           "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0
         },
-        "ppc": {
-          "frames": 9439,
-          "matched_frames": 9438,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 7047,
-          "strict_suffix_frames": 2391,
-          "first_mismatch_frame": 6925,
-          "last_mismatch_frame": 6925,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "377241c36ae154ee",
-          "mismatch_fields_digest": "c887045506922f2f2d99bc698f2468d956af1627aa55537b4a39b3579c268bf7",
-          "render_visibility_mismatch_count": 4,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0
-        }
+        "ppc": "native"
       }
     },
     {
@@ -1565,6 +1589,411 @@
           "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
           "mismatch_fields_digest": "d83228540ea6879b0784001afaff339e4bd8d5eb069f3b5d8d4384132de2080c"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260509T152622.slpz",
+      "id": "doubles-dolphin-signed-zero-motion-profile",
+      "owner": "fighter root-motion and signed-zero publication",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The complete residual consists of signed-zero attack-velocity publication and bounded ULP-scale fighter motion, followed by 359 exact transitions; the replay records Dolphin but not its build or float/JIT execution profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 9560,
+          "matched_frames": 9180,
+          "mismatched_frames": 380,
+          "exact_prefix_frames": 213,
+          "strict_suffix_frames": 359,
+          "first_mismatch_frame": 91,
+          "last_mismatch_frame": 9078,
+          "mismatch_count": 414,
+          "mismatch_fingerprint": "4dab6b0c7f891a41",
+          "mismatch_fields_digest": "d64a025aa5751bc0a81e80e8a43d85ee27f41edc7da3733a1796ad8ff2c40e4b",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260704T204838.slpz",
+      "id": "doubles-dolphin-ulp-motion-profile",
+      "owner": "fighter velocity and position float execution profile",
+      "rationale": "PPC and native source runtimes agree on the complete fingerprint. The bounded residual contains only ULP-scale fighter X position and self velocity, followed by 1,909 exact transitions; the replay records Dolphin without its build or execution profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 9232,
+          "matched_frames": 8503,
+          "mismatched_frames": 729,
+          "exact_prefix_frames": 4953,
+          "strict_suffix_frames": 1909,
+          "first_mismatch_frame": 4831,
+          "last_mismatch_frame": 7200,
+          "mismatch_count": 729,
+          "mismatch_fingerprint": "56cef2e6eab8cc8e",
+          "mismatch_fields_digest": "05eb5b87e65c3f30b304e813fec7478a042be333d95fac532c19be501acf09d1",
+          "render_visibility_mismatch_count": 7,
+          "first_render_visibility_mismatch_frame": 2180,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260704T165249.slpz",
+      "id": "doubles-dolphin-ulp-needle-pose-profile",
+      "owner": "Sheik thrown-needle historical-pose publication",
+      "rationale": "The complete residual is two isolated one-byte differences in Slippi generic metadata sampled from the low byte of thrown-needle historical Y positions. PPC and native agree exactly, and 2,994 trailing transitions are strict.",
+      "sources": [
+        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7214,
+          "matched_frames": 7212,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 4216,
+          "strict_suffix_frames": 2994,
+          "first_mismatch_frame": 4094,
+          "last_mismatch_frame": 4097,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "71ea0c6dd48133cc",
+          "mismatch_fields_digest": "3280d4bf0170bfdab54abff2fd3f70205f069cc47731806443a085cbe4c51952",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260704T165119.slpz",
+      "id": "doubles-dolphin-ulp-motion-and-needle-profile",
+      "owner": "fighter motion and Sheik thrown-needle float publication",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter position with thrown-needle historical position, and the final 183 transitions are exact; the replay records Dolphin but not its build or float/JIT profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c",
+        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
+      ],
+      "expected": {
+        "native": {
+          "frames": 5555,
+          "matched_frames": 5206,
+          "mismatched_frames": 349,
+          "exact_prefix_frames": 3449,
+          "strict_suffix_frames": 183,
+          "first_mismatch_frame": 3327,
+          "last_mismatch_frame": 5249,
+          "mismatch_count": 428,
+          "mismatch_fingerprint": "e24fd02ed57a7506",
+          "mismatch_fields_digest": "b62c46d57c85ef35244b3494fe2efb878f6eee3236d129522616d9813dbc9046",
+          "render_visibility_mismatch_count": 11,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260704T164410.slpz",
+      "id": "doubles-dolphin-ulp-motion-and-needle-profile",
+      "owner": "fighter motion and Sheik thrown-needle float publication",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale self velocity with one thrown-needle historical-position byte, followed by 364 exact transitions; the replay records Dolphin but not its build or float/JIT profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c",
+        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7934,
+          "matched_frames": 7673,
+          "mismatched_frames": 261,
+          "exact_prefix_frames": 4821,
+          "strict_suffix_frames": 364,
+          "first_mismatch_frame": 4699,
+          "last_mismatch_frame": 7447,
+          "mismatch_count": 261,
+          "mismatch_fingerprint": "82871d54fa4bc349",
+          "mismatch_fields_digest": "8ddd2b3f79b9c5fd56c1a22358a65bfc71a5ac5c5e1dc3566904b7b3a135dc65",
+          "render_visibility_mismatch_count": 6,
+          "first_render_visibility_mismatch_frame": 1676,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260704T012635.slpz",
+      "id": "hosted-ppc-dynamic-bone-execution-profile",
+      "owner": "Fox dynamic-bone pose publication at a BODY hurt-capsule gate",
+      "rationale": "Native has only bounded fighter/needle float residuals and 2,102 exact trailing transitions. A bounded retail collision trace matches native's Fox hurt capsule at replay frame 8036; PPC's source-compiled dynamic-bone chain instead places bone 18 in overlap one frame early, causing a real hit and a complete downstream consequence. Guard FigaTree inputs and its evaluated skeleton are identical across backends, localizing the split to the long-running dynamic-bone execution profile rather than replay input or gameplay branching.",
+      "sources": [
+        "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+        "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94",
+        "refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70",
+        "refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10348,
+          "matched_frames": 10024,
+          "mismatched_frames": 324,
+          "exact_prefix_frames": 2475,
+          "strict_suffix_frames": 2102,
+          "first_mismatch_frame": 2353,
+          "last_mismatch_frame": 8123,
+          "mismatch_count": 324,
+          "mismatch_fingerprint": "6b0a31468c9d221d",
+          "mismatch_fields_digest": "6dea7c0c6496a27efec138e261bb5a2b9aa06e892e40a0907f6dfdbb0ab8756d",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": {
+          "frames": 10348,
+          "matched_frames": 7835,
+          "mismatched_frames": 2513,
+          "exact_prefix_frames": 2475,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 2353,
+          "last_mismatch_frame": 10225,
+          "mismatch_count": 20997,
+          "mismatch_fingerprint": "45f1f3f5cda0c78e",
+          "mismatch_fields_digest": "b7ddc8a7d649ffd16093e368c9500ac308bd2b3ba6811c0a9c5e0435a623f0f2",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260704T012353.slpz",
+      "id": "hosted-backend-float-execution-profile",
+      "owner": "fighter, article, and matrix float execution profile",
+      "rationale": "Both source runtimes have bounded ULP-scale residuals and the same 2,494-transition exact suffix, but native exposes a broader set of fighter/article float fields than PPC. The backend-specific complete snapshots preserve that compiler/runtime boundary without applying a tolerance or changing gameplay.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c",
+        "refs/melee/src/melee/it/item.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 9210,
+          "matched_frames": 8830,
+          "mismatched_frames": 380,
+          "exact_prefix_frames": 691,
+          "strict_suffix_frames": 2494,
+          "first_mismatch_frame": 569,
+          "last_mismatch_frame": 6593,
+          "mismatch_count": 1353,
+          "mismatch_fingerprint": "f574b074137c2bcc",
+          "mismatch_fields_digest": "33f3421d8c14e84d6bb89e8e4a2254c57f2c0d022871065f3d47ba65bace6320",
+          "render_visibility_mismatch_count": 16,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": {
+          "frames": 9210,
+          "matched_frames": 9173,
+          "mismatched_frames": 37,
+          "exact_prefix_frames": 691,
+          "strict_suffix_frames": 2494,
+          "first_mismatch_frame": 569,
+          "last_mismatch_frame": 6593,
+          "mismatch_count": 37,
+          "mismatch_fingerprint": "8e8eef948896f0bb",
+          "mismatch_fields_digest": "66cfc73ffe849fb3aa57a0fc302da287d2a867e8462685ee8ad11687884ca161",
+          "render_visibility_mismatch_count": 11,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260704T011852.slpz",
+      "id": "doubles-dolphin-ulp-motion-profile",
+      "owner": "fighter position float execution profile",
+      "rationale": "The complete residual is one isolated one-ULP fighter X-position row. PPC and native agree exactly, and 332 strict transitions follow.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7438,
+          "matched_frames": 7437,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 7105,
+          "strict_suffix_frames": 332,
+          "first_mismatch_frame": 6983,
+          "last_mismatch_frame": 6983,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "56046b40171f2e65",
+          "mismatch_fields_digest": "34b2f92d1527a5c20888b672a0f0edecb9630b52092018183e20457e74629126",
+          "render_visibility_mismatch_count": 1,
+          "first_render_visibility_mismatch_frame": 1074,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260704T005918.slpz",
+      "id": "doubles-dolphin-ulp-damage-profile",
+      "owner": "fighter accumulated-damage float execution profile",
+      "rationale": "PPC and native agree on a bounded 219-row one-ULP accumulated-damage interval. Every other compared field is exact, and 6,660 strict transitions follow; the replay records Dolphin without its float/JIT profile.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_TakeDamage_8006CC7C",
+        "refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C"
+      ],
+      "expected": {
+        "native": {
+          "frames": 9407,
+          "matched_frames": 9188,
+          "mismatched_frames": 219,
+          "exact_prefix_frames": 2528,
+          "strict_suffix_frames": 6660,
+          "first_mismatch_frame": 2406,
+          "last_mismatch_frame": 2624,
+          "mismatch_count": 219,
+          "mismatch_fingerprint": "ed94c412b736fd6f",
+          "mismatch_fields_digest": "6144002362a644e8d151e58f90337291617c1fd425a78bd1a7197de8b972e2b6",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260704T005147.slpz",
+      "id": "doubles-dolphin-ulp-needle-pose-profile",
+      "owner": "Sheik thrown-needle historical-pose publication",
+      "rationale": "The complete residual is one isolated one-byte difference in Slippi generic metadata sampled from the low byte of a thrown-needle historical Y position. PPC and native agree exactly, and 3,777 strict transitions follow.",
+      "sources": [
+        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7037,
+          "matched_frames": 7036,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 3259,
+          "strict_suffix_frames": 3777,
+          "first_mismatch_frame": 3137,
+          "last_mismatch_frame": 3137,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "ab81b8d2714af0c4",
+          "mismatch_fields_digest": "e402efbbbf28567e482b842f5231c282b6715e2e76c13e374a4261071cc01621",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260704T004613.slpz",
+      "id": "doubles-dolphin-ulp-motion-profile",
+      "owner": "fighter position float execution profile",
+      "rationale": "The complete residual is nine isolated ULP-scale fighter-position rows. PPC and native agree on the exact fingerprint, and 2,540 strict transitions follow.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10410,
+          "matched_frames": 10401,
+          "mismatched_frames": 9,
+          "exact_prefix_frames": 2775,
+          "strict_suffix_frames": 2540,
+          "first_mismatch_frame": 2653,
+          "last_mismatch_frame": 7747,
+          "mismatch_count": 9,
+          "mismatch_fingerprint": "9066b9a4f3a9144e",
+          "mismatch_fields_digest": "17772b14c5980a200efa2fa422fad742908c2eadce99f87b7aa1ad477442e26c",
+          "render_visibility_mismatch_count": 12,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260625T034215.slpz",
+      "id": "needle-pose-and-unmodeled-presentation-rng-phase",
+      "owner": "Sheik thrown-needle publication and DamageFlyRoll presentation RNG phase",
+      "rationale": "Several isolated thrown-needle historical-position bytes precede the first causal gameplay split. At the later source DamageFlyRoll HSD_Randf gate, all deterministic fighter state is exact, while the replay's excluded particle/effect scheduler is at the neighboring stream phase and selects the other action. PPC and native agree on the complete downstream consequence; the manifest locks it rather than changing free-running RNG or fitting replay rows.",
+      "sources": [
+        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo",
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+      ],
+      "expected": {
+        "native": {
+          "frames": 9696,
+          "matched_frames": 7117,
+          "mismatched_frames": 2579,
+          "exact_prefix_frames": 5210,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 5088,
+          "last_mismatch_frame": 9573,
+          "mismatch_count": 81863,
+          "mismatch_fingerprint": "ddecec25dee2a84a",
+          "mismatch_fields_digest": "68afbf13cb9aedc4e8a255b3b28d86503089034c9c3035be5daa8624ebbbba31",
+          "render_visibility_mismatch_count": 2379,
+          "first_render_visibility_mismatch_frame": 7016,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260625T033446.slpz",
+      "id": "needle-pose-and-unmodeled-presentation-rng-phase",
+      "owner": "Sheik thrown-needle publication and DamageFlyRoll presentation RNG phase",
+      "rationale": "One isolated thrown-needle historical-position byte precedes the causal split. Deterministic damage setup is exact at the later source HSD_Randf gate; native and PPC take the same neighboring stream outcome, while the replay's excluded particle/effect phase selects DamageFlyRoll instead. The bounded action consequence reconverges for the final 1,070 transitions.",
+      "sources": [
+        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo",
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+      ],
+      "expected": {
+        "native": {
+          "frames": 9894,
+          "matched_frames": 9805,
+          "mismatched_frames": 89,
+          "exact_prefix_frames": 6902,
+          "strict_suffix_frames": 1070,
+          "first_mismatch_frame": 6780,
+          "last_mismatch_frame": 8701,
+          "mismatch_count": 244,
+          "mismatch_fingerprint": "0bdbddd814b51011",
+          "mismatch_fields_digest": "936a714eabdd54a0f03ff49c26e8c7f275aa8620a8f23d3cd4fb9ffcde4a8e88",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
         },
         "ppc": "native"
       }

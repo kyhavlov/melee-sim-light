@@ -54,6 +54,7 @@ typedef struct ArrowNode {
 } ArrowNode;
 
 typedef struct Primitive {
+  const uint8_t* validity;
   const uint8_t* data;
   int64_t offset;
 } Primitive;
@@ -135,6 +136,7 @@ typedef struct ReplayView {
   uint32_t stage_id;
   uint32_t initial_random_seed;
   uint8_t is_teams;
+  uint8_t friendly_fire;
   uint8_t online_fnmsubs_zero;
   uint8_t brawl_offscreen_damage;
   uint8_t freeze_dead_up_fall_physics;
@@ -143,6 +145,8 @@ typedef struct ReplayView {
 
 typedef struct FrameRows {
   int64_t* raw;
+  int64_t* player_raw[MSL_CORE_MAX_PLAYERS];
+  uint8_t* player_present[MSL_CORE_MAX_PLAYERS];
   int64_t count;
 } FrameRows;
 
@@ -244,12 +248,13 @@ static int primitive_from_node(ArrowNode node, const char* format, Primitive* ou
   if (node.schema == NULL || node.array == NULL || node.schema->format == NULL ||
       strcmp(node.schema->format, format) != 0 || node.array->n_buffers < 2 ||
       node.array->buffers == NULL || node.array->buffers[1] == NULL ||
-      node.array->null_count != 0) {
+      (node.array->null_count != 0 && node.array->buffers[0] == NULL)) {
     snprintf(error, error_size, "unsupported Arrow primitive %s (%s)",
              node.schema != NULL && node.schema->name != NULL ? node.schema->name : "?",
              node.schema != NULL && node.schema->format != NULL ? node.schema->format : "?");
     return -1;
   }
+  out->validity = (const uint8_t*)node.array->buffers[0];
   out->data = (const uint8_t*)node.array->buffers[1];
   out->offset = node.array->offset;
   return 0;
@@ -266,6 +271,11 @@ static int primitive_child(ArrowNode parent, const char* name, const char* forma
 
 static inline int8_t get_i8(const Primitive* p, int64_t i) {
   return ((const int8_t*)p->data)[p->offset + i];
+}
+
+static inline int primitive_is_valid(const Primitive* p, int64_t i) {
+  int64_t bit = p->offset + i;
+  return p->validity == NULL || (p->validity[bit >> 3] & (1U << (bit & 7))) != 0;
 }
 
 static inline uint8_t get_u8(const Primitive* p, int64_t i) {
@@ -326,6 +336,16 @@ static int parse_start(PyObject* start, ReplayView* replay) {
   }
   value = PyDict_GetItemString(start, "is_teams");
   replay->is_teams = value != NULL && PyObject_IsTrue(value) > 0;
+  value = PyDict_GetItemString(start, "bitfield");
+  if (value != NULL && PyList_Check(value) && PyList_GET_SIZE(value) >= 2) {
+    PyObject* rules = PyList_GET_ITEM(value, 1);
+    if (PyLong_Check(rules)) {
+      // Slippi game-start bitfield byte 1 bit 0 is the VS rules friendly-fire
+      // flag, matching gm_1601.c's rules.x1_7 publication.
+      // refs/melee/src/melee/gm/gm_1601.c::gm_8016A92C
+      replay->friendly_fire = (PyLong_AsUnsignedLong(rules) & 1U) != 0;
+    }
+  }
   scene = PyDict_GetItemString(start, "scene");
   value = scene != NULL && PyDict_Check(scene) ? PyDict_GetItemString(scene, "major") : NULL;
   if (value == NULL || !PyLong_Check(value)) {
@@ -403,6 +423,11 @@ static int parse_start(PyObject* start, ReplayView* replay) {
   if (replay->num_players != 2 && replay->num_players != 4) {
     PyErr_Format(PyExc_ValueError, "expected two or four human players, got %d",
                  replay->num_players);
+    return -1;
+  }
+  if (replay->num_players == 4 && replay->is_teams && !replay->friendly_fire) {
+    PyErr_SetString(PyExc_ValueError,
+                    "four-player teams validation currently requires Team Attack ON");
     return -1;
   }
   for (i = 0; i + 1 < replay->num_players; ++i) {
@@ -692,10 +717,13 @@ static int load_replay(ArrowNode frames, ReplayView* replay, char* error, size_t
 static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, char* error,
                                 size_t error_size) {
   int64_t i;
+  int player;
   int32_t min_id = get_i32(&replay->frame_id, 0);
   int32_t max_id = min_id;
   int64_t range;
   int64_t* last;
+  int64_t* last_player[MSL_CORE_MAX_PLAYERS] = {NULL};
+  int64_t carried_player[MSL_CORE_MAX_PLAYERS] = {-1, -1, -1, -1};
   for (i = 1; i < replay->raw_length; ++i) {
     int32_t id = get_i32(&replay->frame_id, i);
     if (id < min_id) {
@@ -712,32 +740,88 @@ static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, char*
   }
   last = (int64_t*)malloc((size_t)range * sizeof(*last));
   rows->raw = (int64_t*)malloc((size_t)replay->raw_length * sizeof(*rows->raw));
+  for (player = 0; player < replay->num_players; ++player) {
+    last_player[player] = (int64_t*)malloc((size_t)range * sizeof(*last_player[player]));
+    rows->player_raw[player] =
+        (int64_t*)malloc((size_t)replay->raw_length * sizeof(*rows->player_raw[player]));
+    rows->player_present[player] =
+        (uint8_t*)malloc((size_t)replay->raw_length * sizeof(*rows->player_present[player]));
+  }
   if (last == NULL || rows->raw == NULL) {
-    free(last);
-    free(rows->raw);
-    rows->raw = NULL;
-    snprintf(error, error_size, "out of memory indexing replay frames");
-    return -1;
+    goto allocation_failed;
+  }
+  for (player = 0; player < replay->num_players; ++player) {
+    if (last_player[player] == NULL || rows->player_raw[player] == NULL ||
+        rows->player_present[player] == NULL) {
+      goto allocation_failed;
+    }
   }
   for (i = 0; i < range; ++i) {
     last[i] = -1;
+    for (player = 0; player < replay->num_players; ++player) {
+      last_player[player][i] = -1;
+    }
   }
   for (i = 0; i < replay->raw_length; ++i) {
     int64_t key = (int64_t)get_i32(&replay->frame_id, i) - min_id;
     last[key] = i;
+    for (player = 0; player < replay->num_players; ++player) {
+      if (primitive_is_valid(&replay->players[player].character, i)) {
+        last_player[player][key] = i;
+      }
+    }
   }
   for (i = 0; i < replay->raw_length; ++i) {
     int64_t key = (int64_t)get_i32(&replay->frame_id, i) - min_id;
     if (last[key] == i) {
+      for (player = 0; player < replay->num_players; ++player) {
+        int64_t player_row = last_player[player][key];
+        if (player_row >= 0) {
+          carried_player[player] = player_row;
+          rows->player_present[player][rows->count] = 1;
+        } else if (carried_player[player] >= 0 &&
+                   get_u8(&replay->players[player].stocks, carried_player[player]) == 0) {
+          // Slippi omits some pre/post events after a doubles participant has
+          // been eliminated. Carry its last input only while stocks are zero,
+          // and mask that player's absent comparison lanes below. An active
+          // omission remains unreconstructable and is rejected.
+          player_row = carried_player[player];
+          rows->player_present[player][rows->count] = 0;
+        } else {
+          snprintf(error, error_size, "active finalized frame %d has no P%d pre/post row",
+                   get_i32(&replay->frame_id, i), replay->port_1based[player]);
+          goto failed;
+        }
+        rows->player_raw[player][rows->count] = player_row;
+      }
       rows->raw[rows->count++] = i;
     }
   }
   free(last);
+  for (player = 0; player < replay->num_players; ++player) {
+    free(last_player[player]);
+  }
   if (rows->count < 2) {
     snprintf(error, error_size, "replay has fewer than two finalized frames");
     return -1;
   }
   return 0;
+
+allocation_failed:
+  snprintf(error, error_size, "out of memory indexing replay frames");
+failed:
+  free(last);
+  for (player = 0; player < MSL_CORE_MAX_PLAYERS; ++player) {
+    free(last_player[player]);
+    free(rows->player_raw[player]);
+    free(rows->player_present[player]);
+    rows->player_raw[player] = NULL;
+    rows->player_present[player] = NULL;
+  }
+  free(rows->raw);
+  rows->raw = NULL;
+  rows->count = 0;
+  return -1;
 }
 
 static uint8_t trigger_u8(float value) {
@@ -764,12 +848,14 @@ static int8_t processed_stick_i8(float value) {
   return (int8_t)(value * 80.0F);
 }
 
-static void build_input(const ReplayView* replay, int64_t raw, MslCoreInput* input) {
+static void build_input(const ReplayView* replay, const FrameRows* rows, int64_t logical_pos,
+                        MslCoreInput* input) {
   int player;
   memset(input, 0, sizeof(*input));
   for (player = 0; player < replay->num_players; ++player) {
     const ReplayPlayer* src = &replay->players[player];
     MslCoreInputPlayer* dst = &input->p[player];
+    int64_t raw = rows->player_raw[player][logical_pos];
     dst->buttons = get_u16(&src->buttons, raw);
     dst->main_x = get_i8(&src->main_x, raw);
     dst->main_y = get_i8(&src->main_y, raw);
@@ -824,9 +910,11 @@ static int64_t item_count(const ReplayView* replay, int64_t raw) {
   return list_count(replay->item_list, raw);
 }
 
-static void build_expected(const ReplayView* replay, int64_t raw, MslCoreCompare* expected) {
+static void build_expected(const ReplayView* replay, const FrameRows* rows, int64_t logical_pos,
+                           MslCoreCompare* expected) {
   int player;
   int flag;
+  int64_t raw = rows->raw[logical_pos];
   memset(expected, 0, sizeof(*expected));
   expected->frame_id = get_i32(&replay->frame_id, raw);
   expected->frame_pre_random_seed = get_u32(&replay->frame_seed, raw);
@@ -838,38 +926,40 @@ static void build_expected(const ReplayView* replay, int64_t raw, MslCoreCompare
   }
   for (player = 0; player < replay->num_players; ++player) {
     const ReplayPlayer* src = &replay->players[player];
-    uint8_t flags3 = get_u8(&src->state_flags[3], raw);
+    int64_t player_raw = rows->player_raw[player][logical_pos];
+    uint8_t flags3 = get_u8(&src->state_flags[3], player_raw);
     expected->team_id[player] = replay->team_id[player];
-    expected->char_id[player] = get_u8(&src->character, raw);
-    expected->pos_x[player] = get_f32(&src->pos_x, raw);
-    expected->pos_y[player] = get_f32(&src->pos_y, raw);
-    expected->speed_air_x_self[player] = get_f32(&src->speed_air_x, raw);
-    expected->speed_ground_x_self[player] = get_f32(&src->speed_ground_x, raw);
-    expected->speed_y_self[player] = get_f32(&src->speed_y, raw);
-    expected->speed_x_attack[player] = get_f32(&src->speed_x_attack, raw);
-    expected->speed_y_attack[player] = get_f32(&src->speed_y_attack, raw);
-    expected->facing[player] = get_f32(&src->direction, raw) > 0.0F;
-    expected->on_ground[player] = get_u8(&src->airborne, raw) == 0;
-    expected->is_dead[player] = get_u8(&src->stocks, raw) == 0;
-    expected->action_id[player] = get_u16(&src->action, raw);
-    expected->action_frame[player] = frame_i16(get_f32(&src->state_age, raw));
-    expected->jumps_left[player] = get_u8(&src->jumps, raw);
-    expected->stocks[player] = get_u8(&src->stocks, raw);
-    expected->percent[player] = get_f32(&src->percent, raw);
-    expected->shield_hp[player] = get_f32(&src->shield, raw);
-    expected->hitlag[player] = frame_u16(get_f32(&src->hitlag, raw));
-    expected->hitstun[player] = (flags3 & 0x02U) != 0 ? frame_u16(get_f32(&src->misc_as, raw)) : 0;
-    expected->l_cancel[player] = get_u8(&src->l_cancel, raw);
-    expected->hurtbox_state[player] = get_u8(&src->hurtbox, raw);
-    expected->ground_id[player] = get_u16(&src->ground, raw);
-    expected->animation_index[player] = get_u32(&src->animation_index, raw);
-    expected->instance_hit_by[player] = get_u16(&src->instance_hit_by, raw);
-    expected->instance_id[player] = get_u16(&src->instance_id, raw);
-    expected->last_attack_landed[player] = get_u8(&src->last_attack, raw);
-    expected->combo_count[player] = get_u8(&src->combo_count, raw);
-    expected->last_hit_by[player] = get_u8(&src->last_hit_by, raw);
+    expected->char_id[player] = get_u8(&src->character, player_raw);
+    expected->pos_x[player] = get_f32(&src->pos_x, player_raw);
+    expected->pos_y[player] = get_f32(&src->pos_y, player_raw);
+    expected->speed_air_x_self[player] = get_f32(&src->speed_air_x, player_raw);
+    expected->speed_ground_x_self[player] = get_f32(&src->speed_ground_x, player_raw);
+    expected->speed_y_self[player] = get_f32(&src->speed_y, player_raw);
+    expected->speed_x_attack[player] = get_f32(&src->speed_x_attack, player_raw);
+    expected->speed_y_attack[player] = get_f32(&src->speed_y_attack, player_raw);
+    expected->facing[player] = get_f32(&src->direction, player_raw) > 0.0F;
+    expected->on_ground[player] = get_u8(&src->airborne, player_raw) == 0;
+    expected->is_dead[player] = get_u8(&src->stocks, player_raw) == 0;
+    expected->action_id[player] = get_u16(&src->action, player_raw);
+    expected->action_frame[player] = frame_i16(get_f32(&src->state_age, player_raw));
+    expected->jumps_left[player] = get_u8(&src->jumps, player_raw);
+    expected->stocks[player] = get_u8(&src->stocks, player_raw);
+    expected->percent[player] = get_f32(&src->percent, player_raw);
+    expected->shield_hp[player] = get_f32(&src->shield, player_raw);
+    expected->hitlag[player] = frame_u16(get_f32(&src->hitlag, player_raw));
+    expected->hitstun[player] =
+        (flags3 & 0x02U) != 0 ? frame_u16(get_f32(&src->misc_as, player_raw)) : 0;
+    expected->l_cancel[player] = get_u8(&src->l_cancel, player_raw);
+    expected->hurtbox_state[player] = get_u8(&src->hurtbox, player_raw);
+    expected->ground_id[player] = get_u16(&src->ground, player_raw);
+    expected->animation_index[player] = get_u32(&src->animation_index, player_raw);
+    expected->instance_hit_by[player] = get_u16(&src->instance_hit_by, player_raw);
+    expected->instance_id[player] = get_u16(&src->instance_id, player_raw);
+    expected->last_attack_landed[player] = get_u8(&src->last_attack, player_raw);
+    expected->combo_count[player] = get_u8(&src->combo_count, player_raw);
+    expected->last_hit_by[player] = get_u8(&src->last_hit_by, player_raw);
     for (flag = 0; flag < MSL_CORE_STATE_FLAGS_BYTES; ++flag) {
-      expected->state_flags[player][flag] = get_u8(&src->state_flags[flag], raw);
+      expected->state_flags[player][flag] = get_u8(&src->state_flags[flag], player_raw);
     }
   }
   {
@@ -1230,13 +1320,15 @@ static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemField
   return 1;
 }
 
-static int compare_row(const ReplayView* replay, int64_t raw, const MslCoreCompare* actual,
-                       int signed_zero_equal, ValidationResult* result) {
+static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t logical_pos,
+                       const MslCoreCompare* actual, int signed_zero_equal,
+                       ValidationResult* result) {
   MslCoreCompare expected;
+  int64_t raw = rows->raw[logical_pos];
   int64_t frame = get_i32(&replay->frame_id, raw);
   size_t field_i;
   int64_t mismatch_before = result->mismatch_count;
-  build_expected(replay, raw, &expected);
+  build_expected(replay, rows, logical_pos, &expected);
   for (field_i = 0; field_i < sizeof(compare_fields) / sizeof(compare_fields[0]); ++field_i) {
     const FieldSpec* spec = &compare_fields[field_i];
     const uint8_t* expected_bytes = (const uint8_t*)(const void*)&expected + spec->offset;
@@ -1244,6 +1336,16 @@ static int compare_row(const ReplayView* replay, int64_t raw, const MslCoreCompa
     size_t width = field_width((FieldKind)spec->kind);
     int element;
     for (element = 0; element < spec->count; ++element) {
+      int player = -1;
+      if (spec->count == MSL_CORE_MAX_PLAYERS) {
+        player = element;
+      } else if (spec->offset == offsetof(MslCoreCompare, state_flags)) {
+        player = element / MSL_CORE_STATE_FLAGS_BYTES;
+      }
+      if (player >= 0 && player < replay->num_players &&
+          !rows->player_present[player][logical_pos]) {
+        continue;
+      }
       uint32_t expected_bits = load_bits(expected_bytes + (size_t)element * width, width);
       uint32_t actual_bits = load_bits(actual_bytes + (size_t)element * width, width);
       if (spec->offset == offsetof(MslCoreCompare, state_flags) &&
@@ -1323,14 +1425,24 @@ static void refill_write_buffer(StreamState* state) {
   while (state->next_input_pos <= state->process_end_pos &&
          state->write_len + sizeof(MslCoreStreamFrame) <= sizeof(state->write_buf)) {
     MslCoreStreamFrame frame;
-    int64_t raw = state->rows->raw[state->next_input_pos++];
+    int64_t logical_pos = state->next_input_pos++;
+    int64_t raw = state->rows->raw[logical_pos];
     int64_t event;
+    int seed_player = 0;
     memset(&frame, 0, sizeof(frame));
+    while (seed_player < state->replay->num_players &&
+           !state->rows->player_present[seed_player][logical_pos]) {
+      ++seed_player;
+    }
+    if (seed_player == state->replay->num_players) {
+      seed_player = 0;
+    }
     frame.frame_pre_random_seed = get_u32(&state->replay->frame_seed, raw);
     frame.stage_events.fighter_pre_random_seed =
-        get_u32(&state->replay->players[0].random_seed, raw);
+        get_u32(&state->replay->players[seed_player].random_seed,
+                state->rows->player_raw[seed_player][logical_pos]);
     frame.stage_events.fighter_pre_random_seed_valid = 1;
-    build_input(state->replay, raw, &frame.input);
+    build_input(state->replay, state->rows, logical_pos, &frame.input);
     if (state->replay->fod_platform_list != NULL) {
       int64_t start = list_range_start(state->replay->fod_platform_list, raw);
       int64_t count = list_count(state->replay->fod_platform_list, raw);
@@ -1377,7 +1489,8 @@ static int consume_output(StreamState* state, const uint8_t* data, size_t size, 
         int64_t raw = state->rows->raw[logical_pos];
         int64_t frame = get_i32(&state->replay->frame_id, raw);
         const MslCoreCompare* actual = (const MslCoreCompare*)(const void*)state->output_row;
-        if (compare_row(state->replay, raw, actual, state->signed_zero_equal, &state->result)) {
+        if (compare_row(state->replay, state->rows, logical_pos, actual, state->signed_zero_equal,
+                        &state->result)) {
           state->result.matched_frames += 1;
           state->result.strict_suffix_frames += 1;
           if (state->result.first_mismatch_frame == INT64_MIN) {
@@ -1850,8 +1963,9 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     PyErr_SetString(PyExc_ValueError, error);
     goto done;
   }
-  if (replay.num_players != 2) {
-    PyErr_Format(PyExc_ValueError, "Melee core requires two players, got %d", replay.num_players);
+  if (replay.num_players != 2 && replay.num_players != 4) {
+    PyErr_Format(PyExc_ValueError, "Melee core requires two or four players, got %d",
+                 replay.num_players);
     goto done;
   }
   if (replay.stage_id != 2 && replay.stage_id != 3 && replay.stage_id != 8 &&
@@ -1861,7 +1975,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     goto done;
   }
   for (i = 0; i < replay.num_players; ++i) {
-    uint8_t character = get_u8(&replay.players[i].character, rows.raw[0]);
+    uint8_t character = get_u8(&replay.players[i].character, rows.player_raw[i][0]);
     if (character != 1 && character != 2 && character != 7 && character != 18 && character != 19 &&
         character != 22) {
       PyErr_SetString(PyExc_ValueError,
@@ -1922,6 +2036,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   state.config.match_damage_ratio = replay.damage_ratio;
   state.config.num_players = (uint8_t)replay.num_players;
   state.config.is_teams = replay.is_teams;
+  state.config.friendly_fire = replay.friendly_fire;
   state.config.online_fnmsubs_zero = replay.online_fnmsubs_zero;
   state.config.brawl_offscreen_damage = replay.brawl_offscreen_damage;
   state.config.freeze_dead_up_fall_physics = replay.freeze_dead_up_fall_physics;
@@ -1932,21 +2047,22 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
                                      (replay.dreamland_whispy_list != NULL ? 2U : 0U);
   for (i = 0; i < replay.num_players; ++i) {
     const ReplayPlayer* player = &replay.players[i];
+    int64_t player_raw = rows.player_raw[i][0];
     uint8_t stocks = replay.start_stocks[i];
     if (stocks > state.config.stock_count) {
       state.config.stock_count = stocks;
     }
-    state.config.players[i].char_id = get_u8(&player->character, rows.raw[0]);
+    state.config.players[i].char_id = get_u8(&player->character, player_raw);
     state.config.players[i].team_id = replay.team_id[i];
     state.config.players[i].costume_id = replay.costume_id[i];
     state.config.players[i].handicap = replay.handicap[i];
     state.config.players[i].facing_and_port =
-        (uint8_t)((replay.port_1based[i] << 1) | (get_f32(&player->direction, rows.raw[0]) > 0.0F));
+        (uint8_t)((replay.port_1based[i] << 1) | (get_f32(&player->direction, player_raw) > 0.0F));
   }
   if (state.config.stock_count == 0) {
     state.config.stock_count = 1;
   }
-  build_input(&replay, rows.raw[0], &state.previous);
+  build_input(&replay, &rows, 0, &state.previous);
 
   runner_started = monotonic_seconds();
   Py_BEGIN_ALLOW_THREADS stream_result =
@@ -1960,6 +2076,10 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   result = result_object(&replay, &rows, &state, compare_count, runner_seconds);
 
 done:
+  for (i = 0; i < MSL_CORE_MAX_PLAYERS; ++i) {
+    free(rows.player_raw[i]);
+    free(rows.player_present[i]);
+  }
   free(rows.raw);
   Py_XDECREF(arrow_pair);
   return result;

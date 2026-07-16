@@ -1,11 +1,11 @@
 # Source-Shaped Melee Core
 
-Status: Phase 5.5 canonical source promotion and the Phase 5 singles packets are complete. PPC32
-and native x86-64 compile the tracked repository-owned gameplay source directly. The full
-97-replay legal-stage singles gate completes as 50 strict passes plus 47 exact source
-classifications over 848,202 transitions. The active autonomous goal continues with the 21-replay
-doubles packet. Real multi-match context ownership, arbitrary savestates, the replacement API, and
-Wasm/viewer cutover remain deferred until that broader source closure is stable.
+Status: Phase 5.5 canonical source promotion and every Phase 5 supported-domain packet are
+complete. PPC32 and native x86-64 compile the tracked repository-owned gameplay source directly.
+The terminal 118-replay inventory completes as 58 strict passes plus 60 exact source
+classifications over 1,032,182 transitions: 50/47 across the 97 legal-stage singles and 8/13
+across the 21 doubles. Real multi-match context ownership, arbitrary savestates, the replacement
+API, and Wasm/viewer cutover remain deferred until the next agreed phase.
 
 Branch base: `core-rewrite` at `6fbcc9bc7719` (`Rewrite core contact and motion state ownership`).
 
@@ -1310,6 +1310,54 @@ players in shared systems.
 Run all 21 doubles replays through their final transitions and rerun the complete 97-entry singles
 aggregate. Record four-player memory/pool high-water marks and every new persistent owner for the
 later context/savestate design. Commit the doubles packet independently.
+
+Subphase E result: complete. The replay loader now reconstructs nullable, split Arrow player rows
+with an independent finalized-row cursor for each physical port, admits two- and four-player games,
+and masks only source-valid absent post-frame rows for already eliminated players. Match startup
+publishes all four Slippi neutral-spawn entries, applies the retail team-ordered spawn permutation,
+loads the recorded Team Attack bit, and carries friendly fire through the source rules. The runtime
+also implements the reached START-button team stock-share path directly from `gm_8016B918` rather
+than treating eliminated teammates as absent inputs. A single canonical target runs both terminal
+inventories through the existing parallel Arrow/native runner:
+
+```bash
+make -f src/melee_core/Makefile validation-supported-domain
+```
+
+Two shared source corrections were proven while closing the packet. The simultaneous grab-pair
+damage path now uses the zero-applied-knockback predicate present in GALE01 at `0x8008EE60` and
+`0x8008F270`, correcting the pinned nonmatching `ftCo_Damage` transcription. Grounded fighter pose
+publication now compiles the reached `lbbgflash` ground-IK chain plus source-backed `MTXRotRad`
+instead of the former headless no-op. Both are recorded as upstream candidates; neither is a
+doubles-specific replay adjustment.
+
+The terminal native doubles gate is eight strict passes plus thirteen exact classifications, zero
+failures, and zero errors over 183,980 transitions at roughly 80k aggregate frames/second. The
+classifications preserve full-stream fingerprints. Their bounded owners are signed-zero/ULP
+execution profiles, historical needle-pose bytes, presentation-owned DamageFlyRoll RNG phase, and
+two backend-specific source profiles: PPC dynamic-bone evaluation can advance one Fox BODY contact
+by one frame in `Game_20260509T012635`, while native/PPC FObj/JObj evaluation produces different
+bounded pose residuals in `Game_20260509T012353`. Neither classification changes gameplay or stops
+validation after its first mismatch. The complete singles inventory remains 50 strict passes plus
+47 exact classifications.
+
+A representative four-player run completed with the native sealed preallocation envelope intact
+and no post-initialization allocation. Source allocator high-water marks by element size were 948
+for 64-byte records, 780 for 24-byte records, 737 for the largest 48-byte graph pool, 373 for
+40-byte records, 158 and 4 for the other 48-byte pools, 26 for 12-byte records, 24 for 96-byte
+records, 10 for the 32-KiB fighter archive-work buffers, 7 for 5,416-byte records, and 6 for
+800-byte records. Native initialization retains at least 256 spare records in every registered
+pool, with larger explicit reserves for AObj, FObj, and ID pools.
+
+Future ownership recorded by this packet:
+
+- `GameData`: the existing immutable fighter/stage archives, translated graphs, callback tables,
+  article catalogs, and stage collision data; four-player support adds no mutable catalog state;
+- `MatchState`: four physical player slots and input histories, fighter/article entities, team and
+  friendly-fire rules, stocks and stock-share state, spawn permutation, per-port replay row
+  presence, scheduler/camera/render matrices, dynamic-bone/IK state, and all fixed pools;
+- explicit presentation exclusions: renderer/VI visibility publication, effect/audio RNG work,
+  and backend-specific float execution profiles already locked by exact classifications.
 
 #### Autonomous goal and commit policy
 

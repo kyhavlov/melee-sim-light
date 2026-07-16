@@ -104,14 +104,17 @@ def test_native_validation_compares_complete_classified_replays() -> None:
     if not NATIVE.is_file() or not NATIVE_BINARY.is_file():
         pytest.skip("native core validation artifacts are unavailable")
     classifications = load_classifications(DEFAULT_CLASSIFICATIONS)
-    _suite, suite_cases = load_suite_cases(
-        ROOT / "replays/suites/aggregate_recent.json",
-        characters=frozenset(
-            character.strip().casefold()
-            for character in DEFAULT_CHARACTERS.split(",")
-        ),
-        stages=frozenset((2, 3, 8, 28, 31, 32)),
-    )
+    suite_cases: list[ReplayCase] = []
+    for suite_name in ("aggregate_recent.json", "doubles_recent.json"):
+        _suite, loaded_cases = load_suite_cases(
+            ROOT / "replays/suites" / suite_name,
+            characters=frozenset(
+                character.strip().casefold()
+                for character in DEFAULT_CHARACTERS.split(",")
+            ),
+            stages=frozenset((2, 3, 8, 28, 31, 32)),
+        )
+        suite_cases.extend(loaded_cases)
     cases_by_path = {case.display_path: case for case in suite_cases}
     cases = [cases_by_path[replay] for replay in classifications]
 

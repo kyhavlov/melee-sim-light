@@ -18,6 +18,7 @@ typedef struct MslCoreUcfPadBuffer {
 
 typedef struct MslCoreMatchRules {
     int is_teams;
+    bool friendly_fire;
     float damage_ratio;
     bool online_fnmsubs_zero;
     bool brawl_offscreen_damage;
@@ -34,7 +35,8 @@ typedef struct MslCoreMatchRules {
 
 void msl_core_bind_match_rules(MslCoreMatchRules* rules);
 void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
-                               float damage_ratio, int online_fnmsubs_zero,
+                               int friendly_fire, float damage_ratio,
+                               int online_fnmsubs_zero,
                                int brawl_offscreen_damage,
                                int freeze_dead_up_fall_physics,
                                int ucf_cardinals_1_0_enabled,
@@ -44,6 +46,7 @@ bool msl_core_uses_online_fnmsubs_zero(void);
 bool msl_core_has_brawl_offscreen_damage(void);
 bool msl_core_freezes_dead_up_fall_physics(void);
 void msl_core_advance_match_frame(void);
+void msl_core_apply_team_stock_steal(void);
 bool msl_core_match_is_over(void);
 
 void msl_ucf_seed_pad(int slot, s8 raw_x, s8 raw_y, s8 raw_cx, s8 raw_cy);

@@ -164,7 +164,7 @@ $(PPC_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
 $(NATIVE_OBJ_DIR)/gameplay/src/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast -mfma
 $(NATIVE_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast -mfma
 
-.PHONY: all runtime native source source-check validation validator validation-suite clean run run-native toolchain data-check smoke native-smoke map-smoke validation-smoke test
+.PHONY: all runtime native source source-check validation validator validation-suite validation-supported-domain clean run run-native toolchain data-check smoke native-smoke map-smoke validation-smoke test
 
 all: runtime
 
@@ -311,6 +311,13 @@ validation-suite:
 		--backend "$(VALIDATION_BACKEND)" --workers "$(VALIDATION_WORKERS)" \
 		--build-jobs "$(VALIDATION_BUILD_JOBS)" --frames "$(VALIDATION_FRAMES)" \
 		--timing $(VALIDATION_ARGS)
+
+validation-supported-domain:
+	@$(MAKE) --no-print-directory -f "$(CORE)/Makefile" validation-suite \
+		VALIDATION_SUITE=replays/suites/aggregate_recent.json
+	@$(MAKE) --no-print-directory -f "$(CORE)/Makefile" validation-suite \
+		VALIDATION_SUITE=replays/suites/doubles_recent.json \
+		VALIDATION_ARGS="$(VALIDATION_ARGS) --no-build"
 
 test: source-check smoke native-smoke validation-smoke
 

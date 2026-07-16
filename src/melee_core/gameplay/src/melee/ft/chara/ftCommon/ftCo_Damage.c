@@ -751,8 +751,12 @@ static bool inlineB0(Fighter_GObj* gobj)
 {
     Fighter* fp = gobj->user_data;
     float kb_applied = fp->dmg.kb_applied;
-    // might not be correct?
-    if (kb_applied != 0) {
+    // GALE01 0x8008EE60..0x8008EEA8 and 0x8008F270..0x8008F2C4 use
+    // the same zero-KB-or-SDI-refresh predicate as ftCo_8008E984. The
+    // pinned nonmatching C inverted the first comparison, which suppresses
+    // ordinary damage reactions when a grabbed pair is hit together.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008EC90
+    if (kb_applied == 0) {
         return true;
     }
     if (fp->allow_sdi && fp->x221A_b3 &&

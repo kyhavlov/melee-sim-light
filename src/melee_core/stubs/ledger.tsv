@@ -18,8 +18,6 @@ lbAudioAx_800263E8	headless positional-audio projection	reachable	zero-direction
 lbAudioAx_800264E4	headless positional-audio projection	reachable	source absent-owner result -1	refs/melee/src/melee/lb/lbaudio_ax.c::lbAudioAx_800264E4
 lbAudioAx_80024304	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 lbBgFlash_80021C48	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
-lbBgFlash_80020E38	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
-lbBgFlash_80021410	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 lbRefract_80022BB8	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 psInitDataBank	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 psInitDataBankLoad	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c

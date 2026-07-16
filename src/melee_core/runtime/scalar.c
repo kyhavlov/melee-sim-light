@@ -81,7 +81,8 @@ typedef struct MslCoreStageSpec {
     InternalStageId internal_id;
     const char* archive;
     StageData* source;
-    Vec3 spawn[2];
+    Vec3 singles_spawn[MSL_CORE_MAX_PLAYERS];
+    Vec3 teams_spawn[MSL_CORE_MAX_PLAYERS];
 } MslCoreStageSpec;
 
 // External list ids and singles spawn coordinates are the source-backed
@@ -94,32 +95,50 @@ static const MslCoreStageSpec stage_specs[] = {
       IZUMI,
       "/GrIz.dat",
       &grIz_803E0E5C,
-      { { -41.25F, 21.0F, 0.0F }, { 41.25F, 27.0F, 0.0F } } },
+      { { -41.25F, 21.0F, 0.0F }, { 41.25F, 27.0F, 0.0F },
+        { 0.0F, 5.25F, 0.0F }, { 0.0F, 48.0F, 0.0F } },
+      { { -41.25F, 21.0F, 0.0F }, { -41.25F, 5.0F, 0.0F },
+        { 41.25F, 27.0F, 0.0F }, { 41.25F, 5.0F, 0.0F } } },
     { MSL_CORE_STAGE_POKEMON_STADIUM,
       PSTADIUM,
       "/GrPs.dat",
       &grPs_803E1334,
-      { { -40.0F, 32.0F, 0.0F }, { 40.0F, 32.0F, 0.0F } } },
+      { { -40.0F, 32.0F, 0.0F }, { 40.0F, 32.0F, 0.0F },
+        { 70.0F, 7.0F, 0.0F }, { -70.0F, 7.0F, 0.0F } },
+      { { -40.0F, 32.0F, 0.0F }, { -40.0F, 5.0F, 0.0F },
+        { 40.0F, 32.0F, 0.0F }, { 40.0F, 5.0F, 0.0F } } },
     { MSL_CORE_STAGE_YOSHIS_STORY,
       STORY,
       "/GrSt.dat",
       &grSt_803E274C,
-      { { -42.0F, 26.6F, 0.0F }, { 42.0F, 28.0F, 0.0F } } },
+      { { -42.0F, 26.6F, 0.0F }, { 42.0F, 28.0F, 0.0F },
+        { 0.0F, 46.9F, 0.0F }, { 0.0F, 4.9F, 0.0F } },
+      { { -42.0F, 26.6F, 0.0F }, { -42.0F, 5.0F, 0.0F },
+        { 42.0F, 28.0F, 0.0F }, { 42.0F, 5.0F, 0.0F } } },
     { MSL_CORE_STAGE_DREAM_LAND,
       OLDPUPUPU,
       "/GrOp.dat",
       &grOp_803E6748,
-      { { -46.6F, 37.2F, 0.0F }, { 47.4F, 37.3F, 0.0F } } },
+      { { -46.6F, 37.2F, 0.0F }, { 47.4F, 37.3F, 0.0F },
+        { 0.0F, 7.0F, 0.0F }, { 0.0F, 58.5F, 0.0F } },
+      { { -46.6F, 37.2F, 0.0F }, { -46.6F, 5.0F, 0.0F },
+        { 47.4F, 37.3F, 0.0F }, { 47.4F, 5.0F, 0.0F } } },
     { MSL_CORE_STAGE_BATTLEFIELD,
       BATTLE,
       "/GrNBa.dat",
       &grNBa_803E7E38,
-      { { -38.8F, 35.2F, 0.0F }, { 38.8F, 35.2F, 0.0F } } },
+      { { -38.8F, 35.2F, 0.0F }, { 38.8F, 35.2F, 0.0F },
+        { 0.0F, 8.0F, 0.0F }, { 0.0F, 62.4F, 0.0F } },
+      { { -38.8F, 35.2F, 0.0F }, { -38.8F, 5.0F, 0.0F },
+        { 38.8F, 35.2F, 0.0F }, { 38.8F, 5.0F, 0.0F } } },
     { MSL_CORE_STAGE_FINAL_DESTINATION,
       LAST,
       "/GrNLa.dat",
       NULL,
-      { { -60.0F, 10.0F, 0.0F }, { 60.0F, 10.0F, 0.0F } } },
+      { { -60.0F, 10.0F, 0.0F }, { 60.0F, 10.0F, 0.0F },
+        { -20.0F, 10.0F, 0.0F }, { 20.0F, 10.0F, 0.0F } },
+      { { -60.0F, 10.0F, 0.0F }, { -20.0F, 10.0F, 0.0F },
+        { 60.0F, 10.0F, 0.0F }, { 20.0F, 10.0F, 0.0F } } },
 };
 
 // grlast.c::grNLa_803E7F90 carries one collision-joint remap outside the DAT.
@@ -144,6 +163,37 @@ static const MslCoreStageSpec* stage_spec(uint8_t external_id)
         }
     }
     return NULL;
+}
+
+static int neutral_spawn_order(const MslCoreMatch* match, int player)
+{
+    int i;
+    int order = 0;
+
+    if (!match->config.is_teams) {
+        for (i = 0; i < match->config.num_players; ++i) {
+            if (match->source_slots[i] < match->source_slots[player]) {
+                ++order;
+            }
+        }
+        return order;
+    }
+
+    // NeutralSpawn.asm creates its 2v2 order by ascending team id and then
+    // ascending physical player slot. Preserve that source table index even
+    // when the validation/config lanes are not already in team order.
+    // refs/slippi-ssbm-asm/External/NeutralSpawn/NeutralSpawn.asm::{
+    //   CreateTeamArray,SearchForPlayerID,NeutralSpawnTable}
+    for (i = 0; i < match->config.num_players; ++i) {
+        uint8_t other_team = match->config.players[i].team_id;
+        uint8_t player_team = match->config.players[player].team_id;
+        if (other_team < player_team ||
+            (other_team == player_team &&
+             match->source_slots[i] < match->source_slots[player])) {
+            ++order;
+        }
+    }
+    return order;
 }
 
 static CharacterKind source_character_kind(uint8_t external_id)
@@ -382,12 +432,16 @@ static int validate_config(MslCoreMatchConfig* config)
                 "2,3,8,28,31,32\n");
         return -1;
     }
-    if (config->num_players != 0 && config->num_players != 2) {
+    if (config->num_players != 0 && config->num_players != 2 &&
+        config->num_players != 4) {
         fprintf(stderr,
-                "current core requires num_players=2 (or zero default)\n");
+                "current core requires num_players=2 or 4 (or zero default)\n");
         return -1;
     }
-    for (i = 0; i < 2; ++i) {
+    if (config->num_players == 0) {
+        config->num_players = 2;
+    }
+    for (i = 0; i < config->num_players; ++i) {
         if (config->players[i].char_id != MSL_CORE_CHAR_FOX &&
             config->players[i].char_id != MSL_CORE_CHAR_CAPTAIN_FALCON &&
             config->players[i].char_id != MSL_CORE_CHAR_SHEIK &&
@@ -407,8 +461,11 @@ static int validate_config(MslCoreMatchConfig* config)
             fprintf(stderr, "player handicap must be in the source range 1..9\n");
             return -1;
         }
+        if (config->is_teams && config->players[i].team_id > 2) {
+            fprintf(stderr, "player team id must be in the source range 0..2\n");
+            return -1;
+        }
     }
-    config->num_players = 2;
     if (config->stock_count == 0) {
         config->stock_count = 4;
     }
@@ -459,17 +516,24 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
     match->stage_data = spec->source != NULL ? spec->source : &fd_stage_data;
     bind_stage_match(match);
     match->frame_id = match->config.frame_id;
-    for (i = 0; i < 2; ++i) {
+    for (i = 0; i < match->config.num_players; ++i) {
+        int j;
         uint8_t encoded = match->config.players[i].facing_and_port;
         uint8_t port = encoded >> 1;
         match->source_slots[i] = port == 0 ? (uint8_t) i : (uint8_t) (port - 1);
-        if (match->source_slots[i] >= MSL_CORE_MAX_PLAYERS ||
-            (i != 0 && match->source_slots[i] == match->source_slots[0])) {
-            fprintf(stderr, "invalid two-player physical port mapping\n");
+        if (match->source_slots[i] >= MSL_CORE_MAX_PLAYERS) {
+            fprintf(stderr, "invalid physical port mapping\n");
             return -1;
+        }
+        for (j = 0; j < i; ++j) {
+            if (match->source_slots[i] == match->source_slots[j]) {
+                fprintf(stderr, "duplicate physical port mapping\n");
+                return -1;
+            }
         }
     }
     msl_core_match_rules_init(&match->rules, match->config.is_teams,
+                              match->config.friendly_fire,
                               match->config.match_damage_ratio,
                               match->config.online_fnmsubs_zero,
                               match->config.brawl_offscreen_damage,
@@ -624,8 +688,12 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
     // player table consumed by the scheduled statistics pass.
     Player_InitAllPlayers();
     Player_80036DD8();
-    for (i = 0; i < 2; ++i) {
+    for (i = 0; i < match->config.num_players; ++i) {
         int slot = match->source_slots[i];
+        int spawn_order = neutral_spawn_order(match, i);
+        const Vec3* spawn = match->config.is_teams
+                                ? &spec->teams_spawn[spawn_order]
+                                : &spec->singles_spawn[spawn_order];
         uint8_t encoded = match->config.players[i].facing_and_port;
         float facing = (encoded >> 1) == 0 ? (i == 0 ? 1.0F : -1.0F)
                                            : ((encoded & 1) ? 1.0F : -1.0F);
@@ -651,7 +719,7 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
         // refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC
         Player_SetFlagsBit3(slot, 1);
         Player_SetUnk4C(slot, (slot + 1) * 5);
-        Player_80032768(slot, (Vec3*) &spec->spawn[i]);
+        Player_80032768(slot, (Vec3*) spawn);
     }
     // The versus bootstrap initializes fighter/device/item allocation before
     // Fighter_Create. Items are disabled in the current Fox/FD domain, so the
@@ -660,7 +728,7 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
     Item_80266FA8();
     Item_80266FCC();
     Player_80036DA4();
-    for (i = 0; i < 2; ++i) {
+    for (i = 0; i < match->config.num_players; ++i) {
         int slot = match->source_slots[i];
         // gm_16AE.c::fn_8016E2BC creates match fighters through the player
         // owner so player_entity/transformation state and scheduled player
@@ -681,7 +749,7 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
     }
 
 #ifdef MSL_CORE_NATIVE
-    for (i = 0; i < 2; ++i) {
+    for (i = 0; i < match->config.num_players; ++i) {
         int entity_index;
         for (entity_index = 0; entity_index < 2; ++entity_index) {
             Fighter_GObj* fighter_gobj = Player_GetEntityAtIndex(
@@ -939,14 +1007,15 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
                       frame_seed);
     msl_core_put_le32(out + offsetof(MslCoreCompare, stage_id),
                       match->config.stage_id);
-    out[offsetof(MslCoreCompare, num_players)] = 2;
+    out[offsetof(MslCoreCompare, num_players)] = match->config.num_players;
     out[offsetof(MslCoreCompare, is_teams)] = match->config.is_teams ? 1 : 0;
     // MslCoreCompare represents all four controller slots. Slots without a
     // source Fighter GObj use the validation contract's inactive/dead value.
-    out[offsetof(MslCoreCompare, is_dead) + 2] = 1;
-    out[offsetof(MslCoreCompare, is_dead) + 3] = 1;
+    for (i = match->config.num_players; i < MSL_CORE_MAX_PLAYERS; ++i) {
+        out[offsetof(MslCoreCompare, is_dead) + i] = 1;
+    }
 
-    for (i = 0; i < 2; ++i) {
+    for (i = 0; i < match->config.num_players; ++i) {
         Fighter* fp = GET_FIGHTER(match->fighters[i]);
         uint8_t state_flags[5];
         float hitstun = fp->x221C_b6 ? fp->mv.co.damage.x0 : 0.0F;
@@ -1077,19 +1146,56 @@ static void apply_replay_stage_events(MslCoreMatch* match)
     }
 }
 
-static void publish_render_matrices(HSD_JObj* jobj)
+static void publish_render_matrices_pass(HSD_JObj* jobj, u32 trsp_mask)
 {
     HSD_JObj* child;
 
     if (jobj == NULL) {
         return;
     }
-    HSD_JObjSetupMatrix(jobj);
     if (jobj->flags & JOBJ_INSTANCE) {
+        // Visible instances publish both the instance root and referenced
+        // child before traversing the shared tree.
+        // refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjDispAll
+        if (!(jobj->flags & JOBJ_HIDDEN) && jobj->child != NULL) {
+            HSD_JObjSetupMatrix(jobj);
+            HSD_JObjSetupMatrix(jobj->child);
+            publish_render_matrices_pass(jobj->child, trsp_mask);
+        }
         return;
     }
-    for (child = jobj->child; child != NULL; child = child->next) {
-        publish_render_matrices(child);
+
+    // HSD_JObjDispAll only reaches HSD_JObjDispDObj (and therefore the lazy
+    // matrix setup) for a JObj participating in the current transparency
+    // pass. It likewise only descends through roots carrying that pass bit.
+    // Preserving those two gates matters to gameplay: collision can observe
+    // matrices intentionally left at an earlier publication epoch even after
+    // the corresponding local animation values have advanced.
+    // refs/melee/src/sysdolphin/baselib/{jobj.c,displayfunc.c}::{
+    //   HSD_JObjDispAll,HSD_JObjDisp,HSD_JObjDispDObj}
+    if (!(jobj->flags & JOBJ_HIDDEN) &&
+        (jobj->flags & (trsp_mask << 18)) != 0 && union_type_dobj(jobj))
+    {
+        HSD_JObjSetupMatrix(jobj);
+    }
+    if ((jobj->flags & (trsp_mask << 28)) != 0) {
+        for (child = jobj->child; child != NULL; child = child->next) {
+            publish_render_matrices_pass(child, trsp_mask);
+        }
+    }
+}
+
+static void publish_render_matrices(HSD_JObj* jobj)
+{
+    // HSD_GObj_80390ED0 visits the normal gameplay camera's three passes in
+    // bit order; HSD_GObj_804085F0 maps them to OPA, XLU, then TEXEDGE.
+    // refs/melee/src/sysdolphin/baselib/gobj.c::{
+    //   HSD_GObj_804085F0,HSD_GObj_80390ED0}
+    static const u32 trsp_masks[] = { 1, 4, 2 };
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE(trsp_masks); ++i) {
+        publish_render_matrices_pass(jobj, trsp_masks[i]);
     }
 }
 
@@ -1131,14 +1237,20 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
         ftLib_800868A4();
     }
 
-    for (i = 0; i < 2; ++i) {
+    for (i = 0; i < match->config.num_players; ++i) {
         int slot = match->source_slots[i];
         inject_pad_status(slot, &input->p[i]);
         msl_ucf_set_pending_pad(slot, input->p[i].main_x, input->p[i].main_y,
                                 input->p[i].c_x, input->p[i].c_y);
     }
+    // Versus scene OnFrame runs after pad publication and immediately before
+    // the gameplay-object scheduler. Preserve the source-owned team stock
+    // transfer at that same boundary.
+    // refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34
+    // refs/melee/src/melee/gm/gm_16AE.c::{fn_8016CFE0,fn_8016B918}
+    msl_core_apply_team_stock_steal();
     HSD_GObj_80390CFC();
-    for (i = 0; i < 2; ++i) {
+    for (i = 0; i < match->config.num_players; ++i) {
         // Player_SwapTransformedStates keeps the active Sheik/Zelda half in
         // source entity slot zero. Refresh this convenience pointer after the
         // gameplay scheduler so output and the headless render publication
@@ -1174,7 +1286,7 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
     // refs/melee/src/melee/lb/lb_0195.c::lb_80019894
     // refs/slippi-ssbm-asm/console_lag_pd*.json
     // refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18
-    for (i = 0; i < 2; ++i) {
+    for (i = 0; i < match->config.num_players; ++i) {
         // Retail's intervening fighter draw walks the complete visible JObj
         // tree through HSD_JObjDispAll. The GX/DObj work is presentation, but
         // its ordered lazy-matrix publication is observed by next-frame

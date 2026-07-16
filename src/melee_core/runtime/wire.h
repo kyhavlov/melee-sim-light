@@ -66,6 +66,7 @@ typedef struct MslCoreMatchConfig {
     float match_damage_ratio;
     uint8_t num_players;
     uint8_t is_teams;
+    uint8_t friendly_fire;
     uint8_t stock_count;
     uint8_t camera_mode;
     // Runtime capabilities are explicit because scene major alone does not
@@ -166,7 +167,7 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 8, "MslCoreInputPlayer wire size");
 _Static_assert(sizeof(MslCoreInput) == 32, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 16, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 52, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 51, "MslCoreMatchConfig wire size");
+_Static_assert(sizeof(MslCoreMatchConfig) == 52, "MslCoreMatchConfig wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1022, "MslCoreCompare wire size");
 
