@@ -1971,6 +1971,16 @@ completed. Do not send progress notifications for merely attempted or rejected c
 separate update at a material architectural closure such as the hot/cold cut, canonical SoA/AoSoA
 execution, first retained SIMD kernel, or final 500k lock.
 
+The bounded pre-SoA packet is complete. The strict native release allowlist now includes the full
+hosted matrix, FObj, JObj, and lbVector owners; native-DAT, GObj scheduler, context-TU, and direct
+context-inline experiments were measured and removed. All 153 replay locks and Phase 8 runtime/API
+contracts remain intact. The final ordinary resident result is 27,831 complete FPS at 256 and
+38,086 at 512 on CPU 0, whose 96 MiB V-cache is now materially faster than the previously selected
+frequency-domain core for true resident state. [`PERFORMANCE.md`](PERFORMANCE.md) contains every
+retained/rejected result and the preservation audit. The next packet begins the measured hot/cold
+and SoA/AoSoA representation cut; it must not reopen the compiler sweep or introduce explicit SIMD
+before the scalar tiled layout is proven.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to

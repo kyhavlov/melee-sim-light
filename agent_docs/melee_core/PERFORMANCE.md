@@ -388,3 +388,32 @@ comparisons against the JObj baseline were:
 The complete release-binary gate retained 63 exact passes, 90 existing classifications, zero
 XPASS/fail/error, and all output locks across 1,415,476 frames. Its 16-worker wall time was 4.998
 seconds, and release-profile native smokes passed.
+
+### Bounded packet result
+
+The retained pre-SoA release profile optimizes four complete, audited owners: hosted SDK matrix
+math, FObj interpretation, JObj hierarchy/matrix traversal, and shared lbVector math. All other
+experiments were removed. With the ordinary eight-tick warmup, the final true-resident results are:
+
+| Core/domain | Environments | Complete FPS | Step-only FPS | Digest |
+|---|---:|---:|---:|---:|
+| CPU 0 / 96 MiB V-cache | 256 | 27,831 | 28,584 | `7579e5fc270dd660` |
+| CPU 0 / 96 MiB V-cache | 512 | 38,086 | 38,412 | `0bd4fdd9cfdec765` |
+| CPU 8 / 32 MiB frequency | 256 | 21,227 | 19,957 | `7579e5fc270dd660` |
+| CPU 8 / 32 MiB frequency | 512 | 24,026 | 23,356 | `0bd4fdd9cfdec765` |
+
+Relative to the Phase 8 true-resident CPU-8 baseline, complete throughput is up 60.0% at 256 and
+51.3% at 512. True residency reverses the earlier sharded cache-domain result: CPU 0 is now the
+faster repeatable local core and becomes the primary target for the following hot/cold and
+SoA/AoSoA packet. The best current result is 38,086 complete FPS, so the 500k goal still requires
+the planned representation and cross-environment execution work rather than more blanket compiler
+flags.
+
+Final preservation evidence comprises the complete release-binary 153-replay gate; native and PPC
+API/data/model/map/scheduler/batch smokes; native/Wasm state, viewer, and savestate parity; browser
+viewer smoke; the runtime allocation lock; the ordinary 256-environment large-batch lifecycle and
+arbitrary-index restore gate; formatting; and the focused benchmark unit test. The compiler-only
+packet did not rerun the supervised 4,096/16,384 high-memory lifecycle measurements: their storage,
+reset, relocation, observation-ring, and API code is unchanged, while the safe 256 gate exercises
+the same contract. The repository-wide legacy benchmark report was refreshed as required, but it
+is not used as evidence for this new core.
