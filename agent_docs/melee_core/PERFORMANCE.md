@@ -637,3 +637,11 @@ existing exact classifications, zero XPASS/fail/error), and native smoke/save-re
 This cut is retained because true 256/512 residency and the 4k–16k memory target cannot tolerate
 replicated cold retail ceilings. It does not defer the required frame-time architecture: the next
 throughput packet must replace a dominant complete owner with canonical cross-environment execution.
+
+After this cut, the representative state-bank workload was re-run with every logical environment
+actually resident. It reaches 44,395/44,979 complete/step FPS at 256 and 55,248/56,192 at 512 on
+CPU 0 with the same digests. The standard benchmark now defaults `resident_matches` to
+`BENCHMARK_MATCHES`; a deliberately sharded forensic run must opt into a smaller value. These true-
+resident results replace the 16-resident 47,887/61,534 figures as the acceptance baseline for all
+following layout and execution packets. At 512 the remaining distance to 500k is 9.05x, so scalar
+owner deletion alone is not a credible completion path.

@@ -2037,6 +2037,11 @@ frame-rate increase. The next acceptance unit is a dominant frame-time owner exe
 canonical state across environments; leaf caches, additional compiler sweeps, and isolated scalar
 arithmetic changes are closed as an implementation queue.
 
+The representative benchmark contract is true-resident again: by default all 256 or 512 logical
+environments are backed by distinct live Matches. The post-cull CPU-0 baselines are 44,395 FPS at
+256 and 55,248 FPS at 512 with unchanged digests. Sharding through a smaller resident set is now an
+explicit forensic override and cannot qualify a retained Phase 9 throughput result.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to
