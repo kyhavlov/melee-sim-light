@@ -277,6 +277,7 @@ $(WASM_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
 
 ifeq ($(NATIVE_RELEASE_PROFILE),1)
 NATIVE_RELEASE_OPT_OBJS := \
+	$(NATIVE_OBJ_DIR)/gameplay/src/melee/lb/lbvector.o \
 	$(NATIVE_OBJ_DIR)/gameplay/src/sysdolphin/baselib/fobj.o \
 	$(NATIVE_OBJ_DIR)/gameplay/src/sysdolphin/baselib/jobj.o \
 	$(NATIVE_OBJ_DIR)/src/melee_core/api.o \

@@ -372,3 +372,19 @@ comparisons against the FObj baseline were:
 The complete release-binary gate retained the same 63 exact passes, 90 existing classifications,
 zero XPASS/fail/error, and all output locks across 1,415,476 frames. Its 16-worker wall time was
 5.694 seconds, and release-profile native smokes passed.
+
+The fourth retained candidate adds the complete source `melee/lb/lbvector.c` owner to the strict
+allowlist. This TU owns shared vector length, normalization, angle, projection, and rotation
+helpers used across gameplay and collision. The release profile still preserves source expression
+order with `-ffp-contract=off`, disables strict-alias assumptions, and forbids fast-math; this does
+not substitute approximate square roots or trigonometry. Stabilized true-resident CPU-0
+comparisons against the JObj baseline were:
+
+| Environments | JObj complete / step FPS | lbVector complete / step FPS | Complete / step change | Digest |
+|---:|---:|---:|---:|---:|
+| 256 | 25,403 / 24,931 | 28,573 / 29,003 | +12.5% / +16.3% | `7579e5fc270dd660` |
+| 512 | 31,931 / 27,666 | 36,222 / 37,948 | +13.4% / +37.2% | `0bd4fdd9cfdec765` |
+
+The complete release-binary gate retained 63 exact passes, 90 existing classifications, zero
+XPASS/fail/error, and all output locks across 1,415,476 frames. Its 16-worker wall time was 4.998
+seconds, and release-profile native smokes passed.
