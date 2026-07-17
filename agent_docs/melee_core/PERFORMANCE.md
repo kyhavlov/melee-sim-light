@@ -350,3 +350,25 @@ reverse-ordered true-resident CPU-0 comparisons against the matrix-only binary w
 The complete release-binary gate again retained 63 exact passes, 90 existing classifications, zero
 XPASS/fail/error, and all output locks across 1,415,476 frames. Its 16-worker wall time was 6.229
 seconds. Release-profile native API/data/scheduler/batch smokes also passed.
+
+The flat `gprof` sample is useful for locating substantial source owners, but it is not trustworthy
+for ranking tiny leaf accessors: `-pg` inserts per-function instrumentation and consequently
+overstates their cost. A direct thread-local source/camera context experiment, motivated by those
+samples, proved this in the production workload. It was 4.3% slower for complete frames and 2.5%
+slower for step-only at 512 environments and was removed in full; the promoted context API and
+binding representation remain unchanged.
+
+The third retained candidate adds `sysdolphin/baselib/jobj.c` to the same strict host-optimization
+allowlist. JObj owns source model hierarchy traversal, dirty propagation, and animation matrix
+setup. This is a compiler-only change to that complete owner TU, with the paired-single/FMA matrix
+boundary still owned by the separately audited `dolphin_mtx.c`. Stabilized true-resident CPU-0
+comparisons against the FObj baseline were:
+
+| Environments | FObj complete / step FPS | JObj complete / step FPS | Complete / step change | Digest |
+|---:|---:|---:|---:|---:|
+| 256 | 21,433 / 23,363 | 25,278 / 24,618 | +17.9% / +5.4% | `7579e5fc270dd660` |
+| 512 | 28,567 / 27,923 | 28,947 / 30,260 | +1.3% / +8.4% | `0bd4fdd9cfdec765` |
+
+The complete release-binary gate retained the same 63 exact passes, 90 existing classifications,
+zero XPASS/fail/error, and all output locks across 1,415,476 frames. Its 16-worker wall time was
+5.694 seconds, and release-profile native smokes passed.
