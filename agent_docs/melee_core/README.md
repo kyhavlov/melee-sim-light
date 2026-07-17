@@ -2072,6 +2072,16 @@ unchanged digests and all release gates green. A scalar phase-banded map schedul
 removed because it lost locality; the map owner may leave the resident scheduler only with its
 compact cross-environment replacement. [`PERFORMANCE.md`](PERFORMANCE.md) records the evidence.
 
+The next retained cut removes a whole hosted-port shim rather than another gameplay leaf. Imported
+source headers now read the Match/GameData owner pointers already published by the one-per-Match
+context bind, eliminating tens of millions of out-of-line accessor calls; the complete `mpcoll.c`
+owner also joins the strict exact release allowlist. True-resident CPU-0 throughput reaches 60,242
+FPS at 256 and 78,472 FPS at 512, up 18.5% and 17.9%, with unchanged digests and all native/Wasm
+gates green. This closes compatibility-accessor tuning. The next packets must delete or replace
+complete live collision/pose representations and execute those canonical arrays across
+environments; compiler sweeps, leaf caches, and source files that linker GC already makes
+unreachable are not the Phase 9 queue.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to

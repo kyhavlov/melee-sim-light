@@ -192,7 +192,12 @@ struct Fighter_804D652C_t {
 // PlCo.dat's 23 published symbols are immutable GameData. Preserve the source
 // names at use sites while resolving them through the active shared owner.
 // refs/melee/src/melee/ft/fighter.c::Fighter_LoadCommonData
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_fighter_common_data() (msl_core_context_fighter_common_data)
+#else
 void** msl_core_fighter_common_data(void);
+#endif
 #define MSL_FIGHTER_COMMON(type, index)                                       \
     ((type) msl_core_fighter_common_data()[index])
 #define p_ftCommonData MSL_FIGHTER_COMMON(ftCommonData*, 0)

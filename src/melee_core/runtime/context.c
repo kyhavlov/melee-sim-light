@@ -1,81 +1,161 @@
+#define MSL_CORE_CONTEXT_IMPLEMENTATION
 #include "runtime/context.h"
 
 #include "runtime/scalar.h"
 
 #include <stdlib.h>
 
-typedef struct MslCoreContextBinding {
-    MslCoreMatch* match;
-    const MslCoreGameData* game_data;
-    HSD_RandomContext* random;
-    HSD_ObjAllocContext* objalloc;
-    HSD_GObjContext* gobj;
-    HSD_ClassContext* class_state;
-    HSD_IDContext* id;
-    HSD_AObjContext* aobj;
-    MslMemoryContext* memory;
-    MslMemoryContext* game_memory;
-    MslFileContext* files;
-    MslSourceGameData* source_game_data;
-    MslSourceMatchState* source_match_state;
+_Thread_local MslCoreMatch* msl_core_context_match;
+_Thread_local const MslCoreGameData* msl_core_context_game_data;
+_Thread_local HSD_RandomContext* msl_core_context_random;
+_Thread_local HSD_ObjAllocContext* msl_core_context_objalloc;
+_Thread_local HSD_GObjContext* msl_core_context_gobj;
+_Thread_local HSD_ClassContext* msl_core_context_class;
+_Thread_local HSD_IDContext* msl_core_context_id;
+_Thread_local HSD_AObjContext* msl_core_context_aobj;
+_Thread_local MslMemoryContext* msl_core_context_memory;
+_Thread_local MslMemoryContext* msl_core_context_game_memory;
+_Thread_local MslFileContext* msl_core_context_files;
+_Thread_local MslSourceGameData* msl_core_context_source_game_data;
+_Thread_local MslSourceMatchState* msl_core_context_source_match_state;
+_Thread_local StageInfo* msl_core_context_stage_info;
+_Thread_local int* msl_core_context_mp_collision_epoch;
+_Thread_local mpCollisionBox* msl_core_context_mp_collision_boxes;
+_Thread_local struct mpIsland_80458E88_t* msl_core_context_mp_island_root;
+_Thread_local void** msl_core_context_fighter_common_data;
+_Thread_local MslItemGameData* msl_core_context_item_game_data;
+_Thread_local MslItemState* msl_core_context_item_state;
+_Thread_local HSD_PadStatus* msl_core_context_pad_master;
+_Thread_local HSD_PadStatus* msl_core_context_pad_game;
+_Thread_local HSD_PadStatus* msl_core_context_pad_copy;
+_Thread_local MslFtDeviceState* msl_core_context_ft_device;
+_Thread_local MslFtCollState* msl_core_context_ft_coll;
+_Thread_local MslFtAnimScratch* msl_core_context_ft_anim;
+_Thread_local MslGroundState* msl_core_context_ground;
+_Thread_local void* msl_core_context_ground_stage_positions;
+_Thread_local void* msl_core_context_player_common_ref;
+_Thread_local void* msl_core_context_fighter_data_list;
+_Thread_local void* msl_core_context_fighter_state;
+_Thread_local int* msl_core_context_fighter_reference_counts;
+_Thread_local void* msl_core_context_fighter_costume_lists;
+_Thread_local void* msl_core_context_fighter_animation_data;
+_Thread_local void* msl_core_context_puff_hat_joints;
 #ifdef MSL_CORE_NATIVE
-    MslNativeDatContext* native_dat;
+_Thread_local MslNativeDatContext* msl_core_context_native_dat;
 #endif
-} MslCoreContextBinding;
-
-static _Thread_local MslCoreContextBinding active;
 
 void msl_core_bind_game_data(MslCoreGameData* game_data)
 {
-    active.match = NULL;
-    active.game_data = game_data;
-    active.random = &game_data->bootstrap_random;
-    active.objalloc = &game_data->bootstrap_objalloc;
-    active.gobj = &game_data->bootstrap_gobj;
-    active.class_state = &game_data->bootstrap_class;
-    active.id = &game_data->bootstrap_id;
-    active.aobj = &game_data->bootstrap_aobj;
-    active.memory = &game_data->memory;
-    active.game_memory = &game_data->memory;
-    active.files = &game_data->files;
-    active.source_game_data = &game_data->source;
-    active.source_match_state = NULL;
+    msl_core_context_match = NULL;
+    msl_core_context_game_data = game_data;
+    msl_core_context_random = &game_data->bootstrap_random;
+    msl_core_context_objalloc = &game_data->bootstrap_objalloc;
+    msl_core_context_gobj = &game_data->bootstrap_gobj;
+    msl_core_context_class = &game_data->bootstrap_class;
+    msl_core_context_id = &game_data->bootstrap_id;
+    msl_core_context_aobj = &game_data->bootstrap_aobj;
+    msl_core_context_memory = &game_data->memory;
+    msl_core_context_game_memory = &game_data->memory;
+    msl_core_context_files = &game_data->files;
+    msl_core_context_source_game_data = &game_data->source;
+    msl_core_context_source_match_state = NULL;
+    msl_core_context_stage_info = NULL;
+    msl_core_context_mp_collision_epoch = NULL;
+    msl_core_context_mp_collision_boxes = NULL;
+    msl_core_context_mp_island_root = NULL;
+    msl_core_context_fighter_common_data = game_data->source.fighter.common_data;
+    msl_core_context_item_game_data = &game_data->source.item;
+    msl_core_context_item_state = NULL;
+    msl_core_context_pad_master = NULL;
+    msl_core_context_pad_game = NULL;
+    msl_core_context_pad_copy = NULL;
+    msl_core_context_ft_device = NULL;
+    msl_core_context_ft_coll = NULL;
+    msl_core_context_ft_anim = NULL;
+    msl_core_context_ground = NULL;
+    msl_core_context_ground_stage_positions = NULL;
+    msl_core_context_player_common_ref = &game_data->source.player_common;
+    msl_core_context_fighter_data_list =
+        game_data->source.fighter.data_list;
+    msl_core_context_fighter_state = NULL;
+    msl_core_context_fighter_reference_counts = NULL;
+    msl_core_context_fighter_costume_lists =
+        game_data->source.fighter.costume_lists;
+    msl_core_context_fighter_animation_data =
+        game_data->source.fighter.animation_data;
+    msl_core_context_puff_hat_joints =
+        game_data->source.fighter.puff_hat_joints;
 #ifdef MSL_CORE_NATIVE
-    active.native_dat = &game_data->native_dat;
+    msl_core_context_native_dat = &game_data->native_dat;
 #endif
 }
 
 void msl_core_bind_match(MslCoreMatch* match)
 {
-    active.match = match;
-    active.game_data = match->game_data;
-    active.random = &match->random;
-    active.objalloc = &match->objalloc;
-    active.gobj = &match->gobj;
-    active.class_state = &match->class_state;
-    active.id = &match->id;
-    active.aobj = &match->aobj;
-    active.memory = &match->memory;
-    active.game_memory = (MslMemoryContext*) &match->game_data->memory;
-    active.files = (MslFileContext*) &match->game_data->files;
-    active.source_game_data = (MslSourceGameData*) &match->game_data->source;
-    active.source_match_state = &match->source;
+    msl_core_context_match = match;
+    msl_core_context_game_data = match->game_data;
+    msl_core_context_random = &match->random;
+    msl_core_context_objalloc = &match->objalloc;
+    msl_core_context_gobj = &match->gobj;
+    msl_core_context_class = &match->class_state;
+    msl_core_context_id = &match->id;
+    msl_core_context_aobj = &match->aobj;
+    msl_core_context_memory = &match->memory;
+    msl_core_context_game_memory =
+        (MslMemoryContext*) &match->game_data->memory;
+    msl_core_context_files = (MslFileContext*) &match->game_data->files;
+    msl_core_context_source_game_data =
+        (MslSourceGameData*) &match->game_data->source;
+    msl_core_context_source_match_state = &match->source;
+    msl_core_context_stage_info = &match->source.stage;
+    msl_core_context_mp_collision_epoch =
+        &match->source.mp_coll.collision_epoch;
+    msl_core_context_mp_collision_boxes =
+        match->source.mp_lib.collision_boxes;
+    msl_core_context_mp_island_root = &match->source.mp_lib.island_root;
+    msl_core_context_fighter_common_data =
+        (void**) match->game_data->source.fighter.common_data;
+    msl_core_context_item_game_data =
+        (MslItemGameData*) &match->game_data->source.item;
+    msl_core_context_item_state = &match->source.item;
+    msl_core_context_pad_master = match->source.pad_master;
+    msl_core_context_pad_game = match->source.pad_game;
+    msl_core_context_pad_copy = match->source.pad_copy;
+    msl_core_context_ft_device = &match->source.ft_device;
+    msl_core_context_ft_coll = &match->source.ft_coll;
+    msl_core_context_ft_anim = &match->source.ft_anim;
+    msl_core_context_ground = &match->source.ground;
+    msl_core_context_ground_stage_positions =
+        match->source.ground.stage_positions;
+    msl_core_context_player_common_ref =
+        (void*) &match->game_data->source.player_common;
+    msl_core_context_fighter_data_list = match->source.fighter.data_list;
+    msl_core_context_fighter_state = match->source.fighter.state;
+    msl_core_context_fighter_reference_counts =
+        match->source.fighter.reference_counts;
+    msl_core_context_fighter_costume_lists =
+        (void*) match->game_data->source.fighter.costume_lists;
+    msl_core_context_fighter_animation_data =
+        (void*) match->game_data->source.fighter.animation_data;
+    msl_core_context_puff_hat_joints =
+        (void*) match->game_data->source.fighter.puff_hat_joints;
 #ifdef MSL_CORE_NATIVE
-    active.native_dat = (MslNativeDatContext*) &match->game_data->native_dat;
+    msl_core_context_native_dat =
+        (MslNativeDatContext*) &match->game_data->native_dat;
 #endif
 }
 
 MslCoreMatch* msl_core_active_match(void)
 {
-    if (active.match == NULL) {
+    if (msl_core_context_match == NULL) {
         abort();
     }
-    return active.match;
+    return msl_core_context_match;
 }
 
 MslCoreMatch* msl_core_try_active_match(void)
 {
-    return active.match;
+    return msl_core_context_match;
 }
 
 #ifdef MSL_CORE_NATIVE
@@ -123,42 +203,42 @@ void msl_core_peach_turnip_owner_set(Item* item, HSD_GObj* owner)
 
 HSD_RandomContext* msl_core_random_context(void)
 {
-    if (active.random == NULL) {
+    if (msl_core_context_random == NULL) {
         abort();
     }
-    return active.random;
+    return msl_core_context_random;
 }
 
 HSD_ObjAllocContext* msl_core_objalloc_context(void)
 {
-    if (active.objalloc == NULL) {
+    if (msl_core_context_objalloc == NULL) {
         abort();
     }
-    return active.objalloc;
+    return msl_core_context_objalloc;
 }
 
 HSD_GObjContext* msl_core_gobj_context(void)
 {
-    if (active.gobj == NULL) {
+    if (msl_core_context_gobj == NULL) {
         abort();
     }
-    return active.gobj;
+    return msl_core_context_gobj;
 }
 
 HSD_ClassContext* msl_core_class_context(void)
 {
-    if (active.class_state == NULL) {
+    if (msl_core_context_class == NULL) {
         abort();
     }
-    return active.class_state;
+    return msl_core_context_class;
 }
 
 HSD_IDContext* msl_core_id_context(void)
 {
-    if (active.id == NULL) {
+    if (msl_core_context_id == NULL) {
         abort();
     }
-    return active.id;
+    return msl_core_context_id;
 }
 
 MslFtDeviceState* msl_core_ft_device_state(void)
@@ -168,10 +248,10 @@ MslFtDeviceState* msl_core_ft_device_state(void)
 
 HSD_AObjContext* msl_core_aobj_context(void)
 {
-    if (active.aobj == NULL) {
+    if (msl_core_context_aobj == NULL) {
         abort();
     }
-    return active.aobj;
+    return msl_core_context_aobj;
 }
 
 MslFtCollState* msl_core_ft_coll_state(void)
@@ -194,11 +274,11 @@ const unsigned char* msl_core_gameplay_part_mask(int fighter_kind)
     if ((unsigned) fighter_kind >= FTKIND_MAX) {
         return NULL;
     }
-    if (active.game_data == NULL) {
+    if (msl_core_context_game_data == NULL) {
         return NULL;
     }
-    return active.game_data->gameplay_parts[fighter_kind].available
-               ? active.game_data->gameplay_parts[fighter_kind].live
+    return msl_core_context_game_data->gameplay_parts[fighter_kind].available
+               ? msl_core_context_game_data->gameplay_parts[fighter_kind].live
                : NULL;
 }
 
@@ -279,42 +359,42 @@ ftData_UnkCountStruct* msl_core_fighter_animation_data(void)
 
 MslMemoryContext* msl_core_memory_context(void)
 {
-    if (active.memory == NULL) {
+    if (msl_core_context_memory == NULL) {
         abort();
     }
-    return active.memory;
+    return msl_core_context_memory;
 }
 
 MslMemoryContext* msl_core_game_memory_context(void)
 {
-    if (active.game_memory == NULL) {
+    if (msl_core_context_game_memory == NULL) {
         abort();
     }
-    return active.game_memory;
+    return msl_core_context_game_memory;
 }
 
 MslFileContext* msl_core_file_context(void)
 {
-    if (active.files == NULL) {
+    if (msl_core_context_files == NULL) {
         abort();
     }
-    return active.files;
+    return msl_core_context_files;
 }
 
 MslSourceGameData* msl_core_source_game_data(void)
 {
-    if (active.source_game_data == NULL) {
+    if (msl_core_context_source_game_data == NULL) {
         abort();
     }
-    return active.source_game_data;
+    return msl_core_context_source_game_data;
 }
 
 MslSourceMatchState* msl_core_source_match_state(void)
 {
-    if (active.source_match_state == NULL) {
+    if (msl_core_context_source_match_state == NULL) {
         abort();
     }
-    return active.source_match_state;
+    return msl_core_context_source_match_state;
 }
 
 int* msl_core_mp_collision_epoch_ref(void)
@@ -380,9 +460,9 @@ CameraDebugMode* msl_core_camera_debug(void)
 #ifdef MSL_CORE_NATIVE
 MslNativeDatContext* msl_core_native_dat_context(void)
 {
-    if (active.native_dat == NULL) {
+    if (msl_core_context_native_dat == NULL) {
         abort();
     }
-    return active.native_dat;
+    return msl_core_context_native_dat;
 }
 #endif

@@ -13,9 +13,19 @@ typedef struct ft_8045993C_t {
 } ft_8045993C_t;
 
 #ifdef MSL_CORE_HOSTED
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_fighter_data_list()                                          \
+    ((ftData**) msl_core_context_fighter_data_list)
+#define msl_core_fighter_state()                                              \
+    ((ft_8045993C_t*) msl_core_context_fighter_state)
+#define msl_core_fighter_reference_counts()                                   \
+    (msl_core_context_fighter_reference_counts)
+#else
 ftData** msl_core_fighter_data_list(void);
 ft_8045993C_t* msl_core_fighter_state(void);
 int* msl_core_fighter_reference_counts(void);
+#endif
 #define gFtDataList (msl_core_fighter_data_list())
 #define ft_8045993C (msl_core_fighter_state())
 #define ft_8045996C (msl_core_fighter_reference_counts())

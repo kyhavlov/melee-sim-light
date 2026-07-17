@@ -9,7 +9,12 @@ typedef struct HSD_RandomContext {
     u32* active;
 } HSD_RandomContext;
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_random_context() (msl_core_context_random)
+#else
 HSD_RandomContext* msl_core_random_context(void);
+#endif
 
 #define seed (msl_core_random_context()->value)
 #define seed_ptr (msl_core_random_context()->active)

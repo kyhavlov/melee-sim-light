@@ -58,8 +58,14 @@ typedef struct MslItemState {
     u8 x1C[4];
 } MslItemState;
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_item_game_data() (msl_core_context_item_game_data)
+#define msl_core_item_state() (msl_core_context_item_state)
+#else
 MslItemGameData* msl_core_item_game_data(void);
 MslItemState* msl_core_item_state(void);
+#endif
 #endif
 
 /* 3F1418 */ extern struct sdata_ItemGXLink it_803F1418[43];

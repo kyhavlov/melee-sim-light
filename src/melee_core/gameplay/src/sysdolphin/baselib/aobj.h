@@ -74,7 +74,12 @@ typedef struct HSD_AObjContext {
     s32 active_count;
 } HSD_AObjContext;
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_aobj_context() (msl_core_context_aobj)
+#else
 HSD_AObjContext* msl_core_aobj_context(void);
+#endif
 #endif
 
 void HSD_AObjInitAllocData(void);

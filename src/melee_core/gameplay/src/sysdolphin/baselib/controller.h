@@ -86,9 +86,16 @@ extern HSD_PadStatus HSD_PadMasterStatus[4];
 extern HSD_PadStatus HSD_PadGameStatus[4];
 extern HSD_PadStatus HSD_PadCopyStatus[4];
 #else
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_pad_master_status() (msl_core_context_pad_master)
+#define msl_core_pad_game_status() (msl_core_context_pad_game)
+#define msl_core_pad_copy_status() (msl_core_context_pad_copy)
+#else
 HSD_PadStatus* msl_core_pad_master_status(void);
 HSD_PadStatus* msl_core_pad_game_status(void);
 HSD_PadStatus* msl_core_pad_copy_status(void);
+#endif
 #define HSD_PadMasterStatus (msl_core_pad_master_status())
 #define HSD_PadGameStatus (msl_core_pad_game_status())
 #define HSD_PadCopyStatus (msl_core_pad_copy_status())

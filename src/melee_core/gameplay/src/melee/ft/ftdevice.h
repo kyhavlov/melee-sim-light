@@ -24,7 +24,12 @@ typedef struct MslFtDeviceState {
     int collision_count;
 } MslFtDeviceState;
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_ft_device_state() (msl_core_context_ft_device)
+#else
 MslFtDeviceState* msl_core_ft_device_state(void);
+#endif
 #define ft_80459A68 (msl_core_ft_device_state()->entries)
 #define ftDevice_BuryThings (msl_core_ft_device_state()->bury_entries)
 #define ft_80459A8C (msl_core_ft_device_state()->collision_entry)

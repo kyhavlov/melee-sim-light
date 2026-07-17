@@ -69,7 +69,12 @@ typedef struct HSD_ClassContext {
     u32 class_count;
 } HSD_ClassContext;
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_class_context() (msl_core_context_class)
+#else
 HSD_ClassContext* msl_core_class_context(void);
+#endif
 #endif
 
 extern HSD_ClassInfo hsdClass;

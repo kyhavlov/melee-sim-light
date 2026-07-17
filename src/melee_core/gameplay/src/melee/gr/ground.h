@@ -162,7 +162,12 @@
 #ifndef MSL_CORE_HOSTED
 /* 49E6C8 */ extern StageInfo stage_info;
 #else
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_stage_info() (msl_core_context_stage_info)
+#else
 StageInfo* msl_core_stage_info(void);
+#endif
 #define stage_info (*msl_core_stage_info())
 #endif
 

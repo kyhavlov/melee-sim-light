@@ -55,7 +55,12 @@ typedef struct HSD_ObjAllocContext {
     u32 count;
 } HSD_ObjAllocContext;
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_objalloc_context() (msl_core_context_objalloc)
+#else
 HSD_ObjAllocContext* msl_core_objalloc_context(void);
+#endif
 HSD_ObjAllocData* HSD_ObjAllocResolve(HSD_ObjAllocData* data);
 void HSD_ObjAllocSetRelocType(HSD_ObjAllocData* data, u32 type, u32 count,
                               u32 stride);

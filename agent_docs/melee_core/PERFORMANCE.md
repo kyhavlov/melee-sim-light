@@ -742,3 +742,41 @@ bounded attempt to phase-band the still-scalar map owner across sixteen Matches 
 to 60,535 complete FPS at 512 and was removed: an owner leaves the resident scheduler only together
 with its compact cross-environment replacement. This packet closes reached presentation/CPU dead
 work; further scalar leaf cleanup is not the 500k path.
+
+## Phase 9 hosted context-owner cut — 2026-07-16
+
+The imported gameplay code was still paying an out-of-line compatibility call whenever it read a
+retail global that had been promoted into `GameData` or `Match`. A short gprof census found roughly
+61.4 million `msl_core_source_match_state`, 27.8 million `msl_core_gobj_context`, 13.0 million
+`msl_core_stage_info`, 5.1 million `msl_core_native_dat_context`, 4.5 million
+`msl_core_source_game_data`, and 4.4 million `msl_core_try_active_match` calls in the sampled
+resident workload, plus the same pattern for object pools, controller state, fighter registries,
+items, and collision state. These calls did not implement gameplay; they repeatedly rediscovered
+owner pointers that `msl_core_bind_match` had already published.
+
+Native imported headers now read those already-bound thread-local owner pointers directly. The
+compatibility accessors remain available at the runtime/API boundary, the PPC source-global path is
+unchanged, and a Match is still bound once for its complete scalar scheduler. The strict release
+allowlist also optimizes the complete `mpcoll.c` translation unit; isolated `fighter.c` and
+`ftcoll.c` additions changed the production digest and were removed instead of broadening the
+compiler exception.
+
+True-resident CPU-0 results are:
+
+| Environments | Previous complete/step FPS | Retained complete/step FPS | Complete change | Digest |
+|---:|---:|---:|---:|---:|
+| 256 | 50,833 / 52,488 | 60,242 / 61,548 | +18.5% | `bdc54107c51fa3d7` |
+| 512 | 66,552 / 67,851 | 78,472 / 80,974 | +17.9% | `3fb5823d90657775` |
+
+All 153 native replays remain green: 63 exact passes, 90 unchanged classifications, zero
+XPASS/fail/error, and all 1,415,476 output locks. Native API/save-restore, Wasm state/viewer digest
+and cross-match restore, formatting, and the no-runtime-allocation smoke also pass.
+
+Two bounded negative results define the next cut. Treating the left/right wall remap helpers as
+dynamic-platform-only was exact on the representative digest and faster, but failed thirteen
+Battlefield replays: the source owner also projects static wall vertices through the fighter's
+swept ECB. That cull was removed. Optimizing `fighter.c`/`ftcoll.c` was likewise rejected because it
+changed arithmetic output without a commensurate architectural gain. The retained packet removes a
+large port-shim layer, but 78,472 FPS still leaves a 6.37x gap to 500k. The queue now returns to
+complete live representations: compact collision topology/overlays and compact pose evaluation,
+then cross-environment kernels over those canonical arrays. More isolated leaf tuning is closed.

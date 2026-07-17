@@ -27,14 +27,27 @@
                                                           FtMotionId msid);
 /* 086060 */ Fighter* ftData_80086060(Fighter* arg0);
 #ifdef MSL_CORE_HOSTED
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_fighter_costume_lists()                                      \
+    ((struct UnkCostumeList*) msl_core_context_fighter_costume_lists)
+#else
 struct UnkCostumeList* msl_core_fighter_costume_lists(void);
+#endif
 #define CostumeListsForeachCharacter (msl_core_fighter_costume_lists())
 #else
 /* 3C0EC0 */ extern struct UnkCostumeList
     CostumeListsForeachCharacter[FTKIND_MAX];
 #endif
 #ifdef MSL_CORE_HOSTED
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_fighter_animation_data()                                     \
+    ((struct ftData_UnkCountStruct*)                                          \
+         msl_core_context_fighter_animation_data)
+#else
 struct ftData_UnkCountStruct* msl_core_fighter_animation_data(void);
+#endif
 void msl_core_fighter_animation_data_init(void);
 #define ftData_Table_Unk0 (msl_core_fighter_animation_data())
 #else

@@ -319,7 +319,13 @@ s32 Player_80033BB8(int slot);
 #ifndef MSL_CORE_HOSTED
 /* 4D6470 */ extern pl_804D6470_t* pl_804D6470;
 #else
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_player_common_ref()                                          \
+    ((pl_804D6470_t**) msl_core_context_player_common_ref)
+#else
 pl_804D6470_t** msl_core_player_common_ref(void);
+#endif
 #define pl_804D6470 (*msl_core_player_common_ref())
 #endif
 

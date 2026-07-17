@@ -153,7 +153,12 @@ typedef struct HSD_GObjContext {
     u8 cobj_kind;
 } HSD_GObjContext;
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_gobj_context() (msl_core_context_gobj)
+#else
 HSD_GObjContext* msl_core_gobj_context(void);
+#endif
 
 #define HSD_GObj_804CE3E4 (msl_core_gobj_context()->pending)
 #define gobjproc_alloc_data (msl_core_gobj_context()->proc_alloc)

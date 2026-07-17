@@ -125,7 +125,11 @@
 /* 04F42C */ s32 mpColl_8004F42C(int joint, int index);
 #ifdef MSL_CORE_NATIVE
 #include <runtime/context.h>
+#ifdef MSL_CORE_CONTEXT_IMPLEMENTATION
 #define mpColl_804D64AC (*msl_core_mp_collision_epoch_ref())
+#else
+#define mpColl_804D64AC (*msl_core_context_mp_collision_epoch)
+#endif
 #else
 /* 4D64AC */ extern int mpColl_804D64AC;
 #endif

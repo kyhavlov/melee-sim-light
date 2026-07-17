@@ -24,7 +24,12 @@ typedef struct HSD_IDContext {
     HSD_IDTable default_table;
 } HSD_IDContext;
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
+#include <runtime/context.h>
+#define msl_core_id_context() (msl_core_context_id)
+#else
 HSD_IDContext* msl_core_id_context(void);
+#endif
 #endif
 
 HSD_ObjAllocData* HSD_IDGetAllocData(void);
