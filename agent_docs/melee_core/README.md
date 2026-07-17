@@ -2052,6 +2052,18 @@ the remaining 8.34x gap must come from deleting pointer-rich live representation
 compact pose/collision state and executing their complete gameplay owners across environments, not
 from more compiler, cache, or leaf-function experiments.
 
+Fighter pose construction is now compact as well as cold at runtime. Hosted main/interpolation
+loaders allocate only the MSLPART1 gameplay closure and omit DObj/MObj/PObj geometry entirely;
+source-indexed FighterBone/FigaTree ownership and exact save/restore remain intact. The supporting
+extraction contract now falls back to ISO-backed `ftHurtboxInit` data for direct Peach/Puff builds,
+preventing BODY joints from disappearing merely because the intermediate hurt-capsule JSON has not
+been generated. The full gate remains 63 exact passes and 90 unchanged classifications. Ordinary
+arena state falls another 63,400 bytes, the reached four-player maximum falls 125,556 bytes, and
+the census creates 416 fewer JObjs. True-resident throughput reaches 48,516 FPS at 256 and 61,871
+FPS at 512 with unchanged digests. This is a retained large representation deletion, but its
+3-4% frame-time gain reinforces that collision/physics/combat must next become compact complete-
+owner batch kernels; further scalar leaf tuning is not the queue.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to

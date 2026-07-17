@@ -724,6 +724,164 @@ HSD_JObj* HSD_JObjLoadJoint(HSD_Joint* arg0)
     return jobj;
 }
 
+#ifdef MSL_CORE_HOSTED
+enum { MSL_CORE_FILTERED_JOBJ_CAPACITY = 256 };
+
+typedef struct MslCoreFilteredJObjLoad {
+    const u8* keep;
+    size_t count;
+    size_t index;
+    HSD_JObj** jobjs;
+    u8* depths;
+    HSD_Joint* joints[MSL_CORE_FILTERED_JOBJ_CAPACITY];
+    bool failed;
+} MslCoreFilteredJObjLoad;
+
+static void msl_core_consume_cold_joint_list(MslCoreFilteredJObjLoad* load,
+                                             HSD_Joint* joint, u8 depth)
+{
+    while (joint != NULL) {
+        size_t index = load->index++;
+        if (index >= load->count || load->keep[index]) {
+            load->failed = true;
+            return;
+        }
+        load->joints[index] = joint;
+        load->depths[index] = depth;
+        if (!(joint->flags & JOBJ_INSTANCE)) {
+            msl_core_consume_cold_joint_list(load, joint->child, depth + 1);
+            if (load->failed) {
+                return;
+            }
+        }
+        joint = joint->next;
+    }
+}
+
+static void msl_core_JObjLoadFilteredShallow(HSD_JObj* jobj,
+                                             HSD_Joint* joint,
+                                             HSD_JObj* parent)
+{
+    jobj->parent = parent;
+    jobj->flags |= joint->flags;
+    if (union_type_spline(jobj)) {
+        jobj->u.spline = joint->u.spline;
+    } else if (union_type_ptcl(jobj)) {
+        HSD_SList* slist;
+        jobj->u.ptcl = joint->u.ptcl;
+        for (slist = jobj->u.ptcl; slist != NULL; slist = slist->next) {
+            *(u32*) &slist->data |= 0x80000000;
+        }
+    } else {
+        // DObj/MObj/PObj are renderer geometry/material owners. The filtered
+        // fighter tree retains JObj/AObj/RObj pose and constraint owners.
+        // refs/melee/src/sysdolphin/baselib/{jobj.c,dobj.c,mobj.c,pobj.c}
+        jobj->u.dobj = NULL;
+    }
+    jobj->robj = HSD_RObjLoadDesc(joint->robjdesc);
+    jobj->rotate.x = joint->rotation.x;
+    jobj->rotate.y = joint->rotation.y;
+    jobj->rotate.z = joint->rotation.z;
+    jobj->scale = joint->scale;
+    jobj->translate = joint->position;
+    PSMTXIdentity(jobj->mtx);
+    jobj->scl = NULL;
+    if (joint->mtx != NULL) {
+        jobj->envelopemtx = HSD_MtxAlloc();
+        memcpy(jobj->envelopemtx, joint->mtx, sizeof(Mtx));
+    }
+    HSD_IDInsertToTable(NULL, (u32) joint, jobj);
+    jobj->id = (u32) joint;
+}
+
+static HSD_JObj* msl_core_load_filtered_joint_list(
+    MslCoreFilteredJObjLoad* load, HSD_Joint* joint, HSD_JObj* parent,
+    u8 depth)
+{
+    HSD_JObj* jobj;
+    HSD_ClassInfo* info;
+    size_t index;
+
+    if (joint == NULL || load->failed) {
+        return NULL;
+    }
+    index = load->index++;
+    if (index >= load->count) {
+        load->failed = true;
+        return NULL;
+    }
+    load->joints[index] = joint;
+    load->depths[index] = depth;
+    if (!load->keep[index]) {
+        if (!(joint->flags & JOBJ_INSTANCE)) {
+            msl_core_consume_cold_joint_list(load, joint->child, depth + 1);
+        }
+        return msl_core_load_filtered_joint_list(load, joint->next, parent,
+                                                 depth);
+    }
+    if (joint->class_name == NULL ||
+        !(info = hsdSearchClassInfo(joint->class_name)))
+    {
+        jobj = HSD_JObjAlloc();
+    } else {
+        jobj = hsdNew(info);
+        HSD_ASSERT(1124, jobj);
+    }
+    load->jobjs[index] = jobj;
+    if (!(joint->flags & JOBJ_INSTANCE)) {
+        jobj->child = msl_core_load_filtered_joint_list(
+            load, joint->child, jobj, depth + 1);
+    }
+    jobj->next = msl_core_load_filtered_joint_list(load, joint->next, parent,
+                                                   depth);
+    msl_core_JObjLoadFilteredShallow(jobj, joint, parent);
+    return jobj;
+}
+
+HSD_JObj* msl_core_HSD_JObjLoadJointFiltered(HSD_Joint* joint,
+                                             const u8* keep_by_node,
+                                             size_t node_count,
+                                             HSD_JObj** jobj_by_node,
+                                             u8* depth_by_node)
+{
+    MslCoreFilteredJObjLoad load = { 0 };
+    HSD_JObj* root;
+    size_t i;
+
+    HSD_ASSERT(1125, joint);
+    HSD_ASSERT(1126, keep_by_node);
+    HSD_ASSERT(1127, jobj_by_node);
+    HSD_ASSERT(1128, depth_by_node);
+    HSD_ASSERT(1129, node_count <= MSL_CORE_FILTERED_JOBJ_CAPACITY);
+    memset(jobj_by_node, 0, node_count * sizeof(*jobj_by_node));
+    load.keep = keep_by_node;
+    load.count = node_count;
+    load.jobjs = jobj_by_node;
+    load.depths = depth_by_node;
+    root = msl_core_load_filtered_joint_list(&load, joint, NULL, 0);
+    HSD_ASSERT(1130, !load.failed && load.index == node_count && root != NULL);
+
+    // Resolve only retained source descriptors. The extracted keep set is
+    // ancestor-closed; a live instance or RObj reference to a cold descriptor
+    // is therefore a data-contract failure rather than a runtime fallback.
+    for (i = 0; i < node_count; ++i) {
+        HSD_JObj* jobj = jobj_by_node[i];
+        HSD_Joint* source = load.joints[i];
+        if (jobj == NULL) {
+            continue;
+        }
+        HSD_RObjResolveRefsAll(jobj->robj, source->robjdesc);
+        if (jobj->flags & JOBJ_INSTANCE) {
+            jobj->child =
+                HSD_IDGetDataFromTable(NULL, (u32) source->child, NULL);
+            HSD_ASSERT(1131, jobj->child);
+            HSD_JObjRef(jobj->child);
+        }
+    }
+    return root;
+}
+#endif
+
 #ifndef BUGFIX
 #pragma push
 #pragma force_active on

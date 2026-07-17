@@ -177,6 +177,13 @@ HSD_JObj* HSD_JObjRemove(HSD_JObj* jobj);
 void HSD_JObjRemoveAll(HSD_JObj*);
 struct HSD_DObj* HSD_JObjGetDObj(HSD_JObj* jobj);
 HSD_JObj* HSD_JObjLoadJoint(HSD_Joint*);
+#ifdef MSL_CORE_HOSTED
+HSD_JObj* msl_core_HSD_JObjLoadJointFiltered(HSD_Joint* joint,
+                                             const u8* keep_by_node,
+                                             size_t node_count,
+                                             HSD_JObj** jobj_by_node,
+                                             u8* depth_by_node);
+#endif
 void HSD_JObjAddAnimAll(HSD_JObj*, HSD_AnimJoint*, HSD_MatAnimJoint*,
                         HSD_ShapeAnimJoint*);
 void HSD_JObjAnimAll(HSD_JObj*);

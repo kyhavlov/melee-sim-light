@@ -674,3 +674,40 @@ are already removed by function/data sections and linker GC, so binary-source pr
 size concern unless an owner is actually scheduled or its state is touched. The remaining phase
 therefore replaces complete live representations: compact fighter pose programs, compact
 stage-collision topology/overlays, and cross-environment physics/combat/collision execution.
+
+## Phase 9 construction-time fighter-pose compaction — 2026-07-16
+
+The earlier MSLPART1 packet stopped runtime animation/publication below cold pose roots but still
+constructed both complete source JObj trees and their renderer geometry for every fighter. Hosted
+fighter construction now filters the main and interpolation descriptors before allocation. It
+retains the extracted ancestor-closed gameplay joints, AObj/RObj constraints, source part/depth
+indices, and one detached sentinel for direct source operations on omitted parts; it never creates
+the omitted JObjs or any DObj/MObj/PObj graph. The source FigaTree-to-FighterBone walks were kept in
+their original index domain, with the one physical-tree walk explicitly skipping sentinel entries.
+
+The first exactness gate exposed a real extraction-contract hole rather than a need for replay
+exceptions. Direct Peach/Puff extraction did not materialize `data/hurtcaps/<character>.json`, so
+Puff BODY bones 12 and 26 were absent from the compact closure and back-air contact changed. Direct
+animation extraction now reads the same ISO-backed `ftHurtboxInit` owner when that intermediate is
+absent. Puff retains 34 of 50 physical nodes and the complete 153-replay output lock returns green.
+
+The supported-domain runtime census changes as follows:
+
+- ordinary singles arena/savestate payload: 1,656,588 to 1,593,188 bytes (-63,400, -3.8%);
+- reached four-player maximum arena: 2,080,864 to 1,955,308 bytes (-125,556, -6.0%);
+- census HSD_JOBJ relocation storage: 1,546 records / 284,464 bytes to 1,130 / 207,920
+  (-416 records, -76,544 bytes, -26.9%);
+- ordinary active 192-byte source-class objects: 569 to 473 (-16.9%).
+
+True-resident CPU-0 throughput retains a smaller but repeatable frame-time improvement:
+
+| Environments | Previous complete/step FPS | Retained complete/step FPS | Complete change | Digest |
+|---:|---:|---:|---:|---:|
+| 256 | 46,739 / 47,434 | 48,516 / 48,429 | +3.8% | `bdc54107c51fa3d7` |
+| 512 | 59,962 / 61,179 | 61,871 / 63,270 | +3.2% | `3fb5823d90657775` |
+
+The release gate remains 63 exact passes, 90 unchanged exact classifications, zero
+XPASS/fail/error, and all 1,415,476 output locks. This packet is retained primarily because it
+deletes a large live representation and improves per-environment memory; it does not pretend that a
+3-4% scalar gain closes the remaining 8x throughput gap. The next unit remains compact collision
+topology/overlay state followed by complete-owner cross-environment execution.

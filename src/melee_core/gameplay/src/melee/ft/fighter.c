@@ -630,7 +630,11 @@ void Fighter_UnkUpdateCostumeJoint_800686E4(Fighter_GObj* gobj)
                                  .costume_list[fp->x619_costume_id]
                                  .joint;
     ftPartsPObjSetDefaultClass();
+#ifdef MSL_CORE_HOSTED
+    jobj = ftParts_HeadlessLoadMain(fp, fp->x108_costume_joint);
+#else
     jobj = HSD_JObjLoadJoint(fp->x108_costume_joint);
+#endif
     ftPartsPObjClearDefaultClass();
     ftParts_80073758(jobj);
 
@@ -1021,10 +1025,20 @@ Fighter_GObj* Fighter_Create(struct plAllocInfo* input)
 #endif
     ftData_80085820(fp->kind, fp->x619_costume_id);
 
+#ifdef MSL_CORE_HOSTED
+    // Allocate the source FighterBone table before the compact loader so it
+    // can preserve original part ids while omitting cold descriptor subtrees.
+    // refs/melee/src/melee/ft/ftparts.c::{ftParts_80074E58,
+    //   ftParts_SetupParts}
+    // data/model_parts/<character>.bin::MSLPART1
+    ftParts_80074E58(fp);
+#endif
     Fighter_UnkUpdateCostumeJoint_800686E4(gobj);
 
     ftData_80085B10(fp);
+#ifndef MSL_CORE_HOSTED
     ftParts_80074E58(fp);
+#endif
     ftParts_SetupParts(gobj);
 #ifndef MSL_CORE_HOSTED
     // Costume MObj/TObj animation is renderer-only. The gameplay skeleton and

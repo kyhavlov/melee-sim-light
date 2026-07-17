@@ -1008,8 +1008,15 @@ def _ftdata_xc_count(character: str) -> int:
     """
     # Values are ftData_Table_Unk0[internal_id].count from refs/melee/src/melee/ft/ftdata.c
     # (FTKIND_MAX rows indexed by FighterKind): fox=row 1, falcon=row 2, sheik=row 7,
-    # marth=row 18, zelda=row 19, falco=row 22.
-    return CHARS[character].anim_table_count
+    # marth=row 18, zelda=row 19, falco=row 22. Peach/Purin remain outside the
+    # production extraction registry while their validation domain is being
+    # completed, but the direct per-character extractor still supports them.
+    if character in CHARS:
+        return CHARS[character].anim_table_count
+    return {
+        "peach": 318,
+        "puff": 327,
+    }[character]
 
 
 def _write_anim_blend_data(character: str, out_dir: Path) -> Path:
@@ -1380,6 +1387,27 @@ def _read_ftdata_x8_u8(character: str, rel_off: int) -> int:
     return int(arc.buf[off])
 
 
+def _read_ftdata_x58_part_ids(character: str) -> tuple[int, ...]:
+    """Return the six source-owned grounded-IK Fighter_Part indices.
+
+    refs/melee/src/melee/ft/{types.h::ftData_x58_t,ft_0899.c::ft_80089B08}
+    """
+    prefix = _fighter_prefix(character)
+    base = ISO_DIR / f"{prefix}.dat"
+    arc = parse_hsd_archive(base.read_bytes())
+    ftdata_abs = arc.get_public_offset(_ftdata_symbol(character))
+    if ftdata_abs is None:
+        raise RuntimeError(f"{base.name} missing ftData public symbol")
+    x58_ptr = _u32_be(arc.buf, ftdata_abs + 0x58)
+    if x58_ptr == 0:
+        return ()
+    x58_abs = arc.data_base + x58_ptr
+    offsets = (0x00, 0x01, 0x08, 0x09, 0x10, 0x11)
+    if x58_abs + max(offsets) >= len(arc.buf):
+        raise RuntimeError(f"{base.name} ftData.x58 out of bounds")
+    return tuple(int(arc.buf[x58_abs + off]) for off in offsets)
+
+
 def _msid_anim_entry_full(
     character: str, msid: int
 ) -> tuple[str, int, int, int, int, int] | None:
@@ -1423,6 +1451,24 @@ def _msid_anim_entry(character: str, msid: int) -> tuple[str, int, int, int] | N
     """Return the legacy public animation-entry tuple used by sibling extractors."""
     entry = _msid_anim_entry_full(character, msid)
     return None if entry is None else entry[:4]
+
+
+def _load_hurt_capsule_data(character: str) -> dict:
+    """Load the source hurt-capsule owner even for direct/debug characters."""
+    import json
+
+    hurt_path = DATA_DIR / "hurtcaps" / f"{character}.json"
+    if hurt_path.exists():
+        return json.loads(hurt_path.read_text())
+
+    # Production extraction emits MSLHURT1/JSON before animation metadata, but
+    # direct character extraction must not silently lose BODY pose owners when
+    # that intermediate has not been materialized yet (notably Peach/Puff).
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B4E0
+    # refs/melee/src/melee/lb/types.h::FighterHurtCapsule
+    from tools.extraction.extract_fighter_hurtcapsules import extract_character
+
+    return extract_character(character, iso_dir=ISO_DIR)
 
 
 def _collect_needed_parts_from_moves(character: str, moves_path: Path) -> tuple[list[int], list[int]]:
@@ -1503,16 +1549,14 @@ def _collect_needed_parts_from_moves(character: str, moves_path: Path) -> tuple[
             print(f"warning: failed to read {char_path}: {e}")
 
     # Include hurt capsule bones if extracted (needed to animate accurate defender hurt capsules).
-    hurt_path = DATA_DIR / "hurtcaps" / f"{character}.json"
-    if hurt_path.exists():
-        try:
-            hurt = json.loads(hurt_path.read_text())
-            for cap in hurt.get("capsules", []):
-                part = int(cap.get("bone_idx", -1))
-                if 0 <= part < parts_num:
-                    needed.add(part)
-        except Exception as e:
-            print(f"warning: failed to read {hurt_path}: {e}")
+    try:
+        hurt = _load_hurt_capsule_data(character)
+        for cap in hurt.get("capsules", []):
+            part = int(cap.get("bone_idx", -1))
+            if 0 <= part < parts_num:
+                needed.add(part)
+    except Exception as e:
+        print(f"warning: failed to load {character} hurt capsules: {e}")
 
     return sorted(needed), [max_frame_by_move.get(i, 0) for i in range(13)]
 
@@ -1834,16 +1878,14 @@ def extract_one_character(
     # Sources:
     # - Hurtcaps: `data/hurtcaps/<character>.json` (extracted from ftData hurtbox init tables)
     # - ECB joints: `data/characters/<character>.json` `ecb_joints` (used by our ECB probe/debug)
-    hc_path = DATA_DIR / "hurtcaps" / f"{character}.json"
-    if hc_path.exists():
-        try:
-            hc = json.loads(hc_path.read_text())
-            for cap in hc.get("capsules", []) or []:
-                bi = cap.get("bone_idx")
-                if isinstance(bi, int) and 0 <= bi < 256 and bi not in needed_parts:
-                    needed_parts.append(bi)
-        except Exception:
-            pass
+    try:
+        hc = _load_hurt_capsule_data(character)
+        for cap in hc.get("capsules", []) or []:
+            bi = cap.get("bone_idx")
+            if isinstance(bi, int) and 0 <= bi < 256 and bi not in needed_parts:
+                needed_parts.append(bi)
+    except Exception:
+        pass
 
     ch_path = DATA_DIR / "characters" / f"{character}.json"
     if ch_path.exists():
@@ -1857,30 +1899,49 @@ def extract_one_character(
     part_rot, part_scl, part_pos, parent_part, part_flags = _read_rest_srt_and_parents(character)
     model_scaling, inv_scale_part = _read_model_scale_and_inv_part(character)
     inv_model_scale = 1.0 / model_scaling if abs(model_scaling) > 1.0e-6 else 1.0
-    dynamic_sets = _read_fighter_dynamics(character)
+    source_dynamic_sets = _read_fighter_dynamics(character)
     moves = json.loads(moves_path.read_text())
-    # The current fixed runtime state carries one descriptor chain. Keep every source set that fits
-    # that representation (Fox's tail today) and reject multi-set characters here until the state
-    # surface can represent all sets without collisions.
-    if len(dynamic_sets) != 1 or int(dynamic_sets[0].get("chain_count", 0)) > 16:
-        dynamic_sets = []
-    for dyn in dynamic_sets:
+    # Fighter construction always calls ftCo_8009CF84, which passes each source
+    # dynamics root and chain count to lb_8000FD48.  Keep that complete child
+    # chain in MSLPART1 even when the compact SSDYNN01 runtime artifact cannot
+    # yet represent the character's number/length of dynamics sets.
+    #
+    # refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CF84
+    # refs/melee/src/melee/lb/lbspdisplay.c::lb_8000FD48
+    for dyn in source_dynamic_sets:
         for part in _dynamic_first_child_chain(
             int(dyn.get("root_part", -1)), int(dyn.get("chain_count", 0)), parent_part
         ):
             if 0 <= part < 256 and part not in needed_parts:
                 needed_parts.append(part)
-    # Capture victim alignment anchor (`mv.co.capturedamage.x18`) is set from `ftData.x8->x11`.
+
+    # The current fixed runtime state carries one descriptor chain. Keep every source set that fits
+    # that representation (Fox's tail today) and reject multi-set characters here until the state
+    # surface can represent all sets without collisions.
+    dynamic_sets = source_dynamic_sets
+    if len(source_dynamic_sets) != 1 or int(source_dynamic_sets[0].get("chain_count", 0)) > 16:
+        dynamic_sets = []
+    # Source pose owners that address FighterBone entries through DAT-provided
+    # part ids must participate in the same admission closure as hit/hurt data.
+    # Grounded IK reads both leg chains from ftData.x58 every enabled frame.
+    # refs/melee/src/melee/ft/ft_0899.c::ft_80089B08
+    for part in _read_ftdata_x58_part_ids(character):
+        if 0 <= part < parts_num and part not in needed_parts:
+            needed_parts.append(part)
+
+    # Capture victim alignment and several root/pose owners use `ftData.x8`
+    # x10/x11 as raw indices into `fp->parts`.
     # Decomp: refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800D9CE8
     #
     # Store the raw u8 (index into `fp->parts[]`) as a pose part id so the simulator can query
     # that joint in SSANIM01.
-    try:
-        grab_anchor_part = _read_ftdata_x8_u8(character, 0x11)
-        if 0 <= grab_anchor_part < 256 and grab_anchor_part not in needed_parts:
-            needed_parts.append(int(grab_anchor_part))
-    except Exception:
-        pass
+    for rel_off in (0x10, 0x11):
+        try:
+            part = _read_ftdata_x8_u8(character, rel_off)
+            if 0 <= part < parts_num and part not in needed_parts:
+                needed_parts.append(int(part))
+        except Exception:
+            pass
 
     closure_parts = _closure_with_ancestors(needed_parts, parent_part)
 

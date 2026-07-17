@@ -11,7 +11,13 @@ from tools.extraction.known_data_artifacts import PART_MAGIC, PART_VERSION
 # External (CSS/Slippi) character ids from the central registry.
 from tools.extraction.char_registry import CHARS
 
-CHAR_IDS = {name: info.external_id for name, info in CHARS.items()}
+CHAR_IDS = {
+    **{name: info.external_id for name, info in CHARS.items()},
+    # Direct extractor support for validation-domain characters that have not
+    # yet entered the production data registry.
+    "peach": 12,
+    "puff": 16,
+}
 
 ANCHOR_IDS = {
     "ecb_joint": 1,

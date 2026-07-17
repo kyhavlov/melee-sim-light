@@ -1529,6 +1529,28 @@ def test_tracked_input_artifact_extractors_regenerate_stable_outputs(tmp_path: P
     ).read_bytes()
 
 
+def test_direct_anim_extraction_keeps_iso_hurt_capsule_owners(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import tools.extraction.extract_fighter_anims as fighter_anims
+    import tools.extraction.extract_fighter_hurtcapsules as hurtcaps
+
+    iso_dir = tmp_path / "raw"
+    expected = {"character": "puff", "capsules": [{"bone_idx": 26}]}
+    calls: list[tuple[str, Path]] = []
+
+    def fake_extract(character: str, *, iso_dir: Path) -> dict:
+        calls.append((character, iso_dir))
+        return expected
+
+    monkeypatch.setattr(fighter_anims, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(fighter_anims, "ISO_DIR", iso_dir)
+    monkeypatch.setattr(hurtcaps, "extract_character", fake_extract)
+
+    assert fighter_anims._load_hurt_capsule_data("puff") == expected
+    assert calls == [("puff", iso_dir)]
+
+
 def test_manifest_registry_chars_fails_loudly_on_unknown_char(tmp_path) -> None:
     # A manifest char missing from the extraction registry must raise, not silently skip:
     # skipped chars get default/empty entries in every per-char preprocessor map (the

@@ -284,9 +284,24 @@ void ftAnim_8006E7B8(Fighter* fp, Fighter_Part part)
     temp_r27 = fp->parts[part].xC;
     jobj = temp_r30;
     while (jobj != NULL) {
+#ifdef MSL_CORE_HOSTED
+        // The source tree and FighterBone table normally advance together.
+        // Headless construction preserves the source-indexed FighterBone
+        // table but omits presentation-only JObjs, represented by one detached
+        // cold sentinel. Skip those table entries while walking the compact
+        // physical tree so animation ownership remains attached to the same
+        // source part.
+        // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E7B8
+        while (!fp->parts[i].flags_b1 ||
+               (fp->parts[i].joint->flags & JOBJ_MSL_GAMEPLAY_COLD))
+        {
+            i++;
+        }
+#else
         while (!fp->parts[i].flags_b1) {
             i++;
         }
+#endif
         if (fp->parts[i].xC <= temp_r27 && i != part) {
             break;
         }
@@ -537,7 +552,8 @@ bool ftAnim_IsFramesRemaining(Fighter_GObj* gobj)
     } else {
         for (i = 0; i < ftPartsTable[fp->kind]->parts_num; i++) {
             if (fp->parts[i].flags_b1 && !fp->parts[i].flags_b0 &&
-                !fp->parts[i].flags_b5 && lb_8000B074(fp->parts[i].x4_jobj2))
+                !fp->parts[i].flags_b5 &&
+                lb_8000B074(fp->parts[i].x4_jobj2))
             {
                 return true;
             }
@@ -928,10 +944,22 @@ void ftAnim_8006FE08(Fighter* fp, bool do_blending)
 void ftAnim_8006FE48(Fighter_GObj* fighter_gobj)
 {
     Fighter* fp = GET_FIGHTER(fighter_gobj);
+#ifdef MSL_CORE_HOSTED
+    bool compact;
+    fp->x8AC_animSkeleton = ftParts_HeadlessLoadInterp(
+        fp, fp->x108_costume_joint, &compact);
+#else
     fp->x8AC_animSkeleton = ftParts_8007482C(fp->x108_costume_joint);
+#endif
     fp->x8A4_animBlendFrames = 0.0F;
     fp->x8A8_anim_frame = 0.0F;
+#ifdef MSL_CORE_HOSTED
+    if (!compact) {
+        ftParts_8007462C(fighter_gobj);
+    }
+#else
     ftParts_8007462C(fighter_gobj);
+#endif
 }
 
 void ftAnim_8006FE9C(Fighter* fp, Fighter_Part start, float t, float t_inv)

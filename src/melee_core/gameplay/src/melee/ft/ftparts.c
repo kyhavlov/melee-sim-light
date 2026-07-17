@@ -24,6 +24,9 @@
 #include <sysdolphin/baselib/pobj.h>
 #include <sysdolphin/baselib/util.h>
 #include <melee/lb/lbrefract.h>
+#ifdef MSL_CORE_HOSTED
+#include "runtime/context.h"
+#endif
 
 #define MAX_FT_PARTS 140
 
@@ -394,6 +397,126 @@ void ftParts_80074194(Fighter* fighter, FighterBone* bone, HSD_JObj* jobj,
     bone->flags2_b6 = dobj_count != 0 ? true : false;
 }
 
+#ifdef MSL_CORE_HOSTED
+static HSD_JObj* ftParts_HeadlessLoadCompact(Fighter* fp, HSD_Joint* joint,
+                                             bool interpolation,
+                                             bool* compact_out)
+{
+    const u8* live_parts = msl_core_gameplay_part_mask(fp->kind);
+    u8 keep_by_node[MAX_FT_PARTS];
+    u8 part_by_node[MAX_FT_PARTS];
+    u8 depth_by_node[MAX_FT_PARTS];
+    HSD_JObj* jobj_by_node[MAX_FT_PARTS];
+    HSD_JObj* cold_jobj = NULL;
+    HSD_JObj* root;
+    bool has_cold_node = false;
+    int part_count = ftPartsTable[fp->kind]->parts_num;
+    int node_count = 0;
+    int part;
+    int node;
+
+    *compact_out = false;
+    if (live_parts == NULL) {
+        return HSD_JObjLoadJoint(joint);
+    }
+    HSD_ASSERT(498, part_count <= MAX_FT_PARTS);
+    for (part = 0; part < part_count; ++part) {
+        if (interpolation) {
+            fp->parts[part].x4_jobj2 = NULL;
+        } else {
+            fp->parts[part].joint = NULL;
+        }
+        if (ftParts_8007506C(fp->kind, part) != 0) {
+            continue;
+        }
+        HSD_ASSERT(499, node_count < MAX_FT_PARTS);
+        part_by_node[node_count] = part;
+        keep_by_node[node_count] = live_parts[part] != 0;
+        has_cold_node |= !keep_by_node[node_count];
+        if (!interpolation) {
+            // Source FigaTree streams enumerate every costume-skeleton node.
+            // Preserve that part-table membership for their source-index scan.
+            // Attachment receives the cold sentinel for omitted presentation
+            // nodes and lbAnim consumes those tracks without source work;
+            // flags_b0 remains the source-owned dynamics/visibility bit.
+            // refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006FCE4,
+            //   ftAnim_8006FA58}
+            fp->parts[part].flags_b1 = true;
+        }
+        node_count += 1;
+    }
+    HSD_ASSERT(500, node_count > 0 && keep_by_node[0]);
+    if (!has_cold_node) {
+        // A generated closure that admits every physical node offers no JObj
+        // compaction. Keep the exact source loader in that case; besides
+        // avoiding a second representation for no state win, this preserves
+        // model-specific class/load semantics.
+        // data/model_parts/<character>.bin::MSLPART1
+        // refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjLoadJoint
+        return HSD_JObjLoadJoint(joint);
+    }
+    root = msl_core_HSD_JObjLoadJointFiltered(
+        joint, keep_by_node, node_count, jobj_by_node, depth_by_node);
+    for (node = 0; node < node_count; ++node) {
+        HSD_JObj* jobj = jobj_by_node[node];
+        part = part_by_node[node];
+        if (jobj == NULL) {
+            if (cold_jobj == NULL) {
+                // One detached source-class JObj stands in for every omitted
+                // presentation part. Existing JObj/lbAnim cold guards suppress
+                // animation ownership, while direct source SRT helpers remain
+                // safe during blend and validation-reseed paths.
+                // refs/melee/src/melee/ft/ftanim.c
+                // refs/melee/src/sysdolphin/baselib/jobj.c
+                cold_jobj = HSD_JObjAlloc();
+                cold_jobj->flags |= JOBJ_MSL_GAMEPLAY_COLD;
+                PSMTXIdentity(cold_jobj->mtx);
+            }
+            fp->parts[part].xC = depth_by_node[node];
+            if (interpolation) {
+                fp->parts[part].x4_jobj2 = cold_jobj;
+            } else {
+                fp->parts[part].joint = cold_jobj;
+            }
+            continue;
+        }
+        if (interpolation) {
+            fp->parts[part].x4_jobj2 = jobj;
+        } else {
+            int dobj_count = 0;
+            ftParts_80074194(fp, &fp->parts[part], jobj, &dobj_count,
+                            depth_by_node[node]);
+        }
+    }
+    *compact_out = true;
+    return root;
+}
+
+HSD_JObj* ftParts_HeadlessLoadMain(Fighter* fp, HSD_Joint* joint)
+{
+    bool compact;
+    HSD_JObj* root =
+        ftParts_HeadlessLoadCompact(fp, joint, false, &compact);
+    if (compact) {
+        // Init-only marker consumed by ftParts_SetupParts below. DObj state is
+        // renderer-owned and the compact tree deliberately has no DObj list.
+        fp->dobj_list.count = UINT32_MAX;
+    }
+    return root;
+}
+
+HSD_JObj* ftParts_HeadlessLoadInterp(Fighter* fp, HSD_Joint* joint,
+                                     bool* compact_out)
+{
+    HSD_JObj* root;
+    HSD_JObjSetDefaultClass(HSD_CLASS_INFO(&ftIntpJObj));
+    root =
+        ftParts_HeadlessLoadCompact(fp, joint, true, compact_out);
+    HSD_JObjSetDefaultClass(NULL);
+    return root;
+}
+#endif
+
 void ftParts_SetupParts(Fighter_GObj* fighter_obj)
 {
     HSD_JObj* jobj = GET_JOBJ(fighter_obj);
@@ -401,6 +524,13 @@ void ftParts_SetupParts(Fighter_GObj* fighter_obj)
     u32 part = 0;
     u32 tree_depth = 0;
     int dobj_count = 0;
+
+#ifdef MSL_CORE_HOSTED
+    if (fp->dobj_list.count == UINT32_MAX) {
+        fp->dobj_list.count = 0;
+        return;
+    }
+#endif
 
     if (ftPartsTable[fp->kind]->parts_num > MAX_FT_PARTS) {
         HSD_ASSERTREPORT(503, 0, "fighter parts num over! player %d\n",

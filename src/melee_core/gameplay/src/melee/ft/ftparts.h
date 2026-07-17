@@ -32,6 +32,11 @@ struct Fighter_804D6540_x0_t;
 /* 0743E0 */ void func_800743E0(void);
 /* 07462C */ void ftParts_8007462C(Fighter_GObj*);
 /* 07482C */ HSD_JObj* ftParts_8007482C(HSD_Joint*);
+#ifdef MSL_CORE_HOSTED
+HSD_JObj* ftParts_HeadlessLoadMain(Fighter* fp, HSD_Joint* joint);
+HSD_JObj* ftParts_HeadlessLoadInterp(Fighter* fp, HSD_Joint* joint,
+                                     bool* compact_out);
+#endif
 /* 07487C */ void ftParts_8007487C(FtPartsDesc*, FtPartsVis*, u32 costume_id,
                                    DObjList*, DObjList*);
 /* 0749CC */ void ftParts_800749CC(Fighter_GObj*);
