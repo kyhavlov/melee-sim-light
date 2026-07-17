@@ -780,3 +780,31 @@ changed arithmetic output without a commensurate architectural gain. The retaine
 large port-shim layer, but 78,472 FPS still leaves a 6.37x gap to 500k. The queue now returns to
 complete live representations: compact collision topology/overlays and compact pose evaluation,
 then cross-environment kernels over those canonical arrays. More isolated leaf tuning is closed.
+
+## Phase 9 reached class-storage cut — 2026-07-16
+
+Every hosted Match still called the source size-class allocator's bootstrap for all 32 generic
+classes from 32 through 1,024 bytes. That policy created free slabs even when construction had
+never produced an object of that size. The slabs were sealed into the Match arena and replicated
+across every resident environment; linker garbage collection cannot remove runtime-owned storage.
+
+Native bootstrap now reserves headroom only for classes proven reached by live construction state
+or the hosted source-class high-water counters. It also stops constructing metadata entries merely
+by iterating over empty class slots. The surviving JObj class retains 64 free objects because the
+compact construction graph no longer donates renderer JObjs to the free list and Peach's transient
+article graph crosses the former 32-object reserve. Allocation still uses the ordinary source free
+list, and the sealed-arena failure remains the proof against an omitted runtime class.
+
+The supported-domain runtime census changes as follows:
+
+- ordinary singles arena/savestate payload: 1,593,188 to 907,420 bytes (-685,768, -43.0%);
+- reached four-player maximum arena: 1,955,308 to 1,269,516 bytes (-685,792, -35.1%);
+- replicated `HSD_MEMORY_ENTRY` records: 32 / 1,024 bytes to 6 / 192 bytes;
+- reserved source-class slabs: all 32 generic size slots to the reached 64- and 192-byte owners.
+
+True-resident throughput is intentionally reported as neutral: 60,131 complete FPS at 256 and
+78,370 at 512 versus 60,242 and 78,472 immediately before the cut, with unchanged digests
+`bdc54107c51fa3d7` and `3fb5823d90657775`. The full validation, native API/save-restore, Wasm, and
+runtime-allocation gates remain green. This packet is retained for its large per-environment memory
+deletion; it is not counted as progress toward the 500k frame-time target. The next speed unit is a
+complete compact pose/collision owner, not more size-class or scalar-leaf tuning.

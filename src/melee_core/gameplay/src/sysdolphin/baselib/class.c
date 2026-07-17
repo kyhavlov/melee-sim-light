@@ -349,15 +349,57 @@ void hsdPreallocateMemPieces(u32 minimum_free)
 
     HSD_ASSERT(0x1000, minimum_free <= MAXIMUM_RESERVE);
     // Class objects use a shared size-class allocator that otherwise grows
-    // lazily from HSD_MemAlloc. Populate every registered class size during
-    // hosted bootstrap; hsdNew/hsdDelete keep the ordinary source ownership.
+    // lazily from HSD_MemAlloc. Populate runtime headroom for the size classes
+    // that construction actually reached; hsdNew/hsdDelete keep the ordinary
+    // source ownership.
     // refs/melee/src/sysdolphin/baselib/class.c::hsdAllocMemPiece
     for (i = 0; i < size_class_count; ++i) {
+#ifdef MSL_CORE_NATIVE
+        HSD_MemoryEntry* entry = memory_list[i];
+#else
         HSD_MemoryEntry* entry = GetMemoryEntry(i);
+#endif
         u32 needed;
         u32 j;
 
+#ifdef MSL_CORE_NATIVE
+        if (entry == NULL) {
+            continue;
+        }
+#endif
         HSD_ASSERT(0x1001, entry != NULL);
+#ifdef MSL_CORE_NATIVE
+        {
+            HSD_ClassContext* context = msl_core_class_context();
+            u32 class_index;
+            bool reached = entry->nb_alloc != entry->nb_free;
+
+            // Live construction objects are the authoritative indication that
+            // this Match owns a size class. The hosted class counters retain
+            // additional reached classes when available, but class amnesia
+            // can reset them during source-library initialization. Creating
+            // slabs for all 32 generic allocator buckets replicated hundreds
+            // of kilobytes of never-addressed renderer/class storage in every
+            // environment.
+            // refs/melee/src/sysdolphin/baselib/class.c::{_hsdClassAlloc,
+            //   _hsdClassDestroy,hsdAllocMemPiece}
+            for (class_index = 0;
+                 !reached && class_index < context->class_count;
+                 ++class_index)
+            {
+                HSD_ClassInfo* info = context->class_keys[class_index];
+                if (context->class_nb_peak[class_index] != 0 &&
+                    (u32) OSRoundUp32B(info->head.obj_size) == entry->size)
+                {
+                    reached = true;
+                    break;
+                }
+            }
+            if (!reached) {
+                continue;
+            }
+        }
+#endif
         needed = entry->nb_free < minimum_free
                      ? minimum_free - entry->nb_free
                      : 0;

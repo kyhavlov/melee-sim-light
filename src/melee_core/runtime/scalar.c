@@ -1213,7 +1213,14 @@ static int match_construct(MslCoreMatch* match,
     // the original byte-bounded pool ceiling.
     // refs/melee/src/melee/it/items/itseakchain.c::it_802BAF2C
     HSD_ObjAllocEnsureFree(&item_link_alloc_data, 151);
-    hsdPreallocateMemPieces(32);
+    // The compact construction graph no longer leaves renderer JObjs on the
+    // class free list. Preserve the reached source JObj high-water directly:
+    // Peach's transient article graph can own more than 32 JObjs at once.
+    // hsdPreallocateMemPieces skips every size class not reached by this
+    // Match, so this does not restore the former all-class slab reserve.
+    // refs/melee/src/melee/it/items/itpeachturnip.c
+    // refs/melee/src/sysdolphin/baselib/{class.c,jobj.c}
+    hsdPreallocateMemPieces(64);
 
     // This Match's source allocation pools are complete. Shared DAT graphs
     // are sealed once, after GameData has preloaded the supported domain;

@@ -2082,6 +2082,15 @@ complete live collision/pose representations and execute those canonical arrays 
 environments; compiler sweeps, leaf caches, and source files that linker GC already makes
 unreachable are not the Phase 9 queue.
 
+The next structural memory cut removes the generic class allocator's per-Match reserve for every
+32-byte size bucket. Native bootstrap now reserves only source classes reached during Match
+construction, while retaining the measured JObj headroom needed by transient Peach articles. The
+ordinary singles arena falls from 1,593,188 to 907,420 bytes (-43.0%) and the reached four-player
+maximum falls from 1,955,308 to 1,269,516 bytes (-35.1%), with unchanged digests, validation,
+save/restore, Wasm, and allocation locks. Throughput is neutral at 60,131 FPS for 256 environments
+and 78,370 for 512, so this is explicitly a resident-memory result. The throughput queue remains
+replacement of the complete live pose/collision representation and then cross-environment kernels.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to
