@@ -3310,7 +3310,13 @@ void Fighter_8006DA4C(Fighter_GObj* gobj)
         Player_80032828(fp->player_id, fp->x221F_b4, &fp->cur_pos);
         Player_SetFacingDirectionConditional(fp->player_id, fp->x221F_b4,
                                              fp->facing_dir);
+#ifndef MSL_CORE_HOSTED
+        // Per-frame bonus/result-screen statistics have no gameplay consumer
+        // in the headless versus runtime. Position and facing publication
+        // above remain live source state.
+        // refs/melee/src/melee/pl/plbonuslib.c::pl_8003FAA8
         pl_8003FAA8(fp->player_id, fp->x221F_b4, &fp->cur_pos, &fp->prev_pos);
+#endif
     }
 }
 

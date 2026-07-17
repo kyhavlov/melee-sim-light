@@ -574,3 +574,40 @@ the complete 153-replay gate: 63 exact passes, 90 existing classifications, zero
 and all 1,415,476 output locks in 3.807 seconds. The next representation packet targets matrix/pose
 publication or map/collision state directly; further small cache or whole-TU sweeps are not the
 implementation queue.
+
+## Phase 9 whole-owner collision and bonus-stat closure — 2026-07-16
+
+The representative phase profile moved the optimization unit back to complete frame owners. Of
+the timed source-callback work, `Fighter_procMap` owned about 29%, the main fighter action owner
+18%, `Fighter_ProcessHit` 11%, the gameplay camera 7%, and fighter animation 6%. A proposed
+per-line endpoint cache and exact-sized mp pools were removed after adjacent measurements were
+neutral or slower. A second direct-pose experiment flattened eligible integer-pose matrices but
+improved the complete 256 workload by only about 1% while requiring large shared pose files; it
+was likewise removed completely.
+
+The retained collision change places the complete source `melee/mp/mplib.c` owner under the
+existing strict `-O3 -march=native -mtune=native` profile. This is the 7k-line directional stage
+query, projection, remap, and line-traversal owner identified by both the phase and flat profiles;
+the floating-point contract remains strict. Extending that profile to `mpcoll.c` changed a
+Peach/Puff item-position output lock and was removed. Extending it to `ftcoll.c` changed the
+production digest and was also removed.
+
+The retained whole-system cull removes `pl_8003FAA8` from the hosted per-frame fighter schedule.
+That function and its four large children collect movement, action, magnifier, item-hold, and bonus
+statistics for post-match result scoring. They do not publish gameplay state. Source player
+position and facing publication remain in their original priority-22 owner, and retail/PPC builds
+retain the complete statistics path.
+
+On the representative CPU-0 workload, the combined retained result is:
+
+| Environments | Previous complete/step FPS | Retained complete/step FPS | Complete change | Digest |
+|---:|---:|---:|---:|---:|
+| 256 | 42,385 / 42,973 | 47,474 / 48,382 | +12.0% | `bdc54107c51fa3d7` |
+| 512 | 54,159 / 55,650 | 61,362 / 62,381 | +13.3% | `3fb5823d90657775` |
+
+The exact release binary passes all 153 replays: 63 exact passes, 90 existing classifications,
+zero XPASS/fail/error, and all 1,415,476 output locks. This packet is still scalar cleanup, not the
+500k architecture. The next large unit is the complete pointer-heavy map-collision kernel:
+compact extracted stage-line arrays plus cross-environment collision execution, preserving the
+source admission/publication order and dynamic-platform fallback. Presentation camera state is the
+next whole-owner cull candidate; leaf caches and isolated arithmetic rewrites are not the queue.

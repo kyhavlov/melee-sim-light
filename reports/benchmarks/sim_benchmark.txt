@@ -1,8 +1,8 @@
 # Generated benchmark report. Refresh with: make benchmark-report
 # Optional for ordinary changes; refresh before committing likely performance-affecting changes.
 
-generated_utc=2026-07-17T02:45:16Z
-git_base_revision=bf92388db9260bb445e10fed3eb7fe5b45942ab6
+generated_utc=2026-07-17T03:41:15Z
+git_base_revision=86e67502d88285ee84d84ea8e5240305d46879af
 git_tree=dirty
 system=Linux 6.17.0-14-generic x86_64
 cpu=AMD Ryzen 9 9950X3D 16-Core Processor
@@ -13,39 +13,39 @@ cflags=-O3 -Wall -Wextra -std=c11 -ffp-contract=off -march=native -flto
 [random_mixed]
 command=make bench-sim-native
 mode=rollout batch=256 frames=5000 warmup=500 input_ring=256 stages=32,31,3,8,28,2 characters=fox,falco,marth,falcon,sheik,zelda
-elapsed_sec=3.177516966 env_steps=1280000 env_steps_per_sec=402830.265 ns_per_env_step=2482.435
-single_core_fps=402830.265
+elapsed_sec=3.200783307 env_steps=1280000 env_steps_per_sec=399902.111 ns_per_env_step=2500.612
+single_core_fps=399902.111
 active_items avg=0.426 max=5
-step_batch_ns avg=635467.792 p50=638815 p95=704568 p99=750534 p999=998969 max=1224681 max_frame=2219 p99_over_avg=1.181 max_over_avg=1.927
+step_batch_ns avg=640125.242 p50=644035 p95=709467 p99=745324 p999=860270 max=984633 max_frame=83 p99_over_avg=1.164 max_over_avg=1.538
 checksum=17024985282127126121
 
 [random_fox_falco]
 command=make bench-sim-native ARGS='--matchups fox-falco'
 mode=rollout batch=256 frames=5000 warmup=500 input_ring=256 stages=32,31,3,8,28,2 characters=fox,falco
-elapsed_sec=3.708450952 env_steps=1280000 env_steps_per_sec=345157.592 ns_per_env_step=2897.227
-single_core_fps=345157.592
+elapsed_sec=3.723803266 env_steps=1280000 env_steps_per_sec=343734.593 ns_per_env_step=2909.221
+single_core_fps=343734.593
 active_items avg=1.191 max=8
-step_batch_ns avg=741661.993 p50=751826 p95=813653 p99=851864 p999=999731 max=1369773 max_frame=3344 p99_over_avg=1.149 max_over_avg=1.847
+step_batch_ns avg=744726.324 p50=753029 p95=820084 p99=878093 p999=1114866 max=1476633 max_frame=1010 p99_over_avg=1.179 max_over_avg=1.983
 checksum=13933608870958392417
 
 [aggregate_replay]
 command=uv run python -m tools.eval.profile_validation_rollout_frames --max-records 3000 --repeat 10 --top 0
 {
   "aggregate": {
-    "avg_ns": 3026.8535773710482,
-    "max_ns": 48902,
-    "max_over_avg": 16.156050747084198,
-    "p50_ns": 2335,
-    "p95_ns": 6983,
-    "p999_ns": 25739,
-    "p99_ns": 13936,
-    "p99_over_avg": 4.604120960520334,
+    "avg_ns": 3031.2168319467555,
+    "max_ns": 41869,
+    "max_over_avg": 13.812604746295973,
+    "p50_ns": 2355,
+    "p95_ns": 6913,
+    "p999_ns": 26059,
+    "p99_ns": 13896,
+    "p99_over_avg": 4.584297584239625,
     "records_profiled": 15000,
     "replays": 5,
-    "single_core_fps": 330376.07351609744,
+    "single_core_fps": 329900.5170005487,
     "steps": 150250,
     "top": [],
-    "total_step_ns": 454784750
+    "total_step_ns": 455440329
   },
   "out": "build/bench/validation_rollout_benchmark.json"
 }

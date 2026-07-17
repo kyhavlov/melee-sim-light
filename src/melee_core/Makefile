@@ -287,6 +287,7 @@ NATIVE_RELEASE_OPT_OBJS := \
 	$(NATIVE_OBJ_DIR)/gameplay/src/melee/ft/ftanim.o \
 	$(NATIVE_OBJ_DIR)/gameplay/src/melee/lb/lbspdisplay.o \
 	$(NATIVE_OBJ_DIR)/gameplay/src/melee/lb/lbvector.o \
+	$(NATIVE_OBJ_DIR)/gameplay/src/melee/mp/mplib.o \
 	$(NATIVE_OBJ_DIR)/gameplay/src/sysdolphin/baselib/fobj.o \
 	$(NATIVE_OBJ_DIR)/gameplay/src/sysdolphin/baselib/jobj.o \
 	$(NATIVE_OBJ_DIR)/src/melee_core/api.o \
