@@ -448,8 +448,16 @@ MslCoreResult msl_core_batch_step_matches(MslCoreBatch* batch,
 #ifdef MSL_CORE_PHASE_PROFILE
                             uint64_t started = phase_cycles();
 #endif
-                            msl_core_match_scheduler_invoke(
-                                &batch->matches[i]);
+                            // A Match commonly has two or four fighter procs
+                            // with the same source owner. Their state is
+                            // match-local, so retain source proc order while
+                            // consuming that consecutive owner run under one
+                            // context binding before moving to the next lane.
+                            // refs/melee/src/sysdolphin/baselib/gobj.c::
+                            //   HSD_GObj_80390CFC
+                            owners[lane] =
+                                msl_core_match_scheduler_invoke_owner(
+                                    &batch->matches[i], owner);
 #ifdef MSL_CORE_PHASE_PROFILE
                             {
                                 uint64_t elapsed = phase_cycles() - started;
@@ -457,7 +465,6 @@ MslCoreResult msl_core_batch_step_matches(MslCoreBatch* batch,
                                 phase_record_owner(owner, elapsed);
                             }
 #endif
-                            owners[lane] = NULL;
                         }
                     }
                 }

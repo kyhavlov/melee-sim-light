@@ -1679,6 +1679,18 @@ void msl_core_match_scheduler_invoke(MslCoreMatch* match)
     msl_hsd_gobj_run_procs_invoke();
 }
 
+HSD_GObjEvent msl_core_match_scheduler_invoke_owner(MslCoreMatch* match,
+                                                    HSD_GObjEvent owner)
+{
+    HSD_GObjEvent next;
+    bind_scheduler_owners(match);
+    do {
+        msl_hsd_gobj_run_procs_invoke();
+        next = msl_hsd_gobj_run_procs_next_owner();
+    } while (next == owner);
+    return next;
+}
+
 int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
 {
     int i;

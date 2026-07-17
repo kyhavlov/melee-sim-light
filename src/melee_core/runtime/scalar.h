@@ -134,6 +134,8 @@ void msl_core_match_scheduler_priority_begin(MslCoreMatch* match,
                                              uint32_t priority);
 HSD_GObjEvent msl_core_match_scheduler_next_owner(MslCoreMatch* match);
 void msl_core_match_scheduler_invoke(MslCoreMatch* match);
+HSD_GObjEvent msl_core_match_scheduler_invoke_owner(MslCoreMatch* match,
+                                                    HSD_GObjEvent owner);
 int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed);
 const MslCoreCompare* msl_core_match_output(const MslCoreMatch* match);
 void msl_core_match_write_items(const MslCoreMatch* match,

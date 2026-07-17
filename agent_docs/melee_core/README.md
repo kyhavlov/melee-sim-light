@@ -2000,6 +2000,14 @@ native/Wasm smokes, and the full validation suite are green. The representative 
 `3fb5823d90657775`. The next storage packet must promote canonical gameplay state rather than merely
 widening the two-Match source frontier.
 
+The first vectorizable scheduler seam is also retained. Within one Match, consecutive fighter GObj
+processes with the same source callback now execute in source order under one context binding before
+the tile moves to its next lane. All mutable owners are Match-local, so this removes redundant TLS
+bundle publication without changing per-Match order or cross-environment semantics. It raises the
+representative 256 result from 32,848 to 34,411 complete FPS and the stabilized adjacent 512 result
+from 42,261 to 42,995, with unchanged digests and the complete validation gate green. The hot/cold
+storage cut can use this owner-run boundary directly rather than adding another scheduler bridge.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to

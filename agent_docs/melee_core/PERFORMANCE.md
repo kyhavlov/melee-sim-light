@@ -496,3 +496,20 @@ The representative CPU-0 baseline replacing the opening-heavy Phase 9 numbers is
 The seed-coverage locks are stage mask `000000019000010c` and character mask
 `00000000004c8286`. These results are the comparison point for the scalar hot/cold storage cut;
 older ordinary-workload digests remain useful only for adjacent forensic experiments.
+
+## Phase 9 consecutive source-owner runs — 2026-07-16
+
+The canonical tiled scheduler previously rebound the complete Match TLS owner bundle between every
+individual GObj process, even when a Match's next two or four fighter processes had the same source
+callback. Cross-Match grouping therefore alternated bindings after each fighter. Matches share only
+immutable `GameData`; mutable callback, scheduler, arena, player, stage, and RNG state is explicitly
+Match-owned. The scheduler now consumes each consecutive same-callback run in source process order
+under one Match binding, then returns the already-discovered next owner to the tile dispatcher.
+Lane order and every per-Match GObj order remain deterministic.
+
+This is a measured execution change rather than dormant scheduler substrate. On the representative
+CPU-0 workload, 256 environments improved from 32,848/32,944 complete/step-only FPS to
+34,411/34,819 (+4.8%/+5.7%) with digest `bdc54107c51fa3d7`. A directly adjacent 512 baseline/candidate
+comparison improved from 42,261/42,445 to a repeated 42,995/43,142 (+1.7%/+1.6%) with digest
+`3fb5823d90657775`; a first candidate repeat was 42,164/42,985. The complete native gate retained 63
+exact passes, 90 existing exact classifications, and zero XPASS/fail/error over 1,415,476 frames.
