@@ -2064,6 +2064,14 @@ FPS at 512 with unchanged digests. This is a retained large representation delet
 3-4% frame-time gain reinforces that collision/physics/combat must next become compact complete-
 owner batch kernels; further scalar leaf tuning is not the queue.
 
+The following reached dead-owner packet removes three complete hosted-only workloads left behind by
+earlier architectural cuts: the fighter's empty three-pass renderer traversal after DObj removal,
+the unused Slippi DeadUp camera-copy pipeline/result-stat average, and CPU-AI targeting bounds for
+human-only matches. True-resident throughput is now 50,833 FPS at 256 and 66,552 FPS at 512 with
+unchanged digests and all release gates green. A scalar phase-banded map scheduler was measured and
+removed because it lost locality; the map owner may leave the resident scheduler only with its
+compact cross-environment replacement. [`PERFORMANCE.md`](PERFORMANCE.md) records the evidence.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to

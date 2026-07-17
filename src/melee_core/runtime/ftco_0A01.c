@@ -27,6 +27,18 @@ void ftCo_800A0DA4(Fighter* fp)
 
         hurt = &fp->hurt_capsules[i];
         lbColl_800083C4(&hurt->capsule);
+#ifdef MSL_CORE_HOSTED
+        // Capsule publication above is gameplay state consumed by the next
+        // contact pass. The remaining reductions derive only the CPU
+        // attack/targeting box in x1A88. Hosted matches construct every
+        // participant as Gm_PKind_Human and accept external controller input,
+        // so ftcpuattack has no scheduled consumer for those four values.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_0A01.c::
+        //   ftCo_800A0DA4
+        // refs/melee/src/melee/ft/ftcpuattack.c
+        // src/melee_core/runtime/scalar.c::Player_SetSlottype
+        continue;
+#endif
         dx = hurt->capsule.a_pos.x - fp->cur_pos.x;
         dy = hurt->capsule.a_pos.y - fp->cur_pos.y;
         scale = hurt->capsule.scale * fp->x34_scale.y;
@@ -53,6 +65,7 @@ void ftCo_800A0DA4(Fighter* fp)
         }
     }
 
+#ifndef MSL_CORE_HOSTED
     if (fp->facing_dir > 0.0F) {
         data->x55C = right;
         data->x560 = -left;
@@ -62,6 +75,7 @@ void ftCo_800A0DA4(Fighter* fp)
     }
     data->x564 = 0.5F * (data->x55C + data->x560);
     data->x568 = top;
+#endif
 }
 
 bool ftCo_800A0FB0(Vec3* vec_out, int* line_id_out, u32* flags_out,

@@ -52,6 +52,10 @@
 #include <melee/gr/grshrineroute.h>
 #include <melee/gr/grzebes.h>
 
+#ifdef MSL_CORE_HOSTED
+extern bool msl_core_freezes_dead_up_fall_physics(void);
+#endif
+
 /* 029AAC */ static void Camera_80029AAC(CameraBounds* bounds,
                                          CameraTransformState* transform,
                                          f32 speed);
@@ -1435,19 +1439,32 @@ void Camera_8002B3D4(void* arg0)
         Camera_80029CF8(&bounds, &cm_80452C68.transform);
         Camera_8002A768(&cm_80452C68.transform, 0);
     }
-    Camera_8002958C(&sp2C, &cm_80452C68.transform_copy);
-    cm_80452C68.transform_copy.target_fov = cm_803BCCA0.x40;
-    temp_f31 =
-        cm_80452C68.transform_copy.target_fov - cm_80452C68.transform_copy.fov;
-    cm_80452C68.transform_copy.fov += temp_f31 * cm_803BCCA0.x44;
-    Camera_80029BC4(&sp2C, &cm_80452C68.transform_copy);
-    if (!((Camera_80030AF8() != 0) &&
-          ((p1_fgp = Ground_801C57A4(), p1_fgp != NULL)) &&
-          (ftLib_80086644(p1_fgp, &fighter_pos),
-           abs_threshold_inline(fighter_pos.z, 30.0f))))
+#ifdef MSL_CORE_HOSTED
+    // Slippi's FreezeDeadUpFallPhysics patch removes the only gameplay
+    // consumer of the separately maintained DeadUp render transform. Do not
+    // run a duplicate complete camera-bounds/smoothing pipeline for matches
+    // carrying that capability. Offline retail keeps the source copy owner.
+    // refs/melee/src/melee/cm/camera.c::{Camera_8002B3D4,
+    //   Camera_800310B8}
+    // refs/slippi-ssbm-asm/Online/Core/FreezeDeadUpFallPhysics/
+    //   UpdateModelPos.asm
+    if (!msl_core_freezes_dead_up_fall_physics())
+#endif
     {
-        Camera_80029CF8(&sp2C, &cm_80452C68.transform_copy);
-        Camera_8002A768(&cm_80452C68.transform_copy, 0);
+        Camera_8002958C(&sp2C, &cm_80452C68.transform_copy);
+        cm_80452C68.transform_copy.target_fov = cm_803BCCA0.x40;
+        temp_f31 = cm_80452C68.transform_copy.target_fov -
+                   cm_80452C68.transform_copy.fov;
+        cm_80452C68.transform_copy.fov += temp_f31 * cm_803BCCA0.x44;
+        Camera_80029BC4(&sp2C, &cm_80452C68.transform_copy);
+        if (!((Camera_80030AF8() != 0) &&
+              ((p1_fgp = Ground_801C57A4(), p1_fgp != NULL)) &&
+              (ftLib_80086644(p1_fgp, &fighter_pos),
+               abs_threshold_inline(fighter_pos.z, 30.0f))))
+        {
+            Camera_80029CF8(&sp2C, &cm_80452C68.transform_copy);
+            Camera_8002A768(&cm_80452C68.transform_copy, 0);
+        }
     }
 
     /// @remarks permuter jank
@@ -1472,13 +1489,22 @@ void Camera_8002B3D4(void* arg0)
                     Stage_GetCamTrackSmooth());
     Camera_80029C88(&bounds, &cm_80452C68.transform,
                     Stage_GetCamTrackSmooth());
-    Camera_80029AAC(&sp2C, &cm_80452C68.transform_copy,
-                    Stage_GetCamTrackSmooth());
-    Camera_80029C88(&sp2C, &cm_80452C68.transform_copy,
-                    Stage_GetCamTrackSmooth());
+#ifdef MSL_CORE_HOSTED
+    if (!msl_core_freezes_dead_up_fall_physics())
+#endif
+    {
+        Camera_80029AAC(&sp2C, &cm_80452C68.transform_copy,
+                        Stage_GetCamTrackSmooth());
+        Camera_80029C88(&sp2C, &cm_80452C68.transform_copy,
+                        Stage_GetCamTrackSmooth());
+    }
     Camera_8002A28C(&bounds);
     Camera_8002A0C0(&bounds, &cm_80452C68.transform);
 
+#ifndef MSL_CORE_HOSTED
+    // Camera_80030E10's sole linked consumer is the result-screen bonus
+    // statistics owner, which is excluded from hosted per-frame execution.
+    // refs/melee/src/melee/{cm/camera.c,pl/plbonus.c}
     if (((s16) cm_80452C68.x2B8) > 0x3E8) {
         cm_80452C68.x2B4 = cm_80452C68.x2B0;
         cm_80452C68.x2B8 = 1;
@@ -1488,6 +1514,7 @@ void Camera_8002B3D4(void* arg0)
     cm_80452C68.x2B4 += Stage_GetCamBoundsRightOffset() - temp_f31;
     cm_80452C68.x2B8 += 1;
     cm_80452C68.x2B0 = cm_80452C68.x2B4 / ((f32) cm_80452C68.x2B8);
+#endif
 }
 
 inline HSD_PadStatus* get_slot_pad(u8 arg0)

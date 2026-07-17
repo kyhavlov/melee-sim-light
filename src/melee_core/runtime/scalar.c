@@ -1886,7 +1886,14 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
         //   ftDrawCommon_80080E18,ftDrawCommon_800805C8}
         // refs/melee/src/sysdolphin/baselib/jobj.c::{
         //   HSD_JObjDispAll,HSD_JObjSetupMatrixSub}
-        publish_render_matrices(match->fighters[i]->hsd_obj);
+        // Hosted fighter construction has no DObj/MObj/PObj graph. Retail's
+        // display walk only publishes a JObj matrix after reaching a DObj in
+        // one of the three transparency passes, so all three fighter walks
+        // are empty after the canonical gameplay-pose construction cut.
+        // Items retain their independent source display owner below.
+        // refs/melee/src/sysdolphin/baselib/jobj.c::{HSD_JObjDispAll,
+        //   HSD_JObjDisp,HSD_JObjDispDObj}
+        // src/melee_core/gameplay/src/melee/ft/ftparts.c::ftParts_80074194
         msl_camera_publish_fighter_visibility(match->fighters[i]);
     }
     {

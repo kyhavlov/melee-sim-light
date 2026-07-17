@@ -711,3 +711,34 @@ XPASS/fail/error, and all 1,415,476 output locks. This packet is retained primar
 deletes a large live representation and improves per-environment memory; it does not pretend that a
 3-4% scalar gain closes the remaining 8x throughput gap. The next unit remains compact collision
 topology/overlay state followed by complete-owner cross-environment execution.
+
+## Phase 9 reached dead-owner deletion — 2026-07-16
+
+The compact hosted fighter graph exposed a complete stale runtime owner: `msl_core_match_step_finish`
+still walked every fighter JObj tree once for each of retail's OPA, XLU, and TEXEDGE display passes.
+Hosted fighter construction now creates no DObj/MObj/PObj graph, and the source display path only
+publishes a JObj matrix after reaching a DObj in the selected pass. All three fighter traversals are
+therefore empty and are deleted; item display publication remains source-shaped because item graphs
+still own gameplay-observed matrices.
+
+Two adjacent dead consumers are removed at the same source boundary. Slippi's
+`FreezeDeadUpFallPhysics` capability eliminates the sole gameplay consumer of the separately
+smoothed DeadUp render-camera transform, so hosted standard camera updates no longer run that
+duplicate bounds and smoothing pipeline. The camera result-screen running average is also omitted
+because its sole linked consumer is already excluded bonus-stat output. Finally, hosted matches
+construct every participant as a human controller, so hurt-capsule publication retains its exact
+matrix work while omitting the following CPU-AI-only targeting-box reduction.
+
+On the true-resident CPU-0 workload, the retained results are:
+
+| Environments | Previous complete/step FPS | Retained complete/step FPS | Complete change | Digest |
+|---:|---:|---:|---:|---:|
+| 256 | 48,516 / 48,429 | 50,833 / 52,488 | +4.8% | `bdc54107c51fa3d7` |
+| 512 | 61,871 / 63,270 | 66,552 / 67,851 | +7.6% | `3fb5823d90657775` |
+
+The complete native gate remains 63 exact passes, 90 unchanged exact classifications, zero
+XPASS/fail/error, and all 1,415,476 output locks. Native API/save-restore and Wasm smokes pass. A
+bounded attempt to phase-band the still-scalar map owner across sixteen Matches was exact but fell
+to 60,535 complete FPS at 512 and was removed: an owner leaves the resident scheduler only together
+with its compact cross-environment replacement. This packet closes reached presentation/CPU dead
+work; further scalar leaf cleanup is not the 500k path.
