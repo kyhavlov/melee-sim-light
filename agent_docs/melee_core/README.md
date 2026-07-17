@@ -2042,6 +2042,16 @@ environments are backed by distinct live Matches. The post-cull CPU-0 baselines 
 256 and 55,248 FPS at 512 with unchanged digests. Sharding through a smaller resident set is now an
 explicit forensic override and cannot qualify a retained Phase 9 throughput result.
 
+The generic two-Match scalar callback interleaver is no longer the production path. Until an owner
+has an actual cross-environment kernel, each Match remains resident through its complete source
+scheduler and enters `HSD_GObj_80390CFC` under one published context. Hosted JObj animation also
+omits the renderer-only DObj/MObj/PObj animation owner and null AObj/RObj dispatcher calls. The
+retained true-resident result is 46,739 FPS at 256 and 59,493–59,962 FPS at 512 with unchanged
+digests and the complete replay gate green. This is the final scalar scheduling/null-owner cleanup:
+the remaining 8.34x gap must come from deleting pointer-rich live representations in favor of
+compact pose/collision state and executing their complete gameplay owners across environments, not
+from more compiler, cache, or leaf-function experiments.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to

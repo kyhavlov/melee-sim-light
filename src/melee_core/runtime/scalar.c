@@ -1912,22 +1912,16 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
                         uint32_t frame_seed,
                         const MslCoreStageEvents* stage_events)
 {
-    uint32_t priority;
     if (msl_core_match_step_prepare(match, input, frame_seed, stage_events) !=
         0)
     {
         return -1;
     }
-    msl_core_match_scheduler_begin(match);
-    for (priority = 0;
-         priority < msl_core_match_scheduler_priority_count(match);
-         ++priority)
-    {
-        msl_core_match_scheduler_priority_begin(match, priority);
-        while (msl_core_match_scheduler_next_owner(match) != NULL) {
-            msl_core_match_scheduler_invoke(match);
-        }
-    }
+    // Prepare has already published this Match's complete hosted context.
+    // Run the source scheduler directly so the scalar canonical path does not
+    // re-enter the cross-Match binding wrappers at every priority/proc seam.
+    // refs/melee/src/sysdolphin/baselib/gobj.c::HSD_GObj_80390CFC
+    HSD_GObj_80390CFC();
     return msl_core_match_step_finish(match, frame_seed);
 }
 

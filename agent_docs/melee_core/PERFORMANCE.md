@@ -645,3 +645,32 @@ CPU 0 with the same digests. The standard benchmark now defaults `resident_match
 resident results replace the 16-resident 47,887/61,534 figures as the acceptance baseline for all
 following layout and execution packets. At 512 the remaining distance to 500k is 9.05x, so scalar
 owner deletion alone is not a credible completion path.
+
+## Phase 9 scalar residency and renderer-dispatch closure — 2026-07-16
+
+The generic two-Match callback interleaver was a net cost before any owner had a real batch kernel.
+It repeatedly evicted the current Match and republished the complete hosted context merely to call
+the same scalar source owner in its neighbor. The canonical production path now keeps one Match
+resident for its complete source `HSD_GObj_80390CFC` scheduler. It enters that scheduler directly
+after prepare instead of re-entering match-binding wrappers at every priority/proc seam. Future
+cross-environment kernels must cut in at explicit complete-owner boundaries; they must not restore
+generic scalar callback interleaving as batching theater.
+
+The same closure removes the hosted `DObj/MObj/PObj` animation dispatch from `HSD_JObjAnim` and
+avoids entering generic AObj/RObj dispatchers for null owners. DObj is renderable geometry/material
+state; fighter pose, constraints, hit/hurt primitives, ECBs, and attachments remain owned by the
+retained JObj/AObj/RObj graph. This is an owner-level renderer exclusion, not a gameplay-joint
+exclusion.
+
+On the true-resident CPU-0 workload, 256 environments improve from 44,395/44,979 to
+46,739/47,434 complete/step-only FPS. Two adjacent 512 runs reach 59,493/60,681 and
+59,962/61,179 versus the 55,248/56,192 baseline, a 7.7–8.5% complete improvement. Digests remain
+`bdc54107c51fa3d7` and `3fb5823d90657775`. The complete release gate remains 63 exact passes, 90
+existing exact classifications, zero XPASS/fail/error, and all 1,415,476 output locks.
+
+This closes generic scheduler/cache and null-dispatch work; it does not materially change the
+500k plan. At 59,962 FPS the remaining gap is still 8.34x. Linked but unreachable translation units
+are already removed by function/data sections and linker GC, so binary-source pruning is a build-
+size concern unless an owner is actually scheduled or its state is touched. The remaining phase
+therefore replaces complete live representations: compact fighter pose programs, compact
+stage-collision topology/overlays, and cross-environment physics/combat/collision execution.

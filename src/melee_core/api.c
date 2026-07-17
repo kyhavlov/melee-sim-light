@@ -17,10 +17,6 @@
 
 enum {
     MSL_CORE_BATCH_MATCH_LIMIT = 16384,
-    // One source-shaped Match currently has a large cold graph but a much
-    // smaller active scheduler frontier. A measured 1/2/4/8 sweep selected
-    // two frontiers per canonical tile; Phase 9 can promote measured fields
-    // into denser AoSoA tiles before widening this group.
     MSL_CORE_BATCH_TILE_MATCHES = 2,
 };
 
@@ -360,6 +356,26 @@ MslCoreResult msl_core_batch_step_matches(MslCoreBatch* batch,
             return MSL_CORE_INVALID_STATE;
         }
     }
+#ifndef MSL_CORE_PHASE_PROFILE
+    // Until an owner has a real cross-environment kernel, interleaving its
+    // scalar source callbacks only evicts the current Match and republishes
+    // the full hosted context. Keep one Match resident for its complete
+    // source scheduler; later batch kernels can cut in at explicit owner
+    // boundaries instead of paying a generic callback-grouping tax.
+    // refs/melee/src/sysdolphin/baselib/gobj.c::HSD_GObj_80390CFC
+    for (i = 0; i < batch->match_count; ++i) {
+        if (selected(match_mask, mask_stride, i)) {
+            MslCoreMatch* match = &batch->matches[i];
+            uint32_t frame_seed = match->random_seed;
+            if (msl_core_match_step(match, row_const(inputs, input_stride, i),
+                                    frame_seed, &no_stage_events) != 0)
+            {
+                return MSL_CORE_INVALID_STATE;
+            }
+        }
+    }
+    return MSL_CORE_OK;
+#endif
     for (tile_begin = 0; tile_begin < batch->match_count;
          tile_begin += MSL_CORE_BATCH_TILE_MATCHES)
     {

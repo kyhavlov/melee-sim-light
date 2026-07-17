@@ -546,11 +546,26 @@ void HSD_JObjAnim(HSD_JObj* jobj)
         }
 #endif
         HSD_JObjCheckDepend(jobj);
+#ifdef MSL_CORE_HOSTED
+        // The headless gameplay closure retains every live JObj, but most
+        // joints have no active AObj and nearly all have no RObj. Avoid
+        // entering the generic null-owner dispatchers for those joints.
+        // refs/melee/src/sysdolphin/baselib/{jobj.c,aobj.c,robj.c}
+        if (jobj->aobj != NULL) {
+            HSD_AObjInterpretAnim(jobj->aobj, jobj, JObjUpdateFunc);
+        }
+        if (jobj->robj != NULL) {
+            HSD_RObjAnimAll(jobj->robj);
+        }
+#else
         HSD_AObjInterpretAnim(jobj->aobj, jobj, JObjUpdateFunc);
         HSD_RObjAnimAll(jobj->robj);
+#endif
+#ifndef MSL_CORE_HOSTED
         if (union_type_dobj(jobj)) {
             HSD_DObjAnimAll(jobj->u.dobj);
         }
+#endif
     }
 }
 
