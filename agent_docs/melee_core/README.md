@@ -1981,6 +1981,16 @@ retained/rejected result and the preservation audit. The next packet begins the 
 and SoA/AoSoA representation cut; it must not reopen the compiler sweep or introduce explicit SIMD
 before the scalar tiled layout is proven.
 
+The first Phase 9 hot/cold owner closure removes source fighter-dynamics chains whose complete
+supported-domain consumer graph is presentation-only, while retaining collision-owned Fox and Puff
+chains by source JObj/hurt-capsule identity. Together with strict optimization of the still-live
+`lbspdisplay.c` owner, the unchanged ordinary workload now reaches 31,139 complete FPS at 256 and
+46,947 at 512 with identical digests; a late-game/reset probe improves from about 21.1k to 39.2k.
+All 153 replay locks remain unchanged. Profiling also exposed that the ordinary short resident run
+mostly measures the match opening, so representative aggregate-state staging is a prerequisite for
+the final 500k lock. The next storage packet must use that corrected owner mix and promote canonical
+gameplay state rather than merely widening the two-Match source frontier.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to

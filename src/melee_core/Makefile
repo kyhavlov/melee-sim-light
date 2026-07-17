@@ -272,11 +272,19 @@ $(NATIVE_RUNTIME_CENSUS_OBJ): NATIVE_CPPFLAGS += -D_GNU_SOURCE
 ifeq ($(NATIVE_GPROF),1)
 $(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_GPROF
 endif
+ifeq ($(NATIVE_PHASE_PROFILE),1)
+$(NATIVE_OBJ_DIR)/src/melee_core/api.o: NATIVE_CPPFLAGS += -DMSL_CORE_PHASE_PROFILE
+$(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_PHASE_PROFILE
+endif
+ifeq ($(NATIVE_CALLGRIND),1)
+$(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_CALLGRIND
+endif
 $(WASM_OBJ_DIR)/gameplay/src/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
 $(WASM_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
 
 ifeq ($(NATIVE_RELEASE_PROFILE),1)
 NATIVE_RELEASE_OPT_OBJS := \
+	$(NATIVE_OBJ_DIR)/gameplay/src/melee/lb/lbspdisplay.o \
 	$(NATIVE_OBJ_DIR)/gameplay/src/melee/lb/lbvector.o \
 	$(NATIVE_OBJ_DIR)/gameplay/src/sysdolphin/baselib/fobj.o \
 	$(NATIVE_OBJ_DIR)/gameplay/src/sysdolphin/baselib/jobj.o \

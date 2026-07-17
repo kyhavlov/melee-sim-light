@@ -119,6 +119,51 @@ void ftCo_8009CF84(Fighter* fp)
     }
 }
 
+#ifdef MSL_CORE_HOSTED
+static bool ftCo_DynamicsOwnsHurtCapsule(Fighter* fp, DynamicsDesc* desc)
+{
+    struct DynamicsData* dynamics;
+    u32 hurt_index;
+
+    for (dynamics = desc->data; dynamics != NULL; dynamics = dynamics->next) {
+        HSD_JObj* joint = dynamics->desc.lb_unk0.jobj;
+        for (hurt_index = 0; hurt_index < fp->hurt_capsules_len;
+             ++hurt_index)
+        {
+            if (fp->hurt_capsules[hurt_index].capsule.bone == joint) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void ftCo_HeadlessPruneDynamics(Fighter* fp)
+{
+    ssize_t i;
+
+    // Fighter dynamics only mutate their secondary JObj chains. In the
+    // headless gameplay graph, a chain remains live when a source hurt
+    // capsule reads one of those JObjs through lb_8000B1CC. The supported
+    // source-data audit also covers move hitbox, shield, reflector, absorber,
+    // item-attachment, and character callback bone owners; none references a
+    // chain rejected by this predicate. This retains Fox's tail and Puff's
+    // body chains while removing hair, cloth, and cape solvers whose only
+    // consumers are ftDraw/lbColl debug presentation.
+    // refs/melee/src/melee/ft/{ftdynamics.c,ftcoll.c}
+    // refs/melee/src/melee/lb/{lb_00B0.c,lbspdisplay.c,lbcollision.c}
+    // extracted data/anims/*.dyn.bin, data/hurtcaps/*.bin, MSLFTSC1
+    for (i = 0; i < fp->dynamics_num; ++i) {
+        DynamicsDesc* desc = &fp->dynamic_bone_sets[i].dyn_desc;
+        if (desc->data != NULL &&
+            !ftCo_DynamicsOwnsHurtCapsule(fp, desc))
+        {
+            lb_8000FD18(desc);
+        }
+    }
+}
+#endif
+
 void ftCo_8009D074(Fighter* fp)
 {
     KirbyHatStruct* hat = ft_80459B88.hats[FTKIND_KOOPA];

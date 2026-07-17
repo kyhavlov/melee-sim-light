@@ -9,6 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef MSL_CORE_PHASE_PROFILE
+#include <inttypes.h>
+#include <stdio.h>
+#include <x86intrin.h>
+#endif
+
 enum {
     MSL_CORE_BATCH_MATCH_LIMIT = 16384,
     // One source-shaped Match currently has a large cold graph but a much
@@ -27,6 +33,70 @@ struct MslCoreBatch {
     uint32_t match_count;
     uint32_t reset_index_capacity;
 };
+
+#ifdef MSL_CORE_PHASE_PROFILE
+enum { MSL_CORE_PHASE_OWNER_CAPACITY = 2048 };
+
+typedef struct MslCorePhaseOwnerProfile {
+    uintptr_t owner;
+    uint64_t cycles;
+    uint64_t calls;
+} MslCorePhaseOwnerProfile;
+
+static struct {
+    uint64_t prepare_cycles;
+    uint64_t scheduler_cycles;
+    uint64_t invoke_cycles;
+    uint64_t finish_cycles;
+    uint64_t matches;
+    MslCorePhaseOwnerProfile owners[MSL_CORE_PHASE_OWNER_CAPACITY];
+} phase_profile;
+
+static inline uint64_t phase_cycles(void)
+{
+    unsigned int aux;
+    return __rdtscp(&aux);
+}
+
+static void phase_record_owner(HSD_GObjEvent owner, uint64_t cycles)
+{
+    uintptr_t key = (uintptr_t) owner;
+    size_t slot = (key >> 4) & (MSL_CORE_PHASE_OWNER_CAPACITY - 1);
+    while (phase_profile.owners[slot].owner != 0 &&
+           phase_profile.owners[slot].owner != key)
+    {
+        slot = (slot + 1) & (MSL_CORE_PHASE_OWNER_CAPACITY - 1);
+    }
+    phase_profile.owners[slot].owner = key;
+    phase_profile.owners[slot].cycles += cycles;
+    phase_profile.owners[slot].calls += 1;
+}
+
+void msl_core_phase_profile_reset(void)
+{
+    memset(&phase_profile, 0, sizeof(phase_profile));
+}
+
+void msl_core_phase_profile_report(void)
+{
+    size_t i;
+    printf("phase_profile matches=%" PRIu64 " prepare=%" PRIu64
+           " scheduler=%" PRIu64 " invoke=%" PRIu64 " finish=%" PRIu64
+           "\n",
+           phase_profile.matches, phase_profile.prepare_cycles,
+           phase_profile.scheduler_cycles, phase_profile.invoke_cycles,
+           phase_profile.finish_cycles);
+    for (i = 0; i < MSL_CORE_PHASE_OWNER_CAPACITY; ++i) {
+        if (phase_profile.owners[i].owner != 0) {
+            printf("phase_owner address=%#" PRIxPTR " calls=%" PRIu64
+                   " cycles=%" PRIu64 "\n",
+                   phase_profile.owners[i].owner,
+                   phase_profile.owners[i].calls,
+                   phase_profile.owners[i].cycles);
+        }
+    }
+}
+#endif
 
 static int selected(const uint8_t* mask, size_t stride, uint32_t index)
 {
@@ -306,6 +376,9 @@ MslCoreResult msl_core_batch_step_matches(MslCoreBatch* batch,
                 MslCoreMatch* match = &batch->matches[i];
                 uint32_t lane = i - tile_begin;
                 uint32_t count;
+#ifdef MSL_CORE_PHASE_PROFILE
+                uint64_t started = phase_cycles();
+#endif
                 frame_seeds[lane] = match->random_seed;
                 if (msl_core_match_step_prepare(
                         match, row_const(inputs, input_stride, i),
@@ -313,13 +386,25 @@ MslCoreResult msl_core_batch_step_matches(MslCoreBatch* batch,
                 {
                     return MSL_CORE_INVALID_STATE;
                 }
+#ifdef MSL_CORE_PHASE_PROFILE
+                phase_profile.prepare_cycles += phase_cycles() - started;
+                started = phase_cycles();
+#endif
                 msl_core_match_scheduler_begin(match);
                 count = msl_core_match_scheduler_priority_count(match);
+#ifdef MSL_CORE_PHASE_PROFILE
+                phase_profile.scheduler_cycles += phase_cycles() - started;
+                phase_profile.matches += 1;
+#endif
                 if (count > priority_count) {
                     priority_count = count;
                 }
             }
         }
+#ifdef MSL_CORE_PHASE_PROFILE
+        {
+            uint64_t scheduler_started = phase_cycles();
+#endif
         for (priority = 0; priority < priority_count; ++priority) {
             HSD_GObjEvent owner;
             memset(owners, 0, sizeof(owners));
@@ -360,21 +445,42 @@ MslCoreResult msl_core_batch_step_matches(MslCoreBatch* batch,
                     for (i = tile_begin; i < tile_end; ++i) {
                         uint32_t lane = i - tile_begin;
                         if (owners[lane] == owner) {
+#ifdef MSL_CORE_PHASE_PROFILE
+                            uint64_t started = phase_cycles();
+#endif
                             msl_core_match_scheduler_invoke(
                                 &batch->matches[i]);
+#ifdef MSL_CORE_PHASE_PROFILE
+                            {
+                                uint64_t elapsed = phase_cycles() - started;
+                                phase_profile.invoke_cycles += elapsed;
+                                phase_record_owner(owner, elapsed);
+                            }
+#endif
                             owners[lane] = NULL;
                         }
                     }
                 }
             } while (owner != NULL);
         }
+#ifdef MSL_CORE_PHASE_PROFILE
+            phase_profile.scheduler_cycles +=
+                phase_cycles() - scheduler_started;
+        }
+#endif
         for (i = tile_begin; i < tile_end; ++i) {
+#ifdef MSL_CORE_PHASE_PROFILE
+            uint64_t started = phase_cycles();
+#endif
             if (selected(match_mask, mask_stride, i) &&
                 msl_core_match_step_finish(
                     &batch->matches[i], frame_seeds[i - tile_begin]) != 0)
             {
                 return MSL_CORE_INVALID_STATE;
             }
+#ifdef MSL_CORE_PHASE_PROFILE
+            phase_profile.finish_cycles += phase_cycles() - started;
+#endif
         }
     }
     return MSL_CORE_OK;

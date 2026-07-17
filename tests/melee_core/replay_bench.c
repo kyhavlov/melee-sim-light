@@ -16,8 +16,17 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef MSL_CORE_CALLGRIND
+#include <valgrind/callgrind.h>
+#endif
+
 #ifdef MSL_CORE_GPROF
 extern void moncontrol(int mode);
+#endif
+
+#ifdef MSL_CORE_PHASE_PROFILE
+extern void msl_core_phase_profile_reset(void);
+extern void msl_core_phase_profile_report(void);
 #endif
 
 enum { OBSERVATION_HISTORY = 128 };
@@ -326,13 +335,46 @@ static int run_sharded_pass(const MslCoreGameData* game_data, ReplayCase* cases,
     workload.case_index[0] = reset_seed->case_index;
     workload.frame_index[0] = reset_seed->frame_index;
     workload.configs[0] = cases[reset_seed->case_index].header->config;
-    if (msl_core_batch_restore_match(batch, 0, reset_seed->snapshot, reset_seed->snapshot_size) !=
-            MSL_CORE_OK ||
-        run_workload(batch, &workload, ticks, write_outputs, &measured) != 0) {
+    if (msl_core_batch_restore_match(batch, 0, reset_seed->snapshot,
+                                     reset_seed->snapshot_size) != MSL_CORE_OK) {
       msl_core_batch_destroy(batch);
       workload_free(&workload);
       return -1;
     }
+#ifdef MSL_CORE_PHASE_PROFILE
+    msl_core_phase_profile_reset();
+#endif
+#ifdef MSL_CORE_GPROF
+    if (write_outputs) {
+      moncontrol(1);
+    }
+#endif
+#ifdef MSL_CORE_CALLGRIND
+    if (write_outputs) {
+      CALLGRIND_ZERO_STATS;
+      CALLGRIND_START_INSTRUMENTATION;
+    }
+#endif
+    if (run_workload(batch, &workload, ticks, write_outputs, &measured) != 0) {
+#ifdef MSL_CORE_GPROF
+      moncontrol(0);
+#endif
+#ifdef MSL_CORE_CALLGRIND
+      CALLGRIND_STOP_INSTRUMENTATION;
+#endif
+      msl_core_batch_destroy(batch);
+      workload_free(&workload);
+      return -1;
+    }
+#ifdef MSL_CORE_GPROF
+    moncontrol(0);
+#endif
+#ifdef MSL_CORE_CALLGRIND
+    if (write_outputs) {
+      CALLGRIND_STOP_INSTRUMENTATION;
+      CALLGRIND_DUMP_STATS;
+    }
+#endif
     total->seconds += measured.seconds;
     total->cpu_seconds += measured.cpu_seconds;
     total->resets += measured.resets;
@@ -563,9 +605,6 @@ int main(int argc, char** argv) {
     fprintf(stderr, "benchmark workload failed\n");
     goto done;
   }
-#ifdef MSL_CORE_GPROF
-  moncontrol(1);
-#endif
   if (run_sharded_pass(game_data, cases, case_count, match_count, resident_match_count, ticks,
                        warmup_ticks, 1, observations, terminals, &reset_seed, &production) != 0) {
 #ifdef MSL_CORE_GPROF
@@ -574,13 +613,13 @@ int main(int argc, char** argv) {
     fprintf(stderr, "benchmark workload failed\n");
     goto done;
   }
-#ifdef MSL_CORE_GPROF
-  moncontrol(0);
-#endif
   digest = hash_bytes(digest, observations,
                       (size_t)match_count * OBSERVATION_HISTORY * sizeof(*observations));
   digest =
       hash_bytes(digest, terminals, (size_t)match_count * OBSERVATION_HISTORY * sizeof(*terminals));
+#ifdef MSL_CORE_PHASE_PROFILE
+  msl_core_phase_profile_report();
+#endif
   if (run_sharded_pass(game_data, cases, case_count, match_count, resident_match_count, ticks,
                        warmup_ticks, 0, observations, terminals, &reset_seed, &step_only) != 0) {
     fprintf(stderr, "step-only diagnostic failed\n");

@@ -417,3 +417,49 @@ packet did not rerun the supervised 4,096/16,384 high-memory lifecycle measureme
 reset, relocation, observation-ring, and API code is unchanged, while the safe 256 gate exercises
 the same contract. The repository-wide legacy benchmark report was refreshed as required, but it
 is not used as evidence for this new core.
+
+## Phase 9 headless dynamic-owner cut — 2026-07-16
+
+An opt-in cycle profile now measures only the timed production pass, after GameData construction,
+Match reset, warmup, and savestate restore. The same boundary is used by the opt-in gprof and
+Callgrind controls, so setup no longer contaminates owner rankings. No profiling code is present in
+ordinary release objects. A one-Match late-game/reset probe was added to the owner analysis because
+the ordinary 32,768-frame resident benchmark executes only 128 ticks at 256 Matches and 64 ticks at
+512 Matches. Apart from its one deliberately late savestate lane, that benchmark therefore
+overweights the opening. Its output/digest lock remains useful for adjacent performance checks, but
+the next benchmark-contract packet must stage representative aggregate gameplay states before the
+500k result can be accepted.
+
+The late-game probe made the first hot/cold owner boundary unambiguous. The priority-16 fighter
+dynamics owner consumed about half of timed scheduler cycles for the selected Peach-heavy state.
+Peach, Zelda, and Marth construct source dynamic JObj chains for hair, cloth, and cape motion, but
+none of those chains owns a supported-domain hurt capsule. The raw-data audit additionally found no
+supported move-script HitCapsule, normal guard sphere, or special shield/reflector sphere on a
+rejected chain. Fox's tail chain is retained because part 18 owns both a hurt capsule and move
+hitboxes; Puff's body chain is retained because parts 7 and 8 own hurt capsules. The decision is
+made by live source JObj/hurt-capsule ownership rather than character id.
+
+Hosted fighter construction now returns presentation-only dynamics descriptors to the existing
+fixed source pool after `ftColl_8007B320` has published every hurt-capsule bone. The source
+`dynamics_num` and descriptor slots remain intact, so movescript bone-physics callbacks and
+savestate layout do not gain a second representation. The priority-16 source loop sees empty cold
+descriptors; collision-owned Fox/Puff chains continue through the exact `lb_8001044C` solver. The
+complete `lbspdisplay.c` owner is compiled under the already locked strict `-O3 -march=native`
+profile; adding `ftdynamics.c` itself to that profile was neutral/negative and was removed.
+
+Retained CPU-0 results, using the unchanged ordinary benchmark workload and digests, are:
+
+| Environments | Pre-cut complete FPS | Retained complete FPS | Change | Digest |
+|---:|---:|---:|---:|---|
+| 256 | 27,831 | 31,139 | +11.9% | `7579e5fc270dd660` |
+| 512 | 38,086 | 46,947 | +23.3% | `0bd4fdd9cfdec765` |
+
+The one-Match late-game/reset probe improved from about 21,100 to 39,200 complete FPS with digest
+`c3162f853421cb0b` and three ordinary resets over 1,024 frames. Removing strict optimization from
+the still-live `lbspdisplay.c` owner reduced the 512 result to 40,299 FPS, so that compiler boundary
+is retained with the source-owner cut rather than as unused scaffolding.
+
+Correctness evidence is the exact release binary used above: the complete 153-replay native gate
+retained 63 exact passes, 90 existing exact classifications, zero XPASS/fail/error, all output
+locks, and 1,415,476 compared frames. The cut adds no runtime allocation, new classification,
+character-id dispatch, or alternate gameplay state.

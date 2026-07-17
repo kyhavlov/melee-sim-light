@@ -960,6 +960,7 @@ Fighter_GObj* Fighter_Create(struct plAllocInfo* input)
 
     ftColl_8007B320(gobj);
 #ifdef MSL_CORE_HOSTED
+    ftCo_HeadlessPruneDynamics(fp);
     // Retain the source camera subject and callback slot: the renderer itself
     // is headless, but ftLib_80086A8C publishes gameplay-visible x221F_b0 from
     // the updated subject. See runtime/camera.c.
