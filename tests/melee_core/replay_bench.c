@@ -47,6 +47,7 @@ typedef struct Workload {
 
 typedef struct RunResult {
   double seconds;
+  double cpu_seconds;
   uint64_t resets;
 } RunResult;
 
@@ -60,6 +61,14 @@ typedef struct ResetSeed {
 static double seconds_now(void) {
   struct timespec now;
   if (clock_gettime(CLOCK_MONOTONIC_RAW, &now) != 0) {
+    return 0.0;
+  }
+  return (double)now.tv_sec + (double)now.tv_nsec / 1000000000.0;
+}
+
+static double cpu_seconds_now(void) {
+  struct timespec now;
+  if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &now) != 0) {
     return 0.0;
   }
   return (double)now.tv_sec + (double)now.tv_nsec / 1000000000.0;
@@ -236,6 +245,7 @@ static int run_workload(MslCoreBatch* batch, Workload* workload, uint32_t ticks,
   uint64_t resets = 0;
   uint32_t tick;
   double started = seconds_now();
+  double cpu_started = cpu_seconds_now();
   for (tick = 0; tick < ticks; ++tick) {
     uint32_t i;
     int any_reset = 0;
@@ -276,6 +286,7 @@ static int run_workload(MslCoreBatch* batch, Workload* workload, uint32_t ticks,
       return -1;
     }
   }
+  result->cpu_seconds = cpu_seconds_now() - cpu_started;
   result->seconds = seconds_now() - started;
   result->resets = resets;
   return 0;
@@ -289,6 +300,7 @@ static int run_sharded_pass(const MslCoreGameData* game_data, ReplayCase* cases,
                             RunResult* total) {
   uint32_t offset;
   total->seconds = 0.0;
+  total->cpu_seconds = 0.0;
   total->resets = 0;
   for (offset = 0; offset < logical_match_count; offset += resident_match_count) {
     uint32_t count = logical_match_count - offset;
@@ -322,6 +334,7 @@ static int run_sharded_pass(const MslCoreGameData* game_data, ReplayCase* cases,
       return -1;
     }
     total->seconds += measured.seconds;
+    total->cpu_seconds += measured.cpu_seconds;
     total->resets += measured.resets;
     msl_core_batch_destroy(batch);
     workload_free(&workload);
@@ -580,13 +593,17 @@ int main(int argc, char** argv) {
       resident_match_count == match_count ? "resident" : "sharded", case_count, match_count,
       resident_match_count, ticks, OBSERVATION_HISTORY, sched_getcpu(),
       (double)observation_bytes / (1024.0 * 1024.0));
-  printf("production seconds=%.6f match_frames=%" PRIu64 " fps=%.0f resets=%" PRIu64
-         " digest=%016" PRIx64 "\n",
-         production.seconds, (uint64_t)match_count * ticks,
-         (double)((uint64_t)match_count * ticks) / production.seconds, production.resets, digest);
-  printf("step_only seconds=%.6f match_frames=%" PRIu64 " fps=%.0f resets=%" PRIu64 "\n",
-         step_only.seconds, (uint64_t)match_count * ticks,
-         (double)((uint64_t)match_count * ticks) / step_only.seconds, step_only.resets);
+  printf("production seconds=%.6f cpu_seconds=%.6f match_frames=%" PRIu64
+         " fps=%.0f cpu_fps=%.0f resets=%" PRIu64 " digest=%016" PRIx64 "\n",
+         production.seconds, production.cpu_seconds, (uint64_t)match_count * ticks,
+         (double)((uint64_t)match_count * ticks) / production.seconds,
+         (double)((uint64_t)match_count * ticks) / production.cpu_seconds, production.resets,
+         digest);
+  printf("step_only seconds=%.6f cpu_seconds=%.6f match_frames=%" PRIu64
+         " fps=%.0f cpu_fps=%.0f resets=%" PRIu64 "\n",
+         step_only.seconds, step_only.cpu_seconds, (uint64_t)match_count * ticks,
+         (double)((uint64_t)match_count * ticks) / step_only.seconds,
+         (double)((uint64_t)match_count * ticks) / step_only.cpu_seconds, step_only.resets);
   result = 0;
 
 done:

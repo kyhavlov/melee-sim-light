@@ -317,3 +317,36 @@ XPASS/fail/error, and all output locks over 1,415,476 frames. The release valida
 from 8.303 seconds for the rejected context candidate to 6.752 seconds for the retained matrix
 candidate under the same 16-worker command; this is supporting evidence rather than the production
 throughput metric.
+
+Desktop activity on the documented CPU-8 target made short wall-clock A/B samples vary by more
+than the candidate effects. The benchmark now reports `CLOCK_THREAD_CPUTIME_ID` seconds and FPS
+beside the existing monotonic wall-clock figures. This adds two clock reads per timed pass, does not
+change the production loop or digest, and distinguishes scheduler preemption from actual execution
+time. It does not normalize boost-clock variation, so experimental owner sweeps use a 64-tick
+warmup and reversed adjacent ordering on an otherwise idle physical core. The published production
+contract and ordinary targets retain their eight-tick warmup and wall FPS as the primary metric.
+
+Three more whole-TU compiler candidates were bounded and removed:
+
+- `platform/native_dat.c` affected reset-owned archive translation but alternated from about 5%
+  ahead to 3% behind at 512 environments while the supposedly unaffected step-only pass moved by
+  similar amounts. This was boost/load noise, not a retained runtime win.
+- `sysdolphin/baselib/gobj.c` was 4.6% slower for complete frames and 4.7% slower for step-only on
+  the clean adjacent 512-environment pair. The scheduler translation remains on its strict source
+  profile.
+- `runtime/context.c` remains rejected as described above; its hot accessor cost requires an
+  ownership/call-boundary change rather than a higher optimization level on the callee TU.
+
+The second retained candidate adds `sysdolphin/baselib/fobj.c` to the strict `-O3 -march=native
+-mtune=native` allowlist. This is the source-owned FObj interpreter identified by the production
+profile. No fast-math, unsafe contraction, LTO, or source rewrite is involved. Stabilized,
+reverse-ordered true-resident CPU-0 comparisons against the matrix-only binary were:
+
+| Environments | Matrix-only complete / step FPS | FObj complete / step FPS | Complete / step change | Digest |
+|---:|---:|---:|---:|---:|
+| 256 | 20,221 / 21,027 | 21,777 / 22,448 | +7.7% / +6.8% | `7579e5fc270dd660` |
+| 512 | 28,286 / 29,127 | 29,026 / 29,969 | +2.6% / +2.9% | `0bd4fdd9cfdec765` |
+
+The complete release-binary gate again retained 63 exact passes, 90 existing classifications, zero
+XPASS/fail/error, and all output locks across 1,415,476 frames. Its 16-worker wall time was 6.229
+seconds. Release-profile native API/data/scheduler/batch smokes also passed.
