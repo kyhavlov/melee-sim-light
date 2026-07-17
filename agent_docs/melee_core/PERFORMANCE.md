@@ -284,3 +284,36 @@ Rejected candidates are recorded rather than retained: transparent huge-page adv
 256-environment reset about five times slower, and a file-backed copy-on-write template did not
 reduce proportional/private memory because relocation necessarily dirtied the pointer-bearing
 pages. Both experiments were removed.
+
+## Phase 9 pre-SoA profiling and compiler closure — 2026-07-16
+
+Hardware counters remain unavailable at `perf_event_paranoid=4`. An opt-in flat `gprof` build now
+disables sampling through GameData/Match setup and samples only the complete production pass; the
+normal benchmark binary and timed workload are unchanged. A true resident 256-environment sample
+identified hosted matrix concatenation as the largest individual source owner (7.8%), followed by
+strict square-root/trig helpers, JObj/FObj animation, GObj next-owner dispatch, collision/vector
+math, and camera/context accessors. This is sufficient owner evidence for the bounded compiler
+packet; instruction/cache counters remain deferred until the host permits `perf`.
+
+The first apparent candidate, adding `runtime/context.c` to the strict `-O3` allowlist, was rejected.
+Its initial noisy measurements looked positive and the full release replay gate passed, but an
+adjacent baseline/candidate alternation measured 14,552 versus 12,905 complete FPS. Optimizing the
+small accessor bodies does not remove the profiled cross-TU call boundary, so the allowlist change
+was removed.
+
+The first retained candidate adds only `platform/dolphin_mtx.c` to the existing strict `-O3
+-march=native -mtune=native` allowlist. Its hosted SDK matrix functions already name the retail
+paired-single `fmaf` boundaries explicitly, and the release profile continues to reject fast-math
+and unsafe contraction. Adjacent true-resident CPU-8 measurements were:
+
+| Environments | Baseline complete FPS | Candidate complete FPS | Change | Digest |
+|---:|---:|---:|---:|---|
+| 256 | 13,581 | 16,337 | +20.3% | `7579e5fc270dd660` |
+| 512 | 16,273 | 19,663 | +20.8% | `0bd4fdd9cfdec765` |
+
+The candidate's second 256 run reached 16,848 complete FPS with the same digest. The complete
+release-binary 153-replay gate retained 63 exact passes, 90 existing classifications, zero
+XPASS/fail/error, and all output locks over 1,415,476 frames. The release validation wall time fell
+from 8.303 seconds for the rejected context candidate to 6.752 seconds for the retained matrix
+candidate under the same 16-worker command; this is supporting evidence rather than the production
+throughput metric.

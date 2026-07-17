@@ -16,6 +16,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef MSL_CORE_GPROF
+extern void moncontrol(int mode);
+#endif
+
 enum { OBSERVATION_HISTORY = 128 };
 
 typedef struct ReplayCase {
@@ -499,6 +503,10 @@ int main(int argc, char** argv) {
   RunResult step_only;
   int result = 1;
 
+#ifdef MSL_CORE_GPROF
+  moncontrol(0);
+#endif
+
   if (argc < 3) {
     fprintf(stderr,
             "usage: %s DATA_ROOT MANIFEST [--matches N] [--match-frames N] "
@@ -538,12 +546,24 @@ int main(int argc, char** argv) {
   terminals = calloc((size_t)match_count * OBSERVATION_HISTORY, sizeof(*terminals));
   if (observations == NULL || terminals == NULL || load_cases(manifest, &cases, &case_count) != 0 ||
       msl_core_game_data_create(data_root, &game_data) != MSL_CORE_OK ||
-      reset_seed_create(game_data, cases, case_count, ticks, &reset_seed) != 0 ||
-      run_sharded_pass(game_data, cases, case_count, match_count, resident_match_count, ticks,
-                       warmup_ticks, 1, observations, terminals, &reset_seed, &production) != 0) {
+      reset_seed_create(game_data, cases, case_count, ticks, &reset_seed) != 0) {
     fprintf(stderr, "benchmark workload failed\n");
     goto done;
   }
+#ifdef MSL_CORE_GPROF
+  moncontrol(1);
+#endif
+  if (run_sharded_pass(game_data, cases, case_count, match_count, resident_match_count, ticks,
+                       warmup_ticks, 1, observations, terminals, &reset_seed, &production) != 0) {
+#ifdef MSL_CORE_GPROF
+    moncontrol(0);
+#endif
+    fprintf(stderr, "benchmark workload failed\n");
+    goto done;
+  }
+#ifdef MSL_CORE_GPROF
+  moncontrol(0);
+#endif
   digest = hash_bytes(digest, observations,
                       (size_t)match_count * OBSERVATION_HISTORY * sizeof(*observations));
   digest =

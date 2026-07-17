@@ -269,12 +269,16 @@ $(NATIVE_OBJ_DIR)/gameplay/src/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-c
 $(NATIVE_OBJ_DIR)/src/melee_core/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
 $(NATIVE_OBJ_DIR)/src/melee_core/runtime/savestate.o: NATIVE_CPPFLAGS += -D_GNU_SOURCE
 $(NATIVE_RUNTIME_CENSUS_OBJ): NATIVE_CPPFLAGS += -D_GNU_SOURCE
+ifeq ($(NATIVE_GPROF),1)
+$(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_GPROF
+endif
 $(WASM_OBJ_DIR)/gameplay/src/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
 $(WASM_OBJ_DIR)/src/melee_core/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
 
 ifeq ($(NATIVE_RELEASE_PROFILE),1)
 NATIVE_RELEASE_OPT_OBJS := \
 	$(NATIVE_OBJ_DIR)/src/melee_core/api.o \
+	$(NATIVE_OBJ_DIR)/src/melee_core/platform/dolphin_mtx.o \
 	$(NATIVE_OBJ_DIR)/src/melee_core/runtime/observation.o \
 	$(NATIVE_OBJ_DIR)/src/melee_core/runtime/relocation.o \
 	$(NATIVE_OBJ_DIR)/src/melee_core/runtime/savestate.o \
