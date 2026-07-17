@@ -2008,6 +2008,17 @@ representative 256 result from 32,848 to 34,411 complete FPS and the stabilized 
 from 42,261 to 42,995, with unchanged digests and the complete validation gate green. The hot/cold
 storage cut can use this owner-run boundary directly rather than adding another scheduler bridge.
 
+The first data-backed pose storage cut is retained as well. Immutable `GameData` loads the existing
+generated `MSLPART1` gameplay-joint closure and fighter construction removes animation and matrix
+publication from all presentation-only main/interpolation JObj subtrees. Missing character metadata
+falls back to the complete source graph, and defensive ancestor promotion makes incomplete metadata
+fail toward extra work rather than hidden gameplay. Representative CPU-0 throughput is now 40,384
+complete FPS at 256 and 51,671 at 512, improvements of 17.4% and 20.2% over the preceding owner-run
+baseline with unchanged digests and the full validation gate green. The next pose packet should
+promote the surviving live closure into a compact per-motion evaluator, with cached exact integer
+poses as the primary fast path and compact FObj/blend/dynamics evaluation as the fallback, instead
+of continuing pointer-graph micro-optimization.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to

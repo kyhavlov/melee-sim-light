@@ -513,3 +513,38 @@ CPU-0 workload, 256 environments improved from 32,848/32,944 complete/step-only 
 comparison improved from 42,261/42,445 to a repeated 42,995/43,142 (+1.7%/+1.6%) with digest
 `3fb5823d90657775`; a first candidate repeat was 42,164/42,985. The complete native gate retained 63
 exact passes, 90 existing exact classifications, and zero XPASS/fail/error over 1,415,476 frames.
+
+## Phase 9 extracted gameplay-pose closure — 2026-07-16
+
+The first scalar hot/cold representation cut now consumes the existing generated `MSLPART1`
+artifact in immutable `GameData`. Its part set is extracted from animation skeletons and the full
+gameplay consumer closure: hit and hurt capsules, ECB owners, capture/throw joints, article anchors,
+special descriptors, and every required ancestor. Hosted fighter construction marks the complete
+main and interpolation JObj trees cold, promotes the extracted live joints and their observed
+ancestors, removes already-created animation state from the remaining cold subtrees, and prevents
+later Figa/JObj attachment, interpretation, and render-matrix publication there. A defensive
+bottom-up promotion means incomplete metadata can only retain extra source work; it cannot hide a
+live descendant. A character without generated metadata uses the complete source graph unchanged,
+which is the current Peach/Puff path and the future-character admission fallback.
+
+This is the first retained data-backed representation cut, not a replay-specific omission or a
+character-id gameplay branch. `MSLPART1` is generated once by the established ISO extraction
+pipeline and remains outside Git. Its compact masks are included in the immutable game-data
+fingerprint. The retail/PPC graph is unchanged, and native/Wasm gameplay remains output-equivalent;
+Wasm currently takes the complete-graph fallback until the generated compact pose assets are added
+to its preload contract.
+
+On the representative CPU-0 workload, stabilized results are:
+
+| Environments | Previous complete/step FPS | Retained complete/step FPS | Complete change | Digest |
+|---:|---:|---:|---:|---|
+| 256 | 34,411 / 34,819 | 40,384 / 40,925 | +17.4% | `bdc54107c51fa3d7` |
+| 512 | 42,995 / 43,142 | 51,671 / 52,412 | +20.2% | `3fb5823d90657775` |
+
+The full native suite retains 63 exact passes, 90 existing exact classifications, zero
+XPASS/fail/error, and all 1,415,476 output locks. Native and Wasm smokes pass. The next pose packet
+should keep this extracted closure as the immutable admission table, but replace the surviving
+pointer-linked FObj/JObj traversal with a compact per-motion pose program: direct cached matrices
+for proven exact integer/unblended rows and a compact track/blend/dynamics evaluator for the cases
+that need live state. This is the first credible path to a step-change beyond repeated source-loop
+micro-optimization.

@@ -30,10 +30,16 @@
 enum {
     MSL_CORE_DATA_ROOT_CAPACITY = 1024,
     MSL_CORE_STAGE_GROUND_CAPACITY = 10,
+    MSL_CORE_GAMEPLAY_PART_CAPACITY = 256,
 #ifdef MSL_CORE_NATIVE
     MSL_CORE_PEACH_TURNIP_OWNER_CAPACITY = 16,
 #endif
 };
+
+typedef struct MslCoreGameplayParts {
+    uint8_t available;
+    uint8_t live[MSL_CORE_GAMEPLAY_PART_CAPACITY];
+} MslCoreGameplayParts;
 
 #ifdef MSL_CORE_NATIVE
 typedef struct MslCorePeachTurnipOwner {
@@ -58,6 +64,11 @@ typedef struct MslCoreGameData {
     HSD_ClassContext bootstrap_class;
     HSD_IDContext bootstrap_id;
     HSD_AObjContext bootstrap_aobj;
+    // Extracted MSLPART1 closes every gameplay-consumed fighter joint over
+    // its ancestors. Characters without an artifact retain the complete
+    // source JObj graph as the correctness fallback.
+    // tools/extraction/{extract_fighter_anims.py,extract_fighter_parts.py}
+    MslCoreGameplayParts gameplay_parts[FTKIND_MAX];
     MslMemoryContext memory;
 #ifdef MSL_CORE_NATIVE
     MslNativeDatContext native_dat;

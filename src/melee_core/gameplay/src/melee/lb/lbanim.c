@@ -91,6 +91,14 @@ void lbAnim_8001E6D8(HSD_JObj* jobj, FigaTree* tree, FigaTrack* track,
     PAD_STACK(8);
 
     if (jobj != NULL && frames != 0) {
+#ifdef MSL_CORE_HOSTED
+        // MSLPART1's ancestor-closed gameplay part set makes animation on
+        // marked joints presentation-only in the headless runtime.
+        // tools/extraction/extract_fighter_anims.py::_collect_needed_parts_from_moves
+        if (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD) {
+            return;
+        }
+#endif
         if (jobj->aobj != NULL) {
             HSD_AObjRemove(jobj->aobj);
         }
@@ -116,6 +124,11 @@ void lbAnim_8001E7E8(HSD_JObj* jobj, FigaTree* tree, FigaTrack* track,
     PAD_STACK(8);
 
     if (jobj != NULL && frames != 0) {
+#ifdef MSL_CORE_HOSTED
+        if (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD) {
+            return;
+        }
+#endif
         if (jobj->aobj != NULL) {
             HSD_AObjRemove(jobj->aobj);
         }

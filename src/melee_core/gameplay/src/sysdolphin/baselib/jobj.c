@@ -303,6 +303,11 @@ void HSD_JObjAddAnim(HSD_JObj* jobj, HSD_AnimJoint* an_joint,
                      HSD_MatAnimJoint* mat_joint, HSD_ShapeAnimJoint* sh_joint)
 {
     if (jobj != NULL) {
+#ifdef MSL_CORE_HOSTED
+        if (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD) {
+            return;
+        }
+#endif
         if (an_joint != NULL) {
             if (jobj->aobj != NULL) {
                 HSD_AObjRemove(jobj->aobj);
@@ -535,6 +540,11 @@ void JObjUpdateFunc(void* obj, enum_t type, HSD_ObjData* val)
 void HSD_JObjAnim(HSD_JObj* jobj)
 {
     if (jobj != NULL) {
+#ifdef MSL_CORE_HOSTED
+        if (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD) {
+            return;
+        }
+#endif
         HSD_JObjCheckDepend(jobj);
         HSD_AObjInterpretAnim(jobj->aobj, jobj, JObjUpdateFunc);
         HSD_RObjAnimAll(jobj->robj);
@@ -548,6 +558,11 @@ void JObjAnimAll(HSD_JObj* jobj)
 {
     HSD_JObj* child;
     if (jobj != NULL) {
+#ifdef MSL_CORE_HOSTED
+        if (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD) {
+            return;
+        }
+#endif
         HSD_JObjAnim(jobj);
         if (!(jobj->flags & JOBJ_INSTANCE)) {
             child = jobj->child;

@@ -6,6 +6,7 @@
 
 typedef struct MslCoreContextBinding {
     MslCoreMatch* match;
+    const MslCoreGameData* game_data;
     HSD_RandomContext* random;
     HSD_ObjAllocContext* objalloc;
     HSD_GObjContext* gobj;
@@ -27,6 +28,7 @@ static _Thread_local MslCoreContextBinding active;
 void msl_core_bind_game_data(MslCoreGameData* game_data)
 {
     active.match = NULL;
+    active.game_data = game_data;
     active.random = &game_data->bootstrap_random;
     active.objalloc = &game_data->bootstrap_objalloc;
     active.gobj = &game_data->bootstrap_gobj;
@@ -46,6 +48,7 @@ void msl_core_bind_game_data(MslCoreGameData* game_data)
 void msl_core_bind_match(MslCoreMatch* match)
 {
     active.match = match;
+    active.game_data = match->game_data;
     active.random = &match->random;
     active.objalloc = &match->objalloc;
     active.gobj = &match->gobj;
@@ -184,6 +187,19 @@ MslFtAnimScratch* msl_core_ft_anim_scratch(void)
 MslGroundState* msl_core_ground_state(void)
 {
     return &msl_core_source_match_state()->ground;
+}
+
+const unsigned char* msl_core_gameplay_part_mask(int fighter_kind)
+{
+    if ((unsigned) fighter_kind >= FTKIND_MAX) {
+        return NULL;
+    }
+    if (active.game_data == NULL) {
+        return NULL;
+    }
+    return active.game_data->gameplay_parts[fighter_kind].available
+               ? active.game_data->gameplay_parts[fighter_kind].live
+               : NULL;
 }
 
 void* msl_core_ground_stage_positions(void)

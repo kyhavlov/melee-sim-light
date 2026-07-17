@@ -33,6 +33,7 @@
 #include "runtime/match.h"
 #include "runtime/wire.h"
 
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -91,6 +92,115 @@ typedef struct MslCoreStageSpec {
 static int preload_supported_game_data(MslCoreGameData* game_data);
 #endif
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+typedef struct MslCoreGameplayPartSpec {
+    FighterKind kind;
+    const char* stem;
+} MslCoreGameplayPartSpec;
+
+static const MslCoreGameplayPartSpec gameplay_part_specs[] = {
+    { FTKIND_FOX, "fox" },       { FTKIND_CAPTAIN, "falcon" },
+    { FTKIND_SEAK, "sheik" },    { FTKIND_PEACH, "peach" },
+    { FTKIND_PURIN, "puff" },    { FTKIND_MARS, "marth" },
+    { FTKIND_ZELDA, "zelda" },   { FTKIND_FALCO, "falco" },
+};
+
+static uint16_t read_u16_le(const uint8_t* src)
+{
+    return (uint16_t) (src[0] | ((uint16_t) src[1] << 8));
+}
+
+static uint32_t read_u32_le(const uint8_t* src)
+{
+    return (uint32_t) src[0] | ((uint32_t) src[1] << 8) |
+           ((uint32_t) src[2] << 16) | ((uint32_t) src[3] << 24);
+}
+
+static int read_exact(FILE* file, void* dst, size_t size)
+{
+    return fread(dst, 1, size, file) == size ? 0 : -1;
+}
+
+static int load_gameplay_part_file(MslCoreGameData* game_data,
+                                   const MslCoreGameplayPartSpec* spec)
+{
+    uint8_t header[20];
+    uint8_t row[12];
+    char path[MSL_CORE_DATA_ROOT_CAPACITY + 64];
+    MslCoreGameplayParts* parts = &game_data->gameplay_parts[spec->kind];
+    FILE* file;
+    uint16_t local_count;
+    uint16_t anchor_count;
+    uint16_t i;
+    int path_length;
+    int result = -1;
+
+    path_length = snprintf(path, sizeof(path), "%s/../model_parts/%s.bin",
+                           game_data->root, spec->stem);
+    if (path_length < 0 || (size_t) path_length >= sizeof(path)) {
+        fprintf(stderr, "gameplay-part metadata path is too long for %s\n",
+                spec->stem);
+        return -1;
+    }
+    file = fopen(path, "rb");
+    if (file == NULL) {
+        // The complete source graph is the exact fallback for a character
+        // whose generated compact-pose substrate has not been extracted yet.
+        return errno == ENOENT ? 0 : -1;
+    }
+    if (read_exact(file, header, sizeof(header)) != 0 ||
+        memcmp(header, "MSLPART1", 8) != 0 || read_u32_le(header + 8) != 1)
+    {
+        goto done;
+    }
+    local_count = read_u16_le(header + 14);
+    anchor_count = read_u16_le(header + 16);
+    if (local_count == 0 || local_count > MSL_CORE_GAMEPLAY_PART_CAPACITY) {
+        goto done;
+    }
+    for (i = 0; i < local_count; ++i) {
+        uint16_t part;
+        if (read_exact(file, row, sizeof(row)) != 0) {
+            goto done;
+        }
+        part = read_u16_le(row);
+        if (part >= MSL_CORE_GAMEPLAY_PART_CAPACITY) {
+            goto done;
+        }
+        parts->live[part] = 1;
+    }
+    for (i = 0; i < anchor_count; ++i) {
+        if (read_exact(file, row, 8) != 0) {
+            goto done;
+        }
+    }
+    if (fgetc(file) != EOF) {
+        goto done;
+    }
+    parts->available = 1;
+    result = 0;
+
+done:
+    fclose(file);
+    if (result != 0) {
+        fprintf(stderr, "invalid gameplay-part metadata: %s\n", path);
+    }
+    return result;
+}
+
+static int load_gameplay_parts(MslCoreGameData* game_data)
+{
+    size_t i;
+    for (i = 0; i < ARRAY_SIZE(gameplay_part_specs); ++i) {
+        if (load_gameplay_part_file(game_data, &gameplay_part_specs[i]) != 0)
+        {
+            return -1;
+        }
+    }
+    return 0;
+}
+#endif
+
 static uint64_t fingerprint_game_data(const MslCoreGameData* game_data)
 {
     uint64_t hash = UINT64_C(1469598103934665603);
@@ -109,6 +219,14 @@ static uint64_t fingerprint_game_data(const MslCoreGameData* game_data)
         }
         cursor = entry->data;
         remaining = entry->size;
+        while (remaining-- != 0) {
+            hash = (hash ^ *cursor++) * UINT64_C(1099511628211);
+        }
+    }
+    for (i = 0; i < FTKIND_MAX; ++i) {
+        const uint8_t* cursor =
+            (const uint8_t*) &game_data->gameplay_parts[i];
+        size_t remaining = sizeof(game_data->gameplay_parts[i]);
         while (remaining-- != 0) {
             hash = (hash ^ *cursor++) * UINT64_C(1099511628211);
         }
@@ -618,6 +736,12 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
         return -1;
     }
     memcpy(game_data->root, data_root, length + 1);
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+    if (load_gameplay_parts(game_data) != 0) {
+        msl_memory_context_destroy(&game_data->memory);
+        return -1;
+    }
+#endif
     game_data->bootstrap_random.value = 1;
     game_data->bootstrap_random.active = &game_data->bootstrap_random.value;
     msl_core_bind_game_data(game_data);
@@ -1532,6 +1656,11 @@ static void publish_render_matrices_pass(HSD_JObj* jobj, u32 trsp_mask)
     if (jobj == NULL) {
         return;
     }
+#ifdef MSL_CORE_HOSTED
+    if (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD) {
+        return;
+    }
+#endif
     if (jobj->flags & JOBJ_INSTANCE) {
         // Visible instances publish both the instance root and referenced
         // child before traversing the shared tree.

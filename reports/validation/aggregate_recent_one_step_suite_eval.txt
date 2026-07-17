@@ -773,25 +773,25 @@ overall.float_norm_mae_p95: 0.00001698
 
 == replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz ==
 Records: 12914  Players/scored per record: 2  Total player-frames: 25828
-mismatch.action_id: 12 / 25828 (0.000465)
-mismatch.action_frame: 14 / 25828 (0.000542)
+mismatch.action_id: 11 / 25828 (0.000426)
+mismatch.action_frame: 13 / 25828 (0.000503)
 mismatch.on_ground: 4 / 25828 (0.000155)
 mismatch.facing: 3 / 25828 (0.000116)
 mismatch.stocks: 0 / 25828 (0.000000)
 mismatch.jumps_left: 4 / 25828 (0.000155)
 mismatch.is_dead: 0 / 25828 (0.000000)
 mismatch.hitlag: 9 / 25828 (0.000348)
-mismatch.hitstun: 7 / 25828 (0.000271)
+mismatch.hitstun: 6 / 25828 (0.000232)
 mismatch.l_cancel: 0 / 25828 (0.000000)
 mismatch.hurtbox_state: 2 / 25828 (0.000077)
 mismatch.ground_id: 2 / 25828 (0.000077)
-mismatch.animation_index: 11 / 25828 (0.000426)
-mismatch.instance_hit_by: 9 / 25828 (0.000348)
-mismatch.instance_id: 13 / 25828 (0.000503)
-mismatch.last_attack_landed: 5 / 25828 (0.000194)
+mismatch.animation_index: 10 / 25828 (0.000387)
+mismatch.instance_hit_by: 8 / 25828 (0.000310)
+mismatch.instance_id: 12 / 25828 (0.000465)
+mismatch.last_attack_landed: 4 / 25828 (0.000155)
 mismatch.combo_count: 2 / 25828 (0.000077)
-mismatch.last_hit_by: 10 / 25828 (0.000387)
-mismatch.state_flags: 21 / 129140 (0.000163)
+mismatch.last_hit_by: 9 / 25828 (0.000348)
+mismatch.state_flags: 19 / 129140 (0.000147)
 mismatch.item_exists: 6 / 193710 (0.000031)
 mismatch.item_type: 6 / 193710 (0.000031)
 mismatch.item_state: 0 / 193710 (0.000000)
@@ -800,21 +800,21 @@ mismatch.item_instance_id: 6 / 193710 (0.000031)
 ignored_mismatch.state_flags[4]&0x80: 19 / 25828 (0.000736)
 err.pos_x: mae=0.006181 p95=0.000000 max=96.037529
 err.pos_y: mae=0.012243 p95=0.000000 max=40.800812
-err.speed_air_x_self: mae=0.000116 p95=0.000000 max=2.062500
+err.speed_air_x_self: mae=0.000104 p95=0.000000 max=2.062500
 err.speed_ground_x_self: mae=0.000296 p95=0.000000 max=2.062500
-err.speed_y_self: mae=0.000640 p95=0.000000 max=3.400000
+err.speed_y_self: mae=0.000508 p95=0.000000 max=3.170000
 err.speed_x_attack: mae=0.000207 p95=0.000000 max=2.522034
-err.speed_y_attack: mae=0.000215 p95=0.000000 max=3.113040
-err.percent: mae=0.001200 p95=0.000000 max=7.559998
+err.speed_y_attack: mae=0.000094 p95=0.000000 max=2.435500
+err.percent: mae=0.000929 p95=0.000000 max=7.559998
 err.shield_hp: mae=0.000006 p95=0.000000 max=0.069679
 err.item_pos_x: mae=0.147358 p95=0.000000 max=55.080002
 err.item_pos_y: mae=0.015119 p95=0.000000 max=13.752838
 err.item_vel_x: mae=0.015385 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000062
-overall.discrete_mismatch: 152 / 1562594
-overall.strict_discrete_mismatch: 171 / 1562594
+overall.discrete_mismatch: 142 / 1562594
+overall.strict_discrete_mismatch: 161 / 1562594
 overall.ignored_discrete_mismatch: 19
-overall.float_norm_mae_p95: 0.00099374
+overall.float_norm_mae_p95: 0.00098310
 
 == replays/validation/battlefield_recent/LoyalDishonestWren.slpz ==
 Records: 4655  Players/scored per record: 2  Total player-frames: 9310
@@ -4372,7 +4372,7 @@ overall.ignored_discrete_mismatch: 0
 overall.float_norm_mae_p95: 0.00000000
 
 == suite summary ==
-overall.discrete_mismatch: 6850 / 102632442
-overall.strict_discrete_mismatch: 11853 / 102632442
+overall.discrete_mismatch: 6840 / 102632442
+overall.strict_discrete_mismatch: 11843 / 102632442
 overall.ignored_discrete_mismatch: 5003
-overall.float_norm_mae_p95: 5.19922154
+overall.float_norm_mae_p95: 5.19922138

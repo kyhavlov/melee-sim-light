@@ -900,6 +900,99 @@ static void Fighter_Create_Inline2(Fighter_GObj* gobj)
     }
 }
 
+#ifdef MSL_CORE_HOSTED
+static void Fighter_HeadlessMarkPoseCold(HSD_JObj* jobj)
+{
+    HSD_JObj* child;
+
+    if (jobj == NULL) {
+        return;
+    }
+    jobj->flags |= JOBJ_MSL_GAMEPLAY_COLD;
+    if (!(jobj->flags & JOBJ_INSTANCE)) {
+        for (child = jobj->child; child != NULL; child = child->next) {
+            Fighter_HeadlessMarkPoseCold(child);
+        }
+    }
+}
+
+static bool Fighter_HeadlessPromoteLivePoseAncestors(HSD_JObj* jobj)
+{
+    HSD_JObj* child;
+    bool live;
+
+    if (jobj == NULL) {
+        return false;
+    }
+    live = (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD) == 0;
+    if (!(jobj->flags & JOBJ_INSTANCE)) {
+        for (child = jobj->child; child != NULL; child = child->next) {
+            live |= Fighter_HeadlessPromoteLivePoseAncestors(child);
+        }
+    }
+    if (live) {
+        jobj->flags &= ~JOBJ_MSL_GAMEPLAY_COLD;
+    }
+    return live;
+}
+
+static void Fighter_HeadlessRemoveColdPoseAnim(HSD_JObj* jobj)
+{
+    HSD_JObj* child;
+
+    if (jobj == NULL) {
+        return;
+    }
+    if (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD) {
+        HSD_JObjRemoveAnimAll(jobj);
+        return;
+    }
+    if (!(jobj->flags & JOBJ_INSTANCE)) {
+        for (child = jobj->child; child != NULL; child = child->next) {
+            Fighter_HeadlessRemoveColdPoseAnim(child);
+        }
+    }
+}
+
+static void Fighter_HeadlessPrunePose(Fighter_GObj* gobj)
+{
+    Fighter* fp = GET_FIGHTER(gobj);
+    const unsigned char* live_parts = msl_core_gameplay_part_mask(fp->kind);
+    HSD_JObj* roots[] = { GET_JOBJ(gobj), fp->x8AC_animSkeleton };
+    int part_count;
+    int root;
+    int part;
+
+    if (live_parts == NULL) {
+        return;
+    }
+    for (root = 0; root < ARRAY_SIZE(roots); ++root) {
+        Fighter_HeadlessMarkPoseCold(roots[root]);
+    }
+    part_count = ftPartsTable[fp->kind]->parts_num;
+    // ftParts_SetupParts enforces the source MAX_FT_PARTS=140 bound; the
+    // generated part mask has one byte for every possible u8 part id.
+    for (part = 0; part < part_count; ++part) {
+        if (!live_parts[part]) {
+            continue;
+        }
+        if (fp->parts[part].joint != NULL) {
+            fp->parts[part].joint->flags &= ~JOBJ_MSL_GAMEPLAY_COLD;
+        }
+        if (fp->parts[part].x4_jobj2 != NULL) {
+            fp->parts[part].x4_jobj2->flags &= ~JOBJ_MSL_GAMEPLAY_COLD;
+        }
+    }
+    for (root = 0; root < ARRAY_SIZE(roots); ++root) {
+        // Keep this bottom-up promotion even though MSLPART1 is emitted as an
+        // ancestor closure: a malformed/incomplete optimization artifact can
+        // only retain extra source work, never hide a live descendant.
+        Fighter_HeadlessPromoteLivePoseAncestors(roots[root]);
+        Fighter_HeadlessRemoveColdPoseAnim(roots[root]);
+    }
+}
+#endif
+
 Fighter_GObj* Fighter_Create(struct plAllocInfo* input)
 {
     Fighter_GObj* gobj;
@@ -960,6 +1053,12 @@ Fighter_GObj* Fighter_Create(struct plAllocInfo* input)
 
     ftColl_8007B320(gobj);
 #ifdef MSL_CORE_HOSTED
+    // MSLPART1 is extracted from the animation skeleton plus every gameplay
+    // consumer (hit/hurt capsules, ECB, capture/throw and article anchors).
+    // Keep the source graph for its live closure and make presentation-only
+    // subtrees cold; characters without that artifact stay entirely source.
+    // tools/extraction/{extract_fighter_anims.py,extract_fighter_parts.py}
+    Fighter_HeadlessPrunePose(gobj);
     ftCo_HeadlessPruneDynamics(fp);
     // Retain the source camera subject and callback slot: the renderer itself
     // is headless, but ftLib_80086A8C publishes gameplay-visible x221F_b0 from
