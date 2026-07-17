@@ -548,3 +548,29 @@ pointer-linked FObj/JObj traversal with a compact per-motion pose program: direc
 for proven exact integer/unblended rows and a compact track/blend/dynamics evaluator for the cases
 that need live state. This is the first credible path to a step-change beyond repeated source-loop
 micro-optimization.
+
+## Phase 9 animation-owner compiler closure — 2026-07-16
+
+The first compact-pose experiment was intentionally rejected. It memory-mapped the existing
+ISO-extracted `SSANIM01`/`SSANIML1`/`SSANIMT1` artifacts and replaced source FObj decoding on
+zero-start, unit-rate, unblended integer frames with indexed values and source-derived per-frame
+publication masks. The complete Fox control replay remained exact, but the representative 256
+workload improved only from 40,384 to about 41,500 FPS (+2.8%). It retained the pointer JObj walk,
+RObj publication, dirty propagation, and matrix construction, while adding roughly one dense pose
+cache per supported character. That cost/complexity ratio is not a useful precursor to the later
+direct-matrix or SoA design, so the experiment was removed completely.
+
+The much smaller retained closure compiles the complete source `melee/ft/ftanim.c` owner under the
+existing strict `-O3 -march=native -mtune=native` profile. FObj, JObj, hosted matrix, and vector
+owners were already audited at that boundary; this removes the remaining unoptimized tree/control
+overhead without introducing a second animation representation. An adjacent CPU-0 comparison at
+256 environments measured 40,508/41,040 versus 42,385/42,973 complete/step-only FPS (+4.6%/+4.7%)
+with digest `bdc54107c51fa3d7`. The 512 result is 54,159/55,650 versus the prior retained
+51,671/52,412 (+4.8%/+6.2%) with digest `3fb5823d90657775`.
+
+Adding the much broader `fighter.c` TU changed the 256 production digest to
+`d4376876c81b0602` and was removed before validation. The retained `ftanim.c` release binary passed
+the complete 153-replay gate: 63 exact passes, 90 existing classifications, zero XPASS/fail/error,
+and all 1,415,476 output locks in 3.807 seconds. The next representation packet targets matrix/pose
+publication or map/collision state directly; further small cache or whole-TU sweeps are not the
+implementation queue.

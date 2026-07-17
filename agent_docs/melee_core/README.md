@@ -2019,6 +2019,14 @@ promote the surviving live closure into a compact per-motion evaluator, with cac
 poses as the primary fast path and compact FObj/blend/dynamics evaluation as the fallback, instead
 of continuing pointer-graph micro-optimization.
 
+A bounded follow-up rejected that narrow local-pose cache after it produced only a 2.8% complete
+gain while retaining matrix publication and adding a dense per-character cache. The cache was
+removed. Strictly optimizing the complete source `ftanim.c` owner is retained instead: representative
+CPU-0 throughput is 42,385 complete FPS at 256 and 54,159 at 512, with unchanged digests and the
+full 153-replay release gate green. `fighter.c` changed the production digest under the same profile
+and remains on the reference flags. The next packet must attack direct pose/matrix publication or
+map/collision representation rather than accumulating more animation micro-paths.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to
