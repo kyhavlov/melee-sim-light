@@ -75,6 +75,7 @@ int main(int argc, char** argv)
     } padded_state[MATCH_COUNT];
     MslCoreState other_state;
     MslCoreState snapshot_continuation;
+    MslCoreState dreamland_continuation;
     MslCoreState item_continuation;
     MslCoreState restore_guard;
     MslCoreInput item_tape[ITEM_TAPE_CAPACITY];
@@ -90,9 +91,11 @@ int main(int argc, char** argv)
     uint32_t copy_source = 0;
     void* snapshot = NULL;
     void* snapshot_b = NULL;
+    void* dreamland_snapshot = NULL;
     void* item_snapshot = NULL;
     size_t snapshot_size = 0;
     size_t snapshot_b_size = 0;
+    size_t dreamland_snapshot_size = 0;
     size_t snapshot_written = 0;
     size_t item_snapshot_size = 0;
     int item_tape_frames = 0;
@@ -198,6 +201,37 @@ int main(int argc, char** argv)
         {
             goto done;
         }
+    }
+    phase = "Dream Land ground-owner checkpoint";
+    if (msl_core_batch_match_save_size(batch, 3, &dreamland_snapshot_size) !=
+            MSL_CORE_OK ||
+        (dreamland_snapshot = malloc(dreamland_snapshot_size)) == NULL ||
+        msl_core_batch_save_match(batch, 3, dreamland_snapshot,
+                                  dreamland_snapshot_size, NULL) != MSL_CORE_OK ||
+        msl_core_batch_step_matches(batch, inputs, sizeof(inputs[0]), mask3,
+                                    sizeof(mask3[0])) != MSL_CORE_OK ||
+        msl_core_batch_write_state(batch, first, sizeof(first[0]), NULL, 0) !=
+            MSL_CORE_OK)
+    {
+        goto done;
+    }
+    dreamland_continuation = first[3];
+    if (msl_core_batch_restore_match(other_batch, 0, dreamland_snapshot,
+                                     dreamland_snapshot_size) != MSL_CORE_OK ||
+        msl_core_batch_step_matches(other_batch, &inputs[3], sizeof(inputs[3]),
+                                    NULL, 0) != MSL_CORE_OK ||
+        msl_core_batch_write_state(other_batch, &other_state,
+                                   sizeof(other_state), NULL, 0) != MSL_CORE_OK ||
+        memcmp(&other_state, &dreamland_continuation, sizeof(other_state)) != 0 ||
+        msl_core_batch_restore_match(batch, 3, dreamland_snapshot,
+                                     dreamland_snapshot_size) != MSL_CORE_OK)
+    {
+        goto done;
+    }
+    msl_core_batch_destroy(other_batch);
+    other_batch = NULL;
+    if (msl_core_batch_create(game_data, 1, &other_batch) != MSL_CORE_OK) {
+        goto done;
     }
     phase = "save first checkpoint";
     if (msl_core_batch_write_state(batch, first, sizeof(first[0]), NULL, 0) !=
@@ -672,6 +706,7 @@ done:
         fprintf(stderr, "batch API smoke failed during %s\n", phase);
     }
     free(item_snapshot);
+    free(dreamland_snapshot);
     free(snapshot_b);
     free(snapshot);
     msl_core_batch_destroy(other_batch);

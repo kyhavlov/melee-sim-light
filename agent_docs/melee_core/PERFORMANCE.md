@@ -18,10 +18,10 @@ Python and Arrow are absent from the timed workload.
 `tests/melee_core/replay_bench.c` mmaps every tape before timing, cycles them over logical
 environments, runs ordinary free-running gameplay, and writes `MslCoreObservation` plus
 `MslCoreTerminal` into a caller-owned 128-frame ring. It does not use validation comparison,
-per-frame replay RNG authority, stage-event teacher forcing, or viewer output. One resident match
-per shard starts from a real near-end savestate, so the timed region includes ordinary replay-end
-masked reset and restart. A second pass reports step-only throughput. The observation/terminal ring
-is hashed after timing.
+per-frame replay RNG authority, stage-event teacher forcing, or viewer output. The original Phase 7
+workload used one near-end checkpoint per shard; the representative Phase 9 contract below
+supersedes that opening-heavy workload. A second pass reports step-only throughput. The
+observation/terminal ring is hashed after timing.
 
 Build or refresh the cache:
 
@@ -463,3 +463,36 @@ Correctness evidence is the exact release binary used above: the complete 153-re
 retained 63 exact passes, 90 existing exact classifications, zero XPASS/fail/error, all output
 locks, and 1,415,476 compared frames. The cut adds no runtime allocation, new classification,
 character-id dispatch, or alternate gameplay state.
+
+## Phase 9 representative benchmark contract — 2026-07-16
+
+The official resident workload now assigns all 153 aggregate controller streams cyclically while
+staging a bounded bank of 32 free-running source states before timing. Seed selection first covers
+every stage and character present in the manifest, then fills the bank with evenly spaced aggregate
+cases. Those matches are advanced normally from match start to deterministic quarter-, half-, and
+three-quarter-game offsets; one seed begins 32 frames before replay end so even the 64-tick
+512-environment sample includes ordinary masked reset/restart. No replay row state, validation RNG,
+teacher forcing, or serialized generated artifact enters staging. Unseeded aggregate cases begin at
+ordinary match start, so the timed owner mix deliberately contains both openings and mature match
+states. The untimed bank contains 154,102 free-running environment-frames and keeps each complete
+command below ten seconds on the current baseline.
+
+This workload exposed a real savestate gap before producing a number. Source
+`zeroStageInfoArrays` initializes 64 ground-object slots, and Dream Land reads slot 7, but the decomp
+declaration exposed only four pointers followed by opaque padding. It happened to preserve the
+retail 32-bit byte extent, but hid the remaining live pointers from generated native/Wasm relocation.
+`StageInfo.x180` now expresses the source-used 64-pointer owner array. A native batch smoke saves a
+live Dream Land match, restores it into an independent environment, advances the Whispy/ground
+owners, and requires the same continuation. The full 153-replay native gate remains 63 exact passes,
+90 existing exact classifications, and zero XPASS/fail/error; native and Wasm savestate smokes pass.
+
+The representative CPU-0 baseline replacing the opening-heavy Phase 9 numbers is:
+
+| Environments | Complete FPS | Step-only FPS | Resets | Digest |
+|---:|---:|---:|---:|---|
+| 256 | 32,848 | 32,944 | 2 | `bdc54107c51fa3d7` |
+| 512 | 41,567 | 39,096 | 4 | `3fb5823d90657775` |
+
+The seed-coverage locks are stage mask `000000019000010c` and character mask
+`00000000004c8286`. These results are the comparison point for the scalar hot/cold storage cut;
+older ordinary-workload digests remain useful only for adjacent forensic experiments.

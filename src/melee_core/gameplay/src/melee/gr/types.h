@@ -83,8 +83,14 @@ struct StageInfo {
     Vec3 x130, x13C, x148, x154, x160, x16C;
     DynamicsDesc* (*x178)(int);
     bool (*x17C)(Vec3*, int, HSD_JObj*);
-    HSD_GObj* x180[4];
-    u8 x190_pad[0x280 - 0x190];
+    // Ground_801BFFB0 clears 64 entries and stage owners address map ids
+    // beyond three (Dream Land reads map id 7). The former four-entry
+    // declaration plus opaque padding happened to preserve the 32-bit byte
+    // extent, but hid live pointers from hosted savestate relocation and
+    // made the source loop overrun the typed array on 64-bit hosts.
+    // refs/melee/src/melee/gr/ground.c::{zeroStageInfoArrays,
+    // Ground_801C2BA4,Ground_801C2BBC}
+    HSD_GObj* x180[64];
     HSD_JObj* x280[261];
     void* x694[4];
     void* x6A4;

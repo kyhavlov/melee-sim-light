@@ -1986,10 +1986,19 @@ supported-domain consumer graph is presentation-only, while retaining collision-
 chains by source JObj/hurt-capsule identity. Together with strict optimization of the still-live
 `lbspdisplay.c` owner, the unchanged ordinary workload now reaches 31,139 complete FPS at 256 and
 46,947 at 512 with identical digests; a late-game/reset probe improves from about 21.1k to 39.2k.
-All 153 replay locks remain unchanged. Profiling also exposed that the ordinary short resident run
-mostly measures the match opening, so representative aggregate-state staging is a prerequisite for
-the final 500k lock. The next storage packet must use that corrected owner mix and promote canonical
-gameplay state rather than merely widening the two-Match source frontier.
+All 153 replay locks remain unchanged.
+
+The benchmark prerequisite is now closed. Before timing, a bounded 32-state bank is advanced with
+ordinary free-running inputs to deterministic quarter/mid/late offsets selected across every
+supported character and stage; the logical batch still cycles all 153 aggregate streams, and a
+near-end state guarantees reset/restart work in the bounded sample. The complete command remains
+under ten seconds. This exposed and fixed the decomp's hidden `StageInfo.x180` ground-object slots:
+the source initializes 64 entries and Dream Land reads slot 7, so generated native/Wasm savestate
+relocation now sees all 64 pointers. A focused independent Dream Land restore/continuation lock,
+native/Wasm smokes, and the full validation suite are green. The representative CPU-0 baseline is
+32,848 complete FPS at 256 and 41,567 at 512, with digests `bdc54107c51fa3d7` and
+`3fb5823d90657775`. The next storage packet must promote canonical gameplay state rather than merely
+widening the two-Match source frontier.
 
 ## Command runtime policy
 
