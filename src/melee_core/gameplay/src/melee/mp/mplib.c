@@ -921,29 +921,46 @@ void mpLibLoad(MapCollData* coll_data)
     int dynamic_count;
     int i;
 
-    joint_prev = NULL;
-    groundCollVtx = HSD_MemAlloc(0xC000);
-    HSD_ASSERT(412, groundCollVtx);
 #ifdef MSL_CORE_NATIVE
-    groundCollLine =
-        HSD_MemAllocReloc(0x3000, MSL_RELOC_COLL_LINE,
-                          0x3000 / sizeof(CollLine), sizeof(CollLine), 0);
-#else
-    groundCollLine = HSD_MemAlloc(0x3000);
-#endif
-    HSD_ASSERT(413, groundCollLine);
-#ifdef MSL_CORE_NATIVE
-    groundCollJoint =
-        HSD_MemAllocReloc(0x3400, MSL_RELOC_COLL_JOINT,
-                          0x3400 / sizeof(CollJoint), sizeof(CollJoint), 0);
-#else
-    groundCollJoint = HSD_MemAlloc(0x3400);
-#endif
-    HSD_ASSERT(414, groundCollJoint);
+    // Native Match construction has the complete stage archive available and
+    // never admits collision records after mpLibLoad. Retail's fixed byte
+    // ceilings reserve space for the largest disc stage in the one global
+    // arena; duplicating those ceilings in every hosted Match is dead state.
+    // Preserve the source record layouts and order while sizing each dense
+    // owner to this stage's extracted DAT counts.
+    // refs/melee/src/melee/mp/mplib.c::mpLibLoad
+    // data/stages/bin/*.bin::MSLSTG01 collision topology audit
     grDynamicAttr_801CA0B4();
     if (coll_data == NULL) {
         coll_data = &mpLib_803BF760;
     }
+    HSD_ASSERT(411, coll_data->vert_count > 0 && coll_data->line_count > 0 &&
+                        coll_data->joint_count > 0);
+    groundCollVtx = HSD_MemAlloc((ssize_t) coll_data->vert_count *
+                                 sizeof(*groundCollVtx));
+    groundCollLine =
+        HSD_MemAllocReloc((ssize_t) coll_data->line_count *
+                             sizeof(*groundCollLine),
+                         MSL_RELOC_COLL_LINE, coll_data->line_count,
+                         sizeof(*groundCollLine), 0);
+    groundCollJoint =
+        HSD_MemAllocReloc((ssize_t) coll_data->joint_count *
+                             sizeof(*groundCollJoint),
+                         MSL_RELOC_COLL_JOINT, coll_data->joint_count,
+                         sizeof(*groundCollJoint), 0);
+#else
+    groundCollVtx = HSD_MemAlloc(0xC000);
+    groundCollLine = HSD_MemAlloc(0x3000);
+    groundCollJoint = HSD_MemAlloc(0x3400);
+    grDynamicAttr_801CA0B4();
+    if (coll_data == NULL) {
+        coll_data = &mpLib_803BF760;
+    }
+#endif
+    joint_prev = NULL;
+    HSD_ASSERT(412, groundCollVtx);
+    HSD_ASSERT(413, groundCollLine);
+    HSD_ASSERT(414, groundCollJoint);
 #ifdef MSL_CORE_NATIVE
     {
         MslMpLibState* state = &msl_core_source_match_state()->mp_lib;

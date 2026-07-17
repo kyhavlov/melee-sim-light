@@ -611,3 +611,29 @@ zero XPASS/fail/error, and all 1,415,476 output locks. This packet is still scal
 compact extracted stage-line arrays plus cross-environment collision execution, preserving the
 source admission/publication order and dynamic-platform fallback. Presentation camera state is the
 next whole-owner cull candidate; leaf caches and isolated arithmetic rewrites are not the queue.
+
+## Phase 9 large replicated-state cull — 2026-07-16
+
+The optimization unit is now explicitly split between state residency and frame time. Native
+fighter animation translation already parses immutable `PlFxAJ.dat` subarchives directly, so the
+two retail 32 KiB ARAM/file scratch buffers allocated for every fighter had no supported hosted
+consumer. The native owner is removed completely; the PPC path and Nana's unsupported scratch-copy
+path remain source-shaped. Hosted `mpLibLoad` also sizes its dense `CollVtx`, `CollLine`, and
+`CollJoint` arrays from the selected stage's DAT counts instead of duplicating retail's maximum-disc-
+stage byte ceilings in every Match. Final Destination publishes one collision epoch without ten
+presentation-only stage-model animation walks.
+
+The ordinary singles arena/savestate payload falls from 1,927,968 to 1,656,588 bytes, a 271,380-byte
+(14.1%) reduction. The reached four-player maximum falls from 2,743,864 to 2,080,864 bytes, a
+663,000-byte (24.2%) reduction; the removed fighter scratch pool alone eliminates 589,824 bytes at
+that census maximum. The selected FD collision graph now owns 320 bytes of `CollJoint` records and
+544 bytes of `CollLine` records instead of the former 13,280/12,288-byte maxima.
+
+This is intentionally not reported as a throughput win: the current representative workload still
+shards through sixteen resident Matches, so those cold bytes were not in its timed working set. Its
+digests remain `bdc54107c51fa3d7` and `3fb5823d90657775`, with adjacent CPU-0 results of 47,887/48,534
+FPS at 256 and 61,534/62,955 FPS at 512. All 153 replay locks remain unchanged (63 exact passes, 90
+existing exact classifications, zero XPASS/fail/error), and native smoke/save-restore gates pass.
+This cut is retained because true 256/512 residency and the 4k–16k memory target cannot tolerate
+replicated cold retail ceilings. It does not defer the required frame-time architecture: the next
+throughput packet must replace a dominant complete owner with canonical cross-environment execution.

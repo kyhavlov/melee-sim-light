@@ -2027,6 +2027,16 @@ full 153-replay release gate green. `fighter.c` changed the production digest un
 and remains on the reference flags. The next packet must attack direct pose/matrix publication or
 map/collision representation rather than accumulating more animation micro-paths.
 
+The first large replicated-state cut removes two unused 32 KiB native animation-archive scratch
+buffers per fighter and sizes hosted collision pools from the selected stage's DAT counts. Ordinary
+singles Match storage falls by 14.1%; the reached four-player maximum falls by 24.2%, with unchanged
+replay locks, digests, allocation behavior, and save/restore. Final Destination also replaces ten
+presentation stage-model animation procs with one collision-epoch publication. Because the current
+benchmark shards over sixteen resident Matches, these cold-state removals do not claim a material
+frame-rate increase. The next acceptance unit is a dominant frame-time owner executed from compact
+canonical state across environments; leaf caches, additional compiler sweeps, and isolated scalar
+arithmetic changes are closed as an implementation queue.
+
 ## Command runtime policy
 
 Routine development commands should normally complete in under five seconds and must be scoped to

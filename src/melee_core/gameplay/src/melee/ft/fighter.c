@@ -226,7 +226,9 @@ void Fighter_800679B0(void)
 void Fighter_FirstInitialize_80067A84(void)
 {
     Fighter_800679B0();
+#ifndef MSL_CORE_NATIVE
     HSD_ObjAllocInit(&fighter_x59C_alloc_data, 0x8000, 0x20);
+#endif
 }
 
 void Fighter_LoadCommonData(void)
@@ -3350,8 +3352,10 @@ void Fighter_Unload_8006DABC(void* user_data)
     HSD_LObjRemoveAll(fp->x588);
     Player_80031FB0(fp->player_id, fp->x221F_b4);
 
+#ifndef MSL_CORE_NATIVE
     HSD_ObjFree(&fighter_x59C_alloc_data, fp->x59C);
     HSD_ObjFree(&fighter_x59C_alloc_data, fp->x5A0);
+#endif
     HSD_ObjFree(&fighter_parts_alloc_data, fp->parts);
     HSD_ObjFree(&fighter_dobj_list_alloc_data, fp->dobj_list.data);
     HSD_ObjFree(&fighter_x2040_alloc_data, fp->x203C.data);

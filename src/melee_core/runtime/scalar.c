@@ -427,13 +427,17 @@ enum_t Stage_80225194(void)
     return bound_stage_match->config.stage_id;
 }
 
-static void headless_ground_anim_proc(HSD_GObj* gobj)
+static void headless_static_ground_epoch_proc(HSD_GObj* gobj)
 {
-    // Exact gameplay-bearing projection of Ground_801C1CD0. Material updates
-    // and the per-stage presentation callback are absent on FD, but every map
-    // GObj must still publish one collision epoch after advancing its JObj.
+    (void) gobj;
+    // Final Destination's collision archive is static. Ground_801C1CD0's
+    // HSD_JObjAnimAll walk and material callback only advance the ten stage
+    // model graphs; no collision vertex, stage point, or gameplay callback is
+    // sourced from those animations. Retain one epoch publication so mpColl's
+    // cached-contact invalidation still observes a stage frame, without
+    // scheduling ten renderer-model walks.
     // refs/melee/src/melee/gr/ground.c::Ground_801C1CD0
-    HSD_JObjAnimAll(gobj->hsd_obj);
+    // data/stages/final_destination.json::{segments,platform_motion}
     mpColl_804D64AC += 1;
 }
 
@@ -1041,7 +1045,10 @@ static int match_construct(MslCoreMatch* match,
             memset(gp->x20, 0xFF, sizeof(gp->x20));
             GObj_InitUserData(gobj, 3, NULL, gp);
             HSD_GObjObject_80390A70(gobj, HSD_GObj_804D7849, root);
-            HSD_GObj_SetupProc(gobj, headless_ground_anim_proc, 1);
+            if (i == 0) {
+                HSD_GObj_SetupProc(gobj, headless_static_ground_epoch_proc,
+                                   1);
+            }
             if (i == 7) {
                 msl_fd_background_init(gobj);
             }

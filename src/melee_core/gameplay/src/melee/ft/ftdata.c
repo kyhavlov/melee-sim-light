@@ -1926,8 +1926,21 @@ void ftData_80085A14(FighterKind kind)
 void ftData_80085B10(Fighter* fp)
 {
     FighterKind kind = fp->kind;
+#ifdef MSL_CORE_NATIVE
+    // Hosted animation graphs are translated once from the immutable
+    // PlFxAJ.dat subarchive below. Retail's two 32 KiB ARAM/file scratch
+    // buffers are therefore never a native gameplay owner; the only source
+    // branch that copies another fighter's scratch belongs to Nana, outside
+    // the supported domain. Do not replicate 64 KiB of dead state per
+    // fighter in every Match.
+    // refs/melee/src/melee/ft/ftdata.c::{ftData_80085A14,
+    //   ftData_80085CD8,ftData_80085E50,ftData_80086060}
+    fp->x59C = NULL;
+    fp->x5A0 = NULL;
+#else
     fp->x59C = HSD_ObjAlloc(&fighter_x59C_alloc_data);
     fp->x5A0 = HSD_ObjAlloc(&fighter_x59C_alloc_data);
+#endif
     fp->x5A4 = NULL;
     fp->x5A8 = NULL;
     fp->x58C = ftData_Table_Unk0[kind].count;
@@ -1942,8 +1955,13 @@ void ftData_80085B98(Fighter* fp, int arg1, int arg2)
     struct Fighter_WaitAnimData* temp_r3;
 
     temp_r30 = (u32) ftData_UnkIntPairs[fp->kind].data;
+#ifdef MSL_CORE_NATIVE
+    fp->x59C = NULL;
+    fp->x5A0 = NULL;
+#else
     fp->x59C = HSD_ObjAlloc(&fighter_x59C_alloc_data);
     fp->x5A0 = HSD_ObjAlloc(&fighter_x59C_alloc_data);
+#endif
     fp->x5A4 = 0;
     fp->x5A8 = 0;
     fp->x58C = ftData_UnkIntPairs[fp->kind].count;
