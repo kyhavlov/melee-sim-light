@@ -99,3 +99,28 @@ read-only executable constant rather than mutable data copied into every GameDat
 The 500k path remains complete compact pose/geometry ownership, aligned AoSoA hot state, fixed
 homogeneous phase loops, and AVX2/AVX-512 kernels. Scalar compatibility bridges, partial caches,
 and isolated leaf tuning are not acceptable substitutes for those deletion boundaries.
+
+## Exact compiler and source-pool closure — 2026-07-18
+
+The current source was re-audited at Og/O1/O2 rather than assuming the former O3-only sweep was
+complete. Blanket Og/O1 changed both benchmark digests and O1 crashed a full-suite worker; blanket
+O2 exposed an unresolved unsupported-Ness reference. Measured O1/O2 variants of `fighter.c`,
+`ftdynamics.c`, `gobj.c`, camera, `ftaction.c`, and supported stage owners were exact only when
+neutral/slower. Replay-trained PGO over the existing exact allowlist preserved digests but
+alternated within noise at 512 and was neutral at 256, so no profile artifact or workflow remains.
+
+`lb_00B0.c` remained 5–9% faster in isolation at O1/O2, but release validation revealed that its
+apparent `ExpertWorthlessFinch` failure was byte-for-byte identical to the committed rebuilt
+release binary. Bisecting the existing allowlist identified `mpcoll.c -O3` as that stale
+release-only owner. The retained replacement restores `mpcoll.c` to the source profile and compiles
+`lb_00B0.c` at O2. The release gate changes from 63 PASS / 89 CLASSIFIED / 1 FAIL to 63 / 90 / 0,
+while adjacent A/B improves about +2.6% at 256 and +3.0% at 512 with unchanged digests.
+
+A temporary full-suite pool census then measured construction and replay high water and was
+removed. The uniform `HSD_ObjAllocPreallocateAll` floor reserved fighter construction pools, unused
+list and Rvalue owners, and oversized small pools in every Match. Explicit runtime-owner reserves
+delete that state while retaining conservative animation, matrix, process, item, and Sheik-chain
+bounds. Ordinary singles falls 921,656 to 685,888 arena bytes (-25.6%); maximum supported
+construction falls 1,266,476 to 997,972 (-21.2%); maximum pool storage falls 757,540 to 542,072
+(-28.4%). Alternating 512 measurements are neutral (-0.27%, +0.33%), so this is retained as a
+memory-capacity result.

@@ -6,7 +6,7 @@ baseline. The instrumented profiler identifies owners; its FPS is not a throughp
 
 ## Provenance
 
-- Runtime commit: `bae97324d032c5d00fa23d1e56ce965a4ecdc229`
+- Runtime commit: `9021688409efdcbb5091402b3747da55c554e684`
 - Date: 2026-07-18
 - Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 6.17 x86-64
 - Compiler: GCC 13.3.0
@@ -14,7 +14,10 @@ baseline. The instrumented profiler identifies owners; its FPS is not a throughp
   128-frame observation history, resident batch, eight warmup ticks
 - Release flags: the root Makefile's strict `native-release` profile with `-march=native
   -mtune=native`
-- Correctness gate: 153/153 accepted (`63 PASS`, `90 CLASSIFIED`, no XPASS/fail/error)
+- Ordinary native correctness gate: 153/153 accepted (`63 PASS`, `90 CLASSIFIED`, no
+  XPASS/fail/error)
+- Rebuilt release-profile gate: 153/153 accepted (`63 PASS`, `90 CLASSIFIED`, no
+  XPASS/fail/error)
 - Native source/smoke and Wasm smoke gates: green
 
 ## Uninstrumented throughput
@@ -26,20 +29,50 @@ make benchmark-9950x3d-vcache-512
 
 | Batch | Production FPS | Fresh-run range | Digest |
 |---:|---:|---:|---|
-| 256 | 61,830 | 61,826–61,835 | `bdc54107c51fa3d7` |
-| 512 | 83,013 | 82,756–84,651 | `3fb5823d90657775` |
+| 256 | 66,474 | 66,004–66,943 | `bdc54107c51fa3d7` |
+| 512 | 89,950 | 89,868–90,032 | `3fb5823d90657775` |
 
-The 512 figure is the median of three consecutive runs. The 256 figure is the midpoint of two
-consecutive runs and agrees with the retained 61.8k baseline. Compare changes with repeated,
-alternating control/candidate runs when the expected gain is close to ordinary run variance.
+Compare changes with repeated, alternating control/candidate runs when the expected gain is close
+to ordinary run variance.
 
-## Subsystem profile
+## Latest retained changes
+
+Commits `a46cc202` and `90216884` replace the stale `mpcoll.c -O3` admission with exact
+`lb_00B0.c -O2` and compact sealed per-Match source pools. The release binary accepts all 153
+cases and preserves both benchmark digests.
+
+Adjacent same-host compiler A/B measured +2.6% at 256 (63,071 to 64,699) and about +3.0% at 512
+(84,425 control mean to 86,938 candidate mean). The subsequent pool cut was neutral at 512: the
+two reversed pairs differed by -0.27% and +0.33%.
+
+Ordinary singles Match arena/savestate payload is 685,888 bytes, down from 921,656 (-25.6%). The
+maximum supported four-player arena is 997,972 bytes, down from 1,266,476 (-21.2%). Maximum source
+pool storage is 542,072 bytes, down from 757,540 (-28.4%); the 512-environment lifecycle smoke
+reports 0.36 GiB initialized state plus the caller-owned 0.06 GiB observation ring.
+
+The refreshed profiler keeps digest `3fb5823d90657775`. Its main ownership shift is
+intentional: restoring exact `mpcoll.c` raises `Fighter_procMap` from 12.56% to 14.72%, while the
+new O2 transform owner and lower total cycle count reduce animation and ProcessHit costs.
+
+| Current owner | Contract share |
+|---|---:|
+| `step` | 97.75% |
+| `observation` | 1.93% |
+| `terminal` | 0.31% |
+| `Fighter_8006A360` | 19.71% |
+| `Fighter_ProcessHit_8006D1EC` | 14.76% |
+| `Fighter_procMap` | 14.72% |
+| `Fighter_8006D9AC` | 8.55% |
+| `Camera_8002B3D4` | 4.13% |
+
+## Reference subsystem profile at `6399f75b`
 
 ```sh
 make subsystem-profile
 ```
 
-The dedicated executable uses the identical resident match loop, per-match scheduler order,
+The tables below preserve the detailed profile captured when the profiler was introduced. The
+dedicated executable uses the identical resident match loop, per-match scheduler order,
 inputs, output writes, and compiler optimization policy as the production workload. RDTSCP hooks
 and counters exist only in that executable. Its output digest is
 `3fb5823d90657775`, identical to the uninstrumented 512 run. Nested tables overlap their parent;
