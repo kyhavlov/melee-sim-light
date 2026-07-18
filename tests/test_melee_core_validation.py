@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.melee_core.validate_replay import (
+from tools.validation.validate_replay import (
     DEFAULT_CHARACTERS,
     DEFAULT_CLASSIFICATIONS,
     MAX_AUTO_WORKERS,

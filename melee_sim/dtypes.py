@@ -4,14 +4,21 @@ from functools import lru_cache
 
 import numpy as np
 
-from . import _native
-
 MAX_PLAYERS = 4
+
+_SIZES = {
+    "controller_input": 112,
+    "input": 52,
+    "match_config": 52,
+    "compare": 1022,
+    "gamestate": 980,
+    "terminal": 16,
+}
 
 
 @lru_cache(maxsize=1)
 def sizes() -> dict[str, int]:
-    return dict(_native.sizes())
+    return dict(_SIZES)
 
 
 def raw_buffer(batch_size: int, kind: str) -> np.ndarray:
@@ -70,6 +77,11 @@ def input_player_dtype() -> np.dtype:
             ("c_y", "i1"),
             ("l", "u1"),
             ("r", "u1"),
+            ("nml_main_x", "i1"),
+            ("nml_main_y", "i1"),
+            ("nml_c_x", "i1"),
+            ("nml_c_y", "i1"),
+            ("nml_valid", "u1"),
         ],
         align=False,
     )
@@ -86,8 +98,9 @@ def match_player_config_dtype() -> np.dtype:
         [
             ("char_id", "u1"),
             ("team_id", "u1"),
-            ("facing", "u1"),
-            ("_pad0", "u1"),
+            ("facing_and_port", "u1"),
+            ("costume_id", "u1"),
+            ("handicap", "u1"),
         ],
         align=False,
     )
@@ -100,11 +113,20 @@ def match_config_dtype() -> np.dtype:
             ("stage_id", "<u4"),
             ("frame_id", "<i4"),
             ("frame_pre_random_seed", "<u4"),
+            ("initial_random_seed", "<u4"),
             ("match_damage_ratio", "<f4"),
             ("num_players", "u1"),
             ("is_teams", "u1"),
+            ("friendly_fire", "u1"),
             ("stock_count", "u1"),
             ("camera_mode", "u1"),
+            ("online_fnmsubs_zero", "u1"),
+            ("brawl_offscreen_damage", "u1"),
+            ("freeze_dead_up_fall_physics", "u1"),
+            ("ucf_cardinals_1_0_enabled", "u1"),
+            ("ucf_shield_sdi_enabled", "u1"),
+            ("ucf_sdi_enabled", "u1"),
+            ("stage_event_streams", "u1"),
             ("players", match_player_config_dtype(), (MAX_PLAYERS,)),
         ],
         align=False,
@@ -245,14 +267,6 @@ def compare_dtype() -> np.dtype:
         ],
         align=False,
     )
-
-
-def _opaque_dtype(kind: str) -> np.dtype:
-    return np.dtype((np.void, sizes()[kind]))
-
-
-def seed_dtype() -> np.dtype:
-    return _opaque_dtype("seed")
 
 
 @lru_cache(maxsize=1)

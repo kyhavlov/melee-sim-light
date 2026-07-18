@@ -59,6 +59,7 @@ class Buffers:
             raise ValueError("obs_dim must be non-negative")
 
         action_kind = "controller_input" if action_format == "controller" else "input"
+        terminal = dtypes.raw_sequence_buffer(length, batch_size, "terminal")
         return cls(
             length=length,
             batch_size=batch_size,
@@ -69,10 +70,10 @@ class Buffers:
             compare=dtypes.raw_buffer(batch_size, "compare"),
             viewpoint=np.zeros(batch_size, dtype=np.uint8),
             gamestate=dtypes.raw_sequence_buffer(length, batch_size, "gamestate", extra_frames=1),
-            terminal=dtypes.raw_sequence_buffer(length, batch_size, "terminal"),
+            terminal=terminal,
             obs=np.zeros((length + 1, batch_size, int(obs_dim)), dtype=np.float32),
             reward=np.zeros((length, batch_size), dtype=np.float32),
-            done=np.zeros((length, batch_size), dtype=np.uint8),
+            done=dtypes.view_raw_sequence(terminal, dtypes.terminal_dtype())["done"],
             reset_mask=np.zeros((length, batch_size), dtype=np.uint8),
         )
 

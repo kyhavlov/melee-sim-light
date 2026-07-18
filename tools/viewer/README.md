@@ -24,7 +24,7 @@ make viewer-build
 Build the full registry data root before building:
 
 ```bash
-uv run python -m melee_sim.extract_data --iso /path/to/SSBM.iso
+uv run python -m tools.data.extract --iso /path/to/SSBM.iso
 ```
 
 `make viewer-build` writes a self-contained browser asset tree under
@@ -60,6 +60,6 @@ make viewer OPEN=0
 ## Trace Format
 
 `MSLTRACE1` is documented in `tools/viewer/TRACE_FORMAT.md`. It is compact JSON
-with sparse-delta frame, input, and item streams. Modelplay, live viewer export,
+with sparse-delta frame, input, and item streams. Live viewer export,
 and downstream users should write this format rather than the renderer's
 internal replay shape.

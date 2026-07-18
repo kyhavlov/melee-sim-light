@@ -8,7 +8,7 @@ RAW_DIR="$DATA_ROOT/raw"
 
 if [[ ! -d "$RAW_DIR" ]]; then
   echo "error: extracted raw game data not found: $RAW_DIR" >&2
-  echo "Set MSL_DATA_DIR, or run python -m melee_sim.extract_data --iso /path/to/SSBM.iso." >&2
+  echo "Set MSL_DATA_DIR, or run python -m tools.data.extract --iso /path/to/SSBM.iso." >&2
   exit 1
 fi
 DATA_ROOT="$(cd "$DATA_ROOT" && pwd)"
@@ -32,7 +32,7 @@ fi
 # packaging. The ignored raw profile contains only the supported fighter,
 # stage, effect, and common archives produced by the normal extraction
 # contract; no game asset is copied into the repository source tree.
-make --no-print-directory -f "$ROOT/src/melee_core/Makefile" \
+make --no-print-directory -f "$ROOT/Makefile" \
   viewer-schema wasm "${make_jobs[@]}" MSL_DATA_DIR="$DATA_ROOT" DATA="$RAW_DIR"
 
 mkdir -p "$OUT_DIR"

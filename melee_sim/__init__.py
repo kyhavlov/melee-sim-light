@@ -29,7 +29,6 @@ from .dtypes import (
     gamestate_player_dtype,
     gamestate_randall_dtype,
     gamestate_stage_dtype,
-    seed_dtype,
     terminal_dtype,
 )
 from .env_batch import EnvBatch
@@ -63,7 +62,6 @@ __all__ = [
     "gamestate_player_dtype",
     "gamestate_randall_dtype",
     "gamestate_stage_dtype",
-    "seed_dtype",
     "terminal_dtype",
     "neutral_controller",
     "write_controller",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tools.slippi.suite_io import load_suite, suite_manifest_paths
+from tools.validation.suite_io import load_suite, suite_manifest_paths
 
 
 @pytest.mark.parametrize("focused_suite", ("marth", "sheik", "falcon", "zelda"))

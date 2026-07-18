@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 from peppi_py import _read_slippi
 
-from tools.melee_core.prepare_replay_benchmark import _cached_frame_count
-from tools.melee_core.validate_replay import NATIVE, load_native
-from tools.slippi.slpz import replay_path_for_peppi
+from tools.validation.prepare_replay_benchmark import _cached_frame_count
+from tools.validation.validate_replay import NATIVE, load_native
+from tools.validation.slpz import replay_path_for_peppi
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,4 +47,3 @@ def test_native_preprocessor_writes_packed_benchmark_case(tmp_path: Path) -> Non
     assert stored_frames == frame_count
     assert output.stat().st_size == header_size + input_size * frame_count
     assert _cached_frame_count(output) == frame_count
-

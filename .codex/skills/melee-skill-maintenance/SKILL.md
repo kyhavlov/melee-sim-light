@@ -21,8 +21,8 @@ Other Melee-domain skills should trigger lightweight maintenance automatically: 
 - Current schema sizes, cache versions, generated table versions, or report field churn.
 - Current simulator helper/function names unless they are stable public commands central to the workflow.
 - Temporary bridges, rejected experiments, or one-replay workarounds.
-- Claims that should live in source comments, tests, `agent_docs/SPEC.md`,
-  `agent_docs/DATA_CONTRACT.md`, or the active worklog.
+- Claims that should live in source comments, tests, active architecture docs,
+  or the active worklog.
 
 ## Update Procedure
 1. Decide whether the new knowledge is stable Melee-domain knowledge or current simulator state.

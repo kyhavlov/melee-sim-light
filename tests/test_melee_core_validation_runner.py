@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
-from tools.melee_core import validate_replay
+from tools.validation import validate_replay
 
 
 ROOT = Path(__file__).resolve().parents[1]

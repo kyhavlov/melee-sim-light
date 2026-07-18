@@ -4,214 +4,72 @@ import re
 from pathlib import Path
 
 
-def _js_export_int(source: str, name: str) -> int:
-    match = re.search(rf"export const {re.escape(name)} = (\d+);", source)
-    assert match is not None, f"missing JS export: {name}"
-    return int(match.group(1))
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def _js_object_int(source: str, object_name: str, field: str) -> int:
-    match = re.search(rf"export const {re.escape(object_name)} = \{{(.*?)\}};", source, re.S)
-    assert match is not None, f"missing JS object: {object_name}"
-    body = match.group(1)
-    field_match = re.search(rf"\b{re.escape(field)}:\s*(\d+)", body)
-    assert field_match is not None, f"missing JS field: {object_name}.{field}"
-    return int(field_match.group(1))
-
-
-def _js_const_ints(source: str) -> dict[str, int]:
+def _constants(source: str) -> dict[str, int]:
     return {
         name: int(value)
         for name, value in re.findall(r"export const ([A-Z0-9_]+) = (\d+);", source)
     }
 
 
-def _live_supported_characters(schema: str) -> list[tuple[int, str]]:
-    consts = _js_const_ints(schema)
-    match = re.search(
-        r"export const SUPPORTED_CHARACTERS = Object\.freeze\(\[(.*?)\]\);",
-        schema,
-        re.S,
-    )
-    assert match is not None, "missing SUPPORTED_CHARACTERS"
-    characters: list[tuple[int, str]] = []
-    for id_token, label in re.findall(
-        r'id:\s*([A-Z0-9_]+|\d+),\s*label:\s*"([^"]+)"',
-        match.group(1),
-    ):
-        char_id = int(id_token) if id_token.isdigit() else consts[id_token]
-        characters.append((char_id, label))
-    return characters
-
-
-def _viewer_external_char_map(adapter_source: str) -> dict[int, int]:
-    return {
-        int(internal_id): int(external_id)
-        for internal_id, external_id in re.findall(
-            r"if \(internalCharId === (\d+)\) return (\d+);", adapter_source
+def _characters(source: str) -> list[tuple[int, str]]:
+    constants = _constants(source)
+    match = re.search(r"SUPPORTED_CHARACTERS = Object\.freeze\(\[(.*?)\]\);", source, re.S)
+    assert match is not None
+    return [
+        (constants[token] if token in constants else int(token), label)
+        for token, label in re.findall(
+            r'id:\s*([A-Z0-9_]+|\d+),\s*label:\s*"([^"]+)"', match.group(1)
         )
-    }
-
-
-def _viewer_zip_by_external_id(animation_cache: str) -> list[str]:
-    match = re.search(
-        r"const characterZipUrlByExternalId = \[(.*?)\];",
-        animation_cache,
-        re.S,
-    )
-    assert match is not None, "missing characterZipUrlByExternalId"
-    return re.findall(r'"([^"]+\.zip)"', match.group(1))
-
-
-def _asset_manifest_filenames(manifest: str) -> set[str]:
-    filenames = []
-    for line in manifest.splitlines():
-        if not line or line.startswith("#"):
-            continue
-        filenames.append(line.split("\t", 1)[0])
-    assert len(filenames) == len(set(filenames)), "duplicate viewer asset manifest filenames"
-    return set(filenames)
-
-
-def _viewer_wasm_required_chars(build_wasm: str) -> set[str]:
-    match = re.search(r"viewer_chars=\(([^)]*)\)", build_wasm)
-    assert match is not None, "missing build_wasm.sh viewer_chars"
-    return set(match.group(1).split())
-
-
-def _data_key_from_character_label(label: str) -> str:
-    if label == "Captain Falcon":
-        return "falcon"
-    return label.lower().replace(" ", "_")
-
-
-def test_supported_character_registry_mirrors_are_exact() -> None:
-    import melee_sim as msl
-    from tools.extraction.char_registry import CHARS
-
-    root = Path(__file__).resolve().parents[1]
-    expected_internal = {name: info.internal_id for name, info in CHARS.items()}
-    assert {member.name.lower(): int(member) for member in msl.Character} == expected_internal
-
-    c_registry = (root / "src/char_registry.h").read_text(encoding="utf-8")
-    c_rows = {
-        name: symbol.lower()
-        for symbol, name in re.findall(
-            r"MSL_CHAR_ID_([A-Z0-9_]+),\s*\"([a-z0-9_]+)\"", c_registry
-        )
-    }
-    assert c_rows == {name: name for name in CHARS}
-
-    schema = (root / "tools/viewer/live/schema.js").read_text(encoding="utf-8")
-    viewer_rows = {
-        _data_key_from_character_label(label): internal_id
-        for internal_id, label in _live_supported_characters(schema)
-    }
-    assert viewer_rows == expected_internal
-
-
-def test_live_viewer_stage_state_schema_matches_native_binding() -> None:
-    # Webplay passes STAGE_STATE_SIZE as the C out_stride for
-    # msl_batch_debug_write_stage_state. If this gets stale, native returns ENOSPC (28) when the
-    # match starts.
-    root = Path(__file__).resolve().parents[1]
-    schema = (root / "tools/viewer/live/schema.js").read_text()
-
-    msl_binding = __import__("msl_binding")
-    assert _js_export_int(schema, "STAGE_STATE_SIZE") == int(msl_binding.sizes()["stage_state"])
-
-    assert _js_object_int(schema, "stageStateOffsets", "randallExists") == 28
-    assert _js_object_int(schema, "stageStateOffsets", "randallX") == 30
-    assert _js_object_int(schema, "stageStateOffsets", "randallY") == 34
-
-
-def test_live_viewer_hitbox_display_schema_matches_native_debug_rows() -> None:
-    # Webplay renders Sheik Chain from msl_batch_debug_hitboxes_world rows:
-    # [x, y, z, radius, damage, u16_0, u16_1, u16_3, bone_part_id, enabled].
-    root = Path(__file__).resolve().parents[1]
-    schema = (root / "tools/viewer/live/schema.js").read_text()
-    build_wasm = (root / "tools/viewer/live/build_wasm.sh").read_text()
-
-    assert _js_export_int(schema, "MAX_PLAYERS") == 4
-    assert _js_export_int(schema, "MAX_HITBOXES") == 4
-    assert _js_export_int(schema, "HITBOX_SIZE") == 40
-    assert _js_export_int(schema, "HITBOX_PLAYER_SIZE") == 160
-    assert _js_export_int(schema, "HITBOXES_SIZE") == 640
-    assert _js_object_int(schema, "hitboxOffsets", "x") == 0
-    assert _js_object_int(schema, "hitboxOffsets", "radius") == 12
-    assert _js_object_int(schema, "hitboxOffsets", "damage") == 16
-    assert _js_object_int(schema, "hitboxOffsets", "bonePartId") == 32
-    assert _js_object_int(schema, "hitboxOffsets", "enabled") == 36
-    assert "_msl_batch_debug_hitboxes_world" in build_wasm
-
-
-def test_live_viewer_supported_characters_have_packaged_animation_zips() -> None:
-    root = Path(__file__).resolve().parents[1]
-    schema = (root / "tools/viewer/live/schema.js").read_text()
-    viewer_adapter = (root / "tools/viewer/live/viewer_adapter.js").read_text()
-    animation_cache = (root / "tools/viewer/slippi-viewer/src/viewer/animationCache.ts").read_text()
-    manifest = (root / "tools/viewer/assets/character_zips.tsv").read_text()
-
-    external_char_map = _viewer_external_char_map(viewer_adapter)
-    zip_by_external_id = _viewer_zip_by_external_id(animation_cache)
-    packaged_filenames = _asset_manifest_filenames(manifest)
-    expected_zip_by_label = {
-        "Captain Falcon": "captainFalcon.zip",
-        "Falco": "falco.zip",
-        "Fox": "fox.zip",
-        "Marth": "marth.zip",
-        "Sheik": "sheik.zip",
-        "Zelda": "zelda.zip",
-    }
-
-    missing: list[str] = []
-    for internal_id, label in _live_supported_characters(schema):
-        external_id = external_char_map.get(internal_id, internal_id)
-        assert external_id < len(zip_by_external_id), (
-            f"{label} maps to unknown external id {external_id}"
-        )
-        zip_filename = Path(zip_by_external_id[external_id]).name
-        assert zip_filename == expected_zip_by_label[label]
-        if zip_filename not in packaged_filenames:
-            missing.append(f"{label}: {zip_filename}")
-
-    assert not missing, (
-        "live viewer character dropdown has unpackaged animation zips: " + ", ".join(missing)
-    )
-
-
-def test_live_viewer_transform_characters_map_to_animation_assets() -> None:
-    root = Path(__file__).resolve().parents[1]
-    schema = (root / "tools/viewer/live/schema.js").read_text()
-    viewer_adapter = (root / "tools/viewer/live/viewer_adapter.js").read_text()
-    trace_adapter = (root / "tools/viewer/msltrace1.js").read_text()
-
-    supported = dict(_live_supported_characters(schema))
-    assert supported[2] == "Captain Falcon"
-    assert supported[7] == "Sheik"
-    assert supported[19] == "Zelda"
-
-    # Live Compare traces expose simulator internal ids. Slippi animation zips are keyed by
-    # external ids, so characters with divergent public ids need explicit mapping.
-    for adapter_source in (viewer_adapter, trace_adapter):
-        external = _viewer_external_char_map(adapter_source)
-        assert external[2] == 0
-        assert external[7] == 19
-        assert external[19] == 18
-
-
-def test_live_viewer_supported_characters_are_required_by_wasm_build() -> None:
-    root = Path(__file__).resolve().parents[1]
-    schema = (root / "tools/viewer/live/schema.js").read_text()
-    build_wasm = (root / "tools/viewer/live/build_wasm.sh").read_text()
-
-    required_chars = _viewer_wasm_required_chars(build_wasm)
-    missing = [
-        _data_key_from_character_label(label)
-        for _internal_id, label in _live_supported_characters(schema)
-        if _data_key_from_character_label(label) not in required_chars
     ]
 
-    assert not missing, (
-        "live viewer dropdown chars missing from WASM data preflight: " + ", ".join(missing)
+
+def _external_ids(source: str) -> dict[int, int]:
+    return {
+        int(internal): int(external)
+        for internal, external in re.findall(
+            r"if \(internalCharId === (\d+)\) return (\d+);", source
+        )
+    }
+
+
+def test_live_viewer_supported_domain_and_assets() -> None:
+    schema = (ROOT / "tools/viewer/live/schema.js").read_text()
+    adapter = (ROOT / "tools/viewer/live/viewer_adapter.js").read_text()
+    animation_cache = (
+        ROOT / "tools/viewer/slippi-viewer/src/viewer/animationCache.ts"
+    ).read_text()
+    manifest = (ROOT / "tools/viewer/assets/character_zips.tsv").read_text()
+    expected = {
+        1: "Fox",
+        2: "Captain Falcon",
+        7: "Sheik",
+        9: "Peach",
+        15: "Jigglypuff",
+        18: "Marth",
+        19: "Zelda",
+        22: "Falco",
+    }
+    assert dict(_characters(schema)) == expected
+
+    zip_match = re.search(
+        r"characterZipUrlByExternalId = \[(.*?)\];", animation_cache, re.S
     )
+    assert zip_match is not None
+    zips = re.findall(r'"([^"]+\.zip)"', zip_match.group(1))
+    packaged = {
+        line.split("\t", 1)[0]
+        for line in manifest.splitlines()
+        if line and not line.startswith("#")
+    }
+    external = _external_ids(adapter)
+    for internal_id in expected:
+        filename = Path(zips[external.get(internal_id, internal_id)]).name
+        assert filename in packaged
+
+
+def test_generated_viewer_schema_is_current() -> None:
+    generated = (ROOT / "tools/viewer/live/schema.generated.js").read_text()
+    assert generated.startswith("// Generated by tools/viewer/schema.c; do not edit.")

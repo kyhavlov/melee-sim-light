@@ -36,10 +36,10 @@ uv run python -m melee_sim.extract_data --iso /path/to/SSBM.iso [--out-dir /path
 ```
 
 By default, the extraction command creates a local `data/` root. Original retail archives needed
-by the source-shaped core live under `data/raw/`; generated JSON/bin tables live alongside that
-directory. The ISO, raw archives, and generated outputs are ignored and are never repository
-assets. A deterministic manifest binds both representations to the source ISO, and rerunning the
-same command validates the root without rebuilding unchanged data.
+by the source-shaped core live under `data/raw/`; deterministic generated runtime artifacts live
+under the same data root. The ISO, extracted archives, and generated outputs are ignored and are
+never repository assets. A deterministic manifest binds the extraction to the source ISO, and
+rerunning the same command validates the root without rebuilding unchanged data.
 
 `EnvBatch()` and the source-shaped core both load source-checkout `data/` by default. To use or
 share another data root, set `MSL_DATA_DIR` or pass `data_dir` to the current Python API:
@@ -52,8 +52,8 @@ MSL_DATA_DIR=/path/to/data uv run python train.py
 env = msl.EnvBatch(batch_size=1024, data_dir="/path/to/data")
 ```
 
-The resolved data directory is process-global native runtime state, so choose it
-before creating simulator batches.
+Each `EnvBatch` owns immutable game data loaded from its data root. Matches in that batch share the
+game data, and different batches may use different compatible roots.
 
 ## Examples
 
@@ -65,7 +65,7 @@ The Python API is built around two objects:
 - `Buffers` owns the reusable NumPy arrays for match config, controller input, observations, and outputs. Reusing one buffer object avoids per-step allocation.
 
 A typical RL loop creates one `EnvBatch`, writes controller inputs into its bound buffers, and calls `env.step()`:
-  
+
 ```python
 import melee_sim as msl
 
@@ -119,27 +119,34 @@ EnvBatch(
 env.buffers -> Buffers
 env.allocate_buffers(*, observation: str = "native", action_format: str = "controller", obs_dim: int = 0) -> Buffers
 env.configure_match(buffers: Buffers | None = None, config: MatchConfig | None = None, **overrides) -> None
-env.configure_matches(configs: Sequence[MatchConfig], *, env_ids: Sequence[int] | np.ndarray | None = None, **overrides) -> None
+env.configure_matches(configs: Sequence[MatchConfig], *, env_ids: Sequence[int] | np.ndarray | None = None) -> None
 env.bind(buffers: Buffers) -> None
 env.reset_all() -> None
+env.reset_masked(*, write_initial_observation: bool = True) -> None
 env.step(*, write_outputs: bool = True, write_compare: bool = False, max_frame_id: int = -1) -> None
+env.write_compare() -> None
+env.copy_matches_from(source: EnvBatch, destination_indices, source_indices) -> None
+env.save(match_index: int) -> bytes
+env.restore(match_index: int, state: bytes | bytearray | memoryview) -> None
 env.reset_cursor() -> None
 
-PlayerConfig(character: int | Character, team_id: int | None = None, facing: int | None = None)
+PlayerConfig(character: int | Character, team_id: int | None = None, facing: int | None = None,
+             controller_port: int | None = None, costume: int = 0, handicap: int = 9)
 MatchConfig(stage: int | Stage = Stage.FINAL_DESTINATION, players: tuple[PlayerConfig, ...] | None = None, ...)
 ```
 
 ### C Native API
 
-The native API is built around one simulator object plus caller-owned arrays:
+The native API is built around immutable game data, one simulator batch, and caller-owned arrays:
 
-- `MslBatch` owns the simulator instance: batch size, player count, loaded data, and current simulator state.
-- Match configs describe the starting state for each lane in the batch.
-- `MslInput` arrays provide previous/current controller inputs for each lane.
-- Output arrays such as `MeleeGamestate` receive observations after stepping.
-- Each batch function takes a pointer plus a stride, so integrations can use their own fixed memory layout and reuse it every frame.
+- `MslCoreGameData` owns the extracted game data shared by every match in a batch.
+- `MslCoreBatch` owns independent mutable match states.
+- `MslCoreMatchConfig` rows describe resets, while `MslCoreInput` rows provide controller input.
+- Output arrays receive observations, terminal flags, or complete validation state.
+- Batch functions accept byte strides and optional masks so integrations can reuse their own fixed layouts.
 
-A typical native loop creates one `MslBatch`, initializes match configs, writes controller inputs each frame, calls `msl_batch_step_input()`, and writes observations into a caller-owned output array:
+A typical native loop creates the shared game data and batch, resets its matches, steps one input
+row, and writes policy-facing observations:
 
 ```c
 #include <stdint.h>
@@ -149,50 +156,66 @@ A typical native loop creates one `MslBatch`, initializes match configs, writes 
 #include "src/api.h"
 
 int main(void) {
-  enum { BATCH = 2, PLAYERS = 2 };
+  enum { BATCH = 2 };
 
-  MslBatch* batch = msl_batch_create(BATCH, PLAYERS);
-  if (batch == NULL) {
+  MslCoreGameData* game_data = NULL;
+  MslCoreBatch* batch = NULL;
+  if (msl_core_game_data_create("data/raw", &game_data) != MSL_CORE_OK ||
+      msl_core_batch_create(game_data, BATCH, &batch) != MSL_CORE_OK) {
+    msl_core_game_data_destroy(game_data);
     return 1;
   }
 
-  MslMatchConfig configs[BATCH];
+  MslCoreMatchConfig configs[BATCH];
   memset(configs, 0, sizeof(configs));
   for (int i = 0; i < BATCH; i++) {
-    configs[i].stage_id = MSL_STAGE_ID_FINAL_DESTINATION;
+    configs[i].stage_id = MSL_CORE_STAGE_FINAL_DESTINATION;
     configs[i].frame_id = -123;
-    configs[i].players[0].char_id = MSL_CHAR_ID_FOX;
-    configs[i].players[1].char_id = MSL_CHAR_ID_FALCO;
+    configs[i].frame_pre_random_seed = 1;
+    configs[i].initial_random_seed = 1;
+    configs[i].match_damage_ratio = 1.0f;
+    configs[i].num_players = 2;
+    configs[i].stock_count = 4;
+    configs[i].ucf_shield_sdi_enabled = 1;
+    configs[i].ucf_sdi_enabled = 1;
+    configs[i].players[0].char_id = MSL_CORE_CHARACTER_FOX;
+    configs[i].players[0].handicap = 9;
+    configs[i].players[1].char_id = MSL_CORE_CHARACTER_FALCO;
+    configs[i].players[1].handicap = 9;
   }
 
-  if (msl_batch_init_match(batch, (const uint8_t*)configs, sizeof(configs[0])) != 0) {
-    msl_batch_destroy(batch);
+  if (msl_core_batch_reset_matches(batch, configs, sizeof(configs[0]), NULL, 0) !=
+      MSL_CORE_OK) {
+    msl_core_batch_destroy(batch);
+    msl_core_game_data_destroy(game_data);
     return 1;
   }
 
-  MslInput prev[BATCH];
-  MslInput input[BATCH];
-  memset(prev, 0, sizeof(prev));
+  MslCoreInput input[BATCH];
   memset(input, 0, sizeof(input));
+  input[0].p[0].main_x = 80;
 
-  if (msl_batch_step_input(batch, (const uint8_t*)prev, sizeof(prev[0]),
-                           (const uint8_t*)input, sizeof(input[0])) != 0) {
-    msl_batch_destroy(batch);
+  if (msl_core_batch_step_matches(batch, input, sizeof(input[0]), NULL, 0) !=
+      MSL_CORE_OK) {
+    msl_core_batch_destroy(batch);
+    msl_core_game_data_destroy(game_data);
     return 1;
   }
 
   uint8_t viewpoint[BATCH] = {0};
-  MeleeGamestate out[BATCH];
-  if (melee_batch_write_gamestate(batch, viewpoint, sizeof(viewpoint[0]), (uint8_t*)out,
-                                  sizeof(out[0])) != 0) {
-    msl_batch_destroy(batch);
+  MslCoreObservation out[BATCH];
+  if (msl_core_batch_write_observation(batch, viewpoint, sizeof(viewpoint[0]), out,
+                                       sizeof(out[0]), NULL, 0) != MSL_CORE_OK) {
+    msl_core_batch_destroy(batch);
+    msl_core_game_data_destroy(game_data);
     return 1;
   }
 
   printf("frame=%d p0_action=%u p0_x=%f\n", out[0].frame_id,
          (unsigned)out[0].slots[0].action_id, out[0].slots[0].pos_x);
 
-  msl_batch_destroy(batch);
+  msl_core_batch_destroy(batch);
+  msl_core_game_data_destroy(game_data);
   return 0;
 }
 ```
@@ -200,21 +223,31 @@ int main(void) {
 Useful C signatures:
 
 ```c
-MslBatch* msl_batch_create(int batch_size, int num_players);
-void msl_batch_destroy(MslBatch* batch);
+MslCoreResult msl_core_game_data_create(const char* data_root, MslCoreGameData** out);
+void msl_core_game_data_destroy(MslCoreGameData* game_data);
+MslCoreResult msl_core_batch_create(const MslCoreGameData* game_data, uint32_t match_count,
+                                    MslCoreBatch** out);
+void msl_core_batch_destroy(MslCoreBatch* batch);
 
-int msl_batch_init_match(MslBatch* batch, const uint8_t* config_bytes,
-                         size_t config_stride_bytes);
-int msl_batch_init_match_masked(MslBatch* batch, const uint8_t* config_bytes,
-                                size_t config_stride_bytes, const uint8_t* mask_bytes,
-                                size_t mask_stride_bytes);
+MslCoreResult msl_core_batch_reset_matches(MslCoreBatch* batch, const MslCoreMatchConfig* configs,
+                                           size_t config_stride, const uint8_t* mask,
+                                           size_t mask_stride);
+MslCoreResult msl_core_batch_step_matches(MslCoreBatch* batch, const MslCoreInput* inputs,
+                                          size_t input_stride, const uint8_t* mask,
+                                          size_t mask_stride);
+MslCoreResult msl_core_batch_write_observation(const MslCoreBatch* batch,
+                                               const uint8_t* viewpoints,
+                                               size_t viewpoint_stride,
+                                               MslCoreObservation* output,
+                                               size_t output_stride,
+                                               const uint8_t* mask, size_t mask_stride);
 
-int msl_batch_step_input(MslBatch* batch, const uint8_t* prev_input_bytes,
-                         size_t prev_input_stride_bytes, const uint8_t* input_bytes,
-                         size_t input_stride_bytes);
-int melee_batch_write_gamestate(const MslBatch* batch, const uint8_t* viewpoint_player_bytes,
-                                size_t viewpoint_player_stride_bytes, uint8_t* out_bytes,
-                                size_t out_stride_bytes);
+MslCoreResult msl_core_batch_match_save_size(const MslCoreBatch* batch,
+                                             uint32_t match_index, size_t* required_size);
+MslCoreResult msl_core_batch_save_match(const MslCoreBatch* batch, uint32_t match_index,
+                                        void* buffer, size_t buffer_size, size_t* written);
+MslCoreResult msl_core_batch_restore_match(MslCoreBatch* batch, uint32_t match_index,
+                                           const void* buffer, size_t buffer_size);
 ```
 
 ## Viewer
@@ -242,7 +275,7 @@ make viewer
 
 Open `http://127.0.0.1:8001/tools/viewer/`.
 
-Modelplay and the live viewer both write `*.msltrace.json`. The trace format is
+The live viewer writes `*.msltrace.json`. The trace format is
 documented in `tools/viewer/TRACE_FORMAT.md`; it is compact JSON with
 sparse-delta frame, input, and item streams. `make viewer-build` downloads the
 display assets into `build/cache/viewer-zips/` on first use and
@@ -258,65 +291,70 @@ Core runtime calls:
 
 | call | purpose |
 | --- | --- |
-| `msl_batch_create(batch_size, num_players)` | create independent match lanes |
-| `msl_batch_destroy(batch)` | free native runtime storage |
-| `msl_batch_init_match(batch, configs, stride)` | reset every lane from `MslMatchConfig` |
-| `msl_batch_init_match_masked(batch, configs, stride, mask, mask_stride)` | reset selected lanes |
-| `msl_batch_step_input(batch, prev, prev_stride, input, input_stride)` | advance every lane one frame |
-| `melee_batch_write_gamestate(batch, viewpoints, viewpoint_stride, out, out_stride)` | write one `MeleeGamestate` per lane |
-| `msl_batch_write_terminal(batch, out, stride, max_frame_id)` | write `MslTerminal` done flags |
-| `msl_batch_reseed_seed(...)` | restore replay/validation seed state |
+| `msl_core_game_data_create(data_root, out)` | load immutable extracted game data |
+| `msl_core_batch_create(game_data, count, out)` | create independent matches sharing that data |
+| `msl_core_batch_reset_matches(batch, configs, stride, mask, mask_stride)` | reset all or selected matches |
+| `msl_core_batch_step_matches(batch, inputs, stride, mask, mask_stride)` | advance all or selected matches one frame |
+| `msl_core_batch_write_observation(...)` | write one policy-facing observation per match |
+| `msl_core_batch_write_terminal(...)` | write terminal flags |
+| `msl_core_batch_copy_matches(...)` | copy arbitrary match states between compatible batches |
+| `msl_core_batch_save_match(...)` / `restore_match(...)` | serialize or restore one complete match state |
 
 Data root:
 
-- Direct C callers should set `MSL_DATA_DIR` before `msl_batch_create()` when
-  using extracted data from a non-default directory.
-- If `MSL_DATA_DIR` is unset, native loaders fall back to source-checkout
-  `data/`.
-- The resolved data root is process-global native state; choose it before
-  creating simulator batches.
+- Direct C callers pass the extracted `data/raw` directory to
+  `msl_core_game_data_create()`.
+- The Python wrapper accepts either the containing data root or its `raw/`
+  directory through `data_dir` or `MSL_DATA_DIR`.
+- Game data is explicitly owned and can be shared by compatible batches; it is
+  not process-global runtime state.
 
 Timing contract:
 
-- `msl_batch_init_match()` writes the initial state.
-- Each `msl_batch_step_input()` consumes a previous and current `MslInput` row.
-- Melee input logic depends on previous-frame button/stick state, so callers
-  should preserve and pass the previous input used for each lane.
-- `melee_batch_write_gamestate()` writes the post-step state currently owned by
-  the batch.
+- `msl_core_batch_reset_matches()` writes the initial state and clears prior
+  controller history.
+- Each `msl_core_batch_step_matches()` consumes one current `MslCoreInput` row;
+  the match owns the prior input needed by Melee input logic.
+- Observation, state, terminal, and viewer projections write the current
+  post-step state without advancing it.
 
 Batch functions take a pointer plus a byte stride. This lets callers keep fixed
 arrays, struct-of-arrays wrappers, or padded records without runtime allocation.
 
 ## Native Input And Match Config
 
-`MslMatchConfig` starts or resets a lane:
+`MslCoreMatchConfig` starts or resets a match:
 
 | field | type | values / range | meaning |
 | --- | --- | --- | --- |
-| `stage_id` | `uint32_t` | `MSL_STAGE_ID_*` | GALE01/Slippi stage id |
+| `stage_id` | `uint32_t` | `MSL_CORE_STAGE_*` | GALE01/Slippi stage id |
 | `frame_id` | `int32_t` | normal match start `-123` | starting frame id |
-| `frame_pre_random_seed` | `uint32_t` | any `uint32_t` | starting RNG seed |
-| `match_damage_ratio` | `float` | `0.0` or positive | global damage ratio; `0.0` means default `1.0` |
-| `num_players` | `uint8_t` | `0`, `2`, or `4` | `0` means batch default; otherwise must match batch |
+| `frame_pre_random_seed` | `uint32_t` | any `uint32_t` | starting frame RNG seed |
+| `initial_random_seed` | `uint32_t` | any `uint32_t` | seed used during match/stage construction |
+| `match_damage_ratio` | `float` | positive | global damage ratio; normally `1.0` |
+| `num_players` | `uint8_t` | `2` or `4` | active source players |
 | `is_teams` | `uint8_t` | `0` or `1` | nonzero for teams |
-| `stock_count` | `uint8_t` | `0..255` | `0` means normal 4-stock start |
+| `friendly_fire` | `uint8_t` | `0` or `1` | enable team damage |
+| `stock_count` | `uint8_t` | `1..255` | starting stocks; normally `4` |
 | `camera_mode` | `uint8_t` | `0` or `1` | `0` normal gameplay camera, `1` free camera |
-| `players[4]` | `MslMatchPlayerConfig[4]` | active entries `< num_players` | per-player character/team/facing |
+| capability fields | `uint8_t` | `0` or `1` | Slippi/UCF/stage-stream runtime capabilities |
+| `players[4]` | `MslCoreMatchPlayerConfig[4]` | active entries `< num_players` | per-player character/team/facing |
 
-`MslMatchPlayerConfig`:
+`MslCoreMatchPlayerConfig`:
 
 | field | type | values / range | meaning |
 | --- | --- | --- | --- |
-| `char_id` | `uint8_t` | `MSL_CHAR_ID_FOX=1`, `MSL_CHAR_ID_FALCON=2`, `MSL_CHAR_ID_SHEIK=7`, `MSL_CHAR_ID_MARTH=18`, `MSL_CHAR_ID_ZELDA=19`, `MSL_CHAR_ID_FALCO=22` | GALE01/Slippi character id |
+| `char_id` | `uint8_t` | `MSL_CORE_CHARACTER_*` | supported GALE01/Slippi character id |
 | `team_id` | `uint8_t` | `0=red, 1=blue, 2=green` | team assignment |
-| `facing` | `uint8_t` | `0` or `1` | `0` left, `1` right; neutral spawn facing is derived when unset |
+| `facing_and_port` | `uint8_t` | packed facing and optional port | bit 0 facing; bits 1..3 one-based physical port |
+| `costume_id` | `uint8_t` | character costume id | starting costume |
+| `handicap` | `uint8_t` | `1..9` | starting handicap; normally `9` |
 
-`MslInput` contains one raw controller row per source player:
+`MslCoreInput` contains one raw controller row per source player:
 
 | field | type | values / range | native meaning |
 | --- | --- | --- | --- |
-| `p[4].buttons` | `uint16_t` | OR of `MSL_BUTTON_*` | packed digital button mask |
+| `p[4].buttons` | `uint16_t` | OR of `MSL_CORE_BUTTON_*` | packed digital button mask |
 | `p[4].main_x`, `main_y` | `int8_t` | `-80..80` | raw main-stick axes |
 | `p[4].c_x`, `c_y` | `int8_t` | `-80..80` | raw C-stick axes |
 | `p[4].l`, `r` | `uint8_t` | `0..255` | raw analog trigger values |
@@ -325,21 +363,21 @@ Button masks:
 
 | constant | value |
 | --- | --- |
-| `MSL_BUTTON_A` | `0x0100` |
-| `MSL_BUTTON_B` | `0x0200` |
-| `MSL_BUTTON_X` | `0x0400` |
-| `MSL_BUTTON_Y` | `0x0800` |
-| `MSL_BUTTON_Z` | `0x0010` |
-| `MSL_BUTTON_L` | `0x0040` |
-| `MSL_BUTTON_R` | `0x0020` |
-| `MSL_BUTTON_START` | `0x1000` |
-| `MSL_BUTTON_D_UP` | `0x0008` |
-| `MSL_BUTTON_D_DOWN` | `0x0004` |
+| `MSL_CORE_BUTTON_A` | `0x0100` |
+| `MSL_CORE_BUTTON_B` | `0x0200` |
+| `MSL_CORE_BUTTON_X` | `0x0400` |
+| `MSL_CORE_BUTTON_Y` | `0x0800` |
+| `MSL_CORE_BUTTON_Z` | `0x0010` |
+| `MSL_CORE_BUTTON_L` | `0x0040` |
+| `MSL_CORE_BUTTON_R` | `0x0020` |
+| `MSL_CORE_BUTTON_START` | `0x1000` |
+| `MSL_CORE_BUTTON_D_UP` | `0x0008` |
+| `MSL_CORE_BUTTON_D_DOWN` | `0x0004` |
 
 ## Native Gamestate Output
 
-`MeleeGamestate` is the policy-facing state written by
-`melee_batch_write_gamestate()`.
+`MslCoreObservation` is the policy-facing state written by
+`msl_core_batch_write_observation()`.
 
 Player slots are viewpoint-relative: `slots[0]` is self, then allies by source
 player index, then opponents by source player index. Unused slots have
@@ -351,15 +389,15 @@ Top-level fields:
 | --- | --- | --- | --- |
 | `frame_id` | `int32_t` | match frame id (starts at -123 in pre-match countdown) | scalar |
 | `frame_pre_random_seed` | `uint32_t` | any `uint32_t` | scalar |
-| `stage_id` | `uint32_t` | `MSL_STAGE_ID_*` | scalar |
+| `stage_id` | `uint32_t` | `MSL_CORE_STAGE_*` | scalar |
 | `num_players` | `uint8_t` | `2` or `4` | scalar |
 | `viewpoint_player` | `uint8_t` | `0..num_players-1` | scalar |
 | `is_teams` | `uint8_t` | `0` or `1` | scalar |
-| `stage` | `MeleeStage` | stage-owned state | scalar |
-| `slots` | `MeleePlayer` | viewpoint-relative players | `[4]` |
-| `items` | `MeleeItem` | active/inactive item slots | `[15]` |
+| `stage` | `MslCoreObservationStage` | stage-owned state | scalar |
+| `slots` | `MslCoreObservationPlayer` | viewpoint-relative players | `[4]` |
+| `items` | `MslCoreItem` | active/inactive item slots | `[15]` |
 
-`MeleePlayer`:
+`MslCoreObservationPlayer`:
 
 | field | type | values / range |
 | --- | --- | --- |
@@ -375,7 +413,7 @@ Top-level fields:
 | `action_id` | `uint16_t` | GALE01 action id |
 | `action_frame` | `int16_t` | current action frame |
 | `hitlag`, `hitstun` | `uint16_t` | remaining frames |
-| `char_id` | `uint8_t` | `MSL_CHAR_ID_*` |
+| `char_id` | `uint8_t` | `MSL_CORE_CHARACTER_*` |
 | `stocks` | `uint8_t` | remaining stocks |
 | `facing` | `uint8_t` | `0` left, `1` right |
 | `on_ground` | `uint8_t` | `0` or `1` |
@@ -383,7 +421,7 @@ Top-level fields:
 | `hurtbox_state` | `uint8_t` | GALE01 hurtbox state id |
 | `invulnerable` | `uint8_t` | `0` or `1` |
 
-`MeleeItem` slots are fixed-capacity. Inactive slots have `exists == 0`.
+`MslCoreItem` slots are fixed-capacity. Inactive slots have `exists == 0`.
 
 | field | type | values / range |
 | --- | --- | --- |
@@ -400,21 +438,22 @@ Top-level fields:
 | `spawn_id` | `uint32_t` | deterministic spawn identity |
 | `misc0`, `misc1`, `misc2`, `misc3` | `uint8_t` | item-specific bytes |
 
-`MeleeStage` currently exposes Randall on Yoshi's Story:
+`MslCoreObservationStage` exposes the policy-relevant moving platform state:
 
 | field | type | values / range |
 | --- | --- | --- |
 | `randall.exists` | `uint8_t` | `0` or `1` |
 | `randall.x`, `randall.y` | `float` | world coordinates |
+| `fod_platforms.left`, `fod_platforms.right` | `float` | Fountain of Dreams platform heights |
 
 ## Terminal Output
 
-`MslTerminal` is written by `msl_batch_write_terminal()`:
+`MslCoreTerminal` is written by `msl_core_batch_write_terminal()`:
 
 | field | type | values / range | meaning |
 | --- | --- | --- | --- |
 | `frame_id` | `int32_t` | current frame id | current frame |
-| `stage_id` | `uint32_t` | `MSL_STAGE_ID_*` | current stage |
+| `stage_id` | `uint32_t` | `MSL_CORE_STAGE_*` | current stage |
 | `done` | `uint8_t` | `0` or `1` | any terminal condition |
 | `match_ended` | `uint8_t` | `0` or `1` | in-game match end |
 | `stockout` | `uint8_t` | `0` or `1` | player/team out of stocks |
@@ -422,16 +461,14 @@ Top-level fields:
 
 ## Replay Validation Helper
 
-For quick triage of a single Slippi replay, `tools.eval.validate_replay` builds
-validation replay buffers directly from `.slp/.slpz` input and prints one-step or rollout results to stdout
-without updating committed validation reports:
+For quick triage of a single Slippi replay, `tools.validation.validate_replay` loads `.slp` or
+`.slpz` input once through Peppi and performs the per-frame rollout and comparison in C. It prints
+the strict result or locked classification to stdout without changing committed reports:
 
 ```bash
-uv run python -m tools.eval.validate_replay \
-  --replay /path/to/Game.slp \
-  --mode rollout
+uv run python -m tools.validation.validate_replay /path/to/Game.slp --backend native
 ```
 
-Use `--mode one-step` for direct seeded one-step validation, or `--mode both`
-to run both views. By default the tool selects human player ports from the
-replay; pass `--ports 1,2` to choose ports explicitly.
+Use `--frames N` for a prefix or `--suite replays/suites/melee_core_aggregate.json` for a suite.
+The active source ownership, correctness contract, build layout, and retained performance evidence
+are documented in [src/README.md](src/README.md).

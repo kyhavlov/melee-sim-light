@@ -1,4 +1,2 @@
 replays/validation/**/*.slp filter=lfs diff=lfs merge=lfs -text
 replays/validation/**/*.slpz filter=lfs diff=lfs merge=lfs -text
-# Unified-diff context for blank source lines is a single required space.
-src/melee_core/patches/*.patch -whitespace

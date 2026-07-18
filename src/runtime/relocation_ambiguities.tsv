@@ -1,0 +1,18 @@
+# owner	ambiguity	policy	evidence
+MslCoreMatch::memory	allocator construction scratch contains self-addresses	excluded from generated root offsets; the sealed Match discards the ledger and restores only its arena base explicitly	runtime/{relocation.c,savestate.c}::relocate_match
+Ground::{gv,u}	stage actor unions mix pointers and scalar state	DWARF pointer-capable slots only; values relocate only when they carry Match/GameData/image provenance; complete Ground storage remains in MatchState	refs/melee/src/melee/gr/types.h; tests/melee_core/context_smoke.c
+CameraTransformState::{x344,x35C}	callback/scalar callback unions	typed callback slot; native image load-bias relocation	src/melee/cm/types.h
+MslFtCollState::damage_log*	hit/hurt owner unions	all live alternatives are managed owner pointers; typed provenance relocation	src/melee/ft/ftcoll.h
+HSD_RObj::u	JObj/expression alternatives	generated typed slots; managed object and native image relocation	refs/melee/src/sysdolphin/baselib/robj.h
+HSD_JObj::u	particle/DObj/spline alternatives	all live alternatives are pointers; generated typed relocation	refs/melee/src/sysdolphin/baselib/jobj.h
+HSD_PObj::u	JObj/shape/envelope alternatives	all live alternatives are pointers; generated typed relocation	refs/melee/src/sysdolphin/baselib/pobj.h
+Fighter::{x3E4_fighterCmdScript,x408,x488,x508}	source pointer-width command/color-animation overlays	generated pointer-capable slots with managed/DAT provenance; source-width scalar alternatives are left unchanged	src/melee/ft/types.h
+Fighter::{coll_data,x914,xDF4,x1064_thrownHitbox}	ECB and hit-owner unions	generated typed slots; only managed owner/ECB pointers relocate	src/melee/ft/types.h
+Fighter::{fv,mv}	character and motion-state unions mix pointers and scalar state	generated pointer-capable slots are provenance-gated; cross-match live-state continuation and raw-object audits cover the reached eight-character domain	src/melee/ft/forward.h; tests/melee_core/{context_smoke.c,batch_api_smoke.c}
+Item::{x378_itemColl,x524_cmd,x548_colorOverlay,x5D4_hitboxes}	ECB, command, color-animation, and hit-owner overlays	generated pointer-capable slots with managed/DAT provenance	src/melee/it/types.h
+Item::xDD4_itemVar	item-kind union mixes article pointers and scalar variables	generated pointer-capable slots are provenance-gated; live Peach item save/destruction/free-list reuse/restore covers reached article topology	src/melee/it/itCharItems.h; tests/melee_core/batch_api_smoke.c
+ItemLink::coll_data	ECB source union	generated typed managed-pointer relocation	src/melee/it/types.h
+DynamicsData::desc	polymorphic descriptor union	generated typed DAT/image-pointer relocation	refs/melee/src/melee/lb/lbspdisplay.h
+raw intrusive pool objects	free entries retain stale bytes after their first source free-list link	compact records retain the exact live/free type transition and relocate only the declared first link for raw entries; never scan remaining stale words	runtime/relocation.c; tests/melee_core/context_smoke.c::raw_objects_have_no_managed_pointers
+void-pointer arrays	untyped source arrays carry homogeneous object pointers	register exact count/stride as MSL_RELOC_POINTER_ARRAY; never scan adjacent storage	runtime/scalar.c::init_relocation_types; src/sysdolphin/baselib/{class.c,gobjinit.c}
+native image references	callbacks, HSD class descriptors, and immutable compile-time tables are outside Match/GameData	relocate typed slots by the containing ELF image load bias; wasm table indices and fixed-address PPC remain unchanged	runtime/savestate.c::{current_image_range,relocate_value}

@@ -1,21 +1,13 @@
-# Local-only large assets
-SSBM.iso
-_iso/
-.msl/
+# Local retail/reference data
+/SSBM.iso
+/_iso/
+/.msl/
+/data/
+/refs/**
+!/refs/README.md
+!/refs/Ishiiruka
 
-# Heavy reference repos / binaries (keep locally; document setup)
-refs/**
-!refs/README.md
-!refs/Ishiiruka
-
-# Dolphin artifacts / user dirs
-.local_dolphin/
-.local_ExiAI/
-Slippi_Online-x86_64-ExiAI.AppImage
-squashfs-root/
-dolphin-emu-ExiAI
-
-# Replay corpora (keep suite definitions committed)
+# Replay corpora are LFS-managed only under validation.
 replays/*.slp
 replays/**/*.slp
 replays/*.slpz
@@ -24,34 +16,15 @@ replays/**/*.slpz
 !replays/validation/**/
 !replays/validation/**/*.slp
 !replays/validation/**/*.slpz
-!replays/heldout/
-!replays/heldout/**/
 
-# Preprocessed datasets (local-only)
-datasets/
-
-# Extracted game data (generated; keep local)
-data/**
-!data/stages/
-data/stages/**
-!data/stages/slippi_neutral_spawns.json
-
-# Build outputs / caches (future-proof)
-build/
-dist/
-target/
-reports/triage/
-reports/marth_port/
-reports/bench/
-reports/modelplay/
-manual_repros/
-tools/extraction/source_artifacts/
-!tests/fixtures/modelplay/manual_repros/
-!tests/fixtures/modelplay/manual_repros/*.json
-!tests/fixtures/modelplay/manual_repros/**/
-!tests/fixtures/modelplay/manual_repros/**/*.json
-tools/modelplay/__pycache__/
-tools/viewer/slippi-viewer/public/zips/*.zip
+# Generated output and local environments
+/build/
+/dist/
+/reports/triage/
+/datasets/
+/manual_repros/
+/.venv/
+/.env
 __pycache__/
 *.pyc
 *.so
@@ -61,9 +34,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.venv/
-.env
 
-# Local machine dev notes (not committed)
+# Viewer caches and local notes
+tools/viewer/slippi-viewer/public/zips/*.zip
 DEV_LOCAL.md
-tools/melee_core/notify_discord.sh
+tools/notify_discord.sh

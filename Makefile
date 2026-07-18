@@ -1,320 +1,734 @@
-.PHONY: bootstrap build build-native clean-native clean-native-shadow test test-parallel test-serial package-smoke slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-marth validate-falcon validate-sheik validate-rollout validate-rollout-aggregate validate-rollout-marth validate-rollout-falcon validate-rollout-sheik validate-all validate-heldout rollout-summary rollout-diff build_data viewer-build viewer fmt fmt-check check dolphin-engine-dump dolphin-extract build-bench-sim build-bench-sim-native bench-sim bench-sim-native benchmark-report FORCE
+# Canonical PPC reference, native, Python shared-library, and Wasm builds for
+# the source-shaped simulator.
 
-PY := uv run python
-MSL_DATA_DIR ?= data
-RAW_DATA_DIR := $(MSL_DATA_DIR)/raw
-SUITE ?= replays/suites/fox_falco_fd_ucf084_recent.json
-AGG_SUITE ?= replays/suites/aggregate_recent.json
-DOUBLES_SUITE ?= replays/suites/doubles_recent.json
-MARTH_SUITE ?= replays/suites/marth.json
-FALCON_SUITE ?= replays/suites/falcon.json
-SHEIK_SUITE ?= replays/suites/sheik.json
-HELDOUT_INDEX ?= replays/suites/heldout.json
-CHUNK ?= 64
-OUT ?=
-PRIMARY_ONE_STEP_OUT ?= reports/validation/one_step_suite_eval.txt
-PRIMARY_ROLLOUT_OUT ?= reports/validation/rollout_suite_eval.txt
-AGG_ONE_STEP_OUT ?= reports/validation/aggregate_recent_one_step_suite_eval.txt
-AGG_ROLLOUT_OUT ?= reports/validation/aggregate_recent_rollout_suite_eval.txt
-DOUBLES_ONE_STEP_OUT ?= reports/validation/doubles_recent_one_step_suite_eval.txt
-DOUBLES_ROLLOUT_OUT ?= reports/validation/doubles_recent_rollout_suite_eval.txt
-MARTH_ONE_STEP_OUT ?= reports/validation/marth_one_step.txt
-MARTH_ROLLOUT_OUT ?= reports/validation/marth_rollout.txt
-FALCON_ONE_STEP_OUT ?= reports/validation/falcon_one_step.txt
-FALCON_ROLLOUT_OUT ?= reports/validation/falcon_rollout.txt
-SHEIK_ONE_STEP_OUT ?= reports/validation/sheik_one_step.txt
-SHEIK_ROLLOUT_OUT ?= reports/validation/sheik_rollout.txt
-HELDOUT_OUT_DIR ?= reports/validation/heldout
-HELDOUT_SUMMARY_OUT ?= reports/validation/heldout/summary.txt
-ROLLOUT_JSON ?= reports/triage/current_rollout_streaks.json
-ROLLOUT_BEFORE ?= reports/triage/rollout_streaks.json
-ROLLOUT_AFTER ?= reports/triage/current_rollout_streaks.json
-ROLLOUT_TOP ?= 8
-ROLLOUT_SUMMARY_OUT ?=
-ROLLOUT_DIFF_OUT ?=
-ARGS ?=
-TEST_ARGS ?=
-TEST_WORKERS ?= auto
-VALIDATE_WORKERS ?= 0
-HELDOUT_WORKERS ?= 0
-HELDOUT_SUITE_WORKERS ?= 0
-VERBOSE ?=
-CLANG_FORMAT ?= clang-format
-# Clang 18 handles the simulator's large branch-heavy collision/combat translation units
-# materially better than GCC under the same native/LTO settings. Respect explicit environment or
-# command-line compiler choices, but use Clang for the normal local Make workflow.
-ifeq ($(origin CC),default)
-ifneq ($(shell command -v clang 2>/dev/null),)
-CC := clang
-else
-CC := cc
-endif
-endif
-CFLAGS ?= -O3 -Wall -Wextra -std=c11 -ffp-contract=off
-NATIVE_OPT ?= 1
-LTO ?= 1
-export MSL_NATIVE_OPT := $(strip $(NATIVE_OPT))
-export MSL_LTO := $(strip $(LTO))
-ifeq ($(strip $(NATIVE_OPT)),1)
-CFLAGS += -march=native
-endif
-ifeq ($(strip $(LTO)),1)
-LTO_FLAG := -flto
-CFLAGS += $(LTO_FLAG)
-endif
-BENCH_SIM ?= build/bench/bench_sim
-BENCHMARK_REPORT ?= reports/benchmarks/sim_benchmark.txt
-BENCHMARK_REPLAY_JSON ?= build/bench/validation_rollout_benchmark.json
-BENCH_SIM_CORE_SRCS := $(wildcard src/*.c) src/decomp/lb/lb_00ce.c
-BENCH_SIM_TOOL_SRC := tools/bench/bench_sim.c
-BUILD_FORCE ?= 0
-BUILD_STAMP ?= build/msl_binding.stamp
-NATIVE_EXT_GLOB := melee_sim/_native*.so
-NATIVE_SOURCE_LIST_TOOL := tools/build_native_sources.py
-PY_EXT_SUFFIX := $(shell $(PY) -c 'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX") or ".so")')
-PY_SOABI := $(shell $(PY) -c 'import sysconfig; print(sysconfig.get_config_var("SOABI") or "python")')
-PY_INCLUDE_FLAGS := $(shell $(PY) -c 'import sysconfig, numpy; paths=[numpy.get_include(), sysconfig.get_path("include"), sysconfig.get_path("platinclude")]; print(" ".join("-I"+p for p in dict.fromkeys(paths) if p))')
-PY_LINK_FLAGS := $(shell $(PY) -c 'import sysconfig; vals=[sysconfig.get_config_var(k) or "" for k in ("LDFLAGS","LIBS","SYSLIBS")]; print(" ".join(v for v in vals if v))')
-NATIVE_SO := melee_sim/_native$(PY_EXT_SUFFIX)
-NATIVE_BUILD_DIR := build/native/$(PY_SOABI)
-NATIVE_OBJ_DIR := $(NATIVE_BUILD_DIR)/opt$(strip $(NATIVE_OPT))-lto$(strip $(LTO))
-NATIVE_CONFIG_STAMP := $(NATIVE_BUILD_DIR)/active_config.stamp
-NATIVE_SOURCE_LIST_DEPS := setup.py $(NATIVE_SOURCE_LIST_TOOL)
-NATIVE_SRCS := $(shell $(PY) $(NATIVE_SOURCE_LIST_TOOL) setup.py)
-ifeq ($(strip $(NATIVE_SRCS)),)
-$(error native extension source list is empty; check setup.py and $(NATIVE_SOURCE_LIST_TOOL))
-endif
-NATIVE_OBJS := $(patsubst %.c,$(NATIVE_OBJ_DIR)/%.o,$(NATIVE_SRCS))
-BENCH_SIM_CORE_OBJS := $(patsubst %.c,$(NATIVE_OBJ_DIR)/%.o,$(BENCH_SIM_CORE_SRCS))
-BENCH_SIM_TOOL_OBJ := $(patsubst %.c,$(NATIVE_OBJ_DIR)/%.o,$(BENCH_SIM_TOOL_SRC))
-LEGACY_ROOT_EXT_GLOB := msl_binding*.so
+.DELETE_ON_ERROR:
+
+ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+CORE := $(ROOT)/src
+BUILD_ROOT := $(ROOT)/build/melee_core
+PPC_BUILD := $(BUILD_ROOT)/ppc
+NATIVE_BUILD := $(BUILD_ROOT)/native
+NATIVE_RELEASE_BUILD := $(BUILD_ROOT)/native-release
+WASM_BUILD := $(BUILD_ROOT)/wasm
+PYTHON_BUILD := $(BUILD_ROOT)/python
+VALIDATION_BUILD := $(BUILD_ROOT)/validation
+SOURCE_TREE := $(CORE)
+PPC_OBJ_DIR := $(PPC_BUILD)/obj
+NATIVE_OBJ_DIR := $(NATIVE_BUILD)/obj
+WASM_OBJ_DIR := $(WASM_BUILD)/obj
+PYTHON_OBJ_DIR := $(PYTHON_BUILD)/obj
+NATIVE_GENERATED_DIR := $(NATIVE_BUILD)/generated
+WASM_GENERATED_DIR := $(WASM_BUILD)/generated
+WASM_LAYOUT_INCLUDE := $(WASM_GENERATED_DIR)/layout-include
+WASM_GLIBC_STUB := $(WASM_LAYOUT_INCLUDE)/gnu/stubs-32.h
+PPC_GENERATED_DIR := $(PPC_BUILD)/generated
+TOOLCHAIN_ROOT := $(BUILD_ROOT)/toolchain/root
+TOOLCHAIN_STAMP := $(BUILD_ROOT)/toolchain/ready.stamp
+CC := $(TOOLCHAIN_ROOT)/usr/bin/powerpc-linux-gnu-gcc-13
+QEMU := $(TOOLCHAIN_ROOT)/usr/bin/qemu-ppc-static
+SYSROOT := $(TOOLCHAIN_ROOT)
+QEMU_SYSROOT := $(TOOLCHAIN_ROOT)/usr/powerpc-linux-gnu
+PY ?= $(ROOT)/.venv/bin/python
+HOST_CC ?= cc
+EMCC ?= emcc
+ISO ?=
+VIEWER_HOST ?= 127.0.0.1
 VIEWER_PORT ?= 8001
-HOST ?= 127.0.0.1
 OPEN ?= 1
+WASM_LINK_FLAGS ?= -sSTACK_SIZE=1048576
+MSL_DATA_DIR ?= $(ROOT)/data
+DATA ?= $(abspath $(MSL_DATA_DIR))/raw
+VALIDATION_SUITE ?= replays/suites/melee_core_aggregate.json
+VALIDATION_CHARACTERS ?= Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach
+VALIDATION_STAGES ?= 32,31,3,2,8,28
+VALIDATION_BACKEND ?= native
+VALIDATION_WORKERS ?= 0
+VALIDATION_BUILD_JOBS ?= 4
+VALIDATION_FRAMES ?= 0
+VALIDATION_ARGS ?=
+BENCHMARK_MANIFEST ?= $(BUILD_ROOT)/benchmark/cases.tsv
+BENCHMARK_CPU ?= 8
+BENCHMARK_MATCHES ?= 256
+BENCHMARK_RESIDENT_MATCHES ?= $(BENCHMARK_MATCHES)
+BENCHMARK_MATCH_FRAMES ?= 32768
+BENCHMARK_WARMUP_TICKS ?= 8
+LARGE_BATCH_MATCHES ?= 256
+RELEASE_ARCH_FLAGS ?= -march=native -mtune=native
 
-VALIDATE_OUT := --out "$(PRIMARY_ONE_STEP_OUT)"
-ROLLOUT_OUT := --out "$(PRIMARY_ROLLOUT_OUT)"
-ifneq ($(strip $(OUT)),)
-VALIDATE_OUT := --out "$(OUT)"
-ROLLOUT_OUT := --out "$(OUT)"
+SOURCE_SYNC := $(ROOT)/tools/build/source_sync.sh
+UPSTREAM_ROOTS := MSL MetroTRK Runtime melee sysdolphin
+UPSTREAM_REL_SRCS := $(shell cd $(SOURCE_TREE) && find $(UPSTREAM_ROOTS) \
+	-type f -name '*.c' -printf '%p\n' | LC_ALL=C sort)
+UPSTREAM_REL_SRCS := $(filter-out \
+	melee/ft/chara/ftCommon/ftCo_0A01.c \
+	melee/it/it_279C.c, \
+	$(UPSTREAM_REL_SRCS))
+UPSTREAM_REL_SRCS := $(filter-out melee/it/items/%.c,$(UPSTREAM_REL_SRCS))
+UPSTREAM_REL_SRCS += \
+	melee/it/items/itfoxblaster.c \
+	melee/it/items/itfoxillusion.c \
+	melee/it/items/itfoxlaser.c \
+	melee/it/items/itbombhei.c \
+	melee/it/items/itdosei.c \
+	melee/it/items/itfoods.c \
+	melee/it/items/itfreeze.c \
+	melee/it/items/itharisen.c \
+	melee/it/items/itheiho.c \
+	melee/it/items/itlinkhookshot.c \
+	melee/it/items/itpeachexplode.c \
+	melee/it/items/itpeachparasol.c \
+	melee/it/items/itpeachtoad.c \
+	melee/it/items/itpeachtoadspore.c \
+	melee/it/items/itpeachturnip.c \
+	melee/it/items/itseakchain.c \
+	melee/it/items/itseakneedleheld.c \
+	melee/it/items/itseakneedlethrown.c \
+	melee/it/items/itseakvanish.c \
+	melee/it/items/itsword.c \
+	melee/it/items/itzeldadinfire.c \
+	melee/it/items/itzeldadinfireexplode.c
+UPSTREAM_SRCS := $(addprefix $(SOURCE_TREE)/,$(UPSTREAM_REL_SRCS))
+PPC_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(PPC_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
+NATIVE_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(NATIVE_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
+WASM_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(WASM_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
+PYTHON_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(PYTHON_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
+
+PLATFORM_SRCS := \
+	$(CORE)/platform/dolphin_mtx.c \
+	$(CORE)/platform/files.c \
+	$(CORE)/platform/memory.c \
+	$(CORE)/platform/os_report.c \
+	$(CORE)/platform/platform_state.c \
+	$(CORE)/platform/slippi.c
+NATIVE_PLATFORM_SRCS := $(CORE)/platform/native_dat.c
+RUNTIME_SRCS := \
+	$(CORE)/api.c \
+	$(CORE)/runtime/audio.c \
+	$(CORE)/runtime/camera.c \
+	$(CORE)/runtime/common.c \
+	$(CORE)/runtime/context.c \
+	$(CORE)/runtime/effects.c \
+	$(CORE)/runtime/final_destination.c \
+	$(CORE)/runtime/ftco_0A01.c \
+	$(CORE)/runtime/items.c \
+	$(CORE)/runtime/match.c \
+	$(CORE)/runtime/math.c \
+	$(CORE)/runtime/observation.c \
+	$(CORE)/runtime/relocation.c \
+	$(CORE)/runtime/savestate.c \
+	$(CORE)/runtime/scalar.c \
+	$(CORE)/runtime/viewer.c \
+	$(CORE)/runtime/wire.c
+STUB_SRCS := \
+	$(CORE)/stubs/headless_exclusions.c \
+	$(CORE)/stubs/unreached_presentation.c \
+	$(CORE)/stubs/unresolved_abort.c
+LOCAL_SRCS := $(PLATFORM_SRCS) $(RUNTIME_SRCS) $(STUB_SRCS)
+PPC_LOCAL_OBJS := $(patsubst $(ROOT)/%.c,$(PPC_OBJ_DIR)/%.o,$(LOCAL_SRCS))
+NATIVE_LOCAL_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(LOCAL_SRCS))
+WASM_LOCAL_OBJS := $(patsubst $(ROOT)/%.c,$(WASM_OBJ_DIR)/%.o,$(LOCAL_SRCS))
+PYTHON_LOCAL_SRCS := $(LOCAL_SRCS) $(NATIVE_PLATFORM_SRCS) $(CORE)/python_api.c
+PYTHON_LOCAL_OBJS := $(patsubst $(ROOT)/%.c,$(PYTHON_OBJ_DIR)/%.o,$(PYTHON_LOCAL_SRCS))
+NATIVE_PLATFORM_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(NATIVE_PLATFORM_SRCS))
+WASM_PLATFORM_OBJS := $(patsubst $(ROOT)/%.c,$(WASM_OBJ_DIR)/%.o,$(NATIVE_PLATFORM_SRCS))
+NATIVE_DAT_TYPES_SRC := $(ROOT)/tools/build/native_dat_types.c
+NATIVE_DAT_LAYOUT_GENERATOR := $(ROOT)/tools/build/generate_native_dat_layout.py
+COMMAND_FIELDS_GENERATOR := $(ROOT)/tools/build/generate_command_accessors.py
+NATIVE_DAT_PPC_TYPES_OBJ := $(NATIVE_GENERATED_DIR)/native_dat_types_ppc.o
+NATIVE_DAT_NATIVE_TYPES_OBJ := $(NATIVE_GENERATED_DIR)/native_dat_types_native.o
+NATIVE_DAT_LAYOUT_SRC := $(NATIVE_GENERATED_DIR)/native_dat_layout.c
+NATIVE_DAT_LAYOUT_OBJ := $(NATIVE_OBJ_DIR)/generated/native_dat_layout.o
+WASM_DAT_NATIVE_TYPES_OBJ := $(WASM_GENERATED_DIR)/native_dat_types_wasm.o
+WASM_DAT_LAYOUT_SRC := $(WASM_GENERATED_DIR)/native_dat_layout.c
+WASM_DAT_LAYOUT_OBJ := $(WASM_OBJ_DIR)/generated/native_dat_layout.o
+WASM_COMMAND_FIELDS := $(WASM_GENERATED_DIR)/msl_command_fields.h
+MATCH_RELOC_TYPES_SRC := $(ROOT)/tools/build/match_reloc_types.c
+MATCH_RELOC_GENERATOR := $(ROOT)/tools/build/generate_match_reloc_layout.py
+MATCH_RELOC_TYPES_DEF := $(CORE)/runtime/relocation_types.def
+NATIVE_MATCH_RELOC_TYPES_OBJ := $(NATIVE_GENERATED_DIR)/match_reloc_types.o
+NATIVE_MATCH_RELOC_LAYOUT_SRC := $(NATIVE_GENERATED_DIR)/match_reloc_layout.c
+NATIVE_MATCH_RELOC_LAYOUT_OBJ := $(NATIVE_OBJ_DIR)/generated/match_reloc_layout.o
+WASM_MATCH_RELOC_TYPES_OBJ := $(WASM_GENERATED_DIR)/match_reloc_types.o
+WASM_MATCH_RELOC_LAYOUT_SRC := $(WASM_GENERATED_DIR)/match_reloc_layout.c
+WASM_MATCH_RELOC_LAYOUT_OBJ := $(WASM_OBJ_DIR)/generated/match_reloc_layout.o
+PYTHON_DAT_LAYOUT_OBJ := $(PYTHON_OBJ_DIR)/generated/native_dat_layout.o
+PYTHON_MATCH_RELOC_LAYOUT_OBJ := $(PYTHON_OBJ_DIR)/generated/match_reloc_layout.o
+PPC_MATCH_RELOC_TYPES_OBJ := $(PPC_GENERATED_DIR)/match_reloc_types.o
+PPC_MATCH_RELOC_LAYOUT_SRC := $(PPC_GENERATED_DIR)/match_reloc_layout.c
+PPC_MATCH_RELOC_LAYOUT_OBJ := $(PPC_OBJ_DIR)/generated/match_reloc_layout.o
+PPC_CORE_OBJS := $(PPC_UPSTREAM_OBJS) $(PPC_LOCAL_OBJS) \
+	$(PPC_MATCH_RELOC_LAYOUT_OBJ)
+NATIVE_CORE_OBJS := $(NATIVE_UPSTREAM_OBJS) $(NATIVE_LOCAL_OBJS) \
+	$(NATIVE_PLATFORM_OBJS) $(NATIVE_DAT_LAYOUT_OBJ) \
+	$(NATIVE_MATCH_RELOC_LAYOUT_OBJ)
+WASM_CORE_OBJS := $(WASM_UPSTREAM_OBJS) $(WASM_LOCAL_OBJS) \
+	$(WASM_PLATFORM_OBJS) $(WASM_DAT_LAYOUT_OBJ) \
+	$(WASM_MATCH_RELOC_LAYOUT_OBJ)
+PYTHON_CORE_OBJS := $(PYTHON_UPSTREAM_OBJS) $(PYTHON_LOCAL_OBJS) \
+	$(PYTHON_DAT_LAYOUT_OBJ) $(PYTHON_MATCH_RELOC_LAYOUT_OBJ)
+MAIN_SRC := $(CORE)/runtime/main.c
+PPC_MAIN_OBJ := $(patsubst $(ROOT)/%.c,$(PPC_OBJ_DIR)/%.o,$(MAIN_SRC))
+NATIVE_MAIN_OBJ := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(MAIN_SRC))
+PPC_OBJS := $(PPC_CORE_OBJS) $(PPC_MAIN_OBJ)
+NATIVE_OBJS := $(NATIVE_CORE_OBJS) $(NATIVE_MAIN_OBJ)
+SMOKE_SRCS := \
+	$(ROOT)/tests/melee_core/archive_smoke.c \
+	$(ROOT)/tests/melee_core/data_load_smoke.c \
+	$(ROOT)/tests/melee_core/map_collision_smoke.c \
+	$(ROOT)/tests/melee_core/model_animation_smoke.c \
+	$(ROOT)/tests/melee_core/scalar_api_smoke.c \
+	$(ROOT)/tests/melee_core/scheduler_smoke.c \
+	$(ROOT)/tests/melee_core/wasm_parity.c
+NATIVE_SMOKE_SRCS := \
+	$(ROOT)/tests/melee_core/batch_api_smoke.c \
+	$(ROOT)/tests/melee_core/context_smoke.c \
+	$(ROOT)/tests/melee_core/data_load_smoke.c \
+	$(ROOT)/tests/melee_core/map_collision_smoke.c \
+	$(ROOT)/tests/melee_core/model_animation_smoke.c \
+	$(ROOT)/tests/melee_core/scalar_api_smoke.c \
+	$(ROOT)/tests/melee_core/scheduler_smoke.c \
+	$(ROOT)/tests/melee_core/lifecycle_bench.c
+PPC_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(PPC_OBJ_DIR)/%.o,$(SMOKE_SRCS))
+NATIVE_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(NATIVE_SMOKE_SRCS))
+NATIVE_REPLAY_BENCH_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/replay_bench.o
+NATIVE_RUNTIME_CENSUS_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/runtime_census.o
+NATIVE_LARGE_BATCH_SMOKE_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/large_batch_smoke.o
+NATIVE_FLAGS_STAMP := $(NATIVE_BUILD)/compile-flags.stamp
+NATIVE_COMPILE_OBJS := $(NATIVE_UPSTREAM_OBJS) $(NATIVE_LOCAL_OBJS) \
+	$(NATIVE_PLATFORM_OBJS) $(NATIVE_MAIN_OBJ) $(NATIVE_SMOKE_OBJS) \
+	$(NATIVE_REPLAY_BENCH_OBJ) $(NATIVE_RUNTIME_CENSUS_OBJ) \
+	$(NATIVE_LARGE_BATCH_SMOKE_OBJ) \
+	$(NATIVE_DAT_LAYOUT_OBJ) \
+	$(NATIVE_MATCH_RELOC_LAYOUT_OBJ)
+DEPS := $(PPC_OBJS:.o=.d) $(PPC_SMOKE_OBJS:.o=.d) $(NATIVE_OBJS:.o=.d) \
+	$(NATIVE_SMOKE_OBJS:.o=.d) $(NATIVE_REPLAY_BENCH_OBJ:.o=.d) \
+	$(NATIVE_RUNTIME_CENSUS_OBJ:.o=.d) $(WASM_CORE_OBJS:.o=.d) \
+	$(NATIVE_DAT_PPC_TYPES_OBJ:.o=.d) \
+	$(NATIVE_DAT_NATIVE_TYPES_OBJ:.o=.d) \
+	$(NATIVE_MATCH_RELOC_TYPES_OBJ:.o=.d) \
+	$(NATIVE_MATCH_RELOC_LAYOUT_OBJ:.o=.d) \
+	$(WASM_MATCH_RELOC_TYPES_OBJ:.o=.d) \
+	$(WASM_MATCH_RELOC_LAYOUT_OBJ:.o=.d) \
+	$(PPC_MATCH_RELOC_TYPES_OBJ:.o=.d) \
+	$(PPC_MATCH_RELOC_LAYOUT_OBJ:.o=.d)
+DEPS += $(PYTHON_CORE_OBJS:.o=.d)
+
+BINARY := $(PPC_BUILD)/melee-core-ppc
+NATIVE_BINARY := $(NATIVE_BUILD)/melee-core-native
+WASM_MODULE := $(WASM_BUILD)/melee-core.js
+PYTHON_LIBRARY := $(PYTHON_BUILD)/libmelee_core.so
+ARCHIVE_SMOKE := $(PPC_BUILD)/archive-smoke
+DATA_SMOKE := $(PPC_BUILD)/data-smoke
+MAP_SMOKE := $(PPC_BUILD)/map-collision-smoke
+MODEL_SMOKE := $(PPC_BUILD)/model-animation-smoke
+SCHEDULER_SMOKE := $(PPC_BUILD)/scheduler-smoke
+SCALAR_API_SMOKE := $(PPC_BUILD)/scalar-api-smoke
+NATIVE_DATA_SMOKE := $(NATIVE_BUILD)/data-smoke
+NATIVE_MAP_SMOKE := $(NATIVE_BUILD)/map-collision-smoke
+NATIVE_MODEL_SMOKE := $(NATIVE_BUILD)/model-animation-smoke
+NATIVE_SCHEDULER_SMOKE := $(NATIVE_BUILD)/scheduler-smoke
+NATIVE_SCALAR_API_SMOKE := $(NATIVE_BUILD)/scalar-api-smoke
+NATIVE_CONTEXT_SMOKE := $(NATIVE_BUILD)/context-smoke
+NATIVE_BATCH_API_SMOKE := $(NATIVE_BUILD)/batch-api-smoke
+NATIVE_WASM_PARITY := $(NATIVE_BUILD)/wasm-parity
+NATIVE_LIFECYCLE_BENCH := $(NATIVE_BUILD)/lifecycle-bench
+NATIVE_REPLAY_BENCH := $(NATIVE_BUILD)/replay-bench
+NATIVE_RUNTIME_CENSUS := $(NATIVE_BUILD)/runtime-census
+NATIVE_LARGE_BATCH_SMOKE := $(NATIVE_BUILD)/large-batch-smoke
+NATIVE_RELEASE_BINARY := $(NATIVE_RELEASE_BUILD)/melee-core-native
+NATIVE_RELEASE_REPLAY_BENCH := $(NATIVE_RELEASE_BUILD)/replay-bench
+VIEWER_SCHEMA_TOOL := $(NATIVE_BUILD)/viewer-schema
+VIEWER_SCHEMA_JS := $(ROOT)/tools/viewer/live/schema.generated.js
+VALIDATION_NATIVE_SRC := $(ROOT)/tools/validation/native.c
+VALIDATION_NATIVE := $(VALIDATION_BUILD)/_msl_replay_validate.so
+
+CPPFLAGS := \
+	-DBUGFIX \
+	-include $(CORE)/platform/compat.h \
+	-I$(CORE) \
+	-I$(CORE)/platform/include \
+	-I$(SOURCE_TREE) \
+	-I$(SOURCE_TREE)/melee \
+	-I$(SOURCE_TREE)/melee/ft/chara \
+	-I$(SOURCE_TREE)/sysdolphin \
+	-I$(SOURCE_TREE)/Runtime \
+	-I$(SOURCE_TREE)/extern/dolphin/include
+NATIVE_CPPFLAGS := $(CPPFLAGS) -DMSL_CORE_NATIVE
+PYTHON_CPPFLAGS := $(NATIVE_CPPFLAGS) -DMSL_CORE_SHARED
+WASM_CPPFLAGS := $(CPPFLAGS) -I$(WASM_GENERATED_DIR) \
+	-DMSL_CORE_NATIVE -DMSL_CORE_WASM
+CFLAGS := \
+	-O0 -g -std=gnu11 -fgnu89-inline -fno-short-enums \
+	-fno-strict-aliasing -ffp-contract=off -ffunction-sections \
+	-fdata-sections -w
+NATIVE_CFLAGS = $(CFLAGS) -fno-pie
+NATIVE_LINK_FLAGS ?=
+# The source-shaped gameplay TUs still contain optimizer-sensitive decomp C.
+# Keep them at the validation reference profile until Phase 8 closes those UB
+# boundaries; Phase 7 optimizes the audited host/API shell below and requires
+# the complete output-lock suite before expanding that allowlist.
+NATIVE_RELEASE_CFLAGS := \
+	-O0 -g -std=gnu11 -fgnu89-inline -fno-short-enums \
+	-fno-strict-aliasing -ffp-contract=off -ffunction-sections \
+	-fdata-sections -fno-pie -w
+NATIVE_BASE_CFLAGS := $(NATIVE_CFLAGS)
+WASM_CFLAGS = $(CFLAGS) -Wno-implicit-function-declaration -Wno-int-conversion \
+	-Wno-incompatible-pointer-types -Wno-return-mismatch
+LDLIBS := -lm
+
+# Melee's matching MSL trig implementation intentionally compiles its nested
+# range-reduction and polynomial expressions to fmadds/fnmsubs (DOL
+# 0x80326240). Preserve those operation boundaries without enabling
+# contraction indiscriminately in the hosted core.
+$(PPC_OBJ_DIR)/gameplay/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
+$(PPC_OBJ_DIR)/src/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
+$(NATIVE_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
+$(NATIVE_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
+$(NATIVE_OBJ_DIR)/src/runtime/savestate.o: NATIVE_CPPFLAGS += -D_GNU_SOURCE
+$(PYTHON_OBJ_DIR)/src/runtime/savestate.o: PYTHON_CPPFLAGS += -D_GNU_SOURCE
+$(NATIVE_RUNTIME_CENSUS_OBJ): NATIVE_CPPFLAGS += -D_GNU_SOURCE
+ifeq ($(NATIVE_GPROF),1)
+$(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_GPROF
 endif
-ifneq ($(strip $(ROLLOUT_SUMMARY_OUT)),)
-ROLLOUT_SUMMARY_OUT_ARG := --out $(ROLLOUT_SUMMARY_OUT)
+ifeq ($(NATIVE_PHASE_PROFILE),1)
+$(NATIVE_OBJ_DIR)/src/api.o: NATIVE_CPPFLAGS += -DMSL_CORE_PHASE_PROFILE
+$(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_PHASE_PROFILE
 endif
-ifneq ($(strip $(ROLLOUT_DIFF_OUT)),)
-ROLLOUT_DIFF_OUT_ARG := --out $(ROLLOUT_DIFF_OUT)
+ifeq ($(NATIVE_CALLGRIND),1)
+$(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_CALLGRIND
 endif
-ifeq ($(strip $(VERBOSE)),)
-BUILD_QUIET := @
-else
-BUILD_QUIET :=
+$(WASM_OBJ_DIR)/gameplay/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
+$(WASM_OBJ_DIR)/src/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
+$(PYTHON_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
+$(PYTHON_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
+
+ifeq ($(NATIVE_RELEASE_PROFILE),1)
+NATIVE_RELEASE_OPT_OBJS := \
+	$(NATIVE_OBJ_DIR)/gameplay/melee/ft/ftanim.o \
+	$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lbspdisplay.o \
+	$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lbvector.o \
+	$(NATIVE_OBJ_DIR)/gameplay/melee/mp/mpcoll.o \
+	$(NATIVE_OBJ_DIR)/gameplay/melee/mp/mplib.o \
+	$(NATIVE_OBJ_DIR)/gameplay/sysdolphin/baselib/fobj.o \
+	$(NATIVE_OBJ_DIR)/gameplay/sysdolphin/baselib/jobj.o \
+	$(NATIVE_OBJ_DIR)/src/api.o \
+	$(NATIVE_OBJ_DIR)/src/platform/dolphin_mtx.o \
+	$(NATIVE_OBJ_DIR)/src/runtime/observation.o \
+	$(NATIVE_OBJ_DIR)/src/runtime/relocation.o \
+	$(NATIVE_OBJ_DIR)/src/runtime/savestate.o \
+	$(NATIVE_OBJ_DIR)/src/runtime/viewer.o \
+	$(NATIVE_OBJ_DIR)/src/runtime/wire.o \
+	$(NATIVE_OBJ_DIR)/src/runtime/main.o \
+	$(NATIVE_OBJ_DIR)/generated/native_dat_layout.o \
+	$(NATIVE_OBJ_DIR)/generated/match_reloc_layout.o \
+	$(NATIVE_OBJ_DIR)/tests/melee_core/replay_bench.o
+$(NATIVE_RELEASE_OPT_OBJS): override NATIVE_CFLAGS += -O3 $(RELEASE_ARCH_FLAGS)
 endif
-ifeq ($(strip $(BUILD_FORCE)),1)
-BUILD_STAMP_DEPS := FORCE
-NATIVE_OBJECT_DEPS := FORCE
-else
-BUILD_STAMP_DEPS :=
-NATIVE_OBJECT_DEPS :=
-endif
 
-build: clean-native-shadow $(BUILD_STAMP)
-	@if ! ls $(NATIVE_EXT_GLOB) >/dev/null 2>&1; then \
-		$(MAKE) --no-print-directory BUILD_FORCE=1 "$(BUILD_STAMP)"; \
-	fi
+NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_RELEASE_OPT_OBJS)
 
-build-native:
-	@$(MAKE) --no-print-directory NATIVE_OPT=1 build
+.PHONY: all bootstrap extract ppc native python-library native-release runtime-census large-batch-smoke benchmark-prepare benchmark-native benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-build viewer viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source-check validator validation-suite validation-supported-domain clean toolchain data-check ppc-smoke native-smoke test test-full format-check slpz-convert FORCE
 
-clean-native-shadow:
-	@rm -f $(LEGACY_ROOT_EXT_GLOB)
+all: native python-library
 
-clean-native:
-	@rm -rf build/native build/temp.* build/lib.* "$(BUILD_STAMP)" $(NATIVE_EXT_GLOB) $(LEGACY_ROOT_EXT_GLOB)
+bootstrap:
+	@test -n "$(ISO)" || (echo "Usage: make bootstrap ISO=/path/to/SSBM.iso" >&2; exit 2)
+	@uv sync --dev
+	@"$(PY)" -m tools.data.extract --iso "$(ISO)" --out-dir "$(MSL_DATA_DIR)"
+	@$(MAKE) --no-print-directory native python-library
 
-$(NATIVE_CONFIG_STAMP): FORCE
-	@mkdir -p "$(@D)"
-	@{ \
-		printf '%s\n' 'CC=$(CC)'; \
-		printf '%s\n' 'CFLAGS=$(CFLAGS)'; \
-		printf '%s\n' 'NATIVE_OPT=$(strip $(NATIVE_OPT))'; \
-		printf '%s\n' 'LTO=$(strip $(LTO))'; \
-		printf '%s\n' 'PY=$(PY)'; \
-		printf '%s\n' 'PY_EXT_SUFFIX=$(PY_EXT_SUFFIX)'; \
-		printf '%s\n' 'PY_INCLUDE_FLAGS=$(PY_INCLUDE_FLAGS)'; \
-		printf '%s\n' 'PY_LINK_FLAGS=$(PY_LINK_FLAGS)'; \
-	} > "$@.tmp"; \
-	if test -f "$@" && cmp -s "$@" "$@.tmp"; then rm -f "$@.tmp"; else mv "$@.tmp" "$@"; fi
+extract:
+	@test -n "$(ISO)" || (echo "Usage: make extract ISO=/path/to/SSBM.iso" >&2; exit 2)
+	@"$(PY)" -m tools.data.extract --iso "$(ISO)" --out-dir "$(MSL_DATA_DIR)"
 
-$(NATIVE_OBJ_DIR)/%.o: %.c Makefile $(NATIVE_CONFIG_STAMP) $(NATIVE_OBJECT_DEPS)
-	@mkdir -p "$(@D)"
-	$(BUILD_QUIET)$(CC) $(CFLAGS) -DNDEBUG -fPIC $(PY_INCLUDE_FLAGS) -Isrc -MMD -MP -c "$<" -o "$@"
+ppc: $(BINARY)
 
-$(NATIVE_SO): $(NATIVE_OBJS) $(NATIVE_SOURCE_LIST_DEPS) $(NATIVE_CONFIG_STAMP)
-	@mkdir -p "$(@D)"
-	$(BUILD_QUIET)$(CC) -shared $(LTO_FLAG) $(filter %.o,$^) $(PY_LINK_FLAGS) -lm -o "$@"
+native: $(NATIVE_BINARY)
 
-$(BUILD_STAMP): $(NATIVE_SO) $(BUILD_STAMP_DEPS)
-	@mkdir -p "$(@D)"
-	@touch "$@"
+python-library: $(PYTHON_LIBRARY)
+
+native-release:
+	@case "$(NATIVE_RELEASE_CFLAGS) $(RELEASE_ARCH_FLAGS) $(NATIVE_LINK_FLAGS)" in \
+		*Ofast*|*fast-math*|*unsafe-math*|*finite-math*|*associative-math*|*reciprocal-math*|*fp-contract=fast*) \
+			echo "unsafe floating-point flag in strict release build" >&2; exit 2;; \
+		*flto*) \
+			echo "LTO is not validated for the source-shaped gameplay build" >&2; exit 2;; \
+	esac
+	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" native "$(NATIVE_RELEASE_REPLAY_BENCH)" \
+		NATIVE_BUILD="$(NATIVE_RELEASE_BUILD)" \
+		NATIVE_CFLAGS="$(NATIVE_RELEASE_CFLAGS)" NATIVE_RELEASE_PROFILE=1
+
+runtime-census: data-check $(NATIVE_RUNTIME_CENSUS)
+	@"$(NATIVE_RUNTIME_CENSUS)" "$(DATA)"
+
+large-batch-smoke: data-check $(NATIVE_LARGE_BATCH_SMOKE)
+	@"$(NATIVE_LARGE_BATCH_SMOKE)" "$(DATA)" "$(LARGE_BATCH_MATCHES)"
+
+wasm: $(WASM_MODULE)
+
+viewer-schema: $(VIEWER_SCHEMA_JS)
+
+viewer-build:
+	@MSL_DATA_DIR="$(abspath $(MSL_DATA_DIR))" "$(ROOT)/tools/viewer/build.sh"
+
+viewer:
+	@MSL_VIEWER_STATIC_ROOT="build/viewer" MSL_VIEWER_URL_PATH="/tools/viewer/" \
+		MSL_VIEWER_HOST="$(VIEWER_HOST)" MSL_VIEWER_PORT="$(VIEWER_PORT)" \
+		MSL_VIEWER_OPEN="$(OPEN)" node "$(ROOT)/tools/viewer/server.mjs"
 
 FORCE:
 
--include $(NATIVE_OBJS:.o=.d)
-
-bootstrap:
-	@test -n "$(ISO)" || (echo "Usage: make bootstrap ISO=/path/to/SSBM.iso"; exit 2)
-	@git lfs version >/dev/null 2>&1 || (echo "Missing git-lfs. Install it before bootstrapping."; exit 2)
-	@git lfs install --local
-	@git lfs pull
-	@uv sync --dev
-	@$(PY) -m melee_sim.extract_data --iso "$(ISO)" --out-dir "$(MSL_DATA_DIR)"
-	@$(MAKE) --no-print-directory build
-
-test: build
-	@mkdir -p reports/triage
-	@$(PY) -m pytest -n "$(TEST_WORKERS)" $(TEST_ARGS)
-
-test-parallel: test
-
-test-serial: build
-	@mkdir -p reports/triage
-	@$(PY) -m pytest $(TEST_ARGS)
-
-package-smoke:
-	@$(PY) scripts/package_smoke.py
-
-slpz-convert-suite:
-	@$(PY) -m tools.slippi.convert_replay_storage --suite "$(SUITE)" $(ARGS)
-
-slpz-convert-validation:
-	@$(PY) -m tools.slippi.convert_replay_storage --all-validation-suites $(ARGS)
-
-validate: build
-	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SUITE)" --chunk "$(CHUNK)" $(VALIDATE_OUT)
-
-validate-aggregate: build
-	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(AGG_SUITE)" --chunk "$(CHUNK)" --out "$(AGG_ONE_STEP_OUT)"
-
-# Rollout text validation report (parallel to make validate); OUT=... controls report path.
-validate-rollout: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SUITE)" $(ROLLOUT_OUT)
-
-validate-rollout-aggregate: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(AGG_SUITE)" --out "$(AGG_ROLLOUT_OUT)"
-
-# Fast Marth-focused iteration loop: the marth suite is the same replays the aggregate
-# suite carries (subset), stored under replays/validation/marth - run these frequently while
-# debugging Marth, and validate-all (which covers the same rows via aggregate) less often.
-validate-marth: build
-	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(MARTH_SUITE)" --chunk "$(CHUNK)" --out "$(MARTH_ONE_STEP_OUT)"
-
-validate-rollout-marth: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(MARTH_SUITE)" --out "$(MARTH_ROLLOUT_OUT)"
-
-validate-falcon: build
-	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(FALCON_SUITE)" --chunk "$(CHUNK)" --out "$(FALCON_ONE_STEP_OUT)"
-
-validate-rollout-falcon: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(FALCON_SUITE)" --out "$(FALCON_ROLLOUT_OUT)"
-
-validate-sheik: build
-	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SHEIK_SUITE)" --chunk "$(CHUNK)" --out "$(SHEIK_ONE_STEP_OUT)"
-
-validate-rollout-sheik: build
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SHEIK_SUITE)" --out "$(SHEIK_ROLLOUT_OUT)"
-
-validate-all: build
-	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --doubles-suite "$(DOUBLES_SUITE)" --falcon-suite "$(FALCON_SUITE)" --sheik-suite "$(SHEIK_SUITE)" --chunk "$(CHUNK)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)" --doubles-one-step-out "$(DOUBLES_ONE_STEP_OUT)" --doubles-rollout-out "$(DOUBLES_ROLLOUT_OUT)" --falcon-one-step-out "$(FALCON_ONE_STEP_OUT)" --falcon-rollout-out "$(FALCON_ROLLOUT_OUT)" --sheik-one-step-out "$(SHEIK_ONE_STEP_OUT)" --sheik-rollout-out "$(SHEIK_ROLLOUT_OUT)" --workers "$(VALIDATE_WORKERS)"
-
-validate-heldout: build
-	@$(PY) -m tools.eval.run_heldout_validation --index "$(HELDOUT_INDEX)" --chunk "$(CHUNK)" --out-dir "$(HELDOUT_OUT_DIR)" --summary-out "$(HELDOUT_SUMMARY_OUT)" --workers "$(HELDOUT_WORKERS)" --suite-workers "$(HELDOUT_SUITE_WORKERS)"
-
-rollout-summary:
-	@$(PY) -m tools.eval.summarize_rollout_streaks --in "$(ROLLOUT_JSON)" --top "$(ROLLOUT_TOP)" $(ROLLOUT_SUMMARY_OUT_ARG)
-
-rollout-diff:
-	@$(PY) -m tools.eval.diff_rollout_streaks --before "$(ROLLOUT_BEFORE)" --after "$(ROLLOUT_AFTER)" --top "$(ROLLOUT_TOP)" $(ROLLOUT_DIFF_OUT_ARG)
-
-build_data:
-	@$(PY) -m tools.extraction.build_data --iso-dir "$(RAW_DATA_DIR)" \
-		--raw-manifest "$(RAW_DATA_DIR)/manifest.json" --out-dir "$(MSL_DATA_DIR)" \
-		--stages grnla,grnba,griz,grps,grst,grop
-
-viewer-build:
-	@tools/viewer/build.sh
-
-viewer:
-	@MSL_VIEWER_STATIC_ROOT="build/viewer" MSL_VIEWER_URL_PATH="/tools/viewer/" MSL_VIEWER_HOST="$(HOST)" MSL_VIEWER_PORT="$(VIEWER_PORT)" MSL_VIEWER_OPEN="$(OPEN)" node tools/viewer/server.mjs
-
-fmt:
-	@command -v "$(CLANG_FORMAT)" >/dev/null 2>&1 || (echo "Missing clang-format (set CLANG_FORMAT=... or install it)."; exit 1)
-	@find src bindings -path src/melee_core -prune -o -type f '(' -name '*.c' -o -name '*.h' ')' -print0 | xargs -0 "$(CLANG_FORMAT)" -i
-
-fmt-check:
-	@command -v "$(CLANG_FORMAT)" >/dev/null 2>&1 || (echo "Missing clang-format (set CLANG_FORMAT=... or install it)."; exit 1)
-	@find src bindings -path src/melee_core -prune -o -type f '(' -name '*.c' -o -name '*.h' ')' -print0 | xargs -0 "$(CLANG_FORMAT)" --dry-run --Werror
-
-check: fmt-check test
-
-dolphin-engine-dump:
-	@$(PY) -m tools.dolphin.dolphin_engine_dump $(ARGS)
-
-dolphin-extract:
-	@$(PY) -m tools.dolphin.extract_engine_dump_rows $(ARGS)
-
-build-bench-sim: $(BENCH_SIM)
-
-$(BENCH_SIM): $(BENCH_SIM_CORE_OBJS) $(BENCH_SIM_TOOL_OBJ) $(NATIVE_CONFIG_STAMP)
+$(NATIVE_FLAGS_STAMP): FORCE
 	@mkdir -p "$(@D)"
-	$(BUILD_QUIET)$(CC) $(filter -pg,$(CFLAGS)) $(LTO_FLAG) \
-		$(BENCH_SIM_CORE_OBJS) $(BENCH_SIM_TOOL_OBJ) -lm -o "$@"
+	@printf '%s\n' '$(NATIVE_FLAGS_SIGNATURE)' > "$@.tmp"
+	@cmp -s "$@.tmp" "$@" && rm "$@.tmp" || mv "$@.tmp" "$@"
 
-build-bench-sim-native:
-	@$(MAKE) --no-print-directory NATIVE_OPT=1 build-bench-sim
+$(NATIVE_COMPILE_OBJS): $(NATIVE_FLAGS_STAMP)
 
-bench-sim: build-bench-sim
-	@"$(BENCH_SIM)" $(ARGS)
+$(VIEWER_SCHEMA_TOOL): $(ROOT)/tools/viewer/schema.c $(CORE)/runtime/wire.h
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" -std=c11 -Wall -Wextra -I"$(CORE)" "$<" -o "$@"
 
-bench-sim-native: build-bench-sim-native
-	@"$(BENCH_SIM)" $(ARGS)
+$(VIEWER_SCHEMA_JS): $(VIEWER_SCHEMA_TOOL)
+	@tmp="$@.tmp"; "$(VIEWER_SCHEMA_TOOL)" > "$$tmp"; \
+		if ! cmp -s "$$tmp" "$@"; then mv "$$tmp" "$@"; else rm "$$tmp"; fi
 
-benchmark-report: build build-bench-sim-native
-	@mkdir -p "$(dir $(BENCHMARK_REPORT))" "$(dir $(BENCHMARK_REPLAY_JSON))"
-	@tmp="$(BENCHMARK_REPORT).tmp"; \
-	rm -f "$$tmp"; \
-	set -eu; \
-	trap 'rm -f "$$tmp"' 0 1 2 3 15; \
-	if [ -r /proc/cpuinfo ]; then \
-		cpu=$$(awk -F: '/model name/{sub(/^[ \t]+/, "", $$2); print $$2; exit}' /proc/cpuinfo); \
-	else \
-		cpu=$$(sysctl -n machdep.cpu.brand_string 2>/dev/null || uname -m); \
+viewer-schema-check: $(VIEWER_SCHEMA_TOOL)
+	@tmp="$(NATIVE_BUILD)/schema.generated.js"; \
+		"$(VIEWER_SCHEMA_TOOL)" > "$$tmp"; cmp "$$tmp" "$(VIEWER_SCHEMA_JS)"
+
+source-check:
+	@$(SOURCE_SYNC) check
+
+validator: $(VALIDATION_NATIVE)
+
+$(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(CORE)/runtime/wire.h $(CORE)/runtime/benchmark_wire.h $(CORE)/runtime/item_projection.h
+	@mkdir -p "$(@D)"
+	@PY_INCLUDE="$$($(PY) -c 'import sysconfig; print(sysconfig.get_path("include"))')"; \
+		"$(HOST_CC)" -O3 -std=c11 -fPIC -shared -Wall -Wextra \
+			-D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -I"$$PY_INCLUDE" \
+			-I"$(CORE)" "$<" -lm -o "$@"
+
+toolchain: $(TOOLCHAIN_STAMP)
+
+$(TOOLCHAIN_STAMP): $(ROOT)/tools/build/setup_ppc32_toolchain.sh
+	@$(ROOT)/tools/build/setup_ppc32_toolchain.sh
+
+$(PPC_UPSTREAM_OBJS): $(PPC_OBJ_DIR)/gameplay/%.o: $(SOURCE_TREE)/%.c $(TOOLCHAIN_STAMP)
+	@mkdir -p "$(@D)"
+	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) $(CFLAGS) \
+		-MMD -MP -c "$(SOURCE_TREE)/$*.c" -o "$@"
+
+$(PPC_OBJ_DIR)/%.o: $(ROOT)/%.c $(TOOLCHAIN_STAMP)
+	@mkdir -p "$(@D)"
+	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) $(CFLAGS) \
+		-MMD -MP -c "$<" -o "$@"
+
+$(BINARY): $(PPC_OBJS)
+	@mkdir -p "$(@D)"
+	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+		"$(CC)" --sysroot="$(SYSROOT)" -Wl,--gc-sections $^ $(LDLIBS) -o "$@"
+
+$(NATIVE_UPSTREAM_OBJS): $(NATIVE_OBJ_DIR)/gameplay/%.o: $(SOURCE_TREE)/%.c
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) $(NATIVE_CFLAGS) -MMD -MP \
+		-c "$(SOURCE_TREE)/$*.c" -o "$@"
+
+$(NATIVE_OBJ_DIR)/%.o: $(ROOT)/%.c
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) $(NATIVE_CFLAGS) -MMD -MP -c "$<" -o "$@"
+
+$(PYTHON_UPSTREAM_OBJS): $(PYTHON_OBJ_DIR)/gameplay/%.o: $(SOURCE_TREE)/%.c
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" $(PYTHON_CPPFLAGS) $(NATIVE_CFLAGS) -fPIC \
+		-fvisibility=hidden -MMD -MP \
+		-c "$(SOURCE_TREE)/$*.c" -o "$@"
+
+$(PYTHON_OBJ_DIR)/%.o: $(ROOT)/%.c
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" $(PYTHON_CPPFLAGS) $(NATIVE_CFLAGS) -fPIC \
+		-fvisibility=hidden -MMD -MP -c "$<" -o "$@"
+
+$(WASM_UPSTREAM_OBJS): $(WASM_OBJ_DIR)/gameplay/%.o: $(SOURCE_TREE)/%.c
+	@mkdir -p "$(@D)"
+	@"$(EMCC)" $(WASM_CPPFLAGS) $(WASM_CFLAGS) -MMD -MP \
+		-c "$(SOURCE_TREE)/$*.c" -o "$@"
+
+$(WASM_OBJ_DIR)/%.o: $(ROOT)/%.c
+	@mkdir -p "$(@D)"
+	@"$(EMCC)" $(WASM_CPPFLAGS) $(WASM_CFLAGS) -MMD -MP -c "$<" -o "$@"
+
+$(WASM_OBJ_DIR)/gameplay/melee/ft/ftaction.o \
+$(WASM_OBJ_DIR)/gameplay/melee/it/itanimlist.o \
+$(WASM_OBJ_DIR)/gameplay/melee/lb/lbcommand.o: $(WASM_COMMAND_FIELDS)
+
+$(NATIVE_DAT_PPC_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(TOOLCHAIN_STAMP)
+	@mkdir -p "$(@D)"
+	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) -MMD -MP -g -gdwarf-4 \
+		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
+
+$(NATIVE_DAT_NATIVE_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC)
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
+		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
+
+$(WASM_COMMAND_FIELDS): $(NATIVE_DAT_PPC_TYPES_OBJ) $(COMMAND_FIELDS_GENERATOR)
+	@mkdir -p "$(@D)"
+	@"$(PY)" "$(COMMAND_FIELDS_GENERATOR)" \
+		--object "$(NATIVE_DAT_PPC_TYPES_OBJ)" --output "$@"
+
+$(NATIVE_DAT_LAYOUT_SRC): $(NATIVE_DAT_PPC_TYPES_OBJ) $(NATIVE_DAT_NATIVE_TYPES_OBJ) $(NATIVE_DAT_LAYOUT_GENERATOR)
+	@"$(PY)" "$(NATIVE_DAT_LAYOUT_GENERATOR)" \
+		--ppc "$(NATIVE_DAT_PPC_TYPES_OBJ)" \
+		--native "$(NATIVE_DAT_NATIVE_TYPES_OBJ)" --output "$@"
+
+$(NATIVE_DAT_LAYOUT_OBJ): $(NATIVE_DAT_LAYOUT_SRC)
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) $(NATIVE_CFLAGS) -MMD -MP -c "$<" -o "$@"
+
+$(WASM_GLIBC_STUB):
+	@mkdir -p "$(@D)"
+	@: > "$@"
+
+$(WASM_DAT_NATIVE_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(WASM_GLIBC_STUB)
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" -m32 -malign-double -I"$(WASM_LAYOUT_INCLUDE)" \
+		-isystem /usr/include/x86_64-linux-gnu $(WASM_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
+		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
+
+$(WASM_DAT_LAYOUT_SRC): $(NATIVE_DAT_PPC_TYPES_OBJ) $(WASM_DAT_NATIVE_TYPES_OBJ) $(NATIVE_DAT_LAYOUT_GENERATOR)
+	@"$(PY)" "$(NATIVE_DAT_LAYOUT_GENERATOR)" \
+		--ppc "$(NATIVE_DAT_PPC_TYPES_OBJ)" \
+		--native "$(WASM_DAT_NATIVE_TYPES_OBJ)" --output "$@"
+
+$(WASM_DAT_LAYOUT_OBJ): $(WASM_DAT_LAYOUT_SRC)
+	@mkdir -p "$(@D)"
+	@"$(EMCC)" $(WASM_CPPFLAGS) $(WASM_CFLAGS) -MMD -MP -c "$<" -o "$@"
+
+$(NATIVE_MATCH_RELOC_TYPES_OBJ): $(MATCH_RELOC_TYPES_SRC) $(MATCH_RELOC_TYPES_DEF)
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
+		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
+
+$(NATIVE_MATCH_RELOC_LAYOUT_SRC): $(NATIVE_MATCH_RELOC_TYPES_OBJ) $(MATCH_RELOC_TYPES_DEF) $(MATCH_RELOC_GENERATOR)
+	@"$(PY)" "$(MATCH_RELOC_GENERATOR)" --object "$(NATIVE_MATCH_RELOC_TYPES_OBJ)" \
+		--types "$(MATCH_RELOC_TYPES_DEF)" --output "$@"
+
+$(NATIVE_MATCH_RELOC_LAYOUT_OBJ): $(NATIVE_MATCH_RELOC_LAYOUT_SRC)
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) $(NATIVE_CFLAGS) -MMD -MP -c "$<" -o "$@"
+
+$(PYTHON_DAT_LAYOUT_OBJ): $(NATIVE_DAT_LAYOUT_SRC)
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" $(PYTHON_CPPFLAGS) $(NATIVE_CFLAGS) -fPIC \
+		-fvisibility=hidden -MMD -MP -c "$<" -o "$@"
+
+$(PYTHON_MATCH_RELOC_LAYOUT_OBJ): $(NATIVE_MATCH_RELOC_LAYOUT_SRC)
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" $(PYTHON_CPPFLAGS) $(NATIVE_CFLAGS) -fPIC \
+		-fvisibility=hidden -MMD -MP -c "$<" -o "$@"
+
+$(WASM_MATCH_RELOC_TYPES_OBJ): $(MATCH_RELOC_TYPES_SRC) $(MATCH_RELOC_TYPES_DEF) $(WASM_GLIBC_STUB)
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" -m32 -malign-double -I"$(WASM_LAYOUT_INCLUDE)" \
+		-isystem /usr/include/x86_64-linux-gnu $(WASM_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
+		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
+
+$(WASM_MATCH_RELOC_LAYOUT_SRC): $(WASM_MATCH_RELOC_TYPES_OBJ) $(MATCH_RELOC_TYPES_DEF) $(MATCH_RELOC_GENERATOR)
+	@"$(PY)" "$(MATCH_RELOC_GENERATOR)" --object "$(WASM_MATCH_RELOC_TYPES_OBJ)" \
+		--types "$(MATCH_RELOC_TYPES_DEF)" --output "$@"
+
+$(WASM_MATCH_RELOC_LAYOUT_OBJ): $(WASM_MATCH_RELOC_LAYOUT_SRC)
+	@mkdir -p "$(@D)"
+	@"$(EMCC)" $(WASM_CPPFLAGS) $(WASM_CFLAGS) -MMD -MP -c "$<" -o "$@"
+
+$(PPC_MATCH_RELOC_TYPES_OBJ): $(MATCH_RELOC_TYPES_SRC) $(MATCH_RELOC_TYPES_DEF) $(TOOLCHAIN_STAMP)
+	@mkdir -p "$(@D)"
+	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
+		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
+
+$(PPC_MATCH_RELOC_LAYOUT_SRC): $(PPC_MATCH_RELOC_TYPES_OBJ) $(MATCH_RELOC_TYPES_DEF) $(MATCH_RELOC_GENERATOR)
+	@"$(PY)" "$(MATCH_RELOC_GENERATOR)" --object "$(PPC_MATCH_RELOC_TYPES_OBJ)" \
+		--types "$(MATCH_RELOC_TYPES_DEF)" --output "$@"
+
+$(PPC_MATCH_RELOC_LAYOUT_OBJ): $(PPC_MATCH_RELOC_LAYOUT_SRC) $(TOOLCHAIN_STAMP)
+	@mkdir -p "$(@D)"
+	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) $(CFLAGS) -MMD -MP -c "$<" -o "$@"
+
+$(NATIVE_BINARY): $(NATIVE_OBJS)
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" -no-pie $(NATIVE_LINK_FLAGS) -Wl,--gc-sections $^ $(LDLIBS) -o "$@"
+
+$(PYTHON_LIBRARY): $(PYTHON_CORE_OBJS)
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" -shared -Wl,--gc-sections -Wl,-Bsymbolic -Wl,-z,defs \
+		$^ $(LDLIBS) -o "$@"
+
+$(WASM_MODULE): $(WASM_CORE_OBJS)
+	@mkdir -p "$(@D)"
+	@log="$(WASM_BUILD)/link-warnings.log"; other="$(WASM_BUILD)/link-other-warnings.log"; \
+	if ! "$(EMCC)" -O2 $(WASM_LINK_FLAGS) --no-entry -Wl,--gc-sections $^ $(LDLIBS) \
+		-sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createMslCoreModule \
+		-sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 \
+		-sINITIAL_MEMORY=536870912 -sMAXIMUM_MEMORY=1073741824 \
+		-sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_core_game_data_create","_msl_core_game_data_destroy","_msl_core_batch_create","_msl_core_batch_destroy","_msl_core_batch_match_count","_msl_core_batch_reset_matches","_msl_core_batch_step_matches","_msl_core_batch_write_state","_msl_core_batch_write_observation","_msl_core_batch_write_terminal","_msl_core_batch_write_viewer","_msl_core_batch_copy_matches","_msl_core_batch_match_save_size","_msl_core_batch_save_match","_msl_core_batch_restore_match"]' \
+		-sEXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
+		--preload-file "$(DATA)@/data/raw" -o "$@" 2>"$$log"; then \
+		cat "$$log" >&2; exit 1; \
 	fi; \
-	logical_cpus=$$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo unknown); \
-	{ \
-		echo "# Generated benchmark report. Refresh with: make benchmark-report"; \
-		echo "# Optional for ordinary changes; refresh before committing likely performance-affecting changes."; \
-		echo; \
-		echo "generated_utc=$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
-		echo "git_base_revision=$$(git rev-parse HEAD)"; \
-		if git diff --quiet && git diff --cached --quiet; then echo "git_tree=clean"; else echo "git_tree=dirty"; fi; \
-		echo "system=$$(uname -srm)"; \
-		echo "cpu=$$cpu"; \
-		echo "logical_cpus=$$logical_cpus"; \
-		echo "compiler=$$($(CC) --version | head -n 1)"; \
-		echo "cflags=$(CFLAGS)"; \
-		echo; \
-		echo "[random_mixed]"; \
-		echo "command=make bench-sim-native"; \
-		"$(BENCH_SIM)"; \
-		echo; \
-		echo "[random_fox_falco]"; \
-		echo "command=make bench-sim-native ARGS='--matchups fox-falco'"; \
-		"$(BENCH_SIM)" --matchups fox-falco; \
-		echo; \
-		echo "[aggregate_replay]"; \
-		echo "command=$(PY) -m tools.eval.profile_validation_rollout_frames --max-records 3000 --repeat 10 --top 0"; \
-		$(PY) -m tools.eval.profile_validation_rollout_frames \
-			--max-records 3000 --repeat 10 --top 0 --out "$(BENCHMARK_REPLAY_JSON)"; \
-	} > "$$tmp"; \
-	mv "$$tmp" "$(BENCHMARK_REPORT)"; \
-	trap - 0 1 2 3 15
+	awk 'BEGIN { RS=""; ORS="\n\n" } !/warning: function signature mismatch/' \
+		"$$log" >"$$other"; \
+	count="$$(rg -c 'warning: function signature mismatch' "$$log" 2>/dev/null || true)"; \
+	if [ "$${count:-0}" -gt 0 ]; then \
+		echo "wasm link: $$count expected signature warnings from loud unsupported stubs (details: $$log)" >&2; \
+	fi; \
+	if [ -s "$$other" ]; then cat "$$other" >&2; fi
+
+define link_smoke
+$(1): $(PPC_CORE_OBJS) $(2)
+	@mkdir -p "$$(@D)"
+	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$$$PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$$$LD_LIBRARY_PATH" \
+		"$(CC)" --sysroot="$(SYSROOT)" -Wl,--gc-sections $$^ $(LDLIBS) -o "$$@"
+endef
+
+define link_native_smoke
+$(1): $(NATIVE_CORE_OBJS) $(2)
+	@mkdir -p "$$(@D)"
+	@"$(HOST_CC)" -no-pie $(NATIVE_LINK_FLAGS) -Wl,--gc-sections $$^ $(LDLIBS) -o "$$@"
+endef
+
+$(eval $(call link_smoke,$(ARCHIVE_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/archive_smoke.o))
+$(eval $(call link_smoke,$(DATA_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/data_load_smoke.o))
+$(eval $(call link_smoke,$(MAP_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/map_collision_smoke.o))
+$(eval $(call link_smoke,$(MODEL_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/model_animation_smoke.o))
+$(eval $(call link_smoke,$(SCHEDULER_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/scheduler_smoke.o))
+$(eval $(call link_smoke,$(SCALAR_API_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/scalar_api_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_DATA_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/data_load_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_MAP_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/map_collision_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_MODEL_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/model_animation_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_SCHEDULER_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scheduler_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_SCALAR_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scalar_api_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_CONTEXT_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/context_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_BATCH_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/batch_api_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_WASM_PARITY),$(NATIVE_OBJ_DIR)/tests/melee_core/wasm_parity.o))
+$(eval $(call link_native_smoke,$(NATIVE_LIFECYCLE_BENCH),$(NATIVE_OBJ_DIR)/tests/melee_core/lifecycle_bench.o))
+$(eval $(call link_native_smoke,$(NATIVE_REPLAY_BENCH),$(NATIVE_REPLAY_BENCH_OBJ)))
+
+$(NATIVE_RUNTIME_CENSUS): $(NATIVE_CORE_OBJS) $(NATIVE_RUNTIME_CENSUS_OBJ)
+	@mkdir -p "$(@D)"
+	@"$(HOST_CC)" -no-pie -Wl,--gc-sections $^ \
+		$(LDLIBS) -ldl -o "$@"
+
+$(eval $(call link_native_smoke,$(NATIVE_LARGE_BATCH_SMOKE),$(NATIVE_LARGE_BATCH_SMOKE_OBJ)))
+
+data-check:
+	@$(PY) -c 'from pathlib import Path; from tools.data.raw import validate_raw_dir; validate_raw_dir(Path("$(DATA)"), verify_hashes=False)'
+
+ppc-smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE) $(SCHEDULER_SMOKE) $(SCALAR_API_SMOKE)
+	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(ARCHIVE_SMOKE)" \
+		"$(DATA)/PlCo.dat" \
+		"$(DATA)/PlFx.dat" \
+		"$(DATA)/PlFxNr.dat" \
+		"$(DATA)/GrNLa.dat"
+	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(DATA_SMOKE)" "$(DATA)"
+	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MODEL_SMOKE)" "$(DATA)"
+	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MAP_SMOKE)" "$(DATA)"
+	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCHEDULER_SMOKE)"
+	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
+		"$(DATA)"
+
+native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE)
+	@timeout 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
+	@timeout 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
+	@timeout 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
+	@timeout 5s "$(NATIVE_SCHEDULER_SMOKE)"
+	@timeout 5s "$(NATIVE_SCALAR_API_SMOKE)" "$(DATA)"
+	@timeout 5s "$(NATIVE_CONTEXT_SMOKE)" "$(DATA)"
+	@timeout 5s "$(NATIVE_BATCH_API_SMOKE)" "$(DATA)"
+
+wasm-smoke: data-check $(WASM_MODULE) $(NATIVE_WASM_PARITY)
+	@MSL_CORE_NATIVE_DIGEST="$$($(NATIVE_WASM_PARITY) "$(DATA)")" \
+		node "$(ROOT)/tests/melee_core/wasm_api_smoke.mjs" "$(WASM_MODULE)"
+
+viewer-smoke: wasm-smoke viewer-schema-check
+	+@MSL_DATA_DIR="$(abspath $(MSL_DATA_DIR))" \
+		"$(ROOT)/tools/viewer/live/build_wasm.sh" >/dev/null
+	@node "$(ROOT)/tests/melee_core/viewer_wasm_smoke.mjs"
+	@node "$(ROOT)/tests/melee_core/viewer_browser_smoke.mjs"
+
+viewer-production-smoke: viewer-smoke
+	+@"$(ROOT)/tools/viewer/build.sh" >/dev/null
+	@node "$(ROOT)/tests/melee_core/viewer_browser_smoke.mjs" --production
+
+lifecycle-benchmark: data-check $(NATIVE_LIFECYCLE_BENCH)
+	@timeout 5s "$(NATIVE_LIFECYCLE_BENCH)" "$(DATA)"
+
+benchmark-prepare: validator
+	@"$(PY)" -m tools.validation.prepare_replay_benchmark \
+		--suite "$(VALIDATION_SUITE)" --output "$(BENCHMARK_MANIFEST)" \
+		--characters "$(VALIDATION_CHARACTERS)" --stages "$(VALIDATION_STAGES)"
+
+benchmark-native: data-check benchmark-prepare native-release
+	@taskset -c "$(BENCHMARK_CPU)" "$(NATIVE_RELEASE_REPLAY_BENCH)" \
+		"$(DATA)" "$(BENCHMARK_MANIFEST)" --matches "$(BENCHMARK_MATCHES)" \
+		--resident-matches "$(BENCHMARK_RESIDENT_MATCHES)" \
+		--match-frames "$(BENCHMARK_MATCH_FRAMES)" \
+		--warmup-ticks "$(BENCHMARK_WARMUP_TICKS)"
+
+benchmark-9950x3d-vcache-256:
+	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" benchmark-native \
+		BENCHMARK_CPU=0 BENCHMARK_MATCHES=256
+
+benchmark-9950x3d-vcache-512:
+	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" benchmark-native \
+		BENCHMARK_CPU=0 BENCHMARK_MATCHES=512
+
+benchmark-9950x3d-frequency-256:
+	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" benchmark-native \
+		BENCHMARK_CPU=8 BENCHMARK_MATCHES=256
+
+benchmark-9950x3d-frequency-512:
+	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" benchmark-native \
+		BENCHMARK_CPU=8 BENCHMARK_MATCHES=512
+
+validation-suite:
+	@MSL_DATA_DIR="$(abspath $(MSL_DATA_DIR))" "$(PY)" -m tools.validation.validate_replay \
+		--suite "$(VALIDATION_SUITE)" \
+		--characters "$(VALIDATION_CHARACTERS)" --stages "$(VALIDATION_STAGES)" \
+		--backend "$(VALIDATION_BACKEND)" --workers "$(VALIDATION_WORKERS)" \
+		--build-jobs "$(VALIDATION_BUILD_JOBS)" --frames "$(VALIDATION_FRAMES)" \
+		--timing $(VALIDATION_ARGS)
+
+validation-supported-domain:
+	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" validation-suite \
+		VALIDATION_SUITE=replays/suites/melee_core_aggregate.json
+
+test: source-check native-smoke python-library validator
+	@"$(PY)" -m pytest -q
+
+test-full: test ppc-smoke validation-supported-domain viewer-smoke
+
+format-check:
+	@git diff --check
+
+slpz-convert:
+	@"$(PY)" -m tools.validation.convert_replay_storage $(ARGS)
+
+clean:
+	@rm -rf "$(PPC_BUILD)" "$(NATIVE_BUILD)" "$(NATIVE_RELEASE_BUILD)" \
+		"$(WASM_BUILD)" "$(PYTHON_BUILD)" "$(VALIDATION_BUILD)" \
+		"$(BUILD_ROOT)/benchmark"
+
+-include $(DEPS)

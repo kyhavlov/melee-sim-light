@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.slippi.slpz import (
+from tools.validation.slpz import (
     EVENT_PAYLOADS,
     GAME_START,
     RAW_HEADER,

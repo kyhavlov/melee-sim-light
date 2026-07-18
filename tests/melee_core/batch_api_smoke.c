@@ -1,27 +1,9 @@
 #include "api.h"
-#include "../../src/api.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <dolphin/pad.h>
-
-_Static_assert(sizeof(MslCoreObservation) == sizeof(MeleeGamestate),
-               "production observation contract drift");
-_Static_assert(sizeof(MslCoreObservationPlayer) == sizeof(MeleePlayer),
-               "production player contract drift");
-_Static_assert(sizeof(MslCoreObservationStage) == sizeof(MeleeStage),
-               "production stage contract drift");
-_Static_assert(sizeof(MslCoreItem) == sizeof(MeleeItem),
-               "production item contract drift");
-_Static_assert(sizeof(MslCoreTerminal) == sizeof(MslTerminal),
-               "production terminal contract drift");
-_Static_assert(offsetof(MslCoreObservation, slots) ==
-                   offsetof(MeleeGamestate, slots),
-               "production slot layout drift");
-_Static_assert(offsetof(MslCoreObservation, items) ==
-                   offsetof(MeleeGamestate, items),
-               "production item layout drift");
 
 static int viewer_has_item(const MslCoreViewerState* viewer)
 {
