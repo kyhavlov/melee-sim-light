@@ -873,8 +873,8 @@ Every experiment below is labeled before implementation:
 | 1 | **Completed by Packet 1:** cull or construction-precompute supported-stage animation/callback work whose products are invariant or presentation-only | **Retained: +6.8% at 512** | Dynamic collision/platform/wind publication remains source-owned. The final audit, correctness gates, and normalized A/B evidence are recorded below. |
 | 2 | **Rejected by Packet 2:** split `Fighter_ProcessHit_8006D1EC` into a minimal no-pending-event path and the exact event path | **Correctness-green, noise-level** | 96.0% of visible calls were idle, but preserving gameplay-required hurt-capsule publication left +0.7% at 512 and -0.4% at 256. The capsule consumer boundary remains queue item 6; no scalar guard was retained. |
 | 3 | **Completed by Packet 3:** reduce camera/magnify/visibility to the gameplay-observed headless owner | **Retained: +1.5% at 512** | One Match-wide render publication, dead hosted standard-mode work removed, and renderer-only quake/model-shift projection deleted. Gameplay camera bounds, transform, offscreen damage, effect lifetime, and visibility remain canonical. |
-| 4 | Replace stage collision pointer topology with compact immutable line/normal/adjacency arrays and a bounded dynamic overlay | **Potential** | Map collision is 18%. Compact data is the final memory shape, but conversion alone may not beat hot scalar pointers until traversal is also replaced. |
-| 5 | Add stage spatial candidate sets and swept-ECB broad-phase rejection before exact narrow phase | **Potential** | It can skip large line searches, especially across repeated static stages, but candidate maintenance and small-stage workloads may erase the gain. Exact admission, ordering, remap, platform, and ledge rules remain unchanged. |
+| 4 | **Rejected with Packet 5:** replace stage collision pointer topology with compact immutable arrays and a bounded dynamic overlay | **Potential; scalar standalone boundary too small** | The largest supported dense topology is under roughly 9 KiB per Match, and all scalar scan/query/intersection work is only about 1.95% of Callgrind instructions. Do the compact shape inside items 8–10's final cross-environment kernel instead of building a soon-displaced scalar representation. |
+| 5 | **Rejected with Packet 4:** add scalar stage spatial candidates before exact narrow phase | **Potential; ~1.02x deletion ceiling** | A production census found 5.80M intersection attempts but only 4,406 ideal AABB candidates over 32,768 frames. The existing first comparisons already reject by AABB, leaving too little total scalar cost to justify the cross-cutting index/remap cut. No candidate was retained. |
 | 6 | Replace live pose tree traversal with shared ordinary-frame pose data plus a compact evaluator for blends, fractional rates, dynamics, IK, and capture | **Potential** as a scalar replacement; **definite** only when it deletes the tree/matrix owner and feeds batched consumers directly | Pose evaluation is 13–16% and the broader geometry group about 25%. Prior partial caches failed because they retained the expensive consumer graph. No further partial cache qualifies. |
 | 7 | Compile one complete hot owner at a time under the audited strict O3 profile | **Potential** | Prior matrix, animation, and mpLib closures won, while other TUs changed exact output or regressed. Compiler closure can improve a measured owner but cannot supply the multi-x architecture. |
 | 8 | Promote compact hot mutable state into aligned AoSoA tiles, separating immutable shared and cold rare state | **Definite final-architecture improvement at 512**, but state extraction alone need not raise FPS | This is required to stop loading multi-megabyte per-Match pointer graphs and to make cross-environment kernels contiguous. The gain is judged after consumers use the new state and the displaced hot representation is deleted. |
@@ -1087,3 +1087,20 @@ and save/restore, sealed runtime census, 256-environment arbitrary-index restore
 native parity (`cef96ff32edfe898`), live viewer (`1b43d24b47c228f2`), and browser viewer all pass.
 Detailed adjacent evidence is under ignored
 `reports/triage/perf_candidates/packet3_headless_camera.md`.
+
+### Packet 4–5 — scalar stage topology/spatial index rejected — 2026-07-17
+
+The six supported extracted stages contain only 11–136 lines, and the largest current per-Match
+collision topology is under roughly 9 KiB. A temporary exact-digest production census over 32,768
+representative match-frames counted 5,795,030 intersection attempts versus 4,406 ideal swept-AABB
+line candidates. However, the existing intersection helpers already perform the AABB rejection in
+their first comparisons. The preserved Callgrind production run attributes about 5.28M of 270.06M
+retired instructions (1.95%) to the complete scan/query/intersection/bounding boundary, for only a
+roughly 1.02x ceiling even if all of it vanished.
+
+This potential packet is cleanly rejected before production cutover. The temporary diagnostic was
+removed completely, leaving no runtime change or compatibility state. Compact stage data and
+spatial masks remain valuable only as part of items 8–10's final AoSoA/homogeneous SIMD collision
+kernel, where they displace scalar traversal instead of creating an intermediate scalar owner.
+Detailed stage counts and the proposed/deleted boundary are archived in
+`history/PACKET_04_05_STAGE_COLLISION.md`.

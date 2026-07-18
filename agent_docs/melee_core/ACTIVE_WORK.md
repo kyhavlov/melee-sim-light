@@ -1,6 +1,12 @@
 # Active melee-core work
 
-Packet 3 is correctness-green and retained for commit. Its final evidence is in `PERFORMANCE.md`,
-and its owner map and chronological log are archived in `history/PACKET_03_HEADLESS_CAMERA.md`.
-Queue items 4–5 (compact stage collision representation plus spatial candidate traversal) are next;
-write their combined final owner/deletion map here before runtime edits.
+Queue items 4–5 are cleanly rejected before production cutover. Their proposed final boundary,
+production census, Callgrind ceiling, and disposition are archived in
+`history/PACKET_04_05_STAGE_COLLISION.md` and summarized in `PERFORMANCE.md`. No collision runtime,
+diagnostic counter, duplicate state, or compatibility path remains in the worktree.
+
+Queue item 6 (final compact pose/geometry consumer cutover) is next. Before runtime edits, inspect
+the committed pose/geometry owner and the archived failed experiments, then replace this file with
+a new packet map naming its final owner, canonical shared/dynamic state, every gameplay consumer,
+displaced tree/matrix/hurt-capsule state, complete deletion boundary, confidence label, and an early
+proof that exercises the final consumer shape rather than another partial cache.
