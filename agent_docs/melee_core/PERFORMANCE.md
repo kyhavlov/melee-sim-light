@@ -808,3 +808,207 @@ True-resident throughput is intentionally reported as neutral: 60,131 complete F
 runtime-allocation gates remain green. This packet is retained for its large per-environment memory
 deletion; it is not counted as progress toward the 500k frame-time target. The next speed unit is a
 complete compact pose/collision owner, not more size-class or scalar-leaf tuning.
+
+## Phase 9 clean-HEAD profile and 500k experiment queue — 2026-07-17
+
+The failed broad compact-pose experiment established that representation work must follow measured
+complete owners rather than an assumed renderer-shaped bottleneck. Its complete dirty tree is
+preserved outside the branch as named stash
+`fad684cec36b130020c8badd08d9ddd841fd514b`; it is evidence and a salvage source, not the active
+runtime. The temporary profiling instrumentation is independently preserved as
+`0d17defb5841f04e80924af05698747f3ee38ef0`. Neither stash is a retained performance result.
+
+The committed HEAD was rebuilt and remeasured on CPU 0 before profiling. It produced the expected
+digests and reached 58,289 complete FPS at 256 and 75,363 at 512. These are 3.1% and 3.8% below the
+recorded retained results of 60,131 and 78,370 under contemporaneous host conditions, so the
+retained implementation is intact. Future decisions use adjacent alternating baseline/candidate
+runs rather than comparing a new sample with the best historical sample.
+
+The former `MSL_CORE_PHASE_PROFILE` result is rejected as optimization evidence because it changed
+the production scalar schedule into a two-Match interleaving path. The replacement diagnostic timed
+the unchanged complete production contract, used RDTSCP with measured timer overhead removed, and
+kept the production digest exact. The canonical suite-derived and midgame-weighted samples agree on
+the major owners:
+
+| Exclusive complete-contract owner | Canonical | Midgame-weighted |
+|---|---:|---:|
+| Fighter map/stage collision callback | 18.15% | 18.10% |
+| Live pose animation evaluation | 13.34% | 16.21% |
+| Hit/damage resolution | 13.20% | 10.80% |
+| Stage object animation/callbacks | 9.34% | 10.03% |
+| Action-state animation callback | 7.56% | 8.76% |
+| Controller/input/IASA owner | 7.46% | 6.42% |
+| Fighter dynamics | 6.68% | 5.07% |
+| Global and fighter camera callbacks | 4.52% | 4.50% |
+| Contact/hurt/hit/shield publication | 2.82% | 2.32% |
+| Scheduler traversal/dispatch | 2.93% | 2.93% |
+| Finish/publication | 2.31% | 2.31% |
+| Observation | 1.95% | 1.95% |
+| Combat collision detection | 1.61% | 1.27% |
+| Ground IK | 1.19% | 1.20% |
+| Items/articles | 0.83% | 1.34% |
+
+Stage collision plus scheduled stage work owns about 28% of the frame. Hit resolution, collision
+detection, and contact publication own about 14–18%. A generous pose/geometry grouping owns about
+25%, which gives it only a 1.34x whole-runtime ceiling even if it were eliminated completely. The
+500k checkpoint is therefore defined at **512 resident environments on one CPU core**. It requires
+6.38x over the retained 78,370 FPS result; 256 remains a required secondary cache-pressure report,
+not the official completion point.
+
+### Confidence labels
+
+Every experiment below is labeled before implementation:
+
+- **Definite improvement** means the completed final boundary removes measured executed work or
+  replaces it with strictly less equivalent work. A neutral or negative result is evidence that the
+  implementation, deletion boundary, or benchmark is wrong; it is not grounds to relabel the idea
+  as worthless. This expectation applies only after the complete named boundary is in place, not to
+  temporary scaffolding.
+- **Potential improvement** means the idea is source-correct and plausible, but locality, branch
+  frequency, divergence, setup cost, or cache pressure can legitimately make a correct
+  implementation neutral or slower. It is retained only on measured complete-contract evidence.
+
+| Order | Optimization item | Confidence | Basis and expected role |
+|---:|---|---|---|
+| 1 | **Completed by Packet 1:** cull or construction-precompute supported-stage animation/callback work whose products are invariant or presentation-only | **Retained: +6.8% at 512** | Dynamic collision/platform/wind publication remains source-owned. The final audit, correctness gates, and normalized A/B evidence are recorded below. |
+| 2 | Split `Fighter_ProcessHit_8006D1EC` into a minimal no-pending-event path and the exact event path | **Potential** until the inner owner profile proves what can be skipped; **definite** for subsequently proven unconditional dead work | The owner is 11–13%, but some timers and shield/damage state may genuinely advance every frame. Active flags or queues must preserve exact source ordering. |
+| 3 | Reduce camera/magnify/visibility to the gameplay-observed headless owner | **Definite** for presentation-only branches; total size is potential | Camera callbacks are 4.5%, with additional finish visibility cost. Existing gameplay camera bounds, blast zones, offscreen damage, and visibility bits remain canonical. |
+| 4 | Replace stage collision pointer topology with compact immutable line/normal/adjacency arrays and a bounded dynamic overlay | **Potential** | Map collision is 18%. Compact data is the final memory shape, but conversion alone may not beat hot scalar pointers until traversal is also replaced. |
+| 5 | Add stage spatial candidate sets and swept-ECB broad-phase rejection before exact narrow phase | **Potential** | It can skip large line searches, especially across repeated static stages, but candidate maintenance and small-stage workloads may erase the gain. Exact admission, ordering, remap, platform, and ledge rules remain unchanged. |
+| 6 | Replace live pose tree traversal with shared ordinary-frame pose data plus a compact evaluator for blends, fractional rates, dynamics, IK, and capture | **Potential** as a scalar replacement; **definite** only when it deletes the tree/matrix owner and feeds batched consumers directly | Pose evaluation is 13–16% and the broader geometry group about 25%. Prior partial caches failed because they retained the expensive consumer graph. No further partial cache qualifies. |
+| 7 | Compile one complete hot owner at a time under the audited strict O3 profile | **Potential** | Prior matrix, animation, and mpLib closures won, while other TUs changed exact output or regressed. Compiler closure can improve a measured owner but cannot supply the multi-x architecture. |
+| 8 | Promote compact hot mutable state into aligned AoSoA tiles, separating immutable shared and cold rare state | **Definite final-architecture improvement at 512**, but state extraction alone need not raise FPS | This is required to stop loading multi-megabyte per-Match pointer graphs and to make cross-environment kernels contiguous. The gain is judged after consumers use the new state and the displaced hot representation is deleted. |
+| 9 | Replace generic linked-list scheduling at named complete-owner boundaries with fixed phase loops and callback/action-owner index queues | **Definite as part of the completed batched execution boundary**; direct dispatch savings alone are small | Traversal is only about 3%. The value is homogeneous work and stable locality. Scalar callback interleaving is already proven slower and must not return. |
+| 10 | Implement masked AVX2/AVX-512 kernels for homogeneous stage collision, pose transforms, integration, contact, and other unconditional owners | **Definite for completed homogeneous kernels** | These kernels are the principal multi-x step. If a completed contiguous kernel cannot beat equivalent scalar work materially, its layout, lane utilization, or measurement is wrong. Divergent action logic uses compact owner queues rather than vectorizing function pointers. |
+| 11 | Add active fighter/item/hitbox masks and pair broad phase for combat | **Potential** | It can remove empty and distant pair work, particularly in doubles and item-heavy states, but measured collision detection itself is only 1–2%; do it after the larger hit-resolution boundary. |
+
+The plausible milestone model is 1.3–1.6x from deletion, precomputation, fast paths, and bounded
+compiler closure; another 1.5–2x from compact hot state and homogeneous phase kernels; and 2–3x
+from effective SIMD over those kernels. These factors are hypotheses to falsify, not gains to claim
+in advance. No scalar patch pile is expected to reach 500k.
+
+### One-item ablation protocol
+
+Until several packets have landed cleanly, one turn investigates exactly one optimization item from
+the table rather than a bundle. Before runtime edits, `ACTIVE_WORK.md` names its final owner,
+canonical state, consumers, displaced state/code, deletion boundary, confidence label, and expected
+measurement. The chronological log is updated before and after every material experiment.
+
+Each candidate starts from clean committed HEAD. It receives adjacent alternating CPU-0 A/B runs at
+256 and 512 resident environments on the canonical workload, exact digest comparison, and a
+midgame-weighted supporting run. The 512 result is the acceptance decision. A candidate expected to
+move frame time must show a repeatable complete-contract improvement outside run noise; a
+representation prerequisite may be retained without immediate FPS only when it completes a named
+final deletion boundary and is explicitly labeled as such. Independent micro-candidates below 5%
+are rejected unless they are a necessary part of that final boundary.
+
+Every successful candidate is preserved without committing: a named stash including untracked
+files plus an ordered binary patch under ignored `reports/triage/perf_candidates/`, with parent,
+SHA-256, changed owners, benchmark evidence, digests, and gate status recorded in the worklog.
+Candidates are measured both alone and cumulatively over the accepted uncommitted stack. Rejected
+experiments are removed only after their evidence and disposition are recorded. No substantial
+existing dirty work is deleted or replaced without a separate salvage proposal and user approval.
+
+The full 153-replay native gate, native API/save-restore, no-allocation smoke, and relevant Wasm
+smokes run once a candidate has earned retention through focused exact locks and benchmarks. No new
+validation classification is allowed. An item stops for reconvening if two structural attempts fail
+the same unknown, its final path becomes uncertain, or two hours pass without a retained result or
+completed deletion boundary. No performance candidate is committed before the user reviews the
+ablation report and explicitly authorizes it.
+
+### Packet 1 — supported-stage headless animation/callback cull
+
+This is one bounded optimization item, not a general stage refactor and not the stage-collision
+representation packet. Its objective is to remove scheduled per-frame stage work whose output is
+presentation-only, or move gameplay-observed invariant output to construction/reset. The declared
+confidence is **definite improvement for every completed removable owner**: if profiling proves the
+old executed work is gone without equivalent replacement work and complete-contract throughput
+does not improve, the implementation or measurement must be investigated rather than declaring the
+idea invalid. The amount of removable work within the measured 9–10% stage-object budget remains an
+open measurement; the packet is independently retained only for a repeatable improvement of about
+5% or more at 512 environments.
+
+The source boundary starts at `Ground_801C1CD0`, its common JObj animation work, and the scheduled
+stage-specific callbacks reached on Final Destination, Battlefield, Fountain of Dreams, frozen
+Pokemon Stadium, Yoshi's Story, and Dream Land N64. The audit must name every changed callback and
+each value it publishes. Dynamic collision transforms, moving-platform state, stage hazards that
+remain enabled in the supported profile, Dream Land wind, gameplay camera/blast-zone state, and any
+other value consumed by fighter, item, collision, or terminal logic remain in their exact source
+order. No callback is removable merely because its name or object graph looks renderer-related.
+
+Process:
+
+1. Create a concise `ACTIVE_WORK.md` packet map before runtime edits. Record the final owner,
+   canonical invariant/dynamic state, consumers, exact displaced callbacks/traversals, deletion
+   boundary, exclusions, confidence label, and chronological log. Do not restore the old broad pose
+   candidate or profiling changes into the production path.
+2. Measure adjacent CPU-0 baselines at 512 and 256 resident environments with exact production
+   digests. The 512 result decides acceptance; 256 is the secondary cache-pressure result.
+3. Use the preserved diagnostic profiler only to split stage-object cost by supported stage and
+   callback. Keep production scheduling unchanged and keep each routine command within the normal
+   time limit.
+4. Trace the outputs and downstream consumers of every callback large enough to matter. Classify
+   it as dynamic/gameplay-observed, invariant/gameplay-observed, or presentation-only/unobserved.
+   Record source/data evidence for the classification before changing it.
+5. Leave dynamic gameplay owners source-shaped. Publish invariant gameplay data once during the
+   appropriate construction/reset owner. Delete presentation-only scheduled work completely. Do
+   not add flags, lazy fallbacks, duplicate representations, compatibility dispatch, or a new
+   per-frame substitute loop.
+6. Run focused exact per-stage output locks and re-profile the candidate. Verify that each displaced
+   callback has disappeared and that its work was not shifted to another timed owner before treating
+   benchmark movement as evidence.
+7. Run alternating baseline/candidate measurements at 512 and 256 plus the midgame-weighted
+   supporting workload. Diagnose any neutral or negative result for an allegedly completed
+   definite cut; do not immediately restore the deleted owner or pivot to unrelated tuning.
+8. If the candidate earns retention, run the complete 153-replay native gate, native API and
+   arbitrary-index save/restore checks, no-runtime-allocation smoke, and relevant Wasm/viewer smokes.
+   No digest change or new/widened validation classification is allowed.
+9. Preserve a successful result as both a named stash and an ordered ignored binary patch with
+   SHA-256 and evidence, then reapply it so the accepted implementation remains uncommitted in the
+   worktree. Preserve a bounded unsuccessful experiment before removal as well. Report the audit,
+   displaced owners, standalone and marginal FPS, correctness gates, and disposition. Send the
+   Discord webhook only for a concrete retained performance win. Commit only when the active user
+   request authorizes it.
+
+#### Packet 1 retained result — 2026-07-17
+
+The supported-stage audit retained one construction-time deletion boundary. Culled common Ground
+owners have their animation graphs removed and `Ground_801C1CD0` replaced by an epoch-only owner;
+the source collision-cache epoch and any non-null Ground callback remain in the same scheduler
+position. Dynamic common animation remains on Fountain map 4, Yoshi maps 2/3, Dream Land maps 2/7,
+and Battlefield map 3. Frozen Stadium retains no common animation in the frozen supported profile.
+The invariant Stadium map-5 and Battlefield map-6 priority-4 callbacks are removed after their
+construction publication, as are asserted-null construction-time `Ground_801C1D38` callbacks.
+Later transient Ground objects retain their source schedule. There is no runtime stage branch,
+fallback, duplicate state, or compatibility dispatch.
+
+Canonical CPU-0 A/B evidence uses the same packed manifest, output contract, and digest:
+
+| Environments | Adjacent no-op mean | Candidate mean | Gain | Digest |
+|---:|---:|---:|---:|---|
+| 512 | 78,504 FPS | 83,837 FPS | **+6.8%** | `3fb5823d90657775` |
+| 256 | 59,903 FPS | 63,207 FPS | **+5.5%** | `bdc54107c51fa3d7` |
+
+Both sides of the final comparison include the completed 128-piece reached-class reserve. The two
+individual 512 pairs improved 78,609 to 83,747 FPS and 78,398 to 83,927 FPS. The 256 pairs improved
+60,098 to 63,158 FPS and 59,707 to 63,255 FPS. The representative-only supporting workload from the
+earlier schedule audit improved 55,918 to 60,488 FPS (+8.2%) with unchanged digest
+`f3f76e2500bf0da5`. A canonical all-case owner profile retained digest
+`3fb5823d90657775`, removed every named construction-time owner, and showed no substitute callback.
+The final corrected no-cull and candidate executables are preserved under ignored
+`reports/triage/packet1-stage-cull/` with SHA-256 values
+`13b48edb7a535927183fe8b5a20e5657111398faffa88d88937853fd77a8aa0c` and
+`cfa974e86afc5a675a11686156be410587aaa351a49d4db53dcd097d3c41012d`.
+
+The initial 64-piece reached-class reserve was insufficient for three supported transient JObj
+graphs. Raising the initialization-only reserve to 128 closes the source allocator boundary with no
+frame-path work. It adds 14,236 bytes to the representative per-environment arena/savestate payload
+(921,656 bytes total) and raises maximum supported construction to 1,266,476 bytes, still inside the
+3 MiB arena.
+
+The complete 153-replay gate is green: 63 exact pass, 90 unchanged exact classifications, zero
+XPASS/fail/error, and 1,415,476 compared frames. Source sync, native API/context/batch and
+save/restore smokes, the sealed-runtime allocation census, 256-environment arbitrary-index restore,
+PPC scalar/data/model/map/scheduler smokes, Wasm/native parity (`cef96ff32edfe898`), live-viewer
+(`1b43d24b47c228f2`), and browser smokes pass. The final implementation is correctness-green and
+retained for commit.

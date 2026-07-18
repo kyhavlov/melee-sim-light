@@ -159,6 +159,12 @@
 /* 1C5ABC */ bool Ground_801C5ABC(void);
 /* 1C5AD0 */ u32 Ground_801C5AD0(s32 i);
 /* 1C5AEC */ void Ground_801C5AEC(Vec3* v, Vec3*, Vec3*, Vec3*);
+#ifdef MSL_CORE_HOSTED
+void msl_ground_headless_epoch_proc(HSD_GObj* gobj);
+void msl_ground_use_headless_epoch_proc(HSD_GObj* gobj);
+void msl_ground_remove_null_post_proc(HSD_GObj* gobj);
+void msl_ground_remove_priority4_procs(HSD_GObj* gobj);
+#endif
 #ifndef MSL_CORE_HOSTED
 /* 49E6C8 */ extern StageInfo stage_info;
 #else

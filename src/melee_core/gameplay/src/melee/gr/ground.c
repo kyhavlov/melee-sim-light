@@ -1022,6 +1022,56 @@ static void Ground_801C1D38(HSD_GObj* gobj)
     }
 }
 
+#ifdef MSL_CORE_HOSTED
+void msl_ground_headless_epoch_proc(HSD_GObj* gobj)
+{
+    Ground* gp = gobj->user_data;
+    mpColl_804D64AC += 1;
+    if (gp->x8_callback != NULL) {
+        gp->x8_callback(gobj);
+    }
+}
+
+void msl_ground_use_headless_epoch_proc(HSD_GObj* gobj)
+{
+    HSD_GObjProc* proc;
+    HSD_JObjRemoveAnimAll(gobj->hsd_obj);
+    for (proc = gobj->proc; proc != NULL; proc = proc->child) {
+        if (proc->on_invoke == Ground_801C1CD0) {
+            proc->on_invoke = msl_ground_headless_epoch_proc;
+            return;
+        }
+    }
+    HSD_ASSERT(1040, 0);
+}
+
+void msl_ground_remove_null_post_proc(HSD_GObj* gobj)
+{
+    HSD_GObjProc* proc;
+    Ground* gp = gobj->user_data;
+    HSD_ASSERT(1047, gp->xC_callback == NULL);
+    for (proc = gobj->proc; proc != NULL; proc = proc->child) {
+        if (proc->on_invoke == Ground_801C1D38) {
+            HSD_GObjProc_8038FE24(proc);
+            return;
+        }
+    }
+    HSD_ASSERT(1054, 0);
+}
+
+void msl_ground_remove_priority4_procs(HSD_GObj* gobj)
+{
+    HSD_GObjProc* proc = gobj->proc;
+    while (proc != NULL) {
+        HSD_GObjProc* next = proc->child;
+        if (proc->s_link == 4) {
+            HSD_GObjProc_8038FE24(proc);
+        }
+        proc = next;
+    }
+}
+#endif
+
 void Ground_801C1D6C(u32 arg0)
 {
     stage_info.flags |= arg0;

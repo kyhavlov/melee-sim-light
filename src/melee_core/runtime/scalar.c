@@ -84,6 +84,8 @@ typedef struct MslCoreStageSpec {
     InternalStageId internal_id;
     const char* archive;
     StageData* source;
+    uint16_t runtime_animation_mask;
+    uint16_t static_stage_proc_mask;
     Vec3 singles_spawn[MSL_CORE_MAX_PLAYERS];
     Vec3 teams_spawn[MSL_CORE_MAX_PLAYERS];
 } MslCoreStageSpec;
@@ -244,6 +246,8 @@ static const MslCoreStageSpec stage_specs[] = {
       IZUMI,
       "/GrIz.dat",
       &grIz_803E0E5C,
+      1U << 4,
+      0,
       { { -41.25F, 21.0F, 0.0F }, { 41.25F, 27.0F, 0.0F },
         { 0.0F, 5.25F, 0.0F }, { 0.0F, 48.0F, 0.0F } },
       { { -41.25F, 21.0F, 0.0F }, { -41.25F, 5.0F, 0.0F },
@@ -252,6 +256,8 @@ static const MslCoreStageSpec stage_specs[] = {
       PSTADIUM,
       "/GrPs.dat",
       &grPs_803E1334,
+      0,
+      1U << 5,
       { { -40.0F, 32.0F, 0.0F }, { 40.0F, 32.0F, 0.0F },
         { 70.0F, 7.0F, 0.0F }, { -70.0F, 7.0F, 0.0F } },
       { { -40.0F, 32.0F, 0.0F }, { -40.0F, 5.0F, 0.0F },
@@ -260,6 +266,8 @@ static const MslCoreStageSpec stage_specs[] = {
       STORY,
       "/GrSt.dat",
       &grSt_803E274C,
+      (1U << 2) | (1U << 3),
+      0,
       { { -42.0F, 26.6F, 0.0F }, { 42.0F, 28.0F, 0.0F },
         { 0.0F, 46.9F, 0.0F }, { 0.0F, 4.9F, 0.0F } },
       { { -42.0F, 26.6F, 0.0F }, { -42.0F, 5.0F, 0.0F },
@@ -268,6 +276,8 @@ static const MslCoreStageSpec stage_specs[] = {
       OLDPUPUPU,
       "/GrOp.dat",
       &grOp_803E6748,
+      (1U << 2) | (1U << 7),
+      0,
       { { -46.6F, 37.2F, 0.0F }, { 47.4F, 37.3F, 0.0F },
         { 0.0F, 7.0F, 0.0F }, { 0.0F, 58.5F, 0.0F } },
       { { -46.6F, 37.2F, 0.0F }, { -46.6F, 5.0F, 0.0F },
@@ -276,6 +286,8 @@ static const MslCoreStageSpec stage_specs[] = {
       BATTLE,
       "/GrNBa.dat",
       &grNBa_803E7E38,
+      1U << 3,
+      1U << 6,
       { { -38.8F, 35.2F, 0.0F }, { 38.8F, 35.2F, 0.0F },
         { 0.0F, 8.0F, 0.0F }, { 0.0F, 62.4F, 0.0F } },
       { { -38.8F, 35.2F, 0.0F }, { -38.8F, 5.0F, 0.0F },
@@ -284,6 +296,8 @@ static const MslCoreStageSpec stage_specs[] = {
       LAST,
       "/GrNLa.dat",
       NULL,
+      0,
+      0,
       { { -60.0F, 10.0F, 0.0F }, { 60.0F, 10.0F, 0.0F },
         { -20.0F, 10.0F, 0.0F }, { 20.0F, 10.0F, 0.0F } },
       { { -60.0F, 10.0F, 0.0F }, { -20.0F, 10.0F, 0.0F },
@@ -427,18 +441,28 @@ enum_t Stage_80225194(void)
     return bound_stage_match->config.stage_id;
 }
 
-static void headless_static_ground_epoch_proc(HSD_GObj* gobj)
+static void configure_headless_ground_schedule(
+    MslCoreMatch* match, const MslCoreStageSpec* spec)
 {
-    (void) gobj;
-    // Final Destination's collision archive is static. Ground_801C1CD0's
-    // HSD_JObjAnimAll walk and material callback only advance the ten stage
-    // model graphs; no collision vertex, stage point, or gameplay callback is
-    // sourced from those animations. Retain one epoch publication so mpColl's
-    // cached-contact invalidation still observes a stage frame, without
-    // scheduling ten renderer-model walks.
-    // refs/melee/src/melee/gr/ground.c::Ground_801C1CD0
-    // data/stages/final_destination.json::{segments,platform_motion}
-    mpColl_804D64AC += 1;
+    int i;
+    for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
+        Ground* gp;
+        uint16_t map_bit;
+        if (!match->stage_ground_used[i]) {
+            continue;
+        }
+        gp = &match->stage_ground[i];
+        HSD_ASSERT(501, gp->map_id >= 0 && gp->map_id < 16);
+        map_bit = (uint16_t) (1U << gp->map_id);
+        if ((spec->runtime_animation_mask & map_bit) == 0) {
+            msl_ground_use_headless_epoch_proc(gp->gobj);
+        }
+        if ((spec->static_stage_proc_mask & map_bit) != 0) {
+            msl_ground_remove_priority4_procs(gp->gobj);
+        } else {
+            msl_ground_remove_null_post_proc(gp->gobj);
+        }
+    }
 }
 
 static void init_hsd(void)
@@ -1002,6 +1026,15 @@ static int match_construct(MslCoreMatch* match,
         // to preserve the source lifecycle seam.
         spec->source->OnInit();
         spec->source->OnLoad();
+        // Only source owners that publish dynamic gameplay state retain their
+        // per-frame model/collision schedule. The masks are the construction-
+        // time audit of the supported stage callbacks; no stage-id branch is
+        // added to the frame path.
+        // refs/melee/src/melee/gr/{grbattle.c,grizumi.c,groldpupupu.c,
+        //   grpstadium.c,grstory.c}
+        // data/stages/{battlefield,fountain_of_dreams,dream_land_n64,
+        //   pokemon_stadium,yoshis_story}.json
+        configure_headless_ground_schedule(match, spec);
     } else {
         map_data = grDatFiles_801C6324();
         if (map_data == NULL || map_data->unk4 == NULL) {
@@ -1046,7 +1079,7 @@ static int match_construct(MslCoreMatch* match,
             GObj_InitUserData(gobj, 3, NULL, gp);
             HSD_GObjObject_80390A70(gobj, HSD_GObj_804D7849, root);
             if (i == 0) {
-                HSD_GObj_SetupProc(gobj, headless_static_ground_epoch_proc,
+                HSD_GObj_SetupProc(gobj, msl_ground_headless_epoch_proc,
                                    1);
             }
             if (i == 7) {
@@ -1214,13 +1247,14 @@ static int match_construct(MslCoreMatch* match,
     // refs/melee/src/melee/it/items/itseakchain.c::it_802BAF2C
     HSD_ObjAllocEnsureFree(&item_link_alloc_data, 151);
     // The compact construction graph no longer leaves renderer JObjs on the
-    // class free list. Preserve the reached source JObj high-water directly:
-    // Peach's transient article graph can own more than 32 JObjs at once.
+    // class free list. Preserve runtime headroom for the reached source class
+    // sizes: supported item/effect graphs can cross the former 64-piece JObj
+    // reserve while the Match arena is sealed.
     // hsdPreallocateMemPieces skips every size class not reached by this
     // Match, so this does not restore the former all-class slab reserve.
     // refs/melee/src/melee/it/items/itpeachturnip.c
     // refs/melee/src/sysdolphin/baselib/{class.c,jobj.c}
-    hsdPreallocateMemPieces(64);
+    hsdPreallocateMemPieces(128);
 
     // This Match's source allocation pools are complete. Shared DAT graphs
     // are sealed once, after GameData has preloaded the supported domain;
