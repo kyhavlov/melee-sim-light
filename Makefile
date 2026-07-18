@@ -248,11 +248,12 @@ $(PYTHON_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contr
 $(PYTHON_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
 
 ifeq ($(NATIVE_RELEASE_PROFILE),1)
+NATIVE_RELEASE_O2_OBJS := \
+	$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lb_00B0.o
 NATIVE_RELEASE_OPT_OBJS := \
 	$(NATIVE_OBJ_DIR)/gameplay/melee/ft/ftanim.o \
 	$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lbspdisplay.o \
 	$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lbvector.o \
-	$(NATIVE_OBJ_DIR)/gameplay/melee/mp/mpcoll.o \
 	$(NATIVE_OBJ_DIR)/gameplay/melee/mp/mplib.o \
 	$(NATIVE_OBJ_DIR)/gameplay/sysdolphin/baselib/fobj.o \
 	$(NATIVE_OBJ_DIR)/gameplay/sysdolphin/baselib/jobj.o \
@@ -267,10 +268,11 @@ NATIVE_RELEASE_OPT_OBJS := \
 	$(NATIVE_OBJ_DIR)/generated/native_dat_layout.o \
 	$(NATIVE_OBJ_DIR)/generated/match_reloc_layout.o \
 	$(NATIVE_OBJ_DIR)/tests/melee_core/replay_bench.o
+$(NATIVE_RELEASE_O2_OBJS): override NATIVE_CFLAGS += -O2 $(RELEASE_ARCH_FLAGS)
 $(NATIVE_RELEASE_OPT_OBJS): override NATIVE_CFLAGS += -O3 $(RELEASE_ARCH_FLAGS)
 endif
 
-NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_SUBSYSTEM_PROFILE)|$(NATIVE_RELEASE_OPT_OBJS)
+NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_SUBSYSTEM_PROFILE)|$(NATIVE_RELEASE_O2_OBJS)|$(NATIVE_RELEASE_OPT_OBJS)
 
 .PHONY: all bootstrap extract ppc native python-library native-release runtime-census large-batch-smoke benchmark-prepare benchmark-native subsystem-profile benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-build viewer viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source-check validator validation-suite validation-supported-domain clean toolchain data-check ppc-smoke native-smoke test test-full format-check slpz-convert FORCE
 
