@@ -8,9 +8,8 @@ MAX_PLAYERS = 4
 
 _SIZES = {
     "controller_input": 112,
-    "input": 52,
-    "match_config": 52,
-    "compare": 1022,
+    "input": 32,
+    "match_config": 48,
     "gamestate": 980,
     "terminal": 16,
 }
@@ -63,7 +62,9 @@ def controller_player_dtype() -> np.dtype:
 
 @lru_cache(maxsize=1)
 def controller_input_dtype() -> np.dtype:
-    return np.dtype({"names": ["p"], "formats": [(controller_player_dtype(), (MAX_PLAYERS,))]})
+    return np.dtype(
+        {"names": ["players"], "formats": [(controller_player_dtype(), (MAX_PLAYERS,))]}
+    )
 
 
 @lru_cache(maxsize=1)
@@ -77,11 +78,6 @@ def input_player_dtype() -> np.dtype:
             ("c_y", "i1"),
             ("l", "u1"),
             ("r", "u1"),
-            ("nml_main_x", "i1"),
-            ("nml_main_y", "i1"),
-            ("nml_c_x", "i1"),
-            ("nml_c_y", "i1"),
-            ("nml_valid", "u1"),
         ],
         align=False,
     )
@@ -89,17 +85,18 @@ def input_player_dtype() -> np.dtype:
 
 @lru_cache(maxsize=1)
 def input_dtype() -> np.dtype:
-    return np.dtype({"names": ["p"], "formats": [(input_player_dtype(), (MAX_PLAYERS,))]})
+    return np.dtype({"names": ["players"], "formats": [(input_player_dtype(), (MAX_PLAYERS,))]})
 
 
 @lru_cache(maxsize=1)
 def match_player_config_dtype() -> np.dtype:
     return np.dtype(
         [
-            ("char_id", "u1"),
-            ("team_id", "u1"),
-            ("facing_and_port", "u1"),
-            ("costume_id", "u1"),
+            ("character", "u1"),
+            ("team", "i1"),
+            ("facing", "i1"),
+            ("controller_port", "i1"),
+            ("costume", "u1"),
             ("handicap", "u1"),
         ],
         align=False,
@@ -110,24 +107,18 @@ def match_player_config_dtype() -> np.dtype:
 def match_config_dtype() -> np.dtype:
     return np.dtype(
         [
-            ("stage_id", "<u4"),
-            ("frame_id", "<i4"),
-            ("frame_pre_random_seed", "<u4"),
-            ("initial_random_seed", "<u4"),
-            ("match_damage_ratio", "<f4"),
+            ("stage", "<u4"),
+            ("random_seed", "<u4"),
+            ("max_frame", "<i4"),
+            ("damage_ratio", "<f4"),
             ("num_players", "u1"),
             ("is_teams", "u1"),
             ("friendly_fire", "u1"),
-            ("stock_count", "u1"),
-            ("camera_mode", "u1"),
-            ("online_fnmsubs_zero", "u1"),
-            ("brawl_offscreen_damage", "u1"),
-            ("freeze_dead_up_fall_physics", "u1"),
-            ("ucf_cardinals_1_0_enabled", "u1"),
-            ("ucf_shield_sdi_enabled", "u1"),
-            ("ucf_sdi_enabled", "u1"),
-            ("stage_event_streams", "u1"),
+            ("stocks", "u1"),
+            ("viewpoint_player", "u1"),
+            ("ucf_cardinals", "u1"),
             ("players", match_player_config_dtype(), (MAX_PLAYERS,)),
+            ("_pad0", "u1", (2,)),
         ],
         align=False,
     )
@@ -216,54 +207,6 @@ def gamestate_stage_dtype() -> np.dtype:
         [
             ("randall", gamestate_randall_dtype()),
             ("fod_platforms", [("left", "<f4"), ("right", "<f4")]),
-        ],
-        align=False,
-    )
-
-
-@lru_cache(maxsize=1)
-def compare_dtype() -> np.dtype:
-    return np.dtype(
-        [
-            ("frame_id", "<i4"),
-            ("frame_pre_random_seed", "<u4"),
-            ("stage_id", "<u4"),
-            ("num_players", "u1"),
-            ("is_teams", "u1"),
-            ("_pad0", "u1", (2,)),
-            ("team_id", "u1", (MAX_PLAYERS,)),
-            ("char_id", "u1", (MAX_PLAYERS,)),
-            ("pos_x", "<f4", (MAX_PLAYERS,)),
-            ("pos_y", "<f4", (MAX_PLAYERS,)),
-            ("speed_air_x_self", "<f4", (MAX_PLAYERS,)),
-            ("speed_ground_x_self", "<f4", (MAX_PLAYERS,)),
-            ("speed_y_self", "<f4", (MAX_PLAYERS,)),
-            ("speed_x_attack", "<f4", (MAX_PLAYERS,)),
-            ("speed_y_attack", "<f4", (MAX_PLAYERS,)),
-            ("facing", "u1", (MAX_PLAYERS,)),
-            ("on_ground", "u1", (MAX_PLAYERS,)),
-            ("is_dead", "u1", (MAX_PLAYERS,)),
-            ("_pad1", "u1"),
-            ("action_id", "<u2", (MAX_PLAYERS,)),
-            ("action_frame", "<i2", (MAX_PLAYERS,)),
-            ("jumps_left", "u1", (MAX_PLAYERS,)),
-            ("stocks", "u1", (MAX_PLAYERS,)),
-            ("percent", "<f4", (MAX_PLAYERS,)),
-            ("shield_hp", "<f4", (MAX_PLAYERS,)),
-            ("hitlag", "<u2", (MAX_PLAYERS,)),
-            ("hitstun", "<u2", (MAX_PLAYERS,)),
-            ("l_cancel", "u1", (MAX_PLAYERS,)),
-            ("hurtbox_state", "u1", (MAX_PLAYERS,)),
-            ("ground_id", "<u2", (MAX_PLAYERS,)),
-            ("animation_index", "<u4", (MAX_PLAYERS,)),
-            ("instance_hit_by", "<u2", (MAX_PLAYERS,)),
-            ("instance_id", "<u2", (MAX_PLAYERS,)),
-            ("last_attack_landed", "u1", (MAX_PLAYERS,)),
-            ("combo_count", "u1", (MAX_PLAYERS,)),
-            ("last_hit_by", "u1", (MAX_PLAYERS,)),
-            ("_pad2", "u1"),
-            ("state_flags", "u1", (MAX_PLAYERS, 5)),
-            ("items", item_dtype(), (15,)),
         ],
         align=False,
     )

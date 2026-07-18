@@ -74,7 +74,7 @@ def to_raw_trigger(x):
 
 
 def write_controller(action_view: np.ndarray, controller: Controller, player: int = 0) -> None:
-    p = action_view["p"][..., int(player)]
+    p = action_view["players"][..., int(player)]
     p["main_stick_x"][...] = controller.main_stick.x
     p["main_stick_y"][...] = controller.main_stick.y
     p["c_stick_x"][...] = controller.c_stick.x

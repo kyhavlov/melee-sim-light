@@ -22,8 +22,6 @@ class Buffers:
     action_format: str
     match_config: np.ndarray
     action: np.ndarray
-    compare: np.ndarray
-    viewpoint: np.ndarray
     gamestate: np.ndarray
     terminal: np.ndarray
     obs: np.ndarray
@@ -59,6 +57,11 @@ class Buffers:
             raise ValueError("obs_dim must be non-negative")
 
         action_kind = "controller_input" if action_format == "controller" else "input"
+        action = dtypes.raw_sequence_buffer(length, batch_size, action_kind)
+        if action_format == "controller":
+            players = dtypes.view_raw_sequence(action, dtypes.controller_input_dtype())["players"]
+            for field in ("main_stick_x", "main_stick_y", "c_stick_x", "c_stick_y"):
+                players[field].fill(0.5)
         terminal = dtypes.raw_sequence_buffer(length, batch_size, "terminal")
         return cls(
             length=length,
@@ -66,9 +69,7 @@ class Buffers:
             num_players=num_players,
             action_format=action_format,
             match_config=dtypes.raw_buffer(batch_size, "match_config"),
-            action=dtypes.raw_sequence_buffer(length, batch_size, action_kind),
-            compare=dtypes.raw_buffer(batch_size, "compare"),
-            viewpoint=np.zeros(batch_size, dtype=np.uint8),
+            action=action,
             gamestate=dtypes.raw_sequence_buffer(length, batch_size, "gamestate", extra_frames=1),
             terminal=terminal,
             obs=np.zeros((length + 1, batch_size, int(obs_dim)), dtype=np.float32),
@@ -97,10 +98,6 @@ class Buffers:
         if self.action_format != "controller":
             raise ValueError("controller_action_view is only available for action_format='controller'")
         return dtypes.view_raw_sequence(self.action, dtypes.controller_input_dtype())
-
-    @property
-    def compare_view(self) -> np.ndarray:
-        return dtypes.view_raw(self.compare, dtypes.compare_dtype())
 
     @property
     def gamestate_view(self) -> np.ndarray:

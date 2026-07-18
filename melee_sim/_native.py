@@ -44,57 +44,31 @@ def library() -> ctypes.CDLL:
     size = ctypes.c_size_t
     u32 = ctypes.c_uint32
 
-    lib.msl_core_game_data_create.argtypes = [ctypes.c_char_p, ctypes.POINTER(pointer)]
-    lib.msl_core_game_data_create.restype = ctypes.c_int
-    lib.msl_core_game_data_destroy.argtypes = [pointer]
-    lib.msl_core_batch_create.argtypes = [pointer, u32, ctypes.POINTER(pointer)]
-    lib.msl_core_batch_create.restype = ctypes.c_int
-    lib.msl_core_batch_destroy.argtypes = [pointer]
-    lib.msl_core_batch_match_count.argtypes = [pointer]
-    lib.msl_core_batch_match_count.restype = u32
-
-    for name in (
-        "msl_core_batch_reset_matches",
-        "msl_core_batch_step_matches",
-        "msl_core_batch_write_state",
-        "msl_core_batch_write_observation",
-        "msl_core_batch_write_terminal",
-    ):
-        getattr(lib, name).restype = ctypes.c_int
-    lib.msl_core_batch_reset_matches.argtypes = [pointer, pointer, size, pointer, size]
-    lib.msl_core_batch_step_matches.argtypes = [pointer, pointer, size, pointer, size]
-    lib.msl_core_batch_write_state.argtypes = [pointer, pointer, size, pointer, size]
-    lib.msl_core_batch_write_observation.argtypes = [
-        pointer,
-        pointer,
-        size,
-        pointer,
-        size,
-        pointer,
-        size,
-    ]
-    lib.msl_core_batch_write_terminal.argtypes = [
-        pointer,
-        pointer,
-        size,
-        ctypes.c_int32,
-        pointer,
-        size,
-    ]
-    lib.msl_core_batch_copy_matches.argtypes = [pointer, pointer, pointer, pointer, u32]
-    lib.msl_core_batch_copy_matches.restype = ctypes.c_int
-    lib.msl_core_batch_match_save_size.argtypes = [pointer, u32, ctypes.POINTER(size)]
-    lib.msl_core_batch_match_save_size.restype = ctypes.c_int
-    lib.msl_core_batch_save_match.argtypes = [
+    lib.msl_batch_create.argtypes = [ctypes.c_char_p, u32, ctypes.POINTER(pointer)]
+    lib.msl_batch_create.restype = ctypes.c_int
+    lib.msl_batch_destroy.argtypes = [pointer]
+    lib.msl_batch_size.argtypes = [pointer]
+    lib.msl_batch_size.restype = u32
+    lib.msl_batch_reset.argtypes = [pointer, pointer, pointer, pointer]
+    lib.msl_batch_reset.restype = ctypes.c_int
+    lib.msl_batch_step.argtypes = [pointer, pointer, pointer, pointer]
+    lib.msl_batch_step.restype = ctypes.c_int
+    lib.msl_batch_observe.argtypes = [pointer, pointer, pointer]
+    lib.msl_batch_observe.restype = ctypes.c_int
+    lib.msl_batch_copy.argtypes = [pointer, pointer, pointer, pointer, u32]
+    lib.msl_batch_copy.restype = ctypes.c_int
+    lib.msl_batch_save_size.argtypes = [pointer, u32, ctypes.POINTER(size)]
+    lib.msl_batch_save_size.restype = ctypes.c_int
+    lib.msl_batch_save.argtypes = [
         pointer,
         u32,
         pointer,
         size,
         ctypes.POINTER(size),
     ]
-    lib.msl_core_batch_save_match.restype = ctypes.c_int
-    lib.msl_core_batch_restore_match.argtypes = [pointer, u32, pointer, size]
-    lib.msl_core_batch_restore_match.restype = ctypes.c_int
+    lib.msl_batch_save.restype = ctypes.c_int
+    lib.msl_batch_restore.argtypes = [pointer, u32, pointer, size]
+    lib.msl_batch_restore.restype = ctypes.c_int
     lib.msl_python_controller_inputs.argtypes = [pointer, size, pointer, size, u32]
     lib.msl_python_controller_inputs.restype = ctypes.c_int
     return lib

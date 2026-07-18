@@ -1,726 +1,402 @@
 #include "api.h"
 
-#include "runtime/observation.h"
-#include "runtime/savestate.h"
-#include "runtime/scalar.h"
-#include "runtime/viewer.h"
+#include "runtime/batch.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef MSL_CORE_PHASE_PROFILE
-#include <inttypes.h>
-#include <stdio.h>
-#include <x86intrin.h>
-#endif
-
 enum {
-    MSL_CORE_BATCH_MATCH_LIMIT = 16384,
-    MSL_CORE_BATCH_TILE_MATCHES = 2,
+  MSL_BATCH_LIMIT = 16384,
+  MSL_SAVE_MAGIC = 0x31564E45,
+  MSL_SAVE_VERSION = 1,
 };
 
-struct MslCoreBatch {
-    const MslCoreGameData* game_data;
-    MslCoreMatch* matches;
-    uint8_t* match_arenas;
-    uint32_t* reset_index;
-    uint8_t* initialized;
-    uint32_t match_count;
-    uint32_t reset_index_capacity;
+typedef struct MslSaveHeader {
+  uint32_t magic;
+  uint32_t version;
+  uint32_t payload_size;
+  int32_t max_frame;
+  uint8_t viewpoint_player;
+  uint8_t _reserved[3];
+} MslSaveHeader;
+
+struct MslBatch {
+  MslCoreGameData* game_data;
+  MslCoreBatch* runtime;
+  MslCoreMatchConfig* configs;
+  MslCoreInput* inputs;
+  uint8_t* viewpoint_players;
+  int32_t* max_frames;
+  uint32_t size;
 };
 
-#ifdef MSL_CORE_PHASE_PROFILE
-enum { MSL_CORE_PHASE_OWNER_CAPACITY = 2048 };
+_Static_assert(MSL_OK == MSL_CORE_OK, "result values must agree");
+_Static_assert(MSL_INCOMPATIBLE == MSL_CORE_INCOMPATIBLE, "result values must agree");
+_Static_assert(sizeof(MslPlayerConfig) == 6, "MslPlayerConfig layout");
+_Static_assert(sizeof(MslMatchConfig) == 48, "MslMatchConfig layout");
+_Static_assert(sizeof(MslInputPlayer) == 8, "MslInputPlayer layout");
+_Static_assert(sizeof(MslInput) == 32, "MslInput layout");
+_Static_assert(sizeof(MslItem) == 48, "MslItem layout");
+_Static_assert(sizeof(MslObservation) == 980, "MslObservation layout");
+_Static_assert(sizeof(MslTerminal) == 16, "MslTerminal layout");
+_Static_assert(sizeof(MslSaveHeader) == 20, "MslSaveHeader layout");
 
-typedef struct MslCorePhaseOwnerProfile {
-    uintptr_t owner;
-    uint64_t cycles;
-    uint64_t calls;
-} MslCorePhaseOwnerProfile;
+static MslResult public_result(MslCoreResult result) { return (MslResult)result; }
 
-static struct {
-    uint64_t prepare_cycles;
-    uint64_t scheduler_cycles;
-    uint64_t invoke_cycles;
-    uint64_t finish_cycles;
-    uint64_t matches;
-    MslCorePhaseOwnerProfile owners[MSL_CORE_PHASE_OWNER_CAPACITY];
-} phase_profile;
-
-static inline uint64_t phase_cycles(void)
-{
-    unsigned int aux;
-    return __rdtscp(&aux);
+static int supported_stage(uint32_t stage) {
+  return stage == MSL_STAGE_FOUNTAIN_OF_DREAMS || stage == MSL_STAGE_POKEMON_STADIUM ||
+         stage == MSL_STAGE_YOSHIS_STORY || stage == MSL_STAGE_DREAM_LAND_N64 ||
+         stage == MSL_STAGE_BATTLEFIELD || stage == MSL_STAGE_FINAL_DESTINATION;
 }
 
-static void phase_record_owner(HSD_GObjEvent owner, uint64_t cycles)
-{
-    uintptr_t key = (uintptr_t) owner;
-    size_t slot = (key >> 4) & (MSL_CORE_PHASE_OWNER_CAPACITY - 1);
-    while (phase_profile.owners[slot].owner != 0 &&
-           phase_profile.owners[slot].owner != key)
-    {
-        slot = (slot + 1) & (MSL_CORE_PHASE_OWNER_CAPACITY - 1);
+static int supported_character(uint8_t character) {
+  return character == MSL_CHARACTER_FOX || character == MSL_CHARACTER_CAPTAIN_FALCON ||
+         character == MSL_CHARACTER_SHEIK || character == MSL_CHARACTER_PEACH ||
+         character == MSL_CHARACTER_JIGGLYPUFF || character == MSL_CHARACTER_MARTH ||
+         character == MSL_CHARACTER_ZELDA || character == MSL_CHARACTER_FALCO;
+}
+
+static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* target) {
+  uint8_t ports[MSL_MAX_PLAYERS];
+  uint32_t player;
+
+  if (source == NULL || target == NULL || !supported_stage(source->stage) ||
+      (source->num_players != 2 && source->num_players != 4) || !isfinite(source->damage_ratio) ||
+      source->damage_ratio <= 0.0F || source->stocks == 0 ||
+      source->viewpoint_player >= source->num_players || source->is_teams > 1 ||
+      source->friendly_fire > 1 || source->ucf_cardinals > 1) {
+    return -1;
+  }
+
+  memset(target, 0, sizeof(*target));
+  target->stage_id = source->stage;
+  target->frame_id = -123;
+  target->frame_pre_random_seed = source->random_seed;
+  target->initial_random_seed = source->random_seed;
+  target->match_damage_ratio = source->damage_ratio;
+  target->num_players = source->num_players;
+  target->is_teams = source->is_teams;
+  target->friendly_fire = source->friendly_fire;
+  target->stock_count = source->stocks;
+  target->online_fnmsubs_zero = 1;
+  target->brawl_offscreen_damage = 1;
+  target->freeze_dead_up_fall_physics = 1;
+  target->ucf_cardinals_1_0_enabled = source->ucf_cardinals;
+  target->ucf_shield_sdi_enabled = 1;
+  target->ucf_sdi_enabled = 1;
+
+  for (player = 0; player < source->num_players; ++player) {
+    const MslPlayerConfig* src = &source->players[player];
+    MslCoreMatchPlayerConfig* dst = &target->players[player];
+    uint8_t port;
+    uint32_t previous;
+
+    if (!supported_character(src->character) || src->team < MSL_TEAM_AUTO || src->team > 2 ||
+        src->facing < MSL_FACING_LEFT || src->facing > MSL_FACING_RIGHT ||
+        src->controller_port < MSL_CONTROLLER_PORT_AUTO ||
+        src->controller_port >= MSL_MAX_PLAYERS || src->handicap < 1 || src->handicap > 9) {
+      return -1;
     }
-    phase_profile.owners[slot].owner = key;
-    phase_profile.owners[slot].cycles += cycles;
-    phase_profile.owners[slot].calls += 1;
-}
 
-void msl_core_phase_profile_reset(void)
-{
-    memset(&phase_profile, 0, sizeof(phase_profile));
-}
-
-void msl_core_phase_profile_report(void)
-{
-    size_t i;
-    printf("phase_profile matches=%" PRIu64 " prepare=%" PRIu64
-           " scheduler=%" PRIu64 " invoke=%" PRIu64 " finish=%" PRIu64
-           "\n",
-           phase_profile.matches, phase_profile.prepare_cycles,
-           phase_profile.scheduler_cycles, phase_profile.invoke_cycles,
-           phase_profile.finish_cycles);
-    for (i = 0; i < MSL_CORE_PHASE_OWNER_CAPACITY; ++i) {
-        if (phase_profile.owners[i].owner != 0) {
-            printf("phase_owner address=%#" PRIxPTR " calls=%" PRIu64
-                   " cycles=%" PRIu64 "\n",
-                   phase_profile.owners[i].owner,
-                   phase_profile.owners[i].calls,
-                   phase_profile.owners[i].cycles);
-        }
+    port = src->controller_port == MSL_CONTROLLER_PORT_AUTO ? (uint8_t)player
+                                                            : (uint8_t)src->controller_port;
+    for (previous = 0; previous < player; ++previous) {
+      if (ports[previous] == port) {
+        return -1;
+      }
     }
-}
-#endif
-
-static int selected(const uint8_t* mask, size_t stride, uint32_t index)
-{
-    return mask == NULL || mask[(size_t) index * stride] != 0;
-}
-
-static const void* row_const(const void* rows, size_t stride, uint32_t index)
-{
-    return (const uint8_t*) rows + (size_t) index * stride;
-}
-
-static void* row_mutable(void* rows, size_t stride, uint32_t index)
-{
-    return (uint8_t*) rows + (size_t) index * stride;
+    ports[player] = port;
+    dst->char_id = src->character;
+    dst->team_id =
+        src->team == MSL_TEAM_AUTO
+            ? (source->is_teams ? (uint8_t)(player >= source->num_players / 2) : (uint8_t)player)
+            : (uint8_t)src->team;
+    dst->facing_and_port =
+        (uint8_t)((src->facing == MSL_FACING_AUTO ? player == 0 : src->facing == MSL_FACING_RIGHT) |
+                  ((port + 1) << 1));
+    dst->costume_id = src->costume;
+    dst->handicap = src->handicap;
+  }
+  return 0;
 }
 
-static int supported_stage(uint32_t stage_id)
-{
-    return stage_id == MSL_CORE_STAGE_FOUNTAIN_OF_DREAMS ||
-           stage_id == MSL_CORE_STAGE_POKEMON_STADIUM ||
-           stage_id == MSL_CORE_STAGE_YOSHIS_STORY ||
-           stage_id == MSL_CORE_STAGE_DREAM_LAND_N64 ||
-           stage_id == MSL_CORE_STAGE_BATTLEFIELD ||
-           stage_id == MSL_CORE_STAGE_FINAL_DESTINATION;
-}
-
-static int supported_character(uint8_t char_id)
-{
-    return char_id == MSL_CORE_CHARACTER_FOX ||
-           char_id == MSL_CORE_CHARACTER_CAPTAIN_FALCON ||
-           char_id == MSL_CORE_CHARACTER_SHEIK ||
-           char_id == MSL_CORE_CHARACTER_PEACH ||
-           char_id == MSL_CORE_CHARACTER_JIGGLYPUFF ||
-           char_id == MSL_CORE_CHARACTER_MARTH ||
-           char_id == MSL_CORE_CHARACTER_ZELDA ||
-           char_id == MSL_CORE_CHARACTER_FALCO;
-}
-
-static int valid_config(const MslCoreMatchConfig* config)
-{
-    uint8_t source_slots[MSL_CORE_MAX_PLAYERS];
+static void translate_inputs(MslBatch* batch, const MslInput inputs[]) {
+  uint32_t env;
+  for (env = 0; env < batch->size; ++env) {
     uint32_t player;
-    if (config == NULL || !supported_stage(config->stage_id) ||
-        (config->num_players != 2 && config->num_players != 4) ||
-        !isfinite(config->match_damage_ratio) ||
-        config->match_damage_ratio < 0.0F)
-    {
-        return 0;
+    memset(&batch->inputs[env], 0, sizeof(batch->inputs[env]));
+    for (player = 0; player < MSL_MAX_PLAYERS; ++player) {
+      const MslInputPlayer* src = &inputs[env].players[player];
+      MslCoreInputPlayer* dst = &batch->inputs[env].p[player];
+      dst->buttons = src->buttons;
+      dst->main_x = src->main_x;
+      dst->main_y = src->main_y;
+      dst->c_x = src->c_x;
+      dst->c_y = src->c_y;
+      dst->l = src->l;
+      dst->r = src->r;
     }
-    for (player = 0; player < config->num_players; ++player) {
-        uint8_t encoded = config->players[player].facing_and_port;
-        uint8_t port = encoded >> 1;
-        uint32_t previous;
-        source_slots[player] = port == 0 ? (uint8_t) player : (uint8_t) (port - 1);
-        if (!supported_character(config->players[player].char_id) ||
-            config->players[player].handicap > 9 ||
-            (config->is_teams && config->players[player].team_id > 2) ||
-            source_slots[player] >= MSL_CORE_MAX_PLAYERS)
-        {
-            return 0;
-        }
-        for (previous = 0; previous < player; ++previous) {
-            if (source_slots[previous] == source_slots[player]) {
-                return 0;
-            }
-        }
-    }
-    return 1;
+  }
 }
 
-MslCoreResult msl_core_game_data_create(const char* data_root,
-                                        MslCoreGameData** out_game_data)
-{
-    MslCoreGameData* game_data;
-    if (data_root == NULL || data_root[0] == '\0' || out_game_data == NULL) {
-        return MSL_CORE_INVALID_ARGUMENT;
-    }
-    *out_game_data = NULL;
-    game_data = calloc(1, sizeof(*game_data));
-    if (game_data == NULL) {
-        return MSL_CORE_OUT_OF_MEMORY;
-    }
-    if (msl_core_game_data_init(game_data, data_root) != 0) {
-        msl_core_game_data_deinit(game_data);
-        free(game_data);
-        return MSL_CORE_INVALID_STATE;
-    }
-    *out_game_data = game_data;
-    return MSL_CORE_OK;
+const char* msl_result_string(MslResult result) {
+  switch (result) {
+    case MSL_OK:
+      return "ok";
+    case MSL_INVALID_ARGUMENT:
+      return "invalid argument";
+    case MSL_OUT_OF_MEMORY:
+      return "out of memory";
+    case MSL_INVALID_STATE:
+      return "invalid simulator state";
+    case MSL_INCOMPATIBLE:
+      return "incompatible data or savestate";
+    default:
+      return "unknown error";
+  }
 }
 
-void msl_core_game_data_destroy(MslCoreGameData* game_data)
-{
-    if (game_data == NULL) {
-        return;
-    }
-    msl_core_game_data_deinit(game_data);
-    free(game_data);
+MslMatchConfig msl_match_config_default(void) {
+  MslMatchConfig config;
+  uint32_t player;
+
+  memset(&config, 0, sizeof(config));
+  config.stage = MSL_STAGE_FINAL_DESTINATION;
+  config.random_seed = 1;
+  config.max_frame = -1;
+  config.damage_ratio = 1.0F;
+  config.num_players = 2;
+  config.stocks = 4;
+  for (player = 0; player < MSL_MAX_PLAYERS; ++player) {
+    config.players[player].character = player & 1 ? MSL_CHARACTER_FALCO : MSL_CHARACTER_FOX;
+    config.players[player].team = MSL_TEAM_AUTO;
+    config.players[player].facing = MSL_FACING_AUTO;
+    config.players[player].controller_port = MSL_CONTROLLER_PORT_AUTO;
+    config.players[player].handicap = 9;
+  }
+  return config;
 }
 
-MslCoreResult msl_core_batch_create(const MslCoreGameData* game_data,
-                                    uint32_t match_count,
-                                    MslCoreBatch** out_batch)
-{
-    MslCoreBatch* batch;
-    size_t match_capacity;
-    uint32_t i;
-    if (game_data == NULL || out_batch == NULL || match_count == 0 ||
-        match_count > MSL_CORE_BATCH_MATCH_LIMIT)
-    {
-        return MSL_CORE_INVALID_ARGUMENT;
+MslResult msl_batch_create(const char* data_root, uint32_t batch_size, MslBatch** out_batch) {
+  char raw_root[1024];
+  MslBatch* batch;
+  MslCoreResult core_result;
+  size_t root_length;
+
+  if (data_root == NULL || data_root[0] == '\0' || out_batch == NULL || batch_size == 0 ||
+      batch_size > MSL_BATCH_LIMIT) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  root_length = strlen(data_root);
+  if ((root_length == 3 && strcmp(data_root, "raw") == 0) ||
+      (root_length >= 4 && strcmp(data_root + root_length - 4, "/raw") == 0)) {
+    if (root_length >= sizeof(raw_root)) {
+      return MSL_INVALID_ARGUMENT;
     }
-    *out_batch = NULL;
-    batch = calloc(1, sizeof(*batch));
-    if (batch == NULL) {
-        return MSL_CORE_OUT_OF_MEMORY;
-    }
-    batch->game_data = game_data;
-    batch->match_count = match_count;
-    batch->matches = calloc(match_count, sizeof(*batch->matches));
-    batch->initialized = calloc(match_count, sizeof(*batch->initialized));
-    batch->reset_index_capacity = 1;
-    while (batch->reset_index_capacity < match_count * 2) {
-        batch->reset_index_capacity *= 2;
-    }
-    batch->reset_index = calloc(batch->reset_index_capacity,
-                                sizeof(*batch->reset_index));
-    batch->match_arenas = msl_memory_map_match_arenas(match_count);
-    if (batch->matches == NULL || batch->initialized == NULL ||
-        batch->reset_index == NULL || batch->match_arenas == NULL)
-    {
-        msl_core_batch_destroy(batch);
-        return MSL_CORE_OUT_OF_MEMORY;
-    }
-    match_capacity = msl_memory_match_capacity();
-    for (i = 0; i < match_count; ++i) {
-        if (msl_core_match_storage_bind(
-                &batch->matches[i],
-                batch->match_arenas + (size_t) i * match_capacity,
-                match_capacity) != 0)
-        {
-            msl_core_batch_destroy(batch);
-            return MSL_CORE_OUT_OF_MEMORY;
-        }
-    }
-    *out_batch = batch;
-    return MSL_CORE_OK;
+    memcpy(raw_root, data_root, root_length + 1);
+  } else if (snprintf(raw_root, sizeof(raw_root), "%s/raw", data_root) >= (int)sizeof(raw_root)) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  *out_batch = NULL;
+  batch = calloc(1, sizeof(*batch));
+  if (batch == NULL) {
+    return MSL_OUT_OF_MEMORY;
+  }
+  batch->size = batch_size;
+  batch->configs = calloc(batch_size, sizeof(*batch->configs));
+  batch->inputs = calloc(batch_size, sizeof(*batch->inputs));
+  batch->viewpoint_players = calloc(batch_size, sizeof(*batch->viewpoint_players));
+  batch->max_frames = calloc(batch_size, sizeof(*batch->max_frames));
+  if (batch->configs == NULL || batch->inputs == NULL || batch->viewpoint_players == NULL ||
+      batch->max_frames == NULL) {
+    msl_batch_destroy(batch);
+    return MSL_OUT_OF_MEMORY;
+  }
+  core_result = msl_core_game_data_create(raw_root, &batch->game_data);
+  if (core_result != MSL_CORE_OK) {
+    msl_batch_destroy(batch);
+    return public_result(core_result);
+  }
+  core_result = msl_core_batch_create(batch->game_data, batch_size, &batch->runtime);
+  if (core_result != MSL_CORE_OK) {
+    msl_batch_destroy(batch);
+    return public_result(core_result);
+  }
+  *out_batch = batch;
+  return MSL_OK;
 }
 
-void msl_core_batch_destroy(MslCoreBatch* batch)
-{
-    uint32_t i;
-    if (batch == NULL) {
-        return;
-    }
-    if (batch->matches != NULL) {
-        for (i = 0; i < batch->match_count; ++i) {
-            msl_core_match_destroy(&batch->matches[i]);
-        }
-    }
-    msl_memory_unmap_match_arenas(batch->match_arenas, batch->match_count);
-    free(batch->reset_index);
-    free(batch->initialized);
-    free(batch->matches);
-    free(batch);
+void msl_batch_destroy(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  msl_core_batch_destroy(batch->runtime);
+  msl_core_game_data_destroy(batch->game_data);
+  free(batch->max_frames);
+  free(batch->viewpoint_players);
+  free(batch->inputs);
+  free(batch->configs);
+  free(batch);
 }
 
-static uint32_t hash_config(const MslCoreMatchConfig* config)
-{
-    const uint8_t* bytes = (const uint8_t*) config;
-    uint32_t hash = UINT32_C(2166136261);
-    size_t i;
-    for (i = 0; i < sizeof(*config); ++i) {
-        hash ^= bytes[i];
-        hash *= UINT32_C(16777619);
+uint32_t msl_batch_size(const MslBatch* batch) { return batch != NULL ? batch->size : 0; }
+
+MslResult msl_batch_reset(MslBatch* batch, const MslMatchConfig configs[],
+                          const uint8_t reset_mask[], MslObservation observations[]) {
+  MslCoreResult result;
+  uint32_t env;
+
+  if (batch == NULL || configs == NULL || observations == NULL) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  for (env = 0; env < batch->size; ++env) {
+    if ((reset_mask == NULL || reset_mask[env] != 0) &&
+        translate_config(&configs[env], &batch->configs[env]) != 0) {
+      return MSL_INVALID_ARGUMENT;
     }
-    return hash;
+  }
+  result = msl_core_batch_reset_matches(batch->runtime, batch->configs, sizeof(batch->configs[0]),
+                                        reset_mask, sizeof(reset_mask[0]));
+  if (result != MSL_CORE_OK) {
+    return public_result(result);
+  }
+  for (env = 0; env < batch->size; ++env) {
+    if (reset_mask == NULL || reset_mask[env] != 0) {
+      batch->viewpoint_players[env] = configs[env].viewpoint_player;
+      batch->max_frames[env] = configs[env].max_frame;
+    }
+  }
+  return public_result(msl_core_batch_write_observation(
+      batch->runtime, batch->viewpoint_players, sizeof(batch->viewpoint_players[0]), observations,
+      sizeof(observations[0]), reset_mask, sizeof(reset_mask[0])));
 }
 
-uint32_t msl_core_batch_match_count(const MslCoreBatch* batch)
-{
-    return batch != NULL ? batch->match_count : 0;
+MslResult msl_batch_observe(const MslBatch* batch, MslObservation observations[],
+                            MslTerminal terminals[]) {
+  MslCoreResult result;
+  if (batch == NULL || observations == NULL || terminals == NULL) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  result = msl_core_batch_write_observation(batch->runtime, batch->viewpoint_players,
+                                            sizeof(batch->viewpoint_players[0]), observations,
+                                            sizeof(observations[0]), NULL, 0);
+  if (result != MSL_CORE_OK) {
+    return public_result(result);
+  }
+  return public_result(msl_core_batch_write_terminals(batch->runtime, terminals,
+                                                      sizeof(terminals[0]), batch->max_frames,
+                                                      sizeof(batch->max_frames[0]), NULL, 0));
 }
 
-static MslCoreResult validate_mask(const MslCoreBatch* batch,
-                                   const uint8_t* mask, size_t stride)
-{
-    if (batch == NULL || (mask != NULL && stride < sizeof(uint8_t))) {
-        return MSL_CORE_INVALID_ARGUMENT;
-    }
-    return MSL_CORE_OK;
+MslResult msl_batch_step(MslBatch* batch, const MslInput inputs[], MslObservation observations[],
+                         MslTerminal terminals[]) {
+  MslCoreResult result;
+  if (batch == NULL || inputs == NULL || observations == NULL || terminals == NULL) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  translate_inputs(batch, inputs);
+  result =
+      msl_core_batch_step_matches(batch->runtime, batch->inputs, sizeof(batch->inputs[0]), NULL, 0);
+  return result == MSL_CORE_OK ? msl_batch_observe(batch, observations, terminals)
+                               : public_result(result);
 }
 
-MslCoreResult msl_core_batch_reset_matches(MslCoreBatch* batch,
-                                           const MslCoreMatchConfig* configs,
-                                           size_t config_stride,
-                                           const uint8_t* match_mask,
-                                           size_t mask_stride)
-{
-    MslCoreInput previous = { 0 };
-    uint32_t i;
-    if (validate_mask(batch, match_mask, mask_stride) != MSL_CORE_OK ||
-        configs == NULL || config_stride < sizeof(*configs))
-    {
-        return MSL_CORE_INVALID_ARGUMENT;
-    }
-    for (i = 0; i < batch->match_count; ++i) {
-        const MslCoreMatchConfig* config =
-            row_const(configs, config_stride, i);
-        if (selected(match_mask, mask_stride, i) && !valid_config(config)) {
-            return MSL_CORE_INVALID_ARGUMENT;
-        }
-    }
-    memset(batch->reset_index, 0,
-           (size_t) batch->reset_index_capacity *
-               sizeof(*batch->reset_index));
-    for (i = 0; i < batch->match_count; ++i) {
-        const MslCoreMatchConfig* config =
-            row_const(configs, config_stride, i);
-        if (selected(match_mask, mask_stride, i)) {
-            uint32_t slot =
-                hash_config(config) & (batch->reset_index_capacity - 1);
-            uint32_t source = UINT32_MAX;
-            while (batch->reset_index[slot] != 0) {
-                uint32_t candidate = batch->reset_index[slot] - 1;
-                if (memcmp(config, &batch->matches[candidate].config,
-                           sizeof(*config)) == 0)
-                {
-                    source = candidate;
-                    break;
-                }
-                slot = (slot + 1) & (batch->reset_index_capacity - 1);
-            }
-            if (source == UINT32_MAX) {
-                if (msl_core_match_reset(&batch->matches[i], batch->game_data,
-                                         config, &previous) != 0)
-                {
-                    return MSL_CORE_INVALID_STATE;
-                }
-                batch->reset_index[slot] = i + 1;
-            } else {
-                batch->matches[i].game_data = batch->game_data;
-                if (msl_core_match_copy(&batch->matches[i],
-                                        &batch->matches[source]) != 0)
-                {
-                    return MSL_CORE_INVALID_STATE;
-                }
-            }
-            batch->initialized[i] = 1;
-        }
-    }
-    return MSL_CORE_OK;
+MslResult msl_batch_copy(MslBatch* destination, const MslBatch* source,
+                         const uint32_t destination_indices[], const uint32_t source_indices[],
+                         uint32_t count) {
+  MslCoreResult result;
+  uint32_t index;
+  if (destination == NULL || source == NULL ||
+      (count != 0 && (destination_indices == NULL || source_indices == NULL))) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  result = msl_core_batch_copy_matches(destination->runtime, source->runtime, destination_indices,
+                                       source_indices, count);
+  if (result != MSL_CORE_OK) {
+    return public_result(result);
+  }
+  for (index = 0; index < count; ++index) {
+    destination->viewpoint_players[destination_indices[index]] =
+        source->viewpoint_players[source_indices[index]];
+    destination->max_frames[destination_indices[index]] = source->max_frames[source_indices[index]];
+  }
+  return MSL_OK;
 }
 
-MslCoreResult msl_core_batch_step_matches(MslCoreBatch* batch,
-                                          const MslCoreInput* inputs,
-                                          size_t input_stride,
-                                          const uint8_t* match_mask,
-                                          size_t mask_stride)
-{
-    static const MslCoreStageEvents no_stage_events = { 0 };
-    uint32_t tile_begin;
-    uint32_t i;
-    if (validate_mask(batch, match_mask, mask_stride) != MSL_CORE_OK ||
-        inputs == NULL || input_stride < sizeof(*inputs))
-    {
-        return MSL_CORE_INVALID_ARGUMENT;
-    }
-    for (i = 0; i < batch->match_count; ++i) {
-        if (selected(match_mask, mask_stride, i) && !batch->initialized[i]) {
-            return MSL_CORE_INVALID_STATE;
-        }
-    }
-#ifndef MSL_CORE_PHASE_PROFILE
-    // Until an owner has a real cross-environment kernel, interleaving its
-    // scalar source callbacks only evicts the current Match and republishes
-    // the full hosted context. Keep one Match resident for its complete
-    // source scheduler; later batch kernels can cut in at explicit owner
-    // boundaries instead of paying a generic callback-grouping tax.
-    // refs/melee/src/sysdolphin/baselib/gobj.c::HSD_GObj_80390CFC
-    for (i = 0; i < batch->match_count; ++i) {
-        if (selected(match_mask, mask_stride, i)) {
-            MslCoreMatch* match = &batch->matches[i];
-            uint32_t frame_seed = match->random_seed;
-            if (msl_core_match_step(match, row_const(inputs, input_stride, i),
-                                    frame_seed, &no_stage_events) != 0)
-            {
-                return MSL_CORE_INVALID_STATE;
-            }
-        }
-    }
-    return MSL_CORE_OK;
-#endif
-    for (tile_begin = 0; tile_begin < batch->match_count;
-         tile_begin += MSL_CORE_BATCH_TILE_MATCHES)
-    {
-        HSD_GObjEvent owners[MSL_CORE_BATCH_TILE_MATCHES] = { 0 };
-        uint32_t frame_seeds[MSL_CORE_BATCH_TILE_MATCHES];
-        uint32_t tile_end = tile_begin + MSL_CORE_BATCH_TILE_MATCHES;
-        uint32_t priority_count = 0;
-        uint32_t priority;
-        if (tile_end > batch->match_count) {
-            tile_end = batch->match_count;
-        }
-        for (i = tile_begin; i < tile_end; ++i) {
-            if (selected(match_mask, mask_stride, i)) {
-                MslCoreMatch* match = &batch->matches[i];
-                uint32_t lane = i - tile_begin;
-                uint32_t count;
-#ifdef MSL_CORE_PHASE_PROFILE
-                uint64_t started = phase_cycles();
-#endif
-                frame_seeds[lane] = match->random_seed;
-                if (msl_core_match_step_prepare(
-                        match, row_const(inputs, input_stride, i),
-                        frame_seeds[lane], &no_stage_events) != 0)
-                {
-                    return MSL_CORE_INVALID_STATE;
-                }
-#ifdef MSL_CORE_PHASE_PROFILE
-                phase_profile.prepare_cycles += phase_cycles() - started;
-                started = phase_cycles();
-#endif
-                msl_core_match_scheduler_begin(match);
-                count = msl_core_match_scheduler_priority_count(match);
-#ifdef MSL_CORE_PHASE_PROFILE
-                phase_profile.scheduler_cycles += phase_cycles() - started;
-                phase_profile.matches += 1;
-#endif
-                if (count > priority_count) {
-                    priority_count = count;
-                }
-            }
-        }
-#ifdef MSL_CORE_PHASE_PROFILE
-        {
-            uint64_t scheduler_started = phase_cycles();
-#endif
-        for (priority = 0; priority < priority_count; ++priority) {
-            HSD_GObjEvent owner;
-            memset(owners, 0, sizeof(owners));
-            for (i = tile_begin; i < tile_end; ++i) {
-                if (selected(match_mask, mask_stride, i) &&
-                    priority < msl_core_match_scheduler_priority_count(
-                                   &batch->matches[i]))
-                {
-                    msl_core_match_scheduler_priority_begin(
-                        &batch->matches[i], priority);
-                }
-            }
-            do {
-                owner = NULL;
-                for (i = tile_begin; i < tile_end; ++i) {
-                    uint32_t lane = i - tile_begin;
-                    if (!selected(match_mask, mask_stride, i) ||
-                        priority >= msl_core_match_scheduler_priority_count(
-                                        &batch->matches[i]))
-                    {
-                        continue;
-                    }
-                    if (owners[lane] == NULL) {
-                        owners[lane] = msl_core_match_scheduler_next_owner(
-                            &batch->matches[i]);
-                    }
-                    if (owner == NULL && owners[lane] != NULL) {
-                        owner = owners[lane];
-                    }
-                }
-                if (owner != NULL) {
-                    // Imported source callback identity is the scheduler
-                    // owner key. Preserve match order within each group and
-                    // each Match's exact callback sequence while neighboring
-                    // matches execute the same owner together.
-                    // refs/melee/src/sysdolphin/baselib/gobj.c::
-                    //   HSD_GObj_80390CFC
-                    for (i = tile_begin; i < tile_end; ++i) {
-                        uint32_t lane = i - tile_begin;
-                        if (owners[lane] == owner) {
-#ifdef MSL_CORE_PHASE_PROFILE
-                            uint64_t started = phase_cycles();
-#endif
-                            // A Match commonly has two or four fighter procs
-                            // with the same source owner. Their state is
-                            // match-local, so retain source proc order while
-                            // consuming that consecutive owner run under one
-                            // context binding before moving to the next lane.
-                            // refs/melee/src/sysdolphin/baselib/gobj.c::
-                            //   HSD_GObj_80390CFC
-                            owners[lane] =
-                                msl_core_match_scheduler_invoke_owner(
-                                    &batch->matches[i], owner);
-#ifdef MSL_CORE_PHASE_PROFILE
-                            {
-                                uint64_t elapsed = phase_cycles() - started;
-                                phase_profile.invoke_cycles += elapsed;
-                                phase_record_owner(owner, elapsed);
-                            }
-#endif
-                        }
-                    }
-                }
-            } while (owner != NULL);
-        }
-#ifdef MSL_CORE_PHASE_PROFILE
-            phase_profile.scheduler_cycles +=
-                phase_cycles() - scheduler_started;
-        }
-#endif
-        for (i = tile_begin; i < tile_end; ++i) {
-#ifdef MSL_CORE_PHASE_PROFILE
-            uint64_t started = phase_cycles();
-#endif
-            if (selected(match_mask, mask_stride, i) &&
-                msl_core_match_step_finish(
-                    &batch->matches[i], frame_seeds[i - tile_begin]) != 0)
-            {
-                return MSL_CORE_INVALID_STATE;
-            }
-#ifdef MSL_CORE_PHASE_PROFILE
-            phase_profile.finish_cycles += phase_cycles() - started;
-#endif
-        }
-    }
-    return MSL_CORE_OK;
+MslResult msl_batch_save_size(const MslBatch* batch, uint32_t env_index, size_t* required_size) {
+  size_t payload_size;
+  MslCoreResult result;
+  if (batch == NULL || required_size == NULL) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  result = msl_core_batch_match_save_size(batch->runtime, env_index, &payload_size);
+  if (result != MSL_CORE_OK) {
+    return public_result(result);
+  }
+  if (payload_size > UINT32_MAX || payload_size > SIZE_MAX - sizeof(MslSaveHeader)) {
+    return MSL_INVALID_STATE;
+  }
+  *required_size = sizeof(MslSaveHeader) + payload_size;
+  return MSL_OK;
 }
 
-MslCoreResult msl_core_batch_write_state(const MslCoreBatch* batch,
-                                         MslCoreState* output,
-                                         size_t output_stride,
-                                         const uint8_t* match_mask,
-                                         size_t mask_stride)
-{
-    uint32_t i;
-    if (validate_mask(batch, match_mask, mask_stride) != MSL_CORE_OK ||
-        output == NULL || output_stride < sizeof(*output))
-    {
-        return MSL_CORE_INVALID_ARGUMENT;
-    }
-    for (i = 0; i < batch->match_count; ++i) {
-        if (selected(match_mask, mask_stride, i)) {
-            if (!batch->initialized[i]) {
-                return MSL_CORE_INVALID_STATE;
-            }
-            memcpy(row_mutable(output, output_stride, i),
-                   msl_core_match_output(&batch->matches[i]), sizeof(*output));
-        }
-    }
-    return MSL_CORE_OK;
+MslResult msl_batch_save(const MslBatch* batch, uint32_t env_index, void* buffer,
+                         size_t buffer_size, size_t* written) {
+  MslSaveHeader header;
+  size_t required_size;
+  size_t payload_written;
+  MslResult public_status;
+  MslCoreResult result;
+
+  if (batch == NULL || buffer == NULL || written == NULL) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  public_status = msl_batch_save_size(batch, env_index, &required_size);
+  if (public_status != MSL_OK) {
+    return public_status;
+  }
+  if (buffer_size < required_size) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  memset(&header, 0, sizeof(header));
+  header.magic = MSL_SAVE_MAGIC;
+  header.version = MSL_SAVE_VERSION;
+  header.payload_size = (uint32_t)(required_size - sizeof(header));
+  header.max_frame = batch->max_frames[env_index];
+  header.viewpoint_player = batch->viewpoint_players[env_index];
+  memcpy(buffer, &header, sizeof(header));
+  result = msl_core_batch_save_match(batch->runtime, env_index, (uint8_t*)buffer + sizeof(header),
+                                     buffer_size - sizeof(header), &payload_written);
+  if (result != MSL_CORE_OK) {
+    return public_result(result);
+  }
+  *written = sizeof(header) + payload_written;
+  return MSL_OK;
 }
 
-MslCoreResult msl_core_batch_write_terminal(const MslCoreBatch* batch,
-                                            MslCoreTerminal* output,
-                                            size_t output_stride,
-                                            int32_t max_frame_id,
-                                            const uint8_t* match_mask,
-                                            size_t mask_stride)
-{
-    uint32_t i;
-    if (validate_mask(batch, match_mask, mask_stride) != MSL_CORE_OK ||
-        output == NULL || output_stride < sizeof(*output))
-    {
-        return MSL_CORE_INVALID_ARGUMENT;
-    }
-    for (i = 0; i < batch->match_count; ++i) {
-        if (selected(match_mask, mask_stride, i)) {
-            if (!batch->initialized[i]) {
-                return MSL_CORE_INVALID_STATE;
-            }
-            msl_core_match_write_terminal(
-                &batch->matches[i], max_frame_id,
-                row_mutable(output, output_stride, i));
-        }
-    }
-    return MSL_CORE_OK;
-}
+MslResult msl_batch_restore(MslBatch* batch, uint32_t env_index, const void* buffer,
+                            size_t buffer_size) {
+  MslSaveHeader header;
+  MslCoreResult result;
 
-MslCoreResult msl_core_batch_write_observation(
-    const MslCoreBatch* batch, const uint8_t* viewpoint_players,
-    size_t viewpoint_stride, MslCoreObservation* output,
-    size_t output_stride, const uint8_t* match_mask, size_t mask_stride)
-{
-    uint32_t i;
-    if (validate_mask(batch, match_mask, mask_stride) != MSL_CORE_OK ||
-        viewpoint_players == NULL || viewpoint_stride < sizeof(uint8_t) ||
-        output == NULL || output_stride < sizeof(*output))
-    {
-        return MSL_CORE_INVALID_ARGUMENT;
-    }
-    for (i = 0; i < batch->match_count; ++i) {
-        if (selected(match_mask, mask_stride, i)) {
-            uint8_t viewpoint = viewpoint_players[(size_t) i * viewpoint_stride];
-            if (!batch->initialized[i]) {
-                return MSL_CORE_INVALID_STATE;
-            }
-            if (viewpoint >= batch->matches[i].config.num_players) {
-                return MSL_CORE_INVALID_ARGUMENT;
-            }
-        }
-    }
-    for (i = 0; i < batch->match_count; ++i) {
-        if (selected(match_mask, mask_stride, i)) {
-            uint8_t viewpoint = viewpoint_players[(size_t) i * viewpoint_stride];
-            if (msl_core_match_write_observation(
-                    &batch->matches[i], viewpoint,
-                    row_mutable(output, output_stride, i)) != 0)
-            {
-                return MSL_CORE_INVALID_STATE;
-            }
-        }
-    }
-    return MSL_CORE_OK;
-}
-
-MslCoreResult msl_core_batch_write_viewer(const MslCoreBatch* batch,
-                                          MslCoreViewerState* output,
-                                          size_t output_stride,
-                                          const uint8_t* match_mask,
-                                          size_t mask_stride)
-{
-    uint32_t i;
-    if (validate_mask(batch, match_mask, mask_stride) != MSL_CORE_OK ||
-        output == NULL || output_stride < sizeof(*output))
-    {
-        return MSL_CORE_INVALID_ARGUMENT;
-    }
-    for (i = 0; i < batch->match_count; ++i) {
-        if (selected(match_mask, mask_stride, i)) {
-            if (!batch->initialized[i]) {
-                return MSL_CORE_INVALID_STATE;
-            }
-            msl_core_match_write_viewer(&batch->matches[i],
-                                        row_mutable(output, output_stride, i));
-        }
-    }
-    return MSL_CORE_OK;
-}
-
-MslCoreResult msl_core_batch_copy_matches(MslCoreBatch* destination,
-                                          const MslCoreBatch* source,
-                                          const uint32_t* destination_indices,
-                                          const uint32_t* source_indices,
-                                          uint32_t count)
-{
-    uint32_t i;
-    uint32_t j;
-    if (destination == NULL || source == NULL ||
-        (count != 0 &&
-         (destination_indices == NULL || source_indices == NULL)))
-    {
-        return MSL_CORE_INVALID_ARGUMENT;
-    }
-    for (i = 0; i < count; ++i) {
-        if (destination_indices[i] >= destination->match_count ||
-            source_indices[i] >= source->match_count ||
-            !source->initialized[source_indices[i]])
-        {
-            return MSL_CORE_INVALID_ARGUMENT;
-        }
-        if (destination == source &&
-            destination_indices[i] != source_indices[i])
-        {
-            for (j = 0; j < count; ++j) {
-                if (destination_indices[i] == source_indices[j]) {
-                    return MSL_CORE_INVALID_ARGUMENT;
-                }
-            }
-        }
-    }
-    for (i = 0; i < count; ++i) {
-        MslCoreMatch* dst = &destination->matches[destination_indices[i]];
-        const MslCoreMatch* src = &source->matches[source_indices[i]];
-        if (dst != src) {
-            dst->game_data = destination->game_data;
-            if (msl_core_match_copy(dst, src) != 0) {
-                return MSL_CORE_INCOMPATIBLE;
-            }
-        }
-        destination->initialized[destination_indices[i]] = 1;
-    }
-    return MSL_CORE_OK;
-}
-
-MslCoreResult msl_core_batch_match_save_size(const MslCoreBatch* batch,
-                                             uint32_t match_index,
-                                             size_t* required_size)
-{
-    if (batch == NULL || required_size == NULL ||
-        match_index >= batch->match_count)
-    {
-        return MSL_CORE_INVALID_ARGUMENT;
-    }
-    if (!batch->initialized[match_index]) {
-        return MSL_CORE_INVALID_STATE;
-    }
-    *required_size = msl_core_match_save_size(&batch->matches[match_index]);
-    return MSL_CORE_OK;
-}
-
-MslCoreResult msl_core_batch_save_match(const MslCoreBatch* batch,
-                                        uint32_t match_index, void* buffer,
-                                        size_t buffer_size, size_t* written)
-{
-    if (batch == NULL || buffer == NULL || match_index >= batch->match_count) {
-        return MSL_CORE_INVALID_ARGUMENT;
-    }
-    if (!batch->initialized[match_index]) {
-        return MSL_CORE_INVALID_STATE;
-    }
-    return msl_core_match_save(&batch->matches[match_index], buffer,
-                               buffer_size, written) == 0
-               ? MSL_CORE_OK
-               : MSL_CORE_INVALID_ARGUMENT;
-}
-
-MslCoreResult msl_core_batch_restore_match(MslCoreBatch* batch,
-                                           uint32_t match_index,
-                                           const void* buffer,
-                                           size_t buffer_size)
-{
-    MslCoreMatch* match;
-    if (batch == NULL || buffer == NULL || match_index >= batch->match_count) {
-        return MSL_CORE_INVALID_ARGUMENT;
-    }
-    match = &batch->matches[match_index];
-    match->game_data = batch->game_data;
-    if (msl_core_match_restore(match, buffer, buffer_size) != 0) {
-        return MSL_CORE_INCOMPATIBLE;
-    }
-    batch->initialized[match_index] = 1;
-    return MSL_CORE_OK;
+  if (batch == NULL || buffer == NULL || env_index >= batch->size || buffer_size < sizeof(header)) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  memcpy(&header, buffer, sizeof(header));
+  if (header.magic != MSL_SAVE_MAGIC || header.version != MSL_SAVE_VERSION ||
+      header.payload_size != buffer_size - sizeof(header) ||
+      header.viewpoint_player >= MSL_MAX_PLAYERS || header._reserved[0] != 0 ||
+      header._reserved[1] != 0 || header._reserved[2] != 0) {
+    return MSL_INCOMPATIBLE;
+  }
+  result = msl_core_batch_restore_match(
+      batch->runtime, env_index, (const uint8_t*)buffer + sizeof(header), header.payload_size);
+  if (result != MSL_CORE_OK) {
+    return public_result(result);
+  }
+  batch->max_frames[env_index] = header.max_frame;
+  batch->viewpoint_players[env_index] = header.viewpoint_player;
+  return MSL_OK;
 }

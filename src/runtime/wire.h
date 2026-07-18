@@ -1,12 +1,14 @@
 #ifndef MSL_CORE_RUNTIME_WIRE_H
 #define MSL_CORE_RUNTIME_WIRE_H
 
+#include "api.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
 enum {
-    MSL_CORE_MAX_PLAYERS = 4,
-    MSL_CORE_MAX_ITEMS = 15,
+    MSL_CORE_MAX_PLAYERS = MSL_MAX_PLAYERS,
+    MSL_CORE_MAX_ITEMS = MSL_MAX_ITEMS,
     MSL_CORE_MAX_HITBOXES = 4,
     MSL_CORE_STATE_FLAGS_BYTES = 5,
 };
@@ -118,29 +120,7 @@ typedef struct MslCoreStreamJobHeader {
     MslCoreInput previous;
 } MslCoreStreamJobHeader;
 
-typedef struct MslCoreItem {
-    uint8_t exists;
-    uint8_t state;
-    uint16_t type;
-    int8_t owner;
-    uint8_t _pad0;
-    uint16_t instance_id;
-    uint16_t attack_id;
-    uint16_t attack_instance;
-    float direction;
-    float vel_x;
-    float vel_y;
-    float pos_x;
-    float pos_y;
-    uint16_t damage;
-    uint16_t _pad1;
-    float timer;
-    uint32_t spawn_id;
-    uint8_t misc0;
-    uint8_t misc1;
-    uint8_t misc2;
-    uint8_t misc3;
-} MslCoreItem;
+typedef MslItem MslCoreItem;
 
 typedef struct MslCoreCompare {
     int32_t frame_id;
@@ -184,83 +164,12 @@ typedef struct MslCoreCompare {
     MslCoreItem items[MSL_CORE_MAX_ITEMS];
 } MslCoreCompare;
 
-// Policy-facing observation. Its semantic fields and compact byte layout
-// cover the Slippi-AI-facing state contract while remaining independent of
-// replay-forensic and viewer-only projections.
-typedef struct MslCoreObservationPlayer {
-    uint8_t present;
-    uint8_t source_player;
-    uint8_t team_relation;
-    uint8_t team_id;
-
-    float pos_x;
-    float pos_y;
-    float speed_air_x_self;
-    float speed_ground_x_self;
-    float speed_y_self;
-    float speed_x_attack;
-    float speed_y_attack;
-    float percent;
-    float shield_hp;
-
-    uint16_t action_id;
-    int16_t action_frame;
-    uint16_t hitlag;
-    uint16_t hitstun;
-
-    uint8_t char_id;
-    uint8_t stocks;
-    uint8_t facing;
-    uint8_t on_ground;
-    uint8_t jumps_left;
-    uint8_t hurtbox_state;
-    uint8_t invulnerable;
-    uint8_t _pad0;
-} MslCoreObservationPlayer;
-
-typedef struct MslCoreObservationRandall {
-    uint8_t exists;
-    uint8_t _pad0[3];
-    float x;
-    float y;
-} MslCoreObservationRandall;
-
-typedef struct MslCoreObservationFodPlatforms {
-    float left;
-    float right;
-} MslCoreObservationFodPlatforms;
-
-typedef struct MslCoreObservationStage {
-    MslCoreObservationRandall randall;
-    MslCoreObservationFodPlatforms fod_platforms;
-} MslCoreObservationStage;
-
-typedef struct MslCoreObservation {
-    int32_t frame_id;
-    uint32_t frame_pre_random_seed;
-    uint32_t stage_id;
-    uint8_t num_players;
-    uint8_t viewpoint_player;
-    uint8_t is_teams;
-    uint8_t _pad0;
-
-    MslCoreObservationStage stage;
-    MslCoreObservationPlayer slots[MSL_CORE_MAX_PLAYERS];
-    MslCoreItem items[MSL_CORE_MAX_ITEMS];
-} MslCoreObservation;
-
-typedef struct MslCoreTerminal {
-    int32_t frame_id;
-    uint32_t stage_id;
-    uint8_t done;
-    uint8_t match_ended;
-    uint8_t stockout;
-    uint8_t max_frame_reached;
-    uint8_t alive_count;
-    uint8_t alive_team_count;
-    uint8_t team_alive_mask;
-    uint8_t _pad0;
-} MslCoreTerminal;
+typedef MslObservationPlayer MslCoreObservationPlayer;
+typedef MslObservationRandall MslCoreObservationRandall;
+typedef MslObservationFodPlatforms MslCoreObservationFodPlatforms;
+typedef MslObservationStage MslCoreObservationStage;
+typedef MslObservation MslCoreObservation;
+typedef MslTerminal MslCoreTerminal;
 
 // Stable production projection used by interactive consumers. This is a
 // separate schema from MslCoreCompare: replay-forensic lanes can evolve

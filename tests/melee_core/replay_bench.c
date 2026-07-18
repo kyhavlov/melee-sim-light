@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
 
-#include "api.h"
+#include "runtime/batch.h"
 #include "runtime/benchmark_wire.h"
 
 #include <errno.h>

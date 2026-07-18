@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
 
-#include "api.h"
+#include "runtime/batch.h"
 #include "platform/memory.h"
 #include "runtime/scalar.h"
 

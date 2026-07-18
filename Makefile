@@ -28,7 +28,7 @@ QEMU := $(TOOLCHAIN_ROOT)/usr/bin/qemu-ppc-static
 SYSROOT := $(TOOLCHAIN_ROOT)
 QEMU_SYSROOT := $(TOOLCHAIN_ROOT)/usr/powerpc-linux-gnu
 PY ?= $(ROOT)/.venv/bin/python
-HOST_CC ?= cc
+HOST_CC ?= gcc
 EMCC ?= emcc
 ISO ?=
 VIEWER_HOST ?= 127.0.0.1
@@ -126,6 +126,7 @@ SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/scheduler_smoke.c
 NATIVE_SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/batch_api_smoke.c \
+	$(ROOT)/tests/melee_core/public_api_smoke.c \
 	$(ROOT)/tests/melee_core/context_smoke.c \
 	$(ROOT)/tests/melee_core/data_load_smoke.c \
 	$(ROOT)/tests/melee_core/gameplay_parts_smoke.c \
@@ -171,6 +172,7 @@ NATIVE_SCHEDULER_SMOKE := $(NATIVE_BUILD)/scheduler-smoke
 NATIVE_SCALAR_API_SMOKE := $(NATIVE_BUILD)/scalar-api-smoke
 NATIVE_CONTEXT_SMOKE := $(NATIVE_BUILD)/context-smoke
 NATIVE_BATCH_API_SMOKE := $(NATIVE_BUILD)/batch-api-smoke
+NATIVE_PUBLIC_API_SMOKE := $(NATIVE_BUILD)/public-api-smoke
 NATIVE_GAMEPLAY_PARTS_SMOKE := $(NATIVE_BUILD)/gameplay-parts-smoke
 NATIVE_WASM_PARITY := $(NATIVE_BUILD)/wasm-parity
 NATIVE_LIFECYCLE_BENCH := $(NATIVE_BUILD)/lifecycle-bench
@@ -557,6 +559,7 @@ $(eval $(call link_native_smoke,$(NATIVE_SCHEDULER_SMOKE),$(NATIVE_OBJ_DIR)/test
 $(eval $(call link_native_smoke,$(NATIVE_SCALAR_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scalar_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_CONTEXT_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/context_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_BATCH_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/batch_api_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_PUBLIC_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/public_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_GAMEPLAY_PARTS_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/gameplay_parts_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_WASM_PARITY),$(NATIVE_OBJ_DIR)/tests/melee_core/wasm_parity.o))
 $(eval $(call link_native_smoke,$(NATIVE_LIFECYCLE_BENCH),$(NATIVE_OBJ_DIR)/tests/melee_core/lifecycle_bench.o))
@@ -585,7 +588,7 @@ ppc-smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE)
 	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
 		"$(DATA)"
 
-native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE)
+native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE)
 	@timeout 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
@@ -593,6 +596,7 @@ native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL
 	@timeout 5s "$(NATIVE_SCALAR_API_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_CONTEXT_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_BATCH_API_SMOKE)" "$(DATA)"
+	@timeout 5s "$(NATIVE_PUBLIC_API_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_GAMEPLAY_PARTS_SMOKE)" "$(DATA)"
 
 wasm-smoke: data-check $(WASM_MODULE) $(NATIVE_WASM_PARITY)

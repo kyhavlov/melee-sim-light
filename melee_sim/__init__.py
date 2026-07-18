@@ -19,7 +19,6 @@ from .controller import (
 )
 from .config import Character, MatchConfig, PlayerConfig, Stage
 from .dtypes import (
-    compare_dtype,
     controller_input_dtype,
     input_dtype,
     item_dtype,
@@ -52,7 +51,6 @@ __all__ = [
     "MatchConfig",
     "PlayerConfig",
     "Stage",
-    "compare_dtype",
     "controller_input_dtype",
     "input_dtype",
     "item_dtype",

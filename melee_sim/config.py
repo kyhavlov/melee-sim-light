@@ -38,14 +38,11 @@ class PlayerConfig:
 class MatchConfig:
     stage: int | Stage = Stage.FINAL_DESTINATION
     players: tuple[PlayerConfig, ...] | None = None
-    frame_id: int = -123
-    frame_pre_random_seed: int | None = None
-    initial_random_seed: int | None = None
-    stock_count: int = 4
-    match_damage_ratio: float = 1.0
+    seed: int | None = None
+    max_frame: int = -1
+    stocks: int = 4
+    damage_ratio: float = 1.0
     is_teams: bool = False
     friendly_fire: bool = False
-    camera_mode: int = 0
+    viewpoint_player: int = 0
     ucf_cardinals_1_0_enabled: bool = False
-    ucf_shield_sdi_enabled: bool = True
-    ucf_sdi_enabled: bool = True

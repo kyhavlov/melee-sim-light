@@ -23,7 +23,6 @@ class EnvBatch:
         "num_players",
         "data_dir",
         "t",
-        "_game_data",
         "_handle",
         "_input_storage",
         "_bound",
@@ -40,7 +39,6 @@ class EnvBatch:
         observation: str = "native",
         action_format: str = "controller",
         obs_dim: int = 0,
-        ucf_enabled: bool = True,
         ucf_cardinals_1_0_enabled: bool = False,
     ) -> None:
         self.batch_size = int(batch_size)
@@ -50,11 +48,8 @@ class EnvBatch:
             raise ValueError("batch_size must be positive")
         if self.num_players not in (2, 4):
             raise ValueError("num_players must be 2 or 4")
-        if not ucf_enabled:
-            raise ValueError("the canonical RL runtime currently requires UCF")
         self.data_dir = _resolve_data_dir(data_dir)
         self.t = 0
-        self._game_data = ctypes.c_void_p()
         self._handle = ctypes.c_void_p()
         self._input_storage = dtypes.raw_buffer(self.batch_size, "input")
         self._bound: Buffers | None = None
@@ -62,22 +57,11 @@ class EnvBatch:
 
         lib = _native.library()
         _native.check(
-            lib.msl_core_game_data_create(
-                os.fsencode(_raw_data_dir(self.data_dir)), ctypes.byref(self._game_data)
+            lib.msl_batch_create(
+                os.fsencode(self.data_dir), self.batch_size, ctypes.byref(self._handle)
             ),
-            "create game data",
+            "create batch",
         )
-        try:
-            _native.check(
-                lib.msl_core_batch_create(
-                    self._game_data, self.batch_size, ctypes.byref(self._handle)
-                ),
-                "create batch",
-            )
-        except BaseException:
-            lib.msl_core_game_data_destroy(self._game_data)
-            self._game_data = ctypes.c_void_p()
-            raise
         self.bind(
             self.allocate_buffers(
                 observation=observation,
@@ -92,11 +76,8 @@ class EnvBatch:
     def close(self) -> None:
         if self._closed:
             return
-        lib = _native.library()
-        lib.msl_core_batch_destroy(self._handle)
-        lib.msl_core_game_data_destroy(self._game_data)
+        _native.library().msl_batch_destroy(self._handle)
         self._handle = ctypes.c_void_p()
-        self._game_data = ctypes.c_void_p()
         self._closed = True
 
     def __enter__(self) -> Self:
@@ -137,10 +118,6 @@ class EnvBatch:
     @property
     def controller_action_view(self) -> np.ndarray:
         return self.buffers.controller_action_view
-
-    @property
-    def compare_view(self) -> np.ndarray:
-        return self.buffers.compare_view
 
     @property
     def gamestate_view(self) -> np.ndarray:
@@ -233,99 +210,59 @@ class EnvBatch:
 
     def reset_all(self) -> None:
         self._check_bound()
-        lib = _native.library()
         _native.check(
-            lib.msl_core_batch_reset_matches(
+            _native.library().msl_batch_reset(
                 self._handle,
                 _native.pointer(self.buffers.match_config),
-                self.buffers.match_config.shape[1],
                 None,
-                0,
+                _native.pointer(self.buffers.gamestate[0]),
             ),
             "reset matches",
         )
         self.t = 0
-        self._write_observation(0, None)
 
-    def reset_masked(self, *, write_initial_observation: bool = True) -> None:
+    def reset_masked(self) -> None:
         self._check_bound()
         frame = self._check_step_index(self.t)
         mask = self.buffers.reset_mask[frame]
         _native.check(
-            _native.library().msl_core_batch_reset_matches(
+            _native.library().msl_batch_reset(
                 self._handle,
                 _native.pointer(self.buffers.match_config),
-                self.buffers.match_config.shape[1],
                 _native.pointer(mask),
-                mask.strides[0],
+                _native.pointer(self.buffers.gamestate[frame]),
             ),
             "reset selected matches",
         )
-        if write_initial_observation:
-            self._write_observation(frame, mask)
 
     def reset_cursor(self) -> None:
         self._check_bound()
         self.t = 0
 
-    def step(
-        self,
-        *,
-        write_outputs: bool = True,
-        write_compare: bool = False,
-        max_frame_id: int = -1,
-    ) -> None:
+    def step(self) -> None:
         frame = self._check_step_index(self.t)
         inputs = self._inputs_for_frame(frame)
-        lib = _native.library()
         _native.check(
-            lib.msl_core_batch_step_matches(
+            _native.library().msl_batch_step(
                 self._handle,
                 _native.pointer(inputs),
-                inputs.strides[0],
-                None,
-                0,
+                _native.pointer(self.buffers.gamestate[frame + 1]),
+                _native.pointer(self.buffers.terminal[frame]),
             ),
             "step matches",
         )
-        if write_compare:
-            _native.check(
-                lib.msl_core_batch_write_state(
-                    self._handle,
-                    _native.pointer(self.buffers.compare),
-                    self.buffers.compare.strides[0],
-                    None,
-                    0,
-                ),
-                "write state",
-            )
-        if write_outputs:
-            self._write_observation(frame + 1, None)
-            terminal = self.buffers.terminal[frame]
-            _native.check(
-                lib.msl_core_batch_write_terminal(
-                    self._handle,
-                    _native.pointer(terminal),
-                    terminal.strides[0],
-                    int(max_frame_id),
-                    None,
-                    0,
-                ),
-                "write terminal",
-            )
         self.t += 1
 
-    def write_compare(self) -> None:
-        self._check_bound()
+    def observe(self) -> None:
+        """Write the current native state without advancing the batch."""
+        frame = self._check_step_index(self.t)
         _native.check(
-            _native.library().msl_core_batch_write_state(
+            _native.library().msl_batch_observe(
                 self._handle,
-                _native.pointer(self.buffers.compare),
-                self.buffers.compare.strides[0],
-                None,
-                0,
+                _native.pointer(self.buffers.gamestate[frame]),
+                _native.pointer(self.buffers.terminal[frame]),
             ),
-            "write state",
+            "observe matches",
         )
 
     def copy_matches_from(
@@ -339,7 +276,7 @@ class EnvBatch:
         if destination.shape != sources.shape or destination.ndim != 1:
             raise ValueError("source and destination indices must be equal-length vectors")
         _native.check(
-            _native.library().msl_core_batch_copy_matches(
+            _native.library().msl_batch_copy(
                 self._handle,
                 source._handle,
                 _native.pointer(destination),
@@ -353,7 +290,7 @@ class EnvBatch:
         size = ctypes.c_size_t()
         lib = _native.library()
         _native.check(
-            lib.msl_core_batch_match_save_size(
+            lib.msl_batch_save_size(
                 self._handle, int(match_index), ctypes.byref(size)
             ),
             "measure savestate",
@@ -361,7 +298,7 @@ class EnvBatch:
         buffer = ctypes.create_string_buffer(size.value)
         written = ctypes.c_size_t()
         _native.check(
-            lib.msl_core_batch_save_match(
+            lib.msl_batch_save(
                 self._handle,
                 int(match_index),
                 buffer,
@@ -378,7 +315,7 @@ class EnvBatch:
             raise ValueError("savestate must be contiguous")
         buffer = (ctypes.c_ubyte * view.nbytes).from_buffer_copy(view)
         _native.check(
-            _native.library().msl_core_batch_restore_match(
+            _native.library().msl_batch_restore(
                 self._handle, int(match_index), buffer, view.nbytes
             ),
             "restore match",
@@ -398,21 +335,6 @@ class EnvBatch:
         if result:
             raise ValueError("invalid controller input buffer")
         return self._input_storage
-
-    def _write_observation(self, frame: int, mask: np.ndarray | None) -> None:
-        output = self.buffers.gamestate[frame]
-        _native.check(
-            _native.library().msl_core_batch_write_observation(
-                self._handle,
-                _native.pointer(self.buffers.viewpoint),
-                self.buffers.viewpoint.strides[0],
-                _native.pointer(output),
-                output.strides[0],
-                _native.pointer(mask),
-                0 if mask is None else mask.strides[0],
-            ),
-            "write observation",
-        )
 
     def _check_open(self) -> None:
         if self._closed:
@@ -474,33 +396,26 @@ def _write_match_config(
         raise ValueError(f"players must contain exactly {num_players} entries")
     for name in row.dtype.names or ():
         row[name] = 0
-    seed = lane if config.frame_pre_random_seed is None else config.frame_pre_random_seed
-    initial_seed = seed if config.initial_random_seed is None else config.initial_random_seed
-    row["stage_id"] = int(config.stage)
-    row["frame_id"] = int(config.frame_id)
-    row["frame_pre_random_seed"] = int(seed)
-    row["initial_random_seed"] = int(initial_seed)
-    row["match_damage_ratio"] = float(config.match_damage_ratio)
+    row["stage"] = int(config.stage)
+    row["random_seed"] = lane if config.seed is None else int(config.seed)
+    row["max_frame"] = int(config.max_frame)
+    row["damage_ratio"] = float(config.damage_ratio)
     row["num_players"] = num_players
     row["is_teams"] = bool(config.is_teams)
     row["friendly_fire"] = bool(config.friendly_fire)
-    row["stock_count"] = int(config.stock_count)
-    row["camera_mode"] = int(config.camera_mode)
-    row["ucf_cardinals_1_0_enabled"] = bool(config.ucf_cardinals_1_0_enabled)
-    row["ucf_shield_sdi_enabled"] = bool(config.ucf_shield_sdi_enabled)
-    row["ucf_sdi_enabled"] = bool(config.ucf_sdi_enabled)
+    row["stocks"] = int(config.stocks)
+    row["viewpoint_player"] = int(config.viewpoint_player)
+    row["ucf_cardinals"] = bool(config.ucf_cardinals_1_0_enabled)
     for index, player in enumerate(players):
-        if player.team_id is None:
-            team = int(index >= (num_players + 1) // 2) if config.is_teams else index
-        else:
-            team = int(player.team_id)
-        facing = (index == 0) if player.facing is None else bool(player.facing)
-        port = 0 if player.controller_port is None else int(player.controller_port) + 1
-        if not 0 <= port <= 4:
+        team = -1 if player.team_id is None else int(player.team_id)
+        facing = 0 if player.facing is None else (1 if player.facing else -1)
+        port = -1 if player.controller_port is None else int(player.controller_port)
+        if not -1 <= port < 4:
             raise ValueError("controller_port must be in 0..3")
         target = row["players"][index]
-        target["char_id"] = int(player.character)
-        target["team_id"] = team
-        target["facing_and_port"] = int(facing) | (port << 1)
-        target["costume_id"] = int(player.costume)
+        target["character"] = int(player.character)
+        target["team"] = team
+        target["facing"] = facing
+        target["controller_port"] = port
+        target["costume"] = int(player.costume)
         target["handicap"] = int(player.handicap)
