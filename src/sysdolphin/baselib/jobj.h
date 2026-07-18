@@ -94,9 +94,9 @@ struct HSD_JObj;
 #define JOBJ_ROOT_XLU (1 << 29)
 #define JOBJ_ROOT_TEXEDGE (1 << 30)
 
-// Hosted headless ownership bit. MSLPART1 proves that a marked subtree has no
-// gameplay-consumed joints; retail never uses bit 31 in HSD_JObj::flags.
-// tools/data/gameplay_parts.json
+// Hosted headless ownership bit. ftparts.c admits every gameplay-consumed
+// joint and structurally proves the remaining marked subtrees cold; retail
+// never uses bit 31 in HSD_JObj::flags.
 #define JOBJ_MSL_GAMEPLAY_COLD 0x80000000U
 
 #define JOBJ_ROOT_MASK (JOBJ_ROOT_OPA | JOBJ_ROOT_TEXEDGE | JOBJ_ROOT_XLU)

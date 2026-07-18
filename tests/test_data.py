@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import struct
 from pathlib import Path
 
 import pytest
 
 from tools.data.extract import _disc_files, _main_dol, _profile
-from tools.data.gameplay_parts import emit_gameplay_parts
 from tools.data.raw import DataError, raw_dir, validate_raw_dir
 
 
@@ -31,26 +29,3 @@ def test_configured_raw_data_profile_is_valid() -> None:
     except DataError as exc:
         pytest.fail(str(exc))
     assert len(manifest["files"]) == 81
-
-
-def test_gameplay_part_artifacts_are_deterministic(tmp_path: Path) -> None:
-    emit_gameplay_parts(tmp_path)
-    artifacts = sorted((tmp_path / "model_parts").glob("*.bin"))
-    assert [path.stem for path in artifacts] == [
-        "falco",
-        "falcon",
-        "fox",
-        "marth",
-        "peach",
-        "puff",
-        "sheik",
-        "zelda",
-    ]
-    for path in artifacts:
-        payload = path.read_bytes()
-        assert payload[:8] == b"MSLPART1"
-        version, _character, part_count, anchor_count, reserved = struct.unpack_from(
-            "<IHHHH", payload, 8
-        )
-        assert (version, anchor_count, reserved) == (1, 0, 0)
-        assert len(payload) == 20 + part_count * 12

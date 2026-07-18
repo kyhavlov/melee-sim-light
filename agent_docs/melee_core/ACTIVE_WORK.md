@@ -1,54 +1,68 @@
-# Active packet — canonical simulator cutover
+# Active packet — gameplay-pose admission ownership
 
-The approved scope and deletion contract are in
-[`CANONICAL_CUTOVER.md`](CANONICAL_CUTOVER.md). This file is only the chronological execution log.
+Replace optional `MSLPART1` files with one required, source-audited immutable admission table while
+preserving the retained native pose cull. This packet changes metadata ownership, not the surviving
+JObj/FighterBone representation or frame scheduler.
+
+## Scope
+
+- In: supported-fighter part-owner audit, immutable native/Wasm table, direct runtime cutover,
+  complete `MSLPART1` deletion, structural checks, exact replay/Wasm gates, and retained benchmarks.
+- Out: compact-pose program work, SIMD/AoSoA changes, scheduler changes, new fighters, or restoration
+  of any stashed pose experiment.
+
+## Ownership and deletion boundary
+
+- Final owner: hosted fighter-pose construction in `melee/ft/ftparts.c`.
+- Canonical state: one compile-time read-only supported-fighter part-admission table; no mutable or
+  per-GameData copy.
+- Consumers: compact main/interpolation JObj construction and post-construction cold-subtree
+  animation pruning.
+- Source oracle: PPC deliberately retains the complete source JObj graph through compile-time target
+  ownership, not runtime fallback dispatch.
+- Displaced state/code: `tools/data/gameplay_parts.{py,json}`, `data/model_parts`, scalar file
+  parsing, `MslCoreGameData::gameplay_parts`, its fingerprint bytes, optional availability state,
+  runtime context lookup, artifact tests, and every `MSLPART1` reference.
+- Completion: current native output contract or better, native API/save-restore gates, fresh
+  extraction containing no pose artifact, Wasm/viewer parity, and no retained 256/512 regression.
+
+## Action items
+
+- [x] Audit decomp/DAT owners and supported costume topology without treating the deleted legacy
+  extractor as authority.
+- [x] Install the immutable table at the final fighter-parts owner and cut native/Wasm consumers over
+  directly.
+- [x] Delete the complete artifact/loader/fallback boundary.
+- [x] Add structural coverage for supported fighters, valid part ids, ancestor closure, costume
+  topology, and meaningful cold-node removal.
+- [x] Run focused native, extraction, source-sync, and Wasm checks.
+- [x] Run the complete 153-replay gate and retained 256/512 benchmarks.
+- [x] Record final retained evidence and leave the coherent packet uncommitted for review.
 
 ## Log
 
-- 2026-07-18: Preserved the entire compact-pose packet, including untracked files, as stash
-  `a5e6f8f20e94b5c3bd5f49ecfb9533168c9f4daa` with subject
-  `wip: compact-pose-before-canonical-cutover-20260718`. Clean cutover baseline is HEAD
-  `8fd36c6e252e7ddfbdface686509bac316b05ebf`.
-- 2026-07-18: Started the canonical cutover. Final owner is the new decomp-backed runtime directly
-  under `src/`; canonical mutable state is its batch/match state; canonical shared state is its
-  immutable game data. Consumers are the C API, replay validation/benchmarking, and the Wasm live
-  viewer. The displaced boundary is the entire old simulator, Python extension, preprocessing/eval
-  stack, legacy extraction graph, old tests, and old documentation. No compatibility bridge is
-  permitted.
-- 2026-07-18: Promoted the decomp-backed API/runtime/platform/source graph directly under `src/`,
-  moved its Makefile to the repository root, and cut validation/build/viewer paths over without a
-  compatibility alias. Deleted the displaced C/Python simulator, extension, tools, tests, reports,
-  and historical documentation.
-- 2026-07-18: Replaced legacy extraction with `tools/data`: a stdlib ISO/FST extractor emits 81
-  hashed raw files plus eight deterministic MSLPART1 pose closures from an audited source-owner
-  manifest. Empty-root extraction completed in 0.67 seconds; fresh data passed native and PPC
-  smokes and produced the same runtime pose masks.
-- 2026-07-18: Completion evidence is green: source sync (132 classified deltas), 35 Python tests,
-  native/PPC smokes, Wasm API parity, live and production browser viewer smokes, and the native
-  153-replay gate (63 exact, 90 unchanged classified, 0 failure/error, 1,415,476 frames). Same-host
-  alternating benchmarks are performance-neutral at -0.48% (256) and -0.53% (512), with unchanged
-  digests. Final step is the repository/worktree residue audit; no commit is authorized.
-- 2026-07-18: Residue audit found no production reference to the displaced simulator or its paths.
-  Removed its ignored compiled extension/caches and the three packet-only worktrees. The two dirty
-  diagnostic worktrees were preserved first as stashes `e8ca20e952019ee4755c8aa662570092ea0d7c70`
-  and `266e29405e766011376f3a1049d1b06723c7af63`; the main packet remains preserved as
-  `a5e6f8f20e94b5c3bd5f49ecfb9533168c9f4daa`. The cutover is ready for review and remains
-  uncommitted.
-- 2026-07-18: Review correction opened. `MSLPART1` and its two committed pose-pruning packets are
-  explicitly frozen for a separate post-cutover audit. This correction preserves the user-authored
-  root README as its editing base, moves the active simulator guide to `src/`, removes dead
-  old-simulator Make targets, and audits the public Python/C API rather than documenting a deleted
-  interface as if it still existed. No commit is authorized.
-- 2026-07-18: Correction implementation complete pending gates. The root README retains its original
-  structure, introduction, Python example, C example, viewer section, and API reference, with only
-  obsolete API names/contracts updated. The simulator guide is now `src/README.md`; the root
-  Makefile exposes only canonical extraction/build/smoke/validation/benchmark targets. The public
-  Python package now calls the sole `src/api.h` runtime through a hidden-visibility shared library;
-  the old CPython extension and gameplay implementation remain deleted. Next: run focused API,
-  build, replay, and viewer gates without touching the deferred MSLPART1 boundary.
-- 2026-07-18: Correction gates retained. Source sync remains 132 classified deltas; 39 Python/tool
-  tests, native and PPC smokes, and the public Python step/arbitrary-index restore checks pass. The
-  complete replay gate remains 63 exact, 90 unchanged classified, zero XPASS/fail/error, and
-  1,415,476 compared frames. Wasm parity and live/production browser viewer smokes pass. Final
-  residue found no production use of the displaced API/build/tool paths; MSLPART1 was not modified
-  or audited. The coherent cutover is ready to stage and remains uncommitted.
+- 2026-07-18: Packet opened from committed runtime `4a3340b0`. Existing unrelated cleanup remains
+  uncommitted in `Makefile` and the replay-storage skill. The approved final representation and
+  deletion boundary above are fixed before implementation.
+- 2026-07-18: Retained the direct table-owned cutover. Native and Wasm now read the immutable table
+  in `ftparts.c`; PPC keeps source construction through compile-time target ownership. Removed the
+  artifact serializer, extractor emission, parser, mutable GameData copy/fingerprint bytes, context
+  lookup, and missing-file/full-graph fallback. Incremental native compile and `native-smoke` are
+  green. Next: prove every supported costume's topology and constructed cold/live ownership.
+- 2026-07-18: Retained `gameplay_parts_smoke.c`. It constructs all 39 supported fighter costumes
+  and proves mask bounds, source-descriptor topology equality, ancestor closure, live instance
+  targets, actual live/cold JObj ownership, and nonempty deletion. Reached physical/live/cold
+  counts were Fox 73/36/37, Falcon 63/33/30, Sheik 58/34/24, Peach 114/89/25, Puff 50/34/16,
+  Marth 90/51/39, Zelda 118/88/30, and Falco 67/34/33. Next: source/extraction and API gates.
+- 2026-07-18: Packet complete. Fresh empty-root extraction took 0.86 seconds and emitted no pose
+  artifact; source sync, native/PPC/Python APIs, save/restore/batch smokes, Wasm parity, live viewer,
+  browser smoke, and all 39 costume checks are green. The full replay gate remains 63 exact, 90
+  unchanged classified, zero XPASS/fail/error, and 1,415,476 compared frames. Interleaved exact-HEAD
+  A/B retained identical digests and candidate medians of 60,911 FPS at 256 (+1.47%) and 80,780 at
+  512 (+0.92%); this is performance-neutral. Shared GameData is 8,488 bytes smaller. The coherent
+  packet remains uncommitted for review.
+- 2026-07-18: Final review removed the inherited bottom-up ancestor repair pass: all-costume
+  structural coverage proves closure before runtime, so production no longer compensates for an
+  incomplete admission table. Native, Python arbitrary-index save/restore, 153-replay, Wasm/viewer,
+  and browser gates remain green. Final spot checkpoints were 61,449 FPS at 256 and 81,222 at 512
+  with the retained digests.

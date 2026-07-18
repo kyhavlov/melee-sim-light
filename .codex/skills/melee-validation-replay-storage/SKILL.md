@@ -24,7 +24,7 @@ Use this skill for storage-format or path-resolution work around validation repl
 3. Confirm new validation replay files match `.gitattributes` LFS rules.
 4. Confirm old validation `.slp` files are staged as deleted when replacing them with `.slpz`.
 5. Run focused changed-path tests before claiming compatibility.
-6. Run `make validate-all` when committed validation reports or suite replay paths change.
+6. Run `make validation-supported-domain` when suite replay paths change.
 
 ## Benchmark Guidance
 - Benchmark direct `.slp` versus `.slpz` validation with equivalent suites and warmed comparable inputs.

@@ -7,8 +7,8 @@
 - `src/platform/` owns native/PPC/Wasm hosting and raw DAT translation.
 - `src/melee/` and `src/sysdolphin/` retain source-shaped gameplay ownership.
 - `src/stubs/ledger.tsv` records explicit headless exclusions.
-- `tools/data/` extracts the minimal supported retail profile and emits deterministic runtime
-  artifacts without depending on a second simulator.
+- `tools/data/` extracts the minimal supported retail profile consumed directly by the runtime,
+  without depending on a second simulator or generated gameplay metadata.
 - `tools/validation/` loads replays once through Peppi and performs per-frame work in C.
 - `tools/viewer/` builds the public API to Wasm for live play.
 

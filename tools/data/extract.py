@@ -17,7 +17,6 @@ from .raw import (
     sha256_file,
     validate_raw_dir,
 )
-from .gameplay_parts import emit_gameplay_parts
 
 
 @dataclass(frozen=True)
@@ -201,7 +200,6 @@ def extract(iso: Path, output: Path) -> None:
     temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.replace(temporary, raw / MANIFEST_NAME)
     validate_raw_dir(raw, verify_hashes=True)
-    emit_gameplay_parts(output)
 
 
 def main() -> None:

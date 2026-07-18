@@ -50,6 +50,23 @@ four-player high-water. Ordinary singles use about 0.92 MiB. Shared game-data ar
 storage is paid once per process. The public observation history costs 127,488 bytes per environment
 at 128 frames.
 
+## Gameplay-pose admission ownership A/B
+
+An interleaved three-sample same-host comparison used exact `4a3340b0` plus its extracted pose
+artifact as the control and the immutable `ftparts.c` admission table as the candidate. Both used
+the same raw archives, packed 153-replay workload, release flags, CPU 0, and resident observation
+history.
+
+| Environments | HEAD median FPS | Immutable-table median FPS | Delta | Digest |
+|---:|---:|---:|---:|---:|
+| 256 | 60,030 | 60,911 | +1.47% | `bdc54107c51fa3d7` |
+| 512 | 80,045 | 80,780 | +0.92% | `3fb5823d90657775` |
+
+This is retained as performance-neutral: the packet removes initialization/data ownership rather
+than frame work, and the small positive delta is within ordinary layout/run variance. Shared
+`MslCoreGameData` shrank from 380,216 to 371,728 bytes (-8,488 bytes); the admitted table is one
+read-only executable constant rather than mutable data copied into every GameData owner.
+
 ## Measured frame-time owners
 
 | Exclusive owner | Canonical share | Midgame share |

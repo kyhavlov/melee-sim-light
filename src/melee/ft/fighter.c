@@ -630,7 +630,7 @@ void Fighter_UnkUpdateCostumeJoint_800686E4(Fighter_GObj* gobj)
                                  .costume_list[fp->x619_costume_id]
                                  .joint;
     ftPartsPObjSetDefaultClass();
-#ifdef MSL_CORE_HOSTED
+#ifdef MSL_CORE_NATIVE
     jobj = ftParts_HeadlessLoadMain(fp, fp->x108_costume_joint);
 #else
     jobj = HSD_JObjLoadJoint(fp->x108_costume_joint);
@@ -906,7 +906,7 @@ static void Fighter_Create_Inline2(Fighter_GObj* gobj)
     }
 }
 
-#ifdef MSL_CORE_HOSTED
+#ifdef MSL_CORE_NATIVE
 static void Fighter_HeadlessMarkPoseCold(HSD_JObj* jobj)
 {
     HSD_JObj* child;
@@ -920,26 +920,6 @@ static void Fighter_HeadlessMarkPoseCold(HSD_JObj* jobj)
             Fighter_HeadlessMarkPoseCold(child);
         }
     }
-}
-
-static bool Fighter_HeadlessPromoteLivePoseAncestors(HSD_JObj* jobj)
-{
-    HSD_JObj* child;
-    bool live;
-
-    if (jobj == NULL) {
-        return false;
-    }
-    live = (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD) == 0;
-    if (!(jobj->flags & JOBJ_INSTANCE)) {
-        for (child = jobj->child; child != NULL; child = child->next) {
-            live |= Fighter_HeadlessPromoteLivePoseAncestors(child);
-        }
-    }
-    if (live) {
-        jobj->flags &= ~JOBJ_MSL_GAMEPLAY_COLD;
-    }
-    return live;
 }
 
 static void Fighter_HeadlessRemoveColdPoseAnim(HSD_JObj* jobj)
@@ -963,21 +943,18 @@ static void Fighter_HeadlessRemoveColdPoseAnim(HSD_JObj* jobj)
 static void Fighter_HeadlessPrunePose(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
-    const unsigned char* live_parts = msl_core_gameplay_part_mask(fp->kind);
+    const u8* live_parts = ftParts_HeadlessGameplayMask(fp->kind);
     HSD_JObj* roots[] = { GET_JOBJ(gobj), fp->x8AC_animSkeleton };
     int part_count;
     int root;
     int part;
 
-    if (live_parts == NULL) {
-        return;
-    }
     for (root = 0; root < ARRAY_SIZE(roots); ++root) {
         Fighter_HeadlessMarkPoseCold(roots[root]);
     }
     part_count = ftPartsTable[fp->kind]->parts_num;
     // ftParts_SetupParts enforces the source MAX_FT_PARTS=140 bound; the
-    // generated part mask has one byte for every possible u8 part id.
+    // admission table has one byte for every source-supported part id.
     for (part = 0; part < part_count; ++part) {
         if (!live_parts[part]) {
             continue;
@@ -990,10 +967,6 @@ static void Fighter_HeadlessPrunePose(Fighter_GObj* gobj)
         }
     }
     for (root = 0; root < ARRAY_SIZE(roots); ++root) {
-        // Keep this bottom-up promotion even though MSLPART1 is emitted as an
-        // ancestor closure: a malformed/incomplete optimization artifact can
-        // only retain extra source work, never hide a live descendant.
-        Fighter_HeadlessPromoteLivePoseAncestors(roots[root]);
         Fighter_HeadlessRemoveColdPoseAnim(roots[root]);
     }
 }
@@ -1025,18 +998,17 @@ Fighter_GObj* Fighter_Create(struct plAllocInfo* input)
 #endif
     ftData_80085820(fp->kind, fp->x619_costume_id);
 
-#ifdef MSL_CORE_HOSTED
+#ifdef MSL_CORE_NATIVE
     // Allocate the source FighterBone table before the compact loader so it
     // can preserve original part ids while omitting cold descriptor subtrees.
     // refs/melee/src/melee/ft/ftparts.c::{ftParts_80074E58,
     //   ftParts_SetupParts}
-    // data/model_parts/<character>.bin::MSLPART1
     ftParts_80074E58(fp);
 #endif
     Fighter_UnkUpdateCostumeJoint_800686E4(gobj);
 
     ftData_80085B10(fp);
-#ifndef MSL_CORE_HOSTED
+#ifndef MSL_CORE_NATIVE
     ftParts_80074E58(fp);
 #endif
     ftParts_SetupParts(gobj);
@@ -1068,13 +1040,13 @@ Fighter_GObj* Fighter_Create(struct plAllocInfo* input)
     Fighter_Create_Inline2(gobj);
 
     ftColl_8007B320(gobj);
-#ifdef MSL_CORE_HOSTED
-    // MSLPART1 is extracted from the animation skeleton plus every gameplay
-    // consumer (hit/hurt capsules, ECB, capture/throw and article anchors).
-    // Keep the source graph for its live closure and make presentation-only
-    // subtrees cold; characters without that artifact stay entirely source.
-    // tools/data/gameplay_parts.json
+#ifdef MSL_CORE_NATIVE
+    // The immutable ftParts admission table closes every gameplay consumer
+    // over its skeleton ancestors. Make the remaining presentation-only
+    // subtrees cold after source initialization.
     Fighter_HeadlessPrunePose(gobj);
+#endif
+#ifdef MSL_CORE_HOSTED
     ftCo_HeadlessPruneDynamics(fp);
     // Retain the source camera subject and callback slot: the renderer itself
     // is headless, but ftLib_80086A8C publishes gameplay-visible x221F_b0 from

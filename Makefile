@@ -12,7 +12,6 @@ NATIVE_RELEASE_BUILD := $(BUILD_ROOT)/native-release
 WASM_BUILD := $(BUILD_ROOT)/wasm
 PYTHON_BUILD := $(BUILD_ROOT)/python
 VALIDATION_BUILD := $(BUILD_ROOT)/validation
-SOURCE_TREE := $(CORE)
 PPC_OBJ_DIR := $(PPC_BUILD)/obj
 NATIVE_OBJ_DIR := $(NATIVE_BUILD)/obj
 WASM_OBJ_DIR := $(WASM_BUILD)/obj
@@ -57,73 +56,20 @@ RELEASE_ARCH_FLAGS ?= -march=native -mtune=native
 
 SOURCE_SYNC := $(ROOT)/tools/build/source_sync.sh
 UPSTREAM_ROOTS := MSL MetroTRK Runtime melee sysdolphin
-UPSTREAM_REL_SRCS := $(shell cd $(SOURCE_TREE) && find $(UPSTREAM_ROOTS) \
-	-type f -name '*.c' -printf '%p\n' | LC_ALL=C sort)
-UPSTREAM_REL_SRCS := $(filter-out \
-	melee/ft/chara/ftCommon/ftCo_0A01.c \
-	melee/it/it_279C.c, \
-	$(UPSTREAM_REL_SRCS))
-UPSTREAM_REL_SRCS := $(filter-out melee/it/items/%.c,$(UPSTREAM_REL_SRCS))
-UPSTREAM_REL_SRCS += \
-	melee/it/items/itfoxblaster.c \
-	melee/it/items/itfoxillusion.c \
-	melee/it/items/itfoxlaser.c \
-	melee/it/items/itbombhei.c \
-	melee/it/items/itdosei.c \
-	melee/it/items/itfoods.c \
-	melee/it/items/itfreeze.c \
-	melee/it/items/itharisen.c \
-	melee/it/items/itheiho.c \
-	melee/it/items/itlinkhookshot.c \
-	melee/it/items/itpeachexplode.c \
-	melee/it/items/itpeachparasol.c \
-	melee/it/items/itpeachtoad.c \
-	melee/it/items/itpeachtoadspore.c \
-	melee/it/items/itpeachturnip.c \
-	melee/it/items/itseakchain.c \
-	melee/it/items/itseakneedleheld.c \
-	melee/it/items/itseakneedlethrown.c \
-	melee/it/items/itseakvanish.c \
-	melee/it/items/itsword.c \
-	melee/it/items/itzeldadinfire.c \
-	melee/it/items/itzeldadinfireexplode.c
-UPSTREAM_SRCS := $(addprefix $(SOURCE_TREE)/,$(UPSTREAM_REL_SRCS))
-PPC_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(PPC_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
-NATIVE_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(NATIVE_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
-WASM_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(WASM_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
-PYTHON_UPSTREAM_OBJS := $(patsubst $(SOURCE_TREE)/%.c,$(PYTHON_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
+UPSTREAM_SRCS := $(shell find $(addprefix $(CORE)/,$(UPSTREAM_ROOTS)) \
+	-type f -name '*.c' -print | LC_ALL=C sort)
+PPC_UPSTREAM_OBJS := $(patsubst $(CORE)/%.c,$(PPC_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
+NATIVE_UPSTREAM_OBJS := $(patsubst $(CORE)/%.c,$(NATIVE_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
+WASM_UPSTREAM_OBJS := $(patsubst $(CORE)/%.c,$(WASM_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
+PYTHON_UPSTREAM_OBJS := $(patsubst $(CORE)/%.c,$(PYTHON_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
 
-PLATFORM_SRCS := \
-	$(CORE)/platform/dolphin_mtx.c \
-	$(CORE)/platform/files.c \
-	$(CORE)/platform/memory.c \
-	$(CORE)/platform/os_report.c \
-	$(CORE)/platform/platform_state.c \
-	$(CORE)/platform/slippi.c
+# Directory ownership is the build boundary. The special host entry points
+# below are linked only by the targets that consume them.
 NATIVE_PLATFORM_SRCS := $(CORE)/platform/native_dat.c
-RUNTIME_SRCS := \
-	$(CORE)/api.c \
-	$(CORE)/runtime/audio.c \
-	$(CORE)/runtime/camera.c \
-	$(CORE)/runtime/common.c \
-	$(CORE)/runtime/context.c \
-	$(CORE)/runtime/effects.c \
-	$(CORE)/runtime/final_destination.c \
-	$(CORE)/runtime/ftco_0A01.c \
-	$(CORE)/runtime/items.c \
-	$(CORE)/runtime/match.c \
-	$(CORE)/runtime/math.c \
-	$(CORE)/runtime/observation.c \
-	$(CORE)/runtime/relocation.c \
-	$(CORE)/runtime/savestate.c \
-	$(CORE)/runtime/scalar.c \
-	$(CORE)/runtime/viewer.c \
-	$(CORE)/runtime/wire.c
-STUB_SRCS := \
-	$(CORE)/stubs/headless_exclusions.c \
-	$(CORE)/stubs/unreached_presentation.c \
-	$(CORE)/stubs/unresolved_abort.c
-LOCAL_SRCS := $(PLATFORM_SRCS) $(RUNTIME_SRCS) $(STUB_SRCS)
+PLATFORM_SRCS := $(filter-out $(NATIVE_PLATFORM_SRCS),$(wildcard $(CORE)/platform/*.c))
+RUNTIME_SRCS := $(filter-out $(CORE)/runtime/main.c,$(wildcard $(CORE)/runtime/*.c))
+STUB_SRCS := $(wildcard $(CORE)/stubs/*.c)
+LOCAL_SRCS := $(CORE)/api.c $(PLATFORM_SRCS) $(RUNTIME_SRCS) $(STUB_SRCS)
 PPC_LOCAL_OBJS := $(patsubst $(ROOT)/%.c,$(PPC_OBJ_DIR)/%.o,$(LOCAL_SRCS))
 NATIVE_LOCAL_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(LOCAL_SRCS))
 WASM_LOCAL_OBJS := $(patsubst $(ROOT)/%.c,$(WASM_OBJ_DIR)/%.o,$(LOCAL_SRCS))
@@ -177,41 +123,36 @@ SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/map_collision_smoke.c \
 	$(ROOT)/tests/melee_core/model_animation_smoke.c \
 	$(ROOT)/tests/melee_core/scalar_api_smoke.c \
-	$(ROOT)/tests/melee_core/scheduler_smoke.c \
-	$(ROOT)/tests/melee_core/wasm_parity.c
+	$(ROOT)/tests/melee_core/scheduler_smoke.c
 NATIVE_SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/batch_api_smoke.c \
 	$(ROOT)/tests/melee_core/context_smoke.c \
 	$(ROOT)/tests/melee_core/data_load_smoke.c \
+	$(ROOT)/tests/melee_core/gameplay_parts_smoke.c \
 	$(ROOT)/tests/melee_core/map_collision_smoke.c \
 	$(ROOT)/tests/melee_core/model_animation_smoke.c \
 	$(ROOT)/tests/melee_core/scalar_api_smoke.c \
 	$(ROOT)/tests/melee_core/scheduler_smoke.c \
-	$(ROOT)/tests/melee_core/lifecycle_bench.c
+	$(ROOT)/tests/melee_core/lifecycle_bench.c \
+	$(ROOT)/tests/melee_core/wasm_parity.c
 PPC_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(PPC_OBJ_DIR)/%.o,$(SMOKE_SRCS))
 NATIVE_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(NATIVE_SMOKE_SRCS))
 NATIVE_REPLAY_BENCH_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/replay_bench.o
 NATIVE_RUNTIME_CENSUS_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/runtime_census.o
 NATIVE_LARGE_BATCH_SMOKE_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/large_batch_smoke.o
 NATIVE_FLAGS_STAMP := $(NATIVE_BUILD)/compile-flags.stamp
-NATIVE_COMPILE_OBJS := $(NATIVE_UPSTREAM_OBJS) $(NATIVE_LOCAL_OBJS) \
-	$(NATIVE_PLATFORM_OBJS) $(NATIVE_MAIN_OBJ) $(NATIVE_SMOKE_OBJS) \
+NATIVE_COMPILE_OBJS := $(NATIVE_CORE_OBJS) $(NATIVE_MAIN_OBJ) $(NATIVE_SMOKE_OBJS) \
 	$(NATIVE_REPLAY_BENCH_OBJ) $(NATIVE_RUNTIME_CENSUS_OBJ) \
-	$(NATIVE_LARGE_BATCH_SMOKE_OBJ) \
-	$(NATIVE_DAT_LAYOUT_OBJ) \
-	$(NATIVE_MATCH_RELOC_LAYOUT_OBJ)
-DEPS := $(PPC_OBJS:.o=.d) $(PPC_SMOKE_OBJS:.o=.d) $(NATIVE_OBJS:.o=.d) \
-	$(NATIVE_SMOKE_OBJS:.o=.d) $(NATIVE_REPLAY_BENCH_OBJ:.o=.d) \
-	$(NATIVE_RUNTIME_CENSUS_OBJ:.o=.d) $(WASM_CORE_OBJS:.o=.d) \
+	$(NATIVE_LARGE_BATCH_SMOKE_OBJ)
+DEPS := $(PPC_OBJS:.o=.d) $(PPC_SMOKE_OBJS:.o=.d) \
+	$(NATIVE_COMPILE_OBJS:.o=.d) $(WASM_CORE_OBJS:.o=.d) \
+	$(PYTHON_CORE_OBJS:.o=.d) \
 	$(NATIVE_DAT_PPC_TYPES_OBJ:.o=.d) \
 	$(NATIVE_DAT_NATIVE_TYPES_OBJ:.o=.d) \
 	$(NATIVE_MATCH_RELOC_TYPES_OBJ:.o=.d) \
-	$(NATIVE_MATCH_RELOC_LAYOUT_OBJ:.o=.d) \
+	$(WASM_DAT_NATIVE_TYPES_OBJ:.o=.d) \
 	$(WASM_MATCH_RELOC_TYPES_OBJ:.o=.d) \
-	$(WASM_MATCH_RELOC_LAYOUT_OBJ:.o=.d) \
-	$(PPC_MATCH_RELOC_TYPES_OBJ:.o=.d) \
-	$(PPC_MATCH_RELOC_LAYOUT_OBJ:.o=.d)
-DEPS += $(PYTHON_CORE_OBJS:.o=.d)
+	$(PPC_MATCH_RELOC_TYPES_OBJ:.o=.d)
 
 BINARY := $(PPC_BUILD)/melee-core-ppc
 NATIVE_BINARY := $(NATIVE_BUILD)/melee-core-native
@@ -230,12 +171,12 @@ NATIVE_SCHEDULER_SMOKE := $(NATIVE_BUILD)/scheduler-smoke
 NATIVE_SCALAR_API_SMOKE := $(NATIVE_BUILD)/scalar-api-smoke
 NATIVE_CONTEXT_SMOKE := $(NATIVE_BUILD)/context-smoke
 NATIVE_BATCH_API_SMOKE := $(NATIVE_BUILD)/batch-api-smoke
+NATIVE_GAMEPLAY_PARTS_SMOKE := $(NATIVE_BUILD)/gameplay-parts-smoke
 NATIVE_WASM_PARITY := $(NATIVE_BUILD)/wasm-parity
 NATIVE_LIFECYCLE_BENCH := $(NATIVE_BUILD)/lifecycle-bench
 NATIVE_REPLAY_BENCH := $(NATIVE_BUILD)/replay-bench
 NATIVE_RUNTIME_CENSUS := $(NATIVE_BUILD)/runtime-census
 NATIVE_LARGE_BATCH_SMOKE := $(NATIVE_BUILD)/large-batch-smoke
-NATIVE_RELEASE_BINARY := $(NATIVE_RELEASE_BUILD)/melee-core-native
 NATIVE_RELEASE_REPLAY_BENCH := $(NATIVE_RELEASE_BUILD)/replay-bench
 VIEWER_SCHEMA_TOOL := $(NATIVE_BUILD)/viewer-schema
 VIEWER_SCHEMA_JS := $(ROOT)/tools/viewer/live/schema.generated.js
@@ -247,12 +188,11 @@ CPPFLAGS := \
 	-include $(CORE)/platform/compat.h \
 	-I$(CORE) \
 	-I$(CORE)/platform/include \
-	-I$(SOURCE_TREE) \
-	-I$(SOURCE_TREE)/melee \
-	-I$(SOURCE_TREE)/melee/ft/chara \
-	-I$(SOURCE_TREE)/sysdolphin \
-	-I$(SOURCE_TREE)/Runtime \
-	-I$(SOURCE_TREE)/extern/dolphin/include
+	-I$(CORE)/melee \
+	-I$(CORE)/melee/ft/chara \
+	-I$(CORE)/sysdolphin \
+	-I$(CORE)/Runtime \
+	-I$(CORE)/extern/dolphin/include
 NATIVE_CPPFLAGS := $(CPPFLAGS) -DMSL_CORE_NATIVE
 PYTHON_CPPFLAGS := $(NATIVE_CPPFLAGS) -DMSL_CORE_SHARED
 WASM_CPPFLAGS := $(CPPFLAGS) -I$(WASM_GENERATED_DIR) \
@@ -263,14 +203,9 @@ CFLAGS := \
 	-fdata-sections -w
 NATIVE_CFLAGS = $(CFLAGS) -fno-pie
 NATIVE_LINK_FLAGS ?=
-# The source-shaped gameplay TUs still contain optimizer-sensitive decomp C.
-# Keep them at the validation reference profile until Phase 8 closes those UB
-# boundaries; Phase 7 optimizes the audited host/API shell below and requires
-# the complete output-lock suite before expanding that allowlist.
-NATIVE_RELEASE_CFLAGS := \
-	-O0 -g -std=gnu11 -fgnu89-inline -fno-short-enums \
-	-fno-strict-aliasing -ffp-contract=off -ffunction-sections \
-	-fdata-sections -fno-pie -w
+# Imported gameplay remains at the validation reference profile. The audited
+# release allowlist below opts complete owners into native optimization.
+NATIVE_RELEASE_CFLAGS := $(CFLAGS) -fno-pie
 NATIVE_BASE_CFLAGS := $(NATIVE_CFLAGS)
 WASM_CFLAGS = $(CFLAGS) -Wno-implicit-function-declaration -Wno-int-conversion \
 	-Wno-incompatible-pointer-types -Wno-return-mismatch
@@ -414,12 +349,12 @@ toolchain: $(TOOLCHAIN_STAMP)
 $(TOOLCHAIN_STAMP): $(ROOT)/tools/build/setup_ppc32_toolchain.sh
 	@$(ROOT)/tools/build/setup_ppc32_toolchain.sh
 
-$(PPC_UPSTREAM_OBJS): $(PPC_OBJ_DIR)/gameplay/%.o: $(SOURCE_TREE)/%.c $(TOOLCHAIN_STAMP)
+$(PPC_UPSTREAM_OBJS): $(PPC_OBJ_DIR)/gameplay/%.o: $(CORE)/%.c $(TOOLCHAIN_STAMP)
 	@mkdir -p "$(@D)"
 	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
 		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
 		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) $(CFLAGS) \
-		-MMD -MP -c "$(SOURCE_TREE)/$*.c" -o "$@"
+		-MMD -MP -c "$(CORE)/$*.c" -o "$@"
 
 $(PPC_OBJ_DIR)/%.o: $(ROOT)/%.c $(TOOLCHAIN_STAMP)
 	@mkdir -p "$(@D)"
@@ -434,30 +369,30 @@ $(BINARY): $(PPC_OBJS)
 		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
 		"$(CC)" --sysroot="$(SYSROOT)" -Wl,--gc-sections $^ $(LDLIBS) -o "$@"
 
-$(NATIVE_UPSTREAM_OBJS): $(NATIVE_OBJ_DIR)/gameplay/%.o: $(SOURCE_TREE)/%.c
+$(NATIVE_UPSTREAM_OBJS): $(NATIVE_OBJ_DIR)/gameplay/%.o: $(CORE)/%.c
 	@mkdir -p "$(@D)"
 	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) $(NATIVE_CFLAGS) -MMD -MP \
-		-c "$(SOURCE_TREE)/$*.c" -o "$@"
+		-c "$(CORE)/$*.c" -o "$@"
 
 $(NATIVE_OBJ_DIR)/%.o: $(ROOT)/%.c
 	@mkdir -p "$(@D)"
 	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) $(NATIVE_CFLAGS) -MMD -MP -c "$<" -o "$@"
 
-$(PYTHON_UPSTREAM_OBJS): $(PYTHON_OBJ_DIR)/gameplay/%.o: $(SOURCE_TREE)/%.c
+$(PYTHON_UPSTREAM_OBJS): $(PYTHON_OBJ_DIR)/gameplay/%.o: $(CORE)/%.c
 	@mkdir -p "$(@D)"
 	@"$(HOST_CC)" $(PYTHON_CPPFLAGS) $(NATIVE_CFLAGS) -fPIC \
 		-fvisibility=hidden -MMD -MP \
-		-c "$(SOURCE_TREE)/$*.c" -o "$@"
+		-c "$(CORE)/$*.c" -o "$@"
 
 $(PYTHON_OBJ_DIR)/%.o: $(ROOT)/%.c
 	@mkdir -p "$(@D)"
 	@"$(HOST_CC)" $(PYTHON_CPPFLAGS) $(NATIVE_CFLAGS) -fPIC \
 		-fvisibility=hidden -MMD -MP -c "$<" -o "$@"
 
-$(WASM_UPSTREAM_OBJS): $(WASM_OBJ_DIR)/gameplay/%.o: $(SOURCE_TREE)/%.c
+$(WASM_UPSTREAM_OBJS): $(WASM_OBJ_DIR)/gameplay/%.o: $(CORE)/%.c
 	@mkdir -p "$(@D)"
 	@"$(EMCC)" $(WASM_CPPFLAGS) $(WASM_CFLAGS) -MMD -MP \
-		-c "$(SOURCE_TREE)/$*.c" -o "$@"
+		-c "$(CORE)/$*.c" -o "$@"
 
 $(WASM_OBJ_DIR)/%.o: $(ROOT)/%.c
 	@mkdir -p "$(@D)"
@@ -622,6 +557,7 @@ $(eval $(call link_native_smoke,$(NATIVE_SCHEDULER_SMOKE),$(NATIVE_OBJ_DIR)/test
 $(eval $(call link_native_smoke,$(NATIVE_SCALAR_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scalar_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_CONTEXT_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/context_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_BATCH_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/batch_api_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_GAMEPLAY_PARTS_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/gameplay_parts_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_WASM_PARITY),$(NATIVE_OBJ_DIR)/tests/melee_core/wasm_parity.o))
 $(eval $(call link_native_smoke,$(NATIVE_LIFECYCLE_BENCH),$(NATIVE_OBJ_DIR)/tests/melee_core/lifecycle_bench.o))
 $(eval $(call link_native_smoke,$(NATIVE_REPLAY_BENCH),$(NATIVE_REPLAY_BENCH_OBJ)))
@@ -649,7 +585,7 @@ ppc-smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE)
 	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
 		"$(DATA)"
 
-native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE)
+native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE)
 	@timeout 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
@@ -657,6 +593,7 @@ native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL
 	@timeout 5s "$(NATIVE_SCALAR_API_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_CONTEXT_SMOKE)" "$(DATA)"
 	@timeout 5s "$(NATIVE_BATCH_API_SMOKE)" "$(DATA)"
+	@timeout 5s "$(NATIVE_GAMEPLAY_PARTS_SMOKE)" "$(DATA)"
 
 wasm-smoke: data-check $(WASM_MODULE) $(NATIVE_WASM_PARITY)
 	@MSL_CORE_NATIVE_DIGEST="$$($(NATIVE_WASM_PARITY) "$(DATA)")" \

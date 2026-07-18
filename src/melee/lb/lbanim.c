@@ -92,9 +92,8 @@ void lbAnim_8001E6D8(HSD_JObj* jobj, FigaTree* tree, FigaTrack* track,
 
     if (jobj != NULL && frames != 0) {
 #ifdef MSL_CORE_HOSTED
-        // MSLPART1's ancestor-closed gameplay part set makes animation on
+        // ftparts.c's ancestor-closed gameplay admission makes animation on
         // marked joints presentation-only in the headless runtime.
-        // tools/data/gameplay_parts.json
         if (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD) {
             return;
         }

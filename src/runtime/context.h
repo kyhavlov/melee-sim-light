@@ -92,7 +92,6 @@ HSD_AObjContext* msl_core_aobj_context(void);
 MslFtCollState* msl_core_ft_coll_state(void);
 MslFtAnimScratch* msl_core_ft_anim_scratch(void);
 MslGroundState* msl_core_ground_state(void);
-const unsigned char* msl_core_gameplay_part_mask(int fighter_kind);
 void* msl_core_ground_stage_positions(void);
 void** msl_core_stage_pointer_ref(int slot);
 int* msl_core_mp_collision_epoch_ref(void);

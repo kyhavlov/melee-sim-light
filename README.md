@@ -35,11 +35,10 @@ Extract it from a valid SSBM ISO:
 uv run python -m melee_sim.extract_data --iso /path/to/SSBM.iso [--out-dir /path/to/my-msl-data]
 ```
 
-By default, the extraction command creates a local `data/` root. Original retail archives needed
-by the source-shaped core live under `data/raw/`; deterministic generated runtime artifacts live
-under the same data root. The ISO, extracted archives, and generated outputs are ignored and are
-never repository assets. A deterministic manifest binds the extraction to the source ISO, and
-rerunning the same command validates the root without rebuilding unchanged data.
+By default, the extraction command creates a local `data/` root. The minimal retail archive profile
+lives under `data/raw/` and the source-shaped core translates it directly during initialization.
+The ISO and extracted archives are ignored and are never repository assets. A deterministic
+manifest binds the extraction to the source ISO.
 
 `EnvBatch()` and the source-shaped core both load source-checkout `data/` by default. To use or
 share another data root, set `MSL_DATA_DIR` or pass `data_dir` to the current Python API:

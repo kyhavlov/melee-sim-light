@@ -944,20 +944,15 @@ void ftAnim_8006FE08(Fighter* fp, bool do_blending)
 void ftAnim_8006FE48(Fighter_GObj* fighter_gobj)
 {
     Fighter* fp = GET_FIGHTER(fighter_gobj);
-#ifdef MSL_CORE_HOSTED
-    bool compact;
-    fp->x8AC_animSkeleton = ftParts_HeadlessLoadInterp(
-        fp, fp->x108_costume_joint, &compact);
+#ifdef MSL_CORE_NATIVE
+    fp->x8AC_animSkeleton =
+        ftParts_HeadlessLoadInterp(fp, fp->x108_costume_joint);
 #else
     fp->x8AC_animSkeleton = ftParts_8007482C(fp->x108_costume_joint);
 #endif
     fp->x8A4_animBlendFrames = 0.0F;
     fp->x8A8_anim_frame = 0.0F;
-#ifdef MSL_CORE_HOSTED
-    if (!compact) {
-        ftParts_8007462C(fighter_gobj);
-    }
-#else
+#ifndef MSL_CORE_NATIVE
     ftParts_8007462C(fighter_gobj);
 #endif
 }

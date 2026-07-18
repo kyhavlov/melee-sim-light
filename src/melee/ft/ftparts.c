@@ -24,11 +24,110 @@
 #include <sysdolphin/baselib/pobj.h>
 #include <sysdolphin/baselib/util.h>
 #include <melee/lb/lbrefract.h>
-#ifdef MSL_CORE_HOSTED
-#include "runtime/context.h"
-#endif
-
 #define MAX_FT_PARTS 140
+
+#ifdef MSL_CORE_NATIVE
+// GALE01 part admission for the supported headless domain. The table closes
+// source-owned hit/hurt/contact descriptors, ECB/IK and dynamics chains,
+// capture/throw and article attachments, character-special anchors, and every
+// skeleton ancestor. Source owners: ft/{ftaction.c,ftcoll.c,ftdynamics.c,
+// ft_0899.c,ft_0CDD.c}, ft/chara/ftCommon/ftCo_Attack100.c, and the supported
+// character/item callsites that address fp->parts directly.
+static const u8 gameplay_part_masks[FTKIND_MAX][MAX_FT_PARTS] = {
+    [FTKIND_FOX] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [6] = 1, [7] = 1, [8] = 1, [9] = 1, [11] = 1, [12] = 1,
+        [13] = 1, [14] = 1, [15] = 1, [17] = 1, [18] = 1, [19] = 1,
+        [20] = 1, [21] = 1, [22] = 1, [23] = 1, [24] = 1, [25] = 1,
+        [26] = 1, [40] = 1, [41] = 1, [53] = 1, [54] = 1, [55] = 1,
+        [56] = 1, [57] = 1, [67] = 1, [68] = 1, [69] = 1, [71] = 1,
+    },
+    [FTKIND_CAPTAIN] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [6] = 1,
+        [7] = 1, [8] = 1, [9] = 1, [10] = 1, [12] = 1, [13] = 1,
+        [14] = 1, [15] = 1, [16] = 1, [18] = 1, [19] = 1, [21] = 1,
+        [22] = 1, [23] = 1, [24] = 1, [25] = 1, [38] = 1, [39] = 1,
+        [42] = 1, [44] = 1, [45] = 1, [46] = 1, [47] = 1, [57] = 1,
+        [58] = 1, [59] = 1, [61] = 1,
+    },
+    [FTKIND_SEAK] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [6] = 1, [7] = 1, [8] = 1, [9] = 1, [11] = 1, [12] = 1,
+        [13] = 1, [14] = 1, [15] = 1, [17] = 1, [18] = 1, [19] = 1,
+        [20] = 1, [21] = 1, [22] = 1, [23] = 1, [26] = 1, [35] = 1,
+        [36] = 1, [39] = 1, [40] = 1, [41] = 1, [42] = 1, [43] = 1,
+        [52] = 1, [53] = 1, [54] = 1, [56] = 1,
+    },
+    [FTKIND_PEACH] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [6] = 1, [7] = 1, [8] = 1, [9] = 1, [10] = 1, [11] = 1,
+        [12] = 1, [13] = 1, [14] = 1, [15] = 1, [16] = 1, [17] = 1,
+        [18] = 1, [19] = 1, [20] = 1, [21] = 1, [22] = 1, [23] = 1,
+        [24] = 1, [25] = 1, [26] = 1, [27] = 1, [28] = 1, [29] = 1,
+        [30] = 1, [31] = 1, [32] = 1, [33] = 1, [34] = 1, [35] = 1,
+        [36] = 1, [37] = 1, [38] = 1, [39] = 1, [40] = 1, [41] = 1,
+        [42] = 1, [43] = 1, [44] = 1, [45] = 1, [46] = 1, [47] = 1,
+        [48] = 1, [49] = 1, [50] = 1, [51] = 1, [52] = 1, [53] = 1,
+        [54] = 1, [55] = 1, [56] = 1, [57] = 1, [58] = 1, [59] = 1,
+        [60] = 1, [61] = 1, [62] = 1, [63] = 1, [64] = 1, [65] = 1,
+        [66] = 1, [67] = 1, [69] = 1, [70] = 1, [71] = 1, [72] = 1,
+        [74] = 1, [86] = 1, [87] = 1, [88] = 1, [89] = 1, [90] = 1,
+        [91] = 1, [92] = 1, [95] = 1, [96] = 1, [97] = 1, [98] = 1,
+        [100] = 1, [109] = 1, [110] = 1, [111] = 1, [112] = 1,
+    },
+    [FTKIND_PURIN] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [6] = 1, [7] = 1, [8] = 1, [9] = 1, [12] = 1, [26] = 1,
+        [27] = 1, [28] = 1, [29] = 1, [30] = 1, [31] = 1, [32] = 1,
+        [33] = 1, [34] = 1, [35] = 1, [36] = 1, [37] = 1, [38] = 1,
+        [39] = 1, [40] = 1, [41] = 1, [42] = 1, [43] = 1, [44] = 1,
+        [45] = 1, [46] = 1, [47] = 1, [48] = 1,
+    },
+    [FTKIND_MARS] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [6] = 1, [7] = 1, [8] = 1, [9] = 1, [12] = 1, [13] = 1,
+        [14] = 1, [15] = 1, [16] = 1, [21] = 1, [22] = 1, [25] = 1,
+        [27] = 1, [28] = 1, [29] = 1, [31] = 1, [40] = 1, [44] = 1,
+        [45] = 1, [46] = 1, [47] = 1, [48] = 1, [49] = 1, [50] = 1,
+        [51] = 1, [52] = 1, [53] = 1, [54] = 1, [55] = 1, [56] = 1,
+        [57] = 1, [58] = 1, [59] = 1, [60] = 1, [67] = 1, [69] = 1,
+        [70] = 1, [71] = 1, [73] = 1, [74] = 1, [75] = 1, [76] = 1,
+        [85] = 1, [86] = 1, [88] = 1,
+    },
+    [FTKIND_ZELDA] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [6] = 1, [7] = 1, [8] = 1, [9] = 1, [10] = 1, [11] = 1,
+        [12] = 1, [13] = 1, [14] = 1, [15] = 1, [16] = 1, [17] = 1,
+        [18] = 1, [19] = 1, [20] = 1, [21] = 1, [22] = 1, [23] = 1,
+        [24] = 1, [25] = 1, [26] = 1, [27] = 1, [28] = 1, [29] = 1,
+        [30] = 1, [31] = 1, [32] = 1, [33] = 1, [34] = 1, [35] = 1,
+        [36] = 1, [37] = 1, [38] = 1, [39] = 1, [40] = 1, [41] = 1,
+        [42] = 1, [43] = 1, [44] = 1, [45] = 1, [46] = 1, [47] = 1,
+        [48] = 1, [49] = 1, [50] = 1, [51] = 1, [52] = 1, [53] = 1,
+        [54] = 1, [55] = 1, [56] = 1, [57] = 1, [58] = 1, [59] = 1,
+        [60] = 1, [61] = 1, [62] = 1, [63] = 1, [64] = 1, [65] = 1,
+        [66] = 1, [67] = 1, [68] = 1, [71] = 1, [72] = 1, [73] = 1,
+        [76] = 1, [88] = 1, [89] = 1, [90] = 1, [91] = 1, [92] = 1,
+        [93] = 1, [96] = 1, [99] = 1, [100] = 1, [101] = 1,
+        [104] = 1, [113] = 1, [114] = 1, [115] = 1, [116] = 1,
+    },
+    [FTKIND_FALCO] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [6] = 1, [7] = 1, [8] = 1, [9] = 1, [11] = 1, [12] = 1,
+        [13] = 1, [14] = 1, [15] = 1, [17] = 1, [18] = 1, [19] = 1,
+        [21] = 1, [22] = 1, [23] = 1, [24] = 1, [38] = 1, [39] = 1,
+        [46] = 1, [47] = 1, [48] = 1, [49] = 1, [50] = 1, [52] = 1,
+        [61] = 1, [62] = 1, [63] = 1, [65] = 1,
+    },
+};
+
+const u8* ftParts_HeadlessGameplayMask(FighterKind kind)
+{
+    HSD_ASSERT(27, (unsigned) kind < FTKIND_MAX &&
+                       gameplay_part_masks[kind][0] != 0);
+    return gameplay_part_masks[kind];
+}
+#endif
 
 HSD_JObjInfo ftJObj = { ftParts_JObjInfoInit };
 HSD_JObjInfo ftIntpJObj = { ftParts_IntpJObjInfoInit };
@@ -397,12 +496,11 @@ void ftParts_80074194(Fighter* fighter, FighterBone* bone, HSD_JObj* jobj,
     bone->flags2_b6 = dobj_count != 0 ? true : false;
 }
 
-#ifdef MSL_CORE_HOSTED
+#ifdef MSL_CORE_NATIVE
 static HSD_JObj* ftParts_HeadlessLoadCompact(Fighter* fp, HSD_Joint* joint,
-                                             bool interpolation,
-                                             bool* compact_out)
+                                             bool interpolation)
 {
-    const u8* live_parts = msl_core_gameplay_part_mask(fp->kind);
+    const u8* live_parts = ftParts_HeadlessGameplayMask(fp->kind);
     u8 keep_by_node[MAX_FT_PARTS];
     u8 part_by_node[MAX_FT_PARTS];
     u8 depth_by_node[MAX_FT_PARTS];
@@ -415,10 +513,6 @@ static HSD_JObj* ftParts_HeadlessLoadCompact(Fighter* fp, HSD_Joint* joint,
     int part;
     int node;
 
-    *compact_out = false;
-    if (live_parts == NULL) {
-        return HSD_JObjLoadJoint(joint);
-    }
     HSD_ASSERT(498, part_count <= MAX_FT_PARTS);
     for (part = 0; part < part_count; ++part) {
         if (interpolation) {
@@ -446,15 +540,7 @@ static HSD_JObj* ftParts_HeadlessLoadCompact(Fighter* fp, HSD_Joint* joint,
         node_count += 1;
     }
     HSD_ASSERT(500, node_count > 0 && keep_by_node[0]);
-    if (!has_cold_node) {
-        // A generated closure that admits every physical node offers no JObj
-        // compaction. Keep the exact source loader in that case; besides
-        // avoiding a second representation for no state win, this preserves
-        // model-specific class/load semantics.
-        // data/model_parts/<character>.bin::MSLPART1
-        // refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjLoadJoint
-        return HSD_JObjLoadJoint(joint);
-    }
+    HSD_ASSERT(500, has_cold_node);
     root = msl_core_HSD_JObjLoadJointFiltered(
         joint, keep_by_node, node_count, jobj_by_node, depth_by_node);
     for (node = 0; node < node_count; ++node) {
@@ -488,30 +574,23 @@ static HSD_JObj* ftParts_HeadlessLoadCompact(Fighter* fp, HSD_Joint* joint,
                             depth_by_node[node]);
         }
     }
-    *compact_out = true;
     return root;
 }
 
 HSD_JObj* ftParts_HeadlessLoadMain(Fighter* fp, HSD_Joint* joint)
 {
-    bool compact;
-    HSD_JObj* root =
-        ftParts_HeadlessLoadCompact(fp, joint, false, &compact);
-    if (compact) {
-        // Init-only marker consumed by ftParts_SetupParts below. DObj state is
-        // renderer-owned and the compact tree deliberately has no DObj list.
-        fp->dobj_list.count = UINT32_MAX;
-    }
+    HSD_JObj* root = ftParts_HeadlessLoadCompact(fp, joint, false);
+    // Init-only marker consumed by ftParts_SetupParts below. DObj state is
+    // renderer-owned and the compact tree deliberately has no DObj list.
+    fp->dobj_list.count = UINT32_MAX;
     return root;
 }
 
-HSD_JObj* ftParts_HeadlessLoadInterp(Fighter* fp, HSD_Joint* joint,
-                                     bool* compact_out)
+HSD_JObj* ftParts_HeadlessLoadInterp(Fighter* fp, HSD_Joint* joint)
 {
     HSD_JObj* root;
     HSD_JObjSetDefaultClass(HSD_CLASS_INFO(&ftIntpJObj));
-    root =
-        ftParts_HeadlessLoadCompact(fp, joint, true, compact_out);
+    root = ftParts_HeadlessLoadCompact(fp, joint, true);
     HSD_JObjSetDefaultClass(NULL);
     return root;
 }
@@ -525,7 +604,7 @@ void ftParts_SetupParts(Fighter_GObj* fighter_obj)
     u32 tree_depth = 0;
     int dobj_count = 0;
 
-#ifdef MSL_CORE_HOSTED
+#ifdef MSL_CORE_NATIVE
     if (fp->dobj_list.count == UINT32_MAX) {
         fp->dobj_list.count = 0;
         return;

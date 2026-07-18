@@ -269,19 +269,6 @@ MslGroundState* msl_core_ground_state(void)
     return &msl_core_source_match_state()->ground;
 }
 
-const unsigned char* msl_core_gameplay_part_mask(int fighter_kind)
-{
-    if ((unsigned) fighter_kind >= FTKIND_MAX) {
-        return NULL;
-    }
-    if (msl_core_context_game_data == NULL) {
-        return NULL;
-    }
-    return msl_core_context_game_data->gameplay_parts[fighter_kind].available
-               ? msl_core_context_game_data->gameplay_parts[fighter_kind].live
-               : NULL;
-}
-
 void* msl_core_ground_stage_positions(void)
 {
     return msl_core_source_match_state()->ground.stage_positions;
