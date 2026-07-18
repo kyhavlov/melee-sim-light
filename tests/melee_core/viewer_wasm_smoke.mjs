@@ -7,6 +7,7 @@ import {
   CHAR_FALCO,
   CHAR_JIGGLYPUFF,
   CHAR_PEACH,
+  CHAR_SHEIK,
   STAGE_FINAL_DESTINATION,
   STAGE_FOUNTAIN_OF_DREAMS,
   STAGE_YOSHIS_STORY,
@@ -83,6 +84,24 @@ try {
   );
   reset({ stageId: STAGE_YOSHIS_STORY });
   assert(step().stage.randall?.exists);
+
+  // Seed 7 sends Yoshi's first Shy Guy group through Sheik's spawn point.
+  // Reproduce the live-viewer contact that exercises stage-item damage credit.
+  reset({ p1Char: CHAR_SHEIK, stageId: STAGE_YOSHIS_STORY, seed: 7 });
+  let hitShyGuy = false;
+  for (let index = 0; index < 2400; index += 1) {
+    const attack = index >= 2100 && index < 2300 && index % 12 === 0;
+    const current = step(
+      controllers(attack ? { ...neutral(), buttons: BUTTONS.A } : neutral()),
+    );
+    if (
+      current.items.some((item) => item.typeId === 210 && item.damageTaken > 0)
+    ) {
+      hitShyGuy = true;
+      break;
+    }
+  }
+  assert(hitShyGuy, "live viewer never damaged Yoshi's Shy Guy");
 
   reset({ p1Char: CHAR_FOX });
   let sawHitbox = false;
@@ -258,6 +277,7 @@ try {
       hitbox: sawHitbox,
       shield: sawShield,
       item: sawItem,
+      shy_guy_hit: hitShyGuy,
       death_reset: sawDeath,
       wasm_memory_bytes: heapSize,
     }),

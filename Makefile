@@ -515,6 +515,7 @@ $(PYTHON_LIBRARY): $(PYTHON_CORE_OBJS)
 $(WASM_MODULE): $(WASM_CORE_OBJS)
 	@mkdir -p "$(@D)"
 	@log="$(WASM_BUILD)/link-warnings.log"; other="$(WASM_BUILD)/link-other-warnings.log"; \
+	runtime="$(WASM_BUILD)/runtime-signature-warnings.log"; \
 	if ! "$(EMCC)" -O2 $(WASM_LINK_FLAGS) --no-entry -Wl,--gc-sections $^ $(LDLIBS) \
 		-sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createMslCoreModule \
 		-sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 \
@@ -526,6 +527,14 @@ $(WASM_MODULE): $(WASM_CORE_OBJS)
 	fi; \
 	awk 'BEGIN { RS=""; ORS="\n\n" } !/warning: function signature mismatch/' \
 		"$$log" >"$$other"; \
+	awk 'BEGIN { RS=""; ORS="\n\n" } \
+		/warning: function signature mismatch/ && /\/obj\/src\/runtime\//' \
+		"$$log" >"$$runtime"; \
+	if [ -s "$$runtime" ]; then \
+		echo "wasm link: runtime function signature mismatch" >&2; \
+		cat "$$runtime" >&2; exit 1; \
+	fi; \
+	rm -f "$$runtime"; \
 	count="$$(rg -c 'warning: function signature mismatch' "$$log" 2>/dev/null || true)"; \
 	if [ "$${count:-0}" -gt 0 ]; then \
 		echo "wasm link: $$count expected signature warnings from loud unsupported stubs (details: $$log)" >&2; \

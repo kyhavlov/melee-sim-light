@@ -26,6 +26,7 @@
 #include "it/items/itzeldadinfireexplode.h"
 #include "it/itzako.h"
 #include "pl/plattack.h"
+#include "pl/plbonuslib.h"
 #include "pl/plstale.h"
 #include "pl/pltrick.h"
 
