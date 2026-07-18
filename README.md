@@ -1,7 +1,7 @@
 # melee-sim-light
 
-`melee-sim-light` is a deterministic, batched SSBM-like simulator for
-high-throughput RL training and replay-driven validation.
+`melee-sim-light` is a deterministic, batched simulator for high-throughput RL training,
+built on the [SSBM Decompilation](https://github.com/doldecomp/melee) project.
 
 The simulator core is C. The public Python package is `melee_sim`, with a thin
 NumPy API over native batch execution.
@@ -109,11 +109,11 @@ contiguous arrays whose length is the batch size; the simulator allocates nothin
 int main(void)
 {
   enum { BATCH_SIZE = 512 };
-  MslBatch* sim = NULL;
-  MslMatchConfig matches[BATCH_SIZE];
-  MslInput inputs[BATCH_SIZE] = { 0 };
-  MslObservation observations[BATCH_SIZE];
-  MslTerminal terminals[BATCH_SIZE];
+  MslBatch* sim = NULL; // Opaque simulator batch.
+  MslMatchConfig matches[BATCH_SIZE]; // Reset configuration for each match.
+  MslInput inputs[BATCH_SIZE] = { 0 }; // Neutral inputs for the next frame.
+  MslObservation observations[BATCH_SIZE]; // Current state of each match.
+  MslTerminal terminals[BATCH_SIZE]; // Episode status for each match.
 
   for (int i = 0; i < BATCH_SIZE; ++i) {
     matches[i] = msl_match_config_default();

@@ -65,9 +65,4 @@ MslCoreResult msl_core_batch_restore_match(
     MslCoreBatch* batch, uint32_t match_index, const void* buffer,
     size_t buffer_size);
 
-#ifdef MSL_CORE_PHASE_PROFILE
-void msl_core_phase_profile_reset(void);
-void msl_core_phase_profile_report(void);
-#endif
-
 #endif

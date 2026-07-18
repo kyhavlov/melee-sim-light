@@ -9,6 +9,7 @@ BUILD_ROOT := $(ROOT)/build/melee_core
 PPC_BUILD := $(BUILD_ROOT)/ppc
 NATIVE_BUILD := $(BUILD_ROOT)/native
 NATIVE_RELEASE_BUILD := $(BUILD_ROOT)/native-release
+SUBSYSTEM_PROFILE_BUILD := $(BUILD_ROOT)/subsystem-profile
 WASM_BUILD := $(BUILD_ROOT)/wasm
 PYTHON_BUILD := $(BUILD_ROOT)/python
 VALIDATION_BUILD := $(BUILD_ROOT)/validation
@@ -180,6 +181,8 @@ NATIVE_REPLAY_BENCH := $(NATIVE_BUILD)/replay-bench
 NATIVE_RUNTIME_CENSUS := $(NATIVE_BUILD)/runtime-census
 NATIVE_LARGE_BATCH_SMOKE := $(NATIVE_BUILD)/large-batch-smoke
 NATIVE_RELEASE_REPLAY_BENCH := $(NATIVE_RELEASE_BUILD)/replay-bench
+SUBSYSTEM_PROFILE_REPLAY_BENCH := $(SUBSYSTEM_PROFILE_BUILD)/replay-bench
+SUBSYSTEM_PROFILE_RAW := $(SUBSYSTEM_PROFILE_BUILD)/profile.txt
 VIEWER_SCHEMA_TOOL := $(NATIVE_BUILD)/viewer-schema
 VIEWER_SCHEMA_JS := $(ROOT)/tools/viewer/live/schema.generated.js
 VALIDATION_NATIVE_SRC := $(ROOT)/tools/validation/native.c
@@ -227,9 +230,14 @@ $(NATIVE_RUNTIME_CENSUS_OBJ): NATIVE_CPPFLAGS += -D_GNU_SOURCE
 ifeq ($(NATIVE_GPROF),1)
 $(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_GPROF
 endif
-ifeq ($(NATIVE_PHASE_PROFILE),1)
-$(NATIVE_OBJ_DIR)/src/api.o: NATIVE_CPPFLAGS += -DMSL_CORE_PHASE_PROFILE
-$(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_PHASE_PROFILE
+ifeq ($(NATIVE_SUBSYSTEM_PROFILE),1)
+$(NATIVE_OBJ_DIR)/src/runtime/batch.o: NATIVE_CPPFLAGS += -DMSL_SUBSYSTEM_PROFILE
+$(NATIVE_OBJ_DIR)/src/runtime/scalar.o: NATIVE_CPPFLAGS += -DMSL_SUBSYSTEM_PROFILE
+$(NATIVE_OBJ_DIR)/src/runtime/subsystem_profile.o: NATIVE_CPPFLAGS += -DMSL_SUBSYSTEM_PROFILE
+$(NATIVE_OBJ_DIR)/gameplay/melee/ft/fighter.o: NATIVE_CPPFLAGS += -DMSL_SUBSYSTEM_PROFILE
+$(NATIVE_OBJ_DIR)/gameplay/melee/ft/ftanim.o: NATIVE_CPPFLAGS += -DMSL_SUBSYSTEM_PROFILE
+$(NATIVE_OBJ_DIR)/gameplay/sysdolphin/baselib/gobj.o: NATIVE_CPPFLAGS += -DMSL_SUBSYSTEM_PROFILE
+$(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_SUBSYSTEM_PROFILE
 endif
 ifeq ($(NATIVE_CALLGRIND),1)
 $(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_CALLGRIND
@@ -262,9 +270,9 @@ NATIVE_RELEASE_OPT_OBJS := \
 $(NATIVE_RELEASE_OPT_OBJS): override NATIVE_CFLAGS += -O3 $(RELEASE_ARCH_FLAGS)
 endif
 
-NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_RELEASE_OPT_OBJS)
+NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_SUBSYSTEM_PROFILE)|$(NATIVE_RELEASE_OPT_OBJS)
 
-.PHONY: all bootstrap extract ppc native python-library native-release runtime-census large-batch-smoke benchmark-prepare benchmark-native benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-build viewer viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source-check validator validation-suite validation-supported-domain clean toolchain data-check ppc-smoke native-smoke test test-full format-check slpz-convert FORCE
+.PHONY: all bootstrap extract ppc native python-library native-release runtime-census large-batch-smoke benchmark-prepare benchmark-native subsystem-profile benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-build viewer viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source-check validator validation-suite validation-supported-domain clean toolchain data-check ppc-smoke native-smoke test test-full format-check slpz-convert FORCE
 
 all: native python-library
 
@@ -636,6 +644,24 @@ benchmark-native: data-check benchmark-prepare native-release
 		--resident-matches "$(BENCHMARK_RESIDENT_MATCHES)" \
 		--match-frames "$(BENCHMARK_MATCH_FRAMES)" \
 		--warmup-ticks "$(BENCHMARK_WARMUP_TICKS)"
+
+subsystem-profile: BENCHMARK_CPU=0
+subsystem-profile: BENCHMARK_MATCHES=512
+subsystem-profile: BENCHMARK_RESIDENT_MATCHES=512
+subsystem-profile: data-check benchmark-prepare
+	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" \
+		NATIVE_BUILD="$(SUBSYSTEM_PROFILE_BUILD)" \
+		NATIVE_CFLAGS="$(NATIVE_RELEASE_CFLAGS)" NATIVE_RELEASE_PROFILE=1 \
+		NATIVE_SUBSYSTEM_PROFILE=1 "$(SUBSYSTEM_PROFILE_REPLAY_BENCH)"
+	@mkdir -p "$(SUBSYSTEM_PROFILE_BUILD)"
+	@taskset -c "$(BENCHMARK_CPU)" "$(SUBSYSTEM_PROFILE_REPLAY_BENCH)" \
+		"$(DATA)" "$(BENCHMARK_MANIFEST)" --matches "$(BENCHMARK_MATCHES)" \
+		--resident-matches "$(BENCHMARK_RESIDENT_MATCHES)" \
+		--match-frames "$(BENCHMARK_MATCH_FRAMES)" \
+		--warmup-ticks "$(BENCHMARK_WARMUP_TICKS)" > "$(SUBSYSTEM_PROFILE_RAW)"
+	@"$(PY)" "$(ROOT)/tools/performance/report_subsystem_profile.py" \
+		--binary "$(SUBSYSTEM_PROFILE_REPLAY_BENCH)" \
+		--input "$(SUBSYSTEM_PROFILE_RAW)"
 
 benchmark-9950x3d-vcache-256:
 	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" benchmark-native \

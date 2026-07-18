@@ -31,6 +31,7 @@
 #include "runtime/effects.h"
 #include "runtime/final_destination.h"
 #include "runtime/match.h"
+#include "runtime/subsystem_profile.h"
 #include "runtime/wire.h"
 
 #include <errno.h>
@@ -1748,6 +1749,9 @@ HSD_GObjEvent msl_core_match_scheduler_invoke_owner(MslCoreMatch* match,
 int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
 {
     int i;
+#ifdef MSL_SUBSYSTEM_PROFILE
+    uint64_t finish_started = msl_profile_cycles();
+#endif
     if (match == NULL) {
         return -1;
     }
@@ -1803,10 +1807,22 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
     //   ftDrawCommon_80080E18,ftDrawCommon_800805C8}
     // refs/melee/src/sysdolphin/baselib/jobj.c::{
     //   HSD_JObjDispAll,HSD_JObjSetupMatrixSub}
-    msl_camera_publish_match_visibility(match->fighters,
-                                        match->config.num_players);
+    {
+#ifdef MSL_SUBSYSTEM_PROFILE
+        uint64_t started = msl_profile_cycles();
+#endif
+        msl_camera_publish_match_visibility(match->fighters,
+                                            match->config.num_players);
+#ifdef MSL_SUBSYSTEM_PROFILE
+        msl_profile_add(MSL_PROFILE_FINISH_FIGHTER_VISIBILITY,
+                             msl_profile_cycles() - started);
+#endif
+    }
     {
         Item_GObj* item_gobj = (Item_GObj*) HSD_GObj_Entities->items;
+#ifdef MSL_SUBSYSTEM_PROFILE
+        uint64_t started = msl_profile_cycles();
+#endif
         while (item_gobj != NULL) {
             // Item display callbacks likewise walk the gameplay JObj tree via
             // HSD_JObjDispAll. Preserve the lazy matrix publication while
@@ -1816,11 +1832,19 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
             publish_render_matrices(item_gobj->hsd_obj);
             item_gobj = (Item_GObj*) item_gobj->next;
         }
+#ifdef MSL_SUBSYSTEM_PROFILE
+        msl_profile_add(MSL_PROFILE_FINISH_ITEM_MATRICES,
+                             msl_profile_cycles() - started);
+#endif
     }
     // gm_8016AEDC is observed by fighter processes during this pass. The
     // source match owner advances it only after those processes have run.
     msl_core_advance_match_frame();
     match->random_seed = *seed_ptr;
+#ifdef MSL_SUBSYSTEM_PROFILE
+    msl_profile_add(MSL_PROFILE_FINISH,
+                         msl_profile_cycles() - finish_started);
+#endif
     return 0;
 }
 
@@ -1828,16 +1852,28 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
                         uint32_t frame_seed,
                         const MslCoreStageEvents* stage_events)
 {
+#ifdef MSL_SUBSYSTEM_PROFILE
+    uint64_t started = msl_profile_cycles();
+#endif
     if (msl_core_match_step_prepare(match, input, frame_seed, stage_events) !=
         0)
     {
         return -1;
     }
+#ifdef MSL_SUBSYSTEM_PROFILE
+    msl_profile_add(MSL_PROFILE_PREPARE,
+                         msl_profile_cycles() - started);
+    started = msl_profile_cycles();
+#endif
     // Prepare has already published this Match's complete hosted context.
     // Run the source scheduler directly so the scalar canonical path does not
     // re-enter the cross-Match binding wrappers at every priority/proc seam.
     // refs/melee/src/sysdolphin/baselib/gobj.c::HSD_GObj_80390CFC
     HSD_GObj_80390CFC();
+#ifdef MSL_SUBSYSTEM_PROFILE
+    msl_profile_add(MSL_PROFILE_SCHEDULER,
+                         msl_profile_cycles() - started);
+#endif
     return msl_core_match_step_finish(match, frame_seed);
 }
 

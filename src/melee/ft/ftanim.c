@@ -23,6 +23,7 @@
 #ifdef MSL_CORE_HOSTED
 #include "runtime/context.h"
 #include "runtime/source_state.h"
+#include "runtime/subsystem_profile.h"
 #define ftAnim_804590D8 (msl_core_ft_anim_scratch()->anim_joints)
 #define ftAnim_804590D8_unk (msl_core_ft_anim_scratch()->mat_anim_joints)
 #define ftAnim_804590D8_F0 (msl_core_ft_anim_scratch()->joints)
@@ -403,10 +404,32 @@ void ftAnim_8006E9B4(Fighter_GObj* gobj)
 /// Process animation?
 void ftAnim_8006EBA4(Fighter_GObj* gobj)
 {
+#ifdef MSL_SUBSYSTEM_PROFILE
+    uint64_t started = msl_profile_cycles();
+#endif
     ftAnim_8006E9B4(gobj);
+#ifdef MSL_SUBSYSTEM_PROFILE
+    msl_profile_add(MSL_PROFILE_POSE_ANIMATION,
+                         msl_profile_cycles() - started);
+    started = msl_profile_cycles();
+#endif
     ftAction_80073240(gobj);
+#ifdef MSL_SUBSYSTEM_PROFILE
+    msl_profile_add(MSL_PROFILE_ACTION_SCRIPT,
+                         msl_profile_cycles() - started);
+    started = msl_profile_cycles();
+#endif
     ftAnim_800707B0(gobj);
+#ifdef MSL_SUBSYSTEM_PROFILE
+    msl_profile_add(MSL_PROFILE_SECONDARY_POSE,
+                         msl_profile_cycles() - started);
+    started = msl_profile_cycles();
+#endif
     ftCo_800DB500(gobj);
+#ifdef MSL_SUBSYSTEM_PROFILE
+    msl_profile_add(MSL_PROFILE_CAPTURE_POSE,
+                         msl_profile_cycles() - started);
+#endif
 }
 
 void ftAnim_8006EBE8(HSD_GObj* gobj, float anim_start, float anim_rate,

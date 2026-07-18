@@ -16,7 +16,7 @@ implementation queue.
 
 1. Before a multi-owner or representation packet, record its final owner, canonical state,
    consumers, displaced code/state, and deletion boundary in
-   `agent_docs/melee_core/ACTIVE_WORK.md`.
+   `agent_docs/ACTIVE_WORK.md`.
 2. Do not add synchronized dual state, setter hooks, compatibility flags, fallback dispatch, or a
    production bridge for an incomplete cutover.
 3. Establish the approved final representation and deletion boundary first, then recover
@@ -34,6 +34,9 @@ implementation queue.
 - Use deterministic ordering. Immutable game data is shared; mutable state belongs to one match
   and must save/restore at any batch index.
 - The production API is one single-threaded batch per process. Do not add an internal worker pool.
+- New repository-owned symbols use the plain `msl_`/`Msl`/`MSL_` namespace. Existing
+  `msl_core_`/`MslCore`/`MSL_CORE_` names are cleanup debt, not a naming precedent; when a plain
+  name would collide, use the actual subsystem owner rather than a generic `core` qualifier.
 - Gameplay lives in C under `src/`. Python is cold extraction/codegen/replay/report tooling only.
 - Gameplay logic must be backed nearby by `refs/melee`, matching asm, `refs/slippi-ssbm-asm`, or
   extracted `data/`. Do not add replay-fit constants or character-id proxies for missing state.
@@ -45,11 +48,12 @@ implementation queue.
 ## Routine workflow
 
 - Routine commands should finish within five seconds and normally remain below ten seconds.
-  Announce fresh full builds, full replay gates, and production viewer builds first.
+  Announce fresh full builds, full replay gates, and production viewer builds first. Occasional
+  slower commands are ok if necessary/justified.
 - Use root `Makefile` targets: `source-check`, `native-smoke`, `validation-suite`, `wasm-smoke`,
   `viewer-smoke`, and the bounded benchmark targets.
 - The full supported-domain gate is a material checkpoint, not an inner loop.
 - Put forensic outputs under ignored `reports/triage/` and never hand-edit generated results.
-- New-core plans and evidence live only under `agent_docs/melee_core/`.
+- New-core plans and evidence live only under `agent_docs/`.
 - A performance commit must include implementation, gates, and refreshed retained evidence in
-  `agent_docs/melee_core/PERFORMANCE.md`.
+  `agent_docs/PERFORMANCE.md`.

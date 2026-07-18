@@ -2,6 +2,7 @@
 
 #include "runtime/batch.h"
 #include "runtime/benchmark_wire.h"
+#include "runtime/subsystem_profile.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -22,11 +23,6 @@
 
 #ifdef MSL_CORE_GPROF
 extern void moncontrol(int mode);
-#endif
-
-#ifdef MSL_CORE_PHASE_PROFILE
-extern void msl_core_phase_profile_reset(void);
-extern void msl_core_phase_profile_report(void);
 #endif
 
 enum {
@@ -367,8 +363,10 @@ static int run_sharded_pass(const MslCoreGameData* game_data, ReplayCase* cases,
       workload_free(&workload);
       return -1;
     }
-#ifdef MSL_CORE_PHASE_PROFILE
-    msl_core_phase_profile_reset();
+#ifdef MSL_SUBSYSTEM_PROFILE
+    if (write_outputs) {
+      msl_subsystem_profile_reset();
+    }
 #endif
 #ifdef MSL_CORE_GPROF
     if (write_outputs) {
@@ -644,8 +642,8 @@ int main(int argc, char** argv) {
                       (size_t)match_count * OBSERVATION_HISTORY * sizeof(*observations));
   digest =
       hash_bytes(digest, terminals, (size_t)match_count * OBSERVATION_HISTORY * sizeof(*terminals));
-#ifdef MSL_CORE_PHASE_PROFILE
-  msl_core_phase_profile_report();
+#ifdef MSL_SUBSYSTEM_PROFILE
+  msl_subsystem_profile_report();
 #endif
   if (run_sharded_pass(game_data, cases, case_count, match_count, resident_match_count, ticks,
                        warmup_ticks, 0, observations, terminals, &representative_seeds,

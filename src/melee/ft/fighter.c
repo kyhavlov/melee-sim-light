@@ -24,6 +24,7 @@
 #include "platform/slippi.h"
 #include "runtime/context.h"
 #include "runtime/source_state.h"
+#include "runtime/subsystem_profile.h"
 #endif
 
 #include "cm/camera.h"
@@ -1882,7 +1883,16 @@ void Fighter_8006A360(Fighter_GObj* gobj)
             if (fp->dmg.x18ac_time_since_hit != -1) {
                 fp->dmg.x18ac_time_since_hit++;
             }
-            ftAnim_8006EBA4(gobj);
+#ifdef MSL_SUBSYSTEM_PROFILE
+            {
+                uint64_t started = msl_profile_cycles();
+#endif
+                ftAnim_8006EBA4(gobj);
+#ifdef MSL_SUBSYSTEM_PROFILE
+                msl_profile_add(MSL_PROFILE_FIGHTER_ANIMATION,
+                                     msl_profile_cycles() - started);
+            }
+#endif
             ftCo_800D71D8(gobj);
             ftColl_800764DC(gobj);
 
@@ -1892,7 +1902,14 @@ void Fighter_8006A360(Fighter_GObj* gobj)
             ftCo_800DEF38(gobj);
 
             if (fp->anim_cb) {
+#ifdef MSL_SUBSYSTEM_PROFILE
+                uint64_t started = msl_profile_cycles();
+#endif
                 fp->anim_cb(gobj);
+#ifdef MSL_SUBSYSTEM_PROFILE
+                msl_profile_add(MSL_PROFILE_ACTION_ANIM_CALLBACK,
+                                     msl_profile_cycles() - started);
+#endif
             }
         }
 
@@ -2320,7 +2337,14 @@ void Fighter_Spaghetti_8006AD10(Fighter_GObj* gobj)
             Fighter_UnkIncrementCounters_8006ABEC(gobj);
 
             if (fp->input_cb) {
+#ifdef MSL_SUBSYSTEM_PROFILE
+                uint64_t started = msl_profile_cycles();
+#endif
                 fp->input_cb(gobj);
+#ifdef MSL_SUBSYSTEM_PROFILE
+                msl_profile_add(MSL_PROFILE_INPUT_ACTION_CALLBACK,
+                                     msl_profile_cycles() - started);
+#endif
             }
         }
     }
@@ -2360,7 +2384,14 @@ void Fighter_procUpdate(Fighter_GObj* gobj)
         ftCo_800C0A98(gobj);
 
         if (fp->phys_cb) {
+#ifdef MSL_SUBSYSTEM_PROFILE
+            uint64_t started = msl_profile_cycles();
+#endif
             fp->phys_cb(gobj);
+#ifdef MSL_SUBSYSTEM_PROFILE
+            msl_profile_add(MSL_PROFILE_PHYSICS_CALLBACK,
+                                 msl_profile_cycles() - started);
+#endif
         }
 
         p_kb_vel = &fp->x8c_kb_vel;
@@ -2704,7 +2735,14 @@ void Fighter_procMap(Fighter_GObj* gobj)
         HSD_JObjSetTranslate(gobj->hsd_obj, &fp->cur_pos);
 
         if (fp->coll_cb) {
+#ifdef MSL_SUBSYSTEM_PROFILE
+            uint64_t started = msl_profile_cycles();
+#endif
             fp->coll_cb(gobj);
+#ifdef MSL_SUBSYSTEM_PROFILE
+            msl_profile_add(MSL_PROFILE_STAGE_COLLISION_CALLBACK,
+                                 msl_profile_cycles() - started);
+#endif
             ftKb_SpecialN_800F1D24(gobj);
         }
 
@@ -2777,9 +2815,18 @@ void Fighter_8006C80C(Fighter_GObj* gobj)
             }
         }
 
-        ftColl_8007AE80(gobj);
-        ft_8007C224(gobj);
-        ft_8007C6DC(gobj);
+#ifdef MSL_SUBSYSTEM_PROFILE
+        {
+            uint64_t started = msl_profile_cycles();
+#endif
+            ftColl_8007AE80(gobj);
+            ft_8007C224(gobj);
+            ft_8007C6DC(gobj);
+#ifdef MSL_SUBSYSTEM_PROFILE
+            msl_profile_add(MSL_PROFILE_CONTACT_PUBLICATION,
+                                 msl_profile_cycles() - started);
+        }
+#endif
 
         if (fp->x20A0_accessory) {
             HSD_JObjAnimAll(fp->x20A0_accessory);

@@ -9,6 +9,10 @@
 #include "lobj.h"
 #include "object.h"
 
+#ifdef MSL_SUBSYSTEM_PROFILE
+#include "runtime/subsystem_profile.h"
+#endif
+
 #ifndef MSL_CORE_HOSTED
 u8 HSD_GObj_804D784B;
 s8 HSD_GObj_804D784A;
@@ -203,7 +207,16 @@ void msl_hsd_gobj_run_procs_invoke(void)
     gobj = proc->gobj;
     HSD_GObj_804D781C = gobj;
     HSD_GObj_804D7838 = proc;
+#ifdef MSL_SUBSYSTEM_PROFILE
+    {
+        uint64_t started = msl_profile_cycles();
+        proc->on_invoke(gobj);
+        msl_profile_add_owner((uintptr_t) proc->on_invoke,
+                                   msl_profile_cycles() - started);
+    }
+#else
     proc->on_invoke(gobj);
+#endif
     HSD_GObj_804D7830 = proc->next;
     if (HSD_GObj_804CE3E4.flags != 0) {
         HSD_GObj_804CE3E4.b0 = 1;

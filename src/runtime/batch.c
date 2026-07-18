@@ -3,22 +3,14 @@
 #include "runtime/observation.h"
 #include "runtime/savestate.h"
 #include "runtime/scalar.h"
+#include "runtime/subsystem_profile.h"
 #include "runtime/viewer.h"
 
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef MSL_CORE_PHASE_PROFILE
-#include <inttypes.h>
-#include <stdio.h>
-#include <x86intrin.h>
-#endif
-
-enum {
-    MSL_CORE_BATCH_MATCH_LIMIT = 16384,
-    MSL_CORE_BATCH_TILE_MATCHES = 2,
-};
+enum { MSL_CORE_BATCH_MATCH_LIMIT = 16384 };
 
 struct MslCoreBatch {
     const MslCoreGameData* game_data;
@@ -29,70 +21,6 @@ struct MslCoreBatch {
     uint32_t match_count;
     uint32_t reset_index_capacity;
 };
-
-#ifdef MSL_CORE_PHASE_PROFILE
-enum { MSL_CORE_PHASE_OWNER_CAPACITY = 2048 };
-
-typedef struct MslCorePhaseOwnerProfile {
-    uintptr_t owner;
-    uint64_t cycles;
-    uint64_t calls;
-} MslCorePhaseOwnerProfile;
-
-static struct {
-    uint64_t prepare_cycles;
-    uint64_t scheduler_cycles;
-    uint64_t invoke_cycles;
-    uint64_t finish_cycles;
-    uint64_t matches;
-    MslCorePhaseOwnerProfile owners[MSL_CORE_PHASE_OWNER_CAPACITY];
-} phase_profile;
-
-static inline uint64_t phase_cycles(void)
-{
-    unsigned int aux;
-    return __rdtscp(&aux);
-}
-
-static void phase_record_owner(HSD_GObjEvent owner, uint64_t cycles)
-{
-    uintptr_t key = (uintptr_t) owner;
-    size_t slot = (key >> 4) & (MSL_CORE_PHASE_OWNER_CAPACITY - 1);
-    while (phase_profile.owners[slot].owner != 0 &&
-           phase_profile.owners[slot].owner != key)
-    {
-        slot = (slot + 1) & (MSL_CORE_PHASE_OWNER_CAPACITY - 1);
-    }
-    phase_profile.owners[slot].owner = key;
-    phase_profile.owners[slot].cycles += cycles;
-    phase_profile.owners[slot].calls += 1;
-}
-
-void msl_core_phase_profile_reset(void)
-{
-    memset(&phase_profile, 0, sizeof(phase_profile));
-}
-
-void msl_core_phase_profile_report(void)
-{
-    size_t i;
-    printf("phase_profile matches=%" PRIu64 " prepare=%" PRIu64
-           " scheduler=%" PRIu64 " invoke=%" PRIu64 " finish=%" PRIu64
-           "\n",
-           phase_profile.matches, phase_profile.prepare_cycles,
-           phase_profile.scheduler_cycles, phase_profile.invoke_cycles,
-           phase_profile.finish_cycles);
-    for (i = 0; i < MSL_CORE_PHASE_OWNER_CAPACITY; ++i) {
-        if (phase_profile.owners[i].owner != 0) {
-            printf("phase_owner address=%#" PRIxPTR " calls=%" PRIu64
-                   " cycles=%" PRIu64 "\n",
-                   phase_profile.owners[i].owner,
-                   phase_profile.owners[i].calls,
-                   phase_profile.owners[i].cycles);
-        }
-    }
-}
-#endif
 
 static int selected(const uint8_t* mask, size_t stride, uint32_t index)
 {
@@ -350,8 +278,10 @@ MslCoreResult msl_core_batch_step_matches(
     const uint8_t* match_mask, size_t mask_stride)
 {
     static const MslCoreStageEvents no_stage_events = { 0 };
-    uint32_t tile_begin;
     uint32_t i;
+#ifdef MSL_SUBSYSTEM_PROFILE
+    uint64_t started = msl_profile_cycles();
+#endif
     if (validate_mask(batch, match_mask, mask_stride) != MSL_CORE_OK ||
         inputs == NULL || input_stride < sizeof(*inputs))
     {
@@ -362,7 +292,6 @@ MslCoreResult msl_core_batch_step_matches(
             return MSL_CORE_INVALID_STATE;
         }
     }
-#ifndef MSL_CORE_PHASE_PROFILE
     // Until an owner has a real cross-environment kernel, interleaving its
     // scalar source callbacks only evicts the current Match and republishes
     // the full hosted context. Keep one Match resident for its complete
@@ -380,138 +309,10 @@ MslCoreResult msl_core_batch_step_matches(
             }
         }
     }
-    return MSL_CORE_OK;
+#ifdef MSL_SUBSYSTEM_PROFILE
+    msl_profile_add(MSL_PROFILE_STEP,
+                         msl_profile_cycles() - started);
 #endif
-    for (tile_begin = 0; tile_begin < batch->match_count;
-         tile_begin += MSL_CORE_BATCH_TILE_MATCHES)
-    {
-        HSD_GObjEvent owners[MSL_CORE_BATCH_TILE_MATCHES] = { 0 };
-        uint32_t frame_seeds[MSL_CORE_BATCH_TILE_MATCHES];
-        uint32_t tile_end = tile_begin + MSL_CORE_BATCH_TILE_MATCHES;
-        uint32_t priority_count = 0;
-        uint32_t priority;
-        if (tile_end > batch->match_count) {
-            tile_end = batch->match_count;
-        }
-        for (i = tile_begin; i < tile_end; ++i) {
-            if (selected(match_mask, mask_stride, i)) {
-                MslCoreMatch* match = &batch->matches[i];
-                uint32_t lane = i - tile_begin;
-                uint32_t count;
-#ifdef MSL_CORE_PHASE_PROFILE
-                uint64_t started = phase_cycles();
-#endif
-                frame_seeds[lane] = match->random_seed;
-                if (msl_core_match_step_prepare(
-                        match, row_const(inputs, input_stride, i),
-                        frame_seeds[lane], &no_stage_events) != 0)
-                {
-                    return MSL_CORE_INVALID_STATE;
-                }
-#ifdef MSL_CORE_PHASE_PROFILE
-                phase_profile.prepare_cycles += phase_cycles() - started;
-                started = phase_cycles();
-#endif
-                msl_core_match_scheduler_begin(match);
-                count = msl_core_match_scheduler_priority_count(match);
-#ifdef MSL_CORE_PHASE_PROFILE
-                phase_profile.scheduler_cycles += phase_cycles() - started;
-                phase_profile.matches += 1;
-#endif
-                if (count > priority_count) {
-                    priority_count = count;
-                }
-            }
-        }
-#ifdef MSL_CORE_PHASE_PROFILE
-        {
-            uint64_t scheduler_started = phase_cycles();
-#endif
-        for (priority = 0; priority < priority_count; ++priority) {
-            HSD_GObjEvent owner;
-            memset(owners, 0, sizeof(owners));
-            for (i = tile_begin; i < tile_end; ++i) {
-                if (selected(match_mask, mask_stride, i) &&
-                    priority < msl_core_match_scheduler_priority_count(
-                                   &batch->matches[i]))
-                {
-                    msl_core_match_scheduler_priority_begin(
-                        &batch->matches[i], priority);
-                }
-            }
-            do {
-                owner = NULL;
-                for (i = tile_begin; i < tile_end; ++i) {
-                    uint32_t lane = i - tile_begin;
-                    if (!selected(match_mask, mask_stride, i) ||
-                        priority >= msl_core_match_scheduler_priority_count(
-                                        &batch->matches[i]))
-                    {
-                        continue;
-                    }
-                    if (owners[lane] == NULL) {
-                        owners[lane] = msl_core_match_scheduler_next_owner(
-                            &batch->matches[i]);
-                    }
-                    if (owner == NULL && owners[lane] != NULL) {
-                        owner = owners[lane];
-                    }
-                }
-                if (owner != NULL) {
-                    // Imported source callback identity is the scheduler
-                    // owner key. Preserve match order within each group and
-                    // each Match's exact callback sequence while neighboring
-                    // matches execute the same owner together.
-                    // refs/melee/src/sysdolphin/baselib/gobj.c::
-                    //   HSD_GObj_80390CFC
-                    for (i = tile_begin; i < tile_end; ++i) {
-                        uint32_t lane = i - tile_begin;
-                        if (owners[lane] == owner) {
-#ifdef MSL_CORE_PHASE_PROFILE
-                            uint64_t started = phase_cycles();
-#endif
-                            // A Match commonly has two or four fighter procs
-                            // with the same source owner. Their state is
-                            // match-local, so retain source proc order while
-                            // consuming that consecutive owner run under one
-                            // context binding before moving to the next lane.
-                            // refs/melee/src/sysdolphin/baselib/gobj.c::
-                            //   HSD_GObj_80390CFC
-                            owners[lane] =
-                                msl_core_match_scheduler_invoke_owner(
-                                    &batch->matches[i], owner);
-#ifdef MSL_CORE_PHASE_PROFILE
-                            {
-                                uint64_t elapsed = phase_cycles() - started;
-                                phase_profile.invoke_cycles += elapsed;
-                                phase_record_owner(owner, elapsed);
-                            }
-#endif
-                        }
-                    }
-                }
-            } while (owner != NULL);
-        }
-#ifdef MSL_CORE_PHASE_PROFILE
-            phase_profile.scheduler_cycles +=
-                phase_cycles() - scheduler_started;
-        }
-#endif
-        for (i = tile_begin; i < tile_end; ++i) {
-#ifdef MSL_CORE_PHASE_PROFILE
-            uint64_t started = phase_cycles();
-#endif
-            if (selected(match_mask, mask_stride, i) &&
-                msl_core_match_step_finish(
-                    &batch->matches[i], frame_seeds[i - tile_begin]) != 0)
-            {
-                return MSL_CORE_INVALID_STATE;
-            }
-#ifdef MSL_CORE_PHASE_PROFILE
-            phase_profile.finish_cycles += phase_cycles() - started;
-#endif
-        }
-    }
     return MSL_CORE_OK;
 }
 
@@ -542,6 +343,9 @@ MslCoreResult msl_core_batch_write_terminal(
     int32_t max_frame_id, const uint8_t* match_mask, size_t mask_stride)
 {
     uint32_t i;
+#ifdef MSL_SUBSYSTEM_PROFILE
+    uint64_t started = msl_profile_cycles();
+#endif
     if (validate_mask(batch, match_mask, mask_stride) != MSL_CORE_OK ||
         output == NULL || output_stride < sizeof(*output))
     {
@@ -557,6 +361,10 @@ MslCoreResult msl_core_batch_write_terminal(
                 row_mutable(output, output_stride, i));
         }
     }
+#ifdef MSL_SUBSYSTEM_PROFILE
+    msl_profile_add(MSL_PROFILE_TERMINAL,
+                         msl_profile_cycles() - started);
+#endif
     return MSL_CORE_OK;
 }
 
@@ -593,6 +401,9 @@ MslCoreResult msl_core_batch_write_observation(
     size_t output_stride, const uint8_t* match_mask, size_t mask_stride)
 {
     uint32_t i;
+#ifdef MSL_SUBSYSTEM_PROFILE
+    uint64_t started = msl_profile_cycles();
+#endif
     if (validate_mask(batch, match_mask, mask_stride) != MSL_CORE_OK ||
         viewpoint_players == NULL || viewpoint_stride < sizeof(uint8_t) ||
         output == NULL || output_stride < sizeof(*output))
@@ -621,6 +432,10 @@ MslCoreResult msl_core_batch_write_observation(
             }
         }
     }
+#ifdef MSL_SUBSYSTEM_PROFILE
+    msl_profile_add(MSL_PROFILE_OBSERVATION,
+                         msl_profile_cycles() - started);
+#endif
     return MSL_CORE_OK;
 }
 
