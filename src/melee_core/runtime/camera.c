@@ -339,14 +339,12 @@ static void headless_camera_build_view(Mtx view, Vec3* eye, float* fov,
         -fmaf(eye->z, look.z, fmaf(eye->x, look.x, eye->y * look.y));
 }
 
-static bool headless_camera_point_on_screen(const Vec3* point)
+static bool headless_camera_point_on_screen(const Mtx view, float fov,
+                                            const Vec3* point)
 {
-    Mtx view;
-    Vec3 eye;
     Vec3 projected_point;
     Vec3 eye_point;
     float angle;
-    float fov;
     float cotangent;
     float clip_x;
     float clip_y;
@@ -356,8 +354,6 @@ static bool headless_camera_point_on_screen(const Vec3* point)
     float screen_y;
     int pixel_x;
     int pixel_y;
-
-    headless_camera_build_view(view, &eye, &fov, false);
 
     // Exact lbVector_WorldToScreen near-plane projection followed by the
     // perspective subset of SDK GXProject. cm_803BCB64 uses a 640x480
@@ -401,66 +397,78 @@ static bool headless_camera_point_on_screen(const Vec3* point)
     return pixel_x >= 0 && pixel_x < 640 && pixel_y >= 0 && pixel_y < 480;
 }
 
-void msl_camera_publish_fighter_visibility(HSD_GObj* gobj)
+void msl_camera_publish_match_visibility(Fighter_GObj* const* fighters,
+                                         int fighter_count)
 {
-    Fighter* fp = GET_FIGHTER(gobj);
-    CmSubject* subject = fp->x890_cameraBox;
-    Vec3* point;
+    Mtx view;
+    Mtx deadup_view;
+    Vec3 eye;
+    float fov;
+    float deadup_fov;
+    bool view_ready = false;
+    bool deadup_view_ready = false;
+    int i;
 
-    // The magnifier camera is GX link 0 while fighter drawing is GX link 5.
-    // Its vanilla render callback therefore consumes the visibility bit left
-    // by the preceding fighter draw before this pass publishes a new one.
-    // refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC618
-    // refs/melee/src/melee/ft/fighter.c::Fighter_80068E64
-    if (fp->player_id >= 0 && fp->player_id < 6) {
-        msl_vanilla_magnify_offscreen[fp->player_id] =
-            fp->x221F_b0 && ftLib_80086ED0(gobj);
-    }
+    for (i = 0; i < fighter_count; ++i) {
+        Fighter_GObj* gobj = fighters[i];
+        Fighter* fp = GET_FIGHTER(gobj);
+        CmSubject* subject = fp->x890_cameraBox;
+        Vec3* point;
 
-    // This is the gameplay-visible side effect at the head of
-    // ftDrawCommon_80080E18, with Camera_80030CD8's viewport test projected
-    // onto the source stage camera bounds. The HSD camera, scissor, and all
-    // draw calls remain presentation-only and are intentionally absent.
-    // refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18
-    // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
-    // refs/melee/src/melee/cm/camera.c::{Camera_80030BBC,Camera_80030CD8}
-    if (subject == NULL || fp->x2229_b3 || fp->x2220_b7) {
-        fp->x221F_b0 = false;
-    } else {
-        point = &subject->x1C;
-        if (headless_camera_point_on_screen(point)) {
+        // The magnifier camera is GX link 0 while fighter drawing is GX link
+        // 5. Its vanilla render callback therefore consumes the visibility
+        // bit left by the preceding fighter draw before this pass publishes
+        // a new one.
+        // refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC618
+        // refs/melee/src/melee/ft/fighter.c::Fighter_80068E64
+        if (fp->player_id >= 0 && fp->player_id < 6) {
+            msl_vanilla_magnify_offscreen[fp->player_id] =
+                fp->x221F_b0 && ftLib_80086ED0(gobj);
+        }
+
+        // This is the gameplay-visible side effect at the head of
+        // ftDrawCommon_80080E18, with Camera_80030CD8's viewport test
+        // projected from the source camera transform. Build that transform
+        // once per Match render pass rather than once per fighter.
+        // refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18
+        // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+        // refs/melee/src/melee/cm/camera.c::{Camera_80030BBC,Camera_80030CD8}
+        if (subject == NULL || fp->x2229_b3 || fp->x2220_b7) {
             fp->x221F_b0 = false;
         } else {
-            fp->x221F_b0 = true;
+            if (!view_ready) {
+                headless_camera_build_view(view, &eye, &fov, false);
+                view_ready = true;
+            }
+            point = &subject->x1C;
+            fp->x221F_b0 =
+                !headless_camera_point_on_screen(view, fov, point);
         }
-    }
 
-    // Offline retail DeadUpFall stores its visible trajectory in camera
-    // coordinates and publishes the inverse-view result through cur_pos in
-    // the fighter render callback. Slippi Online deliberately replaces that
-    // with a JObj-only transform so rollback gameplay never depends on the
-    // renderer; the match capability keeps those two source owners distinct.
-    // refs/melee/src/melee/ft/ftdrawcommon.c::
-    //     ftDrawCommon_80080E18_inline2
-    // refs/slippi-ssbm-asm/Online/Core/FreezeDeadUpFallPhysics/
-    //     UpdateModelPos.asm
-    // Camera_800311EC sets camera mode 1 only around the GX-link traversal
-    // that reaches this callback. The headless schedule invokes this owner
-    // directly, so that transient scheduler bit is represented by the call
-    // site rather than read from the otherwise-idle renderer global.
-    // refs/melee/src/melee/cm/camera.c::Camera_800311EC
-    if (!msl_core_freezes_dead_up_fall_physics() && !fp->x221F_b3 &&
-        fp->x2220_b7)
-    {
-        Mtx view;
-        Mtx inverse;
-        Vec3 eye;
-        float fov;
+        // Offline retail DeadUpFall stores its visible trajectory in camera
+        // coordinates and publishes the inverse-view result through cur_pos
+        // in the fighter render callback. Slippi Online replaces that with a
+        // JObj-only transform. The source transform is Match-wide, so share
+        // its construction while preserving fighter traversal order.
+        // refs/melee/src/melee/ft/ftdrawcommon.c::
+        //     ftDrawCommon_80080E18_inline2
+        // refs/slippi-ssbm-asm/Online/Core/FreezeDeadUpFallPhysics/
+        //     UpdateModelPos.asm
+        // refs/melee/src/melee/cm/camera.c::Camera_800311EC
+        if (!msl_core_freezes_dead_up_fall_physics() && !fp->x221F_b3 &&
+            fp->x2220_b7)
+        {
+            Mtx inverse;
 
-        headless_camera_build_view(view, &eye, &fov, true);
-        if (PSMTXInverse(view, inverse)) {
-            PSMTXMultVec(inverse, &fp->mv.co.unk_deadup.x50,
-                         &fp->cur_pos);
+            if (!deadup_view_ready) {
+                headless_camera_build_view(deadup_view, &eye, &deadup_fov,
+                                           true);
+                deadup_view_ready = true;
+            }
+            if (PSMTXInverse(deadup_view, inverse)) {
+                PSMTXMultVec(inverse, &fp->mv.co.unk_deadup.x50,
+                             &fp->cur_pos);
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 # Active melee-core work
 
-Packet 2 is a clean rejection. Its final evidence is in `PERFORMANCE.md`, and its owner map and
-chronological log are archived in `history/PACKET_02_PROCESS_HIT.md`. Runtime source is identical to
-the retained baseline. Queue item 3 (headless camera/magnify/visibility) is next; write its complete
-owner map here before runtime edits.
+Packet 3 is correctness-green and retained for commit. Its final evidence is in `PERFORMANCE.md`,
+and its owner map and chronological log are archived in `history/PACKET_03_HEADLESS_CAMERA.md`.
+Queue items 4–5 (compact stage collision representation plus spatial candidate traversal) are next;
+write their combined final owner/deletion map here before runtime edits.

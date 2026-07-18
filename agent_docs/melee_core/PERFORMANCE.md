@@ -852,7 +852,7 @@ Stage collision plus scheduled stage work owns about 28% of the frame. Hit resol
 detection, and contact publication own about 14–18%. A generous pose/geometry grouping owns about
 25%, which gives it only a 1.34x whole-runtime ceiling even if it were eliminated completely. The
 500k checkpoint is therefore defined at **512 resident environments on one CPU core**. It requires
-5.96x over the retained 83,837 FPS result; 256 remains a required secondary cache-pressure report,
+5.87x over the retained 85,156 FPS result; 256 remains a required secondary cache-pressure report,
 not the official completion point.
 
 ### Confidence labels
@@ -872,7 +872,7 @@ Every experiment below is labeled before implementation:
 |---:|---|---|---|
 | 1 | **Completed by Packet 1:** cull or construction-precompute supported-stage animation/callback work whose products are invariant or presentation-only | **Retained: +6.8% at 512** | Dynamic collision/platform/wind publication remains source-owned. The final audit, correctness gates, and normalized A/B evidence are recorded below. |
 | 2 | **Rejected by Packet 2:** split `Fighter_ProcessHit_8006D1EC` into a minimal no-pending-event path and the exact event path | **Correctness-green, noise-level** | 96.0% of visible calls were idle, but preserving gameplay-required hurt-capsule publication left +0.7% at 512 and -0.4% at 256. The capsule consumer boundary remains queue item 6; no scalar guard was retained. |
-| 3 | Reduce camera/magnify/visibility to the gameplay-observed headless owner | **Definite** for presentation-only branches; total size is potential | Camera callbacks are 4.5%, with additional finish visibility cost. Existing gameplay camera bounds, blast zones, offscreen damage, and visibility bits remain canonical. |
+| 3 | **Completed by Packet 3:** reduce camera/magnify/visibility to the gameplay-observed headless owner | **Retained: +1.5% at 512** | One Match-wide render publication, dead hosted standard-mode work removed, and renderer-only quake/model-shift projection deleted. Gameplay camera bounds, transform, offscreen damage, effect lifetime, and visibility remain canonical. |
 | 4 | Replace stage collision pointer topology with compact immutable line/normal/adjacency arrays and a bounded dynamic overlay | **Potential** | Map collision is 18%. Compact data is the final memory shape, but conversion alone may not beat hot scalar pointers until traversal is also replaced. |
 | 5 | Add stage spatial candidate sets and swept-ECB broad-phase rejection before exact narrow phase | **Potential** | It can skip large line searches, especially across repeated static stages, but candidate maintenance and small-stage workloads may erase the gain. Exact admission, ordering, remap, platform, and ledge rules remain unchanged. |
 | 6 | Replace live pose tree traversal with shared ordinary-frame pose data plus a compact evaluator for blends, fractional rates, dynamics, IK, and capture | **Potential** as a scalar replacement; **definite** only when it deletes the tree/matrix owner and feeds batched consumers directly | Pose evaluation is 13–16% and the broader geometry group about 25%. Prior partial caches failed because they retained the expensive consumer graph. No further partial cache qualifies. |
@@ -1054,3 +1054,36 @@ hurt-capsule projection, not by its idle resolution/reset branches. Retaining a 
 be noise-level intermediate machinery that queue item 6 later deletes. The production source is
 restored exactly; the branch census, implementation boundary, full-gate evidence, and A/B are
 preserved under ignored `reports/triage/perf_candidates/packet2_process_hit.md`.
+
+### Packet 3 — gameplay-observed headless camera retained — 2026-07-17
+
+The final hosted camera boundary retains the source fighter `CmSubject` callbacks, standard camera
+transform, stage translation, bounded camera-effect lifetime, camera-bound gameplay queries,
+vanilla and Slippi offscreen-damage policies, offline DeadUp inverse-view publication, and viewer
+output. It deletes fighter model-shift calculation whose only consumers are retail fighter/item
+drawing, the unreachable hosted single-player zoom/correction path (`gm_8016B41C` is the declared
+hosted constant false and `x2BC` remains 1.0), and renderer-only quake-frame copies. Camera effect
+production and cleanup remain in source order so the packet does not perturb effect/RNG scheduling.
+
+The former per-fighter visibility function is deleted. One Match-wide render-publication owner now
+captures each fighter's prior-render magnifier bit in traversal order, constructs the exact main
+view lazily once, tests all live subjects against it, and constructs the offline DeadUp view lazily
+once when needed. There is no HSD CObj/draw graph, fallback, compatibility flag, or parallel state.
+
+Two adjacent CPU-0 A/B pairs produced:
+
+| Environments | Baseline complete FPS mean | Candidate complete FPS mean | Gain | Digest |
+|---:|---:|---:|---:|---|
+| 512 | 83,916 | 85,156 | **+1.48%** | `3fb5823d90657775` |
+| 256 | 63,137 | 63,315 | **+0.28%** | `bdc54107c51fa3d7` |
+
+The individual 512 pairs were 84,024 to 85,082 and 83,808 to 85,229 FPS. The 256 pairs were
+63,346 to 63,471 and 62,928 to 63,158 FPS. Step-only digests are not emitted; complete production
+digests and the observation contract were unchanged.
+
+The complete 153-replay gate is green with 63 exact passes, 90 unchanged exact classifications,
+zero XPASS/fail/error, and all 1,415,476 output locks. Source sync, native scalar/context/batch API
+and save/restore, sealed runtime census, 256-environment arbitrary-index restore, PPC smokes, Wasm
+native parity (`cef96ff32edfe898`), live viewer (`1b43d24b47c228f2`), and browser viewer all pass.
+Detailed adjacent evidence is under ignored
+`reports/triage/perf_candidates/packet3_headless_camera.md`.

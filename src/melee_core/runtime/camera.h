@@ -11,6 +11,7 @@ typedef struct MslCoreCameraState {
 
 void msl_camera_state_init(MslCoreCameraState* state);
 void msl_camera_state_bind(MslCoreCameraState* state);
-void msl_camera_publish_fighter_visibility(Fighter_GObj* gobj);
+void msl_camera_publish_match_visibility(Fighter_GObj* const* fighters,
+                                         int fighter_count);
 
 #endif

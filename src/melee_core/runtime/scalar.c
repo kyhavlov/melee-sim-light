@@ -1917,26 +1917,17 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
     // refs/melee/src/melee/lb/lb_0195.c::lb_80019894
     // refs/slippi-ssbm-asm/console_lag_pd*.json
     // refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18
-    for (i = 0; i < match->config.num_players; ++i) {
-        // Retail's intervening fighter draw walks the complete visible JObj
-        // tree through HSD_JObjDispAll. The GX/DObj work is presentation, but
-        // its ordered lazy-matrix publication is observed by next-frame
-        // hit/hurt capsules, including RObj/IK-dependent bones. Preserve that
-        // source boundary without invoking the renderer.
-        // refs/melee/src/melee/ft/ftdrawcommon.c::{
-        //   ftDrawCommon_80080E18,ftDrawCommon_800805C8}
-        // refs/melee/src/sysdolphin/baselib/jobj.c::{
-        //   HSD_JObjDispAll,HSD_JObjSetupMatrixSub}
-        // Hosted fighter construction has no DObj/MObj/PObj graph. Retail's
-        // display walk only publishes a JObj matrix after reaching a DObj in
-        // one of the three transparency passes, so all three fighter walks
-        // are empty after the canonical gameplay-pose construction cut.
-        // Items retain their independent source display owner below.
-        // refs/melee/src/sysdolphin/baselib/jobj.c::{HSD_JObjDispAll,
-        //   HSD_JObjDisp,HSD_JObjDispDObj}
-        // src/melee_core/gameplay/src/melee/ft/ftparts.c::ftParts_80074194
-        msl_camera_publish_fighter_visibility(match->fighters[i]);
-    }
+    // Retail's intervening fighter draw walks the complete visible JObj tree
+    // through HSD_JObjDispAll. Hosted fighter construction has no
+    // DObj/MObj/PObj graph, so the only remaining Match-wide render owner is
+    // camera visibility/magnifier/DeadUp publication. Items retain their
+    // independent lazy-matrix publication below.
+    // refs/melee/src/melee/ft/ftdrawcommon.c::{
+    //   ftDrawCommon_80080E18,ftDrawCommon_800805C8}
+    // refs/melee/src/sysdolphin/baselib/jobj.c::{
+    //   HSD_JObjDispAll,HSD_JObjSetupMatrixSub}
+    msl_camera_publish_match_visibility(match->fighters,
+                                        match->config.num_players);
     {
         Item_GObj* item_gobj = (Item_GObj*) HSD_GObj_Entities->items;
         while (item_gobj != NULL) {

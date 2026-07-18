@@ -3311,7 +3311,9 @@ void Fighter_UnkCallCameraCallback_8006D9EC(Fighter_GObj* gobj)
     Fighter* fp = GET_FIGHTER(gobj);
 
     if (!fp->x221F_b3) {
+#ifndef MSL_CORE_HOSTED
         ftCommon_8008021C(gobj);
+#endif
         if (fp->cam_cb) {
             fp->cam_cb(gobj);
         }

@@ -928,12 +928,16 @@ void Camera_8002A28C(CameraBounds* arg0)
 
     test = -1;
 
+#ifndef MSL_CORE_HOSTED
+    // Hosted camera-effect producers retain their source ordering and bounded
+    // lifetime below, but the quake frame is consumed only by the renderer.
     for (i = 0; i < 2; ++i) {
         for (j = 0; j < 8; ++j) {
             cm_80452C68._1B0[i][j] = cm_80452C68._B0[i][j];
             cm_80452C68._B0[i][j].type = 0;
         }
     }
+#endif
 
     for (i = 0; i < 5; ++i) {
         if (cm_80452C68._8C[i] != 0) {
@@ -1425,7 +1429,9 @@ void Camera_8002B3D4(void* arg0)
 
     Camera_80030DF8();
     Camera_800293E0();
+#ifndef MSL_CORE_HOSTED
     Camera_8002B0E0();
+#endif
     Camera_8002958C(&bounds, &cm_80452C68.transform);
     cm_80452C68.transform.target_fov = cm_803BCCA0.x40;
     total_dist = cm_80452C68.transform.target_fov - cm_80452C68.transform.fov;
@@ -1467,6 +1473,7 @@ void Camera_8002B3D4(void* arg0)
         }
     }
 
+#ifndef MSL_CORE_HOSTED
     /// @remarks permuter jank
     distance.y = cm_80452C68.transform.target_position.y -
                  cm_80452C68.transform.target_interest.y;
@@ -1485,6 +1492,7 @@ void Camera_8002B3D4(void* arg0)
     }
 
     Camera_8002B1F8(&cm_80452C68.transform);
+#endif
     Camera_80029AAC(&bounds, &cm_80452C68.transform,
                     Stage_GetCamTrackSmooth());
     Camera_80029C88(&bounds, &cm_80452C68.transform,
@@ -4907,6 +4915,7 @@ void Camera_80030E44(enum_t arg0, Vec3* arg1)
 
     cm_80452C68._8C[arg0] = result;
 
+#ifndef MSL_CORE_HOSTED
     {
         s32 i;
         for (i = 0; i < 16; i++) {
@@ -4922,6 +4931,7 @@ void Camera_80030E44(enum_t arg0, Vec3* arg1)
             }
         }
     }
+#endif
 }
 
 void Camera_80031044(s32 arg0)
