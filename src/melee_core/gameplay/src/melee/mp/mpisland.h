@@ -26,10 +26,10 @@ extern mpIsland_Palette mpIsland_TerrainPalette;
 struct mpIsland_80458E88_t;
 #ifdef MSL_CORE_HOSTED
 #include "runtime/context.h"
-#ifdef MSL_CORE_CONTEXT_IMPLEMENTATION
-#define mpIsland_80458E88 (*msl_core_mp_island_root())
-#else
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
 #define mpIsland_80458E88 (*msl_core_context_mp_island_root)
+#else
+#define mpIsland_80458E88 (*msl_core_mp_island_root())
 #endif
 #else
 extern struct mpIsland_80458E88_t mpIsland_80458E88;
