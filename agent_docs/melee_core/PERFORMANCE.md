@@ -852,7 +852,7 @@ Stage collision plus scheduled stage work owns about 28% of the frame. Hit resol
 detection, and contact publication own about 14–18%. A generous pose/geometry grouping owns about
 25%, which gives it only a 1.34x whole-runtime ceiling even if it were eliminated completely. The
 500k checkpoint is therefore defined at **512 resident environments on one CPU core**. It requires
-6.38x over the retained 78,370 FPS result; 256 remains a required secondary cache-pressure report,
+5.96x over the retained 83,837 FPS result; 256 remains a required secondary cache-pressure report,
 not the official completion point.
 
 ### Confidence labels
@@ -887,34 +887,53 @@ compiler closure; another 1.5–2x from compact hot state and homogeneous phase 
 from effective SIMD over those kernels. These factors are hypotheses to falsify, not gains to claim
 in advance. No scalar patch pile is expected to reach 500k.
 
-### One-item ablation protocol
+### Sequential optimization execution protocol
 
-Until several packets have landed cleanly, one turn investigates exactly one optimization item from
-the table rather than a bundle. Before runtime edits, `ACTIVE_WORK.md` names its final owner,
-canonical state, consumers, displaced state/code, deletion boundary, confidence label, and expected
-measurement. The chronological log is updated before and after every material experiment.
+The next autonomous performance goal owns queue items 2–11 in order and continues from one item to
+the next without waiting for routine approval. Keep one active packet at a time. Adjacent items may
+be implemented as one packet when separating them would require a temporary bridge or a
+representation that the next item immediately deletes; the queue is a priority order, not a demand
+for artificial commit boundaries.
 
-Each candidate starts from clean committed HEAD. It receives adjacent alternating CPU-0 A/B runs at
-256 and 512 resident environments on the canonical workload, exact digest comparison, and a
-midgame-weighted supporting run. The 512 result is the acceptance decision. A candidate expected to
-move frame time must show a repeatable complete-contract improvement outside run noise; a
-representation prerequisite may be retained without immediate FPS only when it completes a named
-final deletion boundary and is explicitly labeled as such. Independent micro-candidates below 5%
-are rejected unless they are a necessary part of that final boundary.
+Before each packet, start from the rolling clean committed baseline and make `ACTIVE_WORK.md` name
+the final owner, canonical state, consumers, displaced state/code, deletion boundary, confidence
+label, and early proof plan. Profile the actual production owner before choosing the implementation.
+Record each material experiment and disposition in the chronological log. Benchmark adjacent
+alternating CPU-0 A/B runs at 512 and 256 resident environments on the canonical complete-output
+workload, with exact digests; 512 decides retention and 256 reports cache pressure.
 
-Every successful candidate is preserved without committing: a named stash including untracked
-files plus an ordered binary patch under ignored `reports/triage/perf_candidates/`, with parent,
-SHA-256, changed owners, benchmark evidence, digests, and gate status recorded in the worklog.
-Candidates are measured both alone and cumulatively over the accepted uncommitted stack. Rejected
-experiments are removed only after their evidence and disposition are recorded. No substantial
-existing dirty work is deleted or replaced without a separate salvage proposal and user approval.
+For a large representation or execution refactor, prove the target shape as early as credibly
+possible with an isolated ignored kernel/prototype or bounded end-to-end slice. Such a proof is
+evidence, not a production compatibility path. Once the final design is supported, cut the owning
+runtime over directly, delete the displaced representation/consumer boundary, and recover
+correctness inside the final representation. Intermediate validation may be red while the cut is
+incomplete. Do not add or commit synchronized dual state, setter hooks, lazy materialization,
+fallback dispatch, compatibility flags, or adapters whose only purpose is keeping an intermediate
+tree green. Do not tune scaffolding or code the packet intends to delete, and do not restore the old
+owner merely because an incomplete final cut initially benchmarks slower.
 
-The full 153-replay native gate, native API/save-restore, no-allocation smoke, and relevant Wasm
-smokes run once a candidate has earned retention through focused exact locks and benchmarks. No new
-validation classification is allowed. An item stops for reconvening if two structural attempts fail
-the same unknown, its final path becomes uncertain, or two hours pass without a retained result or
-completed deletion boundary. No performance candidate is committed before the user reviews the
-ablation report and explicitly authorizes it.
+A definite item that is neutral or slower after its complete final deletion boundary is in place
+must be diagnosed as an implementation, locality, or measurement failure; it is not rejected on
+the first number. A potential item may be rejected after a complete correctness-equivalent ablation
+shows no useful gain. Preserve rejected evidence under ignored `reports/triage/`, remove the
+rejected production code cleanly, record the result, and continue to the next queue item. A
+structural prerequisite is not a standalone retained checkpoint merely because later work needs it:
+keep it in the same dirty packet until the dependent final consumer and performance proof exist.
+
+Every retained commit must be correctness-green: the complete 153-replay gate must finish with no
+new or widened classification/output lock, and native API/save/restore, sealed-allocation,
+arbitrary-index batch restore, relevant PPC, and Wasm/viewer gates must pass. Never commit a known
+correctness regression or a red intermediate cut. Commit each retained packet or inseparable packet
+group as a logical checkpoint, update the rolling retained baseline and cumulative/marginal evidence
+in this file, archive its worklog, then continue automatically. The autonomous goal explicitly
+authorizes those green performance commits. Send the Discord webhook for concrete retained wins and
+major completed cutovers, not routine diagnostics.
+
+Do not pause merely because an item is difficult, an intermediate structural cut is red, or a
+routine design choice is required. Pause only for a genuine external blocker or source/data evidence
+that invalidates the intended final architecture with no credible in-scope path. The goal finishes
+after every remaining queue item has a retained green commit or a documented clean rejection, the
+rolling final tree passes all production gates, and final 512/256 throughput and memory are reported.
 
 ### Packet 1 — supported-stage headless animation/callback cull
 
