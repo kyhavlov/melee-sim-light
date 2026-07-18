@@ -109,6 +109,15 @@ static HSD_ObjAllocData item_alloc_data;
 static HSD_ObjAllocData item_dynamic_bones_alloc_data;
 
 HSD_ObjAllocData item_link_alloc_data;
+
+#ifdef MSL_CORE_NATIVE
+void msl_item_reserve_runtime_pools(u32 item_count, u32 link_count)
+{
+    HSD_ObjAllocEnsureFree(&item_alloc_data, item_count);
+    HSD_ObjAllocEnsureFree(&item_dynamic_bones_alloc_data, item_count);
+    HSD_ObjAllocEnsureFree(&item_link_alloc_data, link_count);
+}
+#endif
 #ifndef MSL_CORE_HOSTED
 HSD_ObjAllocUnk Item_804A0C64;
 Item_FtTrack Item_804A0CCC;

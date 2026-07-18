@@ -1083,31 +1083,21 @@ static int match_construct(MslCoreMatch* match,
     Camera_8002F3AC();
 
 #ifdef MSL_CORE_NATIVE
-    // Baselib's source allocators grow one object at a time on demand. Before
-    // sealing the HSD heap, reserve up to the public output's simultaneous
-    // item capacity in every ordinary pool. This retains source free-list
-    // ownership without multiplying large Fighter/x59C objects by a uniform
-    // 256-object floor. Animation graphs have separate measured reserves.
+    // Baselib's source allocators grow one object at a time on demand. Seal
+    // only explicit runtime-reachable pools; fighter construction pools and
+    // unused renderer lists keep their construction high-water without a
+    // replicated speculative free slab.
     // refs/melee/src/sysdolphin/baselib/objalloc.c::{HSD_ObjAlloc,
     //   HSD_ObjAllocAddFree}
     // refs/melee/src/melee/it/item.c::{Item_80266FA8,it_8026B3A8}
-    // refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,objalloc.c}
-    // Bound ordinary pools by the public simultaneous-item capacity. The
-    // animation/identity and Yoshi Heiho-process owners need larger full-
-    // replay reserves than one object per item, so retain explicit target
-    // free counts rather than adding them on top of a uniform floor.
+    // refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,id.c,mtx.c,robj.c}
     // tests/melee_core/runtime_census.c
     // refs/melee/src/melee/gr/grstory.c
-    HSD_ObjAllocPreallocateAll(MSL_CORE_MAX_ITEMS,
-                               MSL_CORE_MAX_ITEMS * sizeof(Item));
     HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(), 704);
     HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(), 1280);
-    HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 448);
-    HSD_ObjAllocEnsureFree(HSD_SListGetAllocData(), 256);
-    HSD_ObjAllocEnsureFree(HSD_DListGetAllocData(), 256);
-    HSD_ObjAllocEnsureFree(HSD_RObjGetAllocData(), 256);
-    HSD_ObjAllocEnsureFree(HSD_RvalueObjGetAllocData(), 256);
-    HSD_ObjAllocEnsureFree(&gobj_alloc_data, 256);
+    HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 128);
+    HSD_ObjAllocEnsureFree(HSD_RObjGetAllocData(), 16);
+    HSD_ObjAllocEnsureFree(&gobj_alloc_data, 128);
     HSD_ObjAllocEnsureFree(&gobjproc_alloc_data, 256);
     // The reached Peach article graph consumes twelve temporary matrix-pool
     // slots. The resulting fifteen-item bound rounds to the established
@@ -1118,12 +1108,12 @@ static int match_construct(MslCoreMatch* match,
     // frames; the source object is only twelve bytes, so keep the established
     // full-replay reserve without imposing that count on large pools.
     // refs/melee/src/sysdolphin/baselib/mtx.c::{HSD_VecAlloc,HSD_VecFree}
-    HSD_ObjAllocEnsureFree(HSD_VecGetAllocData(), 256);
-    // Sheik's chain owns one ItemLink per source attribute link, independent
-    // of the fifteen top-level item slots; four-player construction can reach
-    // the original byte-bounded pool ceiling.
-    // refs/melee/src/melee/it/items/itseakchain.c::it_802BAF2C
-    HSD_ObjAllocEnsureFree(&item_link_alloc_data, 151);
+    HSD_ObjAllocEnsureFree(HSD_VecGetAllocData(), 128);
+    // Item and dynamic-bone objects are bounded by the public simultaneous
+    // item contract. Keep the established source ItemLink ceiling for
+    // multi-fighter Sheik chains rather than deriving it from replay rows.
+    // refs/melee/src/melee/it/{item.c,items/itseakchain.c}
+    msl_item_reserve_runtime_pools(MSL_CORE_MAX_ITEMS, 151);
     // The compact construction graph no longer leaves renderer JObjs on the
     // class free list. Preserve runtime headroom for the reached source class
     // sizes: supported item/effect graphs can cross the former 64-piece JObj

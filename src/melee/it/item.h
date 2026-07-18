@@ -60,6 +60,10 @@ struct ItemStateDesc;
 /* 26B074 */ void Item_8026B074(Item* item_data);
 /* 26B1A4 */ bool Item_IsGrabbable(Item_GObj* gobj);
 /* 4A0C38 */ extern HSD_ObjAllocData item_link_alloc_data;
+
+#ifdef MSL_CORE_NATIVE
+void msl_item_reserve_runtime_pools(u32 item_count, u32 link_count);
+#endif
 #ifndef MSL_CORE_HOSTED
 /* 4A0C64 */ extern HSD_ObjAllocUnk Item_804A0C64;
 /* 4A0CCC */ extern Item_FtTrack Item_804A0CCC;

@@ -56,28 +56,6 @@ void HSD_ObjAllocSetRelocType(HSD_ObjAllocData* data, u32 type, u32 count,
 }
 #endif
 
-void HSD_ObjAllocPreallocateAll(u32 minimum_free, size_t maximum_free_bytes)
-{
-    HSD_ObjAllocData* data;
-
-    // Hosted scalar simulation seals HSD allocation after bootstrap. Grow
-    // every source-registered object pool up front; normal allocation still
-    // consumes and returns the original intrusive free lists.
-    // refs/melee/src/sysdolphin/baselib/objalloc.c::HSD_ObjAlloc
-    for (data = alloc_datas; data != NULL; data = data->next) {
-        u32 bounded_free = minimum_free;
-        if (data->size != 0 && maximum_free_bytes / data->size < bounded_free) {
-            bounded_free = maximum_free_bytes / data->size;
-        }
-        if (bounded_free == 0) {
-            bounded_free = 1;
-        }
-        if (data->free < bounded_free) {
-            HSD_ObjAllocAddFree(data, bounded_free - data->free);
-        }
-    }
-}
-
 void HSD_ObjAllocEnsureFree(HSD_ObjAllocData* data, u32 minimum_free)
 {
     data = HSD_ObjAllocResolve(data);
