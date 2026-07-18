@@ -871,7 +871,7 @@ Every experiment below is labeled before implementation:
 | Order | Optimization item | Confidence | Basis and expected role |
 |---:|---|---|---|
 | 1 | **Completed by Packet 1:** cull or construction-precompute supported-stage animation/callback work whose products are invariant or presentation-only | **Retained: +6.8% at 512** | Dynamic collision/platform/wind publication remains source-owned. The final audit, correctness gates, and normalized A/B evidence are recorded below. |
-| 2 | Split `Fighter_ProcessHit_8006D1EC` into a minimal no-pending-event path and the exact event path | **Potential** until the inner owner profile proves what can be skipped; **definite** for subsequently proven unconditional dead work | The owner is 11–13%, but some timers and shield/damage state may genuinely advance every frame. Active flags or queues must preserve exact source ordering. |
+| 2 | **Rejected by Packet 2:** split `Fighter_ProcessHit_8006D1EC` into a minimal no-pending-event path and the exact event path | **Correctness-green, noise-level** | 96.0% of visible calls were idle, but preserving gameplay-required hurt-capsule publication left +0.7% at 512 and -0.4% at 256. The capsule consumer boundary remains queue item 6; no scalar guard was retained. |
 | 3 | Reduce camera/magnify/visibility to the gameplay-observed headless owner | **Definite** for presentation-only branches; total size is potential | Camera callbacks are 4.5%, with additional finish visibility cost. Existing gameplay camera bounds, blast zones, offscreen damage, and visibility bits remain canonical. |
 | 4 | Replace stage collision pointer topology with compact immutable line/normal/adjacency arrays and a bounded dynamic overlay | **Potential** | Map collision is 18%. Compact data is the final memory shape, but conversion alone may not beat hot scalar pointers until traversal is also replaced. |
 | 5 | Add stage spatial candidate sets and swept-ECB broad-phase rejection before exact narrow phase | **Potential** | It can skip large line searches, especially across repeated static stages, but candidate maintenance and small-stage workloads may erase the gain. Exact admission, ordering, remap, platform, and ledge rules remain unchanged. |
@@ -1031,3 +1031,26 @@ save/restore smokes, the sealed-runtime allocation census, 256-environment arbit
 PPC scalar/data/model/map/scheduler smokes, Wasm/native parity (`cef96ff32edfe898`), live-viewer
 (`1b43d24b47c228f2`), and browser smokes pass. The final implementation is correctness-green and
 retained for commit.
+
+### Packet 2 — ProcessHit idle/event split rejected — 2026-07-17
+
+A macro-gated census inside the unchanged callback found 329,584 conservative idle candidates
+among 343,361 visible calls (96.0%) on the canonical 512-environment workload. The candidate used
+only the existing source pending fields after exact shield and delayed-damage advancement. It kept
+`ftCo_800A0DA4`, because its hurt-capsule publication is consumed by the following contact pass,
+and introduced no second flag, queue, fallback, or compatibility path.
+
+The correctness-equivalent path passed the complete 153-replay gate with 63 exact passes, 90
+unchanged classifications, zero XPASS/fail/error, and all 1,415,476 output locks. Adjacent rebuilt
+CPU-0 measurements were:
+
+| Environments | Clean HEAD complete/step FPS | Candidate complete/step FPS | Complete change | Digest |
+|---:|---:|---:|---:|---|
+| 512 | 83,094 / 85,741 | 83,696 / 86,379 | +0.72% | `3fb5823d90657775` |
+| 256 | 62,992 / 64,452 | 62,761 / 64,579 | -0.37% | `bdc54107c51fa3d7` |
+
+This is a clean rejection: the measured 10.8–13.2% callback owner is dominated by the required
+hurt-capsule projection, not by its idle resolution/reset branches. Retaining a scalar guard would
+be noise-level intermediate machinery that queue item 6 later deletes. The production source is
+restored exactly; the branch census, implementation boundary, full-gate evidence, and A/B are
+preserved under ignored `reports/triage/perf_candidates/packet2_process_hit.md`.
