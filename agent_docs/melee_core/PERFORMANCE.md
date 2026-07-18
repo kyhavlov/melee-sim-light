@@ -876,7 +876,7 @@ Every experiment below is labeled before implementation:
 | 4 | **Rejected with Packet 5:** replace stage collision pointer topology with compact immutable arrays and a bounded dynamic overlay | **Potential; scalar standalone boundary too small** | The largest supported dense topology is under roughly 9 KiB per Match, and all scalar scan/query/intersection work is only about 1.95% of Callgrind instructions. Do the compact shape inside items 8–10's final cross-environment kernel instead of building a soon-displaced scalar representation. |
 | 5 | **Rejected with Packet 4:** add scalar stage spatial candidates before exact narrow phase | **Potential; ~1.02x deletion ceiling** | A production census found 5.80M intersection attempts but only 4,406 ideal AABB candidates over 32,768 frames. The existing first comparisons already reject by AABB, leaving too little total scalar cost to justify the cross-cutting index/remap cut. No candidate was retained. |
 | 6 | Replace live pose tree traversal with shared ordinary-frame pose data plus a compact evaluator for blends, fractional rates, dynamics, IK, and capture | **Potential** as a scalar replacement; **definite** only when it deletes the tree/matrix owner and feeds batched consumers directly | Pose evaluation is 13–16% and the broader geometry group about 25%. Prior partial caches failed because they retained the expensive consumer graph. No further partial cache qualifies. |
-| 7 | Compile one complete hot owner at a time under the audited strict O3 profile | **Potential** | Prior matrix, animation, and mpLib closures won, while other TUs changed exact output or regressed. Compiler closure can improve a measured owner but cannot supply the multi-x architecture. |
+| 7 | **Rejected by Packet 7:** compile one remaining complete hot owner at a time under the audited strict O3 profile | **Potential; no new qualifying owner** | `lb_00B0.c` gained 5.6–9.2% but introduced a new Peach/Puff item-float output drift; `ftaction.c` was noise-level, while `ft_081B.c` and `fighter.c` regressed. Every candidate was removed without a workaround or classification change. |
 | 8 | Promote compact hot mutable state into aligned AoSoA tiles, separating immutable shared and cold rare state | **Definite final-architecture improvement at 512**, but state extraction alone need not raise FPS | This is required to stop loading multi-megabyte per-Match pointer graphs and to make cross-environment kernels contiguous. The gain is judged after consumers use the new state and the displaced hot representation is deleted. |
 | 9 | Replace generic linked-list scheduling at named complete-owner boundaries with fixed phase loops and callback/action-owner index queues | **Definite as part of the completed batched execution boundary**; direct dispatch savings alone are small | Traversal is only about 3%. The value is homogeneous work and stable locality. Scalar callback interleaving is already proven slower and must not return. |
 | 10 | Implement masked AVX2/AVX-512 kernels for homogeneous stage collision, pose transforms, integration, contact, and other unconditional owners | **Definite for completed homogeneous kernels** | These kernels are the principal multi-x step. If a completed contiguous kernel cannot beat equivalent scalar work materially, its layout, lane utilization, or measurement is wrong. Divergent action logic uses compact owner queues rather than vectorizing function pointers. |
@@ -1104,3 +1104,24 @@ spatial masks remain valuable only as part of items 8–10's final AoSoA/homogen
 kernel, where they displace scalar traversal instead of creating an intermediate scalar owner.
 Detailed stage counts and the proposed/deleted boundary are archived in
 `history/PACKET_04_05_STAGE_COLLISION.md`.
+
+### Packet 7 — remaining strict-O3 owners rejected — 2026-07-18
+
+A fresh current-tree production profile confirmed that the previously retained matrix, FObj, JObj,
+ftAnim, lbVector, mpColl/mpLib, and hosted shell allowlist already covers the clear compiler wins.
+The historically tested `gobj.c`, `ftdynamics.c`, context, and native-DAT owners remain rejected.
+Four remaining material candidates were tested as whole translation units with the same strict
+flags and no source changes:
+
+| Candidate | 512 result | Exactness / disposition |
+|---|---:|---|
+| `lb_00B0.c` SRT/point-transform owner | 85,566 to 90,348, then 84,362 to 92,144 (+5.6%, +9.2%) | Benchmark digests exact, but the full gate produced a new `ExpertWorthlessFinch.slpz` item-float output drift (63 pass / 89 classified / 1 fail); rejected completely |
+| `ftaction.c` action animation owner | 84,547 versus 84,362 adjacent | Exact but noise-level; rejected |
+| `ft_081B.c` fighter ECB callback | 83,189 versus 84,362 adjacent (-1.4%) | Exact regression; rejected |
+| `fighter.c` process/publication owner | 84,104 versus 84,362 adjacent | Exact but neutral/slower; rejected |
+
+The attractive `lb_00B0.c` candidate also reached 67,849 FPS at 256 with the exact
+`bdc54107c51fa3d7` digest, but the replay output-lock failure is disqualifying. No partial-TU
+optimization, float workaround, or widened classification is retained. Packet 7 closes with the
+committed allowlist unchanged; further material gains require the representation and execution
+cutovers in items 6 and 8–10.
