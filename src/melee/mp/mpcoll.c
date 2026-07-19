@@ -1657,6 +1657,44 @@ static inline bool mpColl_RightWall_inline2(CollData* coll, float ax, float ay,
                             coll->joint_id_skip, coll->joint_id_only);
 }
 
+#ifdef MSL_CORE_NATIVE
+static bool mpColl_WallBroadphase(CollData* coll, u32 kind)
+{
+    const float tolerance = 0.1F;
+    float left = coll->cur_pos.x + coll->ecb.left.x;
+    float prev = coll->prev_pos.x + coll->prev_ecb.left.x;
+    float right = coll->cur_pos.x + coll->ecb.right.x;
+    float bottom = coll->cur_pos.y + coll->ecb.bottom.y;
+    float top = coll->cur_pos.y + coll->ecb.top.y;
+
+    if (prev < left) {
+        left = prev;
+    }
+    prev = coll->prev_pos.x + coll->prev_ecb.right.x;
+    if (prev > right) {
+        right = prev;
+    }
+    prev = coll->prev_pos.y + coll->prev_ecb.bottom.y;
+    if (prev < bottom) {
+        bottom = prev;
+    }
+    prev = coll->prev_pos.y + coll->prev_ecb.top.y;
+    if (prev > top) {
+        top = prev;
+    }
+
+    // The source intersection helpers admit small endpoint/half-space
+    // tolerances. A broad phase must be conservative across all of them.
+    left -= tolerance;
+    bottom -= tolerance;
+    right += tolerance;
+    top += tolerance;
+
+    return mpLib_WallBroadphase(left, bottom, right, top, kind,
+                                coll->joint_id_skip, coll->joint_id_only);
+}
+#endif
+
 bool mpColl_80044E10_RightWall(CollData* coll)
 {
     int line_id;
@@ -1677,6 +1715,11 @@ bool mpColl_80044E10_RightWall(CollData* coll)
 
     hit_wall = false;
     mpColl_804D6488 = 0;
+#ifdef MSL_CORE_NATIVE
+    if (!mpColl_WallBroadphase(coll, CollLine_RightWall)) {
+        return false;
+    }
+#endif
 
     left_x = coll->cur_pos.x + coll->ecb.left.x;
     left_y = coll->cur_pos.y + coll->ecb.left.y;
@@ -2002,6 +2045,11 @@ bool mpColl_80045B74_LeftWall(CollData* coll)
 
     hit_wall = false;
     mpColl_804D648C = 0;
+#ifdef MSL_CORE_NATIVE
+    if (!mpColl_WallBroadphase(coll, CollLine_LeftWall)) {
+        return false;
+    }
+#endif
 
     right_x = coll->cur_pos.x + coll->ecb.right.x;
     right_y = coll->cur_pos.y + coll->ecb.right.y;
@@ -2989,6 +3037,11 @@ bool mpColl_80048AB0_RightWall(CollData* coll)
 
     hit_wall = false;
     mpColl_804D6488 = 0;
+#ifdef MSL_CORE_NATIVE
+    if (!mpColl_WallBroadphase(coll, CollLine_RightWall)) {
+        return false;
+    }
+#endif
 
     if (mpLib_80054ED8(coll->floor.index)) {
         int temp;
@@ -3284,6 +3337,11 @@ bool mpColl_80049778_LeftWall(CollData* coll)
 
     hit_wall = false;
     mpColl_804D648C = 0;
+#ifdef MSL_CORE_NATIVE
+    if (!mpColl_WallBroadphase(coll, CollLine_LeftWall)) {
+        return false;
+    }
+#endif
 
     if (mpLib_80054ED8(coll->floor.index)) {
         int temp;
@@ -4102,6 +4160,11 @@ bool mpColl_8004B894_RightWall(CollData* coll)
 
     hit_wall = false;
     mpColl_804D6488 = 0;
+#ifdef MSL_CORE_NATIVE
+    if (!mpColl_WallBroadphase(coll, CollLine_RightWall)) {
+        return false;
+    }
+#endif
     if (mpLib_80054ED8(coll->ceiling.index)) {
         int temp;
         line_id1 = mpLib_8005389C_Ceiling(coll->ceiling.index);
@@ -4197,6 +4260,11 @@ bool mpColl_8004BDD4_LeftWall(CollData* coll)
 
     hit_wall = false;
     mpColl_804D6488 = 0;
+#ifdef MSL_CORE_NATIVE
+    if (!mpColl_WallBroadphase(coll, CollLine_LeftWall)) {
+        return false;
+    }
+#endif
     if (mpLib_80054ED8(coll->ceiling.index)) {
         int temp;
         line_id1 = mpLib_80053950_Ceiling(coll->ceiling.index);

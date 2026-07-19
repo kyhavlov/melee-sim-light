@@ -184,6 +184,10 @@
 /* 0581DC */ void mpLib_800581DC(int joint_id0, int joint_id1);
 /* 058560 */ void mpLib_80058560(void);
 /* 058614 */ void mpLib_80058614_Floor(void);
+#ifdef MSL_CORE_NATIVE
+bool mpLib_WallBroadphase(float left, float bottom, float right, float top,
+                          u32 kind, int joint_id_skip, int joint_id_only);
+#endif
 /* 0587FC */ void mpLib_800587FC(HSD_GObj*);
 /* 058820 */ void mpLib_80058820(void);
 /* 0588C8 */ bool mpCheckedBounding(void);

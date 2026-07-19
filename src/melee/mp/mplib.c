@@ -5947,6 +5947,89 @@ bool mpCheckedBounding(void)
     return didCheckBounding;
 }
 
+#ifdef MSL_CORE_NATIVE
+// A fighter wall pass tests several source-owned ECB segments and swept quads
+// against the same line ranges. Reject only when the complete current/previous
+// ECB bounds cannot overlap any eligible static wall. Remapped joints retain
+// the exact source path because their query is transformed into current space.
+static bool mpLib_WallRangeIntersects(CollJoint* joint, int start, int count,
+                                      float left, float bottom, float right,
+                                      float top, u32 kind)
+{
+    CollLine* lines = groundCollLine;
+    CollVtx* vertices = groundCollVtx;
+    bool remapped = joint->flags &
+                    (CollJoint_B10 | CollJoint_B9 | CollJoint_B8);
+    int i;
+
+    for (i = 0; i < count; ++i) {
+        CollLine* line = &lines[start + i];
+        MapLine* map_line;
+        CollVtx* v0;
+        CollVtx* v1;
+
+        if (!(line->flags & kind) || !(line->flags & LINE_FLAG_ENABLED) ||
+            line->flags & LINE_FLAG_EMPTY)
+        {
+            continue;
+        }
+        if (remapped) {
+            return true;
+        }
+
+        map_line = line->x0;
+        v0 = &vertices[map_line->v0_idx];
+        v1 = &vertices[map_line->v1_idx];
+        if (!((v0->pos.x < left && v1->pos.x < left) ||
+              (v0->pos.x > right && v1->pos.x > right) ||
+              (v0->pos.y < bottom && v1->pos.y < bottom) ||
+              (v0->pos.y > top && v1->pos.y > top)))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool mpLib_WallBroadphase(float left, float bottom, float right, float top,
+                          u32 kind, int joint_id_skip, int joint_id_only)
+{
+    CollJoint* joints = groundCollJoint;
+    CollJoint* joint;
+
+    for (joint = jointListStart; joint != NULL; joint = joint->next) {
+        MapJoint* map_joint;
+        int joint_id = joint - joints;
+        int start;
+        int count;
+
+        if (joint->flags & CollJoint_TooFar || joint_id == joint_id_skip ||
+            (joint_id_only != -1 && joint_id != joint_id_only))
+        {
+            continue;
+        }
+
+        map_joint = joint->inner;
+        if (kind == CollLine_LeftWall) {
+            start = map_joint->left_wall_start;
+            count = map_joint->left_wall_count;
+        } else {
+            start = map_joint->right_wall_start;
+            count = map_joint->right_wall_count;
+        }
+        if (mpLib_WallRangeIntersects(joint, start, count, left, bottom,
+                                      right, top, kind) ||
+            mpLib_WallRangeIntersects(joint, map_joint->dynamic_start,
+                                      map_joint->dynamic_count, left, bottom,
+                                      right, top, kind))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
 /// takes a bounding box and checks each joint to see if they're within range
 /// if they are outside the bounding box, they are marked as too far
 void mpBoundingCheck(float left, float bottom, float right, float top)

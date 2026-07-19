@@ -21,6 +21,26 @@ make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
 
+## Fighter wall-pass broad phase — 2026-07-18
+
+The retained candidate performs one conservative, data-driven wall-line AABB test before each
+high-level left/right wall pass. An empty pass now skips the source callback's repeated ECB
+segment and swept-quad queries; any plausible static line and every transformed/remapped joint
+continues through the exact source narrow phase in its original order. The broad phase owns no
+cache or persistent state and adds no allocation.
+
+Attribution over the 65,536-frame workload falls from 3,655,507 to 196,752 wall queries (-94.6%)
+and from 23,233,780 to 3,061,555 exact intersection calls (-86.8%). Three adjacent CPU-0 control/
+candidate pairs preserve digest `6f91f23e3553a090` at 512: 42,408/45,638, 41,592/44,998, and
+42,463/45,976 FPS. Median paired improvement is +8.19%; raw medians improve 42,408 to 45,638 FPS
+(+7.62%).
+
+At 256, three pairs preserve digest `8ef126a41244d514`: 43,008/48,273, 44,559/48,292, and
+44,001/48,158 FPS. Median paired improvement is +9.45%; raw medians improve 44,001 to 48,273 FPS
+(+9.71%). The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error
+across 1,415,476 frames. Native API/copy/save-restore, source sync, sealed allocation, PPC, Wasm
+parity, viewer, and formatting gates pass.
+
 ## Fixed fighter animation lifecycle — 2026-07-18
 
 The retained runtime replaces fighter JObj AObj/FObj use of the generic HSD object pools with
