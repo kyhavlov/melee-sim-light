@@ -21,6 +21,47 @@ make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
 
+## Native release control-flow/layout deletion — 2026-07-19
+
+The native release profile now explicitly omits frame pointers, CET branch landing pads, and unwind
+tables. None is consumed by the simulator, public API, or save/restore contract. Debug/native
+development, PPC, and Wasm profiles remain unchanged; gameplay source and floating-point code
+generation are untouched. Release text falls from 1,826,759 to 1,581,491 bytes (-13.4%), and the
+linked binary no longer advertises IBT/SHSTK or emits ENDBR64 in gameplay functions.
+
+Three adjacent CPU-0 controls/candidates at 512 preserve digest `6f91f23e3553a090`. Controls are
+77,347/76,948/76,606 FPS and candidates are 80,375/80,041/79,899 FPS; raw medians improve 76,948 to
+80,041 FPS (+4.02%). Final 256 samples are 85,381/84,790/85,355 FPS, an 85,355 median (+4.41% over
+81,753), preserving digest `8ef126a41244d514`.
+
+The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across
+1,415,476 frames. Native source/API/copy/save-restore and sealed allocation, PPC, Wasm parity,
+viewer/browser, pytest, source-sync, and formatting gates pass. Persistent and shared memory are
+unchanged.
+
+### Rejected demand-owned Figa decoder construction
+
+Moving exact mutable Figa track construction from every transition to first fractional/non-unit
+demand reduced the diagnostic materializations by about 90%, but adjacent resident-512 throughput
+was neutral. The exact candidate adds a deferred hot-path state branch without deleting material
+production work and is preserved in `rejected-demand-owned-figa-decoder-20260719`.
+
+### Rejected exact three-axis SIMD trig
+
+An exact three-lane AVX2/FMA `msl_sincosf3`, including the common all-small-angle exit, preserved the
+512 digest but measured 77,085 FPS against an adjacent 77,324 control median. Mixed matrices make
+the vector path execute both polynomial families and lane selection; the predictable scalar
+small/even/odd paths are cheaper. The candidate is preserved in
+`rejected-exact-simd-sincosf3-20260719`.
+
+### Rejected shared change-owned pose publication
+
+Immutable per-sample transition bits alone were invalid because source systems can mutate animated
+JObj components between samples. An exact live-SRT guard restored the digest, but reached only
+75,871 FPS against the adjacent 77,324 control median: metadata reads and live admission cost more
+than the matrix work avoided. The candidate is preserved in
+`rejected-shared-change-owned-pose-publication-20260719`; scalar channel invalidation is closed.
+
 ## Fused ordinary JObj world matrix — 2026-07-19
 
 Hosted non-root, non-quaternion JObjs now publish their final world matrix through one exact owner.

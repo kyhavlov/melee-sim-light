@@ -178,3 +178,11 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
   boundaries with no alternate state or fallback. Adjacent 512 raw medians improve +4.02%
   (+4.17% paired), and final 256 throughput improves +4.01%. Both digests and the complete
   replay/allocation/API/save-restore/PPC/Wasm/viewer gates remain exact.
+
+## Native release control-flow/layout deletion
+
+- **This commit** removes CET landing pads, frame chains, and unwind tables from the native release
+  profile while leaving gameplay source, floating-point generation, debug builds, PPC, and Wasm
+  unchanged. Release text falls 13.4%; adjacent 512 medians improve +4.02% and final 256 throughput
+  improves +4.41%. Both digests and the complete replay/allocation/API/save-restore/PPC/Wasm/viewer
+  gates remain exact.

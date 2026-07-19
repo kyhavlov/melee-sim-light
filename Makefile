@@ -210,7 +210,8 @@ NATIVE_CFLAGS = $(CFLAGS) -fno-pie
 NATIVE_LINK_FLAGS ?=
 # Imported gameplay remains at the validation reference profile. The audited
 # release allowlist below opts complete owners into native optimization.
-NATIVE_RELEASE_CFLAGS := $(CFLAGS) -fno-pie
+NATIVE_RELEASE_CFLAGS := $(CFLAGS) -fno-pie -fomit-frame-pointer \
+	-fcf-protection=none -fno-asynchronous-unwind-tables -fno-unwind-tables
 NATIVE_BASE_CFLAGS := $(NATIVE_CFLAGS)
 WASM_CFLAGS = $(CFLAGS) -Wno-implicit-function-declaration -Wno-int-conversion \
 	-Wno-incompatible-pointer-types -Wno-return-mismatch

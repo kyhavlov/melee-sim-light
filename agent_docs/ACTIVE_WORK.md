@@ -1,91 +1,66 @@
-# Active performance packet — fused ordinary JObj world matrix
+# Active performance packet — release-only control-flow/layout deletion
 
 ## Objective
 
-Delete the intermediate local-matrix publication and separate concat boundary for the dominant
-ordinary Euler JObj path. Prove a singular exact world-matrix evaluator early; reject the packet
-without leaf tuning if it cannot produce a material resident-512 gain.
+Delete host toolchain instrumentation and frame-chain state that the single-threaded production
+simulator does not consume. Measure this as one exact release-layout packet before returning to
+larger source owners.
 
 ## Final boundary
 
-- **Final owner:** the hosted Dolphin matrix platform owns an exact Euler-SRT-to-parent-world
-  evaluator; `HSD_JObjMakeMatrix` selects it for non-root, non-quaternion JObjs.
-- **Canonical state:** `jobj->mtx` remains the only matrix state. The evaluator consumes the existing
-  JObj scale/rotation/translation, optional parent scale compensation, and parent world matrix, then
-  writes the final world matrix directly.
-- **Consumers:** ordinary non-quaternion JObjs with a parent. Root JObjs retain source
-  `HSD_MtxSRT`; quaternion JObjs retain `HSD_MtxSRTQuat`; subsequent animation-parent translation,
-  RObj/IK, capture, dynamics, hit/hurt, and collision consumers continue to read `jobj->mtx`.
-- **Displaced work:** constructing and storing a complete local 3x4 matrix, reloading it through the
-  general alias-safe `PSMTXConcat` interface, the concat temporary/copy, and the two separate call
-  boundaries.
-- **Deletion boundary:** the admitted path calls only the fused evaluator. It has no synchronized
-  local/world matrices, compatibility flag, alternate pose state, approximate math, legacy
-  extractor, or fallback dispatch. Explicitly excluded source cases remain source-owned rather than
-  being emulated by the new owner.
+- **Final owner:** the native release profile owns its explicit ABI/code-generation contract.
+- **Canonical state:** gameplay and API state are unchanged; stack unwinding, debug backtraces, and
+  CET metadata are not runtime simulation outputs.
+- **Consumers:** the native release core and replay benchmark. Debug/native development, PPC, and
+  Wasm builds retain their existing profiles.
+- **Displaced work:** per-function ENDBR instructions, frame-pointer setup/teardown, asynchronous
+  unwind tables, and any associated release binary metadata.
+- **Deletion boundary:** release objects are built with `-fcf-protection=none`,
+  `-fomit-frame-pointer`, and no unwind tables. No unsafe floating-point, source optimization,
+  gameplay branch, ABI surface, or benchmark-only dispatch is introduced.
 
 ## Evidence and acceptance
 
-- Retained commit `9d54eedd` measures 74,340 FPS at 512 and 78,599 FPS at 256 with digests
+- Retained commit `f8b3e325` measures 77,319 FPS at 512 and 81,753 FPS at 256 with digests
   `6f91f23e3553a090` and `8ef126a41244d514`.
-- A clean Callgrind drill-down records 95,656 `HSD_MtxSRT` calls and 95,004 parent concats in the
-  sampled gameplay subset. `HSD_MtxSRT` is about 10.3% inclusive and its two JObj matrix callers plus
-  concat dominate the sampled instruction tree. Isolated exact concat compilation was only +1.27%,
-  and O1/O2/O3 admission for the source matrix owner was about one point, so this packet must delete
-  the boundary rather than tune either leaf.
-- Early proof requires unchanged 512 digest and three adjacent samples. Target at least 5%; a
-  three-to-five-point result is retainable only when the approved final boundary is complete,
-  displaced machinery is deleted, and further work would expand into unrelated JObj consumers.
-- Retention requires both benchmark digests and the complete 153-replay classification, native
-  source/API/copy/save-restore/allocation, PPC, Wasm/viewer, pytest, source-sync, and formatting gates.
-  Commit implementation and evidence atomically only after those gates.
+- The current release binary advertises IBT/SHSTK and every reached function begins with ENDBR64;
+  most imported gameplay remains at O0 and therefore also retains frame-pointer traffic.
+- Early proof requires unchanged digests, reduced text/unwind footprint, and adjacent resident-512
+  samples. Retain even a small stable gain because the final change is a compact global deletion;
+  reject if throughput is neutral.
+- Final retention requires the complete 153-replay classification and native source/API/copy/
+  save-restore/allocation gates; PPC/Wasm are structurally outside the changed profile but must still
+  pass the ordinary production gate before commit.
 
 ## Log
 
 - 2026-07-19 — `open`
-  Scope: ordinary Euler JObj local SRT construction followed immediately by parent concat.
-  Hypothesis: combining the exact operations inside one optimized owner removes the intermediate
-  matrix traffic, general alias handling, temporary copy, and call boundaries that neither prior
-  leaf experiment could eliminate.
-  Evidence: 95,004 of 95,656 sampled SRT constructions are followed by parent concat; the retained
-  profile attributes 14.32% to pose animation, while the sampled matrix tree is substantially
-  larger because it also serves ECB and dynamics consumers.
-  Disposition: implement only the singular non-root, non-quaternion world evaluator and run the
-  digest plus adjacent resident-512 proof before any full gate.
-  Next: preserve the exact SRT and paired-single concat operation boundaries in one hosted owner.
+  Scope: native release code-generation metadata and prolog/epilog only.
+  Hypothesis: removing CET landing pads, frame chains, and unwind sections lowers instruction and
+  i-cache pressure across the large O0 source callback closure without changing any float operation.
+  Evidence: the 1.83 MiB text image carries IBT/SHSTK properties and emitted ENDBR64 at every sampled
+  hot function; no production API consumes native stack unwinding.
+  Disposition: apply the release-only flags together, confirm binary deletion, then run exact digest
+  and adjacent 512 proof.
+  Next: rebuild the isolated release profile and inspect code/property/size before benchmarking.
 - 2026-07-19 — `open`
-  Scope: first exact scalar fused evaluator, followed by exact unit-parent-scale admission.
-  Hypothesis: boundary deletion alone establishes viability; the common exact-unit scale case also
-  removes three divides and six multiplies without changing any source result.
-  Evidence: the first candidate preserved the 512 digest at roughly +2.9% by paired median. Exact
-  unit-scale admission raised representative throughput from about 77.0k to 77.4k FPS.
-  Disposition: the boundary is viable but its scalar general-concat arithmetic remains below the
-  final form; retain unit-scale admission and replace that arithmetic, not the representation.
-  Next: evaluate the three affine output rows across SIMD columns with unchanged FMA order.
-- 2026-07-19 — `open`
-  Scope: exact SIMD-across-columns native concat inside the singular fused evaluator.
-  Hypothesis: three four-lane affine rows remove scalar publication/packing work while retaining the
-  independent per-column PPC multiply/FMA sequence.
-  Evidence: the 512 digest remains exact and adjacent candidate throughput reaches a 77,319 FPS
-  median, about four whole-frame points over clean HEAD.
-  Disposition: advance the final evaluator to the complete correctness and production gate.
-  Next: run the 153-replay, native state, PPC, Wasm/viewer, and refreshed-profile gates.
+  Scope: complete release-only frame/CET/unwind deletion candidate.
+  Hypothesis: the verified text and hot-prolog deletion should yield a stable whole-frame gain.
+  Evidence: text falls from 1,826,759 to 1,581,491 bytes (-13.4%); IBT/SHSTK properties and ENDBR64
+  disappear. The 512 digest remains `6f91f23e3553a090`; candidate samples are
+  80,375/80,041/79,899 FPS (80,041 median), visibly above the recorded 77,319 baseline.
+  Disposition: preserve the candidate and gather same-host adjacent clean controls before full gate.
+  Next: named-stash, rebuild clean HEAD, and collect three 512 controls.
 - 2026-07-19 — `retained`
-  Scope: exact fused Euler SRT and parent-world publication for every hosted non-root,
-  non-quaternion JObj, including a SIMD-across-columns native evaluator and a source-equivalent
-  portable evaluator.
-  Hypothesis: the final world-matrix owner can consume exact local components directly, deleting
-  general alias handling, a complete temporary matrix round trip, and two source call boundaries.
-  Evidence: three adjacent 512 controls are 74,332/74,623/73,679 FPS and candidates are
-  77,319/77,732/76,889 FPS. Raw medians improve 74,332 to 77,319 FPS (+4.02%); median paired change
-  is +4.17%. Final 256 samples are 81,309/81,753/81,824 FPS, an 81,753 median (+4.01% over the
-  retained 78,599 baseline). Digests remain `6f91f23e3553a090` and `8ef126a41244d514`.
-  The complete replay gate remains 63 PASS / 90 unchanged CLASSIFIED / zero failures across
-  1,415,476 frames. Source, native allocation/API/copy/save-restore, PPC, Wasm/viewer, pytest, and
-  formatting gates pass; persistent storage remains 633,432 arena bytes and 695,048 savestate
-  bytes with 825 initialization allocations.
-  Disposition: retain the singular fused owner. The measured four-point whole-frame cut is durable
-  boundary deletion comparable to earlier retained packets despite missing the aspirational 5%
-  target; no local/world dual representation or general concat fallback exists on the admitted path.
-  Next: commit implementation and evidence atomically, refresh the profile-backed queue, and begin
-  the next bounded final-form packet.
+  Scope: explicit native release deletion of CET, frame chains, and unwind metadata.
+  Hypothesis: removing non-simulation control-flow/layout overhead across the large source closure
+  yields a durable exact whole-frame improvement.
+  Evidence: adjacent 512 controls are 77,347/76,948/76,606 FPS and candidates are
+  80,375/80,041/79,899 FPS; raw medians improve 76,948 to 80,041 FPS (+4.02%). Final 256 samples are
+  85,381/84,790/85,355 FPS, an 85,355 median (+4.41% over 81,753). Digests remain
+  `6f91f23e3553a090` and `8ef126a41244d514`. Text falls 1,826,759 to 1,581,491 bytes (-13.4%).
+  The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero failures across 1,415,476
+  frames; native source/API/copy/save-restore/allocation, PPC, Wasm/viewer, pytest, source-sync, and
+  formatting gates pass.
+  Disposition: retain and atomically commit the release-profile deletion with evidence.
+  Next: refresh the retained baseline/profile, commit, then select the next high-impact owner.
