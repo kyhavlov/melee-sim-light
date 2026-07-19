@@ -33,7 +33,7 @@ static MslFighterPose* active_pose(void)
 
 static bool is_figa(const MslFighterPoseJoint* node)
 {
-    return node->program_index != MSL_FIGHTER_POSE_PROGRAM_NONE;
+    return node->program_is_figa;
 }
 
 static bool is_attached(const MslFighterPoseJoint* node)
@@ -143,7 +143,7 @@ static void register_joint(HSD_JObj* joint)
     node->flags = AOBJ_NO_ANIM;
     node->joint = joint;
     node->framerate = 1.0F;
-    node->program_index = MSL_FIGHTER_POSE_PROGRAM_NONE;
+    node->program_node_index = MSL_FIGHTER_POSE_PROGRAM_NODE_NONE;
     parent = pose_joint(joint->parent);
     node->parent_index = parent != NULL
                              ? (uint16_t) (parent - pose->joints)
@@ -440,9 +440,8 @@ static void release_joint(MslFighterPoseJoint* node)
     node->rewind_frame = 0.0F;
     node->end_frame = 0.0F;
     node->framerate = 1.0F;
-    node->program_index = MSL_FIGHTER_POSE_PROGRAM_NONE;
-    node->program_track_start = 0;
-    node->program_track_count = 0;
+    node->program_node_index = MSL_FIGHTER_POSE_PROGRAM_NODE_NONE;
+    node->program_is_figa = 0;
     node->program_filtered = 0;
     node->decoder_synced = 0;
     if (node->path != NULL) {
@@ -538,6 +537,11 @@ void msl_fighter_pose_attach_figa(HSD_JObj* joint, FigaTree* tree,
                                   FigaTrack* tracks, int track_count,
                                   bool filtered)
 {
+#ifdef MSL_CORE_NATIVE
+    const MslFighterPosePrograms* programs = active_programs();
+    const MslFighterPoseProgram* program;
+    uint16_t program_index;
+#endif
     MslFighterPoseJoint* node = pose_joint(joint);
     MslFighterPoseTrack* destination;
     int retained = 0;
@@ -546,12 +550,30 @@ void msl_fighter_pose_attach_figa(HSD_JObj* joint, FigaTree* tree,
         return;
     }
     release_joint(node);
-    node->program_index = find_program(tree);
+    node->program_is_figa = 1;
+#ifdef MSL_CORE_NATIVE
+    program_index = find_program(tree);
+    program = &programs->programs[program_index];
     HSD_ASSERT(355, tracks >= tree->tracks);
-    HSD_ASSERT(356, (size_t) (tracks - tree->tracks) <= 0x7FF);
-    HSD_ASSERT(357, track_count > 0 && track_count <= 0x7F);
-    node->program_track_start = (uint32_t) (tracks - tree->tracks);
-    node->program_track_count = (uint32_t) track_count;
+    HSD_ASSERT(356, track_count > 0 && track_count <= UINT8_MAX);
+    {
+        uint32_t track_start = (uint32_t) (tracks - tree->tracks);
+        uint16_t node_index;
+        for (node_index = 0; node_index < program->node_count; ++node_index) {
+            const MslFighterPoseProgramNode* program_node =
+                &programs->nodes[program->node_start + node_index];
+            if (program_node->track_start == track_start &&
+                program_node->track_count == track_count)
+            {
+                break;
+            }
+        }
+        HSD_ASSERT(357, node_index < program->node_count &&
+                            program->node_start + node_index <
+                                MSL_FIGHTER_POSE_PROGRAM_NODE_NONE);
+        node->program_node_index = program->node_start + node_index;
+    }
+#endif
     node->program_filtered = filtered;
     for (i = 0; i < track_count; ++i) {
         if (!filtered || (tracks[i].obj_type != 5 &&
@@ -1089,39 +1111,27 @@ static int compare_figa_pointer(const void* lhs, const void* rhs)
     return a < b ? -1 : a > b;
 }
 
-static uint32_t figa_track_count(const FigaTree* tree)
+static uint32_t figa_node_count(const FigaTree* tree)
 {
     const s8* node = tree->nodes;
     uint32_t count = 0;
     while (*node != -1) {
         HSD_ASSERT(450, *node >= 0);
-        count += (uint8_t) *node++;
+        ++count;
+        ++node;
     }
     return count;
 }
 
-static void validate_figa_node_ranges(const FigaTree* tree)
+static bool direct_srt_type(uint8_t type)
 {
-    const s8* node = tree->nodes;
-    uint32_t track_start = 0;
-    while (*node != -1) {
-        uint32_t track_count;
-        HSD_ASSERT(462, *node >= 0);
-        track_count = (uint8_t) *node++;
-        if (track_count != 0) {
-            HSD_ASSERT(466, track_start <= 0x7FF);
-            HSD_ASSERT(467, track_count <= 0x7F);
-        }
-        track_start += track_count;
-    }
-    HSD_ASSERT(471, track_start == figa_track_count(tree));
+    return type >= HSD_A_J_ROTX && type <= HSD_A_J_SCAZ &&
+           type != HSD_A_J_PATH;
 }
 
-static void set_program_value(MslFighterPosePrograms* programs,
-                              uint32_t index, float value)
+static uint32_t mask_count(uint16_t mask)
 {
-    programs->values[index] = value;
-    programs->valid[index >> 3] |= (uint8_t) (1U << (index & 7));
+    return (uint32_t) __builtin_popcount((unsigned int) mask);
 }
 #endif
 
@@ -1130,6 +1140,7 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
 #ifdef MSL_CORE_NATIVE
     MslFigaCollect collect = { 0 };
     uint64_t value_count = 0;
+    uint32_t node_count = 0;
     uint32_t unique_count;
     uint32_t i;
 
@@ -1153,55 +1164,111 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
         }
     }
     programs->programs = calloc(unique_count, sizeof(*programs->programs));
-    if (programs->programs == NULL) {
+    for (i = 0; i < unique_count; ++i) {
+        node_count += figa_node_count(collect.trees[i]);
+    }
+    programs->nodes = calloc(node_count, sizeof(*programs->nodes));
+    if (programs->programs == NULL || programs->nodes == NULL) {
         free(collect.trees);
+        msl_fighter_pose_programs_deinit(programs);
         return -1;
     }
     programs->program_count = unique_count;
+    programs->node_count = node_count;
+    node_count = 0;
     for (i = 0; i < unique_count; ++i) {
         MslFighterPoseProgram* program = &programs->programs[i];
+        const s8* source_node = collect.trees[i]->nodes;
+        uint32_t track_start = 0;
+        uint16_t node_index;
         uint32_t sample_count =
             collect.trees[i]->frames > 0.0F
                 ? (uint32_t) ceilf(collect.trees[i]->frames) + 1
                 : 1;
         program->tree = collect.trees[i];
-        program->track_count = figa_track_count(program->tree);
-        validate_figa_node_ranges(program->tree);
+        program->node_start = node_count;
+        program->node_count = (uint16_t) figa_node_count(program->tree);
         HSD_ASSERT(495, sample_count <= UINT16_MAX);
         program->sample_count = (uint16_t) sample_count;
-        program->value_start = (uint32_t) value_count;
-        value_count += (uint64_t) program->track_count * sample_count;
-        HSD_ASSERT(500, value_count <= UINT32_MAX);
+        for (node_index = 0; node_index < program->node_count; ++node_index) {
+            MslFighterPoseProgramNode* node = &programs->nodes[node_count++];
+            uint32_t track_count;
+            uint32_t track;
+            HSD_ASSERT(500, *source_node >= 0);
+            track_count = (uint8_t) *source_node++;
+            HSD_ASSERT(501, track_start <= UINT16_MAX);
+            HSD_ASSERT(502, track_count <= UINT8_MAX);
+            node->track_start = (uint16_t) track_start;
+            node->track_count = (uint8_t) track_count;
+            node->sample_count = program->sample_count;
+            node->direct = track_count != 0;
+            for (track = 0; track < track_count; ++track) {
+                uint8_t type =
+                    program->tree->tracks[track_start + track].obj_type;
+                if (!direct_srt_type(type)) {
+                    node->direct = 0;
+                } else if (node->type_mask & (uint16_t) (1U << type)) {
+                    node->direct = 0;
+                }
+                if (type < 16) {
+                    node->type_mask |= (uint16_t) (1U << type);
+                }
+            }
+            if (node->direct) {
+                node->value_count = (uint8_t) mask_count(node->type_mask);
+                node->value_start = (uint32_t) value_count;
+                value_count +=
+                    (uint64_t) node->value_count * program->sample_count;
+                HSD_ASSERT(503, value_count <= UINT32_MAX);
+            }
+            track_start += track_count;
+        }
+        HSD_ASSERT(505, *source_node == -1);
     }
     free(collect.trees);
     programs->value_count = (uint32_t) value_count;
     programs->values = malloc((size_t) programs->value_count *
                               sizeof(*programs->values));
-    programs->valid = calloc(((size_t) programs->value_count + 7) / 8, 1);
-    if (programs->values == NULL || programs->valid == NULL) {
+    if (programs->values == NULL) {
         msl_fighter_pose_programs_deinit(programs);
         return -1;
     }
     for (i = 0; i < programs->program_count; ++i) {
         MslFighterPoseProgram* program = &programs->programs[i];
-        uint32_t track_index;
-        for (track_index = 0; track_index < program->track_count;
-             ++track_index)
-        {
-            MslFighterPoseTrack track = { 0 };
-            uint32_t sample;
-            init_track(&track, &program->tree->tracks[track_index]);
-            request_track(&track, 0.0F);
-            for (sample = 0; sample < program->sample_count; ++sample) {
-                float value;
-                if (interpret_track(NULL, &track,
-                                    sample == 0 ? 0.0F : 1.0F, true,
-                                    &value))
-                {
-                    uint32_t value_index =
-                        program->value_start +
-                        sample * program->track_count + track_index;
-                    set_program_value(programs, value_index, value);
+        uint16_t node_index;
+        for (node_index = 0; node_index < program->node_count; ++node_index) {
+            MslFighterPoseProgramNode* node =
+                &programs->nodes[program->node_start + node_index];
+            uint32_t local_track;
+            if (!node->direct) {
+                continue;
+            }
+            for (local_track = 0; local_track < node->track_count;
+                 ++local_track)
+            {
+                const FigaTrack* source =
+                    &program->tree->tracks[node->track_start + local_track];
+                MslFighterPoseTrack track = { 0 };
+                uint16_t lower_mask =
+                    (uint16_t) (node->type_mask &
+                                ((1U << source->obj_type) - 1));
+                uint32_t slot = mask_count(lower_mask);
+                uint32_t sample;
+                init_track(&track, source);
+                request_track(&track, 0.0F);
+                for (sample = 0; sample < program->sample_count; ++sample) {
+                    float value;
+                    if (interpret_track(NULL, &track,
+                                        sample == 0 ? 0.0F : 1.0F, true,
+                                        &value))
+                    {
+                        uint32_t value_index =
+                            node->value_start +
+                            sample * node->value_count + slot;
+                        programs->values[value_index] = value;
+                    } else {
+                        node->direct = 0;
+                    }
                 }
             }
         }
@@ -1216,8 +1283,8 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
 void msl_fighter_pose_programs_deinit(MslFighterPosePrograms* programs)
 {
 #ifdef MSL_CORE_NATIVE
-    free(programs->valid);
     free(programs->values);
+    free(programs->nodes);
     free(programs->programs);
 #endif
     memset(programs, 0, sizeof(*programs));
@@ -1238,61 +1305,154 @@ static void stop_tracks(MslFighterPoseJoint* node, float rate, bool publish)
 }
 
 #ifdef MSL_CORE_NATIVE
-static bool program_value(const MslFighterPosePrograms* programs,
-                          const MslFighterPoseProgram* program,
-                          uint32_t sample, uint32_t track, float* value)
-{
-    uint32_t index;
-    if (sample >= program->sample_count || track >= program->track_count) {
-        return false;
-    }
-    index = program->value_start + sample * program->track_count + track;
-    if (!(programs->valid[index >> 3] &
-          (uint8_t) (1U << (index & 7))))
-    {
-        return false;
-    }
-    *value = programs->values[index];
-    return true;
-}
-
-static void publish_program_sample(MslFighterPoseJoint* node,
-                                   uint32_t sample)
+static bool publish_program_sample(MslFighterPoseJoint* node,
+                                   uint32_t sample, bool publish)
 {
     const MslFighterPosePrograms* programs = active_programs();
-    const MslFighterPoseProgram* program =
-        &programs->programs[node->program_index];
-    uint32_t i;
+    const MslFighterPoseProgramNode* program_node =
+        &programs->nodes[node->program_node_index];
+    HSD_JObj* joint = node->joint;
+    const float* values;
+    uint16_t mask;
+    uint16_t type_mask;
+    bool wrote = false;
 
-    for (i = 0; i < node->program_track_count; ++i) {
-        uint32_t track_index = node->program_track_start + i;
-        const FigaTrack* track = &program->tree->tracks[track_index];
-        float value;
-        if (track->obj_type == TYPE_JOBJ &&
-            (!node->program_filtered ||
-             (track->obj_type != 5 &&
-              (uint8_t) (track->obj_type - 6) > 1)) &&
-            program_value(programs, program, sample, track_index, &value))
-        {
-            publish_value_type(node, track->obj_type, value);
-            break;
+    if (!program_node->direct || sample >= program_node->sample_count) {
+        return false;
+    }
+    if (!publish) {
+        return true;
+    }
+    mask = program_node->type_mask;
+    type_mask = program_node->type_mask;
+    if (node->program_filtered) {
+        mask &= (uint16_t) ~((1U << HSD_A_J_TRAX) |
+                            (1U << HSD_A_J_TRAY) |
+                            (1U << HSD_A_J_TRAZ));
+    }
+    values = &programs->values[program_node->value_start +
+                               sample * program_node->value_count];
+#define PUBLISH_ROTX(value)                                                   \
+    do {                                                                     \
+        if (joint->flags & JOBJ_JOINT1) {                                    \
+            HSD_RObj* robj =                                                 \
+                HSD_RObjGetByType(joint->robj, REFTYPE_IKHINT, 0);           \
+            if (robj != NULL) {                                              \
+                robj->u.ik_hint.rotate_x = (value);                           \
+            }                                                                \
+        }                                                                    \
+        joint->rotate.x = (value);                                           \
+    } while (0)
+    switch (type_mask) {
+    case 0x00E:
+        PUBLISH_ROTX(values[0]);
+        joint->rotate.y = values[1];
+        joint->rotate.z = values[2];
+        wrote = true;
+        goto published;
+    case 0x004:
+        joint->rotate.y = values[0];
+        wrote = true;
+        goto published;
+    case 0x00C:
+        joint->rotate.y = values[0];
+        joint->rotate.z = values[1];
+        wrote = true;
+        goto published;
+    case 0x002:
+        PUBLISH_ROTX(values[0]);
+        wrote = true;
+        goto published;
+    case 0x0EE:
+        PUBLISH_ROTX(values[0]);
+        joint->rotate.y = values[1];
+        joint->rotate.z = values[2];
+        if (!node->program_filtered) {
+            joint->translate.x = values[3];
+            joint->translate.y = values[4];
+            joint->translate.z = values[5];
+        }
+        wrote = true;
+        goto published;
+    case 0x40E:
+        PUBLISH_ROTX(values[0]);
+        joint->rotate.y = values[1];
+        joint->rotate.z = values[2];
+        joint->scale.z =
+            fabsf_bitwise(values[3]) < 1e-3F ? 1e-3F : values[3];
+        wrote = true;
+        goto published;
+    case 0x006:
+        PUBLISH_ROTX(values[0]);
+        joint->rotate.y = values[1];
+        wrote = true;
+        goto published;
+    case 0x008:
+        joint->rotate.z = values[0];
+        wrote = true;
+        goto published;
+    case 0x0E0:
+        if (!node->program_filtered) {
+            joint->translate.x = values[0];
+            joint->translate.y = values[1];
+            joint->translate.z = values[2];
+            wrote = true;
+        }
+        goto published;
+    case 0x00A:
+        PUBLISH_ROTX(values[0]);
+        joint->rotate.z = values[1];
+        wrote = true;
+        goto published;
+    }
+#define PUBLISH_SRT(type, target)                                             \
+    if (type_mask & (1U << (type))) {                                        \
+        float value = *values++;                                             \
+        if (mask & (1U << (type))) {                                         \
+            target = value;                                                  \
+            wrote = true;                                                    \
+        }                                                                    \
+    }
+    if (type_mask & (1U << HSD_A_J_ROTX)) {
+        float value = *values++;
+        if (mask & (1U << HSD_A_J_ROTX)) {
+            PUBLISH_ROTX(value);
+            wrote = true;
         }
     }
-    for (i = 0; i < node->program_track_count; ++i) {
-        uint32_t track_index = node->program_track_start + i;
-        const FigaTrack* track = &program->tree->tracks[track_index];
-        float value;
-        if ((node->program_filtered &&
-             (track->obj_type == 5 ||
-              (uint8_t) (track->obj_type - 6) <= 1)) ||
-            track->obj_type == TYPE_JOBJ)
-        {
-            continue;
-        }
-        if (program_value(programs, program, sample, track_index, &value)) {
-            publish_value_type(node, track->obj_type, value);
+    PUBLISH_SRT(HSD_A_J_ROTY, joint->rotate.y);
+    PUBLISH_SRT(HSD_A_J_ROTZ, joint->rotate.z);
+    PUBLISH_SRT(HSD_A_J_TRAX, joint->translate.x);
+    PUBLISH_SRT(HSD_A_J_TRAY, joint->translate.y);
+    PUBLISH_SRT(HSD_A_J_TRAZ, joint->translate.z);
+    if (type_mask & (1U << HSD_A_J_SCAX)) {
+        float value = *values++;
+        if (mask & (1U << HSD_A_J_SCAX)) {
+            joint->scale.x = fabsf_bitwise(value) < 1e-3F ? 1e-3F : value;
+            wrote = true;
         }
     }
+    if (type_mask & (1U << HSD_A_J_SCAY)) {
+        float value = *values++;
+        if (mask & (1U << HSD_A_J_SCAY)) {
+            joint->scale.y = fabsf_bitwise(value) < 1e-3F ? 1e-3F : value;
+            wrote = true;
+        }
+    }
+    if (type_mask & (1U << HSD_A_J_SCAZ)) {
+        float value = *values++;
+        if (mask & (1U << HSD_A_J_SCAZ)) {
+            joint->scale.z = fabsf_bitwise(value) < 1e-3F ? 1e-3F : value;
+            wrote = true;
+        }
+    }
+#undef PUBLISH_SRT
+published:
+#undef PUBLISH_ROTX
+    if (wrote && !(joint->flags & JOBJ_MTX_INDEP_SRT)) {
+        joint->flags |= JOBJ_MTX_DIRTY;
+    }
+    return true;
 }
 
 #endif
@@ -1342,15 +1502,13 @@ static void interpret_joint(MslFighterPoseJoint* node)
 #ifdef MSL_CORE_NATIVE
     if (is_figa(node) && node->framerate == 1.0F &&
         node->curr_frame >= 0.0F &&
-        node->curr_frame == truncf(node->curr_frame) &&
-        (uint32_t) node->curr_frame <
-            active_programs()->programs[node->program_index].sample_count)
+        node->curr_frame == truncf(node->curr_frame))
     {
-        if (publish) {
-            publish_program_sample(node, (uint32_t) node->curr_frame);
+        used_table = publish_program_sample(
+            node, (uint32_t) node->curr_frame, publish);
+        if (used_table) {
+            node->decoder_synced = 0;
         }
-        node->decoder_synced = 0;
-        used_table = true;
     }
 #endif
     if (!used_table) {

@@ -3,6 +3,58 @@
 Only production-contract, correctness-green results belong here. Historical experiments remain in
 Git history and ignored triage artifacts, not in this active evidence file.
 
+### Rejected exact scheduled-fighter compiler boundary
+
+Per-function O1--O3 admission tested the dominant O0 scheduled owners in `fighter.c` without
+admitting the known non-exact translation unit. `Fighter_8006A360`,
+`Fighter_Spaghetti_8006AD10`, `Fighter_8006CB94`, and `Fighter_ProcessHit_8006D1EC` each preserved
+the production digest but remained neutral or slower against a 47,571.8 cycles/frame resident-512
+control. `Fighter_procUpdate` changed the digest at both O1 and O3. The inclusive callback shares
+are therefore demanded callee work rather than O0 shell overhead; no compiler attribute remains.
+
+### Rejected tile-resident scalar scheduler
+
+An exact diagnostic interleaved the existing source scheduler by priority within bounded groups of
+2, 4, and 8 Matches. Resident-512 costs rose from a 47,571.8 cycles/frame control to 49,964.1,
+50,028.5, and 50,484.8 respectively, with digest `6f91f23e3553a090` unchanged. Even the two-Match
+tile's 5.0% state/context tax exceeds the previously measured 3.3% maximum from deleting resumable
+wrapper dispatch. Cross-environment kernels therefore need an owner-specific final state boundary;
+generic priority interleaving and its diagnostic code were removed.
+
+### Rejected direct compact pose tree iteration
+
+The compact full-tree owner directly invoked dependency, interpretation, and RObj work from its
+typed node interval, deleting 6.5 million redundant singular-entry calls and `joint->aobj` ownership
+checks per production workload. The digest stayed exact, but candidate cycles/frame were
+47,511.1/47,590.8/47,884.5 against the 47,571.8 control median: neutral. GCC's optimized caller and
+the demanded per-node work hide this boundary cost, so the direct duplicate was removed.
+
+### Rejected process-global hosted context pointers
+
+Replacing the native transient Match/GameData owner pointers with ordinary process globals preserved
+the production digest and matched the single-threaded API contract, but resident-512 cost rose to
+48,714.7 cycles/frame against the 47,571.8 control (+2.4%). The native local-exec TLS model is
+already cheaper than interposable external globals in the separated source closure; all context
+pointers were restored to TLS and no API contract changed.
+
+### Rejected exact hot-closure LTO
+
+The prior LTO link failure was narrowed to dead CObj/LObj/GX/rumble functions in four mixed
+presentation objects. Excluding those complete objects produced an exact pose/JObj/platform/runtime
+partition with both production digests unchanged. Balanced and single-partition LTO measured about
+48,295--48,306 cycles/frame at resident 512 against the 47,571.8 control (+1.5% cost). Cross-TU
+inlining inflated or rearranged this already optimized scalar closure without deleting demanded
+math; all LTO flags and artifacts were removed, and no headless stubs were added.
+
+### Rejected cache-line-native JObj hot layout
+
+The hosted JObj was reordered into a 192-byte layout with its 48-byte matrix at offset 64 and its
+actual arena allocation aligned to 64 bytes. The candidate was exact, but the alignment guarantee
+raised lifecycle snapshot size from 633,432 to 644,440 bytes per environment. Adjacent binary pairs
+improved resident-512 cycles/frame by only 0.25--0.57%; most of that small effect reproduced from
+alignment alone. The roughly 11 KiB per-environment cost is not justified by the sub-percent gain,
+so the original layout and 32-byte arena contract were restored.
+
 ## Benchmark contract
 
 - Host: AMD Ryzen 9 9950X3D; CPU 0 is the 96 MiB V-cache domain.
@@ -20,6 +72,30 @@ make benchmark-prepare
 make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
+
+## Dense ordinary fighter pose samples — 2026-07-19
+
+Shared fighter animation data now describes each Figa node once and stores only its supported,
+present SRT channels in an exact dense sample stream. Each live pose joint binds that immutable node
+descriptor at animation attachment. The ordinary integral, unit-rate publication path writes the
+canonical JObj SRT fields directly; it no longer scans source tracks twice, probes sparse validity
+bits, redispatches component types, or stores absent samples. Fractional rates, paths, duplicate or
+unsupported channels, and other dynamic cases continue through the exact mutable decoder. There is
+no second mutable pose, compatibility mode, legacy extractor, or per-Match state.
+
+Three adjacent resident-512 controls are 47,623.8/47,902.1/47,868.8 cycles/frame and candidates are
+46,030.4/46,124.2/46,090.4, reducing the median cost from 47,868.8 to 46,090.4 (-3.71%). Adjacent
+resident-256 controls are 44,892.6/45,184.1/45,181.3 and candidates are
+43,510.7/43,266.4/43,658.5, reducing the median from 45,181.3 to 43,510.7 (-3.70%). Median wall
+throughput is 93,120 FPS at 512 and 98,641 FPS at 256. Digests remain
+`6f91f23e3553a090` / `8ef126a41244d514`.
+
+The representation contains 10,718,160 exact values and 131,653 immutable node descriptors across
+1,683 programs. It adds 0.71 MiB to process-global shared GameData while leaving the 633,432-byte
+per-Match arena and every savestate field unchanged. Debug and optimized-release validation remain
+63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across 1,415,476 frames. Native source/API/
+copy/save-restore and sealed allocation, PPC, Wasm parity, viewer/browser, pytest, source-sync, and
+formatting gates pass.
 
 ## Compact fighter ECB matrix publication — 2026-07-19
 

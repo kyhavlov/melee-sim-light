@@ -1,107 +1,81 @@
-# Active performance packet — compact six-origin fighter ECB evaluator
+# Active performance packet — dense ordinary pose samples
 
 ## Objective
 
-Replace six independent generic JObj point queries in fighter JObj-backed ECB publication with one
-compact-pose evaluator. Resolve the union of demanded ancestors once, evaluate dirty ordinary
-matrices in canonical topology order, and publish the same six JObj matrix origins directly to the
-source ECB owner.
+Replace the ordinary integral-frame Figa publication loop with an immutable, node-indexed dense
+sample table. Publish each supported node's exact SRT values directly to its canonical JObj without
+scanning source tracks, probing a validity bit per track, or redispatching component types.
 
 ## Final boundary
 
-- **Final owner:** `runtime/fighter_pose.c` owns one six-origin query for joints registered in the
-  compact fighter pose. `mpColl_LoadECB_JObj` owns invocation at its existing six-point source site.
-- **Canonical state:** evaluated results are written only to each existing `HSD_JObj::mtx`; ECB
-  output remains `CollData::desired_ecb`. No origin cache, alternate pose, or per-frame buffer is
-  persistent or save-state-visible.
-- **Consumers:** fighter ECB publication uses the compact query. Other JObj users and non-fighter
-  JObj sources retain their proper generic owner rather than a compatibility mode.
-- **Displaced work:** six repeated pose lookups, ancestor recursion, dirty checks, and separately
-  dispatched matrix/trig calls. The evaluator admits ordinary Euler SRT nodes and delegates true
-  quaternion, IK, RObj, path, user-matrix, and independent-parent nodes to their source routines.
-- **Deletion boundary:** the compact query never calls six generic `lb_8000B1CC` paths for a compact
-  fighter ECB. There is no synchronized dual result, runtime feature flag, character/stage list,
-  approximate math, or replay exception.
+- **Final owner:** shared `MslFighterPosePrograms` owns one descriptor and dense sample stream per
+  Figa node; each live pose joint binds its descriptor once when the animation is attached.
+- **Canonical state:** JObj SRT fields and flags remain the only mutable pose state and remain fully
+  save/restore-visible. Tables are immutable shared GameData.
+- **Consumers:** the existing integral, unit-rate ordinary animation path reads dense samples;
+  fractional rates, paths, duplicate or unsupported channels, and other legal dynamic cases retain
+  the exact mutable source decoder.
+- **Displaced work:** ordinary publication no longer walks Figa tracks twice, reads source track
+  types, probes sparse validity bits, calls generic type publication, or stores absent samples.
+- **Deletion boundary:** the old program-wide sparse value/validity representation and runtime track
+  scan are removed. There is no second mutable pose, legacy extractor, runtime mode, or fallback for
+  a descriptor classified as dense.
 
 ## Evidence and acceptance
 
-- Baseline `3d0ecbb0`: 90,017 FPS at 256 and 84,556 FPS at 512; digests
-  `8ef126a41244d514` / `6f91f23e3553a090`; debug and release validation are 63 PASS / 90 unchanged
-  CLASSIFIED.
-- RDTSCP assigns 16.19% to stage collision. Prior helper attribution assigns 14.31% to
-  `mpColl_LoadECB_JObj` and records 143,594 calls; the next collision query owner is only 1.59%.
-- A 64-environment instruction sample places exact matrix/trig owners (`msl_sincosf3`,
-  `HSD_MtxSRTConcat`, `PSMTXConcat`, `HSD_JObjMakeMatrix`, setup recursion) among the largest frame
-  costs. A lazy-publication proof moved 4.15 points directly into stage collision, confirming this
-  demand rather than deleting it.
-- Early proof: scalar compact union evaluation must preserve both digests and reduce setup entries;
-  vector/precomputed-trig work proceeds only if the final six-origin boundary is correct and has a
-  measurable ceiling.
-- Final retention: target at least 5% overall at 512, unchanged digests/classifications, complete
-  debug/release/API/copy/save-restore/allocation/PPC/Wasm/viewer gates, no hot allocation, and no
-  persistent memory growth.
+- The committed profile assigns 17.46% of frame cycles to pose animation.
+- An earlier exact proof on `fe25fec5` improved resident-512 cycles/frame by 2.00% raw and 2.07% in
+  adjacent pairs. It was rejected under a previous packet's 3% threshold, but is a durable owner
+  representation rather than leaf tuning and is now being reconstructed against `d05e385c`.
+- Retain only repeatable whole-frame gain at 512 and 256, unchanged digests and replay
+  classifications, exact arbitrary-index copy/save-restore, no per-Match memory growth, and the full
+  native/allocation/PPC/Wasm/viewer gate.
 
 ## Log
 
-- 2026-07-19 — `rejected`
-  Scope: the six compact-pose joint origins consumed by `mpColl_LoadECB_JObj`.
-  Hypothesis: evaluating their shared ancestor closure once in topology order removes enough
-  repeated generic traversal and enables a multi-node exact trig/matrix kernel without a batch
-  scheduler seam.
-  Evidence: stage collision is 16.19% of the current contract and its six-origin loader dominates
-  that owner. Previous per-point deferral proved the work is demanded; previous eager global matrix
-  tables failed from cache footprint, which this ephemeral demanded closure avoids.
-  Disposition: first establish an exact compact union evaluator using canonical JObj matrices, then
-  measure the remaining arithmetic ceiling before vectorizing.
-  Next: add the six-origin compact API and route only compact fighter JObj ECBs through it; run both
-  production digests and collect exact setup/matrix counts.
-
-- 2026-07-19 — `retained`
-  Scope: initialization-bound closure metadata and one topology-ordered query.
-  Hypothesis: removing per-query path discovery is the necessary production substrate for a
-  multi-matrix evaluator.
-  Evidence: supported bindings contain 18, 21, 25, or 28 joints; 318,596 benchmark queries publish
-  6,417,376 dirty matrices, with dirty work on 95.7% of queries. Prebinding restores the scalar
-  proof from 81,946 to 84,444 FPS with digest `6f91f23e3553a090` unchanged.
-  Disposition: retain as the immutable topology owner; scalar traversal alone is neutral and not
-  the performance claim.
-  Next: evaluate the ordinary dirty subset through one exact trig batch and direct canonical matrix
-  publication.
-
-- 2026-07-19 — `rejected`
-  Scope: an evaluator that classified every bound node as Euler at initialization.
-  Hypothesis: matrix method and flags are immutable after fighter construction.
-  Evidence: optimized release validation diverged broadly. Direct source/candidate comparison found
-  `JOBJ_USE_QUATERNION` appearing dynamically on bound nodes during interpolation; classical-scale
-  inheritance also requires its distinct source path.
-  Disposition: reject static Euler classification. Preserve classical-scale semantics and classify
-  the dynamic quaternion/path bits at each publication without restoring generic traversal.
-  Next: batch only the ordinary subset and dispatch the small special subset in the same topology
-  walk.
-
-- 2026-07-19 — `retained`
-  Scope: final compact six-origin evaluator with exact wide trig.
-  Hypothesis: one AVX-512 evaluation of the ordinary Euler subset plus direct canonical matrix
-  publication removes the dominant repeated trig/dispatch work while special nodes remain exact.
-  Evidence: 18.6 of 19.9 dirty nodes in a 10,000-query census are direct Euler candidates. Final
-  adjacent medians improve 81,453 to 85,633 FPS at 512 (+5.13%) and 86,597 to 91,912 at 256
-  (+6.14%), preserving digests `6f91f23e3553a090` / `8ef126a41244d514`. Tightening the pose pool
-  against its 976-node supported census offsets topology storage and reduces the lifecycle snapshot
-  from 634,232 to 633,432 bytes. Debug and release validation remain 63 PASS / 90 unchanged
-  CLASSIFIED; the complete native/PPC/API/save-restore/allocation/Wasm/viewer/pytest/source-sync/
-  formatting gate is green.
-  Disposition: retain and commit the complete final boundary and evidence atomically.
-  Next: refresh the subsystem profile from the committed binary and select the next bounded owner.
-
 - 2026-07-19 — `open`
-  Scope: final ablation of the compact ECB boundary from the exact AVX-512 trig owner.
-  Hypothesis: the measured gain must come from deleting repeated six-origin work, not merely from
-  compiling every existing three-axis matrix through the new exact wide trig kernel.
-  Evidence: with exact wide trig still active, three bypass samples are
-  83,982/83,178/83,758 FPS at 512 (83,758 median), versus the complete candidate's recent
-  88,256/89,094/89,238 (89,094 median). The compact boundary therefore contributes about 6.4% over
-  the wide-trig-only shape and is not dead scaffolding.
-  Disposition: reject the bypass and retain the complete compact boundary. The temporary compile
-  switch is removed.
-  Next: rebuild the complete candidate, record final adjacent evidence and full gates, then commit
-  the implementation and evidence atomically.
+  Scope: shared Figa program layout, animation-attach binding, and the ordinary integral-frame
+  publication path.
+  Hypothesis: dense per-node values and direct component publication delete immutable metadata and
+  dispatch from the dominant ordinary path while leaving true dynamic cases source-exact.
+  Evidence: the prior implementation was exact and measured +2%; the current profile assigns 17.46%
+  to the containing owner.
+  Disposition: reconstruct the representation against current HEAD without disturbing the retained
+  compact ECB evaluator, then benchmark and improve only within this final boundary.
+  Next: port the descriptor/value layout and direct publisher, run both production digests, and
+  compare resident-512 cycles/frame against an adjacent clean binary.
+
+- 2026-07-19 — `retained`
+  Scope: complete dense node descriptors, initialization-time sample construction and binding, and
+  direct ordinary SRT publication.
+  Hypothesis: the final dense representation should delete enough immutable metadata work to reduce
+  the whole-frame cost, without changing the dynamic decoder or mutable pose state.
+  Evidence: resident-512 controls are 47,623.8/47,902.1/47,868.8 cycles/frame and candidates are
+  46,030.4/46,124.2/46,090.4, reducing the median 3.71%. Resident-256 controls are
+  44,892.6/45,184.1/45,181.3 and candidates are 43,510.7/43,266.4/43,658.5, reducing the median
+  3.70%. Digests remain `6f91f23e3553a090` / `8ef126a41244d514`.
+  Disposition: retain the single representation; it exceeds the earlier proof and has no per-Match
+  state or memory cost.
+  Next: complete the full material gate and commit the packet atomically if green.
+
+- 2026-07-19 — `retained`
+  Scope: complete material gate and memory census.
+  Hypothesis: the dense shared representation must preserve every runtime and artifact contract, not
+  only the benchmark digests.
+  Evidence: debug and optimized-release validation are each 63 PASS / 90 unchanged CLASSIFIED across
+  1,415,476 frames. API, arbitrary-index copy/save-restore, 633,432-byte sealed arena, PPC, Wasm
+  parity, viewer/browser, 38 Python tests, source sync, and formatting are green. Shared GameData
+  grows by 0.71 MiB; per-Match state is unchanged.
+  Disposition: packet complete and ready for atomic implementation/evidence commit.
+  Next: commit, notify the retained win, refresh the committed profile, and select the next bounded
+  high-impact owner.
+
+- 2026-07-19 — `rejected`
+  Scope: packing the immutable node descriptor from 16 to 12 bytes by storing its direct admission
+  bit in the channel mask.
+  Hypothesis: the smaller shared table would reduce cache traffic in the ordinary publisher.
+  Evidence: the exact candidate cost 47,492--47,875 cycles/frame in adjacent resident-512 pairs
+  versus 47,311--47,538 for the 16-byte descriptor. The non-power-of-two stride loses more than its
+  0.50 MiB shared-memory saving recovers.
+  Disposition: restore the naturally aligned 16-byte descriptor; no packed representation remains.
+  Next: rebuild the already-gated final candidate and commit it with retained evidence.

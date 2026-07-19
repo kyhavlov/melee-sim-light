@@ -17,6 +17,7 @@ enum {
     MSL_FIGHTER_POSE_ECB_CAPACITY = 8,
     MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY = 32,
     MSL_FIGHTER_POSE_PROGRAM_NONE = 0x7FF,
+    MSL_FIGHTER_POSE_PROGRAM_NODE_NONE = 0x3FFFF,
 };
 
 typedef struct MslFighterPoseTrack {
@@ -52,9 +53,8 @@ typedef struct MslFighterPoseJoint {
     uint16_t track_count;
     uint16_t parent_index;
     uint16_t tree_count;
-    uint32_t program_index : 11;
-    uint32_t program_track_start : 11;
-    uint32_t program_track_count : 7;
+    uint32_t program_node_index : 18;
+    uint32_t program_is_figa : 1;
     uint32_t program_filtered : 1;
     uint32_t decoder_synced : 1;
 } MslFighterPoseJoint;
@@ -80,16 +80,28 @@ typedef struct MslFighterPose {
 
 typedef struct MslFighterPoseProgram {
     FigaTree* tree;
-    uint32_t value_start;
-    uint32_t track_count;
+    uint32_t node_start;
+    uint16_t node_count;
     uint16_t sample_count;
 } MslFighterPoseProgram;
 
+typedef struct MslFighterPoseProgramNode {
+    uint32_t value_start;
+    uint16_t track_start;
+    uint16_t type_mask;
+    uint16_t sample_count;
+    uint8_t track_count;
+    uint8_t value_count;
+    uint8_t direct;
+    uint8_t pad;
+} MslFighterPoseProgramNode;
+
 typedef struct MslFighterPosePrograms {
     MslFighterPoseProgram* programs;
+    MslFighterPoseProgramNode* nodes;
     float* values;
-    uint8_t* valid;
     uint32_t program_count;
+    uint32_t node_count;
     uint32_t value_count;
 } MslFighterPosePrograms;
 

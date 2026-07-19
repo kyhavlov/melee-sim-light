@@ -16,6 +16,7 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#include <x86intrin.h>
 
 #ifdef MSL_CORE_CALLGRIND
 #include <valgrind/callgrind.h>
@@ -62,6 +63,7 @@ typedef struct Workload {
 typedef struct RunResult {
   double seconds;
   double cpu_seconds;
+  uint64_t cycles;
   uint64_t resets;
 } RunResult;
 
@@ -330,9 +332,12 @@ static int workload_preroll(MslCoreBatch* batch, Workload* workload) {
 static int run_workload(MslCoreBatch* batch, Workload* workload, uint32_t ticks, int write_outputs,
                         RunResult* result) {
   uint64_t resets = 0;
+  uint64_t cycle_started;
+  unsigned int cycle_aux;
   uint32_t tick;
   double started = seconds_now();
   double cpu_started = cpu_seconds_now();
+  cycle_started = __rdtscp(&cycle_aux);
   for (tick = 0; tick < ticks; ++tick) {
     uint32_t i;
     int any_reset = 0;
@@ -373,6 +378,7 @@ static int run_workload(MslCoreBatch* batch, Workload* workload, uint32_t ticks,
       return -1;
     }
   }
+  result->cycles = __rdtscp(&cycle_aux) - cycle_started;
   result->cpu_seconds = cpu_seconds_now() - cpu_started;
   result->seconds = seconds_now() - started;
   result->resets = resets;
@@ -387,6 +393,7 @@ static int run_sharded_pass(const MslCoreGameData* game_data, ReplayCase* cases,
   uint32_t offset;
   total->seconds = 0.0;
   total->cpu_seconds = 0.0;
+  total->cycles = 0;
   total->resets = 0;
   for (offset = 0; offset < logical_match_count; offset += resident_match_count) {
     uint32_t count = logical_match_count - offset;
@@ -446,6 +453,7 @@ static int run_sharded_pass(const MslCoreGameData* game_data, ReplayCase* cases,
 #endif
     total->seconds += measured.seconds;
     total->cpu_seconds += measured.cpu_seconds;
+    total->cycles += measured.cycles;
     total->resets += measured.resets;
     msl_core_batch_destroy(batch);
     workload_free(&workload);
@@ -576,9 +584,12 @@ int main(int argc, char** argv) {
       STARTUP_BASE_FRAMES, STARTUP_FRAME_GAP, preroll_source_count,
       preroll_match_frames, stage_mask, character_mask, sched_getcpu(),
       (double)observation_bytes / (1024.0 * 1024.0));
-  printf("production seconds=%.6f cpu_seconds=%.6f match_frames=%" PRIu64
+  printf("production seconds=%.6f cpu_seconds=%.6f cycles=%" PRIu64
+         " cycles_per_frame=%.1f match_frames=%" PRIu64
          " fps=%.0f cpu_fps=%.0f resets=%" PRIu64 " digest=%016" PRIx64 "\n",
-         production.seconds, production.cpu_seconds, (uint64_t)match_count * ticks,
+         production.seconds, production.cpu_seconds, production.cycles,
+         production.cycles / (double)((uint64_t)match_count * ticks),
+         (uint64_t)match_count * ticks,
          (double)((uint64_t)match_count * ticks) / production.seconds,
          (double)((uint64_t)match_count * ticks) / production.cpu_seconds, production.resets,
          digest);
