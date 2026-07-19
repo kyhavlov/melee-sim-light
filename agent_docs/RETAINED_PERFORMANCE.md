@@ -163,8 +163,18 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Exact paired matrix trig
 
-- **This commit** replaces six scalar trig calls in each hosted three-axis HSD matrix constructor
+- `9d54eedd` **Share exact matrix trig evaluation** replaces six scalar trig calls in each hosted
+  three-axis HSD matrix constructor
   with one exact paired evaluator. It shares source range reduction while preserving both MSL
   polynomial results and adds no state or approximation. Adjacent 512 medians improve +6.47%; the
   final 256 result improves +5.55% over the preceding baseline. Both production digests and the
   complete replay/API/save-restore/PPC/Wasm/viewer gates remain exact.
+
+## Fused ordinary JObj world matrix
+
+- **This commit** fuses exact Euler SRT construction and parent concat for every hosted non-root,
+  non-quaternion JObj, directly publishing the singular `jobj->mtx` world matrix. It deletes the
+  complete intermediate local matrix round trip, general alias handling, and separate call
+  boundaries with no alternate state or fallback. Adjacent 512 raw medians improve +4.02%
+  (+4.17% paired), and final 256 throughput improves +4.01%. Both digests and the complete
+  replay/allocation/API/save-restore/PPC/Wasm/viewer gates remain exact.

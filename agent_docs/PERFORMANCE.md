@@ -21,6 +21,26 @@ make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
 
+## Fused ordinary JObj world matrix — 2026-07-19
+
+Hosted non-root, non-quaternion JObjs now publish their final world matrix through one exact owner.
+The evaluator preserves the source Euler SRT and paired-single concat operation boundaries, but
+consumes the local components directly and writes only `jobj->mtx`. This deletes the complete local
+matrix store/reload, general alias handling and temporary copy, and separate SRT/concat calls.
+Roots and quaternion JObjs retain their explicit source owners; there is no second matrix state,
+fallback flag, approximation, or persistent memory.
+
+Three adjacent CPU-0 controls/candidates at 512 preserve digest `6f91f23e3553a090`. Controls are
+74,332/74,623/73,679 FPS and candidates are 77,319/77,732/76,889 FPS; raw medians improve 74,332 to
+77,319 FPS (+4.02%) and median paired change is +4.17%. Final 256 samples are
+81,309/81,753/81,824 FPS, an 81,753 median (+4.01% over 78,599), preserving digest
+`8ef126a41244d514`.
+
+The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across
+1,415,476 frames. Native source/API/copy/save-restore and sealed allocation, PPC, Wasm parity,
+viewer/browser, pytest, and formatting gates pass. Arena/savestate storage remains
+633,432/695,048 bytes with 825 initialization allocations.
+
 ## Exact paired matrix trig — 2026-07-19
 
 Hosted `HSD_MtxSRT` and `HSD_MkRotationMtx` now request all three Euler sine/cosine pairs through one
@@ -40,6 +60,20 @@ improve 69,882 to 74,405 FPS (+6.47%). A separate final candidate set is
 The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across
 1,415,476 frames. Native source/API/copy/save-restore and sealed allocation, PPC, Wasm parity,
 viewer/browser, pytest, and formatting gates pass. Persistent and shared memory are unchanged.
+
+### Rejected isolated exact affine concat
+
+An x86 exact fixed-shape affine `PSMTXConcat` reduced the emitted kernel substantially but improved
+the complete 512 workload only +1.27% by adjacent raw median. It would also be displaced by direct
+source-boundary fusion, so the candidate was preserved in named stash
+`rejected-exact-affine-concat-20260719` and removed.
+
+### Rejected whole HSD matrix compiler admission
+
+Complete `sysdolphin/baselib/mtx.c` O1/O2/O3 release admission preserved both production digests,
+but every level remained around one whole-frame point at 512. The dominant work is demanded exact
+arithmetic and cross-owner matrix traffic rather than O0 scaffolding; the candidate is preserved in
+named stash `rejected-exact-hsd-matrix-compiler-20260719`.
 
 ## Supported hosted dynamics-pool capacity — 2026-07-19
 

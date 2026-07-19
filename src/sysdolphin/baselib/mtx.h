@@ -23,6 +23,10 @@ void HSD_MtxGetScale(Mtx arg0, Vec3* arg1);
 void HSD_MkRotationMtx(Mtx arg0, Vec3* arg1);
 void HSD_MtxQuat(Mtx arg0, Quaternion* arg1);
 void HSD_MtxSRT(Mtx m, Vec3* vec1, Vec3* vec2, Vec3* vec3, Vec3* vec4);
+#if defined(MSL_CORE_NATIVE)
+void HSD_MtxSRTConcat(Mtx m, Mtx parent, Vec3* scale, Vec3* rotate,
+                      Vec3* translate, Vec3* parent_scale);
+#endif
 void HSD_MtxSRTQuat(Mtx arg0, Vec3* arg1, Quaternion* arg2, Vec3* arg3,
                     Vec3* arg4);
 void HSD_MtxScaledAdd(Mtx arg0, Mtx arg1, Mtx arg2, f32 arg3);

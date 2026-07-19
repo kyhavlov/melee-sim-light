@@ -180,16 +180,24 @@ void HSD_JObjMakeMatrix(HSD_JObj* jobj)
         }
         HSD_MtxSRTQuat(jobj->mtx, &jobj->scale, &jobj->rotate,
                        &jobj->translate, scl);
-    } else {
+    } else if (jobj->parent != NULL) {
         if (has_scl(jobj->parent)) {
             scl = jobj->parent->scl;
         } else {
             scl = NULL;
         }
+#ifdef MSL_CORE_NATIVE
+        HSD_MtxSRTConcat(jobj->mtx, jobj->parent->mtx, &jobj->scale,
+                         (Vec3*) &jobj->rotate, &jobj->translate, scl);
+#else
         HSD_MtxSRT(jobj->mtx, &jobj->scale, (Vec3*) &jobj->rotate,
                    &jobj->translate, scl);
+#endif
+    } else {
+        HSD_MtxSRT(jobj->mtx, &jobj->scale, (Vec3*) &jobj->rotate,
+                   &jobj->translate, NULL);
     }
-    if (jobj->parent != NULL) {
+    if (jobj->parent != NULL && (jobj->flags & 0x20000)) {
         PSMTXConcat(jobj->parent->mtx, jobj->mtx, jobj->mtx);
     }
 #ifdef MSL_CORE_NATIVE

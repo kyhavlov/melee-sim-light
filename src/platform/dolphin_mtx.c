@@ -1,8 +1,14 @@
 #include <dolphin/mtx.h>
 
+#include <MSL/trigf.h>
+
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
+
+#if defined(__FMA__)
+#include <immintrin.h>
+#endif
 
 static uint64_t double_bits(double value)
 {
@@ -285,6 +291,121 @@ void PSMTXConcat(Mtx a, Mtx b, Mtx out)
     }
     if (result == temporary) {
         memcpy(out, temporary, sizeof(Mtx));
+    }
+}
+
+void HSD_MtxSRTConcat(Mtx out, Mtx parent, Vec3* scale, Vec3* rotate,
+                      Vec3* translate, Vec3* parent_scale)
+{
+    float sin_xyz[3];
+    float cos_xyz[3];
+    float scale_x2 = scale->x;
+    float scale_x1 = scale->x;
+    float scale_x = scale->x;
+    float scale_y2 = scale->y;
+    float scale_y1 = scale->y;
+    float scale_y = scale->y;
+    float scale_z2 = scale->z;
+    float scale_z1 = scale->z;
+    float scale_z = scale->z;
+#if !defined(__FMA__)
+    float local[3][4];
+#endif
+    int row;
+#if !defined(__FMA__)
+    int column;
+#endif
+
+    // Exact hosted fusion of HSD_MtxSRT followed by the paired-single
+    // PSMTXConcat. The local values retain the source rounding boundaries,
+    // but are consumed directly instead of being published and reloaded as a
+    // general aliasable matrix.
+    // refs/melee/src/sysdolphin/baselib/mtx.c::HSD_MtxSRT
+    // refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXConcat
+    msl_sincosf3(&rotate->x, sin_xyz, cos_xyz);
+    if (parent_scale != NULL &&
+        (parent_scale->x != 1.0F || parent_scale->y != 1.0F ||
+         parent_scale->z != 1.0F)) {
+        float reciprocal_x = 1.0F / parent_scale->x;
+        float reciprocal_y = 1.0F / parent_scale->y;
+        float reciprocal_z = 1.0F / parent_scale->z;
+
+        scale_y2 *= parent_scale->y * reciprocal_x;
+        scale_z2 *= parent_scale->z * reciprocal_x;
+        scale_x1 *= parent_scale->x * reciprocal_y;
+        scale_z1 *= parent_scale->z * reciprocal_y;
+        scale_x *= parent_scale->x * reciprocal_z;
+        scale_y *= parent_scale->y * reciprocal_z;
+    }
+
+    {
+        float local00 = cos_xyz[2] * (scale_x2 * cos_xyz[1]);
+        float local10 = sin_xyz[2] * (scale_x1 * cos_xyz[1]);
+        float local20 = -scale_x * sin_xyz[1];
+        float local01 = scale_y2 *
+                        fmaf(cos_xyz[2], sin_xyz[0] * sin_xyz[1],
+                             -(cos_xyz[0] * sin_xyz[2]));
+        float local11 =
+            scale_y1 * fmaf(sin_xyz[2], sin_xyz[0] * sin_xyz[1],
+                            cos_xyz[0] * cos_xyz[2]);
+        float local21 = cos_xyz[1] * (scale_y * sin_xyz[0]);
+        float local02 =
+            scale_z2 * fmaf(cos_xyz[2], cos_xyz[0] * sin_xyz[1],
+                            sin_xyz[0] * sin_xyz[2]);
+        float local12 = scale_z1 *
+                        fmaf(sin_xyz[2], cos_xyz[0] * sin_xyz[1],
+                             -(sin_xyz[0] * cos_xyz[2]));
+        float local22 = cos_xyz[1] * (scale_z * cos_xyz[0]);
+
+#if defined(__FMA__)
+        __m128 local0 =
+            _mm_set_ps(translate->x, local02, local01, local00);
+        __m128 local1 =
+            _mm_set_ps(translate->y, local12, local11, local10);
+        __m128 local2 =
+            _mm_set_ps(translate->z, local22, local21, local20);
+
+        for (row = 0; row != 3; row++) {
+            __m128 world =
+                _mm_mul_ps(_mm_set1_ps(parent[row][0]), local0);
+            float translate;
+
+            world = _mm_fmadd_ps(_mm_set1_ps(parent[row][1]), local1,
+                                 world);
+            world = _mm_fmadd_ps(_mm_set1_ps(parent[row][2]), local2,
+                                 world);
+            translate = fmaf(1.0F, parent[row][3],
+                             _mm_cvtss_f32(_mm_shuffle_ps(
+                                 world, world, _MM_SHUFFLE(3, 3, 3, 3))));
+            world = _mm_insert_ps(world, _mm_set_ss(translate), 0x30);
+            _mm_storeu_ps(out[row], world);
+        }
+#else
+        local[0][0] = local00;
+        local[1][0] = local10;
+        local[2][0] = local20;
+        local[0][1] = local01;
+        local[1][1] = local11;
+        local[2][1] = local21;
+        local[0][2] = local02;
+        local[1][2] = local12;
+        local[2][2] = local22;
+        local[0][3] = translate->x;
+        local[1][3] = translate->y;
+        local[2][3] = translate->z;
+
+        for (row = 0; row != 3; row++) {
+            for (column = 0; column != 4; column++) {
+                float value = parent[row][0] * local[0][column];
+                value = fmaf(local[1][column], parent[row][1], value);
+                value = fmaf(local[2][column], parent[row][2], value);
+                if (column == 3) {
+                    value = fmaf(1.0F, parent[row][3], value);
+                }
+                out[row][column] = value;
+            }
+        }
+#endif
     }
 }
 
