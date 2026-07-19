@@ -27,7 +27,9 @@ extern void moncontrol(int mode);
 
 enum {
   OBSERVATION_HISTORY = 128,
-  REPRESENTATIVE_SEED_LIMIT = 32,
+  STARTUP_GROUP_COUNT = 8,
+  STARTUP_BASE_FRAMES = 200,
+  STARTUP_FRAME_GAP = 100,
 };
 
 typedef struct ReplayCase {
@@ -49,7 +51,11 @@ typedef struct Workload {
   MslCoreTerminal* terminals;
   uint32_t* case_index;
   uint32_t* frame_index;
+  uint32_t* source_index;
+  uint32_t* copy_destination;
+  uint32_t* copy_source;
   uint8_t* viewpoint;
+  uint8_t* step_mask;
   uint8_t* reset_mask;
 } Workload;
 
@@ -58,21 +64,6 @@ typedef struct RunResult {
   double cpu_seconds;
   uint64_t resets;
 } RunResult;
-
-typedef struct RepresentativeSeed {
-  uint32_t case_index;
-  uint32_t frame_index;
-  void* snapshot;
-  size_t snapshot_size;
-} RepresentativeSeed;
-
-typedef struct RepresentativeSeeds {
-  RepresentativeSeed* entries;
-  uint32_t count;
-  uint64_t staged_match_frames;
-  uint64_t stage_mask;
-  uint64_t character_mask;
-} RepresentativeSeeds;
 
 static double seconds_now(void) {
   struct timespec now;
@@ -223,11 +214,17 @@ static int workload_allocate(Workload* workload, ReplayCase* cases, uint32_t cas
   workload->terminals = terminals;
   workload->case_index = calloc(match_count, sizeof(*workload->case_index));
   workload->frame_index = calloc(match_count, sizeof(*workload->frame_index));
+  workload->source_index = calloc(match_count, sizeof(*workload->source_index));
+  workload->copy_destination = calloc(match_count, sizeof(*workload->copy_destination));
+  workload->copy_source = calloc(match_count, sizeof(*workload->copy_source));
   workload->viewpoint = calloc(match_count, sizeof(*workload->viewpoint));
+  workload->step_mask = calloc(match_count, sizeof(*workload->step_mask));
   workload->reset_mask = calloc(match_count, sizeof(*workload->reset_mask));
   return workload->configs != NULL && workload->inputs != NULL && observations != NULL &&
                  terminals != NULL && workload->case_index != NULL &&
-                 workload->frame_index != NULL && workload->viewpoint != NULL &&
+                 workload->frame_index != NULL && workload->source_index != NULL &&
+                 workload->copy_destination != NULL && workload->copy_source != NULL &&
+                 workload->viewpoint != NULL && workload->step_mask != NULL &&
                  workload->reset_mask != NULL
              ? 0
              : -1;
@@ -238,43 +235,93 @@ static void workload_free(Workload* workload) {
   free(workload->inputs);
   free(workload->case_index);
   free(workload->frame_index);
+  free(workload->source_index);
+  free(workload->copy_destination);
+  free(workload->copy_source);
   free(workload->viewpoint);
+  free(workload->step_mask);
   free(workload->reset_mask);
 }
 
-static const RepresentativeSeed* representative_seed_for_case(
-    const RepresentativeSeeds* seeds, uint32_t case_index) {
-  uint32_t i;
-  for (i = 0; i < seeds->count; ++i) {
-    if (seeds->entries[i].case_index == case_index) {
-      return &seeds->entries[i];
-    }
-  }
-  return NULL;
-}
-
-static int workload_reset(MslCoreBatch* batch, Workload* workload,
-                          const RepresentativeSeeds* seeds) {
+static int workload_reset(MslCoreBatch* batch, Workload* workload) {
   uint32_t i;
   for (i = 0; i < workload->match_count; ++i) {
+    uint32_t j;
     uint32_t case_index = (workload->output_match_offset + i) % workload->case_count;
     workload->case_index[i] = case_index;
     workload->frame_index[i] = 0;
+    workload->source_index[i] = i;
+    for (j = 0; j < i; ++j) {
+      if (workload->case_index[j] == case_index) {
+        workload->source_index[i] = j;
+        break;
+      }
+    }
     workload->configs[i] = workload->cases[case_index].header->config;
   }
   if (msl_core_batch_reset_matches(batch, workload->configs, sizeof(workload->configs[0]), NULL,
                                    0) != MSL_CORE_OK) {
     return -1;
   }
-  for (i = 0; i < workload->match_count; ++i) {
-    const RepresentativeSeed* seed =
-        representative_seed_for_case(seeds, workload->case_index[i]);
-    if (seed != NULL) {
-      workload->frame_index[i] = seed->frame_index;
-      if (msl_core_batch_restore_match(batch, i, seed->snapshot, seed->snapshot_size) !=
-          MSL_CORE_OK) {
-        return -1;
+  return 0;
+}
+
+static int workload_preroll(MslCoreBatch* batch, Workload* workload) {
+  uint32_t max_frames = STARTUP_BASE_FRAMES +
+                        (STARTUP_GROUP_COUNT - 1) * STARTUP_FRAME_GAP;
+  uint32_t tick;
+  for (tick = 0; tick < max_frames; ++tick) {
+    uint32_t i;
+    int any_reset = 0;
+    memset(workload->step_mask, 0, workload->match_count);
+    for (i = 0; i < workload->match_count; ++i) {
+      uint32_t target_frames =
+          STARTUP_BASE_FRAMES +
+          (workload->case_index[i] % STARTUP_GROUP_COUNT) * STARTUP_FRAME_GAP;
+      if (workload->source_index[i] == i && tick + target_frames >= max_frames) {
+        ReplayCase* replay = &workload->cases[workload->case_index[i]];
+        workload->inputs[i] = replay->inputs[workload->frame_index[i]];
+        workload->step_mask[i] = 1;
       }
+    }
+    if (msl_core_batch_step_matches(batch, workload->inputs, sizeof(workload->inputs[0]),
+                                    workload->step_mask, sizeof(workload->step_mask[0])) !=
+        MSL_CORE_OK) {
+      return -1;
+    }
+    memset(workload->reset_mask, 0, workload->match_count);
+    for (i = 0; i < workload->match_count; ++i) {
+      ReplayCase* replay;
+      if (!workload->step_mask[i]) {
+        continue;
+      }
+      replay = &workload->cases[workload->case_index[i]];
+      if (++workload->frame_index[i] == replay->header->frame_count) {
+        workload->frame_index[i] = 0;
+        workload->reset_mask[i] = 1;
+        any_reset = 1;
+      }
+    }
+    if (any_reset && msl_core_batch_reset_matches(
+                         batch, workload->configs, sizeof(workload->configs[0]),
+                         workload->reset_mask, sizeof(workload->reset_mask[0])) != MSL_CORE_OK) {
+      return -1;
+    }
+  }
+  {
+    uint32_t copy_count = 0;
+    uint32_t i;
+    for (i = 0; i < workload->match_count; ++i) {
+      if (workload->source_index[i] != i) {
+        workload->copy_destination[copy_count] = i;
+        workload->copy_source[copy_count] = workload->source_index[i];
+        workload->frame_index[i] = workload->frame_index[workload->source_index[i]];
+        ++copy_count;
+      }
+    }
+    if (msl_core_batch_copy_matches(batch, batch, workload->copy_destination,
+                                    workload->copy_source, copy_count) != MSL_CORE_OK) {
+      return -1;
     }
   }
   return 0;
@@ -336,8 +383,7 @@ static int run_sharded_pass(const MslCoreGameData* game_data, ReplayCase* cases,
                             uint32_t case_count, uint32_t logical_match_count,
                             uint32_t resident_match_count, uint32_t ticks, uint32_t warmup_ticks,
                             int write_outputs, MslCoreObservation* observations,
-                            MslCoreTerminal* terminals, const RepresentativeSeeds* seeds,
-                            RunResult* total) {
+                            MslCoreTerminal* terminals, RunResult* total) {
   uint32_t offset;
   total->seconds = 0.0;
   total->cpu_seconds = 0.0;
@@ -354,9 +400,8 @@ static int run_sharded_pass(const MslCoreGameData* game_data, ReplayCase* cases,
     if (workload_allocate(&workload, cases, case_count, count, logical_match_count, offset,
                           observations, terminals) != 0 ||
         msl_core_batch_create(game_data, count, &batch) != MSL_CORE_OK ||
-        workload_reset(batch, &workload, seeds) != 0 ||
-        run_workload(batch, &workload, warmup_ticks, write_outputs, &warmup) != 0 ||
-        workload_reset(batch, &workload, seeds) != 0) {
+        workload_reset(batch, &workload) != 0 || workload_preroll(batch, &workload) != 0 ||
+        run_workload(batch, &workload, warmup_ticks, 0, &warmup) != 0) {
       if (batch != NULL) {
         msl_core_batch_destroy(batch);
       }
@@ -408,149 +453,6 @@ static int run_sharded_pass(const MslCoreGameData* game_data, ReplayCase* cases,
   return 0;
 }
 
-static int representative_seeds_create(const MslCoreGameData* game_data, ReplayCase* cases,
-                                       uint32_t case_count, RepresentativeSeeds* seeds) {
-  MslCoreBatch* batch = NULL;
-  MslCoreMatchConfig* configs = NULL;
-  MslCoreInput* inputs = NULL;
-  uint8_t* mask = NULL;
-  uint8_t* selected_cases = NULL;
-  uint32_t target_count;
-  uint32_t max_prefix = 0;
-  uint32_t i;
-  memset(seeds, 0, sizeof(*seeds));
-  target_count = case_count < REPRESENTATIVE_SEED_LIMIT ? case_count : REPRESENTATIVE_SEED_LIMIT;
-  seeds->entries = calloc(target_count, sizeof(*seeds->entries));
-  configs = calloc(target_count, sizeof(*configs));
-  inputs = calloc(target_count, sizeof(*inputs));
-  mask = calloc(target_count, sizeof(*mask));
-  selected_cases = calloc(case_count, sizeof(*selected_cases));
-  if (seeds->entries == NULL || configs == NULL || inputs == NULL || mask == NULL ||
-      selected_cases == NULL) {
-    goto fail;
-  }
-  // Greedily retain every new stage/character owner before filling the bank
-  // with evenly spaced aggregate cases. This keeps the bounded setup stable
-  // as manifests grow without silently dropping a rare supported owner.
-  for (i = 0; i < case_count && seeds->count < target_count; ++i) {
-    const MslCoreMatchConfig* config = &cases[i].header->config;
-    uint64_t stage = config->stage_id < 64 ? UINT64_C(1) << config->stage_id : 0;
-    uint64_t characters = 0;
-    uint32_t player;
-    for (player = 0; player < config->num_players; ++player) {
-      if (config->players[player].char_id < 64) {
-        characters |= UINT64_C(1) << config->players[player].char_id;
-      }
-    }
-    if ((stage & ~seeds->stage_mask) != 0 ||
-        (characters & ~seeds->character_mask) != 0) {
-      seeds->entries[seeds->count++].case_index = i;
-      selected_cases[i] = 1;
-      seeds->stage_mask |= stage;
-      seeds->character_mask |= characters;
-    }
-  }
-  for (i = 0; i < target_count && seeds->count < target_count; ++i) {
-    uint32_t case_index = (uint32_t)(((uint64_t)i * case_count) / target_count);
-    if (!selected_cases[case_index]) {
-      seeds->entries[seeds->count++].case_index = case_index;
-      selected_cases[case_index] = 1;
-    }
-  }
-  for (i = 0; i < case_count && seeds->count < target_count; ++i) {
-    if (!selected_cases[i]) {
-      seeds->entries[seeds->count++].case_index = i;
-      selected_cases[i] = 1;
-    }
-  }
-  if (msl_core_batch_create(game_data, seeds->count, &batch) != MSL_CORE_OK) {
-    goto fail;
-  }
-  for (i = 0; i < seeds->count; ++i) {
-    RepresentativeSeed* seed = &seeds->entries[i];
-    uint32_t numerator = i % 3 + 1;
-    if (i == 0 && cases[seed->case_index].header->frame_count > 32) {
-      // Keep ordinary reset/restart cost represented even in the bounded
-      // 64-tick 512-Match workload.
-      seed->frame_index = cases[seed->case_index].header->frame_count - 32;
-    } else {
-      seed->frame_index =
-          (uint32_t)(((uint64_t)cases[seed->case_index].header->frame_count * numerator) / 4);
-    }
-    if (seed->frame_index >= cases[seed->case_index].header->frame_count) {
-      seed->frame_index = cases[seed->case_index].header->frame_count - 1;
-    }
-    configs[i] = cases[seed->case_index].header->config;
-    seeds->staged_match_frames += seed->frame_index;
-    if (seed->frame_index > max_prefix) {
-      max_prefix = seed->frame_index;
-    }
-  }
-  if (msl_core_batch_reset_matches(batch, configs, sizeof(configs[0]), NULL, 0) != MSL_CORE_OK) {
-    goto fail;
-  }
-  for (i = 0; i < max_prefix; ++i) {
-    uint32_t lane;
-    int any_active = 0;
-    memset(mask, 0, seeds->count);
-    for (lane = 0; lane < seeds->count; ++lane) {
-      RepresentativeSeed* seed = &seeds->entries[lane];
-      if (i < seed->frame_index) {
-        inputs[lane] = cases[seed->case_index].inputs[i];
-        mask[lane] = 1;
-        any_active = 1;
-      }
-    }
-    if (any_active && msl_core_batch_step_matches(batch, inputs, sizeof(inputs[0]), mask,
-                                                  sizeof(mask[0])) != MSL_CORE_OK) {
-      goto fail;
-    }
-  }
-  for (i = 0; i < seeds->count; ++i) {
-    RepresentativeSeed* seed = &seeds->entries[i];
-    size_t written = 0;
-    if (msl_core_batch_match_save_size(batch, i, &seed->snapshot_size) != MSL_CORE_OK ||
-        (seed->snapshot = malloc(seed->snapshot_size)) == NULL ||
-        msl_core_batch_save_match(batch, i, seed->snapshot, seed->snapshot_size, &written) !=
-            MSL_CORE_OK ||
-        written != seed->snapshot_size) {
-      goto fail;
-    }
-  }
-  msl_core_batch_destroy(batch);
-  free(configs);
-  free(inputs);
-  free(mask);
-  free(selected_cases);
-  return 0;
-
-fail:
-  if (batch != NULL) {
-    msl_core_batch_destroy(batch);
-  }
-  if (seeds->entries != NULL) {
-    for (i = 0; i < seeds->count; ++i) {
-      free(seeds->entries[i].snapshot);
-    }
-  }
-  free(seeds->entries);
-  free(configs);
-  free(inputs);
-  free(mask);
-  free(selected_cases);
-  memset(seeds, 0, sizeof(*seeds));
-  return -1;
-}
-
-static void representative_seeds_destroy(RepresentativeSeeds* seeds) {
-  uint32_t i;
-  for (i = 0; i < seeds->count; ++i) {
-    free(seeds->entries[i].snapshot);
-  }
-  free(seeds->entries);
-  memset(seeds, 0, sizeof(*seeds));
-}
-
 static uint64_t hash_bytes(uint64_t hash, const void* data, size_t size) {
   const uint8_t* bytes = data;
   size_t i;
@@ -566,20 +468,22 @@ int main(int argc, char** argv) {
   const char* manifest;
   uint32_t match_count = 256;
   uint32_t resident_match_count = 16;
-  uint32_t match_frames = 32768;
+  uint32_t match_frames = 65536;
   uint32_t warmup_ticks = 8;
   uint32_t ticks;
   uint32_t case_count = 0;
+  uint32_t preroll_source_count;
   uint32_t i;
   uint64_t digest = UINT64_C(14695981039346656037);
+  uint64_t preroll_match_frames = 0;
+  uint64_t stage_mask = 0;
+  uint64_t character_mask = 0;
   size_t observation_bytes;
   ReplayCase* cases = NULL;
   MslCoreObservation* observations = NULL;
   MslCoreTerminal* terminals = NULL;
   MslCoreGameData* game_data = NULL;
-  RepresentativeSeeds representative_seeds = {0};
   RunResult production;
-  RunResult step_only;
   int result = 1;
 
 #ifdef MSL_CORE_GPROF
@@ -624,14 +528,29 @@ int main(int argc, char** argv) {
   observations = calloc((size_t)match_count * OBSERVATION_HISTORY, sizeof(*observations));
   terminals = calloc((size_t)match_count * OBSERVATION_HISTORY, sizeof(*terminals));
   if (observations == NULL || terminals == NULL || load_cases(manifest, &cases, &case_count) != 0 ||
-      msl_core_game_data_create(data_root, &game_data) != MSL_CORE_OK ||
-      representative_seeds_create(game_data, cases, case_count, &representative_seeds) != 0) {
+      msl_core_game_data_create(data_root, &game_data) != MSL_CORE_OK) {
     fprintf(stderr, "benchmark workload failed\n");
     goto done;
   }
+  for (i = 0; i < case_count; ++i) {
+    const MslCoreMatchConfig* config = &cases[i].header->config;
+    uint32_t player;
+    if (config->stage_id < 64) {
+      stage_mask |= UINT64_C(1) << config->stage_id;
+    }
+    for (player = 0; player < config->num_players; ++player) {
+      if (config->players[player].char_id < 64) {
+        character_mask |= UINT64_C(1) << config->players[player].char_id;
+      }
+    }
+  }
+  preroll_source_count = match_count < case_count ? match_count : case_count;
+  for (i = 0; i < preroll_source_count; ++i) {
+    preroll_match_frames +=
+        STARTUP_BASE_FRAMES + (i % STARTUP_GROUP_COUNT) * STARTUP_FRAME_GAP;
+  }
   if (run_sharded_pass(game_data, cases, case_count, match_count, resident_match_count, ticks,
-                       warmup_ticks, 1, observations, terminals, &representative_seeds,
-                       &production) != 0) {
+                       warmup_ticks, 1, observations, terminals, &production) != 0) {
 #ifdef MSL_CORE_GPROF
     moncontrol(0);
 #endif
@@ -645,22 +564,17 @@ int main(int argc, char** argv) {
 #ifdef MSL_SUBSYSTEM_PROFILE
   msl_subsystem_profile_report();
 #endif
-  if (run_sharded_pass(game_data, cases, case_count, match_count, resident_match_count, ticks,
-                       warmup_ticks, 0, observations, terminals, &representative_seeds,
-                       &step_only) != 0) {
-    fprintf(stderr, "step-only diagnostic failed\n");
-    goto done;
-  }
   printf(
       "replay_benchmark mode=%s cases=%u logical_matches=%u "
-      "resident_matches=%u ticks=%u history=%u representative_seeds=%u "
-      "staged_match_frames=%" PRIu64 " stage_mask=%016" PRIx64
+      "resident_matches=%u ticks=%u history=%u startup_groups=%u "
+      "startup_base=%u startup_gap=%u preroll_sources=%u preroll_match_frames=%" PRIu64
+      " stage_mask=%016" PRIx64
       " character_mask=%016" PRIx64 " cpu=%d "
       "observation_mib=%.2f\n",
       resident_match_count == match_count ? "resident" : "sharded", case_count, match_count,
-      resident_match_count, ticks, OBSERVATION_HISTORY, representative_seeds.count,
-      representative_seeds.staged_match_frames, representative_seeds.stage_mask,
-      representative_seeds.character_mask, sched_getcpu(),
+      resident_match_count, ticks, OBSERVATION_HISTORY, STARTUP_GROUP_COUNT,
+      STARTUP_BASE_FRAMES, STARTUP_FRAME_GAP, preroll_source_count,
+      preroll_match_frames, stage_mask, character_mask, sched_getcpu(),
       (double)observation_bytes / (1024.0 * 1024.0));
   printf("production seconds=%.6f cpu_seconds=%.6f match_frames=%" PRIu64
          " fps=%.0f cpu_fps=%.0f resets=%" PRIu64 " digest=%016" PRIx64 "\n",
@@ -668,11 +582,6 @@ int main(int argc, char** argv) {
          (double)((uint64_t)match_count * ticks) / production.seconds,
          (double)((uint64_t)match_count * ticks) / production.cpu_seconds, production.resets,
          digest);
-  printf("step_only seconds=%.6f cpu_seconds=%.6f match_frames=%" PRIu64
-         " fps=%.0f cpu_fps=%.0f resets=%" PRIu64 "\n",
-         step_only.seconds, step_only.cpu_seconds, (uint64_t)match_count * ticks,
-         (double)((uint64_t)match_count * ticks) / step_only.seconds,
-         (double)((uint64_t)match_count * ticks) / step_only.cpu_seconds, step_only.resets);
   result = 0;
 
 done:
@@ -681,7 +590,6 @@ done:
   }
   free(observations);
   free(terminals);
-  representative_seeds_destroy(&representative_seeds);
   unload_cases(cases, case_count);
   return result;
 }
