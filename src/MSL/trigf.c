@@ -106,6 +106,82 @@ f32 cosf(f32 x)
     }
 }
 
+#if defined(MSL_CORE_NATIVE)
+void msl_sincosf3(const f32 xyz[3], f32 sin_out[3], f32 cos_out[3])
+{
+    int i;
+
+    for (i = 0; i < 3; i++) {
+        int n;
+        f32 x = xyz[i];
+        f32 y;
+        f32 ysq;
+        f32 sin_z;
+        f32 cos_z;
+
+        sin_z = (2.0f / (f32) M_PI) * x;
+        n = (__HI(x) & 0x80000000) ? (int) (sin_z - 0.5f)
+                                   : (int) (sin_z + 0.5f);
+
+        y = x - n * 2 + __four_over_pi_m1[0] * x +
+            __four_over_pi_m1[1] * x + __four_over_pi_m1[2] * x +
+            __four_over_pi_m1[3] * x;
+        n &= 3;
+
+        if (__builtin_fabsf(y) < __epsilon) {
+            n <<= 1;
+            sin_out[i] =
+                __sincos_on_quadrant[n] +
+                (__sincos_on_quadrant[n + 1] * y * __sincos_poly[9]);
+            cos_out[i] =
+                __sincos_on_quadrant[n + 1] - y * __sincos_on_quadrant[n];
+            continue;
+        } else {
+            ysq = y * y;
+            if (n & 1) {
+                n <<= 1;
+                sin_z = (((__sincos_poly[0] * ysq + __sincos_poly[2]) *
+                              ysq +
+                          __sincos_poly[4]) *
+                           ysq +
+                       __sincos_poly[6]) *
+                          ysq +
+                      __sincos_poly[8];
+                cos_z =
+                    -((((__sincos_poly[1] * ysq + __sincos_poly[3]) * ysq +
+                         __sincos_poly[5]) *
+                           ysq +
+                        __sincos_poly[7]) *
+                          ysq +
+                       __sincos_poly[9]) *
+                    y;
+                sin_out[i] = sin_z * __sincos_on_quadrant[n];
+                cos_out[i] = cos_z * __sincos_on_quadrant[n];
+            } else {
+                n <<= 1;
+                sin_z =
+                    ((((__sincos_poly[1] * ysq + __sincos_poly[3]) * ysq +
+                        __sincos_poly[5]) *
+                           ysq +
+                       __sincos_poly[7]) *
+                          ysq +
+                      __sincos_poly[9]) *
+                    y;
+                cos_z = (((__sincos_poly[0] * ysq + __sincos_poly[2]) *
+                              ysq +
+                          __sincos_poly[4]) *
+                             ysq +
+                         __sincos_poly[6]) *
+                            ysq +
+                        __sincos_poly[8];
+                sin_out[i] = sin_z * __sincos_on_quadrant[n + 1];
+                cos_out[i] = cos_z * __sincos_on_quadrant[n + 1];
+            }
+        }
+    }
+}
+#endif
+
 #pragma dont_inline on
 
 f32 sin__Ff(f32 x)

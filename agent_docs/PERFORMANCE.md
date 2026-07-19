@@ -21,6 +21,26 @@ make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
 
+## Exact paired matrix trig — 2026-07-19
+
+Hosted `HSD_MtxSRT` and `HSD_MkRotationMtx` now request all three Euler sine/cosine pairs through one
+exact MSL owner. Each component performs the source sign/range/quadrant reduction once, evaluates
+both unchanged MSL polynomials once, and publishes the same six scalar results. This deletes the
+second identical reduction and five of six external call boundaries per matrix; it adds no cache,
+table, approximation, mutable state, or alternate pose representation. PPC retains the matching
+scalar source sequence.
+
+Three adjacent CPU-0 control/candidate samples at 512 preserve digest `6f91f23e3553a090`.
+Controls are 69,882/70,242/69,633 FPS and candidates are 74,405/74,669/74,322 FPS; raw medians
+improve 69,882 to 74,405 FPS (+6.47%). A separate final candidate set is
+74,780/74,340/74,039 FPS, a 74,340 median. At 256, final samples are
+78,599/78,487/78,818 FPS, a 78,599 median (+5.55% over the preceding 74,466 baseline), with digest
+`8ef126a41244d514` unchanged.
+
+The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across
+1,415,476 frames. Native source/API/copy/save-restore and sealed allocation, PPC, Wasm parity,
+viewer/browser, pytest, and formatting gates pass. Persistent and shared memory are unchanged.
+
 ## Supported hosted dynamics-pool capacity — 2026-07-19
 
 Native and Wasm Matches now own 64 fighter-dynamics nodes instead of the retail all-roster pool of
@@ -174,6 +194,17 @@ threshold after this seam tax. No direct matrix kernel or runtime bridge was pur
 diagnostic implementation is preserved in named stash `rejected-native-batch-ecb-seam-20260719`.
 Future batch geometry work must amortize its phase boundary across multiple dominant consumers and
 use a canonical hot layout rather than interleave one scattered per-Match owner.
+
+### Rejected eager exact ECB matrix program
+
+An exact direct-index diagnostic proved that local Euler-matrix lookup could improve the retained
+scalar workload about 4.3%, but its narrow 13,041-binding sample covered only values reached by the
+probe workload. The production-shaped exhaustive program expanded to 34,834 bindings and 1,430,638
+samples; full matrices cost about 68.7 MiB shared and measured between 57k and 71k FPS. Exact linear
+3x3 dedup still retained 668,807 unique matrices (about 30 MiB) and reached only 68,074 FPS. Compact
+ECB topology without the matrix table measured about 67.6k. The final eager design is therefore
+slower than retained execution and carries excessive shared state; both diagnostic paths are
+preserved in named stashes, and no production source remains.
 
 ### Rejected dense ordinary pose publication
 

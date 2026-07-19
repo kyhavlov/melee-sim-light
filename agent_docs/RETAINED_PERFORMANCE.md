@@ -154,8 +154,17 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Supported hosted dynamics capacity
 
-- **This commit** sizes the native/Wasm fighter-dynamics pool to its supported construction and
-  gameplay bound of 64 nodes, with hard exhaustion enforcement and the retail PPC layout preserved.
+- `3305b234` **Compact hosted fighter dynamics capacity** sizes the native/Wasm fighter-dynamics
+  pool to its supported construction and gameplay bound of 64 nodes, with hard exhaustion
+  enforcement and the retail PPC layout preserved.
   Ordinary arena/savestate storage falls by 43,008 bytes per environment; 512 adjacent A/B medians
   are throughput-neutral (+0.17% raw, +0.05% paired), and every construction, correctness,
   allocation, API, PPC, Wasm, and viewer gate is green.
+
+## Exact paired matrix trig
+
+- **This commit** replaces six scalar trig calls in each hosted three-axis HSD matrix constructor
+  with one exact paired evaluator. It shares source range reduction while preserving both MSL
+  polynomial results and adds no state or approximation. Adjacent 512 medians improve +6.47%; the
+  final 256 result improves +5.55% over the preceding baseline. Both production digests and the
+  complete replay/API/save-restore/PPC/Wasm/viewer gates remain exact.

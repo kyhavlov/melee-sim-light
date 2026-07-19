@@ -7,8 +7,8 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 ## Provenance
 
 - Runtime: compact fighter pose/gameplay geometry, shared exact ordinary Figa samples, direct hosted
-  scheduler dispatch, demand-owned hurt capsules, exact O1 fighter map collision, and the supported
-  64-node hosted dynamics pool
+  scheduler dispatch, demand-owned hurt capsules, exact O1 fighter map collision, the supported
+  64-node hosted dynamics pool, and exact paired three-axis matrix trig
 - Date: 2026-07-19
 - Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 6.17 x86-64
 - Compiler: GCC 13.3.0, strict native release profile, `-march=native -mtune=native`
@@ -35,9 +35,10 @@ make benchmark-9950x3d-vcache-512
 | 256 | `8ef126a41244d514` |
 | 512 | `6f91f23e3553a090` |
 
-The retained comparison medians are 74,466 FPS at 256 and 70,468 FPS at 512. The latest
-capacity-only packet is throughput-neutral: adjacent 512 control/candidate medians are
-69,982/70,102 FPS (+0.17% raw, +0.05% paired) with the same digest.
+The retained comparison medians are 78,599 FPS at 256 and 74,340 FPS at 512. For the latest exact
+paired-trig packet, adjacent 512 control/candidate medians are 69,882/74,405 FPS (+6.47%) with the
+same digest. Its final independent candidate set has a 74,340 median; the final 256 candidate median
+is 78,599 FPS (+5.55% over the preceding 74,466 baseline).
 
 ## Current memory contract
 
@@ -60,10 +61,11 @@ paid once per process rather than once per environment.
 
 ## Current corrected profile
 
-On the committed staggered 512 workload, the scheduler owns 94.07% of instrumented time. Its largest
-exclusive owners are hosted fighter maintenance (`Fighter_8006A360`, 26.22%), fighter map collision
-(`Fighter_procMap`, 21.32%), fighter dynamics (`Fighter_8006D9AC`, 7.23%), Spaghetti camera bounds
-(6.81%), and camera (3.71%). Cross-cutting phase attribution assigns 20.43% to stage collision,
-15.46% to fighter animation, 13.79% to pose animation, 8.18% to action animation callbacks, and
-4.60% to input/action callbacks. The profiler's 59,435 FPS is diagnostic overhead, not a throughput
-baseline; nested rows must not be added to their enclosing phase shares.
+On the staggered 512 workload with exact paired matrix trig, the scheduler owns 93.92% of
+instrumented time. Its largest exclusive owners are hosted fighter maintenance
+(`Fighter_8006A360`, 27.35%), fighter map collision (`Fighter_procMap`, 18.28%), fighter dynamics
+(`Fighter_8006D9AC`, 7.51%), Spaghetti camera bounds (7.16%), and camera (3.93%). Cross-cutting
+phase attribution assigns 17.39% to stage collision, 16.08% to fighter animation, 14.32% to pose
+animation, 8.53% to action animation callbacks, and 4.84% to input/action callbacks. The profiler's
+62,469 FPS is diagnostic overhead, not a throughput baseline; nested rows must not be added to their
+enclosing phase shares.

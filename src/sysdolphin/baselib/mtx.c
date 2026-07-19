@@ -334,12 +334,25 @@ void HSD_MkRotationMtx(Mtx arg0, Vec3* arg1)
     f32 temp1;
     f32 temp2;
 
+#if defined(MSL_CORE_NATIVE)
+    f32 sin_xyz[3];
+    f32 cos_xyz[3];
+
+    msl_sincosf3(&arg1->x, sin_xyz, cos_xyz);
+    sinX = sin_xyz[0];
+    sinY = sin_xyz[1];
+    sinZ = sin_xyz[2];
+    cosX = cos_xyz[0];
+    cosY = cos_xyz[1];
+    cosZ = cos_xyz[2];
+#else
     sinX = sinf(arg1->x);
     cosX = cosf(arg1->x);
     sinY = sinf(arg1->y);
     cosY = cosf(arg1->y);
     sinZ = sinf(arg1->z);
     cosZ = cosf(arg1->z);
+#endif
 
     temp1 = sinX * sinY;
     arg0[0][0] = cosY * cosZ;
@@ -374,12 +387,32 @@ void HSD_MtxSRT(Mtx m, Vec3* vec1, Vec3* vec2, Vec3* vec3, Vec3* vec4)
     f32 vec1y;
     f32 vec1z;
 
-    f32 sinX = sinf(vec2->x);
-    f32 cosX = cosf(vec2->x);
-    f32 sinY = sinf(vec2->y);
-    f32 cosY = cosf(vec2->y);
-    f32 sinZ = sinf(vec2->z);
-    f32 cosZ = cosf(vec2->z);
+    f32 sinX;
+    f32 cosX;
+    f32 sinY;
+    f32 cosY;
+    f32 sinZ;
+    f32 cosZ;
+
+#if defined(MSL_CORE_NATIVE)
+    f32 sin_xyz[3];
+    f32 cos_xyz[3];
+
+    msl_sincosf3(&vec2->x, sin_xyz, cos_xyz);
+    sinX = sin_xyz[0];
+    sinY = sin_xyz[1];
+    sinZ = sin_xyz[2];
+    cosX = cos_xyz[0];
+    cosY = cos_xyz[1];
+    cosZ = cos_xyz[2];
+#else
+    sinX = sinf(vec2->x);
+    cosX = cosf(vec2->x);
+    sinY = sinf(vec2->y);
+    cosY = cosf(vec2->y);
+    sinZ = sinf(vec2->z);
+    cosZ = cosf(vec2->z);
+#endif
 
     vec1x_2 = vec1x_1 = vec1x = vec1->x;
     vec1y_2 = vec1y_1 = vec1y = vec1->y;
