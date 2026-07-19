@@ -21,6 +21,24 @@ make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
 
+## Direct hosted GObj scheduler — 2026-07-19
+
+The hosted production scheduler now executes the decomp-shaped priority/process walk directly from
+the already-bound Match GObj context. This deletes the four out-of-line resumable-scheduler calls,
+their repeated context recovery, and duplicated scheduler-state publication from every production
+dispatch. The resumable functions remain a diagnostic interface only; there is no static schedule,
+copied process list, callback specialization, alternate state, or changed mutation order.
+
+Three adjacent CPU-0 control/candidate pairs preserve digest `6f91f23e3553a090` at 512. Results are
+63,609/65,445, 63,464/65,652, and 63,544/65,668 FPS. Raw medians improve 63,544 to 65,652 FPS
+(+3.32%); median paired improvement is +3.34%. The candidate's three 256-environment samples are
+68,850, 68,589, and 68,891 FPS, a 68,850 median (+3.12% over the retained 66,767 baseline), with
+unchanged digest `8ef126a41244d514`.
+
+The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across
+1,415,476 frames. Native source/API/copy/save-restore and sealed-allocation, PPC, Wasm parity,
+viewer, and formatting gates pass. The packet adds no state, allocation, API, or memory cost.
+
 ## Shared compiled fighter animation samples — 2026-07-19
 
 GameData now enumerates every translated fighter Figa tree and compiles its exact ordinary integer

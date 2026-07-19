@@ -239,16 +239,73 @@ void msl_hsd_gobj_run_procs_invoke(void)
     HSD_GObj_804D7838 = NULL;
 }
 
-void HSD_GObj_80390CFC(void)
+__attribute__((hot, optimize("O3"))) void HSD_GObj_80390CFC(void)
 {
+    HSD_GObjContext* context = msl_core_gobj_context();
+    u64 proc_link_mask = context->init_data.unk_2 != NULL
+                             ? *context->init_data.unk_2
+                             : 0;
     s32 priority;
-    msl_hsd_gobj_run_procs_begin();
-    for (priority = 0; priority <= HSD_GObjLibInitData.gproc_pri_max;
+
+    context->proc_epoch += 1;
+    if (context->proc_epoch > 2) {
+        context->proc_epoch = 0;
+    }
+    context->scheduled_proc = NULL;
+    for (priority = 0; priority <= context->init_data.gproc_pri_max;
          ++priority)
     {
-        msl_hsd_gobj_run_procs_priority_begin(priority);
-        while (msl_hsd_gobj_run_procs_next_owner() != NULL) {
-            msl_hsd_gobj_run_procs_invoke();
+        HSD_GObjProc* proc;
+        context->current_proc_priority = priority;
+        proc = context->proc_heads[priority];
+        while (proc != NULL) {
+            HSD_GObj* gobj;
+            context->next_proc = proc->next;
+            if (proc->flags_3 == context->proc_epoch) {
+                proc = context->next_proc;
+                continue;
+            }
+            proc->flags_3 = context->proc_epoch;
+            gobj = proc->gobj;
+            if (!(proc_link_mask & (1LL << gobj->p_link)) &&
+                !(proc->flags_1) && !(proc->flags_2))
+            {
+                context->current_proc_gobj = gobj;
+                context->current_proc = proc;
+#ifdef MSL_SUBSYSTEM_PROFILE
+                {
+                    uint64_t started = msl_profile_cycles();
+                    proc->on_invoke(gobj);
+                    msl_profile_add_owner(
+                        (uintptr_t) proc->on_invoke,
+                        msl_profile_cycles() - started);
+                }
+#else
+                proc->on_invoke(gobj);
+#endif
+                context->next_proc = proc->next;
+                if (context->pending.flags != 0) {
+                    context->pending.b0 = 1;
+                    if (context->pending.b1) {
+                        HSD_GObjPLink_80390228(proc->gobj);
+                    } else {
+                        if (context->pending.b3) {
+                            HSD_GObjPLink_8039032C(
+                                context->pending.type, proc->gobj,
+                                context->pending.p_link,
+                                context->pending.p_prio,
+                                context->pending.gobj);
+                        }
+                        if (context->pending.b2) {
+                            HSD_GObjProc_8038FE24(proc);
+                        }
+                    }
+                    context->pending.flags = 0;
+                }
+                context->current_proc_gobj = NULL;
+                context->current_proc = NULL;
+            }
+            proc = context->next_proc;
         }
     }
 }
