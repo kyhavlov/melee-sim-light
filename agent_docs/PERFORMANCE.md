@@ -21,6 +21,24 @@ make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
 
+## Exact O1 fighter map collision owner — 2026-07-19
+
+The native release profile now compiles the complete `mpcoll.c` translation unit at O1. This is the
+strongest exact measured level for the dominant fighter map-collision source owner: O2 preserves the
+production digest but reaches only 68,414 FPS at 512, while the previously removed O3 admission
+changes a validation replay. There is no collision source edit, function clone, action fast path,
+runtime dispatch, or alternate state.
+
+Three adjacent CPU-0 control/candidate pairs preserve digest `6f91f23e3553a090` at 512. Controls are
+67,572, 67,255, and 67,627 FPS; candidates are 70,466, 70,510, and 70,468 FPS. Raw medians improve
+67,572 to 70,468 FPS (+4.29%); median paired improvement is +4.28%. At 256, controls are
+71,467/71,383/71,231 and candidates are 74,395/74,466/74,674 FPS, preserving digest
+`8ef126a41244d514`; raw and paired medians improve +4.32%.
+
+The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across
+1,415,476 frames. Native source/API/copy/save-restore and sealed-allocation, PPC, Wasm parity,
+viewer, and formatting gates pass. The packet changes no persistent or shared memory.
+
 ## Demand-owned hurt-capsule publication — 2026-07-19
 
 Hosted `Fighter_ProcessHit_8006D1EC` no longer transforms every hurt capsule unconditionally.
@@ -60,6 +78,51 @@ unchanged digest `8ef126a41244d514`.
 The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across
 1,415,476 frames. Native source/API/copy/save-restore and sealed-allocation, PPC, Wasm parity,
 viewer, and formatting gates pass. The packet adds no state, allocation, API, or memory cost.
+
+### Rejected fighter-dynamics branch specialization
+
+A profile-only census of every admitted fighter call found only three-node/no-collider and
+four-node/collider chains, with no skipped prefixes or stiffness branch and one dominant axis.
+That structural simplicity is not the cost: exact orientation and constraint math account for
+about 67% of solver cycles, setup and floor work another 23%, and collider handling only 2.4%.
+A branch-pruned clone therefore cannot meet a two-point whole-frame threshold; no production code
+or instrumentation was retained. Future dynamics work must transform the exact math execution or
+state layout rather than duplicate the generic solver.
+
+### Rejected compiled pose-publication operation spans
+
+Immutable per-node/filter operation spans replaced both hot scans of original Figa track metadata
+while preserving exact publication order and digest. Three adjacent 512 pairs improved only
+66,974 to 67,764 FPS by raw median (+1.18%, +1.21% paired). The candidate was preserved in a named
+stash and removed: another shared metadata array is not justified for a sub-threshold scalar scan
+cut. Further pose work must reduce sample/matrix execution itself rather than its small dispatch
+surface.
+
+### Rejected change-owned fighter SRT invalidation
+
+Bit-exact direct-component comparisons preserved the 512 digest but measured 66,419 FPS against the
+66,953 retained median. Reached parent animation/demanded geometry already invalidates enough of the
+closure that per-track comparisons add more work than they remove. The candidate was preserved in a
+named stash and removed without further leaf tuning.
+
+### Rejected exact release LTO partition
+
+Restricting GCC LTO to the already exact O2/O3 release allowlist does not link cleanly. LTO merges
+complete translation units before section GC and retains presentation-only functions in mixed
+owners such as `lbspdisplay`, `lbvector`, and `mpLib`; those functions correctly reference renderer/
+GX symbols absent from the headless runtime. Ordinary LTO and whole-program internalization failed
+the same boundary. No stubs or source-owner splits were added solely for LTO, and the Makefile
+candidate was preserved in a named stash.
+
+### Rejected dominant action-callback compiler closure
+
+Profile-only target attribution resolved 594 actual animation, input/IASA, physics, and collision
+callback targets. Ten common-action source files contained nearly every dominant target, but much of
+their measured collision time belongs to the shared `mpColl` callee. Complete-owner O2 admission was
+exact only after removing `ftCo_Damage`; the eight useful exact files reached 67,298 FPS at 512
+against the retained 66,953 median (+0.52%). O3 remained exact but measured 67,194 FPS. The bounded
+source set is below the three-point threshold, so no compiler list or target instrumentation remains;
+both candidates are preserved in named stashes.
 
 ## Shared compiled fighter animation samples — 2026-07-19
 
