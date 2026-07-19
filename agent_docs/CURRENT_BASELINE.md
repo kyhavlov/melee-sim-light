@@ -6,7 +6,7 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Provenance
 
-- Commit: dense ordinary pose samples (current HEAD)
+- Commit: direct fighter animation binding (current HEAD)
 - Runtime: compact fighter pose/gameplay geometry, node-indexed dense exact ordinary Figa samples,
   direct hosted
   scheduler dispatch, demand-owned hurt capsules, exact O1 fighter map collision, the supported
@@ -39,9 +39,9 @@ make benchmark-9950x3d-vcache-512
 | 256 | `8ef126a41244d514` |
 | 512 | `6f91f23e3553a090` |
 
-The retained comparison medians are 98,641 FPS at 256 and 93,120 FPS at 512. For the latest dense
-pose packet, adjacent 512 control/candidate median costs are 47,868.8/46,090.4 cycles/frame (-3.71%)
-and adjacent 256 costs are 45,181.3/43,510.7 (-3.70%), with the same digests.
+The retained comparison medians are 98,682 FPS at 256 and 92,963 FPS at 512. For the latest direct
+animation-binding packet, adjacent 512 control/candidate median costs are 47,185.9/46,168.3
+cycles/frame (-2.16%) and adjacent 256 costs are 44,986.5/43,492.5 (-3.32%), with the same digests.
 
 ## Current memory contract
 
@@ -59,19 +59,17 @@ nodes inside the fixed 1,000-node capacity.
 | Hosted fighter-dynamics pool | 10,752 B (64 nodes) |
 
 The public 128-frame observation history remains 127,488 bytes per environment and is caller-owned.
-Shared GameData additionally owns 10,718,160 compiled Figa values and 131,653 immutable node
-descriptors (42.92 MiB total), paid once per process rather than once per environment. The dense
-layout adds 0.71 MiB of process-global data while deleting sparse validity bits; per-Match memory is
-unchanged.
+Shared GameData additionally owns 10,718,160 compiled Figa values, 131,653 immutable node
+descriptors, and direct binding tables (43.44 MiB total), paid once per process rather than once per
+environment. The dense publication and direct-binding layouts add 1.23 MiB of process-global data
+while deleting sparse validity bits; per-Match memory is unchanged.
 
 ## Current corrected profile
 
-The last corrected profile is from `d05e385c`, before dense pose publication. On that staggered 512
-workload the scheduler owns 94.57% of
-instrumented time. Its largest inclusive callback owners are hosted fighter maintenance
-(`Fighter_8006A360`, 32.52%), fighter map collision (`Fighter_procMap`, 12.85%), fighter dynamics
-(`Fighter_8006D9AC`, 7.73%), Spaghetti input/IASA (7.26%), and camera (3.34%). Cross-cutting phase
-attribution assigns 20.62% to fighter animation, 18.87% to pose animation, 12.06% to stage collision,
-9.02% to action animation callbacks, and 5.13% to input/action callbacks. The profiler's 64,124 FPS
-is diagnostic overhead, not a throughput baseline; nested rows must not be added to their enclosing
-phase shares.
+On the staggered 512 workload at `90078dfb`, the scheduler owns 94.08% of instrumented time. Its
+largest inclusive callback owners are hosted fighter maintenance (`Fighter_8006A360`, 28.98%),
+fighter map collision (`Fighter_procMap`, 13.89%), fighter dynamics (`Fighter_8006D9AC`, 8.86%),
+Spaghetti input/IASA (8.09%), and camera (3.62%). Cross-cutting phase attribution assigns 16.52% to
+fighter animation, 14.53% to pose animation, 13.04% to stage collision, 9.89% to action animation
+callbacks, and 5.75% to input/action callbacks. The profiler's 73,928 FPS is diagnostic overhead,
+not a throughput baseline; nested rows must not be added to their enclosing phase shares.

@@ -50,23 +50,18 @@ static const MslFighterPosePrograms* active_programs(void)
 static uint16_t find_program(const FigaTree* tree)
 {
     const MslFighterPosePrograms* programs = active_programs();
-    uint32_t begin = 0;
-    uint32_t end = programs->program_count;
     uintptr_t target = (uintptr_t) tree;
-    while (begin < end) {
-        uint32_t middle = begin + (end - begin) / 2;
-        uintptr_t candidate =
-            (uintptr_t) programs->programs[middle].tree;
-        if (candidate < target) {
-            begin = middle + 1;
-        } else {
-            end = middle;
+    uint32_t slot =
+        (uint32_t) ((target >> 3) * UINT32_C(2654435761)) &
+        programs->program_hash_mask;
+    for (;;) {
+        uint16_t index = programs->program_hash[slot];
+        HSD_ASSERT(51, index != UINT16_MAX);
+        if (programs->programs[index].tree == tree) {
+            return index;
         }
+        slot = (slot + 1) & programs->program_hash_mask;
     }
-    HSD_ASSERT(51, begin < programs->program_count &&
-                       programs->programs[begin].tree == tree);
-    HSD_ASSERT(52, begin < MSL_FIGHTER_POSE_PROGRAM_NONE);
-    return (uint16_t) begin;
 }
 #else
 static uint16_t find_program(const FigaTree* tree)
@@ -540,6 +535,7 @@ void msl_fighter_pose_attach_figa(HSD_JObj* joint, FigaTree* tree,
 #ifdef MSL_CORE_NATIVE
     const MslFighterPosePrograms* programs = active_programs();
     const MslFighterPoseProgram* program;
+    const MslFighterPoseProgramNode* program_node;
     uint16_t program_index;
 #endif
     MslFighterPoseJoint* node = pose_joint(joint);
@@ -559,18 +555,15 @@ void msl_fighter_pose_attach_figa(HSD_JObj* joint, FigaTree* tree,
     {
         uint32_t track_start = (uint32_t) (tracks - tree->tracks);
         uint16_t node_index;
-        for (node_index = 0; node_index < program->node_count; ++node_index) {
-            const MslFighterPoseProgramNode* program_node =
-                &programs->nodes[program->node_start + node_index];
-            if (program_node->track_start == track_start &&
-                program_node->track_count == track_count)
-            {
-                break;
-            }
-        }
+        HSD_ASSERT(357, track_start < program->track_count);
+        node_index = programs->track_nodes[program->track_map_start +
+                                           track_start];
+        program_node = &programs->nodes[program->node_start + node_index];
         HSD_ASSERT(357, node_index < program->node_count &&
                             program->node_start + node_index <
-                                MSL_FIGHTER_POSE_PROGRAM_NODE_NONE);
+                                MSL_FIGHTER_POSE_PROGRAM_NODE_NONE &&
+                            program_node->track_start == track_start &&
+                            program_node->track_count == track_count);
         node->program_node_index = program->node_start + node_index;
     }
 #endif
@@ -1123,6 +1116,17 @@ static uint32_t figa_node_count(const FigaTree* tree)
     return count;
 }
 
+static uint32_t figa_track_count(const FigaTree* tree)
+{
+    const s8* node = tree->nodes;
+    uint32_t count = 0;
+    while (*node != -1) {
+        HSD_ASSERT(451, *node >= 0);
+        count += (uint8_t) *node++;
+    }
+    return count;
+}
+
 static bool direct_srt_type(uint8_t type)
 {
     return type >= HSD_A_J_ROTX && type <= HSD_A_J_SCAZ &&
@@ -1140,6 +1144,8 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
 #ifdef MSL_CORE_NATIVE
     MslFigaCollect collect = { 0 };
     uint64_t value_count = 0;
+    uint64_t track_node_count = 0;
+    uint32_t hash_capacity = 1;
     uint32_t node_count = 0;
     uint32_t unique_count;
     uint32_t i;
@@ -1163,19 +1169,36 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
             collect.trees[unique_count++] = collect.trees[i];
         }
     }
+    HSD_ASSERT(491, unique_count < MSL_FIGHTER_POSE_PROGRAM_NONE);
     programs->programs = calloc(unique_count, sizeof(*programs->programs));
+    while (hash_capacity < unique_count * 2) {
+        hash_capacity <<= 1;
+    }
+    programs->program_hash = malloc(
+        (size_t) hash_capacity * sizeof(*programs->program_hash));
     for (i = 0; i < unique_count; ++i) {
         node_count += figa_node_count(collect.trees[i]);
+        track_node_count += figa_track_count(collect.trees[i]);
     }
     programs->nodes = calloc(node_count, sizeof(*programs->nodes));
-    if (programs->programs == NULL || programs->nodes == NULL) {
+    HSD_ASSERT(492, track_node_count <= UINT32_MAX);
+    programs->track_nodes = calloc((size_t) track_node_count,
+                                   sizeof(*programs->track_nodes));
+    if (programs->programs == NULL || programs->program_hash == NULL ||
+        programs->nodes == NULL || programs->track_nodes == NULL)
+    {
         free(collect.trees);
         msl_fighter_pose_programs_deinit(programs);
         return -1;
     }
     programs->program_count = unique_count;
+    programs->program_hash_mask = hash_capacity - 1;
+    memset(programs->program_hash, 0xFF,
+           (size_t) hash_capacity * sizeof(*programs->program_hash));
     programs->node_count = node_count;
+    programs->track_node_count = (uint32_t) track_node_count;
     node_count = 0;
+    track_node_count = 0;
     for (i = 0; i < unique_count; ++i) {
         MslFighterPoseProgram* program = &programs->programs[i];
         const s8* source_node = collect.trees[i]->nodes;
@@ -1187,6 +1210,10 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
                 : 1;
         program->tree = collect.trees[i];
         program->node_start = node_count;
+        program->track_map_start = (uint32_t) track_node_count;
+        program->track_count = figa_track_count(program->tree);
+        track_node_count += program->track_count;
+        HSD_ASSERT(495, figa_node_count(program->tree) <= UINT16_MAX);
         program->node_count = (uint16_t) figa_node_count(program->tree);
         HSD_ASSERT(495, sample_count <= UINT16_MAX);
         program->sample_count = (uint16_t) sample_count;
@@ -1201,6 +1228,8 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
             node->track_start = (uint16_t) track_start;
             node->track_count = (uint8_t) track_count;
             node->sample_count = program->sample_count;
+            programs->track_nodes[program->track_map_start + track_start] =
+                node_index;
             node->direct = track_count != 0;
             for (track = 0; track < track_count; ++track) {
                 uint8_t type =
@@ -1224,6 +1253,7 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
             track_start += track_count;
         }
         HSD_ASSERT(505, *source_node == -1);
+        HSD_ASSERT(506, track_start == program->track_count);
     }
     free(collect.trees);
     programs->value_count = (uint32_t) value_count;
@@ -1273,6 +1303,17 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
             }
         }
     }
+    for (i = 0; i < programs->program_count; ++i) {
+        uintptr_t tree = (uintptr_t) programs->programs[i].tree;
+        uint32_t slot =
+            (uint32_t) ((tree >> 3) * UINT32_C(2654435761)) &
+            programs->program_hash_mask;
+        while (programs->program_hash[slot] != UINT16_MAX)
+        {
+            slot = (slot + 1) & programs->program_hash_mask;
+        }
+        programs->program_hash[slot] = (uint16_t) i;
+    }
     return 0;
 #else
     memset(programs, 0, sizeof(*programs));
@@ -1283,6 +1324,8 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
 void msl_fighter_pose_programs_deinit(MslFighterPosePrograms* programs)
 {
 #ifdef MSL_CORE_NATIVE
+    free(programs->program_hash);
+    free(programs->track_nodes);
     free(programs->values);
     free(programs->nodes);
     free(programs->programs);

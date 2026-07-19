@@ -81,6 +81,8 @@ typedef struct MslFighterPose {
 typedef struct MslFighterPoseProgram {
     FigaTree* tree;
     uint32_t node_start;
+    uint32_t track_map_start;
+    uint32_t track_count;
     uint16_t node_count;
     uint16_t sample_count;
 } MslFighterPoseProgram;
@@ -100,9 +102,13 @@ typedef struct MslFighterPosePrograms {
     MslFighterPoseProgram* programs;
     MslFighterPoseProgramNode* nodes;
     float* values;
+    uint16_t* track_nodes;
+    uint16_t* program_hash;
     uint32_t program_count;
+    uint32_t program_hash_mask;
     uint32_t node_count;
     uint32_t value_count;
+    uint32_t track_node_count;
 } MslFighterPosePrograms;
 
 int msl_fighter_pose_init(MslFighterPose* pose);

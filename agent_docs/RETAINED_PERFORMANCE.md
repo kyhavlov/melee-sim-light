@@ -198,10 +198,19 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Compact fighter ECB matrix publication
 
-- **This commit** binds each fighter ECB's six-origin ancestor union at initialization, evaluates its
+- `d05e385c` **Batch fighter ECB matrix publication** binds each fighter ECB's six-origin ancestor union at initialization, evaluates its
   ordinary matrices through exact AVX-512 paired trig in topology order, and publishes only the
   canonical JObj matrices consumed by source collision. Dynamic special nodes remain source-owned;
   the generic fighter path and repeated per-origin traversal are deleted. Adjacent raw medians
   improve +5.13% at 512 and +6.14% at 256, both production digests and the complete gate remain
   exact, and tighter censused pose capacity makes lifecycle snapshots 800 bytes smaller per
   environment.
+
+## Dense pose publication and direct transition binding
+
+- `90078dfb` **Publish dense fighter pose samples** replaces sparse program-wide validity/value
+  storage and per-frame source-track scans with immutable per-node exact SRT streams. Adjacent
+  cycle cost falls 3.71% at 512 and 3.70% at 256 with no per-Match state growth.
+- **This commit** maps Figa trees and track starts directly to dense node descriptors, deleting the
+  binary program search and linear node scan from every animation attachment. Adjacent cycle cost
+  falls 2.16% at 512 and 3.32% at 256; 544,046 bytes are added only to process-global GameData.

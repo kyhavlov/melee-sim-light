@@ -97,6 +97,27 @@ per-Match arena and every savestate field unchanged. Debug and optimized-release
 copy/save-restore and sealed allocation, PPC, Wasm parity, viewer/browser, pytest, source-sync, and
 formatting gates pass.
 
+## Direct fighter animation node binding — 2026-07-19
+
+Shared pose programs now own a 261,195-entry track-start-to-relative-node map and a 4,096-slot
+open-addressed Figa-tree hash. Each animation attachment resolves its program and dense node with
+bounded direct lookups, deleting the binary search across 1,683 programs and the linear scan across
+the selected program's nodes. The map is immutable GameData; it adds no mutable cursor, source-tree
+field, per-Match state, fallback scan, character list, or transition shortcut.
+
+Three adjacent resident-512 controls are 47,184.4/47,185.9/47,623.1 cycles/frame and candidates are
+46,168.3/46,458.8/45,916.6, reducing the median from 47,185.9 to 46,168.3 (-2.16%). Adjacent
+resident-256 controls are 44,781.4/45,816.6/44,986.5 and candidates are
+43,561.5/43,367.1/43,492.5, reducing the median from 44,986.5 to 43,492.5 (-3.32%). Digests remain
+`6f91f23e3553a090` / `8ef126a41244d514`; candidate wall medians are 92,963 FPS at 512 and 98,682
+FPS at 256.
+
+The lookup owner adds 544,046 bytes to process-global shared GameData. The 633,432-byte per-Match
+arena and all savestate fields remain unchanged. Debug and optimized-release validation remain
+63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across 1,415,476 frames. Native source/
+API/copy/save-restore and sealed allocation, PPC, Wasm parity, viewer/browser, pytest, source-sync,
+and formatting gates pass.
+
 ## Compact fighter ECB matrix publication — 2026-07-19
 
 Fighter JObj-backed ECB publication now binds the union of its six origin-joint ancestor paths once
