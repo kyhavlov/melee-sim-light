@@ -12,8 +12,10 @@
 enum {
     // The supported-domain construction census reaches 976 retained main and
     // interpolation nodes for four Peach instances.
-    MSL_FIGHTER_POSE_JOINT_CAPACITY = 1024,
+    MSL_FIGHTER_POSE_JOINT_CAPACITY = 1000,
     MSL_FIGHTER_POSE_TRACK_CAPACITY = 1024,
+    MSL_FIGHTER_POSE_ECB_CAPACITY = 8,
+    MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY = 32,
     MSL_FIGHTER_POSE_PROGRAM_NONE = 0x7FF,
 };
 
@@ -66,8 +68,14 @@ _Static_assert(sizeof(MslFighterPoseJoint) ==
 typedef struct MslFighterPose {
     MslFighterPoseJoint* joints;
     MslFighterPoseTrack* tracks;
+    struct {
+        uint16_t origin;
+        uint16_t joint_count;
+        uint16_t joints[MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY];
+    } ecb[MSL_FIGHTER_POSE_ECB_CAPACITY];
     uint16_t joint_count;
     uint16_t track_used;
+    uint16_t ecb_count;
 } MslFighterPose;
 
 typedef struct MslFighterPoseProgram {
@@ -115,5 +123,8 @@ bool msl_fighter_pose_transform_point(HSD_JObj* joint, const Vec3* local,
 bool msl_fighter_pose_transform_pair(HSD_JObj* joint, const Vec3* local_a,
                                      const Vec3* local_b, Vec3* world_a,
                                      Vec3* world_b);
+void msl_fighter_pose_bind_origins(HSD_JObj* const joints[6]);
+void msl_fighter_pose_transform_origins(HSD_JObj* const joints[6],
+                                        Vec3 world[6]);
 
 #endif

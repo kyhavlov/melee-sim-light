@@ -294,11 +294,11 @@ void PSMTXConcat(Mtx a, Mtx b, Mtx out)
     }
 }
 
-void HSD_MtxSRTConcat(Mtx out, Mtx parent, Vec3* scale, Vec3* rotate,
-                      Vec3* translate, Vec3* parent_scale)
+static inline __attribute__((always_inline)) void
+mtx_srt_concat_trig(Mtx out, Mtx parent, Vec3* scale, Vec3* translate,
+                    Vec3* parent_scale, const float sin_xyz[3],
+                    const float cos_xyz[3])
 {
-    float sin_xyz[3];
-    float cos_xyz[3];
     float scale_x2 = scale->x;
     float scale_x1 = scale->x;
     float scale_x = scale->x;
@@ -322,7 +322,6 @@ void HSD_MtxSRTConcat(Mtx out, Mtx parent, Vec3* scale, Vec3* rotate,
     // general aliasable matrix.
     // refs/melee/src/sysdolphin/baselib/mtx.c::HSD_MtxSRT
     // refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXConcat
-    msl_sincosf3(&rotate->x, sin_xyz, cos_xyz);
     if (parent_scale != NULL &&
         (parent_scale->x != 1.0F || parent_scale->y != 1.0F ||
          parent_scale->z != 1.0F)) {
@@ -407,6 +406,25 @@ void HSD_MtxSRTConcat(Mtx out, Mtx parent, Vec3* scale, Vec3* rotate,
         }
 #endif
     }
+}
+
+void HSD_MtxSRTConcat(Mtx out, Mtx parent, Vec3* scale, Vec3* rotate,
+                      Vec3* translate, Vec3* parent_scale)
+{
+    float sin_xyz[3];
+    float cos_xyz[3];
+
+    msl_sincosf3(&rotate->x, sin_xyz, cos_xyz);
+    mtx_srt_concat_trig(out, parent, scale, translate, parent_scale, sin_xyz,
+                        cos_xyz);
+}
+
+void HSD_MtxSRTConcatTrig(Mtx out, Mtx parent, Vec3* scale, Vec3* translate,
+                          Vec3* parent_scale, const float sin_xyz[3],
+                          const float cos_xyz[3])
+{
+    mtx_srt_concat_trig(out, parent, scale, translate, parent_scale, sin_xyz,
+                        cos_xyz);
 }
 
 void PSMTXMultVec(Mtx44 matrix, Vec* src, Vec* dst)

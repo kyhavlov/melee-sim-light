@@ -1,116 +1,107 @@
-# Active performance packet — optimized native source closure
+# Active performance packet — compact six-origin fighter ECB evaluator
 
 ## Objective
 
-Replace the native release runtime's decomp-matching `-O0` default with a strict optimized source
-closure. Establish the whole-runtime throughput ceiling first, then make every reached supported
-owner safe under optimization by fixing explicit source operation boundaries or latent undefined
-behavior. Retain the strongest correctness-green final profile; do not accumulate a permanent
-allowlist of uninvestigated `-O0` gameplay owners.
+Replace six independent generic JObj point queries in fighter JObj-backed ECB publication with one
+compact-pose evaluator. Resolve the union of demanded ancestors once, evaluate dirty ordinary
+matrices in canonical topology order, and publish the same six JObj matrix origins directly to the
+source ECB owner.
 
 ## Final boundary
 
-- **Final owner:** the native release build owns one strict optimized compiler contract for runtime,
-  platform, and imported gameplay source. PPC retains its matching profile and Wasm its existing
-  toolchain profile.
-- **Canonical state:** gameplay source state and public outputs are unchanged. Float expressions
-  whose source/PPC operation order is observable state that order explicitly in source; native
-  optimization must not rely on unsafe math.
-- **Consumers:** the production batch API, replay validator, save/restore, Python library, and native
-  tools all consume the same optimized native runtime.
-- **Displaced work:** O0 stack traffic, redundant loads/stores, uninlined accessor/branch scaffolding,
-  and debug-oriented code layout across reached native source owners.
-- **Deletion boundary:** `-O0` is no longer the native release default. Any owner retained below the
-  final default must have a measured exactness reason and a narrow documented boundary; unresolved
-  failures do not justify reverting the complete packet without attribution.
+- **Final owner:** `runtime/fighter_pose.c` owns one six-origin query for joints registered in the
+  compact fighter pose. `mpColl_LoadECB_JObj` owns invocation at its existing six-point source site.
+- **Canonical state:** evaluated results are written only to each existing `HSD_JObj::mtx`; ECB
+  output remains `CollData::desired_ecb`. No origin cache, alternate pose, or per-frame buffer is
+  persistent or save-state-visible.
+- **Consumers:** fighter ECB publication uses the compact query. Other JObj users and non-fighter
+  JObj sources retain their proper generic owner rather than a compatibility mode.
+- **Displaced work:** six repeated pose lookups, ancestor recursion, dirty checks, and separately
+  dispatched matrix/trig calls. The evaluator admits ordinary Euler SRT nodes and delegates true
+  quaternion, IK, RObj, path, user-matrix, and independent-parent nodes to their source routines.
+- **Deletion boundary:** the compact query never calls six generic `lb_8000B1CC` paths for a compact
+  fighter ECB. There is no synchronized dual result, runtime feature flag, character/stage list,
+  approximate math, or replay exception.
 
 ## Evidence and acceptance
 
-- Retained baseline `a8431342`: 85,355 FPS at 256 and 80,041 FPS at 512, digests
-  `8ef126a41244d514` / `6f91f23e3553a090`; 63 PASS / 90 unchanged CLASSIFIED.
-- The current release compiles only one O1 owner, one O2 owner, and a small O3 allowlist; the large
-  imported scheduler closure remains O0. Earlier blanket probes were stopped at changed digests and
-  one unresolved unsupported-Ness reference rather than completing correctness attribution.
-- Early proof: isolated strict O2/O3 build, benchmark digest/throughput, native smoke, and bounded
-  validation triage. A large throughput ceiling requires pursuing correctness inside the optimized
-  representation rather than falling back wholesale.
-- Final retention: unchanged production digests, no new/widened replay classification, complete
-  `test-full`, and adjacent 256/512 measurements. Update retained evidence and commit atomically only
-  with a measured correctness-green gain.
+- Baseline `3d0ecbb0`: 90,017 FPS at 256 and 84,556 FPS at 512; digests
+  `8ef126a41244d514` / `6f91f23e3553a090`; debug and release validation are 63 PASS / 90 unchanged
+  CLASSIFIED.
+- RDTSCP assigns 16.19% to stage collision. Prior helper attribution assigns 14.31% to
+  `mpColl_LoadECB_JObj` and records 143,594 calls; the next collision query owner is only 1.59%.
+- A 64-environment instruction sample places exact matrix/trig owners (`msl_sincosf3`,
+  `HSD_MtxSRTConcat`, `PSMTXConcat`, `HSD_JObjMakeMatrix`, setup recursion) among the largest frame
+  costs. A lazy-publication proof moved 4.15 points directly into stage collision, confirming this
+  demand rather than deleting it.
+- Early proof: scalar compact union evaluation must preserve both digests and reduce setup entries;
+  vector/precomputed-trig work proceeds only if the final six-origin boundary is correct and has a
+  measurable ceiling.
+- Final retention: target at least 5% overall at 512, unchanged digests/classifications, complete
+  debug/release/API/copy/save-restore/allocation/PPC/Wasm/viewer gates, no hot allocation, and no
+  persistent memory growth.
 
 ## Log
 
-- 2026-07-19 — `open`
-  Scope: whole native release compiler boundary, beginning with strict O2 across all native source.
-  Hypothesis: removing O0 code generation across the remaining 90%+ scheduler closure is a much
-  larger final-form opportunity than another scalar leaf or a scattered-JObj batch seam.
-  Evidence: current corrected profile assigns 93.75% to the source scheduler; only a small explicit
-  object list is optimized today. Prior blanket probes established correctness problems but did not
-  establish or repair their source owners.
-  Disposition: build an isolated candidate and measure its throughput ceiling before editing source.
-  Next: compile strict whole-runtime O2, run the production digests and native smoke, then attribute
-  build/runtime/output failures by translation unit and source owner.
-- 2026-07-19 — `open`
-  Scope: strict whole-source ceiling and first directory-level attribution.
-  Hypothesis: the optimized closure has enough headroom to justify resolving its exactness owners.
-  Evidence: whole-source O1 and O2 both reach about 92.2k FPS at 512 (+15% over 80,041), but share
-  wrong digest `aa365caa5c1ec1be`; a 300-frame all-replay pass reports ULP-scale velocity/position
-  drift in 126/153 cases rather than structural failures. O2 additionally retains unsupported Ness
-  yoyo calls through inlining; compiling that unreachable TU at O0 proves the link boundary and
-  produces the same throughput/digest as O1. Isolated fighter, non-fighter Melee, and baselib groups
-  each change the digest; optimizing only repository runtime/platform source is exact but merely
-  80.7k FPS.
-  Disposition: retain the strict global ceiling as the packet direction. Attribute the upstream
-  drift by smaller translation-unit groups and keep unsupported character code outside the reached
-  optimized closure; do not patch replay outputs or accept ULP drift.
-  Next: bisect baselib and Melee source groups to identify the small operation-order owners that must
-  be repaired or narrowly held below the final default.
-- 2026-07-19 — `open`
-  Scope: O1 default with fighter/item/quatlib source-profile exceptions and exact release validation.
-  Hypothesis: the non-fighter closure supplies most of the blanket-O1 ceiling while the identified
-  float-sensitive subtrees can remain at their measured source profiles without masking new drift.
-  Evidence: the candidate preserves both production benchmark digests and reaches 84,556 FPS at 512
-  and 90,017 FPS at 256 by three-sample median. Release validation exposed one previously hidden
-  two-ULP Peach turnip ECB mismatch in the already-retained O1 `mpcoll.c`; the ordinary full gate had
-  validated the O0 development binary rather than the release binary. Attribution proves GCC fused
-  the source's separate `sinf` and `cosf` calls into `sincosf` in `mpColl_LoadECB_Fixed`.
-  Disposition: preserve the candidate and repair the operation boundary in source; do not classify
-  the mismatch or hold the full collision function at O0.
-  Next: force separate hosted trig calls at the narrow source site, run all 153 replays against the
-  release binary, then gather an adjacent clean-HEAD control.
-- 2026-07-19 — `open`
-  Scope: source-ordered fixed-ECB trig boundary and complete optimized-release validation.
-  Hypothesis: non-inlinable scalar wrappers preserve the retail call graph without sacrificing the
-  optimized collision owner around it.
-  Evidence: the release object now imports separate `sinf` and `cosf` symbols and no `sincosf`;
-  `ExpertWorthlessFinch` returns to fingerprint `cd6428688741de53`. The complete 153-replay release
-  run is 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across 1,415,476 frames. Final
-  candidate medians remain 84,556 FPS at 512 and 90,017 FPS at 256 with unchanged digests.
-  Disposition: retain the narrow operation-order repair pending adjacent control and complete gates.
-  Next: preserve this tree in a named stash, rebuild exact clean HEAD, collect adjacent control
-  samples, restore the candidate, and retain only if the measured gain remains material.
-- 2026-07-19 — `open`
-  Scope: adjacent clean-HEAD throughput control and production release-validation contract.
-  Hypothesis: the optimized source closure is a stable gain relative to the exact committed binary,
-  and making release validation a first-class full-gate dependency prevents compiler admissions from
-  being judged only through the O0 development runtime.
-  Evidence: clean-HEAD samples are 80,118/79,807/80,213 FPS at 512 and
-  85,001/84,597/84,513 FPS at 256. Candidate medians of 84,556 and 90,017 improve the adjacent
-  medians by +5.54% and +6.41%, respectively, with both digests unchanged. The Makefile now exposes
-  and includes a dedicated all-153 optimized-release validation gate.
-  Disposition: retain the complete packet pending the ordinary full gate.
-  Next: run source/API/copy/save-restore/allocation, PPC, debug and release replay validation, Wasm,
-  viewer, pytest, source-sync, and formatting gates; then update retained evidence atomically.
+- 2026-07-19 — `rejected`
+  Scope: the six compact-pose joint origins consumed by `mpColl_LoadECB_JObj`.
+  Hypothesis: evaluating their shared ancestor closure once in topology order removes enough
+  repeated generic traversal and enables a multi-node exact trig/matrix kernel without a batch
+  scheduler seam.
+  Evidence: stage collision is 16.19% of the current contract and its six-origin loader dominates
+  that owner. Previous per-point deferral proved the work is demanded; previous eager global matrix
+  tables failed from cache footprint, which this ephemeral demanded closure avoids.
+  Disposition: first establish an exact compact union evaluator using canonical JObj matrices, then
+  measure the remaining arithmetic ceiling before vectorizing.
+  Next: add the six-origin compact API and route only compact fighter JObj ECBs through it; run both
+  production digests and collect exact setup/matrix counts.
+
 - 2026-07-19 — `retained`
-  Scope: strict optimized native source closure, fixed-ECB trig operation boundary, and release gate.
-  Hypothesis: optimizing the exact-safe closure and explicitly preserving the few measured lower
-  source profiles yields a durable whole-scheduler gain without weakening correctness.
-  Evidence: adjacent medians improve 80,118 to 84,556 FPS at 512 (+5.54%) and 84,597 to 90,017 FPS
-  at 256 (+6.41%), preserving digests `6f91f23e3553a090` / `8ef126a41244d514`. Both debug and release
-  validation are 63 PASS / 90 unchanged CLASSIFIED / zero failures across 1,415,476 frames. Native
-  source/API/copy/save-restore/allocation, PPC, Wasm/viewer, pytest, source-sync, and formatting gates
-  pass. The refreshed profile assigns 94.59% to the scheduler, led by fighter maintenance (29.74%),
-  map collision (16.97%), dynamics (8.12%), and Spaghetti input/IASA (7.33%).
-  Disposition: retain and atomically commit implementation, release gate, and evidence.
-  Next: begin a bounded packet against the largest remaining final-form source owner, using the new
-  optimized-release gate before retention.
+  Scope: initialization-bound closure metadata and one topology-ordered query.
+  Hypothesis: removing per-query path discovery is the necessary production substrate for a
+  multi-matrix evaluator.
+  Evidence: supported bindings contain 18, 21, 25, or 28 joints; 318,596 benchmark queries publish
+  6,417,376 dirty matrices, with dirty work on 95.7% of queries. Prebinding restores the scalar
+  proof from 81,946 to 84,444 FPS with digest `6f91f23e3553a090` unchanged.
+  Disposition: retain as the immutable topology owner; scalar traversal alone is neutral and not
+  the performance claim.
+  Next: evaluate the ordinary dirty subset through one exact trig batch and direct canonical matrix
+  publication.
+
+- 2026-07-19 — `rejected`
+  Scope: an evaluator that classified every bound node as Euler at initialization.
+  Hypothesis: matrix method and flags are immutable after fighter construction.
+  Evidence: optimized release validation diverged broadly. Direct source/candidate comparison found
+  `JOBJ_USE_QUATERNION` appearing dynamically on bound nodes during interpolation; classical-scale
+  inheritance also requires its distinct source path.
+  Disposition: reject static Euler classification. Preserve classical-scale semantics and classify
+  the dynamic quaternion/path bits at each publication without restoring generic traversal.
+  Next: batch only the ordinary subset and dispatch the small special subset in the same topology
+  walk.
+
+- 2026-07-19 — `retained`
+  Scope: final compact six-origin evaluator with exact wide trig.
+  Hypothesis: one AVX-512 evaluation of the ordinary Euler subset plus direct canonical matrix
+  publication removes the dominant repeated trig/dispatch work while special nodes remain exact.
+  Evidence: 18.6 of 19.9 dirty nodes in a 10,000-query census are direct Euler candidates. Final
+  adjacent medians improve 81,453 to 85,633 FPS at 512 (+5.13%) and 86,597 to 91,912 at 256
+  (+6.14%), preserving digests `6f91f23e3553a090` / `8ef126a41244d514`. Tightening the pose pool
+  against its 976-node supported census offsets topology storage and reduces the lifecycle snapshot
+  from 634,232 to 633,432 bytes. Debug and release validation remain 63 PASS / 90 unchanged
+  CLASSIFIED; the complete native/PPC/API/save-restore/allocation/Wasm/viewer/pytest/source-sync/
+  formatting gate is green.
+  Disposition: retain and commit the complete final boundary and evidence atomically.
+  Next: refresh the subsystem profile from the committed binary and select the next bounded owner.
+
+- 2026-07-19 — `open`
+  Scope: final ablation of the compact ECB boundary from the exact AVX-512 trig owner.
+  Hypothesis: the measured gain must come from deleting repeated six-origin work, not merely from
+  compiling every existing three-axis matrix through the new exact wide trig kernel.
+  Evidence: with exact wide trig still active, three bypass samples are
+  83,982/83,178/83,758 FPS at 512 (83,758 median), versus the complete candidate's recent
+  88,256/89,094/89,238 (89,094 median). The compact boundary therefore contributes about 6.4% over
+  the wide-trig-only shape and is not dead scaffolding.
+  Disposition: reject the bypass and retain the complete compact boundary. The temporary compile
+  switch is removed.
+  Next: rebuild the complete candidate, record final adjacent evidence and full gates, then commit
+  the implementation and evidence atomically.

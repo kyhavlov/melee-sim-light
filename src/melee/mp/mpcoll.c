@@ -27,6 +27,7 @@
 #include <baselib/gobj.h>
 #include <MSL/trigf.h>
 #ifdef MSL_CORE_NATIVE
+#include <runtime/fighter_pose.h>
 #include <runtime/source_state.h>
 #endif
 
@@ -231,6 +232,9 @@ void mpColl_SetECBSource_JObj(CollData* cd, HSD_GObj* gobj, HSD_JObj* arg1,
     cd->ecb_source.x10C_joint[3] = arg5;
     cd->ecb_source.x10C_joint[4] = arg6;
     cd->ecb_source.x10C_joint[5] = arg7;
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_ABLATE_COMPACT_ECB)
+    msl_fighter_pose_bind_origins(cd->ecb_source.x10C_joint);
+#endif
     cd->ecb_source.x124 = arg9;
     cd->ecb_source.x128 = 10.0F;
     cd->ecb_source.x12C = 10.0F;
@@ -345,6 +349,11 @@ inline void update_min_max(float* min, float* max, float val)
 void mpColl_LoadECB_JObj(CollData* coll, u32 flags)
 {
     Vec3 vec;
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_ABLATE_COMPACT_ECB)
+    Vec3 origins[6];
+    msl_fighter_pose_transform_origins(coll->ecb_source.x10C_joint, origins);
+    int origin_index = 0;
+#endif
     float left_x, bottom_y;
     float right_x, top_y;
     float dx, dy;
@@ -371,12 +380,21 @@ void mpColl_LoadECB_JObj(CollData* coll, u32 flags)
     {
         float temp_x = coll->cur_pos.x;
         float temp_y = coll->cur_pos.y;
-        lb_8000B1CC(coll->ecb_source.x10C_joint[0], NULL, &vec);
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_ABLATE_COMPACT_ECB)
+#define LOAD_ECB_ORIGIN(joint, output)                                        \
+    do {                                                                      \
+        output = origins[origin_index++];                                     \
+    } while (0)
+#else
+#define LOAD_ECB_ORIGIN(joint, output) lb_8000B1CC(joint, NULL, &output)
+#endif
+
+        LOAD_ECB_ORIGIN(coll->ecb_source.x10C_joint[0], vec);
         left_x = right_x = vec.x - temp_x;
         bottom_y = top_y = vec.y - temp_y;
 
 #define EXPAND_ECB_FOR(joint)                                                 \
-    lb_8000B1CC(joint, NULL, &vec);                                           \
+    LOAD_ECB_ORIGIN(joint, vec);                                              \
     dx = vec.x - temp_x;                                                      \
     dy = vec.y - temp_y;                                                      \
     update_min_max(&left_x, &right_x, dx);                                    \
@@ -387,6 +405,8 @@ void mpColl_LoadECB_JObj(CollData* coll, u32 flags)
         EXPAND_ECB_FOR(coll->ecb_source.x10C_joint[3]);
         EXPAND_ECB_FOR(coll->ecb_source.x10C_joint[4]);
         EXPAND_ECB_FOR(coll->ecb_source.x10C_joint[5]);
+
+#undef LOAD_ECB_ORIGIN
     }
 
     if (!(flags & CollisionFlagAir_CanGrabLedge)) {

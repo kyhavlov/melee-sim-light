@@ -189,9 +189,19 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Optimized native source closure
 
-- **This commit** makes strict O1 the native release default while preserving measured lower source
+- `3d0ecbb0` **Optimize strict native source closure** makes strict O1 the native release default while preserving measured lower source
   profiles for float-sensitive fighter/item/quaternion closures and stronger profiles for exact
   admitted owners. It also preserves separate fixed-ECB trig calls and makes full optimized-release
   replay validation a permanent gate. Adjacent medians improve +5.54% at 512 and +6.41% at 256;
   both digests and the complete debug/release replay, API/save-restore/PPC/Wasm/viewer gates remain
   exact.
+
+## Compact fighter ECB matrix publication
+
+- **This commit** binds each fighter ECB's six-origin ancestor union at initialization, evaluates its
+  ordinary matrices through exact AVX-512 paired trig in topology order, and publishes only the
+  canonical JObj matrices consumed by source collision. Dynamic special nodes remain source-owned;
+  the generic fighter path and repeated per-origin traversal are deleted. Adjacent raw medians
+  improve +5.13% at 512 and +6.14% at 256, both production digests and the complete gate remain
+  exact, and tighter censused pose capacity makes lifecycle snapshots 800 bytes smaller per
+  environment.

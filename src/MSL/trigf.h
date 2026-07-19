@@ -13,6 +13,8 @@ float tanf(float);
 
 #if defined(MSL_CORE_NATIVE)
 void msl_sincosf3(const float xyz[3], float sin_out[3], float cos_out[3]);
+void msl_sincosf_many(const float* angles, float* sin_out, float* cos_out,
+                      int count);
 #endif
 
 #endif

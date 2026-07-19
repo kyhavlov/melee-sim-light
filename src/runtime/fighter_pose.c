@@ -20,6 +20,7 @@
 #include <baselib/spline.h>
 #include <melee/lb/lb_00B0.h>
 #include <melee/lb/lbanim.h>
+#include <MSL/trigf.h>
 
 enum {
     MSL_FIGHTER_POSE_MAGIC = 0x4D534C50,
@@ -116,6 +117,7 @@ int msl_fighter_pose_init(MslFighterPose* pose)
     }
     pose->joint_count = 0;
     pose->track_used = 0;
+    pose->ecb_count = 0;
     return 0;
 #else
     (void) pose;
@@ -269,6 +271,164 @@ bool msl_fighter_pose_transform_pair(HSD_JObj* joint, const Vec3* local_a,
     MTXMultVec(joint->mtx, (Vec3*) local_a, world_a);
     MTXMultVec(joint->mtx, (Vec3*) local_b, world_b);
     return true;
+}
+
+void msl_fighter_pose_bind_origins(HSD_JObj* const joints[6])
+{
+    MslFighterPose* pose = active_pose();
+    uint64_t needed[(MSL_FIGHTER_POSE_JOINT_CAPACITY + 63) / 64] = { 0 };
+    uint16_t first = UINT16_MAX;
+    uint16_t last = 0;
+    uint16_t count = 0;
+    uint16_t origin;
+    uint16_t i;
+
+    for (i = 0; i < 6; ++i) {
+        MslFighterPoseJoint* node = pose_joint(joints[i]);
+        if (node == NULL) {
+            return;
+        }
+        for (;;) {
+            uint16_t index = (uint16_t) (node - pose->joints);
+            HSD_JObj* joint = node->joint;
+            needed[index >> 6] |= UINT64_C(1) << (index & 63);
+            if (index < first) {
+                first = index;
+            }
+            if (index > last) {
+                last = index;
+            }
+            if (node->parent_index == UINT16_MAX) {
+                break;
+            }
+            node = &pose->joints[node->parent_index];
+        }
+    }
+
+    origin = (uint16_t) (pose_joint(joints[0]) - pose->joints);
+    for (i = 0; i < pose->ecb_count; ++i) {
+        if (pose->ecb[i].origin == origin) {
+            return;
+        }
+    }
+    HSD_ASSERT(272, pose->ecb_count < MSL_FIGHTER_POSE_ECB_CAPACITY);
+    pose->ecb[pose->ecb_count].origin = origin;
+    for (i = first; i <= last; ++i) {
+        if ((needed[i >> 6] & (UINT64_C(1) << (i & 63))) != 0) {
+            MslFighterPoseJoint* node = &pose->joints[i];
+            HSD_JObj* joint = node->joint;
+            uint16_t encoded = i;
+            HSD_ASSERT(273, count < MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY);
+            if (joint->parent != NULL &&
+                HSD_JOBJ_METHOD(joint)->make_mtx == HSD_JObjMakeMatrix &&
+                joint->robj == NULL &&
+                (joint->flags &
+                 (JOBJ_JOINT | JOBJ_USER_DEF_MTX | JOBJ_MTX_INDEP_PARENT |
+                  JOBJ_MTX_INDEP_SRT)) == 0)
+            {
+                encoded |= 0x8000;
+            }
+            pose->ecb[pose->ecb_count].joints[count++] = encoded;
+        }
+    }
+    pose->ecb[pose->ecb_count].joint_count = count;
+    pose->ecb_count += 1;
+}
+
+static void setup_euler_matrix(HSD_JObj* joint, const float sin_xyz[3],
+                               const float cos_xyz[3])
+{
+    Vec3* parent_scale = NULL;
+
+    HSD_ASSERT(322, joint->parent != NULL);
+    if (joint->flags & JOBJ_CLASSICAL_SCALE) {
+        if (joint->parent->scl != NULL) {
+            if (joint->scl == NULL) {
+                joint->scl = HSD_VecAlloc();
+            }
+            *joint->scl = *joint->parent->scl;
+        } else if (joint->scl != NULL) {
+            HSD_VecFree(joint->scl);
+            joint->scl = NULL;
+        }
+    } else {
+        if (joint->scl == NULL) {
+            joint->scl = HSD_VecAlloc();
+        }
+        if (joint->parent->scl != NULL) {
+            joint->scl->x = joint->scale.x * joint->parent->scl->x;
+            joint->scl->y = joint->scale.y * joint->parent->scl->y;
+            joint->scl->z = joint->scale.z * joint->parent->scl->z;
+        } else {
+            *joint->scl = joint->scale;
+        }
+    }
+    if (joint->parent->scl != NULL) {
+        parent_scale = joint->parent->scl;
+    }
+    HSD_MtxSRTConcatTrig(joint->mtx, joint->parent->mtx, &joint->scale,
+                         &joint->translate, parent_scale, sin_xyz, cos_xyz);
+    joint->flags &= ~JOBJ_MTX_DIRTY;
+}
+
+void msl_fighter_pose_transform_origins(HSD_JObj* const joints[6],
+                                        Vec3 world[6])
+{
+    MslFighterPose* pose = active_pose();
+    MslFighterPoseJoint* origin = pose_joint(joints[0]);
+    HSD_JObj* dirty[MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY];
+    float angles[MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY * 3];
+    float sin_values[MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY * 3];
+    float cos_values[MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY * 3];
+    uint16_t trig_slot[MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY];
+    uint16_t origin_index;
+    uint16_t binding;
+    uint16_t dirty_count = 0;
+    uint16_t direct_count = 0;
+    uint16_t i;
+
+    HSD_ASSERT(367, origin != NULL);
+    origin_index = (uint16_t) (origin - pose->joints);
+    for (binding = 0; binding < pose->ecb_count; ++binding) {
+        if (pose->ecb[binding].origin == origin_index) {
+            break;
+        }
+    }
+    HSD_ASSERT(374, binding < pose->ecb_count);
+    for (i = 0; i < pose->ecb[binding].joint_count; ++i) {
+        uint16_t encoded = pose->ecb[binding].joints[i];
+        MslFighterPoseJoint* node = &pose->joints[encoded & 0x7FFF];
+        HSD_JObj* joint = node->joint;
+        if (HSD_JObjMtxIsDirty(joint)) {
+            dirty[dirty_count] = joint;
+            if ((encoded & 0x8000) != 0 && node->path == NULL &&
+                (joint->flags & JOBJ_USE_QUATERNION) == 0)
+            {
+                trig_slot[dirty_count] = direct_count;
+                memcpy(&angles[direct_count * 3], &joint->rotate,
+                       3 * sizeof(float));
+                direct_count += 1;
+            } else {
+                trig_slot[dirty_count] = UINT16_MAX;
+            }
+            dirty_count += 1;
+        }
+    }
+    msl_sincosf_many(angles, sin_values, cos_values, direct_count * 3);
+    for (i = 0; i < dirty_count; ++i) {
+        uint16_t slot = trig_slot[i];
+        if (slot == UINT16_MAX) {
+            HSD_JObjSetupMatrixSub(dirty[i]);
+        } else {
+            setup_euler_matrix(dirty[i], &sin_values[slot * 3],
+                               &cos_values[slot * 3]);
+        }
+    }
+    for (i = 0; i < 6; ++i) {
+        world[i].x = joints[i]->mtx[0][3];
+        world[i].y = joints[i]->mtx[1][3];
+        world[i].z = joints[i]->mtx[2][3];
+    }
 }
 
 static void release_joint(MslFighterPoseJoint* node)

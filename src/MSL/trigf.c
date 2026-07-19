@@ -1,5 +1,9 @@
 #include "math.h"
 
+#if defined(__AVX512F__)
+#include <immintrin.h>
+#endif
+
 #define __epsilon 3.45266983e-4f
 
 #define __HI(x) (((s32*) &x)[0])
@@ -107,11 +111,109 @@ f32 cosf(f32 x)
 }
 
 #if defined(MSL_CORE_NATIVE)
-void msl_sincosf3(const f32 xyz[3], f32 sin_out[3], f32 cos_out[3])
+void msl_sincosf_many(const f32* xyz, f32* sin_out, f32* cos_out, int count)
 {
-    int i;
+    int i = 0;
 
-    for (i = 0; i < 3; i++) {
+#if defined(__AVX512F__)
+    for (; i < count; i += 16) {
+        int remaining = count - i;
+        __mmask16 lanes = remaining >= 16
+                             ? (__mmask16) 0xFFFF
+                             : (__mmask16) ((1U << remaining) - 1U);
+        __m512 x = _mm512_maskz_loadu_ps(lanes, &xyz[i]);
+        __m512 z = _mm512_mul_ps(x, _mm512_set1_ps(2.0f / (f32) M_PI));
+        __m512i x_bits = _mm512_castps_si512(x);
+        __mmask16 negative =
+            _mm512_movepi32_mask(_mm512_srai_epi32(x_bits, 31));
+        __m512 rounded = _mm512_mask_blend_ps(
+            negative, _mm512_add_ps(z, _mm512_set1_ps(0.5f)),
+            _mm512_sub_ps(z, _mm512_set1_ps(0.5f)));
+        __m512i n = _mm512_cvttps_epi32(rounded);
+        __m512 y = _mm512_sub_ps(
+            x, _mm512_cvtepi32_ps(_mm512_slli_epi32(n, 1)));
+        __m512 ysq;
+        __m512 sin_poly;
+        __m512 cos_poly;
+        __m512 base;
+        __m512 next;
+        __m512 normal_sin;
+        __m512 normal_cos;
+        __m512 small_sin;
+        __m512 small_cos;
+        __m512i quadrant;
+        __mmask16 even;
+        __mmask16 small;
+
+        y = _mm512_fmadd_ps(x, _mm512_set1_ps(__four_over_pi_m1[0]), y);
+        y = _mm512_fmadd_ps(x, _mm512_set1_ps(__four_over_pi_m1[1]), y);
+        y = _mm512_fmadd_ps(x, _mm512_set1_ps(__four_over_pi_m1[2]), y);
+        y = _mm512_fmadd_ps(x, _mm512_set1_ps(__four_over_pi_m1[3]), y);
+        quadrant = _mm512_and_epi32(_mm512_slli_epi32(n, 1),
+                                    _mm512_set1_epi32(6));
+        base = _mm512_i32gather_ps(quadrant, __sincos_on_quadrant, 4);
+        next = _mm512_i32gather_ps(_mm512_add_epi32(
+                                       quadrant, _mm512_set1_epi32(1)),
+                                   __sincos_on_quadrant, 4);
+        small = _mm512_cmp_ps_mask(
+            _mm512_abs_ps(y), _mm512_set1_ps(__epsilon), _CMP_LT_OQ);
+        if (small == (__mmask16) 0xFFFF) {
+            small_sin = _mm512_fmadd_ps(
+                _mm512_mul_ps(next, y),
+                _mm512_set1_ps(__sincos_poly[9]), base);
+            small_cos = _mm512_fnmadd_ps(y, base, next);
+            _mm512_mask_storeu_ps(&sin_out[i], lanes, small_sin);
+            _mm512_mask_storeu_ps(&cos_out[i], lanes, small_cos);
+            continue;
+        }
+        ysq = _mm512_mul_ps(y, y);
+
+        cos_poly = _mm512_fmadd_ps(
+            _mm512_set1_ps(__sincos_poly[0]), ysq,
+            _mm512_set1_ps(__sincos_poly[2]));
+        cos_poly = _mm512_fmadd_ps(cos_poly, ysq,
+                                   _mm512_set1_ps(__sincos_poly[4]));
+        cos_poly = _mm512_fmadd_ps(cos_poly, ysq,
+                                   _mm512_set1_ps(__sincos_poly[6]));
+        cos_poly = _mm512_fmadd_ps(cos_poly, ysq,
+                                   _mm512_set1_ps(__sincos_poly[8]));
+        sin_poly = _mm512_fmadd_ps(
+            _mm512_set1_ps(__sincos_poly[1]), ysq,
+            _mm512_set1_ps(__sincos_poly[3]));
+        sin_poly = _mm512_fmadd_ps(sin_poly, ysq,
+                                   _mm512_set1_ps(__sincos_poly[5]));
+        sin_poly = _mm512_fmadd_ps(sin_poly, ysq,
+                                   _mm512_set1_ps(__sincos_poly[7]));
+        sin_poly = _mm512_fmadd_ps(sin_poly, ysq,
+                                   _mm512_set1_ps(__sincos_poly[9]));
+
+        even = _mm512_cmpeq_epi32_mask(
+            _mm512_and_epi32(n, _mm512_set1_epi32(1)),
+            _mm512_setzero_si512());
+        normal_sin = _mm512_mask_blend_ps(
+            even, _mm512_mul_ps(cos_poly, base),
+            _mm512_mul_ps(_mm512_mul_ps(sin_poly, y), next));
+        normal_cos = _mm512_mask_blend_ps(
+            even,
+            _mm512_mul_ps(_mm512_mul_ps(_mm512_sub_ps(
+                                            _mm512_setzero_ps(), sin_poly),
+                                        y),
+                          base),
+            _mm512_mul_ps(cos_poly, next));
+        small_sin = _mm512_fmadd_ps(
+            _mm512_mul_ps(next, y),
+            _mm512_set1_ps(__sincos_poly[9]), base);
+        small_cos = _mm512_fnmadd_ps(y, base, next);
+        _mm512_mask_storeu_ps(
+            &sin_out[i], lanes,
+            _mm512_mask_blend_ps(small, normal_sin, small_sin));
+        _mm512_mask_storeu_ps(
+            &cos_out[i], lanes,
+            _mm512_mask_blend_ps(small, normal_cos, small_cos));
+    }
+#endif
+
+    for (; i < count; i++) {
         int n;
         f32 x = xyz[i];
         f32 y;
@@ -179,6 +281,11 @@ void msl_sincosf3(const f32 xyz[3], f32 sin_out[3], f32 cos_out[3])
             }
         }
     }
+}
+
+void msl_sincosf3(const f32 xyz[3], f32 sin_out[3], f32 cos_out[3])
+{
+    msl_sincosf_many(xyz, sin_out, cos_out, 3);
 }
 #endif
 

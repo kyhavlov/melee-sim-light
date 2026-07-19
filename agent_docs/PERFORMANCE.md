@@ -21,6 +21,34 @@ make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
 
+## Compact fighter ECB matrix publication — 2026-07-19
+
+Fighter JObj-backed ECB publication now binds the union of its six origin-joint ancestor paths once
+at fighter initialization. The hot source owner walks that compact topology once, evaluates the
+ordinary Euler subset through one exact AVX-512 MSL trig batch, publishes directly to the canonical
+`HSD_JObj::mtx` matrices in parent order, and reads the same six origins into the source ECB. Dynamic
+quaternion, path, IK, RObj, user-matrix, and independent nodes remain in their exact source routines;
+there is no second matrix representation, lazy cache, generic fighter fallback, character list, or
+replay exception. Non-AVX-512 native and Wasm builds retain the exact scalar loop.
+
+Supported bindings contain 18, 21, 25, or 28 joints. A 10,000-query census found 198,930 dirty
+matrices, of which 186,096 (93.5%) use the direct Euler evaluator. Bypassing the compact boundary
+while retaining exact wide trig falls to an 83,758 FPS median at 512, versus 89,094 for the complete
+shape in its adjacent run, proving that the structural cut owns material work rather than riding the
+shared trig improvement.
+
+Final adjacent CPU-0 controls are 80,085/81,453/82,231 FPS at 512 and candidates are
+85,633/86,880/76,512; raw medians improve 81,453 to 85,633 FPS (+5.13%) despite one externally
+interrupted candidate. At 256, controls are 86,212/87,161/86,597 and candidates are
+94,669/91,912/87,947; medians improve 86,597 to 91,912 FPS (+6.14%). Digests remain
+`6f91f23e3553a090` / `8ef126a41244d514`.
+
+The pose-joint pool is tightened from 1,024 to 1,000 against the measured supported maximum of 976,
+offsetting all bound-topology state: lifecycle snapshot size falls from 634,232 to 633,432 bytes per
+environment (-800 bytes). Debug and optimized-release validation remain 63 PASS / 90 unchanged
+CLASSIFIED / zero failures across 1,415,476 frames. Native source/API/copy/save-restore and sealed
+allocation, PPC, Wasm parity, viewer/browser, pytest, source-sync, and formatting gates pass.
+
 ## Optimized native source closure — 2026-07-19
 
 The native release profile now uses strict O1 as its default instead of inheriting the decomp's O0
@@ -72,6 +100,15 @@ demand reduced the diagnostic materializations by about 90%, but adjacent reside
 was neutral. The exact candidate adds a deferred hot-path state branch without deleting material
 production work and is preserved in `rejected-demand-owned-figa-decoder-20260719`.
 
+### Rejected demand-owned ordinary pose publication
+
+Deferring exact ordinary Figa samples until the common JObj matrix boundary moved work rather than
+deleting it. The initial 512 result was 85,153 FPS with a changed digest against the retained 84,556
+FPS. Instrumented pose animation fell from 16.41% to 11.72%, but stage collision rose from 16.19%
+to 20.34% and action-animation callbacks from 9.09% to 10.43%. Common ECB and callback consumers
+therefore demand nearly the same samples later in the frame; the lazy state and hook were removed
+before correctness cleanup.
+
 ### Rejected exact three-axis SIMD trig
 
 An exact three-lane AVX2/FMA `msl_sincosf3`, including the common all-small-angle exit, preserved the
@@ -79,6 +116,14 @@ An exact three-lane AVX2/FMA `msl_sincosf3`, including the common all-small-angl
 the vector path execute both polynomial families and lane selection; the predictable scalar
 small/even/odd paths are cheaper. The candidate is preserved in
 `rejected-exact-simd-sincosf3-20260719`.
+
+### Rejected exact zero-Euler shortcuts
+
+The shared trig owner skipped range reduction/polynomials for exact zero axes, and a follow-up also
+tested direct diagonal concat for all-zero rotations. Both preserved production digests. The
+diagonal continuation was neutral; trig-only measured 85,174 FPS at 512 against an adjacent 83,077
+control (+2.52%) but only 90,368 at 256 against the retained 90,017 (+0.39%), with a wide 512 sample
+spread. The hot per-lane branch was removed rather than retaining an inconclusive scalar leaf.
 
 ### Rejected shared change-owned pose publication
 

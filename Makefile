@@ -280,6 +280,7 @@ NATIVE_RELEASE_OPT_OBJS := \
 	$(NATIVE_OBJ_DIR)/generated/native_dat_layout.o \
 	$(NATIVE_OBJ_DIR)/generated/match_reloc_layout.o \
 	$(NATIVE_OBJ_DIR)/tests/melee_core/replay_bench.o
+$(NATIVE_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += $(RELEASE_ARCH_FLAGS)
 $(NATIVE_RELEASE_O0_OBJS): override NATIVE_CFLAGS += -O0
 $(NATIVE_RELEASE_O1_OBJS): override NATIVE_CFLAGS += -O1 $(RELEASE_ARCH_FLAGS)
 $(NATIVE_RELEASE_O2_OBJS): override NATIVE_CFLAGS += -O2 $(RELEASE_ARCH_FLAGS)
