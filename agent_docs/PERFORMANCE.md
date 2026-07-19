@@ -21,6 +21,26 @@ make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
 
+## Supported hosted dynamics-pool capacity — 2026-07-19
+
+Native and Wasm Matches now own 64 fighter-dynamics nodes instead of the retail all-roster pool of
+320. The bound covers the largest supported transient construction plus all prior live gameplay
+chains; pool exhaustion is a hard hosted contract failure rather than a fallback or silently
+truncated chain. PPC preserves the retail layout, while solver data, order, and behavior are
+unchanged.
+
+Ordinary arena and savestate sizes fall from 676,440/738,056 to 633,432/695,048 bytes, exactly
+43,008 bytes per environment. The reached four-player maximum falls from 1,004,908 to 961,900
+bytes. This saves 21.0 MiB at 512 environments, 168.0 MiB at 4,096, and 672.0 MiB at 16,384.
+
+Three valid adjacent 512 control/candidate pairs preserve digest `6f91f23e3553a090` at
+69,765/70,102, 69,982/69,944, and 70,153/70,185 FPS. Raw medians improve 69,982 to 70,102 FPS
+(+0.17%) and median paired change is +0.05%, establishing neutral throughput rather than a speed
+claim. The 256 digest remains `8ef126a41244d514`. The complete gate remains 63 PASS / 90 unchanged
+CLASSIFIED / zero XPASS/fail/error across 1,415,476 frames. Maximum construction, native
+source/API/copy/save-restore and sealed-allocation, PPC, Wasm parity, viewer, and formatting gates
+pass with the exhaustion assertion active.
+
 ## Exact O1 fighter map collision owner — 2026-07-19
 
 The native release profile now compiles the complete `mpcoll.c` translation unit at O1. This is the
@@ -123,6 +143,84 @@ exact only after removing `ftCo_Damage`; the eight useful exact files reached 67
 against the retained 66,953 median (+0.52%). O3 remained exact but measured 67,194 FPS. The bounded
 source set is below the three-point threshold, so no compiler list or target instrumentation remains;
 both candidates are preserved in named stashes.
+
+### Rejected second fighter map-pass broad phase
+
+Profile-build-only function instrumentation attributed every `mpcoll.c` helper after exact O1
+admission. No remaining floor, ceiling, or wall narrow-phase entry owns even one whole-frame point;
+the only dominant source is `mpColl_LoadECB_JObj` at 143,594 calls and 14.31% of the instrumented
+contract. The next common query owner is 1.59%, and the retained wall broad phase itself is 1.13%
+under instrumentation. A second line-pass cull cannot meet the three-point bound, so no production
+collision behavior changed and the diagnostic is preserved in a named stash.
+
+### Rejected additional headless camera closure
+
+Profile-build-only function attribution found `Camera_8002958C` is the only dominant remaining
+camera helper. Its subject-bound result directly feeds the standard transform consumed by fighter
+visibility and offline DeadUp publication. The second transform-copy invocation is only 23,554 of
+89,090 calls and must retain history for future DeadUp entry; every other camera helper is below the
+packet ceiling. No complete dead subpass can clear two whole-frame points, so the diagnostic was
+preserved and removed without leaf arithmetic tuning or a changed camera approximation.
+
+### Rejected native batch ECB publication seam
+
+A temporary exact source-query publisher split every native Match once between scheduler priorities
+5 and 6, published its six current ECB points, and resumed map callbacks from batch-owned rows. The
+complete 153-replay suite remained 63 PASS / 90 unchanged CLASSIFIED / zero failures, proving the
+phase ordering, but 512 throughput fell from 70,468 to 65,454 FPS (-7.12%) and the production digest
+changed. The clean prior attribution assigns only about 11.5--12% of frame time to the removable
+queries, so even a zero-cost matrix replacement could not reliably clear the five-point retention
+threshold after this seam tax. No direct matrix kernel or runtime bridge was pursued; the entire
+diagnostic implementation is preserved in named stash `rejected-native-batch-ecb-seam-20260719`.
+Future batch geometry work must amortize its phase boundary across multiple dominant consumers and
+use a canonical hot layout rather than interleave one scattered per-Match owner.
+
+### Rejected dense ordinary pose publication
+
+A node-shaped shared Figa table directly published complete ordinary SRT records and deleted the
+track-major validity/type-dispatch path for 261,169 of 261,195 extracted tracks. Both production
+digests and the complete 63 PASS / 90 unchanged CLASSIFIED suite remained exact. Adjacent 512
+controls were 70,676/70,694/70,073 FPS and candidates were 72,136/71,979/72,092 FPS, only +2.00% by
+raw median and +2.07% paired. The shared node descriptors also offset the removed validity storage.
+The final candidate is preserved in named stash `rejected-dense-ordinary-pose-publication-20260719`;
+no larger mask switch or duplicated timing fast path was retained. Further pose work must change its
+cross-environment execution/state layout rather than add another scalar shared-data representation.
+
+### Rejected hosted human-input owner deletion
+
+The hosted runtime removed its priority-2 CPU proc and every constant-false CPU branch from the
+priority-3 human-input path. That hot deletion preserved the digest but measured 70,630 FPS against
+the retained 70,468 FPS. Removing the now-unreachable 0x57C CPU state reduced Fighter from 11,560 to
+10,104 bytes and ordinary arena/savestate from 676,440/738,056 to 673,344/734,960 bytes. Preserving
+the CPU initializer's two source RNG draws restored the production digest, but the compacted layout
+measured only 69,243 FPS. The small capacity saving does not justify a hot regression; the complete
+experiment is preserved in named stash `rejected-hosted-human-input-owner-deletion-20260719`.
+
+### Rejected fixed hosted fighter scheduler
+
+Hosted Fighter construction omitted all 15 generic proc nodes per Fighter, and the source priority
+walk directly invoked those fixed phases from the canonical p-link-8 fighter GObj list between
+lower- and higher-p-link generic processes. The candidate preserved both production digests and
+migrated the three reached scheduler-priority consumers without a copied fighter list, phase mask,
+callback table, compatibility state, or fallback.
+
+Three adjacent 512 control/candidate pairs were 70,344/68,919, 69,223/67,975, and 68,526/68,027
+FPS; every pair regressed. The existing proc list's stable per-priority callback targets are already
+well predicted, while the direct cut must splice and rescan the live dynamic list around p-link 8.
+The complete exact candidate is preserved in named stash
+`rejected-fixed-hosted-fighter-scheduler-20260719`; no unrolled code-size or leaf-dispatch variant
+was pursued.
+
+### Rejected unsupported casual fighter-status deletion
+
+The hosted priority-0/1 Fighter owners removed every per-frame maintenance block for unsupported
+Mushrooms, Bunny Hood, metal, flower, cloak/refract, gradual healing-item recovery, and Hammer,
+including flower input escape work. The exact candidate preserves digest `6f91f23e3553a090` but
+measures 70,146 FPS at 512 against the retained 70,468 FPS. The complete non-pose/non-action shell
+inside `Fighter_8006A360` is only 4.25% of the instrumented contract, and the deleted blocks are a
+minor subset; widening this into scattered cold checks across action files cannot clear the packet
+threshold. The source candidate is preserved in named stash
+`rejected-unsupported-casual-fighter-status-deletion-20260719`.
 
 ## Shared compiled fighter animation samples — 2026-07-19
 

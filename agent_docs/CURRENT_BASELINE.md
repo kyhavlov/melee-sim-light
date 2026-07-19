@@ -6,8 +6,9 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Provenance
 
-- Runtime: the committed compact fighter pose/gameplay-geometry owner with shared exact ordinary
-  Figa samples, including the fighter wall-pass broad phase and staggered production workload
+- Runtime: compact fighter pose/gameplay geometry, shared exact ordinary Figa samples, direct hosted
+  scheduler dispatch, demand-owned hurt capsules, exact O1 fighter map collision, and the supported
+  64-node hosted dynamics pool
 - Date: 2026-07-19
 - Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 6.17 x86-64
 - Compiler: GCC 13.3.0, strict native release profile, `-march=native -mtune=native`
@@ -34,31 +35,24 @@ make benchmark-9950x3d-vcache-512
 | 256 | `8ef126a41244d514` |
 | 512 | `6f91f23e3553a090` |
 
-Host throughput varied materially during the packet, so retention uses three adjacent CPU-0
-control/candidate pairs and reports both the median paired delta and the raw throughput medians.
-
-| Batch | Prior-commit median | Current median | Raw-median delta | Median paired delta |
-|---:|---:|---:|---:|---:|
-| 256 | 59,961 FPS | 66,767 FPS | +11.35% | +11.35% |
-| 512 | 57,292 FPS | 63,110 FPS | +10.15% | +10.05% |
-
-The exact 512 pairs were 57,292/63,409, 57,460/63,110, and 57,082/62,818 FPS. The exact 256 pairs
-were 60,571/66,869, 59,961/66,767, and 59,373/66,194 FPS. Each pair is the preceding committed
-runtime followed by the current candidate.
+The retained comparison medians are 74,466 FPS at 256 and 70,468 FPS at 512. The latest
+capacity-only packet is throughput-neutral: adjacent 512 control/candidate medians are
+69,982/70,102 FPS (+0.17% raw, +0.05% paired) with the same digest.
 
 ## Current memory contract
 
 The compact pose owner is initialized before gameplay and participates in typed relocation,
-arbitrary-index copy, and save/restore. The allocation lock remains exactly 676,440 arena bytes and
+arbitrary-index copy, and save/restore. The allocation lock remains exactly 633,432 arena bytes and
 825 allocations before and after gameplay. Four supported Peach instances reach 976 compact pose
 nodes inside the fixed 1,024-node capacity.
 
 | Measure | Current |
 |---|---:|
-| Ordinary stepped arena | 676,440 B |
-| Ordinary savestate | 738,056 B |
+| Ordinary stepped arena | 633,432 B |
+| Ordinary savestate | 695,048 B |
 | Initialization allocations | 825 |
 | Maximum reached compact pose nodes | 976 / 1,024 |
+| Hosted fighter-dynamics pool | 10,752 B (64 nodes) |
 
 The public 128-frame observation history remains 127,488 bytes per environment and is caller-owned.
 Shared GameData additionally owns 10,721,046 compiled Figa values (40.90 MiB plus validity bits),
@@ -66,8 +60,10 @@ paid once per process rather than once per environment.
 
 ## Current corrected profile
 
-On the committed staggered 512 workload, fighter map/stage collision is 21.58% of the instrumented
-contract and compact pose animation is 12.59%. Action animation callbacks are 7.58%, input/action
-callbacks are 4.28%, and `Fighter_ProcessHit_8006D1EC` is 4.48%. The profiler's 55,376 FPS is
-diagnostic overhead, not a throughput baseline; nested callback rows are attribution drill-down and
-must not be added to their enclosing phase shares.
+On the committed staggered 512 workload, the scheduler owns 94.07% of instrumented time. Its largest
+exclusive owners are hosted fighter maintenance (`Fighter_8006A360`, 26.22%), fighter map collision
+(`Fighter_procMap`, 21.32%), fighter dynamics (`Fighter_8006D9AC`, 7.23%), Spaghetti camera bounds
+(6.81%), and camera (3.71%). Cross-cutting phase attribution assigns 20.43% to stage collision,
+15.46% to fighter animation, 13.79% to pose animation, 8.18% to action animation callbacks, and
+4.60% to input/action callbacks. The profiler's 59,435 FPS is diagnostic overhead, not a throughput
+baseline; nested rows must not be added to their enclosing phase shares.

@@ -103,10 +103,12 @@ void lb_8000FA94(void)
 {
     int i;
 
-    for (i = 0; i < 0x140; i++) {
+    for (i = 0; i < LB_DYNAMICS_ENTRY_COUNT; i++) {
         lb_804D63A0->entries[i].desc.lb_unk0.jobj = NULL;
         lb_804D63A0->entries[i].next =
-            (i < 0x13F) ? &lb_804D63A0->entries[i] + 1 : NULL;
+            (i + 1 < LB_DYNAMICS_ENTRY_COUNT)
+                ? &lb_804D63A0->entries[i] + 1
+                : NULL;
     }
 
     cur_data = &lb_804D63A0->entries[0];
@@ -127,7 +129,8 @@ void lb_8000FCDC(void)
 #ifdef MSL_CORE_NATIVE
     lb_804D63A0 =
         HSD_MemAllocReloc(sizeof(*lb_804D63A0), MSL_RELOC_LB_DYNAMICS_DATA,
-                          0x140, sizeof(struct DynamicsData), 0);
+                          LB_DYNAMICS_ENTRY_COUNT,
+                          sizeof(struct DynamicsData), 0);
     lb_804D63A8 =
         HSD_MemAllocReloc(sizeof(*lb_804D63A8), MSL_RELOC_LB_EFFECT_ENTRY, 8,
                           sizeof(struct lb_80011A50_t), 0);
@@ -154,6 +157,9 @@ void lb_8000FD18(DynamicsDesc* desc)
 static inline struct DynamicsData* popDynamicsData(void)
 {
     struct DynamicsData* entry = cur_data;
+#ifdef MSL_CORE_NATIVE
+    HSD_ASSERT(161, entry != NULL);
+#endif
     if (entry == NULL) {
         return NULL;
     }

@@ -555,14 +555,22 @@ struct BoneDynamicsDesc {
     DynamicsDesc dyn_desc;
 };
 
+#ifdef MSL_CORE_NATIVE
+enum { LB_DYNAMICS_ENTRY_COUNT = 0x40 };
+#else
+enum { LB_DYNAMICS_ENTRY_COUNT = 0x140 };
+#endif
+
 struct lb_8000FD18_t {
     char pad_0[0x94];
 };
 
 struct lb_804D63A0_t {
-    /* +0 */ struct DynamicsData entries[0x140];
+    /* +0 */ struct DynamicsData entries[LB_DYNAMICS_ENTRY_COUNT];
 };
+#ifndef MSL_CORE_NATIVE
 STATIC_ASSERT(sizeof(struct lb_804D63A0_t) == 0xBE00);
+#endif
 
 struct lb_804D63A8_t {
     /* +0 */ struct lb_80011A50_t entries[8];

@@ -107,7 +107,7 @@ profile exposes the one stale output lock corrected below.
   to 685,888 (-25.6%); the four-player supported maximum falls from 1,266,476 to 997,972 (-21.2%);
   maximum source-pool storage falls from 757,540 to 542,072 (-28.4%). Throughput is neutral.
 
-The retained runtime now produces about 66,474 FPS at 256 and 89,950 FPS at 512 on the current
+At that checkpoint the retained runtime produced about 66,474 FPS at 256 and 89,950 FPS at 512 on the current
 host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Fixed fighter animation lifecycle
@@ -135,8 +135,27 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Shared compiled fighter animation samples
 
-- **This commit** compiles all translated Figa trees into one immutable exact ordinary-sample table
+- `edf724d4` **Precompute exact fighter animation samples** compiles all translated Figa trees into one immutable exact ordinary-sample table
   owned by GameData. Match joints publish integer unit-rate samples without repeated packed-stream
   decoding, while the exact mutable decoder owns only legal fractional/non-unit-rate samples. There
   is no per-Match cache or state growth. Adjacent A/B raw medians improve +10.15% at 512 and +11.35%
   at 256; both digests and the complete correctness/API/PPC/Wasm/viewer gates remain exact.
+
+## Direct scheduler, demand geometry, and exact collision compilation
+
+- `98c78d85` **Inline hosted GObj scheduler dispatch** executes the decomp-shaped priority/process
+  walk directly from the bound Match and deletes repeated resumable-scheduler context publication;
+  +3.32% raw median at 512 and +3.12% at 256.
+- `4e275d65` **Publish fighter hurt capsules on demand** moves ordinary hurt-capsule transforms to
+  their existing first-contact owner while keeping gameplay-live dynamics capsules eager; +2.95%
+  raw median at 512 and +3.40% at 256.
+- `fe25fec5` **Compile fighter map collision at exact O1** admits the complete dominant `mpcoll.c`
+  owner at its strongest measured exact compiler level; +4.29% raw median at 512 and +4.32% at 256.
+
+## Supported hosted dynamics capacity
+
+- **This commit** sizes the native/Wasm fighter-dynamics pool to its supported construction and
+  gameplay bound of 64 nodes, with hard exhaustion enforcement and the retail PPC layout preserved.
+  Ordinary arena/savestate storage falls by 43,008 bytes per environment; 512 adjacent A/B medians
+  are throughput-neutral (+0.17% raw, +0.05% paired), and every construction, correctness,
+  allocation, API, PPC, Wasm, and viewer gate is green.
