@@ -14,6 +14,7 @@ enum {
     // interpolation nodes for four Peach instances.
     MSL_FIGHTER_POSE_JOINT_CAPACITY = 1024,
     MSL_FIGHTER_POSE_TRACK_CAPACITY = 1024,
+    MSL_FIGHTER_POSE_PROGRAM_NONE = 0x7FF,
 };
 
 typedef struct MslFighterPoseTrack {
@@ -49,8 +50,18 @@ typedef struct MslFighterPoseJoint {
     uint16_t track_count;
     uint16_t parent_index;
     uint16_t tree_count;
-    uint8_t attached;
+    uint32_t program_index : 11;
+    uint32_t program_track_start : 11;
+    uint32_t program_track_count : 7;
+    uint32_t program_filtered : 1;
+    uint32_t decoder_synced : 1;
 } MslFighterPoseJoint;
+
+#ifdef MSL_CORE_NATIVE
+_Static_assert(sizeof(MslFighterPoseJoint) ==
+                   (sizeof(void*) == 8 ? 56 : 44),
+               "fighter pose joint must not grow per-Match state");
+#endif
 
 typedef struct MslFighterPose {
     MslFighterPoseJoint* joints;
@@ -59,7 +70,24 @@ typedef struct MslFighterPose {
     uint16_t track_used;
 } MslFighterPose;
 
+typedef struct MslFighterPoseProgram {
+    FigaTree* tree;
+    uint32_t value_start;
+    uint32_t track_count;
+    uint16_t sample_count;
+} MslFighterPoseProgram;
+
+typedef struct MslFighterPosePrograms {
+    MslFighterPoseProgram* programs;
+    float* values;
+    uint8_t* valid;
+    uint32_t program_count;
+    uint32_t value_count;
+} MslFighterPosePrograms;
+
 int msl_fighter_pose_init(MslFighterPose* pose);
+int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs);
+void msl_fighter_pose_programs_deinit(MslFighterPosePrograms* programs);
 void msl_fighter_pose_register_tree(HSD_JObj* root);
 void msl_fighter_pose_remove_tree(HSD_JObj* root);
 void msl_fighter_pose_attach_figa(HSD_JObj* joint, FigaTree* tree,

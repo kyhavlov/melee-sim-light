@@ -10,6 +10,7 @@
 
 typedef struct _HSD_PSCmdList HSD_PSCmdList;
 typedef struct EF_EffectDesc EF_EffectDesc;
+typedef struct FigaTree FigaTree;
 
 enum {
     MSL_NATIVE_ARCHIVE_CACHE_CAPACITY = 2048,
@@ -147,5 +148,7 @@ EF_EffectDesc* msl_native_effect_models(HSD_Archive* archive,
 void msl_native_dat_finish_initialization(void);
 int msl_native_dat_owns(const void* pointer);
 void msl_native_dat_context_destroy(MslNativeDatContext* context);
+void msl_native_dat_for_each_figa(void (*visit)(FigaTree*, void*),
+                                  void* context);
 
 #endif

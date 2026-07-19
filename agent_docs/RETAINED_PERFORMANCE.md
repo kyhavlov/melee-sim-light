@@ -127,8 +127,16 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Compact fighter pose and gameplay geometry
 
-- **This commit** replaces fighter AObj/FObj animation ownership with fixed Match-owned compact
+- `0d2b44f2` **Compact fighter pose and geometry publication** replaces fighter AObj/FObj animation ownership with fixed Match-owned compact
   tracks and topology, publishes root/world placement in scheduler order, and directly serves
   gameplay-point consumers without a side pose representation or fallback. Adjacent A/B raw
   medians improve +24.15% at 512 and +20.65% at 256; median paired improvements are +25.11% and
   +21.87%. Both digests and the complete correctness/API/PPC/Wasm/viewer gates remain exact.
+
+## Shared compiled fighter animation samples
+
+- **This commit** compiles all translated Figa trees into one immutable exact ordinary-sample table
+  owned by GameData. Match joints publish integer unit-rate samples without repeated packed-stream
+  decoding, while the exact mutable decoder owns only legal fractional/non-unit-rate samples. There
+  is no per-Match cache or state growth. Adjacent A/B raw medians improve +10.15% at 512 and +11.35%
+  at 256; both digests and the complete correctness/API/PPC/Wasm/viewer gates remain exact.

@@ -659,6 +659,11 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
     if (preload_supported_game_data(game_data) != 0) {
         return -1;
     }
+    if (msl_fighter_pose_programs_init(&game_data->fighter_pose_programs) !=
+        0)
+    {
+        return -1;
+    }
     game_data->fingerprint = fingerprint_game_data(game_data);
     msl_core_bind_game_data(game_data);
     msl_host_finish_initialization();
@@ -674,6 +679,7 @@ void msl_core_game_data_deinit(MslCoreGameData* game_data)
         return;
     }
 #ifdef MSL_CORE_NATIVE
+    msl_fighter_pose_programs_deinit(&game_data->fighter_pose_programs);
     msl_native_dat_context_destroy(&game_data->native_dat);
 #endif
     msl_memory_context_destroy(&game_data->memory);

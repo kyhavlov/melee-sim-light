@@ -1,383 +1,195 @@
-# Active performance packet — compact fighter pose and gameplay geometry
+# Active performance packet — shared compiled fighter animation programs
 
-## Outcome
+## Objective
 
-Replace the live fighter AObj/FObj/JObj pose and matrix-publication boundary with one compact native
-evaluator that directly serves gameplay geometry. The retained candidate must improve the true
-resident 512-environment benchmark by at least 10%, preserve exact replay/API/save-restore/Wasm
-behavior, and contain no dual pose, source fallback, generated animation artifact, or temporary
-instrumentation.
+Replace repeated per-environment Figa byte-stream decoding for ordinary fighter pose samples with
+one immutable GameData-owned compiled program. The existing exact compact evaluator remains the
+general evaluator for genuinely fractional, blended, path, or descriptor-driven samples; it is not
+a compatibility runtime and must not remain on the ordinary integer Figa path.
+
+This packet is worth retaining only if it removes a material portion of the current 17.71% pose
+owner and improves the complete 512-environment contract by at least 8%. It must not add per-Match
+sample caches or increase mutable savestate state.
 
 ## Final boundary
 
-- Final owner: `runtime/fighter_pose.{c,h}` for native fighter motion tracks, contiguous joint
-  topology, animation-phase invalidation, root/world placement, and gameplay point publication.
-  Retained fighter `HSD_JObj` handles contain the representation's sole local SRT and world matrix so
-  existing procedural source owners can mutate canonical state in scheduler order. Exact source HSD
-  matrix construction remains the arithmetic primitive for dirty/special joints; it is not a second
-  pose or fallback representation. Source `ftanim`, ground IK, capture, dynamics, and character
-  callbacks remain semantic phase owners.
-- Immutable input: the already translated, sealed `FigaTree`, `HSD_AnimJoint`, costume-joint,
-  fighter-part, dynamics, and hit/hurt/contact descriptors loaded from DAT during GameData
-  initialization. Compact track/topology programs are compiled from those C graphs before the
-  initialization seal; there is no Python/legacy extractor or new packaged gameplay asset.
-- Canonical mutable state: per-fighter compact track cursors and clocks; the retained joint handles'
-  local SRT and parent-first world transforms; procedural-owner state; and
-  hit/hurt/shield/reflect/absorb/grab/anchor geometry. The compact owner and its joint handles are
-  Match-owned, fixed-capacity, relocatable, and included by arbitrary-index save/restore.
-- Direct consumers: move hitboxes and grab boxes; BODY hurt capsules; shield, reflector, and absorber
-  volumes; held-item/article and character-special attachment anchors; ground IK; capture/throw
-  positioning; and retained dynamic-bone chains. ECB remains position/source-collision owned, but any
-  pose-joint query it reaches consumes the compact transform.
-- Displaced state/code: fighter `HSD_AObj`/`HSD_FObj` lifecycle storage, global/ancestry-scanning
-  fighter animation traversal, animation-driven recursive descendant invalidation, generic fighter
-  point dispatch, repeated root-driven ordinary matrix rebuilds, and duplicate hurt-endpoint setup.
-  Retained JObj local/world fields are canonical storage used directly by the compact owner.
-- Deletion boundary: supported native fighters have one pose/geometry representation and one
-  animation/topology owner. All fighter point consumers enter its type route; hit/hurt/shield,
-  attachment, IK, capture, and dynamics therefore read its canonical matrix directly. No synchronized
-  pose, setter interception, lazy source materialization, fighter fallback dispatch, compatibility
-  flag, legacy extractor, or dead fixed-pool implementation remains. Non-fighter objects and the
-  source/PPC build keep their source HSD owners.
+- **Final owner:** native DAT/GameData initialization compiles every supported Figa tree into an
+  immutable, deterministic track program and exact ordinary-frame sample representation. Fighter
+  pose attachment binds directly to that shared program.
+- **Canonical mutable state:** the existing Match-owned joint SRT, animation frame/rate/flags,
+  blend state, procedural path state, and exact general evaluator state. A sampled Figa joint may
+  not own a second pose or per-Match cache.
+- **Consumers:** root motion, hitbox/hurtbox/shield geometry, attachments, capture, IK, dynamics,
+  ECB publication, viewer geometry, action-end callbacks, copy, and save/restore.
+- **Displaced work:** ordinary integer Figa samples no longer parse packed keys, waits, fractions,
+  and interpolation state separately in every Match. The direct shared program publishes the same
+  SRT values and AObj end/rewind counts in source order.
+- **Deletion boundary:** no ordinary Figa node enters `interpret_track`; the exact mutable decoder
+  owns only legal non-unit-rate/fractional samples and is resynchronized from source state when
+  returning from the immutable path. It is not a pose cache or synchronized side representation.
+- **Exclusions:** no legacy extractor, Python hot path, replay-derived table, changed animation
+  frame/rate, approximate interpolation, altered matrix arithmetic, scheduler interleaving, or
+  observation reduction.
 
-## Execution gates
+## Sequence
 
-1. Attribute track interpretation, tree dispatch, dirty propagation, matrix construction, procedural
-   pose, and geometry publication on the exact committed 512 workload.
-2. Prove the final evaluator shape in an ignored isolated harness before broad production edits. The
-   proof must use live translated DAT programs and parent-first transforms and demonstrate a credible
-   removal of at least 10% of total 512 frame time; otherwise stop before the cutover grows.
-3. Install the final compact state and program compiler, then cut all named consumers over and
-   complete the deletion boundary before replay-parity repair or throughput tuning.
-4. Recover exact correctness, ordering, arbitrary-index copy/save/restore, doubles, and Wasm inside
-   the compact representation. Never restore displaced source machinery to make an intermediate
-   failure green.
-5. Remove all proof/profiling code. Require unchanged 256/512 digests; 63 PASS / 90 unchanged
-   CLASSIFIED / zero failures; native source/API/copy/save-restore and sealed-allocation gates; PPC,
-   Wasm/viewer, and format gates. Benchmark adjacent CPU-0 control/candidate pairs at 512 and 256.
-6. Update retained evidence only after every gate passes. Leave the complete result uncommitted.
+1. Census the current 512 workload by pose source, blend state, rate, fractional frame, track type,
+   and byte-stream work. Measure the eligible whole-frame ceiling before structural edits.
+2. Enumerate every translated Figa tree during GameData initialization and measure the exact shared
+   table/program size. Reject dense full-pose samples if they are needlessly large; prefer compiled
+   key segments plus a compact ordinary-frame index.
+3. Prove one complete Figa program against the current evaluator over every integer and a bounded
+   fractional sample set before changing runtime ownership.
+4. Cut ordinary Figa attachment/evaluation to the shared program. Keep the exact mutable evaluator
+   only as canonical state for legal nonordinary sampling; do not add a sampled-pose cache. Recover
+   exact root motion, loop/end, blend, path, and save/restore inside that boundary.
+5. Remove diagnostics. Require unchanged 256/512 digests, 63 PASS / 90 unchanged CLASSIFIED / zero
+   failures, native API/copy/save-restore and sealed-allocation gates, plus PPC/Wasm/viewer gates.
+6. Retain and commit only a repeatable adjacent 512 improvement of at least 8%, with 256 as the
+   cache-pressure secondary result. Otherwise record the completed reason and remove the packet.
 
 ## Baseline
 
-- Runtime: `71586c18`
-- 256 digest: `8ef126a41244d514`; retained raw median 48,273 FPS
-- 512 digest: `6f91f23e3553a090`; retained raw median 45,638 FPS
-- Correctness: 63 PASS / 90 CLASSIFIED / zero XPASS/fail/error
+- Runtime: `0d2b44f2`
+- 256: 58,192 FPS median, digest `8ef126a41244d514`
+- 512: 54,202 FPS median, digest `6f91f23e3553a090`
+- Current exact profile: pose animation 17.71%; map collision 19.84%; action animation callbacks
+  7.72%; input/action callbacks 5.20%; remaining gameplay dynamics 6.14%.
 
 ## Log
 
-- 2026-07-18 — `open`
-  Scope: source map for `ftAnim_8006EBA4`, HSD AObj/FObj/JObj evaluation, fixed fighter animation
-  storage, DAT initialization sealing, and downstream transform consumers.
-  Hypothesis: flat compact track state plus parent-first transforms and direct geometry can remove
-  the linked generic animation/tree/matrix boundary rather than cache one of its outputs.
-  Evidence: the committed subsystem profile attributes 22.56% of the instrumented contract to live
-  pose animation; additional direct consumers are separately present in contact publication,
-  dynamics, IK, capture, and attachment callbacks. Native initialization already preloads every
-  supported motion archive before sealing translated DAT graphs.
-  Disposition: final owner and deletion boundary named above. First experiment is temporary nested
-  attribution followed by an ignored final-shape evaluator harness; no production representation is
-  admitted before that proof.
-  Next: measure track/tree/matrix shares and construct the bounded viability proof.
-- 2026-07-18 — `rejected`
-  Scope: unmodified native-release symbol sampling with Linux `perf` on the exact 512 workload.
-  Hypothesis: call-stack samples can split FObj interpretation, JObj traversal, matrix construction,
-  and geometry without instrumenting the runtime.
-  Evidence: the host denies performance counters and observability at `perf_event_paranoid=4`; no
-  benchmark process ran and no runtime evidence was produced.
-  Disposition: sampling is unavailable. Use bounded compile-time cycle buckets inside the named
-  owners, then remove them completely.
-  Next: add nested animation/transform attribution to the existing diagnostic profiler.
-- 2026-07-18 — `open`
-  Scope: temporary nested cycle/count attribution in AObj/FObj interpretation, JObj dependency and
-  matrix setup, RObj animation, and `lb_8000B1CC` point transforms.
-  Hypothesis: the final cut must remove both animation dispatch and consumer-side lazy matrices;
-  either owner alone is too narrow.
-  Evidence: exact-digest 512 diagnostic counts 4,238,227 active AObj/FObj joint evaluations,
-  6,979,165 dirty matrix builds, and 4,926,923 point transforms across 65,536 match-frames. FObj work
-  is the majority of active AObj time; RObj animation is negligible. High-frequency timers inflate
-  wall time, so their cycle totals are directional only, while counts are exact.
-  Disposition: retain the owner map, not the instrumentation. Measure a disposable no-pose upper
-  bound, then benchmark a live-data flat evaluator/world-transform proof.
-  Next: quantify the removable whole-frame ceiling and final evaluator cost.
-- 2026-07-18 — `retained`
-  Scope: ignored 512-resident viability proof over live translated DAT-driven fighter states; no
-  production representation is installed.
-  Hypothesis: sparse/direct component publication plus flat parent-first world transforms is cheap
-  enough to recover at least 10% overall even after exact exceptional-track support.
-  Evidence: the disposable no-pose upper bound reduces a contemporaneous 1.499 s / 43,719 FPS run to
-  0.752 s / 87,117 FPS, identifying roughly 0.747 s of animation plus downstream dirty-matrix work.
-  The final-shape common kernel covers 1,150 live fighters, 84,951 DAT-derived SRT tracks, and 47,553
-  retained joints; at equivalent 128-tick work its measured cost scales to roughly 0.322 s. Its
-  parent-first matrices match source bits on all 46,700 ordinary eligible joints. There are 2,494
-  non-unit-rate active joints (10.0% of animated joints) and zero live non-SRT tracks in the staggered
-  snapshot; the final compact track interpreter must model the former, not exclude it. The projected
-  whole-frame gain is approximately 25–30% before direct geometry savings, leaving ample margin over
-  the 10% acceptance threshold.
-  Disposition: viability gate passed. Remove the proof and attribution code, then install the one
-  compact production representation and complete the named consumer/deletion boundary.
-  Next: implement compact topology/track/local/world state and cut native `ftanim` to it.
-- 2026-07-18 — `open`
-  Scope: production representation cut for native supported-fighter tracks, flat topology, transform
-  evaluation, and joint-backed gameplay queries.
-  Hypothesis: retaining fighter joint handles as the compact owner's sole local/world storage avoids
-  rewriting procedural mechanics into synchronized side state while still deleting the expensive
-  generic AObj/FObj animation and recursive matrix owners. A final fighter/non-fighter type route is
-  unconditional for fighter joints and is not a source fallback.
-  Evidence: gameplay and character source owners mutate joint SRT directly across dozens of files;
-  the live-data proof already established bit-exact parent-first output using those same canonical
-  values. The current `aobj` slot can become the fighter node-owner link without growing JObj state;
-  non-fighter objects remain exclusively HSD-owned.
-  Disposition: install the compact track state and evaluator first, then flat transform/query
-  ownership; never create side local/world arrays or synchronize two representations.
-  Next: replace the native fighter animation pool and `ftanim` lifecycle with compact tracks.
-- 2026-07-18 — `open`
-  Scope: first production compact-track cut using fixed Match-owned joint/track arrays and direct SRT
-  publication from live Figa/AnimJoint streams.
-  Hypothesis: exact source track state with direct common-component publication can replace fighter
-  AObj/FObj allocation and linked callback traversal independently of the subsequent flat transform
-  cut.
-  Evidence: native construction, API, copy/save-restore, and gameplay-parts smoke pass after deleting
-  the fixed generic fighter animation owner. A 1,200-frame replay sweep is not yet correct: 24/153
-  cases pass and the dominant symptom is a two-frame delayed action transition; the bounded Peach
-  demo reproduces it only on frames 34–60. Registering otherwise unattached topology nodes was ruled
-  out, and FObj TYPE_JOBJ ordering plus IK-hint publication now match source.
-  Disposition: representation retained as open; isolate the shared animation-liveness/end-callback
-  discrepancy before any matrix/geometry edits.
-  Next: compare source and compact per-joint active/end accounting around the bounded transition.
-- 2026-07-18 — `open`
-  Scope: global native fighter animation entry routing and the first full supported-domain gate for
-  the compact track owner.
-  Hypothesis: routing every supported-fighter `HSD_JObjAnim` entry through the compact owner closes
-  the shared two-frame transition delay without changing source scheduler order.
-  Evidence: native/API/save-restore smoke and the bounded Peach replay became exact; the 1,200-frame
-  sweep improved from 24/153 to 112/153. The complete 1,415,476-frame gate still regresses to 43
-  PASS / 49 CLASSIFIED / 61 FAIL, with many failures appearing only after thousands of frames and
-  disproportionately affecting doubles. Compact track runs are currently relocated in joint
-  registration order rather than source-address order, so an in-place leftward move can overwrite
-  a later run that has not yet been copied.
-  Disposition: entry routing is necessary but the compact storage lifecycle remains open. Do not
-  begin the transform/geometry cut until long-run compact-track relocation is exact.
-  Next: make compaction preserve ascending old track-run order, then retest one exact singles, one
-  previously late-diverging classified replay, and one doubles replay before repeating the full
-  domain gate.
-- 2026-07-18 — `retained`
-  Scope: compact track-run relocation during fighter animation transitions.
-  Hypothesis: compacting live runs in ascending old-address order prevents an earlier move from
-  overwriting a run whose owning joint was registered earlier but whose current tracks were
-  allocated later.
-  Evidence: the exact 10,174-frame singles replay passes; the previously early-diverging 9,328-frame
-  classified replay now has only its unchanged one-row camera classification; and the 9,560-frame
-  doubles replay reproduces its exact committed signed-zero fingerprint with no new mismatch.
-  Disposition: retain address-ordered relocation as canonical compact storage behavior.
-  Next: repeat the complete supported-domain gate before beginning the transform/geometry cut.
-- 2026-07-18 — `retained`
-  Scope: full-domain correctness checkpoint for compact fighter track ownership.
-  Hypothesis: address-ordered relocation was the sole long-run storage corruption after global
-  fighter animation entry routing.
-  Evidence: the complete native gate is restored to 63 PASS / 90 unchanged CLASSIFIED / zero
-  XPASS/fail/error across all 1,415,476 frames, including every doubles replay and output lock.
-  Native construction, API, copy/save-restore, and gameplay-parts smoke remain green.
-  Disposition: compact AObj/FObj replacement is exact and becomes the sole native fighter animation
-  owner. Continue directly to flat transforms and named geometry consumers; do not retain the
-  generic fighter matrix/query boundary.
-  Next: compile parent-first topology and replace recursive/lazy fighter matrix publication plus
-  generic fighter point queries.
-- 2026-07-18 — `rejected`
-  Scope: first production owned-joint matrix cut using per-node local/world revisions and direct
-  compact point transformation.
-  Hypothesis: revision-based parent setup would delete recursive dirty-subtree propagation while
-  retaining demand-driven source matrix arithmetic.
-  Evidence: the 1,200-frame suite preserves the existing 135 exact rows plus 18 truncated known
-  classifications, and the 512 workload preserves digest `6f91f23e3553a090`; throughput falls from
-  the retained 45,638 FPS median to 37,723 FPS (-17.3%). Per-query ancestry/revision work is more
-  expensive than the displaced recursive owner.
-  Disposition: reject the per-query revision evaluator as an intermediate shape.
-  Next: test one parent-first tree publication per dirty tree, with direct compact point queries.
-- 2026-07-18 — `rejected`
-  Scope: parent-first dirty-tree publication using contiguous registered topology, non-recursive
-  dirty marking, and direct compact point transformation.
-  Hypothesis: one selective parent-first scan per dirty tree amortizes matrix publication across all
-  gameplay consumers and realizes the isolated flat-kernel result.
-  Evidence: the same 1,200-frame suite and 512 digest remain unchanged, but throughput falls further
-  to 33,412 FPS (-26.8%). The production scheduler can dirty and query a fighter tree multiple times
-  across animation, action, IK, capture, dynamics, attachment, and contact phases, so tree-wide
-  publication repeats excess scanning/matrix work instead of matching the isolated one-pass model.
-  Disposition: reject the demand-triggered dirty-tree evaluator. This is the second failed structural
-  experiment on the same architectural unknown; stop implementation and reconvene as required.
-  Next: preserve the exact compact-track owner separately; reshape matrix/geometry publication around
-  explicit scheduler phase boundaries and consumer-owned compact geometry rather than another lazy
-  JObj setup variant.
-
-## Stop-point salvage inventory
-
-- Durable: the compact Match-owned joint/track program, direct SRT publication, global fighter
-  animation routing, address-ordered track relocation, relocation/save-state contract, and exact
-  63/90/0 full-domain checkpoint before matrix edits.
-- Reshape: the current contiguous topology/root metadata and direct point API are useful inputs, but
-  the demand-triggered tree evaluator is not a retained design. The next proposal must name the
-  scheduler publication seams and which geometry is materialized at each seam before editing.
-- Proposed removal after approval: revision/tree-dirty fields and owned `HSD_JObjSetupMatrix`
-  dispatch introduced by the two rejected experiments. Do not remove or restore substantial dirty
-  work without explicit user direction.
-- Still incomplete: direct hit/hurt/shield/attachment/IK/capture/dynamics cutover, deletion of generic
-  fighter matrix ownership and dead fixed-pool code, complete gates, and the required >=10% retained
-  512 result.
-
-## Resumed sequence
-
-- 2026-07-18 — `open`
-  Scope: isolate the full-domain-exact compact animation owner from both rejected matrix evaluators.
-  Hypothesis: measuring the compact track owner alone is required before choosing the scheduler-aligned
-  geometry cut; its cost cannot be inferred from either regressed combined candidate.
-  Evidence: the last exact checkpoint preceded all owned-matrix dispatch, while both later benchmarks
-  combined compact track interpretation with rejected demand-triggered matrix machinery.
-  Disposition: surgically remove only revision/tree-dirty state and owned matrix/point dispatch. Keep
-  the compact animation program, address-ordered storage, native animation entry routing, path-track
-  semantics, relocation contract, and O3 owner intact.
-  Next: rerun native smoke, the complete replay gate, and the 512 checkpoint on the isolated compact
-  animation owner; use that result to budget the final scheduler-aligned geometry publication cut.
-- 2026-07-18 — `retained`
-  Scope: isolated compact animation-owner correctness and adjacent 512 measurement.
-  Hypothesis: compact track ownership is a durable exact substrate even if it does not independently
-  deliver the matrix/geometry packet's throughput target.
-  Evidence: the complete gate is 63 PASS / 90 unchanged CLASSIFIED / zero failures. An adjacent clean
-  `71586c18` control is 45,649 FPS and the compact-track candidate is 44,591 FPS with identical digest
-  `6f91f23e3553a090`, a -2.32% cost before geometry replacement.
-  Disposition: retain the exact compact owner as the required final representation; the geometry cut
-  must recover this small interpreter cost and remove enough matrix/publication work to exceed +10%.
-  Next: count point queries, matrix builds, and dirty publications by exact scheduler owner on the
-  resident workload, then name explicit publication seams from those counts.
-- 2026-07-18 — `open`
-  Scope: temporary scheduler-owner attribution for fighter point queries, matrix builds, and dirty
-  publications on the exact resident workload.
-  Hypothesis: most costly geometry demand clusters at a small number of source process priorities;
-  publishing consumer-owned geometry at those seams avoids both rejected demand-triggered designs.
-  Evidence: current subsystem timing identifies broad phase owners but does not attribute matrix
-  demand or invalidation frequency to the active GObj process.
-  Disposition: add profile-build-only counters keyed by source process callback, collect one resident
-  run, then remove all counters before production edits.
-  Next: resolve callback addresses to source owners and write the final phase/deletion map.
-- 2026-07-18 — `rejected`
-  Scope: the hypothesis that geometry demand is concentrated at one scheduler publication seam.
-  Hypothesis: one source process owns enough point demand and matrix invalidation to support a single
-  bulk publication pass.
-  Evidence: exact owner counts show two distinct dominant boundaries. Animation priority 1 causes
-  2,818,984 dirty publications but only 5,899 immediate matrix builds. Map priority 6 causes
-  3,265,366 dirty publications, 3,040,134 matrix builds, and 860,376 point queries. Post-map contact
-  priority 9 contributes 688,199 builds. The later collision owners then dominate demand:
-  `Fighter_8006CB94` has 417,544 queries / 311,669 builds and `Fighter_ProcessHit_8006D1EC` has
-  3,139,727 queries / 2,368,740 builds despite only 12,248 local dirty publications.
-  Disposition: reject a single demand-triggered or single-seam whole-tree pass. Remove all diagnostic
-  counters. The final evaluator must separate local-pose publication from root/world placement and
-  publish collision geometry before the priority 13/14 consumers.
-  Next: prove the root-placement factorization and exact collision-geometry publication boundary;
-  prioritize eliminating map-driven descendant rebuilds and repeated ProcessHit matrix demand.
-- 2026-07-18 — `open`
-  Scope: redundant fighter-root placement publication at map and accessory seams.
-  Hypothesis: source publishes `cur_pos` before and after map collision and after each accessory
-  callback even when the root already contains the identical three float bit patterns. Skipping only
-  identical writes preserves pose semantics while avoiding recursive descendant invalidation; it is
-  a durable subset of final root/world placement ownership.
-  Evidence: priority 6 owns 3,265,366 dirty publications and 3,040,134 matrix builds; priorities 7/8
-  add 49,939 dirty publications and 331,935 builds. No other state changes when the assigned SRT bits
-  are identical.
-  Disposition: test bitwise-equal root placement suppression at the four source scheduler seams. Keep
-  only if the full replay contract and digest are unchanged and throughput materially improves.
-  Next: native smoke, bounded replay check, then adjacent 512 measurement before the full gate.
-- 2026-07-18 — `retained`
-  Scope: bit-identical fighter-root placement suppression.
-  Hypothesis: repeated identical SRT publication has no gameplay effect and only invalidates cached
-  descendants.
-  Evidence: native smoke and the complete 63/90/0 replay contract pass; digest remains
-  `6f91f23e3553a090`. The 512 candidate improves from 44,591 to 46,310 FPS (+3.85%) and exceeds the
-  adjacent clean control's 45,649 FPS by 1.45%.
-  Disposition: retain as the first scheduler-aligned world-placement cut.
-  Next: replace changed root-translation invalidation with exact translation-column propagation for
-  already-clean ordinary descendants while leaving dirty/special source owners to rebuild normally.
-- 2026-07-18 — `open`
-  Scope: changed fighter-root translation publication over compact parent-first topology.
-  Hypothesis: a pure root translation leaves every descendant basis column unchanged. For a clean
-  ordinary descendant, recomputing only the world translation column with the exact `PSMTXConcat`
-  operation order is bit-identical to a full SRT/matrix rebuild; dirty nodes already carry the new
-  root value into their eventual source build, while IK/RObj/path/independent/user-matrix subtrees
-  retain their semantic source handling.
-  Evidence: priority 6 currently rebuilds 3,040,134 matrices after root placement. The source matrix
-  formula writes local translation directly, then concatenates its translation column independently
-  of the three basis columns.
-  Disposition: install root-tree topology and a direct world-placement owner; do not add a second
-  matrix representation or a generic setter hook. Retain only with exact replay/save-state behavior
-  and a material 512 gain.
-  Next: implement the root placement API, replace the four explicit fighter scheduler seams, then run
-  bounded exactness and an early benchmark before the full gate.
-- 2026-07-18 — `retained`
-  Scope: exact changed-root translation propagation.
-  Hypothesis: ordinary clean descendants need only their translation column republished when fighter
-  world placement changes.
-  Evidence: full 63/90/0 replay parity and digest `6f91f23e3553a090` remain exact. The early 512 result
-  is 50,055 FPS, +9.65% over the adjacent 45,649 clean control and +9.68% over the retained 45,638
-  median. Dirty and semantic special subtrees still execute their source matrix owner.
-  Disposition: retain. This is canonical root/world placement ownership, not a cache or second pose.
-  Next: route fighter point geometry directly through the compact owner and group paired hurt-capsule
-  endpoints so the priority 13/14 collision consumers stop re-entering generic point dispatch.
-- 2026-07-18 — `open`
-  Scope: direct compact point and paired-capsule publication for fighter geometry.
-  Hypothesis: owned fighter joints already expose canonical matrices through the compact node;
-  bypassing generic root/type dispatch and setting up a bone once for paired hurt endpoints removes
-  repeated hot-call overhead without changing transform arithmetic or publication timing.
-  Evidence: `Fighter_ProcessHit_8006D1EC` alone requests 3,139,727 fighter point transforms on the
-  resident workload; hurt capsules publish two endpoints from the same bone.
-  Disposition: add one owned point/pair API, route the native fighter point boundary unconditionally,
-  and replace the repeated hurt endpoint sequences. No alternate representation or fallback.
-  Next: bounded correctness and 512 checkpoint before broader consumer cleanup.
-- 2026-07-18 — `open`
-  Scope: animation-phase local-pose invalidation in the compact evaluator.
-  Hypothesis: the compact parent-first animation walk can publish an animated joint's SRT and mark
-  only that joint dirty. Each following joint already executes `HSD_JObjCheckDepend`, so parent
-  invalidation propagates in walk order without recursively dirtying every descendant from the
-  first animated ancestor.
-  Evidence: animation priority owns 2,818,984 dirty publications while doing only 5,899 immediate
-  matrix builds. The compact evaluator is now the sole SRT track owner and visits retained fighter
-  joints parent-first; source setters add no semantic work beyond the SRT store and dirty call.
-  Disposition: replace standard compact-track setter calls with direct canonical SRT publication and
-  local dirty marking. Path/procedural updates keep their semantic source handling.
-  Next: require the bounded replay shape and unchanged 512 digest before measuring the cut.
+- 2026-07-19 — `open`
+  Scope: production workload eligibility and translated-Figa size census only.
+  Hypothesis: ordinary unblended integer Figa sampling dominates the 17.71% pose owner and can use
+  one shared compiled program without retaining a per-Match sample cache.
+  Evidence: the exact committed profile attributes 1,021,575,725 net cycles to pose animation over
+  146,845 calls, while action scripts, secondary pose, and capture pose total only 0.58%.
+  Disposition: instrument the named owner; no runtime representation change is approved until the
+  eligible cycle share and shared data size are measured.
+  Next: collect the workload/source census and select the smallest exact compiled representation.
 - 2026-07-19 — `retained`
-  Scope: final compact topology, local-pose invalidation, and direct gameplay-point boundary.
-  Hypothesis: a contiguous subtree range is the missing production equivalent of the viability
-  proof: it removes global pool scans and ancestry walks without introducing phase-wide matrix work.
-  Evidence: every registered node now records its parent and subtree range; animation, request,
-  lifecycle, and query owners iterate only that range. Compact SRT publication marks the current
-  node dirty and relies on the existing parent-first scheduler to propagate dependency, while root
-  placement directly republishes exact translation columns for clean ordinary descendants. The
-  native fighter point route directly serves all existing hitbox, shield, attachment, IK, capture,
-  and dynamics callsites, and hurt capsules set up a shared bone once for both endpoints. The full
-  replay gate is 63 PASS / 90 unchanged CLASSIFIED / zero failures across 1,415,476 frames; 256/512
-  digests remain `8ef126a41244d514` / `6f91f23e3553a090`.
-  Disposition: retain. Both rejected demand-triggered matrix designs and the dead fixed AObj/FObj
-  implementation are absent; exact HSD matrix arithmetic remains the single canonical dirty-joint
-  primitive rather than a fallback representation.
-  Next: finish lifecycle capacity, platform, formatting, and final adjacent benchmark evidence.
+  Scope: exact workload eligibility and complete translated-Figa size census.
+  Hypothesis: integer Figa samples dominate pose cost and a shared dense ordinary-value index is
+  small enough to be a practical GameData owner.
+  Evidence: integer-rate/integer-frame Figa joints account for 835,993,960 of 1,006,309,005 timed
+  joint cycles (83.1%); other Figa samples account for 14.7% and descriptor animation 2.2%. The
+  supported native graph contains 1,683 Figa trees, 261,195 tracks, 8.32 MiB of packed streams, and
+  10,721,046 dense track/frame values (40.90 MiB as floats before a validity bitset). Diagnostic
+  output preserves digest `6f91f23e3553a090`.
+  Disposition: the final shared program is viable. Use dense exact ordinary values plus stateless
+  general evaluation from the same immutable source program; do not retain mutable Figa decoder
+  state or a per-Match cache.
+  Next: implement GameData compilation and prove its samples against the current evaluator before
+  cutting Figa attachment.
+- 2026-07-19 — `open`
+  Scope: shared dense program proof and first production-path table cut.
+  Hypothesis: publishing ordinary Figa values directly from the immutable table removes enough
+  decoding to clear the 8% whole-frame target before deleting displaced mutable state.
+  Evidence: exhaustive initialization compiled all 10,721,046 values; reached integer samples were
+  checked bit-for-bit against current joint SRT under diagnostic execution. The first production
+  checkpoint preserves digest `6f91f23e3553a090` and reaches 60,880 FPS at 512 versus the retained
+  54,202 median (~+12.3%).
+  Disposition: retain the shared table and direct publisher as the final ordinary path. The current
+  Figa decoder arrays are temporary proof scaffolding and may not survive the packet.
+  Next: replace nonordinary Figa evaluation with immutable-program sampling, remove per-Match Figa
+  track allocation/state, then repeat exact A/B and gates.
+- 2026-07-19 — `rejected`
+  Scope: remove Figa mutable tracks and reconstruct nonordinary samples from absolute joint frame.
+  Hypothesis: packed-stream state is a pure function of absolute frame, so a stateless seek can own
+  the 14.7% nonordinary path without per-Match track state.
+  Evidence: 512 throughput remained 59,177 FPS, but the digest changed. A 33-replay Fox/Falco gate
+  produced 31 failures, beginning with ULP-scale geometry differences. The exact decoder's residual
+  track time accumulates rates and segment subtractions in a different f32 order from recomputing
+  `startframe + curr_frame`; absolute frame alone is not canonical exact state.
+  Disposition: reject stateless raw seeking. Preserve only compact mutable segment cursor/time for
+  nonordinary Figa tracks; p0/p1/d0/d1, byte cursor, fractions, and decoded keys belong to immutable
+  GameData programs. Restore the exact mutable oracle until that segment representation is proven.
+  Next: reinstate the exact candidate, compile immutable key segments, and replace each 40-byte Figa
+  track with the minimum exact cursor/time/event state.
+- 2026-07-19 — `open`
+  Scope: cleaned production candidate, complete correctness gates, and exact-HEAD adjacent A/B.
+  Hypothesis: the direct dense publisher clears the packet's 8% whole-engine acceptance threshold
+  once diagnostic verification is removed.
+  Evidence: 63 PASS / 90 unchanged CLASSIFIED / zero failures, native API/copy/save-restore and
+  sealed-allocation checks, source sync, PPC, Wasm parity, and live viewer all pass. Three adjacent
+  512 samples preserve digest `6f91f23e3553a090`: controls 57,462/57,276/57,225 FPS and candidates
+  60,898/60,392/60,511 FPS. Raw medians improve 57,276 to 60,511 FPS (+5.65%), below the required
+  8% despite eliminating most packed-stream decoding.
+  Disposition: keep the packet open. Do not commit the marginal publisher or relax the threshold.
+  Next: profile the cleaned candidate, then remove common-path per-track validity/type dispatch with
+  an immutable publication program; retain the exact mutable decoder only for legal nonordinary
+  samples and transition resynchronization.
+- 2026-07-19 — `open`
+  Scope: candidate pose-owner drill-down only; instrumentation is temporary and profile-build-only.
+  Hypothesis: the remaining 12.35% pose owner is dominated by dense-table publication dispatch, so
+  compiling node-local publication order and component destinations can recover the missing 2.35
+  whole-frame points without changing pose state or matrix arithmetic.
+  Evidence: the shared table reduced pose animation from the retained 17.71% to 12.35%, while map
+  collision is now 21.33%. The exact publisher still performs two raw-track scans, repeated bounds
+  and validity checks, source-DAT type loads, and a general type switch for each published value.
+  Disposition: attribute table publication, general decoding, dependency checks, and RObj work
+  separately before selecting the final publication representation.
+  Next: collect the profile-build-only split, remove its instrumentation, and implement only the
+  dominant final-form deletion.
+- 2026-07-19 — `open`
+  Scope: eliminate transition-entry general decoding for exact ordinary Figa requests.
+  Hypothesis: `request_track` already establishes exact decoder state at the requested frame, so an
+  integer, rate-one Figa request can publish its first pose from the immutable table immediately;
+  forcing one full decode for every attached joint is redundant work, not required state.
+  Evidence: the profile-build-only split records 3,128,158 table publications (174,481,100 net
+  cycles) but 825,260 general decodes (318,865,468 net cycles). Dependency checks are 91,381,966
+  cycles and RObj work is negligible. The timers perturb absolute throughput, but the dominant
+  avoidable source is transition-entry/general decoding rather than table value dispatch.
+  Disposition: mark exact ordinary requests table-ready at the canonical request owner; preserve
+  `decoder_synced` until the first table publication marks it stale, so legal later nonordinary
+  evaluation can still resynchronize exactly.
+  Next: require unchanged digest/replay locks, then measure release A/B before attempting a larger
+  compiled publication representation.
+- 2026-07-19 — `open`
+  Scope: restore the packet's zero mutable-state-growth contract before final gates.
+  Hypothesis: the five one-byte joint mode fields are independent booleans/two-bit source state and
+  can share one byte, keeping the native pose joint at its retained 56-byte size without changing
+  access semantics or save/restore ownership.
+  Evidence: clean adjacent 512 A/B is now 57,486/63,209, 56,827/63,258, and 56,627/63,204 FPS;
+  raw medians improve 56,827 to 63,209 (+11.23%) and median paired improvement is +11.32%.
+  At 256 the pairs are 60,559/66,531, 60,563/66,327, and 60,494/66,217 FPS; raw medians improve
+  60,559 to 66,327 (+9.52%). Runtime census exposes an unintended 8,192-byte Match/savestate
+  increase solely from padding the 1,024 joint entries from 56 to 64 bytes.
+  Disposition: pack the existing mode fields into one byte and enforce the 56-byte native layout;
+  do not retain a per-environment memory regression for immutable-program metadata.
+  Next: repeat census, throughput digest, full correctness, and cross-platform gates.
+- 2026-07-19 — `open`
+  Scope: make immutable-program identity the canonical Figa/source/attachment state on both native
+  and 32-bit Wasm/PPC layouts.
+  Hypothesis: `program_index != NONE` already proves Figa attachment, while a nonzero general track
+  count proves descriptor attachment. `table_ready` is redundant because exact eligibility is a
+  pure check of source, rate, integer frame, and table bounds. Packing only program identity/range,
+  filter mode, and decoder synchronization into one 32-bit word fits the retained native and 32-bit
+  joint layouts with no synchronized representation.
+  Evidence: native packing restored the 56-byte joint and exact 676,440-byte arena, but the Wasm
+  compile correctly exposed that a pointer-sized assertion was wrong and the candidate still grew
+  the 32-bit joint from 44 to 48 bytes. Program count is 1,683; Figa node counts are source `s8`.
+  Disposition: delete `attached`, `source`, and `table_ready`; reserve the all-ones 11-bit program
+  id as NONE, validate the complete source track range fits its 11/7-bit fields, and derive the
+  displaced state directly.
+  Next: rebuild native/PPC/Wasm and require exact replay/benchmark digests before final evidence.
 - 2026-07-19 — `retained`
-  Scope: supported-domain compact-pose capacity and sealed lifecycle.
-  Hypothesis: capacity must cover structural joint ownership rather than the displaced active-AObj
-  count, because compact topology also registers nonanimated ancestors.
-  Evidence: the construction census reaches 976 nodes for four Peach instances. A fixed 1,024-node
-  owner passes that maximum; the existing 1,024-track source-backed bound remains sufficient. The
-  runtime allocation lock is unchanged at 676,440 bytes / 825 allocations through gameplay, and
-  arbitrary-index copy/save/restore remains inside the typed relocation contract.
-  Disposition: retain the measured fixed capacities and expose their high water in runtime census.
-  Next: repeat the final complete gate and adjacent 256/512 benchmark pairs after all cleanup.
-- 2026-07-19 — `retained`
-  Scope: final packet acceptance.
-  Hypothesis: the completed compact owner and deletion boundary retain at least 10% total throughput
-  once correctness, four-player capacity, save-state relocation, and platform parity are included.
-  Evidence: three adjacent 512 control/candidate pairs are 43,660/54,624, 43,152/54,202, and
-  44,884/53,226 FPS, for +25.11% median paired improvement and +24.15% raw-median improvement. At
-  256 the pairs are 47,748/58,192, 48,282/57,478, and 48,234/59,070, for +21.87% median paired and
-  +20.65% raw-median improvement. Digests are unchanged. Final native correctness is 63/90/0 across
-  1,415,476 frames; native source/API/copy/save-restore/allocation, PPC, Wasm/viewer, and formatting
-  gates pass. No proof profiler, rejected matrix evaluator, dead fixed-pool code, dual pose, legacy
-  extractor, or fighter fallback path remains.
-  Disposition: packet complete and ready for uncommitted review.
-  Next: user review; do not commit.
+  Scope: final shared compiled Figa owner, derived attachment state, complete gates, and adjacent
+  release A/B.
+  Hypothesis: complete-source ordinary samples can be paid once in immutable GameData while exact
+  mutable decoding remains only for legal nonordinary rates/frames, eliminating repeated packed
+  stream interpretation without a per-Match cache or state growth.
+  Evidence: GameData compiles 1,683 unique Figa trees into 10,721,046 exact values (40.90 MiB plus
+  validity bits). At 512, exact control/candidate pairs are 57,292/63,409, 57,460/63,110, and
+  57,082/62,818 FPS; raw medians improve 57,292 to 63,110 (+10.15%) and median paired improvement
+  is +10.05%, digest `6f91f23e3553a090`. At 256, pairs are 60,571/66,869, 59,961/66,767, and
+  59,373/66,194 FPS; raw medians improve 59,961 to 66,767 (+11.35%), digest
+  `8ef126a41244d514`. The full gate is 63 PASS / 90 unchanged CLASSIFIED / zero failures across
+  1,415,476 frames. Native API/copy/save-restore, sealed allocation, source sync, PPC, Wasm parity,
+  live viewer, and formatting pass. Native arena/savestate remain exactly 676,440/738,056 bytes;
+  Wasm snapshot size is 547,712 bytes.
+  Disposition: retain and atomically commit. The ordinary byte-stream work and redundant
+  transition-entry decode are deleted; no dual pose, fallback, runtime allocation, or legacy
+  extractor remains.
+  Next: refresh the retained baseline/profile and select the next highest-impact owner from the
+  committed runtime.

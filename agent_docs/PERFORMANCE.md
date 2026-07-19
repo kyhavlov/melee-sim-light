@@ -21,6 +21,27 @@ make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
 
+## Shared compiled fighter animation samples — 2026-07-19
+
+GameData now enumerates every translated fighter Figa tree and compiles its exact ordinary integer
+samples once during initialization. Match-owned joints bind by compact program/range identity and
+publish unit-rate integer samples directly from immutable shared data. The existing exact mutable
+decoder remains canonical only for legal fractional/non-unit-rate evaluation and source-ordered
+resynchronization; there is no per-Match pose cache, dual pose, fallback dispatch, gameplay
+allocation, or external/legacy extractor.
+
+Three adjacent CPU-0 control/candidate pairs preserve digest `6f91f23e3553a090` at 512. Results are
+57,292/63,409, 57,460/63,110, and 57,082/62,818 FPS. Raw medians improve 57,292 to 63,110 FPS
+(+10.15%); median paired improvement is +10.05%. At 256, digest `8ef126a41244d514` is unchanged
+across 60,571/66,869, 59,961/66,767, and 59,373/66,194 FPS. Raw medians improve 59,961 to 66,767
+FPS (+11.35%).
+
+The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across
+1,415,476 frames. Native source/API/copy/save-restore, sealed allocation, PPC, Wasm parity, viewer,
+and formatting gates pass. The shared table holds 10,721,046 values (40.90 MiB plus validity bits)
+for 1,683 unique Figa trees. Program identity and decoder mode fit the existing compact joint;
+native arena/savestate remain 676,440/738,056 bytes and the Wasm snapshot remains 547,712 bytes.
+
 ## Compact fighter pose and gameplay geometry — 2026-07-19
 
 The retained candidate replaces native fighter AObj/FObj animation ownership with fixed Match-owned
@@ -43,6 +64,16 @@ The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/er
 and formatting gates pass. The supported construction census reaches 976 compact nodes for four
 Peach instances inside the fixed 1,024-node owner; ordinary stepped arena use remains sealed at
 676,440 bytes with 825 initialization allocations, and the corresponding savestate is 738,056 bytes.
+
+### Rejected scalar ECB publication follow-up
+
+A post-commit `Fighter_procMap` drill-down found that `mpColl_LoadECB_JObj` owns 11.90% of the
+instrumented contract and its six exact bone-origin matrix queries own 11.48%. Action callbacks,
+stage-line scans, and traversal shape were not the hidden cost: direct compact-pose queries, full
+tree publication, and a sparse six-joint ancestor closure all preserved exact output but measured
+between neutral and slower. The final direct-query A/B was +0.39% by raw median and +0.51% paired,
+inside host variance, so every candidate was removed. ECB publication remains in the scalar source
+owner until pose/collision arithmetic can be transformed across environments.
 
 ## Fighter wall-pass broad phase — 2026-07-18
 

@@ -14,6 +14,7 @@ typedef struct HSD_AObjContext HSD_AObjContext;
 typedef struct MslFtCollState MslFtCollState;
 typedef struct MslFtAnimScratch MslFtAnimScratch;
 typedef struct MslFighterPose MslFighterPose;
+typedef struct MslFighterPosePrograms MslFighterPosePrograms;
 typedef struct MslGroundState MslGroundState;
 typedef struct mpCollisionBox mpCollisionBox;
 typedef struct HSD_RandomContext HSD_RandomContext;
@@ -68,6 +69,8 @@ extern _Thread_local MslFtDeviceState* msl_core_context_ft_device;
 extern _Thread_local MslFtCollState* msl_core_context_ft_coll;
 extern _Thread_local MslFtAnimScratch* msl_core_context_ft_anim;
 extern _Thread_local MslFighterPose* msl_context_fighter_pose;
+extern _Thread_local const MslFighterPosePrograms*
+    msl_context_fighter_pose_programs;
 extern _Thread_local MslGroundState* msl_core_context_ground;
 extern _Thread_local void* msl_core_context_ground_stage_positions;
 extern _Thread_local void* msl_core_context_player_common_ref;

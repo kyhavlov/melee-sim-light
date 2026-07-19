@@ -6,8 +6,8 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Provenance
 
-- Runtime: the committed compact fighter pose/gameplay-geometry owner, including the fighter
-  wall-pass broad phase and staggered production workload
+- Runtime: the committed compact fighter pose/gameplay-geometry owner with shared exact ordinary
+  Figa samples, including the fighter wall-pass broad phase and staggered production workload
 - Date: 2026-07-19
 - Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 6.17 x86-64
 - Compiler: GCC 13.3.0, strict native release profile, `-march=native -mtune=native`
@@ -39,11 +39,11 @@ control/candidate pairs and reports both the median paired delta and the raw thr
 
 | Batch | Prior-commit median | Current median | Raw-median delta | Median paired delta |
 |---:|---:|---:|---:|---:|
-| 256 | 48,234 FPS | 58,192 FPS | +20.65% | +21.87% |
-| 512 | 43,660 FPS | 54,202 FPS | +24.15% | +25.11% |
+| 256 | 59,961 FPS | 66,767 FPS | +11.35% | +11.35% |
+| 512 | 57,292 FPS | 63,110 FPS | +10.15% | +10.05% |
 
-The exact 512 pairs were 43,660/54,624, 43,152/54,202, and 44,884/53,226 FPS. The exact 256 pairs
-were 47,748/58,192, 48,282/57,478, and 48,234/59,070 FPS. Each pair is the preceding committed
+The exact 512 pairs were 57,292/63,409, 57,460/63,110, and 57,082/62,818 FPS. The exact 256 pairs
+were 60,571/66,869, 59,961/66,767, and 59,373/66,194 FPS. Each pair is the preceding committed
 runtime followed by the current candidate.
 
 ## Current memory contract
@@ -61,11 +61,13 @@ nodes inside the fixed 1,024-node capacity.
 | Maximum reached compact pose nodes | 976 / 1,024 |
 
 The public 128-frame observation history remains 127,488 bytes per environment and is caller-owned.
+Shared GameData additionally owns 10,721,046 compiled Figa values (40.90 MiB plus validity bits),
+paid once per process rather than once per environment.
 
 ## Current corrected profile
 
-On the committed staggered 512 workload, fighter map/stage collision is 19.84% of the instrumented
-contract and compact pose animation is 17.88%. Action animation callbacks are 7.65%, input/action
-callbacks are 5.13%, and `Fighter_ProcessHit_8006D1EC` is 4.26%. The profiler's 48,992 FPS is
+On the committed staggered 512 workload, fighter map/stage collision is 21.58% of the instrumented
+contract and compact pose animation is 12.59%. Action animation callbacks are 7.58%, input/action
+callbacks are 4.28%, and `Fighter_ProcessHit_8006D1EC` is 4.48%. The profiler's 55,376 FPS is
 diagnostic overhead, not a throughput baseline; nested callback rows are attribution drill-down and
 must not be added to their enclosing phase shares.

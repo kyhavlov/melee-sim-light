@@ -157,6 +157,31 @@ static void require_dat_initialization(const char* operation)
     }
 }
 
+void msl_native_dat_for_each_figa(void (*visit)(FigaTree*, void*),
+                                  void* visit_context)
+{
+    uint32_t archive_index;
+    HSD_ASSERT(171, visit != NULL);
+    for (archive_index = 0; archive_index < native_archive_cache_count;
+         ++archive_index)
+    {
+        MslNativeArchive* archive =
+            native_archive_cache[archive_index].archive.top_ptr;
+        uint32_t public_index;
+        for (public_index = 0; public_index < archive->public_count;
+             ++public_index)
+        {
+            MslNativePublic* public = &archive->publics[public_index];
+            size_t length = strlen(public->symbol);
+            if (length >= 9 &&
+                strcmp(public->symbol + length - 9, "_figatree") == 0)
+            {
+                visit(public->address, visit_context);
+            }
+        }
+    }
+}
+
 void msl_native_dat_finish_initialization(void)
 {
     const size_t page_size = 4096;

@@ -59,6 +59,7 @@ typedef struct MslCoreGameData {
     HSD_ClassContext bootstrap_class;
     HSD_IDContext bootstrap_id;
     HSD_AObjContext bootstrap_aobj;
+    MslFighterPosePrograms fighter_pose_programs;
     MslMemoryContext memory;
 #ifdef MSL_CORE_NATIVE
     MslNativeDatContext native_dat;
