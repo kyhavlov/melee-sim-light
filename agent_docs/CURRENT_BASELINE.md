@@ -6,9 +6,9 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Provenance
 
-- Runtime: the committed fighter wall-pass broad phase, including the fixed fighter animation
-  lifecycle and staggered production workload
-- Date: 2026-07-18
+- Runtime: the committed compact fighter pose/gameplay-geometry owner, including the fighter
+  wall-pass broad phase and staggered production workload
+- Date: 2026-07-19
 - Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 6.17 x86-64
 - Compiler: GCC 13.3.0, strict native release profile, `-march=native -mtune=native`
 - Correctness: 153/153 accepted (`63 PASS`, `90 CLASSIFIED`, zero XPASS/fail/error), with no new
@@ -37,33 +37,35 @@ make benchmark-9950x3d-vcache-512
 Host throughput varied materially during the packet, so retention uses three adjacent CPU-0
 control/candidate pairs and reports both the median paired delta and the raw throughput medians.
 
-| Batch | Control median | Candidate median | Raw-median delta | Median paired delta |
+| Batch | Prior-commit median | Current median | Raw-median delta | Median paired delta |
 |---:|---:|---:|---:|---:|
-| 256 | 44,001 FPS | 48,273 FPS | +9.71% | +9.45% |
-| 512 | 42,408 FPS | 45,638 FPS | +7.62% | +8.19% |
+| 256 | 48,234 FPS | 58,192 FPS | +20.65% | +21.87% |
+| 512 | 43,660 FPS | 54,202 FPS | +24.15% | +25.11% |
 
-The exact 512 pairs were 42,408/45,638, 41,592/44,998, and 42,463/45,976 FPS. The exact 256 pairs
-were 43,008/48,273, 44,559/48,292, and 44,001/48,158 FPS. Each pair is the preceding committed
+The exact 512 pairs were 43,660/54,624, 43,152/54,202, and 44,884/53,226 FPS. The exact 256 pairs
+were 47,748/58,192, 48,282/57,478, and 48,234/59,070 FPS. Each pair is the preceding committed
 runtime followed by the current candidate.
 
 ## Current memory contract
 
-The fixed fighter animation owner is initialized before gameplay and participates in typed
-relocation, arbitrary-index copy, and save/restore. The allocation lock remains exactly 658,148
-arena bytes and 828 allocations before and after gameplay.
+The compact pose owner is initialized before gameplay and participates in typed relocation,
+arbitrary-index copy, and save/restore. The allocation lock remains exactly 676,440 arena bytes and
+825 allocations before and after gameplay. Four supported Peach instances reach 976 compact pose
+nodes inside the fixed 1,024-node capacity.
 
-| Measure | Committed control | Candidate | Delta |
-|---|---:|---:|---:|
-| Ordinary singles arena | 685,888 B | 658,148 B | -27,740 B (-4.0%) |
-| Ordinary savestate | 747,480 B | 719,788 B | -27,692 B (-3.7%) |
-| Maximum supported arena | 997,972 B | 986,616 B | -11,356 B (-1.1%) |
-| Maximum relocation records | 6,127 | 4,530 | -1,597 (-26.1%) |
+| Measure | Current |
+|---|---:|
+| Ordinary stepped arena | 676,440 B |
+| Ordinary savestate | 738,056 B |
+| Initialization allocations | 825 |
+| Maximum reached compact pose nodes | 976 / 1,024 |
 
 The public 128-frame observation history remains 127,488 bytes per environment and is caller-owned.
 
 ## Current corrected profile
 
-On the committed staggered 512 workload, live pose evaluation is now the dominant measured owner
-at 22.56% of the instrumented contract. Fighter map collision follows at 16.20%,
-`Fighter_ProcessHit_8006D1EC` at 8.38%, action animation callbacks at 6.90%, and input/action
-callbacks at 4.73%. The profiler's 36,111 FPS is diagnostic overhead, not a throughput baseline.
+On the committed staggered 512 workload, fighter map/stage collision is 19.84% of the instrumented
+contract and compact pose animation is 17.88%. Action animation callbacks are 7.65%, input/action
+callbacks are 5.13%, and `Fighter_ProcessHit_8006D1EC` is 4.26%. The profiler's 48,992 FPS is
+diagnostic overhead, not a throughput baseline; nested callback rows are attribution drill-down and
+must not be added to their enclosing phase shares.

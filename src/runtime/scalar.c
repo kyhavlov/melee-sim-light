@@ -782,7 +782,7 @@ static int match_construct(MslCoreMatch* match,
     init_hsd();
 #ifdef MSL_CORE_NATIVE
     init_relocation_types();
-    if (msl_fighter_anim_pool_init(&match->fighter_anim) != 0) {
+    if (msl_fighter_pose_init(&match->fighter_pose) != 0) {
         return -1;
     }
 #endif

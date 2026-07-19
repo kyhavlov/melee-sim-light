@@ -14,6 +14,9 @@
 #include <baselib/pobj.h>
 #include <baselib/quatlib.h>
 #include <baselib/robj.h>
+#ifdef MSL_CORE_NATIVE
+#include "runtime/fighter_pose.h"
+#endif
 
 /* 00B9D8 */ static void lb_8000B9D8(HSD_JObj*, float**, s32);
 /* 00BC04 */ static HSD_JObj* lbFindJObjWithAObj(HSD_JObj*);
@@ -32,6 +35,11 @@ static s32 lb_803BA030[] = { 7, 4, 5, 6 };
 
 bool lb_8000B074(HSD_JObj* jobj)
 {
+#ifdef MSL_CORE_NATIVE
+    if (msl_fighter_pose_owns_joint(jobj)) {
+        return msl_fighter_pose_is_animating(jobj);
+    }
+#endif
     HSD_AObj* aobj = jobj->aobj;
 
     if (aobj != NULL && !(aobj->flags & AOBJ_NO_ANIM)) {
@@ -43,6 +51,11 @@ bool lb_8000B074(HSD_JObj* jobj)
 
 bool lb_8000B09C(HSD_JObj* jobj)
 {
+#ifdef MSL_CORE_NATIVE
+    if (msl_fighter_pose_owns_joint(jobj)) {
+        return msl_fighter_pose_tree_is_animating(jobj);
+    }
+#endif
     while (jobj != NULL) {
         if (jobj->aobj != NULL && !(jobj->aobj->flags & AOBJ_NO_ANIM)) {
             return true;
@@ -72,6 +85,11 @@ bool lb_8000B09C(HSD_JObj* jobj)
 
 bool lb_8000B134(HSD_JObj* jobj)
 {
+#ifdef MSL_CORE_NATIVE
+    if (msl_fighter_pose_owns_joint(jobj)) {
+        return msl_fighter_pose_tree_rewound(jobj);
+    }
+#endif
     while (jobj != NULL) {
         if (jobj->aobj != NULL && (jobj->aobj->flags & AOBJ_REWINDED)) {
             return true;
@@ -116,6 +134,11 @@ void lb_8000B1CC(HSD_JObj* arg0, Vec3* pos0, Vec3* pos1)
         *pos1 = *pos0;
         return;
     }
+#ifdef MSL_CORE_NATIVE
+    if (msl_fighter_pose_transform_point(arg0, pos0, pos1)) {
+        return;
+    }
+#endif
     if (jobj_parent(arg0) != NULL) {
         HSD_JObjSetupMatrix(arg0);
         if (pos0 == NULL || (!pos0->x && !pos0->y && !pos0->z)) {
@@ -312,6 +335,11 @@ static HSD_JObj* lbFindJObjWithAObj(HSD_JObj* jobj)
 
 float lbGetJObjFramerate(HSD_JObj* jobj)
 {
+#ifdef MSL_CORE_NATIVE
+    if (msl_fighter_pose_owns_joint(jobj)) {
+        return msl_fighter_pose_tree_rate(jobj);
+    }
+#endif
     jobj = lbFindJObjWithAObj(jobj);
     if (jobj != NULL) {
         return jobj->aobj->framerate;
@@ -321,6 +349,11 @@ float lbGetJObjFramerate(HSD_JObj* jobj)
 
 float lbGetJObjCurrFrame(HSD_JObj* jobj)
 {
+#ifdef MSL_CORE_NATIVE
+    if (msl_fighter_pose_owns_joint(jobj)) {
+        return msl_fighter_pose_tree_frame(jobj);
+    }
+#endif
     jobj = lbFindJObjWithAObj(jobj);
     if (jobj != NULL) {
         return jobj->aobj->curr_frame;
@@ -330,6 +363,11 @@ float lbGetJObjCurrFrame(HSD_JObj* jobj)
 
 float lbGetJObjEndFrame(HSD_JObj* jobj)
 {
+#ifdef MSL_CORE_NATIVE
+    if (msl_fighter_pose_owns_joint(jobj)) {
+        return msl_fighter_pose_tree_end(jobj);
+    }
+#endif
     jobj = lbFindJObjWithAObj(jobj);
     if (jobj != NULL) {
         return jobj->aobj->end_frame;

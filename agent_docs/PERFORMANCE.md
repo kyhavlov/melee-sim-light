@@ -21,6 +21,29 @@ make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
 
+## Compact fighter pose and gameplay geometry — 2026-07-19
+
+The retained candidate replaces native fighter AObj/FObj animation ownership with fixed Match-owned
+track state and contiguous joint/subtree topology. Tree lifecycle and animation operations no longer
+scan the global pose pool or walk parent ancestry; SRT invalidation propagates in the existing exact
+parent-first scheduler. Fighter root placement skips bit-identical publication and republishes only
+the translation column of clean ordinary descendants. All fighter gameplay-point consumers enter the
+compact type route, with paired hurt-capsule endpoints sharing one bone setup. Canonical JObj SRT and
+matrix storage remains singular; exact HSD matrix arithmetic handles dirty and procedural-special
+joints without a side representation or fighter fallback.
+
+Three adjacent CPU-0 control/candidate pairs preserve digest `6f91f23e3553a090` at 512. Results are
+43,660/54,624, 43,152/54,202, and 44,884/53,226 FPS. Median paired improvement is +25.11%; raw medians
+improve 43,660 to 54,202 FPS (+24.15%). At 256, digest `8ef126a41244d514` is unchanged across pairs
+47,748/58,192, 48,282/57,478, and 48,234/59,070. Median paired improvement is +21.87%; raw medians
+improve 48,234 to 58,192 FPS (+20.65%).
+
+The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across
+1,415,476 frames. Native source/API/copy/save-restore, sealed allocation, PPC, Wasm parity, viewer,
+and formatting gates pass. The supported construction census reaches 976 compact nodes for four
+Peach instances inside the fixed 1,024-node owner; ordinary stepped arena use remains sealed at
+676,440 bytes with 825 initialization allocations, and the corresponding savestate is 738,056 bytes.
+
 ## Fighter wall-pass broad phase — 2026-07-18
 
 The retained candidate performs one conservative, data-driven wall-line AABB test before each

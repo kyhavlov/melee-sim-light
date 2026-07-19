@@ -187,6 +187,7 @@ HSD_JObj* msl_core_HSD_JObjLoadJointFiltered(HSD_Joint* joint,
 void HSD_JObjAddAnimAll(HSD_JObj*, HSD_AnimJoint*, HSD_MatAnimJoint*,
                         HSD_ShapeAnimJoint*);
 void HSD_JObjAnimAll(HSD_JObj*);
+void HSD_JObjUpdateAnimValue(HSD_JObj*, enum_t, HSD_ObjData*, HSD_JObj*);
 void HSD_JObjSetFlags(HSD_JObj*, u32 flags);
 void HSD_JObjSetFlagsAll(HSD_JObj*, u32 flags);
 void HSD_JObjClearFlags(HSD_JObj*, u32 flags);

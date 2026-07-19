@@ -28,6 +28,7 @@
 #define MAX_FT_PARTS 140
 
 #ifdef MSL_CORE_NATIVE
+#include "runtime/fighter_pose.h"
 // GALE01 part admission for the supported headless domain. The table closes
 // source-owned hit/hurt/contact descriptors, ECB/IK and dynamics chains,
 // capture/throw and article attachments, character-special anchors, and every
@@ -585,6 +586,7 @@ static HSD_JObj* ftParts_HeadlessLoadCompact(Fighter* fp, HSD_Joint* joint,
 HSD_JObj* ftParts_HeadlessLoadMain(Fighter* fp, HSD_Joint* joint)
 {
     HSD_JObj* root = ftParts_HeadlessLoadCompact(fp, joint, false);
+    msl_fighter_pose_register_tree(root);
     // Init-only marker consumed by ftParts_SetupParts below. DObj state is
     // renderer-owned and the compact tree deliberately has no DObj list.
     fp->dobj_list.count = UINT32_MAX;
@@ -597,6 +599,7 @@ HSD_JObj* ftParts_HeadlessLoadInterp(Fighter* fp, HSD_Joint* joint)
     HSD_JObjSetDefaultClass(HSD_CLASS_INFO(&ftIntpJObj));
     root = ftParts_HeadlessLoadCompact(fp, joint, true);
     HSD_JObjSetDefaultClass(NULL);
+    msl_fighter_pose_register_tree(root);
     return root;
 }
 #endif

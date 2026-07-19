@@ -112,7 +112,7 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Fixed fighter animation lifecycle
 
-- **This commit** moves hosted fighter JObj AObjs/FObjs from generic HSD
+- `be1d9d12` **Fix fighter animation lifecycle** moves hosted fighter JObj AObjs/FObjs from generic HSD
   transition-time pool/relocation churn to fixed typed Match storage, with no fighter fallback.
   The new staggered all-replay contract measures +5.19% median paired improvement at 512 and +5.25%
   at 256; raw throughput medians improve +4.69% and +4.67%. All correctness/API/save-restore/Wasm
@@ -120,7 +120,15 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Fighter wall-pass broad phase
 
-- **This commit** adds one conservative line-AABB rejection before each common
+- `71586c18` **Cull empty fighter wall passes** adds one conservative line-AABB rejection before each common
   left/right wall pass, removing 94.6% of repeated wall-query entries and 86.8% of exact
   intersection calls without replacing narrow phase. Adjacent A/B raw medians improve +7.62% at
   512 and +9.71% at 256; both digests and all correctness/API/PPC/Wasm gates remain exact.
+
+## Compact fighter pose and gameplay geometry
+
+- **This commit** replaces fighter AObj/FObj animation ownership with fixed Match-owned compact
+  tracks and topology, publishes root/world placement in scheduler order, and directly serves
+  gameplay-point consumers without a side pose representation or fallback. Adjacent A/B raw
+  medians improve +24.15% at 512 and +20.65% at 256; median paired improvements are +25.11% and
+  +21.87%. Both digests and the complete correctness/API/PPC/Wasm/viewer gates remain exact.

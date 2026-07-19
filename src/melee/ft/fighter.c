@@ -23,6 +23,7 @@
 #ifdef MSL_CORE_HOSTED
 #include "platform/slippi.h"
 #include "runtime/context.h"
+#include "runtime/fighter_pose.h"
 #include "runtime/source_state.h"
 #include "runtime/subsystem_profile.h"
 #endif
@@ -2703,6 +2704,15 @@ void Fighter_UnkApplyTransformation_8006C0F0(Fighter_GObj* gobj)
     }
 }
 
+static inline void Fighter_SetRootPosition(HSD_JObj* root, const Vec3* pos)
+{
+#ifdef MSL_CORE_NATIVE
+    msl_fighter_pose_set_root_position(root, pos);
+#else
+    HSD_JObjSetTranslate(root, (Vec3*) pos);
+#endif
+}
+
 static inline float Fighter_GetPosX(Fighter* fp)
 {
     return fp->cur_pos.x;
@@ -2732,7 +2742,7 @@ void Fighter_procMap(Fighter_GObj* gobj)
         // exact map-pass seam before the collision callback.
         msl_slippi_lcancel_set(fp, 0);
 #endif
-        HSD_JObjSetTranslate(gobj->hsd_obj, &fp->cur_pos);
+        Fighter_SetRootPosition(gobj->hsd_obj, &fp->cur_pos);
 
         if (fp->coll_cb) {
 #ifdef MSL_SUBSYSTEM_PROFILE
@@ -2763,7 +2773,7 @@ void Fighter_procMap(Fighter_GObj* gobj)
             }
         }
 
-        HSD_JObjSetTranslate(gobj->hsd_obj, &fp->cur_pos);
+        Fighter_SetRootPosition(gobj->hsd_obj, &fp->cur_pos);
     }
 }
 
@@ -2791,12 +2801,12 @@ void Fighter_CallAcessoryCallbacks_8006C624(Fighter_GObj* gobj)
 
         if (fp->accessory2_cb) {
             fp->accessory2_cb(gobj);
-            HSD_JObjSetTranslate(gobj->hsd_obj, &fp->cur_pos);
+            Fighter_SetRootPosition(gobj->hsd_obj, &fp->cur_pos);
         }
 
         if (fp->accessory1_cb) {
             fp->accessory1_cb(gobj);
-            HSD_JObjSetTranslate(gobj->hsd_obj, &fp->cur_pos);
+            Fighter_SetRootPosition(gobj->hsd_obj, &fp->cur_pos);
         }
     }
 }

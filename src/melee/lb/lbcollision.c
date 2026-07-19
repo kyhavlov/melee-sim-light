@@ -25,12 +25,29 @@
 #include <baselib/tev.h>
 #include <MetroTRK/intrinsics.h>
 #include <MSL/math_ppc.h>
+#ifdef MSL_CORE_NATIVE
+#include "runtime/fighter_pose.h"
+#endif
 
 /* 006E58 */ static bool
 lbColl_80006E58(Vec3* hit_start, Vec3* hit_end, Vec3* hurt_start,
                 Vec3* hurt_end, Vec3* hit_closest, Vec3* hurt_closest,
                 MtxPtr hurt_mtx, Vec3* out_contact_pos, float* out_overlap,
                 float hit_radius, float hurt_radius, float broadphase_scale);
+
+static inline void lbColl_TransformHurt(HurtCapsule* hurt)
+{
+#ifdef MSL_CORE_NATIVE
+    if (msl_fighter_pose_transform_pair(
+            hurt->bone, &hurt->a_offset, &hurt->b_offset, &hurt->a_pos,
+            &hurt->b_pos))
+    {
+        return;
+    }
+#endif
+    lb_8000B1CC(hurt->bone, &hurt->a_offset, &hurt->a_pos);
+    lb_8000B1CC(hurt->bone, &hurt->b_offset, &hurt->b_pos);
+}
 
 /// .sdata
 static GXColor lbColl_804D36C4 = { 0, 0xFF, 0xFF, 0x80 };
@@ -1673,8 +1690,7 @@ bool lbColl_80007ECC(HitCapsule* arg0, HurtCapsule* arg1, Mtx arg2,
 
     if (arg1->state == HurtCapsule_Enabled) {
         if (!arg1->skip_update_pos) {
-            lb_8000B1CC(arg1->bone, &arg1->a_offset, &arg1->a_pos);
-            lb_8000B1CC(arg1->bone, &arg1->b_offset, &arg1->b_pos);
+            lbColl_TransformHurt(arg1);
             if (arg2 != NULL) {
                 arg1->b_pos.z = hurt_pos_z;
                 arg1->a_pos.z = hurt_pos_z;
@@ -1713,8 +1729,7 @@ bool lbColl_8000805C(HitCapsule* arg0, HurtCapsule* arg1, Mtx arg2, s32 arg3,
 
     if (arg1->state != Intangible) {
         if (!arg1->skip_update_pos) {
-            lb_8000B1CC(arg1->bone, &arg1->a_offset, &arg1->a_pos);
-            lb_8000B1CC(arg1->bone, &arg1->b_offset, &arg1->b_pos);
+            lbColl_TransformHurt(arg1);
             if (arg2 != NULL) {
                 arg1->b_pos.z = arg6;
                 arg1->a_pos.z = arg6;
@@ -1753,8 +1768,7 @@ bool lbColl_8000805C(HitCapsule* arg0, HurtCapsule* arg1, Mtx arg2, s32 arg3,
 inline void checkPos(HurtCapsule* hurt, Mtx mtx, float arg5)
 {
     if (!hurt->skip_update_pos) {
-        lb_8000B1CC(hurt->bone, &hurt->a_offset, &hurt->a_pos);
-        lb_8000B1CC(hurt->bone, &hurt->b_offset, &hurt->b_pos);
+        lbColl_TransformHurt(hurt);
 
         if (mtx != NULL) {
             hurt->b_pos.z = arg5;
@@ -1806,8 +1820,7 @@ bool lbColl_80008248(HitCapsule* arg0, HurtCapsule* arg1, Mtx arg2, f32 arg3,
     MtxPtr var_r9;
 
     if (!arg1->skip_update_pos) {
-        lb_8000B1CC(arg1->bone, &arg1->a_offset, &arg1->a_pos);
-        lb_8000B1CC(arg1->bone, &arg1->b_offset, &arg1->b_pos);
+        lbColl_TransformHurt(arg1);
         if (arg2 != NULL) {
             arg1->b_pos.z = arg5;
             arg1->a_pos.z = arg5;
@@ -1839,8 +1852,7 @@ void lbColl_800083C4(HurtCapsule* arg0)
         return;
     }
 
-    lb_8000B1CC(arg0->bone, &arg0->a_offset, &arg0->a_pos);
-    lb_8000B1CC(arg0->bone, &arg0->b_offset, &arg0->b_pos);
+    lbColl_TransformHurt(arg0);
     arg0->skip_update_pos = true;
 }
 
@@ -2515,8 +2527,7 @@ bool lbColl_8000A244(HurtCapsule* hurt, u32 arg1, Mtx arg2, float arg3)
     }
     if (var_r0 == arg1) {
         if (!hurt->skip_update_pos) {
-            lb_8000B1CC(hurt->bone, &hurt->a_offset, &hurt->a_pos);
-            lb_8000B1CC(hurt->bone, &hurt->b_offset, &hurt->b_pos);
+            lbColl_TransformHurt(hurt);
             if (arg2 != NULL) {
                 hurt->b_pos.z = arg3;
                 hurt->a_pos.z = arg3;
@@ -2631,8 +2642,7 @@ bool lbColl_8000A584(HurtCapsule* hurt, u32 arg1, u32 arg2, Mtx arg3, f32 arg8)
         }
         if (var_r0 == arg2) {
             if (!hurt->skip_update_pos) {
-                lb_8000B1CC(hurt->bone, &hurt->a_offset, &hurt->a_pos);
-                lb_8000B1CC(hurt->bone, &hurt->b_offset, &hurt->b_pos);
+                lbColl_TransformHurt(hurt);
                 if (arg3 != NULL) {
                     hurt->b_pos.z = arg8;
                     hurt->a_pos.z = arg8;

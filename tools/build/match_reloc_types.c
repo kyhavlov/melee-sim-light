@@ -1,4 +1,5 @@
 #include "runtime/scalar.h"
+#include "runtime/fighter_pose.h"
 
 #include <baselib/aobj.h>
 #include <baselib/class.h>

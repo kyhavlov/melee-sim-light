@@ -13,7 +13,7 @@ typedef struct MslFtDeviceState MslFtDeviceState;
 typedef struct HSD_AObjContext HSD_AObjContext;
 typedef struct MslFtCollState MslFtCollState;
 typedef struct MslFtAnimScratch MslFtAnimScratch;
-typedef struct MslFighterAnimPool MslFighterAnimPool;
+typedef struct MslFighterPose MslFighterPose;
 typedef struct MslGroundState MslGroundState;
 typedef struct mpCollisionBox mpCollisionBox;
 typedef struct HSD_RandomContext HSD_RandomContext;
@@ -67,7 +67,7 @@ extern _Thread_local HSD_PadStatus* msl_core_context_pad_copy;
 extern _Thread_local MslFtDeviceState* msl_core_context_ft_device;
 extern _Thread_local MslFtCollState* msl_core_context_ft_coll;
 extern _Thread_local MslFtAnimScratch* msl_core_context_ft_anim;
-extern _Thread_local MslFighterAnimPool* msl_context_fighter_anim;
+extern _Thread_local MslFighterPose* msl_context_fighter_pose;
 extern _Thread_local MslGroundState* msl_core_context_ground;
 extern _Thread_local void* msl_core_context_ground_stage_positions;
 extern _Thread_local void* msl_core_context_player_common_ref;
@@ -93,7 +93,7 @@ MslFtDeviceState* msl_core_ft_device_state(void);
 HSD_AObjContext* msl_core_aobj_context(void);
 MslFtCollState* msl_core_ft_coll_state(void);
 MslFtAnimScratch* msl_core_ft_anim_scratch(void);
-MslFighterAnimPool* msl_fighter_anim_pool(void);
+MslFighterPose* msl_fighter_pose(void);
 MslGroundState* msl_core_ground_state(void);
 void* msl_core_ground_stage_positions(void);
 void** msl_core_stage_pointer_ref(int slot);
@@ -117,7 +117,7 @@ void msl_core_peach_turnip_owner_set(Item* item, HSD_GObj* owner);
 #define msl_core_native_dat_context() (msl_core_context_native_dat)
 #define msl_core_ft_coll_state() (msl_core_context_ft_coll)
 #define msl_core_ft_anim_scratch() (msl_core_context_ft_anim)
-#define msl_fighter_anim_pool() (msl_context_fighter_anim)
+#define msl_fighter_pose() (msl_context_fighter_pose)
 #define msl_core_ground_state() (msl_core_context_ground)
 #define msl_core_ground_stage_positions()                                      \
     (msl_core_context_ground_stage_positions)

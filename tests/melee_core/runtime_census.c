@@ -214,6 +214,8 @@ int main(int argc, char** argv) {
   size_t max_arena_used = 0;
   size_t max_allocations = 0;
   uint32_t max_relocations = 0;
+  uint16_t max_pose_joints = 0;
+  uint16_t max_pose_tracks = 0;
   uint8_t max_stage = 0;
   uint8_t max_character = 0;
   uint8_t max_player_count = 0;
@@ -258,6 +260,12 @@ int main(int argc, char** argv) {
         }
         if (match->relocation_count > max_relocations) {
           max_relocations = match->relocation_count;
+        }
+        if (match->fighter_pose.joint_count > max_pose_joints) {
+          max_pose_joints = match->fighter_pose.joint_count;
+        }
+        if (match->fighter_pose.track_used > max_pose_tracks) {
+          max_pose_tracks = match->fighter_pose.track_used;
         }
       }
     }
@@ -316,6 +324,8 @@ int main(int argc, char** argv) {
       "character=%u players=%u\n",
       match->memory.capacity, max_arena_used, max_allocations, max_relocations, max_stage,
       max_character, max_player_count);
+  printf("fighter_pose maximum_joints=%u maximum_tracks=%u\n",
+         max_pose_joints, max_pose_tracks);
   printf(
       "runtime_allocation_lock before_used=%zu after_used=%zu "
       "before_allocations=%zu after_allocations=%zu\n",

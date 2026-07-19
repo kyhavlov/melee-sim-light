@@ -20,6 +20,9 @@
 #include <dolphin/mtx.h>
 #include <dolphin/os.h>
 #include <MSL/math_ppc.h>
+#ifdef MSL_CORE_NATIVE
+#include "runtime/fighter_pose.h"
+#endif
 
 void JObjInfoInit(void);
 HSD_JObjInfo hsdJObj = { JObjInfoInit };
@@ -141,6 +144,7 @@ inline bool has_scl(HSD_JObj* jobj)
 
 void HSD_JObjMakeMatrix(HSD_JObj* jobj)
 {
+    HSD_JObj* anim_jobj = NULL;
     Vec3* scl;
 
     HSD_JObjSetupMatrix(jobj->parent);
@@ -188,11 +192,18 @@ void HSD_JObjMakeMatrix(HSD_JObj* jobj)
     if (jobj->parent != NULL) {
         PSMTXConcat(jobj->parent->mtx, jobj->mtx, jobj->mtx);
     }
-    if (jobj->aobj != NULL && jobj->aobj->hsd_obj != NULL) {
+#ifdef MSL_CORE_NATIVE
+    if (!msl_fighter_pose_path(jobj, &anim_jobj))
+#endif
+    {
+        if (jobj->aobj != NULL) {
+            anim_jobj = (HSD_JObj*) jobj->aobj->hsd_obj;
+        }
+    }
+    if (anim_jobj != NULL) {
         Vec3 vec;
-        HSD_JObj* aobj_jobj = (HSD_JObj*) jobj->aobj->hsd_obj;
-        HSD_JObjSetupMatrix((HSD_JObj*) jobj->aobj->hsd_obj);
-        MTXMultVec(aobj_jobj->mtx, &jobj->translate, &vec);
+        HSD_JObjSetupMatrix(anim_jobj);
+        MTXMultVec(anim_jobj->mtx, &jobj->translate, &vec);
         jobj->mtx[0][3] = vec.x;
         jobj->mtx[1][3] = vec.y;
         jobj->mtx[2][3] = vec.z;
@@ -357,9 +368,9 @@ void HSD_JObjAddAnimAll(HSD_JObj* jobj, HSD_AnimJoint* ajoint,
 
 typedef void (*ufc_callback)(HSD_JObj*, u32, f32);
 
-void JObjUpdateFunc(void* obj, enum_t type, HSD_ObjData* val)
+void HSD_JObjUpdateAnimValue(HSD_JObj* jobj, enum_t type,
+                             HSD_ObjData* val, HSD_JObj* path)
 {
-    HSD_JObj* jobj = obj;
     ufc_callback cb;
     Vec3 p;
     HSD_JObj* jp;
@@ -375,8 +386,7 @@ void JObjUpdateFunc(void* obj, enum_t type, HSD_ObjData* val)
             if (1.0L < val->fv) {
                 val->fv = 1.0F;
             }
-            HSD_ASSERT(0x24B, jobj->aobj);
-            jp = (HSD_JObj*) jobj->aobj->hsd_obj;
+            jp = path;
             HSD_ASSERT(0x24D, jp);
             HSD_ASSERT(0x24E, jp->u.spline);
             splArcLengthPoint(&p, jp->u.spline, val->fv);
@@ -537,9 +547,24 @@ void JObjUpdateFunc(void* obj, enum_t type, HSD_ObjData* val)
     }
 }
 
+void JObjUpdateFunc(void* obj, enum_t type, HSD_ObjData* val)
+{
+    HSD_JObj* jobj = obj;
+    HSD_JObj* path = jobj != NULL && jobj->aobj != NULL
+                         ? (HSD_JObj*) jobj->aobj->hsd_obj
+                         : NULL;
+    HSD_JObjUpdateAnimValue(jobj, type, val, path);
+}
+
 void HSD_JObjAnim(HSD_JObj* jobj)
 {
     if (jobj != NULL) {
+#ifdef MSL_CORE_NATIVE
+        if (msl_fighter_pose_owns_joint(jobj)) {
+            msl_fighter_pose_animate_joint(jobj);
+            return;
+        }
+#endif
 #ifdef MSL_CORE_HOSTED
         if (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD) {
             return;
@@ -592,6 +617,12 @@ void JObjAnimAll(HSD_JObj* jobj)
 void HSD_JObjAnimAll(HSD_JObj* jobj)
 {
     if (jobj != NULL) {
+#ifdef MSL_CORE_NATIVE
+        if (msl_fighter_pose_owns_joint(jobj)) {
+            msl_fighter_pose_animate_tree(jobj);
+            return;
+        }
+#endif
         HSD_AObjInitEndCallBack();
         JObjAnimAll(jobj);
         HSD_AObjInvokeCallBacks();

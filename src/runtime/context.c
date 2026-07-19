@@ -31,7 +31,7 @@ _Thread_local HSD_PadStatus* msl_core_context_pad_copy;
 _Thread_local MslFtDeviceState* msl_core_context_ft_device;
 _Thread_local MslFtCollState* msl_core_context_ft_coll;
 _Thread_local MslFtAnimScratch* msl_core_context_ft_anim;
-_Thread_local MslFighterAnimPool* msl_context_fighter_anim;
+_Thread_local MslFighterPose* msl_context_fighter_pose;
 _Thread_local MslGroundState* msl_core_context_ground;
 _Thread_local void* msl_core_context_ground_stage_positions;
 _Thread_local void* msl_core_context_player_common_ref;
@@ -73,7 +73,7 @@ void msl_core_bind_game_data(MslCoreGameData* game_data)
     msl_core_context_ft_device = NULL;
     msl_core_context_ft_coll = NULL;
     msl_core_context_ft_anim = NULL;
-    msl_context_fighter_anim = NULL;
+    msl_context_fighter_pose = NULL;
     msl_core_context_ground = NULL;
     msl_core_context_ground_stage_positions = NULL;
     msl_core_context_player_common_ref = &game_data->source.player_common;
@@ -126,7 +126,7 @@ void msl_core_bind_match(MslCoreMatch* match)
     msl_core_context_ft_device = &match->source.ft_device;
     msl_core_context_ft_coll = &match->source.ft_coll;
     msl_core_context_ft_anim = &match->source.ft_anim;
-    msl_context_fighter_anim = &match->fighter_anim;
+    msl_context_fighter_pose = &match->fighter_pose;
     msl_core_context_ground = &match->source.ground;
     msl_core_context_ground_stage_positions =
         match->source.ground.stage_positions;
@@ -267,9 +267,9 @@ MslFtAnimScratch* msl_core_ft_anim_scratch(void)
     return &msl_core_source_match_state()->ft_anim;
 }
 
-MslFighterAnimPool* msl_fighter_anim_pool(void)
+MslFighterPose* msl_fighter_pose(void)
 {
-    return &msl_core_active_match()->fighter_anim;
+    return &msl_core_active_match()->fighter_pose;
 }
 
 MslGroundState* msl_core_ground_state(void)
