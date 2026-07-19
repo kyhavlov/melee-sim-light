@@ -172,7 +172,7 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Fused ordinary JObj world matrix
 
-- **This commit** fuses exact Euler SRT construction and parent concat for every hosted non-root,
+- `f8b3e325` **Fuse ordinary JObj world matrices** fuses exact Euler SRT construction and parent concat for every hosted non-root,
   non-quaternion JObj, directly publishing the singular `jobj->mtx` world matrix. It deletes the
   complete intermediate local matrix round trip, general alias handling, and separate call
   boundaries with no alternate state or fallback. Adjacent 512 raw medians improve +4.02%
@@ -181,8 +181,17 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Native release control-flow/layout deletion
 
-- **This commit** removes CET landing pads, frame chains, and unwind tables from the native release
+- `a8431342` **Trim native release control-flow overhead** removes CET landing pads, frame chains, and unwind tables from the native release
   profile while leaving gameplay source, floating-point generation, debug builds, PPC, and Wasm
   unchanged. Release text falls 13.4%; adjacent 512 medians improve +4.02% and final 256 throughput
   improves +4.41%. Both digests and the complete replay/allocation/API/save-restore/PPC/Wasm/viewer
   gates remain exact.
+
+## Optimized native source closure
+
+- **This commit** makes strict O1 the native release default while preserving measured lower source
+  profiles for float-sensitive fighter/item/quaternion closures and stronger profiles for exact
+  admitted owners. It also preserves separate fixed-ECB trig calls and makes full optimized-release
+  replay validation a permanent gate. Adjacent medians improve +5.54% at 512 and +6.41% at 256;
+  both digests and the complete debug/release replay, API/save-restore/PPC/Wasm/viewer gates remain
+  exact.

@@ -479,6 +479,20 @@ inline void clamp_below_2(float* value, float max)
     }
 }
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+// The retail path issues separate sinf/cosf calls. GCC otherwise combines
+// these calls at O1, which changes the fixed ECB's rounded coordinates.
+__attribute__((noinline, noipa)) static float mpColl_sinf(float angle)
+{
+    return sinf(angle);
+}
+
+__attribute__((noinline, noipa)) static float mpColl_cosf(float angle)
+{
+    return cosf(angle);
+}
+#endif
+
 void mpColl_LoadECB_Fixed(CollData* coll)
 {
     float angle;
@@ -533,8 +547,13 @@ void mpColl_LoadECB_Fixed(CollData* coll)
     }
 
     if (angle != 0.0F) {
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+        sin = mpColl_sinf(angle);
+        cos = mpColl_cosf(angle);
+#else
         sin = sinf(angle);
         cos = cosf(angle);
+#endif
 
         orig_top_y = top_y;
         orig_bottom_y = bottom_y;

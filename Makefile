@@ -208,9 +208,9 @@ CFLAGS := \
 	-fdata-sections -w
 NATIVE_CFLAGS = $(CFLAGS) -fno-pie
 NATIVE_LINK_FLAGS ?=
-# Imported gameplay remains at the validation reference profile. The audited
-# release allowlist below opts complete owners into native optimization.
-NATIVE_RELEASE_CFLAGS := $(CFLAGS) -fno-pie -fomit-frame-pointer \
+# Native release uses a strict O1 source profile by default. The audited lists
+# below preserve lower exactness profiles or admit stronger measured owners.
+NATIVE_RELEASE_CFLAGS := $(CFLAGS) -O1 -fno-pie -fomit-frame-pointer \
 	-fcf-protection=none -fno-asynchronous-unwind-tables -fno-unwind-tables
 NATIVE_BASE_CFLAGS := $(NATIVE_CFLAGS)
 WASM_CFLAGS = $(CFLAGS) -Wno-implicit-function-declaration -Wno-int-conversion \
@@ -249,6 +249,14 @@ $(PYTHON_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contr
 $(PYTHON_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
 
 ifeq ($(NATIVE_RELEASE_PROFILE),1)
+# Fighter callback and item source closures, plus quaternion interpolation,
+# change canonical outputs when admitted at O1. Preserve their measured source
+# profiles while the remaining native closure uses the strict optimized default.
+NATIVE_RELEASE_O0_OBJS := \
+	$(filter-out $(NATIVE_OBJ_DIR)/gameplay/melee/ft/ftanim.o,\
+		$(filter $(NATIVE_OBJ_DIR)/gameplay/melee/ft/%,$(NATIVE_UPSTREAM_OBJS))) \
+	$(filter $(NATIVE_OBJ_DIR)/gameplay/melee/it/%,$(NATIVE_UPSTREAM_OBJS)) \
+	$(NATIVE_OBJ_DIR)/gameplay/sysdolphin/baselib/quatlib.o
 NATIVE_RELEASE_O1_OBJS := \
 	$(NATIVE_OBJ_DIR)/gameplay/melee/mp/mpcoll.o
 NATIVE_RELEASE_O2_OBJS := \
@@ -272,14 +280,15 @@ NATIVE_RELEASE_OPT_OBJS := \
 	$(NATIVE_OBJ_DIR)/generated/native_dat_layout.o \
 	$(NATIVE_OBJ_DIR)/generated/match_reloc_layout.o \
 	$(NATIVE_OBJ_DIR)/tests/melee_core/replay_bench.o
+$(NATIVE_RELEASE_O0_OBJS): override NATIVE_CFLAGS += -O0
 $(NATIVE_RELEASE_O1_OBJS): override NATIVE_CFLAGS += -O1 $(RELEASE_ARCH_FLAGS)
 $(NATIVE_RELEASE_O2_OBJS): override NATIVE_CFLAGS += -O2 $(RELEASE_ARCH_FLAGS)
 $(NATIVE_RELEASE_OPT_OBJS): override NATIVE_CFLAGS += -O3 $(RELEASE_ARCH_FLAGS)
 endif
 
-NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_SUBSYSTEM_PROFILE)|$(NATIVE_RELEASE_O1_OBJS)|$(NATIVE_RELEASE_O2_OBJS)|$(NATIVE_RELEASE_OPT_OBJS)
+NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_SUBSYSTEM_PROFILE)|$(NATIVE_RELEASE_O0_OBJS)|$(NATIVE_RELEASE_O1_OBJS)|$(NATIVE_RELEASE_O2_OBJS)|$(NATIVE_RELEASE_OPT_OBJS)
 
-.PHONY: all bootstrap extract ppc native python-library native-release runtime-census large-batch-smoke benchmark-prepare benchmark-native subsystem-profile benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-build viewer viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source-check validator validation-suite validation-supported-domain clean toolchain data-check ppc-smoke native-smoke test test-full format-check slpz-convert FORCE
+.PHONY: all bootstrap extract ppc native python-library native-release runtime-census large-batch-smoke benchmark-prepare benchmark-native subsystem-profile benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-build viewer viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source-check validator validation-suite validation-supported-domain validation-release-supported-domain clean toolchain data-check ppc-smoke native-smoke test test-full format-check slpz-convert FORCE
 
 all: native python-library
 
@@ -698,10 +707,17 @@ validation-supported-domain:
 	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" validation-suite \
 		VALIDATION_SUITE=replays/suites/melee_core_aggregate.json
 
+validation-release-supported-domain: validator native-release
+	@MSL_DATA_DIR="$(abspath $(MSL_DATA_DIR))" \
+		MSL_CORE_NATIVE_BINARY="$(NATIVE_RELEASE_BUILD)/melee-core-native" \
+		"$(PY)" -m tools.validation.validate_replay \
+		--suite replays/suites/melee_core_aggregate.json --backend native \
+		--workers "$(VALIDATION_WORKERS)" --no-build
+
 test: source-check native-smoke python-library validator
 	@"$(PY)" -m pytest -q
 
-test-full: test ppc-smoke validation-supported-domain viewer-smoke
+test-full: test ppc-smoke validation-supported-domain validation-release-supported-domain viewer-smoke
 
 format-check:
 	@git diff --check

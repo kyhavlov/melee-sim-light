@@ -21,6 +21,32 @@ make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
 
+## Optimized native source closure — 2026-07-19
+
+The native release profile now uses strict O1 as its default instead of inheriting the decomp's O0
+matching profile. Complete fighter-callback and item source closures plus quaternion interpolation
+retain O0 because isolated O1 admission changes canonical outputs; stronger exact owner profiles
+remain explicit. This compiles the rest of the native scheduler closure as optimized production
+source without fast-math, a parallel runtime, per-action dispatch, or persistent state.
+
+Release validation exposed a pre-existing hole in the retained O1 `mpcoll.c` admission: GCC fused
+the source's separate `sinf` and `cosf` calls in `mpColl_LoadECB_Fixed` into `sincosf`, moving one
+Peach turnip ECB by two ULPs. Narrow non-inlinable hosted wrappers preserve the retail call and
+rounding boundary while the surrounding collision owner remains optimized. `test-full` now runs
+the complete replay inventory against the optimized release binary as well as the development
+binary, preventing future compiler changes from passing through an O0-only validation gate.
+
+Three adjacent CPU-0 clean-HEAD/candidate samples preserve digest `6f91f23e3553a090` at 512.
+Controls are 80,118/79,807/80,213 FPS and candidates are 84,720/83,758/84,556 FPS; raw medians
+improve 80,118 to 84,556 FPS (+5.54%). At 256, controls are 85,001/84,597/84,513 and candidates are
+89,148/90,017/90,169 FPS, preserving digest `8ef126a41244d514`; medians improve 84,597 to 90,017 FPS
+(+6.41%).
+
+The complete debug and optimized-release replay gates are each 63 PASS / 90 unchanged CLASSIFIED /
+zero XPASS/fail/error across 1,415,476 frames. Native source/API/copy/save-restore and sealed
+allocation, PPC, Wasm parity, viewer/browser, pytest, source-sync, and formatting gates pass.
+Persistent and shared memory are unchanged.
+
 ## Native release control-flow/layout deletion — 2026-07-19
 
 The native release profile now explicitly omits frame pointers, CET branch landing pads, and unwind
