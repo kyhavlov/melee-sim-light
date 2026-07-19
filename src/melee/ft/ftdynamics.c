@@ -11,6 +11,7 @@
 #include "ft/types.h"
 #include "gr/ground.h"
 #include "lb/lb_00B0.h"
+#include "lb/lbcollision.h"
 #include "lb/lbspdisplay.h"
 
 #include <stddef.h>
@@ -160,6 +161,31 @@ void ftCo_HeadlessPruneDynamics(Fighter* fp)
         {
             lb_8000FD18(desc);
         }
+    }
+}
+
+void ftCo_HeadlessPublishDynamicHurtCapsules(Fighter* fp)
+{
+    u32 hurt_index;
+
+    for (hurt_index = 0; hurt_index < fp->hurt_capsules_len; ++hurt_index) {
+        FighterHurtCapsule* hurt = &fp->hurt_capsules[hurt_index];
+        ssize_t dynamics_index;
+
+        for (dynamics_index = 0; dynamics_index < fp->dynamics_num;
+             ++dynamics_index)
+        {
+            struct DynamicsData* dynamics =
+                fp->dynamic_bone_sets[dynamics_index].dyn_desc.data;
+            for (; dynamics != NULL; dynamics = dynamics->next) {
+                if (dynamics->desc.lb_unk0.jobj == hurt->capsule.bone) {
+                    lbColl_800083C4(&hurt->capsule);
+                    goto next_hurt;
+                }
+            }
+        }
+    next_hurt:
+        continue;
     }
 }
 #endif

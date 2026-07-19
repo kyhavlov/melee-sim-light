@@ -1,86 +1,83 @@
-# Active performance packet — direct hosted GObj scheduler
+# Active performance packet — demand-owned hurt-capsule publication
 
 ## Objective
 
-Restore the source scheduler's single nested process walk for the canonical scalar Match step. The
-hosted port currently implements `HSD_GObj_80390CFC` by repeatedly calling four resumable-scheduler
-API functions for every priority and process; the production scalar path never suspends there, so
-that decomposition adds out-of-line calls, repeated TLS context recovery, and duplicated state
-publication to every scheduled gameplay callback.
-
-Retain only if exact output is green and the complete 512-environment contract improves at least 3%.
+Delete unconditional hosted hurt-capsule matrix publication from `Fighter_ProcessHit_8006D1EC`.
+The source collision primitives already publish an invalid capsule exactly once on first use through
+`HurtCapsule::skip_update_pos`; the headless human runtime has no CPU targeting consumer for the
+eager `ftCo_800A0DA4` pass. Frames with no actual contact candidate should do no hurtbox geometry
+work. Retain only if exact correctness is green and the 512-environment gain is at least 2%.
 
 ## Final boundary
 
-- **Final owner:** hosted `HSD_GObj_80390CFC` directly mirrors the decomp's priority/process loop and
-  pending-mutation order using the already-bound Match GObj context.
-- **Canonical state:** the existing per-Match `HSD_GObjContext`, process lists, epoch, masks, and
-  pending mutation record. No static schedule, copied proc array, or alternate dispatch state.
-- **Consumers:** every fighter, item, stage, camera, and collision process remains called in exact
-  list/priority order with identical enable/epoch/pending-mutation checks.
-- **Displaced work:** canonical complete steps no longer call `run_procs_begin`, `priority_begin`,
-  `next_owner`, and `invoke` as external resumable seams. Those functions remain only for focused
-  diagnostics/tools that explicitly suspend the scheduler; production does not dispatch through
-  them.
-- **Deletion boundary:** there is one direct production loop. No callback allowlist, fixed-object
-  assumption, process cache, or batch bridge is introduced.
+- **Final owner:** `lbColl` hit/hurt, grab/hurt, shield, reflect, and item contact primitives publish
+  each demanded hurt capsule immediately before its first exact narrow-phase read.
+- **Canonical state:** the existing capsule offsets, positions, matrix, and `skip_update_pos` bit.
+  `Fighter_procUpdate` invalidates the bit after movement; no demand mask, cache, or second capsule
+  representation is added.
+- **Consumers:** fighter hit/grab/throw/reflect/absorb contact, item contact, damage resolution, and
+  viewer output retain their existing source paths.
+- **Displaced work:** hosted `Fighter_ProcessHit_8006D1EC` no longer walks every hurt capsule and
+  sets up its bone matrix unconditionally. The non-hosted source oracle retains `ftCo_800A0DA4`.
+- **Deletion boundary:** no hosted eager hurt publication remains. Every gameplay consumer either
+  uses an existing lazy collision primitive or must explicitly demand the capsule at its source
+  owner; restoring the unconditional pass is not an accepted correctness fix.
 
 ## Sequence
 
-1. Copy the non-hosted decomp-shaped loop into the hosted production owner, retaining profile timing
-   only around the callback itself. Compare generated code to confirm the wrapper calls disappear.
-2. Run native smoke, exact 512 digest, and adjacent throughput. Reject below 3%; do not add a static
-   schedule or callback specialization to rescue it.
-3. If retained, require unchanged 256/512 digests, 63 PASS / 90 unchanged CLASSIFIED / zero failure
-   validation, native API/copy/save-restore/allocation, PPC, Wasm/viewer, source, and formatting
-   gates. Update `PERFORMANCE.md`, send Discord evidence, and commit implementation plus evidence.
+1. Remove the hosted eager call and require unchanged benchmark digest plus a focused replay gate.
+   If red, identify the missing gameplay consumer and demand publication there.
+2. Measure adjacent 512 control/candidate throughput. Reject below 2%; do not tune collision leaves.
+3. If retained, require unchanged 256/512 digests, 63 PASS / 90 unchanged CLASSIFIED / zero full-
+   suite failures, native API/copy/save-restore/allocation, PPC, Wasm/viewer, source, and formatting.
+   Record evidence, send Discord progress, and commit implementation and evidence atomically.
 
 ## Baseline and evidence
 
-- Runtime: `edf724d4`
-- 256: 66,767 FPS, digest `8ef126a41244d514`
-- 512: 63,110 FPS, digest `6f91f23e3553a090`
-- Current release disassembly shows `HSD_GObj_80390CFC` calling all four hosted seams out of line in
-  its inner loop. This is not an inferred compiler issue; the calls are present in the measured
-  binary.
-- The exact profile cannot quantify production dispatch cost because owner hash accounting occurs
-  outside each callback timer. It does establish 166,272 invocations for each of the eleven fixed
-  fighter process owners over the 65,536-frame contract, plus item/stage/camera processes. Release
-  A/B is therefore the only acceptance evidence.
+- Runtime: `98c78d85`
+- 256: 68,850 FPS median, digest `8ef126a41244d514`
+- 512: 65,652 FPS candidate median, digest `6f91f23e3553a090`
+- Fresh exact profile: `Fighter_ProcessHit_8006D1EC` is 4.55% of the contract. A prior idle-path
+  census found 96.0% of visible calls otherwise idle, but retained `ftCo_800A0DA4` because its
+  hurtbox output was assumed mandatory. `lbColl_800083C4` and all hit/hurt primitives already test
+  and set the same invalidation bit lazily; hosted `ftCo_800A0DA4` explicitly discards the only
+  other output, the CPU targeting box.
 
 ## Log
 
 - 2026-07-19 — `open`
-  Scope: direct decomp-shaped hosted scheduler loop only.
-  Hypothesis: deleting millions of out-of-line seam calls and repeated TLS lookups clears three
-  percent overall without touching a gameplay owner.
-  Evidence: release disassembly at `edf724d4` contains calls from `HSD_GObj_80390CFC` to
-  `msl_hsd_gobj_run_procs_{begin,priority_begin,next_owner,invoke}`; the non-hosted function already
-  contains the required exact loop and mutation order.
-  Disposition: implement that same loop for hosted production; keep resumable APIs separate and
-  untouched.
-  Next: cut over the function, inspect assembly, then run digest and adjacent 512 throughput.
+  Scope: hosted eager hurt publication deletion only.
+  Hypothesis: collision demand is sparse enough that source-owned lazy publication removes at least
+  two whole-frame points from the measured 4.55% ProcessHit owner.
+  Evidence: `Fighter_procUpdate` clears every capsule's `skip_update_pos` after movement;
+  `lbColl_800083C4` and contact primitives publish only when that bit is clear. All supported
+  participants are externally controlled humans, so the CPU box discarded by the hosted function
+  is dead.
+  Disposition: cut only the unconditional hosted call; preserve every source collision primitive.
+  Next: run exact digest and focused validation, then adjacent 512 A/B if green.
+- 2026-07-19 — `rejected`
+  Scope: make every hosted hurt capsule fully lazy without preserving dynamic-chain publication.
+  Hypothesis: all gameplay consumers enter a lazy `lbColl` primitive, so no eager matrix side effect
+  remains live.
+  Evidence: benchmark digest stayed exact and throughput reached 68,590 FPS, but the complete suite
+  found seven missed-contact failures. Keeping the original pass only for fighters with surviving
+  dynamics restored all outputs, proving that the next-frame dynamic solver consumes matrices
+  published through hurt capsules even on frames with no contact.
+  Disposition: reject the all-lazy boundary, not the packet. Publish only hurt capsules whose bone
+  is actually present in a surviving canonical `DynamicsDesc`; ordinary capsules stay lazy.
+  Next: derive dynamic capsule demand from the live descriptor graph, preserve hurt-capsule order,
+  and rerun the full gate and adjacent A/B.
 - 2026-07-19 — `retained`
-  Scope: direct decomp-shaped hosted scheduler with one bound-context local and function-local O3.
-  Hypothesis: the exact loop plus direct bound owner removes the production dispatch decomposition
-  without relying on a fixed callback/object set.
-  Evidence: release assembly contains only the indirect gameplay callback and the three exact
-  pending-mutation calls; all resumable seam calls are gone. Digest `6f91f23e3553a090` is unchanged.
-  Three adjacent CPU-0 control/candidate pairs are 63,609/65,445, 63,464/65,652, and
-  63,544/65,668 FPS: median paired +3.34%, raw medians 63,544 to 65,652 (+3.32%).
-  Disposition: candidate clears the three-percent packet gate. Keep the singular direct loop and
-  proceed to complete correctness/platform gates; do not add static scheduling or callback caches.
-  Next: run full validation plus native API/save-restore/allocation, PPC, Wasm/viewer, source, and
-  formatting gates, then record retained evidence and commit atomically if all remain green.
-- 2026-07-19 — `retained`
-  Scope: complete direct hosted scheduler packet, release A/B, and all production gates.
-  Hypothesis: the direct loop is a durable deletion of production decomposition rather than an
-  intermediate scheduler representation.
-  Evidence: three 512 control/candidate pairs preserve digest `6f91f23e3553a090` and improve raw
-  medians 63,544 to 65,652 FPS (+3.32%; paired +3.34%). Candidate 256 median is 68,850 FPS with
-  digest `8ef126a41244d514`, +3.12% over the retained 66,767 baseline. The complete gate is 63 PASS /
-  90 unchanged CLASSIFIED / zero failures across 1,415,476 frames; native API/copy/save-restore,
-  sealed allocation, source sync, PPC, Wasm parity, viewer, and formatting all pass.
-  Disposition: retain and atomically commit the singular direct production loop plus evidence.
-  Next: refresh the committed subsystem profile and select the next bounded source owner; do not
-  retry scattered-JObj cross-environment pose publication or leaf timer tuning.
+  Scope: final demand-owned ordinary publication plus exact dynamic-chain publication.
+  Hypothesis: deriving eager demand from canonical dynamics JObj identity preserves solver state
+  while deleting every ordinary unconditional matrix transform.
+  Evidence: four adjacent 512 control/candidate pairs preserve digest `6f91f23e3553a090`; raw
+  medians improve 65,032 to 66,953 FPS (+2.95%) and median paired improvement is +2.89%. Three 256
+  pairs preserve digest `8ef126a41244d514`; raw medians improve 68,518 to 70,847 FPS (+3.40%) and
+  paired median is +3.53%. The complete gate is 63 PASS / 90 unchanged CLASSIFIED / zero failures
+  across 1,415,476 frames; native API/copy/save-restore/allocation, source sync, PPC, Wasm parity,
+  viewer, and formatting all pass.
+  Disposition: retain and atomically commit. No demand state, cache, allocation, character branch,
+  or changed narrow phase remains.
+  Next: refresh the committed profile and select the next whole-work deletion or production-shaped
+  batch/data-layout owner.

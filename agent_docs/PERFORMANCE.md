@@ -21,6 +21,28 @@ make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
 
+## Demand-owned hurt-capsule publication — 2026-07-19
+
+Hosted `Fighter_ProcessHit_8006D1EC` no longer transforms every hurt capsule unconditionally.
+Existing `lbColl` contact primitives publish ordinary capsules exactly once on first demand through
+their source `skip_update_pos` owner. Capsules attached to surviving gameplay-live dynamic chains
+remain eager because the next frame's solver consumes their published JObj matrices; the hosted
+owner discovers those capsules from the canonical dynamics graph rather than a character/action
+list. This adds no mask, cache, state, allocation, or second geometry representation.
+
+Four adjacent CPU-0 control/candidate binary pairs preserve digest `6f91f23e3553a090` at 512.
+Controls are 65,122, 65,213, 64,942, and 63,839 FPS; candidates are 66,930, 66,976, 67,045, and
+65,753 FPS. Raw medians improve 65,032 to 66,953 FPS (+2.95%); median paired improvement is +2.89%.
+At 256, three adjacent pairs preserve digest `8ef126a41244d514`: controls 68,433/68,518/68,623 and
+candidates 70,847/69,903/71,335 FPS. Raw medians improve 68,518 to 70,847 FPS (+3.40%); median
+paired improvement is +3.53%.
+
+The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across
+1,415,476 frames. Native source/API/copy/save-restore and sealed-allocation, PPC, Wasm parity,
+viewer, and formatting gates pass. The first all-lazy proof exposed seven dynamic-chain misses;
+retaining demand at that exact source owner restored every output lock without restoring the dead
+ordinary work.
+
 ## Direct hosted GObj scheduler — 2026-07-19
 
 The hosted production scheduler now executes the decomp-shaped priority/process walk directly from

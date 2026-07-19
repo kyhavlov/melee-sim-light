@@ -12,6 +12,7 @@
 /* 09CF84 */ void ftCo_8009CF84(Fighter* fp);
 #ifdef MSL_CORE_HOSTED
 void ftCo_HeadlessPruneDynamics(Fighter* fp);
+void ftCo_HeadlessPublishDynamicHurtCapsules(Fighter* fp);
 #endif
 /* 09D074 */ void ftCo_8009D074(Fighter* fp);
 /* 09D704 */ void ftCo_8009D704(Fighter* fp);

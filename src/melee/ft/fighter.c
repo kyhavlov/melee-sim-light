@@ -3320,7 +3320,11 @@ void Fighter_ProcessHit_8006D1EC(Fighter_GObj* gobj)
         if (!fp->x2219_b6 || fp->dmg.x18F4) {
             ftCo_800C2FD8(gobj);
         }
+#ifndef MSL_CORE_HOSTED
         ftCo_800A0DA4(fp);
+#else
+        ftCo_HeadlessPublishDynamicHurtCapsules(fp);
+#endif
     }
 }
 
