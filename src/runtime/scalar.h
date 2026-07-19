@@ -6,6 +6,7 @@
 #include "platform/slippi.h"
 #include "runtime/camera.h"
 #include "runtime/effects.h"
+#include "runtime/fighter_animation.h"
 #include "runtime/match.h"
 #include "runtime/relocation.h"
 #include "runtime/source_state.h"
@@ -83,6 +84,7 @@ typedef struct MslCoreMatch {
     HSD_ClassContext class_state;
     HSD_IDContext id;
     HSD_AObjContext aobj;
+    MslFighterAnimPool fighter_anim;
 #ifdef MSL_CORE_NATIVE
     // Retail stores Peach's live vegetable owner in a u32 source-layout
     // union. Native Match graphs can live above 4 GiB, so retain the complete

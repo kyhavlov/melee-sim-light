@@ -3,10 +3,13 @@
 #include "placeholder.h"
 
 #include <sysdolphin/baselib/aobj.h>
+#include <sysdolphin/baselib/fobj.h>
 #include <sysdolphin/baselib/gobj.h>
+#include <sysdolphin/baselib/id.h>
 #include <sysdolphin/baselib/jobj.h>
 #include <sysdolphin/baselib/mtx.h>
 #include <sysdolphin/baselib/object.h>
+#include <sysdolphin/baselib/robj.h>
 #include <melee/ft/chara/ftCommon/ftCo_Attack100.h>
 #include <melee/ft/fighter.h>
 #include <melee/ft/ft_0852.h>
@@ -22,6 +25,7 @@
 
 #ifdef MSL_CORE_HOSTED
 #include "runtime/context.h"
+#include "runtime/fighter_animation.h"
 #include "runtime/source_state.h"
 #include "runtime/subsystem_profile.h"
 #define ftAnim_804590D8 (msl_core_ft_anim_scratch()->anim_joints)
@@ -642,6 +646,269 @@ static HSD_JObj* get_part_joint(Fighter* fp, int part, bool do_blending)
     return result;
 }
 
+#ifdef MSL_CORE_NATIVE
+static HSD_AObj* ftAnim_AllocAObj(MslFighterAnimPool* pool)
+{
+    HSD_AObj* aobj;
+    uint16_t index;
+
+    HSD_ASSERT(704, pool->free_aobj_count != 0);
+    index = pool->free_aobjs[--pool->free_aobj_count];
+    aobj = &pool->aobjs[index];
+    memset(aobj, 0, sizeof(*aobj));
+    aobj->flags = AOBJ_NO_ANIM;
+    aobj->framerate = 1.0F;
+    return aobj;
+}
+
+static HSD_FObj* ftAnim_AllocFObj(MslFighterAnimPool* pool)
+{
+    HSD_FObj* fobj;
+    uint16_t index;
+
+    HSD_ASSERT(718, pool->free_fobj_count != 0);
+    index = pool->free_fobjs[--pool->free_fobj_count];
+    fobj = &pool->fobjs[index];
+    memset(fobj, 0, sizeof(*fobj));
+    return fobj;
+}
+
+static void ftAnim_FreeFObjs(MslFighterAnimPool* pool, HSD_FObj* fobj)
+{
+    while (fobj != NULL) {
+        HSD_FObj* next = fobj->next;
+        uintptr_t offset = (uintptr_t) fobj - (uintptr_t) pool->fobjs;
+        HSD_ASSERT(730, offset % sizeof(*fobj) == 0);
+        offset /= sizeof(*fobj);
+        HSD_ASSERT(732, offset < MSL_FIGHTER_ANIM_FOBJ_CAPACITY);
+        HSD_ASSERT(733,
+                   pool->free_fobj_count < MSL_FIGHTER_ANIM_FOBJ_CAPACITY);
+        pool->free_fobjs[pool->free_fobj_count++] = (uint16_t) offset;
+        fobj = next;
+    }
+}
+
+static void ftAnim_FreeAObj(MslFighterAnimPool* pool, HSD_JObj* jobj)
+{
+    HSD_AObj* aobj = jobj->aobj;
+    uintptr_t offset;
+
+    if (aobj == NULL) {
+        return;
+    }
+    offset = (uintptr_t) aobj - (uintptr_t) pool->aobjs;
+    HSD_ASSERT(748, offset % sizeof(*aobj) == 0);
+    offset /= sizeof(*aobj);
+    HSD_ASSERT(750, offset < MSL_FIGHTER_ANIM_AOBJ_CAPACITY);
+    ftAnim_FreeFObjs(pool, aobj->fobj);
+    if (aobj->hsd_obj != NULL) {
+        HSD_JObjUnref((HSD_JObj*) aobj->hsd_obj);
+    }
+    HSD_ASSERT(755,
+               pool->free_aobj_count < MSL_FIGHTER_ANIM_AOBJ_CAPACITY);
+    pool->free_aobjs[pool->free_aobj_count++] = (uint16_t) offset;
+    jobj->aobj = NULL;
+}
+
+static bool ftAnim_IsDescendant(HSD_JObj* jobj, HSD_JObj* root)
+{
+    while (jobj != NULL) {
+        if (jobj == root) {
+            return true;
+        }
+        jobj = jobj->parent;
+    }
+    return false;
+}
+
+static void ftAnim_RemoveAll(HSD_JObj* root)
+{
+    MslFighterAnimPool* pool = msl_fighter_anim_pool();
+    uint16_t i = 0;
+
+    while (i < pool->active_count) {
+        HSD_JObj* jobj = pool->active_joints[i];
+        if (!ftAnim_IsDescendant(jobj, root)) {
+            ++i;
+            continue;
+        }
+        ftAnim_FreeAObj(pool, jobj);
+        pool->active_joints[i] =
+            pool->active_joints[--pool->active_count];
+    }
+}
+
+static HSD_FObj* ftAnim_InitFObjs(MslFighterAnimPool* pool,
+                                  FigaTrack* track, s8 frames,
+                                  bool filtered)
+{
+    HSD_FObj* first = NULL;
+    HSD_FObj* previous = NULL;
+    int i;
+
+    for (i = 0; i < frames; ++i) {
+        HSD_FObj* fobj;
+        if (filtered &&
+            (track->obj_type == 5 || (u8) (track->obj_type - 6) <= 1))
+        {
+            continue;
+        }
+        fobj = ftAnim_AllocFObj(pool);
+        if (first == NULL) {
+            first = fobj;
+        } else {
+            previous->next = fobj;
+        }
+        previous = fobj;
+        fobj->startframe = track->startframe;
+        fobj->obj_type = track->obj_type;
+        fobj->frac_value = track->frac_value;
+        fobj->frac_slope = track->frac_slope;
+        fobj->ad_head = track->ad_head;
+        fobj->length = track->length;
+        ++track;
+    }
+    return first;
+}
+
+static void ftAnim_SortFObjs(HSD_AObj* aobj)
+{
+    HSD_FObj* fobj;
+    HSD_FObj** cursor;
+
+    for (cursor = &aobj->fobj; *cursor != NULL; cursor = &fobj->next) {
+        fobj = *cursor;
+        if (fobj->obj_type == TYPE_JOBJ) {
+            *cursor = fobj->next;
+            fobj->next = aobj->fobj;
+            aobj->fobj = fobj;
+            break;
+        }
+    }
+}
+
+static HSD_AObj* ftAnim_ResetAObj(MslFighterAnimPool* pool, HSD_JObj* jobj)
+{
+    HSD_AObj* aobj = jobj->aobj;
+    if (aobj == NULL) {
+        HSD_ASSERT(861,
+                   pool->active_count < MSL_FIGHTER_ANIM_AOBJ_CAPACITY);
+        aobj = ftAnim_AllocAObj(pool);
+        jobj->aobj = aobj;
+        pool->active_joints[pool->active_count++] = jobj;
+    } else {
+        uintptr_t offset = (uintptr_t) aobj - (uintptr_t) pool->aobjs;
+        HSD_ASSERT(868, offset < sizeof(*aobj) *
+                                     MSL_FIGHTER_ANIM_AOBJ_CAPACITY);
+        ftAnim_FreeFObjs(pool, aobj->fobj);
+        if (aobj->hsd_obj != NULL) {
+            HSD_JObjUnref((HSD_JObj*) aobj->hsd_obj);
+        }
+        memset(aobj, 0, sizeof(*aobj));
+        aobj->flags = AOBJ_NO_ANIM;
+        aobj->framerate = 1.0F;
+    }
+    return aobj;
+}
+
+static void ftAnim_AttachFiga(HSD_JObj* jobj, FigaTree* tree,
+                              FigaTrack* track, s8 frames, bool filtered)
+{
+    MslFighterAnimPool* pool;
+    HSD_AObj* aobj;
+
+    if (jobj == NULL || frames == 0 ||
+        (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD))
+    {
+        return;
+    }
+    pool = msl_fighter_anim_pool();
+    aobj = ftAnim_ResetAObj(pool, jobj);
+    HSD_AObjSetFlags(aobj, tree->flags);
+    HSD_AObjSetRewindFrame(aobj, 0.0F);
+    HSD_AObjSetEndFrame(aobj, tree->frames);
+    aobj->fobj = ftAnim_InitFObjs(pool, track, frames, filtered);
+    ftAnim_SortFObjs(aobj);
+    if (tree->type & 1) {
+        HSD_JObjSetFlags(jobj, JOBJ_CLASSICAL_SCALE);
+    } else {
+        HSD_JObjClearFlags(jobj, JOBJ_CLASSICAL_SCALE);
+    }
+}
+
+static HSD_FObj* ftAnim_LoadFObjDesc(MslFighterAnimPool* pool,
+                                     HSD_FObjDesc* desc)
+{
+    HSD_FObj* first = NULL;
+    HSD_FObj* previous = NULL;
+
+    while (desc != NULL) {
+        HSD_FObj* fobj = ftAnim_AllocFObj(pool);
+        if (first == NULL) {
+            first = fobj;
+        } else {
+            previous->next = fobj;
+        }
+        previous = fobj;
+        fobj->startframe = desc->startframe;
+        fobj->obj_type = desc->type;
+        fobj->frac_value = desc->frac_value;
+        fobj->frac_slope = desc->frac_slope;
+        fobj->ad_head = desc->ad;
+        fobj->length = desc->length;
+        desc = desc->next;
+    }
+    return first;
+}
+
+static void ftAnim_AttachAnimJoint(HSD_JObj* jobj,
+                                   HSD_AnimJoint* anim_joint)
+{
+    MslFighterAnimPool* pool;
+    HSD_AObjDesc* desc;
+    HSD_AObj* aobj;
+
+    if (jobj == NULL || anim_joint == NULL ||
+        (jobj->flags & JOBJ_MSL_GAMEPLAY_COLD))
+    {
+        return;
+    }
+    pool = msl_fighter_anim_pool();
+    desc = anim_joint->aobjdesc;
+    aobj = ftAnim_ResetAObj(pool, jobj);
+    HSD_AObjSetFlags(aobj, desc->flags);
+    HSD_AObjSetRewindFrame(aobj, 0.0F);
+    HSD_AObjSetEndFrame(aobj, desc->end_frame);
+    aobj->fobj = ftAnim_LoadFObjDesc(pool, desc->fobjdesc);
+    if (desc->obj_id != 0) {
+        HSD_Obj* object = HSD_IDGetDataFromTable(0, desc->obj_id, 0);
+        if (object != NULL) {
+            ref_INC(object);
+        } else {
+            object = (HSD_Obj*) HSD_JObjLoadJoint((void*) desc->obj_id);
+        }
+        aobj->hsd_obj = object;
+    }
+    ftAnim_SortFObjs(aobj);
+    HSD_RObjAddAnimAll(jobj->robj, anim_joint->robj_anim);
+    if (anim_joint->flags & 1) {
+        HSD_JObjSetFlags(jobj, JOBJ_CLASSICAL_SCALE);
+    } else {
+        HSD_JObjClearFlags(jobj, JOBJ_CLASSICAL_SCALE);
+    }
+}
+
+#define ftAnim_AttachAll(jobj, tree, track, frames)                           \
+    ftAnim_AttachFiga((jobj), (tree), (track), (frames), false)
+#define ftAnim_AttachFiltered(jobj, tree, track, frames)                      \
+    ftAnim_AttachFiga((jobj), (tree), (track), (frames), true)
+#else
+#define ftAnim_AttachAll(jobj, tree, track, frames)                           \
+    lbAnim_8001E6D8((jobj), (tree), (track), (frames))
+#define ftAnim_AttachFiltered(jobj, tree, track, frames)                      \
+    lbAnim_8001E7E8((jobj), (tree), (track), (frames))
+#endif
+
 void ftAnim_8006F4C8(Fighter* fp, bool do_blending, FigaTree* tree)
 {
     s8* cur_node;
@@ -675,7 +942,7 @@ void ftAnim_8006F4C8(Fighter* fp, bool do_blending, FigaTree* tree)
         }
         if (!fp->parts[i].flags_b0 && !fp->parts[i].flags_b5) {
             HSD_JObj* jobj = get_part_joint(fp, i, do_blending);
-            lbAnim_8001E6D8(jobj, tree, cur_track, *cur_node);
+            ftAnim_AttachAll(jobj, tree, cur_track, *cur_node);
         }
 
         {
@@ -734,9 +1001,10 @@ void ftAnim_8006F628(Fighter* fp, Fighter_Part part, bool do_blending)
                 {
                     HSD_JObj* jobj = get_part_joint(fp, tmp, do_blending);
                     if (fp->parts[tmp].flags_b3) {
-                        lbAnim_8001E6D8(jobj, tree, cur_track, *cur_node);
+                        ftAnim_AttachAll(jobj, tree, cur_track, *cur_node);
                     } else {
-                        lbAnim_8001E7E8(jobj, tree, cur_track, *cur_node);
+                        ftAnim_AttachFiltered(jobj, tree, cur_track,
+                                              *cur_node);
                     }
                 }
             }
@@ -812,7 +1080,7 @@ void ftAnim_8006F7C8(Fighter* ft, Fighter_Part part, int arg2, FigaTree* tree)
             } else {
                 r3 = ft->parts[r22].joint;
             }
-            lbAnim_8001E6D8(r3, tree, tracks, *nodes);
+            ftAnim_AttachAll(r3, tree, tracks, *nodes);
         }
 
         tracks = &tracks[*nodes];
@@ -942,9 +1210,9 @@ void ftAnim_8006FCE4(Fighter* fp, bool do_blending)
             {
                 HSD_JObj* jobj = get_part_joint(fp, part, do_blending);
                 if (fp->parts[part].flags_b3) {
-                    lbAnim_8001E6D8(jobj, tree, cur_track, *cur_node);
+                    ftAnim_AttachAll(jobj, tree, cur_track, *cur_node);
                 } else {
-                    lbAnim_8001E7E8(jobj, tree, cur_track, *cur_node);
+                    ftAnim_AttachFiltered(jobj, tree, cur_track, *cur_node);
                 }
             }
         }
@@ -1176,7 +1444,11 @@ void ftAnim_80070734(HSD_JObj* jobj, float frame)
 
 void ftAnim_80070758(HSD_JObj* jobj)
 {
+#ifdef MSL_CORE_NATIVE
+    ftAnim_RemoveAll(jobj);
+#else
     HSD_JObjRemoveAnimAllByFlags(jobj, 1);
+#endif
 }
 
 void ftAnim_8007077C(Fighter_GObj* gobj)
@@ -1248,7 +1520,11 @@ void ftAnim_80070904(Fighter* fp, Fighter_Part start, HSD_AnimJoint* animjoint)
         }
         if (!fp->parts[i].flags_b0 && animjoint->aobjdesc != NULL) {
             HSD_JObj* jobj = fp->parts[i].x4_jobj2;
+#ifdef MSL_CORE_NATIVE
+            ftAnim_AttachAnimJoint(jobj, animjoint);
+#else
             HSD_JObjAddAnim(jobj, animjoint, NULL, NULL);
+#endif
             HSD_JObjClearFlags(jobj, 0x20000);
             HSD_JObjReqAnimByFlags(jobj, 1, 0.0F);
             HSD_JObjAnim(jobj);
@@ -1319,7 +1595,7 @@ void ftAnim_80070A10(Fighter* ft, Fighter_Part part, FigaTree* tree)
 
         if (!ft->parts[r22].flags_b0 && !ft->parts[r22].flags_b5) {
             HSD_JObj* r3 = ft->parts[r22].x4_jobj2;
-            lbAnim_8001E6D8(r3, tree, tracks, *nodes);
+            ftAnim_AttachAll(r3, tree, tracks, *nodes);
         }
 
         tracks = &tracks[*nodes];

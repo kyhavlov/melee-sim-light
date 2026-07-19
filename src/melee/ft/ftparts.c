@@ -14,6 +14,7 @@
 
 #include <dolphin/mtx.h>
 #include <dolphin/os/OSError.h>
+#include <sysdolphin/baselib/aobj.h>
 #include <sysdolphin/baselib/class.h>
 #include <sysdolphin/baselib/debug.h>
 #include <sysdolphin/baselib/displayfunc.h>
@@ -546,6 +547,10 @@ static HSD_JObj* ftParts_HeadlessLoadCompact(Fighter* fp, HSD_Joint* joint,
     for (node = 0; node < node_count; ++node) {
         HSD_JObj* jobj = jobj_by_node[node];
         part = part_by_node[node];
+        if (jobj != NULL && jobj->aobj != NULL) {
+            HSD_AObjRemove(jobj->aobj);
+            jobj->aobj = NULL;
+        }
         if (jobj == NULL) {
             if (cold_jobj == NULL) {
                 // One detached source-class JObj stands in for every omitted

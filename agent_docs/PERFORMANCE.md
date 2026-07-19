@@ -7,8 +7,10 @@ Git history and ignored triage artifacts, not in this active evidence file.
 
 - Host: AMD Ryzen 9 9950X3D; CPU 0 is the 96 MiB V-cache domain.
 - Workload: all 153 supported validation replays packed once into native input tapes.
-- Timed work: free-running gameplay across a true resident batch plus a caller-owned 128-frame
-  ring of 980-byte observations and 16-byte terminal rows.
+- Timed work: each unique replay is pre-rolled once to one of eight 200–900-frame offsets and
+  copied to repeated batch slots through the production API. Timed free-running gameplay covers
+  65,536 match-frames across a true resident batch plus a caller-owned 128-frame observation and
+  terminal ring.
 - Checkpoint: 512 environments on one CPU core; 256 is the cache-pressure secondary result.
 - Acceptance requires unchanged workload digests and the complete replay/API/save-restore/Wasm
   gates with no new or widened classification.
@@ -18,6 +20,26 @@ make benchmark-prepare
 make benchmark-9950x3d-vcache-256
 make benchmark-9950x3d-vcache-512
 ```
+
+## Fixed fighter animation lifecycle — 2026-07-18
+
+The retained runtime replaces fighter JObj AObj/FObj use of the generic HSD object pools with
+fixed, typed Match storage initialized before gameplay. Every hosted full/partial Figa and fighter
+`HSD_AnimJoint` JObj path uses this owner; non-fighter animation and RObj animation retain their
+source owners. Motion state, animation state, track interpretation, scheduler order, and the
+non-hosted source build are unchanged. There is no generic fighter fallback.
+
+Three adjacent CPU-0 pairs preserve digest `6f91f23e3553a090` at 512. The control/candidate results
+were 40,381/42,276, 40,562/42,666, and 36,356/40,999 FPS. The median paired improvement is +5.19%;
+the separate throughput medians are 40,381 and 42,276 FPS (+4.69%) because host throughput moved
+substantially during the final sequence. At 256 the median paired improvement is +5.25% and the
+raw-median improvement is +4.67%, digest `8ef126a41244d514`.
+
+The complete gate remains 63 PASS / 90 unchanged CLASSIFIED / zero XPASS/fail/error across
+1,415,476 frames. Native API/copy/save-restore, source sync, sealed allocation, Wasm parity, viewer,
+and formatting gates pass. Ordinary arena/savestate bytes fall from 685,888/747,480 to
+658,148/719,788; maximum arena use falls 997,972 to 986,616; and maximum relocation records fall
+6,127 to 4,530.
 
 ## Retained pre-cutover baseline
 

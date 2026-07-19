@@ -782,6 +782,9 @@ static int match_construct(MslCoreMatch* match,
     init_hsd();
 #ifdef MSL_CORE_NATIVE
     init_relocation_types();
+    if (msl_fighter_anim_pool_init(&match->fighter_anim) != 0) {
+        return -1;
+    }
 #endif
     match->config = *config;
     if (validate_config(&match->config) != 0) {
@@ -1093,8 +1096,8 @@ static int match_construct(MslCoreMatch* match,
     // refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,id.c,mtx.c,robj.c}
     // tests/melee_core/runtime_census.c
     // refs/melee/src/melee/gr/grstory.c
-    HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(), 704);
-    HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(), 1280);
+    HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(), 128);
+    HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(), 256);
     HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 128);
     HSD_ObjAllocEnsureFree(HSD_RObjGetAllocData(), 16);
     HSD_ObjAllocEnsureFree(&gobj_alloc_data, 128);

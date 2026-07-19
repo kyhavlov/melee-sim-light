@@ -109,3 +109,11 @@ profile exposes the one stale output lock corrected below.
 
 The retained runtime now produces about 66,474 FPS at 256 and 89,950 FPS at 512 on the current
 host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
+
+## Fixed fighter animation lifecycle
+
+- **This commit** moves hosted fighter JObj AObjs/FObjs from generic HSD
+  transition-time pool/relocation churn to fixed typed Match storage, with no fighter fallback.
+  The new staggered all-replay contract measures +5.19% median paired improvement at 512 and +5.25%
+  at 256; raw throughput medians improve +4.69% and +4.67%. All correctness/API/save-restore/Wasm
+  gates are green, and ordinary savestate size falls 747,480 to 719,788 bytes.
