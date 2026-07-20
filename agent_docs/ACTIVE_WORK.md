@@ -1,66 +1,61 @@
-# Active performance packet — direct fighter animation node binding
+# Active performance packet — optimized PPC-exact square root owner
 
 ## Objective
 
-Bind each Figa attachment directly to its immutable dense pose-node descriptor. Delete the linear
-per-attachment scan over a program's nodes while preserving exact transition semantics and the one
-shared dense sample representation.
+Move the process-wide PPC-exact `sqrtf` implementation out of the quaternion translation unit that
+must remain O0. Compile the singular native owner with the optimized release profile while preserving
+the authored `frsqrte` seed, three double-precision Newton steps, final float store, and every caller.
 
 ## Final boundary
 
-- **Final owner:** `MslFighterPosePrograms` owns one immutable track-start-to-node map alongside its
-  program/node/sample tables.
-- **Canonical state:** the map contains relative descriptor indices only. JObj SRT, compact joint
-  animation state, and the source decoder remain the complete mutable/save-state-visible state.
-- **Consumers:** `msl_fighter_pose_attach_figa` resolves the Figa program, indexes the map by the
-  source track offset, verifies the track count, and binds the resulting global node index.
-- **Displaced work:** every attachment no longer linearly compares every node's track start/count.
-- **Deletion boundary:** the scan loop is removed. There is no last-program cache, hidden cursor,
-  mutable source-tree field, per-Match lookup state, fallback scan, or character/action list.
+- **Final owner:** `src/runtime/ppc_sqrt.c` owns the hosted definition backed by
+  `refs/melee/src/sysdolphin/baselib/quatlib.c::sqrtf` and the matching MSL sequence.
+- **Canonical state/semantics:** there is no state or approximation table. The exact source operation
+  order and `ppc_frsqrte` seed remain canonical.
+- **Consumers:** all native/Wasm gameplay `sqrtf` calls resolve to this one definition. PPC retains
+  its upstream-shaped inline definition in `quatlib.c`.
+- **Displaced code:** native/Wasm no longer emit `sqrtf` from the O0 quaternion object.
+- **Deletion boundary:** one definition per platform; no dispatch, fallback, duplicate helper, or
+  fast-math flag.
 
-## Evidence and acceptance
+## Acceptance
 
-- The committed `90078dfb` profile assigns 14.53% to pose animation and 9.89% to action-animation
-  callbacks after the dense publication cut.
-- A gprof diagnostic recorded 2,417,704 attachment calls over 131,072 match-frames. Its sampling
-  overhead is not throughput evidence, but the call count proves the repeated lookup is material.
-- Retain only a repeatable whole-frame resident-512/256 gain, unchanged digests/classifications,
-  unchanged per-Match memory, and the complete replay/API/save-restore/allocation/PPC/Wasm/viewer
-  gate.
+- Both production digests and the complete replay/API/copy/save-restore/allocation/PPC/Wasm/viewer
+  gates remain unchanged.
+- Native disassembly contains the same arithmetic sequence without O0 stack round-trips.
+- Resident 512 and 256 show a repeatable whole-frame gain; otherwise restore the original owner.
 
 ## Log
 
 - 2026-07-19 — `open`
-  Scope: immutable Figa program metadata and the animation attachment binding site.
-  Hypothesis: a compact per-track relative-node map deletes the dominant repeated scan while keeping
-  all source transition and decoder work unchanged.
-  Evidence: 2.42 million calls currently perform a binary program lookup plus linear node scan in a
-  131,072-frame diagnostic; the containing action/pose owners total over 24% of the cycle profile.
-  Disposition: add the sidecar map during GameData initialization and replace the scan with one
-  indexed load and exact assertions.
-  Next: implement the shared map, verify both production digests, and run adjacent 512 measurements.
+  Scope: exact square-root source-owner split and native compiler admission.
+  Hypothesis: the O0 global definition currently spills every intermediate and costs about 300 bytes
+  of code per call; the existing representative gprof run attributes 2.88% self time to `sqrtf`.
+  Evidence: `quatlib.o` is deliberately O0 for quaternion exactness, while its global `sqrtf` symbol
+  serves the entire executable. The release function repeatedly stores/reloads `x`, `guess`, and
+  final `y` around an out-of-line exact `__frsqrte` call.
+  Disposition: establish the singular optimized owner directly, then measure exact production output.
+  Next: split the definition, inspect codegen, and run adjacent resident-512 controls.
 
 - 2026-07-19 — `retained`
-  Scope: per-program track-start map plus direct Figa-tree hash lookup.
-  Hypothesis: deleting both the linear node scan and binary program search should turn each
-  attachment into bounded direct shared-data lookup.
-  Evidence: resident-512 controls are 47,184.4/47,185.9/47,623.1 cycles/frame and candidates are
-  46,168.3/46,458.8/45,916.6, reducing the median 2.16%. Resident-256 controls are
-  44,781.4/45,816.6/44,986.5 and candidates are 43,561.5/43,367.1/43,492.5, reducing the median
-  3.32%. Digests remain `6f91f23e3553a090` / `8ef126a41244d514`.
-  Disposition: retain the final direct binding owner; it adds only immutable process-global lookup
-  data and no per-Match state.
-  Next: complete the full material gate and shared-memory census, then commit atomically if green.
+  Scope: singular optimized hosted definition and adjacent production measurements.
+  Hypothesis: preserving the exact source expression inside the optimized owner will delete O0
+  spill/reload overhead without changing the PPC estimate or rounding sequence.
+  Evidence: resident-512 control/candidate medians are 45,724.9/45,222.2 cycles per frame (-1.10%);
+  resident-256 medians are 43,122.9/42,736.7 (-0.90%). Digests remain
+  `6f91f23e3553a090` / `8ef126a41244d514`. Disassembly preserves the three Newton steps and final
+  float store while eliminating the O0 frame traffic.
+  Disposition: retain the singular exact owner; it adds no state, approximation, or platform fork in
+  gameplay semantics.
+  Next: complete the material gate and refresh the owner profile before the atomic commit.
 
 - 2026-07-19 — `retained`
-  Scope: complete material gate and shared-data census.
-  Hypothesis: direct lookup must preserve every transition, build, and state contract and keep its
-  memory cost process-global.
+  Scope: complete correctness/build gate and corrected profile refresh.
+  Hypothesis: the source-owner split must remain exact across every platform and state contract.
   Evidence: debug and optimized-release validation remain 63 PASS / 90 unchanged CLASSIFIED across
-  1,415,476 frames. API/copy/save-restore, 633,432-byte sealed arena, PPC, Wasm parity, viewer/
-  browser, 38 Python tests, source sync, and formatting are green. The 261,195-entry track map,
-  4,096-slot program hash, and larger descriptors add 544,046 shared bytes; per-Match state is
-  unchanged.
-  Disposition: packet complete and ready for atomic implementation/evidence commit.
-  Next: commit, notify the retained win, refresh profiling only when needed, and select the next
-  bounded high-impact owner.
+  1,415,476 frames. Native API/copy/save-restore/allocation, PPC, Wasm parity, viewer/browser, 38
+  Python tests, source sync, and formatting are green. The corrected profile remains dominated by
+  hosted fighter maintenance (28.88%), map collision (13.78%), dynamics (8.78%), and Spaghetti
+  input/IASA (7.59%).
+  Disposition: packet complete and ready for its atomic implementation/evidence commit.
+  Next: commit and select a larger profile-backed final-form owner.

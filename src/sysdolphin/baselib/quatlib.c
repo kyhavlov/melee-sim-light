@@ -5,6 +5,7 @@
 #include <MSL/math.h>
 #include <MSL/trigf.h>
 
+#ifndef MSL_CORE_NATIVE
 inline float sqrtf(float x)
 {
     volatile float y;
@@ -18,6 +19,7 @@ inline float sqrtf(float x)
     }
     return x;
 }
+#endif
 
 s32 MatToQuat(Mtx m, Quaternion* q)
 {

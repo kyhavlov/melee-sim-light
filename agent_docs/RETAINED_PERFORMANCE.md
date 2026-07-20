@@ -211,6 +211,13 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 - `90078dfb` **Publish dense fighter pose samples** replaces sparse program-wide validity/value
   storage and per-frame source-track scans with immutable per-node exact SRT streams. Adjacent
   cycle cost falls 3.71% at 512 and 3.70% at 256 with no per-Match state growth.
-- **This commit** maps Figa trees and track starts directly to dense node descriptors, deleting the
+- `9885c446` **Bind fighter animation nodes directly** maps Figa trees and track starts directly to dense node descriptors, deleting the
   binary program search and linear node scan from every animation attachment. Adjacent cycle cost
   falls 2.16% at 512 and 3.32% at 256; 544,046 bytes are added only to process-global GameData.
+
+## Optimized PPC-exact square root
+
+- **This commit** moves the singular hosted PPC-exact `sqrtf` implementation out of the O0
+  quaternion translation unit and compiles it with the strict optimized profile. The source
+  `frsqrte`/Newton/store sequence is unchanged; adjacent cycle cost falls 1.10% at 512 and 0.90% at
+  256 with no state or memory change.

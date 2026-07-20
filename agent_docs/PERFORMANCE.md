@@ -3,6 +3,59 @@
 Only production-contract, correctness-green results belong here. Historical experiments remain in
 Git history and ignored triage artifacts, not in this active evidence file.
 
+## Optimized PPC-exact square-root owner — 2026-07-19
+
+The process-wide hosted `sqrtf` definition now lives outside the quaternion translation unit that
+must remain O0 for exact interpolation. Its optimized native owner preserves the source-authored
+PPC `frsqrte` seed, three double-precision Newton steps, final volatile float store, and non-positive
+behavior while deleting O0 stack traffic from every gameplay caller. PPC retains the upstream-shaped
+definition. There is no approximation, dispatch, mutable state, or new platform-visible behavior.
+
+Three adjacent resident-512 control costs are 45,724.9/45,669.2/46,068.3 cycles per frame and
+candidates are 44,997.0/45,222.2/45,387.6, reducing the median from 45,724.9 to 45,222.2 (-1.10%).
+Resident-256 controls are 44,150.4/43,122.9/42,771.7 and candidates are
+42,913.3/42,736.7/42,694.1, reducing the median from 43,122.9 to 42,736.7 (-0.90%). Digests remain
+`6f91f23e3553a090` / `8ef126a41244d514`; wall medians are 94,908 FPS at 512 and 100,428 FPS at 256.
+
+Debug and optimized-release validation remain 63 PASS / 90 unchanged CLASSIFIED / zero
+XPASS/fail/error across 1,415,476 frames. Native source/API/copy/save-restore and sealed allocation,
+PPC, Wasm parity, viewer/browser, pytest, source-sync, and formatting gates pass. Persistent and
+shared memory are unchanged.
+
+### Rejected split compact pose hot state
+
+The retained 56-byte combined node was tested against three singular final layouts: a 32-byte hot
+animation stream plus 16-byte path/topology metadata, the same split with a bit-packed hot track
+range, and a 40-byte hot stream with an explicit range. A profiler census found 27.76M ownership
+checks, 13.62M initial metadata resolutions, and 7.97M dense publication hits per 65,536 match-frames;
+hot null-path/attachedness summaries cut metadata resolutions to 8.44M. Despite lower isolated pose
+time, the best 32-byte whole-frame result only tied its adjacent control at 46,427.4/46,427.5 cycles
+per frame. Packed and 40-byte variants cost 47,305.5 and 47,040.4. All measured variants preserved
+digest `6f91f23e3553a090`, but none produced a production gain, so no representation or instrumentation
+remains. The candidates are preserved in named stash
+`rejected-split-compact-pose-hot-state-20260719`.
+
+### Rejected native stage scalar access
+
+Every native camera/blast scalar accessor was moved to an exact always-inlined `StageInfo` read,
+deleting the external ABI and repeated bound-stage TLS lookup from more than 12.8 million calls in
+the 131,072-frame diagnostic. Digest `6f91f23e3553a090` remained exact, but the candidate measured
+46,311.3 cycles per frame against the adjacent 46,346.4 retained median, well inside noise. The
+calls overlap demanded camera arithmetic and are not a material owner boundary. No copied stage
+state or source change remains; the candidate is in named stash
+`rejected-native-stage-scalar-access-20260719`.
+
+### Rejected compact pose dependency walk
+
+The compact pose owner classified ordinary parent-only JObj dependency behavior once at joint
+registration and directly iterated the typed full-tree interval, removing the generic dependency
+dispatcher and exported single-joint wrapper from the ordinary path. Both 512 samples preserved
+digest `6f91f23e3553a090`, but candidate costs were 46,760.6/46,453.0 cycles per frame against
+46,341.9/46,350.9 controls: every adjacent pair regressed and the median cost rose 0.56%. The
+existing generic branch is well predicted and the extra per-node classification branch does not
+delete demanded animation work. No source or per-Match state remains; the exact candidate is in
+named stash `rejected-compact-pose-dependency-walk-20260719`.
+
 ### Rejected exact scheduled-fighter compiler boundary
 
 Per-function O1--O3 admission tested the dominant O0 scheduled owners in `fighter.c` without

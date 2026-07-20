@@ -272,6 +272,7 @@ NATIVE_RELEASE_OPT_OBJS := \
 	$(NATIVE_OBJ_DIR)/src/platform/dolphin_mtx.o \
 	$(NATIVE_OBJ_DIR)/src/runtime/fighter_pose.o \
 	$(NATIVE_OBJ_DIR)/src/runtime/observation.o \
+	$(NATIVE_OBJ_DIR)/src/runtime/ppc_sqrt.o \
 	$(NATIVE_OBJ_DIR)/src/runtime/relocation.o \
 	$(NATIVE_OBJ_DIR)/src/runtime/savestate.o \
 	$(NATIVE_OBJ_DIR)/src/runtime/viewer.o \
