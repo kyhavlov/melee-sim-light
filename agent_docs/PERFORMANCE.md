@@ -3,6 +3,59 @@
 Only production-contract, correctness-green results belong here. Historical experiments remain in
 Git history and ignored triage artifacts, not in this active evidence file.
 
+## Fighter contact empty-producer cull — 2026-07-19
+
+The native fighter-v-fighter contact owner now rejects an attacker before team, thrown-hitbox,
+clank, shield, and hurtbox enumeration when all four canonical authored hit capsules are disabled.
+Any live capsule enters the complete source body in its original order; the predicate adds no state,
+cache, geometry approximation, action/character dispatch, or alternate combat representation.
+
+The 512 census finds 109,740 of 143,822 owner entries (76.3%) have no live fighter hit capsule.
+Three adjacent resident-512 control/candidate median costs are 44,873.7/44,505.4 cycles per frame
+(-0.82%), with wall throughput rising 95,645 to 96,436 FPS. Two resident-256 median costs are
+42,247.1/41,804.5 (-1.05%), with wall throughput rising 101,597 to 102,667 FPS. Digests remain
+`6f91f23e3553a090` / `8ef126a41244d514`.
+
+Debug and optimized-release validation remain 63 PASS / 90 unchanged CLASSIFIED / zero
+XPASS/fail/error across 1,415,476 frames. Native source/API/copy/save-restore and sealed allocation,
+PPC, Wasm parity, viewer/browser, Python, source-sync, and formatting gates pass. Persistent and
+shared memory are unchanged.
+
+### Rejected fused guard overlay publication
+
+Target attribution found `ftCo_GuardOn_Anim` and `ftCo_Guard_Anim` own 4.09% of the complete
+contract through their shared dynamic shield-pose pipeline. A complete hosted evaluator traversed
+the extracted default, animation-38, and neutral-guard sources once, evaluated exact Figa tracks
+into a local JObj, and published the same two source blends directly to canonical main-pose SRT.
+Digest `6f91f23e3553a090` remained exact, but whole-frame cost rose from 44,511.4 to 45,691.1 cycles
+per frame. Target profiling likewise measured the fused callbacks at 148.5M cycles versus 146.1M
+for the retained source. Exact guard rotation requires the same two ordered quaternion blends; the
+candidate merely traded fixed compact attachment/traversal for stack mapping and fresh dynamic
+track decoding without deleting the dominant math. A dense-sample variant was slightly faster but
+not exact. All source, sampling, and attribution code was removed.
+
+### Rejected direct dense pose interpreter
+
+A production-shaped exact fast evaluator admitted the measured 89.0% dense active-joint population
+before the mutable decoder and directly advanced loop/first-play state, published the existing
+immutable sample, and updated canonical AObj callback counts. Digest `6f91f23e3553a090` remained
+exact, but resident-512 cost rose from the retained 44,511.4 to 45,210.3 cycles per frame. The
+existing interpreter already branches into the same dense publication after a small shared frame
+advance; duplicating that control path adds admission and instruction pressure without deleting
+sample or SRT work. Together with the earlier neutral direct-tree experiment, scalar range/wrapper
+reorganization is closed; further pose gains require a different execution/data boundary. All
+instrumentation and source changes were removed.
+
+### Rejected immutable dense ECB trig
+
+A complete exact GameData stream precomputed six sin/cos floats for every full-rotation dense Figa
+sample and selected it only when live JObj rotation remained bit-identical to the source row. A
+512 census found 3,114,789 exact hits among 5,884,181 direct dirty nodes (52.9%) and 2,342,902
+eligible shared samples. Despite unchanged digest `6f91f23e3553a090`, the 53.62 MiB cold stream plus
+live checks and cached/dynamic lane scatters raised cost to 45,844.8 cycles per frame from the
+44,491.0 retained median. The exact AVX-512 runtime evaluator is cheaper than cold lookup across a
+varied resident batch, so all table, descriptor, selection, and census changes were removed.
+
 ## Fused hosted dynamics transforms — 2026-07-19
 
 The hosted exact fighter dynamics solver now publishes its demanded world bases, child directions,

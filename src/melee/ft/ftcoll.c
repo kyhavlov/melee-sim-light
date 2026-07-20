@@ -1615,6 +1615,14 @@ void ftColl_80078C70(Fighter_GObj* this_gobj)
                 is_same_gobj = true;
             } else {
                 victim_fp = victim_gobj->user_data;
+#ifdef MSL_CORE_NATIVE
+                if ((victim_fp->x914[0].state | victim_fp->x914[1].state |
+                     victim_fp->x914[2].state | victim_fp->x914[3].state) ==
+                    HitCapsule_Disabled)
+                {
+                    goto next_gobj;
+                }
+#endif
                 var_r4 = false;
                 if ((victim_fp->x1064_thrownHitbox.owner != NULL)) {
                     if ((u8) this_fp->player_id != (u8) victim_fp->grabber_unk1) {

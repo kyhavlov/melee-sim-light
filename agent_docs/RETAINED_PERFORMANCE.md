@@ -224,7 +224,14 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Fused hosted dynamics transforms
 
-- **This commit** replaces general temporary-matrix construction in the exact dynamics solver with
+- `cabbcf65` **Fuse exact fighter dynamics transforms** replaces general temporary-matrix construction in the exact dynamics solver with
   one fused hosted evaluator for the demanded bases, directions, inverse axis, and tail position.
   Dynamics profile cycles fall 12.4%; adjacent whole-frame cycle cost falls 1.18% at 512 and 0.99%
   at 256 with unchanged state and memory.
+
+## Fighter contact empty-producer cull
+
+- `This commit` **Cull empty fighter contact producers** rejects each attacker inside the canonical
+  fighter-v-fighter contact owner when all four authored hit capsules are disabled, before team,
+  throw, clank, shield, and hurt enumeration. The census removes 76.3% of owner entries; adjacent
+  cycle medians improve 0.82% at 512 and 1.05% at 256 with both digests unchanged and no state.

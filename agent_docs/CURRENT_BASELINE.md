@@ -6,7 +6,7 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Provenance
 
-- Commit: fused hosted dynamics transforms (this commit)
+- Commit: fighter contact empty-producer cull (this commit)
 - Runtime: compact fighter pose/gameplay geometry, node-indexed dense exact ordinary Figa samples,
   direct hosted
   scheduler dispatch, demand-owned hurt capsules, exact O1 fighter map collision, the supported
@@ -39,9 +39,9 @@ make benchmark-9950x3d-vcache-512
 | 256 | `8ef126a41244d514` |
 | 512 | `6f91f23e3553a090` |
 
-The retained comparison medians are 101,909 FPS at 256 and 96,468 FPS at 512. For the latest fused
-dynamics packet, adjacent 512 control/candidate median costs are 45,022.1/44,491.0 cycles/frame
-(-1.18%) and adjacent 256 costs are 42,537.4/42,115.5 (-0.99%), with the same digests.
+The retained comparison medians are 102,667 FPS at 256 and 96,436 FPS at 512. For the latest fighter
+contact packet, adjacent 512 control/candidate median costs are 44,873.7/44,505.4 cycles/frame
+(-0.82%) and adjacent 256 costs are 42,247.1/41,804.5 (-1.05%), with the same digests.
 
 ## Current memory contract
 

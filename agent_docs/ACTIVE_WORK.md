@@ -1,100 +1,94 @@
-# Active performance packet — fused hosted dynamics transforms
+# Active performance packet — fighter contact empty-owner cull
 
 ## Objective
 
-Replace the general temporary-matrix pipeline inside the exact fighter dynamics solver with one
-hosted transform evaluator that publishes only the two demanded world bases and next-link basis.
-Preserve the complete source constraint/collision/quaternion solver and canonical DynamicsData/JObj
-state while deleting matrices and concatenations whose intermediate values have no consumer.
+Delete always-scheduled fighter contact passes when their exact source-owned contact class has no
+live producer or receiver in the bound Match. Preserve the complete authored hitbox/hurtbox,
+shield, reflect, absorb, grab, item, wind, and damage narrow phases whenever a compatible owner is
+present.
 
 ## Final boundary
 
-- **Final owner:** `lb_8001044C` owns a hosted exact transform kernel adjacent to the source solver;
-  PPC retains the upstream matrix sequence.
-- **Canonical state:** `DynamicsDesc`/`DynamicsData`, their JObj rotations/SRT, angular velocity,
-  world positions, and the source linked order remain the complete mutable/save-state-visible state.
-- **Consumers:** stiffness, gravity, force, collider/floor constraints, quaternion publication,
-  dynamic hurt capsules, attachments, and subsequent frames consume the same canonical fields.
-- **Displaced work:** per-link translation/scale matrices, general 3x4 concatenations for sparse
-  transforms, and the tail's unobserved rotation/scale result.
-- **Deletion boundary:** hosted execution has one fused exact transform path, with no shadow
-  dynamics state, cached alternate pose, character/action dispatch, approximate math, or fallback.
+- **Final owner:** `Fighter_8006CB94` owns source-order admission to its eight `ftColl` contact
+  classes; each retained cull is expressed from canonical live collision descriptors, not action or
+  character ids.
+- **Canonical state:** fighter/item hitboxes, hurtboxes/BODY state, shield/reflect/absorb/grab
+  descriptors, DmgLog fields, GObj entity lists, and source scheduler order remain the only mutable
+  and save-state-visible combat authority.
+- **Consumers:** hit/no-hit and target selection, shield/reflect/absorb contact, grab/item contact,
+  damage/hitlag/hitstun/knockback, stale queue, callbacks, and source writeback keep the exact source
+  narrow phases and tie order.
+- **Displaced work:** a contact-class pass does not enumerate geometry or targets when its required
+  source producer/receiver set is empty. The final packet may delete multiple empty classes but may
+  not merge their distinct source semantics.
+- **Deletion boundary:** one conservative admission predicate per source contact class adjacent to
+  `Fighter_8006CB94`; admitted cases enter the unmodified source call. There is no generic radius,
+  cached broad-phase state, replay/action/character list, changed ordering, approximation, or
+  replacement combat representation.
 
 ## Source and profile evidence
 
-- The corrected 512 profile assigns 8.78% of the production contract to
-  `Fighter_8006D9AC`; the earlier dynamics census attributes about 67% of solver cycles to demanded
-  orientation/constraint math and another 23% to setup/floor work.
-- `refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C` constructs translation, Euler, and scale
-  matrices through repeated `PSMTXConcat`, but the loop consumes only two transformed child vectors,
-  the current origin, the inverse parent axis, and the next-link parent basis.
-- `src/platform/dolphin_mtx.c` documents the exact hosted paired-single contraction order required
-  by those operations; the fused evaluator must preserve those float/FMA boundaries.
+- The corrected 512 profile assigns 2.80% to always-scheduled `Fighter_8006CB94`, 2.21% to
+  `Fighter_ProcessHit_8006D1EC`, and 0.65% to contact publication. `ProcessHit` is mostly idle
+  bookkeeping; detection admission is the cleaner deletion boundary.
+- `Fighter_8006CB94` invokes eight distinct collision owners for every active fighter. Competitive
+  frames commonly have no live grab, reflect/absorb, item-contact, wind, or compatible hit owner,
+  but admission must be read from their real descriptors/lists.
+- The retained wall broad phase proves that conservative empty-set rejection can remove most
+  collision enumeration while leaving exact source narrow phase and order untouched.
 
 ## Acceptance
 
-- Prove the fused transform output exact before widening the cut. Both production digests and the
-  complete replay/API/copy/save-restore/allocation/PPC/Wasm/viewer gates must remain unchanged.
-- Add no gameplay allocation, Match/shared state, character list, or runtime branch.
-- Retain only a repeatable whole-frame gain at resident 512 and 256; otherwise remove the kernel and
-  record the rejected result.
+- Attribute exclusive cost and call population first, then add only source-backed predicates whose
+  empty/entered census shows material work deletion. Temporary instrumentation must be removed.
+- Both digests and the complete replay/API/copy/save-restore/allocation/PPC/Wasm/viewer gates remain
+  unchanged. No new Match/shared state, gameplay allocation, or widened validation classification.
+- Retain only a repeatable whole-frame gain at resident 512 and 256; reject predicates that merely
+  move scans or add hot admission cost.
 
 ## Log
 
 - 2026-07-19 — `open`
-  Scope: common per-link world-basis construction and tail world-position publication in
-  `lb_8001044C`.
-  Hypothesis: computing only the demanded columns/positions with the same source contraction order
-  removes several complete 3x4 temporary matrices and general concatenations from the 8.78% owner.
-  Evidence: every retained supported live chain uses the same transform prefix regardless of its
-  three/four-node shape, collider count, or floor behavior; no source branch specialization is
-  required.
-  Disposition: implement one hosted fused helper and cut all supported hosted calls to it.
-  Next: verify the 512 digest immediately, inspect any residual at the first mismatching state, and
-  benchmark before touching the constraint solver.
+  Scope: the eight contact-class calls inside `Fighter_8006CB94`.
+  Hypothesis: one or more uncommon contact classes still enumerate empty producer/receiver sets on
+  most of the 166,272 scheduled fighter visits.
+  Evidence: the enclosing owner is 2.80% of the complete contract, but current profiling does not
+  separate its source calls or empty-set population.
+  Disposition: use opt-in exclusive function attribution plus source descriptor census; do not alter
+  production scheduling until a specific class and predicate are proven.
+  Next: instrument `ftcoll.c` under the diagnostic build, resolve exclusive cycles/calls for all
+  eight entries, then inspect the dominant source owner's real producer/receiver authority.
 
 - 2026-07-19 — `open`
-  Scope: first fused transform implementation and production/replay proof.
-  Hypothesis: eliminating general transform temporaries should materially reduce the dynamics owner.
-  Evidence: resident-512 throughput rises to 94,798 FPS, but digest changes to
-  `0147f963403d7d6a`; release validation confirms widespread downstream divergence rather than an
-  accepted residual. The performance viability is real, not correctness evidence.
-  Disposition: retain the final fused structure as the open candidate and recover exact intermediate
-  rounding before any wider optimization.
-  Next: add a compile-time diagnostic that executes source and fused transform publication side by
-  side at the helper boundary, report the first matrix/position bit difference, then remove it.
-
-- 2026-07-19 — `open`
-  Scope: alias-safe exact fused bases and tail position after diagnostic removal.
-  Hypothesis: one preserved parent snapshot for the in-place next-link update recovers the source
-  matrices without restoring general concatenations.
-  Evidence: the diagnostic proved every fused matrix and origin bit-identical after fixing the
-  in-place parent alias. The production digest is restored; corrected-profile dynamics cycles fall
-  316.8M to 291.6M (-8.0%), or about 0.7 whole-frame points. Candidate 512 samples are stable around
-  44,930 cycles per frame, but adjacent controls are noisy and the current cut is borderline.
-  Disposition: keep the exact final structure open and complete the same deletion boundary over its
-  three remaining general vector/transpose consumers before deciding retention.
-  Next: fuse the two basis-vector publications and inverse-parent axis transform with identical FMA
-  ordering, then remeasure the complete transform packet.
+  Scope: exclusive `ftcoll.c` attribution for the priority-13 contact owner.
+  Hypothesis: a specific empty producer scan dominates the enclosing callback.
+  Evidence: `ftColl_80078C70` alone accounts for 143.2M exclusive diagnostic cycles (3.40% of the
+  instrumented contract) across 143,822 entries. The next priority-13 class is
+  `ftColl_8007925C` at 23.9M (0.57%). `ftColl_80078C70` enumerates every fighter's four authored
+  hit capsules before any hit/shield/hurt/clank path can proceed.
+  Disposition: remove the function instrumentation and add one conservative live-producer scan at
+  this exact owner. Do not touch the seven minor contact classes in this packet.
+  Next: return immediately when every fighter hit capsule is disabled, preserve the complete source
+  body otherwise, then measure exact 512/256 output.
 
 - 2026-07-19 — `retained`
-  Scope: complete fused basis/origin/direction/inverse-axis dynamics transform boundary.
-  Hypothesis: sharing the source origin and directly serving all transform consumers should make the
-  final exact packet repeatably material.
-  Evidence: resident-512 control/candidate medians are 45,022.1/44,491.0 cycles per frame (-1.18%);
-  resident-256 medians are 42,537.4/42,115.5 (-0.99%). Digests remain
-  `6f91f23e3553a090` / `8ef126a41244d514`. Corrected-profile dynamics cycles fall from 316.8M at
-  the parent to 277.6M (-12.4%).
-  Disposition: retain the final hosted transform evaluator; it deletes demanded matrix work without
-  adding state, fallback, or domain specialization.
-  Next: record the material gate and commit atomically if green.
+  Scope: per-attacker empty hit-capsule admission inside `ftColl_80078C70`.
+  Hypothesis: rejecting an attacker before team/throw/clank/hurt enumeration avoids the dominant
+  empty source path without rescanning the whole Match on active frames.
+  Evidence: the census finds 109,740 of 143,822 owner entries (76.3%) have no live fighter hit
+  capsule. Three adjacent 512 control/candidate medians are 44,873.7/44,505.4 cycles per frame
+  (-0.82%); two 256 medians are 42,247.1/41,804.5 (-1.05%). Both digests remain exact.
+  Disposition: retain the local producer admission. The rejected Match-wide prescan duplicated cold
+  state loads and regressed; the final per-attacker cut reads the same four source states immediately
+  before the source would enumerate them and adds no state.
+  Next: run the full material gate, record memory/source evidence, and commit atomically if green.
 
 - 2026-07-19 — `retained`
   Scope: complete material correctness/build/state gate.
-  Hypothesis: exact helper-boundary proofs and production digests must extend across every supported
-  source path and platform.
-  Evidence: debug and optimized-release validation remain 63 PASS / 90 unchanged CLASSIFIED across
-  1,415,476 frames. Native API/copy/save-restore/allocation, PPC, Wasm parity, viewer/browser, 38
-  Python tests, source sync, and formatting are green; memory is unchanged.
+  Hypothesis: the local disabled-producer predicate must preserve every live combat path and all
+  platform/API contracts.
+  Evidence: debug and release validation remain 63 PASS / 90 unchanged CLASSIFIED across 1,415,476
+  frames. Native API/copy/save-restore/allocation, PPC, Wasm parity, viewer/browser, Python tests,
+  source sync, and formatting are green; Match/shared memory are unchanged.
   Disposition: packet complete and ready for its atomic implementation/evidence commit.
   Next: commit, notify the retained win, then profile/select the next bounded owner.
