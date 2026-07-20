@@ -394,6 +394,82 @@ bool lb_800103D8(Vec3* vec, float x0, float x1, float x2, float x3,
     return false;
 }
 
+#ifdef MSL_CORE_HOSTED
+static void msl_dynamics_transform_origin(Mtx parent, const Vec3* translate,
+                                          Vec3* origin)
+{
+    int row;
+
+    for (row = 0; row != 3; ++row) {
+        float value = parent[row][0] * translate->x;
+        value = fmaf(translate->y, parent[row][1], value);
+        value = fmaf(translate->z, parent[row][2], value);
+        (&origin->x)[row] = fmaf(1.0F, parent[row][3], value);
+    }
+}
+
+static void msl_dynamics_build_basis(Mtx parent, const Vec3* translate,
+                                     const Vec3* rotate, const Vec3* scale,
+                                     const Vec3* known_origin, Mtx output)
+{
+    Mtx rotation;
+    Mtx parent_copy;
+    float (*source)[4] = parent;
+    Vec3 origin;
+    int row;
+    int column;
+
+    if (output == parent) {
+        memcpy(parent_copy, parent, sizeof(parent_copy));
+        source = parent_copy;
+    }
+    lbVector_CreateEulerMatrix(rotation, (Quaternion*) rotate);
+    if (known_origin != NULL) {
+        origin = *known_origin;
+    } else {
+        msl_dynamics_transform_origin(source, translate, &origin);
+    }
+    for (row = 0; row != 3; ++row) {
+        for (column = 0; column != 3; ++column) {
+            float value = source[row][0] * rotation[0][column];
+            value = fmaf(rotation[1][column], source[row][1], value);
+            value = fmaf(rotation[2][column], source[row][2], value);
+            output[row][column] = value * (&scale->x)[column];
+        }
+        output[row][3] = (&origin.x)[row];
+    }
+}
+
+static void msl_dynamics_transform_direction(Mtx basis, const Vec3* source,
+                                             const Vec3* origin,
+                                             Vec3* direction)
+{
+    int row;
+
+    for (row = 0; row != 3; ++row) {
+        float xy0 = basis[row][0] * source->x;
+        float xy1 = basis[row][1] * source->y;
+        float zx = fmaf(basis[row][2], source->z, xy0);
+        float ty = fmaf(basis[row][3], 1.0F, xy1);
+        (&direction->x)[row] = zx + ty - (&origin->x)[row];
+    }
+}
+
+static void msl_dynamics_parent_axis(Mtx parent, const Vec3* world,
+                                     Vec3* local)
+{
+    int row;
+
+    for (row = 0; row != 3; ++row) {
+        float xy0 = parent[0][row] * world->x;
+        float xy1 = parent[1][row] * world->y;
+        float zx = fmaf(parent[2][row], world->z, xy0);
+        float ty = fmaf(0.0F, 1.0F, xy1);
+        (&local->x)[row] = zx + ty;
+    }
+}
+#endif
+
 void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
                  float pos_y, bool use_floor_fn, Fighter_Part part,
                  int first_active, bool ground_check)
@@ -482,6 +558,16 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
         f32 force_mag;
 
         /* Build translation matrix and concat */
+#ifdef MSL_CORE_HOSTED
+        msl_dynamics_transform_origin(parent_mtx, &jobj->translate,
+                                      &cur->desc.lb_unk0.unk_2C);
+        msl_dynamics_build_basis(parent_mtx, &jobj->translate,
+                                 &cur->desc.lb_unk0.unk_58, &jobj->scale,
+                                 &cur->desc.lb_unk0.unk_2C, constrained_mtx);
+        msl_dynamics_build_basis(parent_mtx, &jobj->translate, &jobj->rotate,
+                                 &jobj->scale, &cur->desc.lb_unk0.unk_2C,
+                                 bone_mtx);
+#else
         PSMTXTrans(trans_mtx, jobj->translate.x, jobj->translate.y,
                    jobj->translate.z);
         PSMTXConcat(parent_mtx, trans_mtx, bone_mtx);
@@ -498,23 +584,38 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
         PSMTXScale(scale_mtx, jobj->scale.x, jobj->scale.y, jobj->scale.z);
         PSMTXConcat(bone_mtx, scale_mtx, bone_mtx);
         PSMTXConcat(constrained_mtx, scale_mtx, constrained_mtx);
+#endif
 
         /* Store world position */
+#ifndef MSL_CORE_HOSTED
         cur->desc.lb_unk0.unk_2C.x = bone_mtx[0][3];
         cur->desc.lb_unk0.unk_2C.y = bone_mtx[1][3];
         cur->desc.lb_unk0.unk_2C.z = bone_mtx[2][3];
+#endif
 
         /* Compute natural bone direction */
+#ifdef MSL_CORE_HOSTED
+        msl_dynamics_transform_direction(
+            constrained_mtx, &jobj->child->translate,
+            &cur->desc.lb_unk0.unk_2C, &natural_dir);
+#else
         PSMTXMultVec(constrained_mtx, &jobj->child->translate, &natural_dir);
         natural_dir.x -= cur->desc.lb_unk0.unk_2C.x;
         natural_dir.y -= cur->desc.lb_unk0.unk_2C.y;
         natural_dir.z -= cur->desc.lb_unk0.unk_2C.z;
+#endif
 
         /* Compute current bone direction */
+#ifdef MSL_CORE_HOSTED
+        msl_dynamics_transform_direction(bone_mtx, &jobj->child->translate,
+                                         &cur->desc.lb_unk0.unk_2C,
+                                         &current_dir);
+#else
         PSMTXMultVec(bone_mtx, &jobj->child->translate, &current_dir);
         current_dir.x -= cur->desc.lb_unk0.unk_2C.x;
         current_dir.y -= cur->desc.lb_unk0.unk_2C.y;
         current_dir.z -= cur->desc.lb_unk0.unk_2C.z;
+#endif
 
         /* Compute link direction (next world pos - current world pos) */
         link_dir.x =
@@ -876,8 +977,12 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
 
         /* Update JObj rotation via quaternion if angle is significant */
         if (!(angle_diff < 0.00001f && angle_diff > -0.00001f)) {
+#ifdef MSL_CORE_HOSTED
+            msl_dynamics_parent_axis(parent_mtx, &cross_vec, &local_axis);
+#else
             PSMTXTranspose(parent_mtx, bone_mtx);
             PSMTXMultVec(bone_mtx, &cross_vec, &local_axis);
+#endif
             if (local_axis.x >= 0.00001f || local_axis.x <= -0.00001f ||
                 local_axis.y >= 0.00001f || local_axis.y <= -0.00001f ||
                 local_axis.z >= 0.00001f || local_axis.z <= -0.00001f)
@@ -914,10 +1019,15 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
         }
 
         /* Update parent matrix for next iteration */
+#ifdef MSL_CORE_HOSTED
+        msl_dynamics_build_basis(parent_mtx, &jobj->translate, &jobj->rotate,
+                                 &jobj->scale, NULL, parent_mtx);
+#else
         PSMTXConcat(parent_mtx, trans_mtx, parent_mtx);
         lbVector_CreateEulerMatrix(temp_mtx, &jobj->rotate);
         PSMTXConcat(parent_mtx, temp_mtx, parent_mtx);
         PSMTXConcat(parent_mtx, scale_mtx, parent_mtx);
+#endif
 
         jobj = jobj->child;
         idx += 1;
@@ -925,6 +1035,10 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
     }
 
     /* Tail node: compute final world position */
+#ifdef MSL_CORE_HOSTED
+    msl_dynamics_transform_origin(parent_mtx, &jobj->translate,
+                                  &cur->desc.lb_unk0.unk_2C);
+#else
     PSMTXTrans(temp_mtx, jobj->translate.x, jobj->translate.y,
                jobj->translate.z);
     PSMTXConcat(parent_mtx, temp_mtx, parent_mtx);
@@ -935,6 +1049,7 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
     cur->desc.lb_unk0.unk_2C.x = parent_mtx[0][3];
     cur->desc.lb_unk0.unk_2C.y = parent_mtx[1][3];
     cur->desc.lb_unk0.unk_2C.z = parent_mtx[2][3];
+#endif
 }
 
 void lb_800115F4(void)

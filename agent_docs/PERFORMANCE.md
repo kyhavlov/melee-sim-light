@@ -3,6 +3,37 @@
 Only production-contract, correctness-green results belong here. Historical experiments remain in
 Git history and ignored triage artifacts, not in this active evidence file.
 
+## Fused hosted dynamics transforms — 2026-07-19
+
+The hosted exact fighter dynamics solver now publishes its demanded world bases, child directions,
+inverse-parent axis, and tail position through one fused transform evaluator. It preserves the
+source paired-single/FMA rounding sequence and canonical DynamicsData/JObj rotation, position, and
+angular-velocity state while deleting per-link translation/scale matrices, general 3x4
+concatenations, redundant origins, and an unobserved tail rotation/scale result. PPC retains the
+upstream matrix sequence. There is no alternate dynamics state, approximation, fallback, or
+character/action dispatch.
+
+Three adjacent resident-512 control/candidate median costs are 45,022.1/44,491.0 cycles per frame
+(-1.18%), with wall throughput rising 95,330 to 96,468 FPS. Resident-256 medians are
+42,537.4/42,115.5 (-0.99%), with wall throughput rising 100,898 to 101,909 FPS. Digests remain
+`6f91f23e3553a090` / `8ef126a41244d514`. In the corrected profile, inclusive dynamics cost falls
+from 316.8M parent cycles to 277.6M (-12.4%).
+
+Debug and optimized-release validation remain 63 PASS / 90 unchanged CLASSIFIED / zero
+XPASS/fail/error across 1,415,476 frames. Native source/API/copy/save-restore and sealed allocation,
+PPC, Wasm parity, viewer/browser, pytest, source-sync, and formatting gates pass. Persistent and
+shared memory are unchanged.
+
+### Rejected supported human input specialization
+
+The hosted fighter input owner was cut directly to the source-backed human local-versus path,
+deleting CPU stick/button synthesis, repeated constant-false match-mode calls, and the scheduled
+CPU-command process. Strict O1 admission of the resulting function remained exact and was the best
+compiler level; O2/O3 regressed. Resident-512 control/candidate cycle medians were
+46,108.7/45,753.8 (-0.77%), while the two 256 pairs were neutral then slower. The deletion does not
+materially change whole-frame cost and would add hosted source divergence for no reliable gain, so
+all source/build changes were removed before the correctness gate.
+
 ## Optimized PPC-exact square-root owner — 2026-07-19
 
 The process-wide hosted `sqrtf` definition now lives outside the quaternion translation unit that

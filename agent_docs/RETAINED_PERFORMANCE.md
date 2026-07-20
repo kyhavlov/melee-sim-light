@@ -217,7 +217,14 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Optimized PPC-exact square root
 
-- **This commit** moves the singular hosted PPC-exact `sqrtf` implementation out of the O0
+- `94d764b0` **Optimize exact hosted square root** moves the singular hosted PPC-exact `sqrtf` implementation out of the O0
   quaternion translation unit and compiles it with the strict optimized profile. The source
   `frsqrte`/Newton/store sequence is unchanged; adjacent cycle cost falls 1.10% at 512 and 0.90% at
   256 with no state or memory change.
+
+## Fused hosted dynamics transforms
+
+- **This commit** replaces general temporary-matrix construction in the exact dynamics solver with
+  one fused hosted evaluator for the demanded bases, directions, inverse axis, and tail position.
+  Dynamics profile cycles fall 12.4%; adjacent whole-frame cycle cost falls 1.18% at 512 and 0.99%
+  at 256 with unchanged state and memory.
