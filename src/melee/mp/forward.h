@@ -65,8 +65,14 @@ typedef enum CollLineKind {
 #define LINE_FLAG_EMPTY (1 << 7)
 #define LINE_FLAG_PLATFORM (1 << 8)
 #define LINE_FLAG_LEDGE (1 << 9)
+#ifdef MSL_CORE_NATIVE
+/* Hosted CollLine aliases runtime state into unused MapLine::hi_flags bits. */
+#define LINE_FLAG_ENABLED (1 << 14)
+#define LINE_FLAG_HIDDEN (1 << 15)
+#else
 #define LINE_FLAG_ENABLED (1 << 16)
 #define LINE_FLAG_HIDDEN (1 << 18)
+#endif
 
 #define MPCOLL_WALLID_MAX 9
 

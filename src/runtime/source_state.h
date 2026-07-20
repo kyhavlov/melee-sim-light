@@ -78,7 +78,6 @@ typedef struct MslMpLibState {
     mpCollisionBox collision_boxes[2];
     /* mpLibLoad/mpPruneEmptyLines mutate the loaded MapLine adjacency. */
     MapCollData data_copy;
-    MapLine* map_lines;
     bool did_check_bounding;
     MapCollData* data;
     CollVtx* vertices;

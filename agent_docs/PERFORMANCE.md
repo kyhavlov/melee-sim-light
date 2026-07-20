@@ -3,6 +3,77 @@
 Only production-contract, correctness-green results belong here. Historical experiments remain in
 Git history and ignored triage artifacts, not in this active evidence file.
 
+## Canonical embedded stage-line topology — 2026-07-19
+
+Native stage collision now owns each mutable `MapLine` topology record directly inside its
+source-facing `CollLine`. Enabled/hidden runtime state occupies two source-unused `hi_flags` bits;
+the separate per-Match topology allocation, copied array, pointer slot, and relocation graph are
+deleted. Extracted topology remains immutable construction input, while PPC preserves the retail
+pointer layout. All supported extracted stages use only `hi_flags` values 0, 1, 2, 4, 8, and 17.
+
+The final 16-byte record is throughput-neutral at both resident sizes and preserves digests
+`6f91f23e3553a090` / `8ef126a41244d514`; no speed claim is made. Ordinary arena use falls from
+633,432 to 631,820 bytes and initialization allocations from 825 to 824. Ordinary savestate falls
+from 695,048 to 693,972 bytes, and the reached four-player maximum falls from 961,900 to 960,000
+bytes. This saves about 0.79 MiB at 512 environments and 25.2 MiB at 16,384.
+
+Debug and optimized-release validation remain 63 PASS / 90 unchanged CLASSIFIED / zero
+XPASS/fail/error across 1,415,476 frames. Native source/API/copy/save-restore and sealed allocation,
+maximum construction, PPC, Wasm parity, viewer/browser, pytest, source-sync, and formatting gates
+pass.
+
+### Rejected level-ordered ECB matrix kernel
+
+The exact ECB origin publisher encoded ancestor depth once, built fixed per-depth worklists without
+adding Match state, and evaluated ready ordinary Euler siblings through a shared AVX2/FMA local-SRT
+kernel before canonical world-matrix publication. The production digest remained
+`6f91f23e3553a090`. Exact scalar level scheduling already cost 44,644.0 cycles/frame against the
+44,422-cycle retained control; vectorizing every width raised cost to 45,816.4, and restricting SIMD
+to widths four through seven still cost 45,472.8. The retained per-matrix kernel already uses three
+compact SSE/FMA row concatenations; gathering narrow scattered sibling groups and republishing them
+costs more than their nine scalar local-SRT values. All topology metadata, worklists, and SIMD code
+were removed. Cross-environment or contiguous state would be required before revisiting this math.
+
+### Rejected exact stage-line AABB admission
+
+All ordinary/remapped floor, ceiling, left-wall, and right-wall query families received one exact
+source-coordinate AABB admission before narrow phase, without changing candidate iteration or
+adding state. Axis-aligned source tolerance required a 0.125-unit envelope; ordinary floor/ceiling
+endpoint extension used a conservative two-unit envelope. Digest `6f91f23e3553a090` remained exact,
+but candidate costs were 44,657.9 cycles/frame without the early extension cull and 44,611.9 with it,
+against the roughly 44,422 retained control. The optimized `mplib.c` owner already performs the same
+bounding comparisons at narrow-phase entry; duplicating them at the callsite merely trades where
+the checks run. The shared predicate and all eight gates were removed.
+
+### Rejected headless transient result-stat production
+
+The complete hosted producer closure for `pl_040D`'s `pl_x5EC_t` hit/result bonus record was
+removed: sparse hit/trick producers plus the per-fighter `pl_800411C4` and grounded
+`pl_80041280` six-record clears. Digest `6f91f23e3553a090` remained exact and all native symbols in
+that result-only family left the release binary. The stable adjacent 512 pair was 44,264.3 control
+versus 44,301.0 candidate cycles/frame; a second control was externally disturbed while its
+candidate remained 44,365.2. This is throughput-neutral, and deleting the embedded record would save
+only 816 bytes per Match while widening the Player layout delta, so the whole candidate was removed.
+
+### Rejected compact pose animation work schedule
+
+A complete 512 census found 2,534,669 of 6,488,168 retained-tree visits (39.1%) had no live
+animation, RObj, or dependency publication; 98.4% of those empty visits were structurally
+unattached. A fixed 128-byte per-Match topology bitset preserved the digest but raised cost from
+44,422.8/44,324.7 to 44,929.6/45,013.5 cycles per frame. A state-free direct canonical admission
+likewise cost 45,023.8. The remaining live nodes still require scattered JObj loads, while the
+retained contiguous loop makes its empty shell cheaper than either extra admission form. All
+schedule state, predicates, and census instrumentation were removed.
+
+### Rejected native inline wire access
+
+Native header-owned little-endian loads/stores removed every scalar accessor call from optimized
+observation, compare, item, and viewer projection while preserving both digests. Adjacent 512 pairs
+were 44,143.1/44,020.5 and 44,118.5/44,206.6 cycles per frame, a neutral median; 256 moved less than
+one percent. The existing local calls are well predicted and the demanded scattered state reads and
+980-byte output writes dominate this 2.49% owner. The inline implementation was removed; future
+observation work needs a different public data-layout boundary rather than leaf call tuning.
+
 ## Fighter contact empty-producer cull — 2026-07-19
 
 The native fighter-v-fighter contact owner now rejects an attacker before team, thrown-hitbox,

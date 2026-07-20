@@ -6,13 +6,14 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Provenance
 
-- Commit: fighter contact empty-producer cull (this commit)
+- Commit: canonical embedded stage-line topology (this commit)
 - Runtime: compact fighter pose/gameplay geometry, node-indexed dense exact ordinary Figa samples,
   direct hosted
   scheduler dispatch, demand-owned hurt capsules, exact O1 fighter map collision, the supported
   64-node hosted dynamics pool, exact paired three-axis matrix trig, and fused ordinary JObj world
   matrix publication, optimized PPC-exact hosted square root, fused exact dynamics transforms, with release-only
-  CET/frame-chain/unwind deletion and a strict optimized native source closure
+  CET/frame-chain/unwind deletion, a strict optimized native source closure, and singular embedded
+  mutable stage-line topology
 - Date: 2026-07-19
 - Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 6.17 x86-64
 - Compiler: GCC 13.3.0, strict native release profile, `-march=native -mtune=native`
@@ -45,16 +46,17 @@ contact packet, adjacent 512 control/candidate median costs are 44,873.7/44,505.
 
 ## Current memory contract
 
-The compact pose owner is initialized before gameplay and participates in typed relocation,
-arbitrary-index copy, and save/restore. The allocation lock remains exactly 633,432 arena bytes and
-825 allocations before and after gameplay. Four supported Peach instances reach 976 compact pose
+The compact pose and stage-line owners are initialized before gameplay and participate in typed
+relocation, arbitrary-index copy, and save/restore. The allocation lock remains exactly 631,820
+arena bytes and 824 allocations before and after gameplay. Four supported Peach instances reach 976 compact pose
 nodes inside the fixed 1,000-node capacity.
 
 | Measure | Current |
 |---|---:|
-| Ordinary stepped arena | 633,432 B |
-| Ordinary savestate | 695,048 B |
-| Initialization allocations | 825 |
+| Ordinary stepped arena | 631,820 B |
+| Ordinary savestate | 693,972 B |
+| Initialization allocations | 824 |
+| Maximum reached arena | 960,000 B |
 | Maximum reached compact pose nodes | 976 / 1,000 |
 | Hosted fighter-dynamics pool | 10,752 B (64 nodes) |
 

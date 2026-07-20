@@ -858,7 +858,6 @@ CollJoint* mpGetGroundCollJoint(void)
 
 void mpPruneEmptyLines(MapCollData* coll_data)
 {
-    MapLine* line;
     Vec2* verts = coll_data->verts;
     int i;
 
@@ -866,19 +865,26 @@ void mpPruneEmptyLines(MapCollData* coll_data)
         return;
     }
 
-    line = coll_data->lines;
-    for (i = 0; i < coll_data->line_count; i++, line++) {
+    for (i = 0; i < coll_data->line_count; i++) {
+#ifdef MSL_CORE_NATIVE
+        MapLine* line = groundCollLine[i].x0;
+#else
+        MapLine* line = &coll_data->lines[i];
+#endif
         Vec2* v0 = &verts[line->v0_idx];
         Vec2* v1 = &verts[line->v1_idx];
-        MapLine* other;
         int j;
 
         if (v0->x != v1->x || v0->y != v1->y) {
             continue;
         }
 
-        other = coll_data->lines;
-        for (j = 0; j < coll_data->line_count; j++, other++) {
+        for (j = 0; j < coll_data->line_count; j++) {
+#ifdef MSL_CORE_NATIVE
+            MapLine* other = groundCollLine[j].x0;
+#else
+            MapLine* other = &coll_data->lines[j];
+#endif
             if (other->prev_id0 == i) {
                 other->prev_id0 = line->prev_id0;
             }
@@ -968,16 +974,10 @@ void mpLibLoad(MapCollData* coll_data)
         // Retail owns one writable archive graph for one running match.
         // Hosted GameData is shared and immutable, so retain the source
         // MapCollData shape while giving mpPruneEmptyLines and stage stitching
-        // their per-Match writable MapLine owner.
+        // their per-Match writable topology owner inside each CollLine.
         // refs/melee/src/melee/mp/mplib.c::{mpLibLoad,
         //   mpPruneEmptyLines,mpLib_800581DC}
         state->data_copy = *coll_data;
-        state->map_lines = HSD_MemAlloc((ssize_t) coll_data->line_count *
-                                        sizeof(*state->map_lines));
-        HSD_ASSERT(415, state->map_lines != NULL);
-        memcpy(state->map_lines, coll_data->lines,
-               (size_t) coll_data->line_count * sizeof(*state->map_lines));
-        state->data_copy.lines = state->map_lines;
         coll_data = &state->data_copy;
     }
 #endif
@@ -1009,54 +1009,63 @@ void mpLibLoad(MapCollData* coll_data)
     }
     joint->next = NULL;
     jointListEnd = joint;
+#ifdef MSL_CORE_NATIVE
+    for (i = 0; i < coll_data->line_count; ++i) {
+        groundCollLine[i].x0[0] = coll_data->lines[i];
+    }
+#endif
     mpPruneEmptyLines(coll_data);
+
+#ifdef MSL_CORE_NATIVE
+#define INIT_COLL_LINE(index)                                                \
+    do {                                                                     \
+        groundCollLine[index].flags =                                        \
+            groundCollLine[index].x0->hi_flags | LINE_FLAG_ENABLED;          \
+    } while (0)
+#else
+#define INIT_COLL_LINE(index)                                                \
+    do {                                                                     \
+        groundCollLine[index].flags =                                        \
+            coll_data->lines[index].hi_flags | LINE_FLAG_ENABLED;            \
+        groundCollLine[index].x0 = &coll_data->lines[index];                 \
+    } while (0)
+#endif
 
     floor_count = coll_data->floor_count;
     floor_start = coll_data->floor_start;
     for (; floor_count > 0; floor_count--) {
-        groundCollLine[floor_start].flags =
-            coll_data->lines[floor_start].hi_flags | LINE_FLAG_ENABLED;
-        groundCollLine[floor_start].x0 = &coll_data->lines[floor_start];
+        INIT_COLL_LINE(floor_start);
         floor_start++;
     }
 
     ceiling_count = coll_data->ceiling_count;
     ceiling_start = coll_data->ceiling_start;
     for (; ceiling_count > 0; ceiling_count--) {
-        groundCollLine[ceiling_start].flags =
-            coll_data->lines[ceiling_start].hi_flags | LINE_FLAG_ENABLED;
-        groundCollLine[ceiling_start].x0 = &coll_data->lines[ceiling_start];
+        INIT_COLL_LINE(ceiling_start);
         ceiling_start++;
     }
 
     right_wall_count = coll_data->right_wall_count;
     right_wall_start = coll_data->right_wall_start;
     for (; right_wall_count > 0; right_wall_count--) {
-        groundCollLine[right_wall_start].flags =
-            coll_data->lines[right_wall_start].hi_flags | LINE_FLAG_ENABLED;
-        groundCollLine[right_wall_start].x0 =
-            &coll_data->lines[right_wall_start];
+        INIT_COLL_LINE(right_wall_start);
         right_wall_start++;
     }
 
     left_wall_count = coll_data->left_wall_count;
     left_wall_start = coll_data->left_wall_start;
     for (; left_wall_count > 0; left_wall_count--) {
-        groundCollLine[left_wall_start].flags =
-            coll_data->lines[left_wall_start].hi_flags | LINE_FLAG_ENABLED;
-        groundCollLine[left_wall_start].x0 =
-            &coll_data->lines[left_wall_start];
+        INIT_COLL_LINE(left_wall_start);
         left_wall_start++;
     }
 
     dynamic_count = coll_data->dynamic_count;
     dynamic_start = coll_data->dynamic_start;
     for (; dynamic_count > 0; dynamic_count--) {
-        groundCollLine[dynamic_start].flags =
-            coll_data->lines[dynamic_start].hi_flags | LINE_FLAG_ENABLED;
-        groundCollLine[dynamic_start].x0 = &coll_data->lines[dynamic_start];
+        INIT_COLL_LINE(dynamic_start);
         dynamic_start++;
     }
+#undef INIT_COLL_LINE
 
     i = 0;
     while (i < coll_data->vert_count) {

@@ -231,7 +231,15 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 
 ## Fighter contact empty-producer cull
 
-- `This commit` **Cull empty fighter contact producers** rejects each attacker inside the canonical
+- `13e26c2d` **Cull empty fighter contact producers** rejects each attacker inside the canonical
   fighter-v-fighter contact owner when all four authored hit capsules are disabled, before team,
   throw, clank, shield, and hurt enumeration. The census removes 76.3% of owner entries; adjacent
   cycle medians improve 0.82% at 512 and 1.05% at 256 with both digests unchanged and no state.
+
+## Canonical embedded stage-line topology
+
+- `This commit` **Embed canonical mutable stage-line topology** replaces each native
+  `CollLine -> MapLine` pointer plus separate copied topology array with one 16-byte embedded owner,
+  aliasing runtime enabled/hidden state into source-unused topology bits. Throughput is neutral;
+  ordinary arena/savestate fall 1,612/1,076 bytes, initialization loses one allocation, and all
+  correctness, API, snapshot, PPC, Wasm, and viewer gates remain green.

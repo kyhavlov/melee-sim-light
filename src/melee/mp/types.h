@@ -59,9 +59,24 @@ struct MapLine {
 };
 
 struct CollLine {
+#ifdef MSL_CORE_NATIVE
+    /* Native owns mutable topology and runtime flags in one source-sized
+     * record. x0 decays to the embedded MapLine; flags aliases hi_flags. */
+    union {
+        /* +0 */ MapLine x0[1];
+        struct {
+            u8 pad[12];
+            /* +C */ u16 flags;
+        };
+    };
+#else
     /* +0 */ MapLine* x0;
     /* +4 */ u32 flags;
+#endif
 };
+#ifdef MSL_CORE_NATIVE
+STATIC_ASSERT(sizeof(struct CollLine) == 0x10);
+#endif
 
 struct mpisland {
     /*  +0 */ int x0[8];

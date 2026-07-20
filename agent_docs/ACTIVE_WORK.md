@@ -1,94 +1,78 @@
-# Active performance packet — fighter contact empty-owner cull
+# Active performance packet — canonical embedded stage-line topology
 
 ## Objective
 
-Delete always-scheduled fighter contact passes when their exact source-owned contact class has no
-live producer or receiver in the bound Match. Preserve the complete authored hitbox/hurtbox,
-shield, reflect, absorb, grab, item, wind, and damage narrow phases whenever a compatible owner is
-present.
+Replace the native per-Match `CollLine -> MapLine` pointer graph and separate copied `MapLine` array
+with one compact canonical mutable line record. Preserve the retail layout on PPC and preserve every
+source adjacency mutation, line id, query order, flag, and transformed vertex owner.
 
 ## Final boundary
 
-- **Final owner:** `Fighter_8006CB94` owns source-order admission to its eight `ftColl` contact
-  classes; each retained cull is expressed from canonical live collision descriptors, not action or
-  character ids.
-- **Canonical state:** fighter/item hitboxes, hurtboxes/BODY state, shield/reflect/absorb/grab
-  descriptors, DmgLog fields, GObj entity lists, and source scheduler order remain the only mutable
-  and save-state-visible combat authority.
-- **Consumers:** hit/no-hit and target selection, shield/reflect/absorb contact, grab/item contact,
-  damage/hitlag/hitstun/knockback, stale queue, callbacks, and source writeback keep the exact source
-  narrow phases and tie order.
-- **Displaced work:** a contact-class pass does not enumerate geometry or targets when its required
-  source producer/receiver set is empty. The final packet may delete multiple empty classes but may
-  not merge their distinct source semantics.
-- **Deletion boundary:** one conservative admission predicate per source contact class adjacent to
-  `Fighter_8006CB94`; admitted cases enter the unmodified source call. There is no generic radius,
-  cached broad-phase state, replay/action/character list, changed ordering, approximation, or
-  replacement combat representation.
+- **Final owner:** native `CollLine` owns its source `MapLine` topology inline with its runtime flags.
+  `mpLibLoad`, empty-line pruning, stage stitching, island construction, and every `mplib` query read
+  and mutate that one record directly.
+- **Canonical state:** one embedded `MapLine` per stage line, with runtime enabled/hidden state in
+  the otherwise unused high bits of its `hi_flags` field. Extracted
+  `MapCollData::lines` is immutable construction input only; mutable Match topology has no second
+  array and no pointer back to it.
+- **Consumers:** the complete `mplib.c`, `mpisland.c`, `mpcoll.c`, stage callbacks, items, fighter
+  collision, copy, and save/restore use the same ids/fields and source ordering.
+- **Displaced state/work:** delete `MslMpLibState::map_lines`, its construction allocation/copy, and
+  the relocatable pointer slot in each native `CollLine`. Source expressions such as
+  `line->x0->v0_idx` decay directly to the inline one-element owner and no longer load a pointer.
+- **Deletion boundary:** every native mutable topology access resolves to the embedded record from
+  construction onward, including `mpPruneEmptyLines` and `mpLib_800581DC`; no synchronized copy,
+  fallback graph, accessor bridge, or partial query cut remains. PPC retains `MapLine* x0` exactly.
 
-## Source and profile evidence
+## Evidence and acceptance
 
-- The corrected 512 profile assigns 2.80% to always-scheduled `Fighter_8006CB94`, 2.21% to
-  `Fighter_ProcessHit_8006D1EC`, and 0.65% to contact publication. `ProcessHit` is mostly idle
-  bookkeeping; detection admission is the cleaner deletion boundary.
-- `Fighter_8006CB94` invokes eight distinct collision owners for every active fighter. Competitive
-  frames commonly have no live grab, reflect/absorb, item-contact, wind, or compatible hit owner,
-  but admission must be read from their real descriptors/lists.
-- The retained wall broad phase proves that conservative empty-set rejection can remove most
-  collision enumeration while leaving exact source narrow phase and order untouched.
-
-## Acceptance
-
-- Attribute exclusive cost and call population first, then add only source-backed predicates whose
-  empty/entered census shows material work deletion. Temporary instrumentation must be removed.
-- Both digests and the complete replay/API/copy/save-restore/allocation/PPC/Wasm/viewer gates remain
-  unchanged. No new Match/shared state, gameplay allocation, or widened validation classification.
-- Retain only a repeatable whole-frame gain at resident 512 and 256; reject predicates that merely
-  move scans or add hot admission cost.
+- Native currently stores a 16-byte `CollLine` plus a separate 16-byte `MapLine` per stage line;
+  the former contains an 8-byte pointer to the latter. The final compact record remains 16 bytes
+  by aliasing runtime flags into source-unused `hi_flags` bits, removing 16 bytes per line plus the
+  separate allocation/relocation graph.
+- `mplib.c` contains hundreds of source topology dereferences throughout the 12.99% current fighter
+  stage-collision owner. The embedded one-element representation preserves source syntax while
+  letting optimized native code address fields directly.
+- Both production digests and complete replay/API/copy/save-restore/allocation/PPC/Wasm/viewer gates
+  must remain unchanged. Retain only a repeatable throughput or material memory gain at 512/256.
 
 ## Log
 
 - 2026-07-19 — `open`
-  Scope: the eight contact-class calls inside `Fighter_8006CB94`.
-  Hypothesis: one or more uncommon contact classes still enumerate empty producer/receiver sets on
-  most of the 166,272 scheduled fighter visits.
-  Evidence: the enclosing owner is 2.80% of the complete contract, but current profiling does not
-  separate its source calls or empty-set population.
-  Disposition: use opt-in exclusive function attribution plus source descriptor census; do not alter
-  production scheduling until a specific class and predicate are proven.
-  Next: instrument `ftcoll.c` under the diagnostic build, resolve exclusive cycles/calls for all
-  eight entries, then inspect the dominant source owner's real producer/receiver authority.
-
-- 2026-07-19 — `open`
-  Scope: exclusive `ftcoll.c` attribution for the priority-13 contact owner.
-  Hypothesis: a specific empty producer scan dominates the enclosing callback.
-  Evidence: `ftColl_80078C70` alone accounts for 143.2M exclusive diagnostic cycles (3.40% of the
-  instrumented contract) across 143,822 entries. The next priority-13 class is
-  `ftColl_8007925C` at 23.9M (0.57%). `ftColl_80078C70` enumerates every fighter's four authored
-  hit capsules before any hit/shield/hurt/clank path can proceed.
-  Disposition: remove the function instrumentation and add one conservative live-producer scan at
-  this exact owner. Do not touch the seven minor contact classes in this packet.
-  Next: return immediately when every fighter hit capsule is disabled, preserve the complete source
-  body otherwise, then measure exact 512/256 output.
+  Scope: `CollLine`, native `MslMpLibState`, `mpLibLoad`, and native empty-line pruning; downstream
+  source users retain their current expressions and semantics.
+  Hypothesis: deleting the mutable pointer graph improves collision locality and reduces resident
+  Match state without a query-time admission branch.
+  Evidence: post-load runtime only accesses mutable topology through `groundCollLine[].x0`; the
+  separate `MapCollData::lines` copy exists solely to provide those pointees.
+  Disposition: make native `x0` an inline one-element `MapLine`, copy construction input once into
+  that owner, prune it in place, remove the old allocation, then checkpoint digest/size/512 early.
+  Next: complete the singular construction cut and inspect generated relocation layout and symbols.
 
 - 2026-07-19 — `retained`
-  Scope: per-attacker empty hit-capsule admission inside `ftColl_80078C70`.
-  Hypothesis: rejecting an attacker before team/throw/clank/hurt enumeration avoids the dominant
-  empty source path without rescanning the whole Match on active frames.
-  Evidence: the census finds 109,740 of 143,822 owner entries (76.3%) have no live fighter hit
-  capsule. Three adjacent 512 control/candidate medians are 44,873.7/44,505.4 cycles per frame
-  (-0.82%); two 256 medians are 42,247.1/41,804.5 (-1.05%). Both digests remain exact.
-  Disposition: retain the local producer admission. The rejected Match-wide prescan duplicated cold
-  state loads and regressed; the final per-attacker cut reads the same four source states immediately
-  before the source would enumerate them and adds no state.
-  Next: run the full material gate, record memory/source evidence, and commit atomically if green.
+  Scope: complete native construction, topology mutation, query, relocation, copy, and snapshot
+  boundary for supported stage lines.
+  Hypothesis: the final 16-byte alias layout can delete the pointer and duplicate record without the
+  20-byte candidate's locality regression.
+  Evidence: all supported extracted stages use only `hi_flags` values 0, 1, 2, 4, 8, and 17, leaving
+  bits 14/15 for native enabled/hidden state. Both production digests are exact. Adjacent 512
+  measurements are throughput-neutral; two 256 pairs move from 41,982.1/41,880.0 control to
+  41,953.7/41,752.1 candidate cycles per frame. Ordinary arena/allocation state falls from
+  633,432 bytes/825 allocations to 631,820 bytes/824 allocations; ordinary savestate falls from
+  695,048 to 693,972 bytes, and maximum reached arena falls from 961,900 to 960,000 bytes.
+  Disposition: retain the singular embedded owner as a measured state/allocation deletion, making
+  no throughput claim. The initial 20-byte layout was exact but slower and has been displaced.
+  Next: run the complete replay/API/copy/save-restore/allocation/PPC/Wasm/viewer gate, then record
+  and commit atomically if green.
 
 - 2026-07-19 — `retained`
-  Scope: complete material correctness/build/state gate.
-  Hypothesis: the local disabled-producer predicate must preserve every live combat path and all
-  platform/API contracts.
-  Evidence: debug and release validation remain 63 PASS / 90 unchanged CLASSIFIED across 1,415,476
-  frames. Native API/copy/save-restore/allocation, PPC, Wasm parity, viewer/browser, Python tests,
-  source sync, and formatting are green; Match/shared memory are unchanged.
+  Scope: complete material gate for the embedded topology owner.
+  Hypothesis: aliasing native runtime bits into source-unused topology bits must remain transparent
+  to all stage, snapshot, build, and browser consumers.
+  Evidence: debug and optimized-release validation remain 63 PASS / 90 unchanged CLASSIFIED / zero
+  XPASS/fail/error across 1,415,476 frames. Source/API/copy/save-restore and sealed allocation,
+  maximum construction, PPC, Wasm parity, viewer/browser, Python, source-sync, and formatting gates
+  are green.
   Disposition: packet complete and ready for its atomic implementation/evidence commit.
-  Next: commit, notify the retained win, then profile/select the next bounded owner.
+  Next: commit and notify the retained state deletion, then refresh the profile and select the next
+  bounded high-impact final owner.
