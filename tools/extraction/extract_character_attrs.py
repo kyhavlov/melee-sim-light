@@ -1834,7 +1834,7 @@ def main() -> None:
     }
     mapping.update({
         "peach": ("PlPe.dat", "ftDataPeach", False, None),
-        "puff": ("PlPr.dat", "ftDataPurin", False, None),
+        "puff": ("PlPr.dat", "ftDataPurin", False, "purin_special"),
     })
     want = [c.strip() for c in args.chars.split(",") if c.strip()]
     for c in want:
