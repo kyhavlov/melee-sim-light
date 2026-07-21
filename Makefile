@@ -716,7 +716,7 @@ validation-release-supported-domain: validator native-release
 		--suite replays/suites/melee_core_aggregate.json --backend native \
 		--workers "$(VALIDATION_WORKERS)" --no-build
 
-test: source-check native-smoke python-library validator
+test: source-check native-smoke python-library validator native ppc
 	@"$(PY)" -m pytest -q
 
 test-full: test ppc-smoke validation-supported-domain validation-release-supported-domain viewer-smoke

@@ -197,7 +197,11 @@ void HSD_JObjMakeMatrix(HSD_JObj* jobj)
         HSD_MtxSRT(jobj->mtx, &jobj->scale, (Vec3*) &jobj->rotate,
                    &jobj->translate, NULL);
     }
+#ifdef MSL_CORE_NATIVE
     if (jobj->parent != NULL && (jobj->flags & 0x20000)) {
+#else
+    if (jobj->parent != NULL) {
+#endif
         PSMTXConcat(jobj->parent->mtx, jobj->mtx, jobj->mtx);
     }
 #ifdef MSL_CORE_NATIVE
