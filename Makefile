@@ -206,7 +206,11 @@ CFLAGS := \
 	-O0 -g -std=gnu11 -fgnu89-inline -fno-short-enums \
 	-fno-strict-aliasing -ffp-contract=off -ffunction-sections \
 	-fdata-sections -w
-NATIVE_CFLAGS = $(CFLAGS) -fno-pie
+# GCC 14+ promotes several legacy-C constructs (implicit-function-declaration,
+# int-conversion, incompatible-pointer-types, return-mismatch, ...) to default
+# errors. -fpermissive downgrades that whole family back to warnings so the
+# decomp sources build on modern host compilers. (-w still hides the warnings.)
+NATIVE_CFLAGS = $(CFLAGS) -fno-pie -fpermissive
 NATIVE_LINK_FLAGS ?=
 # Native release uses a strict O1 source profile by default. The audited lists
 # below preserve lower exactness profiles or admit stronger measured owners.
