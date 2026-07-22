@@ -237,6 +237,11 @@ class EnvBatch:
 
     def reset_cursor(self) -> None:
         self._check_bound()
+        # Carry the current observation to slot 0 so that reads of the current
+        # frame (and masked resets, which only overwrite selected rows) see
+        # up-to-date data for every match after the cursor wraps.
+        if self.t > 0:
+            np.copyto(self.buffers.gamestate[0], self.buffers.gamestate[self.t])
         self.t = 0
 
     def step(self) -> None:
