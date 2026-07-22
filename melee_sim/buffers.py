@@ -27,7 +27,6 @@ class Buffers:
     obs: np.ndarray
     reward: np.ndarray
     done: np.ndarray
-    reset_mask: np.ndarray
 
     @classmethod
     def empty(
@@ -75,7 +74,6 @@ class Buffers:
             obs=np.zeros((length + 1, batch_size, int(obs_dim)), dtype=np.float32),
             reward=np.zeros((length, batch_size), dtype=np.float32),
             done=dtypes.view_raw_sequence(terminal, dtypes.terminal_dtype())["done"],
-            reset_mask=np.zeros((length, batch_size), dtype=np.uint8),
         )
 
     @property
