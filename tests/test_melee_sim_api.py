@@ -83,3 +83,33 @@ def test_match_config_preserves_per_environment_values(monkeypatch) -> None:
             config[1]["players"]["character"][:2],
             [msl.Character.PEACH, msl.Character.JIGGLYPUFF],
         )
+
+
+def test_reset_cursor_carries_current_frame(monkeypatch) -> None:
+    # Regression test: reset_cursor used to only rewind the ring index, so a
+    # masked reset right after the wrap exposed stale slot-0 rows (from
+    # reset_all) for every non-reset match.
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=2, length=4) as env:
+        neutral = msl.neutral_controller((env.length, env.batch_size))
+        msl.write_controller(env.controller_action_view, neutral, player=0)
+        msl.write_controller(env.controller_action_view, neutral, player=1)
+
+        env.reset_all()
+        for _ in range(env.length):
+            env.step()
+        assert env.t == env.length
+        before = env.current_frame.copy()
+        assert np.all(before["frame_id"] == -123 + env.length)
+
+        env.reset_cursor()
+        assert env.t == 0
+        assert env.current_frame.tobytes() == before.tobytes()
+
+        # A masked reset after the wrap must only touch the selected rows.
+        mask = env.current_reset_mask
+        mask[:] = 0
+        mask[0] = 1
+        env.reset_masked()
+        assert env.current_frame[0]["frame_id"] == -123
+        assert env.current_frame[1].tobytes() == before[1].tobytes()
