@@ -27,6 +27,9 @@ class EnvBatch:
         "_input_storage",
         "_bound",
         "_closed",
+        "_reset_mask_scratch",
+        "_final_states",
+        "_final_states_view",
     )
 
     def __init__(
@@ -54,6 +57,11 @@ class EnvBatch:
         self._input_storage = dtypes.raw_buffer(self.batch_size, "input")
         self._bound: Buffers | None = None
         self._closed = False
+        self._reset_mask_scratch = np.zeros(self.batch_size, dtype=np.uint8)
+        self._final_states = dtypes.raw_sequence_buffer(1, self.batch_size, "gamestate")
+        self._final_states_view = dtypes.view_raw_sequence(
+            self._final_states, dtypes.gamestate_dtype()
+        )[0]
 
         lib = _native.library()
         _native.check(
@@ -138,9 +146,13 @@ class EnvBatch:
         return self.action_view[self.t]
 
     @property
-    def current_reset_mask(self) -> np.ndarray:
-        self._check_step_index(self.t)
-        return self.buffers.reset_mask[self.t]
+    def final_gamestate_view(self) -> np.ndarray:
+        """Final pre-reset gamestate rows preserved by ``step_and_reset``.
+
+        Only rows flagged done on the most recent auto-resetting step are
+        valid; other rows hold stale data.
+        """
+        return self._final_states_view
 
     def done_at(self, t: int) -> np.ndarray:
         return self.buffers.done[self._check_step_index(t)]
@@ -221,16 +233,28 @@ class EnvBatch:
         )
         self.t = 0
 
-    def reset_masked(self) -> None:
+    def reset_matches(self, env_ids: Sequence[int] | np.ndarray) -> None:
+        """Reset the selected matches in place.
+
+        Patches only the selected rows of the current gamestate frame; the
+        other matches and their published observations are untouched. Valid at
+        any cursor position, including the final ring slot.
+        """
         self._check_bound()
-        frame = self._check_step_index(self.t)
-        mask = self.buffers.reset_mask[frame]
+        ids = np.asarray(env_ids, dtype=np.int64).reshape(-1)
+        if ids.size == 0:
+            return
+        if np.any(ids < 0) or np.any(ids >= self.batch_size):
+            raise ValueError("env_ids contains an out-of-range match index")
+        mask = self._reset_mask_scratch
+        mask[:] = 0
+        mask[ids] = 1
         _native.check(
             _native.library().msl_batch_reset(
                 self._handle,
                 _native.pointer(self.buffers.match_config),
                 _native.pointer(mask),
-                _native.pointer(self.buffers.gamestate[frame]),
+                _native.pointer(self.buffers.gamestate[self.t]),
             ),
             "reset selected matches",
         )
@@ -243,6 +267,34 @@ class EnvBatch:
         if self.t > 0:
             np.copyto(self.buffers.gamestate[0], self.buffers.gamestate[self.t])
         self.t = 0
+
+    def begin_step(self) -> np.ndarray:
+        """Ensure ring room for the next step and return its action frame.
+
+        Wraps the cursor (carrying the current observation to slot 0) when the
+        ring is exhausted, so callers never index past the per-step buffers.
+        """
+        self._check_bound()
+        if self.t >= self.length:
+            self.reset_cursor()
+        return self.action_view[self.t]
+
+    def step_and_reset(self) -> np.ndarray:
+        """Step all matches, then reset any that finished.
+
+        Finished matches' final gamestate rows are preserved in
+        ``final_gamestate_view`` before being replaced with their fresh
+        post-reset observations, so the current frame stays valid for every
+        match. Returns the done mask for the step just taken.
+        """
+        step_t = self.t
+        self.step()
+        done = self.buffers.done[step_t]
+        ids = np.flatnonzero(done)
+        if ids.size:
+            self._final_states[0][ids] = self.buffers.gamestate[self.t][ids]
+            self.reset_matches(ids)
+        return done
 
     def step(self) -> None:
         frame = self._check_step_index(self.t)

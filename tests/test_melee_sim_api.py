@@ -102,14 +102,38 @@ def test_reset_cursor_carries_current_frame(monkeypatch) -> None:
         before = env.current_frame.copy()
         assert np.all(before["frame_id"] == -123 + env.length)
 
-        env.reset_cursor()
-        assert env.t == 0
-        assert env.current_frame.tobytes() == before.tobytes()
-
-        # A masked reset after the wrap must only touch the selected rows.
-        mask = env.current_reset_mask
-        mask[:] = 0
-        mask[0] = 1
-        env.reset_masked()
+        # A partial reset is valid even on the final ring slot and must only
+        # touch the selected row.
+        env.reset_matches([0])
         assert env.current_frame[0]["frame_id"] == -123
         assert env.current_frame[1].tobytes() == before[1].tobytes()
+
+        patched = env.current_frame.copy()
+        env.reset_cursor()
+        assert env.t == 0
+        assert env.current_frame.tobytes() == patched.tobytes()
+
+
+def test_step_and_reset_auto_resets_finished_matches(monkeypatch) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=2, length=4) as env:
+        neutral = msl.neutral_controller((env.length, env.batch_size))
+        msl.write_controller(env.controller_action_view, neutral, player=0)
+        msl.write_controller(env.controller_action_view, neutral, player=1)
+        env.configure_matches(
+            [
+                msl.MatchConfig(max_frame=0),
+                msl.MatchConfig(),
+            ]
+        )
+        env.reset_all()
+
+        # Match 0 hits max_frame after 123 steps (frame_id counts up from
+        # -123); the ring wraps many times along the way.
+        for _ in range(123):
+            env.begin_step()
+            done = env.step_and_reset()
+        assert done.tolist() == [1, 0]
+        assert env.final_gamestate_view[0]["frame_id"] == 0
+        assert env.current_frame[0]["frame_id"] == -123
+        assert env.current_frame[1]["frame_id"] == 0
