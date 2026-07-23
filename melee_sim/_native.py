@@ -53,6 +53,8 @@ def library() -> ctypes.CDLL:
     lib.msl_batch_reset.restype = ctypes.c_int
     lib.msl_batch_step.argtypes = [pointer, pointer, pointer, pointer]
     lib.msl_batch_step.restype = ctypes.c_int
+    lib.msl_batch_step_masked.argtypes = [pointer, pointer, pointer, pointer, pointer]
+    lib.msl_batch_step_masked.restype = ctypes.c_int
     lib.msl_batch_observe.argtypes = [pointer, pointer, pointer]
     lib.msl_batch_observe.restype = ctypes.c_int
     lib.msl_batch_copy.argtypes = [pointer, pointer, pointer, pointer, u32]

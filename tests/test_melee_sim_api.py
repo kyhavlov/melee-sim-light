@@ -114,7 +114,7 @@ def test_reset_cursor_carries_current_frame(monkeypatch) -> None:
         assert env.current_frame.tobytes() == patched.tobytes()
 
 
-def test_step_and_reset_auto_resets_finished_matches(monkeypatch) -> None:
+def test_step_and_reset_defers_resets_one_step(monkeypatch) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
     with msl.EnvBatch(batch_size=2, length=4) as env:
         neutral = msl.neutral_controller((env.length, env.batch_size))
@@ -132,8 +132,33 @@ def test_step_and_reset_auto_resets_finished_matches(monkeypatch) -> None:
         # -123); the ring wraps many times along the way.
         for _ in range(123):
             env.begin_step()
-            done = env.step_and_reset()
+            is_resetting, done = env.step_and_reset()
+        # The terminal frame itself is published before any reset happens.
+        assert not is_resetting.any()
         assert done.tolist() == [1, 0]
-        assert env.final_gamestate_view[0]["frame_id"] == 0
-        assert env.current_frame[0]["frame_id"] == -123
+        assert env.current_frame[0]["frame_id"] == 0
         assert env.current_frame[1]["frame_id"] == 0
+
+        # The following call resets match 0 (ignoring its queued action) and
+        # publishes its entry frame while match 1 steps normally.
+        env.begin_step()
+        is_resetting, done = env.step_and_reset()
+        assert is_resetting.tolist() == [True, False]
+        assert done.tolist() == [0, 0]
+        assert env.current_frame[0]["frame_id"] == -123
+        assert env.current_frame[1]["frame_id"] == 1
+
+
+def test_masked_step_republishes_unstepped_matches(monkeypatch) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=2, length=4) as env:
+        neutral = msl.neutral_controller((env.length, env.batch_size))
+        msl.write_controller(env.controller_action_view, neutral, player=0)
+        msl.write_controller(env.controller_action_view, neutral, player=1)
+        env.reset_all()
+        env.step()
+        before = env.current_frame.copy()
+
+        env.step(np.array([1, 0], dtype=np.uint8))
+        assert env.current_frame[0]["frame_id"] == before[0]["frame_id"] + 1
+        assert env.current_frame[1].tobytes() == before[1].tobytes()

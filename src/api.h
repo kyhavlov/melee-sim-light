@@ -225,6 +225,12 @@ MSL_API MslResult msl_batch_reset(MslBatch* batch, const MslMatchConfig configs[
                                   const uint8_t reset_mask[], MslObservation observations[]);
 MSL_API MslResult msl_batch_step(MslBatch* batch, const MslInput inputs[],
                                  MslObservation observations[], MslTerminal terminals[]);
+// A NULL step mask steps every environment; otherwise nonzero bytes select.
+// Every environment is observed regardless of the mask, so unstepped matches
+// republish their current state (e.g. a fresh post-reset entry frame).
+MSL_API MslResult msl_batch_step_masked(MslBatch* batch, const MslInput inputs[],
+                                        const uint8_t step_mask[],
+                                        MslObservation observations[], MslTerminal terminals[]);
 MSL_API MslResult msl_batch_observe(const MslBatch* batch, MslObservation observations[],
                                     MslTerminal terminals[]);
 
