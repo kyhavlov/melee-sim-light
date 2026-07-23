@@ -290,17 +290,23 @@ MslResult msl_batch_observe(const MslBatch* batch, MslObservation observations[]
                                                       sizeof(batch->max_frames[0]), NULL, 0));
 }
 
-MslResult msl_batch_step(MslBatch* batch, const MslInput inputs[], MslObservation observations[],
-                         MslTerminal terminals[]) {
+MslResult msl_batch_step_masked(MslBatch* batch, const MslInput inputs[],
+                                const uint8_t step_mask[], MslObservation observations[],
+                                MslTerminal terminals[]) {
   MslCoreResult result;
   if (batch == NULL || inputs == NULL || observations == NULL || terminals == NULL) {
     return MSL_INVALID_ARGUMENT;
   }
   translate_inputs(batch, inputs);
-  result =
-      msl_core_batch_step_matches(batch->runtime, batch->inputs, sizeof(batch->inputs[0]), NULL, 0);
+  result = msl_core_batch_step_matches(batch->runtime, batch->inputs, sizeof(batch->inputs[0]),
+                                       step_mask, step_mask != NULL ? sizeof(step_mask[0]) : 0);
   return result == MSL_CORE_OK ? msl_batch_observe(batch, observations, terminals)
                                : public_result(result);
+}
+
+MslResult msl_batch_step(MslBatch* batch, const MslInput inputs[], MslObservation observations[],
+                         MslTerminal terminals[]) {
+  return msl_batch_step_masked(batch, inputs, NULL, observations, terminals);
 }
 
 MslResult msl_batch_copy(MslBatch* destination, const MslBatch* source,
