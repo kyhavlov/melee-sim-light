@@ -26,7 +26,17 @@ class DiscFile:
     size: int
 
 
-PLAYER_PREFIXES = ("PlFx", "PlFc", "PlMs", "PlCa", "PlSk", "PlZd", "PlPr", "PlPe")
+PLAYER_PREFIXES = (
+    "PlFx",
+    "PlFc",
+    "PlMs",
+    "PlCa",
+    "PlSk",
+    "PlZd",
+    "PlPr",
+    "PlPe",
+    "PlLg",
+)
 REQUIRED_FILES = {
     "PlCo.dat",
     "PdPm.dat",
@@ -39,6 +49,7 @@ REQUIRED_FILES = {
     "EfPeData.dat",
     "EfPrData.dat",
     "EfZdData.dat",
+    "EfLgData.dat",
     "GrNLa.dat",
     "GrNBa.dat",
     "GrIz.dat",

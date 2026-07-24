@@ -12,6 +12,11 @@
 #include <stdint.h>
 #ifndef MSL_CORE_WASM
 #include <sys/mman.h>
+// Linux uses one generic value on every architecture; glibc only exposes it
+// under _GNU_SOURCE.
+#ifndef MAP_FIXED_NOREPLACE
+#define MAP_FIXED_NOREPLACE 0x100000
+#endif
 #endif
 #endif
 
@@ -89,6 +94,29 @@ int msl_memory_context_init(MslMemoryContext* context, MslMemoryOwner owner)
             flags |= MAP_32BIT;
         }
         mapping = mmap(NULL, capacity, PROT_READ | PROT_WRITE, flags, -1, 0);
+        if (owner == MSL_MEMORY_GAME_DATA &&
+            (mapping == MAP_FAILED || (uintptr_t) mapping > UINT32_MAX))
+        {
+            // MAP_32BIT is x86-64-only; non-x86 kernels (e.g. Docker on an
+            // arm64 host running amd64 user space) ignore or reject it. Scan
+            // fixed low hints above the native DAT arena window instead, the
+            // same low-address strategy native_alloc uses for DAT graphs.
+            uintptr_t hint;
+            if (mapping != MAP_FAILED) {
+                munmap(mapping, capacity);
+                mapping = MAP_FAILED;
+            }
+            for (hint = 0x60000000u;
+                 hint + capacity <= UINT32_MAX && mapping == MAP_FAILED;
+                 hint += 0x04000000u)
+            {
+                mapping = mmap((void*) hint, capacity,
+                               PROT_READ | PROT_WRITE,
+                               MAP_PRIVATE | MAP_ANONYMOUS |
+                                   MAP_FIXED_NOREPLACE,
+                               -1, 0);
+            }
+        }
         if (mapping == MAP_FAILED ||
             (owner == MSL_MEMORY_GAME_DATA &&
              (uintptr_t) mapping > UINT32_MAX))

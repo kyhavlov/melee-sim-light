@@ -191,8 +191,9 @@ int main(int argc, char** argv)
     static const FighterSpec fighters[] = {
         { FTKIND_FOX, 1, "Fox" },       { FTKIND_CAPTAIN, 2, "Falcon" },
         { FTKIND_SEAK, 7, "Sheik" },    { FTKIND_PEACH, 9, "Peach" },
-        { FTKIND_PURIN, 15, "Puff" },   { FTKIND_MARS, 18, "Marth" },
-        { FTKIND_ZELDA, 19, "Zelda" },  { FTKIND_FALCO, 22, "Falco" },
+        { FTKIND_PURIN, 15, "Puff" },   { FTKIND_LUIGI, 17, "Luigi" },
+        { FTKIND_MARS, 18, "Marth" },   { FTKIND_ZELDA, 19, "Zelda" },
+        { FTKIND_FALCO, 22, "Falco" },
     };
     MslCoreInput previous_input = { 0 };
     int match_initialized = 0;

@@ -317,7 +317,7 @@
       "expected": {
         "native": {
           "frames": 7934,
-          "actual_output_fingerprint": "bf319be0f5ee21d8"
+          "actual_output_fingerprint": "cc1b22da26e33884"
         }
       }
     },
@@ -353,7 +353,7 @@
       "expected": {
         "native": {
           "frames": 9232,
-          "actual_output_fingerprint": "243bec26104a62e1"
+          "actual_output_fingerprint": "192703ebe13bd72d"
         }
       }
     },
@@ -452,7 +452,7 @@
       "expected": {
         "native": {
           "frames": 11776,
-          "actual_output_fingerprint": "a4fb02bca2ca60d9"
+          "actual_output_fingerprint": "a4db9e63e11bfc41"
         }
       }
     },
@@ -1001,7 +1001,7 @@
       "expected": {
         "native": {
           "frames": 10417,
-          "actual_output_fingerprint": "1534badd5b1b0245"
+          "actual_output_fingerprint": "179956b2cdb588c5"
         }
       }
     },
@@ -1010,7 +1010,7 @@
       "expected": {
         "native": {
           "frames": 2128,
-          "actual_output_fingerprint": "6b7bfa1e004eb755"
+          "actual_output_fingerprint": "6e36febc1e102355"
         }
       }
     },
@@ -1019,7 +1019,7 @@
       "expected": {
         "native": {
           "frames": 5153,
-          "actual_output_fingerprint": "7e8c09cb8c9013df"
+          "actual_output_fingerprint": "fdee939dc53e68df"
         }
       }
     },
@@ -1028,7 +1028,7 @@
       "expected": {
         "native": {
           "frames": 8804,
-          "actual_output_fingerprint": "a1dff336a44b53f9"
+          "actual_output_fingerprint": "68f087d2cbcbe879"
         }
       }
     },
@@ -1037,7 +1037,7 @@
       "expected": {
         "native": {
           "frames": 16556,
-          "actual_output_fingerprint": "9334f7504ec04f6c"
+          "actual_output_fingerprint": "c091e65d555a5bac"
         }
       }
     },
@@ -1055,7 +1055,7 @@
       "expected": {
         "native": {
           "frames": 12141,
-          "actual_output_fingerprint": "0d0880593b85b5d0"
+          "actual_output_fingerprint": "18bc00f51b174470"
         }
       }
     },
@@ -1064,7 +1064,7 @@
       "expected": {
         "native": {
           "frames": 11267,
-          "actual_output_fingerprint": "295ff653ec6a7754"
+          "actual_output_fingerprint": "7bdf7768502cbcd4"
         }
       }
     },

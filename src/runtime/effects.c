@@ -155,6 +155,7 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     data->recording_common_model = -1;
     msl_effect_load_bank(data, 0, "/EfCoData.dat", "effCommonDataTable");
     msl_effect_load_bank(data, 3, "/EfFxData.dat", "effFoxDataTable");
+    msl_effect_load_bank(data, 18, "/EfLgData.dat", "effLuigiDataTable");
     // efLib_Create queues each common model's frame-zero animation, and both
     // efAsync_Dispatch and efSync_Spawn drain that queue before returning.
     // Record its data-defined DPtcl generator events once while allocation is
@@ -424,6 +425,11 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
         case 0x503: msl_effect_consume_generator_rng(0x6A); break;
         case 0x504: msl_effect_consume_generator_rng(0x6D); break;
         case 0x505: msl_effect_consume_generator_rng(0x79); break;
+        // Luigi fireball spawn pairs a model effect with generator 0x4650;
+        // the fizzle-out is generator 0x4652 alone. The cyclone (0x509) is
+        // model-backed only. refs/melee/src/melee/ef/efsync.c
+        case 0x507: msl_effect_consume_generator_rng(0x4650); break;
+        case 0x508: msl_effect_consume_generator_rng(0x4652); break;
         case 0x50A: msl_effect_consume_generator_rng(0x5F); break;
         }
     }

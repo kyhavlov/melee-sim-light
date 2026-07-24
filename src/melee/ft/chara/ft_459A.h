@@ -21,6 +21,7 @@ UnkCostumeStruct* msl_core_fighter_costumes(FighterKind kind);
 #define ft_8045A0F0 (*msl_core_fighter_costumes(FTKIND_MARS))
 #define ft_8045A168 (*msl_core_fighter_costumes(FTKIND_ZELDA))
 #define ft_8045A1F8 (*msl_core_fighter_costumes(FTKIND_PURIN))
+#define ft_8045A270 (*msl_core_fighter_costumes(FTKIND_LUIGI))
 #define ft_8045A420 (*msl_core_fighter_costumes(FTKIND_FALCO))
 #else
 /* 459A98 */ extern UnkCostumeStruct ft_80459A98;

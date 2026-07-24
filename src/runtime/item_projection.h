@@ -27,6 +27,7 @@ enum {
     MSL_CORE_ITEM_KIND_PEACH_TURNIP = 99,
     MSL_CORE_ITEM_KIND_PEACH_PARASOL = 103,
     MSL_CORE_ITEM_KIND_PEACH_TOAD = 104,
+    MSL_CORE_ITEM_KIND_LUIGI_FIREBALL = 105,
     MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE = 108,
     MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE = 109,
     MSL_CORE_ITEM_KIND_PEACH_TOAD_SPORE = 111,
@@ -95,6 +96,11 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // Only xDDB is uniformly gameplay-owned for all turnip variants.
         // refs/melee/src/melee/it/items/itpeachturnip.c::it_802BD4AC
         return MSL_CORE_ITEM_MISC1;
+    case MSL_CORE_ITEM_KIND_LUIGI_FIREBALL:
+        // The fireball declares no item-variable payload; every sampled
+        // lane is fixed-pool residue.
+        // refs/melee/src/melee/it/items/itluigifireball.c
+        return 0;
     case MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE:
         // Its first source word is explicitly uninitialized padding.
         // refs/melee/src/melee/it/items/itzeldadinfire.c::it_802C1590

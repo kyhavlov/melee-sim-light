@@ -9,6 +9,7 @@
 #include "ef/types.h"
 #include "ft/chara/ftCaptain/types.h"
 #include "ft/chara/ftFox/types.h"
+#include "ft/chara/ftLuigi/types.h"
 #include "ft/chara/ftMars/types.h"
 #include "ft/chara/ftPeach/types.h"
 #include "ft/chara/ftPurin/types.h"
@@ -134,6 +135,11 @@ typedef struct MslDatSheikArticles {
 } MslDatSheikArticles;
 typedef Article* MslDatPeachArticles[5];
 typedef Article* MslDatZeldaArticles[2];
+// PlLg.dat's ftData.x48_items holds the single fireball article registered by
+// ftLg_Init_OnLoad and spawned by ftLg_SpecialN via it_802C01AC.
+// refs/melee/src/melee/ft/chara/ftLuigi/ftLg_Init.c
+// refs/melee/src/melee/it/items/itluigifireball.c
+typedef Article* MslDatLuigiArticles[1];
 // ItCo.dat's public x4 table owns the 43 common-item Article graphs. Peach's
 // SpecialLw can reach BombHei, Dosei, and Sword even when stage items are off.
 // refs/melee/src/melee/it/iteffect.c::it_802787B4
@@ -211,6 +217,7 @@ void* msl_native_dat_type_roots[] = {
     (MslDatSheikArticles*) 0,
     (MslDatPeachArticles*) 0,
     (MslDatZeldaArticles*) 0,
+    (MslDatLuigiArticles*) 0,
     (MslDatCommonItemArticles*) 0,
     (itBombHeiAttributes*) 0,
     (itDoseiAttributes*) 0,
@@ -223,6 +230,7 @@ void* msl_native_dat_type_roots[] = {
     (MarsAttributes*) 0,
     (ftPe_DatAttrs*) 0,
     (ftPurinAttributes*) 0,
+    (ftLuigiAttributes*) 0,
     (ftSeakAttributes*) 0,
     (ftZelda_DatAttrs*) 0,
     (FoxLaserAttr*) 0,
@@ -234,6 +242,7 @@ void* msl_native_dat_type_roots[] = {
     (itPeachToadSporeAttributes*) 0,
     (MslDatZeldaDinFireAttrs*) 0,
     (itZeldaDinFireExplodeAttributes*) 0,
+    (itUnkAttributes*) 0,
     (struct Fighter_804D6518_t*) 0,
     (struct Fighter_804D651C_t*) 0,
     (struct Fighter_804D6520_t*) 0,

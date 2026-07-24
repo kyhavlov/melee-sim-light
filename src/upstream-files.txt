@@ -429,10 +429,15 @@ src/melee/ft/chara/ftLink/ftLk_SpecialN.h
 src/melee/ft/chara/ftLink/ftLk_SpecialS.h
 src/melee/ft/chara/ftLink/types.h
 src/melee/ft/chara/ftLuigi/forward.h
+src/melee/ft/chara/ftLuigi/ftLg_Init.c
 src/melee/ft/chara/ftLuigi/ftLg_Init.h
+src/melee/ft/chara/ftLuigi/ftLg_SpecialHi.c
 src/melee/ft/chara/ftLuigi/ftLg_SpecialHi.h
+src/melee/ft/chara/ftLuigi/ftLg_SpecialLw.c
 src/melee/ft/chara/ftLuigi/ftLg_SpecialLw.h
+src/melee/ft/chara/ftLuigi/ftLg_SpecialN.c
 src/melee/ft/chara/ftLuigi/ftLg_SpecialN.h
+src/melee/ft/chara/ftLuigi/ftLg_SpecialS.c
 src/melee/ft/chara/ftLuigi/ftLg_SpecialS.h
 src/melee/ft/chara/ftLuigi/types.h
 src/melee/ft/chara/ftMario/forward.h
@@ -582,6 +587,10 @@ src/melee/ft/forward.h
 src/melee/ft/ftCo_800C703C.c
 src/melee/ft/ftCo_800C703C.h
 src/melee/ft/ftCo_800C7070.h
+src/melee/ft/ftCo_800C70D0.c
+src/melee/ft/ftCo_800C70D0.h
+src/melee/ft/ftCo_800C7178.c
+src/melee/ft/ftCo_800C7178.h
 src/melee/ft/ftCo_800C7434.c
 src/melee/ft/ftCo_800C7434.h
 src/melee/ft/ftCo_800C7590.c
@@ -820,6 +829,8 @@ src/melee/it/items/itlikelike.h
 src/melee/it/items/itlinkbomb.h
 src/melee/it/items/itlinkhookshot.c
 src/melee/it/items/itlinkhookshot.h
+src/melee/it/items/itluigifireball.c
+src/melee/it/items/itluigifireball.h
 src/melee/it/items/itmarumine.h
 src/melee/it/items/itmsbomb.h
 src/melee/it/items/itnessbat.h

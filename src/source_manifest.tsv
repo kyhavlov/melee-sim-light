@@ -152,6 +152,13 @@ src/melee/ft/chara/ftPurin/ftPr_SpecialHi.c	src/melee/ft/chara/ftPurin/ftPr_Spec
 src/melee/ft/chara/ftPurin/ftPr_SpecialLw.c	src/melee/ft/chara/ftPurin/ftPr_SpecialLw.c	Matching	puff-source-packet	compiled canonical Jigglypuff down-special and Rest owner
 src/melee/ft/chara/ftPurin/ftPr_SpecialN.c	src/melee/ft/chara/ftPurin/ftPr_SpecialN.c	Matching	puff-source-packet+hosted-signf-include	compiled canonical Jigglypuff Rollout owner with hosted math declaration portability
 src/melee/ft/chara/ftPurin/ftPr_SpecialS.c	src/melee/ft/chara/ftPurin/ftPr_SpecialS.c	Matching	puff-source-packet	compiled canonical Jigglypuff Pound owner
+src/melee/ft/ftCo_800C70D0.c	src/melee/ft/ftCo_800C70D0.c	Matching	luigi-source-packet	compiled canonical Mario-family RunBrake floor owner reached by Luigi's override motion states
+src/melee/ft/ftCo_800C7178.c	src/melee/ft/ftCo_800C7178.c	Matching	luigi-source-packet	compiled canonical Mario-family Kneebend floor owner reached by Luigi's override motion states
+src/melee/ft/chara/ftLuigi/ftLg_Init.c	src/melee/ft/chara/ftLuigi/ftLg_Init.c	Matching	luigi-source-packet	compiled canonical Luigi lifecycle, state registry, and data-owner callbacks
+src/melee/ft/chara/ftLuigi/ftLg_SpecialHi.c	src/melee/ft/chara/ftLuigi/ftLg_SpecialHi.c	Matching	luigi-source-packet	compiled canonical Luigi Super Jump Punch owner
+src/melee/ft/chara/ftLuigi/ftLg_SpecialLw.c	src/melee/ft/chara/ftLuigi/ftLg_SpecialLw.c	Matching	luigi-source-packet	compiled canonical Luigi Cyclone owner
+src/melee/ft/chara/ftLuigi/ftLg_SpecialN.c	src/melee/ft/chara/ftLuigi/ftLg_SpecialN.c	Matching	luigi-source-packet	compiled canonical Luigi fireball-spawn special owner
+src/melee/ft/chara/ftLuigi/ftLg_SpecialS.c	src/melee/ft/chara/ftLuigi/ftLg_SpecialS.c	Matching	luigi-source-packet	compiled canonical Luigi Green Missile and misfire owner
 src/melee/ft/fighter.c	src/melee/ft/fighter.c	Matching	0002-headless-fox-fd-runtime.patch,0045-ground-shield-knockback-fmadds.patch	compiled directly from canonical source by Makefile; headless adaptations from historical patch 0002 and retail fmadds translation for hosted builds from historical patch 0045
 src/melee/ft/ftCo_800C703C.c	src/melee/ft/ftCo_800C703C.c	Matching	none	compiled directly from canonical source by Makefile
 src/melee/ft/ftCo_800C7434.c	src/melee/ft/ftCo_800C7434.c	Matching	none	compiled directly from canonical source by Makefile
@@ -267,6 +274,7 @@ src/melee/it/items/itpeachexplode.c	src/melee/it/items/itpeachexplode.c	not-list
 src/melee/it/items/itpeachparasol.c	src/melee/it/items/itpeachparasol.c	not-listed	peach-source-packet	compiled canonical Peach parasol article owner
 src/melee/it/items/itpeachtoad.c	src/melee/it/items/itpeachtoad.c	not-listed	peach-source-packet	compiled canonical Peach Toad article owner
 src/melee/it/items/itpeachtoadspore.c	src/melee/it/items/itpeachtoadspore.c	not-listed	peach-source-packet	compiled canonical Peach Toad-spore article owner
+src/melee/it/items/itluigifireball.c	src/melee/it/items/itluigifireball.c	Matching	luigi-source-packet	compiled canonical Luigi/Mario fireball article owner
 src/melee/it/items/itpeachturnip.c	src/melee/it/items/itpeachturnip.c	not-listed	peach-source-packet	compiled canonical Peach turnip and rare-pull constructor owner
 src/melee/it/items/itsword.c	src/melee/it/items/itsword.c	not-listed	peach-common-item-packet	compiled canonical Beam Sword owner reached by Peach item pull
 src/sysdolphin/baselib/aobj.c	src/sysdolphin/baselib/aobj.c	Matching	0001-hosted-c-compatibility.patch	compiled directly from canonical source by Makefile; adapted by historical patch 0001-hosted-c-compatibility.patch

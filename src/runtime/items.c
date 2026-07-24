@@ -12,6 +12,7 @@
 #include "it/items/itfoxillusion.h"
 #include "it/items/itfoxlaser.h"
 #include "it/items/itheiho.h"
+#include "it/items/itluigifireball.h"
 #include "it/items/itpeachexplode.h"
 #include "it/items/itpeachparasol.h"
 #include "it/items/itpeachtoad.h"
@@ -47,6 +48,7 @@ struct sdata_ItemGXLink it_803F2F28[118] = {
     [It_Kind_Seak_NeedleHeld - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Seak_Vanish - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Seak_Chain - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Luigi_Fire - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Peach_Explode - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Peach_Turnip - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Peach_Parasol - It_Kind_Kuriboh] = { NULL },
@@ -328,6 +330,23 @@ struct ItemLogicTable it_803F3100[118] = {
         NULL,
         NULL,
         itZeldaDinFire_Logic65_EvtUnk,
+    },
+    [It_Kind_Luigi_Fire - It_Kind_Kuriboh] = {
+        it_803F75C0,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        itLuigiFireball_Logic89_DmgDealt,
+        NULL,
+        NULL,
+        itLuigiFireball_Logic89_Reflected,
+        itLuigiFireball_Logic89_Clanked,
+        itLuigiFireball_Logic89_Absorbed,
+        itLuigiFireball_Logic89_ShieldBounced,
+        itLuigiFireball_Logic89_HitShield,
+        itLuigiFireball_Logic89_EvtUnk,
     },
     [It_Kind_Zelda_DinFire_Explode - It_Kind_Kuriboh] = {
         it_803F7740,

@@ -782,7 +782,7 @@
       "replay": "replays/validation/falcon/Game_20260505T215428.slpz",
       "id": "dolphin-ulp-motion-profile",
       "owner": "fighter velocity and position float execution profile",
-      "rationale": "The first residual is a one-ULP DeadUpFall self-velocity result; later float-derived contact differences reconverge for the final 3,998 transitions. Native and PPC agree on the complete exact fingerprint, while the replay records Dolphin without its build or execution profile.",
+      "rationale": "The retail star-KO fmsubs boundary and mainline-Dolphin fnmsubs zero profile now own the former DeadUpFall and signed-zero lanes at the source. The remaining residual is the float-derived contact difference at frame 6596, which reconverges for the final 3,998 transitions. Native and PPC agree on the complete exact fingerprint, while the replay records Dolphin without its build or execution profile.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/mp/mpcoll.c"
@@ -790,18 +790,18 @@
       "expected": {
         "native": {
           "frames": 11776,
-          "matched_frames": 10721,
-          "mismatched_frames": 1055,
-          "exact_prefix_frames": 4298,
+          "matched_frames": 10851,
+          "mismatched_frames": 925,
+          "exact_prefix_frames": 6718,
           "strict_suffix_frames": 3998,
-          "first_mismatch_frame": 4176,
+          "first_mismatch_frame": 6596,
           "last_mismatch_frame": 7655,
-          "mismatch_count": 1495,
-          "mismatch_fingerprint": "ebf979de0efb3e76",
-          "mismatch_fields_digest": "40c50e893e378293b075421e8d63df5da0823b6827d958b1508ce6fe224aa14a",
+          "mismatch_count": 1365,
+          "mismatch_fingerprint": "112008108792d4b1",
           "render_visibility_mismatch_count": 5,
           "first_render_visibility_mismatch_frame": 4249,
-          "signed_zero_equal_count": 0
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "c4a010bdcb0bf98dc8b2ce4aa789a71d6d49ab568936513bbbf27dd947d4c3a4"
         },
         "ppc": "native"
       }
@@ -1625,7 +1625,7 @@
       "replay": "replays/validation/doubles_recent/Game_20260704T204838.slpz",
       "id": "doubles-dolphin-ulp-motion-profile",
       "owner": "fighter velocity and position float execution profile",
-      "rationale": "PPC and native source runtimes agree on the complete fingerprint. The bounded residual contains only ULP-scale fighter X position and self velocity, followed by 1,909 exact transitions; the replay records Dolphin without its build or execution profile.",
+      "rationale": "PPC and native source runtimes agree on the complete fingerprint. The bounded residual is one ULP-scale fighter X position interval, followed by 3,680 exact transitions; the replay records Dolphin without its build or execution profile.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
@@ -1633,18 +1633,18 @@
       "expected": {
         "native": {
           "frames": 9232,
-          "matched_frames": 8503,
-          "mismatched_frames": 729,
+          "matched_frames": 8633,
+          "mismatched_frames": 599,
           "exact_prefix_frames": 4953,
-          "strict_suffix_frames": 1909,
+          "strict_suffix_frames": 3680,
           "first_mismatch_frame": 4831,
-          "last_mismatch_frame": 7200,
-          "mismatch_count": 729,
-          "mismatch_fingerprint": "56cef2e6eab8cc8e",
-          "mismatch_fields_digest": "05eb5b87e65c3f30b304e813fec7478a042be333d95fac532c19be501acf09d1",
+          "last_mismatch_frame": 5429,
+          "mismatch_count": 599,
+          "mismatch_fingerprint": "67aac47ac3ab3600",
           "render_visibility_mismatch_count": 7,
           "first_render_visibility_mismatch_frame": 2180,
-          "signed_zero_equal_count": 0
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "b9ee74bd892e1c5dd87415b4d0a0a49569cd6cddd15517a8d5152c162f0a3599"
         },
         "ppc": "native"
       }
@@ -1711,7 +1711,7 @@
       "replay": "replays/validation/doubles_recent/Game_20260704T164410.slpz",
       "id": "doubles-dolphin-ulp-motion-and-needle-profile",
       "owner": "fighter motion and Sheik thrown-needle float publication",
-      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale self velocity with one thrown-needle historical-position byte, followed by 364 exact transitions; the replay records Dolphin but not its build or float/JIT profile.",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. A single thrown-needle historical-position byte remains, followed by 364 exact transitions; the replay records Dolphin but not its build or float/JIT profile.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
@@ -1721,18 +1721,18 @@
       "expected": {
         "native": {
           "frames": 7934,
-          "matched_frames": 7673,
-          "mismatched_frames": 261,
-          "exact_prefix_frames": 4821,
+          "matched_frames": 7933,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 7569,
           "strict_suffix_frames": 364,
-          "first_mismatch_frame": 4699,
+          "first_mismatch_frame": 7447,
           "last_mismatch_frame": 7447,
-          "mismatch_count": 261,
-          "mismatch_fingerprint": "82871d54fa4bc349",
-          "mismatch_fields_digest": "8ddd2b3f79b9c5fd56c1a22358a65bfc71a5ac5c5e1dc3566904b7b3a135dc65",
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "279ac98950b8a993",
           "render_visibility_mismatch_count": 6,
           "first_render_visibility_mismatch_frame": 1676,
-          "signed_zero_equal_count": 0
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "0a269c7494632e8899684b3887bc0459a7937ea7ca50608954c5fff55399a5d9"
         },
         "ppc": "native"
       }
@@ -2086,66 +2086,10 @@
       }
     },
     {
-      "replay": "replays/validation/puff/Game_20250705T002244.slpz",
-      "id": "dolphin-signed-zero-motion-profile",
-      "owner": "fighter attack-velocity signed-zero publication",
-      "rationale": "Every residual differs only by the sign bit of zero attack velocity. The signed-zero diagnostic is otherwise exact for the complete replay, while strict validation retains the PPC bits and native and PPC produce the same fingerprint.",
-      "sources": [
-        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "refs/melee/src/sysdolphin/baselib/mtx.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 10417,
-          "matched_frames": 10314,
-          "mismatched_frames": 103,
-          "exact_prefix_frames": 6468,
-          "strict_suffix_frames": 1524,
-          "first_mismatch_frame": 6346,
-          "last_mismatch_frame": 8770,
-          "mismatch_count": 103,
-          "mismatch_fingerprint": "ee023c6e2ecaa29b",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "401427a1d5a96d64c351e5ebbadf23393ddf9c1c84707737afe587d7acf9fc07"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/puff/Game_20251218T162123.slpz",
-      "id": "dolphin-signed-zero-motion-profile",
-      "owner": "fighter attack-velocity signed-zero publication",
-      "rationale": "All forty-four residual rows are one signed-zero attack-velocity interval. The diagnostic comparison is otherwise exact, and a complete PPC run reproduces the native strict fingerprint.",
-      "sources": [
-        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "refs/melee/src/sysdolphin/baselib/mtx.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 2128,
-          "matched_frames": 2084,
-          "mismatched_frames": 44,
-          "exact_prefix_frames": 2083,
-          "strict_suffix_frames": 1,
-          "first_mismatch_frame": 1961,
-          "last_mismatch_frame": 2004,
-          "mismatch_count": 44,
-          "mismatch_fingerprint": "75c44ca84088a7cd",
-          "render_visibility_mismatch_count": 4,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "0668e963e225d1f4a79c2a58f569f4819a70d53079ec47935ec35ce764f63641"
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/puff/Game_20260313T121034.slpz",
       "id": "signed-zero-and-unmodeled-presentation-rng-phase",
       "owner": "fighter signed-zero publication and DamageFlyRoll presentation RNG phase",
-      "rationale": "Signed-zero-only intervals precede the causal gameplay residual. At frame 2488 all deterministic pre-gate fighter state is exact, but the excluded effect/particle scheduler is at the neighboring RNG phase and selects DamageFlyRoll instead of DamageFlyHi. Native and PPC agree on the bounded consequence, which reconverges for the final 802 transitions.",
+      "rationale": "The signed-zero intervals are now source-owned by the mainline-Dolphin fnmsubs zero profile. At frame 2488 all deterministic pre-gate fighter state is exact, but the excluded effect/particle scheduler is at the neighboring RNG phase and selects DamageFlyRoll instead of DamageFlyHi. Native and PPC agree on the bounded consequence, which reconverges for the final 2,491 transitions.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
@@ -2155,18 +2099,18 @@
       "expected": {
         "native": {
           "frames": 5153,
-          "matched_frames": 4877,
-          "mismatched_frames": 276,
-          "exact_prefix_frames": 182,
-          "strict_suffix_frames": 802,
-          "first_mismatch_frame": 60,
-          "last_mismatch_frame": 4228,
-          "mismatch_count": 358,
-          "mismatch_fingerprint": "fd943bbf3e257aa6",
+          "matched_frames": 5101,
+          "mismatched_frames": 52,
+          "exact_prefix_frames": 2610,
+          "strict_suffix_frames": 2491,
+          "first_mismatch_frame": 2488,
+          "last_mismatch_frame": 2539,
+          "mismatch_count": 134,
+          "mismatch_fingerprint": "3995b886f73086a8",
           "render_visibility_mismatch_count": 1,
           "first_render_visibility_mismatch_frame": 2519,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "68e4b758ada2fd5750904b1a83b55228ce3eba0e21c0190025bb68ab2b957c5d"
+          "mismatch_fields_digest": "8027f7e5082e6cf010e6f724d8fea45ac4b8944ad7c8f6658434ac73d13b8644"
         },
         "ppc": "native"
       }
@@ -2175,7 +2119,7 @@
       "replay": "replays/validation/puff/Game_20260318T101341.slpz",
       "id": "dolphin-ulp-and-signed-zero-profile",
       "owner": "Puff Rollout motion and fighter signed-zero publication",
-      "rationale": "The complete residual consists of signed-zero publication plus seventeen bounded one-ULP Rollout self-velocity rows. The matching Puff source preserves every discrete transition, exact output resumes for the final 917 rows, and native/PPC fingerprints agree.",
+      "rationale": "The signed-zero lanes are now source-owned by the mainline-Dolphin fnmsubs zero profile; seventeen bounded one-ULP Rollout self-velocity rows remain. The matching Puff source preserves every discrete transition, exact output resumes for the final 1,530 rows, and native/PPC fingerprints agree.",
       "sources": [
         "refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c",
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
@@ -2184,18 +2128,18 @@
       "expected": {
         "native": {
           "frames": 8804,
-          "matched_frames": 8696,
-          "mismatched_frames": 108,
-          "exact_prefix_frames": 1981,
-          "strict_suffix_frames": 917,
-          "first_mismatch_frame": 1859,
-          "last_mismatch_frame": 7764,
-          "mismatch_count": 124,
-          "mismatch_fingerprint": "9adec853cab4cb28",
+          "matched_frames": 8787,
+          "mismatched_frames": 17,
+          "exact_prefix_frames": 5678,
+          "strict_suffix_frames": 1530,
+          "first_mismatch_frame": 5556,
+          "last_mismatch_frame": 7151,
+          "mismatch_count": 33,
+          "mismatch_fingerprint": "a20d57152771280e",
           "render_visibility_mismatch_count": 0,
           "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "ac4dc49c56944933e4b01dc2b78c1b1280d253e502f642477b5297bc5e31d530"
+          "mismatch_fields_digest": "8f2487f3285d263baea2ea9d1da531945439d3eb6df7974b6e7b6fec0213591f"
         },
         "ppc": "native"
       }
@@ -2204,7 +2148,7 @@
       "replay": "replays/validation/puff/Game_20260325T101917.slpz",
       "id": "signed-zero-needle-and-deadup-profile",
       "owner": "fighter signed-zero/DeadUp publication and Sheik thrown-needle historical pose",
-      "rationale": "The complete source-classified residual combines signed-zero motion publication, isolated one-byte Sheik needle historical-position samples, and bounded DeadUp self-velocity ULPs. The diagnostic comparison exposes no discrete gameplay split, exact output resumes for the final 354 transitions, and native/PPC agree.",
+      "rationale": "The signed-zero and DeadUp lanes are now source-owned by the mainline-Dolphin fnmsubs zero profile and the retail star-KO fmsubs boundary; isolated one-byte Sheik needle historical-position samples remain. The diagnostic comparison exposes no discrete gameplay split, exact output resumes for the final 354 transitions, and native/PPC agree.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c",
@@ -2214,18 +2158,18 @@
       "expected": {
         "native": {
           "frames": 16556,
-          "matched_frames": 16240,
-          "mismatched_frames": 316,
-          "exact_prefix_frames": 1068,
+          "matched_frames": 16542,
+          "mismatched_frames": 14,
+          "exact_prefix_frames": 2474,
           "strict_suffix_frames": 354,
-          "first_mismatch_frame": 946,
+          "first_mismatch_frame": 2352,
           "last_mismatch_frame": 16079,
-          "mismatch_count": 316,
-          "mismatch_fingerprint": "5663a187564da74b",
+          "mismatch_count": 14,
+          "mismatch_fingerprint": "fce05aaed64b5fdb",
           "render_visibility_mismatch_count": 4,
           "first_render_visibility_mismatch_frame": 3424,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "5ad2361bf3bfd53f8687f114e169c64c9d4ae68123e2f1fdd89739355674ab31"
+          "mismatch_fields_digest": "ecadde38cb7730fd8becd5de061e3883210453dafb50b35f0256e904292232ea"
         },
         "ppc": "native"
       }
@@ -2234,7 +2178,7 @@
       "replay": "replays/validation/puff/Game_20260602T221603.slpz",
       "id": "signed-zero-and-source-pose-contact-gate",
       "owner": "fighter signed-zero/DeadUp publication and BODY-versus-shield collision pose",
-      "rationale": "Signed-zero and DeadUp ULP rows occur before the causal split. At frame 5509 the source-shaped runtime resolves Puff back-air against Fox BODY one frame before the replay's shield contact; all public state is exact immediately before that geometry gate, and native/PPC take the same downstream path. The lock records the complete consequence while leaving the headless JObj/hurtbox/shield publication boundary as explicit debt.",
+      "rationale": "The pre-gate signed-zero and DeadUp lanes are now source-owned. At frame 5509 the source-shaped runtime resolves Puff back-air against Fox BODY one frame before the replay's shield contact; all public state is exact immediately before that geometry gate, and native/PPC take the same downstream path. The lock records the complete consequence while leaving the headless JObj/hurt pose unmodeled.",
       "sources": [
         "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_800805C8",
         "refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70",
@@ -2244,46 +2188,18 @@
       "expected": {
         "native": {
           "frames": 12141,
-          "matched_frames": 5487,
-          "mismatched_frames": 6654,
-          "exact_prefix_frames": 947,
+          "matched_frames": 5631,
+          "mismatched_frames": 6510,
+          "exact_prefix_frames": 5631,
           "strict_suffix_frames": 0,
-          "first_mismatch_frame": 825,
+          "first_mismatch_frame": 5509,
           "last_mismatch_frame": 12018,
-          "mismatch_count": 214426,
-          "mismatch_fingerprint": "1c72df856e25d9b6",
+          "mismatch_count": 214282,
+          "mismatch_fingerprint": "b7df6cc1a12ac8d4",
           "render_visibility_mismatch_count": 7624,
           "first_render_visibility_mismatch_frame": 1276,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "8326c25a2ec7283216460f82feb1d8caa6f9d57141c8efcef1b8aebafb40c272"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/puff/Game_20260612T031848.slpz",
-      "id": "dolphin-signed-zero-motion-profile",
-      "owner": "fighter attack-velocity signed-zero publication",
-      "rationale": "All sixty-three residual rows differ only by the sign bit of zero attack velocity. Signed-zero diagnostic comparison is exact for the complete replay, while strict validation preserves the PPC publication bits.",
-      "sources": [
-        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "refs/melee/src/sysdolphin/baselib/mtx.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 11267,
-          "matched_frames": 11204,
-          "mismatched_frames": 63,
-          "exact_prefix_frames": 2386,
-          "strict_suffix_frames": 488,
-          "first_mismatch_frame": 2264,
-          "last_mismatch_frame": 10656,
-          "mismatch_count": 63,
-          "mismatch_fingerprint": "1e15dad6d05392ea",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "2b6e7681ed9ed7743fd982fba7eacf2c50f080d94cf268ea9fb800ff17cfb4ef"
+          "mismatch_fields_digest": "2d6c587296f4ba85671edad3d82704d1b3d50c0a435ade3dc69143b1a394ba6d"
         },
         "ppc": "native"
       }
@@ -2356,7 +2272,23 @@
         "refs/melee/src/melee/it/item.c::Item_8026A8EC",
         "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
       ],
-      "expected": {"native": {"frames": 15634, "matched_frames": 6418, "mismatched_frames": 9216, "exact_prefix_frames": 907, "strict_suffix_frames": 0, "first_mismatch_frame": 785, "last_mismatch_frame": 15511, "mismatch_count": 337691, "mismatch_fingerprint": "179f7a2a9224dd62", "render_visibility_mismatch_count": 12589, "first_render_visibility_mismatch_frame": 6678, "signed_zero_equal_count": 0, "mismatch_fields_digest": "25d251b389259bfc9194f93113e55cc867d0d03b6f6395738b97b6a7e2160163"}}
+      "expected": {
+        "native": {
+          "frames": 15634,
+          "matched_frames": 6418,
+          "mismatched_frames": 9216,
+          "exact_prefix_frames": 907,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 785,
+          "last_mismatch_frame": 15511,
+          "mismatch_count": 337691,
+          "mismatch_fingerprint": "179f7a2a9224dd62",
+          "render_visibility_mismatch_count": 12589,
+          "first_render_visibility_mismatch_frame": 6678,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "25d251b389259bfc9194f93113e55cc867d0d03b6f6395738b97b6a7e2160163"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/MadeUpEnchantedStingray.slpz",
@@ -2369,7 +2301,23 @@
         "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
         "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
       ],
-      "expected": {"native": {"frames": 11073, "matched_frames": 5804, "mismatched_frames": 5269, "exact_prefix_frames": 1900, "strict_suffix_frames": 0, "first_mismatch_frame": 1778, "last_mismatch_frame": 10950, "mismatch_count": 181244, "mismatch_fingerprint": "c6173add9a734d20", "render_visibility_mismatch_count": 6658, "first_render_visibility_mismatch_frame": 5768, "signed_zero_equal_count": 0, "mismatch_fields_digest": "da6810779f56bcad1ba1e3f936002e8890f503f137b29977af989e402f91d370"}}
+      "expected": {
+        "native": {
+          "frames": 11073,
+          "matched_frames": 5804,
+          "mismatched_frames": 5269,
+          "exact_prefix_frames": 1900,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 1778,
+          "last_mismatch_frame": 10950,
+          "mismatch_count": 181244,
+          "mismatch_fingerprint": "c6173add9a734d20",
+          "render_visibility_mismatch_count": 6658,
+          "first_render_visibility_mismatch_frame": 5768,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "da6810779f56bcad1ba1e3f936002e8890f503f137b29977af989e402f91d370"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/TameEmbellishedSparrow.slpz",
@@ -2382,7 +2330,23 @@
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 14352, "matched_frames": 13248, "mismatched_frames": 1104, "exact_prefix_frames": 7509, "strict_suffix_frames": 0, "first_mismatch_frame": 7387, "last_mismatch_frame": 14229, "mismatch_count": 2709, "mismatch_fingerprint": "aceed9c38805abd0", "render_visibility_mismatch_count": 25, "first_render_visibility_mismatch_frame": 4778, "signed_zero_equal_count": 0, "mismatch_fields_digest": "a3e29ed0911cdb7017dd9d34c656e75d09a9e9161979974e0684513f883dafcb"}}
+      "expected": {
+        "native": {
+          "frames": 14352,
+          "matched_frames": 13248,
+          "mismatched_frames": 1104,
+          "exact_prefix_frames": 7509,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 7387,
+          "last_mismatch_frame": 14229,
+          "mismatch_count": 2709,
+          "mismatch_fingerprint": "aceed9c38805abd0",
+          "render_visibility_mismatch_count": 25,
+          "first_render_visibility_mismatch_frame": 4778,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "a3e29ed0911cdb7017dd9d34c656e75d09a9e9161979974e0684513f883dafcb"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/HummingDismalCat.slpz",
@@ -2394,7 +2358,23 @@
         "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
         "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
       ],
-      "expected": {"native": {"frames": 6803, "matched_frames": 4291, "mismatched_frames": 2512, "exact_prefix_frames": 3843, "strict_suffix_frames": 0, "first_mismatch_frame": 3721, "last_mismatch_frame": 6680, "mismatch_count": 72754, "mismatch_fingerprint": "2178f2dd2fd334d0", "render_visibility_mismatch_count": 624, "first_render_visibility_mismatch_frame": 3716, "signed_zero_equal_count": 0, "mismatch_fields_digest": "e1a6caa0363ff0f506872994fee59447a46e4bd2d277d0557441535674e6ef68"}}
+      "expected": {
+        "native": {
+          "frames": 6803,
+          "matched_frames": 4291,
+          "mismatched_frames": 2512,
+          "exact_prefix_frames": 3843,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 3721,
+          "last_mismatch_frame": 6680,
+          "mismatch_count": 72754,
+          "mismatch_fingerprint": "2178f2dd2fd334d0",
+          "render_visibility_mismatch_count": 624,
+          "first_render_visibility_mismatch_frame": 3716,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "e1a6caa0363ff0f506872994fee59447a46e4bd2d277d0557441535674e6ef68"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/ScaryFrankPorcupine.slpz",
@@ -2406,7 +2386,23 @@
         "refs/melee/src/melee/it/item.c::Item_80268E5C",
         "refs/melee/src/melee/it/items/itpeachturnip.c"
       ],
-      "expected": {"native": {"frames": 26844, "matched_frames": 26428, "mismatched_frames": 416, "exact_prefix_frames": 2311, "strict_suffix_frames": 570, "first_mismatch_frame": 2189, "last_mismatch_frame": 26151, "mismatch_count": 696, "mismatch_fingerprint": "e8dba20d26ba2331", "render_visibility_mismatch_count": 0, "first_render_visibility_mismatch_frame": null, "signed_zero_equal_count": 0, "mismatch_fields_digest": "1d6c7ccb96e144930c282b0c8916bc9a6347dc4a70a7c6aa19f524306f92c675"}}
+      "expected": {
+        "native": {
+          "frames": 26844,
+          "matched_frames": 26428,
+          "mismatched_frames": 416,
+          "exact_prefix_frames": 2311,
+          "strict_suffix_frames": 570,
+          "first_mismatch_frame": 2189,
+          "last_mismatch_frame": 26151,
+          "mismatch_count": 696,
+          "mismatch_fingerprint": "e8dba20d26ba2331",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "1d6c7ccb96e144930c282b0c8916bc9a6347dc4a70a7c6aa19f524306f92c675"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/StridentRedSandpiper.slpz",
@@ -2418,7 +2414,23 @@
         "refs/melee/src/melee/it/it_2725.c",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 11114, "matched_frames": 11099, "mismatched_frames": 15, "exact_prefix_frames": 7100, "strict_suffix_frames": 3999, "first_mismatch_frame": 6978, "last_mismatch_frame": 6992, "mismatch_count": 30, "mismatch_fingerprint": "3174e8266b283466", "render_visibility_mismatch_count": 14, "first_render_visibility_mismatch_frame": 2036, "signed_zero_equal_count": 0, "mismatch_fields_digest": "8e7997cf98725adede82d885d44e9957cb95e01493ebb3d6d93c56153572c895"}}
+      "expected": {
+        "native": {
+          "frames": 11114,
+          "matched_frames": 11099,
+          "mismatched_frames": 15,
+          "exact_prefix_frames": 7100,
+          "strict_suffix_frames": 3999,
+          "first_mismatch_frame": 6978,
+          "last_mismatch_frame": 6992,
+          "mismatch_count": 30,
+          "mismatch_fingerprint": "3174e8266b283466",
+          "render_visibility_mismatch_count": 14,
+          "first_render_visibility_mismatch_frame": 2036,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "8e7997cf98725adede82d885d44e9957cb95e01493ebb3d6d93c56153572c895"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/DisgustingLivelyRaven.slpz",
@@ -2430,7 +2442,23 @@
         "refs/melee/src/melee/it/item.c",
         "refs/melee/src/melee/it/items/itpeachturnip.c"
       ],
-      "expected": {"native": {"frames": 12960, "matched_frames": 12750, "mismatched_frames": 210, "exact_prefix_frames": 6523, "strict_suffix_frames": 5013, "first_mismatch_frame": 6401, "last_mismatch_frame": 7824, "mismatch_count": 378, "mismatch_fingerprint": "e5d0edb5ac03c879", "render_visibility_mismatch_count": 11, "first_render_visibility_mismatch_frame": 505, "signed_zero_equal_count": 0, "mismatch_fields_digest": "37327be844285a7eb154500f6b2ed78f253354aad893bf72b226c19820435361"}}
+      "expected": {
+        "native": {
+          "frames": 12960,
+          "matched_frames": 12750,
+          "mismatched_frames": 210,
+          "exact_prefix_frames": 6523,
+          "strict_suffix_frames": 5013,
+          "first_mismatch_frame": 6401,
+          "last_mismatch_frame": 7824,
+          "mismatch_count": 378,
+          "mismatch_fingerprint": "e5d0edb5ac03c879",
+          "render_visibility_mismatch_count": 11,
+          "first_render_visibility_mismatch_frame": 505,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "37327be844285a7eb154500f6b2ed78f253354aad893bf72b226c19820435361"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/DryLimitedWoodcock.slpz",
@@ -2443,7 +2471,23 @@
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 10458, "matched_frames": 9695, "mismatched_frames": 763, "exact_prefix_frames": 654, "strict_suffix_frames": 1454, "first_mismatch_frame": 532, "last_mismatch_frame": 8881, "mismatch_count": 939, "mismatch_fingerprint": "da41964656e7b77f", "render_visibility_mismatch_count": 6, "first_render_visibility_mismatch_frame": -122, "signed_zero_equal_count": 0, "mismatch_fields_digest": "42a697027e91ea00d147f830d20b444715ff0ebfd2af8c2b5b45b0872011b34e"}}
+      "expected": {
+        "native": {
+          "frames": 10458,
+          "matched_frames": 9695,
+          "mismatched_frames": 763,
+          "exact_prefix_frames": 654,
+          "strict_suffix_frames": 1454,
+          "first_mismatch_frame": 532,
+          "last_mismatch_frame": 8881,
+          "mismatch_count": 939,
+          "mismatch_fingerprint": "da41964656e7b77f",
+          "render_visibility_mismatch_count": 6,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "42a697027e91ea00d147f830d20b444715ff0ebfd2af8c2b5b45b0872011b34e"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/SmugConfusedTermite.slpz",
@@ -2456,7 +2500,23 @@
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/it/item.c"
       ],
-      "expected": {"native": {"frames": 12898, "matched_frames": 12873, "mismatched_frames": 25, "exact_prefix_frames": 3014, "strict_suffix_frames": 2353, "first_mismatch_frame": 2892, "last_mismatch_frame": 10422, "mismatch_count": 40, "mismatch_fingerprint": "2d59b2d1a3a27a47", "render_visibility_mismatch_count": 9, "first_render_visibility_mismatch_frame": -122, "signed_zero_equal_count": 0, "mismatch_fields_digest": "14dd3e35b2938cec52ba21b6a968d4bcfe7a0bd65d82d0ffeeed4b2f34c862b7"}}
+      "expected": {
+        "native": {
+          "frames": 12898,
+          "matched_frames": 12873,
+          "mismatched_frames": 25,
+          "exact_prefix_frames": 3014,
+          "strict_suffix_frames": 2353,
+          "first_mismatch_frame": 2892,
+          "last_mismatch_frame": 10422,
+          "mismatch_count": 40,
+          "mismatch_fingerprint": "2d59b2d1a3a27a47",
+          "render_visibility_mismatch_count": 9,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "14dd3e35b2938cec52ba21b6a968d4bcfe7a0bd65d82d0ffeeed4b2f34c862b7"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/HappyGoLuckyScentedButterfly.slpz",
@@ -2470,7 +2530,23 @@
         "refs/melee/src/melee/it/items/itseakneedlethrown.c",
         "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
       ],
-      "expected": {"native": {"frames": 14098, "matched_frames": 14009, "mismatched_frames": 89, "exact_prefix_frames": 5186, "strict_suffix_frames": 256, "first_mismatch_frame": 5064, "last_mismatch_frame": 13719, "mismatch_count": 1826, "mismatch_fingerprint": "9841fad731083fe5", "render_visibility_mismatch_count": 19, "first_render_visibility_mismatch_frame": 500, "signed_zero_equal_count": 0, "mismatch_fields_digest": "4010253504a29b52e01af1f1eec5aa9cf6af3d22f4338eecf8e950a5a832f7ff"}}
+      "expected": {
+        "native": {
+          "frames": 14098,
+          "matched_frames": 14009,
+          "mismatched_frames": 89,
+          "exact_prefix_frames": 5186,
+          "strict_suffix_frames": 256,
+          "first_mismatch_frame": 5064,
+          "last_mismatch_frame": 13719,
+          "mismatch_count": 1826,
+          "mismatch_fingerprint": "9841fad731083fe5",
+          "render_visibility_mismatch_count": 19,
+          "first_render_visibility_mismatch_frame": 500,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "4010253504a29b52e01af1f1eec5aa9cf6af3d22f4338eecf8e950a5a832f7ff"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/MarvelousLopsidedOryx.slpz",
@@ -2483,7 +2559,23 @@
         "refs/melee/src/melee/it/item.c",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 16873, "matched_frames": 16718, "mismatched_frames": 155, "exact_prefix_frames": 5011, "strict_suffix_frames": 3635, "first_mismatch_frame": 4889, "last_mismatch_frame": 13115, "mismatch_count": 274, "mismatch_fingerprint": "506a13d8f0632ebd", "render_visibility_mismatch_count": 0, "first_render_visibility_mismatch_frame": null, "signed_zero_equal_count": 0, "mismatch_fields_digest": "73928bec8f35455c95f39a2c12b47f457672a70311a2c2a077e77972e26128d0"}}
+      "expected": {
+        "native": {
+          "frames": 16873,
+          "matched_frames": 16718,
+          "mismatched_frames": 155,
+          "exact_prefix_frames": 5011,
+          "strict_suffix_frames": 3635,
+          "first_mismatch_frame": 4889,
+          "last_mismatch_frame": 13115,
+          "mismatch_count": 274,
+          "mismatch_fingerprint": "506a13d8f0632ebd",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "73928bec8f35455c95f39a2c12b47f457672a70311a2c2a077e77972e26128d0"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
@@ -2496,7 +2588,23 @@
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
         "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
       ],
-      "expected": {"native": {"frames": 14007, "matched_frames": 13779, "mismatched_frames": 228, "exact_prefix_frames": 2383, "strict_suffix_frames": 3439, "first_mismatch_frame": 2261, "last_mismatch_frame": 10445, "mismatch_count": 422, "mismatch_fingerprint": "314b3b824103c3a3", "render_visibility_mismatch_count": 7, "first_render_visibility_mismatch_frame": 1839, "signed_zero_equal_count": 0, "mismatch_fields_digest": "2ad5be03b582dde9ce60b04fcd214cd81bc8bf2aebfb64a9f339e815636e0c4a"}}
+      "expected": {
+        "native": {
+          "frames": 14007,
+          "matched_frames": 13779,
+          "mismatched_frames": 228,
+          "exact_prefix_frames": 2383,
+          "strict_suffix_frames": 3439,
+          "first_mismatch_frame": 2261,
+          "last_mismatch_frame": 10445,
+          "mismatch_count": 422,
+          "mismatch_fingerprint": "314b3b824103c3a3",
+          "render_visibility_mismatch_count": 7,
+          "first_render_visibility_mismatch_frame": 1839,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "2ad5be03b582dde9ce60b04fcd214cd81bc8bf2aebfb64a9f339e815636e0c4a"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/PerfectJollyMagpie.slpz",
@@ -2509,7 +2617,23 @@
         "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
         "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
       ],
-      "expected": {"native": {"frames": 10838, "matched_frames": 10747, "mismatched_frames": 91, "exact_prefix_frames": 519, "strict_suffix_frames": 7489, "first_mismatch_frame": 397, "last_mismatch_frame": 3226, "mismatch_count": 217, "mismatch_fingerprint": "f131461b7eb6ce1f", "render_visibility_mismatch_count": 0, "first_render_visibility_mismatch_frame": null, "signed_zero_equal_count": 0, "mismatch_fields_digest": "11040c31eecc52e09a2256037c62c01a559abd216e320dc4c9300d90f0921292"}}
+      "expected": {
+        "native": {
+          "frames": 10838,
+          "matched_frames": 10747,
+          "mismatched_frames": 91,
+          "exact_prefix_frames": 519,
+          "strict_suffix_frames": 7489,
+          "first_mismatch_frame": 397,
+          "last_mismatch_frame": 3226,
+          "mismatch_count": 217,
+          "mismatch_fingerprint": "f131461b7eb6ce1f",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "11040c31eecc52e09a2256037c62c01a559abd216e320dc4c9300d90f0921292"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/CapitalPristineTarsier.slpz",
@@ -2522,7 +2646,23 @@
         "refs/melee/src/melee/it/item.c",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 16491, "matched_frames": 16261, "mismatched_frames": 230, "exact_prefix_frames": 3835, "strict_suffix_frames": 158, "first_mismatch_frame": 3713, "last_mismatch_frame": 16210, "mismatch_count": 362, "mismatch_fingerprint": "85501af886f5bf13", "render_visibility_mismatch_count": 8, "first_render_visibility_mismatch_frame": 7181, "signed_zero_equal_count": 0, "mismatch_fields_digest": "0b445c929c39d1b81bac8e0c2b1824d7853c7f4d48da8e34793806dbd4c2fbb9"}}
+      "expected": {
+        "native": {
+          "frames": 16491,
+          "matched_frames": 16261,
+          "mismatched_frames": 230,
+          "exact_prefix_frames": 3835,
+          "strict_suffix_frames": 158,
+          "first_mismatch_frame": 3713,
+          "last_mismatch_frame": 16210,
+          "mismatch_count": 362,
+          "mismatch_fingerprint": "85501af886f5bf13",
+          "render_visibility_mismatch_count": 8,
+          "first_render_visibility_mismatch_frame": 7181,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "0b445c929c39d1b81bac8e0c2b1824d7853c7f4d48da8e34793806dbd4c2fbb9"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/ExpertWorthlessFinch.slpz",
@@ -2535,7 +2675,23 @@
         "refs/melee/src/melee/it/items/itbombhei.c",
         "refs/melee/src/melee/it/it_2725.c::it_80272860"
       ],
-      "expected": {"native": {"frames": 12032, "matched_frames": 11758, "mismatched_frames": 274, "exact_prefix_frames": 2299, "strict_suffix_frames": 352, "first_mismatch_frame": 2177, "last_mismatch_frame": 11557, "mismatch_count": 461, "mismatch_fingerprint": "cd6428688741de53", "render_visibility_mismatch_count": 10, "first_render_visibility_mismatch_frame": 1637, "signed_zero_equal_count": 0, "mismatch_fields_digest": "2699512416729798ada5865e3c093c1852baf74e4ba51047c6ee46bf520edb6e"}}
+      "expected": {
+        "native": {
+          "frames": 12032,
+          "matched_frames": 11758,
+          "mismatched_frames": 274,
+          "exact_prefix_frames": 2299,
+          "strict_suffix_frames": 352,
+          "first_mismatch_frame": 2177,
+          "last_mismatch_frame": 11557,
+          "mismatch_count": 461,
+          "mismatch_fingerprint": "cd6428688741de53",
+          "render_visibility_mismatch_count": 10,
+          "first_render_visibility_mismatch_frame": 1637,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "2699512416729798ada5865e3c093c1852baf74e4ba51047c6ee46bf520edb6e"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/HumiliatingCreamyReindeer.slpz",
@@ -2548,7 +2704,23 @@
         "refs/melee/src/melee/mp/mpcoll.c",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 16501, "matched_frames": 13480, "mismatched_frames": 3021, "exact_prefix_frames": 1698, "strict_suffix_frames": 1212, "first_mismatch_frame": 1576, "last_mismatch_frame": 15166, "mismatch_count": 7022, "mismatch_fingerprint": "490081b0268db2f8", "render_visibility_mismatch_count": 7, "first_render_visibility_mismatch_frame": 2941, "signed_zero_equal_count": 0, "mismatch_fields_digest": "2197065a5ba7e4561e5fe8ae838364aa2b2084df50acd5f9541cbf19c7be4f27"}}
+      "expected": {
+        "native": {
+          "frames": 16501,
+          "matched_frames": 13480,
+          "mismatched_frames": 3021,
+          "exact_prefix_frames": 1698,
+          "strict_suffix_frames": 1212,
+          "first_mismatch_frame": 1576,
+          "last_mismatch_frame": 15166,
+          "mismatch_count": 7022,
+          "mismatch_fingerprint": "490081b0268db2f8",
+          "render_visibility_mismatch_count": 7,
+          "first_render_visibility_mismatch_frame": 2941,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "2197065a5ba7e4561e5fe8ae838364aa2b2084df50acd5f9541cbf19c7be4f27"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/peach_demo_1.slpz",
@@ -2560,7 +2732,23 @@
         "refs/melee/src/melee/it/items/itpeachturnip.c",
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate"
       ],
-      "expected": {"native": {"frames": 6174, "matched_frames": 6088, "mismatched_frames": 86, "exact_prefix_frames": 2008, "strict_suffix_frames": 1856, "first_mismatch_frame": 1886, "last_mismatch_frame": 4195, "mismatch_count": 147, "mismatch_fingerprint": "a40e05a73225abd5", "render_visibility_mismatch_count": 0, "first_render_visibility_mismatch_frame": null, "signed_zero_equal_count": 0, "mismatch_fields_digest": "a62618c728f72f99babbf9492b09f057f5b99ecad06a26662b8a5453482165fa"}}
+      "expected": {
+        "native": {
+          "frames": 6174,
+          "matched_frames": 6088,
+          "mismatched_frames": 86,
+          "exact_prefix_frames": 2008,
+          "strict_suffix_frames": 1856,
+          "first_mismatch_frame": 1886,
+          "last_mismatch_frame": 4195,
+          "mismatch_count": 147,
+          "mismatch_fingerprint": "a40e05a73225abd5",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "a62618c728f72f99babbf9492b09f057f5b99ecad06a26662b8a5453482165fa"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/peach_demo_2.slpz",
@@ -2573,7 +2761,23 @@
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/it/item.c"
       ],
-      "expected": {"native": {"frames": 8234, "matched_frames": 7698, "mismatched_frames": 536, "exact_prefix_frames": 1081, "strict_suffix_frames": 334, "first_mismatch_frame": 959, "last_mismatch_frame": 7777, "mismatch_count": 655, "mismatch_fingerprint": "bc61820ec5bf713c", "render_visibility_mismatch_count": 3, "first_render_visibility_mismatch_frame": -122, "signed_zero_equal_count": 0, "mismatch_fields_digest": "16e09bb048a58301f97de4fcacf88a9d5af401196d0348ff3d31e4f1b8cb57fa"}}
+      "expected": {
+        "native": {
+          "frames": 8234,
+          "matched_frames": 7698,
+          "mismatched_frames": 536,
+          "exact_prefix_frames": 1081,
+          "strict_suffix_frames": 334,
+          "first_mismatch_frame": 959,
+          "last_mismatch_frame": 7777,
+          "mismatch_count": 655,
+          "mismatch_fingerprint": "bc61820ec5bf713c",
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "16e09bb048a58301f97de4fcacf88a9d5af401196d0348ff3d31e4f1b8cb57fa"
+        }
+      }
     }
   ]
 }

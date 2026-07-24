@@ -3,7 +3,7 @@
 ## Goal and supported domain
 
 Build a high-performance, batched, deterministic Melee simulator for RL. Supported fighters are
-Fox, Falco, Marth, Sheik, Zelda, Captain Falcon, Jigglypuff, and Peach. RL 1.0 covers singles and
+Fox, Falco, Marth, Sheik, Zelda, Captain Falcon, Jigglypuff, Peach, and Luigi. RL 1.0 covers singles and
 doubles on Final Destination, Battlefield, Fountain of Dreams, frozen Pokemon Stadium, Yoshi's
 Story, and Dream Land N64. UCF is enabled by default.
 

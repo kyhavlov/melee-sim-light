@@ -500,6 +500,15 @@ static int parse_metadata(PyObject* metadata, ReplayView* replay) {
     replay->brawl_offscreen_damage = 1;
     replay->freeze_dead_up_fall_physics = 1;
   }
+  // Mainline Slippi Dolphin's JIT implements nmsub with the retail PPC
+  // exact-zero sign, so scene-8 captures played on it need the retail
+  // fnmsubs zero. playedOn is the discriminator, not the protocol version:
+  // 3.19 "dolphin" corpus captures require the fused c - a*b zero while
+  // 3.18/3.19 "mainline dolphin" captures require the retail sign (verified
+  // by complete Fox/Falco aggregate streams against complete Luigi streams).
+  if (strcmp(played_on, "mainline dolphin") == 0) {
+    replay->online_fnmsubs_zero = 0;
+  }
   return 0;
 }
 
@@ -1004,10 +1013,10 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
     uint8_t character = get_u8(&player->character, player_raw);
     uint8_t stocks = replay->start_stocks[i];
     if (character != 1 && character != 2 && character != 7 && character != 9 && character != 15 &&
-        character != 18 && character != 19 && character != 22) {
+        character != 17 && character != 18 && character != 19 && character != 22) {
       snprintf(error, error_size,
-               "Melee core requires Fox, Captain Falcon, Sheik, Peach, Jigglypuff, Marth, "
-               "Zelda, or Falco players");
+               "Melee core requires Fox, Captain Falcon, Sheik, Peach, Jigglypuff, Luigi, "
+               "Marth, Zelda, or Falco players");
       return -1;
     }
     if (stocks > config->stock_count) {

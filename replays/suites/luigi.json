@@ -1,0 +1,384 @@
+{
+  "name": "luigi",
+  "notes": "Luigi validation suite: 30 curated netplay singles covering all six legal stages (five per stage) against Fox, Falco, Peach, and Luigi dittos across 2022-2026 Slippi versions, plus a local specials demo fixture vs Jigglypuff.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/luigi/Game_20250212T091716.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Luigi",
+        "2": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/Game_20250309T214357.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Luigi",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/Nicki-07-25_Game_20250502T195309.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Fox",
+        "2": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/auto-falco_Game_20260312T161313.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Luigi",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/auto-fox_Game_20251209T040734.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Luigi",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/auto-luigi_Game_20250708T023814.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Fox",
+        "2": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/auto-luigi_Game_20260209T014638.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Luigi",
+        "2": "Peach"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/basic-luigi_Game_20250415T174851.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Luigi",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/diamond-luigi_Game_20260611T161130.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Peach",
+        "2": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/gm-falco_Game_20260220T172641.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Luigi",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/gm-falco_Game_20260224T174542.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Falco",
+        "2": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/gm-fox_Game_20250904T104626.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Luigi",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/gm-fox_Game_20251022T235513.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Luigi",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/gm-fox_Game_20260509T220538.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Fox",
+        "2": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/master-diamond-8a855ab88865a8fd02dd8f60.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Luigi",
+        "2": "Fox"
+      },
+      "played_on": "network"
+    },
+    {
+      "replay": "replays/validation/luigi/master-master-775e398466dfd67e2bea025b.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Luigi",
+        "2": "Falco"
+      },
+      "played_on": "network"
+    },
+    {
+      "replay": "replays/validation/luigi/medium-falco_Game_20251031T000610.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Luigi",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20251124T191106.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Fox",
+        "2": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20251212T112146.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Fox",
+        "2": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20251212T113208.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Fox",
+        "2": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20251227T231147.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Fox",
+        "2": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20260317T085955.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Luigi",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20260422T030348.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Luigi",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20260505T025138.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Luigi",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/plat-falco_Game_20260402T233007.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Luigi",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/plat-fox_Game_20260228T034059.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/platinum-platinum-c20d9507b199f01838e901d0.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Falco",
+        "2": "Luigi"
+      },
+      "played_on": "network"
+    },
+    {
+      "replay": "replays/validation/luigi/slippi_01.07.22-09.08.23_Game_20221011T140934.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Luigi",
+        "2": "Luigi"
+      },
+      "ucf_cardinals_1_0_enabled": false
+    },
+    {
+      "replay": "replays/validation/luigi/slippi_2024_Game_20240704T213554.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Fox",
+        "2": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/slippi_2024_Game_20250307T122650.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Luigi",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/specials_demo.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Luigi",
+        "2": "Jigglypuff"
+      }
+    }
+  ]
+}

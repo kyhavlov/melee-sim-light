@@ -42,6 +42,7 @@ function externalCharId(internalCharId) {
   if (internalCharId === 2) return 0;
   if (internalCharId === 7) return 19;
   if (internalCharId === 9) return 12;
+  if (internalCharId === 17) return 7;
   if (internalCharId === 18) return 9;
   if (internalCharId === 19) return 18;
   if (internalCharId === 22) return 20;

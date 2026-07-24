@@ -915,6 +915,7 @@ static const MslDatType* public_type(const char* symbol)
     if (strcmp(symbol, "ftDataFox") == 0 ||
         strcmp(symbol, "ftDataCaptain") == 0 ||
         strcmp(symbol, "ftDataSeak") == 0 ||
+        strcmp(symbol, "ftDataLuigi") == 0 ||
         strcmp(symbol, "ftDataMars") == 0 ||
         strcmp(symbol, "ftDataPeach") == 0 ||
         strcmp(symbol, "ftDataZelda") == 0 ||
@@ -1136,6 +1137,7 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_SHEIK,
     MSL_FIGHTER_ARTICLES_PEACH,
     MSL_FIGHTER_ARTICLES_ZELDA,
+    MSL_FIGHTER_ARTICLES_LUIGI,
     MSL_FIGHTER_AUX_PURIN_PARTS,
 } MslFighterArticleProfile;
 
@@ -1224,6 +1226,12 @@ static ftData* translate_fighter_public(
         attr_types[0] = msl_dat_root_MslDatZeldaDinFireAttrs;
         attr_types[1] = msl_dat_root_itZeldaDinFireExplodeAttributes;
         break;
+    case MSL_FIGHTER_ARTICLES_LUIGI:
+        article_list_type = msl_dat_root_MslDatLuigiArticles;
+        article_count = 1;
+        indices[0] = 0;
+        attr_types[0] = msl_dat_root_itUnkAttributes;
+        break;
     case MSL_FIGHTER_AUX_PURIN_PARTS:
         // x48_items is not an article table for Purin. Its second pointer owns
         // the costume FtPartsDesc consumed by ftPr_Init_8013C360.
@@ -1250,11 +1258,11 @@ static ftData* translate_fighter_public(
     // reached item implementations are its concrete source type authority.
     // refs/melee/src/melee/ft/chara/{ftFox/ftFx_Init.c,
     //   ftFalco/ftFc_Init.c,ftSeak/ftSk_Init.c,ftPeach/ftPe_Init.c,
-    //   ftZelda/ftZd_Init.c}
+    //   ftZelda/ftZd_Init.c,ftLuigi/ftLg_Init.c}
     // refs/melee/src/melee/it/items/{itfoxlaser.c,itfoxblaster.c,
     //   itfoxillusion.c,itseakneedlethrown.c,itseakchain.c,
     //   itpeachturnip.c,itpeachtoadspore.c,itzeldadinfire.c,
-    //   itzeldadinfireexplode.c}
+    //   itzeldadinfireexplode.c,itluigifireball.c}
     if (result->x48_items == NULL) {
         fprintf(stderr, "native fighter DAT is missing its article list\n");
         abort();
@@ -1363,6 +1371,10 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftSeakAttributes, 317,
                                           MSL_FIGHTER_ARTICLES_SHEIK);
+    } else if (strcmp(symbol, "ftDataLuigi") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftLuigiAttributes, 312,
+                                          MSL_FIGHTER_ARTICLES_LUIGI);
     } else if (strcmp(symbol, "ftDataMars") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_MarsAttributes, 327,
