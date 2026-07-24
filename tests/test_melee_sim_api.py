@@ -131,20 +131,18 @@ def test_step_and_reset_defers_resets_one_step(monkeypatch) -> None:
         # Match 0 hits max_frame after 123 steps (frame_id counts up from
         # -123); the ring wraps many times along the way.
         for _ in range(123):
-            env.begin_step()
-            is_resetting, done = env.step_and_reset()
+            is_resetting, terminal = env.step_and_reset()
         # The terminal frame itself is published before any reset happens.
         assert not is_resetting.any()
-        assert done.tolist() == [1, 0]
+        assert terminal["done"].tolist() == [1, 0]
         assert env.current_frame[0]["frame_id"] == 0
         assert env.current_frame[1]["frame_id"] == 0
 
         # The following call resets match 0 (ignoring its queued action) and
         # publishes its entry frame while match 1 steps normally.
-        env.begin_step()
-        is_resetting, done = env.step_and_reset()
+        is_resetting, terminal = env.step_and_reset()
         assert is_resetting.tolist() == [True, False]
-        assert done.tolist() == [0, 0]
+        assert terminal["done"].tolist() == [0, 0]
         assert env.current_frame[0]["frame_id"] == -123
         assert env.current_frame[1]["frame_id"] == 1
 
