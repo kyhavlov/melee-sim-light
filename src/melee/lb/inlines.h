@@ -1,7 +1,11 @@
 #ifndef MELEE_LB_INLINES_H
 #define MELEE_LB_INLINES_H
 
-#ifdef MSL_CORE_WASM
+// GCC's scalar_storage_order attribute gives the hosted build source-order
+// bitfield views over authored big-endian command bytes. Clang (wasm32 and
+// Mach-O hosts alike) silently ignores the attribute and would read the
+// bytes little-endian, so it must use the DWARF-derived accessors instead.
+#if defined(MSL_CORE_WASM) || defined(__clang__)
 #include <msl_command_fields.h>
 #define MSL_CMD_FIELD(command, owner, field)                                  \
     msl_cmd_##owner##_##field((command)->u)

@@ -15,9 +15,13 @@ Source owners:
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-from tools.build.generate_native_dat_layout import Dwarf, _WRAPPERS
+# Resolve the sibling module from this checkout even when an installed
+# melee_sim distribution also exposes a tools.build package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.build.generate_native_dat_layout import Dwarf, _WRAPPERS  # noqa: E402
 
 
 def unwrap(dwarf: Dwarf, die):

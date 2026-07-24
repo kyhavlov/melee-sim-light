@@ -54,7 +54,10 @@ endif
 NATIVE_EXE_LINK_FLAGS := $(HOST_ARCH_FLAGS) -Wl,-dead_strip \
 	-Wl,-pagezero_size,0x1000
 SHARED_LIB_LINK_FLAGS := $(HOST_ARCH_FLAGS) -shared -Wl,-dead_strip
-PY_EXT_LINK_FLAGS := $(HOST_ARCH_FLAGS) -undefined dynamic_lookup
+# The validator extension loads into the driving Python, which may be
+# arm64 while the runtime is x86_64 (it only talks to the runtime over
+# a pipe), so it builds for the host architecture.
+PY_EXT_LINK_FLAGS := -undefined dynamic_lookup
 else
 TIMEOUT := timeout
 NATIVE_EXE_LINK_FLAGS := -no-pie -Wl,--gc-sections
@@ -134,6 +137,7 @@ WASM_DAT_NATIVE_TYPES_OBJ := $(WASM_GENERATED_DIR)/native_dat_types_wasm.o
 WASM_DAT_LAYOUT_SRC := $(WASM_GENERATED_DIR)/native_dat_layout.c
 WASM_DAT_LAYOUT_OBJ := $(WASM_OBJ_DIR)/generated/native_dat_layout.o
 WASM_COMMAND_FIELDS := $(WASM_GENERATED_DIR)/msl_command_fields.h
+NATIVE_COMMAND_FIELDS := $(NATIVE_GENERATED_DIR)/msl_command_fields.h
 MATCH_RELOC_TYPES_SRC := $(ROOT)/tools/build/match_reloc_types.c
 MATCH_RELOC_GENERATOR := $(ROOT)/tools/build/generate_match_reloc_layout.py
 MATCH_RELOC_TYPES_DEF := $(CORE)/runtime/relocation_types.def
@@ -243,7 +247,7 @@ CPPFLAGS := \
 	-I$(CORE)/sysdolphin \
 	-I$(CORE)/Runtime \
 	-I$(CORE)/extern/dolphin/include
-NATIVE_CPPFLAGS := $(CPPFLAGS) -DMSL_CORE_NATIVE
+NATIVE_CPPFLAGS := $(CPPFLAGS) -DMSL_CORE_NATIVE -I$(NATIVE_GENERATED_DIR)
 PYTHON_CPPFLAGS := $(NATIVE_CPPFLAGS) -DMSL_CORE_SHARED
 WASM_CPPFLAGS := $(CPPFLAGS) -I$(WASM_GENERATED_DIR) \
 	-DMSL_CORE_NATIVE -DMSL_CORE_WASM
@@ -277,8 +281,8 @@ LDLIBS := -lm
 # contraction indiscriminately in the hosted core.
 $(PPC_OBJ_DIR)/gameplay/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
 $(PPC_OBJ_DIR)/src/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
-$(NATIVE_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast $(FMA_FLAGS)
-$(NATIVE_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast $(FMA_FLAGS)
+$(NATIVE_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
+$(NATIVE_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
 $(NATIVE_OBJ_DIR)/src/runtime/savestate.o: NATIVE_CPPFLAGS += -D_GNU_SOURCE
 $(PYTHON_OBJ_DIR)/src/runtime/savestate.o: PYTHON_CPPFLAGS += -D_GNU_SOURCE
 $(NATIVE_RUNTIME_CENSUS_OBJ): NATIVE_CPPFLAGS += -D_GNU_SOURCE
@@ -299,8 +303,8 @@ $(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_CALLGRIND
 endif
 $(WASM_OBJ_DIR)/gameplay/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
 $(WASM_OBJ_DIR)/src/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
-$(PYTHON_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast $(FMA_FLAGS)
-$(PYTHON_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast $(FMA_FLAGS)
+$(PYTHON_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
+$(PYTHON_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
 
 ifeq ($(NATIVE_RELEASE_PROFILE),1)
 # Fighter callback and item source closures, plus quaternion interpolation,
@@ -500,6 +504,22 @@ $(WASM_COMMAND_FIELDS): $(NATIVE_DAT_PPC_TYPES_OBJ) $(COMMAND_FIELDS_GENERATOR)
 	@mkdir -p "$(@D)"
 	@"$(PY)" "$(COMMAND_FIELDS_GENERATOR)" \
 		--object "$(NATIVE_DAT_PPC_TYPES_OBJ)" --output "$@"
+
+# Clang hosts (Mach-O) ignore scalar_storage_order and read the authored
+# big-endian command bytes through the same generated accessors as wasm32.
+$(NATIVE_COMMAND_FIELDS): $(NATIVE_DAT_PPC_TYPES_OBJ) $(COMMAND_FIELDS_GENERATOR)
+	@mkdir -p "$(@D)"
+	@"$(PY)" "$(COMMAND_FIELDS_GENERATOR)" \
+		--object "$(NATIVE_DAT_PPC_TYPES_OBJ)" --output "$@"
+
+$(NATIVE_OBJ_DIR)/gameplay/melee/ft/ftaction.o \
+$(NATIVE_OBJ_DIR)/gameplay/melee/it/itanimlist.o \
+$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lbcommand.o \
+$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lbspdisplay.o \
+$(PYTHON_OBJ_DIR)/gameplay/melee/ft/ftaction.o \
+$(PYTHON_OBJ_DIR)/gameplay/melee/it/itanimlist.o \
+$(PYTHON_OBJ_DIR)/gameplay/melee/lb/lbcommand.o \
+$(PYTHON_OBJ_DIR)/gameplay/melee/lb/lbspdisplay.o: $(NATIVE_COMMAND_FIELDS)
 
 $(NATIVE_DAT_LAYOUT_SRC): $(NATIVE_DAT_PPC_TYPES_OBJ) $(NATIVE_DAT_NATIVE_TYPES_OBJ) $(NATIVE_DAT_LAYOUT_GENERATOR)
 	@"$(PY)" "$(NATIVE_DAT_LAYOUT_GENERATOR)" \

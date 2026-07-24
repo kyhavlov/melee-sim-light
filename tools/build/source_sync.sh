@@ -63,11 +63,24 @@ verify_local_inventory() {
     done < "$files" | LC_ALL=C sort > "$expected"
     (
         cd "$source_root"
-        find MSL MetroTRK Runtime melee sysdolphin extern -type f -printf '%p\n'
-        find . -maxdepth 1 -type f ! -name '.clang-format' ! -name 'api.c' ! -name 'api.h' \
-            ! -name 'python_api.c' ! -name 'python_api.h' ! -name 'README.md' \
-            ! -name 'source_manifest.tsv' ! -name 'upstream-files.txt' \
-            ! -name 'upstream.lock' ! -name 'upstream_delta_ledger.tsv' -printf '%P\n'
+        # Enumerate from git where possible: src/Runtime and src/runtime
+        # collapse into one directory on case-insensitive filesystems
+        # (macOS), where find would return the union. BSD find also lacks
+        # -printf.
+        if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            git ls-files --cached --others --exclude-standard -- \
+                MSL MetroTRK Runtime melee sysdolphin extern
+            git ls-files --cached --others --exclude-standard -- . |
+                grep -v / |
+                grep -vE '^(\.clang-format|api\.c|api\.h|python_api\.c|python_api\.h|README\.md|source_manifest\.tsv|upstream-files\.txt|upstream\.lock|upstream_delta_ledger\.tsv)$'
+        else
+            find MSL MetroTRK Runtime melee sysdolphin extern -type f
+            find . -maxdepth 1 -type f ! -name '.clang-format' ! -name 'api.c' ! -name 'api.h' \
+                ! -name 'python_api.c' ! -name 'python_api.h' ! -name 'README.md' \
+                ! -name 'source_manifest.tsv' ! -name 'upstream-files.txt' \
+                ! -name 'upstream.lock' ! -name 'upstream_delta_ledger.tsv' |
+                sed 's|^\./||'
+        fi
     ) | LC_ALL=C sort > "$actual"
     if ! diff -u "$expected" "$actual"; then
         echo "canonical source inventory differs from src/upstream-files.txt" >&2
