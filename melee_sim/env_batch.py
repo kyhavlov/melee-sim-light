@@ -140,8 +140,8 @@ class EnvBatch:
 
     @property
     def current_action_frame(self) -> np.ndarray:
-        self._check_step_index(self.t)
-        return self.action_view[self.t]
+        self._check_bound()
+        return self.action_view[0 if self.t >= self.length else self.t]
 
     def done_at(self, t: int) -> np.ndarray:
         return self.buffers.done[self._check_step_index(t)]
@@ -259,17 +259,6 @@ class EnvBatch:
             np.copyto(self.buffers.gamestate[0], self.buffers.gamestate[self.t])
         self.t = 0
 
-    def begin_step(self) -> np.ndarray:
-        """Ensure ring room for the next step and return its action frame.
-
-        Wraps the cursor (carrying the current observation to slot 0) when the
-        ring is exhausted, so callers never index past the per-step buffers.
-        """
-        self._check_bound()
-        if self.t >= self.length:
-            self.reset_cursor()
-        return self.action_view[self.t]
-
     def step_and_reset(self) -> tuple[np.ndarray, np.ndarray]:
         """Reset matches that finished last step, then step the rest.
 
@@ -280,11 +269,18 @@ class EnvBatch:
         the following call — episodes keep both their final and initial
         states.
 
-        Returns ``(is_resetting, done)`` describing the newly published
+        Returns ``(is_resetting, terminal)`` describing the newly published
         frame: ``is_resetting`` is a copy marking entry-frame rows and
-        ``done`` is a view marking terminal rows.
+        ``terminal`` is a view of the step's terminal records, whose ``done``
+        field marks terminal rows.
+
+        Wraps the cursor (carrying the current observation to slot 0) when the
+        ring is exhausted, so callers never index past the per-step buffers;
+        write actions through ``current_action_frame``, which is wrap-aware.
         """
         self._check_bound()
+        if self.t >= self.length:
+            self.reset_cursor()
         fresh = self._pending_reset.astype(np.bool_)
         fresh_ids = np.flatnonzero(fresh)
         step_mask = None
@@ -294,9 +290,9 @@ class EnvBatch:
             np.logical_not(fresh, out=step_mask)
         step_t = self.t
         self.step(step_mask)
-        done = self.buffers.done[step_t]
-        np.copyto(self._pending_reset, done)
-        return fresh, done
+        terminal = self.terminal_view[step_t]
+        np.copyto(self._pending_reset, terminal["done"])
+        return fresh, terminal
 
     def step(self, step_mask: np.ndarray | None = None) -> None:
         """Advance the batch one frame and publish observations for all lanes.
