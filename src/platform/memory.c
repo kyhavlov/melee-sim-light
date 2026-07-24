@@ -85,10 +85,38 @@ int msl_memory_context_init(MslMemoryContext* context, MslMemoryOwner owner)
         // must not consume the process-wide low-address window.
         // refs/melee/src/melee/lb/lbfile.c::{lbFile_80016580,
         //   lbFile_800168A0}
+#if defined(__APPLE__)
+        // macOS has no MAP_32BIT and no MAP_FIXED_NOREPLACE. Scan
+        // non-destructive low hints above the native DAT arena window.
+        // x86_64 (Rosetta) images linked with a small __PAGEZERO can map
+        // low; arm64 images cannot map below 4 GiB at all and fail here
+        // cleanly.
+        if (owner == MSL_MEMORY_GAME_DATA) {
+            uintptr_t hint;
+            mapping = MAP_FAILED;
+            for (hint = 0x60000000u;
+                 hint + capacity <= UINT32_MAX && mapping == MAP_FAILED;
+                 hint += 0x08000000u)
+            {
+                mapping = mmap((void*) hint, capacity,
+                               PROT_READ | PROT_WRITE, flags, -1, 0);
+                if (mapping != MAP_FAILED &&
+                    (uintptr_t) mapping + capacity > UINT32_MAX)
+                {
+                    munmap(mapping, capacity);
+                    mapping = MAP_FAILED;
+                }
+            }
+        } else {
+            mapping =
+                mmap(NULL, capacity, PROT_READ | PROT_WRITE, flags, -1, 0);
+        }
+#else
         if (owner == MSL_MEMORY_GAME_DATA) {
             flags |= MAP_32BIT;
         }
         mapping = mmap(NULL, capacity, PROT_READ | PROT_WRITE, flags, -1, 0);
+#endif
         if (mapping == MAP_FAILED ||
             (owner == MSL_MEMORY_GAME_DATA &&
              (uintptr_t) mapping > UINT32_MAX))

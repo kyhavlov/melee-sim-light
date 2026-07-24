@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -23,6 +24,37 @@ _DIE_RE = re.compile(
 _ATTR_RE = re.compile(r"^\s*<[0-9a-f]+>\s+(DW_AT_[A-Za-z0-9_]+)\s*:\s*(.*)$")
 _REF_RE = re.compile(r"<0x([0-9a-f]+)>")
 _INT_RE = re.compile(r"(?:^|\s)(-?(?:0x[0-9a-fA-F]+|\d+))(?:\s|$)")
+
+# llvm-dwarfdump renders the same info with a different surface syntax. It is
+# the fallback on hosts without GNU readelf (macOS), and unlike readelf it
+# parses both ELF and Mach-O objects.
+_DWARFDUMP_DIE_RE = re.compile(r"^0x([0-9a-f]+):(\s+)(DW_TAG_[A-Za-z0-9_]+)")
+# Compile-unit address size: "Pointer Size:  8" (readelf) or
+# "addr_size = 0x08" (dwarfdump). Clang omits DW_AT_byte_size on pointer
+# DIEs, so pointer sizes fall back to this.
+_ADDRESS_SIZE_RE = re.compile(
+    r"(?:Pointer Size:\s+(?:0x)?([0-9a-f]+)|addr_size = (?:0x)?([0-9a-f]+))"
+)
+_DWARFDUMP_ATTR_RE = re.compile(r"^\s+(DW_AT_[A-Za-z0-9_]+)\s*\t?\((.*)\)$")
+_DWARFDUMP_REF_RE = re.compile(r"^0x([0-9a-f]+)")
+_DWARF_ATE_CODES = {
+    "DW_ATE_address": 1,
+    "DW_ATE_boolean": 2,
+    "DW_ATE_complex_float": 3,
+    "DW_ATE_float": 4,
+    "DW_ATE_signed": 5,
+    "DW_ATE_signed_char": 6,
+    "DW_ATE_unsigned": 7,
+    "DW_ATE_unsigned_char": 8,
+}
+
+
+def _dwarf_tool() -> str:
+    if shutil.which("readelf"):
+        return "readelf"
+    if shutil.which("dwarfdump"):
+        return "dwarfdump"
+    raise RuntimeError("neither readelf nor dwarfdump is available")
 
 
 @dataclasses.dataclass
@@ -36,20 +68,41 @@ class Die:
 
 class Dwarf:
     def __init__(self, object_path: Path):
+        tool = _dwarf_tool()
+        if tool == "readelf":
+            command = ["readelf", "--debug-dump=info", "--wide", str(object_path)]
+            die_re = _DIE_RE
+            attr_re = _ATTR_RE
+        else:
+            command = ["dwarfdump", "--debug-info", str(object_path)]
+            die_re = _DWARFDUMP_DIE_RE
+            attr_re = _DWARFDUMP_ATTR_RE
         result = subprocess.run(
-            ["readelf", "--debug-dump=info", "--wide", str(object_path)],
+            command,
             check=True,
             text=True,
             stdout=subprocess.PIPE,
         )
         self.dies: dict[int, Die] = {}
+        self.address_size = 0
         stack: list[Die] = []
         current: Die | None = None
         for line in result.stdout.splitlines():
-            match = _DIE_RE.match(line)
+            if self.address_size == 0:
+                match = _ADDRESS_SIZE_RE.search(line)
+                if match:
+                    self.address_size = int(match.group(1) or match.group(2), 16)
+            match = die_re.match(line)
             if match:
-                depth = int(match.group(1))
-                current = Die(int(match.group(2), 16), depth, match.group(3))
+                if tool == "readelf":
+                    depth = int(match.group(1))
+                    offset = int(match.group(2), 16)
+                    tag = match.group(3)
+                else:
+                    offset = int(match.group(1), 16)
+                    depth = len(match.group(2))
+                    tag = match.group(3)
+                current = Die(offset, depth, tag)
                 self.dies[current.offset] = current
                 while stack and stack[-1].depth >= depth:
                     stack.pop()
@@ -57,15 +110,20 @@ class Dwarf:
                     stack[-1].children.append(current)
                 stack.append(current)
                 continue
-            match = _ATTR_RE.match(line)
+            match = attr_re.match(line)
             if match and current is not None:
-                current.attrs[match.group(1)] = match.group(2)
+                value = match.group(2)
+                if tool == "dwarfdump":
+                    code = _DWARF_ATE_CODES.get(value)
+                    if code is not None:
+                        value = str(code)
+                current.attrs[match.group(1)] = value
 
     def ref(self, die: Die, attr: str = "DW_AT_type") -> Die | None:
         value = die.attrs.get(attr)
         if value is None:
             return None
-        match = _REF_RE.search(value)
+        match = _REF_RE.search(value) or _DWARFDUMP_REF_RE.match(value)
         return self.dies.get(int(match.group(1), 16)) if match else None
 
     @staticmethod
@@ -83,6 +141,8 @@ class Dwarf:
     @staticmethod
     def name(die: Die) -> str:
         value = die.attrs.get("DW_AT_name", "")
+        if value.startswith('"') and value.endswith('"'):
+            return value[1:-1]
         if "): " in value:
             return value.rsplit(": ", 1)[1]
         if value.startswith("(") and ") " in value:
@@ -152,6 +212,8 @@ class PairBuilder:
     def _size(dwarf: Dwarf, die: Die | None) -> int:
         if die is None or die.tag == "DW_TAG_unspecified_type":
             return 0
+        if die.tag == "DW_TAG_pointer_type":
+            return dwarf.integer(die, "DW_AT_byte_size", dwarf.address_size)
         return dwarf.integer(die, "DW_AT_byte_size", 0)
 
     @staticmethod

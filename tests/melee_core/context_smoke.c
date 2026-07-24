@@ -5,8 +5,38 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__APPLE__)
+// Mach-O has no __data_start/_end linker symbols; the writable globals of
+// the executable live in its __DATA segment (data, bss, common).
+#include <mach-o/getsect.h>
+#include <mach-o/ldsyms.h>
+
+static uint8_t* writable_data_start(void)
+{
+    unsigned long size;
+    return getsegmentdata(&_mh_execute_header, "__DATA", &size);
+}
+
+static size_t writable_data_size(void)
+{
+    unsigned long size;
+    (void) getsegmentdata(&_mh_execute_header, "__DATA", &size);
+    return (size_t) size;
+}
+#else
 extern uint8_t __data_start[];
 extern uint8_t _end[];
+
+static uint8_t* writable_data_start(void)
+{
+    return __data_start;
+}
+
+static size_t writable_data_size(void)
+{
+    return (size_t) (_end - __data_start);
+}
+#endif
 
 static uint64_t hash_bytes(const void* data, size_t size)
 {
@@ -22,16 +52,16 @@ static int writable_globals_unchanged(const uint8_t* snapshot, size_t size,
                                       const char* phase)
 {
     size_t byte;
-    if (memcmp(snapshot, __data_start, size) == 0) {
+    if (memcmp(snapshot, writable_data_start(), size) == 0) {
         return 1;
     }
-    for (byte = 0; byte < size && snapshot[byte] == __data_start[byte]; ++byte)
+    for (byte = 0; byte < size && snapshot[byte] == writable_data_start()[byte]; ++byte)
     {
     }
     fprintf(stderr,
             "%s mutated process-global state: address=%p byte=%zu:%02x/%02x\n",
-            phase, __data_start + byte, byte, snapshot[byte],
-            __data_start[byte]);
+            phase, writable_data_start() + byte, byte, snapshot[byte],
+            writable_data_start()[byte]);
     return 0;
 }
 
@@ -105,8 +135,8 @@ static int raw_objects_have_no_managed_pointers(const MslCoreMatch* match,
                 if ((object->flags & MSL_RELOC_INTRUSIVE_FIRST_POINTER) != 0) {
                     HSD_ClassInfo* info;
                     memcpy(&info, object_address, sizeof(info));
-                    if (in_range((uintptr_t) info, __data_start,
-                                 (size_t) (_end - __data_start)))
+                    if (in_range((uintptr_t) info, writable_data_start(),
+                                 writable_data_size()))
                     {
                         fprintf(stderr, "  class=%s size=%d\n",
                                 info->head.class_name != NULL
@@ -284,12 +314,12 @@ int main(int argc, char** argv)
     // All class/source initialization has now been exercised. Gameplay Match
     // construction, stepping, and reset must mutate only explicitly bound
     // MatchState/TLS, never the executable's process-global data segment.
-    global_size = (size_t) (_end - __data_start);
+    global_size = writable_data_size();
     global_snapshot = malloc(global_size);
     if (global_snapshot == NULL) {
         return 1;
     }
-    memcpy(global_snapshot, __data_start, global_size);
+    memcpy(global_snapshot, writable_data_start(), global_size);
 
     for (match_index = 0; match_index < MATCH_COUNT; ++match_index) {
         if (msl_core_match_init(&matches[match_index], &game_data,

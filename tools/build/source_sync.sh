@@ -18,12 +18,19 @@ local_path() {
     esac
 }
 
+# macOS ships shasum but not coreutils sha256sum.
+if command -v sha256sum >/dev/null 2>&1; then
+    sha256_tool=(sha256sum)
+else
+    sha256_tool=(shasum -a 256)
+fi
+
 tree_digest() {
     local tree=$1
     (
         cd "$tree"
-        LC_ALL=C find . -type f -print0 | sort -z | xargs -0 sha256sum |
-            sha256sum | awk '{ print $1 }'
+        LC_ALL=C find . -type f -print0 | sort -z | xargs -0 "${sha256_tool[@]}" |
+            "${sha256_tool[@]}" | awk '{ print $1 }'
     )
 }
 

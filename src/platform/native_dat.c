@@ -116,10 +116,28 @@ static void* native_alloc(size_t size)
             abort();
         }
 #else
+#if defined(__APPLE__)
+        // macOS has no MAP_FIXED_NOREPLACE and MAP_FIXED would clobber
+        // existing mappings. Ask for the same low window with a
+        // non-destructive hint and verify placement stayed below the
+        // 32-bit source-address ceiling. x86_64 (Rosetta) images linked
+        // with a small __PAGEZERO can map low; arm64 images cannot map
+        // below 4 GiB at all and abort here.
+        void* mapping = mmap((void*) 0x50000000, MSL_NATIVE_DAT_ARENA_BYTES,
+                             PROT_READ | PROT_WRITE,
+                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (mapping != MAP_FAILED &&
+            (uintptr_t) mapping + MSL_NATIVE_DAT_ARENA_BYTES > UINT32_MAX)
+        {
+            munmap(mapping, MSL_NATIVE_DAT_ARENA_BYTES);
+            mapping = MAP_FAILED;
+        }
+#else
         void* mapping =
             mmap((void*) 0x50000000, MSL_NATIVE_DAT_ARENA_BYTES,
                  PROT_READ | PROT_WRITE,
                  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+#endif
         if (mapping == MAP_FAILED) {
             fprintf(stderr, "native DAT arena reservation failed\n");
             abort();
