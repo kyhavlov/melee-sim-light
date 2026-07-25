@@ -128,7 +128,7 @@
       "expected": {
         "native": {
           "frames": 12914,
-          "actual_output_fingerprint": "b14e6bc83af7bced"
+          "actual_output_fingerprint": "4da7da970df9ad86"
         }
       }
     },
@@ -668,7 +668,7 @@
       "expected": {
         "native": {
           "frames": 10973,
-          "actual_output_fingerprint": "c92776a3d8a68c86"
+          "actual_output_fingerprint": "f29d7247e9113119"
         }
       }
     },
@@ -803,7 +803,7 @@
       "expected": {
         "native": {
           "frames": 14007,
-          "actual_output_fingerprint": "61b94e8d2d855dbd"
+          "actual_output_fingerprint": "32c84ec91644ffd7"
         }
       }
     },
@@ -812,7 +812,7 @@
       "expected": {
         "native": {
           "frames": 16491,
-          "actual_output_fingerprint": "0c7cceef037fa21d"
+          "actual_output_fingerprint": "598c8adc10487582"
         }
       }
     },
@@ -974,7 +974,7 @@
       "expected": {
         "native": {
           "frames": 13063,
-          "actual_output_fingerprint": "9ad4658f0022de89"
+          "actual_output_fingerprint": "2d09864663614807"
         }
       }
     },
@@ -1172,7 +1172,7 @@
       "expected": {
         "native": {
           "frames": 9014,
-          "actual_output_fingerprint": "7fa3ad26f29a17b2"
+          "actual_output_fingerprint": "a2ccb5210019ecac"
         }
       }
     },
@@ -1280,7 +1280,7 @@
       "expected": {
         "native": {
           "frames": 10703,
-          "actual_output_fingerprint": "f2181cc3ac97169d"
+          "actual_output_fingerprint": "6c766dcbc654dc53"
         }
       }
     },

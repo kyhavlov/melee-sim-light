@@ -173,24 +173,24 @@
       "expected": {
         "native": {
           "frames": 12914,
-          "matched_frames": 12794,
-          "mismatched_frames": 120,
+          "matched_frames": 12816,
+          "mismatched_frames": 98,
           "exact_prefix_frames": 7028,
           "strict_suffix_frames": 5758,
           "first_mismatch_frame": 6906,
           "last_mismatch_frame": 7033,
-          "mismatch_count": 183,
-          "mismatch_fingerprint": "23113abb0b5dba1a",
+          "mismatch_count": 129,
+          "mismatch_fingerprint": "12e744d5fdb46b43",
           "mismatch_fields": [
             {
               "field": "pos_x[1]",
-              "count": 86,
+              "count": 47,
               "first_frame": 6906,
               "last_frame": 7033
             },
             {
               "field": "pos_y[1]",
-              "count": 97,
+              "count": 82,
               "first_frame": 6906,
               "last_frame": 7033
             }
@@ -213,26 +213,26 @@
       "expected": {
         "native": {
           "frames": 13063,
-          "matched_frames": 12939,
-          "mismatched_frames": 124,
-          "exact_prefix_frames": 1947,
+          "matched_frames": 13001,
+          "mismatched_frames": 62,
+          "exact_prefix_frames": 1948,
           "strict_suffix_frames": 10988,
-          "first_mismatch_frame": 1825,
+          "first_mismatch_frame": 1826,
           "last_mismatch_frame": 1952,
-          "mismatch_count": 191,
-          "mismatch_fingerprint": "4733a1866819dda7",
+          "mismatch_count": 84,
+          "mismatch_fingerprint": "ea6d1bd95ec53a26",
           "mismatch_fields": [
             {
               "field": "pos_x[1]",
-              "count": 102,
-              "first_frame": 1825,
+              "count": 56,
+              "first_frame": 1826,
               "last_frame": 1952
             },
             {
               "field": "pos_y[1]",
-              "count": 89,
-              "first_frame": 1825,
-              "last_frame": 1952
+              "count": 28,
+              "first_frame": 1826,
+              "last_frame": 1950
             }
           ],
           "render_visibility_mismatch_count": 0,
@@ -648,18 +648,18 @@
       "expected": {
         "native": {
           "frames": 10973,
-          "matched_frames": 10777,
-          "mismatched_frames": 196,
+          "matched_frames": 10796,
+          "mismatched_frames": 177,
           "exact_prefix_frames": 4954,
           "strict_suffix_frames": 14,
           "first_mismatch_frame": 4832,
           "last_mismatch_frame": 10836,
-          "mismatch_count": 403,
-          "mismatch_fingerprint": "2902340a17fd062e",
-          "mismatch_fields_digest": "bf060706fd9aa42d5f8ec9bbd90fafd42346bf8a4523287ee0070028065bd21d",
+          "mismatch_count": 341,
+          "mismatch_fingerprint": "16ce906c7340825e",
           "render_visibility_mismatch_count": 27,
           "first_render_visibility_mismatch_frame": 2041,
-          "signed_zero_equal_count": 0
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "6e56ef6c1ffb4329dd804e31f38e674eff0fea9274c1f259f649f69176147865"
         },
         "ppc": "native"
       }
@@ -1235,18 +1235,18 @@
       "expected": {
         "native": {
           "frames": 9014,
-          "matched_frames": 8894,
-          "mismatched_frames": 120,
+          "matched_frames": 8914,
+          "mismatched_frames": 100,
           "exact_prefix_frames": 1826,
-          "strict_suffix_frames": 5347,
+          "strict_suffix_frames": 5350,
           "first_mismatch_frame": 1704,
-          "last_mismatch_frame": 3544,
-          "mismatch_count": 182,
-          "mismatch_fingerprint": "0a8c2a68c61051d7",
+          "last_mismatch_frame": 3541,
+          "mismatch_count": 140,
+          "mismatch_fingerprint": "cfc4f7229849abb4",
           "render_visibility_mismatch_count": 1,
           "first_render_visibility_mismatch_frame": 8834,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "1ce2215558e431178c234b7b51b1eea204655b78e9cd009d8398901783ded59b"
+          "mismatch_fields_digest": "6a51ead3992a2dbcb81c8c79644471859daaba38b2d1a5f24c55eb120a214fd2"
         },
         "ppc": "native"
       }
@@ -1461,18 +1461,18 @@
       "expected": {
         "native": {
           "frames": 10703,
-          "matched_frames": 10559,
-          "mismatched_frames": 144,
-          "exact_prefix_frames": 1087,
+          "matched_frames": 10613,
+          "mismatched_frames": 90,
+          "exact_prefix_frames": 1089,
           "strict_suffix_frames": 1107,
-          "first_mismatch_frame": 965,
+          "first_mismatch_frame": 967,
           "last_mismatch_frame": 9473,
-          "mismatch_count": 211,
-          "mismatch_fingerprint": "9908ef4c162c6ccc",
+          "mismatch_count": 116,
+          "mismatch_fingerprint": "daae93f042ec2b5d",
           "render_visibility_mismatch_count": 3,
           "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "6e0f3329ab037a55b4d46633fdca03209273e57a642247234619b5f063bef51e"
+          "mismatch_fields_digest": "f4261bf1e258f49866e9d20a6d4955d002aeccfc4a4bd06dd4444f16f5222b82"
         },
         "ppc": "native"
       }
@@ -2356,7 +2356,23 @@
         "refs/melee/src/melee/it/item.c::Item_8026A8EC",
         "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
       ],
-      "expected": {"native": {"frames": 15634, "matched_frames": 6418, "mismatched_frames": 9216, "exact_prefix_frames": 907, "strict_suffix_frames": 0, "first_mismatch_frame": 785, "last_mismatch_frame": 15511, "mismatch_count": 337691, "mismatch_fingerprint": "179f7a2a9224dd62", "render_visibility_mismatch_count": 12589, "first_render_visibility_mismatch_frame": 6678, "signed_zero_equal_count": 0, "mismatch_fields_digest": "25d251b389259bfc9194f93113e55cc867d0d03b6f6395738b97b6a7e2160163"}}
+      "expected": {
+        "native": {
+          "frames": 15634,
+          "matched_frames": 6418,
+          "mismatched_frames": 9216,
+          "exact_prefix_frames": 907,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 785,
+          "last_mismatch_frame": 15511,
+          "mismatch_count": 337691,
+          "mismatch_fingerprint": "179f7a2a9224dd62",
+          "render_visibility_mismatch_count": 12589,
+          "first_render_visibility_mismatch_frame": 6678,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "25d251b389259bfc9194f93113e55cc867d0d03b6f6395738b97b6a7e2160163"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/MadeUpEnchantedStingray.slpz",
@@ -2369,7 +2385,23 @@
         "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
         "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
       ],
-      "expected": {"native": {"frames": 11073, "matched_frames": 5804, "mismatched_frames": 5269, "exact_prefix_frames": 1900, "strict_suffix_frames": 0, "first_mismatch_frame": 1778, "last_mismatch_frame": 10950, "mismatch_count": 181244, "mismatch_fingerprint": "c6173add9a734d20", "render_visibility_mismatch_count": 6658, "first_render_visibility_mismatch_frame": 5768, "signed_zero_equal_count": 0, "mismatch_fields_digest": "da6810779f56bcad1ba1e3f936002e8890f503f137b29977af989e402f91d370"}}
+      "expected": {
+        "native": {
+          "frames": 11073,
+          "matched_frames": 5804,
+          "mismatched_frames": 5269,
+          "exact_prefix_frames": 1900,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 1778,
+          "last_mismatch_frame": 10950,
+          "mismatch_count": 181244,
+          "mismatch_fingerprint": "c6173add9a734d20",
+          "render_visibility_mismatch_count": 6658,
+          "first_render_visibility_mismatch_frame": 5768,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "da6810779f56bcad1ba1e3f936002e8890f503f137b29977af989e402f91d370"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/TameEmbellishedSparrow.slpz",
@@ -2382,7 +2414,23 @@
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 14352, "matched_frames": 13248, "mismatched_frames": 1104, "exact_prefix_frames": 7509, "strict_suffix_frames": 0, "first_mismatch_frame": 7387, "last_mismatch_frame": 14229, "mismatch_count": 2709, "mismatch_fingerprint": "aceed9c38805abd0", "render_visibility_mismatch_count": 25, "first_render_visibility_mismatch_frame": 4778, "signed_zero_equal_count": 0, "mismatch_fields_digest": "a3e29ed0911cdb7017dd9d34c656e75d09a9e9161979974e0684513f883dafcb"}}
+      "expected": {
+        "native": {
+          "frames": 14352,
+          "matched_frames": 13248,
+          "mismatched_frames": 1104,
+          "exact_prefix_frames": 7509,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 7387,
+          "last_mismatch_frame": 14229,
+          "mismatch_count": 2709,
+          "mismatch_fingerprint": "aceed9c38805abd0",
+          "render_visibility_mismatch_count": 25,
+          "first_render_visibility_mismatch_frame": 4778,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "a3e29ed0911cdb7017dd9d34c656e75d09a9e9161979974e0684513f883dafcb"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/HummingDismalCat.slpz",
@@ -2394,7 +2442,23 @@
         "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
         "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
       ],
-      "expected": {"native": {"frames": 6803, "matched_frames": 4291, "mismatched_frames": 2512, "exact_prefix_frames": 3843, "strict_suffix_frames": 0, "first_mismatch_frame": 3721, "last_mismatch_frame": 6680, "mismatch_count": 72754, "mismatch_fingerprint": "2178f2dd2fd334d0", "render_visibility_mismatch_count": 624, "first_render_visibility_mismatch_frame": 3716, "signed_zero_equal_count": 0, "mismatch_fields_digest": "e1a6caa0363ff0f506872994fee59447a46e4bd2d277d0557441535674e6ef68"}}
+      "expected": {
+        "native": {
+          "frames": 6803,
+          "matched_frames": 4291,
+          "mismatched_frames": 2512,
+          "exact_prefix_frames": 3843,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 3721,
+          "last_mismatch_frame": 6680,
+          "mismatch_count": 72754,
+          "mismatch_fingerprint": "2178f2dd2fd334d0",
+          "render_visibility_mismatch_count": 624,
+          "first_render_visibility_mismatch_frame": 3716,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "e1a6caa0363ff0f506872994fee59447a46e4bd2d277d0557441535674e6ef68"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/ScaryFrankPorcupine.slpz",
@@ -2406,7 +2470,23 @@
         "refs/melee/src/melee/it/item.c::Item_80268E5C",
         "refs/melee/src/melee/it/items/itpeachturnip.c"
       ],
-      "expected": {"native": {"frames": 26844, "matched_frames": 26428, "mismatched_frames": 416, "exact_prefix_frames": 2311, "strict_suffix_frames": 570, "first_mismatch_frame": 2189, "last_mismatch_frame": 26151, "mismatch_count": 696, "mismatch_fingerprint": "e8dba20d26ba2331", "render_visibility_mismatch_count": 0, "first_render_visibility_mismatch_frame": null, "signed_zero_equal_count": 0, "mismatch_fields_digest": "1d6c7ccb96e144930c282b0c8916bc9a6347dc4a70a7c6aa19f524306f92c675"}}
+      "expected": {
+        "native": {
+          "frames": 26844,
+          "matched_frames": 26428,
+          "mismatched_frames": 416,
+          "exact_prefix_frames": 2311,
+          "strict_suffix_frames": 570,
+          "first_mismatch_frame": 2189,
+          "last_mismatch_frame": 26151,
+          "mismatch_count": 696,
+          "mismatch_fingerprint": "e8dba20d26ba2331",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "1d6c7ccb96e144930c282b0c8916bc9a6347dc4a70a7c6aa19f524306f92c675"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/StridentRedSandpiper.slpz",
@@ -2418,7 +2498,23 @@
         "refs/melee/src/melee/it/it_2725.c",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 11114, "matched_frames": 11099, "mismatched_frames": 15, "exact_prefix_frames": 7100, "strict_suffix_frames": 3999, "first_mismatch_frame": 6978, "last_mismatch_frame": 6992, "mismatch_count": 30, "mismatch_fingerprint": "3174e8266b283466", "render_visibility_mismatch_count": 14, "first_render_visibility_mismatch_frame": 2036, "signed_zero_equal_count": 0, "mismatch_fields_digest": "8e7997cf98725adede82d885d44e9957cb95e01493ebb3d6d93c56153572c895"}}
+      "expected": {
+        "native": {
+          "frames": 11114,
+          "matched_frames": 11099,
+          "mismatched_frames": 15,
+          "exact_prefix_frames": 7100,
+          "strict_suffix_frames": 3999,
+          "first_mismatch_frame": 6978,
+          "last_mismatch_frame": 6992,
+          "mismatch_count": 30,
+          "mismatch_fingerprint": "3174e8266b283466",
+          "render_visibility_mismatch_count": 14,
+          "first_render_visibility_mismatch_frame": 2036,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "8e7997cf98725adede82d885d44e9957cb95e01493ebb3d6d93c56153572c895"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/DisgustingLivelyRaven.slpz",
@@ -2430,7 +2526,23 @@
         "refs/melee/src/melee/it/item.c",
         "refs/melee/src/melee/it/items/itpeachturnip.c"
       ],
-      "expected": {"native": {"frames": 12960, "matched_frames": 12750, "mismatched_frames": 210, "exact_prefix_frames": 6523, "strict_suffix_frames": 5013, "first_mismatch_frame": 6401, "last_mismatch_frame": 7824, "mismatch_count": 378, "mismatch_fingerprint": "e5d0edb5ac03c879", "render_visibility_mismatch_count": 11, "first_render_visibility_mismatch_frame": 505, "signed_zero_equal_count": 0, "mismatch_fields_digest": "37327be844285a7eb154500f6b2ed78f253354aad893bf72b226c19820435361"}}
+      "expected": {
+        "native": {
+          "frames": 12960,
+          "matched_frames": 12750,
+          "mismatched_frames": 210,
+          "exact_prefix_frames": 6523,
+          "strict_suffix_frames": 5013,
+          "first_mismatch_frame": 6401,
+          "last_mismatch_frame": 7824,
+          "mismatch_count": 378,
+          "mismatch_fingerprint": "e5d0edb5ac03c879",
+          "render_visibility_mismatch_count": 11,
+          "first_render_visibility_mismatch_frame": 505,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "37327be844285a7eb154500f6b2ed78f253354aad893bf72b226c19820435361"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/DryLimitedWoodcock.slpz",
@@ -2443,7 +2555,23 @@
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 10458, "matched_frames": 9695, "mismatched_frames": 763, "exact_prefix_frames": 654, "strict_suffix_frames": 1454, "first_mismatch_frame": 532, "last_mismatch_frame": 8881, "mismatch_count": 939, "mismatch_fingerprint": "da41964656e7b77f", "render_visibility_mismatch_count": 6, "first_render_visibility_mismatch_frame": -122, "signed_zero_equal_count": 0, "mismatch_fields_digest": "42a697027e91ea00d147f830d20b444715ff0ebfd2af8c2b5b45b0872011b34e"}}
+      "expected": {
+        "native": {
+          "frames": 10458,
+          "matched_frames": 9695,
+          "mismatched_frames": 763,
+          "exact_prefix_frames": 654,
+          "strict_suffix_frames": 1454,
+          "first_mismatch_frame": 532,
+          "last_mismatch_frame": 8881,
+          "mismatch_count": 939,
+          "mismatch_fingerprint": "da41964656e7b77f",
+          "render_visibility_mismatch_count": 6,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "42a697027e91ea00d147f830d20b444715ff0ebfd2af8c2b5b45b0872011b34e"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/SmugConfusedTermite.slpz",
@@ -2456,7 +2584,23 @@
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/it/item.c"
       ],
-      "expected": {"native": {"frames": 12898, "matched_frames": 12873, "mismatched_frames": 25, "exact_prefix_frames": 3014, "strict_suffix_frames": 2353, "first_mismatch_frame": 2892, "last_mismatch_frame": 10422, "mismatch_count": 40, "mismatch_fingerprint": "2d59b2d1a3a27a47", "render_visibility_mismatch_count": 9, "first_render_visibility_mismatch_frame": -122, "signed_zero_equal_count": 0, "mismatch_fields_digest": "14dd3e35b2938cec52ba21b6a968d4bcfe7a0bd65d82d0ffeeed4b2f34c862b7"}}
+      "expected": {
+        "native": {
+          "frames": 12898,
+          "matched_frames": 12873,
+          "mismatched_frames": 25,
+          "exact_prefix_frames": 3014,
+          "strict_suffix_frames": 2353,
+          "first_mismatch_frame": 2892,
+          "last_mismatch_frame": 10422,
+          "mismatch_count": 40,
+          "mismatch_fingerprint": "2d59b2d1a3a27a47",
+          "render_visibility_mismatch_count": 9,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "14dd3e35b2938cec52ba21b6a968d4bcfe7a0bd65d82d0ffeeed4b2f34c862b7"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/HappyGoLuckyScentedButterfly.slpz",
@@ -2470,7 +2614,23 @@
         "refs/melee/src/melee/it/items/itseakneedlethrown.c",
         "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
       ],
-      "expected": {"native": {"frames": 14098, "matched_frames": 14009, "mismatched_frames": 89, "exact_prefix_frames": 5186, "strict_suffix_frames": 256, "first_mismatch_frame": 5064, "last_mismatch_frame": 13719, "mismatch_count": 1826, "mismatch_fingerprint": "9841fad731083fe5", "render_visibility_mismatch_count": 19, "first_render_visibility_mismatch_frame": 500, "signed_zero_equal_count": 0, "mismatch_fields_digest": "4010253504a29b52e01af1f1eec5aa9cf6af3d22f4338eecf8e950a5a832f7ff"}}
+      "expected": {
+        "native": {
+          "frames": 14098,
+          "matched_frames": 14009,
+          "mismatched_frames": 89,
+          "exact_prefix_frames": 5186,
+          "strict_suffix_frames": 256,
+          "first_mismatch_frame": 5064,
+          "last_mismatch_frame": 13719,
+          "mismatch_count": 1826,
+          "mismatch_fingerprint": "9841fad731083fe5",
+          "render_visibility_mismatch_count": 19,
+          "first_render_visibility_mismatch_frame": 500,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "4010253504a29b52e01af1f1eec5aa9cf6af3d22f4338eecf8e950a5a832f7ff"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/MarvelousLopsidedOryx.slpz",
@@ -2483,7 +2643,23 @@
         "refs/melee/src/melee/it/item.c",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 16873, "matched_frames": 16718, "mismatched_frames": 155, "exact_prefix_frames": 5011, "strict_suffix_frames": 3635, "first_mismatch_frame": 4889, "last_mismatch_frame": 13115, "mismatch_count": 274, "mismatch_fingerprint": "506a13d8f0632ebd", "render_visibility_mismatch_count": 0, "first_render_visibility_mismatch_frame": null, "signed_zero_equal_count": 0, "mismatch_fields_digest": "73928bec8f35455c95f39a2c12b47f457672a70311a2c2a077e77972e26128d0"}}
+      "expected": {
+        "native": {
+          "frames": 16873,
+          "matched_frames": 16718,
+          "mismatched_frames": 155,
+          "exact_prefix_frames": 5011,
+          "strict_suffix_frames": 3635,
+          "first_mismatch_frame": 4889,
+          "last_mismatch_frame": 13115,
+          "mismatch_count": 274,
+          "mismatch_fingerprint": "506a13d8f0632ebd",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "73928bec8f35455c95f39a2c12b47f457672a70311a2c2a077e77972e26128d0"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
@@ -2496,7 +2672,23 @@
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
         "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
       ],
-      "expected": {"native": {"frames": 14007, "matched_frames": 13779, "mismatched_frames": 228, "exact_prefix_frames": 2383, "strict_suffix_frames": 3439, "first_mismatch_frame": 2261, "last_mismatch_frame": 10445, "mismatch_count": 422, "mismatch_fingerprint": "314b3b824103c3a3", "render_visibility_mismatch_count": 7, "first_render_visibility_mismatch_frame": 1839, "signed_zero_equal_count": 0, "mismatch_fields_digest": "2ad5be03b582dde9ce60b04fcd214cd81bc8bf2aebfb64a9f339e815636e0c4a"}}
+      "expected": {
+        "native": {
+          "frames": 14007,
+          "matched_frames": 13832,
+          "mismatched_frames": 175,
+          "exact_prefix_frames": 2383,
+          "strict_suffix_frames": 3439,
+          "first_mismatch_frame": 2261,
+          "last_mismatch_frame": 10445,
+          "mismatch_count": 318,
+          "mismatch_fingerprint": "6861a13f436a3fe6",
+          "render_visibility_mismatch_count": 7,
+          "first_render_visibility_mismatch_frame": 1839,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "4f19d53d34941d18bd52751f3bf083120905ace41a7bdd2db240110d271ba064"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/PerfectJollyMagpie.slpz",
@@ -2509,7 +2701,23 @@
         "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
         "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
       ],
-      "expected": {"native": {"frames": 10838, "matched_frames": 10747, "mismatched_frames": 91, "exact_prefix_frames": 519, "strict_suffix_frames": 7489, "first_mismatch_frame": 397, "last_mismatch_frame": 3226, "mismatch_count": 217, "mismatch_fingerprint": "f131461b7eb6ce1f", "render_visibility_mismatch_count": 0, "first_render_visibility_mismatch_frame": null, "signed_zero_equal_count": 0, "mismatch_fields_digest": "11040c31eecc52e09a2256037c62c01a559abd216e320dc4c9300d90f0921292"}}
+      "expected": {
+        "native": {
+          "frames": 10838,
+          "matched_frames": 10747,
+          "mismatched_frames": 91,
+          "exact_prefix_frames": 519,
+          "strict_suffix_frames": 7489,
+          "first_mismatch_frame": 397,
+          "last_mismatch_frame": 3226,
+          "mismatch_count": 217,
+          "mismatch_fingerprint": "f131461b7eb6ce1f",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "11040c31eecc52e09a2256037c62c01a559abd216e320dc4c9300d90f0921292"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/CapitalPristineTarsier.slpz",
@@ -2522,7 +2730,23 @@
         "refs/melee/src/melee/it/item.c",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 16491, "matched_frames": 16261, "mismatched_frames": 230, "exact_prefix_frames": 3835, "strict_suffix_frames": 158, "first_mismatch_frame": 3713, "last_mismatch_frame": 16210, "mismatch_count": 362, "mismatch_fingerprint": "85501af886f5bf13", "render_visibility_mismatch_count": 8, "first_render_visibility_mismatch_frame": 7181, "signed_zero_equal_count": 0, "mismatch_fields_digest": "0b445c929c39d1b81bac8e0c2b1824d7853c7f4d48da8e34793806dbd4c2fbb9"}}
+      "expected": {
+        "native": {
+          "frames": 16491,
+          "matched_frames": 16291,
+          "mismatched_frames": 200,
+          "exact_prefix_frames": 3837,
+          "strict_suffix_frames": 158,
+          "first_mismatch_frame": 3715,
+          "last_mismatch_frame": 16210,
+          "mismatch_count": 296,
+          "mismatch_fingerprint": "08c3dc8bb40ac029",
+          "render_visibility_mismatch_count": 8,
+          "first_render_visibility_mismatch_frame": 7181,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "94c06a44129eac22d730db78ec844780329f6092e51a8009bd439850c58b288d"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/ExpertWorthlessFinch.slpz",
@@ -2535,7 +2759,23 @@
         "refs/melee/src/melee/it/items/itbombhei.c",
         "refs/melee/src/melee/it/it_2725.c::it_80272860"
       ],
-      "expected": {"native": {"frames": 12032, "matched_frames": 11758, "mismatched_frames": 274, "exact_prefix_frames": 2299, "strict_suffix_frames": 352, "first_mismatch_frame": 2177, "last_mismatch_frame": 11557, "mismatch_count": 461, "mismatch_fingerprint": "cd6428688741de53", "render_visibility_mismatch_count": 10, "first_render_visibility_mismatch_frame": 1637, "signed_zero_equal_count": 0, "mismatch_fields_digest": "2699512416729798ada5865e3c093c1852baf74e4ba51047c6ee46bf520edb6e"}}
+      "expected": {
+        "native": {
+          "frames": 12032,
+          "matched_frames": 11758,
+          "mismatched_frames": 274,
+          "exact_prefix_frames": 2299,
+          "strict_suffix_frames": 352,
+          "first_mismatch_frame": 2177,
+          "last_mismatch_frame": 11557,
+          "mismatch_count": 461,
+          "mismatch_fingerprint": "cd6428688741de53",
+          "render_visibility_mismatch_count": 10,
+          "first_render_visibility_mismatch_frame": 1637,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "2699512416729798ada5865e3c093c1852baf74e4ba51047c6ee46bf520edb6e"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/HumiliatingCreamyReindeer.slpz",
@@ -2548,7 +2788,23 @@
         "refs/melee/src/melee/mp/mpcoll.c",
         "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
-      "expected": {"native": {"frames": 16501, "matched_frames": 13480, "mismatched_frames": 3021, "exact_prefix_frames": 1698, "strict_suffix_frames": 1212, "first_mismatch_frame": 1576, "last_mismatch_frame": 15166, "mismatch_count": 7022, "mismatch_fingerprint": "490081b0268db2f8", "render_visibility_mismatch_count": 7, "first_render_visibility_mismatch_frame": 2941, "signed_zero_equal_count": 0, "mismatch_fields_digest": "2197065a5ba7e4561e5fe8ae838364aa2b2084df50acd5f9541cbf19c7be4f27"}}
+      "expected": {
+        "native": {
+          "frames": 16501,
+          "matched_frames": 13480,
+          "mismatched_frames": 3021,
+          "exact_prefix_frames": 1698,
+          "strict_suffix_frames": 1212,
+          "first_mismatch_frame": 1576,
+          "last_mismatch_frame": 15166,
+          "mismatch_count": 7022,
+          "mismatch_fingerprint": "490081b0268db2f8",
+          "render_visibility_mismatch_count": 7,
+          "first_render_visibility_mismatch_frame": 2941,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "2197065a5ba7e4561e5fe8ae838364aa2b2084df50acd5f9541cbf19c7be4f27"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/peach_demo_1.slpz",
@@ -2560,7 +2816,23 @@
         "refs/melee/src/melee/it/items/itpeachturnip.c",
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate"
       ],
-      "expected": {"native": {"frames": 6174, "matched_frames": 6088, "mismatched_frames": 86, "exact_prefix_frames": 2008, "strict_suffix_frames": 1856, "first_mismatch_frame": 1886, "last_mismatch_frame": 4195, "mismatch_count": 147, "mismatch_fingerprint": "a40e05a73225abd5", "render_visibility_mismatch_count": 0, "first_render_visibility_mismatch_frame": null, "signed_zero_equal_count": 0, "mismatch_fields_digest": "a62618c728f72f99babbf9492b09f057f5b99ecad06a26662b8a5453482165fa"}}
+      "expected": {
+        "native": {
+          "frames": 6174,
+          "matched_frames": 6088,
+          "mismatched_frames": 86,
+          "exact_prefix_frames": 2008,
+          "strict_suffix_frames": 1856,
+          "first_mismatch_frame": 1886,
+          "last_mismatch_frame": 4195,
+          "mismatch_count": 147,
+          "mismatch_fingerprint": "a40e05a73225abd5",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "a62618c728f72f99babbf9492b09f057f5b99ecad06a26662b8a5453482165fa"
+        }
+      }
     },
     {
       "replay": "replays/validation/peach/peach_demo_2.slpz",
@@ -2573,7 +2845,23 @@
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/it/item.c"
       ],
-      "expected": {"native": {"frames": 8234, "matched_frames": 7698, "mismatched_frames": 536, "exact_prefix_frames": 1081, "strict_suffix_frames": 334, "first_mismatch_frame": 959, "last_mismatch_frame": 7777, "mismatch_count": 655, "mismatch_fingerprint": "bc61820ec5bf713c", "render_visibility_mismatch_count": 3, "first_render_visibility_mismatch_frame": -122, "signed_zero_equal_count": 0, "mismatch_fields_digest": "16e09bb048a58301f97de4fcacf88a9d5af401196d0348ff3d31e4f1b8cb57fa"}}
+      "expected": {
+        "native": {
+          "frames": 8234,
+          "matched_frames": 7698,
+          "mismatched_frames": 536,
+          "exact_prefix_frames": 1081,
+          "strict_suffix_frames": 334,
+          "first_mismatch_frame": 959,
+          "last_mismatch_frame": 7777,
+          "mismatch_count": 655,
+          "mismatch_fingerprint": "bc61820ec5bf713c",
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "16e09bb048a58301f97de4fcacf88a9d5af401196d0348ff3d31e4f1b8cb57fa"
+        }
+      }
     }
   ]
 }
