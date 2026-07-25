@@ -49,6 +49,10 @@ def byte_size(dwarf: Dwarf, die) -> int:
         return 0
     if "DW_AT_byte_size" in die.attrs:
         return dwarf.integer(die, "DW_AT_byte_size")
+    if die.tag == "DW_TAG_pointer_type":
+        # clang omits DW_AT_byte_size on pointer DIEs; without this, arrays
+        # of pointers collapse to a zero stride and lose relocation slots.
+        return dwarf.address_size
     return 0
 
 

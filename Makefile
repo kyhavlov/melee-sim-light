@@ -62,7 +62,14 @@ LLVM_CLANG := $(shell brew --prefix llvm 2>/dev/null)/bin/clang
 ifneq ($(wildcard $(LLVM_CLANG)),)
 PPC_TYPES_TOOLCHAIN_DEP :=
 PPC_TYPES_COMPILE = "$(LLVM_CLANG)" --target=powerpc-unknown-linux-gnu \
-	-nostdlibinc -isystem "$(ROOT)/tools/build/ppc32_libc_shim"
+	-nostdlibinc -isystem "$(ROOT)/tools/build/cross_libc_shim"
+# The wasm32 layout proxy must be a Linux i386 object: Apple clang's -m32
+# produces a Darwin i386 Mach-O whose struct layouts differ (notably
+# -malign-double handling), which corrupts the wasm relocation tables.
+WASM_PROXY_COMPILE = "$(LLVM_CLANG)" --target=i386-unknown-linux-gnu \
+	-malign-double -nostdlibinc \
+	-isystem "$(ROOT)/tools/build/cross_libc_shim" \
+	-I"$(WASM_LAYOUT_INCLUDE)"
 endif
 else
 TIMEOUT := timeout
@@ -74,6 +81,8 @@ PPC_TYPES_TOOLCHAIN_DEP ?= $(TOOLCHAIN_STAMP)
 PPC_TYPES_COMPILE ?= env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
 	LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
 	"$(CC)" --sysroot="$(SYSROOT)"
+WASM_PROXY_COMPILE ?= "$(HOST_CC)" -m32 -malign-double \
+	-I"$(WASM_LAYOUT_INCLUDE)" -isystem /usr/include/x86_64-linux-gnu
 ifeq ($(HOST_TARGET_ARCH),x86_64)
 FMA_FLAGS := -mfma
 else
@@ -544,8 +553,7 @@ $(WASM_GLIBC_STUB):
 
 $(WASM_DAT_NATIVE_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(WASM_GLIBC_STUB)
 	@mkdir -p "$(@D)"
-	@"$(HOST_CC)" -m32 -malign-double -I"$(WASM_LAYOUT_INCLUDE)" \
-		-isystem /usr/include/x86_64-linux-gnu $(WASM_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
+	@$(WASM_PROXY_COMPILE) $(WASM_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
 $(WASM_DAT_LAYOUT_SRC): $(NATIVE_DAT_PPC_TYPES_OBJ) $(WASM_DAT_NATIVE_TYPES_OBJ) $(NATIVE_DAT_LAYOUT_GENERATOR)
@@ -582,8 +590,7 @@ $(PYTHON_MATCH_RELOC_LAYOUT_OBJ): $(NATIVE_MATCH_RELOC_LAYOUT_SRC)
 
 $(WASM_MATCH_RELOC_TYPES_OBJ): $(MATCH_RELOC_TYPES_SRC) $(MATCH_RELOC_TYPES_DEF) $(WASM_GLIBC_STUB)
 	@mkdir -p "$(@D)"
-	@"$(HOST_CC)" -m32 -malign-double -I"$(WASM_LAYOUT_INCLUDE)" \
-		-isystem /usr/include/x86_64-linux-gnu $(WASM_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
+	@$(WASM_PROXY_COMPILE) $(WASM_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
 $(WASM_MATCH_RELOC_LAYOUT_SRC): $(WASM_MATCH_RELOC_TYPES_OBJ) $(MATCH_RELOC_TYPES_DEF) $(MATCH_RELOC_GENERATOR)
@@ -628,6 +635,7 @@ $(WASM_MODULE): $(WASM_CORE_OBJS)
 		-sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createMslCoreModule \
 		-sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 \
 		-sINITIAL_MEMORY=536870912 -sMAXIMUM_MEMORY=1073741824 \
+		-sGROWABLE_ARRAYBUFFERS=0 \
 		-sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_core_game_data_create","_msl_core_game_data_destroy","_msl_core_batch_create","_msl_core_batch_destroy","_msl_core_batch_match_count","_msl_core_batch_reset_matches","_msl_core_batch_step_matches","_msl_core_batch_write_state","_msl_core_batch_write_observation","_msl_core_batch_write_terminal","_msl_core_batch_write_viewer","_msl_core_batch_copy_matches","_msl_core_batch_match_save_size","_msl_core_batch_save_match","_msl_core_batch_restore_match"]' \
 		-sEXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
 		--preload-file "$(DATA)@/data/raw" -o "$@" 2>"$$log"; then \
