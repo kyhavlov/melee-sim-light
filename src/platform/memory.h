@@ -55,6 +55,20 @@ void* HSD_MemAllocReloc(size_t size, MslRelocType type, uint32_t count,
 int msl_memory_context_owns(const MslMemoryContext* context,
                             const void* pointer);
 
+#ifdef MSL_CORE_NATIVE
+#ifndef MSL_CORE_WASM
+// Map an arena whose low-32-bit address image neither wraps 2^32 nor
+// touches zero, so truncated (u32) addresses inside it stay unique and
+// nonzero and decode back through msl_memory_from_low32. Returns NULL on
+// failure.
+void* msl_memory_map_low32_window(size_t size);
+#endif
+// Reconstruct the host pointer whose low 32 bits are `address`, known to
+// lie inside `context`'s arena. Aborts on addresses outside the arena.
+void* msl_memory_from_low32(const MslMemoryContext* context,
+                            uint32_t address);
+#endif
+
 // Seal hosted HSD allocation after the match bootstrap, and make a raw
 // game-file allocation inaccessible once its native DAT graph is complete.
 void msl_memory_finish_initialization(void);

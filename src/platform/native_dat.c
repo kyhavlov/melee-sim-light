@@ -98,6 +98,17 @@ static int compare_u32(const void* lhs, const void* rhs)
     return a < b ? -1 : a > b;
 }
 
+void* msl_native_dat_from_low32(uint32_t address)
+{
+    MslNativeDatContext* context = msl_core_native_dat_context();
+    uint32_t offset = address - (uint32_t) (uintptr_t) context->arena;
+    if (context->arena == NULL || offset >= MSL_NATIVE_DAT_ARENA_BYTES) {
+        fprintf(stderr, "invalid low-32 native DAT address %08x\n", address);
+        abort();
+    }
+    return context->arena + offset;
+}
+
 static void* native_alloc(size_t size)
 {
     size_t aligned;
@@ -116,29 +127,13 @@ static void* native_alloc(size_t size)
             abort();
         }
 #else
-#if defined(__APPLE__)
-        // macOS has no MAP_FIXED_NOREPLACE and MAP_FIXED would clobber
-        // existing mappings. Ask for the same low window with a
-        // non-destructive hint and verify placement stayed below the
-        // 32-bit source-address ceiling. x86_64 (Rosetta) images linked
-        // with a small __PAGEZERO can map low; arm64 images cannot map
-        // below 4 GiB at all and abort here.
-        void* mapping = mmap((void*) 0x50000000, MSL_NATIVE_DAT_ARENA_BYTES,
-                             PROT_READ | PROT_WRITE,
-                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        if (mapping != MAP_FAILED &&
-            (uintptr_t) mapping + MSL_NATIVE_DAT_ARENA_BYTES > UINT32_MAX)
-        {
-            munmap(mapping, MSL_NATIVE_DAT_ARENA_BYTES);
-            mapping = MAP_FAILED;
-        }
-#else
+        // AObjDesc::obj_id retains truncated (u32) addresses of arena
+        // joints as retail ids; msl_native_dat_from_low32 reconstructs
+        // them, so the arena may live anywhere with a non-wrapping,
+        // nonzero low-32-bit image.
         void* mapping =
-            mmap((void*) 0x50000000, MSL_NATIVE_DAT_ARENA_BYTES,
-                 PROT_READ | PROT_WRITE,
-                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
-#endif
-        if (mapping == MAP_FAILED) {
+            msl_memory_map_low32_window(MSL_NATIVE_DAT_ARENA_BYTES);
+        if (mapping == NULL) {
             fprintf(stderr, "native DAT arena reservation failed\n");
             abort();
         }
@@ -628,7 +623,9 @@ static void translate_value(MslNativeArchive* context,
             // AObjDesc::obj_id is declared u32 because retail uses either an
             // object-table id or a relocated HSD_Joint address in the same
             // word. When the DAT relocation table marks it, materialize the
-            // Joint graph and retain its low-arena address as the retail id.
+            // Joint graph and retain the truncated low 32 bits of its arena
+            // address as the retail id — the same truncation HSD id-table
+            // keys use, decoded back via msl_native_dat_from_low32.
             // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjLoadDesc
             // refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjLoadJoint
             for (i = 0; i < type->field_count; ++i) {
@@ -639,14 +636,10 @@ static void translate_value(MslNativeArchive* context,
                     if (target != UINT32_MAX) {
                         uintptr_t joint = (uintptr_t) translate_target(
                             context, target, msl_dat_root_HSD_Joint);
-                        if (joint > UINT32_MAX) {
-                            fprintf(stderr,
-                                    "native DAT AObj joint escaped low arena\n");
-                            abort();
-                        }
                         write_integer((uint8_t*) native +
                                           field->native_offset,
-                                      field->type->native_size, joint);
+                                      field->type->native_size,
+                                      (uint32_t) joint);
                         continue;
                     }
                 }

@@ -78,52 +78,23 @@ int msl_memory_context_init(MslMemoryContext* context, MslMemoryOwner owner)
     }
 #else
     {
-        int flags = MAP_PRIVATE | MAP_ANONYMOUS;
         void* mapping;
         // Raw retail archives still pass through 32-bit source APIs while
-        // GameData is built. Match graphs use native pointers throughout and
-        // must not consume the process-wide low-address window.
-        // refs/melee/src/melee/lb/lbfile.c::{lbFile_80016580,
-        //   lbFile_800168A0}
-#if defined(__APPLE__)
-        // macOS has no MAP_32BIT and no MAP_FIXED_NOREPLACE. Scan
-        // non-destructive low hints above the native DAT arena window.
-        // x86_64 (Rosetta) images linked with a small __PAGEZERO can map
-        // low; arm64 images cannot map below 4 GiB at all and fail here
-        // cleanly.
+        // GameData is built: truncated (u32) arena addresses circulate as
+        // lbFile source addresses and decode back through
+        // msl_memory_from_low32. Match graphs use native pointers
+        // throughout.
+        // refs/melee/src/melee/lb/lbfile.c::lbFile_800168A0
         if (owner == MSL_MEMORY_GAME_DATA) {
-            uintptr_t hint;
-            mapping = MAP_FAILED;
-            for (hint = 0x60000000u;
-                 hint + capacity <= UINT32_MAX && mapping == MAP_FAILED;
-                 hint += 0x08000000u)
-            {
-                mapping = mmap((void*) hint, capacity,
-                               PROT_READ | PROT_WRITE, flags, -1, 0);
-                if (mapping != MAP_FAILED &&
-                    (uintptr_t) mapping + capacity > UINT32_MAX)
-                {
-                    munmap(mapping, capacity);
-                    mapping = MAP_FAILED;
-                }
-            }
+            mapping = msl_memory_map_low32_window(capacity);
         } else {
-            mapping =
-                mmap(NULL, capacity, PROT_READ | PROT_WRITE, flags, -1, 0);
-        }
-#else
-        if (owner == MSL_MEMORY_GAME_DATA) {
-            flags |= MAP_32BIT;
-        }
-        mapping = mmap(NULL, capacity, PROT_READ | PROT_WRITE, flags, -1, 0);
-#endif
-        if (mapping == MAP_FAILED ||
-            (owner == MSL_MEMORY_GAME_DATA &&
-             (uintptr_t) mapping > UINT32_MAX))
-        {
-            if (mapping != MAP_FAILED) {
-                munmap(mapping, capacity);
+            mapping = mmap(NULL, capacity, PROT_READ | PROT_WRITE,
+                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            if (mapping == MAP_FAILED) {
+                mapping = NULL;
             }
+        }
+        if (mapping == NULL) {
             if (owner == MSL_MEMORY_GAME_DATA) {
                 free(context->allocations);
             }
@@ -211,6 +182,54 @@ size_t msl_memory_match_capacity(void)
 {
     return MSL_MEMORY_MATCH_BYTES;
 }
+
+#ifdef MSL_CORE_NATIVE
+#ifndef MSL_CORE_WASM
+// Truncated (u32) arena addresses are the retail-width currency of lbFile
+// source addresses, HSD id-table keys, and AObjDesc::obj_id. They decode
+// back to host pointers by offset from the owning arena, which is
+// unambiguous only when the arena's low-32-bit image neither wraps 2^32
+// nor touches zero. Any host address satisfying that is fine; no low
+// mapping is required (arm64 macOS forbids mappings below 4 GiB outright).
+void* msl_memory_map_low32_window(size_t size)
+{
+    enum { MSL_LOW32_WINDOW_ATTEMPTS = 64 };
+    void* rejected[MSL_LOW32_WINDOW_ATTEMPTS];
+    size_t rejected_count = 0;
+    void* mapping = NULL;
+    size_t i;
+
+    while (rejected_count < MSL_LOW32_WINDOW_ATTEMPTS) {
+        void* attempt = mmap(NULL, size, PROT_READ | PROT_WRITE,
+                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        uint64_t low;
+        if (attempt == MAP_FAILED) {
+            break;
+        }
+        low = (uint64_t) (uintptr_t) attempt & 0xffffffffu;
+        if (low != 0 && low + size <= ((uint64_t) 1 << 32)) {
+            mapping = attempt;
+            break;
+        }
+        rejected[rejected_count++] = attempt;
+    }
+    for (i = 0; i < rejected_count; ++i) {
+        munmap(rejected[i], size);
+    }
+    return mapping;
+}
+#endif
+
+void* msl_memory_from_low32(const MslMemoryContext* context, uint32_t address)
+{
+    uint32_t offset = address - (uint32_t) (uintptr_t) context->arena;
+    if (context->arena == NULL || offset >= context->capacity) {
+        fprintf(stderr, "invalid low-32 arena address %08x\n", address);
+        abort();
+    }
+    return context->arena + offset;
+}
+#endif
 
 void* msl_memory_map_match_arenas(size_t count)
 {

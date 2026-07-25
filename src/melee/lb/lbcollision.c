@@ -1501,7 +1501,16 @@ void lbColl_800077A0(Vec3* a, MtxPtr arg1, Vec3* b, Vec3* c, Vec3* d, Vec3* e,
     Vec3 normalize_e;
     Vec3 normal_x;
     Vec3 multi_mtx;
+#ifdef __clang__
+    // GCC allocates a harmless spill slot just below the scratch array,
+    // which the second sqrtf_store deliberately targets (retail stack-spill
+    // emulation). Clang's frame layout places the spilled `a` parameter
+    // there instead, so give the below-array store a real in-bounds slot.
+    volatile float sqrt_tmp_storage[3];
+#define sqrt_tmp (sqrt_tmp_storage + 1)
+#else
     volatile float sqrt_tmp[2];
+#endif
 
     diff_cb.x = c->x - b->x;
     diff_cb.y = c->y - b->y;
@@ -1577,6 +1586,9 @@ void lbColl_800077A0(Vec3* a, MtxPtr arg1, Vec3* b, Vec3* c, Vec3* d, Vec3* e,
         e->x = 0.0f;
     }
 }
+#ifdef __clang__
+#undef sqrt_tmp
+#endif
 
 bool lbColl_80007AFC(HitCapsule* a, HitCapsule* b, float x, float y)
 {

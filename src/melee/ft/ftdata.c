@@ -5,6 +5,11 @@
 
 #include <platform.h>
 
+#ifdef MSL_CORE_NATIVE
+#include "platform/memory.h"
+#include "runtime/context.h"
+#endif
+
 #include "ef/efasync.h"
 
 #include "forward.h"
@@ -2019,9 +2024,14 @@ void ftData_80085CD8(Fighter* fp, Fighter* arg1, int msid)
 #ifdef MSL_CORE_NATIVE
                     // The loaded PlFxAJ.dat subarchive is immutable and is the
                     // initialization-cache key for native graph translation.
+                    // x14 carries the truncated low 32 bits of its GameData
+                    // arena address (lbFile_800168A0 source + offset).
                     // refs/melee/src/melee/ft/ftdata.c::ftData_80085A14
                     temp_ret_2 = HSD_ArchiveParse(
-                        &sp14, (void*) temp_r4_2, temp_r3->x8);
+                        &sp14,
+                        msl_memory_from_low32(msl_core_game_memory_context(),
+                                              temp_r4_2),
+                        temp_r3->x8);
 #else
 #ifdef MSL_CORE_HOSTED
                     memcpy(fp->x59C, (void*) temp_r4_2, temp_r3->x8);
@@ -2086,7 +2096,10 @@ FigaTree* ftData_80085E50(Fighter* arg0, int msid)
                     // with ftData_80085CD8's primary animation owner.
                     // refs/melee/src/melee/ft/ftdata.c::ftData_80085A14
                     temp_ret_2 = HSD_ArchiveParse(
-                        &sp10, (void*) temp_r4_2, temp_r3->x8);
+                        &sp10,
+                        msl_memory_from_low32(msl_core_game_memory_context(),
+                                              temp_r4_2),
+                        temp_r3->x8);
 #else
 #ifdef MSL_CORE_HOSTED
                     memcpy(arg0->x5A0, (void*) temp_r4_2, temp_r3->x8);

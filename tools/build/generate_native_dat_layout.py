@@ -52,8 +52,17 @@ _DWARF_ATE_CODES = {
 def _dwarf_tool() -> str:
     if shutil.which("readelf"):
         return "readelf"
-    if shutil.which("dwarfdump"):
-        return "dwarfdump"
+    # Prefer a full LLVM llvm-dwarfdump (e.g. Homebrew's) over Apple's
+    # dwarfdump, which lacks the PowerPC target and warns on PPC32 ELF
+    # objects (it still dumps the DWARF correctly).
+    for candidate in (
+        "llvm-dwarfdump",
+        "/opt/homebrew/opt/llvm/bin/llvm-dwarfdump",
+        "/usr/local/opt/llvm/bin/llvm-dwarfdump",
+        "dwarfdump",
+    ):
+        if shutil.which(candidate):
+            return candidate
     raise RuntimeError("neither readelf nor dwarfdump is available")
 
 
@@ -74,7 +83,7 @@ class Dwarf:
             die_re = _DIE_RE
             attr_re = _ATTR_RE
         else:
-            command = ["dwarfdump", "--debug-info", str(object_path)]
+            command = [tool, "--debug-info", str(object_path)]
             die_re = _DWARFDUMP_DIE_RE
             attr_re = _DWARFDUMP_ATTR_RE
         result = subprocess.run(
@@ -113,7 +122,7 @@ class Dwarf:
             match = attr_re.match(line)
             if match and current is not None:
                 value = match.group(2)
-                if tool == "dwarfdump":
+                if tool != "readelf":
                     code = _DWARF_ATE_CODES.get(value)
                     if code is not None:
                         value = str(code)

@@ -41,29 +41,39 @@ ifeq ($(UNAME_S),Darwin)
 CC := $(ROOT)/tools/build/ppc32_cc.sh
 QEMU := $(ROOT)/tools/build/qemu_ppc.sh
 TIMEOUT := $(ROOT)/tools/build/portable_timeout.sh
-# The hosted runtime keeps retail's 32-bit source-address window: the
-# GameData and native DAT arenas must map below 4 GiB. arm64 macOS
-# enforces a 4 GiB __PAGEZERO floor on arm64 processes (binaries linked
-# with less are killed at exec), but Rosetta 2 x86_64 processes may
-# shrink __PAGEZERO. Build the hosted runtime as x86_64 — the same
-# instruction/FP profile as the validated linux/amd64 build.
-ifeq ($(UNAME_M),arm64)
-HOST_TARGET_ARCH := x86_64
-HOST_ARCH_FLAGS := -arch x86_64
-endif
-NATIVE_EXE_LINK_FLAGS := $(HOST_ARCH_FLAGS) -Wl,-dead_strip \
-	-Wl,-pagezero_size,0x1000
+# The runtime builds for the host architecture by default. Truncated (u32)
+# source addresses decode by offset from their owning arena
+# (msl_memory_from_low32), so no sub-4 GiB mappings are needed and arm64
+# macOS' 4 GiB __PAGEZERO floor is irrelevant. Override
+# HOST_TARGET_ARCH=x86_64 on Apple Silicon to build the Rosetta 2 profile
+# that matches the validated linux/amd64 FP gates.
+HOST_ARCH_FLAGS := -arch $(HOST_TARGET_ARCH)
+NATIVE_EXE_LINK_FLAGS := $(HOST_ARCH_FLAGS) -Wl,-dead_strip
 SHARED_LIB_LINK_FLAGS := $(HOST_ARCH_FLAGS) -shared -Wl,-dead_strip
-# The validator extension loads into the driving Python, which may be
-# arm64 while the runtime is x86_64 (it only talks to the runtime over
-# a pipe), so it builds for the host architecture.
+# The validator extension loads into the driving Python, which may be a
+# different architecture than the runtime (it only talks to the runtime
+# over a pipe), so it builds for the host architecture.
 PY_EXT_LINK_FLAGS := -undefined dynamic_lookup
+# Homebrew LLVM's clang carries every backend; use it to cross-compile the
+# PPC32 DWARF reference object directly instead of running the Linux GNU
+# toolchain inside Docker. -nostdlibinc keeps macOS system headers out of
+# the powerpc-linux target; clang's builtin headers cover the rest.
+LLVM_CLANG := $(shell brew --prefix llvm 2>/dev/null)/bin/clang
+ifneq ($(wildcard $(LLVM_CLANG)),)
+PPC_TYPES_TOOLCHAIN_DEP :=
+PPC_TYPES_COMPILE = "$(LLVM_CLANG)" --target=powerpc-unknown-linux-gnu \
+	-nostdlibinc -isystem "$(ROOT)/tools/build/ppc32_libc_shim"
+endif
 else
 TIMEOUT := timeout
 NATIVE_EXE_LINK_FLAGS := -no-pie -Wl,--gc-sections
 SHARED_LIB_LINK_FLAGS := -shared -Wl,--gc-sections -Wl,-Bsymbolic -Wl,-z,defs
 PY_EXT_LINK_FLAGS :=
 endif
+PPC_TYPES_TOOLCHAIN_DEP ?= $(TOOLCHAIN_STAMP)
+PPC_TYPES_COMPILE ?= env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
+	LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+	"$(CC)" --sysroot="$(SYSROOT)"
 ifeq ($(HOST_TARGET_ARCH),x86_64)
 FMA_FLAGS := -mfma
 else
@@ -488,11 +498,9 @@ $(WASM_OBJ_DIR)/gameplay/melee/ft/ftaction.o \
 $(WASM_OBJ_DIR)/gameplay/melee/it/itanimlist.o \
 $(WASM_OBJ_DIR)/gameplay/melee/lb/lbcommand.o: $(WASM_COMMAND_FIELDS)
 
-$(NATIVE_DAT_PPC_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(TOOLCHAIN_STAMP)
+$(NATIVE_DAT_PPC_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(PPC_TYPES_TOOLCHAIN_DEP)
 	@mkdir -p "$(@D)"
-	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
-		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
-		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) -MMD -MP -g -gdwarf-4 \
+	@$(PPC_TYPES_COMPILE) $(CPPFLAGS) -MMD -MP -g -gdwarf-4 \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
 $(NATIVE_DAT_NATIVE_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC)
