@@ -1,6 +1,9 @@
 #include "ftCo_Rebound.h"
 
 #include <platform.h>
+#ifdef MSL_CORE_HOSTED
+#include <MetroTRK/intrinsics.h>
+#endif
 
 #include "ft/fighter.h"
 #include "ft/ft_081B.h"
@@ -21,9 +24,17 @@ void ftCo_80099D9C(Fighter_GObj* gobj)
     {
         float fp_x191C = fp->dmg.x191C;
         fp->mv.co.rebound.anim_start = (fp->co_attrs.x9C + 0.1f) / fp_x191C;
+#ifdef MSL_CORE_HOSTED
+        // GALE01 0x80099DFC accumulates the rebound slide with one
+        // scalar-single fmadds before the facing multiply.
+        fp->mv.co.rebound.x0 =
+            -fp->dmg.facing_dir *
+            __fmadds(fp_x191C, p_ftCommonData->x3D8, p_ftCommonData->x3DC);
+#else
         fp->mv.co.rebound.x0 =
             -fp->dmg.facing_dir *
             (fp_x191C * p_ftCommonData->x3D8 + p_ftCommonData->x3DC);
+#endif
     }
     ftCommon_800804A0(fp, fp->mv.co.rebound.x0);
 }

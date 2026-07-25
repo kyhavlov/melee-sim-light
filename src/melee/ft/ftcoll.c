@@ -373,8 +373,17 @@ static inline void inlineA0(Fighter* fp0, Fighter* fp1, HitCapsule* hit1,
     if (int_dmg > fp1->dmg.int_value) {
         fp1->dmg.int_value = int_dmg;
         if (hit1->x40_b1 == true && fp1->ground_or_air == GA_Ground) {
+#ifdef MSL_CORE_HOSTED
+            // GALE01 0x80076B14/0x80076C50/0x80077AE8: the clank rebound
+            // damage is one scalar-single fmadds; int_dmg carries staleness
+            // rounding, so the separate multiply shifts the rebound anim
+            // rate and slide by ULPs.
+            fp1->dmg.x191C = __fmadds(int_dmg, p_ftCommonData->x3D0,
+                                        p_ftCommonData->x3D4);
+#else
             fp1->dmg.x191C =
                 int_dmg * p_ftCommonData->x3D0 + p_ftCommonData->x3D4;
+#endif
             {
                 float facing_dir;
                 if (fp1->cur_pos.x < fp0->cur_pos.x) {
@@ -421,8 +430,17 @@ static inline bool inlineA1(Fighter* fp0, HitCapsule* hit0, Fighter* fp1,
     if (int_dmg > fp0->dmg.int_value) {
         fp0->dmg.int_value = int_dmg;
         if (hit0->x40_b1 == true && fp0->ground_or_air == GA_Ground) {
+#ifdef MSL_CORE_HOSTED
+            // GALE01 0x80076B14/0x80076C50/0x80077AE8: the clank rebound
+            // damage is one scalar-single fmadds; int_dmg carries staleness
+            // rounding, so the separate multiply shifts the rebound anim
+            // rate and slide by ULPs.
+            fp0->dmg.x191C = __fmadds(int_dmg, p_ftCommonData->x3D0,
+                                        p_ftCommonData->x3D4);
+#else
             fp0->dmg.x191C =
                 int_dmg * p_ftCommonData->x3D0 + p_ftCommonData->x3D4;
+#endif
             {
                 float facing_dir;
                 if (fp1->cur_pos.x > fp0->cur_pos.x) {
@@ -975,8 +993,17 @@ static inline void inlineItemA0(Item* item, Fighter* fp, HitCapsule* hit,
     if (int_dmg > fp->dmg.int_value) {
         fp->dmg.int_value = int_dmg;
         if (hit->x40_b1 == true && fp->ground_or_air == GA_Ground) {
+#ifdef MSL_CORE_HOSTED
+            // GALE01 0x80076B14/0x80076C50/0x80077AE8: the clank rebound
+            // damage is one scalar-single fmadds; int_dmg carries staleness
+            // rounding, so the separate multiply shifts the rebound anim
+            // rate and slide by ULPs.
+            fp->dmg.x191C = __fmadds(int_dmg, p_ftCommonData->x3D0,
+                                        p_ftCommonData->x3D4);
+#else
             fp->dmg.x191C =
                 int_dmg * p_ftCommonData->x3D0 + p_ftCommonData->x3D4;
+#endif
             {
                 float facing_dir;
                 if (fp->cur_pos.x < item->pos.x) {
