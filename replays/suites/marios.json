@@ -185,7 +185,9 @@
         "1": "Mario",
         "2": "Fox"
       },
-      "ucf_cardinals_1_0_enabled": false
+      "ucf_cardinals_1_0_enabled": false,
+      "ucf_shield_sdi_enabled": false,
+      "ucf_sdi_enabled": false
     },
     {
       "replay": "replays/validation/marios/Slippi-2025-02_Game_20250212T214835.slpz",
