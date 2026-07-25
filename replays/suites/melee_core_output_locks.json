@@ -619,6 +619,285 @@
       }
     },
     {
+      "replay": "replays/validation/luigi/Game_20250212T091716.slpz",
+      "expected": {
+        "native": {
+          "frames": 5737,
+          "actual_output_fingerprint": "b90ae52d1f5b59e4"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/Game_20250309T214357.slpz",
+      "expected": {
+        "native": {
+          "frames": 8974,
+          "actual_output_fingerprint": "97d3e3c89fb0f8b0"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/Nicki-07-25_Game_20250502T195309.slpz",
+      "expected": {
+        "native": {
+          "frames": 13164,
+          "actual_output_fingerprint": "2054f79a038d402e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/auto-falco_Game_20260312T161313.slpz",
+      "expected": {
+        "native": {
+          "frames": 8827,
+          "actual_output_fingerprint": "a33d5fec9ed06d77"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/auto-fox_Game_20251209T040734.slpz",
+      "expected": {
+        "native": {
+          "frames": 4347,
+          "actual_output_fingerprint": "231ba77c156a0cc4"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/auto-luigi_Game_20250708T023814.slpz",
+      "expected": {
+        "native": {
+          "frames": 9940,
+          "actual_output_fingerprint": "15c7e8c5d74a8371"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/auto-luigi_Game_20260209T014638.slpz",
+      "expected": {
+        "native": {
+          "frames": 11741,
+          "actual_output_fingerprint": "24fa2fbc9ad8af71"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/basic-luigi_Game_20250415T174851.slpz",
+      "expected": {
+        "native": {
+          "frames": 10615,
+          "actual_output_fingerprint": "b09bd3c17018c655"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/diamond-luigi_Game_20260611T161130.slpz",
+      "expected": {
+        "native": {
+          "frames": 12539,
+          "actual_output_fingerprint": "1f384a18f4f87795"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/gm-falco_Game_20260220T172641.slpz",
+      "expected": {
+        "native": {
+          "frames": 5022,
+          "actual_output_fingerprint": "fe319f30cb4f7030"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/gm-falco_Game_20260224T174542.slpz",
+      "expected": {
+        "native": {
+          "frames": 10117,
+          "actual_output_fingerprint": "62909ccfa8e71df1"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/gm-fox_Game_20250904T104626.slpz",
+      "expected": {
+        "native": {
+          "frames": 9276,
+          "actual_output_fingerprint": "da50bd5971db414d"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/gm-fox_Game_20251022T235513.slpz",
+      "expected": {
+        "native": {
+          "frames": 5131,
+          "actual_output_fingerprint": "da449ef568adeffa"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/gm-fox_Game_20260509T220538.slpz",
+      "expected": {
+        "native": {
+          "frames": 6736,
+          "actual_output_fingerprint": "15718ffec5f79829"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/master-diamond-8a855ab88865a8fd02dd8f60.slpz",
+      "expected": {
+        "native": {
+          "frames": 12355,
+          "actual_output_fingerprint": "605a26c2fe9c8f6c"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/master-master-775e398466dfd67e2bea025b.slpz",
+      "expected": {
+        "native": {
+          "frames": 9653,
+          "actual_output_fingerprint": "4d01a06a5bb329ba"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-falco_Game_20251031T000610.slpz",
+      "expected": {
+        "native": {
+          "frames": 11478,
+          "actual_output_fingerprint": "66427d4d7f1cd3fc"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20251124T191106.slpz",
+      "expected": {
+        "native": {
+          "frames": 8475,
+          "actual_output_fingerprint": "4c40ca2d5b815233"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20251212T112146.slpz",
+      "expected": {
+        "native": {
+          "frames": 11008,
+          "actual_output_fingerprint": "126ca47539d984eb"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20251212T113208.slpz",
+      "expected": {
+        "native": {
+          "frames": 11948,
+          "actual_output_fingerprint": "7fb1ed0f09ac7e68"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20251227T231147.slpz",
+      "expected": {
+        "native": {
+          "frames": 8420,
+          "actual_output_fingerprint": "70eab1c8991bc656"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20260317T085955.slpz",
+      "expected": {
+        "native": {
+          "frames": 8296,
+          "actual_output_fingerprint": "18e7651f3cd27dc8"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20260422T030348.slpz",
+      "expected": {
+        "native": {
+          "frames": 13385,
+          "actual_output_fingerprint": "70e27b9bbe31bc1d"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20260505T025138.slpz",
+      "expected": {
+        "native": {
+          "frames": 5836,
+          "actual_output_fingerprint": "d8515753f18d15c8"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/plat-falco_Game_20260402T233007.slpz",
+      "expected": {
+        "native": {
+          "frames": 11258,
+          "actual_output_fingerprint": "4414103db51a7512"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/plat-fox_Game_20260228T034059.slpz",
+      "expected": {
+        "native": {
+          "frames": 5130,
+          "actual_output_fingerprint": "5d79dcc508d2e834"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/platinum-platinum-c20d9507b199f01838e901d0.slpz",
+      "expected": {
+        "native": {
+          "frames": 9416,
+          "actual_output_fingerprint": "dc82956be31bdea7"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/slippi_01.07.22-09.08.23_Game_20221011T140934.slpz",
+      "expected": {
+        "native": {
+          "frames": 9583,
+          "actual_output_fingerprint": "a881accccbc46168"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/slippi_2024_Game_20240704T213554.slpz",
+      "expected": {
+        "native": {
+          "frames": 8101,
+          "actual_output_fingerprint": "41f4082f8418ab2c"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/slippi_2024_Game_20250307T122650.slpz",
+      "expected": {
+        "native": {
+          "frames": 5750,
+          "actual_output_fingerprint": "5f067ccad457a3f3"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/specials_demo.slpz",
+      "expected": {
+        "native": {
+          "frames": 19886,
+          "actual_output_fingerprint": "885e2c0fb6054c99"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/marth/BountifulScalyGuanaco.slpz",
       "expected": {
         "native": {

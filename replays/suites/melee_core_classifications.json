@@ -2680,6 +2680,426 @@
           "strict_suffix_frames": 334
         }
       }
+    },
+    {
+      "replay": "replays/validation/luigi/Game_20250212T091716.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "collision pose float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 2009,
+          "first_mismatch_frame": 1887,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 5737,
+          "last_mismatch_frame": 3511,
+          "matched_frames": 5730,
+          "mismatch_count": 7,
+          "mismatch_fields_digest": "64a3f0b5b6229d0dae91739ed81ce8c868f8f4c04cf25eeed32a2a73f22ca46d",
+          "mismatch_fingerprint": "4e23392944829461",
+          "mismatched_frames": 7,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 2103
+        },
+        "ppc": {
+          "exact_prefix_frames": 2009,
+          "first_mismatch_frame": 1887,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 5737,
+          "last_mismatch_frame": 3511,
+          "matched_frames": 5730,
+          "mismatch_count": 7,
+          "mismatch_fields_digest": "64a3f0b5b6229d0dae91739ed81ce8c868f8f4c04cf25eeed32a2a73f22ca46d",
+          "mismatch_fingerprint": "4e23392944829461",
+          "mismatched_frames": 7,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 2103
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/auto-falco_Game_20260312T161313.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "collision pose float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 2232,
+          "first_mismatch_frame": 2110,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 8827,
+          "last_mismatch_frame": 2455,
+          "matched_frames": 8543,
+          "mismatch_count": 287,
+          "mismatch_fields_digest": "87e4cc93850d23da0d6e002fd7ffd92f1e533f9abcae0d95ff01dda982c98e02",
+          "mismatch_fingerprint": "372f49806583bdb9",
+          "mismatched_frames": 284,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 6249
+        },
+        "ppc": {
+          "exact_prefix_frames": 2232,
+          "first_mismatch_frame": 2110,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 8827,
+          "last_mismatch_frame": 2455,
+          "matched_frames": 8543,
+          "mismatch_count": 287,
+          "mismatch_fields_digest": "87e4cc93850d23da0d6e002fd7ffd92f1e533f9abcae0d95ff01dda982c98e02",
+          "mismatch_fingerprint": "372f49806583bdb9",
+          "mismatched_frames": 284,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 6249
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/diamond-luigi_Game_20260611T161130.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "collision pose float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 10829,
+          "first_mismatch_frame": 10707,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 12539,
+          "last_mismatch_frame": 10716,
+          "matched_frames": 12537,
+          "mismatch_count": 2,
+          "mismatch_fields_digest": "dc7ce273fdacf5e577262e1d87afcf9a375c3aedacae38abe19c24bfd46d86c5",
+          "mismatch_fingerprint": "b3cc14d928f09d82",
+          "mismatched_frames": 2,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 1700
+        },
+        "ppc": {
+          "exact_prefix_frames": 10829,
+          "first_mismatch_frame": 10707,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 12539,
+          "last_mismatch_frame": 10716,
+          "matched_frames": 12537,
+          "mismatch_count": 2,
+          "mismatch_fields_digest": "dc7ce273fdacf5e577262e1d87afcf9a375c3aedacae38abe19c24bfd46d86c5",
+          "mismatch_fingerprint": "b3cc14d928f09d82",
+          "mismatched_frames": 2,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 1700
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/master-diamond-8a855ab88865a8fd02dd8f60.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "collision pose float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 10167,
+          "first_mismatch_frame": 10045,
+          "first_render_visibility_mismatch_frame": null,
+          "frames": 12355,
+          "last_mismatch_frame": 10045,
+          "matched_frames": 12354,
+          "mismatch_count": 1,
+          "mismatch_fields_digest": "3178d5ab44efbb5a064ce42f6e990e65434510c93a263bd45c47c94a47496157",
+          "mismatch_fingerprint": "8bb7ea61299d5c8d",
+          "mismatched_frames": 1,
+          "render_visibility_mismatch_count": 0,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 2187
+        },
+        "ppc": {
+          "exact_prefix_frames": 10167,
+          "first_mismatch_frame": 10045,
+          "first_render_visibility_mismatch_frame": null,
+          "frames": 12355,
+          "last_mismatch_frame": 10045,
+          "matched_frames": 12354,
+          "mismatch_count": 1,
+          "mismatch_fields_digest": "3178d5ab44efbb5a064ce42f6e990e65434510c93a263bd45c47c94a47496157",
+          "mismatch_fingerprint": "8bb7ea61299d5c8d",
+          "mismatched_frames": 1,
+          "render_visibility_mismatch_count": 0,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 2187
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/medium-fox_Game_20251212T112146.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "bone-pose interaction range profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit and the first 8,986 frames are exact after the clank-rebound fmadds deltas. The residual is a single max-range interaction that connects in the recording but not in the source runtime (expected speed_x_attack -1.2e-07 versus a still fighter), forking the state machine; the bone-attached collision geometry differs at sub-tolerance scale at that contact.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/ft/ftcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 8986,
+          "first_mismatch_frame": 8864,
+          "first_render_visibility_mismatch_frame": 936,
+          "frames": 11008,
+          "last_mismatch_frame": 10885,
+          "matched_frames": 8986,
+          "mismatch_count": 68563,
+          "mismatch_fields_digest": "388571cd83e02080d8531c56ca843702a68260517cb6302253068533ee5cf24b",
+          "mismatch_fingerprint": "373122e4cbf91661",
+          "mismatched_frames": 2022,
+          "render_visibility_mismatch_count": 2150,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 0
+        },
+        "ppc": {
+          "exact_prefix_frames": 8986,
+          "first_mismatch_frame": 8864,
+          "first_render_visibility_mismatch_frame": 936,
+          "frames": 11008,
+          "last_mismatch_frame": 10885,
+          "matched_frames": 8986,
+          "mismatch_count": 68563,
+          "mismatch_fields_digest": "388571cd83e02080d8531c56ca843702a68260517cb6302253068533ee5cf24b",
+          "mismatch_fingerprint": "373122e4cbf91661",
+          "mismatched_frames": 2022,
+          "render_visibility_mismatch_count": 2150,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 0
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/plat-falco_Game_20260402T233007.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "collision pose float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 4681,
+          "first_mismatch_frame": 4559,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 11258,
+          "last_mismatch_frame": 6143,
+          "matched_frames": 10831,
+          "mismatch_count": 684,
+          "mismatch_fields_digest": "59e5e14ed2225b4475773d6ac69035dffd969e3c3fc1169c94605657a025c780",
+          "mismatch_fingerprint": "538f68f0dacd9e46",
+          "mismatched_frames": 427,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 4992
+        },
+        "ppc": {
+          "exact_prefix_frames": 4681,
+          "first_mismatch_frame": 4559,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 11258,
+          "last_mismatch_frame": 6143,
+          "matched_frames": 10831,
+          "mismatch_count": 684,
+          "mismatch_fields_digest": "59e5e14ed2225b4475773d6ac69035dffd969e3c3fc1169c94605657a025c780",
+          "mismatch_fingerprint": "538f68f0dacd9e46",
+          "mismatched_frames": 427,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 4992
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/platinum-platinum-c20d9507b199f01838e901d0.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "collision pose float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 1112,
+          "first_mismatch_frame": 990,
+          "first_render_visibility_mismatch_frame": null,
+          "frames": 9416,
+          "last_mismatch_frame": 8253,
+          "matched_frames": 9272,
+          "mismatch_count": 158,
+          "mismatch_fields_digest": "1149bb9c9c830a22d331599c6841f7da1eb2e9e3c7a6f50a76ed61e0c119abaf",
+          "mismatch_fingerprint": "d8b4022decc137b4",
+          "mismatched_frames": 144,
+          "render_visibility_mismatch_count": 0,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 1040
+        },
+        "ppc": {
+          "exact_prefix_frames": 1112,
+          "first_mismatch_frame": 990,
+          "first_render_visibility_mismatch_frame": null,
+          "frames": 9416,
+          "last_mismatch_frame": 8253,
+          "matched_frames": 9272,
+          "mismatch_count": 158,
+          "mismatch_fields_digest": "1149bb9c9c830a22d331599c6841f7da1eb2e9e3c7a6f50a76ed61e0c119abaf",
+          "mismatch_fingerprint": "d8b4022decc137b4",
+          "mismatched_frames": 144,
+          "render_visibility_mismatch_count": 0,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 1040
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/slippi_01.07.22-09.08.23_Game_20221011T140934.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "collision pose float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 3610,
+          "first_mismatch_frame": 3488,
+          "first_render_visibility_mismatch_frame": null,
+          "frames": 9583,
+          "last_mismatch_frame": 3617,
+          "matched_frames": 9453,
+          "mismatch_count": 130,
+          "mismatch_fields_digest": "3200795524d7a275db7a5216d97c7d2d9aca707983b569b75fbad9d2c7931e42",
+          "mismatch_fingerprint": "ca2abe022c313cc7",
+          "mismatched_frames": 130,
+          "render_visibility_mismatch_count": 0,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 5843
+        },
+        "ppc": {
+          "exact_prefix_frames": 3610,
+          "first_mismatch_frame": 3488,
+          "first_render_visibility_mismatch_frame": null,
+          "frames": 9583,
+          "last_mismatch_frame": 3617,
+          "matched_frames": 9453,
+          "mismatch_count": 130,
+          "mismatch_fields_digest": "3200795524d7a275db7a5216d97c7d2d9aca707983b569b75fbad9d2c7931e42",
+          "mismatch_fingerprint": "ca2abe022c313cc7",
+          "mismatched_frames": 130,
+          "render_visibility_mismatch_count": 0,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 5843
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/slippi_2024_Game_20250307T122650.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "collision pose float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 1400,
+          "first_mismatch_frame": 1278,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 5750,
+          "last_mismatch_frame": 1296,
+          "matched_frames": 5747,
+          "mismatch_count": 3,
+          "mismatch_fields_digest": "b5c68c573490c202a5044db98bf469a37472961ae2814d9d3c6f284f66d55779",
+          "mismatch_fingerprint": "be35d3535d1324f2",
+          "mismatched_frames": 3,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 4331
+        },
+        "ppc": {
+          "exact_prefix_frames": 1400,
+          "first_mismatch_frame": 1278,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 5750,
+          "last_mismatch_frame": 1296,
+          "matched_frames": 5747,
+          "mismatch_count": 3,
+          "mismatch_fields_digest": "b5c68c573490c202a5044db98bf469a37472961ae2814d9d3c6f284f66d55779",
+          "mismatch_fingerprint": "be35d3535d1324f2",
+          "mismatched_frames": 3,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 4331
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/specials_demo.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "collision pose float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 8217,
+          "first_mismatch_frame": 8095,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 19886,
+          "last_mismatch_frame": 8100,
+          "matched_frames": 19884,
+          "mismatch_count": 2,
+          "mismatch_fields_digest": "287164ec5caecddfdac006da76a0dbaa1974a857d1aa6a9a83a91b5370f89889",
+          "mismatch_fingerprint": "c89105cbbbd0009e",
+          "mismatched_frames": 2,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 11663
+        },
+        "ppc": {
+          "exact_prefix_frames": 8217,
+          "first_mismatch_frame": 8095,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 19886,
+          "last_mismatch_frame": 8100,
+          "matched_frames": 19884,
+          "mismatch_count": 2,
+          "mismatch_fields_digest": "287164ec5caecddfdac006da76a0dbaa1974a857d1aa6a9a83a91b5370f89889",
+          "mismatch_fingerprint": "c89105cbbbd0009e",
+          "mismatched_frames": 2,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 11663
+        }
+      }
     }
   ]
 }

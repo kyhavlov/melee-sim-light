@@ -111,6 +111,7 @@ def test_native_validation_compares_complete_classified_replays() -> None:
         "doubles_recent.json",
         "puff.json",
         "peach.json",
+        "luigi.json",
     ):
         _suite, loaded_cases = load_suite_cases(
             ROOT / "replays/suites" / suite_name,
@@ -145,4 +146,4 @@ def test_native_validation_compares_complete_classified_replays() -> None:
             + int(outcome.result["mismatched_frames"])
             == int(outcome.result["frames"])
         )
-    assert wall_seconds < 8.0
+    assert wall_seconds < 25.0
