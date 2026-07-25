@@ -165,39 +165,26 @@
       "replay": "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz",
       "id": "offline-deadup-render-transform",
       "owner": "ftDrawCommon DeadUp inverse-camera publication",
-      "rationale": "Offline DeadUpFall publishes cur_pos through the render camera's inverse transform. The bounded residual contains only P2 X/Y render positions and is followed by 5,758 exact transitions.",
+      "rationale": "Offline DeadUpFall publishes cur_pos through the render camera's inverse transform. The bounded residual contains only P2 X/Y render positions and is followed by 5,758 exact transitions. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual.",
       "sources": [
         "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18_inline2",
         "refs/melee/src/melee/cm/camera.c::Camera_800311EC"
       ],
       "expected": {
         "native": {
-          "frames": 12914,
-          "matched_frames": 12794,
-          "mismatched_frames": 120,
           "exact_prefix_frames": 7028,
-          "strict_suffix_frames": 5758,
           "first_mismatch_frame": 6906,
-          "last_mismatch_frame": 7033,
-          "mismatch_count": 183,
-          "mismatch_fingerprint": "23113abb0b5dba1a",
-          "mismatch_fields": [
-            {
-              "field": "pos_x[1]",
-              "count": 86,
-              "first_frame": 6906,
-              "last_frame": 7033
-            },
-            {
-              "field": "pos_y[1]",
-              "count": 97,
-              "first_frame": 6906,
-              "last_frame": 7033
-            }
-          ],
-          "render_visibility_mismatch_count": 0,
           "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0
+          "frames": 12914,
+          "last_mismatch_frame": 7033,
+          "matched_frames": 12816,
+          "mismatch_count": 129,
+          "mismatch_fields_digest": "51bb4c0a1801b62830dc2cb030a8d400aee55591a915e4850d5754d9b21d7397",
+          "mismatch_fingerprint": "12e744d5fdb46b43",
+          "mismatched_frames": 98,
+          "render_visibility_mismatch_count": 0,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 5758
         }
       }
     },
@@ -205,39 +192,26 @@
       "replay": "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz",
       "id": "offline-deadup-render-transform",
       "owner": "ftDrawCommon DeadUp inverse-camera publication",
-      "rationale": "Offline DeadUpFall publishes cur_pos through the render camera's inverse transform. The bounded residual contains only P2 X/Y render positions and is followed by 10,988 exact transitions.",
+      "rationale": "Offline DeadUpFall publishes cur_pos through the render camera's inverse transform. The bounded residual contains only P2 X/Y render positions and is followed by 10,988 exact transitions. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual.",
       "sources": [
         "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18_inline2",
         "refs/melee/src/melee/cm/camera.c::Camera_800311EC"
       ],
       "expected": {
         "native": {
-          "frames": 13063,
-          "matched_frames": 12939,
-          "mismatched_frames": 124,
-          "exact_prefix_frames": 1947,
-          "strict_suffix_frames": 10988,
-          "first_mismatch_frame": 1825,
-          "last_mismatch_frame": 1952,
-          "mismatch_count": 191,
-          "mismatch_fingerprint": "4733a1866819dda7",
-          "mismatch_fields": [
-            {
-              "field": "pos_x[1]",
-              "count": 102,
-              "first_frame": 1825,
-              "last_frame": 1952
-            },
-            {
-              "field": "pos_y[1]",
-              "count": 89,
-              "first_frame": 1825,
-              "last_frame": 1952
-            }
-          ],
-          "render_visibility_mismatch_count": 0,
+          "exact_prefix_frames": 1948,
+          "first_mismatch_frame": 1826,
           "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0
+          "frames": 13063,
+          "last_mismatch_frame": 1952,
+          "matched_frames": 13001,
+          "mismatch_count": 84,
+          "mismatch_fields_digest": "f8436519f0c733176cedc903e633f20dbf56b0cca02cf969eafe865b1fd47445",
+          "mismatch_fingerprint": "ea6d1bd95ec53a26",
+          "mismatched_frames": 62,
+          "render_visibility_mismatch_count": 0,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 10988
         }
       }
     },
@@ -568,7 +542,7 @@
       "replay": "replays/validation/marth/ExtraLargeScaryHornet.slpz",
       "id": "mixed-unrecorded-render-rng-profile",
       "owner": "DeadUp render publication, magnifier schedule, and presentation RNG phase",
-      "rationale": "Three already-bounded excluded-presentation families make up the complete residual: offline DeadUp render positions at frames 4832..4959, one magnifier damage tick at 7051, and a late DamageFlyRoll stream-phase action interval at 10766..10836. Native and PPC fingerprints are identical; no replay-local gameplay correction is applied.",
+      "rationale": "Three already-bounded excluded-presentation families make up the complete residual: offline DeadUp render positions at frames 4832..4959, one magnifier damage tick at 7051, and a late DamageFlyRoll stream-phase action interval at 10766..10836. Native and PPC fingerprints are identical; no replay-local gameplay correction is applied. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual.",
       "sources": [
         "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18_inline2",
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
@@ -577,21 +551,35 @@
       ],
       "expected": {
         "native": {
-          "frames": 10973,
-          "matched_frames": 10777,
-          "mismatched_frames": 196,
           "exact_prefix_frames": 4954,
-          "strict_suffix_frames": 14,
           "first_mismatch_frame": 4832,
-          "last_mismatch_frame": 10836,
-          "mismatch_count": 403,
-          "mismatch_fingerprint": "2902340a17fd062e",
-          "mismatch_fields_digest": "bf060706fd9aa42d5f8ec9bbd90fafd42346bf8a4523287ee0070028065bd21d",
-          "render_visibility_mismatch_count": 27,
           "first_render_visibility_mismatch_frame": 2041,
-          "signed_zero_equal_count": 0
+          "frames": 10973,
+          "last_mismatch_frame": 10836,
+          "matched_frames": 10796,
+          "mismatch_count": 341,
+          "mismatch_fields_digest": "6e56ef6c1ffb4329dd804e31f38e674eff0fea9274c1f259f649f69176147865",
+          "mismatch_fingerprint": "16ce906c7340825e",
+          "mismatched_frames": 177,
+          "render_visibility_mismatch_count": 27,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 14
         },
-        "ppc": "native"
+        "ppc": {
+          "exact_prefix_frames": 4954,
+          "first_mismatch_frame": 4832,
+          "first_render_visibility_mismatch_frame": 2041,
+          "frames": 10973,
+          "last_mismatch_frame": 10836,
+          "matched_frames": 10796,
+          "mismatch_count": 341,
+          "mismatch_fields_digest": "6e56ef6c1ffb4329dd804e31f38e674eff0fea9274c1f259f649f69176147865",
+          "mismatch_fingerprint": "16ce906c7340825e",
+          "mismatched_frames": 177,
+          "render_visibility_mismatch_count": 27,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 14
+        }
       }
     },
     {
@@ -1155,7 +1143,7 @@
       "replay": "replays/validation/sheik/GlaringRosyAlpaca.slpz",
       "id": "dolphin-ulp-motion-and-needle-profile",
       "owner": "fighter motion and Sheik thrown-needle float publication",
-      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter motion with isolated one-byte historical-position samples from thrown needles, followed by an exact suffix; the replay records Dolphin but not its build or float/JIT execution profile.",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter motion with isolated one-byte historical-position samples from thrown needles, followed by an exact suffix; the replay records Dolphin but not its build or float/JIT execution profile. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
@@ -1164,21 +1152,35 @@
       ],
       "expected": {
         "native": {
-          "frames": 9014,
-          "matched_frames": 8894,
-          "mismatched_frames": 120,
           "exact_prefix_frames": 1826,
-          "strict_suffix_frames": 5347,
           "first_mismatch_frame": 1704,
-          "last_mismatch_frame": 3544,
-          "mismatch_count": 182,
-          "mismatch_fingerprint": "0a8c2a68c61051d7",
-          "render_visibility_mismatch_count": 1,
           "first_render_visibility_mismatch_frame": 8834,
+          "frames": 9014,
+          "last_mismatch_frame": 3541,
+          "matched_frames": 8914,
+          "mismatch_count": 140,
+          "mismatch_fields_digest": "6a51ead3992a2dbcb81c8c79644471859daaba38b2d1a5f24c55eb120a214fd2",
+          "mismatch_fingerprint": "cfc4f7229849abb4",
+          "mismatched_frames": 100,
+          "render_visibility_mismatch_count": 1,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "1ce2215558e431178c234b7b51b1eea204655b78e9cd009d8398901783ded59b"
+          "strict_suffix_frames": 5350
         },
-        "ppc": "native"
+        "ppc": {
+          "exact_prefix_frames": 1826,
+          "first_mismatch_frame": 1704,
+          "first_render_visibility_mismatch_frame": 8834,
+          "frames": 9014,
+          "last_mismatch_frame": 3541,
+          "matched_frames": 8914,
+          "mismatch_count": 140,
+          "mismatch_fields_digest": "6a51ead3992a2dbcb81c8c79644471859daaba38b2d1a5f24c55eb120a214fd2",
+          "mismatch_fingerprint": "cfc4f7229849abb4",
+          "mismatched_frames": 100,
+          "render_visibility_mismatch_count": 1,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 5350
+        }
       }
     },
     {
@@ -1395,7 +1397,7 @@
       "replay": "replays/validation/sheik/WavyRundownAardvark.slpz",
       "id": "dolphin-ulp-motion-and-needle-profile",
       "owner": "fighter motion and Sheik thrown-needle float publication",
-      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter motion with isolated one-byte historical-position samples from thrown needles, followed by an exact suffix; the replay records Dolphin but not its build or float/JIT execution profile.",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter motion with isolated one-byte historical-position samples from thrown needles, followed by an exact suffix; the replay records Dolphin but not its build or float/JIT execution profile. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
@@ -1404,21 +1406,35 @@
       ],
       "expected": {
         "native": {
-          "frames": 10703,
-          "matched_frames": 10559,
-          "mismatched_frames": 144,
-          "exact_prefix_frames": 1087,
-          "strict_suffix_frames": 1107,
-          "first_mismatch_frame": 965,
-          "last_mismatch_frame": 9473,
-          "mismatch_count": 211,
-          "mismatch_fingerprint": "9908ef4c162c6ccc",
-          "render_visibility_mismatch_count": 3,
+          "exact_prefix_frames": 1089,
+          "first_mismatch_frame": 967,
           "first_render_visibility_mismatch_frame": -122,
+          "frames": 10703,
+          "last_mismatch_frame": 9473,
+          "matched_frames": 10613,
+          "mismatch_count": 116,
+          "mismatch_fields_digest": "f4261bf1e258f49866e9d20a6d4955d002aeccfc4a4bd06dd4444f16f5222b82",
+          "mismatch_fingerprint": "daae93f042ec2b5d",
+          "mismatched_frames": 90,
+          "render_visibility_mismatch_count": 3,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "6e0f3329ab037a55b4d46633fdca03209273e57a642247234619b5f063bef51e"
+          "strict_suffix_frames": 1107
         },
-        "ppc": "native"
+        "ppc": {
+          "exact_prefix_frames": 1089,
+          "first_mismatch_frame": 967,
+          "first_render_visibility_mismatch_frame": -122,
+          "frames": 10703,
+          "last_mismatch_frame": 9473,
+          "matched_frames": 10613,
+          "mismatch_count": 116,
+          "mismatch_fields_digest": "f4261bf1e258f49866e9d20a6d4955d002aeccfc4a4bd06dd4444f16f5222b82",
+          "mismatch_fingerprint": "daae93f042ec2b5d",
+          "mismatched_frames": 90,
+          "render_visibility_mismatch_count": 3,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 1107
+        }
       }
     },
     {
@@ -2483,7 +2499,7 @@
       "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
       "id": "dolphin-ulp-item-motion-profile",
       "owner": "Mr. Saturn and turnip gravity/position float execution",
-      "rationale": "State-aware validation excludes only Mr. Saturn's uninitialized held/thrown xDE4 bytes; all remaining residuals are bounded ULP-scale common-item velocities and positions from imported source gravity/integration. The final 3,439 transitions are strict. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
+      "rationale": "State-aware validation excludes only Mr. Saturn's uninitialized held/thrown xDE4 bytes; all remaining residuals are bounded ULP-scale common-item velocities and positions from imported source gravity/integration. The final 3,439 transitions are strict. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual.",
       "sources": [
         "refs/melee/src/melee/it/items/itdosei.c",
         "refs/melee/src/melee/it/items/itpeachturnip.c",
@@ -2497,11 +2513,11 @@
           "first_render_visibility_mismatch_frame": 1839,
           "frames": 14007,
           "last_mismatch_frame": 10445,
-          "matched_frames": 13883,
-          "mismatch_count": 199,
-          "mismatch_fields_digest": "27205737c70d237861929e908287cacc706dbd69ef063508e5de7dc91681eaa4",
-          "mismatch_fingerprint": "27cd24a4ecb3515b",
-          "mismatched_frames": 124,
+          "matched_frames": 13936,
+          "mismatch_count": 95,
+          "mismatch_fields_digest": "d8936d589695ac6bbabe5bbc3dfb7c6b0ae633e0c3e99edf7f5d2a646b3999ba",
+          "mismatch_fingerprint": "43fead8050c7e52e",
+          "mismatched_frames": 71,
           "render_visibility_mismatch_count": 7,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 3439
@@ -2541,7 +2557,7 @@
       "replay": "replays/validation/peach/CapitalPristineTarsier.slpz",
       "id": "dolphin-ulp-fighter-and-item-profile",
       "owner": "fighter root motion and thrown-item gravity float execution",
-      "rationale": "The complete residual contains bounded ULP-scale fighter root motion and thrown-item velocity/position intervals. Source discrete state remains aligned, and the exact fingerprint includes 158 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
+      "rationale": "The complete residual contains bounded ULP-scale fighter root motion and thrown-item velocity/position intervals. Source discrete state remains aligned, and the exact fingerprint includes 158 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
@@ -2550,16 +2566,16 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 3835,
-          "first_mismatch_frame": 3713,
+          "exact_prefix_frames": 3837,
+          "first_mismatch_frame": 3715,
           "first_render_visibility_mismatch_frame": 7181,
           "frames": 16491,
           "last_mismatch_frame": 16210,
-          "matched_frames": 16371,
-          "mismatch_count": 189,
-          "mismatch_fields_digest": "8b22d3bd496d7c27ea6e5a464d1434c71ea539ec6115d27fa32867d77608fe3b",
-          "mismatch_fingerprint": "4717bc73eea747ee",
-          "mismatched_frames": 120,
+          "matched_frames": 16401,
+          "mismatch_count": 123,
+          "mismatch_fields_digest": "0c3c8b7a2481461e39d4a5a064c404638c4914f688cabe9c7c299257c26c55c0",
+          "mismatch_fingerprint": "9d880aa987485328",
+          "mismatched_frames": 90,
           "render_visibility_mismatch_count": 8,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 158
