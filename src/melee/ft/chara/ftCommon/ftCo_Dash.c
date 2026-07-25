@@ -1,6 +1,9 @@
 #include "ftCo_Dash.h"
 
 #include <placeholder.h>
+#ifdef MSL_CORE_HOSTED
+#include <MetroTRK/intrinsics.h>
+#endif
 
 #include "ft/fighter.h"
 
@@ -140,7 +143,16 @@ void ftCo_Dash_IASA(Fighter_GObj* gobj)
     {
         float friction = ft_GetGroundFrictionMultiplier(fp);
         float temp_f0 = fp->gr_vel * p_ftCommonData->x54;
+#ifdef MSL_CORE_HOSTED
+        // GALE01 0x800CA518-0x800CA51C is fneg + one scalar-single fmadds, so
+        // -temp_f0 * friction is not rounded before the accumulate. On ground
+        // sections whose friction multiplier is not a power of two (e.g.
+        // Fountain of Dreams returns 1.5) the separate multiply rounds twice
+        // and shifts every dash-back turn velocity by ULPs.
+        fp->gr_vel = __fmadds(-temp_f0, friction, fp->gr_vel);
+#else
         fp->gr_vel += -temp_f0 * friction;
+#endif
     }
 }
 
