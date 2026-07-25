@@ -56,11 +56,17 @@
 #include "ftLink/ftLk_SpecialLw.h"
 #include "ftLink/ftLk_SpecialN.h"
 #include "ftLink/ftLk_SpecialS.h"
+#include "ftDrMario/ftDr_Init.h"
 #include "ftLuigi/ftLg_Init.h"
 #include "ftLuigi/ftLg_SpecialHi.h"
 #include "ftLuigi/ftLg_SpecialLw.h"
 #include "ftLuigi/ftLg_SpecialN.h"
 #include "ftLuigi/ftLg_SpecialS.h"
+#include "ftMario/ftMr_Init.h"
+#include "ftMario/ftMr_SpecialHi.h"
+#include "ftMario/ftMr_SpecialLw.h"
+#include "ftMario/ftMr_SpecialN.h"
+#include "ftMario/ftMr_SpecialS.h"
 #include "ftMario/ftMr_Init.h"
 #include "ftMario/ftMr_SpecialHi.h"
 #include "ftMario/ftMr_SpecialLw.h"
@@ -153,6 +159,7 @@ static const ftData_UnkCountStruct
         [FTKIND_FOX] = { 0, 327 },   [FTKIND_CAPTAIN] = { 0, 318 },
         [FTKIND_SEAK] = { 0, 317 },  [FTKIND_PEACH] = { 0, 318 },
         [FTKIND_PURIN] = { 0, 327 }, [FTKIND_LUIGI] = { 0, 312 },
+        [FTKIND_MARIO] = { 0, 303 }, [FTKIND_DRMARIO] = { 0, 303 },
         [FTKIND_MARS] = { 0, 327 },
         [FTKIND_ZELDA] = { 0, 311 }, [FTKIND_FALCO] = { 0, 327 },
     };
@@ -172,6 +179,8 @@ HSD_GObjEvent ftData_OnLoad[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_Init_OnLoad,
     [FTKIND_PURIN] = ftPr_Init_OnLoad,
     [FTKIND_LUIGI] = ftLg_Init_OnLoad,
+    [FTKIND_MARIO] = ftMr_Init_OnLoad,
+    [FTKIND_DRMARIO] = ftDr_Init_OnLoad,
     [FTKIND_MARS] = ftMs_Init_OnLoad,
     [FTKIND_ZELDA] = ftZd_Init_OnLoad,
     [FTKIND_FALCO] = ftFc_Init_OnLoad,
@@ -183,6 +192,8 @@ HSD_GObjEvent ftData_OnDeath[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_Init_OnDeath,
     [FTKIND_PURIN] = ftPr_Init_OnDeath,
     [FTKIND_LUIGI] = ftLg_Init_OnDeath,
+    [FTKIND_MARIO] = ftMr_Init_OnDeath,
+    [FTKIND_DRMARIO] = ftDr_Init_OnDeath,
     [FTKIND_MARS] = ftMs_Init_OnDeath,
     [FTKIND_ZELDA] = ftZd_Init_OnDeath,
     [FTKIND_FALCO] = ftFc_Init_OnDeath,
@@ -197,12 +208,15 @@ MotionState* ftData_CharacterStateTables[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_Init_MotionStateTable,
     [FTKIND_PURIN] = ftPr_Init_MotionStateTable,
     [FTKIND_LUIGI] = ftLg_Init_MotionStateTable,
+    [FTKIND_MARIO] = ftMr_Init_MotionStateTable,
+    [FTKIND_DRMARIO] = ftDr_Init_MotionStateTable,
     [FTKIND_MARS] = ftMs_Init_MotionStateTable,
     [FTKIND_ZELDA] = ftZd_Init_MotionStateTable,
     [FTKIND_FALCO] = ftFc_Init_MotionStateTable,
 };
 MotionState* ftData_UnkMotionStates0[FTKIND_MAX] = {
     [FTKIND_LUIGI] = ftLg_Init_UnkMotionStates0,
+    [FTKIND_MARIO] = ftMr_Init_UnkMotionStates0,
 };
 
 // Direct admitted-character rows from the source registries below. Keeping the
@@ -216,6 +230,8 @@ HSD_GObjEvent ftData_SpecialS[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_SpecialS_Enter,
     [FTKIND_PURIN] = ftPr_SpecialS_Enter,
     [FTKIND_LUIGI] = ftLg_SpecialS_Enter,
+    [FTKIND_MARIO] = ftMr_SpecialS_Enter,
+    [FTKIND_DRMARIO] = ftMr_SpecialS_Enter,
     [FTKIND_MARS] = ftMs_SpecialS_Enter,
     [FTKIND_ZELDA] = ftZd_SpecialS_Enter,
     [FTKIND_FALCO] = ftFx_SpecialSStart_Enter,
@@ -227,6 +243,8 @@ HSD_GObjEvent ftData_SpecialAirHi[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_SpecialAirHi_Enter,
     [FTKIND_PURIN] = ftPr_SpecialAirHi_Enter,
     [FTKIND_LUIGI] = ftLg_SpecialAirHi_Enter,
+    [FTKIND_MARIO] = ftMr_SpecialAirHi_Enter,
+    [FTKIND_DRMARIO] = ftMr_SpecialAirHi_Enter,
     [FTKIND_MARS] = ftMs_SpecialAirHi_Enter,
     [FTKIND_ZELDA] = ftZd_SpecialAirHi_Enter,
     [FTKIND_FALCO] = ftFx_SpecialAirHiStart_Enter,
@@ -238,6 +256,8 @@ HSD_GObjEvent ftData_SpecialAirLw[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_SpecialAirLw_Enter,
     [FTKIND_PURIN] = ftPr_SpecialAirLw_Enter,
     [FTKIND_LUIGI] = ftLg_SpecialAirLw_Enter,
+    [FTKIND_MARIO] = ftMr_SpecialAirLw_Enter,
+    [FTKIND_DRMARIO] = ftMr_SpecialAirLw_Enter,
     [FTKIND_MARS] = ftMs_SpecialAirLw_Enter,
     [FTKIND_ZELDA] = ftZd_SpecialAirLw_Enter,
     [FTKIND_FALCO] = ftFx_SpecialAirLw_Enter,
@@ -249,6 +269,8 @@ HSD_GObjEvent ftData_SpecialAirS[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_SpecialAirS_Enter,
     [FTKIND_PURIN] = ftPr_SpecialAirS_Enter,
     [FTKIND_LUIGI] = ftLg_SpecialAirS_Enter,
+    [FTKIND_MARIO] = ftMr_SpecialAirS_Enter,
+    [FTKIND_DRMARIO] = ftMr_SpecialAirS_Enter,
     [FTKIND_MARS] = ftMs_SpecialAirS_Enter,
     [FTKIND_ZELDA] = ftZd_SpecialAirS_Enter,
     [FTKIND_FALCO] = ftFx_SpecialAirSStart_Enter,
@@ -260,6 +282,8 @@ HSD_GObjEvent ftData_SpecialAirN[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_SpecialAirN_Enter,
     [FTKIND_PURIN] = ftPr_SpecialAirN_Enter,
     [FTKIND_LUIGI] = ftLg_SpecialAirN_Enter,
+    [FTKIND_MARIO] = ftMr_SpecialAirN_Enter,
+    [FTKIND_DRMARIO] = ftMr_SpecialAirN_Enter,
     [FTKIND_MARS] = ftMs_SpecialAirN_Enter,
     [FTKIND_ZELDA] = ftZd_SpecialAirN_Enter,
     [FTKIND_FALCO] = ftFx_SpecialAirN_Enter,
@@ -271,6 +295,8 @@ HSD_GObjEvent ftData_SpecialN[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_SpecialN_Enter,
     [FTKIND_PURIN] = ftPr_SpecialN_Enter,
     [FTKIND_LUIGI] = ftLg_SpecialN_Enter,
+    [FTKIND_MARIO] = ftMr_SpecialN_Enter,
+    [FTKIND_DRMARIO] = ftMr_SpecialN_Enter,
     [FTKIND_MARS] = ftMs_SpecialN_Enter,
     [FTKIND_ZELDA] = ftZd_SpecialN_Enter,
     [FTKIND_FALCO] = ftFx_SpecialN_Enter,
@@ -282,6 +308,8 @@ HSD_GObjEvent ftData_SpecialLw[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_SpecialLw_Enter,
     [FTKIND_PURIN] = ftPr_SpecialLw_Enter,
     [FTKIND_LUIGI] = ftLg_SpecialLw_Enter,
+    [FTKIND_MARIO] = ftMr_SpecialLw_Enter,
+    [FTKIND_DRMARIO] = ftMr_SpecialLw_Enter,
     [FTKIND_MARS] = ftMs_SpecialLw_Enter,
     [FTKIND_ZELDA] = ftZd_SpecialLw_Enter,
     [FTKIND_FALCO] = ftFx_SpecialLw_Enter,
@@ -293,6 +321,8 @@ HSD_GObjEvent ftData_SpecialHi[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_SpecialHi_Enter,
     [FTKIND_PURIN] = ftPr_SpecialHi_Enter,
     [FTKIND_LUIGI] = ftLg_SpecialHi_Enter,
+    [FTKIND_MARIO] = ftMr_SpecialHi_Enter,
+    [FTKIND_DRMARIO] = ftMr_SpecialHi_Enter,
     [FTKIND_MARS] = ftMs_SpecialHi_Enter,
     [FTKIND_ZELDA] = ftZd_SpecialHi_Enter,
     [FTKIND_FALCO] = ftFx_SpecialHi_Enter,
@@ -306,6 +336,8 @@ Fighter_ItemEvent ftData_OnItemPickupExt[FTKIND_MAX] = {
     [FTKIND_PURIN] = ftPr_Init_OnItemPickup,
     [FTKIND_MARS] = ftMs_Init_OnItemPickup,
     [FTKIND_LUIGI] = ftLg_Init_OnItemPickup,
+    [FTKIND_MARIO] = ftMr_Init_OnItemPickup,
+    [FTKIND_DRMARIO] = ftDr_Init_OnItemPickup,
     [FTKIND_MARS] = ftMs_Init_OnItemPickup,
     [FTKIND_ZELDA] = ftZd_Init_OnItemPickup,
     [FTKIND_FALCO] = ftFc_Init_OnItemPickup,
@@ -317,6 +349,8 @@ HSD_GObjEvent ftData_OnItemInvisible[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_Init_OnItemInvisible,
     [FTKIND_PURIN] = ftPr_Init_OnItemInvisible,
     [FTKIND_LUIGI] = ftLg_Init_OnItemInvisible,
+    [FTKIND_MARIO] = ftMr_Init_OnItemInvisible,
+    [FTKIND_DRMARIO] = ftDr_Init_OnItemInvisible,
     [FTKIND_MARS] = ftMs_Init_OnItemInvisible,
     [FTKIND_ZELDA] = ftZd_Init_OnItemInvisible,
     [FTKIND_FALCO] = ftFc_Init_OnItemInvisible,
@@ -328,6 +362,8 @@ HSD_GObjEvent ftData_OnItemVisible[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_Init_OnItemVisible,
     [FTKIND_PURIN] = ftPr_Init_OnItemVisible,
     [FTKIND_LUIGI] = ftLg_Init_OnItemVisible,
+    [FTKIND_MARIO] = ftMr_Init_OnItemVisible,
+    [FTKIND_DRMARIO] = ftDr_Init_OnItemVisible,
     [FTKIND_MARS] = ftMs_Init_OnItemVisible,
     [FTKIND_ZELDA] = ftZd_Init_OnItemVisible,
     [FTKIND_FALCO] = ftFc_Init_OnItemVisible,
@@ -340,6 +376,8 @@ Fighter_ItemEvent ftData_OnItemDropExt[FTKIND_MAX] = {
     [FTKIND_PURIN] = ftPr_Init_OnItemDrop,
     [FTKIND_MARS] = ftMs_Init_OnItemDrop,
     [FTKIND_LUIGI] = ftLg_Init_OnItemDrop,
+    [FTKIND_MARIO] = ftMr_Init_OnItemDrop,
+    [FTKIND_DRMARIO] = ftDr_Init_OnItemDrop,
     [FTKIND_MARS] = ftMs_Init_OnItemDrop,
     [FTKIND_ZELDA] = ftZd_Init_OnItemDrop,
     [FTKIND_FALCO] = ftFc_Init_OnItemDrop,
@@ -351,6 +389,8 @@ Fighter_ItemEvent ftData_OnItemPickup[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_Init_OnItemPickup,
     [FTKIND_PURIN] = ftPr_Init_OnItemPickup,
     [FTKIND_LUIGI] = ftLg_Init_OnItemPickup,
+    [FTKIND_MARIO] = ftMr_Init_OnItemPickup,
+    [FTKIND_DRMARIO] = ftDr_Init_OnItemPickup,
     [FTKIND_MARS] = ftMs_Init_OnItemPickup,
     [FTKIND_ZELDA] = ftZd_Init_OnItemPickup,
     [FTKIND_FALCO] = ftFc_Init_OnItemPickup,
@@ -362,6 +402,8 @@ Fighter_ItemEvent ftData_OnItemDrop[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_Init_OnItemDrop,
     [FTKIND_PURIN] = ftPr_Init_OnItemDrop,
     [FTKIND_LUIGI] = ftLg_Init_OnItemDrop,
+    [FTKIND_MARIO] = ftMr_Init_OnItemDrop,
+    [FTKIND_DRMARIO] = ftDr_Init_OnItemDrop,
     [FTKIND_MARS] = ftMs_Init_OnItemDrop,
     [FTKIND_ZELDA] = ftZd_Init_OnItemDrop,
     [FTKIND_FALCO] = ftFc_Init_OnItemDrop,
@@ -374,6 +416,8 @@ HSD_GObjEvent ftData_OnKnockbackEnter[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_Init_OnKnockbackEnter,
     [FTKIND_PURIN] = ftPr_Init_OnKnockbackEnter,
     [FTKIND_LUIGI] = ftLg_Init_OnKnockbackEnter,
+    [FTKIND_MARIO] = ftMr_Init_OnKnockbackEnter,
+    [FTKIND_DRMARIO] = ftDr_Init_OnKnockbackEnter,
     [FTKIND_MARS] = ftMs_Init_OnKnockbackEnter,
     [FTKIND_ZELDA] = ftZd_Init_OnKnockbackEnter,
     [FTKIND_FALCO] = ftFc_Init_OnKnockbackEnter,
@@ -384,6 +428,8 @@ HSD_GObjEvent ftData_OnKnockbackExit[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_Init_OnKnockbackExit,
     [FTKIND_PURIN] = ftPr_Init_OnKnockbackExit,
     [FTKIND_LUIGI] = ftLg_Init_OnKnockbackExit,
+    [FTKIND_MARIO] = ftMr_Init_OnKnockbackExit,
+    [FTKIND_DRMARIO] = ftDr_Init_OnKnockbackExit,
     [FTKIND_MARS] = ftMs_Init_OnKnockbackExit,
     [FTKIND_ZELDA] = ftZd_Init_OnKnockbackExit,
     [FTKIND_FALCO] = ftFc_Init_OnKnockbackExit,
@@ -399,6 +445,8 @@ HSD_GObjEvent ftKindCalcIndiviParamTable[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_Init_LoadSpecialAttrs,
     [FTKIND_PURIN] = ftPr_Init_LoadSpecialAttrs,
     [FTKIND_LUIGI] = ftLg_Init_LoadSpecialAttrs,
+    [FTKIND_MARIO] = ftMr_Init_LoadSpecialAttrs,
+    [FTKIND_DRMARIO] = ftDr_Init_LoadSpecialAttrs,
     [FTKIND_MARS] = ftMs_Init_LoadSpecialAttrs,
     [FTKIND_ZELDA] = ftZd_Init_LoadSpecialAttrs,
     [FTKIND_FALCO] = ftFc_Init_LoadSpecialAttrs,
@@ -415,6 +463,8 @@ struct StringPair ftData_803C1F40[FTKIND_MAX] = {
     [FTKIND_PEACH] = { ftPe_Init_DatFilename, ftPe_Init_DataName },
     [FTKIND_PURIN] = { ftPr_Init_DatFilename, ftPr_Init_DataName },
     [FTKIND_LUIGI] = { ftLg_Init_DatFilename, ftLg_Init_DataName },
+    [FTKIND_MARIO] = { ftMr_Init_DatFilename, ftMr_Init_DataName },
+    [FTKIND_DRMARIO] = { ftDr_Init_DatFilename, ftDr_Init_DataName },
     [FTKIND_MARS] = { ftMs_Init_DatFilename, ftMs_Init_DataName },
     [FTKIND_ZELDA] = { ftZd_Init_DatFilename, ftZd_Init_DataName },
     [FTKIND_FALCO] = { ftFc_Init_DatFilename, ftFc_Init_DataName },
@@ -442,6 +492,8 @@ Fighter_CostumeStrings* ftData_803C2360[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_Init_CostumeStrings,
     [FTKIND_PURIN] = ftPr_Init_CostumeStrings,
     [FTKIND_LUIGI] = ftLg_Init_CostumeStrings,
+    [FTKIND_MARIO] = ftMr_Init_CostumeStrings,
+    [FTKIND_DRMARIO] = ftDr_Init_CostumeStrings,
     [FTKIND_MARS] = ftMs_Init_CostumeStrings,
     [FTKIND_ZELDA] = ftZd_Init_CostumeStrings,
     [FTKIND_FALCO] = ftFc_Init_CostumeStrings,
@@ -453,6 +505,8 @@ char* ftData_803C23E4[FTKIND_MAX] = {
     [FTKIND_PEACH] = ftPe_Init_AnimDatFilename,
     [FTKIND_PURIN] = ftPr_Init_AnimDatFilename,
     [FTKIND_LUIGI] = ftLg_Init_AnimDatFilename,
+    [FTKIND_MARIO] = ftMr_Init_AnimDatFilename,
+    [FTKIND_DRMARIO] = ftDr_Init_AnimDatFilename,
     [FTKIND_MARS] = ftMs_Init_AnimDatFilename,
     [FTKIND_ZELDA] = ftZd_Init_AnimDatFilename,
     [FTKIND_FALCO] = ftFc_Init_AnimDatFilename,
@@ -464,15 +518,19 @@ Fighter_DemoStrings* ftData_803C2468[FTKIND_MAX] = {
     [FTKIND_PEACH] = &ftPe_Init_DemoMotionFilenames,
     [FTKIND_PURIN] = &ftPr_Init_DemoMotionFilenames,
     [FTKIND_LUIGI] = &ftLg_Init_DemoMotionFilenames,
+    [FTKIND_MARIO] = &ftMr_Init_DemoMotionFilenames,
+    [FTKIND_DRMARIO] = &ftDr_Init_DemoMotionFilenames,
     [FTKIND_MARS] = &ftMs_Init_DemoMotionFilenames,
     [FTKIND_ZELDA] = &ftZd_Init_DemoMotionFilenames,
     [FTKIND_FALCO] = &ftFc_Init_DemoMotionFilenames,
 };
 Fighter_MotionFileStringGetter ftData_803C24EC[FTKIND_MAX] = {
     [FTKIND_LUIGI] = ftLg_Init_GetMotionFileString,
+    [FTKIND_MARIO] = ftMr_Init_GetMotionFileString,
 };
 Fighter_UnkPtrEvent ftData_UnkDemoCallbacks0[FTKIND_MAX] = {
     [FTKIND_LUIGI] = ftLg_Init_UnkDemoCallbacks0,
+    [FTKIND_MARIO] = ftMr_Init_UnkDemoCallbacks0,
 };
 ftData_UnkCountStruct ftData_UnkIntPairs[FTKIND_MAX] = {
     [FTKIND_FOX] = { 0, 14 },
@@ -481,6 +539,8 @@ ftData_UnkCountStruct ftData_UnkIntPairs[FTKIND_MAX] = {
     [FTKIND_PEACH] = { 0, 14 },
     [FTKIND_PURIN] = { 0, 14 },
     [FTKIND_LUIGI] = { 0, 16 },
+    [FTKIND_MARIO] = { 0, 16 },
+    [FTKIND_DRMARIO] = { 0, 14 },
     [FTKIND_MARS] = { 0, 14 },
     [FTKIND_ZELDA] = { 0, 14 },
     [FTKIND_FALCO] = { 0, 14 },
@@ -492,6 +552,8 @@ u8 ftData_UnkBytePerCharacter[FTKIND_MAX] = {
     [FTKIND_PEACH] = 15,
     [FTKIND_PURIN] = 11,
     [FTKIND_LUIGI] = 18,
+    [FTKIND_MARIO] = 1,
+    [FTKIND_DRMARIO] = 1,
     [FTKIND_MARS] = 16,
     [FTKIND_ZELDA] = 17,
     [FTKIND_FALCO] = 3,

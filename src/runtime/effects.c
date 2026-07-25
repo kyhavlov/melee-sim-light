@@ -154,6 +154,9 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     memset(data, 0, sizeof(*data));
     data->recording_common_model = -1;
     msl_effect_load_bank(data, 0, "/EfCoData.dat", "effCommonDataTable");
+    // Mario and Dr. Mario share efAsync bank 1 (ftData_UnkBytePerCharacter
+    // maps both kinds to 1).
+    msl_effect_load_bank(data, 1, "/EfMrData.dat", "effMarioDataTable");
     msl_effect_load_bank(data, 3, "/EfFxData.dat", "effFoxDataTable");
     msl_effect_load_bank(data, 18, "/EfLgData.dat", "effLuigiDataTable");
     // efLib_Create queues each common model's frame-zero animation, and both
@@ -396,6 +399,18 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
         msl_effect_consume_generator_rng(0xBC0);
     } else {
         switch (gfx_id) {
+        // Mario/Dr. Mario efAlt cases: fireball spawn pairs a model effect
+        // with bank-1 generator 0x3E9; the fireball trail (0x47B) and both
+        // cape flourishes (0x47D/0x47E) are generators alone. The tornado
+        // (0x47C) is model-backed only. Doc's pill sparkle (0x4A0) resolves
+        // to generator 0x7D02 in efAsync bank 32 (EfKbMr.dat), which is not
+        // loaded outside Kirby-hat matches, so it consumes nothing here.
+        // refs/melee/src/melee/ef/efalt.c
+        case 0x47A: msl_effect_consume_generator_rng(0x3E9); break;
+        case 0x47B: msl_effect_consume_generator_rng(0x3EB); break;
+        case 0x47D: msl_effect_consume_generator_rng(0x3F0); break;
+        case 0x47E: msl_effect_consume_generator_rng(0x3F1); break;
+        case 0x4A0: msl_effect_consume_generator_rng(0x7D02); break;
         case 0x4BD: msl_effect_consume_generator_rng(0x1B58); break;
         case 0x4BE: msl_effect_consume_generator_rng(0x1B5C); break;
         case 0x4BF:
@@ -447,6 +462,13 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
     case 0x3EE:
         msl_effect_consume_common_model_start(0x27);
         (void) HSD_Randf();
+        break;
+    // Large fire impact: efLib_Create_Attach_Pos(3, ...) whose frame-zero
+    // DPtcl events initialize the explosion's generator fan-out (observed as
+    // the retail 60-draw block ahead of the DamageFlyRoll roll on Mario
+    // f-smash hits). refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch
+    case 0x3FD:
+        msl_effect_consume_common_model_start(3);
         break;
     case 0x427: {
         int i;

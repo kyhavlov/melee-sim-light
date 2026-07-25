@@ -11,7 +11,6 @@
 
 #include "ft/forward.h"
 
-/* 4599F0 */ extern UnkCostumeStruct lbl_804599F0;
 #ifdef MSL_CORE_HOSTED
 UnkCostumeStruct* msl_core_fighter_costumes(FighterKind kind);
 #define ft_80459A98 (*msl_core_fighter_costumes(FTKIND_CAPTAIN))
@@ -22,8 +21,11 @@ UnkCostumeStruct* msl_core_fighter_costumes(FighterKind kind);
 #define ft_8045A168 (*msl_core_fighter_costumes(FTKIND_ZELDA))
 #define ft_8045A1F8 (*msl_core_fighter_costumes(FTKIND_PURIN))
 #define ft_8045A270 (*msl_core_fighter_costumes(FTKIND_LUIGI))
+#define lbl_804599F0 (*msl_core_fighter_costumes(FTKIND_MARIO))
+#define ft_8045A3A8 (*msl_core_fighter_costumes(FTKIND_DRMARIO))
 #define ft_8045A420 (*msl_core_fighter_costumes(FTKIND_FALCO))
 #else
+/* 4599F0 */ extern UnkCostumeStruct lbl_804599F0;
 /* 459A98 */ extern UnkCostumeStruct ft_80459A98;
 /* 459B28 */ extern UnkCostumeStruct ft_80459B28;
 /* 459C10 */ extern UnkCostumeStruct ft_80459C10;

@@ -8,6 +8,8 @@
 #include "ftMario/forward.h"
 #include <baselib/forward.h>
 
+// MWCC accepts a static const as an array bound; C requires a
+// constant expression in the hosted build.
 enum { aux_states_count = 2 };
 
 /* 0E08CC */ void ftMr_Init_OnDeath(HSD_GObj* gobj);

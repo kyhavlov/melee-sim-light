@@ -28,6 +28,10 @@ enum {
     MSL_CORE_ITEM_KIND_PEACH_PARASOL = 103,
     MSL_CORE_ITEM_KIND_PEACH_TOAD = 104,
     MSL_CORE_ITEM_KIND_LUIGI_FIREBALL = 105,
+    MSL_CORE_ITEM_KIND_MARIO_FIREBALL = 48,
+    MSL_CORE_ITEM_KIND_DRMARIO_VITAMIN = 49,
+    MSL_CORE_ITEM_KIND_MARIO_CAPE = 83,
+    MSL_CORE_ITEM_KIND_DRMARIO_SHEET = 84,
     MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE = 108,
     MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE = 109,
     MSL_CORE_ITEM_KIND_PEACH_TOAD_SPORE = 111,
@@ -100,6 +104,15 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // The fireball declares no item-variable payload; every sampled
         // lane is fixed-pool residue.
         // refs/melee/src/melee/it/items/itluigifireball.c
+        return 0;
+    case MSL_CORE_ITEM_KIND_MARIO_FIREBALL:
+    case MSL_CORE_ITEM_KIND_DRMARIO_VITAMIN:
+    case MSL_CORE_ITEM_KIND_MARIO_CAPE:
+    case MSL_CORE_ITEM_KIND_DRMARIO_SHEET:
+        // The Mario-family articles declare no Slippi-visible item
+        // variables; sampled misc lanes are fixed-pool residue.
+        // refs/melee/src/melee/it/items/{itmariofireball.c,
+        // itdrmariopill.c,itmariocape.c}
         return 0;
     case MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE:
         // Its first source word is explicitly uninitialized padding.

@@ -640,35 +640,6 @@
       }
     },
     {
-      "replay": "replays/validation/marth/FemaleFarOffSalmon.slpz",
-      "id": "unmodeled-presentation-rng-stream-phase",
-      "owner": "DamageFlyRoll gate versus post-input particle/effect RNG scheduler",
-      "rationale": "The first causal difference is the source DamageFlyRoll HSD_Randf gate with exact contact, damage, position, and grounded state. Native and PPC agree on the neighboring stream outcome; the recorded presentation-owned phase selects DamageFlyRoll. The downstream interval reconverges for the final 1,870 transitions.",
-      "sources": [
-        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
-        "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
-        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
-      ],
-      "expected": {
-        "native": {
-          "frames": 11699,
-          "matched_frames": 10334,
-          "mismatched_frames": 1365,
-          "exact_prefix_frames": 8464,
-          "strict_suffix_frames": 1870,
-          "first_mismatch_frame": 8342,
-          "last_mismatch_frame": 9706,
-          "mismatch_count": 1999,
-          "mismatch_fingerprint": "d7baeae2000ec287",
-          "mismatch_fields_digest": "53876007d250a4d5a73fa060842faea6190b50a772752227735a882166ca2b40",
-          "render_visibility_mismatch_count": 14,
-          "first_render_visibility_mismatch_frame": 8384,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/marth/FemaleWorthyAlpaca.slpz",
       "id": "dolphin-ulp-motion-profile",
       "owner": "fighter position float execution profile",
@@ -2018,36 +1989,6 @@
       }
     },
     {
-      "replay": "replays/validation/puff/Game_20260313T121034.slpz",
-      "id": "signed-zero-and-unmodeled-presentation-rng-phase",
-      "owner": "fighter signed-zero publication and DamageFlyRoll presentation RNG phase",
-      "rationale": "The signed-zero intervals are now source-owned by the mainline-Dolphin fnmsubs zero profile. At frame 2488 all deterministic pre-gate fighter state is exact, but the excluded effect/particle scheduler is at the neighboring RNG phase and selects DamageFlyRoll instead of DamageFlyHi. Native and PPC agree on the bounded consequence, which reconverges for the final 2,491 transitions.",
-      "sources": [
-        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
-        "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
-        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
-      ],
-      "expected": {
-        "native": {
-          "frames": 5153,
-          "matched_frames": 5101,
-          "mismatched_frames": 52,
-          "exact_prefix_frames": 2610,
-          "strict_suffix_frames": 2491,
-          "first_mismatch_frame": 2488,
-          "last_mismatch_frame": 2539,
-          "mismatch_count": 134,
-          "mismatch_fingerprint": "3995b886f73086a8",
-          "render_visibility_mismatch_count": 1,
-          "first_render_visibility_mismatch_frame": 2519,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "8027f7e5082e6cf010e6f724d8fea45ac4b8944ad7c8f6658434ac73d13b8644"
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/puff/Game_20260318T101341.slpz",
       "id": "dolphin-ulp-and-signed-zero-profile",
       "owner": "Puff Rollout motion and fighter signed-zero publication",
@@ -2526,30 +2467,28 @@
     },
     {
       "replay": "replays/validation/peach/PerfectJollyMagpie.slpz",
-      "id": "item-float-and-presentation-rng-profile",
-      "owner": "item root transform and DamageFlyRoll presentation RNG phase",
-      "rationale": "A 36-row ULP-scale item transform interval is followed by an independent source DamageFlyRoll gate whose deterministic fighter setup is aligned but presentation-owned RNG phase selects the neighboring action. The action interval reconverges, leaving 7,489 strict transitions.",
+      "id": "item-float-transform-ulp-profile",
+      "owner": "item root transform float execution",
+      "rationale": "A 36-row ULP-scale item transform interval (frames 397..432) with full strict reconvergence afterward; the former DamageFlyRoll presentation-RNG clause is now source-owned by the modeled 0x3FD fire-impact model-start generator consumption.",
       "sources": [
         "refs/melee/src/melee/it/item.c",
-        "refs/melee/src/sysdolphin/baselib/mtx.c",
-        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
-        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+        "refs/melee/src/sysdolphin/baselib/mtx.c"
       ],
       "expected": {
         "native": {
           "frames": 10838,
-          "matched_frames": 10747,
-          "mismatched_frames": 91,
+          "matched_frames": 10802,
+          "mismatched_frames": 36,
           "exact_prefix_frames": 519,
-          "strict_suffix_frames": 7489,
+          "strict_suffix_frames": 10283,
           "first_mismatch_frame": 397,
-          "last_mismatch_frame": 3226,
-          "mismatch_count": 217,
-          "mismatch_fingerprint": "f131461b7eb6ce1f",
+          "last_mismatch_frame": 432,
+          "mismatch_count": 72,
+          "mismatch_fingerprint": "27068b8610c98924",
           "render_visibility_mismatch_count": 0,
           "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "11040c31eecc52e09a2256037c62c01a559abd216e320dc4c9300d90f0921292"
+          "mismatch_fields_digest": "890adeff227ba72be99873c22506ffd00c6c495e1f881c40c471533765e4d2a9"
         }
       }
     },

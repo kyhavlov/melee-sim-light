@@ -927,6 +927,8 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataCaptain") == 0 ||
         strcmp(symbol, "ftDataSeak") == 0 ||
         strcmp(symbol, "ftDataLuigi") == 0 ||
+        strcmp(symbol, "ftDataMario") == 0 ||
+        strcmp(symbol, "ftDataDrmario") == 0 ||
         strcmp(symbol, "ftDataMars") == 0 ||
         strcmp(symbol, "ftDataPeach") == 0 ||
         strcmp(symbol, "ftDataZelda") == 0 ||
@@ -1149,6 +1151,8 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_PEACH,
     MSL_FIGHTER_ARTICLES_ZELDA,
     MSL_FIGHTER_ARTICLES_LUIGI,
+    MSL_FIGHTER_ARTICLES_MARIO,
+    MSL_FIGHTER_ARTICLES_MARIOD,
     MSL_FIGHTER_AUX_PURIN_PARTS,
 } MslFighterArticleProfile;
 
@@ -1241,6 +1245,28 @@ static ftData* translate_fighter_public(
         article_list_type = msl_dat_root_MslDatLuigiArticles;
         article_count = 1;
         indices[0] = 0;
+        attr_types[0] = msl_dat_root_itUnkAttributes;
+        break;
+    case MSL_FIGHTER_ARTICLES_MARIO:
+        // PlMr/PlDr share one four-slot article layout, but each DAT only
+        // populates its own owner's slots: Mario registers items[0]
+        // (fireball) and items[2] (cape); Dr. Mario registers items[1]
+        // (megavitamin) and items[3] (super sheet). The fireball and
+        // megavitamin attribute blocks share the five-float itUnkAttributes
+        // shape; the capes declare no special attributes.
+        // refs/melee/src/melee/ft/chara/{ftMario/ftMr_Init.c,
+        // ftDrMario/ftDr_Init.c}
+        article_list_type = msl_dat_root_MslDatMarioArticles;
+        article_count = 2;
+        indices[0] = 0;
+        indices[1] = 2;
+        attr_types[0] = msl_dat_root_itUnkAttributes;
+        break;
+    case MSL_FIGHTER_ARTICLES_MARIOD:
+        article_list_type = msl_dat_root_MslDatMarioArticles;
+        article_count = 2;
+        indices[0] = 1;
+        indices[1] = 3;
         attr_types[0] = msl_dat_root_itUnkAttributes;
         break;
     case MSL_FIGHTER_AUX_PURIN_PARTS:
@@ -1386,6 +1412,18 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftLuigiAttributes, 312,
                                           MSL_FIGHTER_ARTICLES_LUIGI);
+    } else if (strcmp(symbol, "ftDataMario") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftMario_DatAttrs, 303,
+                                          MSL_FIGHTER_ARTICLES_MARIO);
+    } else if (strcmp(symbol, "ftDataDrmario") == 0) {
+        // Doc's ext-attr blob is Mario-shaped: ftDrMarioAttributes is a
+        // partial alias of ftMario_DatAttrs (x4/xC/x14 overlay specials),
+        // and the shared ftMr_* specials read cape_reflection past the
+        // 0x18-byte stub, so translate with the full Mario layout.
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftMario_DatAttrs, 303,
+                                          MSL_FIGHTER_ARTICLES_MARIOD);
     } else if (strcmp(symbol, "ftDataMars") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_MarsAttributes, 327,

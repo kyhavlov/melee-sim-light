@@ -13,7 +13,7 @@ typedef struct EF_EffectDesc EF_EffectDesc;
 typedef struct FigaTree FigaTree;
 
 enum {
-    MSL_NATIVE_ARCHIVE_CACHE_CAPACITY = 2048,
+    MSL_NATIVE_ARCHIVE_CACHE_CAPACITY = 3072,
     MSL_NATIVE_DAT_ARENA_BYTES = 256 * 1024 * 1024,
 };
 
@@ -105,6 +105,8 @@ extern const MslDatType* const msl_dat_root_MslDatSheikArticles;
 extern const MslDatType* const msl_dat_root_MslDatPeachArticles;
 extern const MslDatType* const msl_dat_root_MslDatZeldaArticles;
 extern const MslDatType* const msl_dat_root_MslDatLuigiArticles;
+extern const MslDatType* const msl_dat_root_MslDatMarioArticles;
+extern const MslDatType* const msl_dat_root_ftMario_DatAttrs;
 extern const MslDatType* const msl_dat_root_MslDatCommonItemArticles;
 extern const MslDatType* const msl_dat_root_itBombHeiAttributes;
 extern const MslDatType* const msl_dat_root_itDoseiAttributes;

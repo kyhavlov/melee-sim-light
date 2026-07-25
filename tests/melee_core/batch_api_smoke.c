@@ -129,7 +129,7 @@ int main(int argc, char** argv)
         goto done;
     }
     memcpy(bad_configs, configs, sizeof(configs));
-    bad_configs[0].players[0].char_id = 0;
+    bad_configs[0].players[0].char_id = 4;
     if (msl_core_batch_reset_matches(batch, bad_configs,
                                      sizeof(bad_configs[0]), mask0,
                                      sizeof(mask0[0])) !=

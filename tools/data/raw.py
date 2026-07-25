@@ -20,6 +20,8 @@ SUPPORTED_CHARACTERS = (
     "puff",
     "peach",
     "luigi",
+    "mario",
+    "drmario",
 )
 SUPPORTED_STAGES = ("grnla", "grnba", "griz", "grps", "grst", "grop")
 

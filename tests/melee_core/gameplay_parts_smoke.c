@@ -192,6 +192,8 @@ int main(int argc, char** argv)
         { FTKIND_FOX, 1, "Fox" },       { FTKIND_CAPTAIN, 2, "Falcon" },
         { FTKIND_SEAK, 7, "Sheik" },    { FTKIND_PEACH, 9, "Peach" },
         { FTKIND_PURIN, 15, "Puff" },   { FTKIND_LUIGI, 17, "Luigi" },
+    { FTKIND_MARIO, 0, "Mario" },
+    { FTKIND_DRMARIO, 21, "Dr. Mario" },
         { FTKIND_MARS, 18, "Marth" },   { FTKIND_ZELDA, 19, "Zelda" },
         { FTKIND_FALCO, 22, "Falco" },
     };

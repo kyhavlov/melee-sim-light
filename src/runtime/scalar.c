@@ -62,12 +62,14 @@ enum {
     MSL_CORE_STAGE_DREAM_LAND = 28,
     MSL_CORE_STAGE_BATTLEFIELD = 31,
     MSL_CORE_STAGE_FINAL_DESTINATION = 32,
+    MSL_CORE_CHAR_MARIO = 0,
     MSL_CORE_CHAR_FOX = 1,
     MSL_CORE_CHAR_CAPTAIN_FALCON = 2,
     MSL_CORE_CHAR_SHEIK = 7,
     MSL_CORE_CHAR_PEACH = 9,
     MSL_CORE_CHAR_JIGGLYPUFF = 15,
     MSL_CORE_CHAR_LUIGI = 17,
+    MSL_CORE_CHAR_DRMARIO = 21,
     MSL_CORE_CHAR_MARTH = 18,
     MSL_CORE_CHAR_ZELDA = 19,
     MSL_CORE_CHAR_FALCO = 22,
@@ -257,6 +259,10 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_PURIN;
     case MSL_CORE_CHAR_LUIGI:
         return CKIND_LUIGI;
+    case MSL_CORE_CHAR_MARIO:
+        return CKIND_MARIO;
+    case MSL_CORE_CHAR_DRMARIO:
+        return CKIND_DRMARIO;
     case MSL_CORE_CHAR_MARTH:
         return CKIND_MARS;
     case MSL_CORE_CHAR_ZELDA:
@@ -581,7 +587,9 @@ static int validate_config(MslCoreMatchConfig* config)
         config->num_players = 2;
     }
     for (i = 0; i < config->num_players; ++i) {
-        if (config->players[i].char_id != MSL_CORE_CHAR_FOX &&
+        if (config->players[i].char_id != MSL_CORE_CHAR_MARIO &&
+            config->players[i].char_id != MSL_CORE_CHAR_DRMARIO &&
+            config->players[i].char_id != MSL_CORE_CHAR_FOX &&
             config->players[i].char_id != MSL_CORE_CHAR_CAPTAIN_FALCON &&
             config->players[i].char_id != MSL_CORE_CHAR_SHEIK &&
             config->players[i].char_id != MSL_CORE_CHAR_PEACH &&
@@ -591,12 +599,12 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CORE_CHAR_ZELDA &&
             config->players[i].char_id != MSL_CORE_CHAR_FALCO) {
             fprintf(stderr,
-                    "current core supports external char_id=1 Fox, "
+                    "current core supports external char_id=0 Mario, char_id=1 Fox, "
                     "char_id=2 Captain Falcon, "
                     "char_id=7 Sheik, char_id=9 Peach, "
                     "char_id=15 Jigglypuff, char_id=17 Luigi, "
                     "char_id=18 Marth, "
-                    "char_id=19 Zelda, and char_id=22 Falco only\n");
+                    "char_id=19 Zelda, char_id=21 Dr. Mario, and char_id=22 Falco only\n");
             return -1;
         }
         if (config->players[i].handicap == 0) {
@@ -644,6 +652,12 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
     game_data->source.fighter.costume_lists[FTKIND_LUIGI] =
         (struct UnkCostumeList){ game_data->source.fighter.luigi_costumes,
                                  4 };
+    game_data->source.fighter.costume_lists[FTKIND_MARIO] =
+        (struct UnkCostumeList){ game_data->source.fighter.mario_costumes,
+                                 5 };
+    game_data->source.fighter.costume_lists[FTKIND_DRMARIO] =
+        (struct UnkCostumeList){ game_data->source.fighter.drmario_costumes,
+                                 5 };
     game_data->source.fighter.costume_lists[FTKIND_MARS] =
         (struct UnkCostumeList){ game_data->source.fighter.marth_costumes, 5 };
     game_data->source.fighter.costume_lists[FTKIND_ZELDA] =
@@ -1220,6 +1234,8 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         MSL_CORE_CHAR_SHEIK,      MSL_CORE_CHAR_ZELDA,
         MSL_CORE_CHAR_JIGGLYPUFF, MSL_CORE_CHAR_PEACH,
         MSL_CORE_CHAR_LUIGI,
+        MSL_CORE_CHAR_MARIO,
+        MSL_CORE_CHAR_DRMARIO,
     };
     size_t i;
 

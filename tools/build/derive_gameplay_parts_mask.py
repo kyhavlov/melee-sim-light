@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+"""Derive a gameplay part-admission row for src/melee/ft/ftparts.c.
+
+The admitted set is the union of:
+  - the canonical gameplay skeleton (FtPart ids reached by supported common
+    code), transferred through PlCo.dat's per-character part_to_joint table;
+  - the character's own data-driven bones from its Pl<Xx>.dat ftData:
+    hurtbox owners (x30), dynamics chains (x2C), model-desc anchors
+    (x8->x10..x14: anim root, and throw/item attach bones), the x34 shield
+    bone, and the x54 effect-anchor cycle;
+  - every skeleton ancestor of the above (the compact loader requires an
+    ancestor-closed keep set; see msl_core_HSD_JObjLoadJointFiltered).
+
+The canonical set is anchored to Luigi's audited row (commit 1033eb71), which
+this formula reproduces bit-exactly; run with `luigi` to re-verify before
+trusting output for a new character.
+
+Usage: python3 tools/build/derive_gameplay_parts_mask.py luigi mario drmario
+"""
+import struct
+import sys
+
+# internal FighterKind, Pl prefix, ftData root symbol
+CHARACTERS = {
+    'mario': (0, 'Mr', 'ftDataMario'),
+    'fox': (1, 'Fx', 'ftDataFox'),
+    'captain': (2, 'Ca', 'ftDataCaptain'),
+    'seak': (7, 'Sk', 'ftDataSeak'),
+    'peach': (9, 'Pe', 'ftDataPeach'),
+    'purin': (15, 'Pr', 'ftDataPurin'),
+    'luigi': (17, 'Lg', 'ftDataLuigi'),
+    'mars': (18, 'Ms', 'ftDataMars'),
+    'zelda': (19, 'Zd', 'ftDataZelda'),
+    'drmario': (21, 'Dr', 'ftDataDrmario'),
+    'falco': (22, 'Fc', 'ftDataFalco'),
+}
+
+FTPART_INVALID = 0xFF
+NCANON = 54  # FtPart_TopN .. FtPart_TransN2
+
+# Luigi's audited admission row (joint indices), the canonical anchor.
+LUIGI_AUDITED = [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 22, 23, 24, 29, 30, 31,
+    32, 33, 42, 43, 44, 47, 48, 49, 50, 51, 53, 54, 55, 56, 57, 59,
+]
+
+
+def load_dat(path):
+    d = open(path, 'rb').read()
+    _, dsize, nrel, nroot, nxref = struct.unpack('>IIIII', d[:20])
+    data = d[0x20:0x20 + dsize]
+    reloc_off = 0x20 + dsize
+    relocs = set(struct.unpack('>%dI' % nrel, d[reloc_off:reloc_off + nrel * 4]))
+    roots_off = reloc_off + nrel * 4
+    strtab = roots_off + (nroot + nxref) * 8
+    roots = {}
+    for i in range(nroot + nxref):
+        doff, soff = struct.unpack('>II', d[roots_off + i * 8:roots_off + i * 8 + 8])
+        end = d.index(b'\0', strtab + soff)
+        roots[d[strtab + soff:end].decode()] = doff
+    return data, roots, relocs
+
+
+def u32(data, off):
+    return struct.unpack('>I', data[off:off + 4])[0]
+
+
+class CommonData:
+    def __init__(self, path='data/raw/PlCo.dat'):
+        self.data, roots, _ = load_dat(path)
+        pdata = roots['ftLoadCommonData']
+        self.parts_table_arr = u32(self.data, pdata + 4 * 4)
+        self.excl_arr = u32(self.data, pdata + 5 * 4)
+
+    def parts_table(self, kind):
+        t = u32(self.data, self.parts_table_arr + kind * 4)
+        j2p_off = u32(self.data, t)
+        p2j_off = u32(self.data, t + 4)
+        n = u32(self.data, t + 8)
+        j2p = list(self.data[j2p_off:j2p_off + n])
+        p2j = list(self.data[p2j_off:p2j_off + NCANON])
+        return j2p, p2j, n
+
+    def exclusions(self, kind):
+        t = u32(self.data, self.excl_arr + kind * 4)
+        if t == 0:
+            return set()
+        arr = u32(self.data, t)
+        cnt = u32(self.data, t + 4)
+        return {u32(self.data, arr + i * 8) for i in range(cnt)}
+
+
+def skeleton(path):
+    """Preorder joint list of the costume skeleton with parent indices."""
+    data, roots, _ = load_dat(path)
+    cands = [o for n, o in roots.items()
+             if n.endswith('_joint') and 'matanim' not in n]
+    assert len(cands) == 1, sorted(roots)
+    order, parents = [], []
+    JOBJ_INSTANCE = 0x1000
+
+    def walk(off, parent):
+        while off:
+            idx = len(order)
+            order.append(off)
+            parents.append(parent)
+            flags = u32(data, off + 4)
+            child = u32(data, off + 8)
+            nxt = u32(data, off + 12)
+            if child and not (flags & JOBJ_INSTANCE):
+                walk(child, idx)
+            off = nxt
+
+    walk(cands[0], -1)
+    return order, parents
+
+
+def ftdata_parts(path, root_name):
+    """Data-driven gameplay bones from a character's ftData."""
+    data, roots, relocs = load_dat(path)
+    ft = roots[root_name]
+
+    def ptr(off):
+        # a pointer field is valid iff its offset is relocated (0 is a legal
+        # data-section offset: Mario/Luigi place the x8 model desc there)
+        return u32(data, off) if off in relocs else None
+
+    bones = set()
+    dyn = []
+    x30 = ptr(ft + 0x30)  # hurtboxes
+    if x30 is not None:
+        cnt = u32(data, x30)
+        inits = ptr(x30 + 4)
+        for i in range(cnt):
+            bones.add(u32(data, inits + i * 0x28))
+    x2C = ptr(ft + 0x2C)  # dynamics
+    if x2C is not None:
+        dnum = u32(data, x2C)
+        barr = ptr(x2C + 4)
+        for i in range(dnum):
+            dyn.append((u32(data, barr + i * 0x18),
+                        u32(data, barr + i * 0x18 + 8)))
+    x8 = ptr(ft + 8)  # model desc anchors
+    if x8 is not None:
+        for boff in (0x10, 0x11, 0x12, 0x13, 0x14):
+            bones.add(data[x8 + boff])
+    x34 = ptr(ft + 0x34)  # shield bone
+    if x34 is not None:
+        bones.add(u32(data, x34))
+    x54 = ptr(ft + 0x54)  # effect anchor cycle
+    if x54 is not None:
+        for i in range(5):
+            bones.add(u32(data, x54 + i * 4))
+    return bones, dyn
+
+
+def derive(name, common, canon):
+    kind, prefix, root = CHARACTERS[name]
+    _, p2j, parts_num = common.parts_table(kind)
+    excl = common.exclusions(kind)
+
+    mask = set()
+    for c in sorted(canon):
+        j = p2j[c]
+        if j != FTPART_INVALID:
+            mask.add(j)
+
+    bones, dyn = ftdata_parts(f'data/raw/Pl{prefix}.dat', root)
+    order, parents = skeleton(f'data/raw/Pl{prefix}Nr.dat')
+    phys = [p for p in range(parts_num) if p not in excl]
+    assert len(phys) == len(order), (name, len(phys), len(order))
+    part_of_node = {n: p for n, p in enumerate(phys)}
+    node_of_part = {p: n for n, p in enumerate(phys)}
+
+    for bone_id, count in dyn:  # chains are linear preorder runs
+        n0 = node_of_part[bone_id]
+        for n in range(n0, min(n0 + count, len(order))):
+            bones.add(part_of_node[n])
+    mask |= bones
+
+    changed = True
+    while changed:
+        changed = False
+        for p in sorted(mask):
+            n = node_of_part.get(p)
+            if n is None:
+                continue
+            pa = parents[n]
+            if pa >= 0 and part_of_node[pa] not in mask:
+                mask.add(part_of_node[pa])
+                changed = True
+    return sorted(mask), parts_num
+
+
+def emit_row(name, mask):
+    kind_enum = 'FTKIND_' + ('DRMARIO' if name == 'drmario' else name.upper())
+    parts = [f'[{p}] = 1,' for p in mask]
+    print(f'    [{kind_enum}] = {{')
+    for i in range(0, len(parts), 6):
+        print('        ' + ' '.join(parts[i:i + 6]))
+    print('    },')
+
+
+def main():
+    names = sys.argv[1:] or ['luigi']
+    common = CommonData()
+    lj2p, _, _ = common.parts_table(CHARACTERS['luigi'][0])
+    canon = {lj2p[j] for j in LUIGI_AUDITED if lj2p[j] != FTPART_INVALID}
+    lg, _ = derive('luigi', common, canon)
+    assert lg == LUIGI_AUDITED, ('luigi anchor drifted', lg)
+    for name in names:
+        mask, parts_num = derive(name, common, canon)
+        print(f'// {name}: {len(mask)} live / {parts_num - len(mask)} cold '
+              f'of {parts_num} parts')
+        emit_row(name, mask)
+
+
+if __name__ == '__main__':
+    main()

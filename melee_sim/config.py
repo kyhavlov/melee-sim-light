@@ -11,6 +11,8 @@ class Character(IntEnum):
     PEACH = 9
     JIGGLYPUFF = 15
     LUIGI = 17
+    MARIO = 0
+    DRMARIO = 21
     MARTH = 18
     ZELDA = 19
     FALCO = 22

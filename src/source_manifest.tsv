@@ -275,6 +275,17 @@ src/melee/it/items/itpeachparasol.c	src/melee/it/items/itpeachparasol.c	not-list
 src/melee/it/items/itpeachtoad.c	src/melee/it/items/itpeachtoad.c	not-listed	peach-source-packet	compiled canonical Peach Toad article owner
 src/melee/it/items/itpeachtoadspore.c	src/melee/it/items/itpeachtoadspore.c	not-listed	peach-source-packet	compiled canonical Peach Toad-spore article owner
 src/melee/it/items/itluigifireball.c	src/melee/it/items/itluigifireball.c	Matching	luigi-source-packet	compiled canonical Luigi/Mario fireball article owner
+src/melee/ft/chara/ftDrMario/ftDr_AppealS.c	src/melee/ft/chara/ftDrMario/ftDr_AppealS.c	Matching	mario-source-packet	compiled canonical Dr. Mario megavitamin taunt owner
+src/melee/ft/chara/ftDrMario/ftDr_Init.c	src/melee/ft/chara/ftDrMario/ftDr_Init.c	Matching	mario-source-packet	compiled canonical Dr. Mario lifecycle and data-owner callbacks
+src/melee/ft/chara/ftMario/ftMr_Init.c	src/melee/ft/chara/ftMario/ftMr_Init.c	Matching	mario-source-packet	compiled canonical Mario lifecycle, state registry, and data-owner callbacks
+src/melee/ft/chara/ftMario/ftMr_SpecialHi.c	src/melee/ft/chara/ftMario/ftMr_SpecialHi.c	Matching	mario-source-packet	compiled canonical Super Jump Punch owner
+src/melee/ft/chara/ftMario/ftMr_SpecialLw.c	src/melee/ft/chara/ftMario/ftMr_SpecialLw.c	Matching	mario-source-packet	compiled canonical Mario Tornado owner
+src/melee/ft/chara/ftMario/ftMr_SpecialN.c	src/melee/ft/chara/ftMario/ftMr_SpecialN.c	Matching	mario-source-packet	compiled canonical fireball owner
+src/melee/ft/chara/ftMario/ftMr_SpecialS.c	src/melee/ft/chara/ftMario/ftMr_SpecialS.c	Matching	mario-source-packet	compiled canonical cape owner
+src/melee/ft/chara/ftMario/ftMr_Strings.c	src/melee/ft/chara/ftMario/ftMr_Strings.c	Matching	mario-source-packet	compiled canonical Mario costume and data strings
+src/melee/it/items/itdrmariopill.c	src/melee/it/items/itdrmariopill.c	Matching	mario-source-packet	compiled canonical megavitamin article owner
+src/melee/it/items/itmariocape.c	src/melee/it/items/itmariocape.c	Matching	mario-source-packet	compiled canonical cape and super-sheet article owner
+src/melee/it/items/itmariofireball.c	src/melee/it/items/itmariofireball.c	Matching	mario-source-packet	compiled canonical Mario-family fireball article owner
 src/melee/it/items/itpeachturnip.c	src/melee/it/items/itpeachturnip.c	not-listed	peach-source-packet	compiled canonical Peach turnip and rare-pull constructor owner
 src/melee/it/items/itsword.c	src/melee/it/items/itsword.c	not-listed	peach-common-item-packet	compiled canonical Beam Sword owner reached by Peach item pull
 src/sysdolphin/baselib/aobj.c	src/sysdolphin/baselib/aobj.c	Matching	0001-hosted-c-compatibility.patch	compiled directly from canonical source by Makefile; adapted by historical patch 0001-hosted-c-compatibility.patch

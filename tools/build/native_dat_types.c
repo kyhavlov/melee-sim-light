@@ -9,7 +9,9 @@
 #include "ef/types.h"
 #include "ft/chara/ftCaptain/types.h"
 #include "ft/chara/ftFox/types.h"
+#include "ft/chara/ftDrMario/types.h"
 #include "ft/chara/ftLuigi/types.h"
+#include "ft/chara/ftMario/types.h"
 #include "ft/chara/ftMars/types.h"
 #include "ft/chara/ftPeach/types.h"
 #include "ft/chara/ftPurin/types.h"
@@ -140,6 +142,10 @@ typedef Article* MslDatZeldaArticles[2];
 // refs/melee/src/melee/ft/chara/ftLuigi/ftLg_Init.c
 // refs/melee/src/melee/it/items/itluigifireball.c
 typedef Article* MslDatLuigiArticles[1];
+// PlMr/PlDr ftData.x48_items: fireball, megavitamin, cape, sheet.
+// refs/melee/src/melee/ft/chara/{ftMario/ftMr_Init.c,
+// ftDrMario/ftDr_Init.c}
+typedef Article* MslDatMarioArticles[4];
 // ItCo.dat's public x4 table owns the 43 common-item Article graphs. Peach's
 // SpecialLw can reach BombHei, Dosei, and Sword even when stage items are off.
 // refs/melee/src/melee/it/iteffect.c::it_802787B4
@@ -218,6 +224,8 @@ void* msl_native_dat_type_roots[] = {
     (MslDatPeachArticles*) 0,
     (MslDatZeldaArticles*) 0,
     (MslDatLuigiArticles*) 0,
+    (MslDatMarioArticles*) 0,
+    (ftMario_DatAttrs*) 0,
     (MslDatCommonItemArticles*) 0,
     (itBombHeiAttributes*) 0,
     (itDoseiAttributes*) 0,

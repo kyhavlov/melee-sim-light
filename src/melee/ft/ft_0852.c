@@ -15,8 +15,8 @@ ftData* gFtDataList[FTKIND_MAX];
 ft_8045993C_t ft_8045993C[6];
 
 int ft_8045996C[FTKIND_MAX];
-#endif
 UnkCostumeStruct lbl_804599F0[5];
+#endif
 
 void ft_8008521C(HSD_GObj* gobj)
 {

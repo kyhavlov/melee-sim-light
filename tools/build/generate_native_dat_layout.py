@@ -517,6 +517,8 @@ def main() -> None:
         "MslDatPeachArticles",
         "MslDatZeldaArticles",
         "MslDatLuigiArticles",
+        "MslDatMarioArticles",
+        "ftMario_DatAttrs",
         "MslDatCommonItemArticles",
         "itBombHeiAttributes",
         "itDoseiAttributes",

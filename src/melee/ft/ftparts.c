@@ -35,6 +35,9 @@
 // skeleton ancestor. Source owners: ft/{ftaction.c,ftcoll.c,ftdynamics.c,
 // ft_0899.c,ft_0CDD.c}, ft/chara/ftCommon/ftCo_Attack100.c, and the supported
 // character/item callsites that address fp->parts directly.
+// Rows for new characters are derived from PlCo.dat/Pl<Xx>.dat by
+// tools/build/derive_gameplay_parts_mask.py (anchored to the audited Luigi
+// row, which it reproduces bit-exactly).
 static const u8 gameplay_part_masks[FTKIND_MAX][MAX_FT_PARTS] = {
     [FTKIND_FOX] = {
         [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
@@ -92,6 +95,26 @@ static const u8 gameplay_part_masks[FTKIND_MAX][MAX_FT_PARTS] = {
         [30] = 1, [31] = 1, [32] = 1, [33] = 1, [42] = 1, [43] = 1,
         [44] = 1, [47] = 1, [48] = 1, [49] = 1, [50] = 1, [51] = 1,
         [53] = 1, [54] = 1, [55] = 1, [56] = 1, [57] = 1, [59] = 1,
+    },
+    [FTKIND_MARIO] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [6] = 1, [7] = 1, [8] = 1, [9] = 1, [10] = 1, [11] = 1,
+        [12] = 1, [13] = 1, [22] = 1, [23] = 1, [24] = 1, [29] = 1,
+        [30] = 1, [31] = 1, [32] = 1, [33] = 1, [42] = 1, [43] = 1,
+        [44] = 1, [47] = 1, [48] = 1, [49] = 1, [50] = 1, [51] = 1,
+        [53] = 1, [54] = 1, [55] = 1, [56] = 1, [57] = 1, [59] = 1,
+    },
+    [FTKIND_DRMARIO] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [6] = 1, [7] = 1, [8] = 1, [9] = 1, [10] = 1, [11] = 1,
+        [12] = 1, [13] = 1, [22] = 1, [23] = 1, [24] = 1, [29] = 1,
+        [30] = 1, [31] = 1, [32] = 1, [33] = 1, [42] = 1, [43] = 1,
+        [44] = 1, [52] = 1, [53] = 1, [54] = 1, [55] = 1, [56] = 1,
+        [58] = 1, [59] = 1, [60] = 1, [61] = 1, [62] = 1, [63] = 1,
+        [64] = 1, [65] = 1, [66] = 1, [67] = 1, [68] = 1, [69] = 1,
+        [70] = 1, [71] = 1, [72] = 1, [74] = 1, [75] = 1, [76] = 1,
+        [77] = 1, [78] = 1, [79] = 1, [80] = 1, [81] = 1, [82] = 1,
+        [83] = 1, [84] = 1,
     },
     [FTKIND_MARS] = {
         [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
