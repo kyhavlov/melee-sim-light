@@ -14,6 +14,23 @@ fi
 DATA_ROOT="$(cd "$DATA_ROOT" && pwd)"
 RAW_DIR="$DATA_ROOT/raw"
 
+# A raw dir extracted by an older checkout can be missing archives this
+# checkout's roster needs; once packaged, the wasm runtime dies with a bare
+# Aborted(). Validate the manifest against this checkout's supported profile
+# and every listed file's presence and size before packaging.
+PY="${PY:-$ROOT/.venv/bin/python}"
+if ! (cd "$ROOT" && "$PY" -c 'import sys
+from pathlib import Path
+from tools.data.raw import DataError, validate_raw_dir
+try:
+    validate_raw_dir(Path(sys.argv[1]), verify_hashes=False)
+except DataError as exc:
+    sys.exit(f"error: {exc}")' "$RAW_DIR"); then
+  echo "error: raw game data at $RAW_DIR does not match this checkout's supported profile." >&2
+  echo "Re-extract it for this checkout: python -m tools.data.extract --iso /path/to/SSBM.iso --out-dir $DATA_ROOT" >&2
+  exit 1
+fi
+
 if ! command -v emcc >/dev/null 2>&1; then
   echo "error: emcc is not on PATH. Install/activate Emscripten before building the live viewer." >&2
   exit 1
