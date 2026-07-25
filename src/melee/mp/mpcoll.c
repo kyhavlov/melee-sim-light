@@ -31,6 +31,14 @@
 #include <runtime/source_state.h>
 #endif
 
+
+#ifdef MSL_CORE_HOSTED
+#include <MetroTRK/intrinsics.h>
+#define MSL_MP_ECB_FMADDS(dst, a, b, c) (dst) = __fmadds((a), (b), (c))
+#else
+#define MSL_MP_ECB_FMADDS(dst, a, b, c) (dst) = (a) * (b) + (c)
+#endif
+
 struct mpColl_80458810_t {
     /*  +0 */ int right[9];
     /* +24 */ int left[9];
@@ -1990,9 +1998,13 @@ bool mpColl_800454A4_RightWall(CollData* coll)
             mpLineGetV1Pos(j, &pos);
 
             if (bot <= pos.y && pos.y <= mid) {
-                x = f27 * (pos.y - bot) + coll->ecb.bottom.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, f27, pos.y - bot, coll->ecb.bottom.x);
             } else if (mid <= pos.y && pos.y <= top) {
-                x = f26 * (pos.y - top) + coll->ecb.top.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, f26, pos.y - top, coll->ecb.top.x);
             } else if (pos.y < bot) {
                 break;
             } else {
@@ -2017,9 +2029,13 @@ bool mpColl_800454A4_RightWall(CollData* coll)
             mpLineGetV0Pos(wall_id, &pos);
 
             if (bot <= pos.y && pos.y <= mid) {
-                x = f27 * (pos.y - bot) + coll->ecb.bottom.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, f27, pos.y - bot, coll->ecb.bottom.x);
             } else if (mid <= pos.y && pos.y <= top) {
-                x = f26 * (pos.y - top) + coll->ecb.top.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, f26, pos.y - top, coll->ecb.top.x);
             } else if (pos.y > top) {
                 break;
             } else {
@@ -2316,9 +2332,13 @@ bool mpColl_80046224_LeftWall(CollData* coll)
                 mpLineGetV0Pos(line_id2, &pos);
 
                 if (f28 <= pos.y && pos.y <= f29) {
-                    x = f27 * (pos.y - f28) + coll->ecb.bottom.x;
+                    // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                    // scalar-single fmadds on the fdivs-derived slope.
+                    MSL_MP_ECB_FMADDS(x, f27, pos.y - f28, coll->ecb.bottom.x);
                 } else if (f29 <= pos.y && pos.y <= f30) {
-                    x = f26 * (pos.y - f30) + coll->ecb.top.x;
+                    // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                    // scalar-single fmadds on the fdivs-derived slope.
+                    MSL_MP_ECB_FMADDS(x, f26, pos.y - f30, coll->ecb.top.x);
                 } else if (pos.y < f28) {
                     break;
                 } else {
@@ -2344,9 +2364,13 @@ bool mpColl_80046224_LeftWall(CollData* coll)
             mpLineGetV1Pos(wall_id, &pos);
 
             if (f28 <= pos.y && pos.y <= f29) {
-                x = f27 * (pos.y - f28) + coll->ecb.bottom.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, f27, pos.y - f28, coll->ecb.bottom.x);
             } else if (f29 <= pos.y && pos.y <= f30) {
-                x = f26 * (pos.y - f30) + coll->ecb.top.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, f26, pos.y - f30, coll->ecb.top.x);
             } else if (pos.y > f30) {
                 break;
             } else {
@@ -3295,9 +3319,13 @@ bool mpColl_800491C8_RightWall(CollData* coll)
             mpLineGetV1Pos(j, &pos);
 
             if (bot <= pos.y && pos.y <= mid) {
-                x = bot_y_to_x * (pos.y - bot) + coll->ecb.bottom.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, bot_y_to_x, pos.y - bot, coll->ecb.bottom.x);
             } else if (mid <= pos.y && pos.y <= top) {
-                x = top_y_to_x * (pos.y - top) + coll->ecb.top.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, top_y_to_x, pos.y - top, coll->ecb.top.x);
             } else if (pos.y < bot) {
                 break;
             } else {
@@ -3322,9 +3350,13 @@ bool mpColl_800491C8_RightWall(CollData* coll)
             mpLineGetV0Pos(wall_id, &pos);
 
             if (bot <= pos.y && pos.y <= mid) {
-                x = bot_y_to_x * (pos.y - bot) + coll->ecb.bottom.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, bot_y_to_x, pos.y - bot, coll->ecb.bottom.x);
             } else if (mid <= pos.y && pos.y <= top) {
-                x = top_y_to_x * (pos.y - top) + coll->ecb.top.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, top_y_to_x, pos.y - top, coll->ecb.top.x);
             } else if (pos.y > top) {
                 break;
             } else {
@@ -3602,9 +3634,13 @@ bool mpColl_80049EAC_LeftWall(CollData* coll)
             mpLineGetV0Pos(j, &pos);
 
             if (bot <= pos.y && pos.y <= mid) {
-                x = bot_y_to_x * (pos.y - bot) + coll->ecb.bottom.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, bot_y_to_x, pos.y - bot, coll->ecb.bottom.x);
             } else if (mid <= pos.y && pos.y <= top) {
-                x = top_y_to_x * (pos.y - top) + coll->ecb.top.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, top_y_to_x, pos.y - top, coll->ecb.top.x);
             } else if (pos.y < bot) {
                 break;
             } else {
@@ -3629,9 +3665,13 @@ bool mpColl_80049EAC_LeftWall(CollData* coll)
             mpLineGetV1Pos(wall_id, &pos);
 
             if (bot <= pos.y && pos.y <= mid) {
-                x = bot_y_to_x * (pos.y - bot) + coll->ecb.bottom.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, bot_y_to_x, pos.y - bot, coll->ecb.bottom.x);
             } else if (mid <= pos.y && pos.y <= top) {
-                x = top_y_to_x * (pos.y - top) + coll->ecb.top.x;
+                // GALE01 mpColl wall sweeps interpolate the ECB edge with one
+                // scalar-single fmadds on the fdivs-derived slope.
+                MSL_MP_ECB_FMADDS(x, top_y_to_x, pos.y - top, coll->ecb.top.x);
             } else if (pos.y > top) {
                 break;
             } else {

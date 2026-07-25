@@ -669,8 +669,19 @@ void ftCo_80093240(Fighter_GObj* gobj)
         {
             float scl = p_ftCommonData->x4C0 *
                         (fp->input.lstick.x * p_ftCommonData->sdi_pos_scale);
+#ifdef MSL_CORE_HOSTED
+            // GALE01 0x800932B8/0x800932CC apply the shield SDI slide with
+            // one scalar-single fmadds per component. Ground normals are not
+            // exact (a flat Final Destination floor stores 0x3f7fffff), so
+            // rounding normal * scl separately shifts the slide by ULPs.
+            fp->cur_pos.x =
+                __fmadds(fp->coll_data.floor.normal.y, scl, fp->cur_pos.x);
+            fp->cur_pos.y =
+                __fmadds(-fp->coll_data.floor.normal.x, scl, fp->cur_pos.y);
+#else
             fp->cur_pos.x += fp->coll_data.floor.normal.y * scl;
             fp->cur_pos.y += -fp->coll_data.floor.normal.x * scl;
+#endif
             fp->x670_timer_lstick_tilt_x = 254;
         }
     }
@@ -686,8 +697,17 @@ void ftCo_800932DC(Fighter_GObj* gobj)
         {
             float scl = p_ftCommonData->x4C0 *
                         (fp->input.lstick.x * p_ftCommonData->x4BC);
+#ifdef MSL_CORE_HOSTED
+            // GALE01 0x80093334/0x80093348: same fmadds slide as
+            // ftCo_80093240 above, applied on shield hitlag release.
+            fp->cur_pos.x =
+                __fmadds(fp->coll_data.floor.normal.y, scl, fp->cur_pos.x);
+            fp->cur_pos.y =
+                __fmadds(-fp->coll_data.floor.normal.x, scl, fp->cur_pos.y);
+#else
             fp->cur_pos.x += fp->coll_data.floor.normal.y * scl;
             fp->cur_pos.y += -fp->coll_data.floor.normal.x * scl;
+#endif
 
             /// @todo Fake.
             !gobj;

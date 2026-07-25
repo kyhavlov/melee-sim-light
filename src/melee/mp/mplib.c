@@ -1166,8 +1166,20 @@ static void mpRemap2d(float* x_out, float* y_out, float ax0, float ay0,
             t = 0.0;
         }
 
+#ifdef MSL_CORE_HOSTED
+        // GALE01 0x8004DD30..0x8004DD3C accumulate both terms with
+        // double-precision fmadd; t comes from an fdiv, so the products are
+        // inexact and the fused accumulates round once each before frsp.
+        *x_out = (float) __builtin_fma(
+            t, (double) (bx1 - ax1),
+            __builtin_fma(1.0 - t, (double) (bx0 - ax0), (double) px));
+        *y_out = (float) __builtin_fma(
+            t, (double) (by1 - ay1),
+            __builtin_fma(1.0 - t, (double) (by0 - ay0), (double) py));
+#else
         *x_out = px + (1.0 - t) * (bx0 - ax0) + t * (bx1 - ax1);
         *y_out = py + (1.0 - t) * (by0 - ay0) + t * (by1 - ay1);
+#endif
     } else {
         *x_out = px + (bx0 - ax0) + (bx1 - ax0);
         *y_out = py + (by0 - ay0) + (by1 - ay0);
@@ -1563,8 +1575,16 @@ bool mpLineIntersection(float a0x, float a0y, float a1x, float a1y, float b0x,
                     ((bw * d0y) - (bh * d0x)) / area; // barycentric weight
                 if (t > 0.0) {
                     if (t < 1.0) {
+#ifdef MSL_CORE_HOSTED
+                        // GALE01 0x8004EBA4/0x8004EBA8 are double-precision
+                        // fmadd: t comes from an fdiv, so aw * t is inexact
+                        // and the fused accumulate rounds once before frsp.
+                        *int_x = (float) __builtin_fma(aw, t, (double) a0x);
+                        *int_y = (float) __builtin_fma(ah, t, (double) a0y);
+#else
                         *int_x = (aw * t) + a0x;
                         *int_y = (ah * t) + a0y;
+#endif
                     } else {
                         *int_x = a1x;
                         *int_y = a1y;
@@ -1618,7 +1638,12 @@ bool mpLineIntersectionH(float* int_x, float* int_y, float a0x, float a0y,
     if (ABS(dby) < 0.0001) {
         return false;
     }
+#ifdef MSL_CORE_HOSTED
+    // GALE01 0x8004ECF4 is one double-precision fmadd on the fdiv quotient.
+    new_x = __builtin_fma(dbx / dby, (double) (a0y - b0y), (double) b0x);
+#else
     new_x = dbx / dby * (a0y - b0y) + b0x;
+#endif
     dx = new_x - min_ax;
     if (dx < 0.0) {
         if (dx < -0.1) {
@@ -2335,7 +2360,12 @@ bool mpLineIntersectionV(float* int_x, float* int_y, float a0x, float a0y,
     if (ABS(dbx) < 0.0001) {
         return false;
     }
+#ifdef MSL_CORE_HOSTED
+    // GALE01 0x80050164 is one double-precision fmadd on the fdiv quotient.
+    new_y = __builtin_fma(dby / dbx, (double) (a0x - b0x), (double) b0y);
+#else
     new_y = (dby / dbx * (a0x - b0x)) + b0y;
+#endif
     dy = new_y - min_ay;
     if (dy < 0.0) {
         if (dy < -0.1) {
