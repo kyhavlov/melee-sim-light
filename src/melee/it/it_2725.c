@@ -1,5 +1,9 @@
 #include "it_2725.h"
 
+#ifdef MSL_CORE_HOSTED
+#include <MetroTRK/intrinsics.h>
+#endif
+
 #include "it_279C.h"
 #include "it_3F14.h"
 #include "itanimlist.h"
@@ -390,8 +394,16 @@ void itColl_BounceOffVictim(Item_GObj* gobj)
 {
     Item* item = GET_ITEM(gobj);
     item->x40_vel.x *= it_804D6D28->x58_float;
+#ifdef MSL_CORE_HOSTED
+    // GALE01 0x80272DD8 folds the victim-bounce vertical velocity into one
+    // scalar-single fmadds; rounding the multiply separately shifts a
+    // bounced projectile's launch by ULPs.
+    item->x40_vel.y = __fmadds(item->x40_vel.y, it_804D6D28->x5C_float,
+                               it_804D6D28->x60_float);
+#else
     item->x40_vel.y =
         (item->x40_vel.y * it_804D6D28->x5C_float) + it_804D6D28->x60_float;
+#endif
 }
 
 void it_80272DE4(HSD_JObj* jobj, f32 scale)

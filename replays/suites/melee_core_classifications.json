@@ -2167,7 +2167,7 @@
       "replay": "replays/validation/peach/HeartyStiffMallard.slpz",
       "id": "legacy-fod-float-and-parasol-publication-profile",
       "owner": "Dolphin float execution and Peach parasol item-scheduler publication",
-      "rationale": "After selecting this old capture's explicit pre-Cardinals input profile, the first residual is a one-ULP fighter position. The later Peach parasol boundary records destruction one post-frame row before the source item scheduler publishes it, shifting subsequent item-slot history. The exact complete fingerprint records those execution/publication boundaries without changing Peach gameplay or fitting a replay row. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding.",
+      "rationale": "After selecting this old capture's explicit pre-Cardinals input profile, the first residual is a one-ULP fighter position. The later Peach parasol boundary records destruction one post-frame row before the source item scheduler publishes it, shifting subsequent item-slot history. The exact complete fingerprint records those execution/publication boundaries without changing Peach gameplay or fitting a replay row. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/it/items/itpeachparasol.c",
@@ -2181,11 +2181,11 @@
           "first_render_visibility_mismatch_frame": 6678,
           "frames": 15634,
           "last_mismatch_frame": 15511,
-          "matched_frames": 6420,
-          "mismatch_count": 337688,
-          "mismatch_fields_digest": "3ba340fa8b8a63f841cde0b3c43212635df187e1fe447a80101477298ec7a0f8",
-          "mismatch_fingerprint": "2b7a1035689392e4",
-          "mismatched_frames": 9214,
+          "matched_frames": 6541,
+          "mismatch_count": 337493,
+          "mismatch_fields_digest": "58188b77c9f1ac2302272884f8e0ff503851002ca6840695360868a4a7fa492c",
+          "mismatch_fingerprint": "db27a64e7c9fa6a7",
+          "mismatched_frames": 9093,
           "render_visibility_mismatch_count": 12589,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 0
@@ -2196,7 +2196,7 @@
       "replay": "replays/validation/peach/MadeUpEnchantedStingray.slpz",
       "id": "dolphin-float-and-presentation-rng-profile",
       "owner": "landing velocity float execution and DamageFlyRoll presentation RNG phase",
-      "rationale": "The first causal residual is a 16-ULP self-velocity result at a source landing projection; a bounded PPC probe produces the same bits as native. A later damage event reaches the source DamageFlyRoll gate on the neighboring presentation-owned RNG phase. The manifest locks the complete consequence instead of altering free-running RNG or adding replay-local gameplay. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground.",
+      "rationale": "The first causal residual is a 16-ULP self-velocity result at a source landing projection; a bounded PPC probe produces the same bits as native. A later damage event reaches the source DamageFlyRoll gate on the neighboring presentation-owned RNG phase. The manifest locks the complete consequence instead of altering free-running RNG or adding replay-local gameplay. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/mp/mpcoll.c",
@@ -2210,11 +2210,11 @@
           "first_render_visibility_mismatch_frame": 5768,
           "frames": 11073,
           "last_mismatch_frame": 10950,
-          "matched_frames": 5806,
-          "mismatch_count": 181241,
-          "mismatch_fields_digest": "a53dd3cc15b77924a946ac59f1a43fd701173799afd1d8a3726e4b41e2fa2d3d",
-          "mismatch_fingerprint": "942e2fcf98aa15ac",
-          "mismatched_frames": 5267,
+          "matched_frames": 5866,
+          "mismatch_count": 181156,
+          "mismatch_fields_digest": "4e9407bf2e2c5a22a5438ae7182ba2275272f5e11d92274531b544315e9f059f",
+          "mismatch_fingerprint": "145dbf1e7ce11562",
+          "mismatched_frames": 5207,
           "render_visibility_mismatch_count": 6658,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 0
@@ -2282,7 +2282,7 @@
       "replay": "replays/validation/peach/ScaryFrankPorcupine.slpz",
       "id": "dolphin-ulp-item-motion-profile",
       "owner": "thrown-item gravity and position float execution",
-      "rationale": "After selecting this old capture's explicit pre-Cardinals profile, all residuals are sparse ULP-scale item velocity/position lanes from source gravity and integration. The final 570 transitions are strict, and the exact fingerprint preserves bit-level drift detection. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding.",
+      "rationale": "After selecting this old capture's explicit pre-Cardinals profile, all residuals are sparse ULP-scale item velocity/position lanes from source gravity and integration. The final 570 transitions are strict, and the exact fingerprint preserves bit-level drift detection. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
       "sources": [
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
         "refs/melee/src/melee/it/item.c::Item_80268E5C",
@@ -2290,16 +2290,16 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 2311,
-          "first_mismatch_frame": 2189,
+          "exact_prefix_frames": 16016,
+          "first_mismatch_frame": 15894,
           "first_render_visibility_mismatch_frame": null,
           "frames": 26844,
           "last_mismatch_frame": 26151,
-          "matched_frames": 26444,
-          "mismatch_count": 680,
-          "mismatch_fields_digest": "969e6added318f3c408024b177b05ef75f4c05f49a08a66d4fa7038a07e48521",
-          "mismatch_fingerprint": "044507710f3d25bc",
-          "mismatched_frames": 400,
+          "matched_frames": 26777,
+          "mismatch_count": 179,
+          "mismatch_fields_digest": "26850de6a9f4d1684534a4e0b2cb1ff615f3ed41a967f907feb57f4d66d0816e",
+          "mismatch_fingerprint": "915d6cb12b776c12",
+          "mismatched_frames": 67,
           "render_visibility_mismatch_count": 0,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 570
@@ -2338,7 +2338,7 @@
       "replay": "replays/validation/peach/DisgustingLivelyRaven.slpz",
       "id": "dolphin-ulp-item-motion-profile",
       "owner": "thrown-item gravity and position float execution",
-      "rationale": "The residual is limited to bounded ULP-scale thrown-item velocity and position intervals produced by source gravity/integration, followed by 5,013 strict transitions. No item state or Peach mechanic is fitted.",
+      "rationale": "The residual is limited to bounded ULP-scale thrown-item velocity and position intervals produced by source gravity/integration, followed by 5,013 strict transitions. No item state or Peach mechanic is fitted. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
       "sources": [
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
         "refs/melee/src/melee/it/item.c",
@@ -2346,19 +2346,19 @@
       ],
       "expected": {
         "native": {
-          "frames": 12960,
-          "matched_frames": 12750,
-          "mismatched_frames": 210,
-          "exact_prefix_frames": 6523,
-          "strict_suffix_frames": 5013,
-          "first_mismatch_frame": 6401,
-          "last_mismatch_frame": 7824,
-          "mismatch_count": 378,
-          "mismatch_fingerprint": "e5d0edb5ac03c879",
-          "render_visibility_mismatch_count": 11,
+          "exact_prefix_frames": 7596,
+          "first_mismatch_frame": 7474,
           "first_render_visibility_mismatch_frame": 505,
+          "frames": 12960,
+          "last_mismatch_frame": 7824,
+          "matched_frames": 12922,
+          "mismatch_count": 52,
+          "mismatch_fields_digest": "689c12f59a39944dd2b5b251bdf4767c1621e3fe3ec40c4c33db5c8de037c7fb",
+          "mismatch_fingerprint": "b5e659394851e093",
+          "mismatched_frames": 38,
+          "render_visibility_mismatch_count": 11,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "37327be844285a7eb154500f6b2ed78f253354aad893bf72b226c19820435361"
+          "strict_suffix_frames": 5013
         }
       }
     },
@@ -2483,7 +2483,7 @@
       "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
       "id": "dolphin-ulp-item-motion-profile",
       "owner": "Mr. Saturn and turnip gravity/position float execution",
-      "rationale": "State-aware validation excludes only Mr. Saturn's uninitialized held/thrown xDE4 bytes; all remaining residuals are bounded ULP-scale common-item velocities and positions from imported source gravity/integration. The final 3,439 transitions are strict.",
+      "rationale": "State-aware validation excludes only Mr. Saturn's uninitialized held/thrown xDE4 bytes; all remaining residuals are bounded ULP-scale common-item velocities and positions from imported source gravity/integration. The final 3,439 transitions are strict. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
       "sources": [
         "refs/melee/src/melee/it/items/itdosei.c",
         "refs/melee/src/melee/it/items/itpeachturnip.c",
@@ -2492,19 +2492,19 @@
       ],
       "expected": {
         "native": {
-          "frames": 14007,
-          "matched_frames": 13779,
-          "mismatched_frames": 228,
-          "exact_prefix_frames": 2383,
-          "strict_suffix_frames": 3439,
-          "first_mismatch_frame": 2261,
-          "last_mismatch_frame": 10445,
-          "mismatch_count": 422,
-          "mismatch_fingerprint": "314b3b824103c3a3",
-          "render_visibility_mismatch_count": 7,
+          "exact_prefix_frames": 2942,
+          "first_mismatch_frame": 2820,
           "first_render_visibility_mismatch_frame": 1839,
+          "frames": 14007,
+          "last_mismatch_frame": 10445,
+          "matched_frames": 13883,
+          "mismatch_count": 199,
+          "mismatch_fields_digest": "27205737c70d237861929e908287cacc706dbd69ef063508e5de7dc91681eaa4",
+          "mismatch_fingerprint": "27cd24a4ecb3515b",
+          "mismatched_frames": 124,
+          "render_visibility_mismatch_count": 7,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "2ad5be03b582dde9ce60b04fcd214cd81bc8bf2aebfb64a9f339e815636e0c4a"
+          "strict_suffix_frames": 3439
         }
       }
     },
@@ -2541,7 +2541,7 @@
       "replay": "replays/validation/peach/CapitalPristineTarsier.slpz",
       "id": "dolphin-ulp-fighter-and-item-profile",
       "owner": "fighter root motion and thrown-item gravity float execution",
-      "rationale": "The complete residual contains bounded ULP-scale fighter root motion and thrown-item velocity/position intervals. Source discrete state remains aligned, and the exact fingerprint includes 158 strict trailing transitions.",
+      "rationale": "The complete residual contains bounded ULP-scale fighter root motion and thrown-item velocity/position intervals. Source discrete state remains aligned, and the exact fingerprint includes 158 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
@@ -2550,19 +2550,19 @@
       ],
       "expected": {
         "native": {
-          "frames": 16491,
-          "matched_frames": 16261,
-          "mismatched_frames": 230,
           "exact_prefix_frames": 3835,
-          "strict_suffix_frames": 158,
           "first_mismatch_frame": 3713,
-          "last_mismatch_frame": 16210,
-          "mismatch_count": 362,
-          "mismatch_fingerprint": "85501af886f5bf13",
-          "render_visibility_mismatch_count": 8,
           "first_render_visibility_mismatch_frame": 7181,
+          "frames": 16491,
+          "last_mismatch_frame": 16210,
+          "matched_frames": 16371,
+          "mismatch_count": 189,
+          "mismatch_fields_digest": "8b22d3bd496d7c27ea6e5a464d1434c71ea539ec6115d27fa32867d77608fe3b",
+          "mismatch_fingerprint": "4717bc73eea747ee",
+          "mismatched_frames": 120,
+          "render_visibility_mismatch_count": 8,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "0b445c929c39d1b81bac8e0c2b1824d7853c7f4d48da8e34793806dbd4c2fbb9"
+          "strict_suffix_frames": 158
         }
       }
     },
@@ -2570,7 +2570,7 @@
       "replay": "replays/validation/peach/ExpertWorthlessFinch.slpz",
       "id": "dolphin-ulp-item-motion-profile",
       "owner": "turnip/common-item gravity and position float execution",
-      "rationale": "Restoring Peach's 32-bit source owner-pointer layout places the Bob-omb scale lane correctly and removes the prior metadata displacement. The complete remainder is bounded ULP-scale source item gravity/position with 352 strict trailing transitions.",
+      "rationale": "Restoring Peach's 32-bit source owner-pointer layout places the Bob-omb scale lane correctly and removes the prior metadata displacement. The complete remainder is bounded ULP-scale source item gravity/position with 352 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
       "sources": [
         "refs/melee/src/melee/it/itCharItems.h::itPeachTurnip_ItemVars",
         "refs/melee/src/melee/it/items/itpeachturnip.c::it_802BD4AC",
@@ -2579,19 +2579,19 @@
       ],
       "expected": {
         "native": {
-          "frames": 12032,
-          "matched_frames": 11758,
-          "mismatched_frames": 274,
-          "exact_prefix_frames": 2299,
-          "strict_suffix_frames": 352,
-          "first_mismatch_frame": 2177,
-          "last_mismatch_frame": 11557,
-          "mismatch_count": 461,
-          "mismatch_fingerprint": "cd6428688741de53",
-          "render_visibility_mismatch_count": 10,
+          "exact_prefix_frames": 2533,
+          "first_mismatch_frame": 2411,
           "first_render_visibility_mismatch_frame": 1637,
+          "frames": 12032,
+          "last_mismatch_frame": 11557,
+          "matched_frames": 11834,
+          "mismatch_count": 359,
+          "mismatch_fields_digest": "7fed8055d6642e62fdda5c3807b25818b2a2403d7bdd17ffaf1935138ab0a471",
+          "mismatch_fingerprint": "6a60e0ecfd69ab71",
+          "mismatched_frames": 198,
+          "render_visibility_mismatch_count": 10,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "2699512416729798ada5865e3c093c1852baf74e4ba51047c6ee46bf520edb6e"
+          "strict_suffix_frames": 352
         }
       }
     },
@@ -2628,7 +2628,7 @@
       "replay": "replays/validation/peach/peach_demo_1.slpz",
       "id": "ppc-item-float-and-signed-zero-profile",
       "owner": "turnip gravity float execution and signed-zero attack velocity publication",
-      "rationale": "A bounded PPC probe reproduces native's one-ULP turnip vertical velocity at the first residual. The only later family is ten signed-zero-only attack-velocity rows; 1,856 strict transitions follow. Both remain locked by an exact fingerprint rather than a global float or signed-zero tolerance.",
+      "rationale": "A bounded PPC probe reproduces native's one-ULP turnip vertical velocity at the first residual. The only later family is ten signed-zero-only attack-velocity rows; 1,856 strict transitions follow. Both remain locked by an exact fingerprint rather than a global float or signed-zero tolerance. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
       "sources": [
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
         "refs/melee/src/melee/it/items/itpeachturnip.c",
@@ -2636,19 +2636,19 @@
       ],
       "expected": {
         "native": {
-          "frames": 6174,
-          "matched_frames": 6088,
-          "mismatched_frames": 86,
-          "exact_prefix_frames": 2008,
-          "strict_suffix_frames": 1856,
-          "first_mismatch_frame": 1886,
-          "last_mismatch_frame": 4195,
-          "mismatch_count": 147,
-          "mismatch_fingerprint": "a40e05a73225abd5",
-          "render_visibility_mismatch_count": 0,
+          "exact_prefix_frames": 4308,
+          "first_mismatch_frame": 4186,
           "first_render_visibility_mismatch_frame": null,
+          "frames": 6174,
+          "last_mismatch_frame": 4195,
+          "matched_frames": 6164,
+          "mismatch_count": 10,
+          "mismatch_fields_digest": "8e2ed8d1f5d73d391671cc4f324b15eafbe94963a09bbe61625b57853ebd334e",
+          "mismatch_fingerprint": "99ad2264f14cb3b6",
+          "mismatched_frames": 10,
+          "render_visibility_mismatch_count": 0,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "a62618c728f72f99babbf9492b09f057f5b99ecad06a26662b8a5453482165fa"
+          "strict_suffix_frames": 1856
         }
       }
     },
@@ -2656,7 +2656,7 @@
       "replay": "replays/validation/peach/peach_demo_2.slpz",
       "id": "dolphin-float-motion-profile",
       "owner": "floor-loss fighter motion and item transform float execution",
-      "rationale": "The demo's six grounded-to-airborne down-B floor-loss transitions execute through the imported Peach and collision owners. The residual is confined to float-derived fighter/item positions and velocities and ends with 334 strict transitions; no floor-loss or special-state exception is applied.",
+      "rationale": "The demo's six grounded-to-airborne down-B floor-loss transitions execute through the imported Peach and collision owners. The residual is confined to float-derived fighter/item positions and velocities and ends with 334 strict transitions; no floor-loss or special-state exception is applied. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
       "sources": [
         "refs/melee/src/melee/ft/chara/ftPeach/ftPe_SpecialLw.c",
         "refs/melee/src/melee/mp/mpcoll.c",
@@ -2665,19 +2665,19 @@
       ],
       "expected": {
         "native": {
-          "frames": 8234,
-          "matched_frames": 7698,
-          "mismatched_frames": 536,
           "exact_prefix_frames": 1081,
-          "strict_suffix_frames": 334,
           "first_mismatch_frame": 959,
-          "last_mismatch_frame": 7777,
-          "mismatch_count": 655,
-          "mismatch_fingerprint": "bc61820ec5bf713c",
-          "render_visibility_mismatch_count": 3,
           "first_render_visibility_mismatch_frame": -122,
+          "frames": 8234,
+          "last_mismatch_frame": 7777,
+          "matched_frames": 7841,
+          "mismatch_count": 412,
+          "mismatch_fields_digest": "04a0ffc5b559ffc22db32de86dd9edf396149ca4e0fbd49a9bef76e750febd4b",
+          "mismatch_fingerprint": "288659f90a4f3513",
+          "mismatched_frames": 393,
+          "render_visibility_mismatch_count": 3,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "16e09bb048a58301f97de4fcacf88a9d5af401196d0348ff3d31e4f1b8cb57fa"
+          "strict_suffix_frames": 334
         }
       }
     }

@@ -803,7 +803,7 @@
       "expected": {
         "native": {
           "frames": 14007,
-          "actual_output_fingerprint": "61b94e8d2d855dbd"
+          "actual_output_fingerprint": "1f314c5f9bada7dc"
         }
       }
     },
@@ -812,7 +812,7 @@
       "expected": {
         "native": {
           "frames": 16491,
-          "actual_output_fingerprint": "0c7cceef037fa21d"
+          "actual_output_fingerprint": "b043745fde1c9b16"
         }
       }
     },
@@ -821,7 +821,7 @@
       "expected": {
         "native": {
           "frames": 12960,
-          "actual_output_fingerprint": "8eb5fb488784029c"
+          "actual_output_fingerprint": "3ec0019dba4ecf6b"
         }
       }
     },
@@ -839,7 +839,7 @@
       "expected": {
         "native": {
           "frames": 12032,
-          "actual_output_fingerprint": "b2c640a35d692ea4"
+          "actual_output_fingerprint": "303b96d8a9bbe0ee"
         }
       }
     },
@@ -866,7 +866,7 @@
       "expected": {
         "native": {
           "frames": 15634,
-          "actual_output_fingerprint": "33f8336bfc8766c7"
+          "actual_output_fingerprint": "e76ce1b33b119976"
         }
       }
     },
@@ -893,7 +893,7 @@
       "expected": {
         "native": {
           "frames": 11073,
-          "actual_output_fingerprint": "e54ed23cf0726547"
+          "actual_output_fingerprint": "ecafcc31feef6ec0"
         }
       }
     },
@@ -920,7 +920,7 @@
       "expected": {
         "native": {
           "frames": 26844,
-          "actual_output_fingerprint": "e24b17c4bbc59a62"
+          "actual_output_fingerprint": "68aa50ecb38fa326"
         }
       }
     },
@@ -956,7 +956,7 @@
       "expected": {
         "native": {
           "frames": 6174,
-          "actual_output_fingerprint": "a903624ed45b2c1a"
+          "actual_output_fingerprint": "c58322f67e5c9177"
         }
       }
     },
@@ -965,7 +965,7 @@
       "expected": {
         "native": {
           "frames": 8234,
-          "actual_output_fingerprint": "2d348b8141f6d6cb"
+          "actual_output_fingerprint": "dd11a34d5eeeee6a"
         }
       }
     },
