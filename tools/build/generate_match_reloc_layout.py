@@ -5,9 +5,13 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from pathlib import Path
 
-from tools.build.generate_native_dat_layout import Dwarf
+# Resolve the sibling module from this checkout even when an installed
+# melee_sim distribution also exposes a tools.build package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.build.generate_native_dat_layout import Dwarf  # noqa: E402
 
 
 _TYPE_RE = re.compile(r"^MSL_RELOC_TYPE\(([A-Z0-9_]+),\s*([A-Za-z0-9_]+)\)$")
@@ -45,6 +49,10 @@ def byte_size(dwarf: Dwarf, die) -> int:
         return 0
     if "DW_AT_byte_size" in die.attrs:
         return dwarf.integer(die, "DW_AT_byte_size")
+    if die.tag == "DW_TAG_pointer_type":
+        # clang omits DW_AT_byte_size on pointer DIEs; without this, arrays
+        # of pointers collapse to a zero stride and lose relocation slots.
+        return dwarf.address_size
     return 0
 
 

@@ -31,6 +31,63 @@ QEMU_SYSROOT := $(TOOLCHAIN_ROOT)/usr/powerpc-linux-gnu
 PY ?= $(ROOT)/.venv/bin/python
 HOST_CC ?= gcc
 EMCC ?= emcc
+
+# Host portability. macOS cannot execute the Linux cross toolchain, has no
+# GNU ld (different link flags), and no coreutils timeout.
+UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
+HOST_TARGET_ARCH := $(UNAME_M)
+ifeq ($(UNAME_S),Darwin)
+CC := $(ROOT)/tools/build/ppc32_cc.sh
+QEMU := $(ROOT)/tools/build/qemu_ppc.sh
+TIMEOUT := $(ROOT)/tools/build/portable_timeout.sh
+# The runtime builds for the host architecture by default. Truncated (u32)
+# source addresses decode by offset from their owning arena
+# (msl_memory_from_low32), so no sub-4 GiB mappings are needed and arm64
+# macOS' 4 GiB __PAGEZERO floor is irrelevant. Override
+# HOST_TARGET_ARCH=x86_64 on Apple Silicon to build the Rosetta 2 profile
+# that matches the validated linux/amd64 FP gates.
+HOST_ARCH_FLAGS := -arch $(HOST_TARGET_ARCH)
+NATIVE_EXE_LINK_FLAGS := $(HOST_ARCH_FLAGS) -Wl,-dead_strip
+SHARED_LIB_LINK_FLAGS := $(HOST_ARCH_FLAGS) -shared -Wl,-dead_strip
+# The validator extension loads into the driving Python, which may be a
+# different architecture than the runtime (it only talks to the runtime
+# over a pipe), so it builds for the host architecture.
+PY_EXT_LINK_FLAGS := -undefined dynamic_lookup
+# Homebrew LLVM's clang carries every backend; use it to cross-compile the
+# PPC32 DWARF reference object directly instead of running the Linux GNU
+# toolchain inside Docker. -nostdlibinc keeps macOS system headers out of
+# the powerpc-linux target; clang's builtin headers cover the rest.
+LLVM_CLANG := $(shell brew --prefix llvm 2>/dev/null)/bin/clang
+ifneq ($(wildcard $(LLVM_CLANG)),)
+PPC_TYPES_TOOLCHAIN_DEP :=
+PPC_TYPES_COMPILE = "$(LLVM_CLANG)" --target=powerpc-unknown-linux-gnu \
+	-nostdlibinc -isystem "$(ROOT)/tools/build/cross_libc_shim"
+# The wasm32 layout proxy must be a Linux i386 object: Apple clang's -m32
+# produces a Darwin i386 Mach-O whose struct layouts differ (notably
+# -malign-double handling), which corrupts the wasm relocation tables.
+WASM_PROXY_COMPILE = "$(LLVM_CLANG)" --target=i386-unknown-linux-gnu \
+	-malign-double -nostdlibinc \
+	-isystem "$(ROOT)/tools/build/cross_libc_shim" \
+	-I"$(WASM_LAYOUT_INCLUDE)"
+endif
+else
+TIMEOUT := timeout
+NATIVE_EXE_LINK_FLAGS := -no-pie -Wl,--gc-sections
+SHARED_LIB_LINK_FLAGS := -shared -Wl,--gc-sections -Wl,-Bsymbolic -Wl,-z,defs
+PY_EXT_LINK_FLAGS :=
+endif
+PPC_TYPES_TOOLCHAIN_DEP ?= $(TOOLCHAIN_STAMP)
+PPC_TYPES_COMPILE ?= env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
+	LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+	"$(CC)" --sysroot="$(SYSROOT)"
+WASM_PROXY_COMPILE ?= "$(HOST_CC)" -m32 -malign-double \
+	-I"$(WASM_LAYOUT_INCLUDE)" -isystem /usr/include/x86_64-linux-gnu
+ifeq ($(HOST_TARGET_ARCH),x86_64)
+FMA_FLAGS := -mfma
+else
+FMA_FLAGS :=
+endif
 ISO ?=
 VIEWER_HOST ?= 127.0.0.1
 VIEWER_PORT ?= 8001
@@ -57,8 +114,18 @@ RELEASE_ARCH_FLAGS ?= -march=native -mtune=native
 
 SOURCE_SYNC := $(ROOT)/tools/build/source_sync.sh
 UPSTREAM_ROOTS := MSL MetroTRK Runtime melee sysdolphin
-UPSTREAM_SRCS := $(shell find $(addprefix $(CORE)/,$(UPSTREAM_ROOTS)) \
-	-type f -name '*.c' -print | LC_ALL=C sort)
+# Enumerate sources from git, not the filesystem: src/Runtime (MW library)
+# and src/runtime (port runtime) are distinct in git but collapse into one
+# directory on case-insensitive filesystems (macOS), where find/wildcard
+# would return the union for both. Includes untracked files so new sources
+# build before they are staged.
+MSL_SRC_FILES := $(addprefix $(ROOT)/,$(filter %.c,\
+	$(shell git -C $(ROOT) ls-files --cached --others --exclude-standard -- src 2>/dev/null)))
+ifeq ($(strip $(MSL_SRC_FILES)),)
+$(error source enumeration via git failed; build requires a git checkout)
+endif
+UPSTREAM_SRCS := $(sort $(filter \
+	$(addsuffix /%,$(addprefix $(CORE)/,$(UPSTREAM_ROOTS))),$(MSL_SRC_FILES)))
 PPC_UPSTREAM_OBJS := $(patsubst $(CORE)/%.c,$(PPC_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
 NATIVE_UPSTREAM_OBJS := $(patsubst $(CORE)/%.c,$(NATIVE_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
 WASM_UPSTREAM_OBJS := $(patsubst $(CORE)/%.c,$(WASM_OBJ_DIR)/gameplay/%.o,$(UPSTREAM_SRCS))
@@ -67,9 +134,9 @@ PYTHON_UPSTREAM_OBJS := $(patsubst $(CORE)/%.c,$(PYTHON_OBJ_DIR)/gameplay/%.o,$(
 # Directory ownership is the build boundary. The special host entry points
 # below are linked only by the targets that consume them.
 NATIVE_PLATFORM_SRCS := $(CORE)/platform/native_dat.c
-PLATFORM_SRCS := $(filter-out $(NATIVE_PLATFORM_SRCS),$(wildcard $(CORE)/platform/*.c))
-RUNTIME_SRCS := $(filter-out $(CORE)/runtime/main.c,$(wildcard $(CORE)/runtime/*.c))
-STUB_SRCS := $(wildcard $(CORE)/stubs/*.c)
+PLATFORM_SRCS := $(filter-out $(NATIVE_PLATFORM_SRCS),$(filter $(CORE)/platform/%.c,$(MSL_SRC_FILES)))
+RUNTIME_SRCS := $(filter-out $(CORE)/runtime/main.c,$(filter $(CORE)/runtime/%.c,$(MSL_SRC_FILES)))
+STUB_SRCS := $(filter $(CORE)/stubs/%.c,$(MSL_SRC_FILES))
 LOCAL_SRCS := $(CORE)/api.c $(PLATFORM_SRCS) $(RUNTIME_SRCS) $(STUB_SRCS)
 PPC_LOCAL_OBJS := $(patsubst $(ROOT)/%.c,$(PPC_OBJ_DIR)/%.o,$(LOCAL_SRCS))
 NATIVE_LOCAL_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(LOCAL_SRCS))
@@ -89,6 +156,7 @@ WASM_DAT_NATIVE_TYPES_OBJ := $(WASM_GENERATED_DIR)/native_dat_types_wasm.o
 WASM_DAT_LAYOUT_SRC := $(WASM_GENERATED_DIR)/native_dat_layout.c
 WASM_DAT_LAYOUT_OBJ := $(WASM_OBJ_DIR)/generated/native_dat_layout.o
 WASM_COMMAND_FIELDS := $(WASM_GENERATED_DIR)/msl_command_fields.h
+NATIVE_COMMAND_FIELDS := $(NATIVE_GENERATED_DIR)/msl_command_fields.h
 MATCH_RELOC_TYPES_SRC := $(ROOT)/tools/build/match_reloc_types.c
 MATCH_RELOC_GENERATOR := $(ROOT)/tools/build/generate_match_reloc_layout.py
 MATCH_RELOC_TYPES_DEF := $(CORE)/runtime/relocation_types.def
@@ -198,7 +266,7 @@ CPPFLAGS := \
 	-I$(CORE)/sysdolphin \
 	-I$(CORE)/Runtime \
 	-I$(CORE)/extern/dolphin/include
-NATIVE_CPPFLAGS := $(CPPFLAGS) -DMSL_CORE_NATIVE
+NATIVE_CPPFLAGS := $(CPPFLAGS) -DMSL_CORE_NATIVE -I$(NATIVE_GENERATED_DIR)
 PYTHON_CPPFLAGS := $(NATIVE_CPPFLAGS) -DMSL_CORE_SHARED
 WASM_CPPFLAGS := $(CPPFLAGS) -I$(WASM_GENERATED_DIR) \
 	-DMSL_CORE_NATIVE -DMSL_CORE_WASM
@@ -210,7 +278,12 @@ CFLAGS := \
 # int-conversion, incompatible-pointer-types, return-mismatch, ...) to default
 # errors. -fpermissive downgrades that whole family back to warnings so the
 # decomp sources build on modern host compilers. (-w still hides the warnings.)
-NATIVE_CFLAGS = $(CFLAGS) -fno-pie -fpermissive
+# Apple clang accepts -fpermissive but does not downgrade the legacy-C
+# error family in C the way GCC 14 does; the explicit -Wno- set (already
+# used for the Wasm clang build) covers both compilers.
+NATIVE_CFLAGS = $(CFLAGS) $(HOST_ARCH_FLAGS) -fno-pie -fpermissive \
+	-Wno-implicit-function-declaration -Wno-int-conversion \
+	-Wno-incompatible-pointer-types -Wno-return-mismatch
 NATIVE_LINK_FLAGS ?=
 # Native release uses a strict O1 source profile by default. The audited lists
 # below preserve lower exactness profiles or admit stronger measured owners.
@@ -227,8 +300,8 @@ LDLIBS := -lm
 # contraction indiscriminately in the hosted core.
 $(PPC_OBJ_DIR)/gameplay/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
 $(PPC_OBJ_DIR)/src/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
-$(NATIVE_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
-$(NATIVE_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
+$(NATIVE_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
+$(NATIVE_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
 $(NATIVE_OBJ_DIR)/src/runtime/savestate.o: NATIVE_CPPFLAGS += -D_GNU_SOURCE
 $(PYTHON_OBJ_DIR)/src/runtime/savestate.o: PYTHON_CPPFLAGS += -D_GNU_SOURCE
 $(NATIVE_RUNTIME_CENSUS_OBJ): NATIVE_CPPFLAGS += -D_GNU_SOURCE
@@ -249,8 +322,8 @@ $(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_CALLGRIND
 endif
 $(WASM_OBJ_DIR)/gameplay/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
 $(WASM_OBJ_DIR)/src/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
-$(PYTHON_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
-$(PYTHON_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -mfma
+$(PYTHON_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
+$(PYTHON_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
 
 ifeq ($(NATIVE_RELEASE_PROFILE),1)
 # Fighter callback and item source closures, plus quaternion interpolation,
@@ -372,7 +445,7 @@ validator: $(VALIDATION_NATIVE)
 $(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(CORE)/runtime/wire.h $(CORE)/runtime/benchmark_wire.h $(CORE)/runtime/item_projection.h
 	@mkdir -p "$(@D)"
 	@PY_INCLUDE="$$($(PY) -c 'import sysconfig; print(sysconfig.get_path("include"))')"; \
-		"$(HOST_CC)" -O3 -std=c11 -fPIC -shared -Wall -Wextra \
+		"$(HOST_CC)" -O3 -std=c11 -fPIC -shared $(PY_EXT_LINK_FLAGS) -Wall -Wextra \
 			-D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -I"$$PY_INCLUDE" \
 			-I"$(CORE)" "$<" -lm -o "$@"
 
@@ -434,22 +507,36 @@ $(WASM_OBJ_DIR)/gameplay/melee/ft/ftaction.o \
 $(WASM_OBJ_DIR)/gameplay/melee/it/itanimlist.o \
 $(WASM_OBJ_DIR)/gameplay/melee/lb/lbcommand.o: $(WASM_COMMAND_FIELDS)
 
-$(NATIVE_DAT_PPC_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(TOOLCHAIN_STAMP)
+$(NATIVE_DAT_PPC_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(PPC_TYPES_TOOLCHAIN_DEP)
 	@mkdir -p "$(@D)"
-	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
-		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
-		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) -MMD -MP -g -gdwarf-4 \
+	@$(PPC_TYPES_COMPILE) $(CPPFLAGS) -MMD -MP -g -gdwarf-4 \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
 $(NATIVE_DAT_NATIVE_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC)
 	@mkdir -p "$(@D)"
-	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
+	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) $(HOST_ARCH_FLAGS) -MMD -MP -g -gdwarf-4 -w \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
 $(WASM_COMMAND_FIELDS): $(NATIVE_DAT_PPC_TYPES_OBJ) $(COMMAND_FIELDS_GENERATOR)
 	@mkdir -p "$(@D)"
 	@"$(PY)" "$(COMMAND_FIELDS_GENERATOR)" \
 		--object "$(NATIVE_DAT_PPC_TYPES_OBJ)" --output "$@"
+
+# Clang hosts (Mach-O) ignore scalar_storage_order and read the authored
+# big-endian command bytes through the same generated accessors as wasm32.
+$(NATIVE_COMMAND_FIELDS): $(NATIVE_DAT_PPC_TYPES_OBJ) $(COMMAND_FIELDS_GENERATOR)
+	@mkdir -p "$(@D)"
+	@"$(PY)" "$(COMMAND_FIELDS_GENERATOR)" \
+		--object "$(NATIVE_DAT_PPC_TYPES_OBJ)" --output "$@"
+
+$(NATIVE_OBJ_DIR)/gameplay/melee/ft/ftaction.o \
+$(NATIVE_OBJ_DIR)/gameplay/melee/it/itanimlist.o \
+$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lbcommand.o \
+$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lbspdisplay.o \
+$(PYTHON_OBJ_DIR)/gameplay/melee/ft/ftaction.o \
+$(PYTHON_OBJ_DIR)/gameplay/melee/it/itanimlist.o \
+$(PYTHON_OBJ_DIR)/gameplay/melee/lb/lbcommand.o \
+$(PYTHON_OBJ_DIR)/gameplay/melee/lb/lbspdisplay.o: $(NATIVE_COMMAND_FIELDS)
 
 $(NATIVE_DAT_LAYOUT_SRC): $(NATIVE_DAT_PPC_TYPES_OBJ) $(NATIVE_DAT_NATIVE_TYPES_OBJ) $(NATIVE_DAT_LAYOUT_GENERATOR)
 	@"$(PY)" "$(NATIVE_DAT_LAYOUT_GENERATOR)" \
@@ -466,8 +553,7 @@ $(WASM_GLIBC_STUB):
 
 $(WASM_DAT_NATIVE_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(WASM_GLIBC_STUB)
 	@mkdir -p "$(@D)"
-	@"$(HOST_CC)" -m32 -malign-double -I"$(WASM_LAYOUT_INCLUDE)" \
-		-isystem /usr/include/x86_64-linux-gnu $(WASM_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
+	@$(WASM_PROXY_COMPILE) $(WASM_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
 $(WASM_DAT_LAYOUT_SRC): $(NATIVE_DAT_PPC_TYPES_OBJ) $(WASM_DAT_NATIVE_TYPES_OBJ) $(NATIVE_DAT_LAYOUT_GENERATOR)
@@ -481,7 +567,7 @@ $(WASM_DAT_LAYOUT_OBJ): $(WASM_DAT_LAYOUT_SRC)
 
 $(NATIVE_MATCH_RELOC_TYPES_OBJ): $(MATCH_RELOC_TYPES_SRC) $(MATCH_RELOC_TYPES_DEF)
 	@mkdir -p "$(@D)"
-	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
+	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) $(HOST_ARCH_FLAGS) -MMD -MP -g -gdwarf-4 -w \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
 $(NATIVE_MATCH_RELOC_LAYOUT_SRC): $(NATIVE_MATCH_RELOC_TYPES_OBJ) $(MATCH_RELOC_TYPES_DEF) $(MATCH_RELOC_GENERATOR)
@@ -504,8 +590,7 @@ $(PYTHON_MATCH_RELOC_LAYOUT_OBJ): $(NATIVE_MATCH_RELOC_LAYOUT_SRC)
 
 $(WASM_MATCH_RELOC_TYPES_OBJ): $(MATCH_RELOC_TYPES_SRC) $(MATCH_RELOC_TYPES_DEF) $(WASM_GLIBC_STUB)
 	@mkdir -p "$(@D)"
-	@"$(HOST_CC)" -m32 -malign-double -I"$(WASM_LAYOUT_INCLUDE)" \
-		-isystem /usr/include/x86_64-linux-gnu $(WASM_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
+	@$(WASM_PROXY_COMPILE) $(WASM_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
 $(WASM_MATCH_RELOC_LAYOUT_SRC): $(WASM_MATCH_RELOC_TYPES_OBJ) $(MATCH_RELOC_TYPES_DEF) $(MATCH_RELOC_GENERATOR)
@@ -535,11 +620,11 @@ $(PPC_MATCH_RELOC_LAYOUT_OBJ): $(PPC_MATCH_RELOC_LAYOUT_SRC) $(TOOLCHAIN_STAMP)
 
 $(NATIVE_BINARY): $(NATIVE_OBJS)
 	@mkdir -p "$(@D)"
-	@"$(HOST_CC)" -no-pie $(NATIVE_LINK_FLAGS) -Wl,--gc-sections $^ $(LDLIBS) -o "$@"
+	@"$(HOST_CC)" $(NATIVE_EXE_LINK_FLAGS) $(NATIVE_LINK_FLAGS) $^ $(LDLIBS) -o "$@"
 
 $(PYTHON_LIBRARY): $(PYTHON_CORE_OBJS)
 	@mkdir -p "$(@D)"
-	@"$(HOST_CC)" -shared -Wl,--gc-sections -Wl,-Bsymbolic -Wl,-z,defs \
+	@"$(HOST_CC)" $(SHARED_LIB_LINK_FLAGS) \
 		$^ $(LDLIBS) -o "$@"
 
 $(WASM_MODULE): $(WASM_CORE_OBJS)
@@ -550,6 +635,7 @@ $(WASM_MODULE): $(WASM_CORE_OBJS)
 		-sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createMslCoreModule \
 		-sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 \
 		-sINITIAL_MEMORY=536870912 -sMAXIMUM_MEMORY=1073741824 \
+		-sGROWABLE_ARRAYBUFFERS=0 \
 		-sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_core_game_data_create","_msl_core_game_data_destroy","_msl_core_batch_create","_msl_core_batch_destroy","_msl_core_batch_match_count","_msl_core_batch_reset_matches","_msl_core_batch_step_matches","_msl_core_batch_write_state","_msl_core_batch_write_observation","_msl_core_batch_write_terminal","_msl_core_batch_write_viewer","_msl_core_batch_copy_matches","_msl_core_batch_match_save_size","_msl_core_batch_save_match","_msl_core_batch_restore_match"]' \
 		-sEXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
 		--preload-file "$(DATA)@/data/raw" -o "$@" 2>"$$log"; then \
@@ -582,7 +668,7 @@ endef
 define link_native_smoke
 $(1): $(NATIVE_CORE_OBJS) $(2)
 	@mkdir -p "$$(@D)"
-	@"$(HOST_CC)" -no-pie $(NATIVE_LINK_FLAGS) -Wl,--gc-sections $$^ $(LDLIBS) -o "$$@"
+	@"$(HOST_CC)" $(NATIVE_EXE_LINK_FLAGS) $(NATIVE_LINK_FLAGS) $$^ $(LDLIBS) -o "$$@"
 endef
 
 $(eval $(call link_smoke,$(ARCHIVE_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/archive_smoke.o))
@@ -606,7 +692,7 @@ $(eval $(call link_native_smoke,$(NATIVE_REPLAY_BENCH),$(NATIVE_REPLAY_BENCH_OBJ
 
 $(NATIVE_RUNTIME_CENSUS): $(NATIVE_CORE_OBJS) $(NATIVE_RUNTIME_CENSUS_OBJ)
 	@mkdir -p "$(@D)"
-	@"$(HOST_CC)" -no-pie -Wl,--gc-sections $^ \
+	@"$(HOST_CC)" $(NATIVE_EXE_LINK_FLAGS) $^ \
 		$(LDLIBS) -ldl -o "$@"
 
 $(eval $(call link_native_smoke,$(NATIVE_LARGE_BATCH_SMOKE),$(NATIVE_LARGE_BATCH_SMOKE_OBJ)))
@@ -615,28 +701,28 @@ data-check:
 	@$(PY) -c 'from pathlib import Path; from tools.data.raw import validate_raw_dir; validate_raw_dir(Path("$(DATA)"), verify_hashes=False)'
 
 ppc-smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE) $(SCHEDULER_SMOKE) $(SCALAR_API_SMOKE)
-	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(ARCHIVE_SMOKE)" \
+	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(ARCHIVE_SMOKE)" \
 		"$(DATA)/PlCo.dat" \
 		"$(DATA)/PlFx.dat" \
 		"$(DATA)/PlFxNr.dat" \
 		"$(DATA)/GrNLa.dat"
-	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(DATA_SMOKE)" "$(DATA)"
-	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MODEL_SMOKE)" "$(DATA)"
-	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MAP_SMOKE)" "$(DATA)"
-	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCHEDULER_SMOKE)"
-	@timeout 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
+	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(DATA_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MODEL_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(MAP_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCHEDULER_SMOKE)"
+	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
 		"$(DATA)"
 
 native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE)
-	@timeout 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
-	@timeout 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
-	@timeout 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
-	@timeout 5s "$(NATIVE_SCHEDULER_SMOKE)"
-	@timeout 5s "$(NATIVE_SCALAR_API_SMOKE)" "$(DATA)"
-	@timeout 5s "$(NATIVE_CONTEXT_SMOKE)" "$(DATA)"
-	@timeout 5s "$(NATIVE_BATCH_API_SMOKE)" "$(DATA)"
-	@timeout 5s "$(NATIVE_PUBLIC_API_SMOKE)" "$(DATA)"
-	@timeout 5s "$(NATIVE_GAMEPLAY_PARTS_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 5s "$(NATIVE_SCHEDULER_SMOKE)"
+	@$(TIMEOUT) 5s "$(NATIVE_SCALAR_API_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 5s "$(NATIVE_CONTEXT_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 5s "$(NATIVE_BATCH_API_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 5s "$(NATIVE_PUBLIC_API_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 5s "$(NATIVE_GAMEPLAY_PARTS_SMOKE)" "$(DATA)"
 
 wasm-smoke: data-check $(WASM_MODULE) $(NATIVE_WASM_PARITY)
 	@MSL_CORE_NATIVE_DIGEST="$$($(NATIVE_WASM_PARITY) "$(DATA)")" \
@@ -653,7 +739,7 @@ viewer-production-smoke: viewer-smoke
 	@node "$(ROOT)/tests/melee_core/viewer_browser_smoke.mjs" --production
 
 lifecycle-benchmark: data-check $(NATIVE_LIFECYCLE_BENCH)
-	@timeout 5s "$(NATIVE_LIFECYCLE_BENCH)" "$(DATA)"
+	@$(TIMEOUT) 5s "$(NATIVE_LIFECYCLE_BENCH)" "$(DATA)"
 
 benchmark-prepare: validator
 	@"$(PY)" -m tools.validation.prepare_replay_benchmark \

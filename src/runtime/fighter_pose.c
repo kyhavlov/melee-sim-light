@@ -654,7 +654,10 @@ void msl_fighter_pose_attach_anim_joint(HSD_JObj* joint,
         if (object != NULL) {
             ref_INC(object);
         } else {
-            object = (HSD_Obj*) HSD_JObjLoadJoint((void*) desc->obj_id);
+            // obj_id carries the truncated low 32 bits of the joint's
+            // native DAT arena address (its retail-width id).
+            object = (HSD_Obj*) HSD_JObjLoadJoint(
+                msl_native_dat_from_low32(desc->obj_id));
         }
         node->path = (HSD_JObj*) object;
     }

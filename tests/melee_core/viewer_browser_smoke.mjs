@@ -10,8 +10,14 @@ const staticRoot = production ? path.join(root, "build/viewer") : root;
 const entryPath = production
   ? "/tools/viewer/live/index.html"
   : "/tests/melee_core/viewer_browser_smoke.html";
-const systemChrome = "/opt/google/chrome/chrome";
-const chrome = process.env.CHROME || (fs.existsSync(systemChrome) ? systemChrome : "google-chrome");
+const systemChromePaths = [
+  "/opt/google/chrome/chrome",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+];
+const chrome =
+  process.env.CHROME ||
+  systemChromePaths.find((path) => fs.existsSync(path)) ||
+  "google-chrome";
 const profile = path.join(root, "reports/triage/viewer-browser-profile");
 const contentTypes = new Map([
   [".data", "application/octet-stream"],

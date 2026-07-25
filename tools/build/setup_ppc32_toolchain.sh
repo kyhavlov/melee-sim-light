@@ -13,6 +13,21 @@ if [[ -x "$sysroot/usr/bin/powerpc-linux-gnu-gcc-13" &&
     exit 0
 fi
 
+# macOS cannot run apt-get or the Linux toolchain binaries. Populate the
+# same toolchain tree from inside a Linux container; the compiler is then
+# invoked through tools/build/ppc32_cc.sh, which containerizes each call.
+if [[ "$(uname -s)" == "Darwin" && -z "${MSL_TOOLCHAIN_IN_CONTAINER:-}" ]]; then
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "PPC reference toolchain setup on macOS requires docker" >&2
+        exit 1
+    fi
+    exec docker run --rm --platform linux/amd64 \
+        -v "$repo_root:$repo_root" -w "$repo_root" \
+        -e MSL_TOOLCHAIN_IN_CONTAINER=1 \
+        ubuntu:24.04 \
+        bash -c "apt-get update -qq >/dev/null && exec \"$0\""
+fi
+
 for command in apt-get dpkg-deb; do
     if ! command -v "$command" >/dev/null 2>&1; then
         echo "PPC reference toolchain setup requires $command" >&2
@@ -37,6 +52,18 @@ packages=(
     libubsan1-powerpc-cross
     linux-libc-dev-powerpc-cross
     qemu-user-static
+    # Host-side shared libraries the cross compiler itself links against.
+    # Hosts with a native gcc already have them; the containerized macOS
+    # path runs the toolchain in a bare image and needs them in-tree.
+    binutils-common
+    libbinutils
+    libgmp10
+    libisl23
+    libmpc3
+    libmpfr6
+    libsframe1
+    libzstd1
+    zlib1g
 )
 
 mkdir -p "$package_dir" "$sysroot"

@@ -1766,6 +1766,28 @@ static int stream_runner_session(int input_fd, int output_fd, double timeout, St
   return 0;
 }
 
+// pipe2 is Linux-only. macOS installs FD_CLOEXEC after pipe(); the window
+// between the two calls is tolerable because every spawn in this module
+// dup2s/closes its endpoints through posix_spawn file actions.
+static int cloexec_pipe(int fds[2]) {
+#if defined(__APPLE__)
+  int i;
+  if (pipe(fds) != 0) {
+    return -1;
+  }
+  for (i = 0; i < 2; i++) {
+    if (fcntl(fds[i], F_SETFD, FD_CLOEXEC) != 0) {
+      close(fds[0]);
+      close(fds[1]);
+      return -1;
+    }
+  }
+  return 0;
+#else
+  return pipe2(fds, O_CLOEXEC);
+#endif
+}
+
 static int stream_runner(const char* qemu_path, const char* sysroot, const char* binary_path,
                          const char* data_root, int direct_native, double timeout,
                          StreamState* state, char* error, size_t error_size) {
@@ -1785,7 +1807,7 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
   // Replay validation fans out from Python threads. O_CLOEXEC must be installed atomically with
   // pipe creation so a concurrently spawned runner cannot retain another runner's pipe endpoints
   // across exec and indefinitely suppress EOF.
-  if (pipe2(input_pipe, O_CLOEXEC) != 0 || pipe2(output_pipe, O_CLOEXEC) != 0) {
+  if (cloexec_pipe(input_pipe) != 0 || cloexec_pipe(output_pipe) != 0) {
     snprintf(error, error_size, "pipe: %s", strerror(errno));
     goto done;
   }

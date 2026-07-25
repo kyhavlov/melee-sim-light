@@ -193,7 +193,13 @@ void ftMs_SpecialLw_80138DD0(HSD_GObj* gobj)
     }
 }
 
+// SOLUTION 1 matches retail codegen by round-tripping Fighter* through a
+// 32-bit integer, which dereferences a truncated pointer on 64-bit hosts.
+#ifdef MSL_CORE_NATIVE
+#define SOLUTION 0
+#else
 #define SOLUTION 1
+#endif
 void ftMs_SpecialLwHit_Anim(HSD_GObj* gobj)
 {
     ssize_t idx;
@@ -237,7 +243,13 @@ void ftMs_SpecialLwHit_Anim(HSD_GObj* gobj)
 }
 #undef SOLUTION
 
+// SOLUTION 1 matches retail codegen by round-tripping Fighter* through a
+// 32-bit integer, which dereferences a truncated pointer on 64-bit hosts.
+#ifdef MSL_CORE_NATIVE
+#define SOLUTION 0
+#else
 #define SOLUTION 1
+#endif
 /// https://decomp.me/scratch/Jx7Ov
 void ftMs_SpecialAirLwHit_Anim(HSD_GObj* gobj)
 {

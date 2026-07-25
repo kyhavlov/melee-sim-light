@@ -13,7 +13,12 @@
 #include <stdint.h>
 #include <string.h>
 #if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+#if defined(__APPLE__)
+#include <dlfcn.h>
+#include <mach-o/loader.h>
+#else
 #include <link.h>
+#endif
 #endif
 
 enum {
@@ -63,7 +68,63 @@ typedef struct RelocBases {
     size_t image_size;
 } RelocBases;
 
-#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM) && defined(__APPLE__)
+// Mach-O image range of the image containing the anchor: the union of all
+// mapped segments, mirroring the PT_LOAD walk in the ELF branch below.
+static int find_image_range_macho(const void* anchor, uintptr_t* base,
+                                  size_t* size)
+{
+    Dl_info info;
+    const struct mach_header_64* header;
+    const struct load_command* command;
+    uintptr_t text_vmaddr = 0;
+    int has_text = 0;
+    uintptr_t begin = UINTPTR_MAX;
+    uintptr_t end = 0;
+    uintptr_t slide;
+    uint32_t i;
+
+    if (dladdr(anchor, &info) == 0 || info.dli_fbase == NULL) {
+        return 0;
+    }
+    header = info.dli_fbase;
+    if (header->magic != MH_MAGIC_64) {
+        return 0;
+    }
+    command = (const struct load_command*) (header + 1);
+    for (i = 0; i < header->ncmds; ++i) {
+        if (command->cmd == LC_SEGMENT_64) {
+            const struct segment_command_64* segment =
+                (const struct segment_command_64*) command;
+            if (strcmp(segment->segname, SEG_PAGEZERO) != 0 &&
+                segment->vmsize != 0)
+            {
+                if (segment->vmaddr < begin) {
+                    begin = segment->vmaddr;
+                }
+                if (segment->vmaddr + segment->vmsize > end) {
+                    end = segment->vmaddr + segment->vmsize;
+                }
+            }
+            if (!has_text && strcmp(segment->segname, SEG_TEXT) == 0) {
+                text_vmaddr = segment->vmaddr;
+                has_text = 1;
+            }
+        }
+        command = (const struct load_command*) ((const char*) command +
+                                                command->cmdsize);
+    }
+    if (!has_text || begin > end) {
+        return 0;
+    }
+    slide = (uintptr_t) header - text_vmaddr;
+    *base = begin + slide;
+    *size = end - begin;
+    return 1;
+}
+#endif
+
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM) && !defined(__APPLE__)
 typedef struct ImageRangeQuery {
     uintptr_t anchor;
     uintptr_t base;
@@ -108,6 +169,20 @@ static void current_image_range(uintptr_t* base, size_t* size)
     *base = 0;
     *size = 0;
 #if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+#if defined(__APPLE__)
+    {
+        uintptr_t found_base = 0;
+        size_t found_size = 0;
+        if (!find_image_range_macho(savestate_magic, &found_base,
+                                    &found_size) ||
+            found_base == 0 || found_size == 0)
+        {
+            return;
+        }
+        *base = found_base;
+        *size = found_size;
+    }
+#else
     {
         ImageRangeQuery query = {
             .anchor = (uintptr_t) savestate_magic,
@@ -120,6 +195,7 @@ static void current_image_range(uintptr_t* base, size_t* size)
         *base = query.base;
         *size = query.size;
     }
+#endif
 #endif
 }
 

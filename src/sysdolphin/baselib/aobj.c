@@ -1,5 +1,9 @@
 #include "aobj.h"
 
+#ifdef MSL_CORE_NATIVE
+#include "platform/native_dat.h"
+#endif
+
 #include "cobj.h"
 #include "debug.h"
 #include "dobj.h"
@@ -214,8 +218,15 @@ HSD_AObj* HSD_AObjLoadDesc(HSD_AObjDesc* aobjdesc)
             if (hsd_obj != NULL) {
                 ref_INC(hsd_obj);
             } else {
+#ifdef MSL_CORE_NATIVE
+                // obj_id carries the truncated low 32 bits of the joint's
+                // native DAT arena address (its retail-width id).
+                phi_r30 = (HSD_Obj*) HSD_JObjLoadJoint(
+                    msl_native_dat_from_low32(aobjdesc->obj_id));
+#else
                 phi_r30 =
                     (HSD_Obj*) HSD_JObjLoadJoint((void*) aobjdesc->obj_id);
+#endif
             }
             if (aobj != NULL) {
                 if (aobj->hsd_obj != NULL) {

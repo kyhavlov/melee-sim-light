@@ -160,7 +160,9 @@ bool lbFile_800168A0(s32 heap, const char* basename, u32* source, u32* length)
 #endif
     (void) heap;
     lbFile_8001668C(basename, data, length);
-    *source = (u32) data;
+    // Truncated low 32 bits of the GameData arena address; decoded back
+    // via msl_memory_from_low32.
+    *source = (u32) (uintptr_t) data;
     return true;
 }
 
