@@ -2411,8 +2411,17 @@ void Fighter_procUpdate(Fighter_GObj* gobj)
                 } else {
                     float kb_angle = atan2f(kb_vel_y, kb_vel_x);
 
+#ifdef MSL_CORE_HOSTED
+                    // GALE01 0x8006B948 inlines this sqrtf as frsqrte plus
+                    // three Newton steps; libc sqrtf can differ by one ULP
+                    // and flip the zero clamp on the decay's final frame.
+                    if (msl_gekko_sqrtf(kb_vel_x * kb_vel_x +
+                                        kb_vel_y * kb_vel_y) <
+                        p_ftCommonData->x204_knockbackFrameDecay)
+#else
                     if (sqrtf(kb_vel_x * kb_vel_x + kb_vel_y * kb_vel_y) <
                         p_ftCommonData->x204_knockbackFrameDecay)
+#endif
                     {
                         p_kb_vel->x = p_kb_vel->y = 0;
                     } else {
@@ -2469,8 +2478,14 @@ void Fighter_procUpdate(Fighter_GObj* gobj)
                 float kb_y = pAtkShieldKB->y;
                 float atkShieldKBAngle = atan2f(kb_y, kb_x);
 
+#ifdef MSL_CORE_HOSTED
+                // Same MWCC inline sqrtf as the ordinary knockback decay.
+                if (msl_gekko_sqrtf(kb_x * kb_x + kb_y * kb_y) <
+                    p_ftCommonData->x3E8_shieldKnockbackFrameDecay)
+#else
                 if (sqrtf(kb_x * kb_x + kb_y * kb_y) <
                     p_ftCommonData->x3E8_shieldKnockbackFrameDecay)
+#endif
                 {
                     /// @bug IN THE MELEE CODE THAT CAUSES THE INVISIBLE
                     /// CEILING GLITCH The next line should be 'pAtkShieldKB->y

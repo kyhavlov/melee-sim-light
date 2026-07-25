@@ -34,4 +34,24 @@ static inline float sqrtf_accurate(float x)
     return x;
 }
 
+#ifdef MSL_CORE_HOSTED
+// MWCC's inline float sqrtf as emitted inside gameplay code (e.g. the
+// knockback decay magnitude at GALE01 0x8006B948..0x8006B988): a Gekko
+// frsqrte seed refined by exactly three double-precision Newton steps whose
+// (3 - x * g * g) term is one fused fnmsub each, then x * guess and frsp.
+// Hosted libc sqrtf is correctly rounded and occasionally differs by one
+// ULP, which can flip knife-edge comparisons such as the decay zero clamp.
+static inline float msl_gekko_sqrtf(float x)
+{
+    if (x > 0.0f) {
+        double g = __frsqrte((double) x);
+        g = (0.5 * g) * __builtin_fma(-(double) x, g * g, 3.0);
+        g = (0.5 * g) * __builtin_fma(-(double) x, g * g, 3.0);
+        g = (0.5 * g) * __builtin_fma(-(double) x, g * g, 3.0);
+        return (float) ((double) x * g);
+    }
+    return x;
+}
+#endif
+
 #endif
