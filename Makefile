@@ -627,11 +627,14 @@ $(PYTHON_LIBRARY): $(PYTHON_CORE_OBJS)
 	@"$(HOST_CC)" $(SHARED_LIB_LINK_FLAGS) \
 		$^ $(LDLIBS) -o "$@"
 
-$(WASM_MODULE): $(WASM_CORE_OBJS)
+# The link embeds $(DATA) via --preload-file, so the packaged bundle goes
+# stale whenever the raw archives change; list them as prerequisites (the
+# link line names $(WASM_CORE_OBJS) directly since $^ now includes data).
+$(WASM_MODULE): $(WASM_CORE_OBJS) $(wildcard $(DATA)/*)
 	@mkdir -p "$(@D)"
 	@log="$(WASM_BUILD)/link-warnings.log"; other="$(WASM_BUILD)/link-other-warnings.log"; \
 	runtime="$(WASM_BUILD)/runtime-signature-warnings.log"; \
-	if ! "$(EMCC)" -O2 $(WASM_LINK_FLAGS) --no-entry -Wl,--gc-sections $^ $(LDLIBS) \
+	if ! "$(EMCC)" -O2 $(WASM_LINK_FLAGS) --no-entry -Wl,--gc-sections $(WASM_CORE_OBJS) $(LDLIBS) \
 		-sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createMslCoreModule \
 		-sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 \
 		-sINITIAL_MEMORY=536870912 -sMAXIMUM_MEMORY=1073741824 \
