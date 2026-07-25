@@ -1521,7 +1521,17 @@ bool mpLineIntersection(float a0x, float a0y, float a1x, float a1y, float b0x,
         double d0x = b0x - a0x;
         double aw = a1x - a0x;
         double d0y = b0y - a0y;
+#ifdef MSL_CORE_HOSTED
+        // GALE01 0x8004EA64 is a double-precision fmsub: aw * d0y - the
+        // separately rounded ah * d0x. The exact-float differences promote
+        // losslessly, but the products need one rounding each on the host
+        // split path; the fused form rounds the accumulate once, and the
+        // sign tests below sit on this value's zero boundary at
+        // vertex-touching sweeps (Frozen Stadium ramp junctions).
+        double hs_b0_a = __builtin_fma(aw, d0y, -(ah * d0x));
+#else
         double hs_b0_a = (aw * d0y) - (ah * d0x);
+#endif
         double d1y;
         double d1x;
         double det;
@@ -1539,7 +1549,12 @@ bool mpLineIntersection(float a0x, float a0y, float a1x, float a1y, float b0x,
         d1x = b1x - a1x;
         d1y = b1y - a1y;
 
+#ifdef MSL_CORE_HOSTED
+        // GALE01 0x8004EA98 double fmsub, same single-rounding shape.
+        hs_b1_a = __builtin_fma(aw, d1y, -(ah * d1x));
+#else
         hs_b1_a = (aw * d1y) - (ah * d1x);
+#endif
         if (hs_b1_a > 0.0) {
             if (hs_b1_a > 0.1) {
                 return false;
@@ -1552,7 +1567,12 @@ bool mpLineIntersection(float a0x, float a0y, float a1x, float a1y, float b0x,
             return false;
         }
 
+#ifdef MSL_CORE_HOSTED
+        // GALE01 0x8004EADC double fmsub.
+        det = __builtin_fma(d0x, d1y, -(d0y * d1x));
+#else
         det = (d0x * d1y) - (d0y * d1x);
+#endif
         if (det < hs_b0_a) {
             if (det < hs_b1_a) {
                 return false;
@@ -1568,11 +1588,21 @@ bool mpLineIntersection(float a0x, float a0y, float a1x, float a1y, float b0x,
         if (!((bw == 0.0 && bh == 0.0) || (b1_below_a && b2_above_a) ||
               (hs_b0_a >= 0.0 && b2_above_a)))
         {
+#ifdef MSL_CORE_HOSTED
+            // GALE01 0x8004EB58 double fmsub.
+            double area = __builtin_fma(bw, ah, -(bh * aw));
+#else
             double area = (bw * ah) - (bh * aw);
+#endif
 
             if (ABS(area) > 0.0001F) {
+#ifdef MSL_CORE_HOSTED
+                // GALE01 0x8004EB88 double fmsub feeding the fdiv.
+                double t = __builtin_fma(bw, d0y, -(bh * d0x)) / area;
+#else
                 double t =
                     ((bw * d0y) - (bh * d0x)) / area; // barycentric weight
+#endif
                 if (t > 0.0) {
                     if (t < 1.0) {
 #ifdef MSL_CORE_HOSTED

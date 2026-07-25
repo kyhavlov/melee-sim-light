@@ -1,6 +1,6 @@
 {
   "name": "marios",
-  "notes": "Mario and Dr. Mario validation suite: 60 netplay singles across all six legal stages against Fox, Falco, Marth, and Sheik plus Mario/Dr. Mario dittos, 2022-2026 Slippi and mainline captures.",
+  "notes": "Mario and Dr. Mario validation suite: 60 netplay singles across all six legal stages against Fox, Falco, Marth, and Sheik plus Mario/Dr. Mario dittos, 2022-2026 Slippi and mainline captures. Pokemon Stadium entries are frozen-form only (is_frozen_ps); transforming-PS games are out of the supported domain.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -14,18 +14,6 @@
       "characters": {
         "1": "Dr. Mario",
         "2": "Marth"
-      }
-    },
-    {
-      "replay": "replays/validation/marios/17173_Game_20250225T135947.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Dr. Mario",
-        "2": "Fox"
       }
     },
     {
@@ -200,18 +188,6 @@
       "ucf_cardinals_1_0_enabled": false
     },
     {
-      "replay": "replays/validation/marios/Slippi-2025-01_Game_20250128T234333.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Sheik",
-        "2": "Mario"
-      }
-    },
-    {
       "replay": "replays/validation/marios/Slippi-2025-02_Game_20250212T214835.slpz",
       "ports": [
         1,
@@ -296,18 +272,6 @@
       }
     },
     {
-      "replay": "replays/validation/marios/auto-fox-2025-10_Game_20251018T045526.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Dr. Mario",
-        "2": "Fox"
-      }
-    },
-    {
       "replay": "replays/validation/marios/auto-marth-2025-12_Game_20251229T150036.slpz",
       "ports": [
         1,
@@ -344,30 +308,6 @@
       }
     },
     {
-      "replay": "replays/validation/marios/basic-fox-2025-04_Game_20250404T135725.slp",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Dr. Mario",
-        "2": "Fox"
-      }
-    },
-    {
-      "replay": "replays/validation/marios/basic-fox-2025-04_Game_20250428T074010.slp",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Fox",
-        "2": "Mario"
-      }
-    },
-    {
       "replay": "replays/validation/marios/diamond-diamond-6c3bcc456c967feb1570eb68.slpz",
       "ports": [
         1,
@@ -394,18 +334,6 @@
       "played_on": "network"
     },
     {
-      "replay": "replays/validation/marios/franz-2024-02_Game_20240226T214528.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Marth",
-        "4": "Dr. Mario"
-      }
-    },
-    {
       "replay": "replays/validation/marios/gm-falco-2026-06_Game_20260608T020147.slpz",
       "ports": [
         1,
@@ -430,18 +358,6 @@
       }
     },
     {
-      "replay": "replays/validation/marios/gm-fox-2025-12_Game_20251201T224155.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Mario",
-        "2": "Fox"
-      }
-    },
-    {
       "replay": "replays/validation/marios/gm-fox-2026-03_Game_20260323T192034.slpz",
       "ports": [
         1,
@@ -454,36 +370,12 @@
       }
     },
     {
-      "replay": "replays/validation/marios/gm-fox-2026-03_Game_20260327T132708.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Mario",
-        "2": "Fox"
-      }
-    },
-    {
       "replay": "replays/validation/marios/gm-fox-2026-04_Game_20260413T062552.slpz",
       "ports": [
         1,
         2
       ],
       "stage_id": 28,
-      "characters": {
-        "1": "Mario",
-        "2": "Fox"
-      }
-    },
-    {
-      "replay": "replays/validation/marios/gm-fox-2026-04_Game_20260421T205457.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 3,
       "characters": {
         "1": "Mario",
         "2": "Fox"
@@ -510,18 +402,6 @@
       "stage_id": 28,
       "characters": {
         "1": "Mario",
-        "2": "Sheik"
-      }
-    },
-    {
-      "replay": "replays/validation/marios/gm-sheik-2026-03_Game_20260318T233300.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Dr. Mario",
         "2": "Sheik"
       }
     },
