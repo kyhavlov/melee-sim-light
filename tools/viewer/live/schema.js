@@ -8,6 +8,7 @@ export const CHAR_JIGGLYPUFF = 15;
 export const CHAR_LUIGI = 17;
 export const CHAR_MARIO = 0;
 export const CHAR_DRMARIO = 21;
+export const CHAR_SAMUS = 13;
 export const CHAR_MARTH = 18;
 export const CHAR_ZELDA = 19;
 export const CHAR_FALCO = 22;
@@ -37,6 +38,7 @@ export const SUPPORTED_CHARACTERS = Object.freeze([
   Object.freeze({ id: CHAR_LUIGI, label: "Luigi" }),
   Object.freeze({ id: CHAR_MARIO, label: "Mario" }),
   Object.freeze({ id: CHAR_DRMARIO, label: "Dr. Mario" }),
+  Object.freeze({ id: CHAR_SAMUS, label: "Samus" }),
   Object.freeze({ id: CHAR_MARTH, label: "Marth" }),
   Object.freeze({ id: CHAR_ZELDA, label: "Zelda" }),
   Object.freeze({ id: CHAR_FALCO, label: "Falco" }),

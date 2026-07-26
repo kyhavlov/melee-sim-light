@@ -16,6 +16,10 @@
 #include "it/items/itluigifireball.h"
 #include "it/items/itmariocape.h"
 #include "it/items/itmariofireball.h"
+#include "it/items/itsamusbomb.h"
+#include "it/items/itsamuschargeshot.h"
+#include "it/items/itsamusgrapple.h"
+#include "it/items/itsamusmissile.h"
 #include "it/items/itpeachexplode.h"
 #include "it/items/itpeachparasol.h"
 #include "it/items/itpeachtoad.h"
@@ -38,6 +42,34 @@
 // ItemKind - It_Kind_Kuriboh, matching
 // refs/melee/src/melee/it/item.c::Item_80267978 and the full tables in
 // refs/melee/src/melee/it/it_279C.c.
+// itsamusgrapple.c compiles NonMatching upstream and leaves its retail data
+// owners extern: the grab-element grapple hitbox command block, its
+// zero-velocity reset vector, and the grapple motion-state table. Field
+// values decode GALE01 main.dol .rodata@0x803B8660/0x803B8674 and
+// .data@0x803F73A8; the state handlers resolve through
+// refs/melee/config/GALE01/symbols.txt.
+itSamusGrapple_HitboxData it_803B8660 = {
+    .create_hitbox = {
+        { 11, 0, 0, 0, 139, 0, 0 },
+        { 1200, 0 },
+        { 0, 0 },
+        { 361, 100, 0, 1, 0, 0, 1, 0 },
+        { 0, 8, 0, 1, 2, 1, 0 },
+    },
+};
+Vec3 it_803B8674 = { 0.0f, 0.0f, 0.0f };
+ItemStateTable it_803F73A8[] = {
+    { -1, NULL, itSamusgrapple_UnkMotion0_Phys, NULL },
+    { -1, NULL, itSamusgrapple_UnkMotion1_Phys, NULL },
+    { -1, NULL, itSamusgrapple_UnkMotion2_Phys, NULL },
+    { -1, NULL, itSamusgrapple_UnkMotion3_Phys, NULL },
+    { -1, NULL, itSamusgrapple_UnkMotion4_Phys, NULL },
+    { -1, NULL, itSamusgrapple_UnkMotion5_Phys, NULL },
+    { -1, NULL, itSamusgrapple_UnkMotion6_Phys, NULL },
+    { -1, NULL, itSamusgrapple_UnkMotion7_Phys, NULL },
+    { -1, NULL, itSamusgrapple_UnkMotion8_Phys, NULL },
+};
+
 struct sdata_ItemGXLink it_803F2F28[118] = {
     // Rendering is intentionally absent in the headless runtime. The source
     // values are it_8026EECC for laser/blaster and it_8029CD18 for illusion.
@@ -52,6 +84,10 @@ struct sdata_ItemGXLink it_803F2F28[118] = {
     [It_Kind_Seak_Vanish - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Seak_Chain - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Luigi_Fire - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Samus_Bomb - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Samus_Charge - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Samus_Missile - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Samus_GBeam - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Mario_Fire - It_Kind_Kuriboh] = { NULL },
     [It_Kind_DrMario_Vitamin - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Mario_Cape - It_Kind_Kuriboh] = { NULL },
@@ -82,6 +118,74 @@ struct ItemLogicTable it_803F3100[118] = {
         itFoxLaser_Logic94_ShieldBounced,
         itFoxLaser_Logic94_HitShield,
         itFoxLaser_Logic94_EvtUnk,
+    },
+    [It_Kind_Samus_Bomb - It_Kind_Kuriboh] = {
+        it_803F7220,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        itSamusBomb_Logic50_DmgDealt,
+        NULL,
+        itSamusBomb_Logic50_EnteredAir,
+        it_2725_Logic50_Reflected,
+        itSamusBomb_Logic50_Clanked,
+        NULL,
+        itSamusBomb_Logic50_ShieldBounced,
+        itSamusBomb_Logic50_HitShield,
+        itSamusBomb_Logic50_EvtUnk,
+    },
+    [It_Kind_Samus_Charge - It_Kind_Kuriboh] = {
+        it_803F7288,
+        NULL,
+        it_2725_Logic108_Destroyed,
+        it_2725_Logic108_PickedUp,
+        NULL,
+        NULL,
+        itSamusChargeshot_Logic108_DmgDealt,
+        NULL,
+        NULL,
+        it_2725_Logic108_Reflected,
+        itSamusChargeshot_Logic108_Clanked,
+        itSamusChargeshot_Logic108_Absorbed,
+        it_2725_Logic108_ShieldBounced,
+        itSamusChargeshot_Logic108_HitShield,
+        itSamusChargeshot_Logic108_EvtUnk,
+    },
+    [It_Kind_Samus_Missile - It_Kind_Kuriboh] = {
+        it_803F7340,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_2725_Logic52_DmgDealt,
+        NULL,
+        NULL,
+        it_2725_Logic52_Reflected,
+        it_2725_Logic52_Clanked,
+        NULL,
+        it_2725_Logic52_ShieldBounced,
+        it_2725_Logic52_HitShield,
+        it_2725_Logic52_EvtUnk,
+    },
+    [It_Kind_Samus_GBeam - It_Kind_Kuriboh] = {
+        it_803F73A8,
+        itSamusGrapple_Logic53_Spawned,
+        NULL,
+        itSamusGrapple_Logic53_PickedUp,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        itSamusGrapple_Logic53_EvtUnk,
     },
     [It_Kind_Mario_Fire - It_Kind_Kuriboh] = {
         it_803F6788,

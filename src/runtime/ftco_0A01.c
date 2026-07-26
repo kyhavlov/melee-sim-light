@@ -1,8 +1,14 @@
 #include "ft/chara/ftCommon/ftCo_0A01.h"
 
+#include "ft/ft_0877.h"
+#include "ft/ftlib.h"
+#include "ft/inlines.h"
 #include "ft/types.h"
+#include "gr/stage.h"
 #include "lb/lbcollision.h"
 #include "mp/mplib.h"
+
+#include <math.h>
 
 #include <baselib/random.h>
 
@@ -251,3 +257,103 @@ float ftCo_800A1948(Fighter* fp)
 HSD_Pad ftCo_800A198C(Fighter* fp) { return fp->x1A88.x0; }
 float ftCo_800A1994(Fighter* fp) { return normalized_axis(fp->x1A88.cstickX); }
 float ftCo_800A1A24(Fighter* fp) { return normalized_axis(fp->x1A88.cstickY); }
+
+// Samus grapple target-search slice, verbatim from the upstream TU: the
+// planar distance helper, blast-zone and actionability predicates, and the
+// closest-fighter scan reached by itsamusgrapple.c's pull-toward-target
+// branch.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_0A01.c::ftCo_800A4A40
+
+f32 ftCo_800A1AB4(Fighter* fp0, Fighter* fp1)
+{
+    float dx = fp0->cur_pos.x - fp1->cur_pos.x;
+    float dy = fp0->cur_pos.y - fp1->cur_pos.y;
+    return sqrtf(SQ(dx) + SQ(dy));
+}
+
+bool ftCo_800A0F00(Fighter_GObj* gobj)
+{
+    Fighter* fp = GET_FIGHTER(gobj);
+    struct Fighter_x1A88_t* data = &fp->x1A88;
+    if (ft_80087A18(gobj)) {
+        int result = ft_80087A80(gobj);
+        if (result == 2) {
+            return true;
+        }
+        if (result == 1) {
+            if (data->x7C % 240 > 120) {
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+    return false;
+}
+
+static inline bool inlineD0(Fighter* fp, Fighter* fp1)
+{
+    float y, x;
+    struct Fighter_x1A88_t* data = &fp->x1A88;
+
+    y = fp1->cur_pos.y;
+    x = fp1->cur_pos.x;
+    if (x < Stage_GetBlastZoneLeftOffset() + data->half_width ||
+        x > Stage_GetBlastZoneRightOffset() - data->half_width ||
+        y < Stage_GetBlastZoneBottomOffset() + data->half_height ||
+        y > Stage_GetBlastZoneTopOffset() - data->half_height)
+    {
+        return true;
+    }
+    return false;
+}
+
+static inline bool inlineD1(Fighter* fp)
+{
+    Fighter_GObj* gobj = fp->gobj;
+    if (fp->x221F_b3 || fp->x2224_b2 || ftCo_800A0F00(gobj) ||
+        ftLib_8008732C(gobj))
+    {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+Fighter* ftCo_800A4A40(Fighter* fp)
+{
+    Fighter* fp1;
+    Fighter* cur_fp;
+    Fighter_GObj* cur;
+    float closest;
+    float distance;
+
+    if (fp == NULL) {
+        return NULL;
+    }
+    cur_fp = NULL;
+    for (cur = HSD_GObj_Entities->fighters; cur != NULL; cur = cur->next) {
+        if (fp->gobj == cur) {
+            continue;
+        }
+        fp1 = GET_FIGHTER(cur);
+        if (inlineD0(fp, fp1)) {
+            continue;
+        }
+        if (inlineD1(fp1)) {
+            continue;
+        }
+        if (cur_fp == NULL) {
+            cur_fp = fp1;
+            closest = ftCo_800A1AB4(fp, fp1);
+            continue;
+        }
+        fp1 = GET_FIGHTER(cur);
+        distance = ftCo_800A1AB4(fp, fp1);
+        if (closest > distance) {
+            closest = distance;
+            cur_fp = fp1;
+        }
+    }
+    return cur_fp;
+}

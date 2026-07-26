@@ -67,6 +67,7 @@ enum {
     MSL_CORE_CHAR_CAPTAIN_FALCON = 2,
     MSL_CORE_CHAR_SHEIK = 7,
     MSL_CORE_CHAR_PEACH = 9,
+    MSL_CORE_CHAR_SAMUS = 13,
     MSL_CORE_CHAR_JIGGLYPUFF = 15,
     MSL_CORE_CHAR_LUIGI = 17,
     MSL_CORE_CHAR_DRMARIO = 21,
@@ -258,6 +259,8 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_SEAK;
     case MSL_CORE_CHAR_PEACH:
         return CKIND_PEACH;
+    case MSL_CORE_CHAR_SAMUS:
+        return CKIND_SAMUS;
     case MSL_CORE_CHAR_JIGGLYPUFF:
         return CKIND_PURIN;
     case MSL_CORE_CHAR_LUIGI:
@@ -596,6 +599,7 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CORE_CHAR_CAPTAIN_FALCON &&
             config->players[i].char_id != MSL_CORE_CHAR_SHEIK &&
             config->players[i].char_id != MSL_CORE_CHAR_PEACH &&
+            config->players[i].char_id != MSL_CORE_CHAR_SAMUS &&
             config->players[i].char_id != MSL_CORE_CHAR_JIGGLYPUFF &&
             config->players[i].char_id != MSL_CORE_CHAR_LUIGI &&
             config->players[i].char_id != MSL_CORE_CHAR_MARTH &&
@@ -604,7 +608,7 @@ static int validate_config(MslCoreMatchConfig* config)
             fprintf(stderr,
                     "current core supports external char_id=0 Mario, char_id=1 Fox, "
                     "char_id=2 Captain Falcon, "
-                    "char_id=7 Sheik, char_id=9 Peach, "
+                    "char_id=7 Sheik, char_id=9 Peach, char_id=13 Samus, "
                     "char_id=15 Jigglypuff, char_id=17 Luigi, "
                     "char_id=18 Marth, "
                     "char_id=19 Zelda, char_id=21 Dr. Mario, and char_id=22 Falco only\n");
@@ -650,6 +654,9 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
         (struct UnkCostumeList){ game_data->source.fighter.sheik_costumes, 5 };
     game_data->source.fighter.costume_lists[FTKIND_PEACH] =
         (struct UnkCostumeList){ game_data->source.fighter.peach_costumes, 5 };
+    game_data->source.fighter.costume_lists[FTKIND_SAMUS] =
+        (struct UnkCostumeList){ game_data->source.fighter.samus_costumes,
+                                 5 };
     game_data->source.fighter.costume_lists[FTKIND_PURIN] =
         (struct UnkCostumeList){ game_data->source.fighter.puff_costumes, 5 };
     game_data->source.fighter.costume_lists[FTKIND_LUIGI] =
@@ -1246,6 +1253,7 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         MSL_CORE_CHAR_LUIGI,
         MSL_CORE_CHAR_MARIO,
         MSL_CORE_CHAR_DRMARIO,
+        MSL_CORE_CHAR_SAMUS,
     };
     size_t i;
 

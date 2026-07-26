@@ -55,6 +55,7 @@ static int supported_character(uint8_t character) {
   return character == MSL_CHARACTER_MARIO || character == MSL_CHARACTER_DRMARIO ||
          character == MSL_CHARACTER_FOX || character == MSL_CHARACTER_CAPTAIN_FALCON ||
          character == MSL_CHARACTER_SHEIK || character == MSL_CHARACTER_PEACH ||
+         character == MSL_CHARACTER_SAMUS ||
          character == MSL_CHARACTER_JIGGLYPUFF || character == MSL_CHARACTER_LUIGI ||
          character == MSL_CHARACTER_MARTH ||
          character == MSL_CHARACTER_ZELDA || character == MSL_CHARACTER_FALCO;

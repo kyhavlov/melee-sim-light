@@ -1012,11 +1012,11 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
     int64_t player_raw = rows->player_raw[i][0];
     uint8_t character = get_u8(&player->character, player_raw);
     uint8_t stocks = replay->start_stocks[i];
-    if (character != 1 && character != 2 && character != 7 && character != 9 && character != 15 &&
-        character != 17 && character != 18 && character != 19 &&
+    if (character != 1 && character != 2 && character != 7 && character != 9 && character != 13 &&
+        character != 15 && character != 17 && character != 18 && character != 19 &&
         character != 21 && character != 22 && character != 0) {
       snprintf(error, error_size,
-               "Melee core requires Mario, Fox, Captain Falcon, Sheik, Peach, Jigglypuff, Luigi, "
+               "Melee core requires Mario, Fox, Captain Falcon, Sheik, Peach, Samus, Jigglypuff, Luigi, "
                "Marth, Zelda, Dr. Mario, or Falco players");
       return -1;
     }

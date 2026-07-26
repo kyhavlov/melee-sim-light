@@ -8,6 +8,7 @@
 #include "ft/ftdevice.h"
 #include "gr/types.h"
 #include "it/it_3F14.h"
+#include "it/itCharItems.h"
 #include "lb/types.h"
 #include "mp/types.h"
 #include "pl/player.h"
@@ -26,6 +27,7 @@ typedef struct MslSourceGameData {
         UnkCostumeStruct sheik_costumes[5];
         UnkCostumeStruct peach_costumes[5];
         UnkCostumeStruct puff_costumes[5];
+        UnkCostumeStruct samus_costumes[5];
         UnkCostumeStruct luigi_costumes[4];
         UnkCostumeStruct mario_costumes[5];
         UnkCostumeStruct drmario_costumes[5];
@@ -181,6 +183,15 @@ typedef struct MslSourceMatchState {
         ft_8045993C_t state[6];
         int reference_counts[FTKIND_MAX];
     } fighter;
+    struct {
+        // itsamusgrapple.c::it_802B75FC recomputes the x34..x58 lanes of the
+        // grapple article's special attributes in place at every grapple
+        // spawn: retail treats the DAT blob as scratch. Hosted GameData is
+        // shared and immutable, so each match owns a writable mirror seeded
+        // from the article on first use.
+        itSamusGrappleAttributes attrs;
+        u8 seeded;
+    } samus_grapple;
 } MslSourceMatchState;
 
 #endif

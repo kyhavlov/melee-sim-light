@@ -27,6 +27,7 @@ CHARACTERS = {
     'captain': (2, 'Ca', 'ftDataCaptain'),
     'seak': (7, 'Sk', 'ftDataSeak'),
     'peach': (9, 'Pe', 'ftDataPeach'),
+    'samus': (13, 'Ss', 'ftDataSamus'),
     'purin': (15, 'Pr', 'ftDataPurin'),
     'luigi': (17, 'Lg', 'ftDataLuigi'),
     'mars': (18, 'Ms', 'ftDataMars'),
@@ -37,6 +38,17 @@ CHARACTERS = {
 
 FTPART_INVALID = 0xFF
 NCANON = 54  # FtPart_TopN .. FtPart_TransN2
+
+# Raw fp->parts[...] indices reached directly by character code (article
+# spawn anchors the DAT graphs cannot expose). These join the mask before
+# ancestor closure.
+#   samus: ftSs_SpecialN.c charge-shot spawn parts[FtPart_RHandNb=50],
+#          ftSs_Init.c/ftCo_AirCatch.c/ftCo_Attack100.c throw and grapple
+#          anchor parts[FtPart_ThrowN=51], ftSs_SpecialN.c missile spawn
+#          parts[FtPart_56=56].
+CODE_ANCHORED = {
+    'samus': (50, 51, 56),
+}
 
 # Luigi's audited admission row (joint indices), the canonical anchor.
 LUIGI_AUDITED = [
@@ -177,6 +189,7 @@ def derive(name, common, canon):
         for n in range(n0, min(n0 + count, len(order))):
             bones.add(part_of_node[n])
     mask |= bones
+    mask |= set(CODE_ANCHORED.get(name, ()))
 
     changed = True
     while changed:

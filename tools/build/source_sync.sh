@@ -40,13 +40,18 @@ archive_snapshot() {
     local commit
     local resolved
     local -a paths
+    local path
     commit=$(lock_value commit)
     resolved=$(git -C "$checkout" rev-parse "$commit^{commit}")
     [[ "$resolved" == "$commit" ]] || {
         echo "resolved source commit $resolved; expected $commit" >&2
         return 1
     }
-    mapfile -t paths < "$files"
+    # macOS ships bash 3.2, which lacks mapfile.
+    paths=()
+    while IFS= read -r path; do
+        paths+=("$path")
+    done < "$files"
     mkdir -p "$destination"
     git -C "$checkout" archive "$commit" -- "${paths[@]}" | tar -x -C "$destination"
 }
@@ -93,7 +98,8 @@ verify_local_inventory() {
 verify_upstream() {
     local tree=$1
     local count digest
-    count=$(find "$tree" -type f | wc -l)
+    # BSD wc pads its output with spaces; strip them for the comparison.
+    count=$(find "$tree" -type f | wc -l | tr -d '[:space:]')
     digest=$(tree_digest "$tree")
     [[ "$count" == "$(lock_value file_count)" ]] || {
         echo "locked source snapshot has $count files; expected $(lock_value file_count)" >&2

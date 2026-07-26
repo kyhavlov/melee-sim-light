@@ -286,6 +286,16 @@ src/melee/ft/chara/ftMario/ftMr_Strings.c	src/melee/ft/chara/ftMario/ftMr_String
 src/melee/it/items/itdrmariopill.c	src/melee/it/items/itdrmariopill.c	Matching	mario-source-packet	compiled canonical megavitamin article owner
 src/melee/it/items/itmariocape.c	src/melee/it/items/itmariocape.c	Matching	mario-source-packet	compiled canonical cape and super-sheet article owner
 src/melee/it/items/itmariofireball.c	src/melee/it/items/itmariofireball.c	Matching	mario-source-packet	compiled canonical Mario-family fireball article owner
+src/melee/ft/chara/ftSamus/ftSs_Init.c	src/melee/ft/chara/ftSamus/ftSs_Init.c	Matching	samus-source-packet	compiled canonical Samus lifecycle, state registry, and data-owner callbacks
+src/melee/ft/chara/ftSamus/ftSs_SpecialHi.c	src/melee/ft/chara/ftSamus/ftSs_SpecialHi.c	Matching	samus-source-packet	compiled canonical Screw Attack owner
+src/melee/ft/chara/ftSamus/ftSs_SpecialLw_0.c	src/melee/ft/chara/ftSamus/ftSs_SpecialLw_0.c	Matching	samus-source-packet	compiled canonical Bomb state owner
+src/melee/ft/chara/ftSamus/ftSs_SpecialLw_1.c	src/melee/ft/chara/ftSamus/ftSs_SpecialLw_1.c	Matching	samus-source-packet	compiled canonical Bomb jump and morph-ball helper owner
+src/melee/ft/chara/ftSamus/ftSs_SpecialN.c	src/melee/ft/chara/ftSamus/ftSs_SpecialN.c	Matching	samus-source-packet	compiled canonical Charge Shot owner
+src/melee/ft/chara/ftSamus/ftSs_SpecialS.c	src/melee/ft/chara/ftSamus/ftSs_SpecialS.c	Matching	samus-source-packet	compiled canonical Missile owner
+src/melee/it/items/itsamusbomb.c	src/melee/it/items/itsamusbomb.c	Matching	samus-source-packet	compiled canonical Samus bomb article owner
+src/melee/it/items/itsamuschargeshot.c	src/melee/it/items/itsamuschargeshot.c	Matching	samus-source-packet	compiled canonical Charge Shot article owner
+src/melee/it/items/itsamusgrapple.c	src/melee/it/items/itsamusgrapple.c	NonMatching	samus-source-packet	compiled canonical grapple-beam article owner
+src/melee/it/items/itsamusmissile.c	src/melee/it/items/itsamusmissile.c	Matching	samus-source-packet	compiled canonical homing and super missile article owner
 src/melee/it/items/itpeachturnip.c	src/melee/it/items/itpeachturnip.c	not-listed	peach-source-packet	compiled canonical Peach turnip and rare-pull constructor owner
 src/melee/it/items/itsword.c	src/melee/it/items/itsword.c	not-listed	peach-common-item-packet	compiled canonical Beam Sword owner reached by Peach item pull
 src/sysdolphin/baselib/aobj.c	src/sysdolphin/baselib/aobj.c	Matching	0001-hosted-c-compatibility.patch	compiled directly from canonical source by Makefile; adapted by historical patch 0001-hosted-c-compatibility.patch

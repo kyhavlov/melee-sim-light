@@ -22,6 +22,7 @@ SUPPORTED_CHARACTERS = (
     "luigi",
     "mario",
     "drmario",
+    "samus",
 )
 SUPPORTED_STAGES = ("grnla", "grnba", "griz", "grps", "grst", "grop")
 

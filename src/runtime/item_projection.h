@@ -32,6 +32,10 @@ enum {
     MSL_CORE_ITEM_KIND_DRMARIO_VITAMIN = 49,
     MSL_CORE_ITEM_KIND_MARIO_CAPE = 83,
     MSL_CORE_ITEM_KIND_DRMARIO_SHEET = 84,
+    MSL_CORE_ITEM_KIND_SAMUS_BOMB = 93,
+    MSL_CORE_ITEM_KIND_SAMUS_CHARGE_SHOT = 94,
+    MSL_CORE_ITEM_KIND_SAMUS_MISSILE = 95,
+    MSL_CORE_ITEM_KIND_SAMUS_GRAPPLE_BEAM = 96,
     MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE = 108,
     MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE = 109,
     MSL_CORE_ITEM_KIND_PEACH_TOAD_SPORE = 111,
@@ -113,6 +117,33 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // variables; sampled misc lanes are fixed-pool residue.
         // refs/melee/src/melee/it/items/{itmariofireball.c,
         // itdrmariopill.c,itmariocape.c}
+        return 0;
+    case MSL_CORE_ITEM_KIND_SAMUS_BOMB:
+        // The morph-launch bool at xDD4 is first written by the explosion
+        // event, not the constructor, so xDD7 carries fixed-pool residue for
+        // most of the bomb's life; xDDB is a byte of the owner pointer.
+        // refs/melee/src/melee/it/items/itsamusbomb.c
+        return 0;
+    case MSL_CORE_ITEM_KIND_SAMUS_CHARGE_SHOT:
+        // xDD4 is declared padding. xDD8 (launch angle) and xDEC (charge
+        // level) are first written when the shot fires -- state 0 is the
+        // held charge, whose lanes still carry fixed-pool residue. xDE8
+        // (launch state) is initialized by the constructor.
+        // refs/melee/src/melee/it/items/itsamuschargeshot.c::it_802B55C8
+        if (state == 0) {
+            return MSL_CORE_ITEM_MISC2;
+        }
+        return MSL_CORE_ITEM_MISC1 | MSL_CORE_ITEM_MISC2 |
+               MSL_CORE_ITEM_MISC3;
+    case MSL_CORE_ITEM_KIND_SAMUS_MISSILE:
+        // xDD7 samples is_smash_missile and xDDB the owner move-id scalar;
+        // xDEB/xDEF are bytes of GObj pointers.
+        // refs/melee/src/melee/it/itCharItems.h::itSamusMissile_ItemVars
+        return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC1;
+    case MSL_CORE_ITEM_KIND_SAMUS_GRAPPLE_BEAM:
+        // The declared payload is link/object pointers and three bytes that
+        // end before the xDEB/xDEF samples.
+        // refs/melee/src/melee/it/itCharItems.h::itSamusGrapple_ItemVars
         return 0;
     case MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE:
         // Its first source word is explicitly uninitialized padding.

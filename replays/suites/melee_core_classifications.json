@@ -3081,7 +3081,7 @@
      "matched_frames": 801,
      "mismatch_count": 366326,
      "mismatch_fields_digest": "014c5071a18c1b87e270bcecd0763ecd252f159edabd1245744cae1d95e4463a",
-     "mismatch_fingerprint": "6fbc08f4c4e66c35",
+     "mismatch_fingerprint": "b56ffc77a2f5ce35",
      "mismatched_frames": 9844,
      "render_visibility_mismatch_count": 14800,
      "signed_zero_equal_count": 0,

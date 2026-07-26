@@ -159,6 +159,9 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     // Mario and Dr. Mario share efAsync bank 1 (ftData_UnkBytePerCharacter
     // maps both kinds to 1).
     msl_effect_load_bank(data, 1, "/EfMrData.dat", "effMarioDataTable");
+    // Samus owns efAsync bank 2 (ftData_UnkBytePerCharacter maps
+    // FTKIND_SAMUS to 2).
+msl_effect_load_bank(data, 2, "/EfSsData.dat", "effSamusDataTable");
     msl_effect_load_bank(data, 3, "/EfFxData.dat", "effFoxDataTable");
     msl_effect_load_bank(data, 18, "/EfLgData.dat", "effLuigiDataTable");
     // efLib_Create queues each common model's frame-zero animation, and both

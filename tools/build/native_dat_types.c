@@ -14,6 +14,7 @@
 #include "ft/chara/ftMario/types.h"
 #include "ft/chara/ftMars/types.h"
 #include "ft/chara/ftPeach/types.h"
+#include "ft/chara/ftSamus/types.h"
 #include "ft/chara/ftPurin/types.h"
 #include "ft/chara/ftSeak/types.h"
 #include "ft/chara/ftZelda/types.h"
@@ -146,6 +147,22 @@ typedef Article* MslDatLuigiArticles[1];
 // refs/melee/src/melee/ft/chara/{ftMario/ftMr_Init.c,
 // ftDrMario/ftDr_Init.c}
 typedef Article* MslDatMarioArticles[4];
+// PlSs.dat's ftData.x48_items is a five-slot table: the bomb, charge shot,
+// missile, and grapple-beam articles registered by ftSs_Init_OnLoad, then the
+// throw grapple-beam accessory graph consumed by
+// ftSs_Init_CreateThrowGrappleBeam (a root joint, the per-throw anim joints
+// for ThrowF/B/Hi/Lw, and the shared anim/matanim joints).
+// refs/melee/src/melee/ft/chara/ftSamus/ftSs_Init.c
+typedef struct MslDatSamusThrowBeam {
+    HSD_Joint* joint;
+    HSD_AnimJoint* (*throw_anim_joints)[4];
+    HSD_AnimJoint* anim_joint;
+    HSD_MatAnimJoint* matanim_joint;
+} MslDatSamusThrowBeam;
+typedef struct MslDatSamusArticles {
+    Article* articles[4];
+    MslDatSamusThrowBeam* throw_beam;
+} MslDatSamusArticles;
 // ItCo.dat's public x4 table owns the 43 common-item Article graphs. Peach's
 // SpecialLw can reach BombHei, Dosei, and Sword even when stage items are off.
 // refs/melee/src/melee/it/iteffect.c::it_802787B4
@@ -226,6 +243,12 @@ void* msl_native_dat_type_roots[] = {
     (MslDatLuigiArticles*) 0,
     (MslDatMarioArticles*) 0,
     (ftMario_DatAttrs*) 0,
+    (MslDatSamusArticles*) 0,
+    (ftSs_DatAttrs*) 0,
+    (itSamusBombAttributes*) 0,
+    (itSamusChargeShot_Attributes*) 0,
+    (itSamusMissileAttributes*) 0,
+    (itSamusGrappleAttributes*) 0,
     (MslDatCommonItemArticles*) 0,
     (itBombHeiAttributes*) 0,
     (itDoseiAttributes*) 0,

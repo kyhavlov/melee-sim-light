@@ -48,7 +48,7 @@ def test_live_viewer_supported_domain_and_assets() -> None:
         7: "Sheik",
         9: "Peach",
         15: "Jigglypuff",
-        17: "Luigi", 0: "Mario", 21: "Dr. Mario",
+        17: "Luigi", 0: "Mario", 21: "Dr. Mario", 13: "Samus",
         18: "Marth",
         19: "Zelda",
         22: "Falco",

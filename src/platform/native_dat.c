@@ -927,6 +927,7 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataCaptain") == 0 ||
         strcmp(symbol, "ftDataSeak") == 0 ||
         strcmp(symbol, "ftDataLuigi") == 0 ||
+        strcmp(symbol, "ftDataSamus") == 0 ||
         strcmp(symbol, "ftDataMario") == 0 ||
         strcmp(symbol, "ftDataDrmario") == 0 ||
         strcmp(symbol, "ftDataMars") == 0 ||
@@ -1153,6 +1154,7 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_LUIGI,
     MSL_FIGHTER_ARTICLES_MARIO,
     MSL_FIGHTER_ARTICLES_MARIOD,
+    MSL_FIGHTER_ARTICLES_SAMUS,
     MSL_FIGHTER_AUX_PURIN_PARTS,
 } MslFighterArticleProfile;
 
@@ -1268,6 +1270,25 @@ static ftData* translate_fighter_public(
         indices[0] = 1;
         indices[1] = 3;
         attr_types[0] = msl_dat_root_itUnkAttributes;
+        break;
+    case MSL_FIGHTER_ARTICLES_SAMUS:
+        // PlSs.dat's five-slot list holds the four articles registered by
+        // ftSs_Init_OnLoad (bomb, charge shot, missile, grapple beam), each
+        // with its concrete attribute block, and the throw grapple-beam
+        // accessory graph the list type translates structurally.
+        // refs/melee/src/melee/ft/chara/ftSamus/ftSs_Init.c
+        // refs/melee/src/melee/it/items/{itsamusbomb.c,itsamuschargeshot.c,
+        //   itsamusmissile.c,itsamusgrapple.c}
+        article_list_type = msl_dat_root_MslDatSamusArticles;
+        article_count = 4;
+        indices[0] = 0;
+        indices[1] = 1;
+        indices[2] = 2;
+        indices[3] = 3;
+        attr_types[0] = msl_dat_root_itSamusBombAttributes;
+        attr_types[1] = msl_dat_root_itSamusChargeShot_Attributes;
+        attr_types[2] = msl_dat_root_itSamusMissileAttributes;
+        attr_types[3] = msl_dat_root_itSamusGrappleAttributes;
         break;
     case MSL_FIGHTER_AUX_PURIN_PARTS:
         // x48_items is not an article table for Purin. Its second pointer owns
@@ -1408,6 +1429,10 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftSeakAttributes, 317,
                                           MSL_FIGHTER_ARTICLES_SHEIK);
+    } else if (strcmp(symbol, "ftDataSamus") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftSs_DatAttrs, 313,
+                                          MSL_FIGHTER_ARTICLES_SAMUS);
     } else if (strcmp(symbol, "ftDataLuigi") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftLuigiAttributes, 312,
