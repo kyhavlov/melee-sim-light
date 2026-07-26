@@ -16,9 +16,16 @@ HSD_ObjAllocData HSD_Mtx_804C233C;
 /// Calculates the determinant of the top 3x3 section of a 3x4 matrix
 inline f32 HSD_CalcDeterminantMatrix3x4(Mtx m)
 {
-    return m[0][0] * m[1][1] * m[2][2] + m[0][1] * m[1][2] * m[2][0] +
-           m[0][2] * m[1][0] * m[2][1] - m[2][0] * m[1][1] * m[0][2] -
-           m[1][0] * m[0][1] * m[2][2] - m[0][0] * m[2][1] * m[1][2];
+    // GALE01 0x8037933C-0x80379384 (inlined in HSD_MtxInverse): each term's
+    // leading two-factor product is a pre-rounded fmuls and the trailing
+    // factor fuses into the accumulation via fmadds/fnmsubs.
+    f32 det = m[2][0] * (m[0][1] * m[1][2]);
+    det = __fmadds(m[2][2], m[0][0] * m[1][1], det);
+    det = __fmadds(m[2][1], m[0][2] * m[1][0], det);
+    det = __fnmsubs(m[0][2], m[2][0] * m[1][1], det);
+    det = __fnmsubs(m[2][2], m[1][0] * m[0][1], det);
+    det = __fnmsubs(m[1][2], m[0][0] * m[2][1], det);
+    return det;
 }
 
 void HSD_MtxInverse(Mtx src, Mtx dest)
@@ -41,22 +48,37 @@ void HSD_MtxInverse(Mtx src, Mtx dest)
 
     det = 1.0f / det;
 
-    dest[0][0] = ((*m)[1][1] * (*m)[2][2] - (*m)[2][1] * (*m)[1][2]) * det;
-    dest[0][1] = -((*m)[0][1] * (*m)[2][2] - (*m)[2][1] * (*m)[0][2]) * det;
-    dest[0][2] = ((*m)[0][1] * (*m)[1][2] - (*m)[1][1] * (*m)[0][2]) * det;
-    dest[1][0] = -((*m)[1][0] * (*m)[2][2] - (*m)[2][0] * (*m)[1][2]) * det;
-    dest[1][1] = ((*m)[0][0] * (*m)[2][2] - (*m)[2][0] * (*m)[0][2]) * det;
-    dest[1][2] = -((*m)[0][0] * (*m)[1][2] - (*m)[1][0] * (*m)[0][2]) * det;
-    dest[2][0] = ((*m)[1][0] * (*m)[2][1] - (*m)[2][0] * (*m)[1][1]) * det;
-    dest[2][1] = -((*m)[0][0] * (*m)[2][1] - (*m)[2][0] * (*m)[0][1]) * det;
-    dest[2][2] = ((*m)[0][0] * (*m)[1][1] - (*m)[1][0] * (*m)[0][1]) * det;
+    // GALE01 0x803793E8-0x803794F0: every cofactor is fmsubs/fnmsubs with the
+    // second product pre-rounded; 0x80379500-0x80379578: the translate column
+    // seeds with the [r][1] product and fuses the [r][0]/[r][2] terms.
+    dest[0][0] = __fmsubs((*m)[1][1], (*m)[2][2], (*m)[2][1] * (*m)[1][2]) *
+                 det;
+    dest[0][1] = __fnmsubs((*m)[0][1], (*m)[2][2], (*m)[2][1] * (*m)[0][2]) *
+                 det;
+    dest[0][2] = __fmsubs((*m)[0][1], (*m)[1][2], (*m)[1][1] * (*m)[0][2]) *
+                 det;
+    dest[1][0] = __fnmsubs((*m)[1][0], (*m)[2][2], (*m)[2][0] * (*m)[1][2]) *
+                 det;
+    dest[1][1] = __fmsubs((*m)[0][0], (*m)[2][2], (*m)[2][0] * (*m)[0][2]) *
+                 det;
+    dest[1][2] = __fnmsubs((*m)[0][0], (*m)[1][2], (*m)[1][0] * (*m)[0][2]) *
+                 det;
+    dest[2][0] = __fmsubs((*m)[1][0], (*m)[2][1], (*m)[2][0] * (*m)[1][1]) *
+                 det;
+    dest[2][1] = __fnmsubs((*m)[0][0], (*m)[2][1], (*m)[2][0] * (*m)[0][1]) *
+                 det;
+    dest[2][2] = __fmsubs((*m)[0][0], (*m)[1][1], (*m)[1][0] * (*m)[0][1]) *
+                 det;
 
-    dest[0][3] = -(dest[0][2] * src[2][3] -
-                   (-dest[0][0] * src[0][3] - dest[0][1] * src[1][3]));
-    dest[1][3] = -(dest[1][2] * src[2][3] -
-                   (-dest[1][0] * src[0][3] - dest[1][1] * src[1][3]));
-    dest[2][3] = -(dest[2][2] * src[2][3] -
-                   (-dest[2][0] * src[0][3] - dest[2][1] * src[1][3]));
+    dest[0][3] = __fnmsubs(dest[0][2], src[2][3],
+                           __fmsubs(-dest[0][0], src[0][3],
+                                    dest[0][1] * src[1][3]));
+    dest[1][3] = __fnmsubs(dest[1][2], src[2][3],
+                           __fmsubs(-dest[1][0], src[0][3],
+                                    dest[1][1] * src[1][3]));
+    dest[2][3] = __fnmsubs(dest[2][2], src[2][3],
+                           __fmsubs(-dest[2][0], src[0][3],
+                                    dest[2][1] * src[1][3]));
 }
 
 /// https://decomp.me/scratch/kalJY

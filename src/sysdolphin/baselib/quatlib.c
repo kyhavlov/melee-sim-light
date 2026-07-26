@@ -4,6 +4,7 @@
 
 #include <MSL/math.h>
 #include <MSL/trigf.h>
+#include <MetroTRK/intrinsics.h>
 
 #ifndef MSL_CORE_NATIVE
 inline float sqrtf(float x)
@@ -99,10 +100,17 @@ s32 HSD_QuatLib_8037EC4C(Quaternion* p, Quaternion* q, Quaternion* out)
     f32 z;
     f32 w;
 
-    x = q->w * p->x + p->w * q->x + (p->y * q->z - q->y * p->z);
-    y = q->w * p->y + p->w * q->y + (q->x * p->z - p->x * q->z);
-    z = q->w * p->z + p->w * q->z + (p->x * q->y - q->x * p->y);
-    w = p->w * q->w - (p->z * q->z + (p->x * q->x + p->y * q->y));
+    // GALE01 0x8037EC94-0x8037ECC0: each lane pairs one fmadds (q->w product
+    // fused) with one fmsubs (first cross product fused); w chains fmadds
+    // into the final fmsubs.
+    x = __fmadds(q->w, p->x, p->w * q->x) +
+        __fmsubs(p->y, q->z, q->y * p->z);
+    y = __fmadds(q->w, p->y, p->w * q->y) +
+        __fmsubs(q->x, p->z, p->x * q->z);
+    z = __fmadds(q->w, p->z, p->w * q->z) +
+        __fmsubs(p->x, q->y, q->x * p->y);
+    w = __fmsubs(p->w, q->w,
+                 __fmadds(p->z, q->z, __fmadds(p->x, q->x, p->y * q->y)));
 
     out->x = x;
     out->y = y;
@@ -155,10 +163,12 @@ s32 EulerToQuat(Vec3* euler, Quaternion* q)
 
     ss = sy * sz;
     cc = cy * cz;
-    q->w = cx * cc + sx * ss;
-    q->x = sx * cc - cx * ss;
-    q->y = cz * (cx * sy) + sz * (sx * cy);
-    q->z = sz * (cx * cy) - cz * (sx * sy);
+    // GALE01 0x8037EED0-0x8037EEF0: the first product of each expression
+    // fuses; the second is a pre-rounded fmuls chain.
+    q->w = __fmadds(cx, cc, sx * ss);
+    q->x = __fmsubs(sx, cc, cx * ss);
+    q->y = __fmadds(cz, cx * sy, sz * (sx * cy));
+    q->z = __fmsubs(sz, cx * cy, cz * (sx * sy));
 
     return 0;
 }

@@ -95,7 +95,11 @@ float lbVector_Angle(Vec3* a, Vec3* b)
     float lena_lenb = lbVector_Len(a) * lbVector_Len(b);
 
     if (lena_lenb > 0.0000000001f) {
-        float cosine = (a->x * b->x + a->y * b->y + a->z * b->z) / lena_lenb;
+        // GALE01 0x8000D748/0x8000D750: the x and z dot terms fuse into the
+        // y-product seed via fmadds.
+        float cosine =
+            __fmadds(a->z, b->z, __fmadds(a->x, b->x, a->y * b->y)) /
+            lena_lenb;
         if (cosine > 1.0f) {
             cosine = 1.0f;
         }
@@ -133,27 +137,36 @@ float lbVector_AngleXY(Vec3* a, Vec3* b)
 
 static float lbVector_Sin(float angle)
 {
+    float a3;
+    float a4;
     if (angle > M_PI) {
         angle -= M_TAU;
     } else if (angle < -M_PI) {
         angle += M_TAU;
     }
-    return 0.9878619909286499f * angle -
-           0.15527099370956421f * angle * angle * angle +
-           0.0056429998949170113f * angle * angle * angle * angle * angle;
+    // GALE01 0x8000D9A4-0x8000D9DC (inlined in RotateAboutUnitAxis and
+    // CreateEulerMatrix): the cubic term subtracts via fmsubs with the linear
+    // product fused, and the final a * (c5*a^4) multiply fuses into the sum
+    // via fmadds.
+    a3 = 0.15527099370956421f * angle * angle * angle;
+    a4 = 0.0056429998949170113f * angle * angle * angle * angle;
+    return __fmadds(angle, a4, __fmsubs(0.9878619909286499f, angle, a3));
 }
 
 static float lbVector_Cos(float angle)
 {
+    float a3;
+    float a4;
     angle += M_PI / 2;
     if (angle > M_PI) {
         angle -= M_TAU;
     } else if (angle < -M_PI) {
         angle += M_TAU;
     }
-    return 0.9878619909286499f * angle -
-           0.15527099370956421f * angle * angle * angle +
-           0.0056429998949170113f * angle * angle * angle * angle * angle;
+    // Same fused quintic shape as lbVector_Sin.
+    a3 = 0.15527099370956421f * angle * angle * angle;
+    a4 = 0.0056429998949170113f * angle * angle * angle * angle;
+    return __fmadds(angle, a4, __fmsubs(0.9878619909286499f, angle, a3));
 }
 
 /// 8000D8F4
@@ -179,13 +192,16 @@ void lbVector_RotateAboutUnitAxis(Vec3* v, Vec3* axis, float angle)
     // rotation (1) about the x-axis: rotate everything such that the rotation
     // axis lies in the xz-plane. new v is then (x,y,z), new rotation axis is
     // (b.x, 0, len_axis_yz)
+    // GALE01 0x8000DA64-0x8000DADC: every two-product rotation term below is
+    // an fmadds/fmsubs with the first-listed product fused and the second
+    // pre-rounded (fneg feeds the negated variants).
     if (len_axis_yz > 0.0000000001f) {
         unit_axis_yz_y = axis->z / len_axis_yz;
         unit_axis_yz_z = axis->y / len_axis_yz;
 
         x = v->x;
-        y = v->y * unit_axis_yz_y - v->z * unit_axis_yz_z;
-        z = v->y * unit_axis_yz_z + v->z * unit_axis_yz_y;
+        y = __fmsubs(v->y, unit_axis_yz_y, v->z * unit_axis_yz_z);
+        z = __fmadds(v->y, unit_axis_yz_z, v->z * unit_axis_yz_y);
     } else {
         x = v->x;
         y = v->y;
@@ -194,26 +210,26 @@ void lbVector_RotateAboutUnitAxis(Vec3* v, Vec3* axis, float angle)
 
     // rotation (2) about the y-axis: rotate everything such that the rotation
     // axis aligns with the z-axis new v is then (x2,y2,z2)
-    x2 = x * len_axis_yz - z * axis->x;
+    x2 = __fmsubs(x, len_axis_yz, z * axis->x);
     // y2 = y
-    z2 = x * axis->x + z * len_axis_yz;
+    z2 = __fmadds(x, axis->x, z * len_axis_yz);
 
     // rotate by 'angle' about the z axis, which now aligns with the rotation
     // axis
-    x3 = x2 * c - y * s; // remember that y2=y
-    y3 = x2 * s + y * c;
+    x3 = __fmsubs(x2, c, y * s); // remember that y2=y
+    y3 = __fmadds(x2, s, y * c);
     // z3 = z2
 
     // opposite of rotation (2). We overwrite (x,y,z) with the resulting new v.
-    x = x3 * len_axis_yz + z2 * axis->x; // remember that z3=z2
+    x = __fmadds(x3, len_axis_yz, z2 * axis->x); // remember that z3=z2
     y = y3;
-    z = -x3 * axis->x + z2 * len_axis_yz;
+    z = __fmadds(-x3, axis->x, z2 * len_axis_yz);
 
     // opposite of rotation (1)
     if (len_axis_yz > 0.0000000001f) {
         v->x = x;
-        v->y = y * unit_axis_yz_y + z * unit_axis_yz_z;
-        v->z = -y * unit_axis_yz_z + z * unit_axis_yz_y;
+        v->y = __fmadds(y, unit_axis_yz_y, z * unit_axis_yz_z);
+        v->z = __fmadds(-y, unit_axis_yz_z, z * unit_axis_yz_y);
     } else {
         v->x = x;
         v->y = y;
@@ -478,13 +494,15 @@ void lbVector_CreateEulerMatrix(Mtx m, Quaternion* angles)
     m[2][0] = -sy;
 
     // column 2
-    m[0][1] = cz * sxsy - cx * sz;
-    m[1][1] = sz * sxsy + cx * cz;
+    // GALE01 0x8000E7F4-0x8000E808: the sxsy/cxsy products fuse via
+    // fmadds/fmsubs against the pre-rounded trig products.
+    m[0][1] = __fmsubs(cz, sxsy, cx * sz);
+    m[1][1] = __fmadds(sz, sxsy, cx * cz);
     m[2][1] = sx * cy;
 
     // column 3
-    m[0][2] = cz * cxsy + sx * sz;
-    m[1][2] = sz * cxsy - sx * cz;
+    m[0][2] = __fmadds(cz, cxsy, sx * sz);
+    m[1][2] = __fmsubs(sz, cxsy, sx * cz);
     m[2][2] = cx * cy;
 
     // column 4 - no translational component

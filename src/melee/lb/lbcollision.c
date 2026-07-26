@@ -275,8 +275,12 @@ float lbColl_80005EBC(const Vec3* arg0, const Vec3* arg1, const Vec3* arg2,
     d2.y = sp50.y - sp38.y;
     d2.z = sp50.z - sp38.z;
 
-    d1_dot_d1 = d1.x * d1.x + d1.y * d1.y + d1.z * d1.z;
-    d1_dot_d2 = d1.x * d2.x + d1.y * d2.y + d1.z * d2.z;
+    // GALE01 lbColl_80005EBC 0x80005F08-0x80005FB4: MWCC fuses the x/z terms
+    // of both dot products, the per-axis closest-point lerps, and the x/z
+    // terms of the returned squared distance into fmadds (y products seed the
+    // chains as plain fmuls).
+    d1_dot_d1 = __fmadds(d1.z, d1.z, __fmadds(d1.x, d1.x, d1.y * d1.y));
+    d1_dot_d2 = __fmadds(d1.z, d2.z, __fmadds(d1.x, d2.x, d1.y * d2.y));
 
     scale = -d1_dot_d2 / d1_dot_d1;
     if (scale > lbColl_804D7A00) {
@@ -285,12 +289,12 @@ float lbColl_80005EBC(const Vec3* arg0, const Vec3* arg1, const Vec3* arg2,
         scale = lbColl_804D79F8;
     }
 
-    x = d1.x * scale + sp50.x - arg2->x;
-    y = d1.y * scale + sp50.y - arg2->y;
-    z = d1.z * scale + sp50.z - arg2->z;
+    x = __fmadds(d1.x, scale, sp50.x) - arg2->x;
+    y = __fmadds(d1.y, scale, sp50.y) - arg2->y;
+    z = __fmadds(d1.z, scale, sp50.z) - arg2->z;
 
     *arg3 = scale;
-    return x * x + y * y + z * z;
+    return __fmadds(z, z, __fmadds(x, x, y * y));
 }
 
 float lbColl_80005FC0(Vec3* arg0, Vec3* arg1, Vec3* arg2, float* arg3)
@@ -314,8 +318,10 @@ float lbColl_80005FC0(Vec3* arg0, Vec3* arg1, Vec3* arg2, float* arg3)
     d2.x = sp50.x - sp38.x;
     d2.y = sp50.y - sp38.y;
 
-    d1_dot_d1 = d1.x * d1.x + d1.y * d1.y;
-    d1_dot_d2 = d1.x * d2.x + d1.y * d2.y;
+    // GALE01 lbColl_80005FC0 0x80006008-0x80006088: same fmadds shapes as
+    // lbColl_80005EBC, 2D (y products seed, x terms fuse).
+    d1_dot_d1 = __fmadds(d1.x, d1.x, d1.y * d1.y);
+    d1_dot_d2 = __fmadds(d1.x, d2.x, d1.y * d2.y);
 
     scale = -d1_dot_d2 / d1_dot_d1;
     if (scale > lbColl_804D7A00) {
@@ -324,11 +330,11 @@ float lbColl_80005FC0(Vec3* arg0, Vec3* arg1, Vec3* arg2, float* arg3)
         scale = lbColl_804D79F8;
     }
 
-    x = d1.x * scale + sp50.x - arg2->x;
-    y = d1.y * scale + sp50.y - arg2->y;
+    x = __fmadds(d1.x, scale, sp50.x) - arg2->x;
+    y = __fmadds(d1.y, scale, sp50.y) - arg2->y;
 
     *arg3 = scale;
-    return x * x + y * y;
+    return __fmadds(x, x, y * y);
 }
 
 inline bool end(Vec3* a, Vec3* b, float unk_sum)
@@ -1094,7 +1100,11 @@ bool lbColl_80006E58(Vec3* hit_start, Vec3* hit_end, Vec3* hurt_start,
 
     // Fast reject when the expanded hit segment AABB misses both hurt
     // endpoints.
-    broadphase_radius = (hurt_radius * broadphase_scale) + hit_radius;
+    // GALE01 lbColl_80006E58: MWCC compiles 37 of this function's
+    // multiply-adds to single-precision fused ops (fmadds/fmsubs). Each
+    // __fmadds/__fmsubs below cites its retail instruction address.
+    // GALE01 0x80006E80 fmadds
+    broadphase_radius = __fmadds(hurt_radius, broadphase_scale, hit_radius);
     hit_start_copy = *hit_start;
     hurt_start_copy = *hurt_start;
     hit_end_x = hit_end->x;
@@ -1195,26 +1205,32 @@ block_39:
     (void) hurt_end_z;
     start_delta_x = hit_start_copy.x - hurt_start_copy.x;
     hurt_delta_z = hurt_end_z - hurt_start_copy.z;
-    segment_dot = (hit_delta.x * hurt_delta_x) + segment_dot;
+    // GALE01 0x80007130 fmadds
+    segment_dot = __fmadds(hit_delta.x, hurt_delta_x, segment_dot);
     /* Cache 1.0 constant in a callee-save to avoid reloading it across the
      * several `hit_param = 1.0` / `hurt_param = 1.0` branches below. The
      * variable name is a borrow from the unused-after-broadphase-rejection
      * slot. */
     hit_start_min_z = lbColl_804D7A08;
-    hurt_len_sq = (hurt_delta_x * hurt_delta_x) + hurt_len_sq;
-    segment_dot = (hit_delta.z * hurt_delta_z) + segment_dot;
-    hurt_len_sq = (hurt_delta_z * hurt_delta_z) + hurt_len_sq;
+    // GALE01 0x80007134/0x80007140/0x80007144 fmadds
+    hurt_len_sq = __fmadds(hurt_delta_x, hurt_delta_x, hurt_len_sq);
+    segment_dot = __fmadds(hit_delta.z, hurt_delta_z, segment_dot);
+    hurt_len_sq = __fmadds(hurt_delta_z, hurt_delta_z, hurt_len_sq);
     hit_start_mid_z = hit_delta.z * hit_delta.z;
     start_delta_z = hit_start_copy.z - hurt_start_copy.z;
     hit_len_sq = hit_start_mid_x + hit_start_mid_y;
     hit_len_sq = hit_start_mid_z + hit_len_sq;
     hit_start_dot = hit_delta.y * start_delta_y;
-    hit_start_dot = (hit_delta.x * start_delta_x) + hit_start_dot;
+    // GALE01 0x80007160-0x80007174: the x/z dot terms are fmadds and the
+    // denominator is fmsubs of the fused len product minus the pre-rounded
+    // segment_dot square.
+    hit_start_dot = __fmadds(hit_delta.x, start_delta_x, hit_start_dot);
     hurt_start_dot =
-        (hurt_delta_y * start_delta_y) + (hurt_delta_x * start_delta_x);
-    hit_start_dot = (hit_delta.z * start_delta_z) + hit_start_dot;
-    hurt_start_dot = (hurt_delta_z * start_delta_z) + hurt_start_dot;
-    closest_denom = (hit_len_sq * hurt_len_sq) - (segment_dot * segment_dot);
+        __fmadds(hurt_delta_x, start_delta_x, hurt_delta_y * start_delta_y);
+    hit_start_dot = __fmadds(hit_delta.z, start_delta_z, hit_start_dot);
+    hurt_start_dot = __fmadds(hurt_delta_z, start_delta_z, hurt_start_dot);
+    closest_denom = __fmsubs(hit_len_sq, hurt_len_sq,
+                             segment_dot * segment_dot);
     if ((hurt_len_sq < lbColl_804D79F0) && (hurt_len_sq > lbColl_804D79F4)) {
         is_hurt_segment_degenerate = 1;
     } else {
@@ -1262,12 +1278,14 @@ block_39:
             hit_end_mid_x = hit_end->x - hurt_mid_x;
             hit_start_mid_z = hit_start_copy.z - hurt_mid_z;
             hit_end_mid_z = hit_end->z - hurt_mid_z;
-            if (((hit_start_mid_z * hit_start_mid_z) +
-                 ((hit_start_mid_x * hit_start_mid_x) +
-                  (hit_start_mid_y * hit_start_mid_y))) <
-                ((hit_end_mid_z * hit_end_mid_z) +
-                 ((hit_end_mid_x * hit_end_mid_x) +
-                  (hit_end_mid_y * hit_end_mid_y))))
+            // GALE01 0x80007280-0x80007290 fmadds (y squares seed the
+            // chains).
+            if (__fmadds(hit_start_mid_z, hit_start_mid_z,
+                         __fmadds(hit_start_mid_x, hit_start_mid_x,
+                                  hit_start_mid_y * hit_start_mid_y)) <
+                __fmadds(hit_end_mid_z, hit_end_mid_z,
+                         __fmadds(hit_end_mid_x, hit_end_mid_x,
+                                  hit_end_mid_y * hit_end_mid_y)))
             {
                 Vec3 a2;
                 Vec3 d1;
@@ -1281,12 +1299,13 @@ block_39:
                     float dot;
 
                     a2 = *hit_start;
-                    dot = (d1.z * (c3.z - a2.z)) +
-                          ((d1.x * (c3.x - a2.x)) + (d1.y * (c3.y - a2.y)));
-                    hit_end_mid_x = d1.x * d1.x;
+                    // GALE01 0x800072EC-0x80007324 fmadds
+                    dot = __fmadds(d1.z, c3.z - a2.z,
+                                   __fmadds(d1.x, c3.x - a2.x,
+                                            d1.y * (c3.y - a2.y)));
                     hurt_param_from_hit_start =
-                        -dot /
-                        ((d1.z * d1.z) + (hit_end_mid_x + (d1.y * d1.y)));
+                        -dot / __fmadds(d1.z, d1.z,
+                                        __fmadds(d1.x, d1.x, d1.y * d1.y));
                 }
                 if (hurt_param_from_hit_start > lbColl_804D7A00) {
                     hurt_param_from_hit_start = hit_start_min_z;
@@ -1307,11 +1326,13 @@ block_39:
                     float dot;
 
                     b0 = *hit_end;
-                    dot = (d1.z * (c2.z - b0.z)) +
-                          ((d1.x * (c2.x - b0.x)) + (d1.y * (c2.y - b0.y)));
+                    // GALE01 0x800073A8-0x800073E0 fmadds
+                    dot = __fmadds(d1.z, c2.z - b0.z,
+                                   __fmadds(d1.x, c2.x - b0.x,
+                                            d1.y * (c2.y - b0.y)));
                     hurt_param_from_hit_end =
-                        -dot /
-                        ((d1.z * d1.z) + ((d1.x * d1.x) + (d1.y * d1.y)));
+                        -dot / __fmadds(d1.z, d1.z,
+                                        __fmadds(d1.x, d1.x, d1.y * d1.y));
                 }
                 if (hurt_param_from_hit_end > lbColl_804D7A00) {
                     hurt_param_from_hit_end = hit_param;
@@ -1321,12 +1342,15 @@ block_39:
                 hurt_param = hurt_param_from_hit_end;
             }
         } else {
+            // GALE01 0x80007420/0x80007424 fmsubs (the *hit_start_dot
+            // products are pre-rounded fmuls seeds).
             hit_param =
-                (hit_param_candidate = ((segment_dot * hurt_start_dot) -
-                                        (hurt_len_sq * hit_start_dot)) /
-                                       closest_denom);
-            hurt_param = ((hit_len_sq * hurt_start_dot) -
-                          (segment_dot * hit_start_dot)) /
+                (hit_param_candidate =
+                     __fmsubs(segment_dot, hurt_start_dot,
+                              hurt_len_sq * hit_start_dot) /
+                     closest_denom);
+            hurt_param = __fmsubs(hit_len_sq, hurt_start_dot,
+                                  segment_dot * hit_start_dot) /
                          closest_denom;
             if ((hit_param_candidate > lbColl_804D7A00) ||
                 (hit_param < lbColl_804D7A10) ||
@@ -1370,22 +1394,45 @@ block_39:
             }
         }
     }
-    hit_closest->x = (hit_delta.x * hit_param) + hit_start_copy.x;
-    hit_closest->y = (hit_delta.y * hit_param) + hit_start_copy.y;
-    hit_closest->z = (hit_delta.z * hit_param) + hit_start_copy.z;
-    hurt_closest->x = (hurt_delta_x * hurt_param) + hurt_start_copy.x;
-    hurt_closest->y = (hurt_delta_y * hurt_param) + hurt_start_copy.y;
-    hurt_closest->z = (hurt_delta_z * hurt_param) + hurt_start_copy.z;
+    // GALE01 0x80007500-0x80007538 fmadds (per-axis closest-point lerps) and
+    // 0x80007574/0x80007578 fmadds (squared distance, y seed).
+    hit_closest->x = __fmadds(hit_delta.x, hit_param, hit_start_copy.x);
+    hit_closest->y = __fmadds(hit_delta.y, hit_param, hit_start_copy.y);
+    hit_closest->z = __fmadds(hit_delta.z, hit_param, hit_start_copy.z);
+    hurt_closest->x = __fmadds(hurt_delta_x, hurt_param, hurt_start_copy.x);
+    hurt_closest->y = __fmadds(hurt_delta_y, hurt_param, hurt_start_copy.y);
+    hurt_closest->z = __fmadds(hurt_delta_z, hurt_param, hurt_start_copy.z);
     closest_delta_y = hit_closest->y - hurt_closest->y;
     closest_delta_x = hit_closest->x - hurt_closest->x;
     closest_delta_z = hit_closest->z - hurt_closest->z;
-    closest_dist_sq = (closest_delta_z * closest_delta_z) +
-                      ((closest_delta_x * closest_delta_x) +
-                       (closest_delta_y * closest_delta_y));
+    closest_dist_sq =
+        __fmadds(closest_delta_z, closest_delta_z,
+                 __fmadds(closest_delta_x, closest_delta_x,
+                          closest_delta_y * closest_delta_y));
     if (closest_dist_sq > lbColl_804D79F8) {
         volatile float sp38;
 
         closest_rsqrt_estimate = __frsqrte(closest_dist_sq);
+#ifdef MSL_CORE_HOSTED
+        // GALE01 0x8000759C/0x800075AC/0x800075BC: each Newton step's
+        // x * e^2 - 3.0 is a double fnmsub (single rounding).
+        closest_rsqrt_step1 =
+            (lbColl_804D7A18 * closest_rsqrt_estimate) *
+            __builtin_fma(-(f64) closest_dist_sq,
+                          closest_rsqrt_estimate * closest_rsqrt_estimate,
+                          lbColl_804D7A20);
+        closest_rsqrt_step2 =
+            (lbColl_804D7A18 * closest_rsqrt_step1) *
+            __builtin_fma(-(f64) closest_dist_sq,
+                          closest_rsqrt_step1 * closest_rsqrt_step1,
+                          lbColl_804D7A20);
+        sp38 = (float) ((f64) closest_dist_sq *
+                        ((lbColl_804D7A18 * closest_rsqrt_step2) *
+                         __builtin_fma(
+                             -(f64) closest_dist_sq,
+                             closest_rsqrt_step2 * closest_rsqrt_step2,
+                             lbColl_804D7A20)));
+#else
         closest_rsqrt_step1 =
             lbColl_804D7A18 * closest_rsqrt_estimate *
             -(((f64) closest_dist_sq *
@@ -1400,6 +1447,7 @@ block_39:
                          -(((f64) closest_dist_sq *
                             (closest_rsqrt_step2 * closest_rsqrt_step2)) -
                            lbColl_804D7A20)));
+#endif
         closest_dist = sp38;
     } else {
         closest_dist = closest_dist_sq;
@@ -1422,13 +1470,33 @@ block_39:
     local_delta_y = hit_start_copy.y - hit_delta.y;
     local_delta_x = hit_start_copy.x - hit_delta.x;
     local_delta_z = hit_start_copy.z - hit_delta.z;
-    local_dist_sq =
-        (local_delta_z * local_delta_z) +
-        ((local_delta_x * local_delta_x) + (local_delta_y * local_delta_y));
+    // GALE01 0x8000768C/0x80007690 fmadds
+    local_dist_sq = __fmadds(local_delta_z, local_delta_z,
+                             __fmadds(local_delta_x, local_delta_x,
+                                      local_delta_y * local_delta_y));
     if (local_dist_sq > lbColl_804D79F8) {
         volatile float sp34;
 
         local_rsqrt_estimate = __frsqrte(local_dist_sq);
+#ifdef MSL_CORE_HOSTED
+        // GALE01 0x800076B4/0x800076C4/0x800076D4: fused fnmsub Newton steps
+        // as above.
+        local_rsqrt_step1 =
+            (lbColl_804D7A18 * local_rsqrt_estimate) *
+            __builtin_fma(-(f64) local_dist_sq,
+                          local_rsqrt_estimate * local_rsqrt_estimate,
+                          lbColl_804D7A20);
+        local_rsqrt_step2 =
+            (lbColl_804D7A18 * local_rsqrt_step1) *
+            __builtin_fma(-(f64) local_dist_sq,
+                          local_rsqrt_step1 * local_rsqrt_step1,
+                          lbColl_804D7A20);
+        sp34 = (float) ((f64) local_dist_sq *
+                        ((lbColl_804D7A18 * local_rsqrt_step2) *
+                         __builtin_fma(-(f64) local_dist_sq,
+                                       local_rsqrt_step2 * local_rsqrt_step2,
+                                       lbColl_804D7A20)));
+#else
         local_rsqrt_step1 = lbColl_804D7A18 * local_rsqrt_estimate *
                             -(((f64) local_dist_sq *
                                (local_rsqrt_estimate * local_rsqrt_estimate)) -
@@ -1442,6 +1510,7 @@ block_39:
                          -(((f64) local_dist_sq *
                             (local_rsqrt_step2 * local_rsqrt_step2)) -
                            lbColl_804D7A20)));
+#endif
         local_dist = sp34;
     } else {
         local_dist = local_dist_sq;
@@ -1451,14 +1520,15 @@ block_39:
     allowed_distance = hit_radius + scaled_hurt_radius;
     hurt_closest_x = hurt_closest->x;
     *out_overlap = allowed_distance - closest_dist;
-    out_contact_pos->x =
-        (contact_lerp * (hit_closest->x - hurt_closest_x)) + hurt_closest_x;
+    // GALE01 0x8000771C/0x80007730/0x80007744 fmadds
+    out_contact_pos->x = __fmadds(
+        contact_lerp, hit_closest->x - hurt_closest_x, hurt_closest_x);
     hurt_closest_y = hurt_closest->y;
-    out_contact_pos->y =
-        (contact_lerp * (hit_closest->y - hurt_closest_y)) + hurt_closest_y;
+    out_contact_pos->y = __fmadds(
+        contact_lerp, hit_closest->y - hurt_closest_y, hurt_closest_y);
     hurt_closest_z = hurt_closest->z;
-    out_contact_pos->z =
-        (contact_lerp * (hit_closest->z - hurt_closest_z)) + hurt_closest_z;
+    out_contact_pos->z = __fmadds(
+        contact_lerp, hit_closest->z - hurt_closest_z, hurt_closest_z);
     if (allowed_distance < closest_dist) {
         return 0;
     }

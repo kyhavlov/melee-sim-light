@@ -230,12 +230,27 @@ void lb_8000FD48(HSD_JObj* jobj, DynamicsDesc* desc, size_t max_count)
             dx = prev->desc.lb_unk0.unk_2C.x - next->desc.lb_unk0.unk_2C.x;
             dy = prev->desc.lb_unk0.unk_2C.y - next->desc.lb_unk0.unk_2C.y;
             dz = prev->desc.lb_unk0.unk_2C.z - next->desc.lb_unk0.unk_2C.z;
-            if ((dist_sq = dz * dz + (dx * dx + dy * dy)) > 0.0f) {
+            // GALE01 0x8000FFA8/0x8000FFAC fmadds (y-square seeds)
+            if ((dist_sq = __fmadds(dz, dz, __fmadds(dx, dx, dy * dy))) >
+                0.0f) {
                 volatile float y;
+#ifdef MSL_CORE_HOSTED
+                // GALE01 sqrtf inline: fused fnmsub Newton steps (see
+                // runtime/ppc_sqrt.c).
+                double xd = (double) dist_sq;
+                double guess = __frsqrte(xd);
+                guess = (.5 * guess) *
+                        __builtin_fma(-xd, guess * guess, 3.0);
+                guess = (.5 * guess) *
+                        __builtin_fma(-xd, guess * guess, 3.0);
+                guess = (.5 * guess) *
+                        __builtin_fma(-xd, guess * guess, 3.0);
+#else
                 double guess = __frsqrte((double) dist_sq);
                 guess = .5 * guess * (3.0 - guess * guess * dist_sq);
                 guess = .5 * guess * (3.0 - guess * guess * dist_sq);
                 guess = .5 * guess * (3.0 - guess * guess * dist_sq);
+#endif
                 y = (float) (dist_sq * guess);
                 dist_sq = y;
             }
@@ -343,9 +358,10 @@ void lb_800101C8(Vec3* arg0, Vec3* arg1)
         if (var_r30->x0 == 1) {
             if (arg0->x > var_r30->x10 && arg0->x < var_r30->x18) {
                 if (arg0->y < var_r30->x14 && arg0->y > var_r30->x1C) {
-                    arg1->x += var_r30->x4.x * scale0;
-                    arg1->y += var_r30->x4.y * scale0;
-                    arg1->z += var_r30->x4.z * scale0;
+                    // GALE01 0x800102B0-0x800102D0 fmadds
+                    arg1->x = __fmadds(var_r30->x4.x, scale0, arg1->x);
+                    arg1->y = __fmadds(var_r30->x4.y, scale0, arg1->y);
+                    arg1->z = __fmadds(var_r30->x4.z, scale0, arg1->z);
                 }
             }
         } else {
@@ -360,9 +376,11 @@ void lb_800101C8(Vec3* arg0, Vec3* arg1)
                     var_f0 = 1.0f;
                 }
                 scale1 = 1.0 / (var_f0 * var_f0);
-                arg1->x += scale1 * (delta.x * scale0);
-                arg1->y += scale1 * (delta.y * scale0);
-                arg1->z += scale1 * (delta.z * scale0);
+                // GALE01 0x80010340-0x80010368 fmadds (delta*scale0
+                // pre-rounded fmuls)
+                arg1->x = __fmadds(scale1, delta.x * scale0, arg1->x);
+                arg1->y = __fmadds(scale1, delta.y * scale0, arg1->y);
+                arg1->z = __fmadds(scale1, delta.z * scale0, arg1->z);
             }
         }
     }
@@ -386,7 +404,8 @@ bool lb_800103D8(Vec3* vec, float x0, float x1, float x2, float x3,
         return false;
     }
     if ((double) dist0 > 0.0 && (double) dist1 < 0.0) {
-        vec->x = -dist1 / (dist0 - dist1) * (x0 - x2) + x2;
+        // GALE01 0x80010428 fmadds
+        vec->x = __fmadds(-dist1 / (dist0 - dist1), x0 - x2, x2);
         vec->y = offset;
         vec->z = 0.0f;
         return true;
@@ -745,12 +764,13 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
                         Vec3 coll_dir;
                         f32 bone_len = cur->desc.lb_unk0.unk_48;
                         Vec3 next_bone_pos;
-                        next_bone_pos.x =
-                            link_dir.x * bone_len + cur->desc.lb_unk0.unk_2C.x;
-                        next_bone_pos.y =
-                            link_dir.y * bone_len + cur->desc.lb_unk0.unk_2C.y;
-                        next_bone_pos.z =
-                            link_dir.z * bone_len + cur->desc.lb_unk0.unk_2C.z;
+                        // GALE01 0x80010AE4-0x80010B0C fmadds
+                        next_bone_pos.x = __fmadds(link_dir.x, bone_len,
+                                                   cur->desc.lb_unk0.unk_2C.x);
+                        next_bone_pos.y = __fmadds(link_dir.y, bone_len,
+                                                   cur->desc.lb_unk0.unk_2C.y);
+                        next_bone_pos.z = __fmadds(link_dir.z, bone_len,
+                                                   cur->desc.lb_unk0.unk_2C.z);
 
                         coll_dir.x =
                             collider->position.x - cur->desc.lb_unk0.unk_2C.x;
@@ -778,8 +798,10 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
                                 if (0.0 != coll_angle) {
                                     f32 adj_radius =
                                         (f32) (0.1 + (f64) collider->radius);
-                                    f32 side_sq = coll_dist * coll_dist -
-                                                  adj_radius * adj_radius;
+                                    // GALE01 0x80010C04 fmsubs
+                                    f32 side_sq =
+                                        __fmsubs(coll_dist, coll_dist,
+                                                 adj_radius * adj_radius);
                                     if (side_sq > 0.0f) {
                                         side_sq = sqrtf(side_sq);
                                     }
@@ -813,10 +835,11 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
                     lbVector_Normalize(&link_dir);
                     {
                         f32 bone_len = cur->desc.lb_unk0.unk_48;
-                        f32 end_x =
-                            link_dir.x * bone_len + cur->desc.lb_unk0.unk_2C.x;
-                        f32 end_y =
-                            link_dir.y * bone_len + cur->desc.lb_unk0.unk_2C.y;
+                        // GALE01 0x80010CF8/0x80010CFC fmadds
+                        f32 end_x = __fmadds(link_dir.x, bone_len,
+                                             cur->desc.lb_unk0.unk_2C.x);
+                        f32 end_y = __fmadds(link_dir.y, bone_len,
+                                             cur->desc.lb_unk0.unk_2C.y);
                         s32 floor_hit;
                         if (use_floor_fn != 0) {
                             floor_hit = lb_800103D8(
@@ -872,10 +895,11 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
                             link_dir = gnd_norm;
                         } else {
                             f32 bone_len = cur->desc.lb_unk0.unk_48;
-                            f32 end_x2 = link_dir.x * bone_len +
-                                         cur->desc.lb_unk0.unk_2C.x;
-                            f32 end_y2 = link_dir.y * bone_len +
-                                         cur->desc.lb_unk0.unk_2C.y;
+                            // GALE01 0x80010EC4/0x80010EC8 fmadds
+                            f32 end_x2 = __fmadds(link_dir.x, bone_len,
+                                                  cur->desc.lb_unk0.unk_2C.x);
+                            f32 end_y2 = __fmadds(link_dir.y, bone_len,
+                                                  cur->desc.lb_unk0.unk_2C.y);
                             s32 floor_hit3;
                             if (use_floor_fn != 0) {
                                 floor_hit3 = lb_800103D8(
@@ -898,8 +922,9 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
                                 if (height_diff < 0.0f) {
                                     height_diff = -height_diff;
                                 }
-                                horiz_sq = -(height_diff * height_diff -
-                                             bone_len * bone_len);
+                                // GALE01 0x80010F3C fnmsubs
+                                horiz_sq = __fnmsubs(height_diff, height_diff,
+                                                     bone_len * bone_len);
                                 if (horiz_sq > 0.0f) {
                                     horiz_sq = sqrtf(horiz_sq);
                                 }
