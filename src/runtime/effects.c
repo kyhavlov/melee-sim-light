@@ -120,6 +120,7 @@ static void msl_effect_load_bank(MslCoreEffectData* data, int bank,
     case 0:
         effect_bank->count = command_bank[1];
         effect_bank->commands = (HSD_PSCmdList**) (command_bank + 2);
+        effect_bank->id_base = 0;
         break;
     case 0x40:
     case 0x41:
@@ -128,6 +129,7 @@ static void msl_effect_load_bank(MslCoreEffectData* data, int bank,
         effect_bank->count = command_bank[1] + command_bank[2];
         effect_bank->commands =
             (HSD_PSCmdList**) (command_bank + 3 - command_bank[1]);
+        effect_bank->id_base = command_bank[1];
         break;
     default:
         fprintf(stderr, "%s has unsupported particle command version %x\n",
@@ -223,7 +225,15 @@ static void msl_effect_consume_generator_rng(s32 generator_id)
         return;
     }
     data = &msl_effect_banks[bank];
-    if (index < 0 || index >= data->count || data->commands == NULL)
+    // Version-0x4x per-character banks store commands indexed by the full
+    // generator id: only [id_base, count) exists in the archive. The native
+    // translation exposes a dense array whose entries below id_base are NULL,
+    // and the recorded corpus is bit-exact with those lookups consuming
+    // nothing; mirror that boundary here instead of walking off the front of
+    // the source command table (the PPC oracle crashed dereferencing that
+    // garbage on Fox's 0xBC0 reflector generator).
+    if (index < data->id_base || index >= data->count ||
+        data->commands == NULL)
     {
         return;
     }
