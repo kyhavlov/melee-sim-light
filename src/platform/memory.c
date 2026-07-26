@@ -294,7 +294,7 @@ void* msl_memory_alloc(MslMemoryContext* context, size_t size)
                 context->owner, context->sealed, size, context->used,
                 context->capacity, context->allocation_count,
                 context->allocation_capacity);
-        abort();
+abort();
     }
     result = context->arena + aligned_used;
     context->used = aligned_used + size;

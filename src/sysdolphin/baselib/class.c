@@ -342,7 +342,7 @@ void hsdFreeMemPiece(void* mem, s32 size)
 
 void hsdPreallocateMemPieces(u32 minimum_free)
 {
-    enum { MAXIMUM_RESERVE = 128 };
+    enum { MAXIMUM_RESERVE = 256 };
     void* pieces[MAXIMUM_RESERVE];
     s32 size_class_count = nb_memory_list;
     s32 i;

@@ -1168,9 +1168,12 @@ static int match_construct(MslCoreMatch* match,
     // reserve while the Match arena is sealed.
     // hsdPreallocateMemPieces skips every size class not reached by this
     // Match, so this does not restore the former all-class slab reserve.
-    // refs/melee/src/melee/it/items/itpeachturnip.c
+    // Samus's ground grapple-grab doubles the beam link count
+    // (itsamusgrapple.c::it_802B75FC), and each link loads a jobj graph, so
+    // the deepest supported spawn crosses the former 128-piece reserve.
+    // refs/melee/src/melee/it/items/{itpeachturnip.c,itsamusgrapple.c}
     // refs/melee/src/sysdolphin/baselib/{class.c,jobj.c}
-    hsdPreallocateMemPieces(128);
+    hsdPreallocateMemPieces(256);
 
     // This Match's source allocation pools are complete. Shared DAT graphs
     // are sealed once, after GameData has preloaded the supported domain;
