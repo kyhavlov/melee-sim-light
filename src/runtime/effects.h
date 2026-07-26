@@ -38,6 +38,10 @@ typedef struct MslCoreEffectGeneratorBank {
     HSD_PSCmdList** commands;
     EF_EffectDesc* models;
     s32 count;
+    // Version-0x4x command banks index entries by the full generator id: the
+    // first header word is the bank's id base and only [id_base, count) exist
+    // in the archive. Version-0 banks have id_base 0.
+    s32 id_base;
 } MslCoreEffectGeneratorBank;
 
 typedef struct MslCoreEffectData {
