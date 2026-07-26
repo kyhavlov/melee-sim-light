@@ -359,6 +359,21 @@
      "render_visibility_mismatch_count": 16,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 2494
+    },
+    "ppc": {
+     "exact_prefix_frames": 691,
+     "first_mismatch_frame": 569,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 9210,
+     "last_mismatch_frame": 6593,
+     "matched_frames": 9189,
+     "mismatch_count": 21,
+     "mismatch_fields_digest": "c90aee9269c99f8f97ead9678994c648ba9f9020362fb48a61fb8a96412ea7f6",
+     "mismatch_fingerprint": "6bcdc403995499ed",
+     "mismatched_frames": 21,
+     "render_visibility_mismatch_count": 11,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 2494
     }
    }
   },
@@ -388,7 +403,8 @@
      "render_visibility_mismatch_count": 0,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 2102
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -804,7 +820,8 @@
      "render_visibility_mismatch_count": 3,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 2622
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -2092,6 +2109,21 @@
      "render_visibility_mismatch_count": 1,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 5350
+    },
+    "ppc": {
+     "exact_prefix_frames": 1826,
+     "first_mismatch_frame": 1704,
+     "first_render_visibility_mismatch_frame": 8834,
+     "frames": 9014,
+     "last_mismatch_frame": 3544,
+     "matched_frames": 8895,
+     "mismatch_count": 176,
+     "mismatch_fields_digest": "f783ccaa47757cb3f4f7400ede4f91f7d75131e0b33616bd2cf3c156f4f8eca0",
+     "mismatch_fingerprint": "e1db2d7ad5a6c984",
+     "mismatched_frames": 119,
+     "render_visibility_mismatch_count": 1,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 5347
     }
    }
   },
@@ -2373,6 +2405,21 @@
      "mismatch_fields_digest": "000e0209a3cbcf334e60cd71c7199e182771b10cc7af03fbb0243182c0889b6b",
      "mismatch_fingerprint": "4c5004c1affcbd34",
      "mismatched_frames": 87,
+     "render_visibility_mismatch_count": 3,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 1107
+    },
+    "ppc": {
+     "exact_prefix_frames": 1087,
+     "first_mismatch_frame": 965,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 10703,
+     "last_mismatch_frame": 9473,
+     "matched_frames": 10573,
+     "mismatch_count": 173,
+     "mismatch_fields_digest": "80ba293f96c22e4da1f3b4fa3b6fbfdc8c58695dc59cfd5a4d7e21d334a06c32",
+     "mismatch_fingerprint": "c47ed7c0d2418cab",
+     "mismatched_frames": 130,
      "render_visibility_mismatch_count": 3,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 1107

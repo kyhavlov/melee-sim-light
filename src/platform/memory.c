@@ -29,9 +29,10 @@ enum {
     MSL_MEMORY_MATCH_BYTES = 3 * 1024 * 1024,
 #else
     // 8 MiB filled up when the twelfth character (Dr. Mario) joined the
-    // supported roster; the oracle arena is host memory, not a GameCube
-    // budget.
-    MSL_MEMORY_MATCH_BYTES = 12 * 1024 * 1024,
+    // supported roster, and 12 MiB failed a 2.1 MiB construction allocation
+    // on four-fighter doubles; the oracle arena is host memory, not a
+    // GameCube budget.
+    MSL_MEMORY_MATCH_BYTES = 20 * 1024 * 1024,
 #endif
 };
 
