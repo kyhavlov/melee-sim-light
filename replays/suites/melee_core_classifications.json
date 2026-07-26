@@ -279,34 +279,6 @@
    }
   },
   {
-   "replay": "replays/validation/doubles_recent/Game_20260704T004613.slpz",
-   "id": "doubles-dolphin-ulp-motion-profile",
-   "owner": "fighter position float execution profile",
-   "rationale": "The complete residual is nine isolated ULP-scale fighter-position rows. PPC and native agree on the exact fingerprint, and 2,540 strict transitions follow. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
-   "sources": [
-    "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-    "refs/melee/src/sysdolphin/baselib/mtx.c"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 2775,
-     "first_mismatch_frame": 2653,
-     "first_render_visibility_mismatch_frame": -122,
-     "frames": 10410,
-     "last_mismatch_frame": 7747,
-     "matched_frames": 10404,
-     "mismatch_count": 6,
-     "mismatch_fields_digest": "bb8221930431821871f1ce76fe122630353be672bd670aa468774e3d883e6bc8",
-     "mismatch_fingerprint": "3be9b1ed10aaa134",
-     "mismatched_frames": 6,
-     "render_visibility_mismatch_count": 12,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 2540
-    },
-    "ppc": "native"
-   }
-  },
-  {
    "replay": "replays/validation/doubles_recent/Game_20260704T005147.slpz",
    "id": "doubles-dolphin-ulp-needle-pose-profile",
    "owner": "Sheik thrown-needle historical-pose publication",
@@ -363,38 +335,10 @@
    }
   },
   {
-   "replay": "replays/validation/doubles_recent/Game_20260704T011852.slpz",
-   "id": "doubles-dolphin-ulp-motion-profile",
-   "owner": "fighter position float execution profile",
-   "rationale": "The complete residual is one isolated one-ULP fighter X-position row. PPC and native agree exactly, and 332 strict transitions follow.",
-   "sources": [
-    "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-    "refs/melee/src/sysdolphin/baselib/mtx.c"
-   ],
-   "expected": {
-    "native": {
-     "frames": 7438,
-     "matched_frames": 7437,
-     "mismatched_frames": 1,
-     "exact_prefix_frames": 7105,
-     "strict_suffix_frames": 332,
-     "first_mismatch_frame": 6983,
-     "last_mismatch_frame": 6983,
-     "mismatch_count": 1,
-     "mismatch_fingerprint": "56046b40171f2e65",
-     "mismatch_fields_digest": "34b2f92d1527a5c20888b672a0f0edecb9630b52092018183e20457e74629126",
-     "render_visibility_mismatch_count": 1,
-     "first_render_visibility_mismatch_frame": 1074,
-     "signed_zero_equal_count": 0
-    },
-    "ppc": "native"
-   }
-  },
-  {
    "replay": "replays/validation/doubles_recent/Game_20260704T012353.slpz",
    "id": "hosted-backend-float-execution-profile",
    "owner": "fighter, article, and matrix float execution profile",
-   "rationale": "Both source runtimes have bounded ULP-scale residuals and the same 2,494-transition exact suffix, but native exposes a broader set of fighter/article float fields than PPC. The backend-specific complete snapshots preserve that compiler/runtime boundary without applying a tolerance or changing gameplay. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding.",
+   "rationale": "Both source runtimes have bounded ULP-scale residuals and the same 2,494-transition exact suffix, but native exposes a broader set of fighter/article float fields than PPC. The backend-specific complete snapshots preserve that compiler/runtime boundary without applying a tolerance or changing gameplay. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. The prior PPC snapshot predates these deltas and was retired pending a qemu re-record.",
    "sources": [
     "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
     "refs/melee/src/sysdolphin/baselib/mtx.c",
@@ -407,26 +351,11 @@
      "first_render_visibility_mismatch_frame": -122,
      "frames": 9210,
      "last_mismatch_frame": 6593,
-     "matched_frames": 8845,
-     "mismatch_count": 1338,
-     "mismatch_fields_digest": "13b3ead696f92f5d2c8ab91ea33d66d3b8b3a4e009253804cca7fa2981b83aac",
-     "mismatch_fingerprint": "b2c58a961c4d7e97",
-     "mismatched_frames": 365,
-     "render_visibility_mismatch_count": 16,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 2494
-    },
-    "ppc": {
-     "exact_prefix_frames": 691,
-     "first_mismatch_frame": 569,
-     "first_render_visibility_mismatch_frame": -122,
-     "frames": 9210,
-     "last_mismatch_frame": 6593,
-     "matched_frames": 8845,
-     "mismatch_count": 1338,
-     "mismatch_fields_digest": "13b3ead696f92f5d2c8ab91ea33d66d3b8b3a4e009253804cca7fa2981b83aac",
-     "mismatch_fingerprint": "b2c58a961c4d7e97",
-     "mismatched_frames": 365,
+     "matched_frames": 8846,
+     "mismatch_count": 1337,
+     "mismatch_fields_digest": "4d115e4299cb847a7017895834e9105950fe8db2f7e6c867dfeaac916b279a73",
+     "mismatch_fingerprint": "d54117f83c62525c",
+     "mismatched_frames": 364,
      "render_visibility_mismatch_count": 16,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 2494
@@ -437,7 +366,7 @@
    "replay": "replays/validation/doubles_recent/Game_20260704T012635.slpz",
    "id": "hosted-ppc-dynamic-bone-execution-profile",
    "owner": "Fox dynamic-bone pose publication at a BODY hurt-capsule gate",
-   "rationale": "Native has only bounded fighter/needle float residuals and 2,102 exact trailing transitions. A bounded retail collision trace matches native's Fox hurt capsule at replay frame 8036; PPC's source-compiled dynamic-bone chain instead places bone 18 in overlap one frame early, causing a real hit and a complete downstream consequence. Guard FigaTree inputs and its evaluated skeleton are identical across backends, localizing the split to the long-running dynamic-bone execution profile rather than replay input or gameplay branching. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding.",
+   "rationale": "Native has only bounded fighter/needle float residuals and 2,102 exact trailing transitions. A bounded retail collision trace matches native's Fox hurt capsule at replay frame 8036; PPC's source-compiled dynamic-bone chain instead places bone 18 in overlap one frame early, causing a real hit and a complete downstream consequence. Guard FigaTree inputs and its evaluated skeleton are identical across backends, localizing the split to the long-running dynamic-bone execution profile rather than replay input or gameplay branching. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. The prior PPC snapshot predates these deltas and was retired pending a qemu re-record.",
    "sources": [
     "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
     "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94",
@@ -451,26 +380,11 @@
      "first_render_visibility_mismatch_frame": null,
      "frames": 10348,
      "last_mismatch_frame": 8123,
-     "matched_frames": 10345,
-     "mismatch_count": 3,
-     "mismatch_fields_digest": "af0c943e68a465cd11dd9ea3513a1a22fbb7df06728f5f796cc4767f6aa35f15",
-     "mismatch_fingerprint": "436bc714fe18158a",
-     "mismatched_frames": 3,
-     "render_visibility_mismatch_count": 0,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 2102
-    },
-    "ppc": {
-     "exact_prefix_frames": 2475,
-     "first_mismatch_frame": 2353,
-     "first_render_visibility_mismatch_frame": null,
-     "frames": 10348,
-     "last_mismatch_frame": 8123,
-     "matched_frames": 10345,
-     "mismatch_count": 3,
-     "mismatch_fields_digest": "af0c943e68a465cd11dd9ea3513a1a22fbb7df06728f5f796cc4767f6aa35f15",
-     "mismatch_fingerprint": "436bc714fe18158a",
-     "mismatched_frames": 3,
+     "matched_frames": 10346,
+     "mismatch_count": 2,
+     "mismatch_fields_digest": "02d57cd257b77a605a3ad0be63c397438c86fd66312b378e74292b060b17ae29",
+     "mismatch_fingerprint": "d77f0fcdbc4fad9f",
+     "mismatched_frames": 2,
      "render_visibility_mismatch_count": 0,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 2102
@@ -639,34 +553,6 @@
    }
   },
   {
-   "replay": "replays/validation/falcon/Game_20260501T233530.slpz",
-   "id": "dolphin-ulp-motion-profile",
-   "owner": "fighter position float execution profile",
-   "rationale": "Native and PPC agree bit-for-bit. One isolated X-position ULP is the complete residual and 3,131 exact transitions follow; the replay records Dolphin without its build or execution profile.",
-   "sources": [
-    "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-    "refs/melee/src/melee/mp/mpcoll.c"
-   ],
-   "expected": {
-    "native": {
-     "frames": 7277,
-     "matched_frames": 7276,
-     "mismatched_frames": 1,
-     "exact_prefix_frames": 4145,
-     "strict_suffix_frames": 3131,
-     "first_mismatch_frame": 4023,
-     "last_mismatch_frame": 4023,
-     "mismatch_count": 1,
-     "mismatch_fingerprint": "7df60b2652301ee8",
-     "mismatch_fields_digest": "a0473ab0694d2fbb2e4d6f2cda8274757ac56fdcf6b85137041d6de640824b70",
-     "render_visibility_mismatch_count": 0,
-     "first_render_visibility_mismatch_frame": null,
-     "signed_zero_equal_count": 0
-    },
-    "ppc": "native"
-   }
-  },
-  {
    "replay": "replays/validation/falcon/Game_20260505T114745.slpz",
    "id": "dolphin-ulp-needle-pose-profile",
    "owner": "Sheik thrown-needle historical-pose publication",
@@ -737,38 +623,10 @@
    }
   },
   {
-   "replay": "replays/validation/falcon/Game_20260506T213015.slpz",
-   "id": "dolphin-ulp-motion-profile",
-   "owner": "fighter position float execution profile",
-   "rationale": "One isolated X-position ULP at frame 1670 is the complete residual and 5,625 exact transitions follow; the replay records Dolphin without its build or execution profile. Surfaced when the GALE01-verified MWCC fusing sweep aligned the collision and dynamics kernels with retail rounding.",
-   "sources": [
-    "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-    "refs/melee/src/melee/mp/mpcoll.c"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 1792,
-     "first_mismatch_frame": 1670,
-     "first_render_visibility_mismatch_frame": null,
-     "frames": 7418,
-     "last_mismatch_frame": 1670,
-     "matched_frames": 7417,
-     "mismatch_count": 1,
-     "mismatch_fields_digest": "a41801a06f80f6be1f8fcc6f9f128227b30c30dbc7e6813d07736d97efb67d1b",
-     "mismatch_fingerprint": "cdcb73edafb6f43f",
-     "mismatched_frames": 1,
-     "render_visibility_mismatch_count": 0,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 5625
-    },
-    "ppc": "native"
-   }
-  },
-  {
    "replay": "replays/validation/falcon/Game_20260509T035613.slpz",
    "id": "dolphin-ulp-motion-profile",
    "owner": "fighter position and stage-collision float execution profile",
-   "rationale": "The exact residual consists of bounded one-to-two-ULP position intervals on Yoshi's Story and reconverges for the final 953 transitions. Native and PPC produce the same complete fingerprint; the replay records Dolphin without its build or execution profile. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
+   "rationale": "The exact residual consists of bounded one-to-two-ULP position intervals on Yoshi's Story and reconverges for the final 953 transitions. Native and PPC produce the same complete fingerprint; the replay records Dolphin without its build or execution profile. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
     "refs/melee/src/melee/mp/mpcoll.c",
@@ -780,15 +638,15 @@
      "first_mismatch_frame": 1107,
      "first_render_visibility_mismatch_frame": -122,
      "frames": 7955,
-     "last_mismatch_frame": 6880,
-     "matched_frames": 7381,
-     "mismatch_count": 599,
-     "mismatch_fields_digest": "96bdb359a07b123020c2057b98940d140ccaaf3f35ffb446a6142cf1b45f41a3",
-     "mismatch_fingerprint": "3dad0beada1ac275",
-     "mismatched_frames": 574,
+     "last_mismatch_frame": 3972,
+     "matched_frames": 7387,
+     "mismatch_count": 593,
+     "mismatch_fields_digest": "b768cb2fd0120ccdbd2d08bba14b310b4e0324d131b3058e30fb1948160b747d",
+     "mismatch_fingerprint": "0595e453ad2601b8",
+     "mismatched_frames": 568,
      "render_visibility_mismatch_count": 4,
      "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 952
+     "strict_suffix_frames": 3860
     },
     "ppc": "native"
    }
@@ -825,7 +683,7 @@
    "replay": "replays/validation/falcon/StraightScratchyCheetah.slpz",
    "id": "mixed-dolphin-ulp-render-profile",
    "owner": "fighter position float profile and magnifier render schedule",
-   "rationale": "The corrected left-wall source owner removes the prior collision divergence. The complete residual is now seventeen isolated ULP-scale X-position rows plus one magnifier-owned 1% damage tick, followed by 987 exact transitions; PPC and native agree bit-for-bit while the replay records neither the Dolphin float profile nor VI/render publication boundary.",
+   "rationale": "The corrected left-wall source owner removes the prior collision divergence. The complete residual is now seventeen isolated ULP-scale X-position rows plus one magnifier-owned 1% damage tick, followed by 987 exact transitions; PPC and native agree bit-for-bit while the replay records neither the Dolphin float profile nor VI/render publication boundary. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/mp/mpcoll.c::mpColl_80049EAC_LeftWall",
     "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
@@ -834,19 +692,19 @@
    ],
    "expected": {
     "native": {
-     "frames": 7905,
-     "matched_frames": 7887,
-     "mismatched_frames": 18,
-     "exact_prefix_frames": 1307,
-     "strict_suffix_frames": 987,
-     "first_mismatch_frame": 1185,
-     "last_mismatch_frame": 6795,
-     "mismatch_count": 18,
-     "mismatch_fingerprint": "f6a9387d6bffd14f",
-     "mismatch_fields_digest": "4a1e5feef45b98a0783f14923be30361fc0e6f2bee7c668b713679b03c0b9345",
-     "render_visibility_mismatch_count": 9,
+     "exact_prefix_frames": 1325,
+     "first_mismatch_frame": 1203,
      "first_render_visibility_mismatch_frame": -122,
-     "signed_zero_equal_count": 0
+     "frames": 7905,
+     "last_mismatch_frame": 6795,
+     "matched_frames": 7891,
+     "mismatch_count": 14,
+     "mismatch_fields_digest": "df7087267028fa7041f991724d5bdff83250dc366559f894f43b854b83ce0c60",
+     "mismatch_fingerprint": "df1adaf9cd6c96c1",
+     "mismatched_frames": 14,
+     "render_visibility_mismatch_count": 9,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 987
     },
     "ppc": "native"
    }
@@ -855,7 +713,7 @@
    "replay": "replays/validation/falcon/falcon_demo.slpz",
    "id": "dolphin-ulp-and-signed-zero-profile",
    "owner": "fighter root-motion and signed-zero publication",
-   "rationale": "Correcting the decomp's left-wall candidate count removes the former stage-collision divergence. The remaining source-exact residual is thirteen isolated one-ULP X-position rows and thirty-seven signed-zero attack-velocity rows, followed by 2,189 exact transitions; PPC and native agree on the complete fingerprint while the replay records only an unspecified Dolphin execution profile. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
+   "rationale": "Correcting the decomp's left-wall candidate count removes the former stage-collision divergence. The remaining source-exact residual is thirteen isolated one-ULP X-position rows and thirty-seven signed-zero attack-velocity rows, followed by 2,189 exact transitions; PPC and native agree on the complete fingerprint while the replay records only an unspecified Dolphin execution profile. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/mp/mpcoll.c::mpColl_80049EAC_LeftWall",
     "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
@@ -868,11 +726,11 @@
      "first_render_visibility_mismatch_frame": -122,
      "frames": 7402,
      "last_mismatch_frame": 5090,
-     "matched_frames": 7357,
-     "mismatch_count": 45,
-     "mismatch_fields_digest": "378e3c484d3cc44f166f255ebab6145f08f38502cbea641390030ffc289d58f5",
-     "mismatch_fingerprint": "40eacf2ad0646ad5",
-     "mismatched_frames": 45,
+     "matched_frames": 7361,
+     "mismatch_count": 41,
+     "mismatch_fields_digest": "fae05bebf123e17e15d1b0e18ac8f489e6bf669c6e1109f8ca7cf01f7cb37788",
+     "mismatch_fingerprint": "b7d965bc5cb88ce6",
+     "mismatched_frames": 41,
      "render_visibility_mismatch_count": 8,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 2189
@@ -926,41 +784,26 @@
    "replay": "replays/validation/luigi/Game_20250212T091716.slpz",
    "id": "dolphin-ulp-motion-profile",
    "owner": "collision pose float execution profile",
-   "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
+   "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. The prior PPC snapshot predates these deltas and was retired pending a qemu re-record.",
    "sources": [
     "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
     "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
    ],
    "expected": {
     "native": {
-     "exact_prefix_frames": 2009,
-     "first_mismatch_frame": 1887,
+     "exact_prefix_frames": 2967,
+     "first_mismatch_frame": 2845,
      "first_render_visibility_mismatch_frame": -122,
      "frames": 5737,
-     "last_mismatch_frame": 3511,
-     "matched_frames": 5730,
-     "mismatch_count": 7,
-     "mismatch_fields_digest": "64a3f0b5b6229d0dae91739ed81ce8c868f8f4c04cf25eeed32a2a73f22ca46d",
-     "mismatch_fingerprint": "4e23392944829461",
-     "mismatched_frames": 7,
+     "last_mismatch_frame": 2992,
+     "matched_frames": 5734,
+     "mismatch_count": 3,
+     "mismatch_fields_digest": "5afef4d1fa0a8e71c4fc138e19befd3b5c6d4139db9c1f618802d07c2ff0c33b",
+     "mismatch_fingerprint": "4b776f7e0310cf1f",
+     "mismatched_frames": 3,
      "render_visibility_mismatch_count": 3,
      "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 2103
-    },
-    "ppc": {
-     "exact_prefix_frames": 2009,
-     "first_mismatch_frame": 1887,
-     "first_render_visibility_mismatch_frame": -122,
-     "frames": 5737,
-     "last_mismatch_frame": 3511,
-     "matched_frames": 5730,
-     "mismatch_count": 7,
-     "mismatch_fields_digest": "64a3f0b5b6229d0dae91739ed81ce8c868f8f4c04cf25eeed32a2a73f22ca46d",
-     "mismatch_fingerprint": "4e23392944829461",
-     "mismatched_frames": 7,
-     "render_visibility_mismatch_count": 3,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 2103
+     "strict_suffix_frames": 2622
     }
    }
   },
@@ -1045,48 +888,6 @@
      "render_visibility_mismatch_count": 3,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 1700
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/luigi/master-diamond-8a855ab88865a8fd02dd8f60.slpz",
-   "id": "dolphin-ulp-motion-profile",
-   "owner": "collision pose float execution profile",
-   "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
-   "sources": [
-    "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
-    "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 10167,
-     "first_mismatch_frame": 10045,
-     "first_render_visibility_mismatch_frame": null,
-     "frames": 12355,
-     "last_mismatch_frame": 10045,
-     "matched_frames": 12354,
-     "mismatch_count": 1,
-     "mismatch_fields_digest": "3178d5ab44efbb5a064ce42f6e990e65434510c93a263bd45c47c94a47496157",
-     "mismatch_fingerprint": "8bb7ea61299d5c8d",
-     "mismatched_frames": 1,
-     "render_visibility_mismatch_count": 0,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 2187
-    },
-    "ppc": {
-     "exact_prefix_frames": 10167,
-     "first_mismatch_frame": 10045,
-     "first_render_visibility_mismatch_frame": null,
-     "frames": 12355,
-     "last_mismatch_frame": 10045,
-     "matched_frames": 12354,
-     "mismatch_count": 1,
-     "mismatch_fields_digest": "3178d5ab44efbb5a064ce42f6e990e65434510c93a263bd45c47c94a47496157",
-     "mismatch_fingerprint": "8bb7ea61299d5c8d",
-     "mismatched_frames": 1,
-     "render_visibility_mismatch_count": 0,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 2187
     }
    }
   },
@@ -1217,90 +1018,6 @@
    }
   },
   {
-   "replay": "replays/validation/luigi/slippi_01.07.22-09.08.23_Game_20221011T140934.slpz",
-   "id": "dolphin-ulp-motion-profile",
-   "owner": "collision pose float execution profile",
-   "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
-   "sources": [
-    "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
-    "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 3610,
-     "first_mismatch_frame": 3488,
-     "first_render_visibility_mismatch_frame": null,
-     "frames": 9583,
-     "last_mismatch_frame": 3617,
-     "matched_frames": 9453,
-     "mismatch_count": 130,
-     "mismatch_fields_digest": "3200795524d7a275db7a5216d97c7d2d9aca707983b569b75fbad9d2c7931e42",
-     "mismatch_fingerprint": "ca2abe022c313cc7",
-     "mismatched_frames": 130,
-     "render_visibility_mismatch_count": 0,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 5843
-    },
-    "ppc": {
-     "exact_prefix_frames": 3610,
-     "first_mismatch_frame": 3488,
-     "first_render_visibility_mismatch_frame": null,
-     "frames": 9583,
-     "last_mismatch_frame": 3617,
-     "matched_frames": 9453,
-     "mismatch_count": 130,
-     "mismatch_fields_digest": "3200795524d7a275db7a5216d97c7d2d9aca707983b569b75fbad9d2c7931e42",
-     "mismatch_fingerprint": "ca2abe022c313cc7",
-     "mismatched_frames": 130,
-     "render_visibility_mismatch_count": 0,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 5843
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/luigi/slippi_2024_Game_20250307T122650.slpz",
-   "id": "dolphin-ulp-motion-profile",
-   "owner": "collision pose float execution profile",
-   "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is a position-only ULP tail from knife-edge wall and platform contacts on sloped stages: the resolved position after a wall stay-out or ledge re-probe differs by one ULP when the probe point sits exactly on the line. The collision arithmetic is asm-verified faithful (canonical:mp-ecb-wall-fmadds, canonical:mp-line-intersection-fmadd); the residual enters through the bone-pose-derived ECB edge at sub-tolerance scale and re-converges after the contact ends.",
-   "sources": [
-    "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
-    "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 1400,
-     "first_mismatch_frame": 1278,
-     "first_render_visibility_mismatch_frame": -122,
-     "frames": 5750,
-     "last_mismatch_frame": 1296,
-     "matched_frames": 5747,
-     "mismatch_count": 3,
-     "mismatch_fields_digest": "b5c68c573490c202a5044db98bf469a37472961ae2814d9d3c6f284f66d55779",
-     "mismatch_fingerprint": "be35d3535d1324f2",
-     "mismatched_frames": 3,
-     "render_visibility_mismatch_count": 3,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 4331
-    },
-    "ppc": {
-     "exact_prefix_frames": 1400,
-     "first_mismatch_frame": 1278,
-     "first_render_visibility_mismatch_frame": -122,
-     "frames": 5750,
-     "last_mismatch_frame": 1296,
-     "matched_frames": 5747,
-     "mismatch_count": 3,
-     "mismatch_fields_digest": "b5c68c573490c202a5044db98bf469a37472961ae2814d9d3c6f284f66d55779",
-     "mismatch_fingerprint": "be35d3535d1324f2",
-     "mismatched_frames": 3,
-     "render_visibility_mismatch_count": 3,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 4331
-    }
-   }
-  },
-  {
    "replay": "replays/validation/luigi/specials_demo.slpz",
    "id": "dolphin-ulp-motion-profile",
    "owner": "collision pose float execution profile",
@@ -1413,34 +1130,6 @@
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 14
     }
-   }
-  },
-  {
-   "replay": "replays/validation/marth/FemaleWorthyAlpaca.slpz",
-   "id": "dolphin-ulp-motion-profile",
-   "owner": "fighter position float execution profile",
-   "rationale": "Native and PPC agree bit-for-bit. Four isolated P2 X-position ULP rows are the complete residual, every other gameplay field is exact, and 2,440 strict transitions follow; the replay records Dolphin without its build or execution profile.",
-   "sources": [
-    "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-    "refs/melee/src/melee/mp/mpcoll.c"
-   ],
-   "expected": {
-    "native": {
-     "frames": 7508,
-     "matched_frames": 7504,
-     "mismatched_frames": 4,
-     "exact_prefix_frames": 5056,
-     "strict_suffix_frames": 2440,
-     "first_mismatch_frame": 4934,
-     "last_mismatch_frame": 4945,
-     "mismatch_count": 4,
-     "mismatch_fingerprint": "64715930e314e1bc",
-     "mismatch_fields_digest": "37fe0d810c20421f44f9d63be3ae282414538922f2fd7dbe85694549f1a3c39f",
-     "render_visibility_mismatch_count": 0,
-     "first_render_visibility_mismatch_frame": null,
-     "signed_zero_equal_count": 0
-    },
-    "ppc": "native"
    }
   },
   {
@@ -1591,7 +1280,7 @@
    "replay": "replays/validation/peach/CapitalPristineTarsier.slpz",
    "id": "dolphin-ulp-fighter-and-item-profile",
    "owner": "fighter root motion and thrown-item gravity float execution",
-   "rationale": "The complete residual contains bounded ULP-scale fighter root motion and thrown-item velocity/position intervals. Source discrete state remains aligned, and the exact fingerprint includes 158 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
+   "rationale": "The complete residual contains bounded ULP-scale fighter root motion and thrown-item velocity/position intervals. Source discrete state remains aligned, and the exact fingerprint includes 158 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
     "refs/melee/src/melee/it/it_2725.c::it_80272860",
@@ -1605,11 +1294,11 @@
      "first_render_visibility_mismatch_frame": 7181,
      "frames": 16491,
      "last_mismatch_frame": 16210,
-     "matched_frames": 16405,
-     "mismatch_count": 103,
-     "mismatch_fields_digest": "96359c6f6f19aa30a2688665de451d56523106628f6c9deb0455c35e9a0b5b78",
-     "mismatch_fingerprint": "04e7162e7b82ca68",
-     "mismatched_frames": 86,
+     "matched_frames": 16421,
+     "mismatch_count": 87,
+     "mismatch_fields_digest": "b45bf50b328f7b555efa45ccad8e71f88c23a6d8cb590b0296dada46ba62cad7",
+     "mismatch_fingerprint": "a32b05d2ba44a604",
+     "mismatched_frames": 70,
      "render_visibility_mismatch_count": 8,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 158
@@ -1620,7 +1309,7 @@
    "replay": "replays/validation/peach/DisgustingLivelyRaven.slpz",
    "id": "dolphin-ulp-item-motion-profile",
    "owner": "thrown-item gravity and position float execution",
-   "rationale": "The residual is limited to bounded ULP-scale thrown-item velocity and position intervals produced by source gravity/integration, followed by 5,013 strict transitions. No item state or Peach mechanic is fitted. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
+   "rationale": "The residual is limited to bounded ULP-scale thrown-item velocity and position intervals produced by source gravity/integration, followed by 5,013 strict transitions. No item state or Peach mechanic is fitted. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/it/it_2725.c::it_80272860",
     "refs/melee/src/melee/it/item.c",
@@ -1632,15 +1321,15 @@
      "first_mismatch_frame": 7474,
      "first_render_visibility_mismatch_frame": 505,
      "frames": 12960,
-     "last_mismatch_frame": 7824,
-     "matched_frames": 12922,
-     "mismatch_count": 38,
-     "mismatch_fields_digest": "8bb6ac5c7f853a8a691a51d34a86cb5ace257c9343cec3848b8f1b5c76afc7ea",
-     "mismatch_fingerprint": "94356f7e0f21eb1e",
-     "mismatched_frames": 38,
+     "last_mismatch_frame": 7762,
+     "matched_frames": 12936,
+     "mismatch_count": 24,
+     "mismatch_fields_digest": "cf55adfd74be12d2171d296eecaff6c5ea960a6829a06e3c4e781de92d142513",
+     "mismatch_fingerprint": "0b6e0f225f3612e6",
+     "mismatched_frames": 24,
      "render_visibility_mismatch_count": 11,
      "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 5013
+     "strict_suffix_frames": 5075
     }
    }
   },
@@ -1648,7 +1337,7 @@
    "replay": "replays/validation/peach/DryLimitedWoodcock.slpz",
    "id": "needle-pose-and-dolphin-float-profile",
    "owner": "Sheik thrown-needle historical position and fighter float execution",
-   "rationale": "One source-owned historical-position byte from a thrown needle precedes sparse ULP-scale fighter positions. The runtime retains strict needle bytes where the article owns them and exact source fighter integration; the complete fingerprint prevents either family from becoming a broad exception. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
+   "rationale": "One source-owned historical-position byte from a thrown needle precedes sparse ULP-scale fighter positions. The runtime retains strict needle bytes where the article owns them and exact source fighter integration; the complete fingerprint prevents either family from becoming a broad exception. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
     "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
@@ -1662,11 +1351,11 @@
      "first_render_visibility_mismatch_frame": -122,
      "frames": 10458,
      "last_mismatch_frame": 8881,
-     "matched_frames": 10357,
-     "mismatch_count": 106,
-     "mismatch_fields_digest": "f8a0d0a6834bc8b760020e2bf061895d6e061c7abb78dd6138f98663d146c6db",
-     "mismatch_fingerprint": "86db746cf373e777",
-     "mismatched_frames": 101,
+     "matched_frames": 10359,
+     "mismatch_count": 99,
+     "mismatch_fields_digest": "142780a674a861ec764c3c0e601a8cfdd2e0d85a26f4b8df5011b1ea63f89098",
+     "mismatch_fingerprint": "9d6dd2c90988e192",
+     "mismatched_frames": 99,
      "render_visibility_mismatch_count": 6,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 1454
@@ -1677,7 +1366,7 @@
    "replay": "replays/validation/peach/ExpertWorthlessFinch.slpz",
    "id": "dolphin-ulp-item-motion-profile",
    "owner": "turnip/common-item gravity and position float execution",
-   "rationale": "Restoring Peach's 32-bit source owner-pointer layout places the Bob-omb scale lane correctly and removes the prior metadata displacement. The complete remainder is bounded ULP-scale source item gravity/position with 352 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
+   "rationale": "Restoring Peach's 32-bit source owner-pointer layout places the Bob-omb scale lane correctly and removes the prior metadata displacement. The complete remainder is bounded ULP-scale source item gravity/position with 352 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/it/itCharItems.h::itPeachTurnip_ItemVars",
     "refs/melee/src/melee/it/items/itpeachturnip.c::it_802BD4AC",
@@ -1686,16 +1375,16 @@
    ],
    "expected": {
     "native": {
-     "exact_prefix_frames": 2533,
-     "first_mismatch_frame": 2411,
+     "exact_prefix_frames": 7330,
+     "first_mismatch_frame": 7208,
      "first_render_visibility_mismatch_frame": 1637,
      "frames": 12032,
      "last_mismatch_frame": 11557,
-     "matched_frames": 11835,
-     "mismatch_count": 358,
-     "mismatch_fields_digest": "b7c30536f52cfc911aaeeddd62851491631de38ed915c554d97dc399648be42c",
-     "mismatch_fingerprint": "ba711239fd6ed472",
-     "mismatched_frames": 197,
+     "matched_frames": 12027,
+     "mismatch_count": 5,
+     "mismatch_fields_digest": "c39631f205d94ef2c95c381f9e1e97057178a4ca21581c48cd7cdc028f6c223d",
+     "mismatch_fingerprint": "b0670c3448abc2f6",
+     "mismatched_frames": 5,
      "render_visibility_mismatch_count": 10,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 352
@@ -1706,7 +1395,7 @@
    "replay": "replays/validation/peach/HappyGoLuckyScentedButterfly.slpz",
    "id": "mixed-item-float-magnifier-and-needle-profile",
    "owner": "item float execution, magnifier damage schedule, and Sheik needle publication",
-   "rationale": "The complete residual combines bounded item-position ULPs, one already-modeled 1% magnifier damage publication, and source-owned Sheik needle historical bytes plus their item-lifetime consequence. The exact fingerprint records the capture/runtime profile without changing Peach, camera damage, or needle gameplay. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
+   "rationale": "The complete residual combines bounded item-position ULPs, one already-modeled 1% magnifier damage publication, and source-owned Sheik needle historical bytes plus their item-lifetime consequence. The exact fingerprint records the capture/runtime profile without changing Peach, camera damage, or needle gameplay. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/it/item.c",
     "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
@@ -1722,9 +1411,9 @@
      "frames": 14098,
      "last_mismatch_frame": 13719,
      "matched_frames": 13996,
-     "mismatch_count": 1855,
-     "mismatch_fields_digest": "7c6ab56cb49443113b89e2dafdb4bb49b088021aa01f594d4d88ab4ae25d19e6",
-     "mismatch_fingerprint": "c7480f83afd72f27",
+     "mismatch_count": 1839,
+     "mismatch_fields_digest": "b5d22319217fde065e922453fa1190e62097ba75f7038e1bca221424c690cb80",
+     "mismatch_fingerprint": "4cf4ace78dd11812",
      "mismatched_frames": 102,
      "render_visibility_mismatch_count": 19,
      "signed_zero_equal_count": 0,
@@ -1736,7 +1425,7 @@
    "replay": "replays/validation/peach/HeartyStiffMallard.slpz",
    "id": "legacy-fod-float-and-parasol-publication-profile",
    "owner": "Dolphin float execution and Peach parasol item-scheduler publication",
-   "rationale": "After selecting this old capture's explicit pre-Cardinals input profile, the first residual is a one-ULP fighter position. The later Peach parasol boundary records destruction one post-frame row before the source item scheduler publishes it, shifting subsequent item-slot history. The exact complete fingerprint records those execution/publication boundaries without changing Peach gameplay or fitting a replay row. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
+   "rationale": "After selecting this old capture's explicit pre-Cardinals input profile, the first residual is a one-ULP fighter position. The later Peach parasol boundary records destruction one post-frame row before the source item scheduler publishes it, shifting subsequent item-slot history. The exact complete fingerprint records those execution/publication boundaries without changing Peach gameplay or fitting a replay row. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
     "refs/melee/src/melee/it/items/itpeachparasol.c",
@@ -1750,11 +1439,11 @@
      "first_render_visibility_mismatch_frame": 6678,
      "frames": 15634,
      "last_mismatch_frame": 15511,
-     "matched_frames": 6576,
-     "mismatch_count": 337458,
-     "mismatch_fields_digest": "2ddb79327a043dd4f46624b8dd71c9dd432f73a75624eef7adc591e8d192ceb5",
-     "mismatch_fingerprint": "ffd60e97366f315c",
-     "mismatched_frames": 9058,
+     "matched_frames": 6600,
+     "mismatch_count": 337434,
+     "mismatch_fields_digest": "f7c91a31dcf577f0d018bfbcbacfd1433a0a9d9147b2dc572cd2e39ebfa7eaa3",
+     "mismatch_fingerprint": "25590fac2df95868",
+     "mismatched_frames": 9034,
      "render_visibility_mismatch_count": 12589,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 0
@@ -1822,7 +1511,7 @@
    "replay": "replays/validation/peach/MadeUpEnchantedStingray.slpz",
    "id": "dolphin-float-and-presentation-rng-profile",
    "owner": "landing velocity float execution and DamageFlyRoll presentation RNG phase",
-   "rationale": "The first causal residual is a 16-ULP self-velocity result at a source landing projection; a bounded PPC probe produces the same bits as native. A later damage event reaches the source DamageFlyRoll gate on the neighboring presentation-owned RNG phase. The manifest locks the complete consequence instead of altering free-running RNG or adding replay-local gameplay. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
+   "rationale": "The first causal residual is a 16-ULP self-velocity result at a source landing projection; a bounded PPC probe produces the same bits as native. A later damage event reaches the source DamageFlyRoll gate on the neighboring presentation-owned RNG phase. The manifest locks the complete consequence instead of altering free-running RNG or adding replay-local gameplay. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
     "refs/melee/src/melee/mp/mpcoll.c",
@@ -1836,11 +1525,11 @@
      "first_render_visibility_mismatch_frame": 5768,
      "frames": 11073,
      "last_mismatch_frame": 10950,
-     "matched_frames": 5866,
-     "mismatch_count": 181156,
-     "mismatch_fields_digest": "4e9407bf2e2c5a22a5438ae7182ba2275272f5e11d92274531b544315e9f059f",
-     "mismatch_fingerprint": "145dbf1e7ce11562",
-     "mismatched_frames": 5207,
+     "matched_frames": 5867,
+     "mismatch_count": 181155,
+     "mismatch_fields_digest": "132b718a0b23747466e17f3faefd1eff7594df91c908c35f8150fbb538a00461",
+     "mismatch_fingerprint": "3cdcef4f480b723c",
+     "mismatched_frames": 5206,
      "render_visibility_mismatch_count": 6658,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 0
@@ -1877,33 +1566,6 @@
    }
   },
   {
-   "replay": "replays/validation/peach/PerfectJollyMagpie.slpz",
-   "id": "item-float-transform-ulp-profile",
-   "owner": "item root transform float execution",
-   "rationale": "A 36-row ULP-scale item transform interval (frames 397..432) with full strict reconvergence afterward; the former DamageFlyRoll presentation-RNG clause is now source-owned by the modeled 0x3FD fire-impact model-start generator consumption.",
-   "sources": [
-    "refs/melee/src/melee/it/item.c",
-    "refs/melee/src/sysdolphin/baselib/mtx.c"
-   ],
-   "expected": {
-    "native": {
-     "frames": 10838,
-     "matched_frames": 10802,
-     "mismatched_frames": 36,
-     "exact_prefix_frames": 519,
-     "strict_suffix_frames": 10283,
-     "first_mismatch_frame": 397,
-     "last_mismatch_frame": 432,
-     "mismatch_count": 72,
-     "mismatch_fingerprint": "27068b8610c98924",
-     "render_visibility_mismatch_count": 0,
-     "first_render_visibility_mismatch_frame": null,
-     "signed_zero_equal_count": 0,
-     "mismatch_fields_digest": "890adeff227ba72be99873c22506ffd00c6c495e1f881c40c471533765e4d2a9"
-    }
-   }
-  },
-  {
    "replay": "replays/validation/peach/ScaryFrankPorcupine.slpz",
    "id": "dolphin-ulp-item-motion-profile",
    "owner": "thrown-item gravity and position float execution",
@@ -1935,7 +1597,7 @@
    "replay": "replays/validation/peach/SmugConfusedTermite.slpz",
    "id": "dolphin-ulp-motion-profile",
    "owner": "fighter and item position float execution",
-   "rationale": "Correcting the shared 32-bit item-throw motion-var layout removed the wrong shield-throw action and 12,584 downstream mismatch rows. The complete remainder is 25 isolated ULP-scale fighter/item position rows with 2,353 strict trailing transitions. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
+   "rationale": "Correcting the shared 32-bit item-throw motion-var layout removed the wrong shield-throw action and 12,584 downstream mismatch rows. The complete remainder is 25 isolated ULP-scale fighter/item position rows with 2,353 strict trailing transitions. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/ft/chara/ftCommon/types.h::ftCommon_MotionVars",
     "refs/melee/src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c::ftCo_8009515C",
@@ -1949,11 +1611,11 @@
      "first_render_visibility_mismatch_frame": -122,
      "frames": 12898,
      "last_mismatch_frame": 10422,
-     "matched_frames": 12859,
-     "mismatch_count": 54,
-     "mismatch_fields_digest": "ee1c9a2acecd053c5a9391aa7c4d6f55aa2e1ba7e39e1b5a600da9618627f1a2",
-     "mismatch_fingerprint": "1ca18d4a7f0947a0",
-     "mismatched_frames": 39,
+     "matched_frames": 12877,
+     "mismatch_count": 21,
+     "mismatch_fields_digest": "29b29e1eb594767236ea5af8cc386e867e51830d8a20e5bb36bc851a7dc7b11d",
+     "mismatch_fingerprint": "0dce13447f3aa90f",
+     "mismatched_frames": 21,
      "render_visibility_mismatch_count": 9,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 2353
@@ -1961,38 +1623,10 @@
    }
   },
   {
-   "replay": "replays/validation/peach/StridentRedSandpiper.slpz",
-   "id": "dolphin-ulp-item-transform-profile",
-   "owner": "held/thrown item root transform execution",
-   "rationale": "The complete residual is one 15-row interval of ULP-scale item X/Y positions followed by 3,999 strict transitions. The imported item and matrix paths retain source behavior; this exact fingerprint records only the capture's float execution profile.",
-   "sources": [
-    "refs/melee/src/melee/it/item.c",
-    "refs/melee/src/melee/it/it_2725.c",
-    "refs/melee/src/sysdolphin/baselib/mtx.c"
-   ],
-   "expected": {
-    "native": {
-     "frames": 11114,
-     "matched_frames": 11099,
-     "mismatched_frames": 15,
-     "exact_prefix_frames": 7100,
-     "strict_suffix_frames": 3999,
-     "first_mismatch_frame": 6978,
-     "last_mismatch_frame": 6992,
-     "mismatch_count": 30,
-     "mismatch_fingerprint": "3174e8266b283466",
-     "render_visibility_mismatch_count": 14,
-     "first_render_visibility_mismatch_frame": 2036,
-     "signed_zero_equal_count": 0,
-     "mismatch_fields_digest": "8e7997cf98725adede82d885d44e9957cb95e01493ebb3d6d93c56153572c895"
-    }
-   }
-  },
-  {
    "replay": "replays/validation/peach/TameEmbellishedSparrow.slpz",
    "id": "dolphin-ulp-item-and-motion-profile",
    "owner": "item transform and fighter self-velocity float execution",
-   "rationale": "The complete residual consists of sparse ULP-scale item positions and fighter velocities produced by the imported source transform, gravity, and integration paths. Discrete gameplay remains source-driven; the exact fingerprint prevents this execution profile from becoming a tolerance. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
+   "rationale": "The complete residual consists of sparse ULP-scale item positions and fighter velocities produced by the imported source transform, gravity, and integration paths. Discrete gameplay remains source-driven; the exact fingerprint prevents this execution profile from becoming a tolerance. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/it/item.c",
     "refs/melee/src/melee/it/it_2725.c",
@@ -2001,16 +1635,16 @@
    ],
    "expected": {
     "native": {
-     "exact_prefix_frames": 7509,
-     "first_mismatch_frame": 7387,
+     "exact_prefix_frames": 13629,
+     "first_mismatch_frame": 13507,
      "first_render_visibility_mismatch_frame": 4778,
      "frames": 14352,
      "last_mismatch_frame": 14229,
-     "matched_frames": 13614,
-     "mismatch_count": 2315,
-     "mismatch_fields_digest": "9672b6a179c33491fcbc3867797bc051ba8ce236fdc095b36b72bc3224a10aa1",
-     "mismatch_fingerprint": "417c325969b8a0b4",
-     "mismatched_frames": 738,
+     "matched_frames": 13629,
+     "mismatch_count": 2285,
+     "mismatch_fields_digest": "231267c780bb4eff6bb18c0ce168210546745d834d236b817137dfb51817807d",
+     "mismatch_fingerprint": "65e7d85cca69a2b5",
+     "mismatched_frames": 723,
      "render_visibility_mismatch_count": 25,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 0
@@ -2352,23 +1986,23 @@
    "replay": "replays/validation/sheik/BeautifulDistantWolverine.slpz",
    "id": "dolphin-ulp-needle-pose-profile",
    "owner": "Sheik thrown-needle historical-pose publication",
-   "rationale": "Each residual is an isolated one-byte difference in Slippi generic metadata sampled from the low byte of the thrown needle historical Y position. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and exact gameplay resumes after each row; the replay records Dolphin but not its float/JIT execution profile. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
+   "rationale": "Each residual is an isolated one-byte difference in Slippi generic metadata sampled from the low byte of the thrown needle historical Y position. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and exact gameplay resumes after each row; the replay records Dolphin but not its float/JIT execution profile. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
     "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
    ],
    "expected": {
     "native": {
-     "exact_prefix_frames": 4224,
-     "first_mismatch_frame": 4102,
+     "exact_prefix_frames": 4820,
+     "first_mismatch_frame": 4698,
      "first_render_visibility_mismatch_frame": -122,
      "frames": 7424,
      "last_mismatch_frame": 4698,
-     "matched_frames": 7419,
-     "mismatch_count": 5,
-     "mismatch_fields_digest": "9ec0b46249b67f24de9dde095c1a96d2b4a2995cca3b15d32ab43f14aabc9dac",
-     "mismatch_fingerprint": "813598fe8356fce1",
-     "mismatched_frames": 5,
+     "matched_frames": 7423,
+     "mismatch_count": 1,
+     "mismatch_fields_digest": "597ef599a63fcfbe59082b58cdecc1ab241e1dfdcf590ea40a00ae29f2802b00",
+     "mismatch_fingerprint": "79988ce508131aeb",
+     "mismatched_frames": 1,
      "render_visibility_mismatch_count": 2,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 2603
@@ -2408,26 +2042,26 @@
    "replay": "replays/validation/sheik/DrabMeanArmadillo.slpz",
    "id": "dolphin-ulp-motion-profile",
    "owner": "fighter motion and animation float execution profile",
-   "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual contains only ULP-scale fighter motion values or the downstream animation threshold they gate, with exact gameplay on both sides; the replay records Dolphin but not its build or float/JIT execution profile.",
+   "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual contains only ULP-scale fighter motion values or the downstream animation threshold they gate, with exact gameplay on both sides; the replay records Dolphin but not its build or float/JIT execution profile. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
     "refs/melee/src/sysdolphin/baselib/mtx.c"
    ],
    "expected": {
     "native": {
-     "frames": 6027,
-     "matched_frames": 6024,
-     "mismatched_frames": 3,
-     "exact_prefix_frames": 2555,
-     "strict_suffix_frames": 1725,
-     "first_mismatch_frame": 2433,
-     "last_mismatch_frame": 4179,
-     "mismatch_count": 4,
-     "mismatch_fingerprint": "26bdae63117b61d6",
-     "render_visibility_mismatch_count": 3,
+     "exact_prefix_frames": 4300,
+     "first_mismatch_frame": 4178,
      "first_render_visibility_mismatch_frame": -122,
+     "frames": 6027,
+     "last_mismatch_frame": 4179,
+     "matched_frames": 6025,
+     "mismatch_count": 3,
+     "mismatch_fields_digest": "0a5bdc14103f560e3937bc469505a985928cfefabd90a846508a5051b8b52f04",
+     "mismatch_fingerprint": "93bfeb69804d3c9e",
+     "mismatched_frames": 2,
+     "render_visibility_mismatch_count": 3,
      "signed_zero_equal_count": 0,
-     "mismatch_fields_digest": "b096738c8be7d457cde3c6f05345c1bbd7c9aca09a1610d2b314a394665ce74e"
+     "strict_suffix_frames": 1725
     },
     "ppc": "native"
    }
@@ -2876,52 +2510,10 @@
    }
   },
   {
-   "replay": "replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.slpz",
-   "id": "dolphin-ulp-motion-profile",
-   "owner": "fighter position float execution profile",
-   "rationale": "PPC and native source runtimes agree bit-for-bit. Four isolated P1 X-position rows are the complete residual and 5,565 exact transitions follow it.",
-   "sources": [
-    "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-    "refs/melee/src/melee/mp/mpcoll.c"
-   ],
-   "expected": {
-    "native": {
-     "frames": 5984,
-     "matched_frames": 5980,
-     "mismatched_frames": 4,
-     "exact_prefix_frames": 413,
-     "strict_suffix_frames": 5565,
-     "first_mismatch_frame": 291,
-     "last_mismatch_frame": 296,
-     "mismatch_count": 4,
-     "mismatch_fingerprint": "37d57dc85877b61d",
-     "mismatch_fields_digest": "c95330ed8aa83e7fba4c995f13304dc363557399457ee157d18da651236e0f86",
-     "render_visibility_mismatch_count": 3,
-     "first_render_visibility_mismatch_frame": -122,
-     "signed_zero_equal_count": 0
-    },
-    "ppc": {
-     "frames": 5984,
-     "matched_frames": 5980,
-     "mismatched_frames": 4,
-     "exact_prefix_frames": 413,
-     "strict_suffix_frames": 5565,
-     "first_mismatch_frame": 291,
-     "last_mismatch_frame": 296,
-     "mismatch_count": 4,
-     "mismatch_fingerprint": "37d57dc85877b61d",
-     "mismatch_fields_digest": "c95330ed8aa83e7fba4c995f13304dc363557399457ee157d18da651236e0f86",
-     "render_visibility_mismatch_count": 3,
-     "first_render_visibility_mismatch_frame": -122,
-     "signed_zero_equal_count": 0
-    }
-   }
-  },
-  {
    "replay": "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz",
    "id": "nonmatching-ground-ik-capsule-gate",
    "owner": "nonmatching lbbgflash ground-IK pose publication",
-   "rationale": "Promoting the current upstream ground-IK source fixes the reached four-player ground-pose owner, but upstream still marks the complete lbbgflash object NonMatching. PPC and native agree bit-for-bit: after the prior isolated P1 X-position ULP, the reconstructed IK pose creates one hit at frame 7627 that the Dolphin replay does not, followed by 1,501 exact transitions. The full bounded consequence is locked pending assembly matching of the shared IK owner.",
+   "rationale": "Promoting the current upstream ground-IK source fixes the reached four-player ground-pose owner, but upstream still marks the complete lbbgflash object NonMatching. PPC and native agree bit-for-bit: after the prior isolated P1 X-position ULP, the reconstructed IK pose creates one hit at frame 7627 that the Dolphin replay does not, followed by 1,501 exact transitions. The full bounded consequence is locked pending assembly matching of the shared IK owner. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
    "sources": [
     "refs/melee/configure.py::Object(NonMatching, melee/lb/lbbgflash.c)",
     "refs/melee/src/melee/lb/lbbgflash.c::lbBgFlash_80021410",
@@ -2929,58 +2521,609 @@
    ],
    "expected": {
     "native": {
-     "frames": 9439,
-     "matched_frames": 9249,
-     "mismatched_frames": 190,
-     "exact_prefix_frames": 7047,
-     "strict_suffix_frames": 1501,
-     "first_mismatch_frame": 6925,
-     "last_mismatch_frame": 7815,
-     "mismatch_count": 193,
-     "mismatch_fingerprint": "1dde95408771cea4",
-     "mismatch_fields": [
-      {
-       "field": "pos_x[0]",
-       "count": 1,
-       "first_frame": 6925,
-       "last_frame": 6925
-      },
-      {
-       "field": "hitlag[1]",
-       "count": 1,
-       "first_frame": 7627,
-       "last_frame": 7627
-      },
-      {
-       "field": "instance_hit_by[1]",
-       "count": 1,
-       "first_frame": 7627,
-       "last_frame": 7627
-      },
-      {
-       "field": "last_hit_by[1]",
-       "count": 1,
-       "first_frame": 7627,
-       "last_frame": 7627
-      },
-      {
-       "field": "state_flags[6]",
-       "count": 1,
-       "first_frame": 7627,
-       "last_frame": 7627
-      },
-      {
-       "field": "pos_x[1]",
-       "count": 188,
-       "first_frame": 7628,
-       "last_frame": 7815
-      }
-     ],
-     "render_visibility_mismatch_count": 7,
+     "exact_prefix_frames": 7749,
+     "first_mismatch_frame": 7627,
      "first_render_visibility_mismatch_frame": -122,
-     "signed_zero_equal_count": 0
+     "frames": 9439,
+     "last_mismatch_frame": 7815,
+     "matched_frames": 9250,
+     "mismatch_count": 192,
+     "mismatch_fields_digest": "6370e76add9994157a1d7a672d387cadd31b3a169bf7d80277d398e949b7203b",
+     "mismatch_fingerprint": "a4010dd4e6e06d99",
+     "mismatched_frames": 189,
+     "render_visibility_mismatch_count": 7,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 1501
     },
     "ppc": "native"
+   }
+  },
+  {
+   "replay": "replays/validation/marios/auto-sheik-2025-02_Game_20250228T201822.slp",
+   "id": "dolphin-ulp-needle-pose-profile",
+   "owner": "Sheik needle charge pose byte under the unrecorded Dolphin float profile",
+   "rationale": "The residual is a bounded set of needle pose-byte rows (item.misc2) with an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 139,
+     "first_mismatch_frame": 17,
+     "first_render_visibility_mismatch_frame": null,
+     "frames": 5928,
+     "last_mismatch_frame": 20,
+     "matched_frames": 5926,
+     "mismatch_count": 2,
+     "mismatch_fields_digest": "986a34a12164ccb068060abc7a250a189e35524d162122afc00a265856d816ef",
+     "mismatch_fingerprint": "2fcbed7ad4b22a9d",
+     "mismatched_frames": 2,
+     "render_visibility_mismatch_count": 0,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 5785
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/auto-sheik-2025-02_Game_20250227T165006.slp",
+   "id": "dolphin-ulp-needle-pose-profile",
+   "owner": "Sheik needle charge pose byte under the unrecorded Dolphin float profile",
+   "rationale": "The residual is a bounded set of needle pose-byte rows (item.misc2) with an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 9477,
+     "first_mismatch_frame": 9355,
+     "first_render_visibility_mismatch_frame": null,
+     "frames": 10751,
+     "last_mismatch_frame": 9355,
+     "matched_frames": 10750,
+     "mismatch_count": 1,
+     "mismatch_fields_digest": "e4098776c3a725373fe01cb82771cac0074e50d88bce8533239e13aede57a2ed",
+     "mismatch_fingerprint": "e5dc1ef87e57f56a",
+     "mismatched_frames": 1,
+     "render_visibility_mismatch_count": 0,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 1273
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/gm-sheik-2025-11_Game_20251111T160230.slpz",
+   "id": "dolphin-ulp-needle-pose-profile",
+   "owner": "Sheik needle charge pose byte under the unrecorded Dolphin float profile",
+   "rationale": "The residual is a bounded set of needle pose-byte rows (item.misc2) with an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 4413,
+     "first_mismatch_frame": 4291,
+     "first_render_visibility_mismatch_frame": 2254,
+     "frames": 10336,
+     "last_mismatch_frame": 4294,
+     "matched_frames": 10334,
+     "mismatch_count": 2,
+     "mismatch_fields_digest": "0e80a3b65e77a42bce167cf115b24a1ea49426f3cafdb466e617ed1964013940",
+     "mismatch_fingerprint": "4f97515a9a191419",
+     "mismatched_frames": 2,
+     "render_visibility_mismatch_count": 1,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 5919
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/diamond-diamond-6c3bcc456c967feb1570eb68.slpz",
+   "id": "dolphin-ulp-needle-pose-profile",
+   "owner": "Sheik needle charge pose byte under the unrecorded Dolphin float profile",
+   "rationale": "The residual is a bounded set of needle pose-byte rows (item.misc2) with an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 3674,
+     "first_mismatch_frame": 3552,
+     "first_render_visibility_mismatch_frame": null,
+     "frames": 15286,
+     "last_mismatch_frame": 14954,
+     "matched_frames": 15280,
+     "mismatch_count": 6,
+     "mismatch_fields_digest": "918a4b1fc03c77aa764b2967a068febdb8e5e4646f324c0565a8d972d73dc8bc",
+     "mismatch_fingerprint": "808882f521634943",
+     "mismatched_frames": 6,
+     "render_visibility_mismatch_count": 0,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 209
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/31704_Game_20250224T223414.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "fighter position and velocity float execution profile",
+   "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 1625,
+     "first_mismatch_frame": 1503,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 8362,
+     "last_mismatch_frame": 1597,
+     "matched_frames": 8335,
+     "mismatch_count": 27,
+     "mismatch_fields_digest": "654145777083d251d26086343e048660ea7b0d5b75715e6fe392e7e74a31213d",
+     "mismatch_fingerprint": "50263e98e33020b8",
+     "mismatched_frames": 27,
+     "render_visibility_mismatch_count": 4,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 6642
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/34027_Game_20250422T224627.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "fighter position and velocity float execution profile",
+   "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 2867,
+     "first_mismatch_frame": 2745,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 10991,
+     "last_mismatch_frame": 5916,
+     "matched_frames": 10924,
+     "mismatch_count": 67,
+     "mismatch_fields_digest": "7bfff018559a58a2f5a6bf70abce8af55db30f73b54003efb0488f37486b948a",
+     "mismatch_fingerprint": "5c94e1dae80ca58a",
+     "mismatched_frames": 67,
+     "render_visibility_mismatch_count": 3,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 4952
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/35421_Game_20250320T181522.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "fighter position and velocity float execution profile",
+   "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 3063,
+     "first_mismatch_frame": 2941,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 6617,
+     "last_mismatch_frame": 2951,
+     "matched_frames": 6613,
+     "mismatch_count": 4,
+     "mismatch_fields_digest": "04bcbfc2e58f07d2d70072305b340d4c001569df269b9b80a111a5fea6a3f9af",
+     "mismatch_fingerprint": "4c37a2ea453779ea",
+     "mismatched_frames": 4,
+     "render_visibility_mismatch_count": 3,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 3543
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/35438_Game_20250312T211113.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "fighter position and velocity float execution profile",
+   "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 3438,
+     "first_mismatch_frame": 3316,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 6275,
+     "last_mismatch_frame": 3375,
+     "matched_frames": 6226,
+     "mismatch_count": 49,
+     "mismatch_fields_digest": "a017fb089c0af765a274908334320ec6135505eabd83824623bca8561e4ac9a2",
+     "mismatch_fingerprint": "250e760c0937b608",
+     "mismatched_frames": 49,
+     "render_visibility_mismatch_count": 3,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 2777
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/4308_Game_20250404T231356.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "fighter position and velocity float execution profile",
+   "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 5210,
+     "first_mismatch_frame": 5088,
+     "first_render_visibility_mismatch_frame": null,
+     "frames": 6835,
+     "last_mismatch_frame": 5088,
+     "matched_frames": 6834,
+     "mismatch_count": 1,
+     "mismatch_fields_digest": "9be82e6be67cc69fe4ca9d01b95587fb59dfdf78fa175282627c6a7bb8877df2",
+     "mismatch_fingerprint": "d6a9f2ac8b835fd0",
+     "mismatched_frames": 1,
+     "render_visibility_mismatch_count": 0,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 1624
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/6082_Game_20231226T153224.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "fighter position and velocity float execution profile",
+   "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 3554,
+     "first_mismatch_frame": 3432,
+     "first_render_visibility_mismatch_frame": null,
+     "frames": 8941,
+     "last_mismatch_frame": 7834,
+     "matched_frames": 8879,
+     "mismatch_count": 62,
+     "mismatch_fields_digest": "e29686f2b6ee564cb093f87961036e9f6651b532503e1e77f2417708fc393183",
+     "mismatch_fingerprint": "782337f1af94f858",
+     "mismatched_frames": 62,
+     "render_visibility_mismatch_count": 0,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 984
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/Nicki-07-25-2025-06_Game_20250623T164159.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "fighter position and velocity float execution profile",
+   "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 567,
+     "first_mismatch_frame": 445,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 6545,
+     "last_mismatch_frame": 5403,
+     "matched_frames": 6064,
+     "mismatch_count": 599,
+     "mismatch_fields_digest": "74f71e24d0f0b392ccb24a88d80334678bd45d12d08e0b371e4d082cf78dfa29",
+     "mismatch_fingerprint": "e7ee6497b79cc0ae",
+     "mismatched_frames": 481,
+     "render_visibility_mismatch_count": 3,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 1019
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/Nicki-07-25-2025-06_Game_20250623T165942.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "fighter position and velocity float execution profile",
+   "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 6718,
+     "first_mismatch_frame": 6596,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 12143,
+     "last_mismatch_frame": 6596,
+     "matched_frames": 12142,
+     "mismatch_count": 1,
+     "mismatch_fields_digest": "92dd8fe25b98f7c1b0e9e00b181c74d7e7d0253316c2720b23b42549faada686",
+     "mismatch_fingerprint": "71450af750802aad",
+     "mismatched_frames": 1,
+     "render_visibility_mismatch_count": 3,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 5424
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/medium-fox-2025-12_Game_20251216T053607.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "fighter position and velocity float execution profile",
+   "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 2075,
+     "first_mismatch_frame": 1953,
+     "first_render_visibility_mismatch_frame": 2335,
+     "frames": 8341,
+     "last_mismatch_frame": 1953,
+     "matched_frames": 8340,
+     "mismatch_count": 4,
+     "mismatch_fields_digest": "bf9a2fe29700abb58b344d53afac4e48dc5f0b15732232e755b328963b02ddf4",
+     "mismatch_fingerprint": "18c255e4b20c0a33",
+     "mismatched_frames": 1,
+     "render_visibility_mismatch_count": 2,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 6265
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/medium-fox-2025-12_Game_20251221T121046.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "fighter position and velocity float execution profile",
+   "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 4829,
+     "first_mismatch_frame": 4707,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 6108,
+     "last_mismatch_frame": 4716,
+     "matched_frames": 6106,
+     "mismatch_count": 2,
+     "mismatch_fields_digest": "2b58be3d35230c5225fa458c5dab051aed949d8997bbfd1001e934a5ccf9c485",
+     "mismatch_fingerprint": "19296fbc3c23ab5e",
+     "mismatched_frames": 2,
+     "render_visibility_mismatch_count": 3,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 1269
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/plat-marth-2026-03_Game_20260312T115710.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "fighter position and velocity float execution profile",
+   "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 2205,
+     "first_mismatch_frame": 2083,
+     "first_render_visibility_mismatch_frame": 892,
+     "frames": 12367,
+     "last_mismatch_frame": 2154,
+     "matched_frames": 12295,
+     "mismatch_count": 194,
+     "mismatch_fields_digest": "f981e6795f60e22838cff1829f83bbdf9b1a1c657aab089ba368413461a43e9f",
+     "mismatch_fingerprint": "66825bbe70a79048",
+     "mismatched_frames": 72,
+     "render_visibility_mismatch_count": 8,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 10090
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/2026-07_Game_20260704T135409.slpz",
+   "id": "dolphin-ulp-item-motion-profile",
+   "owner": "item and fighter position float execution profile",
+   "rationale": "The residual mixes bounded item-position and fighter-position ULP intervals with needle pose bytes derived from them, reconverging to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing).",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 2366,
+     "first_mismatch_frame": 2244,
+     "first_render_visibility_mismatch_frame": null,
+     "frames": 15813,
+     "last_mismatch_frame": 15132,
+     "matched_frames": 15664,
+     "mismatch_count": 298,
+     "mismatch_fields_digest": "af74515e83abe675ced3d4de84beac1b5a21552382ccb4dde2260c1f987f5df5",
+     "mismatch_fingerprint": "0ea9afeecf41beeb",
+     "mismatched_frames": 149,
+     "render_visibility_mismatch_count": 0,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 558
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/64303_master-platinum-f57bf677ef721a6e844c0398.slpz",
+   "id": "dolphin-ulp-item-motion-profile",
+   "owner": "item and fighter position float execution profile",
+   "rationale": "The residual mixes bounded item-position and fighter-position ULP intervals with needle pose bytes derived from them, reconverging to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing).",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 5304,
+     "first_mismatch_frame": 5182,
+     "first_render_visibility_mismatch_frame": 6966,
+     "frames": 10580,
+     "last_mismatch_frame": 7014,
+     "matched_frames": 9858,
+     "mismatch_count": 917,
+     "mismatch_fields_digest": "4833b99a989038fd4cef23f94210e3761d18db6d18789ed5542a9c09eeeab6f8",
+     "mismatch_fingerprint": "70fe89cf09470ea9",
+     "mismatched_frames": 722,
+     "render_visibility_mismatch_count": 2,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 3443
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/33692_Game_20250715T211625.slpz",
+   "id": "dolphin-ulp-dynamic-bone-capsule-gate",
+   "owner": "Mario-line grab/hit checks against Fox dynamic-bone tail hurt capsules",
+   "rationale": "Bounded retail interpreter probes reproduce the Fox tail dynamics stream bit-exactly from spawn through the probed windows after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing). The remaining seed is a mid-frame animation-ownership reset (ftCo_8009CB40 anim-to-dynamics transition during Turn) whose lazily-sampled world matrix the replay does not record; the chaotic tail then forks a grab/hit capsule check on tail hurtboxes with complete downstream consequence.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 801,
+     "first_mismatch_frame": 679,
+     "first_render_visibility_mismatch_frame": 792,
+     "frames": 10645,
+     "last_mismatch_frame": 10522,
+     "matched_frames": 801,
+     "mismatch_count": 366326,
+     "mismatch_fields_digest": "014c5071a18c1b87e270bcecd0763ecd252f159edabd1245744cae1d95e4463a",
+     "mismatch_fingerprint": "6fbc08f4c4e66c35",
+     "mismatched_frames": 9844,
+     "render_visibility_mismatch_count": 14800,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 0
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/gm-fox-2026-04_Game_20260413T062552.slpz",
+   "id": "dolphin-ulp-dynamic-bone-capsule-gate",
+   "owner": "Mario-line grab/hit checks against Fox dynamic-bone tail hurt capsules",
+   "rationale": "Bounded retail interpreter probes reproduce the Fox tail dynamics stream bit-exactly from spawn through the probed windows after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing). The remaining seed is a mid-frame animation-ownership reset (ftCo_8009CB40 anim-to-dynamics transition during Turn) whose lazily-sampled world matrix the replay does not record; the chaotic tail then forks a grab/hit capsule check on tail hurtboxes with complete downstream consequence.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 3572,
+     "first_mismatch_frame": 3450,
+     "first_render_visibility_mismatch_frame": 3470,
+     "frames": 8856,
+     "last_mismatch_frame": 8733,
+     "matched_frames": 3572,
+     "mismatch_count": 193000,
+     "mismatch_fields_digest": "296745375d044e6eda6617c5c36da95efea94fc990af938ba9c60388a07cfaed",
+     "mismatch_fingerprint": "5a36db1ebbb9a42c",
+     "mismatched_frames": 5284,
+     "render_visibility_mismatch_count": 5534,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 0
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/silver-fox-2026-06_Game_20260615T232450.slpz",
+   "id": "dolphin-ulp-dynamic-bone-capsule-gate",
+   "owner": "Mario-line grab/hit checks against Fox dynamic-bone tail hurt capsules",
+   "rationale": "Bounded retail interpreter probes reproduce the Fox tail dynamics stream bit-exactly from spawn through the probed windows after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing). The remaining seed is a mid-frame animation-ownership reset (ftCo_8009CB40 anim-to-dynamics transition during Turn) whose lazily-sampled world matrix the replay does not record; the chaotic tail then forks a grab/hit capsule check on tail hurtboxes with complete downstream consequence.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 5176,
+     "first_mismatch_frame": 5054,
+     "first_render_visibility_mismatch_frame": 5720,
+     "frames": 6982,
+     "last_mismatch_frame": 6859,
+     "matched_frames": 5176,
+     "mismatch_count": 52031,
+     "mismatch_fields_digest": "37c28a55646f45ed496e7a083156c352c99e7a5d73786bdf87460c19c8171fc9",
+     "mismatch_fingerprint": "100fc422b3ea196d",
+     "mismatched_frames": 1806,
+     "render_visibility_mismatch_count": 622,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 0
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/medium-fox-2026-04_Game_20260413T180551.slpz",
+   "id": "dolphin-ulp-dynamic-bone-capsule-gate",
+   "owner": "Mario-line grab/hit checks against Fox dynamic-bone tail hurt capsules",
+   "rationale": "Bounded retail interpreter probes reproduce the Fox tail dynamics stream bit-exactly from spawn through the probed windows after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing). The remaining seed is a mid-frame animation-ownership reset (ftCo_8009CB40 anim-to-dynamics transition during Turn) whose lazily-sampled world matrix the replay does not record; the chaotic tail then forks a grab/hit capsule check on tail hurtboxes with complete downstream consequence.",
+   "sources": [
+    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 1032,
+     "first_mismatch_frame": 910,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 8959,
+     "last_mismatch_frame": 8813,
+     "matched_frames": 8608,
+     "mismatch_count": 473,
+     "mismatch_fields_digest": "9ac37ee7659b062b3c66e30992d42a087e45ff70fdae6943e9d0c50e849b0d0a",
+     "mismatch_fingerprint": "ede2992ad1f8ccbb",
+     "mismatched_frames": 351,
+     "render_visibility_mismatch_count": 4,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 23
+    }
    }
   }
  ]

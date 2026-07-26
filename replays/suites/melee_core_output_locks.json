@@ -218,7 +218,7 @@
    "expected": {
     "native": {
      "frames": 10410,
-     "actual_output_fingerprint": "2901aa521bd598cc"
+     "actual_output_fingerprint": "97ec9f886c104e5c"
     }
    }
   },
@@ -263,7 +263,7 @@
    "expected": {
     "native": {
      "frames": 7438,
-     "actual_output_fingerprint": "6dd5b5636022538b"
+     "actual_output_fingerprint": "51248575519ebffa"
     }
    }
   },
@@ -281,7 +281,7 @@
    "expected": {
     "native": {
      "frames": 9210,
-     "actual_output_fingerprint": "ebe55d2e4d7a354c"
+     "actual_output_fingerprint": "60222d5ad0a2161d"
     }
    }
   },
@@ -290,7 +290,7 @@
    "expected": {
     "native": {
      "frames": 10348,
-     "actual_output_fingerprint": "1a7ea577fe2b0c7e"
+     "actual_output_fingerprint": "55c1d3b194eb667d"
     }
    }
   },
@@ -434,7 +434,7 @@
    "expected": {
     "native": {
      "frames": 7277,
-     "actual_output_fingerprint": "fed8969b8b384c08"
+     "actual_output_fingerprint": "f267b69e626cda71"
     }
    }
   },
@@ -461,7 +461,7 @@
    "expected": {
     "native": {
      "frames": 7418,
-     "actual_output_fingerprint": "2c0adad5a26ba9b2"
+     "actual_output_fingerprint": "4651fc9fd8615ea3"
     }
    }
   },
@@ -488,7 +488,7 @@
    "expected": {
     "native": {
      "frames": 7955,
-     "actual_output_fingerprint": "e0318a73a440d925"
+     "actual_output_fingerprint": "7fd01859face16ef"
     }
    }
   },
@@ -560,7 +560,7 @@
    "expected": {
     "native": {
      "frames": 7905,
-     "actual_output_fingerprint": "62c539c6e9f66e89"
+     "actual_output_fingerprint": "c939ec4924c4efb3"
     }
    }
   },
@@ -578,7 +578,7 @@
    "expected": {
     "native": {
      "frames": 7402,
-     "actual_output_fingerprint": "2c1f2bcd73131b3e"
+     "actual_output_fingerprint": "ebd75e9231ff557a"
     }
    }
   },
@@ -623,7 +623,7 @@
    "expected": {
     "native": {
      "frames": 5737,
-     "actual_output_fingerprint": "b90ae52d1f5b59e4"
+     "actual_output_fingerprint": "bd10855b1fefcde8"
     }
    }
   },
@@ -749,7 +749,7 @@
    "expected": {
     "native": {
      "frames": 12355,
-     "actual_output_fingerprint": "605a26c2fe9c8f6c"
+     "actual_output_fingerprint": "2a9d06897958b8db"
     }
    }
   },
@@ -866,7 +866,7 @@
    "expected": {
     "native": {
      "frames": 9583,
-     "actual_output_fingerprint": "a881accccbc46168"
+     "actual_output_fingerprint": "51c881808a7ac467"
     }
    }
   },
@@ -884,7 +884,7 @@
    "expected": {
     "native": {
      "frames": 5750,
-     "actual_output_fingerprint": "5f067ccad457a3f3"
+     "actual_output_fingerprint": "ddb37b2e279b898a"
     }
    }
   },
@@ -965,7 +965,7 @@
    "expected": {
     "native": {
      "frames": 7508,
-     "actual_output_fingerprint": "3ece605ff38145a0"
+     "actual_output_fingerprint": "90736efb1355bd34"
     }
    }
   },
@@ -1091,7 +1091,7 @@
    "expected": {
     "native": {
      "frames": 16491,
-     "actual_output_fingerprint": "9167948e2674b1d6"
+     "actual_output_fingerprint": "3f4702f60be4ed4c"
     }
    }
   },
@@ -1100,7 +1100,7 @@
    "expected": {
     "native": {
      "frames": 12960,
-     "actual_output_fingerprint": "ba22203702de23db"
+     "actual_output_fingerprint": "5be76edb192d9850"
     }
    }
   },
@@ -1109,7 +1109,7 @@
    "expected": {
     "native": {
      "frames": 10458,
-     "actual_output_fingerprint": "04ecce7cbb6e0df7"
+     "actual_output_fingerprint": "717600d5b5eddd28"
     }
    }
   },
@@ -1118,7 +1118,7 @@
    "expected": {
     "native": {
      "frames": 12032,
-     "actual_output_fingerprint": "866e9021020cdaa2"
+     "actual_output_fingerprint": "9ee875ac11209110"
     }
    }
   },
@@ -1136,7 +1136,7 @@
    "expected": {
     "native": {
      "frames": 14098,
-     "actual_output_fingerprint": "b4c4cc4541040c46"
+     "actual_output_fingerprint": "7d730e48860031c3"
     }
    }
   },
@@ -1145,7 +1145,7 @@
    "expected": {
     "native": {
      "frames": 15634,
-     "actual_output_fingerprint": "5d81b11dcf52a58f"
+     "actual_output_fingerprint": "43b5aacf27a1c283"
     }
    }
   },
@@ -1172,7 +1172,7 @@
    "expected": {
     "native": {
      "frames": 11073,
-     "actual_output_fingerprint": "ecafcc31feef6ec0"
+     "actual_output_fingerprint": "79090cb85f431309"
     }
    }
   },
@@ -1190,7 +1190,7 @@
    "expected": {
     "native": {
      "frames": 10838,
-     "actual_output_fingerprint": "555c92c4601779a7"
+     "actual_output_fingerprint": "8f169be5258d0ffe"
     }
    }
   },
@@ -1208,7 +1208,7 @@
    "expected": {
     "native": {
      "frames": 12898,
-     "actual_output_fingerprint": "80fe42ce43db647b"
+     "actual_output_fingerprint": "7518b3431dd79745"
     }
    }
   },
@@ -1217,7 +1217,7 @@
    "expected": {
     "native": {
      "frames": 11114,
-     "actual_output_fingerprint": "27ee2fe2afb8b59d"
+     "actual_output_fingerprint": "413f00f51836f23b"
     }
    }
   },
@@ -1226,7 +1226,7 @@
    "expected": {
     "native": {
      "frames": 14352,
-     "actual_output_fingerprint": "2ddbc13690ff54fe"
+     "actual_output_fingerprint": "24a87d32184e8a0a"
     }
    }
   },
@@ -1424,7 +1424,7 @@
    "expected": {
     "native": {
      "frames": 7424,
-     "actual_output_fingerprint": "f7594f36f455befb"
+     "actual_output_fingerprint": "e90e013d49b347fd"
     }
    }
   },
@@ -1442,7 +1442,7 @@
    "expected": {
     "native": {
      "frames": 6027,
-     "actual_output_fingerprint": "4469301137ab3a30"
+     "actual_output_fingerprint": "cbbdd2e883ccf5ad"
     }
    }
   },
@@ -1613,7 +1613,7 @@
    "expected": {
     "native": {
      "frames": 5984,
-     "actual_output_fingerprint": "95bfde96ff744004"
+     "actual_output_fingerprint": "72e95dae6c0a7f3a"
     }
    }
   },
@@ -1622,7 +1622,7 @@
    "expected": {
     "native": {
      "frames": 9439,
-     "actual_output_fingerprint": "312436061de32c2c"
+     "actual_output_fingerprint": "dbd8226dc9a5f671"
     }
    }
   },
@@ -1659,6 +1659,456 @@
     "native": {
      "frames": 4196,
      "actual_output_fingerprint": "1739433fa95cc850"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/1368_Game_20250320T135741.slpz",
+   "expected": {
+    "native": {
+     "frames": 10801,
+     "actual_output_fingerprint": "50d7203e9c7bc552"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/2026-07_Game_20260704T135409.slpz",
+   "expected": {
+    "native": {
+     "frames": 15813,
+     "actual_output_fingerprint": "91b26697f0eaee01"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/31704_Game_20250224T223414.slpz",
+   "expected": {
+    "native": {
+     "frames": 8362,
+     "actual_output_fingerprint": "1025b9892726c305"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/33690_Game_20250715T204349.slpz",
+   "expected": {
+    "native": {
+     "frames": 12226,
+     "actual_output_fingerprint": "8565a2b08e9095fc"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/33692_Game_20250715T211625.slpz",
+   "expected": {
+    "native": {
+     "frames": 10645,
+     "actual_output_fingerprint": "50abe31270623e41"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/34027_Game_20250422T224627.slpz",
+   "expected": {
+    "native": {
+     "frames": 10991,
+     "actual_output_fingerprint": "bcad2fc46a899085"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/35421_Game_20250320T181522.slpz",
+   "expected": {
+    "native": {
+     "frames": 6617,
+     "actual_output_fingerprint": "f3b3f1562b41c635"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/35438_Game_20250312T211113.slpz",
+   "expected": {
+    "native": {
+     "frames": 6275,
+     "actual_output_fingerprint": "9bcf045dc7cbbf55"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/4308_Game_20250404T231356.slpz",
+   "expected": {
+    "native": {
+     "frames": 6835,
+     "actual_output_fingerprint": "6fa26e0acee3d5ac"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/6082_Game_20231226T153224.slpz",
+   "expected": {
+    "native": {
+     "frames": 8941,
+     "actual_output_fingerprint": "fc2d2cff3d1bcf8e"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/64303_master-platinum-f57bf677ef721a6e844c0398.slpz",
+   "expected": {
+    "native": {
+     "frames": 10580,
+     "actual_output_fingerprint": "e9ec0c7c118962fa"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/Nicki-07-25-2025-06_Game_20250623T164159.slpz",
+   "expected": {
+    "native": {
+     "frames": 6545,
+     "actual_output_fingerprint": "77bb1bf21b0b05e4"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/Nicki-07-25-2025-06_Game_20250623T165942.slpz",
+   "expected": {
+    "native": {
+     "frames": 12143,
+     "actual_output_fingerprint": "8d233610a27cc57c"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/Slippi-20220321_Game_20220322T011940.slpz",
+   "expected": {
+    "native": {
+     "frames": 8060,
+     "actual_output_fingerprint": "d058ded1d305a37a"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/Slippi-2025-02_Game_20250212T214835.slpz",
+   "expected": {
+    "native": {
+     "frames": 7167,
+     "actual_output_fingerprint": "4d4b51484688907d"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/Slippi-2025-04_Game_20250406T181737.slpz",
+   "expected": {
+    "native": {
+     "frames": 8933,
+     "actual_output_fingerprint": "efe8f4c493480ae3"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/Slippi-2025-04_Game_20250408T021446.slpz",
+   "expected": {
+    "native": {
+     "frames": 10090,
+     "actual_output_fingerprint": "ad8bb8789c61f97b"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/auto-doc-2026-05_Game_20260513T205625.slpz",
+   "expected": {
+    "native": {
+     "frames": 15022,
+     "actual_output_fingerprint": "21397c45244f2783"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/auto-fox-2025-06_Game_20250608T173336.slp",
+   "expected": {
+    "native": {
+     "frames": 6103,
+     "actual_output_fingerprint": "800628aa7a31ac38"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/auto-fox-2025-08_Game_20250811T223548.slpz",
+   "expected": {
+    "native": {
+     "frames": 8220,
+     "actual_output_fingerprint": "236f53a8545a4131"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/auto-fox-2025-09_Game_20250918T175348.slpz",
+   "expected": {
+    "native": {
+     "frames": 8987,
+     "actual_output_fingerprint": "38c1bb2352194df7"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/auto-marth-2025-12_Game_20251229T150036.slpz",
+   "expected": {
+    "native": {
+     "frames": 7369,
+     "actual_output_fingerprint": "80e92d77455ca36b"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/auto-sheik-2025-02_Game_20250227T165006.slp",
+   "expected": {
+    "native": {
+     "frames": 10751,
+     "actual_output_fingerprint": "ea9875d324eae3a7"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/auto-sheik-2025-02_Game_20250228T201822.slp",
+   "expected": {
+    "native": {
+     "frames": 5928,
+     "actual_output_fingerprint": "b12c33b8e981a0e6"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/diamond-diamond-6c3bcc456c967feb1570eb68.slpz",
+   "expected": {
+    "native": {
+     "frames": 15286,
+     "actual_output_fingerprint": "2c662baeebca692a"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/diamond-platinum-ba31dd26e40b4c452a6665e0.slpz",
+   "expected": {
+    "native": {
+     "frames": 8515,
+     "actual_output_fingerprint": "7ff8d5611207852e"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/gm-falco-2026-06_Game_20260608T020147.slpz",
+   "expected": {
+    "native": {
+     "frames": 9601,
+     "actual_output_fingerprint": "151e410280d0d855"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/gm-fox-2025-11_Game_20251130T085625.slpz",
+   "expected": {
+    "native": {
+     "frames": 5939,
+     "actual_output_fingerprint": "813868fcd781dbca"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/gm-fox-2026-03_Game_20260323T192034.slpz",
+   "expected": {
+    "native": {
+     "frames": 7513,
+     "actual_output_fingerprint": "dae6fb0966c4ddd3"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/gm-fox-2026-04_Game_20260413T062552.slpz",
+   "expected": {
+    "native": {
+     "frames": 8856,
+     "actual_output_fingerprint": "99104184dfc1a843"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/gm-marth-2025-11_Game_20251113T014158.slpz",
+   "expected": {
+    "native": {
+     "frames": 4499,
+     "actual_output_fingerprint": "a1030d7da6a68010"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/gm-sheik-2025-11_Game_20251111T160230.slpz",
+   "expected": {
+    "native": {
+     "frames": 10336,
+     "actual_output_fingerprint": "617f076810d1d70b"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/gold-falco-2026-05_Game_20260513T153241.slpz",
+   "expected": {
+    "native": {
+     "frames": 8974,
+     "actual_output_fingerprint": "5c925ac90f6b739b"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/gold-fox-2026-05_Game_20260506T010201.slpz",
+   "expected": {
+    "native": {
+     "frames": 11089,
+     "actual_output_fingerprint": "6e1c98ca199e269c"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/gold-fox-2026-05_Game_20260527T010931.slpz",
+   "expected": {
+    "native": {
+     "frames": 10294,
+     "actual_output_fingerprint": "8cda67a62091b6b6"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/master-diamond-2a8a128fe61a6b8aa44f372e.slpz",
+   "expected": {
+    "native": {
+     "frames": 10528,
+     "actual_output_fingerprint": "99db383f0a74b7e2"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/master-fox-2026-04_Game_20260425T193419.slpz",
+   "expected": {
+    "native": {
+     "frames": 8356,
+     "actual_output_fingerprint": "ebcbc58e7ceaf2e4"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/medium-falco-2026-03_Game_20260330T201208.slpz",
+   "expected": {
+    "native": {
+     "frames": 9144,
+     "actual_output_fingerprint": "230168292766cd8e"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/medium-fox-2025-09_Game_20250919T170839.slpz",
+   "expected": {
+    "native": {
+     "frames": 6184,
+     "actual_output_fingerprint": "8ca0f840579996e8"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/medium-fox-2025-12_Game_20251216T053607.slpz",
+   "expected": {
+    "native": {
+     "frames": 8341,
+     "actual_output_fingerprint": "4750a5396234f395"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/medium-fox-2025-12_Game_20251221T121046.slpz",
+   "expected": {
+    "native": {
+     "frames": 6108,
+     "actual_output_fingerprint": "537965c79a8d8f74"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/medium-fox-2026-01_Game_20260113T184751.slpz",
+   "expected": {
+    "native": {
+     "frames": 5376,
+     "actual_output_fingerprint": "c8bf8bae75bd3c6d"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/medium-fox-2026-03_Game_20260327T000224.slpz",
+   "expected": {
+    "native": {
+     "frames": 8255,
+     "actual_output_fingerprint": "4b9ff3418d527b0b"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/medium-fox-2026-04_Game_20260413T180551.slpz",
+   "expected": {
+    "native": {
+     "frames": 8959,
+     "actual_output_fingerprint": "f28f310b5d74bad2"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/plat-marth-2026-03_Game_20260312T115710.slpz",
+   "expected": {
+    "native": {
+     "frames": 12367,
+     "actual_output_fingerprint": "c651ec05fc97c526"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/plat-marth-2026-03_Game_20260323T002353.slpz",
+   "expected": {
+    "native": {
+     "frames": 14686,
+     "actual_output_fingerprint": "53d5f7c4a8b6674f"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/platinum-platinum-4aa6d15f587e02246006b7e0.slpz",
+   "expected": {
+    "native": {
+     "frames": 10188,
+     "actual_output_fingerprint": "d2c35e59be07cc44"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/ranked-anonymized_platinum-platinum-7d58208ea7f4c046a0da2ae1.slpz",
+   "expected": {
+    "native": {
+     "frames": 12462,
+     "actual_output_fingerprint": "d26bbe48ad243a4a"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/silver-fox-2026-06_Game_20260615T232450.slpz",
+   "expected": {
+    "native": {
+     "frames": 6982,
+     "actual_output_fingerprint": "2c87b1aa94085d5b"
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/marios/slippi-2025-06_Game_20250630T205933.slpz",
+   "expected": {
+    "native": {
+     "frames": 11828,
+     "actual_output_fingerprint": "316a05b9390b96a0"
     }
    }
   }

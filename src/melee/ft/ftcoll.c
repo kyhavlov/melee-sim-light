@@ -488,7 +488,9 @@ bool ftColl_8007699C(Fighter* fp0, HitCapsule* hit0, Fighter* fp1,
 static inline bool ftColl_8007699C_dontinline(Fighter* fp0, HitCapsule* hit0,
                                               Fighter* fp1, HitCapsule* hit1)
 {
-    ftColl_8007699C(fp0, hit0, fp1, hit1);
+    // Retail forwards ftColl_8007699C's bool through r3; hosted compilers do
+    // not preserve that fallthrough, and the caller tests this result.
+    return ftColl_8007699C(fp0, hit0, fp1, hit1);
 }
 
 void ftColl_80076CBC(Fighter* fp0, HitCapsule* hit0, Fighter* fp1)

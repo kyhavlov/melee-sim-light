@@ -40,6 +40,7 @@
 #include <dolphin/mtx.h>
 #include <baselib/dobj.h>
 #include <baselib/jobj.h>
+#include <MetroTRK/intrinsics.h>
 
 /* 0C63BC */ static void fn_800C63BC(Fighter_GObj* gobj);
 /* 0C63E0 */ static void fn_800C63E0(Fighter_GObj* gobj);
@@ -185,8 +186,11 @@ void ftCo_EntryStart_Phys(Fighter_GObj* gobj)
     temp_r6 = p_ftCommonData->x6BC;
     temp_f4 = p_ftCommonData->x6C4;
     temp_f31 = (f32) (temp_r6 - temp_r31->mv.co.entry.timer) / temp_r6;
-    temp_r31->mv.co.entry.x14.y =
-        (temp_f31 * (temp_r31->mv.co.entry.x8.y - temp_f4)) + temp_f4;
+    // GALE01 0x800C67AC evaluates the entry-grow ramp as one fmadds off the
+    // fdivs fraction. The y-only scale feeds every bone world matrix, and Fox
+    // tail dynamics amplifies the double-rounded product into a visible fork.
+    temp_r31->mv.co.entry.x14.y = __fmadds(
+        temp_f31, temp_r31->mv.co.entry.x8.y - temp_f4, temp_f4);
 
     HSD_JObjSetScale(gobj->hsd_obj, &temp_r31->mv.co.entry.x14);
 

@@ -174,7 +174,10 @@ static const MslCoreStageSpec stage_specs[] = {
       "/GrNBa.dat",
       &grNBa_803E7E38,
       1U << 3,
-      1U << 6,
+      // Map 6's per-frame proc (grBattle_8021A174) is not render-only: it
+      // advances the shared dynamics-force emitters (lb_800115F4) that gate
+      // fighter tail gusts. Keep it scheduled.
+      0,
       { { -38.8F, 35.2F, 0.0F }, { 38.8F, 35.2F, 0.0F },
         { 0.0F, 8.0F, 0.0F }, { 0.0F, 62.4F, 0.0F } },
       { { -38.8F, 35.2F, 0.0F }, { -38.8F, 5.0F, 0.0F },
@@ -990,6 +993,13 @@ static int match_construct(MslCoreMatch* match,
             if (i == 0) {
                 HSD_GObj_SetupProc(gobj, msl_ground_headless_epoch_proc,
                                    1);
+            }
+            if (i == 3) {
+                // grlast.c::grLast_8021AAB0 (map 3's priority-4 proc) ends by
+                // advancing the shared dynamics-force emitters. The rest of
+                // that proc is renderer-owned, but the emitter tick gates
+                // fighter tail gusts (Fox Shine etc.) read by lb_8001044C.
+                HSD_GObj_SetupProc(gobj, msl_fd_force_emitter_proc, 4);
             }
             if (i == 7) {
                 msl_fd_background_init(gobj);

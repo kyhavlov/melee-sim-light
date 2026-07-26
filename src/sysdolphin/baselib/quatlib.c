@@ -182,7 +182,12 @@ s32 HSD_QuatLib_8037EF28(Quaternion* p, Quaternion* q, Quaternion* out, f32 t)
     f32 sp;
     f32 sq;
 
-    cosom = p->x * q->x + p->y * q->y + p->z * q->z + p->w * q->w;
+    // GALE01 0x8037EF6C-0x8037EF94: the dot product accumulates through
+    // fmadds, and every output lane below is one fmadds over a pre-rounded
+    // fmuls (0x8037EFFC-0x8037F03C and the sibling branches).
+    cosom = __fmadds(p->w, q->w,
+                     __fmadds(p->z, q->z,
+                              __fmadds(p->y, q->y, p->x * q->x)));
 
     if ((1.0F + cosom) > 1e-10F) {
         if ((1.0F - cosom) > 1e-10F) {
@@ -194,10 +199,10 @@ s32 HSD_QuatLib_8037EF28(Quaternion* p, Quaternion* q, Quaternion* out, f32 t)
             sq = t;
             sp = (f32) (1.0 - (f64) t);
         }
-        out->x = sp * p->x + sq * q->x;
-        out->y = sp * p->y + sq * q->y;
-        out->z = sp * p->z + sq * q->z;
-        out->w = sp * p->w + sq * q->w;
+        out->x = __fmadds(sp, p->x, sq * q->x);
+        out->y = __fmadds(sp, p->y, sq * q->y);
+        out->z = __fmadds(sp, p->z, sq * q->z);
+        out->w = __fmadds(sp, p->w, sq * q->w);
     } else {
         out->x = -p->y;
         out->y = p->x;
@@ -207,19 +212,19 @@ s32 HSD_QuatLib_8037EF28(Quaternion* p, Quaternion* q, Quaternion* out, f32 t)
         if (t < 0.5F) {
             sp = sinf((f32) (M_PI_2 * (1.0F - (2.0F * t))));
             sq = sinf((f32) (M_PI_2 * (2.0F * t)));
-            out->x = sp * p->x + sq * q->x;
-            out->y = sp * p->y + sq * q->y;
-            out->z = sp * p->z + sq * q->z;
-            out->w = sp * p->w + sq * q->w;
+            out->x = __fmadds(sp, p->x, sq * q->x);
+            out->y = __fmadds(sp, p->y, sq * q->y);
+            out->z = __fmadds(sp, p->z, sq * q->z);
+            out->w = __fmadds(sp, p->w, sq * q->w);
         } else {
             t -= 0.5F;
             t2 = 2.0F * t;
             sp = sinf((f32) (M_PI_2 * (1.0F - t2)));
             sq = sinf((f32) (M_PI_2 * t2));
-            out->x = sp * p->x + sq * q->x;
-            out->y = sp * p->y + sq * q->y;
-            out->z = sp * p->z + sq * q->z;
-            out->w = sp * p->w + sq * q->w;
+            out->x = __fmadds(sp, p->x, sq * q->x);
+            out->y = __fmadds(sp, p->y, sq * q->y);
+            out->z = __fmadds(sp, p->z, sq * q->z);
+            out->w = __fmadds(sp, p->w, sq * q->w);
         }
     }
 

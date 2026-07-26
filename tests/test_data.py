@@ -28,4 +28,4 @@ def test_configured_raw_data_profile_is_valid() -> None:
         manifest = validate_raw_dir(path, verify_hashes=False)
     except DataError as exc:
         pytest.fail(str(exc))
-    assert len(manifest["files"]) == 81
+    assert len(manifest["files"]) == 106

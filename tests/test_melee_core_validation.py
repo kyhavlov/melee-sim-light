@@ -112,6 +112,7 @@ def test_native_validation_compares_complete_classified_replays() -> None:
         "puff.json",
         "peach.json",
         "luigi.json",
+        "marios.json",
     ):
         _suite, loaded_cases = load_suite_cases(
             ROOT / "replays/suites" / suite_name,

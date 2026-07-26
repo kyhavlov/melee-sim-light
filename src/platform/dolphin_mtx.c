@@ -681,33 +681,49 @@ void MTXRotRad(Mtx matrix, char axis, float radians)
 
 void PSMTXQuat(Mtx matrix, Quaternion* q)
 {
-    float scale = 2.0F /
-                  (q->w * q->w +
-                   (q->z * q->z + (q->x * q->x + q->y * q->y)));
-    float xs = q->x * scale;
-    float ys = q->y * scale;
-    float zs = q->z * scale;
-    float wx = q->w * xs;
-    float wy = q->w * ys;
-    float wz = q->w * zs;
-    float xx = q->x * xs;
-    float xy = q->x * ys;
-    float xz = q->x * zs;
-    float yy = q->y * ys;
-    float yz = q->y * zs;
-    float zz = q->z * zs;
+    // refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat is
+    // paired-single assembly: the norm reciprocal is a fres estimate plus one
+    // Newton step, each diagonal folds its squared sum through a single
+    // ps_nmsub round (m[1][1] with the sum itself fused, m[0][0] and m[2][2]
+    // from pre-rounded squares), and every off-diagonal fuses its first
+    // product. Dynamic-bone rotations re-enter gameplay through the
+    // mtx->euler conversion, so keep those exact boundaries.
+    float x = q->x;
+    float y = q->y;
+    float z = q->z;
+    float w = q->w;
+    float xx = x * x;
+    float yy = y * y;
+    float zz = z * z;
+    float zz_xx = fmaf(z, z, xx);
+    float ww_yy = fmaf(w, w, yy);
+    float norm = zz_xx + ww_yy;
+    float estimate = (float) ppc_fres((double) norm);
+    float scale = estimate * fmaf(-norm, estimate, 2.0F);
+    float zw = z * w;
+    float yw = y * w;
+    float xw = x * w;
+    float xy_zw = fmaf(x, y, zw);
+    float xy_mzw = fmaf(x, y, -zw);
+    float xz_yw = fmaf(x, z, yw);
+    float yz_xw = fmaf(y, z, xw);
+    float xz_myw = fmaf(-2.0F, yw, xz_yw);
+    float yz_mxw = fmaf(-2.0F, xw, yz_xw);
+    float xx_yy = xx + yy;
+    float zz_yy = zz + yy;
 
-    matrix[0][0] = 1.0F - (yy + zz);
-    matrix[0][1] = xy - wz;
-    matrix[0][2] = xz + wy;
+    scale = scale * 2.0F;
+    matrix[0][0] = fmaf(-zz_yy, scale, 1.0F);
+    matrix[0][1] = xy_mzw * scale;
+    matrix[0][2] = xz_yw * scale;
     matrix[0][3] = 0.0F;
-    matrix[1][0] = xy + wz;
-    matrix[1][1] = 1.0F - (xx + zz);
-    matrix[1][2] = yz - wx;
+    matrix[1][0] = xy_zw * scale;
+    matrix[1][1] = fmaf(-zz_xx, scale, 1.0F);
+    matrix[1][2] = yz_mxw * scale;
     matrix[1][3] = 0.0F;
-    matrix[2][0] = xz - wy;
-    matrix[2][1] = yz + wx;
-    matrix[2][2] = 1.0F - (xx + yy);
+    matrix[2][0] = xz_myw * scale;
+    matrix[2][1] = yz_xw * scale;
+    matrix[2][2] = fmaf(-xx_yy, scale, 1.0F);
     matrix[2][3] = 0.0F;
 }
 

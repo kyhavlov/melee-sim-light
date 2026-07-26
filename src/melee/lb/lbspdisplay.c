@@ -345,7 +345,7 @@ struct lb_80011A50_t* lb_800100B0(struct lb_80011A50_t* arg0, f32 arg1)
     return ret;
 }
 
-void lb_800101C8(Vec3* arg0, Vec3* arg1)
+f32 lb_800101C8(Vec3* arg0, Vec3* arg1)
 {
     struct lb_80011A50_t* var_r30 = lb_804D63B0;
     arg1->x = 0.0f;
@@ -384,12 +384,16 @@ void lb_800101C8(Vec3* arg0, Vec3* arg1)
             }
         }
     }
-    lbVector_Normalize(arg1);
+    return lbVector_Normalize(arg1);
 }
 
 float lb_800103B8(Vec3* a, Vec3* b)
 {
-    lb_800101C8(a, b);
+    // GALE01 0x800103B8 returns the accumulated-force magnitude through the
+    // f1 left by lb_800101C8's tail call to lbVector_Normalize. Hosted
+    // compilers do not preserve that fallthrough, which zeroed force_mag and
+    // froze queued dynamics forces (hit gusts) out of the tail solver.
+    return lb_800101C8(a, b);
 }
 
 bool lb_800103D8(Vec3* vec, float x0, float x1, float x2, float x3,

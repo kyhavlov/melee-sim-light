@@ -1,14 +1,15 @@
 {
-  "name": "melee_core_aggregate",
-  "notes": "Canonical decomp-port validation inventory. This is the union of every active singles, character-extension, and doubles replay manifest; heldout/generalization suites remain separate. Character filtering controls which already-supported source domains execute without changing the aggregate inventory.",
-  "ucf_enabled": true,
-  "ucf_cardinals_1_0_enabled": true,
-  "team_attack_on": true,
-  "include_suites": [
-    "aggregate_recent.json",
-    "puff.json",
-    "peach.json",
-    "doubles_recent.json",
-    "luigi.json"
-  ]
+ "name": "melee_core_aggregate",
+ "notes": "Canonical decomp-port validation inventory. This is the union of every active singles, character-extension, and doubles replay manifest; heldout/generalization suites remain separate. Character filtering controls which already-supported source domains execute without changing the aggregate inventory.",
+ "ucf_enabled": true,
+ "ucf_cardinals_1_0_enabled": true,
+ "team_attack_on": true,
+ "include_suites": [
+  "aggregate_recent.json",
+  "puff.json",
+  "peach.json",
+  "doubles_recent.json",
+  "luigi.json",
+  "marios.json"
+ ]
 }

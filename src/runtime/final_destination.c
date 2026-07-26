@@ -1,6 +1,7 @@
 #include "runtime/final_destination.h"
 
 #include "gr/types.h"
+#include "lb/lbspdisplay.h"
 
 #include <MetroTRK/intrinsics.h>
 
@@ -97,4 +98,13 @@ void msl_fd_background_init(HSD_GObj* gobj)
 
     // grlast.c::grLast_8021A7F4 registers callback2 at source priority 4.
     HSD_GObj_SetupProc(gobj, fd_background_rotation_think, 4);
+}
+
+void msl_fd_force_emitter_proc(HSD_GObj* gobj)
+{
+    // grlast.c::grLast_8021AAB0 (map 3's priority-4 proc) ends by advancing
+    // the shared dynamics-force emitters. Its remaining duties are
+    // renderer-owned, but the emitter phase gates the fighter tail gusts
+    // (Fox Shine and friends) that lb_8001044C consumes.
+    lb_800115F4();
 }
