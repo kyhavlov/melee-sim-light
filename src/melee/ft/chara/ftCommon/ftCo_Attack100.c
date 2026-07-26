@@ -1455,7 +1455,11 @@ bool fn_800D9558(Fighter_GObj* gobj)
             if (grav <= (f32) attrs->xA8) {
                 item = fp->fv.ss.x223C;
                 it = GET_ITEM(item);
+                #ifdef MSL_CORE_NATIVE
+                grappleAttrs = (void*) msl_samus_grapple_attrs(it);
+#else
                 grappleAttrs = it->xC4_article_data->x4_specialAttributes;
+#endif
                 if (item != NULL) {
                     for (i = 0, frame = 0x14; i < 6; i++, frame += 3) {
                         if (fp->mv.ca.specials.grav == (f32) frame) {
@@ -1790,7 +1794,11 @@ bool fn_800D9930(Fighter_GObj* gobj)
                 Item* it;
                 it = GET_ITEM(fp->fv.ss.x223C);
                 item = fp->fv.ss.x223C;
+                #ifdef MSL_CORE_NATIVE
+                grappleAttrs = (void*) msl_samus_grapple_attrs(it);
+#else
                 grappleAttrs = it->xC4_article_data->x4_specialAttributes;
+#endif
                 if (item != NULL) {
                     for (i = 0, frame = 0x14; i < 4; i++, frame += 3) {
                         if (fp->mv.ca.specials.grav == (f32) frame) {

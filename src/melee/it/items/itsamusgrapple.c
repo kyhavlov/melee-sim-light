@@ -50,7 +50,7 @@ extern itSamusGrapple_HitboxData it_803B8660;
 // grapple spawn: retail uses the article's DAT blob as scratch. Hosted
 // GameData is shared and immutable, so route every attribute access through
 // the match-owned mirror in MslSourceMatchState.
-static itSamusGrappleAttributes* msl_samus_grapple_attrs(Item* ip)
+itSamusGrappleAttributes* msl_samus_grapple_attrs(Item* ip)
 {
     MslSourceMatchState* state = msl_core_source_match_state();
     if (!state->samus_grapple.seeded) {

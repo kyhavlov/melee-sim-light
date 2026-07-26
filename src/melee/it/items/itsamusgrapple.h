@@ -37,6 +37,14 @@ typedef struct itSamusGrapple_HitboxData {
     u8 x134_7 : 1;
 } itSamusGrapple_HitboxData;
 
+#ifdef MSL_CORE_NATIVE
+// Retail recomputes the x34..x58 attribute lanes in place at every grapple
+// spawn; hosted GameData is immutable, so every reader of the grapple
+// article's attributes (including the ftCommon tether views) must go through
+// the match-owned mirror.
+itSamusGrappleAttributes* msl_samus_grapple_attrs(Item* ip);
+#endif
+
 /* 2A77DC */ void it_802A77DC(Item_GObj* gobj);
 /* 2B7150 */ void itSamusGrapple_Logic53_Spawned(Item_GObj*);
 /* 2B7160 */ void it_802B7160(Fighter_GObj*, itSamusGrapple_HitboxData*);

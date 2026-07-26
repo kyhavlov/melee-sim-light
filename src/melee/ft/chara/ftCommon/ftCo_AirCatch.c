@@ -214,8 +214,16 @@ void ftCo_AirCatch_Anim(Fighter_GObj* gobj)
             if (fp->mv.co.aircatch.x0 <= da->xC8) {
                 Item_GObj* temp_r29_2 = fp->fv.ss.x223C;
                 Item* tether_ip = GET_ITEM(temp_r29_2);
+#ifdef MSL_CORE_NATIVE
+                // The tether view aliases the grapple attributes retail
+                // mutates in place; read the match-owned mirror.
+                struct TetherAttributes* tether_data =
+                    (struct TetherAttributes*)
+                        msl_samus_grapple_attrs(tether_ip);
+#else
                 struct TetherAttributes* tether_data =
                     tether_ip->xC4_article_data->x4_specialAttributes;
+#endif
                 if (fp->mv.co.aircatch.x0 == da->xC0) {
                     {
                         Vec3 pos = { 1.8, 0, 0 };
