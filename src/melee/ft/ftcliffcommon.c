@@ -20,6 +20,7 @@
 
 #include <common_structs.h>
 #include <dolphin/mtx.h>
+#include <MetroTRK/intrinsics.h>
 
 bool ftCliffCommon_80081298(Fighter_GObj* gobj)
 {
@@ -120,7 +121,9 @@ void ftCo_CliffCatch_Phys(Fighter_GObj* gobj)
         } else {
             mpLib_80053DA4_Floor(fp->mv.co.cliff.ledge_id, &vec);
         }
-        fp->cur_pos.x = fp->x68C_transNPos.z * fp->facing_dir + vec.x;
+        // GALE01 0x800815A8 fmadds: the ledge-relative x is contracted.
+        fp->cur_pos.x =
+            __fmadds(fp->x68C_transNPos.z, fp->facing_dir, vec.x);
         fp->cur_pos.y = vec.y + fp->x68C_transNPos.y;
     } else {
         ftCo_Fall_Enter(gobj);
