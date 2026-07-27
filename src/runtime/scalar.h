@@ -69,6 +69,12 @@ typedef struct MslCoreGameData {
 typedef struct MslCoreMatch {
     const MslCoreGameData* game_data;
     Fighter_GObj* fighters[MSL_CORE_MAX_PLAYERS];
+    // Ice Climbers slots own a second fighter entity: the Nana follower at
+    // Player_GetEntityAtIndex(slot, 1). NULL for every other character,
+    // including Sheik/Zelda whose entity 1 is the dormant transformation
+    // half rather than an independently simulated fighter.
+    // refs/melee/src/melee/pl/player.c::Player_80031AD0
+    Fighter_GObj* follower_fighters[MSL_CORE_MAX_PLAYERS];
     Ground stage_ground[MSL_CORE_STAGE_GROUND_CAPACITY];
     uint8_t stage_ground_used[MSL_CORE_STAGE_GROUND_CAPACITY];
     StageData* stage_data;
@@ -108,6 +114,9 @@ typedef struct MslCoreMatch {
     float output_pos_x[MSL_CORE_MAX_PLAYERS];
     float output_pos_y[MSL_CORE_MAX_PLAYERS];
     uint8_t output_render_visibility[MSL_CORE_MAX_PLAYERS];
+    float follower_output_pos_x[MSL_CORE_MAX_PLAYERS];
+    float follower_output_pos_y[MSL_CORE_MAX_PLAYERS];
+    uint8_t follower_output_render_visibility[MSL_CORE_MAX_PLAYERS];
     uint32_t random_seed;
     MslCoreCompare output;
 } MslCoreMatch;

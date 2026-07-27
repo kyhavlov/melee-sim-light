@@ -9,6 +9,7 @@ class Character(IntEnum):
     FALCON = 2
     SHEIK = 7
     PEACH = 9
+    ICE_CLIMBERS = 10
     SAMUS = 13
     JIGGLYPUFF = 15
     LUIGI = 17

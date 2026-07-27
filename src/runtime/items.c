@@ -7,6 +7,9 @@
 #include "it/it_279C.h"
 #include "it/it_3F14.h"
 #include "it/items/itbombhei.h"
+#include "it/items/itclimbersblizzard.h"
+#include "it/items/itclimbersice.h"
+#include "it/items/itclimbersstring.h"
 #include "it/items/itdosei.h"
 #include "it/items/itfoxblaster.h"
 #include "it/items/itfoxillusion.h"
@@ -84,6 +87,9 @@ struct sdata_ItemGXLink it_803F2F28[118] = {
     [It_Kind_Seak_Vanish - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Seak_Chain - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Luigi_Fire - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_IceClimber_Ice - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_IceClimber_Blizzard - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_IceClimber_GumStrings - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Samus_Bomb - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Samus_Charge - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Samus_Missile - It_Kind_Kuriboh] = { NULL },
@@ -118,6 +124,57 @@ struct ItemLogicTable it_803F3100[118] = {
         itFoxLaser_Logic94_ShieldBounced,
         itFoxLaser_Logic94_HitShield,
         itFoxLaser_Logic94_EvtUnk,
+    },
+    [It_Kind_IceClimber_Ice - It_Kind_Kuriboh] = {
+        it_803F7668,
+        NULL,
+        it_2725_Logic90_Destroyed,
+        NULL,
+        NULL,
+        NULL,
+        itClimbersIce_Logic90_DmgDealt,
+        NULL,
+        NULL,
+        itClimbersIce_Logic90_Reflected,
+        itClimbersIce_Logic90_Clanked,
+        itClimbersIce_Logic90_Absorbed,
+        itClimbersIce_Logic90_ShieldBounced,
+        it_2725_Logic90_HitShield,
+        itClimbersIce_Logic90_EvtUnk,
+    },
+    [It_Kind_IceClimber_Blizzard - It_Kind_Kuriboh] = {
+        it_803F76A8,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        itClimbersBlizzard_DmgDealt,
+        NULL,
+        NULL,
+        itClimbersBlizzard_Reflected,
+        itClimbersBlizzard_Clanked,
+        itClimbersBlizzard_Absorbed,
+        itClimbersBlizzard_ShieldBounced,
+        itClimbersBlizzard_HitShield,
+        itClimbersBlizzard_EvtUnk,
+    },
+    [It_Kind_IceClimber_GumStrings - It_Kind_Kuriboh] = {
+        it_803F76B8,
+        NULL,
+        NULL,
+        it_2725_Logic70_PickedUp,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_2725_Logic70_EvtUnk,
     },
     [It_Kind_Samus_Bomb - It_Kind_Kuriboh] = {
         it_803F7220,

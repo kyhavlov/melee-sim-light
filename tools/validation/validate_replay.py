@@ -36,7 +36,7 @@ NATIVE_BINARY = Path(
 TOOLCHAIN = BUILD / "toolchain" / "root"
 QEMU = TOOLCHAIN / "usr" / "bin" / "qemu-ppc-static"
 SYSROOT = TOOLCHAIN / "usr" / "powerpc-linux-gnu"
-DEFAULT_CHARACTERS = "Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach,Luigi,Mario,Dr. Mario,Samus"
+DEFAULT_CHARACTERS = "Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach,Luigi,Mario,Dr. Mario,Samus,Ice Climbers"
 DEFAULT_STAGES = "32,31,3,2,8,28"
 MAX_AUTO_WORKERS = 16
 DEFAULT_CLASSIFICATIONS = ROOT / "replays/suites/melee_core_classifications.json"
@@ -260,7 +260,7 @@ def load_output_locks(path: Path) -> dict[str, ReplayOutputLock]:
     data = json.loads(path.read_text())
     if data.get("version") != 1 or data.get("algorithm") != "fnv1a64":
         raise ValueError(f"{path}: unsupported output-lock manifest")
-    if data.get("wire") != {"name": "MslCoreCompare", "size": 1022}:
+    if data.get("wire") != {"name": "MslCoreCompare", "size": 1302}:
         raise ValueError(f"{path}: output-lock wire contract does not match MslCoreCompare")
     locks: dict[str, ReplayOutputLock] = {}
     for entry in data.get("locks", []):
@@ -314,7 +314,7 @@ def write_output_locks(
     payload = {
         "version": 1,
         "algorithm": "fnv1a64",
-        "wire": {"name": "MslCoreCompare", "size": 1022},
+        "wire": {"name": "MslCoreCompare", "size": 1302},
         "locks": [
             {"replay": lock.replay, "expected": lock.expected}
             for lock in sorted(updated.values(), key=lambda lock: lock.replay)

@@ -82,6 +82,7 @@ ftKb_SpecialNFx_800FDD14	unsupported-fighter branch	unreachable	named abort	Fox 
 ftKb_SpecialNFx_800FDD4C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialNFx_800FDDF4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialNFx_800FDEB4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
+ftKb_SpecialNIc_80108CE8	unsupported-fighter branch	unreachable	named abort	Climbers-ice destruction notifies its owner through this callback only for Kirby's copied neutral special (item kind 0x6B)
 ftKb_SpecialNSk_80105FF0	unsupported-fighter branch	unreachable	named abort	Sheik needle-held dispatch selects this callback only for Kirby's copied neutral special
 ftKb_SpecialNSk_80106020	unsupported-fighter branch	unreachable	named abort	Sheik needle-held dispatch selects this callback only for Kirby's copied neutral special
 ftKb_SpecialN_800F1CD8	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner

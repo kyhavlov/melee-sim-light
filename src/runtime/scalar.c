@@ -734,6 +734,31 @@ static int match_construct(MslCoreMatch* match,
 static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
                           MslCoreCompare* compare);
 
+// Slippi's post-frame recorder snapshots fighter positions after gameplay
+// processes but before the render pass. Capture the leader and any Nana
+// follower at that same boundary.
+// refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+static void capture_output_positions(MslCoreMatch* match)
+{
+    int i;
+    for (i = 0; i < match->config.num_players; ++i) {
+        Fighter* fp = GET_FIGHTER(match->fighters[i]);
+        match->output_pos_x[i] = fp->cur_pos.x;
+        match->output_pos_y[i] = fp->cur_pos.y;
+        match->output_render_visibility[i] = fp->x221F_b0;
+        match->follower_output_pos_x[i] = 0.0F;
+        match->follower_output_pos_y[i] = 0.0F;
+        match->follower_output_render_visibility[i] = 0;
+        if (match->follower_fighters[i] != NULL) {
+            Fighter* follower_fp = GET_FIGHTER(match->follower_fighters[i]);
+            match->follower_output_pos_x[i] = follower_fp->cur_pos.x;
+            match->follower_output_pos_y[i] = follower_fp->cur_pos.y;
+            match->follower_output_render_visibility[i] =
+                follower_fp->x221F_b0;
+        }
+    }
+}
+
 int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
                         const MslCoreMatchConfig* config,
                         const MslCoreInput* previous_input)
@@ -1081,8 +1106,25 @@ static int match_construct(MslCoreMatch* match,
         // bookkeeping refer to the same GObj.
         Player_80031AD0(slot);
         match->fighters[i] = Player_GetEntityAtIndex(slot, 0);
+        // Only the Ice Climbers follower branch spawns an independently
+        // simulated entity 1; Sheik/Zelda's entity 1 is the dormant
+        // transformation half and stays out of the follower axis.
+        // refs/melee/src/melee/pl/player.c::Player_80031AD0
+        match->follower_fighters[i] =
+            match->config.players[i].char_id == MSL_CORE_CHAR_POPO
+                ? Player_GetEntityAtIndex(slot, 1)
+                : NULL;
         if (match->fighters[i] == NULL) {
             fprintf(stderr, "source Fighter_Create returned NULL for slot %d\n",
+                    i);
+            return -1;
+        }
+        if (match->config.players[i].char_id == MSL_CORE_CHAR_POPO &&
+            match->follower_fighters[i] == NULL)
+        {
+            fprintf(stderr,
+                    "source follower Fighter_Create returned NULL for slot "
+                    "%d\n",
                     i);
             return -1;
         }
@@ -1199,12 +1241,7 @@ static int match_construct(MslCoreMatch* match,
     seed = match->config.frame_pre_random_seed;
     seed_ptr = &seed;
     match->last_frame_seed = seed;
-    for (i = 0; i < match->config.num_players; ++i) {
-        Fighter* fp = GET_FIGHTER(match->fighters[i]);
-        match->output_pos_x[i] = fp->cur_pos.x;
-        match->output_pos_y[i] = fp->cur_pos.y;
-        match->output_render_visibility[i] = fp->x221F_b0;
-    }
+    capture_output_positions(match);
     match->random_seed = seed;
     return 0;
 }
@@ -1586,6 +1623,92 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
                sizeof(state_flags));
     }
 
+    // Follower (Nana) lanes mirror the leader extraction above. Slippi's
+    // recorder emits follower rows only while Nana's fighter is awake: her
+    // Dead* animation frames still record, rows stop when ftCo_800BFD04 puts
+    // her into ftCo_MS_Sleep (x221F_b3), and resume with the leader Rebirth.
+    // refs/melee/src/melee/ft/ftcolanim.c::ftCo_800BFD04
+    for (i = 0; i < match->config.num_players; ++i) {
+        Fighter* fp;
+        uint8_t state_flags[5];
+        float hitstun;
+        int hurtbox;
+        int jumps_left;
+
+        if (match->follower_fighters[i] == NULL) {
+            continue;
+        }
+        fp = GET_FIGHTER(match->follower_fighters[i]);
+        if (fp->x221F_b3) {
+            continue;
+        }
+        hitstun = fp->x221C_b6 ? fp->mv.co.damage.x0 : 0.0F;
+        hurtbox = fp->x1988 != 0 ? fp->x1988 : fp->x198C;
+        jumps_left = fp->co_attrs.max_jumps - fp->x1968_jumpsUsed;
+
+        out[offsetof(MslCoreCompare, follower_present) + i] = 1;
+        out[offsetof(MslCoreCompare, follower_char_id) + i] = fp->kind;
+        put_player_f32(out, offsetof(MslCoreCompare, follower_pos_x), i,
+                       match->follower_output_pos_x[i]);
+        put_player_f32(out, offsetof(MslCoreCompare, follower_pos_y), i,
+                       match->follower_output_pos_y[i]);
+        put_player_f32(out, offsetof(MslCoreCompare, follower_speed_air_x_self),
+                       i, fp->self_vel.x);
+        put_player_f32(out,
+                       offsetof(MslCoreCompare, follower_speed_ground_x_self),
+                       i, fp->gr_vel);
+        put_player_f32(out, offsetof(MslCoreCompare, follower_speed_y_self), i,
+                       fp->self_vel.y);
+        put_player_f32(out, offsetof(MslCoreCompare, follower_speed_x_attack),
+                       i, fp->x8c_kb_vel.x);
+        put_player_f32(out, offsetof(MslCoreCompare, follower_speed_y_attack),
+                       i, fp->x8c_kb_vel.y);
+        out[offsetof(MslCoreCompare, follower_facing) + i] =
+            fp->facing_dir > 0.0F;
+        out[offsetof(MslCoreCompare, follower_on_ground) + i] =
+            fp->ground_or_air == GA_Ground;
+        put_player_u16(out, offsetof(MslCoreCompare, follower_action_id), i,
+                       (uint16_t) fp->motion_id);
+        put_player_u16(out, offsetof(MslCoreCompare, follower_action_frame), i,
+                       (uint16_t) state_age_i16(fp->cur_anim_frame));
+        out[offsetof(MslCoreCompare, follower_jumps_left) + i] =
+            jumps_left > 0 ? (uint8_t) jumps_left : 0;
+        out[offsetof(MslCoreCompare, follower_stocks) + i] =
+            (uint8_t) Player_GetStocks(fp->player_id);
+        put_player_f32(out, offsetof(MslCoreCompare, follower_percent), i,
+                       fp->dmg.x1830_percent);
+        put_player_f32(out, offsetof(MslCoreCompare, follower_shield_hp), i,
+                       fp->shield_health);
+        put_player_u16(out, offsetof(MslCoreCompare, follower_hitlag), i,
+                       float_frames_u16(fp->dmg.x195c_hitlag_frames));
+        put_player_u16(out, offsetof(MslCoreCompare, follower_hitstun), i,
+                       float_frames_u16(hitstun));
+        out[offsetof(MslCoreCompare, follower_l_cancel) + i] =
+            msl_slippi_lcancel_get(fp);
+        out[offsetof(MslCoreCompare, follower_hurtbox_state) + i] =
+            (uint8_t) hurtbox;
+        put_player_u16(out, offsetof(MslCoreCompare, follower_ground_id), i,
+                       (uint16_t) fp->coll_data.floor.index);
+        put_player_u32(out, offsetof(MslCoreCompare, follower_animation_index),
+                       i, (uint32_t) fp->anim_id);
+        put_player_u16(out, offsetof(MslCoreCompare, follower_instance_hit_by),
+                       i, fp->dmg.x18ec_instancehitby);
+        put_player_u16(out, offsetof(MslCoreCompare, follower_instance_id), i,
+                       fp->x2074.x2088);
+        out[offsetof(MslCoreCompare, follower_last_attack_landed) + i] =
+            (uint8_t) fp->x208C;
+        out[offsetof(MslCoreCompare, follower_combo_count) + i] =
+            (uint8_t) fp->x2090;
+        out[offsetof(MslCoreCompare, follower_last_hit_by) + i] =
+            (uint8_t) fp->dmg.x18c4_source_ply;
+        pack_fighter_state_flags(fp, state_flags);
+        state_flags[4] =
+            (state_flags[4] & 0x7FU) |
+            ppc_state_bit(match->follower_output_render_visibility[i], 0);
+        memcpy(out + offsetof(MslCoreCompare, follower_state_flags) + i * 5,
+               state_flags, sizeof(state_flags));
+    }
+
     msl_core_match_write_items(match, compare->items);
 }
 
@@ -1831,6 +1954,12 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
         // refs/melee/src/melee/pl/player.c::Player_SwapTransformedStates
         match->fighters[i] =
             Player_GetEntityAtIndex(match->source_slots[i], 0);
+        // The Nana follower entity can be re-created by respawn handling, so
+        // refresh her pointer at the same boundary as the leader's.
+        match->follower_fighters[i] =
+            match->config.players[i].char_id == MSL_CORE_CHAR_POPO
+                ? Player_GetEntityAtIndex(match->source_slots[i], 1)
+                : NULL;
         if (match->fighters[i] == NULL) {
             fprintf(stderr, "source player slot %d lost its active fighter\n",
                     match->source_slots[i]);
@@ -1843,12 +1972,7 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
     // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     match->frame_id += 1;
     match->last_frame_seed = frame_seed;
-    for (i = 0; i < match->config.num_players; ++i) {
-        Fighter* fp = GET_FIGHTER(match->fighters[i]);
-        match->output_pos_x[i] = fp->cur_pos.x;
-        match->output_pos_y[i] = fp->cur_pos.y;
-        match->output_render_visibility[i] = fp->x221F_b0;
-    }
+    capture_output_positions(match);
 
     // The subsequent retail render pass invokes ftDrawCommon_80080E18.
     // Preserve its camera-visibility publication for the next gameplay/
@@ -1875,11 +1999,24 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
     // refs/melee/src/sysdolphin/baselib/jobj.c::{
     //   HSD_JObjDispAll,HSD_JObjSetupMatrixSub}
     {
+        // Retail's draw pass walks every fighter GObj, so a live Nana
+        // follower participates in the same visibility publication as the
+        // leaders.
+        Fighter_GObj* visible_fighters[MSL_CORE_MAX_PLAYERS * 2];
+        int visible_count = 0;
 #ifdef MSL_SUBSYSTEM_PROFILE
         uint64_t started = msl_profile_cycles();
 #endif
-        msl_camera_publish_match_visibility(match->fighters,
-                                            match->config.num_players);
+        for (i = 0; i < match->config.num_players; ++i) {
+            visible_fighters[visible_count++] = match->fighters[i];
+        }
+        for (i = 0; i < match->config.num_players; ++i) {
+            if (match->follower_fighters[i] != NULL) {
+                visible_fighters[visible_count++] =
+                    match->follower_fighters[i];
+            }
+        }
+        msl_camera_publish_match_visibility(visible_fighters, visible_count);
 #ifdef MSL_SUBSYSTEM_PROFILE
         msl_profile_add(MSL_PROFILE_FINISH_FIGHTER_VISIBILITY,
                              msl_profile_cycles() - started);

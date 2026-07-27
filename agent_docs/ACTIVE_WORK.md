@@ -84,6 +84,19 @@ slice, and follower-frame validation.
   Next: CPU TU import (ftCo_0A01.c + ftcpuattack.c wholesale, projection reconciliation,
   stub triage) — delegated; then fighter-axis lanes and follower validation.
 
+- 2026-07-27 — `retained` (steps 3-5 infrastructure)
+  Scope: CPU TU import committed (14de9dc2); follower compare lanes cut through
+  wire.h/scalar/native.c in one step (MslCoreCompare 1022→1302, 28 follower lanes + presence);
+  peppi follower descent with independent life-cycle row indexing (rows null during Nana's
+  Sleep, resume at Popo's respawn — measured); ICs article registry rows fixed in items.c (NULL
+  state-table segfault); public API/python/viewer admission; 12-replay icies suite staged.
+  Evidence: container aggregate 183/63/0 under the new wire with all 247 output locks
+  re-recorded; icies suite runs end-to-end (12/12, zero errors, four-climber ditto included),
+  every entry diverging at frames 83-204 in follower lanes — the untuned Nana start-of-match AI
+  decision stream.
+  Next: Nana AI fidelity (retail probe of the x1A88 decision stream at the first divergence,
+  fd-falco @-39 class), then classify/lock the suite and wire it into the aggregate.
+
 - 2026-07-27 — `open`
   Scope: surveys complete (decomp map + sim architecture map, two Explore agents).
   Evidence: dual-entity player machinery already compiled in and inert; CPU predicate stubbed

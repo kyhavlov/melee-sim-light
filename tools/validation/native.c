@@ -137,6 +137,11 @@ typedef struct ReplayView {
   const struct ArrowArray* dreamland_whispy_list;
   Primitive dreamland_whispy_direction;
   ReplayPlayer players[MSL_CORE_MAX_PLAYERS];
+  // Peppi emits a parallel ports.P{n}.follower child for Ice Climbers
+  // players. Only its post lanes participate in comparison: Nana takes no
+  // external input, so the follower pre rows never become wire inputs.
+  ReplayPlayer followers[MSL_CORE_MAX_PLAYERS];
+  uint8_t has_follower[MSL_CORE_MAX_PLAYERS];
   int port_1based[MSL_CORE_MAX_PLAYERS];
   uint8_t team_id[MSL_CORE_MAX_PLAYERS];
   uint8_t start_stocks[MSL_CORE_MAX_PLAYERS];
@@ -157,6 +162,11 @@ typedef struct FrameRows {
   int64_t* raw;
   int64_t* player_raw[MSL_CORE_MAX_PLAYERS];
   uint8_t* player_present[MSL_CORE_MAX_PLAYERS];
+  // Follower rows have an independent life-cycle: Slippi stops emitting them
+  // while Nana sleeps after her death and resumes them on the shared respawn,
+  // so absence is presence information rather than a data gap.
+  int64_t* follower_raw[MSL_CORE_MAX_PLAYERS];
+  uint8_t* follower_present[MSL_CORE_MAX_PLAYERS];
   int64_t count;
 } FrameRows;
 
@@ -512,7 +522,83 @@ static int parse_metadata(PyObject* metadata, ReplayView* replay) {
   return 0;
 }
 
-static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, char* error,
+static int load_post_fields(ArrowNode post, ReplayPlayer* player, char* error,
+                            size_t error_size) {
+  ArrowNode node;
+  ArrowNode flags;
+  ArrowNode velocities;
+  int k;
+#define FIELD(PARENT, NAME, FORMAT, TARGET)                                               \
+  do {                                                                                    \
+    if (primitive_child((PARENT), (NAME), (FORMAT), &(TARGET), error, error_size) != 0) { \
+      return -1;                                                                          \
+    }                                                                                     \
+  } while (0)
+  FIELD(post, "character", "C", player->character);
+  FIELD(post, "state", "S", player->action);
+  if (node_child(post, "position", &node, error, error_size) != 0) {
+    return -1;
+  }
+  FIELD(node, "x", "f", player->pos_x);
+  FIELD(node, "y", "f", player->pos_y);
+  FIELD(post, "direction", "f", player->direction);
+  FIELD(post, "percent", "f", player->percent);
+  FIELD(post, "shield", "f", player->shield);
+  FIELD(post, "stocks", "C", player->stocks);
+  FIELD(post, "state_age", "f", player->state_age);
+  FIELD(post, "airborne", "C", player->airborne);
+  FIELD(post, "ground", "S", player->ground);
+  FIELD(post, "jumps", "C", player->jumps);
+  FIELD(post, "l_cancel", "C", player->l_cancel);
+  FIELD(post, "hurtbox_state", "C", player->hurtbox);
+  FIELD(post, "hitlag", "f", player->hitlag);
+  FIELD(post, "misc_as", "f", player->misc_as);
+  FIELD(post, "animation_index", "I", player->animation_index);
+  {
+    ArrowNode value;
+    int present = node_child_optional(post, "last_hit_by_instance", &value, error, error_size);
+    if (present < 0) {
+      return -1;
+    }
+    if (present != 0) {
+      if (primitive_from_node(value, "S", &player->instance_hit_by, error, error_size) != 0) {
+        return -1;
+      }
+      player->instance_hit_by_present = 1;
+    }
+    present = node_child_optional(post, "instance_id", &value, error, error_size);
+    if (present < 0) {
+      return -1;
+    }
+    if (present != 0) {
+      if (primitive_from_node(value, "S", &player->instance_id, error, error_size) != 0) {
+        return -1;
+      }
+      player->instance_id_present = 1;
+    }
+  }
+  FIELD(post, "last_attack_landed", "C", player->last_attack);
+  FIELD(post, "combo_count", "C", player->combo_count);
+  FIELD(post, "last_hit_by", "C", player->last_hit_by);
+  if (node_child(post, "state_flags", &flags, error, error_size) != 0 ||
+      node_child(post, "velocities", &velocities, error, error_size) != 0) {
+    return -1;
+  }
+  for (k = 0; k < MSL_CORE_STATE_FLAGS_BYTES; ++k) {
+    char name[2] = {(char)('0' + k), '\0'};
+    FIELD(flags, name, "C", player->state_flags[k]);
+  }
+  FIELD(velocities, "self_x_air", "f", player->speed_air_x);
+  FIELD(velocities, "self_x_ground", "f", player->speed_ground_x);
+  FIELD(velocities, "self_y", "f", player->speed_y);
+  FIELD(velocities, "knockback_x", "f", player->speed_x_attack);
+  FIELD(velocities, "knockback_y", "f", player->speed_y_attack);
+#undef FIELD
+  return 0;
+}
+
+static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player,
+                       ReplayPlayer* follower, uint8_t* has_follower, char* error,
                        size_t error_size) {
   char port_name[3] = {'P', (char)('0' + port_1based), '\0'};
   ArrowNode port;
@@ -520,8 +606,6 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
   ArrowNode pre;
   ArrowNode post;
   ArrowNode node;
-  ArrowNode flags;
-  ArrowNode velocities;
   ArrowNode raw_c_x;
   ArrowNode raw_c_y;
   ArrowNode raw_main_y;
@@ -529,7 +613,6 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
   ArrowNode cstick;
   int has_raw_c_x;
   int has_raw_c_y;
-  int k;
 #define FIELD(PARENT, NAME, FORMAT, TARGET)                                               \
   do {                                                                                    \
     if (primitive_child((PARENT), (NAME), (FORMAT), &(TARGET), error, error_size) != 0) { \
@@ -607,67 +690,30 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player, c
   }
   FIELD(node, "l", "f", player->trigger_l);
   FIELD(node, "r", "f", player->trigger_r);
-
-  FIELD(post, "character", "C", player->character);
-  FIELD(post, "state", "S", player->action);
-  if (node_child(post, "position", &node, error, error_size) != 0) {
-    return -1;
-  }
-  FIELD(node, "x", "f", player->pos_x);
-  FIELD(node, "y", "f", player->pos_y);
-  FIELD(post, "direction", "f", player->direction);
-  FIELD(post, "percent", "f", player->percent);
-  FIELD(post, "shield", "f", player->shield);
-  FIELD(post, "stocks", "C", player->stocks);
-  FIELD(post, "state_age", "f", player->state_age);
-  FIELD(post, "airborne", "C", player->airborne);
-  FIELD(post, "ground", "S", player->ground);
-  FIELD(post, "jumps", "C", player->jumps);
-  FIELD(post, "l_cancel", "C", player->l_cancel);
-  FIELD(post, "hurtbox_state", "C", player->hurtbox);
-  FIELD(post, "hitlag", "f", player->hitlag);
-  FIELD(post, "misc_as", "f", player->misc_as);
-  FIELD(post, "animation_index", "I", player->animation_index);
-  {
-    ArrowNode value;
-    int present = node_child_optional(post, "last_hit_by_instance", &value, error, error_size);
-    if (present < 0) {
-      return -1;
-    }
-    if (present != 0) {
-      if (primitive_from_node(value, "S", &player->instance_hit_by, error, error_size) != 0) {
-        return -1;
-      }
-      player->instance_hit_by_present = 1;
-    }
-    present = node_child_optional(post, "instance_id", &value, error, error_size);
-    if (present < 0) {
-      return -1;
-    }
-    if (present != 0) {
-      if (primitive_from_node(value, "S", &player->instance_id, error, error_size) != 0) {
-        return -1;
-      }
-      player->instance_id_present = 1;
-    }
-  }
-  FIELD(post, "last_attack_landed", "C", player->last_attack);
-  FIELD(post, "combo_count", "C", player->combo_count);
-  FIELD(post, "last_hit_by", "C", player->last_hit_by);
-  if (node_child(post, "state_flags", &flags, error, error_size) != 0 ||
-      node_child(post, "velocities", &velocities, error, error_size) != 0) {
-    return -1;
-  }
-  for (k = 0; k < MSL_CORE_STATE_FLAGS_BYTES; ++k) {
-    char name[2] = {(char)('0' + k), '\0'};
-    FIELD(flags, name, "C", player->state_flags[k]);
-  }
-  FIELD(velocities, "self_x_air", "f", player->speed_air_x);
-  FIELD(velocities, "self_x_ground", "f", player->speed_ground_x);
-  FIELD(velocities, "self_y", "f", player->speed_y);
-  FIELD(velocities, "knockback_x", "f", player->speed_x_attack);
-  FIELD(velocities, "knockback_y", "f", player->speed_y_attack);
 #undef FIELD
+
+  if (load_post_fields(post, player, error, error_size) != 0) {
+    return -1;
+  }
+
+  // Peppi emits ports.P{n}.follower only when the replay recorded a second
+  // fighter entity (Ice Climbers). The follower carries pre rows too, but
+  // Nana takes no external input, so only her post lanes are observations.
+  {
+    ArrowNode follower_node;
+    int present = node_child_optional(port, "follower", &follower_node, error, error_size);
+    if (present < 0) {
+      return -1;
+    }
+    if (present != 0) {
+      ArrowNode follower_post;
+      if (node_child(follower_node, "post", &follower_post, error, error_size) != 0 ||
+          load_post_fields(follower_post, follower, error, error_size) != 0) {
+        return -1;
+      }
+      *has_follower = 1;
+    }
+  }
   return 0;
 }
 
@@ -793,7 +839,8 @@ static int load_replay(ArrowNode frames, ReplayView* replay, char* error, size_t
     return -1;
   }
   for (i = 0; i < replay->num_players; ++i) {
-    if (load_player(ports, replay->port_1based[i], &replay->players[i], error, error_size) != 0) {
+    if (load_player(ports, replay->port_1based[i], &replay->players[i], &replay->followers[i],
+                    &replay->has_follower[i], error, error_size) != 0) {
       return -1;
     }
   }
@@ -809,6 +856,7 @@ static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, char*
   int64_t range;
   int64_t* last;
   int64_t* last_player[MSL_CORE_MAX_PLAYERS] = {NULL};
+  int64_t* last_follower[MSL_CORE_MAX_PLAYERS] = {NULL};
   int64_t carried_player[MSL_CORE_MAX_PLAYERS] = {-1, -1, -1, -1};
   for (i = 1; i < replay->raw_length; ++i) {
     int32_t id = get_i32(&replay->frame_id, i);
@@ -832,13 +880,19 @@ static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, char*
         (int64_t*)malloc((size_t)replay->raw_length * sizeof(*rows->player_raw[player]));
     rows->player_present[player] =
         (uint8_t*)malloc((size_t)replay->raw_length * sizeof(*rows->player_present[player]));
+    last_follower[player] = (int64_t*)malloc((size_t)range * sizeof(*last_follower[player]));
+    rows->follower_raw[player] =
+        (int64_t*)malloc((size_t)replay->raw_length * sizeof(*rows->follower_raw[player]));
+    rows->follower_present[player] =
+        (uint8_t*)malloc((size_t)replay->raw_length * sizeof(*rows->follower_present[player]));
   }
   if (last == NULL || rows->raw == NULL) {
     goto allocation_failed;
   }
   for (player = 0; player < replay->num_players; ++player) {
     if (last_player[player] == NULL || rows->player_raw[player] == NULL ||
-        rows->player_present[player] == NULL) {
+        rows->player_present[player] == NULL || last_follower[player] == NULL ||
+        rows->follower_raw[player] == NULL || rows->follower_present[player] == NULL) {
       goto allocation_failed;
     }
   }
@@ -846,6 +900,7 @@ static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, char*
     last[i] = -1;
     for (player = 0; player < replay->num_players; ++player) {
       last_player[player][i] = -1;
+      last_follower[player][i] = -1;
     }
   }
   for (i = 0; i < replay->raw_length; ++i) {
@@ -855,6 +910,10 @@ static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, char*
       if (primitive_is_valid(&replay->players[player].character, i)) {
         last_player[player][key] = i;
       }
+      if (replay->has_follower[player] &&
+          primitive_is_valid(&replay->followers[player].character, i)) {
+        last_follower[player][key] = i;
+      }
     }
   }
   for (i = 0; i < replay->raw_length; ++i) {
@@ -862,6 +921,7 @@ static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, char*
     if (last[key] == i) {
       for (player = 0; player < replay->num_players; ++player) {
         int64_t player_row = last_player[player][key];
+        int64_t follower_row = last_follower[player][key];
         if (player_row >= 0) {
           carried_player[player] = player_row;
           rows->player_present[player][rows->count] = 1;
@@ -879,6 +939,10 @@ static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, char*
           goto failed;
         }
         rows->player_raw[player][rows->count] = player_row;
+        // A frame without a follower row is Nana's dead/asleep span, not an
+        // omission; carry no stale row across it.
+        rows->follower_present[player][rows->count] = follower_row >= 0;
+        rows->follower_raw[player][rows->count] = follower_row;
       }
       rows->raw[rows->count++] = i;
     }
@@ -886,6 +950,7 @@ static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, char*
   free(last);
   for (player = 0; player < replay->num_players; ++player) {
     free(last_player[player]);
+    free(last_follower[player]);
   }
   if (rows->count < 2) {
     snprintf(error, error_size, "replay has fewer than two finalized frames");
@@ -899,10 +964,15 @@ failed:
   free(last);
   for (player = 0; player < MSL_CORE_MAX_PLAYERS; ++player) {
     free(last_player[player]);
+    free(last_follower[player]);
     free(rows->player_raw[player]);
     free(rows->player_present[player]);
+    free(rows->follower_raw[player]);
+    free(rows->follower_present[player]);
     rows->player_raw[player] = NULL;
     rows->player_present[player] = NULL;
+    rows->follower_raw[player] = NULL;
+    rows->follower_present[player] = NULL;
   }
   free(rows->raw);
   rows->raw = NULL;
@@ -1012,13 +1082,36 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
     int64_t player_raw = rows->player_raw[i][0];
     uint8_t character = get_u8(&player->character, player_raw);
     uint8_t stocks = replay->start_stocks[i];
-    if (character != 1 && character != 2 && character != 7 && character != 9 && character != 13 &&
-        character != 15 && character != 17 && character != 18 && character != 19 &&
-        character != 21 && character != 22 && character != 0) {
+    if (character != 1 && character != 2 && character != 7 && character != 9 && character != 10 &&
+        character != 13 && character != 15 && character != 17 && character != 18 &&
+        character != 19 && character != 21 && character != 22 && character != 0) {
       snprintf(error, error_size,
-               "Melee core requires Mario, Fox, Captain Falcon, Sheik, Peach, Samus, Jigglypuff, Luigi, "
-               "Marth, Zelda, Dr. Mario, or Falco players");
+               "Melee core requires Mario, Fox, Captain Falcon, Sheik, Peach, Ice Climbers, "
+               "Samus, Jigglypuff, Luigi, Marth, Zelda, Dr. Mario, or Falco players");
       return -1;
+    }
+    // Ice Climbers leader post rows carry internal kind 10 (Popo) and the
+    // parallel follower stream carries internal kind 11 (Nana) whenever she
+    // is awake. Assert that shape once so per-frame comparison can trust it.
+    if (character == 10) {
+      int64_t pos;
+      if (!replay->has_follower[i]) {
+        snprintf(error, error_size, "Ice Climbers P%d replay has no follower stream",
+                 replay->port_1based[i]);
+        return -1;
+      }
+      for (pos = 0; pos < rows->count; ++pos) {
+        if (rows->follower_present[i][pos]) {
+          uint8_t follower_character =
+              get_u8(&replay->followers[i].character, rows->follower_raw[i][pos]);
+          if (follower_character != 11) {
+            snprintf(error, error_size, "P%d follower rows carry internal char %u, expected Nana",
+                     replay->port_1based[i], follower_character);
+            return -1;
+          }
+          break;
+        }
+      }
     }
     if (stocks > config->stock_count) {
       config->stock_count = stocks;
@@ -1131,6 +1224,52 @@ static void build_expected(const ReplayView* replay, const FrameRows* rows, int6
       expected->state_flags[player][flag] = get_u8(&src->state_flags[flag], player_raw);
     }
   }
+  for (player = 0; player < replay->num_players; ++player) {
+    const ReplayPlayer* src = &replay->followers[player];
+    int64_t follower_raw = rows->follower_raw[player][logical_pos];
+    uint8_t flags3;
+    if (!rows->follower_present[player][logical_pos]) {
+      continue;
+    }
+    flags3 = get_u8(&src->state_flags[3], follower_raw);
+    expected->follower_present[player] = 1;
+    expected->follower_char_id[player] = get_u8(&src->character, follower_raw);
+    expected->follower_pos_x[player] = get_f32(&src->pos_x, follower_raw);
+    expected->follower_pos_y[player] = get_f32(&src->pos_y, follower_raw);
+    expected->follower_speed_air_x_self[player] = get_f32(&src->speed_air_x, follower_raw);
+    expected->follower_speed_ground_x_self[player] = get_f32(&src->speed_ground_x, follower_raw);
+    expected->follower_speed_y_self[player] = get_f32(&src->speed_y, follower_raw);
+    expected->follower_speed_x_attack[player] = get_f32(&src->speed_x_attack, follower_raw);
+    expected->follower_speed_y_attack[player] = get_f32(&src->speed_y_attack, follower_raw);
+    expected->follower_facing[player] = get_f32(&src->direction, follower_raw) > 0.0F;
+    expected->follower_on_ground[player] = get_u8(&src->airborne, follower_raw) == 0;
+    expected->follower_action_id[player] = get_u16(&src->action, follower_raw);
+    expected->follower_action_frame[player] = frame_i16(get_f32(&src->state_age, follower_raw));
+    expected->follower_jumps_left[player] = get_u8(&src->jumps, follower_raw);
+    expected->follower_stocks[player] = get_u8(&src->stocks, follower_raw);
+    expected->follower_percent[player] = get_f32(&src->percent, follower_raw);
+    expected->follower_shield_hp[player] = get_f32(&src->shield, follower_raw);
+    expected->follower_hitlag[player] = frame_u16(get_f32(&src->hitlag, follower_raw));
+    expected->follower_hitstun[player] =
+        (flags3 & 0x02U) != 0 ? frame_u16(get_f32(&src->misc_as, follower_raw)) : 0;
+    expected->follower_l_cancel[player] = get_u8(&src->l_cancel, follower_raw);
+    expected->follower_hurtbox_state[player] = get_u8(&src->hurtbox, follower_raw);
+    expected->follower_ground_id[player] = get_u16(&src->ground, follower_raw);
+    expected->follower_animation_index[player] = get_u32(&src->animation_index, follower_raw);
+    if (src->instance_hit_by_present) {
+      expected->follower_instance_hit_by[player] = get_u16(&src->instance_hit_by, follower_raw);
+    }
+    if (src->instance_id_present) {
+      expected->follower_instance_id[player] = get_u16(&src->instance_id, follower_raw);
+    }
+    expected->follower_last_attack_landed[player] = get_u8(&src->last_attack, follower_raw);
+    expected->follower_combo_count[player] = get_u8(&src->combo_count, follower_raw);
+    expected->follower_last_hit_by[player] = get_u8(&src->last_hit_by, follower_raw);
+    for (flag = 0; flag < MSL_CORE_STATE_FLAGS_BYTES; ++flag) {
+      expected->follower_state_flags[player][flag] =
+          get_u8(&src->state_flags[flag], follower_raw);
+    }
+  }
   {
     int64_t count = item_count(replay, raw);
     int64_t start = item_range_start(replay, raw);
@@ -1179,10 +1318,17 @@ typedef struct FieldSpec {
   size_t offset;
   uint16_t count;
   uint8_t kind;
+  // Follower lanes compare only frames where both the replay and the sim
+  // report a live Nana; the follower_present lane itself owns life-cycle
+  // disagreement.
+  uint8_t follower;
 } FieldSpec;
 
 #define SPEC(NAME, MEMBER, COUNT, KIND) \
-  { NAME, offsetof(MslCoreCompare, MEMBER), COUNT, KIND }
+  { NAME, offsetof(MslCoreCompare, MEMBER), COUNT, KIND, 0 }
+
+#define FOLLOWER_SPEC(NAME, MEMBER, COUNT, KIND) \
+  { NAME, offsetof(MslCoreCompare, MEMBER), COUNT, KIND, 1 }
 
 static const FieldSpec compare_fields[] = {
     SPEC("frame_id", frame_id, 1, FIELD_I32),
@@ -1220,9 +1366,48 @@ static const FieldSpec compare_fields[] = {
     SPEC("combo_count", combo_count, MSL_CORE_MAX_PLAYERS, FIELD_U8),
     SPEC("last_hit_by", last_hit_by, MSL_CORE_MAX_PLAYERS, FIELD_U8),
     SPEC("state_flags", state_flags, MSL_CORE_MAX_PLAYERS* MSL_CORE_STATE_FLAGS_BYTES, FIELD_U8),
+    FOLLOWER_SPEC("follower_present", follower_present, MSL_CORE_MAX_PLAYERS, FIELD_U8),
+    FOLLOWER_SPEC("follower_char_id", follower_char_id, MSL_CORE_MAX_PLAYERS, FIELD_U8),
+    FOLLOWER_SPEC("follower_pos_x", follower_pos_x, MSL_CORE_MAX_PLAYERS, FIELD_F32),
+    FOLLOWER_SPEC("follower_pos_y", follower_pos_y, MSL_CORE_MAX_PLAYERS, FIELD_F32),
+    FOLLOWER_SPEC("follower_speed_air_x_self", follower_speed_air_x_self, MSL_CORE_MAX_PLAYERS,
+                  FIELD_F32),
+    FOLLOWER_SPEC("follower_speed_ground_x_self", follower_speed_ground_x_self,
+                  MSL_CORE_MAX_PLAYERS, FIELD_F32),
+    FOLLOWER_SPEC("follower_speed_y_self", follower_speed_y_self, MSL_CORE_MAX_PLAYERS, FIELD_F32),
+    FOLLOWER_SPEC("follower_speed_x_attack", follower_speed_x_attack, MSL_CORE_MAX_PLAYERS,
+                  FIELD_F32),
+    FOLLOWER_SPEC("follower_speed_y_attack", follower_speed_y_attack, MSL_CORE_MAX_PLAYERS,
+                  FIELD_F32),
+    FOLLOWER_SPEC("follower_facing", follower_facing, MSL_CORE_MAX_PLAYERS, FIELD_U8),
+    FOLLOWER_SPEC("follower_on_ground", follower_on_ground, MSL_CORE_MAX_PLAYERS, FIELD_U8),
+    FOLLOWER_SPEC("follower_action_id", follower_action_id, MSL_CORE_MAX_PLAYERS, FIELD_U16),
+    FOLLOWER_SPEC("follower_action_frame", follower_action_frame, MSL_CORE_MAX_PLAYERS, FIELD_I16),
+    FOLLOWER_SPEC("follower_jumps_left", follower_jumps_left, MSL_CORE_MAX_PLAYERS, FIELD_U8),
+    FOLLOWER_SPEC("follower_stocks", follower_stocks, MSL_CORE_MAX_PLAYERS, FIELD_U8),
+    FOLLOWER_SPEC("follower_percent", follower_percent, MSL_CORE_MAX_PLAYERS, FIELD_F32),
+    FOLLOWER_SPEC("follower_shield_hp", follower_shield_hp, MSL_CORE_MAX_PLAYERS, FIELD_F32),
+    FOLLOWER_SPEC("follower_hitlag", follower_hitlag, MSL_CORE_MAX_PLAYERS, FIELD_U16),
+    FOLLOWER_SPEC("follower_hitstun", follower_hitstun, MSL_CORE_MAX_PLAYERS, FIELD_U16),
+    FOLLOWER_SPEC("follower_l_cancel", follower_l_cancel, MSL_CORE_MAX_PLAYERS, FIELD_U8),
+    FOLLOWER_SPEC("follower_hurtbox_state", follower_hurtbox_state, MSL_CORE_MAX_PLAYERS,
+                  FIELD_U8),
+    FOLLOWER_SPEC("follower_ground_id", follower_ground_id, MSL_CORE_MAX_PLAYERS, FIELD_U16),
+    FOLLOWER_SPEC("follower_animation_index", follower_animation_index, MSL_CORE_MAX_PLAYERS,
+                  FIELD_U32),
+    FOLLOWER_SPEC("follower_instance_hit_by", follower_instance_hit_by, MSL_CORE_MAX_PLAYERS,
+                  FIELD_U16),
+    FOLLOWER_SPEC("follower_instance_id", follower_instance_id, MSL_CORE_MAX_PLAYERS, FIELD_U16),
+    FOLLOWER_SPEC("follower_last_attack_landed", follower_last_attack_landed,
+                  MSL_CORE_MAX_PLAYERS, FIELD_U8),
+    FOLLOWER_SPEC("follower_combo_count", follower_combo_count, MSL_CORE_MAX_PLAYERS, FIELD_U8),
+    FOLLOWER_SPEC("follower_last_hit_by", follower_last_hit_by, MSL_CORE_MAX_PLAYERS, FIELD_U8),
+    FOLLOWER_SPEC("follower_state_flags", follower_state_flags,
+                  MSL_CORE_MAX_PLAYERS* MSL_CORE_STATE_FLAGS_BYTES, FIELD_U8),
 };
 
 #undef SPEC
+#undef FOLLOWER_SPEC
 
 static size_t field_width(FieldKind kind) {
   switch (kind) {
@@ -1449,23 +1634,45 @@ static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t 
       int player = -1;
       if (spec->count == MSL_CORE_MAX_PLAYERS) {
         player = element;
-      } else if (spec->offset == offsetof(MslCoreCompare, state_flags)) {
+      } else if (spec->offset == offsetof(MslCoreCompare, state_flags) ||
+                 spec->offset == offsetof(MslCoreCompare, follower_state_flags)) {
         player = element / MSL_CORE_STATE_FLAGS_BYTES;
       }
       if (player >= 0 && player < replay->num_players &&
           !rows->player_present[player][logical_pos]) {
         continue;
       }
-      if (player >= 0 && player < replay->num_players &&
-          ((spec->offset == offsetof(MslCoreCompare, instance_hit_by) &&
-            !replay->players[player].instance_hit_by_present) ||
-           (spec->offset == offsetof(MslCoreCompare, instance_id) &&
-            !replay->players[player].instance_id_present))) {
+      if (spec->follower) {
+        // Slots beyond num_players carry no follower observation on either
+        // side; follower rows for real players compare only while both the
+        // replay and the sim have a live Nana. The follower_present lane is
+        // the one that reports life-cycle disagreement.
+        if (player < 0 || player >= replay->num_players) {
+          continue;
+        }
+        if (spec->offset != offsetof(MslCoreCompare, follower_present) &&
+            (!rows->follower_present[player][logical_pos] ||
+             ((const uint8_t*)(const void*)actual)[offsetof(MslCoreCompare, follower_present) +
+                                                   player] == 0)) {
+          continue;
+        }
+        if ((spec->offset == offsetof(MslCoreCompare, follower_instance_hit_by) &&
+             !replay->followers[player].instance_hit_by_present) ||
+            (spec->offset == offsetof(MslCoreCompare, follower_instance_id) &&
+             !replay->followers[player].instance_id_present)) {
+          continue;
+        }
+      } else if (player >= 0 && player < replay->num_players &&
+                 ((spec->offset == offsetof(MslCoreCompare, instance_hit_by) &&
+                   !replay->players[player].instance_hit_by_present) ||
+                  (spec->offset == offsetof(MslCoreCompare, instance_id) &&
+                   !replay->players[player].instance_id_present))) {
         continue;
       }
       uint32_t expected_bits = load_bits(expected_bytes + (size_t)element * width, width);
       uint32_t actual_bits = load_bits(actual_bytes + (size_t)element * width, width);
-      if (spec->offset == offsetof(MslCoreCompare, state_flags) &&
+      if ((spec->offset == offsetof(MslCoreCompare, state_flags) ||
+           spec->offset == offsetof(MslCoreCompare, follower_state_flags)) &&
           element % MSL_CORE_STATE_FLAGS_BYTES == MSL_CORE_STATE_FLAGS_BYTES - 1 &&
           ((expected_bits ^ actual_bits) & 0x80U) != 0) {
         // fp+0x221F_b0 is published by the render traversal rather than the
@@ -2301,6 +2508,8 @@ done:
   for (i = 0; i < MSL_CORE_MAX_PLAYERS; ++i) {
     free(rows.player_raw[i]);
     free(rows.player_present[i]);
+    free(rows.follower_raw[i]);
+    free(rows.follower_present[i]);
   }
   free(rows.raw);
   Py_XDECREF(arrow_pair);
@@ -2434,6 +2643,8 @@ done:
   for (i = 0; i < MSL_CORE_MAX_PLAYERS; ++i) {
     free(rows.player_raw[i]);
     free(rows.player_present[i]);
+    free(rows.follower_raw[i]);
+    free(rows.follower_present[i]);
   }
   free(rows.raw);
   Py_XDECREF(arrow_pair);

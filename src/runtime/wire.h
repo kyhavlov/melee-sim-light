@@ -161,6 +161,44 @@ typedef struct MslCoreCompare {
     uint8_t last_hit_by[MSL_CORE_MAX_PLAYERS];
     uint8_t _pad2[1];
     uint8_t state_flags[MSL_CORE_MAX_PLAYERS][MSL_CORE_STATE_FLAGS_BYTES];
+    // Follower (Ice Climbers Nana) lanes mirror the leader lanes above.
+    // Slippi records follower pre/post rows only while the follower fighter
+    // is awake: her Dead* animation frames are still recorded, rows stop when
+    // she enters ftCo_MS_Sleep (fp->x221F_b3) and resume with the leader's
+    // Rebirth. follower_present owns that life-cycle; every other follower
+    // lane is zero while absent. Slippi has no follower team/elimination
+    // observation, so there are no follower team_id/is_dead lanes.
+    // refs/melee/src/melee/ft/ftcolanim.c::ftCo_800BFD04
+    uint8_t follower_present[MSL_CORE_MAX_PLAYERS];
+    uint8_t follower_char_id[MSL_CORE_MAX_PLAYERS];
+    float follower_pos_x[MSL_CORE_MAX_PLAYERS];
+    float follower_pos_y[MSL_CORE_MAX_PLAYERS];
+    float follower_speed_air_x_self[MSL_CORE_MAX_PLAYERS];
+    float follower_speed_ground_x_self[MSL_CORE_MAX_PLAYERS];
+    float follower_speed_y_self[MSL_CORE_MAX_PLAYERS];
+    float follower_speed_x_attack[MSL_CORE_MAX_PLAYERS];
+    float follower_speed_y_attack[MSL_CORE_MAX_PLAYERS];
+    uint8_t follower_facing[MSL_CORE_MAX_PLAYERS];
+    uint8_t follower_on_ground[MSL_CORE_MAX_PLAYERS];
+    uint16_t follower_action_id[MSL_CORE_MAX_PLAYERS];
+    int16_t follower_action_frame[MSL_CORE_MAX_PLAYERS];
+    uint8_t follower_jumps_left[MSL_CORE_MAX_PLAYERS];
+    uint8_t follower_stocks[MSL_CORE_MAX_PLAYERS];
+    float follower_percent[MSL_CORE_MAX_PLAYERS];
+    float follower_shield_hp[MSL_CORE_MAX_PLAYERS];
+    uint16_t follower_hitlag[MSL_CORE_MAX_PLAYERS];
+    uint16_t follower_hitstun[MSL_CORE_MAX_PLAYERS];
+    uint8_t follower_l_cancel[MSL_CORE_MAX_PLAYERS];
+    uint8_t follower_hurtbox_state[MSL_CORE_MAX_PLAYERS];
+    uint16_t follower_ground_id[MSL_CORE_MAX_PLAYERS];
+    uint32_t follower_animation_index[MSL_CORE_MAX_PLAYERS];
+    uint16_t follower_instance_hit_by[MSL_CORE_MAX_PLAYERS];
+    uint16_t follower_instance_id[MSL_CORE_MAX_PLAYERS];
+    uint8_t follower_last_attack_landed[MSL_CORE_MAX_PLAYERS];
+    uint8_t follower_combo_count[MSL_CORE_MAX_PLAYERS];
+    uint8_t follower_last_hit_by[MSL_CORE_MAX_PLAYERS];
+    uint8_t follower_state_flags[MSL_CORE_MAX_PLAYERS]
+                                [MSL_CORE_STATE_FLAGS_BYTES];
     MslCoreItem items[MSL_CORE_MAX_ITEMS];
 } MslCoreCompare;
 
@@ -277,7 +315,7 @@ _Static_assert(sizeof(MslCoreMatchConfig) == 52,
 _Static_assert(sizeof(MslCoreStreamJobHeader) == 108,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
-_Static_assert(sizeof(MslCoreCompare) == 1022, "MslCoreCompare wire size");
+_Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");
 _Static_assert(sizeof(MslCoreObservationPlayer) == 56,
                "MslCoreObservationPlayer wire size");
 _Static_assert(sizeof(MslCoreObservationStage) == 20,
