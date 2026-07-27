@@ -3229,28 +3229,28 @@
     },
     {
       "replay": "replays/validation/samus/master-peach-2026-06_Game_20260627T002224.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "Samus movement lanes against the Dolphin single-precision motion profile",
-      "rationale": "Bit-exact through the 4,239-frame prefix. The first divergence at frame 4117 is a 1-2 ULP (or sub-1e-3 accumulated) difference in a self-speed/position lane; the value feeds the following frame's drift and collision inputs, so the one-bit seed forks the tail with complete downstream consequence. The Samus source packet's tether pipeline was verified bit-exact against retail interpreter probes through this prefix; the residual matches the corpus-wide Dolphin single-precision motion profile family.",
+      "id": "dolphin-ulp-contact-gate",
+      "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",
+      "rationale": "Bit-exact through the 13,076-frame prefix. The former frame-4117 pos_y island was retired by fusing the grapple rope integration to the retail scalar-single ops (GALE01 0x802B9060..0x802BA910). The residual divergence at frame 12954 is a platform-edge stop decision: retail clamps Samus to x=31.969 on the Frozen Stadium platform lip and zeroes ground speed, while the hosted run keeps sliding; the flip carries complete downstream consequence.",
       "sources": [
-        "refs/melee/src/melee/ft/ftcommon.c",
+        "refs/melee/src/melee/it/items/itsamusgrapple.c",
         "refs/melee/src/melee/mp/mpcoll.c"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 4239,
-          "first_mismatch_frame": 4117,
-          "first_render_visibility_mismatch_frame": 544,
           "frames": 15481,
+          "matched_frames": 13076,
+          "mismatched_frames": 2405,
+          "exact_prefix_frames": 13076,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 12954,
           "last_mismatch_frame": 15358,
-          "matched_frames": 13074,
-          "mismatch_count": 59649,
-          "mismatch_fields_digest": "df108a11438eff711ee885c27320db6f97f80c16056f40b7f183c94a2fac1dc1",
-          "mismatch_fingerprint": "5531d17c55a0c615",
-          "mismatched_frames": 2407,
+          "mismatch_count": 59647,
+          "mismatch_fingerprint": "7633e4e139723401",
           "render_visibility_mismatch_count": 960,
+          "first_render_visibility_mismatch_frame": 544,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 0
+          "mismatch_fields_digest": "b64575ce677e81bf87972e5274df7326f49ff474a7f9451b748c7c18f3be00ad"
         }
       }
     },
