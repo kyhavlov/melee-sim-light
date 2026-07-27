@@ -231,18 +231,18 @@
       "expected": {
         "native": {
           "frames": 9894,
-          "matched_frames": 9805,
-          "mismatched_frames": 89,
-          "exact_prefix_frames": 6902,
+          "matched_frames": 9806,
+          "mismatched_frames": 88,
+          "exact_prefix_frames": 8736,
           "strict_suffix_frames": 1070,
-          "first_mismatch_frame": 6780,
+          "first_mismatch_frame": 8614,
           "last_mismatch_frame": 8701,
-          "mismatch_count": 244,
-          "mismatch_fingerprint": "0bdbddd814b51011",
-          "mismatch_fields_digest": "936a714eabdd54a0f03ff49c26e8c7f275aa8620a8f23d3cd4fb9ffcde4a8e88",
+          "mismatch_count": 243,
+          "mismatch_fingerprint": "b5cf6dc2c00b3d12",
           "render_visibility_mismatch_count": 0,
           "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "f2beed20ebf90739f1a25282e14af3ea2f4ce3e20075db5c7f8cd5fbe7271463"
         },
         "ppc": "native"
       }
@@ -262,46 +262,18 @@
       "expected": {
         "native": {
           "frames": 9696,
-          "matched_frames": 7117,
-          "mismatched_frames": 2579,
-          "exact_prefix_frames": 5210,
+          "matched_frames": 7122,
+          "mismatched_frames": 2574,
+          "exact_prefix_frames": 7122,
           "strict_suffix_frames": 0,
-          "first_mismatch_frame": 5088,
+          "first_mismatch_frame": 7000,
           "last_mismatch_frame": 9573,
-          "mismatch_count": 81863,
-          "mismatch_fingerprint": "ddecec25dee2a84a",
-          "mismatch_fields_digest": "68afbf13cb9aedc4e8a255b3b28d86503089034c9c3035be5daa8624ebbbba31",
+          "mismatch_count": 81858,
+          "mismatch_fingerprint": "f2306068b95020f9",
           "render_visibility_mismatch_count": 2379,
           "first_render_visibility_mismatch_frame": 7016,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/doubles_recent/Game_20260704T005147.slpz",
-      "id": "doubles-dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "The complete residual is one isolated one-byte difference in Slippi generic metadata sampled from the low byte of a thrown-needle historical Y position. PPC and native agree exactly, and 3,777 strict transitions follow.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 7037,
-          "matched_frames": 7036,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 3259,
-          "strict_suffix_frames": 3777,
-          "first_mismatch_frame": 3137,
-          "last_mismatch_frame": 3137,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "ab81b8d2714af0c4",
-          "mismatch_fields_digest": "e402efbbbf28567e482b842f5231c282b6715e2e76c13e374a4261071cc01621",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "831ea080aaf381c5dce82f8b4f457db2239d814d67e2c1edc01792f100921271"
         },
         "ppc": "native"
       }
@@ -378,94 +350,6 @@
       }
     },
     {
-      "replay": "replays/validation/doubles_recent/Game_20260704T012635.slpz",
-      "id": "hosted-ppc-dynamic-bone-execution-profile",
-      "owner": "Fox dynamic-bone pose publication at a BODY hurt-capsule gate",
-      "rationale": "Native has only bounded fighter/needle float residuals and 2,102 exact trailing transitions. A bounded retail collision trace matches native's Fox hurt capsule at replay frame 8036; PPC's source-compiled dynamic-bone chain instead places bone 18 in overlap one frame early, causing a real hit and a complete downstream consequence. Guard FigaTree inputs and its evaluated skeleton are identical across backends, localizing the split to the long-running dynamic-bone execution profile rather than replay input or gameplay branching. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. The prior PPC snapshot predates these deltas and was retired pending a qemu re-record.",
-      "sources": [
-        "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-        "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94",
-        "refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70",
-        "refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 2475,
-          "first_mismatch_frame": 2353,
-          "first_render_visibility_mismatch_frame": null,
-          "frames": 10348,
-          "last_mismatch_frame": 8123,
-          "matched_frames": 10346,
-          "mismatch_count": 2,
-          "mismatch_fields_digest": "02d57cd257b77a605a3ad0be63c397438c86fd66312b378e74292b060b17ae29",
-          "mismatch_fingerprint": "d77f0fcdbc4fad9f",
-          "mismatched_frames": 2,
-          "render_visibility_mismatch_count": 0,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 2102
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/doubles_recent/Game_20260704T164410.slpz",
-      "id": "doubles-dolphin-ulp-motion-and-needle-profile",
-      "owner": "fighter motion and Sheik thrown-needle float publication",
-      "rationale": "PPC and native source runtimes agree bit-for-bit. A single thrown-needle historical-position byte remains, followed by 364 exact transitions; the replay records Dolphin but not its build or float/JIT profile.",
-      "sources": [
-        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "refs/melee/src/sysdolphin/baselib/mtx.c",
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 7934,
-          "matched_frames": 7933,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 7569,
-          "strict_suffix_frames": 364,
-          "first_mismatch_frame": 7447,
-          "last_mismatch_frame": 7447,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "279ac98950b8a993",
-          "render_visibility_mismatch_count": 6,
-          "first_render_visibility_mismatch_frame": 1676,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "0a269c7494632e8899684b3887bc0459a7937ea7ca50608954c5fff55399a5d9"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/doubles_recent/Game_20260704T165249.slpz",
-      "id": "doubles-dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "The complete residual is two isolated one-byte differences in Slippi generic metadata sampled from the low byte of thrown-needle historical Y positions. PPC and native agree exactly, and 2,994 trailing transitions are strict.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 7214,
-          "matched_frames": 7212,
-          "mismatched_frames": 2,
-          "exact_prefix_frames": 4216,
-          "strict_suffix_frames": 2994,
-          "first_mismatch_frame": 4094,
-          "last_mismatch_frame": 4097,
-          "mismatch_count": 2,
-          "mismatch_fingerprint": "71ea0c6dd48133cc",
-          "mismatch_fields_digest": "3280d4bf0170bfdab54abff2fd3f70205f069cc47731806443a085cbe4c51952",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz",
       "id": "unresolved-dolphin-laser-capsule-gate",
       "owner": "Falco laser swept capsule versus fighter hurt-pose publication",
@@ -533,34 +417,6 @@
           "mismatch_fields_digest": "f73471cbdf66498dbf0d97736298f5472b0ad8c3f3a03f2c576c6bf8a3b622b1",
           "render_visibility_mismatch_count": 12,
           "first_render_visibility_mismatch_frame": 1136,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/falcon/Game_20260505T114745.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "The residual is three isolated one-byte differences in Slippi generic metadata sampled from the low byte of thrown-needle historical Y positions. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and 6,392 trailing transitions are exact; the replay records Dolphin but not its float/JIT execution profile.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 10720,
-          "matched_frames": 10717,
-          "mismatched_frames": 3,
-          "exact_prefix_frames": 4229,
-          "strict_suffix_frames": 6392,
-          "first_mismatch_frame": 4107,
-          "last_mismatch_frame": 4205,
-          "mismatch_count": 3,
-          "mismatch_fingerprint": "a033be4a69ea05a5",
-          "mismatch_fields_digest": "71a8130dfd070a86433953406df1f6fd40136228695752f261c44848136263db",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0
         },
         "ppc": "native"
@@ -1068,35 +924,6 @@
       }
     },
     {
-      "replay": "replays/validation/peach/DryLimitedWoodcock.slpz",
-      "id": "needle-pose-and-dolphin-float-profile",
-      "owner": "Sheik thrown-needle historical position and fighter float execution",
-      "rationale": "One source-owned historical-position byte from a thrown needle precedes sparse ULP-scale fighter positions. The runtime retains strict needle bytes where the article owns them and exact source fighter integration; the complete fingerprint prevents either family from becoming a broad exception. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "refs/melee/src/sysdolphin/baselib/mtx.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 10458,
-          "matched_frames": 10455,
-          "mismatched_frames": 3,
-          "exact_prefix_frames": 654,
-          "strict_suffix_frames": 3105,
-          "first_mismatch_frame": 532,
-          "last_mismatch_frame": 7230,
-          "mismatch_count": 3,
-          "mismatch_fingerprint": "67fe896b252045b4",
-          "render_visibility_mismatch_count": 6,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "0e799136c80d8cc66af300c52686b536096777a065833f96bfddb7b82467f2e3"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/peach/ExpertWorthlessFinch.slpz",
       "id": "dolphin-ulp-item-motion-profile",
       "owner": "turnip/common-item gravity and position float execution",
@@ -1139,19 +966,19 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 5186,
-          "first_mismatch_frame": 5064,
-          "first_render_visibility_mismatch_frame": 500,
           "frames": 14098,
+          "matched_frames": 13998,
+          "mismatched_frames": 100,
+          "exact_prefix_frames": 5186,
+          "strict_suffix_frames": 256,
+          "first_mismatch_frame": 5064,
           "last_mismatch_frame": 13719,
-          "matched_frames": 13996,
-          "mismatch_count": 1839,
-          "mismatch_fields_digest": "b5d22319217fde065e922453fa1190e62097ba75f7038e1bca221424c690cb80",
-          "mismatch_fingerprint": "4cf4ace78dd11812",
-          "mismatched_frames": 102,
+          "mismatch_count": 1837,
+          "mismatch_fingerprint": "f84d7ac7cd016d88",
           "render_visibility_mismatch_count": 19,
+          "first_render_visibility_mismatch_frame": 500,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 256
+          "mismatch_fields_digest": "271563c685860b8a5694af6293168de9460249537c20b71571ea8690a690f561"
         }
       }
     },
@@ -1197,19 +1024,19 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 4061,
-          "first_mismatch_frame": 3939,
-          "first_render_visibility_mismatch_frame": 2941,
           "frames": 16501,
-          "last_mismatch_frame": 15166,
-          "matched_frames": 16339,
-          "mismatch_count": 2669,
-          "mismatch_fields_digest": "e97fd5ee52a33c4be1554c040b502d2399a4225224a56fdffc229c403fc1024d",
-          "mismatch_fingerprint": "50ba3ab2cd8c9a57",
-          "mismatched_frames": 162,
+          "matched_frames": 16348,
+          "mismatched_frames": 153,
+          "exact_prefix_frames": 4061,
+          "strict_suffix_frames": 4894,
+          "first_mismatch_frame": 3939,
+          "last_mismatch_frame": 11484,
+          "mismatch_count": 2660,
+          "mismatch_fingerprint": "01229d7db1a53321",
           "render_visibility_mismatch_count": 7,
+          "first_render_visibility_mismatch_frame": 2941,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 1212
+          "mismatch_fields_digest": "8732317e4d6f734ceafdc5037f716b912d45cdb091cb8d7f9241b69009542547"
         }
       }
     },
@@ -1311,19 +1138,19 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 16016,
-          "first_mismatch_frame": 15894,
-          "first_render_visibility_mismatch_frame": null,
           "frames": 26844,
-          "last_mismatch_frame": 26151,
-          "matched_frames": 26777,
-          "mismatch_count": 179,
-          "mismatch_fields_digest": "26850de6a9f4d1684534a4e0b2cb1ff615f3ed41a967f907feb57f4d66d0816e",
-          "mismatch_fingerprint": "915d6cb12b776c12",
-          "mismatched_frames": 67,
+          "matched_frames": 26806,
+          "mismatched_frames": 38,
+          "exact_prefix_frames": 26013,
+          "strict_suffix_frames": 793,
+          "first_mismatch_frame": 25891,
+          "last_mismatch_frame": 25928,
+          "mismatch_count": 150,
+          "mismatch_fingerprint": "31e72c938ffd4692",
           "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 570
+          "mismatch_fields_digest": "765529eb44031e2cd31e5b2ee877a42faad55b76340acc48bd1a62e9aea9df04"
         }
       }
     },
@@ -1484,36 +1311,6 @@
       }
     },
     {
-      "replay": "replays/validation/puff/Game_20260325T101917.slpz",
-      "id": "signed-zero-needle-and-deadup-profile",
-      "owner": "fighter signed-zero/DeadUp publication and Sheik thrown-needle historical pose",
-      "rationale": "The signed-zero and DeadUp lanes are now source-owned by the mainline-Dolphin fnmsubs zero profile and the retail star-KO fmsubs boundary; isolated one-byte Sheik needle historical-position samples remain. The diagnostic comparison exposes no discrete gameplay split, exact output resumes for the final 354 transitions, and native/PPC agree.",
-      "sources": [
-        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c",
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 16556,
-          "matched_frames": 16542,
-          "mismatched_frames": 14,
-          "exact_prefix_frames": 2474,
-          "strict_suffix_frames": 354,
-          "first_mismatch_frame": 2352,
-          "last_mismatch_frame": 16079,
-          "mismatch_count": 14,
-          "mismatch_fingerprint": "fce05aaed64b5fdb",
-          "render_visibility_mismatch_count": 4,
-          "first_render_visibility_mismatch_frame": 3424,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "ecadde38cb7730fd8becd5de061e3883210453dafb50b35f0256e904292232ea"
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/puff/Game_20260602T221603.slpz",
       "id": "signed-zero-and-source-pose-contact-gate",
       "owner": "fighter signed-zero/DeadUp publication and BODY-versus-shield collision pose",
@@ -1631,90 +1428,6 @@
       }
     },
     {
-      "replay": "replays/validation/sheik/AttractiveAnyClam.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "Each residual is an isolated one-byte difference in Slippi generic metadata sampled from the low byte of the thrown needle historical Y position. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and exact gameplay resumes after each row; the replay records Dolphin but not its float/JIT execution profile.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 7388,
-          "matched_frames": 7387,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 4177,
-          "strict_suffix_frames": 3210,
-          "first_mismatch_frame": 4055,
-          "last_mismatch_frame": 4055,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "5e47e63e20931702",
-          "render_visibility_mismatch_count": 10,
-          "first_render_visibility_mismatch_frame": 1047,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "94f5e4402ede5f89dab6f195683388b634ff880f3deb0eec748f41d86b05d259"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/BeautifulDistantWolverine.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "Each residual is an isolated one-byte difference in Slippi generic metadata sampled from the low byte of the thrown needle historical Y position. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and exact gameplay resumes after each row; the replay records Dolphin but not its float/JIT execution profile. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 4820,
-          "first_mismatch_frame": 4698,
-          "first_render_visibility_mismatch_frame": -122,
-          "frames": 7424,
-          "last_mismatch_frame": 4698,
-          "matched_frames": 7423,
-          "mismatch_count": 1,
-          "mismatch_fields_digest": "597ef599a63fcfbe59082b58cdecc1ab241e1dfdcf590ea40a00ae29f2802b00",
-          "mismatch_fingerprint": "79988ce508131aeb",
-          "mismatched_frames": 1,
-          "render_visibility_mismatch_count": 2,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 2603
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/ConstantStiffOtter.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "Each residual is an isolated one-byte difference in Slippi generic metadata sampled from the low byte of the thrown needle historical Y position. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and exact gameplay resumes after each row; the replay records Dolphin but not its float/JIT execution profile.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 11721,
-          "matched_frames": 11717,
-          "mismatched_frames": 4,
-          "exact_prefix_frames": 6763,
-          "strict_suffix_frames": 1742,
-          "first_mismatch_frame": 6641,
-          "last_mismatch_frame": 9856,
-          "mismatch_count": 4,
-          "mismatch_fingerprint": "83c40a6ed568b397",
-          "render_visibility_mismatch_count": 7,
-          "first_render_visibility_mismatch_frame": 2259,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "71f06be37d0c278da0244094565ddec34a19667f729ec99aaffd04433c078253"
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/sheik/GlaringRosyAlpaca.slpz",
       "id": "dolphin-ulp-motion-and-needle-profile",
       "owner": "fighter motion and Sheik thrown-needle float publication",
@@ -1727,19 +1440,19 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 1826,
-          "first_mismatch_frame": 1704,
-          "first_render_visibility_mismatch_frame": 8834,
           "frames": 9014,
+          "matched_frames": 8976,
+          "mismatched_frames": 38,
+          "exact_prefix_frames": 3549,
+          "strict_suffix_frames": 5350,
+          "first_mismatch_frame": 3427,
           "last_mismatch_frame": 3541,
-          "matched_frames": 8974,
-          "mismatch_count": 49,
-          "mismatch_fields_digest": "1f02ef7cf904aedf16c49b1aaac0a6fbc66ef5b04eb326217e401fdba2b420d3",
-          "mismatch_fingerprint": "951324dfc9aeebda",
-          "mismatched_frames": 40,
+          "mismatch_count": 47,
+          "mismatch_fingerprint": "7bd4554d2b645a29",
           "render_visibility_mismatch_count": 1,
+          "first_render_visibility_mismatch_frame": 8834,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 5350
+          "mismatch_fields_digest": "17654e1b85aa2a71072480a1ac309f4d09b5d48722e287ec96241c5a3d3cae8c"
         },
         "ppc": {
           "exact_prefix_frames": 1826,
@@ -1773,18 +1486,18 @@
       "expected": {
         "native": {
           "frames": 10665,
-          "matched_frames": 10003,
-          "mismatched_frames": 662,
+          "matched_frames": 10004,
+          "mismatched_frames": 661,
           "exact_prefix_frames": 3668,
-          "strict_suffix_frames": 3382,
+          "strict_suffix_frames": 6336,
           "first_mismatch_frame": 3546,
-          "last_mismatch_frame": 7160,
-          "mismatch_count": 1295,
-          "mismatch_fingerprint": "47fcc356728ae6bf",
+          "last_mismatch_frame": 4206,
+          "mismatch_count": 1294,
+          "mismatch_fingerprint": "dd96f5eccc5b1ad0",
           "render_visibility_mismatch_count": 1,
           "first_render_visibility_mismatch_frame": 4001,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "940f7d70a7e3c1aafae86e6a9989247d9fc98095af020b13c7ebd101eb896b44"
+          "mismatch_fields_digest": "55200d2cf8f15f45250d6a424f3d150a95caf2cf671085b9820908cf07a462c2"
         },
         "ppc": {
           "frames": 10665,
@@ -1801,62 +1514,6 @@
           "signed_zero_equal_count": 0,
           "mismatch_fields_digest": "e523725a819d1011cb8665aee3cbcf1839625a5c52c800e2c55808e1a2c8c45d"
         }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/PaleMajorEchidna.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "Each residual is an isolated one-byte difference in Slippi generic metadata sampled from the low byte of the thrown needle historical Y position. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and exact gameplay resumes after each row; the replay records Dolphin but not its float/JIT execution profile.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 10638,
-          "matched_frames": 10635,
-          "mismatched_frames": 3,
-          "exact_prefix_frames": 5862,
-          "strict_suffix_frames": 1671,
-          "first_mismatch_frame": 5740,
-          "last_mismatch_frame": 8844,
-          "mismatch_count": 3,
-          "mismatch_fingerprint": "d2fb889f5ca5190c",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "3104e5d3a8e5eac1383a676f087adc85322544846cffacb4f19e198f0412b3f5"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/RuralReasonableRat.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "Each residual is an isolated one-byte difference in Slippi generic metadata sampled from the low byte of the thrown needle historical Y position. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and exact gameplay resumes after each row; the replay records Dolphin but not its float/JIT execution profile.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 9319,
-          "matched_frames": 9309,
-          "mismatched_frames": 10,
-          "exact_prefix_frames": 2730,
-          "strict_suffix_frames": 839,
-          "first_mismatch_frame": 2608,
-          "last_mismatch_frame": 8357,
-          "mismatch_count": 10,
-          "mismatch_fingerprint": "957dc2a4eabb0614",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "00a42f572771dbb8fd9b55d6eadd5bb81af0039af53ee100ed345b04f45473ee"
-        },
-        "ppc": "native"
       }
     },
     {
@@ -1902,118 +1559,6 @@
       }
     },
     {
-      "replay": "replays/validation/sheik/TenseSameHummingbird.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "Each residual is an isolated one-byte difference in Slippi generic metadata sampled from the low byte of the thrown needle historical Y position. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and exact gameplay resumes after each row; the replay records Dolphin but not its float/JIT execution profile.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 11497,
-          "matched_frames": 11492,
-          "mismatched_frames": 5,
-          "exact_prefix_frames": 162,
-          "strict_suffix_frames": 2904,
-          "first_mismatch_frame": 40,
-          "last_mismatch_frame": 8470,
-          "mismatch_count": 5,
-          "mismatch_fingerprint": "5902c3b3c03d8b0b",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "ec3010da5d71611a3224b2192bb27afbb1e5ef5a524a4b06ea3ef6d66b764977"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/TornEnchantingGiraffe.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "Each residual is an isolated one-byte difference in Slippi generic metadata sampled from the low byte of the thrown needle historical Y position. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and exact gameplay resumes after each row; the replay records Dolphin but not its float/JIT execution profile.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 9464,
-          "matched_frames": 9463,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 6585,
-          "strict_suffix_frames": 2878,
-          "first_mismatch_frame": 6463,
-          "last_mismatch_frame": 6463,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "3053a0855622f27c",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "96b336ee074d7df7ba0d27f8e6a7c4a7fcb79a115c9a81741a016fbe622c7df3"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/UnusedLivelyLouse.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "Each residual is an isolated one-byte difference in Slippi generic metadata sampled from the low byte of the thrown needle historical Y position. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and exact gameplay resumes after each row; the replay records Dolphin but not its float/JIT execution profile.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 6200,
-          "matched_frames": 6199,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 3122,
-          "strict_suffix_frames": 3077,
-          "first_mismatch_frame": 3000,
-          "last_mismatch_frame": 3000,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "7ceebb22bfb898f5",
-          "render_visibility_mismatch_count": 6,
-          "first_render_visibility_mismatch_frame": 148,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "4d4d436fdb3781b547fcc1654332120da4ed8972d4679e441fe03d1618c44412"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/UselessGlassLoris.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "Each residual is an isolated one-byte difference in Slippi generic metadata sampled from the low byte of the thrown needle historical Y position. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and exact gameplay resumes after each row; the replay records Dolphin but not its float/JIT execution profile.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 9911,
-          "matched_frames": 9910,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 732,
-          "strict_suffix_frames": 9178,
-          "first_mismatch_frame": 610,
-          "last_mismatch_frame": 610,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "883415db2da37d83",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "17bc4cf5ef7c78b694b073d21586353420f62262dca89f3ec94b28c68a792a59"
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/sheik/WavyRundownAardvark.slpz",
       "id": "dolphin-ulp-motion-and-needle-profile",
       "owner": "fighter motion and Sheik thrown-needle float publication",
@@ -2027,18 +1572,18 @@
       "expected": {
         "native": {
           "frames": 10703,
-          "matched_frames": 10640,
-          "mismatched_frames": 63,
+          "matched_frames": 10653,
+          "mismatched_frames": 50,
           "exact_prefix_frames": 1089,
-          "strict_suffix_frames": 1107,
+          "strict_suffix_frames": 9489,
           "first_mismatch_frame": 967,
-          "last_mismatch_frame": 9473,
-          "mismatch_count": 69,
-          "mismatch_fingerprint": "69561920ec1b40ad",
+          "last_mismatch_frame": 1091,
+          "mismatch_count": 56,
+          "mismatch_fingerprint": "33898c3fcea7e99b",
           "render_visibility_mismatch_count": 3,
           "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "d78964afb52616782984e54c7d30d478b7c8f7bc906a6c27f86ce415b17520cc"
+          "mismatch_fields_digest": "f04dcc78e073789222d5165bccce42864ff94f4e5b5c0f371c3bde9f55e73e99"
         },
         "ppc": {
           "exact_prefix_frames": 1087,
@@ -2058,34 +1603,6 @@
       }
     },
     {
-      "replay": "replays/validation/sheik/ZestyPreciousTurtle.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik thrown-needle historical-pose publication",
-      "rationale": "Each residual is an isolated one-byte difference in Slippi generic metadata sampled from the low byte of the thrown needle historical Y position. PPC and native source runtimes agree exactly, every actual byte is one count above the replay byte, and exact gameplay resumes after each row; the replay records Dolphin but not its float/JIT execution profile.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
-      ],
-      "expected": {
-        "native": {
-          "frames": 8289,
-          "matched_frames": 8285,
-          "mismatched_frames": 4,
-          "exact_prefix_frames": 1535,
-          "strict_suffix_frames": 2749,
-          "first_mismatch_frame": 1413,
-          "last_mismatch_frame": 5417,
-          "mismatch_count": 4,
-          "mismatch_fingerprint": "246a67afeabaa10d",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "195180d20366c4b202aeaac41372c8d86e52d358f88406504736d5745440794e"
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/sheik/sheik_demo_game.slpz",
       "id": "dolphin-signed-zero-and-needle-profile",
       "owner": "PPC signed-zero publication and Sheik thrown-needle historical pose",
@@ -2099,18 +1616,18 @@
       "expected": {
         "native": {
           "frames": 8725,
-          "matched_frames": 8709,
-          "mismatched_frames": 16,
+          "matched_frames": 8710,
+          "mismatched_frames": 15,
           "exact_prefix_frames": 753,
           "strict_suffix_frames": 3301,
           "first_mismatch_frame": 631,
           "last_mismatch_frame": 5301,
-          "mismatch_count": 16,
-          "mismatch_fingerprint": "e053a74c1ece8b5b",
+          "mismatch_count": 15,
+          "mismatch_fingerprint": "e5ee232b00ad7573",
           "render_visibility_mismatch_count": 0,
           "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "81a49452622e13a077f5148916ea6424b4f042b97c8d1b6d9b98fbcd3312a71c"
+          "mismatch_fields_digest": "6a8ea8775bf1d3cadf8eaf5d4c06b43a6323d6395b6f0e279ac48387dc6acc98"
         },
         "ppc": "native"
       }
@@ -2129,18 +1646,18 @@
       "expected": {
         "native": {
           "frames": 8434,
-          "matched_frames": 8378,
-          "mismatched_frames": 56,
+          "matched_frames": 8379,
+          "mismatched_frames": 55,
           "exact_prefix_frames": 550,
-          "strict_suffix_frames": 3149,
+          "strict_suffix_frames": 6260,
           "first_mismatch_frame": 428,
-          "last_mismatch_frame": 5162,
-          "mismatch_count": 56,
-          "mismatch_fingerprint": "4523a7f8c15d2a45",
+          "last_mismatch_frame": 2051,
+          "mismatch_count": 55,
+          "mismatch_fingerprint": "87f9a3682e90e6dd",
           "render_visibility_mismatch_count": 0,
           "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "d83228540ea6879b0784001afaff339e4bd8d5eb069f3b5d8d4384132de2080c"
+          "mismatch_fields_digest": "6d4666989574985b0fcd4bbd1e2feeda69d7777e5353d6ff6eaba84c9231cde0"
         },
         "ppc": "native"
       }
@@ -2172,118 +1689,6 @@
           "strict_suffix_frames": 1501
         },
         "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/marios/auto-sheik-2025-02_Game_20250228T201822.slp",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik needle charge pose byte under the unrecorded Dolphin float profile",
-      "rationale": "The residual is a bounded set of needle pose-byte rows (item.misc2) with an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
-      "sources": [
-        "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-        "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
-        "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 139,
-          "first_mismatch_frame": 17,
-          "first_render_visibility_mismatch_frame": null,
-          "frames": 5928,
-          "last_mismatch_frame": 20,
-          "matched_frames": 5926,
-          "mismatch_count": 2,
-          "mismatch_fields_digest": "986a34a12164ccb068060abc7a250a189e35524d162122afc00a265856d816ef",
-          "mismatch_fingerprint": "2fcbed7ad4b22a9d",
-          "mismatched_frames": 2,
-          "render_visibility_mismatch_count": 0,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 5785
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marios/auto-sheik-2025-02_Game_20250227T165006.slp",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik needle charge pose byte under the unrecorded Dolphin float profile",
-      "rationale": "The residual is a bounded set of needle pose-byte rows (item.misc2) with an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
-      "sources": [
-        "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-        "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
-        "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 9477,
-          "first_mismatch_frame": 9355,
-          "first_render_visibility_mismatch_frame": null,
-          "frames": 10751,
-          "last_mismatch_frame": 9355,
-          "matched_frames": 10750,
-          "mismatch_count": 1,
-          "mismatch_fields_digest": "e4098776c3a725373fe01cb82771cac0074e50d88bce8533239e13aede57a2ed",
-          "mismatch_fingerprint": "e5dc1ef87e57f56a",
-          "mismatched_frames": 1,
-          "render_visibility_mismatch_count": 0,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 1273
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marios/gm-sheik-2025-11_Game_20251111T160230.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik needle charge pose byte under the unrecorded Dolphin float profile",
-      "rationale": "The residual is a bounded set of needle pose-byte rows (item.misc2) with an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
-      "sources": [
-        "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-        "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
-        "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 4413,
-          "first_mismatch_frame": 4291,
-          "first_render_visibility_mismatch_frame": 2254,
-          "frames": 10336,
-          "last_mismatch_frame": 4294,
-          "matched_frames": 10334,
-          "mismatch_count": 2,
-          "mismatch_fields_digest": "0e80a3b65e77a42bce167cf115b24a1ea49426f3cafdb466e617ed1964013940",
-          "mismatch_fingerprint": "4f97515a9a191419",
-          "mismatched_frames": 2,
-          "render_visibility_mismatch_count": 1,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 5919
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marios/diamond-diamond-6c3bcc456c967feb1570eb68.slpz",
-      "id": "dolphin-ulp-needle-pose-profile",
-      "owner": "Sheik needle charge pose byte under the unrecorded Dolphin float profile",
-      "rationale": "The residual is a bounded set of needle pose-byte rows (item.misc2) with an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
-      "sources": [
-        "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-        "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
-        "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 3674,
-          "first_mismatch_frame": 3552,
-          "first_render_visibility_mismatch_frame": null,
-          "frames": 15286,
-          "last_mismatch_frame": 14954,
-          "matched_frames": 15280,
-          "mismatch_count": 6,
-          "mismatch_fields_digest": "918a4b1fc03c77aa764b2967a068febdb8e5e4646f324c0565a8d972d73dc8bc",
-          "mismatch_fingerprint": "808882f521634943",
-          "mismatched_frames": 6,
-          "render_visibility_mismatch_count": 0,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 209
-        }
       }
     },
     {
@@ -2438,19 +1843,19 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 2366,
-          "first_mismatch_frame": 2244,
-          "first_render_visibility_mismatch_frame": null,
           "frames": 15813,
-          "last_mismatch_frame": 15132,
-          "matched_frames": 15664,
-          "mismatch_count": 298,
-          "mismatch_fields_digest": "af74515e83abe675ced3d4de84beac1b5a21552382ccb4dde2260c1f987f5df5",
-          "mismatch_fingerprint": "0ea9afeecf41beeb",
-          "mismatched_frames": 149,
+          "matched_frames": 15678,
+          "mismatched_frames": 135,
+          "exact_prefix_frames": 2366,
+          "strict_suffix_frames": 13312,
+          "first_mismatch_frame": 2244,
+          "last_mismatch_frame": 2378,
+          "mismatch_count": 284,
+          "mismatch_fingerprint": "9c0524bc5e5d083d",
           "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 558
+          "mismatch_fields_digest": "d8ea98de2ec88d8b978a254f97f4d93d6a2272e6f085c8fbcc887f9a22ae8e1f"
         }
       }
     },
