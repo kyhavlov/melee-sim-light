@@ -1,6 +1,9 @@
 #include "grstory.h"
 
 #include <platform.h>
+#ifdef MSL_CORE_HOSTED
+#include <MetroTRK/intrinsics.h>
+#endif
 
 #include <dolphin/os/OSError.h>
 #include <sysdolphin/baselib/gobjgxlink.h>
@@ -281,7 +284,14 @@ void grStory_801E3418(Ground_GObj* gobj)
             it_802D8618(i, &pos, temp_r29, 25.0F * i);
 
             // Jitter the vertical position of the each subsequent shy guy
+            // GALE01 0x801E362C: the jitter scale fuses onto the pattern
+            // height.
+#ifdef MSL_CORE_HOSTED
+            pos.y = __fmadds(3.0F, frand_amp1(),
+                             shyguy_vars->vpos[spawn_pattern]);
+#else
             pos.y = 3.0F * frand_amp1() + shyguy_vars->vpos[spawn_pattern];
+#endif
         }
     }
 }
