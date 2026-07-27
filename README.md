@@ -1,5 +1,7 @@
 # melee-sim-light
 
+[![melee-core validation](https://github.com/kyhavlov/melee-sim-light/actions/workflows/validation.yml/badge.svg?branch=main)](https://github.com/kyhavlov/melee-sim-light/actions/workflows/validation.yml)
+
 `melee-sim-light` is a deterministic, batched simulator for high-throughput RL training,
 built on the [SSBM Decompilation](https://github.com/doldecomp/melee) project.
 
