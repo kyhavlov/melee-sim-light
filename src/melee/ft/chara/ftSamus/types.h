@@ -73,7 +73,11 @@ typedef struct _ftSamusAttributes {
     /* +C4 */ int xC4;
     /* +C8 */ int xC8;
     /* +CC */ f32 xCC;
-    /* +D0 */ UNK_T xD0;
+    // The zair wall-hang duration in frames. it_802BABB8 reads it as
+    // (f32)(s32); the retail UNK_T declaration made the 64-bit DAT
+    // translation treat the lane as a relocatable pointer, which nulled the
+    // raw scalar and collapsed every hosted wall-hang to zero frames.
+    /* +D0 */ int xD0;
 } ftSs_DatAttrs;
 
 /// maybe Samus grapple?

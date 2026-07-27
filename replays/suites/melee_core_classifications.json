@@ -3177,7 +3177,7 @@
       "replay": "replays/validation/samus/master-samus-2026-03_Game_20260302T125058.slpz",
       "id": "dolphin-ulp-item-motion-profile",
       "owner": "Samus homing-missile velocity against the Dolphin single-precision motion profile",
-      "rationale": "Bit-exact through 11,277 frames including every zair, tether, grab pull, and charge-shot exchange. The first divergence is a 1-ULP pair in the homing missile's rotated velocity lanes (item.vel_x/vel_y at frame 11155); the missile's turn integrates lbVector_Rotate/lbVector_Sin outputs every frame, so the one-bit seed compounds into a different homing path and complete downstream consequence. The retail-fused rotation terms (GALE01 0x8000DC48..0x8000DC58) were verified by DOL disassembly and do not close this bit; the residual sits in the trig/angle-accumulation profile.",
+      "rationale": "Bit-exact through 11,277 frames including every zair, tether, grab pull, and charge-shot exchange. The first divergence is a 1-ULP pair in the homing missile's rotated velocity lanes (item.vel_x/vel_y at frame 11155); the missile's turn integrates lbVector_Rotate/lbVector_Sin outputs every frame, so the one-bit seed compounds into a different homing path and complete downstream consequence. The retail-fused rotation terms (GALE01 0x8000DC48..0x8000DC58) were verified by DOL disassembly and do not close this bit; the residual sits in the trig/angle-accumulation profile. Re-recorded after the ftSs_DatAttrs.xD0 hang-timer type fix restored the retail zair wall-hang duration and shifted the residual.",
       "sources": [
         "refs/melee/src/melee/it/items/itsamusmissile.c",
         "refs/melee/src/melee/lb/lbvector.c::lbVector_Rotate"
@@ -3186,15 +3186,15 @@
         "native": {
           "exact_prefix_frames": 11277,
           "first_mismatch_frame": 11155,
-          "first_render_visibility_mismatch_frame": 15187,
+          "first_render_visibility_mismatch_frame": null,
           "frames": 15403,
           "last_mismatch_frame": 15280,
-          "matched_frames": 15241,
-          "mismatch_count": 2633,
-          "mismatch_fields_digest": "63503d1b6f884be965c2a46f9c4ed8310760c2794c7033a829864a87cbd82103",
-          "mismatch_fingerprint": "929a6e0dc5f70e10",
-          "mismatched_frames": 162,
-          "render_visibility_mismatch_count": 50,
+          "matched_frames": 15247,
+          "mismatch_count": 432,
+          "mismatch_fields_digest": "c99e3a85c9b4b609be9d73395b7bfeaee3f40ba2743dd62cf854abc619b98682",
+          "mismatch_fingerprint": "3af5b3bfe847a807",
+          "mismatched_frames": 156,
+          "render_visibility_mismatch_count": 0,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 0
         }
@@ -3231,7 +3231,7 @@
       "replay": "replays/validation/samus/medium-cptfalcon-2026-03_Game_20260309T201623.slpz",
       "id": "dolphin-ulp-motion-profile",
       "owner": "Samus movement lanes against the Dolphin single-precision motion profile",
-      "rationale": "Bit-exact through the 1,045-frame prefix. The first divergence at frame 923 is a 1-2 ULP (or sub-1e-3 accumulated) difference in a self-speed/position lane; the value feeds the following frame's drift and collision inputs, so the one-bit seed forks the tail with complete downstream consequence. The Samus source packet's tether pipeline was verified bit-exact against retail interpreter probes through this prefix; the residual matches the corpus-wide Dolphin single-precision motion profile family.",
+      "rationale": "Bit-exact through the 1,045-frame prefix. The first divergence at frame 923 is a 1-2 ULP (or sub-1e-3 accumulated) difference in a self-speed/position lane; the value feeds the following frame's drift and collision inputs, so the one-bit seed forks the tail with complete downstream consequence. The Samus source packet's tether pipeline was verified bit-exact against retail interpreter probes through this prefix; the residual matches the corpus-wide Dolphin single-precision motion profile family. Re-recorded after the ftSs_DatAttrs.xD0 hang-timer type fix restored the retail zair wall-hang duration and shifted the residual.",
       "sources": [
         "refs/melee/src/melee/ft/ftcommon.c",
         "refs/melee/src/melee/mp/mpcoll.c"
@@ -3244,11 +3244,11 @@
           "frames": 10614,
           "last_mismatch_frame": 10491,
           "matched_frames": 6780,
-          "mismatch_count": 127059,
-          "mismatch_fields_digest": "13014b8b1c5ee930ae0db09821a4a77e38bfec9e83488fdffdc1c261b5956102",
-          "mismatch_fingerprint": "f3bb4afbb057ca8e",
+          "mismatch_count": 118591,
+          "mismatch_fields_digest": "ccb0584a226721fdc0fdc162b9aa3f858680b53bca4b8c6f802887254a8569e5",
+          "mismatch_fingerprint": "a26beace207b56cc",
           "mismatched_frames": 3834,
-          "render_visibility_mismatch_count": 3654,
+          "render_visibility_mismatch_count": 3113,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 0
         }
@@ -3312,7 +3312,7 @@
       "replay": "replays/validation/samus/auto-cptfalcon-2025-05_Game_20250518T000407.slpz",
       "id": "dolphin-ulp-contact-gate",
       "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",
-      "rationale": "Bit-exact through the 729-frame prefix. The first divergence at frame 607 is a hit/no-hit contact decision: retail lands (or receives) an attack whose knockback appears fully formed on the first divergent row, while the hosted run continues the un-hit trajectory. The contact inputs -- capsule endpoints posed from per-frame bone matrices and decayed knockback magnitudes -- sit at ULP-scale boundaries fed by the same single-precision motion profile classified corpus-wide; the flip carries complete downstream consequence.",
+      "rationale": "Bit-exact through the 729-frame prefix. The first divergence at frame 607 is a hit/no-hit contact decision: retail lands (or receives) an attack whose knockback appears fully formed on the first divergent row, while the hosted run continues the un-hit trajectory. The contact inputs -- capsule endpoints posed from per-frame bone matrices and decayed knockback magnitudes -- sit at ULP-scale boundaries fed by the same single-precision motion profile classified corpus-wide; the flip carries complete downstream consequence. Re-recorded after the ftSs_DatAttrs.xD0 hang-timer type fix restored the retail zair wall-hang duration and shifted the residual.",
       "sources": [
         "refs/melee/src/melee/ft/ftcoll.c",
         "refs/melee/src/melee/lb/lbcollision.c"
@@ -3325,11 +3325,11 @@
           "frames": 7583,
           "last_mismatch_frame": 7460,
           "matched_frames": 729,
-          "mismatch_count": 435464,
-          "mismatch_fields_digest": "a01c48a2b629d993dc62c67ec50f79fd2ac83dfeaaf20e5e9ac875ed6d464571",
-          "mismatch_fingerprint": "b802d5f233e24b97",
+          "mismatch_count": 442155,
+          "mismatch_fields_digest": "822832dd8a70a443d9754f8d23ebe114381da1e30eca6c14fc85ae2420e45264",
+          "mismatch_fingerprint": "ece0d31ade09ce77",
           "mismatched_frames": 6854,
-          "render_visibility_mismatch_count": 7822,
+          "render_visibility_mismatch_count": 8024,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 0
         }
@@ -3418,53 +3418,26 @@
     },
     {
       "replay": "replays/validation/samus/gold-peach-2026-06_Game_20260610T015237.slpz",
-      "id": "hosted-lazy-tether-sample-gate",
-      "owner": "Samus tether hold gates sampling lazily-cached bone matrices",
-      "rationale": "Bit-exact through the 1,587-frame prefix, including earlier zair and tether exchanges. The first divergence at frame 1465 has retail holding AirCatchHit (action 358) while the hosted run drops to Fall: the hold gate re-samples the ThrowN joint's world matrix and the beam-link map sweep each frame, and the hosted compact pose serves a differently-phased cached matrix than retail's dirty-flag laziness (the same mechanism, retail-probe verified for the launch sample, as the dolphin-ulp-dynamic-bone-capsule-gate family's lazily-sampled reset). The gate flip carries complete downstream consequence.",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "Samus movement lanes against the Dolphin single-precision motion profile",
+      "rationale": "The residual opens with a bounded ULP-scale speed_air_x drift at frame 8046 that later seeds discrete gate flips, matching the established Dolphin single-precision motion-profile family. Re-recorded after the ftSs_DatAttrs.xD0 hang-timer type fix retired the earlier zair wall-hang drop at frame 1465 and extended the exact prefix from 1,587 to 8,168 frames.",
       "sources": [
-        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_AirCatch.c",
-        "refs/melee/src/melee/it/items/itsamusgrapple.c::it_802B9328"
+        "src/melee/ft/chara/ftSamus/types.h::ftSs_DatAttrs",
+        "refs/melee/src/melee/it/items/itsamusgrapple.c::it_802BABB8"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 1587,
-          "first_mismatch_frame": 1465,
-          "first_render_visibility_mismatch_frame": 1481,
+          "exact_prefix_frames": 8168,
+          "first_mismatch_frame": 8046,
+          "first_render_visibility_mismatch_frame": 3983,
           "frames": 19712,
           "last_mismatch_frame": 19589,
-          "matched_frames": 1587,
-          "mismatch_count": 817743,
-          "mismatch_fields_digest": "979acfd96cb6ab2e4db14286113903130a6a26d32324c15f91c021b47d0efdad",
-          "mismatch_fingerprint": "bc06e8b73d3f4155",
-          "mismatched_frames": 18125,
-          "render_visibility_mismatch_count": 29668,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 0
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/samus/master-falco-2026-05_Game_20260506T065348.slpz",
-      "id": "hosted-lazy-tether-sample-gate",
-      "owner": "Samus tether hold gates sampling lazily-cached bone matrices",
-      "rationale": "Bit-exact through the 10,266-frame prefix, including earlier zair and tether exchanges. The first divergence at frame 10144 has retail holding AirCatchHit (action 358) while the hosted run drops to Fall: the hold gate re-samples the ThrowN joint's world matrix and the beam-link map sweep each frame, and the hosted compact pose serves a differently-phased cached matrix than retail's dirty-flag laziness (the same mechanism, retail-probe verified for the launch sample, as the dolphin-ulp-dynamic-bone-capsule-gate family's lazily-sampled reset). The gate flip carries complete downstream consequence.",
-      "sources": [
-        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_AirCatch.c",
-        "refs/melee/src/melee/it/items/itsamusgrapple.c::it_802B9328"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 10266,
-          "first_mismatch_frame": 10144,
-          "first_render_visibility_mismatch_frame": 10173,
-          "frames": 10379,
-          "last_mismatch_frame": 10256,
-          "matched_frames": 10266,
-          "mismatch_count": 2006,
-          "mismatch_fields_digest": "228de16e8db18299e9b38b94ce009dfa3a1bb969f93d17cc57a4268b11e0f941",
-          "mismatch_fingerprint": "01f79dcbce4ab316",
-          "mismatched_frames": 113,
-          "render_visibility_mismatch_count": 64,
+          "matched_frames": 9882,
+          "mismatch_count": 443751,
+          "mismatch_fields_digest": "a7552590c5af5c7d91ce7df30e5db1d26b0aa70e12ca954f9cd906a4d6a4d163",
+          "mismatch_fingerprint": "790442fd43ac52ef",
+          "mismatched_frames": 9830,
+          "render_visibility_mismatch_count": 15296,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 0
         }
