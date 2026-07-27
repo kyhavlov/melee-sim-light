@@ -245,20 +245,23 @@ void lbVector_Rotate(Vec3* v, int axis, float angle)
     float y;
     float z;
 
+    // GALE01 0x8000DC08-0x8000DC58: each rotation term is an fmadds/fmsubs
+    // with the first-listed product fused and the second pre-rounded, the
+    // same shape as lbVector_RotateAboutUnitAxis above.
     switch (axis) {
     case 1: // rotate about x axis
         x = v->x;
-        y = v->y * c - v->z * s;
-        z = v->y * s + v->z * c;
+        y = __fmsubs(v->y, c, v->z * s);
+        z = __fmadds(v->y, s, v->z * c);
         break;
     case 2: // rotate about y axis
-        x = v->x * c + v->z * s;
+        x = __fmadds(v->x, c, v->z * s);
         y = v->y;
-        z = v->z * c - v->x * s;
+        z = __fmsubs(v->z, c, v->x * s);
         break;
     case 4: // rotate about z axis
-        x = v->x * c - v->y * s;
-        y = v->x * s + v->y * c;
+        x = __fmsubs(v->x, c, v->y * s);
+        y = __fmadds(v->x, s, v->y * c);
         z = v->z;
         break;
     }
