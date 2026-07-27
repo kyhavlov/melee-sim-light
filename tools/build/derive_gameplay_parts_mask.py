@@ -8,6 +8,9 @@ The admitted set is the union of:
     hurtbox owners (x30), dynamics chains (x2C), model-desc anchors
     (x8->x10..x14: anim root, and throw/item attach bones), the x34 shield
     bone, and the x54 effect-anchor cycle;
+  - every Create Hitbox bone reachable from the fighter's subaction
+    scripts (a cold hitbox part has no world matrix, so its capsule
+    whiffs at the origin);
   - every skeleton ancestor of the above (the compact loader requires an
     ancestor-closed keep set; see msl_core_HSD_JObjLoadJointFiltered).
 
@@ -35,6 +38,22 @@ CHARACTERS = {
     'drmario': (21, 'Dr', 'ftDataDrmario'),
     'falco': (22, 'Fc', 'ftDataFalco'),
 }
+
+# Subaction counts per FighterKind (src/melee/ft/ftdata.c ftData_Table_Unk0).
+SUBACTION_COUNTS = {
+    0: 303, 1: 327, 2: 318, 7: 317, 9: 318, 13: 313, 15: 327, 17: 312,
+    18: 327, 19: 311, 21: 303, 22: 327,
+}
+
+# Words consumed per fighter subaction event with opcode >= 10, indexed by
+# opcode - 10 (src/melee/ft/ftaction.c ftAction_803C0870; retail's own
+# fast-skip executor ftAction_8007349C advances by exactly these strides).
+FT_EVENT_WORDS = [
+    5, 5, 1, 1, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 1, 7, 4, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 1, 4,
+]
+CREATE_HITBOX_OPCODE = 11
 
 FTPART_INVALID = 0xFF
 NCANON = 54  # FtPart_TopN .. FtPart_TransN2
@@ -166,6 +185,61 @@ def ftdata_parts(path, root_name):
     return bones, dyn
 
 
+def subaction_hitbox_parts(path, root_name, count, p2j, parts_num):
+    """Part indices carrying Create Hitbox capsules in any subaction script.
+
+    Walks every fighter subaction command stream (following Subroutine and
+    Goto edges) and collects the bone field of each Create Hitbox event
+    (opcode 11). use_common_bone_ids routes the id through part_to_joint,
+    matching ftAction_8007121C's fp->parts[...] placement; a hitbox whose
+    part is masked cold never gets a world matrix, so its capsule sits at
+    the origin and silently whiffs (found via Samus bair's 14% sweetspot
+    on part 18).
+    """
+    data, roots, relocs = load_dat(path)
+    ft = roots[root_name]
+    if ft + 0xC not in relocs:
+        return set()
+    table = u32(data, ft + 0xC)
+    parts = set()
+    seen = set()
+    stack = []
+    for i in range(count):
+        entry = table + i * 0x18
+        if entry + 0xC in relocs:
+            stack.append(u32(data, entry + 0xC))
+    while stack:
+        off = stack.pop()
+        while off not in seen and off + 4 <= len(data):
+            seen.add(off)
+            word = u32(data, off)
+            op = word >> 26
+            if op == 0:  # End
+                break
+            if op in (5, 7):  # Subroutine / Goto: next word is the target
+                if off + 4 in relocs:
+                    stack.append(u32(data, off + 4))
+                if op == 7:
+                    break
+                off += 8
+                continue
+            if op < 10:
+                off += 4
+                continue
+            assert op - 10 < len(FT_EVENT_WORDS), (path, hex(off), op)
+            if op == CREATE_HITBOX_OPCODE:
+                bone = (word >> 11) & 0xFF
+                if (word >> 10) & 1:  # use_common_bone_ids
+                    bone = p2j[bone]
+                # Raw ids past the skeleton (e.g. Samus zair's beam-tip
+                # slot 139) are runtime-anchored article joints, not
+                # admission-gated skeleton parts.
+                if bone != FTPART_INVALID and bone < parts_num:
+                    parts.add(bone)
+            off += 4 * FT_EVENT_WORDS[op - 10]
+    return parts
+
+
 def derive(name, common, canon):
     kind, prefix, root = CHARACTERS[name]
     _, p2j, parts_num = common.parts_table(kind)
@@ -178,6 +252,8 @@ def derive(name, common, canon):
             mask.add(j)
 
     bones, dyn = ftdata_parts(f'data/raw/Pl{prefix}.dat', root)
+    bones |= subaction_hitbox_parts(f'data/raw/Pl{prefix}.dat', root,
+                                    SUBACTION_COUNTS[kind], p2j, parts_num)
     order, parents = skeleton(f'data/raw/Pl{prefix}Nr.dat')
     phys = [p for p in range(parts_num) if p not in excl]
     assert len(phys) == len(order), (name, len(phys), len(order))

@@ -3203,27 +3203,27 @@
     {
       "replay": "replays/validation/samus/medium-cptfalcon-2026-03_Game_20260309T201623.slpz",
       "id": "dolphin-ulp-motion-profile",
-      "owner": "Samus movement lanes against the Dolphin single-precision motion profile",
-      "rationale": "Bit-exact through the 1,045-frame prefix. The first divergence at frame 923 is a 1-2 ULP (or sub-1e-3 accumulated) difference in a self-speed/position lane; the value feeds the following frame's drift and collision inputs, so the one-bit seed forks the tail with complete downstream consequence. The Samus source packet's tether pipeline was verified bit-exact against retail interpreter probes through this prefix; the residual matches the corpus-wide Dolphin single-precision motion profile family. Re-recorded after the ftSs_DatAttrs.xD0 hang-timer type fix restored the retail zair wall-hang duration and shifted the residual.",
+      "owner": "Captain Falcon movement lanes against the Dolphin single-precision motion profile",
+      "rationale": "Bit-exact through the 1,045-frame prefix and the entire 9,243-frame strict suffix. Re-recorded after the subaction-hitbox part-admission fix; the residual is a 323-row pos_x[1] island (frames 923..1248) of 1-ULP magnitude with no downstream consequence.",
       "sources": [
         "refs/melee/src/melee/ft/ftcommon.c",
         "refs/melee/src/melee/mp/mpcoll.c"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 1045,
-          "first_mismatch_frame": 923,
-          "first_render_visibility_mismatch_frame": -122,
           "frames": 10614,
-          "last_mismatch_frame": 10491,
-          "matched_frames": 6780,
-          "mismatch_count": 118591,
-          "mismatch_fields_digest": "ccb0584a226721fdc0fdc162b9aa3f858680b53bca4b8c6f802887254a8569e5",
-          "mismatch_fingerprint": "a26beace207b56cc",
-          "mismatched_frames": 3834,
-          "render_visibility_mismatch_count": 3113,
+          "matched_frames": 10291,
+          "mismatched_frames": 323,
+          "exact_prefix_frames": 1045,
+          "strict_suffix_frames": 9243,
+          "first_mismatch_frame": 923,
+          "last_mismatch_frame": 1248,
+          "mismatch_count": 323,
+          "mismatch_fingerprint": "6ef5d081fc016415",
+          "render_visibility_mismatch_count": 21,
+          "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 0
+          "mismatch_fields_digest": "8692bc908c0a6b73b65f7b0941558bd5158b130c22722795492e0cf4ec52e065"
         }
       }
     },
@@ -3255,56 +3255,29 @@
       }
     },
     {
-      "replay": "replays/validation/samus/diamond-platinum-e9cd78b1cd4439a0f7945269.slpz",
-      "id": "dolphin-ulp-contact-gate",
-      "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",
-      "rationale": "The recording predates the UCF 1.0 cardinal patch: at frame 210 the raw stick (-98, +1) is published unsnapped as -0.9875, so the suite row now carries ucf_cardinals_1_0_enabled=false. With the correct input profile the exact prefix extends from 332 to 1,012 frames and the residual opens with a hit-outcome flip against Falco at frame 890, the established shape of contact decisions seeded by ULP-scale capsule and knockback inputs.",
-      "sources": [
-        "refs/ucf/src/pad_buffer/pad_buffer.cpp::apply_cardinals",
-        "refs/melee/src/melee/ft/ftcoll.c"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 1012,
-          "first_mismatch_frame": 890,
-          "first_render_visibility_mismatch_frame": 907,
-          "frames": 12166,
-          "last_mismatch_frame": 12043,
-          "matched_frames": 1012,
-          "mismatch_count": 411329,
-          "mismatch_fields_digest": "b0f810a0168324c192cc2add7ec033b8930267d1c5670bffb8856f3b0212b47b",
-          "mismatch_fingerprint": "dd7fd6d84ed1a7a9",
-          "mismatched_frames": 11154,
-          "render_visibility_mismatch_count": 17424,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 0
-        }
-      }
-    },
-    {
       "replay": "replays/validation/samus/auto-cptfalcon-2025-05_Game_20250518T000407.slpz",
-      "id": "dolphin-ulp-contact-gate",
-      "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",
-      "rationale": "Bit-exact through the 729-frame prefix. The first divergence at frame 607 is a hit/no-hit contact decision: retail lands (or receives) an attack whose knockback appears fully formed on the first divergent row, while the hosted run continues the un-hit trajectory. The contact inputs -- capsule endpoints posed from per-frame bone matrices and decayed knockback magnitudes -- sit at ULP-scale boundaries fed by the same single-precision motion profile classified corpus-wide; the flip carries complete downstream consequence. Re-recorded after the ftSs_DatAttrs.xD0 hang-timer type fix restored the retail zair wall-hang duration and shifted the residual.",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "Samus movement lanes against the Dolphin single-precision motion profile",
+      "rationale": "Bit-exact through the 1,119-frame prefix and the entire 3,944-frame strict suffix. After the subaction-hitbox part-admission fix landed the frame-607 bair sweetspot (part 18) that previously whiffed from the origin, the residual is a 103-row pos_x island (frames 997..3516) of 1-2 ULP magnitude with no downstream consequence.",
       "sources": [
         "refs/melee/src/melee/ft/ftcoll.c",
         "refs/melee/src/melee/lb/lbcollision.c"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 729,
-          "first_mismatch_frame": 607,
-          "first_render_visibility_mismatch_frame": -122,
           "frames": 7583,
-          "last_mismatch_frame": 7460,
-          "matched_frames": 729,
-          "mismatch_count": 442155,
-          "mismatch_fields_digest": "822832dd8a70a443d9754f8d23ebe114381da1e30eca6c14fc85ae2420e45264",
-          "mismatch_fingerprint": "ece0d31ade09ce77",
-          "mismatched_frames": 6854,
-          "render_visibility_mismatch_count": 8024,
+          "matched_frames": 7480,
+          "mismatched_frames": 103,
+          "exact_prefix_frames": 1119,
+          "strict_suffix_frames": 3944,
+          "first_mismatch_frame": 997,
+          "last_mismatch_frame": 3516,
+          "mismatch_count": 103,
+          "mismatch_fingerprint": "73d5a1f9d05a45d1",
+          "render_visibility_mismatch_count": 19,
+          "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 0
+          "mismatch_fields_digest": "457ce8f1aeaec747c5e38597a37ae582cc2bc0400001e99764b08a72d167bbdd"
         }
       }
     },
@@ -3312,107 +3285,26 @@
       "replay": "replays/validation/samus/fox-d18-2026-04_Game_20260419T223341.slpz",
       "id": "dolphin-ulp-contact-gate",
       "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",
-      "rationale": "Bit-exact through the 1,025-frame prefix. The first divergence at frame 903 is a hit/no-hit contact decision: retail lands (or receives) an attack whose knockback appears fully formed on the first divergent row, while the hosted run continues the un-hit trajectory. The contact inputs -- capsule endpoints posed from per-frame bone matrices and decayed knockback magnitudes -- sit at ULP-scale boundaries fed by the same single-precision motion profile classified corpus-wide; the flip carries complete downstream consequence.",
+      "rationale": "Bit-exact through the 7,511-frame prefix and the 5,151-frame strict suffix. After the subaction-hitbox part-admission fix retired the frame-903 45-degree contact flip, the residual is one 1-ULP pos_y row at frame 7389 and an 81-row damage-state selection flip at 9075 (action 88 vs 91) seeded by ULP-scale knockback inputs.",
       "sources": [
         "refs/melee/src/melee/ft/ftcoll.c",
         "refs/melee/src/melee/lb/lbcollision.c"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 1025,
-          "first_mismatch_frame": 903,
-          "first_render_visibility_mismatch_frame": 1118,
           "frames": 14429,
-          "last_mismatch_frame": 14306,
-          "matched_frames": 1025,
-          "mismatch_count": 564629,
-          "mismatch_fields_digest": "299ef4b7da97c4e8ede3890520e47427adcb1ce28a0fd92e8c908e2090012c85",
-          "mismatch_fingerprint": "cdf5d42578134548",
-          "mismatched_frames": 13404,
-          "render_visibility_mismatch_count": 21352,
+          "matched_frames": 14347,
+          "mismatched_frames": 82,
+          "exact_prefix_frames": 7511,
+          "strict_suffix_frames": 5151,
+          "first_mismatch_frame": 7389,
+          "last_mismatch_frame": 9155,
+          "mismatch_count": 223,
+          "mismatch_fingerprint": "f592145f35038247",
+          "render_visibility_mismatch_count": 1,
+          "first_render_visibility_mismatch_frame": 9125,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 0
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/samus/diamond-platinum-3a0b5b8362dab548ac01a813.slpz",
-      "id": "dolphin-ulp-contact-gate",
-      "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",
-      "rationale": "Bit-exact through the 1,090-frame prefix. The first divergence at frame 968 is a hit/no-hit contact decision: retail lands (or receives) an attack whose knockback appears fully formed on the first divergent row, while the hosted run continues the un-hit trajectory. The contact inputs -- capsule endpoints posed from per-frame bone matrices and decayed knockback magnitudes -- sit at ULP-scale boundaries fed by the same single-precision motion profile classified corpus-wide; the flip carries complete downstream consequence.",
-      "sources": [
-        "refs/melee/src/melee/ft/ftcoll.c",
-        "refs/melee/src/melee/lb/lbcollision.c"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 1090,
-          "first_mismatch_frame": 968,
-          "first_render_visibility_mismatch_frame": 981,
-          "frames": 6835,
-          "last_mismatch_frame": 6712,
-          "matched_frames": 1090,
-          "mismatch_count": 216254,
-          "mismatch_fields_digest": "01ec86cccf5b8f5292e2c1bb70777dde3b8de72200efbd7755daf60603af8008",
-          "mismatch_fingerprint": "2e841e9ed4ff43cc",
-          "mismatched_frames": 5745,
-          "render_visibility_mismatch_count": 7943,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 0
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/samus/medium-marth-2025-11_Game_20251110T032456.slpz",
-      "id": "dolphin-ulp-contact-gate",
-      "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",
-      "rationale": "Bit-exact through the 3,171-frame prefix. The first divergence at frame 3049 is a hit/no-hit contact decision: retail lands (or receives) an attack whose knockback appears fully formed on the first divergent row, while the hosted run continues the un-hit trajectory. The contact inputs -- capsule endpoints posed from per-frame bone matrices and decayed knockback magnitudes -- sit at ULP-scale boundaries fed by the same single-precision motion profile classified corpus-wide; the flip carries complete downstream consequence.",
-      "sources": [
-        "refs/melee/src/melee/ft/ftcoll.c",
-        "refs/melee/src/melee/lb/lbcollision.c"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 3171,
-          "first_mismatch_frame": 3049,
-          "first_render_visibility_mismatch_frame": 3066,
-          "frames": 13986,
-          "last_mismatch_frame": 13863,
-          "matched_frames": 3171,
-          "mismatch_count": 393350,
-          "mismatch_fields_digest": "ed3ed282f87b53457e102170b765ac3239bc47b2a0f5e2c64f1ae1b9d17defb7",
-          "mismatch_fingerprint": "6f0e2a5c052794ee",
-          "mismatched_frames": 10815,
-          "render_visibility_mismatch_count": 12140,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 0
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/samus/gold-peach-2026-06_Game_20260610T015237.slpz",
-      "id": "dolphin-ulp-contact-gate",
-      "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",
-      "rationale": "The residual opens with a hit/no-hit flip against Peach at frame 9762 (hosted publishes attack knockback where retail keeps self motion), the established shape of contact decisions seeded by ULP-scale capsule and knockback inputs. Re-recorded after the fused bomb-jump boost angle (ftSs_Init_80128AC8 fmadds) retired the ULP motion seed at frame 8046 and extended the exact prefix from 8,168 to 9,884 frames.",
-      "sources": [
-        "refs/melee/src/melee/ft/chara/ftSamus/ftSs_SpecialLw_0.c::ftSs_Init_80128AC8",
-        "refs/melee/src/melee/ft/ftcoll.c"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 9884,
-          "first_mismatch_frame": 9762,
-          "first_render_visibility_mismatch_frame": 3983,
-          "frames": 19712,
-          "last_mismatch_frame": 19589,
-          "matched_frames": 9884,
-          "mismatch_count": 443749,
-          "mismatch_fields_digest": "db35df392b591ca28ff660ebaebed019d7f3d07f05a5f537a4e6f1b80b07bee6",
-          "mismatch_fingerprint": "6557d02c6f258553",
-          "mismatched_frames": 9828,
-          "render_visibility_mismatch_count": 15296,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 0
+          "mismatch_fields_digest": "fad66fb8d3a2312cca756a579270fa826c279e1d93d36517f1242bd2d3587cba"
         }
       }
     }
