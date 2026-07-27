@@ -1891,7 +1891,7 @@
       "replay": "replays/validation/marios/33692_Game_20250715T211625.slpz",
       "id": "dolphin-ulp-dynamic-bone-capsule-gate",
       "owner": "Mario-line grab/hit checks against Fox dynamic-bone tail hurt capsules",
-      "rationale": "Bounded retail interpreter probes reproduce the Fox tail dynamics stream bit-exactly from spawn through the probed windows after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing). The remaining seed is a mid-frame animation-ownership reset (ftCo_8009CB40 anim-to-dynamics transition during Turn) whose lazily-sampled world matrix the replay does not record; the chaotic tail then forks a grab/hit capsule check on tail hurtboxes with complete downstream consequence.",
+      "rationale": "Bounded retail interpreter probes reproduce the Fox tail dynamics stream bit-exactly from spawn through the probed windows after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing). The remaining seed is a mid-frame animation-ownership reset (ftCo_8009CB40 anim-to-dynamics transition during Turn) whose lazily-sampled world matrix the replay does not record; the chaotic tail then forks a grab/hit capsule check on tail hurtboxes with complete downstream consequence. Fingerprint re-recorded under the 15-kind data set (Popo/Nana archives widen the arena and shift the lazily-sampled stale-matrix seed; fork frame, counts, and fields digest unchanged).",
       "sources": [
         "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
         "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
@@ -1907,7 +1907,7 @@
           "matched_frames": 801,
           "mismatch_count": 366326,
           "mismatch_fields_digest": "014c5071a18c1b87e270bcecd0763ecd252f159edabd1245744cae1d95e4463a",
-          "mismatch_fingerprint": "b56ffc77a2f5ce35",
+          "mismatch_fingerprint": "7e30f4a275eca3f5",
           "mismatched_frames": 9844,
           "render_visibility_mismatch_count": 14800,
           "signed_zero_equal_count": 0,

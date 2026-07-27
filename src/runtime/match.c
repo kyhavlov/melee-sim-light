@@ -2,6 +2,8 @@
 
 #include "ft/fighter.h"
 #include "ft/ftdevice.h"
+#include "ft/ftlib.h"
+#include "gm/forward.h"
 #include "gm/gm_1601.h"
 #include "gr/ground.h"
 #include "gr/stage.h"
@@ -473,6 +475,60 @@ int gm_8016C5C0(int slot)
     }
     return loser_rank;
 }
+
+// CPU-input target selection reads the per-fighter standings through the
+// GObj wrappers. Both forward to the recomputed source standings above.
+// refs/melee/src/melee/gm/gm_16AE.c::{gm_8016C6C0,gm_8016C75C}
+s32 gm_8016C6C0(HSD_GObj* arg0)
+{
+    return gm_8016C5C0(ftLib_80086BE0(arg0));
+}
+
+// MatchPlayerData::x20 accumulates KOs of non-teammates; team kills fold
+// into the self-destruct/fall columns instead. Retail serves the
+// lbl_8046B6A0.x24C standings block and recomputes it only when the scene
+// pointer changes: within one match every query returns the snapshot taken
+// at the FIRST CPU standings read, not live counts.
+// refs/melee/src/melee/gm/{gm_16AE.c::gm_8016C75C,gm_1601.c::gm_80166378}
+int gm_8016C75C(HSD_GObj* arg0)
+{
+    int slot = ftLib_80086BE0(arg0);
+
+    if (!msl_bound_match_rules->cpu_standings_snapshot_valid) {
+        int self;
+
+        for (self = 0; self < 6; ++self) {
+            int other;
+            int kos = 0;
+
+            if (Player_GetPlayerSlotType(self) == Gm_PKind_NA) {
+                continue;
+            }
+            for (other = 0; other < 6; ++other) {
+                if (other == self ||
+                    Player_GetPlayerSlotType(other) == Gm_PKind_NA) {
+                    continue;
+                }
+                if (!msl_is_teams ||
+                    Player_GetTeam(other) != Player_GetTeam(self)) {
+                    kos += Player_GetKOsByPlayerIndex(self, other);
+                }
+            }
+            msl_bound_match_rules->cpu_standings_kos[self] = kos;
+        }
+        msl_bound_match_rules->cpu_standings_snapshot_valid = true;
+    }
+    return msl_bound_match_rules->cpu_standings_kos[slot];
+}
+
+// The hosted bootstrap constructs the ordinary versus scene, so the scene
+// router always reports the standard VS major mode.
+// refs/melee/src/melee/gm/gm_1A3F.c::gm_801A4310
+u8 gm_801A4310(void) { return GM_VS; }
+
+// refs/melee/src/melee/gm/gm_16AE.c::gm_8016B14C reports the singles rule.
+bool gm_8016B14C(void) { return !msl_is_teams; }
+
 unsigned int gm_801A4BB8(void) { return 0; }
 bool gm_801693BC(int slot)
 {

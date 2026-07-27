@@ -111,6 +111,7 @@ src/melee/ft/chara/ftCommon/ftCo_09F4.c
 src/melee/ft/chara/ftCommon/ftCo_09F4.h
 src/melee/ft/chara/ftCommon/ftCo_09F7.c
 src/melee/ft/chara/ftCommon/ftCo_09F7.h
+src/melee/ft/chara/ftCommon/ftCo_0A01.c
 src/melee/ft/chara/ftCommon/ftCo_0A01.h
 src/melee/ft/chara/ftCommon/ftCo_0C35.c
 src/melee/ft/chara/ftCommon/ftCo_0C35.h
@@ -689,6 +690,7 @@ src/melee/ft/ftchangeparam.c
 src/melee/ft/ftchangeparam.h
 src/melee/ft/ftcliffcommon.c
 src/melee/ft/ftcliffcommon.h
+src/melee/ft/ftcmdscript.c
 src/melee/ft/ftcmdscript.h
 src/melee/ft/ftcolanim.c
 src/melee/ft/ftcolanim.h
@@ -696,6 +698,8 @@ src/melee/ft/ftcoll.c
 src/melee/ft/ftcoll.h
 src/melee/ft/ftcommon.c
 src/melee/ft/ftcommon.h
+src/melee/ft/ftcpuattack.c
+src/melee/ft/ftcpuattack.h
 src/melee/ft/ftdata.c
 src/melee/ft/ftdata.h
 src/melee/ft/ftdemo.h
@@ -764,8 +768,10 @@ src/melee/gr/grdisplay.h
 src/melee/gr/grdynamicattr.c
 src/melee/gr/grdynamicattr.h
 src/melee/gr/grgarden.h
+src/melee/gr/grgreatbay.h
 src/melee/gr/grhomerun.h
 src/melee/gr/gricemt.h
+src/melee/gr/grinishie1.h
 src/melee/gr/grizumi.c
 src/melee/gr/grizumi.h
 src/melee/gr/grkongo.h
@@ -784,6 +790,7 @@ src/melee/gr/grrcruise.h
 src/melee/gr/grshrineroute.h
 src/melee/gr/grstory.c
 src/melee/gr/grstory.h
+src/melee/gr/grvenom.h
 src/melee/gr/grzakogenerator.c
 src/melee/gr/grzakogenerator.h
 src/melee/gr/grzakogenerator.static.h

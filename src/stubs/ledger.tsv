@@ -7,7 +7,6 @@ efSync_Spawn	headless effect projection	reachable	DAT-backed immediate RNG proje
 un_80322258	crowd/audio bookkeeping exclusion	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
 un_803224DC	crowd/audio bookkeeping exclusion	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
 un_80322314	crowd/audio bookkeeping exclusion	reachable	no-op	refs/melee/src/melee/{ft/ftcommon.c::ftCommon_8007EFC8,sfx/crowdsfx.c::un_80322314}; only arms crowd audio state
-ftCo_800A2040	source-gated outside-domain predicate	reachable	source-equivalent false	guarded outside Fox/two-human FD gameplay; see headless_exclusions.c source comments
 efLib_DestroyAll	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 efLib_PauseAll	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
 efLib_ResumeAll	presentation/audio exclusion	reachable	no-op	render/audio/particle-bank lifetime only; gameplay effect RNG is retained by runtime/effects.c
@@ -45,7 +44,6 @@ un_80322598	crowd/audio bookkeeping exclusion	reachable	zero result	refs/melee/s
 ifMagnify_802FB6E8	magnifier UI exclusion	reachable	zero result	magnifier presentation only; BrawlOffscreenDamage gameplay owner is retained
 db_ShowItemPickupRange	debug UI exclusion	reachable	zero result	debug-only pickup-range display
 HSD_PadRumbleAdd	rumble exclusion	reachable	zero result	controller motor presentation only
-ftCo_800B3900	CPU-AI exclusion guard	unreachable for two human players	abort	refs/melee/src/melee/ft/chara/ftCommon/ftCo_0A01.c; caller is gated by ftCo_800A2040
 lbRefract_PObjLoad	renderer projection	reachable during init	base PObj load only	refs/melee/src/melee/lb/lbrefract.c; GX refraction rewrite excluded
 ftKb_SpecialN_800F1D24	non-Fox hook projection	reachable	source-equivalent no-op for Fox	refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c
 HSD_LObjAddCurrent	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
@@ -299,3 +297,12 @@ HSD_LObjGetNbActive	renderer/platform exclusion	unreachable	named abort	GX/light
 HSD_LObjSetup	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
 _HSD_mkEnvelopeModelNodeMtx	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
 HSD_ByteCodeEval	renderer/platform exclusion	unreachable	named abort	GX/light/display callback is retained only for link closure and is not scheduled headlessly
+grBigBlue_801EF844	source-gated outside-domain stage predicate	reachable every CPU-input frame	source-equivalent false; aborts if Big Blue loads	refs/melee/src/melee/gr/grbigblue.c; internal-stage-id gate makes it false on all supported stages
+grCastle_801CDF54	source-gated outside-domain stage predicate	reachable from CPU navigation	source-equivalent false; aborts if Peach's Castle loads	refs/melee/src/melee/gr/grcastle.c; internal-stage-id gate makes it false on all supported stages
+grCorneria_801E2D90	source-gated outside-domain stage predicate	reachable every CPU-input frame	source-equivalent false; aborts if Corneria loads	refs/melee/src/melee/gr/grcorneria.c; internal-stage-id gate makes it false on all supported stages
+grCorneria_801E2E50	source-gated outside-domain stage predicate	reachable every CPU-input frame	source-equivalent false; aborts if Corneria loads	refs/melee/src/melee/gr/grcorneria.c; internal-stage-id gate makes it false on all supported stages
+grGreatBay_801F66A4	source-gated outside-domain stage predicate	reachable from CPU navigation	source-equivalent false; aborts if Great Bay loads	refs/melee/src/melee/gr/grgreatbay.c; internal-stage-id gate makes it false on all supported stages
+grInishie1_801FCAAC	source-gated outside-domain stage predicate	reachable every CPU-input frame	source-equivalent false; aborts if Inishie loads	refs/melee/src/melee/gr/grinishie1.c; internal-stage-id gate makes it false on all supported stages
+grRCruise_80201988	source-gated outside-domain stage predicate	reachable from CPU navigation	source-equivalent false; aborts if Rainbow Cruise loads	refs/melee/src/melee/gr/grrcruise.c; internal-stage-id gate makes it false on all supported stages
+grVenom_80206D10	source-gated outside-domain stage predicate	reachable every CPU-input frame	source-equivalent 0; aborts if Venom loads	refs/melee/src/melee/gr/grvenom.c; internal-stage-id gate makes it 0 on all supported stages
+ftCo_803C6594	undecompiled .data projection	reachable from ftCo_800A1CC4	all-NULL rows; source-exact for supported stages	data/raw/main.dol::0x803C6594 decode: only GREATBAY/SHRINE rows non-NULL, both outside the supported stage domain

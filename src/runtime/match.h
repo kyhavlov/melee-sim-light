@@ -31,6 +31,11 @@ typedef struct MslCoreMatchRules {
     u8 respawn_reservation_timer[6];
     s8 respawn_reservation_character[6];
     MslCoreUcfPadBuffer ucf_pad[4];
+    // gm_16AE.c::gm_8016C75C serves lbl_8046B6A0.x24C standings recomputed
+    // only when the scene pointer changes; within one match that is a single
+    // snapshot taken at the first CPU standings query.
+    bool cpu_standings_snapshot_valid;
+    s32 cpu_standings_kos[6];
 } MslCoreMatchRules;
 
 void msl_core_bind_match_rules(MslCoreMatchRules* rules);

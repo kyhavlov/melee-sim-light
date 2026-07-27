@@ -71,6 +71,19 @@ slice, and follower-frame validation.
 
 ## Log
 
+- 2026-07-27 — `retained` (step 2)
+  Scope: character packet committed as 5d0d3858 (11 TUs, registry rows, DAT translation, parts
+  masks, extraction, effect bank 14, preload with Nana costume coverage).
+  Evidence: native-smoke green including the Popo parts row; triage harness steps ICs-vs-Fox 600
+  frames, Nana spawns as player_entity[1] and idles. One native delta (ledger
+  nana-anim-leader-share-native): the ftData_80085CD8/E50 leader-share branch is excluded under
+  MSL_CORE_NATIVE (x59C never materializes natively; x14 keys the same immutable subarchive).
+  UCF finding: msl_ucf_apply_pad_buffer sits in the COMMON input path mirroring retail hook
+  0x8006B460, so Nana running it is retail-faithful — no gate needed once the CPU predicate is
+  real.
+  Next: CPU TU import (ftCo_0A01.c + ftcpuattack.c wholesale, projection reconciliation,
+  stub triage) — delegated; then fighter-axis lanes and follower validation.
+
 - 2026-07-27 — `open`
   Scope: surveys complete (decomp map + sim architecture map, two Explore agents).
   Evidence: dual-entity player machinery already compiled in and inert; CPU predicate stubbed

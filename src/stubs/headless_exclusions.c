@@ -3,6 +3,16 @@
 
 #include "ftCommon/forward.h"
 
+#include "gr/forward.h"
+#include "gr/grbigblue.h"
+#include "gr/grcastle.h"
+#include "gr/grcorneria.h"
+#include "gr/grgreatbay.h"
+#include "gr/grinishie1.h"
+#include "gr/grrcruise.h"
+#include "gr/grvenom.h"
+#include "gr/ground.h"
+
 #include "lb/lbaudio_ax.h"
 
 #include <stddef.h>
@@ -26,11 +36,85 @@ bool un_803224DC(s32 spawn_id, f32 pos_x, f32 kb_mag)
     return false;
 }
 
-bool ftCo_800A2040(Fighter* fp)
+// The CPU input pass probes every walked floor line against the moving and
+// hazard line classes of Rainbow Cruise, Big Blue, Corneria, Venom, Great
+// Bay, Hyrule Temple, Peach's Castle, and Inishie. Each source predicate
+// opens with an internal-stage-id gate and reports false everywhere else, so
+// on the supported stages these are source-equivalent constants. Abort if an
+// excluded stage ever reaches the hosted scheduler instead of guessing at
+// its joint tables.
+// refs/melee/src/melee/gr/{grbigblue.c,grcastle.c,grcorneria.c,grgreatbay.c,
+//     grinishie1.c,grrcruise.c,grvenom.c}
+static void msl_assert_supported_stage(InternalStageId id)
 {
-    (void) fp;
+    if (stage_info.internal_stage_id == id) {
+        abort();
+    }
+}
+
+bool grBigBlue_801EF844(enum_t line_id)
+{
+    (void) line_id;
+    msl_assert_supported_stage(BIGBLUE);
     return false;
 }
+
+bool grCastle_801CDF54(Vec3* vec)
+{
+    (void) vec;
+    msl_assert_supported_stage(CASTLE);
+    return false;
+}
+
+bool grCorneria_801E2D90(enum_t line_id)
+{
+    (void) line_id;
+    msl_assert_supported_stage(CORNERIA);
+    return false;
+}
+
+bool grCorneria_801E2E50(int line_id)
+{
+    (void) line_id;
+    msl_assert_supported_stage(CORNERIA);
+    return false;
+}
+
+bool grGreatBay_801F66A4(void)
+{
+    msl_assert_supported_stage(GREATBAY);
+    return false;
+}
+
+bool grInishie1_801FCAAC(int line_id)
+{
+    (void) line_id;
+    msl_assert_supported_stage(INISHIE1);
+    return false;
+}
+
+bool grRCruise_80201988(s32 line_id)
+{
+    (void) line_id;
+    msl_assert_supported_stage(RCRUISE);
+    return false;
+}
+
+s32 grVenom_80206D10(s32 line_id)
+{
+    (void) line_id;
+    msl_assert_supported_stage(VENOM);
+    return 0;
+}
+
+// CPU escape-route waypoint table, indexed by internal stage id. The retail
+// object is undecompiled .data: decoding data/raw/main.dol::0x803C6594
+// (symbols.txt, 0x374 bytes = 221 pointers) shows every row is NULL except
+// GREATBAY (6 -> 0x803C639C) and SHRINE (7 -> 0x803C61F8), both outside the
+// supported stage domain. The supported rows are therefore exactly NULL and
+// ftCo_800A1CC4 keeps its source no-op behavior.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_0A01.c::ftCo_803C6594
+void* ftCo_803C6594[221];
 
 void gm_80167470(long arg0, long arg1)
 {
@@ -288,12 +372,6 @@ int HSD_PadRumbleAdd(u8 no, int id, int frame, int pri, void* listp)
     (void) pri;
     (void) listp;
     return 0;
-}
-
-void ftCo_800B3900(Fighter_GObj* gobj)
-{
-    (void) gobj;
-    abort();
 }
 
 // Fighter PObjs use the refraction subclass's loader even for ordinary model
