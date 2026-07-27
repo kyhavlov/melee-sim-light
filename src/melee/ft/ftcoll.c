@@ -151,8 +151,16 @@ inline void comboCount_Push(Fighter* fp)
         var_f2 = p_ftCommonData->x4D4;
     }
     temp_f2 = fp->facing_dir * var_f2;
+#ifdef MSL_CORE_HOSTED
+    // GALE01 0x8007658C/0x800765A0: the combo push along the floor normal is
+    // a scalar-single fnmsubs per lane; the unfused form drifts a grounded
+    // attacker's published position by ULPs.
+    fp->cur_pos.x = __fnmsubs(pos->y, temp_f2, fp->cur_pos.x);
+    fp->cur_pos.y = __fnmsubs(-pos->x, temp_f2, fp->cur_pos.y);
+#else
     fp->cur_pos.x = -(pos->y * temp_f2 - fp->cur_pos.x);
     fp->cur_pos.y = -(-pos->x * temp_f2 - fp->cur_pos.y);
+#endif
 }
 
 /// Combo count something + adjust FtPart_TopN
@@ -2696,10 +2704,20 @@ void ftColl_8007A06C(Fighter_GObj* gobj, void* dmg_ptr, void* log, size_t idx,
         FighterHurtCapsule* hurt = best_entry->hurt1;
         float dx, dy, abs_dx;
 
+#ifdef MSL_CORE_HOSTED
+        // GALE01 0x8007A898/0x8007A8A8: the hurt-capsule midpoint offset is
+        // a scalar-single fmsubs per lane, and dx's sign picks the knockback
+        // facing right below.
+        dx = __fmsubs(0.5F, hurt->capsule.a_pos.x + hurt->capsule.b_pos.x,
+                      best_entry->pos.x);
+        dy = __fmsubs(0.5F, hurt->capsule.a_pos.y + hurt->capsule.b_pos.y,
+                      best_entry->pos.y);
+#else
         dx = 0.5F * (hurt->capsule.a_pos.x + hurt->capsule.b_pos.x) -
              best_entry->pos.x;
         dy = 0.5F * (hurt->capsule.a_pos.y + hurt->capsule.b_pos.y) -
              best_entry->pos.y;
+#endif
 
         if (dx < 0.0F) {
             dir = 1.0F;
