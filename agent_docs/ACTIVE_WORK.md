@@ -97,6 +97,17 @@ slice, and follower-frame validation.
   Next: Nana AI fidelity (retail probe of the x1A88 decision stream at the first divergence,
   fd-falco @-39 class), then classify/lock the suite and wire it into the aggregate.
 
+- 2026-07-27 — `retained` (first Nana fidelity seed)
+  Scope: session 2 traced the universal frames-83..204 follower divergence to the hosted UCF
+  pad-buffer injection: it replaced Nana's AI stick with the port's cardinal-snapped raw pad and
+  double-shifted the ring. The real gecko wraps its whole body in !Player_IsCPU, and Player_IsCPU
+  IS ftCo_800A2040 (GALE01r2 map) — the predicate the CPU import made real.
+  Evidence: with the one-line gate, container icies prefixes moved 83-204 → 95-1,416
+  (medium-sheik: 21s of bit-exact two-climber play); aggregate unchanged (gate is vacuous for
+  humans). Next layer, all classic per-mechanism families: itclimbersice SendItemInfo misc lanes
+  (192/0 vs 64/255 @-27 bf-falco), 1-ULP Nana pos_x @98 fd-falco (fusion site), a crouch-mimic
+  action pick @26 bf-falco.
+
 - 2026-07-27 — `open`
   Scope: surveys complete (decomp map + sim architecture map, two Explore agents).
   Evidence: dual-entity player machinery already compiled in and inert; CPU predicate stubbed

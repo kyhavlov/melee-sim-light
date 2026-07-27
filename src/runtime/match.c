@@ -233,6 +233,17 @@ void msl_ucf_apply_pad_buffer(Fighter* fp)
     MslCoreUcfPadBuffer* buffer = &msl_ucf_pad[slot];
     int delta_y;
 
+    // The gecko wraps its whole body in !Player_IsCPU (GALE01r2 0x800A2040 =
+    // ftCo_800A2040): a CPU-driven fighter neither shifts the port's ring nor
+    // has its AI stick replaced by the cardinal-snapped raw pad. Nana shares
+    // Popo's port, so without this gate she would double-shift his ring and
+    // walk on his live controller values.
+    // refs/ucf/src/pad_buffer/pad_buffer.cpp::gecko_entry
+    // refs/ucf/GALE01r2.map::Player_IsCPU
+    if (ftCo_800A2040(fp)) {
+        return;
+    }
+
     // refs/ucf/src/pad_buffer/pad_buffer.cpp::gecko_entry, injected at
     // Fighter_Spaghetti_8006AD10+0x750 after vanilla input timers publish.
     buffer->raw_x[2] = buffer->raw_x[1];
