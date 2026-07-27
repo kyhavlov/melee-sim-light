@@ -1,5 +1,7 @@
 #include "ftSs_SpecialLw_0.h"
 
+#include <MetroTRK/intrinsics.h>
+
 #include "ftSs_Init.h"
 #include "ftSs_SpecialLw_1.h"
 #include "types.h"
@@ -85,7 +87,10 @@ float ftSs_Init_80128AC8(HSD_GObj* gobj, float farg1, float farg2)
     if (value <= -1.0f) {
         value = -1.0f;
     }
-    return (-da->x4 * value) + 1.5707963705062866f;
+    // GALE01 0x80128B14: fmadds(fneg(x4), value, pi/2); the bomb-jump boost
+    // velocity is x8 * cos/sin of this angle, so the fused rounding is
+    // publication-visible.
+    return __fmadds(-da->x4, value, 1.5707963705062866f);
 }
 
 inline void ftSamus_80128B1C_inner(HSD_GObj* gobj, float angle)

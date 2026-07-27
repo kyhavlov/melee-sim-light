@@ -3201,33 +3201,6 @@
       }
     },
     {
-      "replay": "replays/validation/samus/medium-fox-2025-11_Game_20251128T184658.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "Samus movement lanes against the Dolphin single-precision motion profile",
-      "rationale": "Bit-exact through the 3,007-frame prefix. The first divergence at frame 2885 is a 1-2 ULP (or sub-1e-3 accumulated) difference in a self-speed/position lane; the value feeds the following frame's drift and collision inputs, so the one-bit seed forks the tail with complete downstream consequence. The Samus source packet's tether pipeline was verified bit-exact against retail interpreter probes through this prefix; the residual matches the corpus-wide Dolphin single-precision motion profile family.",
-      "sources": [
-        "refs/melee/src/melee/ft/ftcommon.c",
-        "refs/melee/src/melee/mp/mpcoll.c"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 3007,
-          "first_mismatch_frame": 2885,
-          "first_render_visibility_mismatch_frame": null,
-          "frames": 11538,
-          "last_mismatch_frame": 2922,
-          "matched_frames": 11500,
-          "mismatch_count": 39,
-          "mismatch_fields_digest": "f2547d32991c6809f428577f5fe79184ef2c5e07b2cb1e266d1674bdbe6bea8a",
-          "mismatch_fingerprint": "f9bf8edc1d34d7fe",
-          "mismatched_frames": 38,
-          "render_visibility_mismatch_count": 0,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 8493
-        }
-      }
-    },
-    {
       "replay": "replays/validation/samus/medium-cptfalcon-2026-03_Game_20260309T201623.slpz",
       "id": "dolphin-ulp-motion-profile",
       "owner": "Samus movement lanes against the Dolphin single-precision motion profile",
@@ -3418,25 +3391,25 @@
     },
     {
       "replay": "replays/validation/samus/gold-peach-2026-06_Game_20260610T015237.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "Samus movement lanes against the Dolphin single-precision motion profile",
-      "rationale": "The residual opens with a bounded ULP-scale speed_air_x drift at frame 8046 that later seeds discrete gate flips, matching the established Dolphin single-precision motion-profile family. Re-recorded after the ftSs_DatAttrs.xD0 hang-timer type fix retired the earlier zair wall-hang drop at frame 1465 and extended the exact prefix from 1,587 to 8,168 frames.",
+      "id": "dolphin-ulp-contact-gate",
+      "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",
+      "rationale": "The residual opens with a hit/no-hit flip against Peach at frame 9762 (hosted publishes attack knockback where retail keeps self motion), the established shape of contact decisions seeded by ULP-scale capsule and knockback inputs. Re-recorded after the fused bomb-jump boost angle (ftSs_Init_80128AC8 fmadds) retired the ULP motion seed at frame 8046 and extended the exact prefix from 8,168 to 9,884 frames.",
       "sources": [
-        "src/melee/ft/chara/ftSamus/types.h::ftSs_DatAttrs",
-        "refs/melee/src/melee/it/items/itsamusgrapple.c::it_802BABB8"
+        "refs/melee/src/melee/ft/chara/ftSamus/ftSs_SpecialLw_0.c::ftSs_Init_80128AC8",
+        "refs/melee/src/melee/ft/ftcoll.c"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 8168,
-          "first_mismatch_frame": 8046,
+          "exact_prefix_frames": 9884,
+          "first_mismatch_frame": 9762,
           "first_render_visibility_mismatch_frame": 3983,
           "frames": 19712,
           "last_mismatch_frame": 19589,
-          "matched_frames": 9882,
-          "mismatch_count": 443751,
-          "mismatch_fields_digest": "a7552590c5af5c7d91ce7df30e5db1d26b0aa70e12ca954f9cd906a4d6a4d163",
-          "mismatch_fingerprint": "790442fd43ac52ef",
-          "mismatched_frames": 9830,
+          "matched_frames": 9884,
+          "mismatch_count": 443749,
+          "mismatch_fields_digest": "db35df392b591ca28ff660ebaebed019d7f3d07f05a5f537a4e6f1b80b07bee6",
+          "mismatch_fingerprint": "6557d02c6f258553",
+          "mismatched_frames": 9828,
           "render_visibility_mismatch_count": 15296,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 0

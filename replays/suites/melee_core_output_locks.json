@@ -1910,7 +1910,7 @@
       "expected": {
         "native": {
           "frames": 19712,
-          "actual_output_fingerprint": "59e5bdedfd95e311"
+          "actual_output_fingerprint": "446e64ae1033acac"
         }
       }
     },
@@ -1955,7 +1955,7 @@
       "expected": {
         "native": {
           "frames": 11538,
-          "actual_output_fingerprint": "2b32d57dd5f88643"
+          "actual_output_fingerprint": "17da2c619c0eca11"
         }
       }
     },
