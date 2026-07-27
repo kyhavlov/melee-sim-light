@@ -218,9 +218,9 @@
     },
     {
       "replay": "replays/validation/doubles_recent/Game_20260625T033446.slpz",
-      "id": "needle-pose-and-unmodeled-presentation-rng-phase",
-      "owner": "Sheik thrown-needle publication and DamageFlyRoll presentation RNG phase",
-      "rationale": "One isolated thrown-needle historical-position byte precedes the causal split. Deterministic damage setup is exact at the later source HSD_Randf gate; native and PPC take the same neighboring stream outcome, while the replay's excluded particle/effect phase selects DamageFlyRoll instead. The bounded action consequence reconverges for the final 1,070 transitions.",
+      "id": "unmodeled-presentation-rng-stream-phase",
+      "owner": "DamageFlyRoll presentation RNG phase",
+      "rationale": "One isolated thrown-needle historical-position byte precedes the causal split. Deterministic damage setup is exact at the later source HSD_Randf gate; native and PPC take the same neighboring stream outcome, while the replay's excluded particle/effect phase selects DamageFlyRoll instead. The bounded action consequence reconverges for the final 1,070 transitions. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism.",
       "sources": [
         "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
         "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo",
@@ -249,9 +249,9 @@
     },
     {
       "replay": "replays/validation/doubles_recent/Game_20260625T034215.slpz",
-      "id": "needle-pose-and-unmodeled-presentation-rng-phase",
-      "owner": "Sheik thrown-needle publication and DamageFlyRoll presentation RNG phase",
-      "rationale": "Several isolated thrown-needle historical-position bytes precede the first causal gameplay split. At the later source DamageFlyRoll HSD_Randf gate, all deterministic fighter state is exact, while the replay's excluded particle/effect scheduler is at the neighboring stream phase and selects the other action. PPC and native agree on the complete downstream consequence; the manifest locks it rather than changing free-running RNG or fitting replay rows.",
+      "id": "unmodeled-presentation-rng-stream-phase",
+      "owner": "DamageFlyRoll presentation RNG phase",
+      "rationale": "Several isolated thrown-needle historical-position bytes precede the first causal gameplay split. At the later source DamageFlyRoll HSD_Randf gate, all deterministic fighter state is exact, while the replay's excluded particle/effect scheduler is at the neighboring stream phase and selects the other action. PPC and native agree on the complete downstream consequence; the manifest locks it rather than changing free-running RNG or fitting replay rows. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism.",
       "sources": [
         "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
         "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo",
@@ -954,9 +954,9 @@
     },
     {
       "replay": "replays/validation/peach/HappyGoLuckyScentedButterfly.slpz",
-      "id": "mixed-item-float-magnifier-and-needle-profile",
-      "owner": "item float execution, magnifier damage schedule, and Sheik needle publication",
-      "rationale": "The complete residual combines bounded item-position ULPs, one already-modeled 1% magnifier damage publication, and source-owned Sheik needle historical bytes plus their item-lifetime consequence. The exact fingerprint records the capture/runtime profile without changing Peach, camera damage, or needle gameplay. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
+      "id": "mixed-item-float-and-magnifier-profile",
+      "owner": "item float execution and magnifier render schedule",
+      "rationale": "The complete residual combines bounded item-position ULPs, one already-modeled 1% magnifier damage publication, and source-owned Sheik needle historical bytes plus their item-lifetime consequence. The exact fingerprint records the capture/runtime profile without changing Peach, camera damage, or needle gameplay. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism.",
       "sources": [
         "refs/melee/src/melee/it/item.c",
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
@@ -1429,9 +1429,9 @@
     },
     {
       "replay": "replays/validation/sheik/GlaringRosyAlpaca.slpz",
-      "id": "dolphin-ulp-motion-and-needle-profile",
-      "owner": "fighter motion and Sheik thrown-needle float publication",
-      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter motion with isolated one-byte historical-position samples from thrown needles, followed by an exact suffix; the replay records Dolphin but not its build or float/JIT execution profile. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual.",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter position and velocity float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter motion with isolated one-byte historical-position samples from thrown needles, followed by an exact suffix; the replay records Dolphin but not its build or float/JIT execution profile. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
@@ -1560,9 +1560,9 @@
     },
     {
       "replay": "replays/validation/sheik/WavyRundownAardvark.slpz",
-      "id": "dolphin-ulp-motion-and-needle-profile",
-      "owner": "fighter motion and Sheik thrown-needle float publication",
-      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter motion with isolated one-byte historical-position samples from thrown needles, followed by an exact suffix; the replay records Dolphin but not its build or float/JIT execution profile. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual.",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter position and velocity float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter motion with isolated one-byte historical-position samples from thrown needles, followed by an exact suffix; the replay records Dolphin but not its build or float/JIT execution profile. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
@@ -1604,9 +1604,9 @@
     },
     {
       "replay": "replays/validation/sheik/sheik_demo_game.slpz",
-      "id": "dolphin-signed-zero-and-needle-profile",
-      "owner": "PPC signed-zero publication and Sheik thrown-needle historical pose",
-      "rationale": "PPC and native source runtimes agree bit-for-bit. Fifteen rows differ only by the sign bit of zero attack velocity and one isolated row by the low byte of a thrown needle historical Y position; all are bounded publication differences with 3,301 exact trailing transitions.",
+      "id": "dolphin-signed-zero-profile",
+      "owner": "PPC signed-zero publication",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. Fifteen rows differ only by the sign bit of zero attack velocity and one isolated row by the low byte of a thrown needle historical Y position; all are bounded publication differences with 3,301 exact trailing transitions. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
