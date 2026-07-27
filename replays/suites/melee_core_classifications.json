@@ -451,18 +451,18 @@
       "expected": {
         "native": {
           "frames": 5555,
-          "matched_frames": 5206,
-          "mismatched_frames": 349,
-          "exact_prefix_frames": 3449,
+          "matched_frames": 5551,
+          "mismatched_frames": 4,
+          "exact_prefix_frames": 3629,
           "strict_suffix_frames": 183,
-          "first_mismatch_frame": 3327,
+          "first_mismatch_frame": 3507,
           "last_mismatch_frame": 5249,
-          "mismatch_count": 428,
-          "mismatch_fingerprint": "e24fd02ed57a7506",
-          "mismatch_fields_digest": "b62c46d57c85ef35244b3494fe2efb878f6eee3236d129522616d9813dbc9046",
+          "mismatch_count": 4,
+          "mismatch_fingerprint": "9a841a29b76db05a",
           "render_visibility_mismatch_count": 11,
           "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "023aab8072489b2413267165e00a342647a5484a696a63e6502ed235d1957f85"
         },
         "ppc": "native"
       }
@@ -835,19 +835,19 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 2232,
-          "first_mismatch_frame": 2110,
-          "first_render_visibility_mismatch_frame": -122,
           "frames": 8827,
+          "matched_frames": 8552,
+          "mismatched_frames": 275,
+          "exact_prefix_frames": 2232,
+          "strict_suffix_frames": 6249,
+          "first_mismatch_frame": 2110,
           "last_mismatch_frame": 2455,
-          "matched_frames": 8543,
-          "mismatch_count": 287,
-          "mismatch_fields_digest": "87e4cc93850d23da0d6e002fd7ffd92f1e533f9abcae0d95ff01dda982c98e02",
-          "mismatch_fingerprint": "372f49806583bdb9",
-          "mismatched_frames": 284,
+          "mismatch_count": 278,
+          "mismatch_fingerprint": "6d2dd719df61216e",
           "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 6249
+          "mismatch_fields_digest": "d593c3370317fc40e8859e6bac35a8b98be77354108d930a20c1d75785e0d97f"
         },
         "ppc": {
           "exact_prefix_frames": 2232,
@@ -1955,18 +1955,18 @@
       "expected": {
         "native": {
           "frames": 2412,
-          "matched_frames": 2213,
-          "mismatched_frames": 199,
-          "exact_prefix_frames": 1049,
+          "matched_frames": 2360,
+          "mismatched_frames": 52,
+          "exact_prefix_frames": 1056,
           "strict_suffix_frames": 596,
-          "first_mismatch_frame": 927,
+          "first_mismatch_frame": 934,
           "last_mismatch_frame": 1693,
-          "mismatch_count": 202,
-          "mismatch_fingerprint": "424e672a36b6112a",
+          "mismatch_count": 52,
+          "mismatch_fingerprint": "a072bb220fc20b34",
           "render_visibility_mismatch_count": 4,
           "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "d2868526e51fb66c6f7640b9548222cfe6d77d55b52fde8e7f83f2a7b513c50d"
+          "mismatch_fields_digest": "3fe54d886a6e47932bd3e7a81ae5a0e71473ac441f29934c9a03e4d109ff343e"
         },
         "ppc": "native"
       }
@@ -2793,19 +2793,19 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 3438,
-          "first_mismatch_frame": 3316,
-          "first_render_visibility_mismatch_frame": -122,
           "frames": 6275,
+          "matched_frames": 6231,
+          "mismatched_frames": 44,
+          "exact_prefix_frames": 3438,
+          "strict_suffix_frames": 2777,
+          "first_mismatch_frame": 3316,
           "last_mismatch_frame": 3375,
-          "matched_frames": 6226,
-          "mismatch_count": 49,
-          "mismatch_fields_digest": "a017fb089c0af765a274908334320ec6135505eabd83824623bca8561e4ac9a2",
-          "mismatch_fingerprint": "250e760c0937b608",
-          "mismatched_frames": 49,
+          "mismatch_count": 44,
+          "mismatch_fingerprint": "1710288b26000ac1",
           "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 2777
+          "mismatch_fields_digest": "8464c19935ffc14e21526fa12a6d6720bf1e41fead16df85ca29fc8b422c3195"
         }
       }
     },
@@ -3157,19 +3157,19 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 1032,
-          "first_mismatch_frame": 910,
-          "first_render_visibility_mismatch_frame": -122,
           "frames": 8959,
+          "matched_frames": 8617,
+          "mismatched_frames": 342,
+          "exact_prefix_frames": 1032,
+          "strict_suffix_frames": 23,
+          "first_mismatch_frame": 910,
           "last_mismatch_frame": 8813,
-          "matched_frames": 8608,
-          "mismatch_count": 473,
-          "mismatch_fields_digest": "9ac37ee7659b062b3c66e30992d42a087e45ff70fdae6943e9d0c50e849b0d0a",
-          "mismatch_fingerprint": "ede2992ad1f8ccbb",
-          "mismatched_frames": 351,
+          "mismatch_count": 464,
+          "mismatch_fingerprint": "559b034ce689e1cb",
           "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 23
+          "mismatch_fields_digest": "1bf024f78d2bf6aada266629cd8c509100b66c84ba1fc3fb7627aef6729ec557"
         }
       }
     },
@@ -3212,18 +3212,18 @@
       "expected": {
         "native": {
           "frames": 10614,
-          "matched_frames": 10291,
-          "mismatched_frames": 323,
-          "exact_prefix_frames": 1045,
-          "strict_suffix_frames": 9243,
-          "first_mismatch_frame": 923,
-          "last_mismatch_frame": 1248,
-          "mismatch_count": 323,
-          "mismatch_fingerprint": "6ef5d081fc016415",
+          "matched_frames": 10588,
+          "mismatched_frames": 26,
+          "exact_prefix_frames": 1046,
+          "strict_suffix_frames": 9476,
+          "first_mismatch_frame": 924,
+          "last_mismatch_frame": 1015,
+          "mismatch_count": 26,
+          "mismatch_fingerprint": "689f6d8d9cd82a0a",
           "render_visibility_mismatch_count": 21,
           "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "8692bc908c0a6b73b65f7b0941558bd5158b130c22722795492e0cf4ec52e065"
+          "mismatch_fields_digest": "cddaa382f41a437a6a9b35a63b0ac23af0e68e763860009131379171f47523e2"
         }
       }
     },

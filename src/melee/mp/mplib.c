@@ -49,6 +49,15 @@
 #include <runtime/source_state.h>
 #endif
 
+#ifdef MSL_CORE_HOSTED
+#include <MetroTRK/intrinsics.h>
+#define MSL_MP_FMADDS(a, b, c) __fmadds((a), (b), (c))
+#define MSL_MP_FNMSUBS(a, b, c) __fnmsubs((a), (b), (c))
+#else
+#define MSL_MP_FMADDS(a, b, c) ((a) * (b) + (c))
+#define MSL_MP_FNMSUBS(a, b, c) (-((a) * (b) - (c)))
+#endif
+
 #define LINEID_CHECK(line, line_id)                                           \
     do {                                                                      \
         if ((line_id) == -1 || (line_id) >= mpLib_804D64B4->line_count)       \
@@ -1971,7 +1980,10 @@ bool mpCheckFloorRemap(float ax, float ay, float bx, float by, float y_offset,
                         dy2 = SQ(int_y - old_y);
                         dist2 = dx2 + dy2;
 
-                        if (dx * (int_x - old_x) + dy * (int_y - old_y) < 0.0F)
+                        // GALE01 0x8004F688: sign dot fuses the dx term
+                        // onto the dy product.
+                        if (MSL_MP_FMADDS(dx, int_x - old_x,
+                                          dy * (int_y - old_y)) < 0.0F)
                         {
                             dist2 = -dist2;
                         }
@@ -2006,7 +2018,10 @@ bool mpCheckFloorRemap(float ax, float ay, float bx, float by, float y_offset,
                     dy2 = SQ(int_y - old_y);
                     dist2 = dx2 + dy2;
 
-                    if (dx * (int_x - old_x) + dy * (int_y - old_y) < 0.0F) {
+                    // GALE01 0x8004F77C: same fused sign dot.
+                    if (MSL_MP_FMADDS(dx, int_x - old_x,
+                                      dy * (int_y - old_y)) < 0.0F)
+                    {
                         dist2 = -dist2;
                     }
 
@@ -2264,8 +2279,10 @@ bool mpCheckCeilingRemap(float ax, float ay, float bx, float by, Vec3* vec_out,
                         dx2 = SQ(sp58 - f29);
                         dy2 = SQ(sp54 - f28);
                         dist2 = dx2 + dy2;
-                        if ((x_f23 * (sp58 - f29)) + (y_f22 * (sp54 - f28)) <
-                            0.0F)
+                        // GALE01 0x8004FE54/0x8004FF54: sign dot fuses the
+                        // x term onto the y product.
+                        if (MSL_MP_FMADDS(x_f23, sp58 - f29,
+                                          y_f22 * (sp54 - f28)) < 0.0F)
                         {
                             dist2 = -dist2;
                         }
@@ -2304,8 +2321,10 @@ bool mpCheckCeilingRemap(float ax, float ay, float bx, float by, Vec3* vec_out,
                         dx2 = SQ(sp58 - f29);
                         dy2 = SQ(sp54 - f28);
                         dist2 = dx2 + dy2;
-                        if ((x_f23 * (sp58 - f29)) + (y_f22 * (sp54 - f28)) <
-                            0.0F)
+                        // GALE01 0x8004FE54/0x8004FF54: sign dot fuses the
+                        // x term onto the y product.
+                        if (MSL_MP_FMADDS(x_f23, sp58 - f29,
+                                          y_f22 * (sp54 - f28)) < 0.0F)
                         {
                             dist2 = -dist2;
                         }
@@ -2633,8 +2652,10 @@ bool mpCheckLeftWallRemap(float ax, float ay, float bx, float by,
                         dx2 = SQ(int_x - old_x);
                         dy2 = SQ(int_y - old_y);
                         dist2 = dx2 + dy2;
-                        if ((dx * (int_x - old_x)) + (dy * (int_y - old_y)) <
-                            0.0F)
+                        // GALE01 0x800507A0/0x80050F8C-family: sign dot
+                        // fuses the dx term onto the dy product.
+                        if (MSL_MP_FMADDS(dx, int_x - old_x,
+                                          dy * (int_y - old_y)) < 0.0F)
                         {
                             dist2 = -dist2;
                         }
@@ -2673,8 +2694,10 @@ bool mpCheckLeftWallRemap(float ax, float ay, float bx, float by,
                         dx2 = SQ(int_x - old_x);
                         dy2 = SQ(int_y - old_y);
                         dist2 = dx2 + dy2;
-                        if ((dx * (int_x - old_x)) + (dy * (int_y - old_y)) <
-                            0.0F)
+                        // GALE01 0x800507A0/0x80050F8C-family: sign dot
+                        // fuses the dx term onto the dy product.
+                        if (MSL_MP_FMADDS(dx, int_x - old_x,
+                                          dy * (int_y - old_y)) < 0.0F)
                         {
                             dist2 = -dist2;
                         }
@@ -2943,8 +2966,10 @@ bool mpCheckRightWallRemap(float ax, float ay, float bx, float by,
                         dx2 = SQ(int_x - old_x);
                         dy2 = SQ(int_y - old_y);
                         dist2 = dx2 + dy2;
-                        if ((dx * (int_x - old_x)) + (dy * (int_y - old_y)) <
-                            0.0F)
+                        // GALE01 0x800507A0/0x80050F8C-family: sign dot
+                        // fuses the dx term onto the dy product.
+                        if (MSL_MP_FMADDS(dx, int_x - old_x,
+                                          dy * (int_y - old_y)) < 0.0F)
                         {
                             dist2 = -dist2;
                         }
@@ -2983,8 +3008,10 @@ bool mpCheckRightWallRemap(float ax, float ay, float bx, float by,
                         dx2 = SQ(int_x - old_x);
                         dy2 = SQ(int_y - old_y);
                         dist2 = dx2 + dy2;
-                        if ((dx * (int_x - old_x)) + (dy * (int_y - old_y)) <
-                            0.0F)
+                        // GALE01 0x800507A0/0x80050F8C-family: sign dot
+                        // fuses the dx term onto the dy product.
+                        if (MSL_MP_FMADDS(dx, int_x - old_x,
+                                          dy * (int_y - old_y)) < 0.0F)
                         {
                             dist2 = -dist2;
                         }
@@ -3106,13 +3133,16 @@ bool mpLib_800511A4_RightWall(float ax, float ay, float bx, float by, float cx,
                     vdx = x0 - x;
                     vdy = y0 - y;
 
-                    if (SQ(vdx) + SQ(vdy) > 0.001F) {
+                    // GALE01 0x8005135C-family: vdx^2 fused onto vdy^2.
+                    if (MSL_MP_FMADDS(vdx, vdx, SQ(vdy)) > 0.001F) {
                         if (mpLineIntersection(cx, cy, dx, dy, x, y, x0, y0,
                                                &int_x, &int_y))
                         {
                             dist2 = SQ(int_x - x1) + SQ(int_y - y1);
-                            if ((vdx * (int_x - x1)) + (vdy * (int_y - y1)) <
-                                0.0F)
+                            // GALE01 0x800513B0-family: the line-pick sign
+                            // dot fuses the vdx term onto the vdy product.
+                            if (MSL_MP_FMADDS(vdx, int_x - x1,
+                                              vdy * (int_y - y1)) < 0.0F)
                             {
                                 dist2 = -dist2;
                             }
@@ -3138,13 +3168,16 @@ bool mpLib_800511A4_RightWall(float ax, float ay, float bx, float by, float cx,
                     vdx = x0 - x;
                     vdy = y0 - y;
 
-                    if (SQ(vdx) + SQ(vdy) > 0.001F) {
+                    // GALE01 0x8005135C-family: vdx^2 fused onto vdy^2.
+                    if (MSL_MP_FMADDS(vdx, vdx, SQ(vdy)) > 0.001F) {
                         if (mpLineIntersection(cx, cy, dx, dy, x, y, x0, y0,
                                                &int_x, &int_y))
                         {
                             dist2 = SQ(int_x - x1) + SQ(int_y - y1);
-                            if ((vdx * (int_x - x1)) + (vdy * (int_y - y1)) <
-                                0.0F)
+                            // GALE01 0x800513B0-family: the line-pick sign
+                            // dot fuses the vdx term onto the vdy product.
+                            if (MSL_MP_FMADDS(vdx, int_x - x1,
+                                              vdy * (int_y - y1)) < 0.0F)
                             {
                                 dist2 = -dist2;
                             }
@@ -3250,13 +3283,16 @@ bool mpLib_800515A0_LeftWall(float a0x, float a0y, float a1x, float a1y,
                     vdx = x0 - x;
                     vdy = y0 - y;
 
-                    if (SQ(vdx) + SQ(vdy) > 0.001F) {
+                    // GALE01 0x8005135C-family: vdx^2 fused onto vdy^2.
+                    if (MSL_MP_FMADDS(vdx, vdx, SQ(vdy)) > 0.001F) {
                         if (mpLineIntersection(b0x, b0y, b1x, b1y, x, y, x0,
                                                y0, &int_x, &int_y))
                         {
                             dist2 = SQ(int_x - x1) + SQ(int_y - y1);
-                            if ((vdx * (int_x - x1)) + (vdy * (int_y - y1)) <
-                                0.0F)
+                            // GALE01 0x800513B0-family: the line-pick sign
+                            // dot fuses the vdx term onto the vdy product.
+                            if (MSL_MP_FMADDS(vdx, int_x - x1,
+                                              vdy * (int_y - y1)) < 0.0F)
                             {
                                 dist2 = -dist2;
                             }
@@ -3283,13 +3319,16 @@ bool mpLib_800515A0_LeftWall(float a0x, float a0y, float a1x, float a1y,
                     vdx = x0 - x;
                     vdy = y0 - y;
 
-                    if (SQ(vdx) + SQ(vdy) > 0.001F) {
+                    // GALE01 0x8005135C-family: vdx^2 fused onto vdy^2.
+                    if (MSL_MP_FMADDS(vdx, vdx, SQ(vdy)) > 0.001F) {
                         if (mpLineIntersection(b0x, b0y, b1x, b1y, x, y, x0,
                                                y0, &int_x, &int_y))
                         {
                             dist2 = SQ(int_x - x1) + SQ(int_y - y1);
-                            if ((vdx * (int_x - x1)) + (vdy * (int_y - y1)) <
-                                0.0F)
+                            // GALE01 0x800513B0-family: the line-pick sign
+                            // dot fuses the vdx term onto the vdy product.
+                            if (MSL_MP_FMADDS(vdx, int_x - x1,
+                                              vdy * (int_y - y1)) < 0.0F)
                             {
                                 dist2 = -dist2;
                             }
@@ -3372,7 +3411,9 @@ int mpLib_8005199C_Floor(Vec3* vec, int joint_id_skip, int joint_id_only)
                         if (ABS(x1 - x0) > 0.0001) {
                             float dx = x1 - x0;
                             float dy = y1 - y0;
-                            if (y >= dy / dx * (x - x0) + y0) {
+                            // GALE01 0x80051B1C: the height-at-x lerp is a
+                            // single fmadds on the fdivs quotient.
+                            if (y >= MSL_MP_FMADDS(dy / dx, x - x0, y0)) {
                                 line_id = line - groundCollLine;
                                 goto end;
                             }
@@ -4985,17 +5026,21 @@ void mpLib_80055E9C(int joint_id)
         m1_3 = mtx[1][3];
         v_r4 = &groundCollVtx[joint->inner->vtx_start];
         for (i = 0; i < vtx_count; i++, v_r4++) {
-            v_r4->pos.x = v_r4->x0 * m0_0 + m0_3;
-            v_r4->pos.y = v_r4->x4 * m0_0 + m1_3;
+            // GALE01 0x800560EC..0x800561D4: the uniform-scale vertex
+            // transform is a single fmadds per component (moving platforms
+            // like Randall re-derive their floor lines from these).
+            v_r4->pos.x = MSL_MP_FMADDS(v_r4->x0, m0_0, m0_3);
+            v_r4->pos.y = MSL_MP_FMADDS(v_r4->x4, m0_0, m1_3);
         }
+        // GALE01 0x800561EC..0x80056228: same fmadds shape for the bounds.
         joint->bounding_min.x =
-            (joint->inner->left_bound * m0_0 + m0_3) - 30.0F;
+            MSL_MP_FMADDS(joint->inner->left_bound, m0_0, m0_3) - 30.0F;
         joint->bounding_min.y =
-            (joint->inner->bottom_bound * m0_0 + m1_3) - 30.0F;
+            MSL_MP_FMADDS(joint->inner->bottom_bound, m0_0, m1_3) - 30.0F;
         joint->bounding_max.x =
-            30.0F + (joint->inner->right_bound * m0_0 + m0_3);
+            30.0F + MSL_MP_FMADDS(joint->inner->right_bound, m0_0, m0_3);
         joint->bounding_max.y =
-            30.0F + (joint->inner->top_bound * m0_0 + m1_3);
+            30.0F + MSL_MP_FMADDS(joint->inner->top_bound, m0_0, m1_3);
         joint->flags |= CollJoint_B8;
         goto after0;
     }
@@ -5416,9 +5461,11 @@ bool mpLib_80056C54(int line_id, Vec3* pos, int* line_id_out, Vec3* vec_out,
                 *vec_out = sp58;
             } else {
                 float temp_f2_5 = var_f25 / dist_f28;
-                vec_out->x = (temp_f2_5 * (sp4C.x - sp58.x)) + sp58.x;
-                vec_out->y = (temp_f2_5 * (sp4C.y - sp58.y)) + sp58.y;
-                vec_out->z = (temp_f2_5 * (sp4C.z - sp58.z)) + sp58.z;
+                // GALE01 0x800573A0..0x800573C8: each component lerp is a
+                // single fmadds on the fdivs quotient.
+                vec_out->x = MSL_MP_FMADDS(temp_f2_5, sp4C.x - sp58.x, sp58.x);
+                vec_out->y = MSL_MP_FMADDS(temp_f2_5, sp4C.y - sp58.y, sp58.y);
+                vec_out->z = MSL_MP_FMADDS(temp_f2_5, sp4C.z - sp58.z, sp58.z);
             }
         } else {
             *vec_out = sp4C;

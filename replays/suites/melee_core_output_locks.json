@@ -335,7 +335,7 @@
       "expected": {
         "native": {
           "frames": 5555,
-          "actual_output_fingerprint": "1a24e552b210e4d4"
+          "actual_output_fingerprint": "5e9bab147e5144e6"
         }
       }
     },
@@ -650,7 +650,7 @@
       "expected": {
         "native": {
           "frames": 8827,
-          "actual_output_fingerprint": "a33d5fec9ed06d77"
+          "actual_output_fingerprint": "277b0b120ee38cc7"
         }
       }
     },
@@ -965,7 +965,7 @@
       "expected": {
         "native": {
           "frames": 6275,
-          "actual_output_fingerprint": "9bcf045dc7cbbf55"
+          "actual_output_fingerprint": "77a67ddcfce0d0f8"
         }
       }
     },
@@ -1289,7 +1289,7 @@
       "expected": {
         "native": {
           "frames": 8959,
-          "actual_output_fingerprint": "f28f310b5d74bad2"
+          "actual_output_fingerprint": "a15807b890906fa1"
         }
       }
     },
@@ -1856,7 +1856,7 @@
       "expected": {
         "native": {
           "frames": 2412,
-          "actual_output_fingerprint": "831511c17ba2a198"
+          "actual_output_fingerprint": "6303b69240a1af43"
         }
       }
     },
@@ -1946,7 +1946,7 @@
       "expected": {
         "native": {
           "frames": 10614,
-          "actual_output_fingerprint": "b740eb1d83ded6a3"
+          "actual_output_fingerprint": "db27305baaa49c3a"
         }
       }
     },

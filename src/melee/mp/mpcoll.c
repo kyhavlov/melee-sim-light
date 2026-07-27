@@ -35,8 +35,14 @@
 #ifdef MSL_CORE_HOSTED
 #include <MetroTRK/intrinsics.h>
 #define MSL_MP_ECB_FMADDS(dst, a, b, c) (dst) = __fmadds((a), (b), (c))
+#define MSL_MP_FMADDS(a, b, c) __fmadds((a), (b), (c))
+#define MSL_MP_FMSUBS(a, b, c) __fmsubs((a), (b), (c))
+#define MSL_MP_FNMSUBS(a, b, c) __fnmsubs((a), (b), (c))
 #else
 #define MSL_MP_ECB_FMADDS(dst, a, b, c) (dst) = (a) * (b) + (c)
+#define MSL_MP_FMADDS(a, b, c) ((a) * (b) + (c))
+#define MSL_MP_FMSUBS(a, b, c) ((a) * (b) - (c))
+#define MSL_MP_FNMSUBS(a, b, c) (-((a) * (b) - (c)))
 #endif
 
 struct mpColl_80458810_t {
@@ -604,13 +610,16 @@ void mpColl_LoadECB_Fixed(CollData* coll)
         update_min_max_2(&left_x, &right_x, rot_bot_x);
         update_min_max_2(&bottom_y, &top_y, rot_bot_y);
 
-        rot_right_x = (orig_right_x * cos) - (midpoint_x * sin);
-        rot_right_y = (orig_right_x * sin) + (midpoint_x * cos);
+        // GALE01 0x80042AF4/0x80042AF8: the corner rotation fuses the first
+        // product onto the second (fmsubs/fmadds).
+        rot_right_x = MSL_MP_FMSUBS(orig_right_x, cos, midpoint_x * sin);
+        rot_right_y = MSL_MP_FMADDS(orig_right_x, sin, midpoint_x * cos);
         update_min_max_2(&left_x, &right_x, rot_right_x);
         update_min_max_2(&bottom_y, &top_y, rot_right_y);
 
-        rot_left_x = (orig_left_x * cos) - (midpoint_x * sin);
-        rot_left_y = (orig_left_x * sin) + (midpoint_x * cos);
+        // GALE01 0x80042B3C/0x80042B40: same fused rotation.
+        rot_left_x = MSL_MP_FMSUBS(orig_left_x, cos, midpoint_x * sin);
+        rot_left_y = MSL_MP_FMADDS(orig_left_x, sin, midpoint_x * cos);
         update_min_max_2(&left_x, &right_x, rot_left_x);
         update_min_max_2(&bottom_y, &top_y, rot_left_y);
     }
@@ -717,8 +726,9 @@ void mpColl_LoadECB(CollData* coll)
 /// 80042DB0 https://decomp.me/scratch/GbMpk
 inline void Vec2_Interpolate(float time, Vec2* dest, Vec2* src)
 {
-    dest->x += time * (src->x - dest->x);
-    dest->y += time * (src->y - dest->y);
+    // GALE01 0x80042E68-family: each component lerp is a single fmadds.
+    dest->x = MSL_MP_FMADDS(time, src->x - dest->x, dest->x);
+    dest->y = MSL_MP_FMADDS(time, src->y - dest->y, dest->y);
 }
 
 void mpCollInterpolateECB(CollData* coll, float time)
@@ -1064,8 +1074,9 @@ void mpColl_800439FC(CollData* coll)
     right_dx = ABS(coll->ecb.right.x);
 
     // recalculate ceiling direction from its normal
-    f1 = (coll->ceiling.normal.y * right_dx) + right_x;
-    f2 = -(coll->ceiling.normal.x * right_dx) + right_y;
+    // GALE01 0x80043A4C/0x80043A50: fmadds/fnmsubs.
+    f1 = MSL_MP_FMADDS(coll->ceiling.normal.y, right_dx, right_x);
+    f2 = MSL_MP_FNMSUBS(coll->ceiling.normal.x, right_dx, right_y);
     if (!mpCheckLeftWall(f1, f2, right_x, right_y, &coll->contact, NULL, NULL,
                          NULL, coll->joint_id_skip, coll->joint_id_only))
     {
@@ -1100,8 +1111,9 @@ void mpColl_80043ADC(CollData* coll)
     left_dx = ABS(coll->ecb.left.x);
 
     // recalculate ceiling direction from its normal
-    f1 = -(coll->ceiling.normal.y * left_dx) + left_x;
-    f2 = (coll->ceiling.normal.x * left_dx) + left_y;
+    // GALE01 0x80043B2C/0x80043B30: fnmsubs/fmadds.
+    f1 = MSL_MP_FNMSUBS(coll->ceiling.normal.y, left_dx, left_x);
+    f2 = MSL_MP_FMADDS(coll->ceiling.normal.x, left_dx, left_y);
     if (!mpCheckRightWall(f1, f2, left_x, left_y, &coll->contact, NULL, NULL,
                           NULL, coll->joint_id_skip, coll->joint_id_only))
     {
@@ -1156,8 +1168,9 @@ void mpColl_80043C6C(CollData* coll, int line_id, bool ignore_bottom)
     pos.y = coll->cur_pos.y + coll->ecb.right.y;
     if (mpLib_8004E398_LeftWall(line_id, &pos, NULL, NULL, NULL) != -1) {
         // recalculate floor direction from its normal
-        float floor_x = -(coll->floor.normal.y * right_dx) + pos.x;
-        float floor_y = (coll->floor.normal.x * right_dx) + pos.y;
+        // GALE01 0x80043D04/0x80043D10: fnmsubs/fmadds.
+        float floor_x = MSL_MP_FNMSUBS(coll->floor.normal.y, right_dx, pos.x);
+        float floor_y = MSL_MP_FMADDS(coll->floor.normal.x, right_dx, pos.y);
         if (mpCheckLeftWall(floor_x, floor_y, pos.x, pos.y, &coll->contact,
                             &wall_id, NULL, NULL, coll->joint_id_skip,
                             coll->joint_id_only))
@@ -1180,8 +1193,10 @@ void mpColl_80043C6C(CollData* coll, int line_id, bool ignore_bottom)
         mpLeftWallGetTop(line_id, &pos);
         f1 = pos.x - 2.0F;
         f2 = pos.y;
-        pos.x = -((2.0F * right_dx) - f1);
-        pos.y = -((2.0F * (coll->ecb.right.y - coll->ecb.bottom.y)) - f2);
+        // GALE01 0x80043DC4/0x80043DDC: both are fnmsubs.
+        pos.x = MSL_MP_FNMSUBS(2.0F, right_dx, f1);
+        pos.y =
+            MSL_MP_FNMSUBS(2.0F, coll->ecb.right.y - coll->ecb.bottom.y, f2);
         if (mpCheckFloor(f1, f2, pos.x, pos.y, 0.0F, &coll->contact, NULL,
                          NULL, NULL, coll->floor_skip, coll->joint_id_skip,
                          coll->joint_id_only, NULL, NULL))
@@ -1238,8 +1253,9 @@ void mpColl_80043F40(CollData* coll, int line_id, bool ignore_bottom)
     pos.y = coll->cur_pos.y + coll->ecb.left.y;
     if (mpLib_8004E684_RightWall(line_id, &pos, NULL, NULL, NULL) != -1) {
         // recalculate floor direction from its normal
-        float floor_x = (coll->floor.normal.y * left_dx) + pos.x;
-        float floor_y = -(coll->floor.normal.x * left_dx) + pos.y;
+        // GALE01 0x80043FD8/0x80043FE4: fmadds/fnmsubs.
+        float floor_x = MSL_MP_FMADDS(coll->floor.normal.y, left_dx, pos.x);
+        float floor_y = MSL_MP_FNMSUBS(coll->floor.normal.x, left_dx, pos.y);
         if (mpCheckRightWall(floor_x, floor_y, pos.x, pos.y, &coll->contact,
                              &wall_id, NULL, NULL, coll->joint_id_skip,
                              coll->joint_id_only))
@@ -1263,8 +1279,10 @@ void mpColl_80043F40(CollData* coll, int line_id, bool ignore_bottom)
         f1 = 2.0F + pos.x;
         f2 = pos.y;
         // 2.0 * (ecb bottom -> ecb left).normal() + ecb left
-        pos.x = 2.0F * left_dx + f1;
-        pos.y = -(2.0F * (coll->ecb.left.y - coll->ecb.bottom.y)) + f2;
+        // GALE01 0x80044098/0x800440B0: fmadds/fnmsubs.
+        pos.x = MSL_MP_FMADDS(2.0F, left_dx, f1);
+        pos.y =
+            MSL_MP_FNMSUBS(2.0F, coll->ecb.left.y - coll->ecb.bottom.y, f2);
         if (mpCheckFloor(f1, f2, pos.x, pos.y, 0.0F, &coll->contact, NULL,
                          NULL, NULL, coll->floor_skip, coll->joint_id_skip,
                          coll->joint_id_only, NULL, NULL))
@@ -1968,8 +1986,11 @@ bool mpColl_800454A4_RightWall(CollData* coll)
                     mpLineGetKind(line_id) & CollLine_RightWall)
                 {
                     mpLineGetNormal(line_id, &nrm);
-                    x = (pos.y - top.y) / nrm.x * -nrm.y + top.x - pos.x +
-                        0.5F;
+                    // GALE01 0x80045834: the slope projection fuses onto
+                    // top.x.
+                    x = MSL_MP_FMADDS(-nrm.y, (pos.y - top.y) / nrm.x,
+                                      top.x) -
+                        pos.x + 0.5F;
                     if (mpColl_804D6490_max_x < coll->cur_pos.x + x) {
                         u32 temp = mpLineGetFlags(line_id);
                         mpColl_804D6490_max_x = coll->cur_pos.x + x;
@@ -2300,8 +2321,10 @@ bool mpColl_80046224_LeftWall(CollData* coll)
                     Vec3 nrm;
                     PAD_STACK(0x44);
                     mpLineGetNormal(line_id2, &nrm);
-                    x = (pos.y - vec.y) / -nrm.x * nrm.y + vec.x - pos.x -
-                        0.5F;
+                    // GALE01 0x800465B4: mirrored fused slope projection.
+                    x = MSL_MP_FMADDS(nrm.y, (pos.y - vec.y) / -nrm.x,
+                                      vec.x) -
+                        pos.x - 0.5F;
                     if (mpColl_804D6490_max_x > coll->cur_pos.x + x) {
                         u32 temp = mpLineGetFlags(line_id2);
                         mpColl_804D6490_max_x = coll->cur_pos.x + x;
@@ -3892,8 +3915,10 @@ bool mpColl_8004A908_Floor(CollData* coll, int line_id)
         coll->floor.normal = normal;
         return true;
     }
-    prev_bottom_y = 0.5F * (coll->prev_ecb.top.y + coll->prev_ecb.bottom.y) +
-                    coll->prev_pos.y;
+    // GALE01 0x8004AA6C: the ECB-midpoint retry height is a single fmadds.
+    prev_bottom_y =
+        MSL_MP_FMADDS(0.5F, coll->prev_ecb.top.y + coll->prev_ecb.bottom.y,
+                      coll->prev_pos.y);
     if (coll->x38 != mpColl_804D64AC) {
         hit_floor = mpCheckFloorRemap(
             prev_bottom_x, prev_bottom_y, bottom_x, bottom_y, 0.0F, NULL,
