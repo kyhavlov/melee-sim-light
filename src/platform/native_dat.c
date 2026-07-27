@@ -928,6 +928,8 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataSeak") == 0 ||
         strcmp(symbol, "ftDataLuigi") == 0 ||
         strcmp(symbol, "ftDataSamus") == 0 ||
+        strcmp(symbol, "ftDataPopo") == 0 ||
+        strcmp(symbol, "ftDataNana") == 0 ||
         strcmp(symbol, "ftDataMario") == 0 ||
         strcmp(symbol, "ftDataDrmario") == 0 ||
         strcmp(symbol, "ftDataMars") == 0 ||
@@ -1155,6 +1157,7 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_MARIO,
     MSL_FIGHTER_ARTICLES_MARIOD,
     MSL_FIGHTER_ARTICLES_SAMUS,
+    MSL_FIGHTER_ARTICLES_ICECLIMBER,
     MSL_FIGHTER_AUX_PURIN_PARTS,
 } MslFighterArticleProfile;
 
@@ -1289,6 +1292,24 @@ static ftData* translate_fighter_public(
         attr_types[1] = msl_dat_root_itSamusChargeShot_Attributes;
         attr_types[2] = msl_dat_root_itSamusMissileAttributes;
         attr_types[3] = msl_dat_root_itSamusGrappleAttributes;
+        break;
+    case MSL_FIGHTER_ARTICLES_ICECLIMBER:
+        // PlPp.dat and PlNn.dat share one three-slot article layout: the ice
+        // shot, blizzard, and belay-string articles ftPp_Init_OnLoad registers
+        // as item kinds 106/107/113. Nana's DAT carries its own copies of the
+        // same graphs; her OnLoad registers nothing, so both files translate
+        // through the one list type.
+        // refs/melee/src/melee/ft/chara/ftPopo/ftPp_Init.c
+        // refs/melee/src/melee/it/items/{itclimbersice.c,itclimbersblizzard.c,
+        //   itclimbersstring.c}
+        article_list_type = msl_dat_root_MslDatIceClimberArticles;
+        article_count = 3;
+        indices[0] = 0;
+        indices[1] = 1;
+        indices[2] = 2;
+        attr_types[0] = msl_dat_root_itClimbersIceAttributes;
+        attr_types[1] = msl_dat_root_itClimbersBlizzardAttributes;
+        attr_types[2] = msl_dat_root_itClimbersStringAttributes;
         break;
     case MSL_FIGHTER_AUX_PURIN_PARTS:
         // x48_items is not an article table for Purin. Its second pointer owns
@@ -1433,6 +1454,14 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftSs_DatAttrs, 313,
                                           MSL_FIGHTER_ARTICLES_SAMUS);
+    } else if (strcmp(symbol, "ftDataPopo") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftIceClimberAttributes,
+                                          321, MSL_FIGHTER_ARTICLES_ICECLIMBER);
+    } else if (strcmp(symbol, "ftDataNana") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftIceClimberAttributes,
+                                          321, MSL_FIGHTER_ARTICLES_ICECLIMBER);
     } else if (strcmp(symbol, "ftDataLuigi") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftLuigiAttributes, 312,

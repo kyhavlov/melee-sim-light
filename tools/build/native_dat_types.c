@@ -14,6 +14,7 @@
 #include "ft/chara/ftMario/types.h"
 #include "ft/chara/ftMars/types.h"
 #include "ft/chara/ftPeach/types.h"
+#include "ft/chara/ftPopo/types.h"
 #include "ft/chara/ftSamus/types.h"
 #include "ft/chara/ftPurin/types.h"
 #include "ft/chara/ftSeak/types.h"
@@ -163,6 +164,11 @@ typedef struct MslDatSamusArticles {
     Article* articles[4];
     MslDatSamusThrowBeam* throw_beam;
 } MslDatSamusArticles;
+// PlPp.dat and PlNn.dat each own one three-slot table: the ice shot,
+// blizzard, and belay-string articles ftPp_Init_OnLoad registers as item
+// kinds 106/107/113.
+// refs/melee/src/melee/ft/chara/ftPopo/ftPp_Init.c
+typedef Article* MslDatIceClimberArticles[3];
 // ItCo.dat's public x4 table owns the 43 common-item Article graphs. Peach's
 // SpecialLw can reach BombHei, Dosei, and Sword even when stage items are off.
 // refs/melee/src/melee/it/iteffect.c::it_802787B4
@@ -249,6 +255,11 @@ void* msl_native_dat_type_roots[] = {
     (itSamusChargeShot_Attributes*) 0,
     (itSamusMissileAttributes*) 0,
     (itSamusGrappleAttributes*) 0,
+    (MslDatIceClimberArticles*) 0,
+    (ftIceClimberAttributes*) 0,
+    (itClimbersIceAttributes*) 0,
+    (itClimbersBlizzardAttributes*) 0,
+    (itClimbersStringAttributes*) 0,
     (MslDatCommonItemArticles*) 0,
     (itBombHeiAttributes*) 0,
     (itDoseiAttributes*) 0,

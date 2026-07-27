@@ -1,78 +1,81 @@
-# Active performance packet — canonical embedded stage-line topology
+# Active structural packet — Ice Climbers (Popo + Nana follower entity)
 
 ## Objective
 
-Replace the native per-Match `CollLine -> MapLine` pointer graph and separate copied `MapLine` array
-with one compact canonical mutable line record. Preserve the retail layout on PPC and preserve every
-source adjacency mutation, line id, query order, flag, and transformed vertex owner.
+Add Ice Climbers (external char, internal kinds FTKIND_POPO 10 / FTKIND_NANA 11) to the supported
+domain. Unlike every prior port, one player slot owns TWO fighter entities: Nana is spawned
+alongside Popo by the already-imported `Player_80031AD0` follower branch and is driven by the
+retail CPU input block (AI type 6: record Popo's pads into a 30-slot ring, play back 5 frames
+delayed, with follow/approach fallback). The packet has four owners: the character/article
+sources, the fighter-axis widening of match/observation/compare state, the CPU input subsystem
+slice, and follower-frame validation.
 
 ## Final boundary
 
-- **Final owner:** native `CollLine` owns its source `MapLine` topology inline with its runtime flags.
-  `mpLibLoad`, empty-line pruning, stage stitching, island construction, and every `mplib` query read
-  and mutate that one record directly.
-- **Canonical state:** one embedded `MapLine` per stage line, with runtime enabled/hidden state in
-  the otherwise unused high bits of its `hi_flags` field. Extracted
-  `MapCollData::lines` is immutable construction input only; mutable Match topology has no second
-  array and no pointer back to it.
-- **Consumers:** the complete `mplib.c`, `mpisland.c`, `mpcoll.c`, stage callbacks, items, fighter
-  collision, copy, and save/restore use the same ids/fields and source ordering.
-- **Displaced state/work:** delete `MslMpLibState::map_lines`, its construction allocation/copy, and
-  the relocatable pointer slot in each native `CollLine`. Source expressions such as
-  `line->x0->v0_idx` decay directly to the inline one-element owner and no longer load a pointer.
-- **Deletion boundary:** every native mutable topology access resolves to the embedded record from
-  construction onward, including `mpPruneEmptyLines` and `mpLib_800581DC`; no synchronized copy,
-  fallback graph, accessor bridge, or partial query cut remains. PPC retains `MapLine* x0` exactly.
+- **Final owner (entities):** the imported `src/melee/pl/player.c` dual-entity machinery
+  (`player_entity[2]`, `ftMapping_list[CKIND_POPONANA]`, `Player_8003248C` returning
+  `Gm_PKind_Cpu` for the non-transforming second entity) becomes live. The runtime stops assuming
+  fighters ≡ players: `MslCoreMatch` tracks per-player leader and follower fighters; every
+  consumer that iterates fighters walks both entities of a slot.
+- **Final owner (Nana's brain):** the retail CPU input path. `ftCo_800A2040` (headless stub
+  `false` today) becomes the real predicate; the reachable AI slice — `ftCo_800B3900` tick chain,
+  `ftCo_800B101C` type-6 think, `ftCo_800B0918`/`ftCo_800B0AF4` ring record/playback,
+  `ftCo_800A589C` partner getter, command-execution helpers, and the `ftcpuattack.c` slice the
+  type-6 graph reaches — is ported into the existing `src/runtime/ftco_0A01.c` projection or a
+  full upstream import (decide at import time by measuring the reachable closure; upstream TU is
+  NonMatching, so every ported function is verified against `refs/melee` asm individually).
+- **Canonical state:** Nana's input state is `Fighter.x1A88` (`Fighter_x1A88_t`, 0x57C, already in
+  `types.h`) exactly as retail — no hosted mirror, no synthesized controller lane. Inputs from the
+  wire stay 4-wide per player; Nana never reads `HSD_PadGameStatus` and never touches the UCF pad
+  ring (retail-natural: the AI branch skips the physical-pad block in
+  `Fighter_Spaghetti_8006AD10`).
+- **Consumers:** fighter creation/respawn (`scalar.c` bootstrap, `match.c` respawn), post-frame
+  refresh, native DAT preload (already iterates entity 0..1), observation/output lanes, savestate
+  copy, viewer live schema, and validation compare all address (player, entity∈{leader,follower}).
+- **Displaced code/state:** the entity-0-only assumptions in `scalar.c:1074`/`:1804` (fighters[] =
+  index 0, kept only for the Sheik/Zelda swap); the `ftCo_800A2040` false stub and the
+  `ftCo_800B3900` abort row in `src/stubs/headless_exclusions.c`/`ledger.tsv`; validation's
+  leader-only descent in `tools/validation/native.c:load_player`.
+- **Deletion boundary:** no compatibility flag for "ICs without Nana", no synthesized Nana input
+  lane in the wire format, no duplicate Nana state outside `Fighter`/`StaticPlayer`. The public
+  input API stays `players[4]`; the observation/compare structs gain follower lanes in one cut
+  (Python dtypes, native.c, wire.h move together).
+
+## Sequencing (each step gates green before the next)
+
+1. **Data plumbing:** `PlPp`/`PlNn` prefixes + `EfIcData.dat` in `tools/data/extract.py` and
+   `raw.py`; re-extract from `./SSBM.iso`; manifest/test counts.
+2. **Character packet (compile + spawn):** import 8 Matching chara TUs (`ftPopo/*.c` ×5,
+   `ftNana/*.c` ×3) + 3 Matching article TUs (`itclimbersice/blizzard/string.c`), ftdata.c hosted
+   registry rows, native DAT translation rows, `derive_gameplay_parts_mask.py` rows for both
+   kinds, effect bank, char id 10 through core enums (public API admission deferred to step 5).
+   `source_character_kind` maps id 10 → `CKIND_POPONANA` (first 1→2 expansion).
+3. **Fighter-axis widening:** leader+follower fighter tracking in `MslCoreMatch`, respawn/death
+   (`gm_80167320(slot, subchar)` already wired), UCF gate, savestate, observation lanes.
+4. **CPU slice port:** un-stub `ftCo_800A2040`, port the type-6 reachable closure, asm-verify per
+   function (NonMatching upstream).
+5. **Validation + suite:** follower descent in `native.c` (peppi `ports.P{n}.follower`), follower
+   compare lanes and life-cycle row carry (rows vanish while Nana is dead), public API/python/
+   viewer admission, stage the icies suite (11 usable candidates in
+   `~/SSBM/Replays/Samples/top14.zip`: FD/BF/YS/FoD/DL ×2 each; both PS games non-frozen,
+   excluded), container aggregate gate.
 
 ## Evidence and acceptance
 
-- Native currently stores a 16-byte `CollLine` plus a separate 16-byte `MapLine` per stage line;
-  the former contains an 8-byte pointer to the latter. The final compact record remains 16 bytes
-  by aliasing runtime flags into source-unused `hi_flags` bits, removing 16 bytes per line plus the
-  separate allocation/relocation graph.
-- `mplib.c` contains hundreds of source topology dereferences throughout the 12.99% current fighter
-  stage-collision owner. The embedded one-element representation preserves source syntax while
-  letting optimized native code address fields directly.
-- Both production digests and complete replay/API/copy/save-restore/allocation/PPC/Wasm/viewer gates
-  must remain unchanged. Retain only a repeatable throughput or material memory gain at 512/256.
+- Retail behaviors that must fall out of the port, not be re-implemented: Popo death kills Nana
+  (`ftCo_800BFD9C`); belay partner tether (`checkNanaInRange`, rope item 113); squall sync
+  (`ftNn_Init_80123954` kinematic slaving); Nana's percent-derived CPU level
+  (`min(popo_percent/20, 9)`); Nana motion-table fallback to Popo (`ftData_80085FD4`).
+- Acceptance: container aggregate stays 0 fail with all previously-passing replays byte-stable;
+  icies suite validates with follower rows compared; full pytest green; no wire-format second cut.
 
 ## Log
 
-- 2026-07-19 — `open`
-  Scope: `CollLine`, native `MslMpLibState`, `mpLibLoad`, and native empty-line pruning; downstream
-  source users retain their current expressions and semantics.
-  Hypothesis: deleting the mutable pointer graph improves collision locality and reduces resident
-  Match state without a query-time admission branch.
-  Evidence: post-load runtime only accesses mutable topology through `groundCollLine[].x0`; the
-  separate `MapCollData::lines` copy exists solely to provide those pointees.
-  Disposition: make native `x0` an inline one-element `MapLine`, copy construction input once into
-  that owner, prune it in place, remove the old allocation, then checkpoint digest/size/512 early.
-  Next: complete the singular construction cut and inspect generated relocation layout and symbols.
-
-- 2026-07-19 — `retained`
-  Scope: complete native construction, topology mutation, query, relocation, copy, and snapshot
-  boundary for supported stage lines.
-  Hypothesis: the final 16-byte alias layout can delete the pointer and duplicate record without the
-  20-byte candidate's locality regression.
-  Evidence: all supported extracted stages use only `hi_flags` values 0, 1, 2, 4, 8, and 17, leaving
-  bits 14/15 for native enabled/hidden state. Both production digests are exact. Adjacent 512
-  measurements are throughput-neutral; two 256 pairs move from 41,982.1/41,880.0 control to
-  41,953.7/41,752.1 candidate cycles per frame. Ordinary arena/allocation state falls from
-  633,432 bytes/825 allocations to 631,820 bytes/824 allocations; ordinary savestate falls from
-  695,048 to 693,972 bytes, and maximum reached arena falls from 961,900 to 960,000 bytes.
-  Disposition: retain the singular embedded owner as a measured state/allocation deletion, making
-  no throughput claim. The initial 20-byte layout was exact but slower and has been displaced.
-  Next: run the complete replay/API/copy/save-restore/allocation/PPC/Wasm/viewer gate, then record
-  and commit atomically if green.
-
-- 2026-07-19 — `retained`
-  Scope: complete material gate for the embedded topology owner.
-  Hypothesis: aliasing native runtime bits into source-unused topology bits must remain transparent
-  to all stage, snapshot, build, and browser consumers.
-  Evidence: debug and optimized-release validation remain 63 PASS / 90 unchanged CLASSIFIED / zero
-  XPASS/fail/error across 1,415,476 frames. Source/API/copy/save-restore and sealed allocation,
-  maximum construction, PPC, Wasm parity, viewer/browser, Python, source-sync, and formatting gates
-  are green.
-  Disposition: packet complete and ready for its atomic implementation/evidence commit.
-  Next: commit and notify the retained state deletion, then refresh the profile and select the next
-  bounded high-impact final owner.
+- 2026-07-27 — `open`
+  Scope: surveys complete (decomp map + sim architecture map, two Explore agents).
+  Evidence: dual-entity player machinery already compiled in and inert; CPU predicate stubbed
+  false; validation reads only `ports.P{n}.leader`; UCF pad ring would double-shift if Nana took
+  the pad path. Nana's AI is type 6 (mimic ring + follow), NOT the general CPU tree; reachable
+  slice bounded inside NonMatching `ftCo_0A01.c` + `ftcpuattack.c`.
+  Disposition: proceed with sequencing above; step-2 import is mechanical (all 11 chara/article
+  TUs are Matching upstream).

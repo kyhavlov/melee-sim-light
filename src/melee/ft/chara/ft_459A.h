@@ -17,6 +17,8 @@ UnkCostumeStruct* msl_core_fighter_costumes(FighterKind kind);
 #define ft_80459B28 (*msl_core_fighter_costumes(FTKIND_FOX))
 #define ft_80459D18 (*msl_core_fighter_costumes(FTKIND_SEAK))
 #define ft_80459DF0 (*msl_core_fighter_costumes(FTKIND_PEACH))
+#define ft_80459E68 (*msl_core_fighter_costumes(FTKIND_POPO))
+#define ft_80459EC8 (*msl_core_fighter_costumes(FTKIND_NANA))
 #define ft_80459F88 (*msl_core_fighter_costumes(FTKIND_SAMUS))
 #define ft_8045A0F0 (*msl_core_fighter_costumes(FTKIND_MARS))
 #define ft_8045A168 (*msl_core_fighter_costumes(FTKIND_ZELDA))

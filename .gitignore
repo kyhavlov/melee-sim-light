@@ -40,3 +40,4 @@ __pycache__/
 tools/viewer/slippi-viewer/public/zips/*.zip
 DEV_LOCAL.md
 tools/notify_discord.sh
+SSBM.iso

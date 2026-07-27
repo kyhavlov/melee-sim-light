@@ -296,6 +296,17 @@ src/melee/it/items/itsamusbomb.c	src/melee/it/items/itsamusbomb.c	Matching	samus
 src/melee/it/items/itsamuschargeshot.c	src/melee/it/items/itsamuschargeshot.c	Matching	samus-source-packet	compiled canonical Charge Shot article owner
 src/melee/it/items/itsamusgrapple.c	src/melee/it/items/itsamusgrapple.c	NonMatching	samus-source-packet	compiled canonical grapple-beam article owner
 src/melee/it/items/itsamusmissile.c	src/melee/it/items/itsamusmissile.c	Matching	samus-source-packet	compiled canonical homing and super missile article owner
+src/melee/ft/chara/ftPopo/ftPp_Init.c	src/melee/ft/chara/ftPopo/ftPp_Init.c	Matching	icies-source-packet	compiled canonical Popo lifecycle, state registry, and data-owner callbacks
+src/melee/ft/chara/ftPopo/ftPp_SpecialN.c	src/melee/ft/chara/ftPopo/ftPp_SpecialN.c	Matching	icies-source-packet	compiled canonical Ice Shot owner
+src/melee/ft/chara/ftPopo/ftPp_SpecialS.c	src/melee/ft/chara/ftPopo/ftPp_SpecialS.c	Matching	icies-source-packet	compiled canonical Squall Hammer owner
+src/melee/ft/chara/ftPopo/ftPp_SpecialHi.c	src/melee/ft/chara/ftPopo/ftPp_SpecialHi.c	Matching	icies-source-packet	compiled canonical Belay owner and belay-string lifecycle
+src/melee/ft/chara/ftPopo/ftPp_SpecialLw.c	src/melee/ft/chara/ftPopo/ftPp_SpecialLw.c	Matching	icies-source-packet	compiled canonical Blizzard owner
+src/melee/ft/chara/ftNana/ftNn_Init.c	src/melee/ft/chara/ftNana/ftNn_Init.c	Matching	icies-source-packet	compiled canonical Nana lifecycle and belay-eligibility owner
+src/melee/ft/chara/ftNana/ftNn_SpecialHi.c	src/melee/ft/chara/ftNana/ftNn_SpecialHi.c	Matching	icies-source-packet	compiled canonical Nana belay-partner owner
+src/melee/ft/chara/ftNana/ftNn_SpecialS.c	src/melee/ft/chara/ftNana/ftNn_SpecialS.c	Matching	icies-source-packet	compiled canonical Nana squall-sync owner
+src/melee/it/items/itclimbersice.c	src/melee/it/items/itclimbersice.c	Matching	icies-source-packet	compiled canonical ice-shot article owner
+src/melee/it/items/itclimbersblizzard.c	src/melee/it/items/itclimbersblizzard.c	Matching	icies-source-packet	compiled canonical blizzard article owner
+src/melee/it/items/itclimbersstring.c	src/melee/it/items/itclimbersstring.c	Matching	icies-source-packet	compiled canonical belay-string article owner
 src/melee/it/items/itpeachturnip.c	src/melee/it/items/itpeachturnip.c	not-listed	peach-source-packet	compiled canonical Peach turnip and rare-pull constructor owner
 src/melee/it/items/itsword.c	src/melee/it/items/itsword.c	not-listed	peach-common-item-packet	compiled canonical Beam Sword owner reached by Peach item pull
 src/sysdolphin/baselib/aobj.c	src/sysdolphin/baselib/aobj.c	Matching	0001-hosted-c-compatibility.patch	compiled directly from canonical source by Makefile; adapted by historical patch 0001-hosted-c-compatibility.patch

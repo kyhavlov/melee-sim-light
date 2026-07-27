@@ -30,6 +30,8 @@ CHARACTERS = {
     'captain': (2, 'Ca', 'ftDataCaptain'),
     'seak': (7, 'Sk', 'ftDataSeak'),
     'peach': (9, 'Pe', 'ftDataPeach'),
+    'popo': (10, 'Pp', 'ftDataPopo'),
+    'nana': (11, 'Nn', 'ftDataNana'),
     'samus': (13, 'Ss', 'ftDataSamus'),
     'purin': (15, 'Pr', 'ftDataPurin'),
     'luigi': (17, 'Lg', 'ftDataLuigi'),
@@ -41,8 +43,8 @@ CHARACTERS = {
 
 # Subaction counts per FighterKind (src/melee/ft/ftdata.c ftData_Table_Unk0).
 SUBACTION_COUNTS = {
-    0: 303, 1: 327, 2: 318, 7: 317, 9: 318, 13: 313, 15: 327, 17: 312,
-    18: 327, 19: 311, 21: 303, 22: 327,
+    0: 303, 1: 327, 2: 318, 7: 317, 9: 318, 10: 321, 11: 321, 13: 313,
+    15: 327, 17: 312, 18: 327, 19: 311, 21: 303, 22: 327,
 }
 
 # Words consumed per fighter subaction event with opcode >= 10, indexed by
@@ -67,6 +69,15 @@ NCANON = 54  # FtPart_TopN .. FtPart_TransN2
 #          parts[FtPart_56=56].
 CODE_ANCHORED = {
     'samus': (50, 51, 56),
+    #   popo/nana: ftPp_SpecialN.c ice-shot spawn parts[FtPart_TopN=0],
+    #          ftPp_SpecialLw.c blizzard anchors parts[FtPart_L3rdNa=26] and
+    #          parts[FtPart_L4thNb=29], ftPp_SpecialHi.c/ftNn_SpecialHi.c/
+    #          itclimbersstring.c belay tether reads BOTH climbers'
+    #          parts[FtPart_L4thNb=29], popo's parts[FtPart_R4thNb=47], and
+    #          nana's parts[FtPart_XRotN=2]; each climber runs the shared
+    #          ftPp_* handlers, so the anchor set is symmetric.
+    'popo': (0, 2, 26, 29, 47),
+    'nana': (0, 2, 26, 29, 47),
 }
 
 # Luigi's audited admission row (joint indices), the canonical anchor.
