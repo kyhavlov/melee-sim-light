@@ -1,5 +1,7 @@
 #include "math.h"
 
+#include <MetroTRK/intrinsics.h>
+
 #if defined(__AVX512F__)
 #include <immintrin.h>
 #endif
@@ -25,6 +27,9 @@ void __sinit_trigf_c(void)
 
 SECTION_CTORS void* const __sinit_trigf_c_reference = __sinit_trigf_c;
 
+// MWCC contracts the reduction and polynomial accumulates into scalar-single
+// fused ops; preserve those rounding boundaries explicitly.
+// GALE01 sinf 0x803263D4..0x80326574, cosf 0x80326240..0x803263D0.
 f32 sinf(f32 x)
 {
     int n;
@@ -35,35 +40,44 @@ f32 sinf(f32 x)
     z = (2.0f / (f32) M_PI) * x;
     n = (__HI(x) & 0x80000000) ? (int) (z - 0.5f) : (int) (z + 0.5f);
 
-    y = x - n * 2 + __four_over_pi_m1[0] * x + __four_over_pi_m1[1] * x +
-        __four_over_pi_m1[2] * x + __four_over_pi_m1[3] * x;
+    y = __fmadds(
+        __four_over_pi_m1[3], x,
+        __fmadds(__four_over_pi_m1[2], x,
+                 __fmadds(__four_over_pi_m1[1], x,
+                          __fmadds(__four_over_pi_m1[0], x, x - n * 2))));
     n &= 3;
 
     if (fabsf__Ff(y) < __epsilon) {
         n <<= 1;
-        return __sincos_on_quadrant[n] +
-               (__sincos_on_quadrant[n + 1] * y * __sincos_poly[9]);
+        return __fmadds(__sincos_poly[9], __sincos_on_quadrant[n + 1] * y,
+                        __sincos_on_quadrant[n]);
     }
 
     ysq = y * y;
     if (n & 1) {
         n <<= 1;
-        z = (((__sincos_poly[0] * ysq + __sincos_poly[2]) * ysq +
-              __sincos_poly[4]) *
-                 ysq +
-             __sincos_poly[6]) *
-                ysq +
-            __sincos_poly[8];
+        z = __fmadds(
+            ysq,
+            __fmadds(ysq,
+                     __fmadds(ysq,
+                              __fmadds(__sincos_poly[0], ysq,
+                                       __sincos_poly[2]),
+                              __sincos_poly[4]),
+                     __sincos_poly[6]),
+            __sincos_poly[8]);
 
         return z * __sincos_on_quadrant[n];
     } else {
         n <<= 1;
-        z = ((((__sincos_poly[1] * ysq + __sincos_poly[3]) * ysq +
-               __sincos_poly[5]) *
-                  ysq +
-              __sincos_poly[7]) *
-                 ysq +
-             __sincos_poly[9]) *
+        z = __fmadds(
+                ysq,
+                __fmadds(ysq,
+                         __fmadds(ysq,
+                                  __fmadds(__sincos_poly[1], ysq,
+                                           __sincos_poly[3]),
+                                  __sincos_poly[5]),
+                         __sincos_poly[7]),
+                __sincos_poly[9]) *
             y;
         return z * __sincos_on_quadrant[n + 1];
     }
@@ -79,33 +93,44 @@ f32 cosf(f32 x)
     z = (2.0f / (f32) M_PI) * x;
     n = (__HI(x) & 0x80000000) ? (int) (z - 0.5f) : (int) (z + 0.5f);
 
-    y = x - n * 2 + __four_over_pi_m1[0] * x + __four_over_pi_m1[1] * x +
-        __four_over_pi_m1[2] * x + __four_over_pi_m1[3] * x;
+    y = __fmadds(
+        __four_over_pi_m1[3], x,
+        __fmadds(__four_over_pi_m1[2], x,
+                 __fmadds(__four_over_pi_m1[1], x,
+                          __fmadds(__four_over_pi_m1[0], x, x - n * 2))));
     n &= 3;
     if (fabsf__Ff(y) < __epsilon) {
         n <<= 1;
-        return __sincos_on_quadrant[n + 1] - y * __sincos_on_quadrant[n];
+        return __fnmsubs(y, __sincos_on_quadrant[n],
+                         __sincos_on_quadrant[n + 1]);
     }
 
     ysq = y * y;
     if (n & 1) {
         n <<= 1;
-        z = -((((__sincos_poly[1] * ysq + __sincos_poly[3]) * ysq +
-                __sincos_poly[5]) *
-                   ysq +
-               __sincos_poly[7]) *
-                  ysq +
-              __sincos_poly[9]) *
+        // Retail folds the source negation into a final fnmadds.
+        z = -__fmadds(
+                ysq,
+                __fmadds(ysq,
+                         __fmadds(ysq,
+                                  __fmadds(__sincos_poly[1], ysq,
+                                           __sincos_poly[3]),
+                                  __sincos_poly[5]),
+                         __sincos_poly[7]),
+                __sincos_poly[9]) *
             y;
         return z * __sincos_on_quadrant[n];
     } else {
         n <<= 1;
-        z = (((__sincos_poly[0] * ysq + __sincos_poly[2]) * ysq +
-              __sincos_poly[4]) *
-                 ysq +
-             __sincos_poly[6]) *
-                ysq +
-            __sincos_poly[8];
+        z = __fmadds(
+            ysq,
+            __fmadds(ysq,
+                     __fmadds(ysq,
+                              __fmadds(__sincos_poly[0], ysq,
+                                       __sincos_poly[2]),
+                              __sincos_poly[4]),
+                     __sincos_poly[6]),
+            __sincos_poly[8]);
         return z * __sincos_on_quadrant[n + 1];
     }
 }
@@ -225,57 +250,55 @@ void msl_sincosf_many(const f32* xyz, f32* sin_out, f32* cos_out, int count)
         n = (__HI(x) & 0x80000000) ? (int) (sin_z - 0.5f)
                                    : (int) (sin_z + 0.5f);
 
-        y = x - n * 2 + __four_over_pi_m1[0] * x +
-            __four_over_pi_m1[1] * x + __four_over_pi_m1[2] * x +
-            __four_over_pi_m1[3] * x;
+        // Match the fused sinf/cosf rounding boundaries above.
+        y = __fmadds(
+            __four_over_pi_m1[3], x,
+            __fmadds(__four_over_pi_m1[2], x,
+                     __fmadds(__four_over_pi_m1[1], x,
+                              __fmadds(__four_over_pi_m1[0], x,
+                                       x - n * 2))));
         n &= 3;
 
         if (__builtin_fabsf(y) < __epsilon) {
             n <<= 1;
-            sin_out[i] =
-                __sincos_on_quadrant[n] +
-                (__sincos_on_quadrant[n + 1] * y * __sincos_poly[9]);
-            cos_out[i] =
-                __sincos_on_quadrant[n + 1] - y * __sincos_on_quadrant[n];
+            sin_out[i] = __fmadds(__sincos_poly[9],
+                                  __sincos_on_quadrant[n + 1] * y,
+                                  __sincos_on_quadrant[n]);
+            cos_out[i] = __fnmsubs(y, __sincos_on_quadrant[n],
+                                   __sincos_on_quadrant[n + 1]);
             continue;
         } else {
+            f32 cos_poly;
+            f32 sin_poly;
             ysq = y * y;
+            cos_poly = __fmadds(
+                ysq,
+                __fmadds(ysq,
+                         __fmadds(ysq,
+                                  __fmadds(__sincos_poly[0], ysq,
+                                           __sincos_poly[2]),
+                                  __sincos_poly[4]),
+                         __sincos_poly[6]),
+                __sincos_poly[8]);
+            sin_poly = __fmadds(
+                ysq,
+                __fmadds(ysq,
+                         __fmadds(ysq,
+                                  __fmadds(__sincos_poly[1], ysq,
+                                           __sincos_poly[3]),
+                                  __sincos_poly[5]),
+                         __sincos_poly[7]),
+                __sincos_poly[9]);
             if (n & 1) {
                 n <<= 1;
-                sin_z = (((__sincos_poly[0] * ysq + __sincos_poly[2]) *
-                              ysq +
-                          __sincos_poly[4]) *
-                           ysq +
-                       __sincos_poly[6]) *
-                          ysq +
-                      __sincos_poly[8];
-                cos_z =
-                    -((((__sincos_poly[1] * ysq + __sincos_poly[3]) * ysq +
-                         __sincos_poly[5]) *
-                           ysq +
-                        __sincos_poly[7]) *
-                          ysq +
-                       __sincos_poly[9]) *
-                    y;
+                sin_z = cos_poly;
+                cos_z = -sin_poly * y;
                 sin_out[i] = sin_z * __sincos_on_quadrant[n];
                 cos_out[i] = cos_z * __sincos_on_quadrant[n];
             } else {
                 n <<= 1;
-                sin_z =
-                    ((((__sincos_poly[1] * ysq + __sincos_poly[3]) * ysq +
-                        __sincos_poly[5]) *
-                           ysq +
-                       __sincos_poly[7]) *
-                          ysq +
-                      __sincos_poly[9]) *
-                    y;
-                cos_z = (((__sincos_poly[0] * ysq + __sincos_poly[2]) *
-                              ysq +
-                          __sincos_poly[4]) *
-                             ysq +
-                         __sincos_poly[6]) *
-                            ysq +
-                        __sincos_poly[8];
+                sin_z = sin_poly * y;
+                cos_z = cos_poly;
                 sin_out[i] = sin_z * __sincos_on_quadrant[n + 1];
                 cos_out[i] = cos_z * __sincos_on_quadrant[n + 1];
             }

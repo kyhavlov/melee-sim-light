@@ -3175,25 +3175,25 @@
     },
     {
       "replay": "replays/validation/samus/master-samus-2026-03_Game_20260302T125058.slpz",
-      "id": "dolphin-ulp-item-motion-profile",
-      "owner": "Samus homing-missile velocity against the Dolphin single-precision motion profile",
-      "rationale": "Bit-exact through 11,277 frames including every zair, tether, grab pull, and charge-shot exchange. The first divergence is a 1-ULP pair in the homing missile's rotated velocity lanes (item.vel_x/vel_y at frame 11155); the missile's turn integrates lbVector_Rotate/lbVector_Sin outputs every frame, so the one-bit seed compounds into a different homing path and complete downstream consequence. The retail-fused rotation terms (GALE01 0x8000DC48..0x8000DC58) were verified by DOL disassembly and do not close this bit; the residual sits in the trig/angle-accumulation profile. Re-recorded after the ftSs_DatAttrs.xD0 hang-timer type fix restored the retail zair wall-hang duration and shifted the residual.",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "Samus movement lanes against the Dolphin single-precision motion profile",
+      "rationale": "The residual is a bounded four-field ULP motion tail (P1 pos/self speed) confined to the final zair wall-hang, where the hidden grapple-chain integration seeds the rope payout rate; there are no discrete state flips and the tail runs to the end of the game. Re-recorded after the fused charge-shot interpolation (it_802B56E4 fmadds) and MSL sinf/cosf fusing retired the earlier 1-ULP charge-shot launch-velocity island at frame 11155 and extended the exact prefix from 11,277 to 15,268 frames.",
       "sources": [
-        "refs/melee/src/melee/it/items/itsamusmissile.c",
-        "refs/melee/src/melee/lb/lbvector.c::lbVector_Rotate"
+        "refs/melee/src/melee/it/items/itsamuschargeshot.c::it_802B56E4",
+        "refs/melee/src/melee/it/items/itsamusgrapple.c::it_802BA5DC"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 11277,
-          "first_mismatch_frame": 11155,
+          "exact_prefix_frames": 15268,
+          "first_mismatch_frame": 15146,
           "first_render_visibility_mismatch_frame": null,
           "frames": 15403,
           "last_mismatch_frame": 15280,
-          "matched_frames": 15247,
-          "mismatch_count": 432,
-          "mismatch_fields_digest": "c99e3a85c9b4b609be9d73395b7bfeaee3f40ba2743dd62cf854abc619b98682",
-          "mismatch_fingerprint": "3af5b3bfe847a807",
-          "mismatched_frames": 156,
+          "matched_frames": 15268,
+          "mismatch_count": 390,
+          "mismatch_fields_digest": "c1b8ec84d5c8a852560b802717f7cc443d14e1f90376976e5d08708400477935",
+          "mismatch_fingerprint": "345e65f91e4d550c",
+          "mismatched_frames": 135,
           "render_visibility_mismatch_count": 0,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 0
