@@ -1,0 +1,104 @@
+name: melee-core validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  aggregate:
+    # Pin the image that matches the validated environment (gcc-13). The
+    # replay gate asserts bit-exactness, so keep the toolchain stable.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Replays are LFS objects (~110 MB). Cache them so runs don't burn the
+      # LFS bandwidth quota; checkout above fetches pointers only.
+      - name: Compute LFS asset manifest
+        run: git lfs ls-files -l | cut -d' ' -f1 | sort > .lfs-assets-id
+
+      - name: Cache LFS objects
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
+
+      - name: Fetch LFS objects
+        run: git lfs pull
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Python dependencies
+        run: pip install peppi-py==0.8.6 pyarrow numpy zstandard py-ubjson pytest
+
+      # data/raw is derived deterministically from the ISO; cache it keyed on
+      # the extractor and the tracked manifest so the ISO download is only
+      # needed when extraction inputs change.
+      - name: Cache extracted game data
+        id: cache-data
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: game-data-${{ hashFiles('tools/data/extract.py', 'tools/data/raw.py', 'data/manifest.json') }}
+
+      - name: Cache the ISO
+        if: steps.cache-data.outputs.cache-hit != 'true'
+        id: cache-iso
+        uses: actions/cache@v4
+        with:
+          path: SSBM.iso
+          key: ssbm-iso-v1
+
+      - name: Download the ISO
+        # The secret is a direct-download URL. For Dropbox share links that
+        # means ending in dl=1 -- the default dl=0 serves an HTML preview.
+        if: steps.cache-data.outputs.cache-hit != 'true' && steps.cache-iso.outputs.cache-hit != 'true'
+        env:
+          SSBM_ISO_URL: ${{ secrets.SSBM_ISO_URL }}
+        run: |
+          if [ -z "$SSBM_ISO_URL" ]; then
+            echo "::error::SSBM_ISO_URL secret is unavailable (fork PR or unset secret)."
+            exit 1
+          fi
+          curl --fail --location --retry 3 --silent --show-error \
+            "$SSBM_ISO_URL" -o SSBM.iso
+
+      - name: Extract game data
+        if: steps.cache-data.outputs.cache-hit != 'true'
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python3 -m tools.data.extract --iso SSBM.iso --out-dir data
+
+      - name: Build the native core and validator
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: make native validator python-library -j4 PY=python3
+
+      - name: Run the aggregate replay gate
+        # Explicit bash turns on pipefail so the tee cannot mask a gate
+        # failure.
+        shell: bash
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python3 -m tools.validation.validate_replay \
+            --suite replays/suites/melee_core_aggregate.json \
+            --backend native --no-build --workers 4 \
+            --output-locks replays/suites/melee_core_output_locks.json \
+            | tee aggregate.log
+          grep -E "^\[native\] summary" aggregate.log >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run pytest
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python3 -m pytest tests -q
