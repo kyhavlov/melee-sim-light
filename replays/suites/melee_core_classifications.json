@@ -3256,26 +3256,26 @@
     },
     {
       "replay": "replays/validation/samus/diamond-platinum-e9cd78b1cd4439a0f7945269.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "Samus movement lanes against the Dolphin single-precision motion profile",
-      "rationale": "Bit-exact through the 332-frame prefix. The first divergence at frame 210 is a 1-2 ULP (or sub-1e-3 accumulated) difference in a self-speed/position lane; the value feeds the following frame's drift and collision inputs, so the one-bit seed forks the tail with complete downstream consequence. The Samus source packet's tether pipeline was verified bit-exact against retail interpreter probes through this prefix; the residual matches the corpus-wide Dolphin single-precision motion profile family.",
+      "id": "dolphin-ulp-contact-gate",
+      "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",
+      "rationale": "The recording predates the UCF 1.0 cardinal patch: at frame 210 the raw stick (-98, +1) is published unsnapped as -0.9875, so the suite row now carries ucf_cardinals_1_0_enabled=false. With the correct input profile the exact prefix extends from 332 to 1,012 frames and the residual opens with a hit-outcome flip against Falco at frame 890, the established shape of contact decisions seeded by ULP-scale capsule and knockback inputs.",
       "sources": [
-        "refs/melee/src/melee/ft/ftcommon.c",
-        "refs/melee/src/melee/mp/mpcoll.c"
+        "refs/ucf/src/pad_buffer/pad_buffer.cpp::apply_cardinals",
+        "refs/melee/src/melee/ft/ftcoll.c"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 332,
-          "first_mismatch_frame": 210,
+          "exact_prefix_frames": 1012,
+          "first_mismatch_frame": 890,
           "first_render_visibility_mismatch_frame": 907,
           "frames": 12166,
           "last_mismatch_frame": 12043,
-          "matched_frames": 391,
-          "mismatch_count": 418433,
-          "mismatch_fields_digest": "d0f7226ebb4b547f7ed9ba0e453372c78f5917a0b6c825119a50c6dca3b757b3",
-          "mismatch_fingerprint": "2c169c31ea04dc18",
-          "mismatched_frames": 11775,
-          "render_visibility_mismatch_count": 18214,
+          "matched_frames": 1012,
+          "mismatch_count": 411329,
+          "mismatch_fields_digest": "b0f810a0168324c192cc2add7ec033b8930267d1c5670bffb8856f3b0212b47b",
+          "mismatch_fingerprint": "dd7fd6d84ed1a7a9",
+          "mismatched_frames": 11154,
+          "render_visibility_mismatch_count": 17424,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 0
         }

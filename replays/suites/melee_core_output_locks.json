@@ -1883,7 +1883,7 @@
       "expected": {
         "native": {
           "frames": 12166,
-          "actual_output_fingerprint": "52876b4288b21e16"
+          "actual_output_fingerprint": "f3a405bb09a92d25"
         }
       }
     },
