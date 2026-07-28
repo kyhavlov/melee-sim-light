@@ -1101,6 +1101,140 @@ static void* translate_item_public(MslNativeArchive* context,
     return result;
 }
 
+// PlCo.dat's CPU input block. The DWARF layout carries its members as void
+// pointers, so the generic translation copies the payloads as raw big-endian
+// bytes and the CPU attack evaluator reads byte-swapped garbage: no
+// CPU-driven fighter ever selects an attack. Translate the consumed shapes
+// by hand: per-kind pointer arrays of cmd-terminated 0x24-byte attack
+// entries (uniform 32-bit lanes), the per-kind distance floats, the weapon
+// reach floats, and the byte-encoded command scripts.
+// refs/melee/src/melee/ft/ftcpuattack.c::{ftCo_800B4AB0,ftCo_800B8A9C}
+// refs/melee/src/melee/ft/ftcmdscript.c::{ftCo_800B3E04,ftCo_800B4880}
+enum {
+    MSL_CPU_TABLE_KINDS = 33,       // tables index by fp->kind
+    // Scripts index by CPU attack/defend command ids (0x28/0x29-class rows
+    // land here beside the literal 38/0x26 call sites); slots past the
+    // source array read as non-relocated fields and stay NULL.
+    MSL_CPU_CMDSCRIPT_COUNT = 64,
+    MSL_CPU_WEAPON_REACH_COUNT = 6, // Harisen..Parasol reach bonuses
+    MSL_CPU_ATTACK_ENTRY_BYTES = 0x24,
+};
+
+static void* translate_cpu_attack_entries(MslNativeArchive* context,
+                                          uint32_t offset)
+{
+    uint32_t count = 0;
+    uint32_t words;
+    uint32_t w;
+    uint32_t* native;
+
+    while (offset + (count + 1) * MSL_CPU_ATTACK_ENTRY_BYTES <=
+               context->data_size &&
+           read_be32(context->data + offset +
+                     count * MSL_CPU_ATTACK_ENTRY_BYTES) != 0)
+    {
+        ++count;
+    }
+    words = count * (MSL_CPU_ATTACK_ENTRY_BYTES / 4);
+    native = native_alloc((count + 1) * MSL_CPU_ATTACK_ENTRY_BYTES);
+    for (w = 0; w < words; ++w) {
+        native[w] = read_be32(context->data + offset + w * 4);
+    }
+    for (w = words; w < (count + 1) * (MSL_CPU_ATTACK_ENTRY_BYTES / 4); ++w) {
+        native[w] = 0;
+    }
+    return native;
+}
+
+static void* translate_cpu_attack_table(MslNativeArchive* context,
+                                        uint32_t offset)
+{
+    void** native = native_alloc(MSL_CPU_TABLE_KINDS * sizeof(*native));
+    uint32_t kind;
+
+    for (kind = 0; kind < MSL_CPU_TABLE_KINDS; ++kind) {
+        uint32_t target = raw_pointer(context, offset + kind * 4);
+        native[kind] = target != UINT32_MAX
+                           ? translate_cpu_attack_entries(context, target)
+                           : NULL;
+    }
+    return native;
+}
+
+static void* translate_cpu_float_array(MslNativeArchive* context,
+                                       uint32_t offset, uint32_t count)
+{
+    uint32_t* native = native_alloc(count * sizeof(*native));
+    uint32_t i;
+
+    for (i = 0; i < count; ++i) {
+        native[i] = read_be32(context->data + offset + i * 4);
+    }
+    return native;
+}
+
+static void* translate_cpu_cmdscript(MslNativeArchive* context,
+                                     uint32_t offset)
+{
+    // Byte-encoded command stream: opcodes above 0xBF carry two argument
+    // bytes, above 0x7F one, and 0x7F terminates.
+    // refs/melee/src/melee/ft/ftcmdscript.c::ftCo_800B4880
+    uint32_t end = offset;
+    uint8_t* native;
+    uint32_t size;
+
+    while (end < context->data_size && context->data[end] != 0x7F) {
+        uint8_t cmd = context->data[end];
+        end += 1 + (cmd > 0xBF ? 2 : cmd > 0x7F ? 1 : 0);
+    }
+    size = end + 1 - offset;
+    native = native_alloc(size);
+    memcpy(native, context->data + offset, size);
+    return native;
+}
+
+static void* translate_fighter_cpu_tables(MslNativeArchive* context,
+                                          uint32_t offset)
+{
+    void** result = native_alloc(10 * sizeof(*result));
+    uint32_t member;
+
+    for (member = 0; member < 10; ++member) {
+        uint32_t target = raw_pointer(context, offset + member * 4);
+        if (target == UINT32_MAX) {
+            result[member] = NULL;
+            continue;
+        }
+        switch (member) {
+        case 0: { // cmdscripts: script pointer array
+            void** scripts =
+                native_alloc(MSL_CPU_CMDSCRIPT_COUNT * sizeof(*scripts));
+            uint32_t i;
+            for (i = 0; i < MSL_CPU_CMDSCRIPT_COUNT; ++i) {
+                uint32_t script = raw_pointer(context, target + i * 4);
+                scripts[i] = script != UINT32_MAX
+                                 ? translate_cpu_cmdscript(context, script)
+                                 : NULL;
+            }
+            result[member] = scripts;
+            break;
+        }
+        case 8: // x20: per-kind distance thresholds
+            result[member] = translate_cpu_float_array(context, target,
+                                                       MSL_CPU_TABLE_KINDS);
+            break;
+        case 9: // x24: held-weapon reach bonuses
+            result[member] = translate_cpu_float_array(
+                context, target, MSL_CPU_WEAPON_REACH_COUNT);
+            break;
+        default: // x4..x1C: per-kind attack entry tables
+            result[member] = translate_cpu_attack_table(context, target);
+            break;
+        }
+    }
+    return result;
+}
+
 static void* translate_fighter_common_public(MslNativeArchive* context,
                                              uint32_t offset)
 {
@@ -1140,7 +1274,10 @@ static void* translate_fighter_common_public(MslNativeArchive* context,
     for (i = 0; i < 23; ++i) {
         uint32_t target = raw_pointer(context, offset + i * 4);
         if (target != UINT32_MAX) {
-            result[i] = translate_target(context, target, element_types[i]);
+            result[i] = i == 22
+                            ? translate_fighter_cpu_tables(context, target)
+                            : translate_target(context, target,
+                                               element_types[i]);
         }
     }
     return result;
