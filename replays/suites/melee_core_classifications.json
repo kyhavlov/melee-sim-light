@@ -2293,6 +2293,46 @@
      "render_visibility_mismatch_count": 5,
      "first_render_visibility_mismatch_frame": -122,
      "signed_zero_equal_count": 0
+    },
+    "ppc": {
+     "frames": 8152,
+     "matched_frames": 8140,
+     "mismatched_frames": 12,
+     "exact_prefix_frames": 5694,
+     "strict_suffix_frames": 2446,
+     "first_mismatch_frame": 5572,
+     "last_mismatch_frame": 5583,
+     "mismatch_count": 24,
+     "mismatch_fingerprint": "20091f1d7e7f62b3",
+     "mismatch_fields": [
+      {
+       "field": "item.misc1[4]",
+       "count": 5,
+       "first_frame": 5572,
+       "last_frame": 5576
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 5,
+       "first_frame": 5572,
+       "last_frame": 5576
+      },
+      {
+       "field": "item.misc1[3]",
+       "count": 7,
+       "first_frame": 5577,
+       "last_frame": 5583
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 7,
+       "first_frame": 5577,
+       "last_frame": 5583
+      }
+     ],
+     "render_visibility_mismatch_count": 5,
+     "first_render_visibility_mismatch_frame": -122,
+     "signed_zero_equal_count": 0
     }
    }
   },
@@ -2388,6 +2428,82 @@
      "render_visibility_mismatch_count": 5,
      "first_render_visibility_mismatch_frame": -122,
      "signed_zero_equal_count": 0
+    },
+    "ppc": {
+     "frames": 8610,
+     "matched_frames": 8588,
+     "mismatched_frames": 22,
+     "exact_prefix_frames": 3694,
+     "strict_suffix_frames": 1893,
+     "first_mismatch_frame": 3572,
+     "last_mismatch_frame": 6594,
+     "mismatch_count": 44,
+     "mismatch_fingerprint": "19deed6b6b697556",
+     "mismatch_fields": [
+      {
+       "field": "item.misc1[4]",
+       "count": 1,
+       "first_frame": 3572,
+       "last_frame": 3572
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 1,
+       "first_frame": 3572,
+       "last_frame": 3572
+      },
+      {
+       "field": "item.misc3[4]",
+       "count": 1,
+       "first_frame": 3572,
+       "last_frame": 3572
+      },
+      {
+       "field": "item.misc1[3]",
+       "count": 5,
+       "first_frame": 3573,
+       "last_frame": 3577
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 5,
+       "first_frame": 3573,
+       "last_frame": 3577
+      },
+      {
+       "field": "item.misc3[3]",
+       "count": 5,
+       "first_frame": 3573,
+       "last_frame": 3577
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 5,
+       "first_frame": 3578,
+       "last_frame": 3582
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 11,
+       "first_frame": 3578,
+       "last_frame": 6589
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 5,
+       "first_frame": 3578,
+       "last_frame": 3582
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 5,
+       "first_frame": 6590,
+       "last_frame": 6594
+      }
+     ],
+     "render_visibility_mismatch_count": 5,
+     "first_render_visibility_mismatch_frame": -122,
+     "signed_zero_equal_count": 0
     }
    }
   },
@@ -2453,6 +2569,88 @@
        "field": "item.misc1[2]",
        "count": 2,
        "first_frame": 388,
+       "last_frame": 393
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 1,
+       "first_frame": 393,
+       "last_frame": 393
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 1,
+       "first_frame": 393,
+       "last_frame": 393
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 54,
+       "first_frame": 8255,
+       "last_frame": 8308
+      },
+      {
+       "field": "item.misc0[0]",
+       "count": 17,
+       "first_frame": 8309,
+       "last_frame": 8325
+      }
+     ],
+     "render_visibility_mismatch_count": 19,
+     "first_render_visibility_mismatch_frame": 8823,
+     "signed_zero_equal_count": 0
+    },
+    "ppc": {
+     "frames": 10401,
+     "matched_frames": 10308,
+     "mismatched_frames": 93,
+     "exact_prefix_frames": 500,
+     "strict_suffix_frames": 1953,
+     "first_mismatch_frame": 378,
+     "last_mismatch_frame": 8325,
+     "mismatch_count": 137,
+     "mismatch_fingerprint": "a0f116b6476ea428",
+     "mismatch_fields": [
+      {
+       "field": "item.misc1[1]",
+       "count": 11,
+       "first_frame": 378,
+       "last_frame": 398
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 11,
+       "first_frame": 378,
+       "last_frame": 398
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 11,
+       "first_frame": 378,
+       "last_frame": 398
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 10,
+       "first_frame": 384,
+       "last_frame": 403
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 10,
+       "first_frame": 384,
+       "last_frame": 403
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 10,
+       "first_frame": 384,
+       "last_frame": 403
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 1,
+       "first_frame": 393,
        "last_frame": 393
       },
       {
@@ -2602,6 +2800,124 @@
      "render_visibility_mismatch_count": 0,
      "first_render_visibility_mismatch_frame": null,
      "signed_zero_equal_count": 0
+    },
+    "ppc": {
+     "frames": 6926,
+     "matched_frames": 6659,
+     "mismatched_frames": 267,
+     "exact_prefix_frames": 95,
+     "strict_suffix_frames": 321,
+     "first_mismatch_frame": -27,
+     "last_mismatch_frame": 6482,
+     "mismatch_count": 530,
+     "mismatch_fingerprint": "3d06fe5f7e3cf304",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[0]",
+       "count": 108,
+       "first_frame": -27,
+       "last_frame": 593
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 88,
+       "first_frame": -27,
+       "last_frame": 6482
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 103,
+       "first_frame": -27,
+       "last_frame": 5861
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 18,
+       "first_frame": 1063,
+       "last_frame": 6472
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 62,
+       "first_frame": 1064,
+       "last_frame": 6477
+      },
+      {
+       "field": "item.misc1[3]",
+       "count": 1,
+       "first_frame": 1073,
+       "last_frame": 1073
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 6,
+       "first_frame": 1073,
+       "last_frame": 1092
+      },
+      {
+       "field": "item.misc3[3]",
+       "count": 10,
+       "first_frame": 1073,
+       "last_frame": 1092
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 8,
+       "first_frame": 1074,
+       "last_frame": 1302
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 20,
+       "first_frame": 1074,
+       "last_frame": 5851
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 21,
+       "first_frame": 1079,
+       "last_frame": 1307
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 62,
+       "first_frame": 1079,
+       "last_frame": 5856
+      },
+      {
+       "field": "item.misc3[4]",
+       "count": 2,
+       "first_frame": 1083,
+       "last_frame": 1088
+      },
+      {
+       "field": "item.misc0[4]",
+       "count": 1,
+       "first_frame": 1088,
+       "last_frame": 1088
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 1,
+       "first_frame": 1088,
+       "last_frame": 1088
+      },
+      {
+       "field": "item.misc0[3]",
+       "count": 4,
+       "first_frame": 1089,
+       "last_frame": 1092
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 15,
+       "first_frame": 1278,
+       "last_frame": 1312
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
     }
    }
   },
@@ -2715,6 +3031,82 @@
      "render_visibility_mismatch_count": 0,
      "first_render_visibility_mismatch_frame": null,
      "signed_zero_equal_count": 0
+    },
+    "ppc": {
+     "frames": 9658,
+     "matched_frames": 9181,
+     "mismatched_frames": 477,
+     "exact_prefix_frames": 95,
+     "strict_suffix_frames": 1617,
+     "first_mismatch_frame": -27,
+     "last_mismatch_frame": 7918,
+     "mismatch_count": 911,
+     "mismatch_fingerprint": "1c2963bcc8e8fd66",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[0]",
+       "count": 282,
+       "first_frame": -27,
+       "last_frame": 7918
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 42,
+       "first_frame": 277,
+       "last_frame": 5107
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 71,
+       "first_frame": 277,
+       "last_frame": 6675
+      },
+      {
+       "field": "item.misc0[2]",
+       "count": 5,
+       "first_frame": 283,
+       "last_frame": 287
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 319,
+       "first_frame": 288,
+       "last_frame": 7918
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 26,
+       "first_frame": 372,
+       "last_frame": 5233
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 37,
+       "first_frame": 373,
+       "last_frame": 5237
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 9,
+       "first_frame": 378,
+       "last_frame": 5223
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 61,
+       "first_frame": 3369,
+       "last_frame": 3429
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 59,
+       "first_frame": 7860,
+       "last_frame": 7918
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
     }
    }
   },
@@ -2775,6 +3167,46 @@
        "count": 36,
        "first_frame": 1353,
        "last_frame": 1745
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 11,
+       "first_frame": 1735,
+       "last_frame": 1745
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
+    },
+    "ppc": {
+     "frames": 8387,
+     "matched_frames": 8168,
+     "mismatched_frames": 219,
+     "exact_prefix_frames": 947,
+     "strict_suffix_frames": 355,
+     "first_mismatch_frame": 825,
+     "last_mismatch_frame": 7909,
+     "mismatch_count": 308,
+     "mismatch_fingerprint": "c725c82dc364ce70",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[0]",
+       "count": 208,
+       "first_frame": 825,
+       "last_frame": 7909
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 71,
+       "first_frame": 825,
+       "last_frame": 895
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 18,
+       "first_frame": 831,
+       "last_frame": 848
       },
       {
        "field": "item.misc2[1]",
@@ -2881,6 +3313,88 @@
      "render_visibility_mismatch_count": 183,
      "first_render_visibility_mismatch_frame": 7562,
      "signed_zero_equal_count": 0
+    },
+    "ppc": {
+     "frames": 12335,
+     "matched_frames": 11693,
+     "mismatched_frames": 642,
+     "exact_prefix_frames": 598,
+     "strict_suffix_frames": 1167,
+     "first_mismatch_frame": 476,
+     "last_mismatch_frame": 11045,
+     "mismatch_count": 2242,
+     "mismatch_fingerprint": "f26d8034ec2c4f37",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[0]",
+       "count": 349,
+       "first_frame": 476,
+       "last_frame": 10789
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 520,
+       "first_frame": 476,
+       "last_frame": 11045
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 642,
+       "first_frame": 476,
+       "last_frame": 11045
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 53,
+       "first_frame": 564,
+       "last_frame": 11045
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 161,
+       "first_frame": 569,
+       "last_frame": 10784
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 317,
+       "first_frame": 569,
+       "last_frame": 10784
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 35,
+       "first_frame": 574,
+       "last_frame": 9108
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 5,
+       "first_frame": 579,
+       "last_frame": 1578
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 23,
+       "first_frame": 579,
+       "last_frame": 9108
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 31,
+       "first_frame": 580,
+       "last_frame": 1583
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 106,
+       "first_frame": 1323,
+       "last_frame": 10784
+      }
+     ],
+     "render_visibility_mismatch_count": 183,
+     "first_render_visibility_mismatch_frame": 7562,
+     "signed_zero_equal_count": 0
     }
    }
   },
@@ -2951,6 +3465,76 @@
       {
        "field": "item.misc2[0]",
        "count": 137,
+       "first_frame": 1135,
+       "last_frame": 2522
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 116,
+       "first_frame": 1135,
+       "last_frame": 2522
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
+    },
+    "ppc": {
+     "frames": 14608,
+     "matched_frames": 14279,
+     "mismatched_frames": 329,
+     "exact_prefix_frames": 1246,
+     "strict_suffix_frames": 6643,
+     "first_mismatch_frame": 1124,
+     "last_mismatch_frame": 7842,
+     "mismatch_count": 1060,
+     "mismatch_fingerprint": "649d74b881edd327",
+     "mismatch_fields": [
+      {
+       "field": "item.misc1[0]",
+       "count": 329,
+       "first_frame": 1124,
+       "last_frame": 7842
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 251,
+       "first_frame": 1129,
+       "last_frame": 7837
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 90,
+       "first_frame": 1129,
+       "last_frame": 2517
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 90,
+       "first_frame": 1129,
+       "last_frame": 2517
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 40,
+       "first_frame": 1134,
+       "last_frame": 7832
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 14,
+       "first_frame": 1134,
+       "last_frame": 2512
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 14,
+       "first_frame": 1134,
+       "last_frame": 2512
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 116,
        "first_frame": 1135,
        "last_frame": 2522
       },
@@ -3053,6 +3637,82 @@
      "render_visibility_mismatch_count": 0,
      "first_render_visibility_mismatch_frame": null,
      "signed_zero_equal_count": 0
+    },
+    "ppc": {
+     "frames": 7370,
+     "matched_frames": 7065,
+     "mismatched_frames": 305,
+     "exact_prefix_frames": 555,
+     "strict_suffix_frames": 838,
+     "first_mismatch_frame": 433,
+     "last_mismatch_frame": 6409,
+     "mismatch_count": 974,
+     "mismatch_fingerprint": "f50bfee753b7a136",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[0]",
+       "count": 90,
+       "first_frame": 433,
+       "last_frame": 2512
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 264,
+       "first_frame": 433,
+       "last_frame": 6409
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 264,
+       "first_frame": 433,
+       "last_frame": 6409
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 128,
+       "first_frame": 654,
+       "last_frame": 6399
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 42,
+       "first_frame": 6029,
+       "last_frame": 6394
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 77,
+       "first_frame": 6029,
+       "last_frame": 6404
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 77,
+       "first_frame": 6029,
+       "last_frame": 6404
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 13,
+       "first_frame": 6039,
+       "last_frame": 6399
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 13,
+       "first_frame": 6039,
+       "last_frame": 6399
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 6,
+       "first_frame": 6044,
+       "last_frame": 6389
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
     }
    }
   },
@@ -3077,6 +3737,130 @@
      "last_mismatch_frame": 11717,
      "mismatch_count": 1280,
      "mismatch_fingerprint": "963a331e660221af",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[0]",
+       "count": 192,
+       "first_frame": -28,
+       "last_frame": 11691
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 24,
+       "first_frame": -22,
+       "last_frame": 8789
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 13,
+       "first_frame": 542,
+       "last_frame": 9167
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 30,
+       "first_frame": 542,
+       "last_frame": 11707
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 30,
+       "first_frame": 542,
+       "last_frame": 11707
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 50,
+       "first_frame": 543,
+       "last_frame": 9171
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 116,
+       "first_frame": 543,
+       "last_frame": 11712
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 116,
+       "first_frame": 543,
+       "last_frame": 11712
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 68,
+       "first_frame": 548,
+       "last_frame": 9172
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 288,
+       "first_frame": 548,
+       "last_frame": 11717
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 288,
+       "first_frame": 548,
+       "last_frame": 11717
+      },
+      {
+       "field": "item.misc0[2]",
+       "count": 5,
+       "first_frame": 8780,
+       "last_frame": 8784
+      },
+      {
+       "field": "item.misc1[3]",
+       "count": 10,
+       "first_frame": 9137,
+       "last_frame": 9166
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 19,
+       "first_frame": 9137,
+       "last_frame": 9171
+      },
+      {
+       "field": "item.misc3[3]",
+       "count": 19,
+       "first_frame": 9137,
+       "last_frame": 9171
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 5,
+       "first_frame": 9142,
+       "last_frame": 9167
+      },
+      {
+       "field": "item.misc3[4]",
+       "count": 5,
+       "first_frame": 9142,
+       "last_frame": 9167
+      },
+      {
+       "field": "item.misc1[4]",
+       "count": 2,
+       "first_frame": 9151,
+       "last_frame": 9162
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
+    },
+    "ppc": {
+     "frames": 14709,
+     "matched_frames": 14226,
+     "mismatched_frames": 483,
+     "exact_prefix_frames": 94,
+     "strict_suffix_frames": 2869,
+     "first_mismatch_frame": -28,
+     "last_mismatch_frame": 11717,
+     "mismatch_count": 1280,
+     "mismatch_fingerprint": "ca9faab3a12c517f",
      "mismatch_fields": [
       {
        "field": "item.misc0[0]",
@@ -3394,6 +4178,196 @@
      "render_visibility_mismatch_count": 5,
      "first_render_visibility_mismatch_frame": 2004,
      "signed_zero_equal_count": 0
+    },
+    "ppc": {
+     "frames": 11083,
+     "matched_frames": 10747,
+     "mismatched_frames": 336,
+     "exact_prefix_frames": 4200,
+     "strict_suffix_frames": 553,
+     "first_mismatch_frame": 4078,
+     "last_mismatch_frame": 10407,
+     "mismatch_count": 825,
+     "mismatch_fingerprint": "27ca8612ead1c9ee",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[1]",
+       "count": 67,
+       "first_frame": 4078,
+       "last_frame": 4148
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 56,
+       "first_frame": 4078,
+       "last_frame": 10400
+      },
+      {
+       "field": "item.misc0[0]",
+       "count": 187,
+       "first_frame": 4080,
+       "last_frame": 9813
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 195,
+       "first_frame": 4080,
+       "last_frame": 10402
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 14,
+       "first_frame": 4451,
+       "last_frame": 10397
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 26,
+       "first_frame": 4451,
+       "last_frame": 10402
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 49,
+       "first_frame": 4452,
+       "last_frame": 10405
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 110,
+       "first_frame": 4457,
+       "last_frame": 10407
+      },
+      {
+       "field": "item.vel_x[2]",
+       "count": 1,
+       "first_frame": 5205,
+       "last_frame": 5205
+      },
+      {
+       "field": "item.vel_y[2]",
+       "count": 1,
+       "first_frame": 5205,
+       "last_frame": 5205
+      },
+      {
+       "field": "item.pos_x[2]",
+       "count": 1,
+       "first_frame": 5205,
+       "last_frame": 5205
+      },
+      {
+       "field": "item.pos_y[2]",
+       "count": 1,
+       "first_frame": 5205,
+       "last_frame": 5205
+      },
+      {
+       "field": "item.vel_x[1]",
+       "count": 5,
+       "first_frame": 5206,
+       "last_frame": 5210
+      },
+      {
+       "field": "item.vel_y[1]",
+       "count": 5,
+       "first_frame": 5206,
+       "last_frame": 5210
+      },
+      {
+       "field": "item.pos_x[1]",
+       "count": 5,
+       "first_frame": 5206,
+       "last_frame": 5210
+      },
+      {
+       "field": "item.pos_y[1]",
+       "count": 5,
+       "first_frame": 5206,
+       "last_frame": 5210
+      },
+      {
+       "field": "item.vel_x[0]",
+       "count": 5,
+       "first_frame": 5211,
+       "last_frame": 5215
+      },
+      {
+       "field": "item.vel_y[0]",
+       "count": 5,
+       "first_frame": 5211,
+       "last_frame": 5215
+      },
+      {
+       "field": "item.pos_x[0]",
+       "count": 5,
+       "first_frame": 5211,
+       "last_frame": 5215
+      },
+      {
+       "field": "item.pos_y[0]",
+       "count": 5,
+       "first_frame": 5211,
+       "last_frame": 5215
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 10,
+       "first_frame": 5225,
+       "last_frame": 10395
+      },
+      {
+       "field": "item.misc3[3]",
+       "count": 24,
+       "first_frame": 10367,
+       "last_frame": 10400
+      },
+      {
+       "field": "item.misc1[4]",
+       "count": 3,
+       "first_frame": 10370,
+       "last_frame": 10395
+      },
+      {
+       "field": "item.misc3[4]",
+       "count": 8,
+       "first_frame": 10370,
+       "last_frame": 10397
+      },
+      {
+       "field": "item.misc1[3]",
+       "count": 7,
+       "first_frame": 10371,
+       "last_frame": 10397
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 8,
+       "first_frame": 10373,
+       "last_frame": 10400
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 7,
+       "first_frame": 10376,
+       "last_frame": 10402
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 8,
+       "first_frame": 10378,
+       "last_frame": 10405
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 2,
+       "first_frame": 10380,
+       "last_frame": 10392
+      }
+     ],
+     "render_visibility_mismatch_count": 5,
+     "first_render_visibility_mismatch_frame": 2004,
+     "signed_zero_equal_count": 0
     }
    }
   },
@@ -3520,6 +4494,172 @@
        "count": 134,
        "first_frame": 731,
        "last_frame": 8772
+      },
+      {
+       "field": "item.misc3[3]",
+       "count": 93,
+       "first_frame": 731,
+       "last_frame": 1486
+      },
+      {
+       "field": "item.misc0[3]",
+       "count": 27,
+       "first_frame": 772,
+       "last_frame": 798
+      },
+      {
+       "field": "item.misc0[2]",
+       "count": 5,
+       "first_frame": 799,
+       "last_frame": 8767
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 56,
+       "first_frame": 800,
+       "last_frame": 8772
+      },
+      {
+       "field": "item.misc0[0]",
+       "count": 393,
+       "first_frame": 2419,
+       "last_frame": 11428
+      },
+      {
+       "field": "item.misc1[6]",
+       "count": 1,
+       "first_frame": 5778,
+       "last_frame": 5778
+      },
+      {
+       "field": "item.misc2[6]",
+       "count": 2,
+       "first_frame": 5778,
+       "last_frame": 5783
+      },
+      {
+       "field": "item.misc3[6]",
+       "count": 2,
+       "first_frame": 5778,
+       "last_frame": 5783
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
+    },
+    "ppc": {
+     "frames": 11670,
+     "matched_frames": 10826,
+     "mismatched_frames": 844,
+     "exact_prefix_frames": 419,
+     "strict_suffix_frames": 119,
+     "first_mismatch_frame": 297,
+     "last_mismatch_frame": 11428,
+     "mismatch_count": 2220,
+     "mismatch_fingerprint": "ea5cc37e2c4cc8d4",
+     "mismatch_fields": [
+      {
+       "field": "item.misc1[0]",
+       "count": 144,
+       "first_frame": 297,
+       "last_frame": 5075
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 285,
+       "first_frame": 297,
+       "last_frame": 5075
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 225,
+       "first_frame": 297,
+       "last_frame": 2826
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 111,
+       "first_frame": 302,
+       "last_frame": 5070
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 145,
+       "first_frame": 302,
+       "last_frame": 5070
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 128,
+       "first_frame": 302,
+       "last_frame": 2762
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 88,
+       "first_frame": 307,
+       "last_frame": 5065
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 67,
+       "first_frame": 307,
+       "last_frame": 5065
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 56,
+       "first_frame": 307,
+       "last_frame": 2757
+      },
+      {
+       "field": "item.misc1[4]",
+       "count": 47,
+       "first_frame": 725,
+       "last_frame": 5788
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 59,
+       "first_frame": 725,
+       "last_frame": 5793
+      },
+      {
+       "field": "item.misc3[4]",
+       "count": 59,
+       "first_frame": 725,
+       "last_frame": 5793
+      },
+      {
+       "field": "item.misc1[5]",
+       "count": 10,
+       "first_frame": 730,
+       "last_frame": 5783
+      },
+      {
+       "field": "item.misc2[5]",
+       "count": 15,
+       "first_frame": 730,
+       "last_frame": 5788
+      },
+      {
+       "field": "item.misc3[5]",
+       "count": 15,
+       "first_frame": 730,
+       "last_frame": 5788
+      },
+      {
+       "field": "item.misc1[3]",
+       "count": 94,
+       "first_frame": 731,
+       "last_frame": 1486
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 93,
+       "first_frame": 731,
+       "last_frame": 1486
       },
       {
        "field": "item.misc3[3]",
