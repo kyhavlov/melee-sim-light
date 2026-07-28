@@ -308,8 +308,18 @@ slice, and follower-frame validation.
   retail PC probe over ADE48's early-return addresses at 3983. Note the ga-vs-motion phase
   at landing think (ga=Ground from the prio-6 map pass of the PREVIOUS frame while
   motion_id still Fall) is what arms A3554 grounded gates one tick before the Landing
-  state exists — by elimination the only consistent retail path at 3983 is
-  ftCo_800B8A9C returning TRUE (x18 -> 2, returning before the final transition — matching
+  state exists — REFINED by direct predicate probes (kB4ab0Entry + cascade
+  predicate returns): at the landing ticks retail calls NONE of A5ACC/B9CBC/B8A9C/B732C/
+  A3710/B4AB0 (their first calls are 3984, all returning 0), so retail's ADE48 exits BEFORE
+  the whole predicate block while ours reaches the final transition and hops. Also note the
+  NANA tick-trace anchor correction: t-row(F) prints post@(F-1) motion, so our landing motion
+  (42) appears at post@3982 — SAME frame as retail; the earlier one-frame-landing readings
+  were anchor artifacts. The remaining search space is the ADE48 region between its head and
+  the bl ftCo_800A5ACC (asm 0x800AE460-0x800AE568: the x18==0x12 return, the x221A_b3
+  switch_cmd block, and the motion-keyed 0x125/0x154 -> 0x11/0x13 and 0xBF/0xB7 -> 5,
+  0xFC/0xFD -> 6 sets): add a PC-trace over that range (MSL_PROBE_PC_TRACE with PC_START/
+  PC_END already exists!) for one retail tick and mirror the taken branch sim-side. It is
+  the last unexplained divergence gate. NOT ftCo_800B8A9C returning TRUE (x18 -> 2, returning before the final transition — matching
   the missing CALL row) with B2790's case-2 handler demoting 2 -> 1 the SAME tick (matching
   retail's end-of-tick x18=1 and the 3984 walk script). Ours' B8A9C returns FALSE at that
   tick. So the last mile is ftCo_800B4AB0's per-entry evaluation (or B8A9C's target-state
