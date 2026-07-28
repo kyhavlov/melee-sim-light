@@ -279,6 +279,22 @@ slice, and follower-frame validation.
   cadence at landing (and hence the entire episode class) follows from whichever gate
   flips ours out of 4 early.
 
+- 2026-07-27 — `retained` (the episode split is the landing-tick state demote: 4->1 vs 4->10)
+  Definitive lifetime-2 timeline (gm-peach, NANA-tick t = slippi - 2945; beware TWO Nana
+  lifetimes sharing t ranges — filter by position): both sims enter state 4 at slippi 3925
+  with bit-matching gate inputs (angle/dx sequences identical), both steer -84 through 3982,
+  both land during 3983. At tick 3983 retail demotes 4->1 (ftCo_800B2790 case-4 grounded
+  path: x18 = x1C, Done) and builds the AA42C walk script at 3984; OURS lands in x18=10 at
+  the same tick, spends 3984 in ACD5C (stick 0), demotes to 1 at 3985, and builds the walk
+  script one frame late — the entire one-frame cadence divergence. The ONLY x18 = x20(=10)
+  writer is the ADE48 cascade hop guarded by ftCo_800A3554(fp, 0), which cannot pass while
+  airborne at the think; so either the hop fired against expectation (trace it: one
+  msl-trace at the cascade hop and at the case-4 grounded demote, logging tick + which path)
+  or an unaudited writer exists. FIRST ACTION NEXT SESSION: instrument those two sites, run
+  gm-peach --frames 4115, read the single line that says which path wrote 10 at t=1038, then
+  asm-diff that path. Everything else (episodes, classifications, locks, wiring) hangs off
+  this one answer.
+
 - 2026-07-27 — `open` (dl-fox @238 root-cause narrowed to ftCo_800A2C80's long recovery ray)
   Scope: with the tick trace aligned (our t = slippi + 133 on dl-fox), our Nana's x18 path
   through her damage (~f210-236) is 1 -> 4 -> 10 -> 1 while retail lands in x18=2 (attack).
