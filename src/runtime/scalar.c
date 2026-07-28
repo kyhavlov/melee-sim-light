@@ -988,6 +988,30 @@ static int match_construct(MslCoreMatch* match,
         // data/stages/{battlefield,fountain_of_dreams,dream_land_n64,
         //   pokemon_stadium,yoshis_story}.json
         configure_headless_ground_schedule(match, spec);
+        if (match->config.stage_id == MSL_CORE_STAGE_FOUNTAIN_OF_DREAMS &&
+            (match->config.stage_event_streams & 1) != 0)
+        {
+            // Retail's platform-actor creation tick (grIzumi_801CC358 case 0,
+            // or case 3 for a below-ground start) consumes one HSD_Randi per
+            // platform during stage construction, before Fighter_Create. The
+            // hosted proc returns early when the Slippi platform stream owns
+            // the creation publication, skipping those draws and shifting the
+            // fighter AI init draws (ftCo_800A101C x1A88.x7C phase,
+            // ftCo_800B9704 x34) two positions up the shared stream. Consume
+            // the draws here without disturbing the machine state the
+            // event-quiescent fall-through path still runs.
+            // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+            // refs/melee/src/melee/gr/inlines.h::rand_range
+            for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
+                extern void msl_grizumi_consume_replay_creation_draw(
+                    Ground_GObj* gobj);
+                Ground* gp = &match->stage_ground[i];
+                if (!match->stage_ground_used[i] || gp->map_id != 4) {
+                    continue;
+                }
+                msl_grizumi_consume_replay_creation_draw(gp->gobj);
+            }
+        }
     } else {
         map_data = grDatFiles_801C6324();
         if (map_data == NULL || map_data->unk4 == NULL) {

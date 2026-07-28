@@ -614,6 +614,42 @@ void grIzumi_801CC358(Ground_GObj* gobj)
 }
 
 #ifdef MSL_CORE_HOSTED
+void msl_grizumi_consume_replay_creation_draw(Ground_GObj* gobj)
+{
+    // Retail's platform-actor creation tick (grIzumi_801CC358 case 0, or
+    // case 3 for a below-ground start) consumes one HSD_Randi per platform
+    // during stage construction, before Fighter_Create. The hosted proc
+    // returns early when the Slippi platform stream owns the creation
+    // publication, skipping those draws and shifting the fighter AI init
+    // draws (ftCo_800A101C x1A88.x7C phase, ftCo_800B9704 x34) two positions
+    // up the shared stream. Consume the draws without disturbing the machine
+    // state the event-quiescent fall-through path still runs.
+    // refs/melee/src/melee/gr/inlines.h::rand_range
+    extern bool msl_slippi_fod_platform_height(u8, f32, f32*, bool*);
+    Ground* gp = GET_GROUND(gobj);
+    f32 height;
+    bool changed;
+    int a, b;
+
+    if (!msl_slippi_fod_platform_height(1 - gp->gv.izumi3.xC8,
+                                        gp->gv.izumi3.xD0, &height, &changed))
+    {
+        return;
+    }
+    if (gp->gv.izumi3.xC4 == 0) {
+        a = grIz_804D6968->x3C;
+        b = grIz_804D6968->x38;
+    } else if (gp->gv.izumi3.xC4 == 3) {
+        a = grIz_804D6968->x50;
+        b = grIz_804D6968->x4C;
+    } else {
+        return;
+    }
+    if (a != b) {
+        HSD_Randi(a > b ? a - b : b - a);
+    }
+}
+
 void msl_grizumi_apply_replay_platform_height(Ground_GObj* gobj, f32 height,
                                                bool changed)
 {
