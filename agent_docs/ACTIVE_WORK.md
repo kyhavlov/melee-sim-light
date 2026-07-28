@@ -565,3 +565,28 @@ slice, and follower-frame validation.
   dl-fox 10,818/11,083. Icies otherwise unchanged; ys-fox classification intact.
   OWED: container pytest sweep; PPC-backend lock parity check (locks re-recorded from
   native; hosted-only fixes leave PPC behavior unchanged but verify before the wire cut).
+
+- 2026-07-28 — `retained` (SEVEN MISC-LANE CLASSIFICATIONS) + `open` (the 88/91 roll
+  misalignment = A MISSING EFFECT DRAW). Icies now 0 pass / 8 classified / 4 fail.
+  The four open episodes and what is known:
+  * bf-marth @5605 + medium-marth @10783 (leader DamageFly 88 vs 91): ROOT-CAUSED TO THE
+    RNG STREAM. The variant roll (ftCo_Damage.c:419, HSD_Randf < x240 in ftCo_8008DCE0;
+    91=DamageFlyRoll picked when kb_level==3 && percent>=x23C) samples one position
+    early in ours. Retail frame 5605 draw sequence (bfm_randf_probe.jsonl):
+    [09F7 CPU x3 BIT-MATCH, efSync lib draw BIT-MATCH, **extra dispatcher draw at lr
+    0x80063B74 inside efAsync_Dispatch = the gfx 0x3EC case: li r3,8; bl efLib create;
+    HSD_Randf**, then the roll]. Ours lacks the dispatcher draw because OUR queue holds
+    gfx_id 0x3F8 (1016, spawn_kind 6) at that tick — no case in effects.c's dispatcher
+    switch — while retail dispatches 0x3EC (1004, model 8 + one Randf, a case we already
+    model). SO: either our enqueued gfx id is wrong (enqueue caller attribution via
+    __builtin_return_address lands in ftCo_0A01.c ftCo_800A05F4 region — inlining-
+    degraded, re-attribute with a debugger or wider addr capture), or 0x3F8 needs its own
+    dispatcher-draw case (check refs efasync.c case 0x3F8: efLib_Create_Attach_Pos(0x13)
+    — MODEL-BACKED, no draw, so more likely the ID is wrong our side or retail spawned a
+    DIFFERENT SECOND effect). Fixing this likely clears BOTH marth replays.
+  * dl-fox @5205-5215: small item vel/pos episode (12 fields, blizzard-adjacent).
+  * fod-sheik @10759+: item existence episode (item_count/type/owner from 10761).
+  TOOLING ADDED (container): MSL_GFX_TRACE_PATH prints GFXQ (enqueue, caller low24 in b
+  as float — decode carefully, it is exact for <2^24) and GFX (process) rows via
+  msl_emitter_trace; our RNG trace pairs frames via synthesized online seeds
+  (base + (frame+123)<<16 — bf-marth base 33407).
