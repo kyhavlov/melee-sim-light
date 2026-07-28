@@ -185,12 +185,21 @@ slice, and follower-frame validation.
   ours returns 1 (-> state 4 recover) where retail returns 0 and falls through to
   ftCo_800B8A9C (attack tables ARE populated natively — probed non-NULL). A2C80 casts a
   1000-unit ray from the ECB bottom along the normalized fall direction through mpCheckFloor
-  and returns 0 when it hits an in-bounds floor. Hypothesis to test next: the hosted exact-O1
-  mpCheckFloor broadphase misses long diagonal cross-stage segments (vertical -1000 probes
-  demonstrably work), so our ray finds no floor and Nana wrongly enters recovery. Test: unit
-  probe mpCheckFloor with A2C80-shaped diagonal rays on DL natively vs the same ray in the
-  retail interpreter; if confirmed, fix the segment broadphase walk. This likely owns several
-  fronts (dl-fox @238, fd-falco @346 ledge-catch pick, possibly master-fox @147 damage-exit).
+  and returns 0 when it hits an in-bounds floor. REFUTED by a follow-up probe (kA2c80Entry/kA2c80Ret added
+  to the Nana ring probe): retail A2C80 ALSO returns 1 at f210 — both sims enter recovery
+  state 4 identically, and hosted mpCheckFloor is the verbatim retail loop (mpBoundingCheck2
+  broadphase, no O1 shortcut). The real split is AFTER landing (~f223): both demote out of 4
+  and re-run the ADE48 cascade; retail's ftCo_800B8A9C ground path returns TRUE (x18=2,
+  attack) while ours always returns false. Gates verified equal (xF9_b2 set, target present);
+  the per-kind attack table pointer ((void**)Fighter_804D64FC->x4)[FTKIND_NANA] is translated
+  and non-NULL natively (probed host pointers). NEXT INSTRUMENT: ftCo_800B4AB0 (the CPU
+  attack-script evaluator) — log its parse walk and result natively vs a retail interpreter
+  probe at its call sites; suspects are the attack-script PAYLOAD translation (per-entry
+  structures behind the per-kind table read via retail byte offsets would break under native
+  widening) and its internal ftcpuattack range math reading target x55C spans. This family
+  plausibly owns the remaining behavioral fronts (dl-fox @238 walk-vs-dash after the missed
+  attack, ys-fox @5572+, medium-sheik @194 Landing-vs-Turn = a missed script jump,
+  master-fox @147 damage-exit).
   Scope: retail ring probe on dl-fox frames 225-242 (dl_ring2.jsonl recipe): retail Nana is
   DISENGAGED (xFA mim bit clear) in general-CPU x18=2 from at least 225 through 242, in Wait
   with friction slide (-0.3498) while Popo dashes; the UCF retro-write slot (-128) is present
