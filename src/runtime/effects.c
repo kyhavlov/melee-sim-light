@@ -471,6 +471,9 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
         msl_effect_consume_common_model_start(model_id);
         break;
     }
+    case 0x3EB:
+        msl_effect_consume_common_model_start(7);
+        break;
     case 0x3EC:
         msl_effect_consume_common_model_start(8);
         (void) HSD_Randf();
@@ -478,6 +481,22 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
     case 0x3EE:
         msl_effect_consume_common_model_start(0x27);
         (void) HSD_Randf();
+        break;
+    // The smoke/impact puff family dispatches straight model creations
+    // (efLib_Create_Attach_Pos(gfx - 0x3E5)) with no dispatcher randomness;
+    // their frame-zero DPtcl events still initialize RNG-bearing generators.
+    // Popo's damage-animation GFXSpawn 0x3F8 sits one draw ahead of the
+    // DamageFlyRoll roll on the bf-marth/medium-marth launches.
+    // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch
+    case 0x3F5:
+    case 0x3F6:
+    case 0x3F7:
+    case 0x3F8:
+    case 0x3F9:
+    case 0x3FA:
+    case 0x3FB:
+    case 0x3FC:
+        msl_effect_consume_common_model_start(gfx_id - 0x3E5);
         break;
     // Large fire impact: efLib_Create_Attach_Pos(3, ...) whose frame-zero
     // DPtcl events initialize the explosion's generator fan-out (observed as

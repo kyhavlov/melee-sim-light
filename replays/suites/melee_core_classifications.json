@@ -217,68 +217,6 @@
    }
   },
   {
-   "replay": "replays/validation/doubles_recent/Game_20260625T033446.slpz",
-   "id": "unmodeled-presentation-rng-stream-phase",
-   "owner": "DamageFlyRoll presentation RNG phase",
-   "rationale": "One isolated thrown-needle historical-position byte precedes the causal split. Deterministic damage setup is exact at the later source HSD_Randf gate; native and PPC take the same neighboring stream outcome, while the replay's excluded particle/effect phase selects DamageFlyRoll instead. The bounded action consequence reconverges for the final 1,070 transitions. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism.",
-   "sources": [
-    "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo",
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
-    "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
-    "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
-   ],
-   "expected": {
-    "native": {
-     "frames": 9894,
-     "matched_frames": 9806,
-     "mismatched_frames": 88,
-     "exact_prefix_frames": 8736,
-     "strict_suffix_frames": 1070,
-     "first_mismatch_frame": 8614,
-     "last_mismatch_frame": 8701,
-     "mismatch_count": 243,
-     "mismatch_fingerprint": "b5cf6dc2c00b3d12",
-     "render_visibility_mismatch_count": 0,
-     "first_render_visibility_mismatch_frame": null,
-     "signed_zero_equal_count": 0,
-     "mismatch_fields_digest": "f2beed20ebf90739f1a25282e14af3ea2f4ce3e20075db5c7f8cd5fbe7271463"
-    },
-    "ppc": "native"
-   }
-  },
-  {
-   "replay": "replays/validation/doubles_recent/Game_20260625T034215.slpz",
-   "id": "unmodeled-presentation-rng-stream-phase",
-   "owner": "DamageFlyRoll presentation RNG phase",
-   "rationale": "Several isolated thrown-needle historical-position bytes precede the first causal gameplay split. At the later source DamageFlyRoll HSD_Randf gate, all deterministic fighter state is exact, while the replay's excluded particle/effect scheduler is at the neighboring stream phase and selects the other action. PPC and native agree on the complete downstream consequence; the manifest locks it rather than changing free-running RNG or fitting replay rows. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism.",
-   "sources": [
-    "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo",
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
-    "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
-    "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
-   ],
-   "expected": {
-    "native": {
-     "frames": 9696,
-     "matched_frames": 7122,
-     "mismatched_frames": 2574,
-     "exact_prefix_frames": 7122,
-     "strict_suffix_frames": 0,
-     "first_mismatch_frame": 7000,
-     "last_mismatch_frame": 9573,
-     "mismatch_count": 81858,
-     "mismatch_fingerprint": "f2306068b95020f9",
-     "render_visibility_mismatch_count": 2379,
-     "first_render_visibility_mismatch_frame": 7016,
-     "signed_zero_equal_count": 0,
-     "mismatch_fields_digest": "831ea080aaf381c5dce82f8b4f457db2239d814d67e2c1edc01792f100921271"
-    },
-    "ppc": "native"
-   }
-  },
-  {
    "replay": "replays/validation/doubles_recent/Game_20260704T005918.slpz",
    "id": "doubles-dolphin-ulp-damage-profile",
    "owner": "fighter accumulated-damage float execution profile",
@@ -522,35 +460,6 @@
    }
   },
   {
-   "replay": "replays/validation/marth/ColossalYellowishBison.slpz",
-   "id": "unmodeled-presentation-rng-stream-phase",
-   "owner": "DamageFlyRoll gate versus post-input particle/effect RNG scheduler",
-   "rationale": "Deterministic damage setup is exact at the source HSD_Randf gate. Native and PPC agree on the neighboring stream outcome; the recorded match is one presentation-owned draw later and takes the other damage action. The resulting interval is bounded and followed by 2,574 strict transitions.",
-   "sources": [
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
-    "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
-    "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
-   ],
-   "expected": {
-    "native": {
-     "frames": 10613,
-     "matched_frames": 10378,
-     "mismatched_frames": 235,
-     "exact_prefix_frames": 7804,
-     "strict_suffix_frames": 2574,
-     "first_mismatch_frame": 7682,
-     "last_mismatch_frame": 7916,
-     "mismatch_count": 386,
-     "mismatch_fingerprint": "684e3faed3026724",
-     "mismatch_fields_digest": "b6f3e3c97eac0ab1c42420467a9003f31822f92e3e75b57c5418595eba6b01c1",
-     "render_visibility_mismatch_count": 6,
-     "first_render_visibility_mismatch_frame": 3388,
-     "signed_zero_equal_count": 0
-    },
-    "ppc": "native"
-   }
-  },
-  {
    "replay": "replays/validation/marth/ExtraLargeScaryHornet.slpz",
    "id": "mixed-unrecorded-render-rng-profile",
    "owner": "DeadUp render publication, magnifier schedule, and presentation RNG phase",
@@ -563,19 +472,38 @@
    ],
    "expected": {
     "native": {
-     "exact_prefix_frames": 4954,
-     "first_mismatch_frame": 4832,
-     "first_render_visibility_mismatch_frame": 2041,
      "frames": 10973,
-     "last_mismatch_frame": 10836,
-     "matched_frames": 10841,
-     "mismatch_count": 263,
-     "mismatch_fields_digest": "0c5ff26b3a9faaab7d8c94e0203ab1a0f4f532d8fc8d08372813b574dbce2b19",
-     "mismatch_fingerprint": "95a95d9a33fef2af",
-     "mismatched_frames": 132,
-     "render_visibility_mismatch_count": 27,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 14
+     "matched_frames": 10912,
+     "mismatched_frames": 61,
+     "exact_prefix_frames": 4954,
+     "strict_suffix_frames": 3799,
+     "first_mismatch_frame": 4832,
+     "last_mismatch_frame": 7051,
+     "mismatch_count": 71,
+     "mismatch_fingerprint": "e41d9b16c270bf9d",
+     "mismatch_fields": [
+      {
+       "field": "pos_x[1]",
+       "count": 58,
+       "first_frame": 4832,
+       "last_frame": 4959
+      },
+      {
+       "field": "pos_y[1]",
+       "count": 12,
+       "first_frame": 4881,
+       "last_frame": 4959
+      },
+      {
+       "field": "percent[0]",
+       "count": 1,
+       "first_frame": 7051,
+       "last_frame": 7051
+      }
+     ],
+     "render_visibility_mismatch_count": 18,
+     "first_render_visibility_mismatch_frame": 2041,
+     "signed_zero_equal_count": 0
     },
     "ppc": {
      "exact_prefix_frames": 4954,
@@ -618,64 +546,6 @@
      "mismatch_fields_digest": "19a7ee3b6caf82b66161a0af7369ef53cabb5e0b57d1262dbe302eab9bfacf14",
      "render_visibility_mismatch_count": 3,
      "first_render_visibility_mismatch_frame": 3372,
-     "signed_zero_equal_count": 0
-    },
-    "ppc": "native"
-   }
-  },
-  {
-   "replay": "replays/validation/marth/QuestionableHarmfulPanther.slpz",
-   "id": "unmodeled-presentation-rng-stream-phase",
-   "owner": "DamageFlyRoll gate versus post-input particle/effect RNG scheduler",
-   "rationale": "Deterministic damage setup is exact at the source HSD_Randf gate. Native and PPC take the same neighboring stream outcome; the recorded match is one presentation-owned draw later and selects DamageFlyRoll. The resulting 74-row action interval is followed by 572 strict transitions. This records excluded renderer/particle stream phase rather than altering free-running RNG.",
-   "sources": [
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
-    "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
-    "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
-   ],
-   "expected": {
-    "native": {
-     "frames": 9184,
-     "matched_frames": 9110,
-     "mismatched_frames": 74,
-     "exact_prefix_frames": 8538,
-     "strict_suffix_frames": 572,
-     "first_mismatch_frame": 8416,
-     "last_mismatch_frame": 8489,
-     "mismatch_count": 201,
-     "mismatch_fingerprint": "032d48eb0f409584",
-     "mismatch_fields_digest": "0b86004a88a9f12a67c0eaea73f08fb81d8ec19c9085027813b2070248f681e1",
-     "render_visibility_mismatch_count": 17,
-     "first_render_visibility_mismatch_frame": 325,
-     "signed_zero_equal_count": 0
-    },
-    "ppc": "native"
-   }
-  },
-  {
-   "replay": "replays/validation/marth/WellWornSmallGoshawk.slpz",
-   "id": "unmodeled-presentation-rng-stream-phase",
-   "owner": "DamageFlyRoll gate versus post-input particle/effect RNG scheduler",
-   "rationale": "The first causal difference is the source DamageFlyRoll HSD_Randf gate with exact deterministic setup. Native and PPC agree on the neighboring stream outcome; the recorded presentation-owned phase selects the other action, which legitimately changes later action and instance state. The manifest locks the complete consequence rather than fitting the replay row or changing free-running RNG.",
-   "sources": [
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
-    "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
-    "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
-   ],
-   "expected": {
-    "native": {
-     "frames": 13272,
-     "matched_frames": 11506,
-     "mismatched_frames": 1766,
-     "exact_prefix_frames": 11506,
-     "strict_suffix_frames": 0,
-     "first_mismatch_frame": 11384,
-     "last_mismatch_frame": 13149,
-     "mismatch_count": 6837,
-     "mismatch_fingerprint": "f943054f405742a5",
-     "mismatch_fields_digest": "818dc6b3695e9b55d21e61b0258d7d63ccd8680ec89645a0f8ffc38d09235a54",
-     "render_visibility_mismatch_count": 6,
-     "first_render_visibility_mismatch_frame": 3481,
      "signed_zero_equal_count": 0
     },
     "ppc": "native"
@@ -839,18 +709,37 @@
    "expected": {
     "native": {
      "frames": 14098,
-     "matched_frames": 13998,
-     "mismatched_frames": 100,
+     "matched_frames": 14078,
+     "mismatched_frames": 20,
      "exact_prefix_frames": 5186,
      "strict_suffix_frames": 256,
      "first_mismatch_frame": 5064,
      "last_mismatch_frame": 13719,
-     "mismatch_count": 1837,
-     "mismatch_fingerprint": "f84d7ac7cd016d88",
+     "mismatch_count": 20,
+     "mismatch_fingerprint": "7c8b2ca0cee0bfea",
+     "mismatch_fields": [
+      {
+       "field": "item.pos_x[0]",
+       "count": 16,
+       "first_frame": 5064,
+       "last_frame": 5079
+      },
+      {
+       "field": "percent[0]",
+       "count": 1,
+       "first_frame": 9664,
+       "last_frame": 9664
+      },
+      {
+       "field": "percent[1]",
+       "count": 3,
+       "first_frame": 13599,
+       "last_frame": 13719
+      }
+     ],
      "render_visibility_mismatch_count": 19,
      "first_render_visibility_mismatch_frame": 500,
-     "signed_zero_equal_count": 0,
-     "mismatch_fields_digest": "271563c685860b8a5694af6293168de9460249537c20b71571ea8690a690f561"
+     "signed_zero_equal_count": 0
     }
    }
   },
@@ -925,76 +814,631 @@
    "expected": {
     "native": {
      "frames": 6803,
-     "matched_frames": 4291,
-     "mismatched_frames": 2512,
-     "exact_prefix_frames": 3843,
+     "matched_frames": 4299,
+     "mismatched_frames": 2504,
+     "exact_prefix_frames": 4299,
      "strict_suffix_frames": 0,
-     "first_mismatch_frame": 3721,
+     "first_mismatch_frame": 4177,
      "last_mismatch_frame": 6680,
-     "mismatch_count": 72754,
-     "mismatch_fingerprint": "2178f2dd2fd334d0",
+     "mismatch_count": 72738,
+     "mismatch_fingerprint": "6a532077b54167b0",
+     "mismatch_fields": [
+      {
+       "field": "pos_x[0]",
+       "count": 2504,
+       "first_frame": 4177,
+       "last_frame": 6680
+      },
+      {
+       "field": "pos_y[0]",
+       "count": 1900,
+       "first_frame": 4177,
+       "last_frame": 6680
+      },
+      {
+       "field": "ground_id[0]",
+       "count": 2504,
+       "first_frame": 4177,
+       "last_frame": 6680
+      },
+      {
+       "field": "speed_x_attack[0]",
+       "count": 313,
+       "first_frame": 4188,
+       "last_frame": 6218
+      },
+      {
+       "field": "speed_air_x_self[0]",
+       "count": 1249,
+       "first_frame": 4191,
+       "last_frame": 6676
+      },
+      {
+       "field": "speed_ground_x_self[0]",
+       "count": 773,
+       "first_frame": 4201,
+       "last_frame": 6676
+      },
+      {
+       "field": "action_id[0]",
+       "count": 1712,
+       "first_frame": 4201,
+       "last_frame": 6680
+      },
+      {
+       "field": "action_frame[0]",
+       "count": 1721,
+       "first_frame": 4201,
+       "last_frame": 6680
+      },
+      {
+       "field": "animation_index[0]",
+       "count": 1686,
+       "first_frame": 4201,
+       "last_frame": 6680
+      },
+      {
+       "field": "instance_id[0]",
+       "count": 2252,
+       "first_frame": 4201,
+       "last_frame": 6680
+      },
+      {
+       "field": "instance_id[1]",
+       "count": 2333,
+       "first_frame": 4207,
+       "last_frame": 6680
+      },
+      {
+       "field": "on_ground[0]",
+       "count": 916,
+       "first_frame": 4228,
+       "last_frame": 6680
+      },
+      {
+       "field": "jumps_left[0]",
+       "count": 1119,
+       "first_frame": 4228,
+       "last_frame": 6680
+      },
+      {
+       "field": "l_cancel[0]",
+       "count": 15,
+       "first_frame": 4228,
+       "last_frame": 6136
+      },
+      {
+       "field": "speed_y_self[0]",
+       "count": 1087,
+       "first_frame": 4229,
+       "last_frame": 6679
+      },
+      {
+       "field": "pos_y[1]",
+       "count": 1267,
+       "first_frame": 4252,
+       "last_frame": 6680
+      },
+      {
+       "field": "speed_ground_x_self[1]",
+       "count": 495,
+       "first_frame": 4252,
+       "last_frame": 6680
+      },
+      {
+       "field": "on_ground[1]",
+       "count": 735,
+       "first_frame": 4252,
+       "last_frame": 6680
+      },
+      {
+       "field": "action_id[1]",
+       "count": 1628,
+       "first_frame": 4252,
+       "last_frame": 6680
+      },
+      {
+       "field": "action_frame[1]",
+       "count": 1879,
+       "first_frame": 4252,
+       "last_frame": 6680
+      },
+      {
+       "field": "jumps_left[1]",
+       "count": 735,
+       "first_frame": 4252,
+       "last_frame": 6680
+      },
+      {
+       "field": "l_cancel[1]",
+       "count": 6,
+       "first_frame": 4252,
+       "last_frame": 5295
+      },
+      {
+       "field": "ground_id[1]",
+       "count": 2125,
+       "first_frame": 4252,
+       "last_frame": 6480
+      },
+      {
+       "field": "animation_index[1]",
+       "count": 1540,
+       "first_frame": 4252,
+       "last_frame": 6680
+      },
+      {
+       "field": "pos_x[1]",
+       "count": 2428,
+       "first_frame": 4253,
+       "last_frame": 6680
+      },
+      {
+       "field": "speed_air_x_self[1]",
+       "count": 709,
+       "first_frame": 4253,
+       "last_frame": 6680
+      },
+      {
+       "field": "speed_y_self[1]",
+       "count": 843,
+       "first_frame": 4253,
+       "last_frame": 6680
+      },
+      {
+       "field": "hurtbox_state[0]",
+       "count": 401,
+       "first_frame": 4267,
+       "last_frame": 6680
+      },
+      {
+       "field": "state_flags[6]",
+       "count": 463,
+       "first_frame": 4284,
+       "last_frame": 6640
+      },
+      {
+       "field": "state_flags[0]",
+       "count": 1367,
+       "first_frame": 4285,
+       "last_frame": 6680
+      },
+      {
+       "field": "state_flags[8]",
+       "count": 570,
+       "first_frame": 4285,
+       "last_frame": 6674
+      },
+      {
+       "field": "speed_x_attack[1]",
+       "count": 467,
+       "first_frame": 4355,
+       "last_frame": 6674
+      },
+      {
+       "field": "speed_y_attack[1]",
+       "count": 587,
+       "first_frame": 4355,
+       "last_frame": 6674
+      },
+      {
+       "field": "facing[1]",
+       "count": 1199,
+       "first_frame": 4355,
+       "last_frame": 6658
+      },
+      {
+       "field": "percent[1]",
+       "count": 2326,
+       "first_frame": 4355,
+       "last_frame": 6680
+      },
+      {
+       "field": "hitlag[0]",
+       "count": 137,
+       "first_frame": 4355,
+       "last_frame": 6640
+      },
+      {
+       "field": "hitlag[1]",
+       "count": 149,
+       "first_frame": 4355,
+       "last_frame": 6640
+      },
+      {
+       "field": "hitstun[1]",
+       "count": 401,
+       "first_frame": 4355,
+       "last_frame": 6674
+      },
+      {
+       "field": "instance_hit_by[1]",
+       "count": 2326,
+       "first_frame": 4355,
+       "last_frame": 6680
+      },
+      {
+       "field": "last_attack_landed[0]",
+       "count": 2326,
+       "first_frame": 4355,
+       "last_frame": 6680
+      },
+      {
+       "field": "last_hit_by[1]",
+       "count": 963,
+       "first_frame": 4355,
+       "last_frame": 6680
+      },
+      {
+       "field": "state_flags[1]",
+       "count": 305,
+       "first_frame": 4355,
+       "last_frame": 6680
+      },
+      {
+       "field": "combo_count[0]",
+       "count": 1715,
+       "first_frame": 4360,
+       "last_frame": 6680
+      },
+      {
+       "field": "item.instance_id[0]",
+       "count": 308,
+       "first_frame": 4400,
+       "last_frame": 6429
+      },
+      {
+       "field": "item.pos_x[0]",
+       "count": 308,
+       "first_frame": 4400,
+       "last_frame": 6429
+      },
+      {
+       "field": "item.pos_y[0]",
+       "count": 308,
+       "first_frame": 4400,
+       "last_frame": 6429
+      },
+      {
+       "field": "item.instance_id[1]",
+       "count": 84,
+       "first_frame": 4409,
+       "last_frame": 6424
+      },
+      {
+       "field": "item.pos_x[1]",
+       "count": 84,
+       "first_frame": 4409,
+       "last_frame": 6424
+      },
+      {
+       "field": "item.pos_y[1]",
+       "count": 84,
+       "first_frame": 4409,
+       "last_frame": 6424
+      },
+      {
+       "field": "item_count",
+       "count": 113,
+       "first_frame": 4411,
+       "last_frame": 6429
+      },
+      {
+       "field": "item.state[0]",
+       "count": 84,
+       "first_frame": 4411,
+       "last_frame": 6429
+      },
+      {
+       "field": "item.type[0]",
+       "count": 100,
+       "first_frame": 4411,
+       "last_frame": 6429
+      },
+      {
+       "field": "item.vel_x[0]",
+       "count": 31,
+       "first_frame": 4411,
+       "last_frame": 6364
+      },
+      {
+       "field": "item.timer[0]",
+       "count": 100,
+       "first_frame": 4411,
+       "last_frame": 6429
+      },
+      {
+       "field": "item.spawn_id[0]",
+       "count": 271,
+       "first_frame": 4411,
+       "last_frame": 6429
+      },
+      {
+       "field": "item.misc0[0]",
+       "count": 50,
+       "first_frame": 4411,
+       "last_frame": 6429
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 240,
+       "first_frame": 4411,
+       "last_frame": 6429
+      },
+      {
+       "field": "item.exists[1]",
+       "count": 68,
+       "first_frame": 4411,
+       "last_frame": 6424
+      },
+      {
+       "field": "item.type[1]",
+       "count": 68,
+       "first_frame": 4411,
+       "last_frame": 6424
+      },
+      {
+       "field": "item.direction[1]",
+       "count": 68,
+       "first_frame": 4411,
+       "last_frame": 6424
+      },
+      {
+       "field": "item.vel_x[1]",
+       "count": 68,
+       "first_frame": 4411,
+       "last_frame": 6424
+      },
+      {
+       "field": "item.timer[1]",
+       "count": 73,
+       "first_frame": 4411,
+       "last_frame": 6424
+      },
+      {
+       "field": "item.spawn_id[1]",
+       "count": 78,
+       "first_frame": 4411,
+       "last_frame": 6424
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 28,
+       "first_frame": 4411,
+       "last_frame": 6424
+      },
+      {
+       "field": "item.exists[0]",
+       "count": 86,
+       "first_frame": 4415,
+       "last_frame": 6429
+      },
+      {
+       "field": "item.direction[0]",
+       "count": 86,
+       "first_frame": 4415,
+       "last_frame": 6429
+      },
+      {
+       "field": "state_flags[3]",
+       "count": 674,
+       "first_frame": 4451,
+       "last_frame": 6680
+      },
+      {
+       "field": "item.vel_y[1]",
+       "count": 43,
+       "first_frame": 4512,
+       "last_frame": 6424
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 43,
+       "first_frame": 4512,
+       "last_frame": 6424
+      },
+      {
+       "field": "item.exists[2]",
+       "count": 7,
+       "first_frame": 4518,
+       "last_frame": 4524
+      },
+      {
+       "field": "item.type[2]",
+       "count": 7,
+       "first_frame": 4518,
+       "last_frame": 4524
+      },
+      {
+       "field": "item.instance_id[2]",
+       "count": 7,
+       "first_frame": 4518,
+       "last_frame": 4524
+      },
+      {
+       "field": "item.direction[2]",
+       "count": 7,
+       "first_frame": 4518,
+       "last_frame": 4524
+      },
+      {
+       "field": "item.vel_x[2]",
+       "count": 7,
+       "first_frame": 4518,
+       "last_frame": 4524
+      },
+      {
+       "field": "item.vel_y[2]",
+       "count": 7,
+       "first_frame": 4518,
+       "last_frame": 4524
+      },
+      {
+       "field": "item.pos_x[2]",
+       "count": 7,
+       "first_frame": 4518,
+       "last_frame": 4524
+      },
+      {
+       "field": "item.pos_y[2]",
+       "count": 7,
+       "first_frame": 4518,
+       "last_frame": 4524
+      },
+      {
+       "field": "item.timer[2]",
+       "count": 7,
+       "first_frame": 4518,
+       "last_frame": 4524
+      },
+      {
+       "field": "item.spawn_id[2]",
+       "count": 7,
+       "first_frame": 4518,
+       "last_frame": 4524
+      },
+      {
+       "field": "item.misc0[2]",
+       "count": 4,
+       "first_frame": 4518,
+       "last_frame": 4521
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 7,
+       "first_frame": 4518,
+       "last_frame": 4524
+      },
+      {
+       "field": "item.vel_y[0]",
+       "count": 22,
+       "first_frame": 4525,
+       "last_frame": 6364
+      },
+      {
+       "field": "stocks[1]",
+       "count": 2139,
+       "first_frame": 4542,
+       "last_frame": 6680
+      },
+      {
+       "field": "state_flags[9]",
+       "count": 45,
+       "first_frame": 4542,
+       "last_frame": 4586
+      },
+      {
+       "field": "facing[0]",
+       "count": 553,
+       "first_frame": 4581,
+       "last_frame": 6680
+      },
+      {
+       "field": "last_attack_landed[1]",
+       "count": 2094,
+       "first_frame": 4587,
+       "last_frame": 6680
+      },
+      {
+       "field": "combo_count[1]",
+       "count": 735,
+       "first_frame": 4587,
+       "last_frame": 5321
+      },
+      {
+       "field": "hurtbox_state[1]",
+       "count": 276,
+       "first_frame": 4647,
+       "last_frame": 6489
+      },
+      {
+       "field": "stocks[0]",
+       "count": 1971,
+       "first_frame": 4710,
+       "last_frame": 6680
+      },
+      {
+       "field": "state_flags[4]",
+       "count": 120,
+       "first_frame": 4710,
+       "last_frame": 6619
+      },
+      {
+       "field": "state_flags[2]",
+       "count": 172,
+       "first_frame": 4731,
+       "last_frame": 6680
+      },
+      {
+       "field": "shield_hp[0]",
+       "count": 887,
+       "first_frame": 4732,
+       "last_frame": 6649
+      },
+      {
+       "field": "state_flags[5]",
+       "count": 1678,
+       "first_frame": 4758,
+       "last_frame": 6680
+      },
+      {
+       "field": "percent[0]",
+       "count": 1911,
+       "first_frame": 4770,
+       "last_frame": 6680
+      },
+      {
+       "field": "instance_hit_by[0]",
+       "count": 1911,
+       "first_frame": 4770,
+       "last_frame": 6680
+      },
+      {
+       "field": "state_flags[7]",
+       "count": 103,
+       "first_frame": 4820,
+       "last_frame": 6463
+      },
+      {
+       "field": "shield_hp[1]",
+       "count": 855,
+       "first_frame": 4821,
+       "last_frame": 6525
+      },
+      {
+       "field": "speed_y_attack[0]",
+       "count": 550,
+       "first_frame": 5322,
+       "last_frame": 6218
+      },
+      {
+       "field": "hitstun[0]",
+       "count": 175,
+       "first_frame": 5322,
+       "last_frame": 6189
+      },
+      {
+       "field": "last_hit_by[0]",
+       "count": 712,
+       "first_frame": 5322,
+       "last_frame": 6318
+      },
+      {
+       "field": "item.state[1]",
+       "count": 23,
+       "first_frame": 5631,
+       "last_frame": 6424
+      },
+      {
+       "field": "item.owner[0]",
+       "count": 1,
+       "first_frame": 6364,
+       "last_frame": 6364
+      }
+     ],
      "render_visibility_mismatch_count": 624,
      "first_render_visibility_mismatch_frame": 3716,
-     "signed_zero_equal_count": 0,
-     "mismatch_fields_digest": "e1a6caa0363ff0f506872994fee59447a46e4bd2d277d0557441535674e6ef68"
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/peach/MadeUpEnchantedStingray.slpz",
-   "id": "dolphin-float-and-presentation-rng-profile",
-   "owner": "landing velocity float execution and DamageFlyRoll presentation RNG phase",
-   "rationale": "The first causal residual is a 16-ULP self-velocity result at a source landing projection; a bounded PPC probe produces the same bits as native. A later damage event reaches the source DamageFlyRoll gate on the neighboring presentation-owned RNG phase. The manifest locks the complete consequence instead of altering free-running RNG or adding replay-local gameplay. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
-   "sources": [
-    "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-    "refs/melee/src/melee/mp/mpcoll.c",
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
-    "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 2289,
-     "first_mismatch_frame": 2167,
-     "first_render_visibility_mismatch_frame": 5768,
-     "frames": 11073,
-     "last_mismatch_frame": 10950,
-     "matched_frames": 5867,
-     "mismatch_count": 181155,
-     "mismatch_fields_digest": "132b718a0b23747466e17f3faefd1eff7594df91c908c35f8150fbb538a00461",
-     "mismatch_fingerprint": "3cdcef4f480b723c",
-     "mismatched_frames": 5206,
-     "render_visibility_mismatch_count": 6658,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 0
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/peach/MarvelousLopsidedOryx.slpz",
-   "id": "presentation-rng-and-item-float-profile",
-   "owner": "DamageFlyRoll presentation RNG phase and item transform execution",
-   "rationale": "The first causal difference is the source DamageFlyRoll RNG gate with aligned deterministic setup; the bounded action interval reconverges. A later independent interval contains only item-position ULPs, and 3,635 strict transitions follow the complete residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
-   "sources": [
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
-    "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24",
-    "refs/melee/src/melee/it/item.c",
-    "refs/melee/src/sysdolphin/baselib/mtx.c"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 5011,
-     "first_mismatch_frame": 4889,
-     "first_render_visibility_mismatch_frame": null,
-     "frames": 16873,
-     "last_mismatch_frame": 4940,
-     "matched_frames": 16821,
-     "mismatch_count": 135,
-     "mismatch_fields_digest": "e8730c28839386205adf68bb44fcd329e5ae617753ebc26d6c0c22eae659bb01",
-     "mismatch_fingerprint": "0c5f126efb6e5eba",
-     "mismatched_frames": 52,
-     "render_visibility_mismatch_count": 0,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 11810
+     "signed_zero_equal_count": 0
     }
    }
   },
@@ -1359,48 +1803,6 @@
    }
   },
   {
-   "replay": "replays/validation/sheik/SnarlingHelplessBeaver.slpz",
-   "id": "dolphin-ulp-motion-profile",
-   "owner": "fighter motion and animation float execution profile",
-   "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual contains only ULP-scale fighter motion values or the downstream animation threshold they gate, with exact gameplay on both sides; the replay records Dolphin but not its build or float/JIT execution profile. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground.",
-   "sources": [
-    "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-    "refs/melee/src/sysdolphin/baselib/mtx.c"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 8854,
-     "first_mismatch_frame": 8732,
-     "first_render_visibility_mismatch_frame": 68,
-     "frames": 10013,
-     "last_mismatch_frame": 8799,
-     "matched_frames": 9945,
-     "mismatch_count": 183,
-     "mismatch_fields_digest": "4fdd7dba6bd93a519682c35bafdd0081636fda3c9bb6523de86fcd5c6fc94966",
-     "mismatch_fingerprint": "5f1b0d3d1c5027d8",
-     "mismatched_frames": 68,
-     "render_visibility_mismatch_count": 9,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 1091
-    },
-    "ppc": {
-     "exact_prefix_frames": 8854,
-     "first_mismatch_frame": 8732,
-     "first_render_visibility_mismatch_frame": 68,
-     "frames": 10013,
-     "last_mismatch_frame": 8799,
-     "matched_frames": 9945,
-     "mismatch_count": 183,
-     "mismatch_fields_digest": "4fdd7dba6bd93a519682c35bafdd0081636fda3c9bb6523de86fcd5c6fc94966",
-     "mismatch_fingerprint": "5f1b0d3d1c5027d8",
-     "mismatched_frames": 68,
-     "render_visibility_mismatch_count": 9,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 1091
-    }
-   }
-  },
-  {
    "replay": "replays/validation/sheik/WavyRundownAardvark.slpz",
    "id": "dolphin-ulp-motion-profile",
    "owner": "fighter position and velocity float execution profile",
@@ -1617,34 +2019,6 @@
    }
   },
   {
-   "replay": "replays/validation/marios/plat-marth-2026-03_Game_20260312T115710.slpz",
-   "id": "dolphin-ulp-motion-profile",
-   "owner": "fighter position and velocity float execution profile",
-   "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
-   "sources": [
-    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
-    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 2205,
-     "first_mismatch_frame": 2083,
-     "first_render_visibility_mismatch_frame": 892,
-     "frames": 12367,
-     "last_mismatch_frame": 2154,
-     "matched_frames": 12295,
-     "mismatch_count": 194,
-     "mismatch_fields_digest": "f981e6795f60e22838cff1829f83bbdf9b1a1c657aab089ba368413461a43e9f",
-     "mismatch_fingerprint": "66825bbe70a79048",
-     "mismatched_frames": 72,
-     "render_visibility_mismatch_count": 8,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 10090
-    }
-   }
-  },
-  {
    "replay": "replays/validation/marios/2026-07_Game_20260704T135409.slpz",
    "id": "dolphin-ulp-item-motion-profile",
    "owner": "item and fighter position float execution profile",
@@ -1684,19 +2058,44 @@
    ],
    "expected": {
     "native": {
-     "exact_prefix_frames": 5304,
-     "first_mismatch_frame": 5182,
-     "first_render_visibility_mismatch_frame": 6966,
      "frames": 10580,
-     "last_mismatch_frame": 7014,
-     "matched_frames": 9858,
-     "mismatch_count": 917,
-     "mismatch_fields_digest": "4833b99a989038fd4cef23f94210e3761d18db6d18789ed5542a9c09eeeab6f8",
-     "mismatch_fingerprint": "70fe89cf09470ea9",
-     "mismatched_frames": 722,
-     "render_visibility_mismatch_count": 2,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 3443
+     "matched_frames": 9929,
+     "mismatched_frames": 651,
+     "exact_prefix_frames": 5304,
+     "strict_suffix_frames": 4625,
+     "first_mismatch_frame": 5182,
+     "last_mismatch_frame": 5832,
+     "mismatch_count": 731,
+     "mismatch_fingerprint": "9b2010a6c56b7add",
+     "mismatch_fields": [
+      {
+       "field": "pos_x[0]",
+       "count": 651,
+       "first_frame": 5182,
+       "last_frame": 5832
+      },
+      {
+       "field": "pos_y[0]",
+       "count": 22,
+       "first_frame": 5248,
+       "last_frame": 5725
+      },
+      {
+       "field": "item.pos_x[0]",
+       "count": 56,
+       "first_frame": 5412,
+       "last_frame": 5467
+      },
+      {
+       "field": "item.pos_x[1]",
+       "count": 2,
+       "first_frame": 5424,
+       "last_frame": 5425
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
     }
    }
   },
@@ -1822,18 +2221,25 @@
    "expected": {
     "native": {
      "frames": 14429,
-     "matched_frames": 14347,
-     "mismatched_frames": 82,
+     "matched_frames": 14428,
+     "mismatched_frames": 1,
      "exact_prefix_frames": 7511,
-     "strict_suffix_frames": 5151,
+     "strict_suffix_frames": 6917,
      "first_mismatch_frame": 7389,
-     "last_mismatch_frame": 9155,
-     "mismatch_count": 223,
-     "mismatch_fingerprint": "f592145f35038247",
-     "render_visibility_mismatch_count": 1,
-     "first_render_visibility_mismatch_frame": 9125,
-     "signed_zero_equal_count": 0,
-     "mismatch_fields_digest": "fad66fb8d3a2312cca756a579270fa826c279e1d93d36517f1242bd2d3587cba"
+     "last_mismatch_frame": 7389,
+     "mismatch_count": 1,
+     "mismatch_fingerprint": "c5bc268949e4103f",
+     "mismatch_fields": [
+      {
+       "field": "pos_y[1]",
+       "count": 1,
+       "first_frame": 7389,
+       "last_frame": 7389
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
     }
    }
   },
@@ -2553,6 +2959,232 @@
        "count": 116,
        "first_frame": 1135,
        "last_frame": 2522
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/icies/bf-marth-2025-03_Game_20250321T234954.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over Ice Climbers article pointers and pool residue",
+   "rationale": "Every mismatched row is an item.misc lane on Ice Climbers articles (the entry ice block, mid-match ice blocks, and blizzard puffs): owner-pointer low bytes (misc0) and past-member console pool-reuse residue (misc1/misc2/misc3), unrecordable by re-simulation. All fighter, follower, physics, and item gameplay lanes are exact.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "frames": 7370,
+     "matched_frames": 7065,
+     "mismatched_frames": 305,
+     "exact_prefix_frames": 555,
+     "strict_suffix_frames": 838,
+     "first_mismatch_frame": 433,
+     "last_mismatch_frame": 6409,
+     "mismatch_count": 974,
+     "mismatch_fingerprint": "63abd56f23e3e65e",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[0]",
+       "count": 90,
+       "first_frame": 433,
+       "last_frame": 2512
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 264,
+       "first_frame": 433,
+       "last_frame": 6409
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 264,
+       "first_frame": 433,
+       "last_frame": 6409
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 128,
+       "first_frame": 654,
+       "last_frame": 6399
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 42,
+       "first_frame": 6029,
+       "last_frame": 6394
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 77,
+       "first_frame": 6029,
+       "last_frame": 6404
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 77,
+       "first_frame": 6029,
+       "last_frame": 6404
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 13,
+       "first_frame": 6039,
+       "last_frame": 6399
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 13,
+       "first_frame": 6039,
+       "last_frame": 6399
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 6,
+       "first_frame": 6044,
+       "last_frame": 6389
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/icies/medium-marth-2025-09_Game_20250919T221733.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over Ice Climbers article pointers and pool residue",
+   "rationale": "Every mismatched row is an item.misc lane on Ice Climbers articles (the entry ice block, mid-match ice blocks, and blizzard puffs): owner-pointer low bytes (misc0) and past-member console pool-reuse residue (misc1/misc2/misc3), unrecordable by re-simulation. All fighter, follower, physics, and item gameplay lanes are exact.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "frames": 14709,
+     "matched_frames": 14226,
+     "mismatched_frames": 483,
+     "exact_prefix_frames": 94,
+     "strict_suffix_frames": 2869,
+     "first_mismatch_frame": -28,
+     "last_mismatch_frame": 11717,
+     "mismatch_count": 1280,
+     "mismatch_fingerprint": "963a331e660221af",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[0]",
+       "count": 192,
+       "first_frame": -28,
+       "last_frame": 11691
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 24,
+       "first_frame": -22,
+       "last_frame": 8789
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 13,
+       "first_frame": 542,
+       "last_frame": 9167
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 30,
+       "first_frame": 542,
+       "last_frame": 11707
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 30,
+       "first_frame": 542,
+       "last_frame": 11707
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 50,
+       "first_frame": 543,
+       "last_frame": 9171
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 116,
+       "first_frame": 543,
+       "last_frame": 11712
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 116,
+       "first_frame": 543,
+       "last_frame": 11712
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 68,
+       "first_frame": 548,
+       "last_frame": 9172
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 288,
+       "first_frame": 548,
+       "last_frame": 11717
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 288,
+       "first_frame": 548,
+       "last_frame": 11717
+      },
+      {
+       "field": "item.misc0[2]",
+       "count": 5,
+       "first_frame": 8780,
+       "last_frame": 8784
+      },
+      {
+       "field": "item.misc1[3]",
+       "count": 10,
+       "first_frame": 9137,
+       "last_frame": 9166
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 19,
+       "first_frame": 9137,
+       "last_frame": 9171
+      },
+      {
+       "field": "item.misc3[3]",
+       "count": 19,
+       "first_frame": 9137,
+       "last_frame": 9171
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 5,
+       "first_frame": 9142,
+       "last_frame": 9167
+      },
+      {
+       "field": "item.misc3[4]",
+       "count": 5,
+       "first_frame": 9142,
+       "last_frame": 9167
+      },
+      {
+       "field": "item.misc1[4]",
+       "count": 2,
+       "first_frame": 9151,
+       "last_frame": 9162
       }
      ],
      "render_visibility_mismatch_count": 0,
