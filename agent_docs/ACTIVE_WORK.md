@@ -177,6 +177,21 @@ slice, and follower-frame validation.
   default; the correct silent config is `Backend = No Audio Output` + `Muted = True` +
   `Volume = 0` (fixed in the working copy; apply when tools/dolphin merges to a branch).
 
+- 2026-07-27 — `retained` (session 3 finale: PlCo CPU table translation, 76c44b50)
+  Scope: the B4AB0 instrument revealed the true owner of every remaining behavioral front:
+  Fighter_804D64FC_t declares its table members void**, so the DWARF-driven native layout
+  emitted POINTER->POINTER->VOID and the CPU attack tables/thresholds/scripts were copied as
+  raw big-endian bytes (probed entry cmd=0x02000000 = swapped 2). No CPU-driven fighter could
+  ever select an attack. Hand translator (native_dat.c translate_fighter_cpu_tables): per-kind
+  [33] pointer arrays of cmd-terminated 0x24-byte attack entries, float[33] thresholds,
+  float[6] weapon reach, and byte command scripts indexed by attack command id (count 64 — 39
+  segfaulted via xA4 ids 0x28/0x29; past-array slots read non-relocated -> NULL).
+  Evidence: prefixes gm-peach 747->9,966 (96% of the replay bit-exact), dl-fox 360->5,086,
+  bf-falco->4,798, master-fox 269->2,434, fod-sheik->3,333, ics-ditto->3,021; aggregate
+  183/63/0 unchanged. Remaining first-mismatch fronts are now dominated by the unrecordable
+  item.misc0/2/3 pointer/pool-residue bytes at each ice-block spawn (classification class),
+  plus fd-falco @346 (follower CliffWait pick) and the gm-peach @378 item-motion ULP family.
+
 - 2026-07-27 — `open` (dl-fox @238 root-cause narrowed to ftCo_800A2C80's long recovery ray)
   Scope: with the tick trace aligned (our t = slippi + 133 on dl-fox), our Nana's x18 path
   through her damage (~f210-236) is 1 -> 4 -> 10 -> 1 while retail lands in x18=2 (attack).
