@@ -114,6 +114,7 @@ def test_native_validation_compares_complete_classified_replays() -> None:
         "luigi.json",
         "marios.json",
         "samus.json",
+        "icies.json",
     ):
         _suite, loaded_cases = load_suite_cases(
             ROOT / "replays/suites" / suite_name,
@@ -130,7 +131,10 @@ def test_native_validation_compares_complete_classified_replays() -> None:
     outcomes, wall_seconds = run_cases(
         load_native(),
         cases,
-        workers=min(MAX_AUTO_WORKERS, len(cases)),
+        # Each native server maps the full replay set; sixteen workers
+        # OOM-kill in the 8 GB validation container now that the classified
+        # inventory spans nine characters.
+        workers=min(8, len(cases)),
         frames=0,
         start_frame=None,
         timeout=5.0,
