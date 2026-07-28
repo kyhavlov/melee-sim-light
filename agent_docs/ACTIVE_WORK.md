@@ -436,3 +436,29 @@ slice, and follower-frame validation.
   slice bounded inside NonMatching `ftCo_0A01.c` + `ftcpuattack.c`.
   Disposition: proceed with sequencing above; step-2 import is mechanical (all 11 chara/article
   TUs are Matching upstream).
+
+- 2026-07-28 — `retained` (FOD CONSTRUCTION RNG FIX, commit 4fa63d66; probes 3325a6f218)
+  The fod-sheik/auto-falco follower fronts traced to Nana's x1A88.x7C AI phase counter:
+  its init value is (int)(10*HSD_Randf()) drawn at fighter creation, and our FoD
+  construction stream sat two draws EARLY because the hosted grIzumi platform proc
+  early-returns to the Slippi height stream and never consumed retail's two creation-tick
+  HSD_Randi draws (grIzumi_801CC358 case 0 via rand_range; case 3 for below-ground
+  starts). Nana drew x7C=7 where retail drew 0; every x7C%N gate (x56C %600 follow-radius
+  redraw, x570 %30, DI %120) fired 7 ticks early, sampling different stream positions.
+  Fix: msl_grizumi_consume_replay_creation_draw at match construction post-OnInit, gated
+  on msl_slippi_fod_platform_height owning the creation publication; do NOT touch
+  xC4/xC6 (arming them at creation broke all 27 human Fountain aggregate replays through
+  mistimed platform self-motion — the machine still runs event-quiescent frames).
+  VERIFIED per-stage construction draw counts vs retail (Randf probe + first-A101C
+  chain distance): BF 1=1, DL 2=2, YS 1=1, FD 4=4 (grLast port), PS 1=1, FoD 2=2 after
+  fix. Retail x7C inits per replay are now reproduced exactly (fod: Popo 7, Nana 0,
+  Sheik 4, Zelda 0). fod-sheik 4,215 -> 5,077 matched; aggregate 183/63/0 green.
+  KEY RECIPES: (a) HSD_Randi INLINES the LCG (0x80380588) — a Randf-entry probe never
+  sees Randi draws; infer via chain distance. (b) CPUCore=0 in the probe user-dir
+  Dolphin.ini interprets the whole boot so construction draws (frame counter -124) hit
+  the interpreter probes without the EXI window. (c) Slippi ONLINE per-frame seeds are
+  synthesized (base + frame<<16) — construction draw-count divergence is erased per
+  frame, EXCEPT values that persist (A101C x7C, B9704 x34).
+  NEXT FRONT (fod-sheik @1248): follower_speed -0.725372 vs -0.726160 while mimicking
+  (stick 125 walking), NOT a /127 byte value on our side — ring/clamp interplay again;
+  ring probe run at frames 1240-1256 pending analysis.
