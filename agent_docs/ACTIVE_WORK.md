@@ -295,6 +295,22 @@ slice, and follower-frame validation.
   asm-diff that path. Everything else (episodes, classifications, locks, wiring) hangs off
   this one answer.
 
+- 2026-07-27 — `retained` (the write is the cascade hop; retail never reaches it at 3983)
+  The x18-write trace answered the pinned question: OUR 4->10 at the landing tick is the
+  ADE48 cascade final transition (A3554(fp,0) passing because ga publishes Ground at the
+  think while motion still lags in Fall, and the ADE48 head reset x54 to her own position,
+  making dist 0). The retail cascade probe shows NO A3554(0) call at 3983 — its first CALL
+  is 3984 — so retail's ADE48 exits BEFORE the transition cascade at exactly that tick,
+  while ours falls through. Remaining search space is tiny: ADE48's pre-transition early
+  exits at one tick — the x18==0x12 return, the x221A_b3 hitlag switch_cmd path
+  (B4A78 + x18=0x12), and the motion-keyed 0x125/0x154 -> x11/x13 branches. NEXT: either
+  sim-side log which ADE48 exit path runs at the landing tick for both x18 histories, or a
+  retail PC probe over ADE48's early-return addresses at 3983. Note the ga-vs-motion phase
+  at landing think (ga=Ground from the prio-6 map pass of the PREVIOUS frame while
+  motion_id still Fall) is what arms A3554 grounded gates one tick before the Landing
+  state exists — if retail's ADE48 exit at 3983 turns out to be hitlag/x221A_b3-keyed
+  (landing hitlag arming), that flag's landing semantics are the owner.
+
 - 2026-07-27 — `open` (dl-fox @238 root-cause narrowed to ftCo_800A2C80's long recovery ray)
   Scope: with the tick trace aligned (our t = slippi + 133 on dl-fox), our Nana's x18 path
   through her damage (~f210-236) is 1 -> 4 -> 10 -> 1 while retail lands in x18=2 (attack).
