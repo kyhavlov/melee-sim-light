@@ -3,6 +3,8 @@
 #include <placeholder.h>
 #include <platform.h>
 
+#include <MetroTRK/intrinsics.h>
+
 #include "baselib/random.h"
 #include "db/db.h"
 
@@ -86,7 +88,10 @@ void itClimbersBlizzard_802C2248(Item_GObj* gobj)
     attrs = GET_ATTRS(ip);
     rand = HSD_Randf();
     var_f2 = attrs->x10 - attrs->xC;
-    temp_f0 = (var_f2 * rand) + attrs->xC;
+    // GALE01 0x802C2290 folds the spread-angle lerp into one scalar-single
+    // fmadds. Separate rounding shifts the launch angle by a ULP, and the
+    // cos/sin velocity products land 2-6 ULPs off every blizzard puff spawn.
+    temp_f0 = __fmadds(var_f2, rand, attrs->xC);
     if (ip->facing_dir == 1.0f) {
         var_f2 = temp_f0;
     } else {
