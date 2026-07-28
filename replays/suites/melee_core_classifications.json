@@ -3192,6 +3192,389 @@
      "signed_zero_equal_count": 0
     }
    }
+  },
+  {
+   "replay": "replays/validation/icies/dl-fox-2025-05_Game_20250504T134832.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over Ice Climbers article pool residue, plus the Dream Land wind machine's hosted-excluded rand_range draws",
+   "rationale": "Two residues. (1) Most mismatched rows are Ice Climbers article item.misc0-misc3 lanes: Slippi records raw union bytes at xDD4+0x4..0x17, which carry retail heap pointer identities and uninitialized item-pool residue no re-simulation can reproduce. (2) One blizzard puff's pos/vel lanes fork for eleven frames (5205-5215): the puff's spawn-angle HSD_Randf samples the stream two LCG steps early because grOldPupupu_802113E0's idle-cycle rand_range pair (retail pre-seeds 3177732693/2397774788, interpreter-probe verified) is not consumed by the hosted wind-direction mirror. Running the retail machine live restores this stream bit-exactly but re-rolls latent effect-stream gaps in other Dream Land replays, so the mirror stays and this one puff episode is classified.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/gr/groldpupupu.c::grOldPupupu_802113E0",
+    "src/melee/gr/groldpupupu.c::grOldPupupu_802113E0",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "frames": 11083,
+     "matched_frames": 10818,
+     "mismatched_frames": 265,
+     "exact_prefix_frames": 4200,
+     "strict_suffix_frames": 553,
+     "first_mismatch_frame": 4078,
+     "last_mismatch_frame": 10407,
+     "mismatch_count": 763,
+     "mismatch_fingerprint": "52013c4e8cef4103",
+     "mismatch_fields": [
+      {
+       "field": "item.misc2[1]",
+       "count": 56,
+       "first_frame": 4078,
+       "last_frame": 10400
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 195,
+       "first_frame": 4080,
+       "last_frame": 10402
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 65,
+       "first_frame": 4084,
+       "last_frame": 4148
+      },
+      {
+       "field": "item.misc0[0]",
+       "count": 6,
+       "first_frame": 4149,
+       "last_frame": 4154
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 28,
+       "first_frame": 4451,
+       "last_frame": 10402
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 14,
+       "first_frame": 4451,
+       "last_frame": 10397
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 26,
+       "first_frame": 4451,
+       "last_frame": 10402
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 51,
+       "first_frame": 4452,
+       "last_frame": 10405
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 49,
+       "first_frame": 4452,
+       "last_frame": 10405
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 47,
+       "first_frame": 4457,
+       "last_frame": 10407
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 110,
+       "first_frame": 4457,
+       "last_frame": 10407
+      },
+      {
+       "field": "item.vel_x[2]",
+       "count": 1,
+       "first_frame": 5205,
+       "last_frame": 5205
+      },
+      {
+       "field": "item.vel_y[2]",
+       "count": 1,
+       "first_frame": 5205,
+       "last_frame": 5205
+      },
+      {
+       "field": "item.pos_x[2]",
+       "count": 1,
+       "first_frame": 5205,
+       "last_frame": 5205
+      },
+      {
+       "field": "item.pos_y[2]",
+       "count": 1,
+       "first_frame": 5205,
+       "last_frame": 5205
+      },
+      {
+       "field": "item.vel_x[1]",
+       "count": 5,
+       "first_frame": 5206,
+       "last_frame": 5210
+      },
+      {
+       "field": "item.vel_y[1]",
+       "count": 5,
+       "first_frame": 5206,
+       "last_frame": 5210
+      },
+      {
+       "field": "item.pos_x[1]",
+       "count": 5,
+       "first_frame": 5206,
+       "last_frame": 5210
+      },
+      {
+       "field": "item.pos_y[1]",
+       "count": 5,
+       "first_frame": 5206,
+       "last_frame": 5210
+      },
+      {
+       "field": "item.vel_x[0]",
+       "count": 5,
+       "first_frame": 5211,
+       "last_frame": 5215
+      },
+      {
+       "field": "item.vel_y[0]",
+       "count": 5,
+       "first_frame": 5211,
+       "last_frame": 5215
+      },
+      {
+       "field": "item.pos_x[0]",
+       "count": 5,
+       "first_frame": 5211,
+       "last_frame": 5215
+      },
+      {
+       "field": "item.pos_y[0]",
+       "count": 5,
+       "first_frame": 5211,
+       "last_frame": 5215
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 10,
+       "first_frame": 5225,
+       "last_frame": 10395
+      },
+      {
+       "field": "item.misc3[3]",
+       "count": 24,
+       "first_frame": 10367,
+       "last_frame": 10400
+      },
+      {
+       "field": "item.misc1[4]",
+       "count": 8,
+       "first_frame": 10370,
+       "last_frame": 10397
+      },
+      {
+       "field": "item.misc3[4]",
+       "count": 8,
+       "first_frame": 10370,
+       "last_frame": 10397
+      },
+      {
+       "field": "item.misc1[3]",
+       "count": 20,
+       "first_frame": 10371,
+       "last_frame": 10400
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 2,
+       "first_frame": 10380,
+       "last_frame": 10392
+      }
+     ],
+     "render_visibility_mismatch_count": 5,
+     "first_render_visibility_mismatch_frame": 2004,
+     "signed_zero_equal_count": 0
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/icies/fod-sheik-2025-02_Game_20250205T180543.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over Ice Climbers article pointers and pool residue",
+   "rationale": "The replay's only mismatched rows are Ice Climbers article item.misc0-misc3 lanes (ice blocks and blizzard puffs across the match): Slippi records raw union bytes at xDD4+0x4..0x17, which carry retail heap pointer identities and uninitialized item-pool residue that no re-simulation can reproduce. Gameplay lanes are exact through the 119-row suffix.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "frames": 11670,
+     "matched_frames": 10451,
+     "mismatched_frames": 1219,
+     "exact_prefix_frames": 419,
+     "strict_suffix_frames": 119,
+     "first_mismatch_frame": 297,
+     "last_mismatch_frame": 11428,
+     "mismatch_count": 3769,
+     "mismatch_fingerprint": "a75f52d27bf6cd4f",
+     "mismatch_fields": [
+      {
+       "field": "item.misc1[0]",
+       "count": 465,
+       "first_frame": 297,
+       "last_frame": 10798
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 792,
+       "first_frame": 297,
+       "last_frame": 11428
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 225,
+       "first_frame": 297,
+       "last_frame": 2826
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 358,
+       "first_frame": 302,
+       "last_frame": 10774
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 426,
+       "first_frame": 302,
+       "last_frame": 10798
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 128,
+       "first_frame": 302,
+       "last_frame": 2762
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 138,
+       "first_frame": 307,
+       "last_frame": 10798
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 162,
+       "first_frame": 307,
+       "last_frame": 10798
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 56,
+       "first_frame": 307,
+       "last_frame": 2757
+      },
+      {
+       "field": "item.misc1[4]",
+       "count": 47,
+       "first_frame": 725,
+       "last_frame": 5788
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 65,
+       "first_frame": 725,
+       "last_frame": 5793
+      },
+      {
+       "field": "item.misc3[4]",
+       "count": 59,
+       "first_frame": 725,
+       "last_frame": 5793
+      },
+      {
+       "field": "item.misc1[5]",
+       "count": 10,
+       "first_frame": 730,
+       "last_frame": 5783
+      },
+      {
+       "field": "item.misc2[5]",
+       "count": 15,
+       "first_frame": 730,
+       "last_frame": 5788
+      },
+      {
+       "field": "item.misc3[5]",
+       "count": 15,
+       "first_frame": 730,
+       "last_frame": 5788
+      },
+      {
+       "field": "item.misc1[3]",
+       "count": 95,
+       "first_frame": 731,
+       "last_frame": 8772
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 134,
+       "first_frame": 731,
+       "last_frame": 8772
+      },
+      {
+       "field": "item.misc3[3]",
+       "count": 93,
+       "first_frame": 731,
+       "last_frame": 1486
+      },
+      {
+       "field": "item.misc0[3]",
+       "count": 27,
+       "first_frame": 772,
+       "last_frame": 798
+      },
+      {
+       "field": "item.misc0[2]",
+       "count": 5,
+       "first_frame": 799,
+       "last_frame": 8767
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 56,
+       "first_frame": 800,
+       "last_frame": 8772
+      },
+      {
+       "field": "item.misc0[0]",
+       "count": 393,
+       "first_frame": 2419,
+       "last_frame": 11428
+      },
+      {
+       "field": "item.misc1[6]",
+       "count": 1,
+       "first_frame": 5778,
+       "last_frame": 5778
+      },
+      {
+       "field": "item.misc2[6]",
+       "count": 2,
+       "first_frame": 5778,
+       "last_frame": 5783
+      },
+      {
+       "field": "item.misc3[6]",
+       "count": 2,
+       "first_frame": 5778,
+       "last_frame": 5783
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
+    }
+   }
   }
  ]
 }

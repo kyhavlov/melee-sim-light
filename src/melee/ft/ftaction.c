@@ -1165,13 +1165,25 @@ void ftAction_80072CB0(Fighter_GObj* gobj, CommandInfo* cmd)
     NEXT_CMD(cmd);
 }
 
+/// Store one synthesized script word in authored (big-endian) byte order so
+/// both the GCC scalar_storage_order views and the DWARF-derived accessors
+/// read it back exactly; on the PPC build this is a plain word store.
+static void ftAction_StoreCmdWord(union CmdUnion* record, u32 value)
+{
+    u8* bytes = (u8*) record;
+    bytes[0] = (u8) (value >> 24);
+    bytes[1] = (u8) (value >> 16);
+    bytes[2] = (u8) (value >> 8);
+    bytes[3] = (u8) value;
+}
+
 void ftAction_80072CD8(Fighter_GObj* gobj, CommandInfo* cmd)
 {
     int sp64;
     int sp60;
     int gfx_id;
     CommandInfo _cmd;
-    u32 cmd_words[3];
+    union CmdUnion cmd_words[3];
     Vec3 offset;
     Vec3 range;
     u32 part;
@@ -1183,10 +1195,18 @@ void ftAction_80072CD8(Fighter_GObj* gobj, CommandInfo* cmd)
 
     if (ft_80084BFC(gobj, &sp64, &sp60, &gfx_id) != false) {
         if (sp64 != -1) {
-            _cmd.u = (union CmdUnion*) cmd_words;
-            cmd_words[0] = *(u32*) cmd->u;
-            cmd_words[1] = sp64;
-            cmd_words[2] = *(u32*) ((u8*) cmd->u + 8);
+            // The synthesized command must use CmdUnion stream stride and
+            // authored byte order: ftAction_80071B50 steps one CmdUnion per
+            // word and reads big-endian fields, and native CmdUnion records
+            // are widened for Subroutine/Goto pointers (source word k lives
+            // in record k). The retail source's packed u32[3] copy reads the
+            // computed sfx one word early there.
+            // refs/melee/src/melee/ft/ftaction.c::ftAction_80072CD8
+            _cmd.u = cmd_words;
+            memcpy(&cmd_words[0], cmd->u, sizeof(u32));
+            ftAction_StoreCmdWord(&cmd_words[1], (u32) sp64);
+            memcpy(&cmd_words[2],
+                   (u8*) cmd->u + 2 * sizeof(union CmdUnion), sizeof(u32));
             ftAction_80071B50(gobj, &_cmd);
         }
 
@@ -1228,7 +1248,7 @@ void ftAction_80072E4C(Fighter_GObj* gobj, CommandInfo* cmd)
     int sp60;
     int gfx_id;
     CommandInfo _cmd;
-    u32 cmd_words[3];
+    union CmdUnion cmd_words[3];
     Vec3 offset;
     Vec3 range;
     Fighter* fp;
@@ -1243,10 +1263,13 @@ void ftAction_80072E4C(Fighter_GObj* gobj, CommandInfo* cmd)
     if ((ft_80084C38(gobj, &sp64, &sp60, &gfx_id) != false) &&
         (cmd_flag == 0) && (sp64 != -1))
     {
-        _cmd.u = (union CmdUnion*) cmd_words;
-        cmd_words[0] = *(u32*) cmd->u;
-        cmd_words[1] = sp64;
-        cmd_words[2] = ((u32*) cmd->u)[2];
+        // Same CmdUnion stride/byte-order translation as ftAction_80072CD8.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80072E4C
+        _cmd.u = cmd_words;
+        memcpy(&cmd_words[0], cmd->u, sizeof(u32));
+        ftAction_StoreCmdWord(&cmd_words[1], (u32) sp64);
+        memcpy(&cmd_words[2],
+               (u8*) cmd->u + 2 * sizeof(union CmdUnion), sizeof(u32));
         ftAction_80071B50(gobj, &_cmd);
     }
 
