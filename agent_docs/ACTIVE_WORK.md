@@ -530,3 +530,19 @@ slice, and follower-frame validation.
   38..62, 60..70, 200..210, 400..410, 600..610) + our_tail.txt (post-whispy-fix).
   A giant interpreter window (-123..990) STALLS playback at -123 — sample 10-frame
   windows instead.
+
+- 2026-07-28 — `open` (tail fork: SOLVER INPUTS EXONERATED). The dl-fox validator-52
+  one-tick fork: retail MaybeCaptureTailProbe (extended: arg1/ncol/collider dump,
+  slippi-dolphin committed) vs sim DD94IN trace shows arg1 (x2228_b1, constant 0) and
+  the x1670 collider list (ncol=1, world pos + radius) BIT-IDENTICAL at every tick 44-56
+  including the fork. The divergence is inside the tail chain state itself. CAVEAT: the
+  capsule comparisons carry a sampling skew at the hitlag boundary (retail probe reads
+  capsule 12 at DD94 ENTRY = pre-tick; our HB trace exports post-frame), so the "equal
+  at 51, 0.05 apart at 52" reading may be one tick off. NEXT: dump the CHAIN STATE
+  per-link (DynamicsData jobj rotate quats + desc.lb_unk0.unk_58/unk_2C) at DD94 entry
+  BOTH sides for validator 46-53 and find the first diverging link+field; then audit
+  that op (msl_dynamics_build_basis / transform helpers vs Gekko paired-single PSMTX).
+  PROBE QUIRK (reproduced twice): a tail-probe window 44..56 yields ZERO rows while
+  38..62 works — start windows earlier/wider. Sim traces: MSL_DD94_TRACE=<path> now
+  dumps DD94IN inputs (ftdynamics.c container-only; needs the msl_emitter_trace helper
+  in scalar.c container copy + stdio includes).
