@@ -235,6 +235,19 @@ slice, and follower-frame validation.
   self-vel/decel inputs. gm-peach anchors: our tick t = slippi + 128 for the FIRST Nana
   lifetime; x7C resets on her respawn (filter traces by position, not t, across lifetimes).
 
+- 2026-07-27 — `retained` (cascade-input bit-verification; episode isolated to script cadence)
+  A paired probe of the ADE48 cascade's ftCo_800A3554(fp, 0) call (new kCascadeSafeCall PC
+  0x800AE768 retail-side; msl_casc_trace sim-side) shows at gm-peach tick 3987 the AI inputs
+  are BIT-IDENTICAL across sims: x54x 0x41321AB4, and x38 0x40C9B274 — i.e. the hosted
+  hurt-capsule extents publication (59b0af15) is bit-exact against retail, and targets/x60
+  match. The only difference is the post-3986 position itself: retail's walk script fired at
+  tick 3986 (ring probe: ls -127 set during 3986 -> dash during 3986), ours at 3987. With
+  identical state at every sampled tick, the残 divergence is the EXPIRY TICK of the recovery
+  script chain built during her damage/air phase (csP/command_duration cadence) — one more
+  probe layer: log ftCo_800B49F4 script-finalize ticks + durations on both sides across the
+  recovery (~3950-3987) and find the first build tick that differs, then asm-diff that
+  handler. All three residual behavioral episodes are this same cadence class.
+
 - 2026-07-27 — `open` (dl-fox @238 root-cause narrowed to ftCo_800A2C80's long recovery ray)
   Scope: with the tick trace aligned (our t = slippi + 133 on dl-fox), our Nana's x18 path
   through her damage (~f210-236) is 1 -> 4 -> 10 -> 1 while retail lands in x18=2 (attack).
