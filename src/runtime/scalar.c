@@ -1422,6 +1422,34 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
                    sizeof(word));
             return (uint8_t) word;
         }
+    } else if (item->kind == It_Kind_IceClimber_Ice) {
+        // Retail layout: +0 Item_GObj* x0 (owner), +4 f32 x4 (scale),
+        // +8 flag bits. Offset 3 samples the owner pointer's low byte and
+        // offset 7 the live scale; 0x17/0x1B fall in pool residue past the
+        // declared members.
+        if (source_offset == 3) {
+            return (uint8_t) (uintptr_t) item->xDD4_itemVar.climbersice.x0;
+        }
+        if (source_offset == 7) {
+            memcpy(&word, &item->xDD4_itemVar.climbersice.x4, sizeof(word));
+            return (uint8_t) word;
+        }
+        if (source_offset == 0x17 || source_offset == 0x1B) {
+            return 0;
+        }
+    } else if (item->kind == It_Kind_IceClimber_GumStrings) {
+        // Retail layout: +0 f32 x0, +4/+8 ItemLink*, +C HSD_GObj*, +14
+        // HSD_JObj*. Offsets 7 and 0x17 sample the x4 link and x14 joint
+        // pointer low bytes; 0x1B is past the declared members.
+        if (source_offset == 7) {
+            return (uint8_t) (uintptr_t) item->xDD4_itemVar.climbersstring.x4;
+        }
+        if (source_offset == 0x17) {
+            return (uint8_t) (uintptr_t) item->xDD4_itemVar.climbersstring.x14;
+        }
+        if (source_offset == 0x1B) {
+            return 0;
+        }
     }
 
     // Slippi exports bytes from the retail big-endian item-variable union.

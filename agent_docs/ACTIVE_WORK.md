@@ -108,6 +108,36 @@ slice, and follower-frame validation.
   (192/0 vs 64/255 @-27 bf-falco), 1-ULP Nana pos_x @98 fd-falco (fusion site), a crouch-mimic
   action pick @26 bf-falco.
 
+- 2026-07-27 — `retained` (session 3: three source fixes, rollback boundary identified)
+  Scope: (1) ftCo_800ADE48 upstream decomp had the blast-zone bounds branch INVERTED against
+  GALE01 asm (800ADF50: beq skips the reset for found in-bounds targets; the C reset them) —
+  every valid CPU navigation target was clobbered to self-floor, which kept Nana inert during
+  the entry fall (retail general-CPU steers her toward Popo's floor position with
+  LstickXTowardDestination 0x7F from frame -123 until mimic engages at landing). The sibling
+  bounds-check sites (A3908 ×3, A4038 ×3, A648C, B33B0, A21FC, A8210, AE7AC, inlineD0s) were
+  swept against asm and are faithful. (2) ftCo_800B0AF4's x2225_b3 mimic position lerp is a PPC
+  fmadd (0.05*ring rounded once, then fused 0.95*cur + t before frsp); the C's two rounded
+  products drifted 1 ulp — the whole follower_pos_x 1-ULP family. Fixed with __builtin_fma per
+  the lbcollision.c precedent. (3) item_var_source_byte gained native pointer-widening cases for
+  It_Kind_IceClimber_Ice (offset 3 = owner GObj low byte, 7 = live scale f32) and GumStrings
+  (7/0x17 = link/joint pointer low bytes); 0x1B and ice 0x17 are pool residue.
+  Evidence: container icies first-mismatch fronts moved from -39/-27-class to per-replay
+  engage-adjacent fronts; e.g. ys-fox prefix 261→4,258, gm-peach first -39→378 (item.vel ULP),
+  medium-sheik 1,416→316 (engage-front reshuffle). Aggregate re-verified vacuous.
+  Boundary finding: the residual follower fronts are one-frame stick skews at mimic
+  engage/disengage boundaries where the recorded Nana pre-joystick is a ring slot one NEWER or
+  one OLDER than the (asm-verified) cursor arithmetic can produce from the finalized Popo rows
+  (bf-marth @12 = popo@7 under steady d6; ics-ditto @187 = a -125 flick-transit sample where the
+  straight-line ring holds -128; both directions occur). Every candidate mechanism (ring cursor
+  code, B101C/B2AFC/B3900 call orders, UCF gecko rewrite timing vs the 0x8006B0E0 record hook,
+  A17E4 quantizer) was verified against asm/refs and eliminated: the recordings are netplay
+  rollback captures, and Nana's mimic ring is the first supported state whose content depends on
+  input ARRIVAL timing, which straight-line re-simulation of finalized rows cannot reproduce.
+  Disposition: treat engage-boundary skews as per-replay classifications (rollback-recording
+  owner) unless a Dolphin playback probe shows Slippi playback itself reproduces the recorded
+  follower rows; remaining fixable fronts are the ice-block item-motion ULP family (gm-peach
+  @378) and the fod-sheik @297 item stream.
+
 - 2026-07-27 — `open`
   Scope: surveys complete (decomp map + sim architecture map, two Explore agents).
   Evidence: dual-entity player machinery already compiled in and inert; CPU predicate stubbed

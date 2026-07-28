@@ -6151,6 +6151,10 @@ void ftCo_800ADE48(Fighter* fp)
     if (found != 0) {
         px = data->x54.x;
         py = data->x54.y;
+        // The upstream C for this branch is inverted against the GALE01 asm
+        // (800ADF50: beq .L_800AE01C skips the reset when the target floor
+        // is inside the blast-zone margin; the out-of-bounds case falls
+        // through into .L_800ADF58). Keep found in-bounds targets.
         if (px < data->half_width + Stage_GetBlastZoneLeftOffset() ||
             px > Stage_GetBlastZoneRightOffset() - data->half_width ||
             py < data->half_height + Stage_GetBlastZoneBottomOffset() ||
@@ -6160,7 +6164,7 @@ void ftCo_800ADE48(Fighter* fp)
         } else {
             in_bounds = 1;
         }
-        if (in_bounds != 0) {
+        if (in_bounds == 0) {
             goto block_12;
         }
     } else {
@@ -7680,10 +7684,13 @@ void ftCo_800B0AF4(Fighter* fp)
         data->ltrigger = data->x448->x4;
         data->rtrigger = data->x448->x5;
         if (fp->x2225_b3) {
-            fp->cur_pos.x =
-                0.95 * fp->cur_pos.x + 0.05 * data->x448->cur_pos.x;
-            fp->cur_pos.y =
-                0.95 * fp->cur_pos.y + 0.05 * data->x448->cur_pos.y;
+            // 800B0C34: fmul rounds 0.05*recorded once, then a single fmadd
+            // fuses 0.95*cur with that product before frsp. Two rounded
+            // products plus an add drifts 1 ulp against retail.
+            fp->cur_pos.x = (f32) __builtin_fma(
+                0.95, (f64) fp->cur_pos.x, 0.05 * (f64) data->x448->cur_pos.x);
+            fp->cur_pos.y = (f32) __builtin_fma(
+                0.95, (f64) fp->cur_pos.y, 0.05 * (f64) data->x448->cur_pos.y);
             if (fp->motion_id != ftPp_MS_SpecialLw &&
                 fp->motion_id != ftPp_MS_SpecialAirLw)
             {
