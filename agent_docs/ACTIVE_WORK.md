@@ -212,6 +212,17 @@ slice, and follower-frame validation.
   of one-frame/1-ULP episodes per replay; classification authoring for (a)+(c) plus episode
   attribution for (b) is the remaining path to flipping the suite to CLASSIFIED.
 
+- 2026-07-27 — `open` (gm-peach @3986 attributed to a disengaged general-CPU dash pick)
+  Probe: retail Nana disengages at 3983 (xFA mim bit clear; ring slot +127 IGNORED) and the
+  general CPU emits a full -127 stick at 3986 -> dash-left at 3987 (ground -1.4); ours emits
+  a partial steering stick (~-45, -0.3545 momentum) -> walk. Same class as ics-ditto @1068
+  and medium-sheik @210: the disengaged-CPU state/script pick differs for one frame. These
+  three episodes (plus ys-fox @5572 scale-byte ULP and the item misc/motion classification
+  classes) are the entire remaining icies distance. Next iteration: our-side x18/script trace
+  at gm-peach 3975-3990 vs the retail x18 evolution (extend the ring probe with the ADE48
+  cascade returns already wired for ACD5C) to find which state handler picks the full-stick
+  dash command in retail.
+
 - 2026-07-27 — `open` (dl-fox @238 root-cause narrowed to ftCo_800A2C80's long recovery ray)
   Scope: with the tick trace aligned (our t = slippi + 133 on dl-fox), our Nana's x18 path
   through her damage (~f210-236) is 1 -> 4 -> 10 -> 1 while retail lands in x18=2 (attack).
