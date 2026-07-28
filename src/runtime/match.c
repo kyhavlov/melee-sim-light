@@ -301,6 +301,20 @@ void msl_ucf_apply_dashback(Fighter* fp)
     if (msl_ucf_check_xsmash(fp)) {
         fp->mv.co.turn.has_turned = 1;
         fp->mv.co.turn.just_turned = 1;
+        // The gecko then retroactively writes the dashback into the paired
+        // sub-character's mimic ring at the freshest slot so Nana dashes
+        // back with Popo five frames later (the slot otherwise carries the
+        // flick-transit stick sample and she tilt-turns instead).
+        // refs/ucf/src/dashback/dashback.cpp::gecko_entry
+        {
+            HSD_GObj* sub_gobj = Player_GetEntityAtIndex(fp->player_id, 1);
+            if (sub_gobj != NULL) {
+                Fighter* sub_fp = GET_FIGHTER(sub_gobj);
+                sub_fp->x1A88.x444->facing_dir = fp->facing_dir;
+                sub_fp->x1A88.x444->lstickX =
+                    (u8) (127 + (fp->facing_dir < 0.0F ? 1 : 0));
+            }
+        }
     }
 }
 
