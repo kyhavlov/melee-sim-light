@@ -493,3 +493,40 @@ slice, and follower-frame validation.
   bits at export) and MSL_HB_TRACE_* (fighter hit capsules x4C/x58 + hurt capsule a/b
   positions at export) in /work/src/runtime/scalar.c; validate_replay.py detail rows
   widened to 14 in the container copy.
+
+- 2026-07-28 — `open` (WHISPY WIND MACHINE — dl-fox 5,086 -> 10,818, UNCOMMITTED: aggregate
+  gate blocked). Root cause of the dl-fox tail divergence: hosted grOldPupupu_802113E0
+  SHORT-CIRCUITED Whispy's whole machine to the replay xDC direction (the FoD-platform
+  lesson one level up), so the blow loop's wind force emitters (lb_80011A50 every 10
+  ticks while blowing, first at f~754 on dl-fox) never spawned and NO fighter tail/body
+  dynamics chain ever felt wind. Sim-side proof: msl_emitter_trace (container-only, in
+  lbspdisplay.c lb_80011A50/lb_800119DC + scalar.c helper) logged ZERO emitters pre-fix,
+  243 post-fix. Fix in working tree (Mac+container, uncommitted): delete the hosted
+  early-return; the retail machine runs (its rand_range draws are prio-4 post-think =
+  reseed-erased; DL construction counts already matched), and apply_replay_stage_events
+  still republishes recorded xDC pre-frame for wind-push consumers.
+  RESULTS: dl-fox 10,818/11,083 (the 5082 tail usmash now connects); icies otherwise
+  unchanged. AGGREGATE: 164/54/28 — 22/28 fails are LOCK-DRIFT ONLY (mismatch_rows=0,
+  tails are in the locked output; locks need re-recording once green) + 6 REAL row fails
+  (puff Game_20260602 8,613 rows; luigi medium-fox 2,022; marth Goshawk 1,766 +
+  QuestionableHarmfulPanther 74; marios plat-marth 72; marios medium-fox-2025-12 ONE
+  row) — knife-edge marginal outcomes flipped because wind-blown dynamics are close but
+  not bit-exact yet.
+  THE REMAINING ULP CLASS (pre-wind, reproducible): dl-fox tail bit-exact through frame
+  46, then Fox's hit/hitlag (47-50, both sims' DD94 correctly skip — cadence verified
+  identical via MSL_DD94_TRACE vs the retail MaybeCaptureTailProbe rows) — capsules
+  bit-equal again at 51 — then ONE dynamics tick at 52 forks 0.05 (~100 ULPs). Suspect:
+  the hitlag/damage SHAKE displacement feeding the dynamics origins/colliders at the
+  resume tick (hosted may skip the model vibrate as visual-only), or the colliders
+  (&fp->x1670, ftColl_8007AF60) / x2228_b1 arg at 52. NEXT: dump solver inputs at
+  validator 51-52 both sides (parent_mtx origin, colliders, arg1, ret_B0) — the
+  MaybeCaptureTailProbe (slippi-dolphin, PC 0x8009DD94 entry, port==1 1-BASED) plus a
+  matching sim trace. Transients DAMP when quiet (exact at 200-210 & 38-46; 0.61@400
+  after shine, 0.23@600) — fix the per-event seed, chaos disappears.
+  TOOLING NOTES: retail probe rows appear only when DD94 runs (hitlag gaps are DATA);
+  probe frame == validator frame here; our export HB/HU rows are end-of-frame; sim
+  frame_id in traces = validator frame - 1 (DD94 trace f=35..45 == validator 36..46).
+  Retail per-frame tail baselines saved: job tmp 164f8743/tail_*.jsonl (windows -20..-10,
+  38..62, 60..70, 200..210, 400..410, 600..610) + our_tail.txt (post-whispy-fix).
+  A giant interpreter window (-123..990) STALLS playback at -123 — sample 10-frame
+  windows instead.
