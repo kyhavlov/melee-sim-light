@@ -138,6 +138,30 @@ slice, and follower-frame validation.
   follower rows; remaining fixable fronts are the ice-block item-motion ULP family (gm-peach
   @378) and the fod-sheik @297 item stream.
 
+- 2026-07-27 — `retained` (session 3 continued: UCF follower retro-write, probe loop established)
+  Scope: the bf-marth @12 engage-front was NOT a rollback artifact. A new Dolphin interpreter
+  probe (slippi-dolphin engine-dump branch, MSL_NANA_RING_PROBE_*: logs the B0918 capture call
+  and the B0AF4 playback exit with ring cursors and slot content) showed the slot recorded at
+  slippi 6 with the -86 flick-transit sample being read back at slippi 12 as -128: UCF's
+  dashback gecko (refs/ucf/src/dashback/dashback.cpp, Interrupt_AS_Turn+0x4C) retroactively
+  rewrites the paired sub-character's freshest mimic-ring slot (full-deflection stick + new
+  facing) when the leader's dashback converts. Ported into msl_ucf_apply_dashback (8a191e85);
+  bf-marth prefix 134→179. Probe frame anchor: probe/dump frame N = slippi N; sim tick trace
+  t = slippi + 132; ring capture is one frame stale (prio-2 think before prio-3 input
+  processing), steady playback delay is 6 frames.
+  Boundary of the next front (ys-fox @14, medium-sheik @194, bf-falco @71 class): retail Nana
+  sits DISENGAGED in general-CPU state x18=10 emitting stick 0 while Popo airdodges (probe
+  shows xFA mim bit clear, x18=10 constant); our sim demotes x18 10→1 at the frame Popo's
+  stick returns to neutral and then walks toward the surviving x54 target (ftCo_800ACD5C's
+  early branches differ). Islands are live natively (probe: non-NULL island, A2718=0) and x54
+  correctly tracks Popo's airdodge floor in both. Suspect surface: the scene-keyed hosted
+  mirrors consulted by ACD5C/ADE48 — gm_8016C75C standings-cache value at match start (x88/x8C
+  timer arming) and gm_801A4310 major-scene id vs 0x1C — plus ftCo_800A21FC/A3554 gates.
+  Next: probe gm_8016C75C/gm_801A4310 returns retail-side during the ys-fox window, align the
+  hosted mirrors, then reassess which residual fronts remain for classification (item misc0
+  pointer bytes, misc2/3 pool residue, item-motion ULP family per the dolphin-profile
+  precedent).
+
 - 2026-07-27 — `open`
   Scope: surveys complete (decomp map + sim architecture map, two Explore agents).
   Evidence: dual-entity player machinery already compiled in and inert; CPU predicate stubbed
