@@ -248,6 +248,24 @@ slice, and follower-frame validation.
   recovery (~3950-3987) and find the first build tick that differs, then asm-diff that
   handler. All three residual behavioral episodes are this same cadence class.
 
+- 2026-07-27 — `retained` (script-cadence layer probed; episodes converge on A2C80 recovery entry)
+  The kScriptFinalize probe (0x800B49F4, logs per-build frame/x18/buffer bytes) shows retail
+  building a state-4 recovery script EVERY air frame 3945-3982, demoting to x18=1 at the 3983
+  landing, and building the state-1 AA42C walk script at 3984: SetLstickY 0; 
+  LstickXTowardDestination 0; WaitFor 2; LstickXTowardDestination 0x7F; Done - the WaitFor 2
+  lands the full -127 exactly at 3986. Ours builds the same script one frame later (3985)
+  because our x18 was 10 (not 4) through the recovery: our sim never entered the A2C80
+  recovery state for THIS knockback while retail did (the dl-fox episode was the same gate
+  agreeing; here it disagrees). All three residual behavioral episodes therefore converge on
+  ftCo_800A2C80's per-knockback evaluation during the air phase - its inputs are the
+  xFA_b5 in-bounds flag (B33B0's own bounds chain over the floor probe), the fall-angle
+  lb_8000D008 gate, and the long recovery ray. Next: probe A2C80's ENTRY inputs (pos_delta,
+  xFA_b5, the ray result) retail-side across the air phase (kA2c80Entry already logs dx/dy/
+  xfa; add the mpCheckFloor ray result PC) and mirror sim-side; the first differing input
+  identifies the owner (suspect: xFA_b5 phase, since B33B0's bounds chain runs every tick
+  and its in_bounds -> xFA_b5 store was asm-verified but its mpCheckFloor probe inputs
+  depend on cur_pos while airborne).
+
 - 2026-07-27 — `open` (dl-fox @238 root-cause narrowed to ftCo_800A2C80's long recovery ray)
   Scope: with the tick trace aligned (our t = slippi + 133 on dl-fox), our Nana's x18 path
   through her damage (~f210-236) is 1 -> 4 -> 10 -> 1 while retail lands in x18=2 (attack).
