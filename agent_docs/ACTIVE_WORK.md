@@ -162,8 +162,36 @@ slice, and follower-frame validation.
   pointer bytes, misc2/3 pool residue, item-motion ULP family per the dolphin-profile
   precedent).
 
-- 2026-07-27 — `open`
-  Scope: surveys complete (decomp map + sim architecture map, two Explore agents).
+- 2026-07-27 — `retained` (session 3 continued: CPU size-field publication)
+  Scope: the state-10 front's root cause was NOT the scene mirrors: the retail probe showed
+  ftCo_800A3554 passing with x38 ~= 8.9 (breathing per frame) against our 2.0. x38 comes from
+  the partner's x1A88.x564 hurt-capsule half-span, published every frame by ftCo_800A0DA4 in
+  retail; the hosted build had substituted the dynamics-only capsule publication and never
+  wrote x55C/x560/x564/x568 (dead state before Nana). Fixed in 59b0af15: run the full retail
+  publication whenever a CPU-input fighter exists (msl_fighter_cpu_input_live), keep the cheap
+  path for human-only matches. Container icies prefixes moved dramatically: ys-fox 269 -> 5,694,
+  bf-marth 179 -> 6,489, auto-falco 256 -> 5,731, medium-sheik 316 -> 2,643, ics-ditto
+  309 -> 2,269; master-fox unchanged (@147 damage-exit family).
+  Tooling note (user-reported): the extracted probe driver's `[DSP] Backend = NullSound` is an
+  invalid backend name in the engine-dump Dolphin and silently falls back to the audible
+  default; the correct silent config is `Backend = No Audio Output` + `Muted = True` +
+  `Volume = 0` (fixed in the working copy; apply when tools/dolphin merges to a branch).
+
+- 2026-07-27 — `open` (dl-fox @238 walk-vs-dash front, retail evidence banked)
+  Scope: retail ring probe on dl-fox frames 225-242 (dl_ring2.jsonl recipe): retail Nana is
+  DISENGAGED (xFA mim bit clear) in general-CPU x18=2 from at least 225 through 242, in Wait
+  with friction slide (-0.3498) while Popo dashes; the UCF retro-write slot (-128) is present
+  in her ring but ignored. Ours re-engages/dashes at ~237 (ground -1.4). x7C phase MATCHES
+  retail (x7C = slippi + 132 in both, so the %-gate phases are aligned). gm_8016C75C mirror
+  re-verified faithful (one zero-KO snapshot at first read arms nothing). The divergence is in
+  internal x1A88 state evolution through Nana's damage reaction (~frames 210-235): retail
+  lands in x18=2 (escape) and stays; our x18 path unknown — needs the our-side tick trace
+  (rebuild container with the ftCo_800B3900 tail trace from msl-icies-port-state) compared
+  frame-by-frame, then an asm diff of the diverging handler. Candidate handlers: the damage
+  reaction chain (ftCo_800B4A78 -> x18=0x12 -> ftCo_800AC5A0 case 18 -> demotes), case 2
+  ftCo_800B04DC. Note B0E98 re-engage requires pos_delta diff below co_attrs.mid_walk_point,
+  which should REJECT engage while Popo dashes (delta gap ~1.05) — whichever sim engaged there
+  is the wrong one, and ours engaged.
   Evidence: dual-entity player machinery already compiled in and inert; CPU predicate stubbed
   false; validation reads only `ports.P{n}.leader`; UCF pad ring would double-shift if Nana took
   the pad path. Nana's AI is type 6 (mimic ring + follow), NOT the general CPU tree; reachable
