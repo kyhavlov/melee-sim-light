@@ -546,3 +546,22 @@ slice, and follower-frame validation.
   38..62 works — start windows earlier/wider. Sim traces: MSL_DD94_TRACE=<path> now
   dumps DD94IN inputs (ftdynamics.c container-only; needs the msl_emitter_trace helper
   in scalar.c container copy + stdio includes).
+
+- 2026-07-28 — `retained` (WHISPY WIND + CHAIN MATRIX REFRESH LANDED, commit 637b6706;
+  AGGREGATE 190/56/0 — up from 183/63/0). Final design after the live-machine attempt
+  regressed Fountain knife-edges: (1) wind emitters mirrored deterministically from the
+  RECORDED xDC stream (nonzero == retail xD0 in (0x2D,0x140) entering 0x2E; spawn on
+  %10==0; onset tracked via this proc's own xD0-as-counter because the pre-frame replay
+  pass already wrote xDC); the machine itself stays short-circuited (its rand timers are
+  not replayable headlessly — retail's effect draws precede its prio-4 stream position —
+  and fn_802112F4's push reads xDC post-prio-4, so a live machine forks positions by the
+  0.10 wind speed). (2) msl_fighter_refresh_dynamics_matrices at the publication phase:
+  retained chain-link jobj matrices rebuilt end-of-frame so ftCo_8009CB40's re-anchor
+  (mtx[i][3] reads on anim changes) sees last-frame world poses like retail's render
+  guarantees; previously links past the capsule bone were NEVER built (identity → tail
+  tip re-anchored to x=0 exactly at dl-fox validator 51). Chain-state probe now
+  BIT-IDENTICAL across the hit window. SEVEN long-classified replays (5 DL, 1 YS, 1 FD,
+  all with Fox) became full passes — classifications removed, output locks re-recorded.
+  dl-fox 10,818/11,083. Icies otherwise unchanged; ys-fox classification intact.
+  OWED: container pytest sweep; PPC-backend lock parity check (locks re-recorded from
+  native; hosted-only fixes leave PPC behavior unchanged but verify before the wire cut).
