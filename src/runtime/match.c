@@ -511,15 +511,18 @@ s32 gm_8016C6C0(HSD_GObj* arg0)
 
 // MatchPlayerData::x20 accumulates KOs of non-teammates; team kills fold
 // into the self-destruct/fall columns instead. Retail serves the
-// lbl_8046B6A0.x24C standings block and recomputes it only when the scene
-// pointer changes: within one match every query returns the snapshot taken
-// at the FIRST CPU standings read, not live counts.
+// lbl_8046B6A0.x24C scratch block guarded by the scene pointer, but that
+// scratch is dirtied between reads within a match, so the observable
+// behavior is a LIVE recompute: a playback-Dolphin probe of Nana's first
+// state-10 tick after a KO (fd-falco frame 345) returns the updated count
+// (1), which arms the x88 reaction timer in ftCo_800ADE48. Recompute per
+// call; only CPU-input consumers reach this.
 // refs/melee/src/melee/gm/{gm_16AE.c::gm_8016C75C,gm_1601.c::gm_80166378}
 int gm_8016C75C(HSD_GObj* arg0)
 {
     int slot = ftLib_80086BE0(arg0);
 
-    if (!msl_bound_match_rules->cpu_standings_snapshot_valid) {
+    {
         int self;
 
         for (self = 0; self < 6; ++self) {
@@ -541,7 +544,6 @@ int gm_8016C75C(HSD_GObj* arg0)
             }
             msl_bound_match_rules->cpu_standings_kos[self] = kos;
         }
-        msl_bound_match_rules->cpu_standings_snapshot_valid = true;
     }
     return msl_bound_match_rules->cpu_standings_kos[slot];
 }
