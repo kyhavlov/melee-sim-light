@@ -1889,6 +1889,677 @@
      "signed_zero_equal_count": 0
     }
    }
+  },
+  {
+   "replay": "replays/validation/icies/master-fox-2026-03_Game_20260315T195912.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes past the blizzard puff's declared members",
+   "rationale": "The replay's only mismatched rows are item.misc1/misc2/misc3 lanes on Ice Climbers blizzard puffs (It_Kind_IceClimber_Blizzard, kind 107) during two Blizzard casts (frames 3562-3584 and 6584-6599): Slippi records the raw bytes at xDD4+0x7/+0x17/+0x1B, which for the blizzard's one-float-plus-flag item variables lie past the declared members in console allocator-reuse residue (255/75/78 = the previous pool occupant's bytes). The runtime pins those past-member bytes to zero so the widened native union's previous occupant cannot leak. No re-simulation can reproduce the console pool's reuse history. The remaining 8,548 rows and the 1,888-row suffix are exact.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h::itClimbersBlizzard_ItemVars",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "frames": 8610,
+     "matched_frames": 8548,
+     "mismatched_frames": 62,
+     "exact_prefix_frames": 3684,
+     "strict_suffix_frames": 1888,
+     "first_mismatch_frame": 3562,
+     "last_mismatch_frame": 6599,
+     "mismatch_count": 143,
+     "mismatch_fingerprint": "01c071e2391b6051",
+     "mismatch_fields": [
+      {
+       "field": "item.misc1[2]",
+       "count": 52,
+       "first_frame": 3562,
+       "last_frame": 6594
+      },
+      {
+       "field": "item.misc1[3]",
+       "count": 21,
+       "first_frame": 3567,
+       "last_frame": 6589
+      },
+      {
+       "field": "item.misc1[4]",
+       "count": 3,
+       "first_frame": 3572,
+       "last_frame": 3582
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 1,
+       "first_frame": 3572,
+       "last_frame": 3572
+      },
+      {
+       "field": "item.misc3[4]",
+       "count": 1,
+       "first_frame": 3572,
+       "last_frame": 3572
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 5,
+       "first_frame": 3573,
+       "last_frame": 3577
+      },
+      {
+       "field": "item.misc3[3]",
+       "count": 5,
+       "first_frame": 3573,
+       "last_frame": 3577
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 11,
+       "first_frame": 3578,
+       "last_frame": 6589
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 5,
+       "first_frame": 3578,
+       "last_frame": 3582
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 34,
+       "first_frame": 3584,
+       "last_frame": 6599
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 5,
+       "first_frame": 6590,
+       "last_frame": 6594
+      }
+     ],
+     "render_visibility_mismatch_count": 5,
+     "first_render_visibility_mismatch_frame": -122,
+     "signed_zero_equal_count": 0
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/icies/gm-peach-2026-03_Game_20260329T142118.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over blizzard pool residue and the ice block's owner pointer",
+   "rationale": "The replay's only mismatched rows are item.misc lanes on Ice Climbers articles: blizzard puffs (kind 107) during one Blizzard cast (frames 373-403, misc1/misc2/misc3 = console allocator-reuse residue past the declared one-float member, pinned to zero natively) and one ice block (It_Kind_IceClimber_Ice, kind 106) during frames 8255-8325 (misc0 = the low byte of the owner Item_GObj* heap pointer identity; the runtime publishes its deterministic arena analog). Neither the console pool's reuse history nor its allocator addresses can be reproduced by re-simulation. The remaining 10,299 rows and the 1,953-row suffix are exact.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h::itClimbersIce_ItemVars",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "frames": 10401,
+     "matched_frames": 10299,
+     "mismatched_frames": 102,
+     "exact_prefix_frames": 495,
+     "strict_suffix_frames": 1953,
+     "first_mismatch_frame": 373,
+     "last_mismatch_frame": 8325,
+     "mismatch_count": 159,
+     "mismatch_fingerprint": "219a2a5f036b54fe",
+     "mismatch_fields": [
+      {
+       "field": "item.misc1[0]",
+       "count": 26,
+       "first_frame": 373,
+       "last_frame": 403
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 16,
+       "first_frame": 378,
+       "last_frame": 398
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 11,
+       "first_frame": 378,
+       "last_frame": 398
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 11,
+       "first_frame": 378,
+       "last_frame": 398
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 10,
+       "first_frame": 384,
+       "last_frame": 403
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 10,
+       "first_frame": 384,
+       "last_frame": 403
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 2,
+       "first_frame": 388,
+       "last_frame": 393
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 1,
+       "first_frame": 393,
+       "last_frame": 393
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 1,
+       "first_frame": 393,
+       "last_frame": 393
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 54,
+       "first_frame": 8255,
+       "last_frame": 8308
+      },
+      {
+       "field": "item.misc0[0]",
+       "count": 17,
+       "first_frame": 8309,
+       "last_frame": 8325
+      }
+     ],
+     "render_visibility_mismatch_count": 19,
+     "first_render_visibility_mismatch_frame": 8823,
+     "signed_zero_equal_count": 0
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/icies/auto-falco-2025-10_Game_20251013T073200.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over Ice Climbers article pointers and pool residue",
+   "rationale": "Every mismatched row is an item.misc lane on Ice Climbers articles: the entry ice block (It_Kind_IceClimber_Ice, kind 106, from frame -27) and mid-match ice/blizzard spawns. misc0 samples the owner Item_GObj* heap pointer's low byte and misc1/misc2/misc3 sample bytes past the articles' declared item-variable members, i.e. console allocator identities and pool-reuse residue. The runtime publishes deterministic arena analogs and pins past-member bytes to zero; neither the console heap layout nor its reuse history is recoverable by re-simulation. All fighter, follower, physics, and item gameplay lanes are exact.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "frames": 6926,
+     "matched_frames": 6654,
+     "mismatched_frames": 272,
+     "exact_prefix_frames": 95,
+     "strict_suffix_frames": 321,
+     "first_mismatch_frame": -27,
+     "last_mismatch_frame": 6482,
+     "mismatch_count": 745,
+     "mismatch_fingerprint": "a0386e39487b221e",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[0]",
+       "count": 108,
+       "first_frame": -27,
+       "last_frame": 593
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 88,
+       "first_frame": -27,
+       "last_frame": 6482
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 103,
+       "first_frame": -27,
+       "last_frame": 5861
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 32,
+       "first_frame": 1063,
+       "last_frame": 6472
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 18,
+       "first_frame": 1063,
+       "last_frame": 6472
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 113,
+       "first_frame": 1064,
+       "last_frame": 6477
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 62,
+       "first_frame": 1064,
+       "last_frame": 6477
+      },
+      {
+       "field": "item.misc1[3]",
+       "count": 2,
+       "first_frame": 1073,
+       "last_frame": 1078
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 6,
+       "first_frame": 1073,
+       "last_frame": 1092
+      },
+      {
+       "field": "item.misc3[3]",
+       "count": 10,
+       "first_frame": 1073,
+       "last_frame": 1092
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 20,
+       "first_frame": 1074,
+       "last_frame": 5851
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 62,
+       "first_frame": 1079,
+       "last_frame": 5856
+      },
+      {
+       "field": "item.misc3[4]",
+       "count": 2,
+       "first_frame": 1083,
+       "last_frame": 1088
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 1,
+       "first_frame": 1088,
+       "last_frame": 1088
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 118,
+       "first_frame": 1267,
+       "last_frame": 6482
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/icies/bf-falco-2025-03_Game_20250329T000322.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over Ice Climbers article pointers and pool residue",
+   "rationale": "Every mismatched row is an item.misc lane on Ice Climbers articles (the entry ice block from frame -27, mid-match ice blocks, and blizzard puffs): owner-pointer low bytes (misc0) and past-member console pool-reuse residue (misc1/misc2/misc3), unrecordable by re-simulation. All fighter, follower, physics, and item gameplay lanes are exact.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "frames": 9658,
+     "matched_frames": 9181,
+     "mismatched_frames": 477,
+     "exact_prefix_frames": 95,
+     "strict_suffix_frames": 1617,
+     "first_mismatch_frame": -27,
+     "last_mismatch_frame": 7918,
+     "mismatch_count": 1021,
+     "mismatch_fingerprint": "05902b307d10cc66",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[0]",
+       "count": 282,
+       "first_frame": -27,
+       "last_frame": 7918
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 42,
+       "first_frame": 277,
+       "last_frame": 5107
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 71,
+       "first_frame": 277,
+       "last_frame": 6675
+      },
+      {
+       "field": "item.misc0[2]",
+       "count": 5,
+       "first_frame": 283,
+       "last_frame": 287
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 319,
+       "first_frame": 288,
+       "last_frame": 7918
+      },
+      {
+       "field": "item.misc1[3]",
+       "count": 15,
+       "first_frame": 372,
+       "last_frame": 5227
+      },
+      {
+       "field": "item.misc2[3]",
+       "count": 26,
+       "first_frame": 372,
+       "last_frame": 5233
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 22,
+       "first_frame": 373,
+       "last_frame": 5228
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 37,
+       "first_frame": 373,
+       "last_frame": 5237
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 29,
+       "first_frame": 378,
+       "last_frame": 6675
+      },
+      {
+       "field": "item.misc2[4]",
+       "count": 9,
+       "first_frame": 378,
+       "last_frame": 5223
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 100,
+       "first_frame": 379,
+       "last_frame": 6682
+      },
+      {
+       "field": "item.misc1[4]",
+       "count": 5,
+       "first_frame": 383,
+       "last_frame": 5223
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 59,
+       "first_frame": 7860,
+       "last_frame": 7918
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/icies/fd-falco-2025-02_Game_20250213T164734.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over Ice Climbers article pointers and pool residue",
+   "rationale": "Every mismatched row is an item.misc lane on Ice Climbers ice blocks and blizzard puffs (frames 825-7909): owner-pointer low bytes (misc0) and past-member console pool-reuse residue (misc1/misc2), unrecordable by re-simulation. All fighter, follower, physics, and item gameplay lanes are exact.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "frames": 8387,
+     "matched_frames": 8117,
+     "mismatched_frames": 270,
+     "exact_prefix_frames": 947,
+     "strict_suffix_frames": 355,
+     "first_mismatch_frame": 825,
+     "last_mismatch_frame": 7909,
+     "mismatch_count": 385,
+     "mismatch_fingerprint": "66eadaab57f8a152",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[0]",
+       "count": 208,
+       "first_frame": 825,
+       "last_frame": 7909
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 71,
+       "first_frame": 825,
+       "last_frame": 895
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 18,
+       "first_frame": 831,
+       "last_frame": 848
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 36,
+       "first_frame": 1342,
+       "last_frame": 1392
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 5,
+       "first_frame": 1352,
+       "last_frame": 1382
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 36,
+       "first_frame": 1353,
+       "last_frame": 1745
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 11,
+       "first_frame": 1735,
+       "last_frame": 1745
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/icies/ics-ditto-d18-2025-05_Game_20250518T163949.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over Ice Climbers article pointers and pool residue",
+   "rationale": "Every mismatched row is an item.misc lane on the four climbers' articles (ice blocks and blizzard puffs from both teams, frames 476-11045): owner-pointer low bytes (misc0) and past-member console pool-reuse residue (misc1/misc2/misc3), unrecordable by re-simulation. All fighter, follower, physics, and item gameplay lanes are exact.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "frames": 12335,
+     "matched_frames": 11693,
+     "mismatched_frames": 642,
+     "exact_prefix_frames": 598,
+     "strict_suffix_frames": 1167,
+     "first_mismatch_frame": 476,
+     "last_mismatch_frame": 11045,
+     "mismatch_count": 2506,
+     "mismatch_fingerprint": "59549a46945acbda",
+     "mismatch_fields": [
+      {
+       "field": "item.misc0[0]",
+       "count": 349,
+       "first_frame": 476,
+       "last_frame": 10789
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 520,
+       "first_frame": 476,
+       "last_frame": 11045
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 642,
+       "first_frame": 476,
+       "last_frame": 11045
+      },
+      {
+       "field": "item.misc1[0]",
+       "count": 191,
+       "first_frame": 564,
+       "last_frame": 11045
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 161,
+       "first_frame": 569,
+       "last_frame": 10784
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 317,
+       "first_frame": 569,
+       "last_frame": 10784
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 35,
+       "first_frame": 574,
+       "last_frame": 9108
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 22,
+       "first_frame": 579,
+       "last_frame": 9103
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 23,
+       "first_frame": 579,
+       "last_frame": 9108
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 140,
+       "first_frame": 580,
+       "last_frame": 9108
+      },
+      {
+       "field": "item.misc0[1]",
+       "count": 106,
+       "first_frame": 1323,
+       "last_frame": 10784
+      }
+     ],
+     "render_visibility_mismatch_count": 183,
+     "first_render_visibility_mismatch_frame": 7562,
+     "signed_zero_equal_count": 0
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/icies/medium-sheik-2026-01_Game_20260131T001158.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over Ice Climbers article pointers and pool residue",
+   "rationale": "Every mismatched row is an item.misc lane on Ice Climbers ice blocks and blizzard puffs (frames 1124-7842): owner-pointer low bytes (misc0) and past-member console pool-reuse residue (misc1/misc2/misc3), unrecordable by re-simulation. All fighter, follower, physics, and item gameplay lanes are exact.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "frames": 14608,
+     "matched_frames": 14279,
+     "mismatched_frames": 329,
+     "exact_prefix_frames": 1246,
+     "strict_suffix_frames": 6643,
+     "first_mismatch_frame": 1124,
+     "last_mismatch_frame": 7842,
+     "mismatch_count": 1082,
+     "mismatch_fingerprint": "5057b9059f1a9aab",
+     "mismatch_fields": [
+      {
+       "field": "item.misc1[0]",
+       "count": 329,
+       "first_frame": 1124,
+       "last_frame": 7842
+      },
+      {
+       "field": "item.misc1[1]",
+       "count": 251,
+       "first_frame": 1129,
+       "last_frame": 7837
+      },
+      {
+       "field": "item.misc2[1]",
+       "count": 91,
+       "first_frame": 1129,
+       "last_frame": 2517
+      },
+      {
+       "field": "item.misc3[1]",
+       "count": 90,
+       "first_frame": 1129,
+       "last_frame": 2517
+      },
+      {
+       "field": "item.misc1[2]",
+       "count": 40,
+       "first_frame": 1134,
+       "last_frame": 7832
+      },
+      {
+       "field": "item.misc2[2]",
+       "count": 14,
+       "first_frame": 1134,
+       "last_frame": 2512
+      },
+      {
+       "field": "item.misc3[2]",
+       "count": 14,
+       "first_frame": 1134,
+       "last_frame": 2512
+      },
+      {
+       "field": "item.misc2[0]",
+       "count": 137,
+       "first_frame": 1135,
+       "last_frame": 2522
+      },
+      {
+       "field": "item.misc3[0]",
+       "count": 116,
+       "first_frame": 1135,
+       "last_frame": 2522
+      }
+     ],
+     "render_visibility_mismatch_count": 0,
+     "first_render_visibility_mismatch_frame": null,
+     "signed_zero_equal_count": 0
+    }
+   }
   }
  ]
 }
