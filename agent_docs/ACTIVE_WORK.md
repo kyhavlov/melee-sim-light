@@ -329,6 +329,23 @@ slice, and follower-frame validation.
   retail-side. Suspects: the f64-mixed prediction arithmetic (lines ~161-213, fmadd-class),
   or a subtle table-translation field. This single comparison closes the episode class.
 
+- 2026-07-27 — `open` (the x18==4 cascade exit: asm-real, but the naive port regresses)
+  PC-coverage trace (generic MSL_PROBE_PC_TRACE over 0x800AE0F0-0x800AE568 at the landing
+  tick) shows retail's ADE48 executing: motion 0xFC/0xFD checks, x18==9 guard, IsGrabbing,
+  then `lwz x18; cmpwi 4; beq .L_800AE484 -> li r3,1; b .L_800AE790` = FUNCTION EPILOGUE:
+  when already in recovery state 4 the transition cascade EXITS (the asm function returns a
+  transitioned flag the void C drops). The upstream C falls through — a second control-flow
+  drop in this TU. HOWEVER the one-line `else return` port empirically REGRESSED the suite
+  (gm-peach's landing episode grew into leader-lane divergence from 4100; master-fox/
+  ics-ditto/bf-falco prefixes dropped) and was reverted (uncommitted). Hypotheses for the
+  regression: the exit's r3=1 gates caller behavior not modeled by the void C; or the other
+  state guards (9/5/6/...) have similar unported exits so restoring only the 4-exit skews
+  the state machine asymmetrically; or downstream within-frame RNG draw-order compensations.
+  NEXT SESSION: audit the ENTIRE ADE48 transition block against asm as a unit (the same
+  PC-coverage probe run at a few ticks in different states gives the ground truth per
+  guard), port ALL its exits together, and re-verify. The committed tree (117a2053 state)
+  remains the best-verified point: prefixes 302-9,966.
+
 - 2026-07-27 — `open` (dl-fox @238 root-cause narrowed to ftCo_800A2C80's long recovery ray)
   Scope: with the tick trace aligned (our t = slippi + 133 on dl-fox), our Nana's x18 path
   through her damage (~f210-236) is 1 -> 4 -> 10 -> 1 while retail lands in x18=2 (attack).
