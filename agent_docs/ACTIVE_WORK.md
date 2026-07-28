@@ -474,3 +474,22 @@ slice, and follower-frame validation.
   8,117, bf-marth -> 6,993, auto-falco -> 6,654; aggregate 183/63/0. DIAGNOSIS RECIPE:
   the DASHBACK-FIRE env trace (fire-time anim/has_turned/x670/raws) + the ring probe's
   natural-vs-retro slot values pinpointed the condition delta in minutes.
+
+- 2026-07-28 — `retained` (BLIZZARD SPAWN FMADDS, commit 5023a036) + `open` (dl-fox @5082
+  = Fox TAIL dynamics). The dl-fox item vel/pos ULP family (4476+) was the blizzard puff
+  spawn angle: GALE01 0x802C2290 fuses (x10-xC)*rand+xC; __fmadds port retired the family
+  on four replays. The remaining dl-fox fork @5082: Popo usmash frame 9 hits in retail,
+  whiffs in ours. Collision probe (dl_coll_probe3.jsonl in job tmp 164f8743) + sim-side
+  HB/HU dump (scalar.c MSL_HB_TRACE, container-only): our usmash HITBOX x4C bits are
+  RETAIL-IDENTICAL (incl the z=±8.35 swing arc — verified byte-exact at the 981 usmash
+  too), and 12 of Fox's 13 hurt capsules match retail x/y bits exactly. The 13th — bone_idx
+  18, offsets (0,0,±0.8), scale 1.62 = FOX'S TAIL, a dynamics-driven chain — sits at
+  (49.26, 5.97) in ours vs retail (50.62, 7.97, -0.65): 2.4 units of accumulated dynamics
+  divergence, and retail's hit lands exactly on it (coll_distance +0.319). NEXT: the tail
+  dynamics chain (lb dynamics springs + Whispy wind coupling on DL + lb_800115F4 emitter
+  phase); the marios sessions' dynamics/quat toolkit applies. NOTE the retail probe
+  numbering: this window's collision-probe frames aligned 1:1 with validator frames.
+  TOOLING (container-only, uncommitted): MSL_ICE_TRACE_* (per-frame item kind/vel/pos
+  bits at export) and MSL_HB_TRACE_* (fighter hit capsules x4C/x58 + hurt capsule a/b
+  positions at export) in /work/src/runtime/scalar.c; validate_replay.py detail rows
+  widened to 14 in the container copy.
