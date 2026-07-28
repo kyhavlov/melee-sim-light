@@ -619,6 +619,114 @@
       }
     },
     {
+      "replay": "replays/validation/icies/auto-falco-2025-10_Game_20251013T073200.slpz",
+      "expected": {
+        "native": {
+          "frames": 6926,
+          "actual_output_fingerprint": "6f8a3b476c9eaddd"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/bf-falco-2025-03_Game_20250329T000322.slpz",
+      "expected": {
+        "native": {
+          "frames": 9658,
+          "actual_output_fingerprint": "90ae645821fd3300"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/bf-marth-2025-03_Game_20250321T234954.slpz",
+      "expected": {
+        "native": {
+          "frames": 7370,
+          "actual_output_fingerprint": "dc94c820f684211b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/dl-fox-2025-05_Game_20250504T134832.slpz",
+      "expected": {
+        "native": {
+          "frames": 11083,
+          "actual_output_fingerprint": "170c08a7e8ee972b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/fd-falco-2025-02_Game_20250213T164734.slpz",
+      "expected": {
+        "native": {
+          "frames": 8387,
+          "actual_output_fingerprint": "786af64cf97c3dd3"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/fod-sheik-2025-02_Game_20250205T180543.slpz",
+      "expected": {
+        "native": {
+          "frames": 11670,
+          "actual_output_fingerprint": "4c1440cbbacf0208"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/gm-peach-2026-03_Game_20260329T142118.slpz",
+      "expected": {
+        "native": {
+          "frames": 10401,
+          "actual_output_fingerprint": "c58dd7847260e435"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/ics-ditto-d18-2025-05_Game_20250518T163949.slpz",
+      "expected": {
+        "native": {
+          "frames": 12335,
+          "actual_output_fingerprint": "087fd34d60cc8964"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/master-fox-2026-03_Game_20260315T195912.slpz",
+      "expected": {
+        "native": {
+          "frames": 8610,
+          "actual_output_fingerprint": "3b917465fcb83dcc"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/medium-marth-2025-09_Game_20250919T221733.slpz",
+      "expected": {
+        "native": {
+          "frames": 14709,
+          "actual_output_fingerprint": "5029559ada6036ee"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/medium-sheik-2026-01_Game_20260131T001158.slpz",
+      "expected": {
+        "native": {
+          "frames": 14608,
+          "actual_output_fingerprint": "1193fab90228ad32"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/ys-fox-2025-06_Game_20250606T191516.slpz",
+      "expected": {
+        "native": {
+          "frames": 8152,
+          "actual_output_fingerprint": "9205ba4472c9a54b"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/luigi/Game_20250212T091716.slpz",
       "expected": {
         "native": {
