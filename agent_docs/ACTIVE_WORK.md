@@ -177,7 +177,20 @@ slice, and follower-frame validation.
   default; the correct silent config is `Backend = No Audio Output` + `Muted = True` +
   `Volume = 0` (fixed in the working copy; apply when tools/dolphin merges to a branch).
 
-- 2026-07-27 — `open` (dl-fox @238 walk-vs-dash front, retail evidence banked)
+- 2026-07-27 — `open` (dl-fox @238 root-cause narrowed to ftCo_800A2C80's long recovery ray)
+  Scope: with the tick trace aligned (our t = slippi + 133 on dl-fox), our Nana's x18 path
+  through her damage (~f210-236) is 1 -> 4 -> 10 -> 1 while retail lands in x18=2 (attack).
+  Both sims run the ADE48 transition cascade (x221A_b3 hitlag arming verified); the split is
+  ftCo_800A2C80 ("falling toward doom" recovery check, NOT in the earlier bounds sweep):
+  ours returns 1 (-> state 4 recover) where retail returns 0 and falls through to
+  ftCo_800B8A9C (attack tables ARE populated natively — probed non-NULL). A2C80 casts a
+  1000-unit ray from the ECB bottom along the normalized fall direction through mpCheckFloor
+  and returns 0 when it hits an in-bounds floor. Hypothesis to test next: the hosted exact-O1
+  mpCheckFloor broadphase misses long diagonal cross-stage segments (vertical -1000 probes
+  demonstrably work), so our ray finds no floor and Nana wrongly enters recovery. Test: unit
+  probe mpCheckFloor with A2C80-shaped diagonal rays on DL natively vs the same ray in the
+  retail interpreter; if confirmed, fix the segment broadphase walk. This likely owns several
+  fronts (dl-fox @238, fd-falco @346 ledge-catch pick, possibly master-fox @147 damage-exit).
   Scope: retail ring probe on dl-fox frames 225-242 (dl_ring2.jsonl recipe): retail Nana is
   DISENGAGED (xFA mim bit clear) in general-CPU x18=2 from at least 225 through 242, in Wait
   with friction slide (-0.3498) while Popo dashes; the UCF retro-write slot (-128) is present
