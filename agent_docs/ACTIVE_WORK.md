@@ -192,6 +192,26 @@ slice, and follower-frame validation.
   item.misc0/2/3 pointer/pool-residue bytes at each ice-block spawn (classification class),
   plus fd-falco @346 (follower CliffWait pick) and the gm-peach @378 item-motion ULP family.
 
+- 2026-07-27 — `retained` (session 3 coda: live standings, d2ab8923)
+  Scope: the fd-falco @346 front (follower CliffWait pick) probe showed retail's
+  gm_8016C75C returning the UPDATED KO count (1) at Nana's first post-KO state-10 tick with
+  a dpad-up press (held=8) from ftCo_800ACD5C's x88 branch: retail's x24C scratch is dirtied
+  between reads, so the observable behavior is a live standings recompute, not the frozen
+  first-read snapshot the hosted mirror served. Made gm_8016C75C recompute per call.
+  Evidence: bf-falco prefix 4,798->9,176 (95%), fd-falco 468->7,979 (95%), master-fox
+  2,434->5,948, fod-sheik->4,086, ics-ditto->3,825, medium-sheik->3,962; aggregate 183/63/0.
+  Note: MslCoreMatchRules.cpu_standings_snapshot_valid is now dead state (cleanup with the
+  next wire/struct touch).
+  Current fronts after d2ab8923 (prefixes 302-9,966): (a) item.misc0/2/3 pointer + pool
+  residue lanes lead 9 of 12 replays (classification class); (b) micro AI-stick episodes:
+  ics-ditto @1068 = state-4 recovery DI steering quantization phase (retail alternates
+  -88/-127 with +88 up per the AA320 Nana stick=0x40 increments; ours slightly offset —
+  suspect an upstream 1-ULP or an x570 draw), medium-sheik @210 = one-frame jump-decision
+  skew (Landing vs KneeBend), ys-fox @5572 = ice-block scale low-byte drift (misc1 32 vs 72,
+  ULP-class); (c) gm-peach @378 item-motion ULP family. The behavioral tail is now a handful
+  of one-frame/1-ULP episodes per replay; classification authoring for (a)+(c) plus episode
+  attribution for (b) is the remaining path to flipping the suite to CLASSIFIED.
+
 - 2026-07-27 — `open` (dl-fox @238 root-cause narrowed to ftCo_800A2C80's long recovery ray)
   Scope: with the tick trace aligned (our t = slippi + 133 on dl-fox), our Nana's x18 path
   through her damage (~f210-236) is 1 -> 4 -> 10 -> 1 while retail lands in x18=2 (attack).
