@@ -348,8 +348,14 @@ slice, and follower-frame validation.
   the A3554-based analysis proved ga=Ground at that think. Suspects: the script was built by
   something reached before case-4 (ftCo_800A8DE4_noinline preamble? an ACD5C-shaped WaitFor
   0xA script implies a case-10 dispatch — check whether x18 was still 10 from the previous
-  frame's structures), or the csP gate sequencing. NEXT: re-apply the fix + tick trace WITH
-  ga and the dispatched case id logged in ftCo_800B2790, one run, read the landing tick.
+  frame's structures), or the csP gate sequencing. DISPATCH-TRACE RESULT (fix + case-id/ga logged): the landing tick DOES
+  dispatch case 4 with ga=Ground (t=1037, the demote path executes), but NO dispatch occurs
+  for at least the next 8 ticks — the post-demote script gate (csP/command_duration) stays
+  blocked even though ftCo_800B3E04's Done handler (csP=NULL, dur=0) is verified correct in
+  isolation and ftCo_800B49F4 runs at B2790's tail. Retail's script probe shows builds
+  CONTINUING (3984+). NEXT: one run with csP/dur logged at B3E04 entry/exit and B49F4 for
+  the landing tick — the blocked gate is the last link; beware the two-Nana-lifetime t-space
+  collision (filter by position) and that DISP prints only when the gate passes.
   Hypothesis (b) ELIMINATED: no UCF or slippi-ssbm-asm injection touches 0x800ADE48-0x800AE7AC, so the recording's ADE48 is vanilla and (a) — a compensating infidelity that currently cancels the missing exit — is the operative theory; the with-fix landing-sequence trace comparison is the way in. The reverted change is
   one `else { return; }` at the A2C80 guard — trivial to re-apply once (a)/(b) is resolved.
 
