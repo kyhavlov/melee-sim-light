@@ -109,11 +109,17 @@ void ftCo_Turn_IASA(Fighter_GObj* gobj)
     }
     if (!fp->mv.co.turn.has_turned) {
         fp->facing_dir = -fp->facing_dir;
-    }
 #ifdef MSL_CORE_HOSTED
-    // UCF 0.84 injects immediately after the preceding 0x800C9A44 store.
-    msl_ucf_apply_dashback(fp);
+        // UCF 0.84 replaces this store (Interrupt_AS_Turn+0x4C) with its
+        // gecko trampoline, so the dashback conversion only ever runs on the
+        // not-yet-turned branch. Hoisting it after the if fired conversions
+        // on already-turned smash turns (has_turned set at frame 1) and
+        // retro-wrote full-deflection sticks into Nana's mimic ring where
+        // retail kept the natural capture (fod-sheik slippi 1248: ours
+        // played 127, retail 125).
+        msl_ucf_apply_dashback(fp);
 #endif
+    }
 
     RETURN_IF(ftCo_SpecialS_CheckInput(gobj));
     RETURN_IF(ftCo_800D68C0(gobj));
