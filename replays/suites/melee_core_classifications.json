@@ -350,50 +350,6 @@
    }
   },
   {
-   "replay": "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz",
-   "id": "unresolved-dolphin-laser-capsule-gate",
-   "owner": "Falco laser swept capsule versus fighter hurt-pose publication",
-   "rationale": "All compared state is exact before the gate. Both PPC and native source runtimes detect a 0.0535309-unit overlap and apply Falco laser damage one frame before this Dolphin replay; that causal difference changes the rest of the match. The replay does not identify its Dolphin build/execution profile. This exact full-stream fingerprint records an unresolved source boundary, not a tolerant pass or a replay-row gameplay patch.",
-   "sources": [
-    "refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C",
-    "refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C",
-    "refs/melee/src/melee/it/itcoll.c::it_8027137C",
-    "refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim"
-   ],
-   "expected": {
-    "native": {
-     "frames": 12471,
-     "matched_frames": 3840,
-     "mismatched_frames": 8631,
-     "exact_prefix_frames": 3840,
-     "strict_suffix_frames": 0,
-     "first_mismatch_frame": 3718,
-     "last_mismatch_frame": 12348,
-     "mismatch_count": 295069,
-     "mismatch_fingerprint": "342baf2fcd2db141",
-     "mismatch_fields_digest": "2e35c077866d15fa74590f18ddb3cda601918d26a621742d160dbaf87b505f28",
-     "render_visibility_mismatch_count": 11126,
-     "first_render_visibility_mismatch_frame": 873,
-     "signed_zero_equal_count": 0
-    },
-    "ppc": {
-     "frames": 12471,
-     "matched_frames": 3840,
-     "mismatched_frames": 8631,
-     "exact_prefix_frames": 3840,
-     "strict_suffix_frames": 0,
-     "first_mismatch_frame": 3718,
-     "last_mismatch_frame": 12348,
-     "mismatch_count": 295069,
-     "mismatch_fingerprint": "342baf2fcd2db141",
-     "mismatch_fields_digest": "2e35c077866d15fa74590f18ddb3cda601918d26a621742d160dbaf87b505f28",
-     "render_visibility_mismatch_count": 11126,
-     "first_render_visibility_mismatch_frame": 873,
-     "signed_zero_equal_count": 0
-    }
-   }
-  },
-  {
    "replay": "replays/validation/falcon/EmotionalNaturalLemur.slpz",
    "id": "vanilla-magnifier-render-schedule",
    "owner": "ifMagnify/Fighter_8006A360 render-publication boundary",
@@ -420,48 +376,6 @@
      "signed_zero_equal_count": 0
     },
     "ppc": "native"
-   }
-  },
-  {
-   "replay": "replays/validation/falcon/Game_20260505T215428.slpz",
-   "id": "dolphin-ulp-motion-profile",
-   "owner": "fighter velocity and position float execution profile",
-   "rationale": "The retail star-KO fmsubs boundary and mainline-Dolphin fnmsubs zero profile now own the former DeadUpFall and signed-zero lanes at the source. The remaining residual is the float-derived contact difference at frame 6596, which reconverges for the final 3,998 transitions. Native and PPC agree on the complete exact fingerprint, while the replay records Dolphin without its build or execution profile. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding.",
-   "sources": [
-    "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-    "refs/melee/src/melee/mp/mpcoll.c"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 6718,
-     "first_mismatch_frame": 6596,
-     "first_render_visibility_mismatch_frame": 4249,
-     "frames": 11776,
-     "last_mismatch_frame": 7518,
-     "matched_frames": 10854,
-     "mismatch_count": 1362,
-     "mismatch_fields_digest": "82057130b848cb84bb8b62f3996eb12c489e239671d9af873b31e79884a7bcdc",
-     "mismatch_fingerprint": "84fa1a245eb3a3ab",
-     "mismatched_frames": 922,
-     "render_visibility_mismatch_count": 5,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 4135
-    },
-    "ppc": {
-     "exact_prefix_frames": 6718,
-     "first_mismatch_frame": 6596,
-     "first_render_visibility_mismatch_frame": 4249,
-     "frames": 11776,
-     "last_mismatch_frame": 7518,
-     "matched_frames": 10854,
-     "mismatch_count": 1362,
-     "mismatch_fields_digest": "82057130b848cb84bb8b62f3996eb12c489e239671d9af873b31e79884a7bcdc",
-     "mismatch_fingerprint": "84fa1a245eb3a3ab",
-     "mismatched_frames": 922,
-     "render_visibility_mismatch_count": 5,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 4135
-    }
    }
   },
   {
@@ -562,48 +476,6 @@
      "render_visibility_mismatch_count": 0,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 9090
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/luigi/medium-fox_Game_20251212T112146.slpz",
-   "id": "dolphin-ulp-motion-profile",
-   "owner": "bone-pose interaction range profile",
-   "rationale": "PPC and native source runtimes agree bit-for-bit and the first 8,986 frames are exact after the clank-rebound fmadds deltas. The residual is a single max-range interaction that connects in the recording but not in the source runtime (expected speed_x_attack -1.2e-07 versus a still fighter), forking the state machine; the bone-attached collision geometry differs at sub-tolerance scale at that contact.",
-   "sources": [
-    "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-    "refs/melee/src/melee/ft/ftcoll.c"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 8986,
-     "first_mismatch_frame": 8864,
-     "first_render_visibility_mismatch_frame": 936,
-     "frames": 11008,
-     "last_mismatch_frame": 10885,
-     "matched_frames": 8986,
-     "mismatch_count": 68563,
-     "mismatch_fields_digest": "388571cd83e02080d8531c56ca843702a68260517cb6302253068533ee5cf24b",
-     "mismatch_fingerprint": "373122e4cbf91661",
-     "mismatched_frames": 2022,
-     "render_visibility_mismatch_count": 2150,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 0
-    },
-    "ppc": {
-     "exact_prefix_frames": 8986,
-     "first_mismatch_frame": 8864,
-     "first_render_visibility_mismatch_frame": 936,
-     "frames": 11008,
-     "last_mismatch_frame": 10885,
-     "matched_frames": 8986,
-     "mismatch_count": 68563,
-     "mismatch_fields_digest": "388571cd83e02080d8531c56ca843702a68260517cb6302253068533ee5cf24b",
-     "mismatch_fingerprint": "373122e4cbf91661",
-     "mismatched_frames": 2022,
-     "render_visibility_mismatch_count": 2150,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 0
     }
    }
   },
@@ -1311,36 +1183,6 @@
    }
   },
   {
-   "replay": "replays/validation/puff/Game_20260602T221603.slpz",
-   "id": "signed-zero-and-source-pose-contact-gate",
-   "owner": "fighter signed-zero/DeadUp publication and BODY-versus-shield collision pose",
-   "rationale": "The pre-gate signed-zero and DeadUp lanes are now source-owned. At frame 5509 the source-shaped runtime resolves Puff back-air against Fox BODY one frame before the replay's shield contact; all public state is exact immediately before that geometry gate, and native/PPC take the same downstream path. The lock records the complete consequence while leaving the headless JObj/hurt pose unmodeled.",
-   "sources": [
-    "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_800805C8",
-    "refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70",
-    "refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC",
-    "refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C"
-   ],
-   "expected": {
-    "native": {
-     "frames": 12141,
-     "matched_frames": 5631,
-     "mismatched_frames": 6510,
-     "exact_prefix_frames": 5631,
-     "strict_suffix_frames": 0,
-     "first_mismatch_frame": 5509,
-     "last_mismatch_frame": 12018,
-     "mismatch_count": 214282,
-     "mismatch_fingerprint": "b7df6cc1a12ac8d4",
-     "render_visibility_mismatch_count": 7624,
-     "first_render_visibility_mismatch_frame": 1276,
-     "signed_zero_equal_count": 0,
-     "mismatch_fields_digest": "2d6c587296f4ba85671edad3d82704d1b3d50c0a435ade3dc69143b1a394ba6d"
-    },
-    "ppc": "native"
-   }
-  },
-  {
    "replay": "replays/validation/puff/diamond-diamond-78251f79d12df3bcdb1d4abe.slpz",
    "id": "legacy-fod-hitlag-platform-publication",
    "owner": "Fountain moving-platform translation carried through hitlag exit",
@@ -1663,35 +1505,6 @@
    }
   },
   {
-   "replay": "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz",
-   "id": "nonmatching-ground-ik-capsule-gate",
-   "owner": "nonmatching lbbgflash ground-IK pose publication",
-   "rationale": "Promoting the current upstream ground-IK source fixes the reached four-player ground-pose owner, but upstream still marks the complete lbbgflash object NonMatching. PPC and native agree bit-for-bit: after the prior isolated P1 X-position ULP, the reconstructed IK pose creates one hit at frame 7627 that the Dolphin replay does not, followed by 1,501 exact transitions. The full bounded consequence is locked pending assembly matching of the shared IK owner. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
-   "sources": [
-    "refs/melee/configure.py::Object(NonMatching, melee/lb/lbbgflash.c)",
-    "refs/melee/src/melee/lb/lbbgflash.c::lbBgFlash_80021410",
-    "refs/melee/src/melee/ft/ft_0899.c::ft_80089B08"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 7749,
-     "first_mismatch_frame": 7627,
-     "first_render_visibility_mismatch_frame": -122,
-     "frames": 9439,
-     "last_mismatch_frame": 7815,
-     "matched_frames": 9250,
-     "mismatch_count": 192,
-     "mismatch_fields_digest": "6370e76add9994157a1d7a672d387cadd31b3a169bf7d80277d398e949b7203b",
-     "mismatch_fingerprint": "a4010dd4e6e06d99",
-     "mismatched_frames": 189,
-     "render_visibility_mismatch_count": 7,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 1501
-    },
-    "ppc": "native"
-   }
-  },
-  {
    "replay": "replays/validation/marios/34027_Game_20250422T224627.slpz",
    "id": "dolphin-ulp-motion-profile",
    "owner": "fighter position and velocity float execution profile",
@@ -1884,62 +1697,6 @@
      "render_visibility_mismatch_count": 2,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 3443
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/marios/33692_Game_20250715T211625.slpz",
-   "id": "dolphin-ulp-dynamic-bone-capsule-gate",
-   "owner": "Mario-line grab/hit checks against Fox dynamic-bone tail hurt capsules",
-   "rationale": "Bounded retail interpreter probes reproduce the Fox tail dynamics stream bit-exactly from spawn through the probed windows after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing). The remaining seed is a mid-frame animation-ownership reset (ftCo_8009CB40 anim-to-dynamics transition during Turn) whose lazily-sampled world matrix the replay does not record; the chaotic tail then forks a grab/hit capsule check on tail hurtboxes with complete downstream consequence. Fingerprint re-recorded under the 15-kind data set (Popo/Nana archives widen the arena and shift the lazily-sampled stale-matrix seed; fork frame, counts, and fields digest unchanged).",
-   "sources": [
-    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
-    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 801,
-     "first_mismatch_frame": 679,
-     "first_render_visibility_mismatch_frame": 792,
-     "frames": 10645,
-     "last_mismatch_frame": 10522,
-     "matched_frames": 801,
-     "mismatch_count": 366326,
-     "mismatch_fields_digest": "014c5071a18c1b87e270bcecd0763ecd252f159edabd1245744cae1d95e4463a",
-     "mismatch_fingerprint": "7e30f4a275eca3f5",
-     "mismatched_frames": 9844,
-     "render_visibility_mismatch_count": 14800,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 0
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/marios/gm-fox-2026-04_Game_20260413T062552.slpz",
-   "id": "dolphin-ulp-dynamic-bone-capsule-gate",
-   "owner": "Mario-line grab/hit checks against Fox dynamic-bone tail hurt capsules",
-   "rationale": "Bounded retail interpreter probes reproduce the Fox tail dynamics stream bit-exactly from spawn through the probed windows after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing). The remaining seed is a mid-frame animation-ownership reset (ftCo_8009CB40 anim-to-dynamics transition during Turn) whose lazily-sampled world matrix the replay does not record; the chaotic tail then forks a grab/hit capsule check on tail hurtboxes with complete downstream consequence.",
-   "sources": [
-    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
-    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 3572,
-     "first_mismatch_frame": 3450,
-     "first_render_visibility_mismatch_frame": 3470,
-     "frames": 8856,
-     "last_mismatch_frame": 8733,
-     "matched_frames": 3572,
-     "mismatch_count": 193000,
-     "mismatch_fields_digest": "296745375d044e6eda6617c5c36da95efea94fc990af938ba9c60388a07cfaed",
-     "mismatch_fingerprint": "5a36db1ebbb9a42c",
-     "mismatched_frames": 5284,
-     "render_visibility_mismatch_count": 5534,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 0
     }
    }
   },

@@ -3363,6 +3363,10 @@ void Fighter_ProcessHit_8006D1EC(Fighter_GObj* gobj)
         } else {
             ftCo_HeadlessPublishDynamicHurtCapsules(fp);
         }
+        {
+            extern void msl_fighter_refresh_dynamics_matrices(Fighter* fp);
+            msl_fighter_refresh_dynamics_matrices(fp);
+        }
 #endif
     }
 }
