@@ -1437,6 +1437,27 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
         if (source_offset == 0x17 || source_offset == 0x1B) {
             return 0;
         }
+    } else if (item->kind == It_Kind_Seak_NeedleHeld) {
+        // Retail layout is a single Fighter_GObj* owner; offset 3 samples its
+        // low byte and 4..7 sit past the declared member. The widened native
+        // pointer's upper half is host-mapping-dependent, so pin the
+        // past-member byte instead of leaking it.
+        if (source_offset == 3) {
+            return (uint8_t) (uintptr_t) item->xDD4_itemVar.seakneedleheld
+                .owner;
+        }
+        if (source_offset == 7) {
+            return 0;
+        }
+    } else if (item->kind == It_Kind_IceClimber_Blizzard) {
+        // Retail layout is f32 x0 + one flag byte; offsets 7/0x17/0x1B all
+        // sit past the declared members in allocator-reuse residue. Pin them
+        // so the native union's previous-occupant bytes do not leak.
+        if (source_offset == 7 || source_offset == 0x17 ||
+            source_offset == 0x1B)
+        {
+            return 0;
+        }
     } else if (item->kind == It_Kind_IceClimber_GumStrings) {
         // Retail layout: +0 f32 x0, +4/+8 ItemLink*, +C HSD_GObj*, +14
         // HSD_JObj*. Offsets 7 and 0x17 sample the x4 link and x14 joint
