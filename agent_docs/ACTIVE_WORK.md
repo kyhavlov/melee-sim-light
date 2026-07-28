@@ -342,8 +342,7 @@ slice, and follower-frame validation.
   recording unless (a) a compensating infidelity elsewhere currently cancels the fall-through
   bug (find it by tracing the with-fix landing sequence: ours should now build the walk
   script at 3984 and dash at 3986 exactly like the retail probe — verify, then chase where
-  the tail diverges instead), or (b) the netplay build's ADE48 differs from GALE01 vanilla
-  (check Slippi/UCF gecko lists for hooks in 0x800ADE48-0x800AE7AC). The reverted change is
+  the tail diverges instead), Hypothesis (b) ELIMINATED: no UCF or slippi-ssbm-asm injection touches 0x800ADE48-0x800AE7AC, so the recording's ADE48 is vanilla and (a) — a compensating infidelity that currently cancels the missing exit — is the operative theory; the with-fix landing-sequence trace comparison is the way in. The reverted change is
   one `else { return; }` at the A2C80 guard — trivial to re-apply once (a)/(b) is resolved.
 
 - 2026-07-27 — `open` (the x18==4 cascade exit: asm-real, but the naive port regresses)
