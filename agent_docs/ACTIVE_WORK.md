@@ -223,6 +223,18 @@ slice, and follower-frame validation.
   cascade returns already wired for ACD5C) to find which state handler picks the full-stick
   dash command in retail.
 
+- 2026-07-27 — `open` (gm-peach @3986 refined: identical stick, divergent landing physics)
+  Follow-up traces (our tick + AB224 branch vs the retail ring probe) show BOTH sims emit the
+  full -127 at slippi 3986 in state 1 (same-island AA42C walker) and dash at 3987; published
+  lanes match through 3985. The @3986 delta (air self -0.3895 vs -0.3545 = one accel
+  quantum; pos 0.035) therefore arises INSIDE frame 3986's Landing-state update with
+  identical inputs — an unpublished state bit or IASA-order detail. Blocked on visibility:
+  the engine dump carries only leader rows (port_count=2). Next tooling step: add follower
+  fighter rows to the engine-dump writer (slippi-dolphin engine-dump branch) or an
+  interpreter probe over ftCo_Landing IASA/physics for Nana at 3985-3987, then diff
+  self-vel/decel inputs. gm-peach anchors: our tick t = slippi + 128 for the FIRST Nana
+  lifetime; x7C resets on her respawn (filter traces by position, not t, across lifetimes).
+
 - 2026-07-27 — `open` (dl-fox @238 root-cause narrowed to ftCo_800A2C80's long recovery ray)
   Scope: with the tick trace aligned (our t = slippi + 133 on dl-fox), our Nana's x18 path
   through her damage (~f210-236) is 1 -> 4 -> 10 -> 1 while retail lands in x18=2 (attack).
