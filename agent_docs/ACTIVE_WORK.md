@@ -329,6 +329,23 @@ slice, and follower-frame validation.
   retail-side. Suspects: the f64-mixed prediction arithmetic (lines ~161-213, fmadd-class),
   or a subtle table-translation field. This single comparison closes the episode class.
 
+- 2026-07-27 — `open` (ADE48 cascade truth table complete; the x18==4 exit contradiction)
+  Full asm branch-skeleton extraction (0x800AE280-0x800AE7A8, saved recipe in-session): EVERY
+  state guard in the transition cascade exits the function when x18 already equals it
+  (fifteen exits; guard 7's exit also calls ftCo_800BB9B4 first). The C's PYRAMID NESTING
+  actually implements fourteen of them (each `if (x18 != N) {` nests the whole remainder and
+  the closing braces fall to returns) — the ONLY non-nesting guard is x18 != 4 at the
+  ftCo_800A2C80 site: when x18==4 the C uniquely falls through into the 0xF+ guards. That is
+  the single genuinely dropped exit. CONTRADICTION TO RESOLVE: adding the asm-faithful
+  `else return` REGRESSED the suite (gm-peach matched rows 9,966 -> 4,077 — note the FAIL
+  column is total matched rows, not prefix), which should be impossible against a retail
+  recording unless (a) a compensating infidelity elsewhere currently cancels the fall-through
+  bug (find it by tracing the with-fix landing sequence: ours should now build the walk
+  script at 3984 and dash at 3986 exactly like the retail probe — verify, then chase where
+  the tail diverges instead), or (b) the netplay build's ADE48 differs from GALE01 vanilla
+  (check Slippi/UCF gecko lists for hooks in 0x800ADE48-0x800AE7AC). The reverted change is
+  one `else { return; }` at the A2C80 guard — trivial to re-apply once (a)/(b) is resolved.
+
 - 2026-07-27 — `open` (the x18==4 cascade exit: asm-real, but the naive port regresses)
   PC-coverage trace (generic MSL_PROBE_PC_TRACE over 0x800AE0F0-0x800AE568 at the landing
   tick) shows retail's ADE48 executing: motion 0xFC/0xFD checks, x18==9 guard, IsGrabbing,
