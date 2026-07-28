@@ -342,7 +342,15 @@ slice, and follower-frame validation.
   recording unless (a) a compensating infidelity elsewhere currently cancels the fall-through
   bug (find it by tracing the with-fix landing sequence: ours should now build the walk
   script at 3984 and dash at 3986 exactly like the retail probe — verify, then chase where
-  the tail diverges instead), Hypothesis (b) ELIMINATED: no UCF or slippi-ssbm-asm injection touches 0x800ADE48-0x800AE7AC, so the recording's ADE48 is vanilla and (a) — a compensating infidelity that currently cancels the missing exit — is the operative theory; the with-fix landing-sequence trace comparison is the way in. The reverted change is
+  the tail diverges instead), WITH-FIX TRACE RESULT (the compensator, partially unmasked): with the
+  else-return applied, the landing tick builds a TEN-frame WaitFor script (csp=1 dur=10) and
+  x18 HOLDS 4 through 1038-1047 — the B2790 case-4 grounded demote never fires even though
+  the A3554-based analysis proved ga=Ground at that think. Suspects: the script was built by
+  something reached before case-4 (ftCo_800A8DE4_noinline preamble? an ACD5C-shaped WaitFor
+  0xA script implies a case-10 dispatch — check whether x18 was still 10 from the previous
+  frame's structures), or the csP gate sequencing. NEXT: re-apply the fix + tick trace WITH
+  ga and the dispatched case id logged in ftCo_800B2790, one run, read the landing tick.
+  Hypothesis (b) ELIMINATED: no UCF or slippi-ssbm-asm injection touches 0x800ADE48-0x800AE7AC, so the recording's ADE48 is vanilla and (a) — a compensating infidelity that currently cancels the missing exit — is the operative theory; the with-fix landing-sequence trace comparison is the way in. The reverted change is
   one `else { return; }` at the A2C80 guard — trivial to re-apply once (a)/(b) is resolved.
 
 - 2026-07-27 — `open` (the x18==4 cascade exit: asm-real, but the naive port regresses)
