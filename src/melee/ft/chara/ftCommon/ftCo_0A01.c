@@ -6320,6 +6320,12 @@ void ftCo_800ADE48(Fighter* fp)
                                 data->x18 = 4;
                                 return;
                             }
+                        } else {
+                            // 800AE454/800AE484: an active recovery keeps
+                            // state 4 and exits the transition cascade; the
+                            // upstream C falls through into the remaining
+                            // checks and can leave the state.
+                            return;
                         }
                         if (data->x18 != 0xF) {
                             if (data->level < 5) {
@@ -8626,6 +8632,10 @@ void ftCo_800B2790(Fighter* fp)
             case 4:
                 ftCo_800A8DE4_noinline(fp);
                 if (fp->ground_or_air == GA_Ground) {
+                    // 800B2840: r28 carries the switch's zero default; the
+                    // upstream C reads it uninitialized when no special
+                    // stage line matches.
+                    special_floor = 0;
                     line_id = fp->coll_data.floor.index;
                     if (grBigBlue_801EF844(line_id) ||
                         grInishie1_801FCAAC(line_id) ||
@@ -8708,6 +8718,7 @@ void ftCo_800B2790(Fighter* fp)
                 ftCo_800AC434(fp);
                 break;
             case 19:
+                special_floor = 0;
                 if (fp->motion_id == 0x131) {
                     special_floor = 1;
                 } else if (fp->motion_id == 0x132) {
