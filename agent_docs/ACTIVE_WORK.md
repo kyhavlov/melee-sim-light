@@ -462,3 +462,15 @@ slice, and follower-frame validation.
   NEXT FRONT (fod-sheik @1248): follower_speed -0.725372 vs -0.726160 while mimicking
   (stick 125 walking), NOT a /127 byte value on our side — ring/clamp interplay again;
   ring probe run at frames 1240-1256 pending analysis.
+
+- 2026-07-28 — `retained` (UCF DASHBACK OVER-FIRE FIX, commit after 4fa63d66)
+  The fod-sheik @1248 mimic front: retail ring probe showed the slot playing at x7C=1371
+  held 125 = trunc(127 x 0.986) natural capture while ours held a retro-written 127. The
+  gecko replaces the facing store at Interrupt_AS_Turn+0x4C, which lives INSIDE the
+  if (!has_turned) branch of ftCo_Turn_IASA; our hook ran unconditionally after the if,
+  so already-turned smash turns (has_turned set at frame 1) still converted at anim
+  frame 2 (87/88 fires in fod-sheik were spurious). Moving the call inside the branch:
+  fod-sheik 5,077 -> 9,724, medium-sheik -> 14,279, ics-ditto -> 11,693, fd-falco ->
+  8,117, bf-marth -> 6,993, auto-falco -> 6,654; aggregate 183/63/0. DIAGNOSIS RECIPE:
+  the DASHBACK-FIRE env trace (fire-time anim/has_turned/x670/raws) + the ring probe's
+  natural-vs-retro slot values pinpointed the condition delta in minutes.
