@@ -1927,6 +1927,20 @@ void Fighter_8006ABA0(Fighter_GObj* gobj)
     }
 }
 
+#ifdef MSL_CORE_HOSTED
+static bool msl_fighter_cpu_input_live(void)
+{
+    HSD_GObj* cur;
+    for (cur = HSD_GObj_Entities->fighters; cur != NULL; cur = cur->next) {
+        Fighter* fp = GET_FIGHTER(cur);
+        if (!fp->x221F_b3 && ftCo_800A2040(fp)) {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
 /// https://decomp.me/scratch/A7CgG
 void Fighter_UnkIncrementCounters_8006ABEC(Fighter_GObj* gobj)
 {
@@ -3338,7 +3352,17 @@ void Fighter_ProcessHit_8006D1EC(Fighter_GObj* gobj)
 #ifndef MSL_CORE_HOSTED
         ftCo_800A0DA4(fp);
 #else
-        ftCo_HeadlessPublishDynamicHurtCapsules(fp);
+        // The CPU input tree reads every fighter's hurt-capsule extents
+        // (x1A88.x55C/x560/x564/x568): the follower think consumes the
+        // leader's x564 approach radius and ftcpuattack range checks consume
+        // any target's spans. ftCo_800A0DA4 refreshes all capsules (a
+        // superset of the dynamics-owned publication), so run it whenever a
+        // CPU-driven fighter exists; the fields are dead state otherwise.
+        if (msl_fighter_cpu_input_live()) {
+            ftCo_800A0DA4(fp);
+        } else {
+            ftCo_HeadlessPublishDynamicHurtCapsules(fp);
+        }
 #endif
     }
 }
