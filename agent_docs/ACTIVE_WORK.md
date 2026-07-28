@@ -266,6 +266,19 @@ slice, and follower-frame validation.
   and its in_bounds -> xFA_b5 store was asm-verified but its mpCheckFloor probe inputs
   depend on cur_pos while airborne).
 
+- 2026-07-27 — `retained` (A2C80 exonerated at the gm-peach onset; divergence is a state-4 exit)
+  Paired A2C80 gate traces at the knockback onset (retail kA2c80Entry/kA2c80Ret vs sim-side
+  msl_a2c80_trace): BOTH sims enter recovery state 4 at the same tick (slippi 3925, our
+  t=979; angle bf8be887 passes, xFA_b5 clear, floor ray finds nothing, ret 1). The earlier
+  'ours never entered 4' reading was wrong. Retail stays x18=4 through 3982 (script probe);
+  ours is x18=10 by t=1038 (3984): our sim EXITS state 4 somewhere in 3925-3983 mid-air.
+  Next (first action of the continuation): sample our x18 per tick across t=979-1042 (the
+  tick trace prints it; one grep), find the exit tick, then diff the state-4 handlers'
+  gates at that tick — case-4 of ftCo_800B2790 (grounded demote / ftCo_800A9904 air) and
+  ftCo_800B24B8 (case 4 of B2AFC) against the retail probes. The one-frame walk-script
+  cadence at landing (and hence the entire episode class) follows from whichever gate
+  flips ours out of 4 early.
+
 - 2026-07-27 — `open` (dl-fox @238 root-cause narrowed to ftCo_800A2C80's long recovery ray)
   Scope: with the tick trace aligned (our t = slippi + 133 on dl-fox), our Nana's x18 path
   through her damage (~f210-236) is 1 -> 4 -> 10 -> 1 while retail lands in x18=2 (attack).
