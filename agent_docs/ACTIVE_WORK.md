@@ -329,6 +329,23 @@ slice, and follower-frame validation.
   retail-side. Suspects: the f64-mixed prediction arithmetic (lines ~161-213, fmadd-class),
   or a subtle table-translation field. This single comparison closes the episode class.
 
+- 2026-07-27 — `retained` (BREAKTHROUGH: cascade repair landed; first replay CLASSIFIED)
+  The compensator was a FOURTH upstream decomp drop: ftCo_800B2790's case 4 (and case 19)
+  read special_floor UNINITIALIZED where the asm carries a zeroed register — the garbage
+  routed retail-faithful landings into ftCo_800A0148's blast-zone escape script, masking the
+  missing cascade exit. Landing all three repairs together (9bc1b259: the ADE48 x18==4
+  cascade exit + both zero-inits) restored the retail landing sequence and moved the suite
+  to matched rows 4,215-14,150: ys-fox 8,140/8,152, master-fox 8,543/8,610, gm-peach
+  10,299/10,401, medium-marth 14,150/14,709. ys-fox's entire residue = 12 rows of belay
+  string item.misc1/misc2 = Slippi's raw bytes over retail heap ItemLink/JObj pointer
+  identities — unrecordable in principle — and is now CLASSIFIED (0a20c832,
+  id unrecorded-item-pointer-identity, full native snapshot; note the manifest was
+  re-serialized with indent=1, formatting churn only). SUITE: 0 pass / 1 CLASSIFIED /
+  11 fail; aggregate 183/63/0 verified after both commits.
+  Remaining: the other 11 replays now follow the same endgame — small residues per replay
+  (master-fox 67 rows, gm-peach 102) to attribute as fix-or-classify, then locks and
+  aggregate wiring.
+
 - 2026-07-27 — `open` (ADE48 cascade truth table complete; the x18==4 exit contradiction)
   Full asm branch-skeleton extraction (0x800AE280-0x800AE7A8, saved recipe in-session): EVERY
   state guard in the transition cascade exits the function when x18 already equals it
