@@ -308,8 +308,16 @@ slice, and follower-frame validation.
   retail PC probe over ADE48's early-return addresses at 3983. Note the ga-vs-motion phase
   at landing think (ga=Ground from the prio-6 map pass of the PREVIOUS frame while
   motion_id still Fall) is what arms A3554 grounded gates one tick before the Landing
-  state exists — if retail's ADE48 exit at 3983 turns out to be hitlag/x221A_b3-keyed
-  (landing hitlag arming), that flag's landing semantics are the owner.
+  state exists — by elimination the only consistent retail path at 3983 is
+  ftCo_800B8A9C returning TRUE (x18 -> 2, returning before the final transition — matching
+  the missing CALL row) with B2790's case-2 handler demoting 2 -> 1 the SAME tick (matching
+  retail's end-of-tick x18=1 and the 3984 walk script). Ours' B8A9C returns FALSE at that
+  tick. So the last mile is ftCo_800B4AB0's per-entry evaluation (or B8A9C's target-state
+  gates A3134/A3200 on Peach) at ONE tick with known inputs — instrument the entry loop
+  (which entries pass the level/cmd gates, the predicted relx/relPredY per entry, and the
+  final selection) sim-side, and the same via an interpreter probe on B4AB0's entry/return
+  retail-side. Suspects: the f64-mixed prediction arithmetic (lines ~161-213, fmadd-class),
+  or a subtle table-translation field. This single comparison closes the episode class.
 
 - 2026-07-27 — `open` (dl-fox @238 root-cause narrowed to ftCo_800A2C80's long recovery ray)
   Scope: with the tick trace aligned (our t = slippi + 133 on dl-fox), our Nana's x18 path
