@@ -38,6 +38,8 @@ __pycache__/
 
 # Viewer caches and local notes
 tools/viewer/slippi-viewer/public/zips/*.zip
+# Wasm build output; the .data bundle packages ISO-extracted game data.
+tools/viewer/live/public/
 DEV_LOCAL.md
 tools/notify_discord.sh
 SSBM.iso
