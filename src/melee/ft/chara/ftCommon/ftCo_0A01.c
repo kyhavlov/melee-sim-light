@@ -7625,10 +7625,15 @@ static inline void ftCo_800B0760_dontinline(Fighter* fp)
 /// @todo Maybe a macro?
 static inline u8 inlineM0(float x)
 {
+    // MWCC converts through fctiwz (signed, wrapping) and stores the low
+    // byte. A direct float->u8 conversion of the negative half is undefined
+    // and saturates to zero on arm64 and wasm, silencing every leftward or
+    // downward sample in the follower's mimic ring; converting through s32
+    // keeps the retail modulo semantics on every host.
     if (x >= 0) {
-        return 127.0F * x;
+        return (u8) (s32) (127.0F * x);
     } else {
-        return 128.0F * x;
+        return (u8) (s32) (128.0F * x);
     }
 }
 
