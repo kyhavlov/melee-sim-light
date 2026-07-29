@@ -51,12 +51,17 @@
 
 typedef bool (*lb_803BA248_fn)(ColorOverlay*);
 
+// This is lb's view of the caller's collider records (Fighter_x1670_t /
+// Item xB6C_t). Field types must mirror theirs — the middle member is a
+// JObj pointer, so byte-offset padding would misplace `position` and the
+// array stride on any build whose pointers aren't 4 bytes.
 struct lb_Collider {
-    /* 0x00 */ char pad_00[0x0C];
+    /* 0x00 */ Vec3 pad_v1;
     /* 0x0C */ f32 radius;
-    /* 0x10 */ char pad_10[0x08];
+    /* 0x10 */ void* pad_jobj;
+    /* 0x14 */ f32 pad_x14;
     /* 0x18 */ Vec3 position;
-    /* 0x24 */ char pad_24[0x04];
+    /* 0x24 */ s32 pad_x24;
 };
 
 const struct {

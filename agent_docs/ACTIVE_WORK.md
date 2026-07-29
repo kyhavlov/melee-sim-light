@@ -591,7 +591,52 @@ slice, and follower-frame validation.
   msl_emitter_trace; our RNG trace pairs frames via synthesized online seeds
   (base + (frame+123)<<16 — bf-marth base 33407).
 
-- 2026-07-28 — `open` (session 9: icies_extended staged; the tail-solver fork isolated
+- 2026-07-29 — `closed` (session 10: THE TAIL-SOLVER FORK ROOT-CAUSED AND FIXED —
+  two production fixes, 4 classified replays promoted to bit-exact, aggregate
+  203 pass / 55 classified / 0 fail)
+  The session-9 "solver fork with bit-identical inputs" was never in the solver.
+  Per-stage link_dir instrumentation (MSL_ST rows inside lb_8001044C, container)
+  showed our frame-3468 YS solve matching retail's implied final dirs to 0.2-0.8
+  deg — but our OWN 3469-entry anchors differed from what our solve wrote.
+  ftCo_8009CB40 (the anim-ownership toggle) had rewritten the chain anchors from
+  raw jobj->mtx at the taunt-exit action change. Retail probe on 0x8009CB40
+  (slippi-dolphin: cb40 event in MaybeCaptureTailProbe + per-link unk_38 "av"
+  dump) proved retail fires the identical release/acquire pair but reads
+  END-OF-FRAME RENDER matrices (solved pose, stale through the next frame's anim)
+  — our port had left the last MID-FRAME pre-solve HSD_JObjSetupMatrix in mtx.
+  FIX 1 (melee/ft/fighter.c): Fighter_8006D9AC re-runs
+  msl_fighter_refresh_dynamics_matrices after ftCo_8009E0A8 (post-solve), so the
+  toggle samples the solved pose exactly as retail's renderer leaves it.
+  Verified bit-identical CB40 rewrites vs retail at YS 3469 and 33692 frames
+  36/313/677.
+  That fix flipped marios/33692 (was pass) — bisecting its 380-solve fork against
+  retail (windows 100..380 bit-identical in w/rot/s58/jr/jt/par/av) landed on the
+  collider-avoidance stage: retail rotated link 2 by 0.1896 rad off collider
+  (-43.64,10.65,0.38); ours read collider position (x14, pos.x, pos.y) because
+  struct lb_Collider mirrored Fighter_x1670_t with byte-offset padding — the
+  embedded HSD_JObj* widens to 8 bytes on 64-bit hosts, shifting position from
+  0x18 to 0x1C and the stride from 0x28 to 0x30. Hosted collider avoidance had
+  read garbage since the port began (PPC, with 4-byte pointers, was always
+  correct — hence "ppc matches more rows than native").
+  FIX 2 (melee/lb/lbspdisplay.c): lb_Collider declared with real field types
+  (Vec3, f32, void*, f32, Vec3, s32) — layout-correct at any pointer width.
+  RESULTS: 33692 passes; auto-fox-b @3503 SDI cascade gone (item.misc-only now);
+  icies_extended = 12 misc-only + master-diamond @-19 (parked); icies suite 12/12
+  classified; aggregate 203/55/0 with FOUR replays promoted to fully bit-exact
+  (sheik MixedAllQuetzal, doubles Game_20260704T012353, marios medium-fox-2025-12
+  + silver-fox-2026-06 — the last dropped a 52,031-field residual).
+  Suite updates: 2 classification entries removed, 2 kept ppc-only (native dict
+  dropped; test_melee_core_validation now selects native-snapshot entries only),
+  4 output locks re-recorded, 2 ledger rows appended. PPC re-verified per-entry
+  after the rebuild (the PPC build also defines MSL_CORE_HOSTED so FIX 1 applies
+  there; snapshots re-recorded where drifted).
+  KNOWN GAP: the Mac-side data/ pipeline only covers 7 characters (no ICs) — Mac
+  icies runs fail on stale data, container remains the validation authority.
+  Remaining icies-extended non-misc work: master-diamond @-19 (match-start
+  entry-approach clamp via published extents, likely CB40-at-spawn sampling
+  pre-first-refresh matrices).
+
+- 2026-07-28 — `closed by session 10` (session 9: icies_extended staged; the tail-solver fork isolated
   to a single frame with bit-identical inputs)
   Scope: ~/SSBM/Replays/Samples/ics.zip imported (30 files = the 12 existing suite
   replays + 18 new). Excluded: 4 non-frozen-PS games (established policy) and the 2022

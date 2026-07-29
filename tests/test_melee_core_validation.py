@@ -126,7 +126,13 @@ def test_native_validation_compares_complete_classified_replays() -> None:
         )
         suite_cases.extend(loaded_cases)
     cases_by_path = {case.display_path: case for case in suite_cases}
-    cases = [cases_by_path[replay] for replay in classifications]
+    # Entries without a native snapshot are bit-exact on the native backend
+    # (classified only for PPC) and are covered by the ordinary pass path.
+    cases = [
+        cases_by_path[replay]
+        for replay, classification in classifications.items()
+        if "native" in classification.expected
+    ]
 
     outcomes, wall_seconds = run_cases(
         load_native(),

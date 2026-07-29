@@ -3380,6 +3380,19 @@ void Fighter_8006D9AC(Fighter_GObj* gobj)
     }
 
     ftCo_8009E0A8(gobj);
+#ifdef MSL_CORE_HOSTED
+    // Retail's end-of-frame render recomputes every bone matrix after this
+    // dynamics solve, and ftCo_8009CB40 reads those raw matrices when the
+    // next anim-ownership toggle rewrites the chain anchors. The links must
+    // therefore leave the frame holding the solved pose; otherwise the last
+    // mid-frame HSD_JObjSetupMatrix (pre-solve) wins and the toggle
+    // teleports the chain into a stale pose (retail-probe-verified on
+    // auto-fox YS frame 3469 and marios 33692 frame 36).
+    {
+        extern void msl_fighter_refresh_dynamics_matrices(Fighter* fp);
+        msl_fighter_refresh_dynamics_matrices(fp);
+    }
+#endif
 }
 
 void Fighter_UnkCallCameraCallback_8006D9EC(Fighter_GObj* gobj)
