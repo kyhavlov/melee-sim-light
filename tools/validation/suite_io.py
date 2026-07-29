@@ -16,6 +16,7 @@ class SuiteReplay:
     ucf_cardinals_1_0_enabled: bool | None = None
     ucf_shield_sdi_enabled: bool | None = None
     ucf_sdi_enabled: bool | None = None
+    ucf_shield_drop_extended_enabled: bool | None = None
     played_on: str | None = None
 
 
@@ -28,6 +29,7 @@ class ReplaySuite:
     ucf_cardinals_1_0_enabled: bool | None = None
     ucf_shield_sdi_enabled: bool | None = None
     ucf_sdi_enabled: bool | None = None
+    ucf_shield_drop_extended_enabled: bool | None = None
     team_attack_on: bool | None = None
 
 
@@ -88,6 +90,9 @@ def _load_suite(path: Path, stack: tuple[Path, ...]) -> ReplaySuite:
     ucf_cardinals_1_0_enabled = data.get("ucf_cardinals_1_0_enabled")
     ucf_shield_sdi_enabled = data.get("ucf_shield_sdi_enabled")
     ucf_sdi_enabled = data.get("ucf_sdi_enabled")
+    ucf_shield_drop_extended_enabled = data.get(
+        "ucf_shield_drop_extended_enabled"
+    )
     team_attack_on = data.get("team_attack_on")
     replays: list[SuiteReplay] = []
     for include in data.get("include_suites", []):
@@ -113,6 +118,11 @@ def _load_suite(path: Path, stack: tuple[Path, ...]) -> ReplaySuite:
                         replay.ucf_sdi_enabled
                         if replay.ucf_sdi_enabled is not None
                         else included.ucf_sdi_enabled
+                    ),
+                    ucf_shield_drop_extended_enabled=(
+                        replay.ucf_shield_drop_extended_enabled
+                        if replay.ucf_shield_drop_extended_enabled is not None
+                        else included.ucf_shield_drop_extended_enabled
                     ),
                 )
             )
@@ -142,6 +152,11 @@ def _load_suite(path: Path, stack: tuple[Path, ...]) -> ReplaySuite:
                     if "ucf_sdi_enabled" in r
                     else None
                 ),
+                ucf_shield_drop_extended_enabled=(
+                    bool(r["ucf_shield_drop_extended_enabled"])
+                    if "ucf_shield_drop_extended_enabled" in r
+                    else None
+                ),
                 played_on=(str(r["played_on"]) if "played_on" in r else None),
             )
         )
@@ -166,6 +181,9 @@ def _load_suite(path: Path, stack: tuple[Path, ...]) -> ReplaySuite:
         else None,
         ucf_sdi_enabled=bool(ucf_sdi_enabled)
         if ucf_sdi_enabled is not None
+        else None,
+        ucf_shield_drop_extended_enabled=bool(ucf_shield_drop_extended_enabled)
+        if ucf_shield_drop_extended_enabled is not None
         else None,
         team_attack_on=bool(team_attack_on) if team_attack_on is not None else None,
         replays=tuple(replays),

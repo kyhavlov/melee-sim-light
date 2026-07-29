@@ -62,6 +62,7 @@ class ReplayCase:
     ucf_cardinals_1_0_enabled: bool = True
     ucf_shield_sdi_enabled: bool = True
     ucf_sdi_enabled: bool = True
+    ucf_shield_drop_extended_enabled: bool = True
     played_on: str | None = None
 
 
@@ -397,6 +398,7 @@ def validate_one(
     ucf_cardinals_1_0_enabled: bool = True,
     ucf_shield_sdi_enabled: bool = True,
     ucf_sdi_enabled: bool = True,
+    ucf_shield_drop_extended_enabled: bool = True,
     played_on: str | None = None,
     runner: _NativeRunner | None = None,
 ) -> dict[str, object]:
@@ -426,6 +428,7 @@ def validate_one(
             ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
             ucf_shield_sdi_enabled=ucf_shield_sdi_enabled,
             ucf_sdi_enabled=ucf_sdi_enabled,
+            ucf_shield_drop_extended_enabled=ucf_shield_drop_extended_enabled,
             runner_stdin=runner.stdin_fd if runner is not None else -1,
             runner_stdout=runner.stdout_fd if runner is not None else -1,
         )
@@ -514,6 +517,15 @@ def load_suite_cases(
                         else True
                     )
                 ),
+                ucf_shield_drop_extended_enabled=(
+                    entry.ucf_shield_drop_extended_enabled
+                    if entry.ucf_shield_drop_extended_enabled is not None
+                    else (
+                        suite.ucf_shield_drop_extended_enabled
+                        if suite.ucf_shield_drop_extended_enabled is not None
+                        else True
+                    )
+                ),
                 played_on=entry.played_on,
             )
         )
@@ -574,6 +586,9 @@ def _validate_case(
                 ucf_cardinals_1_0_enabled=case.ucf_cardinals_1_0_enabled,
                 ucf_shield_sdi_enabled=case.ucf_shield_sdi_enabled,
                 ucf_sdi_enabled=case.ucf_sdi_enabled,
+                ucf_shield_drop_extended_enabled=(
+                    case.ucf_shield_drop_extended_enabled
+                ),
                 played_on=case.played_on,
                 runner=runner,
             )

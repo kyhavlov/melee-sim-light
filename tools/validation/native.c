@@ -1035,7 +1035,8 @@ static void build_input(const ReplayView* replay, const FrameRows* rows, int64_t
 
 static int build_match_config(const ReplayView* replay, const FrameRows* rows,
                               int ucf_cardinals_1_0_enabled, int ucf_shield_sdi_enabled,
-                              int ucf_sdi_enabled, MslCoreMatchConfig* config, char* error,
+                              int ucf_sdi_enabled, int ucf_shield_drop_extended_enabled,
+                              MslCoreMatchConfig* config, char* error,
                               size_t error_size) {
   int64_t i;
   if (rows->count == 0) {
@@ -1075,6 +1076,7 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
   config->ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
   config->ucf_shield_sdi_enabled = (uint8_t)ucf_shield_sdi_enabled;
   config->ucf_sdi_enabled = (uint8_t)ucf_sdi_enabled;
+  config->ucf_shield_drop_extended_enabled = (uint8_t)ucf_shield_drop_extended_enabled;
   config->stage_event_streams = (replay->fod_platform_list != NULL ? 1U : 0U) |
                                 (replay->dreamland_whispy_list != NULL ? 2U : 0U);
   for (i = 0; i < replay->num_players; ++i) {
@@ -2355,6 +2357,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "ucf_cardinals_1_0_enabled",
       "ucf_shield_sdi_enabled",
       "ucf_sdi_enabled",
+      "ucf_shield_drop_extended_enabled",
       "runner_stdin",
       "runner_stdout",
       NULL,
@@ -2375,6 +2378,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int ucf_cardinals_1_0_enabled = 1;
   int ucf_shield_sdi_enabled = 1;
   int ucf_sdi_enabled = 1;
+  int ucf_shield_drop_extended_enabled = 1;
   int runner_stdin = -1;
   int runner_stdout = -1;
   struct ArrowSchema* schema;
@@ -2395,10 +2399,11 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppii:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdppppppii:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
-          &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &runner_stdin, &runner_stdout)) {
+          &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
+          &runner_stdin, &runner_stdout)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -2444,7 +2449,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   if (load_replay(frames, &replay, error, sizeof(error)) != 0 ||
       build_finalized_rows(&replay, &rows, error, sizeof(error)) != 0 ||
       build_match_config(&replay, &rows, ucf_cardinals_1_0_enabled, ucf_shield_sdi_enabled,
-                         ucf_sdi_enabled, &state.config, error, sizeof(error)) != 0) {
+                         ucf_sdi_enabled, ucf_shield_drop_extended_enabled, &state.config,
+                         error, sizeof(error)) != 0) {
     PyErr_SetString(PyExc_ValueError, error);
     goto done;
   }
@@ -2525,6 +2531,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
       "ucf_cardinals_1_0_enabled",
       "ucf_shield_sdi_enabled",
       "ucf_sdi_enabled",
+      "ucf_shield_drop_extended_enabled",
       NULL,
   };
   PyObject* frames_obj;
@@ -2535,6 +2542,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   int ucf_cardinals_1_0_enabled = 1;
   int ucf_shield_sdi_enabled = 1;
   int ucf_sdi_enabled = 1;
+  int ucf_shield_drop_extended_enabled = 1;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -2548,10 +2556,10 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   PyObject* result = NULL;
   (void)self;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|ppp:write_benchmark_case", keywords,
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|pppp:write_benchmark_case", keywords,
                                    &frames_obj, &start_obj, &metadata_obj, &output_path,
                                    &ucf_cardinals_1_0_enabled, &ucf_shield_sdi_enabled,
-                                   &ucf_sdi_enabled)) {
+                                   &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled)) {
     return NULL;
   }
   memset(&replay, 0, sizeof(replay));
@@ -2581,7 +2589,8 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   if (load_replay(frames, &replay, error, sizeof(error)) != 0 ||
       build_finalized_rows(&replay, &rows, error, sizeof(error)) != 0 ||
       build_match_config(&replay, &rows, ucf_cardinals_1_0_enabled, ucf_shield_sdi_enabled,
-                         ucf_sdi_enabled, &header.config, error, sizeof(error)) != 0) {
+                         ucf_sdi_enabled, ucf_shield_drop_extended_enabled, &header.config,
+                         error, sizeof(error)) != 0) {
     PyErr_SetString(PyExc_ValueError, error);
     goto done;
   }

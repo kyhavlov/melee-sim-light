@@ -591,6 +591,41 @@ slice, and follower-frame validation.
   msl_emitter_trace; our RNG trace pairs frames via synthesized online seeds
   (base + (frame+123)<<16 — bf-marth base 33407).
 
+- 2026-07-29 — `closed` (session 12: master-diamond @682 root-caused — the UCF pad-ring
+  patch profile; ALL 13 extended icies replays in the aggregate: 271 = 203/68/0)
+  The @682 "grab-attach" was misread: Sheik was hit by an ice block at 681 and our
+  runtime SDI'd her 6.0*stick = -5.85 during hitlag at 682. Trace chain: the
+  displacement matched sdi_pos_scale * lstick exactly; the spaghetti trace showed her
+  x670 tilt timer correctly stale (flick began on the hit frame, so the count-up
+  branch ran), meaning vanilla SDI could not fire - the trigger was
+  msl_ucf_sdi_check (the pad-ring f2 SDI patch), which retail provably did not run
+  for this session.
+  A first attempt keying all ring patches on ucf_cardinals_1_0_enabled BROKE EIGHT
+  aggregate replays (2022 luigi/marios, puff master-diamond, marth x2, falcon,
+  peach x2 - all cardinals-false yet bit-exact under ring-patch emulation): the
+  ring-patch rollout and the cardinals rollout are INDEPENDENT eras. Reverted;
+  the correct model is the existing per-replay rollout-flag scheme (wire.h already
+  documents ucf_sdi_enabled/ucf_shield_sdi_enabled as "separate
+  rollout/capability" for exactly this reason).
+  CHANGES: new ucf_shield_drop_extended_enabled flag plumbed end to end
+  (wire.h/wire.c config byte - MslCoreMatchConfig 52->53, header 108->109;
+  match rules; scalar init; native.c kwargs x2; suite_io + validate_replay
+  schema); msl_ucf_pass_oos_stick_check re-keyed from the session-11 cardinals
+  gate to the new flag; the two ranked-anonymized icies captures
+  (master-diamond, platinum-platinum) carry ucf_sdi/ucf_shield_sdi/
+  ucf_shield_drop_extended = false (platinum's flags also reconcile its ppc
+  snapshot history: the 1326-row follower fork seen pre-gate was sdrop-on
+  behavior).
+  RESULT: master-diamond 782 -> 6,186/6,460 matched, item.misc-only; classified
+  (native 914 / ppc 194) + locked; icies_parked.json dissolved into
+  icies_extended.json (13 replays); counts 270->271; aggregate 203/68/0; container
+  pytest green; WingedGorgeousPanther ppc snapshot verified stable under the
+  re-keyed gates; PPC rebuilt for the wire change.
+  OPEN QUESTION (for future imports): what distinguishes the ranked-anonymized
+  profile (no ring patches, 2023-24 vintage) from ordinary 2022+ netplay (ring
+  patches present)? Possibly a ranked-mode gecko set. New anonymized imports
+  should A/B the three flags against retail probes before classification.
+
 - 2026-07-29 — `closed` (session 11: icies_extended wired into the aggregate — 270
   replays, 203 pass / 67 classified / 0 fail; the pre-cardinals UCF shield-drop gate)
   master-diamond's frame -19 fork root-caused with retail probes: retail Nana

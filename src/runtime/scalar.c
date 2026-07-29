@@ -890,7 +890,8 @@ static int match_construct(MslCoreMatch* match,
                               match->config.freeze_dead_up_fall_physics,
                               match->config.ucf_cardinals_1_0_enabled,
                               match->config.ucf_shield_sdi_enabled,
-                              match->config.ucf_sdi_enabled);
+                              match->config.ucf_sdi_enabled,
+                              match->config.ucf_shield_drop_extended_enabled);
     msl_camera_state_init(&match->camera);
     msl_slippi_state_init(&match->slippi, match->config.stage_event_streams);
 

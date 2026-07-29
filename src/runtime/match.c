@@ -35,6 +35,8 @@ static _Thread_local MslCoreMatchRules* msl_bound_match_rules;
 #define msl_ucf_shield_sdi_enabled \
     (msl_bound_match_rules->ucf_shield_sdi_enabled)
 #define msl_ucf_sdi_enabled (msl_bound_match_rules->ucf_sdi_enabled)
+#define msl_ucf_shield_drop_extended_enabled \
+    (msl_bound_match_rules->ucf_shield_drop_extended_enabled)
 #define msl_match_frame_count (msl_bound_match_rules->frame_count)
 #define msl_match_ended (msl_bound_match_rules->ended)
 #define msl_respawn_reservation_timer                                         \
@@ -97,7 +99,8 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
                                int freeze_dead_up_fall_physics,
                                int ucf_cardinals_1_0_enabled,
                                int ucf_shield_sdi_enabled,
-                               int ucf_sdi_enabled)
+                               int ucf_sdi_enabled,
+                               int ucf_shield_drop_extended_enabled)
 {
     memset(rules, 0, sizeof(*rules));
     msl_core_bind_match_rules(rules);
@@ -110,6 +113,8 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
     msl_ucf_cardinals_1_0_enabled = ucf_cardinals_1_0_enabled != 0;
     msl_ucf_shield_sdi_enabled = ucf_shield_sdi_enabled != 0;
     msl_ucf_sdi_enabled = ucf_sdi_enabled != 0;
+    msl_ucf_shield_drop_extended_enabled =
+        ucf_shield_drop_extended_enabled != 0;
 }
 
 bool msl_core_uses_online_fnmsubs_zero(void)
@@ -391,13 +396,13 @@ bool msl_ucf_pass_oos_stick_check(const Fighter* fp)
     // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/
     //     UCF Shield Drop Extended.asm
     //
-    // The sdrop counter lives in the shared UCF pad ring, which ships inside
-    // the combined "UCF Pad Buffer + 1.0 Cardinals" patch. Recordings that
-    // predate 1.0 cardinals never ran that buffer, so the extended
-    // shield-drop counter branch cannot fire there (retail-probe-verified on
-    // master-diamond frame -19: the mimic-driven Nana keeps GuardOn off the
-    // port's hot counter and vanilla-passes a frame later).
-    if (!msl_ucf_cardinals_1_0_enabled) {
+    // The extended (counter-based) shield drop is its own Slippi rollout,
+    // independent of dashback, classic shield drop, SDI, and cardinal
+    // snapping; recordings made before it shipped must not take the counter
+    // branch (retail-probe-verified on the icies master-diamond frame -19:
+    // the mimic-driven Nana keeps GuardOn off the port's hot counter and
+    // vanilla-passes a frame later).
+    if (!msl_ucf_shield_drop_extended_enabled) {
         return false;
     }
     return msl_ucf_pad[fp->x618_player_id].sdrop_up_frames >= 2;

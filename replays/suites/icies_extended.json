@@ -1,6 +1,6 @@
 {
  "name": "icies_extended",
- "notes": "Second Ice Climbers batch from ics.zip: 12 netplay singles (Slippi, ranked-anonymized, and mainline captures), wired into the aggregate. The pool excluded four non-frozen Pokemon Stadium games and a 2022 FoD capture predating the animation_index stream; master-diamond is parked in icies_parked.json on an ICs->Sheik grab-attach fork at frame 682.",
+ "notes": "Second Ice Climbers batch from ics.zip: 13 netplay singles (Slippi, ranked-anonymized, and mainline captures), wired into the aggregate. The pool excluded four non-frozen Pokemon Stadium games and a 2022 FoD capture predating the animation_index stream. The two ranked-anonymized captures (master-diamond, platinum-platinum) ran the classic UCF profile: dashback + shield drop without the pad-ring additions, so their sdi/shield-sdi/extended-shield-drop flags are off (retail-probe-verified on master-diamond frames -19 and 682).",
  "ucf_enabled": true,
  "ucf_cardinals_1_0_enabled": true,
  "replays": [
@@ -113,6 +113,23 @@
    }
   },
   {
+   "replay": "replays/validation/icies/master-diamond-e1f45bc846c8b64f90b35a94.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 2,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Sheik"
+   },
+   "played_on": "network",
+   "ucf_cardinals_1_0_enabled": false,
+   "ucf_sdi_enabled": false,
+   "ucf_shield_sdi_enabled": false,
+   "ucf_shield_drop_extended_enabled": false
+  },
+  {
    "replay": "replays/validation/icies/medium-fox-2025-08_Game_20250831T105254.slpz",
    "ports": [
     1,
@@ -136,7 +153,10 @@
     "2": "Falco"
    },
    "ucf_cardinals_1_0_enabled": false,
-   "played_on": "network"
+   "played_on": "network",
+   "ucf_sdi_enabled": false,
+   "ucf_shield_sdi_enabled": false,
+   "ucf_shield_drop_extended_enabled": false
   },
   {
    "replay": "replays/validation/icies/ys-fox-2025-07_Game_20250715T230816.slpz",

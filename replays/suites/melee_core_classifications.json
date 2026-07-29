@@ -2557,6 +2557,49 @@
       }
     },
     {
+      "replay": "replays/validation/icies/master-diamond-e1f45bc846c8b64f90b35a94.slpz",
+      "id": "unrecorded-item-pool-residue",
+      "owner": "Slippi SendItemInfo raw union bytes over Ice Climbers article pointers and pool residue",
+      "rationale": "Every mismatched row is an item.misc lane on Ice Climbers articles (entry ice blocks and mid-match ice/blizzard spawns): misc0 samples the owner Item_GObj* heap pointer's low byte and misc1/misc2/misc3 sample bytes past the articles' declared item-variable members, i.e. console allocator identities and pool-reuse residue. The runtime publishes deterministic arena analogs and pins past-member bytes to zero; neither the console heap layout nor its reuse history is recoverable by re-simulation. All fighter, follower, physics, and item gameplay lanes are exact under the recording's classic-UCF profile (no pad-ring sdi/shield-sdi/extended-shield-drop patches).",
+      "sources": [
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+        "refs/melee/src/melee/it/itCharItems.h",
+        "src/runtime/scalar.c::item_var_source_byte"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 181,
+          "first_mismatch_frame": 59,
+          "first_render_visibility_mismatch_frame": null,
+          "frames": 6460,
+          "last_mismatch_frame": 4542,
+          "matched_frames": 6186,
+          "mismatch_count": 914,
+          "mismatch_fields_digest": "78d1f7cf8c3c4beada940d6f228f3dc65cb7aebdc1385f92aacf82583c6f8719",
+          "mismatch_fingerprint": "f88b6f5d446ce6bb",
+          "mismatched_frames": 274,
+          "render_visibility_mismatch_count": 0,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 1795
+        },
+        "ppc": {
+          "exact_prefix_frames": 181,
+          "first_mismatch_frame": 59,
+          "first_render_visibility_mismatch_frame": null,
+          "frames": 6460,
+          "last_mismatch_frame": 1714,
+          "matched_frames": 6353,
+          "mismatch_count": 194,
+          "mismatch_fields_digest": "b99c7cee821953578fb681bd27c8416be952c94bf876272adcd481c029683ea3",
+          "mismatch_fingerprint": "f0fb7fe6a488fa52",
+          "mismatched_frames": 107,
+          "render_visibility_mismatch_count": 0,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 4623
+        }
+      }
+    },
+    {
       "replay": "replays/validation/icies/master-fox-2026-03_Game_20260315T195912.slpz",
       "id": "unrecorded-item-pool-residue",
       "owner": "Slippi SendItemInfo raw union bytes past the blizzard puff's declared members",
