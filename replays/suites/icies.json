@@ -1,152 +1,318 @@
 {
-  "name": "icies",
-  "notes": "Ice Climbers validation suite: 12 netplay singles across all six legal stages against Fox, Falco, Marth, Sheik, and Peach plus an Ice Climbers ditto, 2025-2026 Slippi and mainline captures. The Pokemon Stadium entry is frozen-form only (is_frozen_ps). Every game carries Slippi follower (Nana) frames for both climbers where present. Thirteen additional 2022-2026 captures staged in icies_extended.json await fix-or-classify before joining the aggregate.",
-  "ucf_enabled": true,
-  "ucf_cardinals_1_0_enabled": true,
-  "replays": [
-    {
-      "replay": "replays/validation/icies/auto-falco-2025-10_Game_20251013T073200.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Ice Climbers",
-        "2": "Falco"
-      }
-    },
-    {
-      "replay": "replays/validation/icies/bf-falco-2025-03_Game_20250329T000322.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 31,
-      "characters": {
-        "1": "Ice Climbers",
-        "2": "Falco"
-      }
-    },
-    {
-      "replay": "replays/validation/icies/bf-marth-2025-03_Game_20250321T234954.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 31,
-      "characters": {
-        "1": "Ice Climbers",
-        "2": "Marth"
-      }
-    },
-    {
-      "replay": "replays/validation/icies/dl-fox-2025-05_Game_20250504T134832.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 28,
-      "characters": {
-        "1": "Fox",
-        "2": "Ice Climbers"
-      }
-    },
-    {
-      "replay": "replays/validation/icies/fd-falco-2025-02_Game_20250213T164734.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Ice Climbers",
-        "2": "Falco"
-      }
-    },
-    {
-      "replay": "replays/validation/icies/fod-sheik-2025-02_Game_20250205T180543.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Ice Climbers",
-        "2": "Sheik"
-      }
-    },
-    {
-      "replay": "replays/validation/icies/gm-peach-2026-03_Game_20260329T142118.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Peach",
-        "2": "Ice Climbers"
-      }
-    },
-    {
-      "replay": "replays/validation/icies/ics-ditto-d18-2025-05_Game_20250518T163949.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 28,
-      "characters": {
-        "1": "Ice Climbers",
-        "2": "Ice Climbers"
-      }
-    },
-    {
-      "replay": "replays/validation/icies/master-fox-2026-03_Game_20260315T195912.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 8,
-      "characters": {
-        "1": "Fox",
-        "2": "Ice Climbers"
-      }
-    },
-    {
-      "replay": "replays/validation/icies/medium-marth-2025-09_Game_20250919T221733.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 31,
-      "characters": {
-        "1": "Ice Climbers",
-        "2": "Marth"
-      }
-    },
-    {
-      "replay": "replays/validation/icies/medium-sheik-2026-01_Game_20260131T001158.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Sheik",
-        "2": "Ice Climbers"
-      }
-    },
-    {
-      "replay": "replays/validation/icies/ys-fox-2025-06_Game_20250606T191516.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 8,
-      "characters": {
-        "1": "Ice Climbers",
-        "2": "Fox"
-      }
-    }
-  ]
+ "name": "icies",
+ "notes": "Ice Climbers validation suite: 25 netplay singles across all six legal stages (2022-2026 Slippi, ranked-anonymized, and mainline captures) against Fox, Falco, Marth, Sheik, and Peach plus an Ice Climbers ditto. Pokemon Stadium entries are frozen-form only (is_frozen_ps); the import pool excluded four non-frozen Stadium games and a 2022 FoD capture predating the animation_index stream. Every game carries Slippi follower (Nana) frames for both climbers where present. The two ranked-anonymized captures (master-diamond, platinum-platinum) ran the classic UCF profile - dashback + shield drop without the pad-ring additions - so their sdi/shield-sdi/extended-shield-drop flags are off (retail-probe-verified on master-diamond frames -19 and 682).",
+ "ucf_enabled": true,
+ "ucf_cardinals_1_0_enabled": true,
+ "replays": [
+  {
+   "replay": "replays/validation/icies/auto-falco-2025-10_Game_20251013T073200.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 2,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Falco"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/auto-fox-2025-02_Game_20250215T021224.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 31,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Fox"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/auto-fox-2025-02_Game_20250224T030855.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 8,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Fox"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/auto-fox-2025-07_Game_20250717T133210.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 8,
+   "characters": {
+    "1": "Fox",
+    "2": "Ice Climbers"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/auto-sheik-2026-05_Game_20260512T230931.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Sheik",
+    "2": "Ice Climbers"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/bf-falco-2025-03_Game_20250329T000322.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 31,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Falco"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/bf-fox-2025-03_Game_20250309T224836.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 31,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Fox"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/bf-marth-2025-03_Game_20250321T234954.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 31,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Marth"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/dl-fox-2025-05_Game_20250504T134832.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 28,
+   "characters": {
+    "1": "Fox",
+    "2": "Ice Climbers"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/dl-fox-2025-09_Game_20250911T223118.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 28,
+   "characters": {
+    "1": "Fox",
+    "2": "Ice Climbers"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/dl-marth-2025-04_Game_20250417T142520.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 28,
+   "characters": {
+    "1": "Marth",
+    "2": "Ice Climbers"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/fd-falco-2025-02_Game_20250213T164734.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Falco"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/fd-falco-2025-08_Game_20250830T182914.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Falco"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/fod-sheik-2025-02_Game_20250205T180543.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 2,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Sheik"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/gm-peach-2026-03_Game_20260329T142118.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Peach",
+    "2": "Ice Climbers"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/gm-sheik-2026-04_Game_20260428T204324.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 28,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Sheik"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/ics-ditto-d18-2025-05_Game_20250518T163949.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 28,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Ice Climbers"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/master-diamond-e1f45bc846c8b64f90b35a94.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 2,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Sheik"
+   },
+   "played_on": "network",
+   "ucf_cardinals_1_0_enabled": false,
+   "ucf_sdi_enabled": false,
+   "ucf_shield_sdi_enabled": false,
+   "ucf_shield_drop_extended_enabled": false
+  },
+  {
+   "replay": "replays/validation/icies/master-fox-2026-03_Game_20260315T195912.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 8,
+   "characters": {
+    "1": "Fox",
+    "2": "Ice Climbers"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/medium-fox-2025-08_Game_20250831T105254.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Fox",
+    "2": "Ice Climbers"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/medium-marth-2025-09_Game_20250919T221733.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 31,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Marth"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/medium-sheik-2026-01_Game_20260131T001158.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 3,
+   "characters": {
+    "1": "Sheik",
+    "2": "Ice Climbers"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/platinum-platinum-83d0989d367f6d26c0df4863.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 2,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Falco"
+   },
+   "ucf_cardinals_1_0_enabled": false,
+   "played_on": "network",
+   "ucf_sdi_enabled": false,
+   "ucf_shield_sdi_enabled": false,
+   "ucf_shield_drop_extended_enabled": false
+  },
+  {
+   "replay": "replays/validation/icies/ys-fox-2025-06_Game_20250606T191516.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 8,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Fox"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/ys-fox-2025-07_Game_20250715T230816.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 8,
+   "characters": {
+    "1": "Fox",
+    "2": "Ice Climbers"
+   }
+  }
+ ]
 }

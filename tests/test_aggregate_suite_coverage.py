@@ -53,5 +53,4 @@ def test_melee_core_aggregate_is_unique_and_composed_from_focused_manifests() ->
         "marios.json",
         "samus.json",
         "icies.json",
-        "icies_extended.json",
     }
