@@ -81,6 +81,8 @@ int main(void)
     FIELD(MslCoreViewerState, items, "items");
     FIELD(MslCoreViewerState, stage, "stage");
     FIELD(MslCoreViewerState, camera, "camera");
+    FIELD(MslCoreViewerState, follower_present, "followerPresent");
+    FIELD(MslCoreViewerState, followers, "followers");
     puts("});");
 
     puts("export const viewerPlayerOffsets = Object.freeze({");

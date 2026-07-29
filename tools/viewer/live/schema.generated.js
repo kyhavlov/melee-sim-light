@@ -3,7 +3,7 @@ export const MATCH_CONFIG_SIZE = 53;
 export const MATCH_CONFIG_PLAYER_SIZE = 5;
 export const INPUT_SIZE = 52;
 export const INPUT_PLAYER_SIZE = 13;
-export const VIEWER_STATE_SIZE = 1560;
+export const VIEWER_STATE_SIZE = 2332;
 export const VIEWER_PLAYER_SIZE = 192;
 export const VIEWER_HITBOX_SIZE = 24;
 export const ITEM_SIZE = 48;
@@ -63,6 +63,8 @@ export const viewerOffsets = Object.freeze({
   items: 792,
   stage: 1512,
   camera: 1532,
+  followerPresent: 1560,
+  followers: 1564,
 });
 export const viewerPlayerOffsets = Object.freeze({
   charId: 0,

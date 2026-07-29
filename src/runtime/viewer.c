@@ -204,6 +204,73 @@ static void write_player(const MslCoreCompare* compare, int index,
 #undef COPY_F32
 }
 
+
+static void write_follower(const MslCoreCompare* compare, int index,
+                           const Fighter* fp, uint8_t* out)
+{
+#define COPY_U8(field)                                                        \
+    out[offsetof(MslCoreViewerPlayer, field)] =                               \
+        ((const uint8_t*)                                                     \
+             compare)[offsetof(MslCoreCompare, follower_##field) + index]
+#define COPY_U16(field)                                                       \
+    put_u16(out, offsetof(MslCoreViewerPlayer, field),                        \
+            msl_core_get_le16((const uint8_t*) compare +                      \
+                              offsetof(MslCoreCompare, follower_##field) +    \
+                              (size_t) index * sizeof(uint16_t)))
+#define COPY_U32(field)                                                       \
+    put_u32(out, offsetof(MslCoreViewerPlayer, field),                        \
+            msl_core_get_le32((const uint8_t*) compare +                      \
+                              offsetof(MslCoreCompare, follower_##field) +    \
+                              (size_t) index * sizeof(uint32_t)))
+#define COPY_F32(field)                                                       \
+    put_f32(out, offsetof(MslCoreViewerPlayer, field),                        \
+            msl_core_get_lef32((const uint8_t*) compare +                     \
+                               offsetof(MslCoreCompare, follower_##field) +   \
+                               (size_t) index * sizeof(float)))
+
+    COPY_U8(char_id);
+    // The follower has no team lane of its own; render with the leader's.
+    out[offsetof(MslCoreViewerPlayer, team_id)] =
+        ((const uint8_t*) compare)[offsetof(MslCoreCompare, team_id) + index];
+    COPY_U8(facing);
+    COPY_U8(on_ground);
+    out[offsetof(MslCoreViewerPlayer, is_dead)] = 0;
+    COPY_U8(jumps_left);
+    COPY_U8(stocks);
+    COPY_U8(hurtbox_state);
+    COPY_U8(l_cancel);
+    COPY_U8(last_attack_landed);
+    COPY_U8(combo_count);
+    COPY_U8(last_hit_by);
+    memcpy(out + offsetof(MslCoreViewerPlayer, state_flags),
+           (const uint8_t*) compare +
+               offsetof(MslCoreCompare, follower_state_flags) +
+               (size_t) index * MSL_CORE_STATE_FLAGS_BYTES,
+           MSL_CORE_STATE_FLAGS_BYTES);
+    COPY_U16(action_id);
+    COPY_U16(action_frame);
+    COPY_U16(hitlag);
+    COPY_U16(hitstun);
+    COPY_U16(ground_id);
+    COPY_U32(animation_index);
+    COPY_F32(pos_x);
+    COPY_F32(pos_y);
+    COPY_F32(speed_air_x_self);
+    COPY_F32(speed_ground_x_self);
+    COPY_F32(speed_y_self);
+    COPY_F32(speed_x_attack);
+    COPY_F32(speed_y_attack);
+    COPY_F32(percent);
+    COPY_F32(shield_hp);
+    write_shield(fp, out);
+    write_hitboxes(fp, out);
+
+#undef COPY_U8
+#undef COPY_U16
+#undef COPY_U32
+#undef COPY_F32
+}
+
 static void write_stage(const MslCoreMatch* match, uint8_t* out)
 {
     int i;
@@ -287,6 +354,15 @@ void msl_core_match_write_viewer(const MslCoreMatch* match,
         write_player(compare, i, GET_FIGHTER(match->fighters[i]),
                      out + offsetof(MslCoreViewerState, players) +
                          (size_t) i * sizeof(MslCoreViewerPlayer));
+        if (match->follower_fighters[i] != NULL &&
+            compare->follower_present[i])
+        {
+            out[offsetof(MslCoreViewerState, follower_present) + i] = 1;
+            write_follower(compare, i,
+                           GET_FIGHTER(match->follower_fighters[i]),
+                           out + offsetof(MslCoreViewerState, followers) +
+                               (size_t) i * sizeof(MslCoreViewerPlayer));
+        }
     }
     memcpy(out + offsetof(MslCoreViewerState, items), compare->items,
            sizeof(compare->items));

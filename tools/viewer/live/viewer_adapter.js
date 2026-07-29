@@ -184,11 +184,7 @@ function playerHitboxes(state, playerBase) {
   return hitboxes;
 }
 
-export function viewerFrameFromState(state, frameNumber, controllersByPlayer) {
-  const numPlayers = u8(state, viewerOffsets.numPlayers);
-  const players = [];
-  for (let idx = 0; idx < numPlayers; idx += 1) {
-    const base = viewerOffsets.players + idx * VIEWER_PLAYER_SIZE;
+function playerStateFromBase(state, base, frameNumber, idx, isNana) {
     const flags = base + viewerPlayerOffsets.stateFlags;
     const flags2218 = u8(state, flags);
     const flags221a = u8(state, flags + 1);
@@ -201,15 +197,10 @@ export function viewerFrameFromState(state, frameNumber, controllersByPlayer) {
     const sourceShieldY = f32(state, base + viewerPlayerOffsets.shieldY);
     const hasShieldCenter =
       hasShieldBubble && Number.isFinite(sourceShieldX) && Number.isFinite(sourceShieldY);
-    const controller = controllersByPlayer[idx] ?? {};
-    players.push({
-      frameNumber,
-      playerIndex: idx,
-      inputs: controllerInput(frameNumber, idx, controller),
-      state: {
+    return {
         frameNumber,
         playerIndex: idx,
-        isNana: false,
+        isNana,
         internalCharacterId: u8(state, base + viewerPlayerOffsets.charId),
         actionStateId: u16(state, base + viewerPlayerOffsets.actionId),
         xPosition: f32(state, base + viewerPlayerOffsets.posX),
@@ -253,8 +244,36 @@ export function viewerFrameFromState(state, frameNumber, controllersByPlayer) {
         isPowershieldActive: Boolean(flags221c & 0x20),
         isDead: Boolean(u8(state, base + viewerPlayerOffsets.isDead)),
         isOffscreen: false,
-      },
-    });
+    };
+}
+
+export function viewerFrameFromState(state, frameNumber, controllersByPlayer) {
+  const numPlayers = u8(state, viewerOffsets.numPlayers);
+  const players = [];
+  for (let idx = 0; idx < numPlayers; idx += 1) {
+    const base = viewerOffsets.players + idx * VIEWER_PLAYER_SIZE;
+    const controller = controllersByPlayer[idx] ?? {};
+    const entry = {
+      frameNumber,
+      playerIndex: idx,
+      inputs: controllerInput(frameNumber, idx, controller),
+      state: playerStateFromBase(state, base, frameNumber, idx, false),
+    };
+    if (u8(state, viewerOffsets.followerPresent + idx)) {
+      const followerBase = viewerOffsets.followers + idx * VIEWER_PLAYER_SIZE;
+      entry.nanaState = playerStateFromBase(
+        state,
+        followerBase,
+        frameNumber,
+        idx,
+        true,
+      );
+      entry.nanaInputs = {
+        ...controllerInput(frameNumber, idx, {}),
+        isNana: true,
+      };
+    }
+    players.push(entry);
   }
 
   const items = [];

@@ -307,6 +307,12 @@ typedef struct MslCoreViewerState {
     MslCoreItem items[MSL_CORE_MAX_ITEMS];
     MslCoreViewerStage stage;
     MslCoreViewerCamera camera;
+    // The Ice Climbers follower is a second rendered body on the owning
+    // port. follower_present mirrors the compare lane's life-cycle; the
+    // follower block reuses the player layout (team from the leader,
+    // is_dead = !present).
+    uint8_t follower_present[MSL_CORE_MAX_PLAYERS];
+    MslCoreViewerPlayer followers[MSL_CORE_MAX_PLAYERS];
 } MslCoreViewerState;
 
 #pragma pack(pop)
@@ -337,7 +343,7 @@ _Static_assert(sizeof(MslCoreViewerStage) == 20,
                "MslCoreViewerStage wire size");
 _Static_assert(sizeof(MslCoreViewerCamera) == 28,
                "MslCoreViewerCamera wire size");
-_Static_assert(sizeof(MslCoreViewerState) == 1560,
+_Static_assert(sizeof(MslCoreViewerState) == 2332,
                "MslCoreViewerState wire size");
 
 uint16_t msl_core_get_le16(const void* ptr);
