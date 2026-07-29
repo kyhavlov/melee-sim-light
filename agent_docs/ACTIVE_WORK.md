@@ -590,3 +590,59 @@ slice, and follower-frame validation.
   as float — decode carefully, it is exact for <2^24) and GFX (process) rows via
   msl_emitter_trace; our RNG trace pairs frames via synthesized online seeds
   (base + (frame+123)<<16 — bf-marth base 33407).
+
+- 2026-07-28 — `open` (session 9: icies_extended staged; the tail-solver fork isolated
+  to a single frame with bit-identical inputs)
+  Scope: ~/SSBM/Replays/Samples/ics.zip imported (30 files = the 12 existing suite
+  replays + 18 new). Excluded: 4 non-frozen-PS games (established policy) and the 2022
+  FoD capture (Slippi 3.9.1 predates the animation_index stream — validator ERROR;
+  samus-suite precedent). The remaining 13 staged as replays/suites/icies_extended.json
+  (commit 770c8c27), NOT included by melee_core_aggregate.json — icies.json stays at 12
+  so the aggregate/coverage gates stay green (258, container-verified 12 classified/0
+  fail post-split). ucf refinements: master-diamond (v3.16) + platinum-platinum (v3.15)
+  ranked-anonymized carry ucf_cardinals_1_0_enabled=false + played_on=network (the
+  cardinals flip fixed master-diamond's frame -39 Popo fork: 0.185 vs 0.185*cardinal
+  ratio signature).
+  Extended-suite state: 13 FAIL. 11 are item.misc-lane-only (unrecorded-item-pool
+  class, classify after fixes). Two real forks, both root-caused deep:
+  * auto-fox-2025-02_Game_20250224T030855 (YS) @3503: spurious CPU-Nana SDI (+6.0
+    exactly; retail frozen in hitlag). Full causal chain established with retail
+    probes: Fox's PUBLISHED capsule extent x1A88.x560 (ftCo_800A0DA4 max over hurt
+    capsules) diverges at the frame-3470 publication (retail 3.446 vs ours 4.260;
+    3465-3469 bit-exact) because cap[12] = THE TAIL (scale 1.62) sits 0.8 too far
+    out -> Nana's B8A9C/B4AB0 range check admits an attack candidate ONE THINK EARLY
+    (our x18 0->2 at think 3471, retail at 3472; x7C/x80/x570/positions/colliders all
+    verified bit-identical) -> different B4AB0 Randf pick (frame-seeded): ours built
+    a WaitFor(26+5)+PressR+LstickXForward(0x7F) roll macro, retail a WaitFor(10)+
+    Y-tap macro -> our stale macro replays +127 during Nana's 3502-3504 hitlag ->
+    x670 tilt-timer resets -> ftCo_Damage_OnEveryHitlag SDI fires.
+  * THE TAIL SOLVER FORK (the dl-fox @5082 class, now minimally reproduced, wind-free):
+    Fox's 4-link tail chain state at ftCo_8009DD94 entry is bit-identical at frames
+    3466-3468 (per-link rot/s58/unk_2C anchors/params unk_44-8C, jobj jr/jt, full
+    ancestor mtx walk incl. dirty flags, colliders x1670, arg1, and retail
+    lb_804D63B0 emitters = NULL on YS both sides) yet the FRAME-3468 SOLVE (Fox taunt
+    -exit + movement-start jerk) forks the free links' unk_2C anchors by 14-23
+    degrees of link direction (root link 0.0 stays bit-exact -> parent pose agrees;
+    ours under-rotates toward the new pose = tail trails wider). lb_8001044C C source
+    == refs C (only documented fmadds deltas). NOTE the jr-equality at next entry is
+    NOT evidence the solved rotations matched — anim overwrites jobj->rotate before
+    the next DD94; the surviving solver state is unk_2C (+un-dumped unk_38/unk_44
+    angular velocity). NEXT: stage-by-stage link_dir dump inside our lb_8001044C at
+    frame 3468 (after stiffness/gravity/force/angvel/max-angle(unk_88=0.0524!)/
+    convergence/deviation/collider/ground stages) vs retail's implied final dirs
+    (derivable from the 3469-entry anchors); suspect a branch-boundary flip or an
+    op-level slip in a jerk-only stage (max-angle clamp math, RotateAboutUnitAxis,
+    or the ground-collision mpCheckFloor block near the YS slope).
+  * master-diamond residual @-19 (post-cardinals): Nana entry-approach clamp 125 vs
+    127 (1.4*125/127 velocity signature) = the AA42C clamp fed by published capsule
+    extents — plausibly the same tail/extent class (Sheik hair dynamics), park until
+    the solver fix lands.
+  TOOLING: slippi-dolphin 1872b778b9 (tail probe: MSL_TAIL_PROBE_PORT, per-link
+  params, ancestor walk, emitter global; ring probe: x80/x84/xA4/x570 + target
+  extents). Container /work (env-gated, uncommitted): SDI-CHECK in ftCo_Damage.c,
+  NANAIN x18/x670 fields + THINK buffer dump in ftCo_0A01.c, B8A9C-IN in
+  ftcpuattack.c, EXTENT capsule dump in ftCo_800A0DA4, DD94 trace parameterized
+  (MSL_DD94_PLAYER/START/END) + PARAMS/ANC rows in ftdynamics.c, frame-gated
+  msl_nana_trace_file (gm_8016AEDC-based, prints F<frame>) in match.c, rand/randf
+  trace in sysdolphin/baselib/random.c. Mainline bot captures are per-frame-seeded
+  like online games (verified: base+frame<<16 stride in our stream).
