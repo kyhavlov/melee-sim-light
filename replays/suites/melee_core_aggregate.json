@@ -12,6 +12,7 @@
   "luigi.json",
   "marios.json",
   "samus.json",
-  "icies.json"
+  "icies.json",
+  "icies_extended.json"
  ]
 }

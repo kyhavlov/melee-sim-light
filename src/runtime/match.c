@@ -390,6 +390,16 @@ bool msl_ucf_pass_oos_stick_check(const Fighter* fp)
     // after the injection and remain owned by ftCo_Pass.c.
     // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/
     //     UCF Shield Drop Extended.asm
+    //
+    // The sdrop counter lives in the shared UCF pad ring, which ships inside
+    // the combined "UCF Pad Buffer + 1.0 Cardinals" patch. Recordings that
+    // predate 1.0 cardinals never ran that buffer, so the extended
+    // shield-drop counter branch cannot fire there (retail-probe-verified on
+    // master-diamond frame -19: the mimic-driven Nana keeps GuardOn off the
+    // port's hot counter and vanilla-passes a frame later).
+    if (!msl_ucf_cardinals_1_0_enabled) {
+        return false;
+    }
     return msl_ucf_pad[fp->x618_player_id].sdrop_up_frames >= 2;
 }
 

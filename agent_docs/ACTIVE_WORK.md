@@ -591,6 +591,38 @@ slice, and follower-frame validation.
   msl_emitter_trace; our RNG trace pairs frames via synthesized online seeds
   (base + (frame+123)<<16 — bf-marth base 33407).
 
+- 2026-07-29 — `closed` (session 11: icies_extended wired into the aggregate — 270
+  replays, 203 pass / 67 classified / 0 fail; the pre-cardinals UCF shield-drop gate)
+  master-diamond's frame -19 fork root-caused with retail probes: retail Nana
+  (mimic-driven off Popo's ring) dashes to the platform edge, GuardOns off the
+  ring-played trigger at -19, and vanilla shield-drops (Pass) a frame later when
+  the played stick crosses -0.66. Ours Passed at -19 through the UCF
+  shield-drop-extended emulation: msl_ucf_pass_oos_stick_check read the PORT's
+  sdrop counter (hot from Popo's own deep-down stick) with no version gate. The
+  shipped gecko's counter lives in the shared UCF pad ring, which ships inside
+  the combined "UCF Pad Buffer + 1.0 Cardinals" patch — recordings that predate
+  1.0 cardinals (ucf_cardinals_1_0_enabled=false) never ran that buffer, so the
+  counter branch cannot fire there. FIX (runtime/match.c):
+  msl_ucf_pass_oos_stick_check returns false when cardinals are disabled.
+  Verified: master-diamond -19 fork gone (103 -> 782 matched rows); aggregate
+  unchanged (several cardinals-false replays re-validated identically).
+  master-diamond's NEXT fork (frame 682) is a different class — Sheik
+  grab-attached ~5.85 units from retail while BOTH climbers match bit-exact
+  (pummel/throw cascade from 687); unaffected by the session-10 matrix refresh
+  (A/B verified). PARKED in the new replays/suites/icies_parked.json.
+  WIRING: icies_extended.json rescoped to the 12 green replays and added to
+  melee_core_aggregate.json (258 -> 270); 12 unrecorded-item-pool-residue
+  classifications with native + ppc snapshots; 12 output locks; coverage/runner
+  tests updated (270 + manifest set + classified loader). Trace infra: negative
+  frame windows now work for MSL_NANA_TRACE (match.c gate accepted only
+  start >= 0); container gained AA42C-IN/RECORD/MIMIC-held/PASSGATE/GUARDCHK/
+  OOSCHK probes (ftCo_0A01.c, ftCo_Pass.c, ftCo_Guard.c, container-only);
+  slippi-dolphin ring probe now dumps nana x618/x671/x668.
+  KEY RECIPE: Nana entry behavior = mimic ring playback of Popo's inputs
+  (capture quantizes input.lstick*127 at think time, one frame stale; the ring
+  x4/x5 trigger bytes truncate the merged x650 float to 0/1 — shields propagate
+  through the held word's HSD_PAD_LR bit, not the analog).
+
 - 2026-07-29 — `closed` (session 10: THE TAIL-SOLVER FORK ROOT-CAUSED AND FIXED —
   two production fixes, 4 classified replays promoted to bit-exact, aggregate
   203 pass / 55 classified / 0 fail)

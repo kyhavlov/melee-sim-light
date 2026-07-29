@@ -115,6 +115,7 @@ def test_native_validation_compares_complete_classified_replays() -> None:
         "marios.json",
         "samus.json",
         "icies.json",
+        "icies_extended.json",
     ):
         _suite, loaded_cases = load_suite_cases(
             ROOT / "replays/suites" / suite_name,

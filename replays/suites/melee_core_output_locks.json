@@ -628,11 +628,56 @@
       }
     },
     {
+      "replay": "replays/validation/icies/auto-fox-2025-02_Game_20250215T021224.slpz",
+      "expected": {
+        "native": {
+          "frames": 6237,
+          "actual_output_fingerprint": "1a4eecfdafb6c9fb"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/auto-fox-2025-02_Game_20250224T030855.slpz",
+      "expected": {
+        "native": {
+          "frames": 6656,
+          "actual_output_fingerprint": "7a5cbd75388ccaa0"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/auto-fox-2025-07_Game_20250717T133210.slpz",
+      "expected": {
+        "native": {
+          "frames": 6423,
+          "actual_output_fingerprint": "0cd854bd3dc03c59"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/auto-sheik-2026-05_Game_20260512T230931.slpz",
+      "expected": {
+        "native": {
+          "frames": 7094,
+          "actual_output_fingerprint": "ff49db335a116004"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/icies/bf-falco-2025-03_Game_20250329T000322.slpz",
       "expected": {
         "native": {
           "frames": 9658,
           "actual_output_fingerprint": "90ae645821fd3300"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/bf-fox-2025-03_Game_20250309T224836.slpz",
+      "expected": {
+        "native": {
+          "frames": 13349,
+          "actual_output_fingerprint": "e95c496c5f899ae7"
         }
       }
     },
@@ -655,11 +700,38 @@
       }
     },
     {
+      "replay": "replays/validation/icies/dl-fox-2025-09_Game_20250911T223118.slpz",
+      "expected": {
+        "native": {
+          "frames": 4494,
+          "actual_output_fingerprint": "840e2fdafad04ae2"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/dl-marth-2025-04_Game_20250417T142520.slpz",
+      "expected": {
+        "native": {
+          "frames": 9972,
+          "actual_output_fingerprint": "03ed0ac0d281c6bd"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/icies/fd-falco-2025-02_Game_20250213T164734.slpz",
       "expected": {
         "native": {
           "frames": 8387,
           "actual_output_fingerprint": "786af64cf97c3dd3"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/fd-falco-2025-08_Game_20250830T182914.slpz",
+      "expected": {
+        "native": {
+          "frames": 6094,
+          "actual_output_fingerprint": "513cea03cc16dccd"
         }
       }
     },
@@ -682,6 +754,15 @@
       }
     },
     {
+      "replay": "replays/validation/icies/gm-sheik-2026-04_Game_20260428T204324.slpz",
+      "expected": {
+        "native": {
+          "frames": 12328,
+          "actual_output_fingerprint": "372de461181781fc"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/icies/ics-ditto-d18-2025-05_Game_20250518T163949.slpz",
       "expected": {
         "native": {
@@ -696,6 +777,15 @@
         "native": {
           "frames": 8610,
           "actual_output_fingerprint": "3b917465fcb83dcc"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/medium-fox-2025-08_Game_20250831T105254.slpz",
+      "expected": {
+        "native": {
+          "frames": 10090,
+          "actual_output_fingerprint": "f20dc07321b605bd"
         }
       }
     },
@@ -718,11 +808,29 @@
       }
     },
     {
+      "replay": "replays/validation/icies/platinum-platinum-83d0989d367f6d26c0df4863.slpz",
+      "expected": {
+        "native": {
+          "frames": 11243,
+          "actual_output_fingerprint": "224197c66727f0e4"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/icies/ys-fox-2025-06_Game_20250606T191516.slpz",
       "expected": {
         "native": {
           "frames": 8152,
           "actual_output_fingerprint": "9205ba4472c9a54b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/ys-fox-2025-07_Game_20250715T230816.slpz",
+      "expected": {
+        "native": {
+          "frames": 13305,
+          "actual_output_fingerprint": "c699d22929e3a3a4"
         }
       }
     },
