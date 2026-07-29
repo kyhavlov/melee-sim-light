@@ -14,6 +14,7 @@
 #include "ft/chara/ftMario/types.h"
 #include "ft/chara/ftMars/types.h"
 #include "ft/chara/ftPeach/types.h"
+#include "ft/chara/ftPikachu/types.h"
 #include "ft/chara/ftPopo/types.h"
 #include "ft/chara/ftSamus/types.h"
 #include "ft/chara/ftPurin/types.h"
@@ -169,6 +170,12 @@ typedef struct MslDatSamusArticles {
 // kinds 106/107/113.
 // refs/melee/src/melee/ft/chara/ftPopo/ftPp_Init.c
 typedef Article* MslDatIceClimberArticles[3];
+// PlPk.dat's ftData.x48_items leads with the three articles
+// ftPk_Init_OnLoad registers under the item kinds stored in its attribute
+// block (xDC thunder 81, x14 ground jolt 89, x18 air jolt 90); the later
+// slots carry presentation graphs no ported code reaches.
+// refs/melee/src/melee/ft/chara/ftPikachu/ftPk_Init.c
+typedef Article* MslDatPikachuArticles[3];
 // ItCo.dat's public x4 table owns the 43 common-item Article graphs. Peach's
 // SpecialLw can reach BombHei, Dosei, and Sword even when stage items are off.
 // refs/melee/src/melee/it/iteffect.c::it_802787B4
@@ -260,6 +267,10 @@ void* msl_native_dat_type_roots[] = {
     (itClimbersIceAttributes*) 0,
     (itClimbersBlizzardAttributes*) 0,
     (itClimbersStringAttributes*) 0,
+    (MslDatPikachuArticles*) 0,
+    (ftPikachuAttributes*) 0,
+    (itPikachuthunderAttributes*) 0,
+    (itPikachutJoltGroundAttributes*) 0,
     (MslDatCommonItemArticles*) 0,
     (itBombHeiAttributes*) 0,
     (itDoseiAttributes*) 0,

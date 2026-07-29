@@ -1,4 +1,72 @@
-# Active structural packet — Ice Climbers (Popo + Nana follower entity)
+# Active structural packet — Pikachu
+
+## Objective
+
+Add Pikachu (internal kind FTKIND_PIKACHU 12) to the supported domain: the five Matching chara
+TUs (`ftPk_Init/SpecialN/SpecialS/SpecialHi/SpecialLw`), the three Matching article owners
+(`itpikachuthunder`, `itpikachutjoltground`, `itpikachutjoltair` — `itthunder.c` is the Zapdos
+Pokémon, not a Pikachu article), registry rows, PlPk extraction, native DAT translation,
+part-admission row, effect bank 7, public API/viewer/validation admission, and a 13-replay
+suite (staged standalone, not yet in the aggregate).
+
+## Final boundary
+
+- **Owner (character):** the imported ftPikachu TUs, byte-identical to the pinned decomp except
+  the hosted `speciallw` motion-vars overlay (ledger
+  `canonical:pikachu-thunder-vars-pointer-widening`): retail packs the thunder `Item_GObj*` at
+  mv+0 under the mv+4 strike flag, and the flow addresses both words through `specialhi.x0/x4`
+  aliases; the hosted layout keeps the flag at its mv+4 alias position, moves the full-width
+  pointer past the aliased pair, and names the pointer's owner lane at the two enter-time
+  zeroing sites.
+- **Owner (articles):** hosted `it_803F3100`/`it_803F2F28` rows copied from `it_279C.c`; article
+  list `MslDatPikachuArticles[3]` (PlPk x48 slots 0..2 = thunder 81 / ground jolt 89 / air jolt
+  90, kinds carried in the attribute words xDC/x14/x18 because Pichu shares the code); thunder
+  and ground-jolt attribute blocks translate concretely, the air jolt reads no special
+  attributes.
+- **Data:** `PlPk*` (Nr/Re/Bu/Gr costumes) + `EfPkData.dat` extraction; manifest 137 files.
+- **Item misc lanes:** thunder owns all four sampled lanes (constructor-written); ground jolt
+  owns misc0/2/3 (misc1 = owner pointer byte); air jolt owns misc2/3 (xDE8 launch velocity) —
+  air-spawned jolt instances whose `it_802B3F88` write is not reached before export are an open
+  question (see suite state).
+
+## Suite state (session 1 close, container authoritative)
+
+13 replays (all six stages; Fox/Falco/Marth/Sheik/Peach/ditto; Slippi netplay + mainline +
+two anonymized ranked with played_on=network, master-master v3.16 pre-cardinals):
+**container native 12 pass / 1 fail; PPC 12 pass / 1 fail** — both backends fail only
+master-master, identically: an item.pos_x/pos_y ULP family from frame -24 on FoD (2,507 rows,
+prefix 98) on the stage-ambience item stream; the same-stage v3.17 capture (97280) is
+bit-exact, so suspect the pre-3.18 recording lacks a stream (platform-height events?) whose
+absence shifts the construction/ambience RNG path. Next session starts here.
+Mac-native shows four extra env-only fails (speed_y_attack -0/+0 signed-zero and one jolt-vel
+ULP episode) — the documented macOS FP-drift class, absent in container.
+A recurring `state_flags[*][4]&0x80` render-visibility diagnostic (non-failing) fires on
+several replays — ftPk_Init_UnkMotionStates1/2 part visibility toggles are live for Pikachu
+(first ported character with non-NULL rows there); worth an audit when convenient.
+
+## Log
+
+- 2026-07-29 — `retained` (session 1: the full packet, three hosted-portability fixes)
+  Scope: full character packet + 13-replay suite; container gates green.
+  1. **Thunder motion-vars pointer widening** (ledger pikachu-thunder-vars-pointer-widening):
+     four replays segfaulted (ditto + all three mainline) — `specialhi.x4 = 1` writes landed
+     in the widened `speciallw.x0` high half (0x1_00000000 dereferenced in it_802B1FE8), and
+     enter-time pointer zeroing flowed through the `specialhi.x0` alias. Fixed with a hosted
+     speciallw layout (flag kept at its mv+4 alias position, full-width pointer past the
+     aliased pair) + two named-owner zeroing sites in ftPk_SpecialLw.c.
+  2. **Jolt item-var native sampling** (scalar.c item_var_source_byte): the ground/air jolt
+     structs lead with pointers, so raw retail-offset sampling read padding on 64-bit hosts —
+     the whole item.misc family across 7 replays (expected float bytes vs constant 0/1).
+     Pikachu cases added per the Chain/DinFire/icies precedent; this promoted the suite from
+     4 to 12 native passes.
+  3. **Aggregate fingerprint re-record**: the wider archive arena + grown Fighter struct
+     shifted deterministic pool-residue analogs on two icies classified replays (medium-fox
+     2025-08, ys-fox 2025-07) — native mismatch stats identical, fingerprints moved;
+     re-recorded native snapshots + 2 output locks (PPC snapshots verified unchanged).
+     Aggregate 271 = 203/68/0; container pytest 42 green; Mac pytest green; source-check
+     159 deltas.
+
+# Prior structural packet — Ice Climbers (Popo + Nana follower entity)
 
 ## Objective
 

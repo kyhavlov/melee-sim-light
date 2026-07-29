@@ -32,6 +32,9 @@ enum {
     MSL_CORE_ITEM_KIND_DRMARIO_VITAMIN = 49,
     MSL_CORE_ITEM_KIND_MARIO_CAPE = 83,
     MSL_CORE_ITEM_KIND_DRMARIO_SHEET = 84,
+    MSL_CORE_ITEM_KIND_PIKACHU_THUNDER = 81,
+    MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_GROUND = 89,
+    MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_AIR = 90,
     MSL_CORE_ITEM_KIND_SAMUS_BOMB = 93,
     MSL_CORE_ITEM_KIND_SAMUS_CHARGE_SHOT = 94,
     MSL_CORE_ITEM_KIND_SAMUS_MISSILE = 95,
@@ -118,6 +121,18 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // refs/melee/src/melee/it/items/{itmariofireball.c,
         // itdrmariopill.c,itmariocape.c}
         return 0;
+    case MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_GROUND:
+        // xDD7 samples the crawl angle (constructor-written via
+        // it_802B3554) and xDEB/xDEF the constructor's spawn position;
+        // xDDB is a byte of the owner pointer.
+        // refs/melee/src/melee/it/itCharItems.h::itPikachutJoltGround_ItemVars
+        return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC2 |
+               MSL_CORE_ITEM_MISC3;
+    case MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_AIR:
+        // xDD4/xDD8 are owner/sibling GObj pointers; xDE8 is the launch
+        // velocity vector written by it_802B3F88 on every air entry.
+        // refs/melee/src/melee/it/itCharItems.h::itPikachutJoltAir_ItemVars
+        return MSL_CORE_ITEM_MISC2 | MSL_CORE_ITEM_MISC3;
     case MSL_CORE_ITEM_KIND_SAMUS_BOMB:
         // The morph-launch bool at xDD4 is first written by the explosion
         // event, not the constructor, so xDD7 carries fixed-pool residue for

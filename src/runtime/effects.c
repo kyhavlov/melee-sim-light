@@ -163,6 +163,9 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     // FTKIND_SAMUS to 2).
     msl_effect_load_bank(data, 2, "/EfSsData.dat", "effSamusDataTable");
     msl_effect_load_bank(data, 3, "/EfFxData.dat", "effFoxDataTable");
+    // Pikachu owns efAsync bank 7 (ftData_UnkBytePerCharacter maps
+    // FTKIND_PIKACHU to 7; Pichu shares the bank in retail).
+    msl_effect_load_bank(data, 7, "/EfPkData.dat", "effPikachuDataTable");
     // Popo and Nana share efAsync bank 14 (ftData_UnkBytePerCharacter maps
     // both kinds to 14).
     msl_effect_load_bank(data, 14, "/EfIcData.dat", "effIceclimberDataTable");

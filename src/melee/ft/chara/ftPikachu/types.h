@@ -97,8 +97,15 @@ union ftPikachu_MotionVars {
     } specialhi;
 
     struct ftPikachu_SpecialLwVars {
-        Item_GObj* x0;
+        // Retail packs the thunder Item_GObj* at mv+0 and the strike flag
+        // at mv+4, where the flag is also addressed as specialhi.x4
+        // (SetState_Unk0/Unk1 and both SpecialLwLoop enters). A widened
+        // host pointer at mv+0 would put its high half under those mv+4
+        // writes, so the source word keeps the flag's alias position and
+        // the full-width pointer lives past the aliased pair.
+        s32 x0_source_word;
         bool x4;
+        Item_GObj* x0;
     } speciallw;
 };
 

@@ -19,6 +19,9 @@
 #include "it/items/itluigifireball.h"
 #include "it/items/itmariocape.h"
 #include "it/items/itmariofireball.h"
+#include "it/items/itpikachuthunder.h"
+#include "it/items/itpikachutjoltair.h"
+#include "it/items/itpikachutjoltground.h"
 #include "it/items/itsamusbomb.h"
 #include "it/items/itsamuschargeshot.h"
 #include "it/items/itsamusgrapple.h"
@@ -94,6 +97,9 @@ struct sdata_ItemGXLink it_803F2F28[118] = {
     [It_Kind_Samus_Charge - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Samus_Missile - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Samus_GBeam - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Pikachu_Thunder - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Pikachu_TJolt_Ground - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Pikachu_TJolt_Air - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Mario_Fire - It_Kind_Kuriboh] = { NULL },
     [It_Kind_DrMario_Vitamin - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Mario_Cape - It_Kind_Kuriboh] = { NULL },
@@ -243,6 +249,57 @@ struct ItemLogicTable it_803F3100[118] = {
         NULL,
         NULL,
         itSamusGrapple_Logic53_EvtUnk,
+    },
+    [It_Kind_Pikachu_Thunder - It_Kind_Kuriboh] = {
+        it_803F70C8,
+        NULL,
+        it_2725_Logic39_Destroyed,
+        NULL,
+        NULL,
+        NULL,
+        itPikachuThunder_Logic39_DmgDealt,
+        NULL,
+        NULL,
+        NULL,
+        itPikachuThunder_Logic39_Clanked,
+        itPikachuThunder_Logic39_Absorbed,
+        NULL,
+        itPikachuThunder_Logic39_HitShield,
+        itPikachuThunder_Logic39_EvtUnk,
+    },
+    [It_Kind_Pikachu_TJolt_Ground - It_Kind_Kuriboh] = {
+        it_803F7190,
+        NULL,
+        it_2725_Logic106_Destroyed,
+        NULL,
+        NULL,
+        NULL,
+        it_2725_Logic106_DmgDealt,
+        NULL,
+        NULL,
+        it_2725_Logic106_Reflected,
+        it_2725_Logic106_Clanked,
+        it_2725_Logic106_Absorbed,
+        it_2725_Logic106_ShieldBounced,
+        it_2725_Logic106_HitShield,
+        itPikachuTJoltGround_Logic106_EvtUnk,
+    },
+    [It_Kind_Pikachu_TJolt_Air - It_Kind_Kuriboh] = {
+        it_803F71D8,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_2725_Logic107_DmgDealt,
+        NULL,
+        NULL,
+        it_2725_Logic107_Reflected,
+        it_2725_Logic107_Clanked,
+        it_2725_Logic107_Absorbed,
+        it_2725_Logic107_ShieldBounced,
+        it_2725_Logic107_HitShield,
+        itPikachuTJoltAir_Logic107_EvtUnk,
     },
     [It_Kind_Mario_Fire - It_Kind_Kuriboh] = {
         it_803F6788,

@@ -32,6 +32,7 @@ CHARACTERS = {
     'peach': (9, 'Pe', 'ftDataPeach'),
     'popo': (10, 'Pp', 'ftDataPopo'),
     'nana': (11, 'Nn', 'ftDataNana'),
+    'pikachu': (12, 'Pk', 'ftDataPikachu'),
     'samus': (13, 'Ss', 'ftDataSamus'),
     'purin': (15, 'Pr', 'ftDataPurin'),
     'luigi': (17, 'Lg', 'ftDataLuigi'),
@@ -43,8 +44,8 @@ CHARACTERS = {
 
 # Subaction counts per FighterKind (src/melee/ft/ftdata.c ftData_Table_Unk0).
 SUBACTION_COUNTS = {
-    0: 303, 1: 327, 2: 318, 7: 317, 9: 318, 10: 321, 11: 321, 13: 313,
-    15: 327, 17: 312, 18: 327, 19: 311, 21: 303, 22: 327,
+    0: 303, 1: 327, 2: 318, 7: 317, 9: 318, 10: 321, 11: 321, 12: 320,
+    13: 313, 15: 327, 17: 312, 18: 327, 19: 311, 21: 303, 22: 327,
 }
 
 # Words consumed per fighter subaction event with opcode >= 10, indexed by
@@ -78,6 +79,10 @@ CODE_ANCHORED = {
     #          ftPp_* handlers, so the anchor set is symmetric.
     'popo': (0, 2, 26, 29, 47),
     'nana': (0, 2, 26, 29, 47),
+    #   pikachu: ftPk_SpecialLw.c thunder-loop efAsync anchors
+    #          parts[FtPart_TopN=0] raw; every other part access resolves
+    #          through ftParts_GetBoneIndex.
+    'pikachu': (0,),
 }
 
 # Luigi's audited admission row (joint indices), the canonical anchor.

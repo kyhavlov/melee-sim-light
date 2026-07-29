@@ -10,6 +10,7 @@ class Character(IntEnum):
     SHEIK = 7
     PEACH = 9
     ICE_CLIMBERS = 10
+    PIKACHU = 12
     SAMUS = 13
     JIGGLYPUFF = 15
     LUIGI = 17

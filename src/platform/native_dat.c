@@ -930,6 +930,7 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataSamus") == 0 ||
         strcmp(symbol, "ftDataPopo") == 0 ||
         strcmp(symbol, "ftDataNana") == 0 ||
+        strcmp(symbol, "ftDataPikachu") == 0 ||
         strcmp(symbol, "ftDataMario") == 0 ||
         strcmp(symbol, "ftDataDrmario") == 0 ||
         strcmp(symbol, "ftDataMars") == 0 ||
@@ -1295,6 +1296,7 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_MARIOD,
     MSL_FIGHTER_ARTICLES_SAMUS,
     MSL_FIGHTER_ARTICLES_ICECLIMBER,
+    MSL_FIGHTER_ARTICLES_PIKACHU,
     MSL_FIGHTER_AUX_PURIN_PARTS,
 } MslFighterArticleProfile;
 
@@ -1448,6 +1450,25 @@ static ftData* translate_fighter_public(
         attr_types[1] = msl_dat_root_itClimbersBlizzardAttributes;
         attr_types[2] = msl_dat_root_itClimbersStringAttributes;
         break;
+    case MSL_FIGHTER_ARTICLES_PIKACHU:
+        // PlPk.dat's x48_items leads with the three articles
+        // ftPk_Init_OnLoad registers under the item kinds stored in its
+        // attribute block (xDC thunder 81, x14 ground jolt 89, x18 air jolt
+        // 90). The thunder and ground jolt carry concrete attribute blocks;
+        // the air jolt's ported logic never reads x4_specialAttributes. The
+        // trailing DAT slots hold presentation graphs no ported code
+        // reaches.
+        // refs/melee/src/melee/ft/chara/ftPikachu/ftPk_Init.c
+        // refs/melee/src/melee/it/items/{itpikachuthunder.c,
+        //   itpikachutjoltground.c,itpikachutjoltair.c}
+        article_list_type = msl_dat_root_MslDatPikachuArticles;
+        article_count = 3;
+        indices[0] = 0;
+        indices[1] = 1;
+        indices[2] = 2;
+        attr_types[0] = msl_dat_root_itPikachuthunderAttributes;
+        attr_types[1] = msl_dat_root_itPikachutJoltGroundAttributes;
+        break;
     case MSL_FIGHTER_AUX_PURIN_PARTS:
         // x48_items is not an article table for Purin. Its second pointer owns
         // the costume FtPartsDesc consumed by ftPr_Init_8013C360.
@@ -1599,6 +1620,10 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftIceClimberAttributes,
                                           321, MSL_FIGHTER_ARTICLES_ICECLIMBER);
+    } else if (strcmp(symbol, "ftDataPikachu") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftPikachuAttributes,
+                                          320, MSL_FIGHTER_ARTICLES_PIKACHU);
     } else if (strcmp(symbol, "ftDataLuigi") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftLuigiAttributes, 312,

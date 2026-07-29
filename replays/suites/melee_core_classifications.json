@@ -2782,19 +2782,116 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 137,
-          "first_mismatch_frame": 15,
-          "first_render_visibility_mismatch_frame": null,
           "frames": 10090,
-          "last_mismatch_frame": 9808,
           "matched_frames": 9296,
-          "mismatch_count": 2569,
-          "mismatch_fields_digest": "6f20b774a61d61334b70794a751d790b5f07bad71689fc02b75175d2a87fee31",
-          "mismatch_fingerprint": "7015ed4c499755fe",
           "mismatched_frames": 794,
+          "exact_prefix_frames": 137,
+          "strict_suffix_frames": 159,
+          "first_mismatch_frame": 15,
+          "last_mismatch_frame": 9808,
+          "mismatch_count": 2569,
+          "mismatch_fingerprint": "51c08e048869017e",
+          "mismatch_fields": [
+            {
+              "field": "item.misc3[2]",
+              "count": 88,
+              "first_frame": 15,
+              "last_frame": 9798
+            },
+            {
+              "field": "item.misc3[1]",
+              "count": 244,
+              "first_frame": 18,
+              "last_frame": 9803
+            },
+            {
+              "field": "item.misc1[3]",
+              "count": 25,
+              "first_frame": 20,
+              "last_frame": 5265
+            },
+            {
+              "field": "item.misc2[3]",
+              "count": 13,
+              "first_frame": 20,
+              "last_frame": 5260
+            },
+            {
+              "field": "item.misc3[3]",
+              "count": 27,
+              "first_frame": 20,
+              "last_frame": 5260
+            },
+            {
+              "field": "item.misc3[4]",
+              "count": 5,
+              "first_frame": 25,
+              "last_frame": 827
+            },
+            {
+              "field": "item.misc1[1]",
+              "count": 292,
+              "first_frame": 26,
+              "last_frame": 9803
+            },
+            {
+              "field": "item.misc2[1]",
+              "count": 85,
+              "first_frame": 26,
+              "last_frame": 9793
+            },
+            {
+              "field": "item.misc1[2]",
+              "count": 92,
+              "first_frame": 36,
+              "last_frame": 9798
+            },
+            {
+              "field": "item.misc2[2]",
+              "count": 43,
+              "first_frame": 36,
+              "last_frame": 9788
+            },
+            {
+              "field": "item.misc1[0]",
+              "count": 589,
+              "first_frame": 41,
+              "last_frame": 9808
+            },
+            {
+              "field": "item.misc2[0]",
+              "count": 347,
+              "first_frame": 41,
+              "last_frame": 9798
+            },
+            {
+              "field": "item.misc3[0]",
+              "count": 640,
+              "first_frame": 41,
+              "last_frame": 9808
+            },
+            {
+              "field": "item.misc1[4]",
+              "count": 3,
+              "first_frame": 822,
+              "last_frame": 827
+            },
+            {
+              "field": "item.misc2[4]",
+              "count": 1,
+              "first_frame": 822,
+              "last_frame": 822
+            },
+            {
+              "field": "item.misc0[0]",
+              "count": 75,
+              "first_frame": 3035,
+              "last_frame": 5268
+            }
+          ],
           "render_visibility_mismatch_count": 0,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 159
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
         },
         "ppc": {
           "exact_prefix_frames": 137,
@@ -3375,19 +3472,152 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 95,
-          "first_mismatch_frame": -27,
-          "first_render_visibility_mismatch_frame": -122,
           "frames": 13305,
-          "last_mismatch_frame": 12605,
           "matched_frames": 12437,
-          "mismatch_count": 1818,
-          "mismatch_fields_digest": "cc06c1c6f6bd806838a42716e66c4a5f45c479285817669f43df5dad84e06cf6",
-          "mismatch_fingerprint": "d72952ac7e27a11c",
           "mismatched_frames": 868,
+          "exact_prefix_frames": 95,
+          "strict_suffix_frames": 577,
+          "first_mismatch_frame": -27,
+          "last_mismatch_frame": 12605,
+          "mismatch_count": 1818,
+          "mismatch_fingerprint": "16e6e71cddea535c",
+          "mismatch_fields": [
+            {
+              "field": "item.misc0[0]",
+              "count": 159,
+              "first_frame": -27,
+              "last_frame": 6176
+            },
+            {
+              "field": "item.misc2[0]",
+              "count": 27,
+              "first_frame": -27,
+              "last_frame": -1
+            },
+            {
+              "field": "item.misc3[0]",
+              "count": 27,
+              "first_frame": -27,
+              "last_frame": -1
+            },
+            {
+              "field": "item.misc0[1]",
+              "count": 142,
+              "first_frame": -10,
+              "last_frame": 12550
+            },
+            {
+              "field": "item.misc2[2]",
+              "count": 33,
+              "first_frame": 27,
+              "last_frame": 12600
+            },
+            {
+              "field": "item.misc3[2]",
+              "count": 50,
+              "first_frame": 27,
+              "last_frame": 995
+            },
+            {
+              "field": "item.misc3[3]",
+              "count": 33,
+              "first_frame": 37,
+              "last_frame": 7678
+            },
+            {
+              "field": "item.misc1[4]",
+              "count": 11,
+              "first_frame": 42,
+              "last_frame": 7575
+            },
+            {
+              "field": "item.misc2[4]",
+              "count": 12,
+              "first_frame": 42,
+              "last_frame": 7580
+            },
+            {
+              "field": "item.misc1[3]",
+              "count": 183,
+              "first_frame": 43,
+              "last_frame": 12595
+            },
+            {
+              "field": "item.misc2[3]",
+              "count": 320,
+              "first_frame": 43,
+              "last_frame": 12595
+            },
+            {
+              "field": "item.misc3[4]",
+              "count": 148,
+              "first_frame": 47,
+              "last_frame": 11475
+            },
+            {
+              "field": "item.misc1[2]",
+              "count": 87,
+              "first_frame": 48,
+              "last_frame": 12600
+            },
+            {
+              "field": "item.misc1[1]",
+              "count": 114,
+              "first_frame": 950,
+              "last_frame": 12605
+            },
+            {
+              "field": "item.misc3[1]",
+              "count": 30,
+              "first_frame": 961,
+              "last_frame": 1000
+            },
+            {
+              "field": "item.misc0[4]",
+              "count": 207,
+              "first_frame": 4646,
+              "last_frame": 11475
+            },
+            {
+              "field": "item.misc0[3]",
+              "count": 138,
+              "first_frame": 5537,
+              "last_frame": 7678
+            },
+            {
+              "field": "item.misc1[5]",
+              "count": 2,
+              "first_frame": 7555,
+              "last_frame": 7570
+            },
+            {
+              "field": "item.misc3[5]",
+              "count": 2,
+              "first_frame": 7555,
+              "last_frame": 7570
+            },
+            {
+              "field": "item.misc2[5]",
+              "count": 2,
+              "first_frame": 7560,
+              "last_frame": 7575
+            },
+            {
+              "field": "item.misc0[2]",
+              "count": 76,
+              "first_frame": 12389,
+              "last_frame": 12544
+            },
+            {
+              "field": "item.misc2[1]",
+              "count": 15,
+              "first_frame": 12571,
+              "last_frame": 12605
+            }
+          ],
           "render_visibility_mismatch_count": 5,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 577
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
         },
         "ppc": {
           "exact_prefix_frames": 95,
