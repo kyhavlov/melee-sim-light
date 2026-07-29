@@ -1,6 +1,6 @@
 {
   "name": "icies",
-  "notes": "Ice Climbers validation suite: 12 netplay singles across all six legal stages against Fox, Falco, Marth, Sheik, and Peach plus an Ice Climbers ditto, 2025-2026 Slippi and mainline captures. The Pokemon Stadium entry is frozen-form only (is_frozen_ps). Every game carries Slippi follower (Nana) frames for both climbers where present.",
+  "notes": "Ice Climbers validation suite: 12 netplay singles across all six legal stages against Fox, Falco, Marth, Sheik, and Peach plus an Ice Climbers ditto, 2025-2026 Slippi and mainline captures. The Pokemon Stadium entry is frozen-form only (is_frozen_ps). Every game carries Slippi follower (Nana) frames for both climbers where present. Thirteen additional 2022-2026 captures staged in icies_extended.json await fix-or-classify before joining the aggregate.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
