@@ -41,6 +41,19 @@ already ported; DK is their first live consumer.
   shoulder-timer / Hand Slap fusions** (`canonical:capture-follow-fmadds`) — retail-faithful
   boundaries, identity at current inputs.
 
+## DK tie triage (2026-07-30, user viewer report — RESOLVED, no sim change)
+
+The horizontal tie in the live viewer is not produced by the sim. Verified from extracted
+data: DK's only dynamics chain is the tie (parts 66-71, rooted under chest part 26); NO
+hurtbox rides it (hurtbox bone 73 attaches at part 3, near the hip) and NO subaction Create
+Hitbox anchors on it (hitbox bones: 0,4,7,17,25,29,30,31,43,44,51,52,53,62). The headless
+policy in ftdynamics.c therefore correctly skips its dangle solver (same class as Luigi's
+hair and the capes), and the bit-exact corpus confirms zero gameplay impact. The on-screen
+body outline comes from slippilab's donkeyKong.zip per-animation 2D frames (the sim supplies
+only action/frame/pos/facing + hitbox capsules), and those outlines were generated without
+dangle physics — the stiff tie is baked into the asset and appears in slippilab's own viewer.
+If presentation parity ever matters, the lever is regenerating the zip frames, not the sim.
+
 ## Session 4 (2026-07-30): pre-fusion-era audit — Tier A ports
 
 Corpus-wide inventory (grep fused ops per asm TU vs __f* markers per C TU) found the
