@@ -23,7 +23,7 @@ def test_aggregate_replay_paths_are_unique() -> None:
 
 @pytest.mark.parametrize(
     "component_suite",
-    ("aggregate_recent", "puff", "peach", "doubles_recent", "luigi", "marios", "samus"),
+    ("aggregate_recent", "puff", "peach", "doubles_recent", "luigi", "marios", "samus", "pikachu"),
 )
 def test_melee_core_aggregate_contains_every_active_replay(
     component_suite: str,
@@ -41,7 +41,7 @@ def test_melee_core_aggregate_is_unique_and_composed_from_focused_manifests() ->
     paths = [entry.replay for entry in aggregate.replays]
     manifests = suite_manifest_paths("replays/suites/melee_core_aggregate.json")
 
-    assert len(paths) == 271
+    assert len(paths) == 296
     assert len(paths) == len(set(paths))
     assert {path.name for path in manifests} == {
         "melee_core_aggregate.json",
@@ -53,4 +53,5 @@ def test_melee_core_aggregate_is_unique_and_composed_from_focused_manifests() ->
         "marios.json",
         "samus.json",
         "icies.json",
+        "pikachu.json",
     }

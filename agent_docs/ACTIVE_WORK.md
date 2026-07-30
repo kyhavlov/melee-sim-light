@@ -46,6 +46,32 @@ several replays — ftPk_Init_UnkMotionStates1/2 part visibility toggles are liv
 
 ## Log
 
+- 2026-07-29 — `retained` (session 3: both residual fails dispositioned; pikachu.json JOINED THE
+  AGGREGATE — 296 = 226 pass / 70 classified / 0 fail)
+  **master-master root-caused as a recorder-profile residual**: the drifting FoD items are Fox
+  LASERS (kind 54; the static kind-74 item is his blaster gun) whose spawn X rides the
+  RThumbNb muzzle transform (ftFx_SpecialN_FtGetHoldJoint -> lb_8000B1CC with offset
+  (0, 1.2325, 4.2636)); every flight all game is offset ~2^-16 with the fraction preserved by
+  the laser's integral +7.0/frame velocity. A new MSL_MUZZLE_PROBE in the engine-dump Dolphin
+  (lb_8000B1CC entry filtered on that offset vector, dumping the out vector and the full
+  ancestor jobj chain) showed retail interpreter playback of this exact recording reproducing
+  OUR bits exactly at frames -24 and 78 — every rotate/scale/translate/matrix word of all 12
+  chain links identical. The recording disagrees with its own canonical re-simulation: the
+  anonymized ranked capture records Dolphin without its build/execution profile. Classified
+  dolphin-ulp-fighter-and-item-profile (bounded laser pos/vel intervals + derived angle bytes +
+  reconverging fighter-pos ULP intervals; all discrete lanes exact; native/ppc fingerprints
+  identical: 040cf4c553e20933, 9,734/12,233).
+  **slippi-2025-11** classified dolphin-ulp-motion-profile (one 1-ULP wall-ride pos_x row,
+  3,711 strict suffix, native/ppc identical: 72651ec5c1e33764).
+  Wiring: pikachu.json added to melee_core_aggregate include_suites (271->296); 25 output locks
+  recorded (271 existing locks byte-stable; the two icies locks re-recorded in session 1 stay
+  put); tests updated (296 pins, manifest set, classified-loader suite list, coverage
+  parametrize). Container full pytest 44 green (incl. ppc-snapshot verification); Mac pytest +
+  source-check green. Trap note: the container clone's git HEAD is the stale clone base —
+  diff lock files against the MAC HEAD, not the container's.
+  The Pikachu port is at the endgame state: 23/25 bit-exact on both backends, 2 classified,
+  suite in the aggregate.
+
 - 2026-07-29 — `retained` (session 2: extended suite to 25 + the phantom-revisit decomp fix)
   Scope: the 12 remaining usable batch replays joined pikachu.json (25 total; three anonymized
   ranked now, the v3.15/v3.16 pair carrying cardinals=false — both bit-exact, which isolates

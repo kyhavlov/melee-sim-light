@@ -1924,6 +1924,231 @@
       }
     },
     {
+      "replay": "replays/validation/pikachu/38531_Game_20250316T012548.slpz",
+      "expected": {
+        "native": {
+          "frames": 15895,
+          "actual_output_fingerprint": "36dc61c9e1ea796d"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/40631_Game_20250325T200102.slpz",
+      "expected": {
+        "native": {
+          "frames": 11476,
+          "actual_output_fingerprint": "7913a7c5e60428bc"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/40830_Game_20250330T140702.slpz",
+      "expected": {
+        "native": {
+          "frames": 8892,
+          "actual_output_fingerprint": "23989d0cca99bf71"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/41738_Game_20250420T131116.slpz",
+      "expected": {
+        "native": {
+          "frames": 6466,
+          "actual_output_fingerprint": "2d0f0cab6c0c3613"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/41919_Game_20250423T163143.slpz",
+      "expected": {
+        "native": {
+          "frames": 9727,
+          "actual_output_fingerprint": "6b8fbe81087b8754"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/41969_Game_20250426T105320.slpz",
+      "expected": {
+        "native": {
+          "frames": 10925,
+          "actual_output_fingerprint": "e8fd2cf414543691"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/43799_Game_20250624T005320.slpz",
+      "expected": {
+        "native": {
+          "frames": 11067,
+          "actual_output_fingerprint": "05fb7205085ef5c1"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/44145_Game_20250707T185007.slpz",
+      "expected": {
+        "native": {
+          "frames": 11679,
+          "actual_output_fingerprint": "5da8c3ea14bd5c42"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/77736_Game_20250506T000051.slpz",
+      "expected": {
+        "native": {
+          "frames": 4855,
+          "actual_output_fingerprint": "d181c727217e3603"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/97280_diamond-platinum-a313b0df5d11e8fb163d6c9b.slpz",
+      "expected": {
+        "native": {
+          "frames": 7903,
+          "actual_output_fingerprint": "823456045fff259a"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/auto-pikachu-2025-02_Game_20250212T183028.slpz",
+      "expected": {
+        "native": {
+          "frames": 7930,
+          "actual_output_fingerprint": "013d98740142d714"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/auto-pikachu-2025-12_Game_20251217T173410.slpz",
+      "expected": {
+        "native": {
+          "frames": 10158,
+          "actual_output_fingerprint": "fa20dfd3701ebb92"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/diamond-platinum-65468eac6defc7ae336916cb.slpz",
+      "expected": {
+        "native": {
+          "frames": 10212,
+          "actual_output_fingerprint": "6eb335b063c211ce"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/diamond-platinum-c53c1ea834421338b65dd158.slpz",
+      "expected": {
+        "native": {
+          "frames": 3781,
+          "actual_output_fingerprint": "e2f54c823d6d6aba"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/master-master-97beba9993588c0e724b06c2.slpz",
+      "expected": {
+        "native": {
+          "frames": 12233,
+          "actual_output_fingerprint": "17cc04c621f9b2e0"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/plat-pikachu-2026-03_Game_20260320T175816.slpz",
+      "expected": {
+        "native": {
+          "frames": 7196,
+          "actual_output_fingerprint": "d8d132a8516bb094"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/silver-fox-2026-04_Game_20260420T132214.slpz",
+      "expected": {
+        "native": {
+          "frames": 12117,
+          "actual_output_fingerprint": "cdde30ff45b8a13a"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2025-01_Game_20250127T220401.slpz",
+      "expected": {
+        "native": {
+          "frames": 4703,
+          "actual_output_fingerprint": "2fbf85526db4cf7b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2025-03a_Game_20250323T182057.slpz",
+      "expected": {
+        "native": {
+          "frames": 5297,
+          "actual_output_fingerprint": "0024a71206604963"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2025-03b_Game_20250324T212734.slpz",
+      "expected": {
+        "native": {
+          "frames": 9990,
+          "actual_output_fingerprint": "39015566d386bb2b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2025-04_Game_20250429T124920.slpz",
+      "expected": {
+        "native": {
+          "frames": 8215,
+          "actual_output_fingerprint": "8fef7afd61cfd0bf"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2025-04b_Game_20250409T172535.slpz",
+      "expected": {
+        "native": {
+          "frames": 10011,
+          "actual_output_fingerprint": "5b35a452eea4552f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2025-05_Game_20250520T230951.slpz",
+      "expected": {
+        "native": {
+          "frames": 11938,
+          "actual_output_fingerprint": "f518be0ef8d18722"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2025-11_Game_20251114T162828.slpz",
+      "expected": {
+        "native": {
+          "frames": 8774,
+          "actual_output_fingerprint": "6f14051435595330"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2026-07_Game_20260713T214222.slpz",
+      "expected": {
+        "native": {
+          "frames": 13031,
+          "actual_output_fingerprint": "9a5e122c369a294b"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz",
       "expected": {
         "native": {

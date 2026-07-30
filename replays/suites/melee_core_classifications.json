@@ -5374,6 +5374,419 @@
         },
         "ppc": "native"
       }
+    },
+    {
+      "replay": "replays/validation/pikachu/master-master-97beba9993588c0e724b06c2.slpz",
+      "id": "dolphin-ulp-fighter-and-item-profile",
+      "owner": "Fox blaster-muzzle transform and fighter motion float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. Bounded retail interpreter playback of this recording reproduces the runtime's exact blaster-muzzle transform bits (lb_8000B1CC on the RThumbNb chain, probed at frames -24 and 78 with every ancestor rotate/scale/translate/matrix word identical), while the recording carries laser spawn positions offset ~2^-16 on every flight all game: the anonymized ranked capture records Dolphin without its build or execution profile. The residual is bounded laser position/velocity intervals, angle bytes derived from those floats, and reconverging ULP-scale fighter position intervals; every discrete gameplay lane is exact and the fingerprint ends in 22 strict trailing transitions.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint",
+        "refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C504",
+        "refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC"
+      ],
+      "expected": {
+        "native": {
+          "frames": 12233,
+          "matched_frames": 9734,
+          "mismatched_frames": 2499,
+          "exact_prefix_frames": 98,
+          "strict_suffix_frames": 22,
+          "first_mismatch_frame": -24,
+          "last_mismatch_frame": 12088,
+          "mismatch_count": 4802,
+          "mismatch_fingerprint": "040cf4c553e20933",
+          "mismatch_fields": [
+            {
+              "field": "item.pos_x[1]",
+              "count": 619,
+              "first_frame": -24,
+              "last_frame": 12078
+            },
+            {
+              "field": "item.pos_x[0]",
+              "count": 1077,
+              "first_frame": -13,
+              "last_frame": 12088
+            },
+            {
+              "field": "item.pos_y[1]",
+              "count": 458,
+              "first_frame": 78,
+              "last_frame": 12078
+            },
+            {
+              "field": "item.pos_y[0]",
+              "count": 771,
+              "first_frame": 80,
+              "last_frame": 12088
+            },
+            {
+              "field": "item.pos_x[2]",
+              "count": 203,
+              "first_frame": 125,
+              "last_frame": 12063
+            },
+            {
+              "field": "item.pos_y[2]",
+              "count": 106,
+              "first_frame": 125,
+              "last_frame": 12063
+            },
+            {
+              "field": "item.pos_x[3]",
+              "count": 28,
+              "first_frame": 135,
+              "last_frame": 11213
+            },
+            {
+              "field": "item.pos_y[3]",
+              "count": 28,
+              "first_frame": 135,
+              "last_frame": 11213
+            },
+            {
+              "field": "pos_x[1]",
+              "count": 679,
+              "first_frame": 444,
+              "last_frame": 12054
+            },
+            {
+              "field": "item.vel_x[1]",
+              "count": 27,
+              "first_frame": 458,
+              "last_frame": 9621
+            },
+            {
+              "field": "item.vel_y[1]",
+              "count": 23,
+              "first_frame": 458,
+              "last_frame": 9621
+            },
+            {
+              "field": "item.misc1[1]",
+              "count": 27,
+              "first_frame": 458,
+              "last_frame": 9621
+            },
+            {
+              "field": "item.vel_x[2]",
+              "count": 1,
+              "first_frame": 459,
+              "last_frame": 459
+            },
+            {
+              "field": "item.misc1[2]",
+              "count": 1,
+              "first_frame": 459,
+              "last_frame": 459
+            },
+            {
+              "field": "pos_y[1]",
+              "count": 12,
+              "first_frame": 821,
+              "last_frame": 9375
+            },
+            {
+              "field": "speed_air_x_self[1]",
+              "count": 38,
+              "first_frame": 3226,
+              "last_frame": 9360
+            },
+            {
+              "field": "pos_y[0]",
+              "count": 184,
+              "first_frame": 3846,
+              "last_frame": 11611
+            },
+            {
+              "field": "pos_x[0]",
+              "count": 261,
+              "first_frame": 3972,
+              "last_frame": 8393
+            },
+            {
+              "field": "item.vel_x[0]",
+              "count": 78,
+              "first_frame": 5922,
+              "last_frame": 11215
+            },
+            {
+              "field": "item.vel_y[0]",
+              "count": 78,
+              "first_frame": 5922,
+              "last_frame": 11215
+            },
+            {
+              "field": "item.misc1[0]",
+              "count": 78,
+              "first_frame": 5922,
+              "last_frame": 11215
+            },
+            {
+              "field": "speed_ground_x_self[1]",
+              "count": 1,
+              "first_frame": 9360,
+              "last_frame": 9360
+            },
+            {
+              "field": "item.pos_x[4]",
+              "count": 8,
+              "first_frame": 10049,
+              "last_frame": 10078
+            },
+            {
+              "field": "item.pos_y[4]",
+              "count": 8,
+              "first_frame": 10049,
+              "last_frame": 10078
+            },
+            {
+              "field": "item.pos_x[5]",
+              "count": 4,
+              "first_frame": 10068,
+              "last_frame": 10071
+            },
+            {
+              "field": "item.pos_y[5]",
+              "count": 4,
+              "first_frame": 10068,
+              "last_frame": 10071
+            }
+          ],
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": {
+          "frames": 12233,
+          "matched_frames": 9734,
+          "mismatched_frames": 2499,
+          "exact_prefix_frames": 98,
+          "strict_suffix_frames": 22,
+          "first_mismatch_frame": -24,
+          "last_mismatch_frame": 12088,
+          "mismatch_count": 4802,
+          "mismatch_fingerprint": "040cf4c553e20933",
+          "mismatch_fields": [
+            {
+              "field": "item.pos_x[1]",
+              "count": 619,
+              "first_frame": -24,
+              "last_frame": 12078
+            },
+            {
+              "field": "item.pos_x[0]",
+              "count": 1077,
+              "first_frame": -13,
+              "last_frame": 12088
+            },
+            {
+              "field": "item.pos_y[1]",
+              "count": 458,
+              "first_frame": 78,
+              "last_frame": 12078
+            },
+            {
+              "field": "item.pos_y[0]",
+              "count": 771,
+              "first_frame": 80,
+              "last_frame": 12088
+            },
+            {
+              "field": "item.pos_x[2]",
+              "count": 203,
+              "first_frame": 125,
+              "last_frame": 12063
+            },
+            {
+              "field": "item.pos_y[2]",
+              "count": 106,
+              "first_frame": 125,
+              "last_frame": 12063
+            },
+            {
+              "field": "item.pos_x[3]",
+              "count": 28,
+              "first_frame": 135,
+              "last_frame": 11213
+            },
+            {
+              "field": "item.pos_y[3]",
+              "count": 28,
+              "first_frame": 135,
+              "last_frame": 11213
+            },
+            {
+              "field": "pos_x[1]",
+              "count": 679,
+              "first_frame": 444,
+              "last_frame": 12054
+            },
+            {
+              "field": "item.vel_x[1]",
+              "count": 27,
+              "first_frame": 458,
+              "last_frame": 9621
+            },
+            {
+              "field": "item.vel_y[1]",
+              "count": 23,
+              "first_frame": 458,
+              "last_frame": 9621
+            },
+            {
+              "field": "item.misc1[1]",
+              "count": 27,
+              "first_frame": 458,
+              "last_frame": 9621
+            },
+            {
+              "field": "item.vel_x[2]",
+              "count": 1,
+              "first_frame": 459,
+              "last_frame": 459
+            },
+            {
+              "field": "item.misc1[2]",
+              "count": 1,
+              "first_frame": 459,
+              "last_frame": 459
+            },
+            {
+              "field": "pos_y[1]",
+              "count": 12,
+              "first_frame": 821,
+              "last_frame": 9375
+            },
+            {
+              "field": "speed_air_x_self[1]",
+              "count": 38,
+              "first_frame": 3226,
+              "last_frame": 9360
+            },
+            {
+              "field": "pos_y[0]",
+              "count": 184,
+              "first_frame": 3846,
+              "last_frame": 11611
+            },
+            {
+              "field": "pos_x[0]",
+              "count": 261,
+              "first_frame": 3972,
+              "last_frame": 8393
+            },
+            {
+              "field": "item.vel_x[0]",
+              "count": 78,
+              "first_frame": 5922,
+              "last_frame": 11215
+            },
+            {
+              "field": "item.vel_y[0]",
+              "count": 78,
+              "first_frame": 5922,
+              "last_frame": 11215
+            },
+            {
+              "field": "item.misc1[0]",
+              "count": 78,
+              "first_frame": 5922,
+              "last_frame": 11215
+            },
+            {
+              "field": "speed_ground_x_self[1]",
+              "count": 1,
+              "first_frame": 9360,
+              "last_frame": 9360
+            },
+            {
+              "field": "item.pos_x[4]",
+              "count": 8,
+              "first_frame": 10049,
+              "last_frame": 10078
+            },
+            {
+              "field": "item.pos_y[4]",
+              "count": 8,
+              "first_frame": 10049,
+              "last_frame": 10078
+            },
+            {
+              "field": "item.pos_x[5]",
+              "count": 4,
+              "first_frame": 10068,
+              "last_frame": 10071
+            },
+            {
+              "field": "item.pos_y[5]",
+              "count": 4,
+              "first_frame": 10068,
+              "last_frame": 10071
+            }
+          ],
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2025-11_Game_20251114T162828.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter wall push-out float execution profile",
+      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is one isolated 1-ULP pos_x row on a fast-falling Falco riding the Yoshi's Story right underside wall, where the position re-derives from the wall line each frame and reconverges immediately; the replay records Dolphin but not its build or execution profile. The fingerprint ends in 3,711 strict trailing transitions.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate"
+      ],
+      "expected": {
+        "native": {
+          "frames": 8774,
+          "matched_frames": 8773,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 5062,
+          "strict_suffix_frames": 3711,
+          "first_mismatch_frame": 4940,
+          "last_mismatch_frame": 4940,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "72651ec5c1e33764",
+          "mismatch_fields": [
+            {
+              "field": "pos_x[1]",
+              "count": 1,
+              "first_frame": 4940,
+              "last_frame": 4940
+            }
+          ],
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": {
+          "frames": 8774,
+          "matched_frames": 8773,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 5062,
+          "strict_suffix_frames": 3711,
+          "first_mismatch_frame": 4940,
+          "last_mismatch_frame": 4940,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "72651ec5c1e33764",
+          "mismatch_fields": [
+            {
+              "field": "pos_x[1]",
+              "count": 1,
+              "first_frame": 4940,
+              "last_frame": 4940
+            }
+          ],
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        }
+      }
     }
   ]
 }
