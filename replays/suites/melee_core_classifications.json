@@ -5587,6 +5587,300 @@
           "signed_zero_equal_count": 0
         }
       }
+    },
+    {
+      "replay": "replays/validation/dk/auto-dk-2025-04_Game_20250408T015844.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "Samus grapple-swing rope integration and the offstage wall-hug clamp",
+      "rationale": "The residual is one bounded 150-row P2 pos/self-speed episode while Samus swings on the grapple rope under Fountain's side wall, healing at the ledge-grab snap; there are no discrete state flips. PPC and native source runtimes agree bit-for-bit, and engine-dump retail playback of this recording reproduces the recorded bits through the fork window, so the seed is the hidden grapple-chain integration ULP documented on the master-samus entry.",
+      "sources": [
+        "refs/melee/src/melee/it/items/itsamusgrapple.c::it_802BA5DC",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall"
+      ],
+      "expected": {
+        "native": {
+          "frames": 13657,
+          "matched_frames": 13507,
+          "mismatched_frames": 150,
+          "exact_prefix_frames": 8776,
+          "strict_suffix_frames": 4731,
+          "first_mismatch_frame": 8654,
+          "last_mismatch_frame": 8803,
+          "mismatch_count": 309,
+          "mismatch_fingerprint": "874a5e9d0ba6f55d",
+          "render_visibility_mismatch_count": 9,
+          "first_render_visibility_mismatch_frame": 6354,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "350aef6aeb777b1f114d03a7cddaecd8bf5397590e8bd08051387aabca66cb67"
+        },
+        "ppc": {
+          "frames": 13657,
+          "matched_frames": 13507,
+          "mismatched_frames": 150,
+          "exact_prefix_frames": 8776,
+          "strict_suffix_frames": 4731,
+          "first_mismatch_frame": 8654,
+          "last_mismatch_frame": 8803,
+          "mismatch_count": 309,
+          "mismatch_fingerprint": "874a5e9d0ba6f55d",
+          "render_visibility_mismatch_count": 9,
+          "first_render_visibility_mismatch_frame": 6354,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "350aef6aeb777b1f114d03a7cddaecd8bf5397590e8bd08051387aabca66cb67"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/dk/9560_Game_20250405T084316.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "airborne wall-hug pos_x re-derivation lanes",
+      "rationale": "The complete residual is a three-row 1-ULP pos_x episode while DK falls in hitstun pinned against Yoshi's left side wall (the wall-hug clamp re-derives pos_x from the wall line each frame; all published velocity lanes stay exact), ending at the bottom-blast respawn snap. PPC and native source runtimes agree bit-for-bit, and engine-dump retail playback of this recording reproduces the recorded bits through the fork window; the clamp's remaining rounding seed is a documented open lever.",
+      "sources": [
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7359,
+          "matched_frames": 7356,
+          "mismatched_frames": 3,
+          "exact_prefix_frames": 2242,
+          "strict_suffix_frames": 5114,
+          "first_mismatch_frame": 2120,
+          "last_mismatch_frame": 2122,
+          "mismatch_count": 3,
+          "mismatch_fingerprint": "e0598ae666db839d",
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "d2343abbd7d7f9ed3c10f7a89731ad656779cd5c585f46f3b4edf1312f4124ba"
+        },
+        "ppc": {
+          "frames": 7359,
+          "matched_frames": 7356,
+          "mismatched_frames": 3,
+          "exact_prefix_frames": 2242,
+          "strict_suffix_frames": 5114,
+          "first_mismatch_frame": 2120,
+          "last_mismatch_frame": 2122,
+          "mismatch_count": 3,
+          "mismatch_fingerprint": "e0598ae666db839d",
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "d2343abbd7d7f9ed3c10f7a89731ad656779cd5c585f46f3b4edf1312f4124ba"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/dk/22123_Game_20250505T215606.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "airborne wall-hug pos_x re-derivation lanes",
+      "rationale": "The complete residual is a two-row 1-ULP pos_x episode while DK falls hugging Dream Land's left edge wall, self-healing at the next absolute snap; no discrete state flips and all velocity lanes stay exact. PPC and native source runtimes agree bit-for-bit; same wall-hug clamp mechanism as the retail-arbitrated 9560 entry.",
+      "sources": [
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 12291,
+          "matched_frames": 12289,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 8019,
+          "strict_suffix_frames": 4267,
+          "first_mismatch_frame": 7897,
+          "last_mismatch_frame": 7901,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "76d24b524348c9b9",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "4ca54b1cbabe672e69b58de9cae7f296306d7741afda26a00677a15b3179f9d8"
+        },
+        "ppc": {
+          "frames": 12291,
+          "matched_frames": 12289,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 8019,
+          "strict_suffix_frames": 4267,
+          "first_mismatch_frame": 7897,
+          "last_mismatch_frame": 7901,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "76d24b524348c9b9",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "4ca54b1cbabe672e69b58de9cae7f296306d7741afda26a00677a15b3179f9d8"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/dk/basic-dk-2025-04_Game_20250427T125907.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "airborne wall-hug pos_x re-derivation lanes",
+      "rationale": "The complete residual is a six-row 1-ULP pos_x episode while DK falls hugging Yoshi's right side wall, self-healing at the next absolute snap; no discrete state flips and all velocity lanes stay exact. PPC and native source runtimes agree bit-for-bit; same wall-hug clamp mechanism as the retail-arbitrated 9560 entry.",
+      "sources": [
+        "refs/melee/src/melee/mp/mplib.c::mpLib_800511A4_RightWall",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10171,
+          "matched_frames": 10165,
+          "mismatched_frames": 6,
+          "exact_prefix_frames": 7387,
+          "strict_suffix_frames": 2778,
+          "first_mismatch_frame": 7265,
+          "last_mismatch_frame": 7270,
+          "mismatch_count": 6,
+          "mismatch_fingerprint": "8ccb8c481c165fc8",
+          "render_visibility_mismatch_count": 46,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "0a07b9cf10147fe40390a73c30d93ee8d1825e671dad6e533849968e9c99e378"
+        },
+        "ppc": {
+          "frames": 10171,
+          "matched_frames": 10165,
+          "mismatched_frames": 6,
+          "exact_prefix_frames": 7387,
+          "strict_suffix_frames": 2778,
+          "first_mismatch_frame": 7265,
+          "last_mismatch_frame": 7270,
+          "mismatch_count": 6,
+          "mismatch_fingerprint": "8ccb8c481c165fc8",
+          "render_visibility_mismatch_count": 46,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "0a07b9cf10147fe40390a73c30d93ee8d1825e671dad6e533849968e9c99e378"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/dk/medium-marth-2025-09_Game_20250912T002037.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "airborne wall-hug pos_x re-derivation lanes",
+      "rationale": "The complete residual is a two-row 1-ULP pos_x episode while DK falls in hitstun hugging Yoshi's right side wall, self-healing at the next absolute snap; no discrete state flips and all velocity lanes stay exact. PPC and native source runtimes agree bit-for-bit; same wall-hug clamp mechanism as the retail-arbitrated 9560 entry.",
+      "sources": [
+        "refs/melee/src/melee/mp/mplib.c::mpLib_800511A4_RightWall",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 8353,
+          "matched_frames": 8351,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 7182,
+          "strict_suffix_frames": 1169,
+          "first_mismatch_frame": 7060,
+          "last_mismatch_frame": 7061,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "4e90c30cb3c91ca6",
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "4c37894b15766c6244085ec04712e373a416776e3526e1488d819f3045ff1345"
+        },
+        "ppc": {
+          "frames": 8353,
+          "matched_frames": 8351,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 7182,
+          "strict_suffix_frames": 1169,
+          "first_mismatch_frame": 7060,
+          "last_mismatch_frame": 7061,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "4e90c30cb3c91ca6",
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "4c37894b15766c6244085ec04712e373a416776e3526e1488d819f3045ff1345"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/dk/slippi-2025-04_Game_20250422T141746.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "airborne wall-hug pos_x re-derivation lanes",
+      "rationale": "The complete residual is one 1-ULP pos_x row on the last fall frame before DK's cliff catch at Dream Land's right edge wall, healed by the cliff-catch absolute snap; no discrete state flips. PPC and native source runtimes agree bit-for-bit; same wall-hug clamp mechanism as the retail-arbitrated 9560 entry.",
+      "sources": [
+        "refs/melee/src/melee/mp/mplib.c::mpLib_800511A4_RightWall",
+        "refs/melee/src/melee/ft/ftcliffcommon.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 14522,
+          "matched_frames": 14521,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 9733,
+          "strict_suffix_frames": 4788,
+          "first_mismatch_frame": 9611,
+          "last_mismatch_frame": 9611,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "77c738dff3327f97",
+          "render_visibility_mismatch_count": 25,
+          "first_render_visibility_mismatch_frame": 459,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "297f426a21df156c49c456694a4ab2b3a7a2218362edc2bf65f2b61fa0306067"
+        },
+        "ppc": {
+          "frames": 14522,
+          "matched_frames": 14521,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 9733,
+          "strict_suffix_frames": 4788,
+          "first_mismatch_frame": 9611,
+          "last_mismatch_frame": 9611,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "77c738dff3327f97",
+          "render_visibility_mismatch_count": 25,
+          "first_render_visibility_mismatch_frame": 459,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "297f426a21df156c49c456694a4ab2b3a7a2218362edc2bf65f2b61fa0306067"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/dk/slippi-2025-04_Game_20250422T152714.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "DK cargo-walk speed lanes at the edge wall clamp",
+      "rationale": "The residual is a bounded 1-ULP family in DK's walk-speed pair while cargo-walking pinned at Final Destination's edge (sixteen speed rows, then a self-healing pos_x tail); no discrete state flips. PPC and native source runtimes agree bit-for-bit; the seed is the same edge/wall clamp rounding family as the retail-arbitrated 9560 entry.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftwalkcommon.c",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11734,
+          "matched_frames": 11712,
+          "mismatched_frames": 22,
+          "exact_prefix_frames": 2785,
+          "strict_suffix_frames": 3897,
+          "first_mismatch_frame": 2663,
+          "last_mismatch_frame": 7714,
+          "mismatch_count": 40,
+          "mismatch_fingerprint": "0e3033e5cd6bc56a",
+          "render_visibility_mismatch_count": 6,
+          "first_render_visibility_mismatch_frame": 1034,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "54dc6aaec5613bd68a54255d7f36ec9f43446d4674a0ad0e7e4725541f5a1953"
+        },
+        "ppc": {
+          "frames": 11734,
+          "matched_frames": 11712,
+          "mismatched_frames": 22,
+          "exact_prefix_frames": 2785,
+          "strict_suffix_frames": 3897,
+          "first_mismatch_frame": 2663,
+          "last_mismatch_frame": 7714,
+          "mismatch_count": 40,
+          "mismatch_fingerprint": "0e3033e5cd6bc56a",
+          "render_visibility_mismatch_count": 6,
+          "first_render_visibility_mismatch_frame": 1034,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "54dc6aaec5613bd68a54255d7f36ec9f43446d4674a0ad0e7e4725541f5a1953"
+        }
+      }
     }
   ]
 }

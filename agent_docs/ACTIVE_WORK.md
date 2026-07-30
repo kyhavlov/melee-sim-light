@@ -41,6 +41,20 @@ already ported; DK is their first live consumer.
   shoulder-timer / Hand Slap fusions** (`canonical:capture-follow-fmadds`) — retail-faithful
   boundaries, identity at current inputs.
 
+## Session 2 close (2026-07-30): suite IN THE AGGREGATE — 336 = 259 pass / 77 classified / 0 fail
+
+All seven residual families classified with native+PPC snapshots (identical fingerprints both
+backends). Retail engine-dump playback arbitrated two of them (auto-dk-2025-04 grapple-swing
+fork and the 9560 wall-hug episode): retail reproduces the RECORDING, so these are hosted
+ULP residuals, not recorder profile — the wall-hug clamp's pos_x re-derivation
+(mpLib_8004E398/511A4 X-at-Y + mpcoll hug candidates; inputs bit-equal, output 1 ULP) is the
+documented open lever, alongside the known Samus grapple-chain integration. Trace toolkit
+used: bracketing pos probes around coll_cb + an auto-instrumented MPX dump of every
+mpcoll cur_pos.x writer (site L2419 = the LeftWall hug clamp) — rebuild from this description.
+Fused retail-faithfully along the way (identity at current inputs): throw-release velocity
+blend (0x8006BC7C/90), walk-cycle wrap (0x800E0010), plus session 1's HSD_FMod/capture-follow
+set. dk.json joined include_suites with 27 output locks; tests updated to 336.
+
 ## Suite state (session 1 close, container authoritative)
 
 27 replays (all six stages; Fox/Falco/Marth/Sheik/Jigglypuff/Samus/Captain Falcon; Slippi
@@ -57,8 +71,7 @@ fingerprints on both backends.** The seven shared families:
 - Five 1–6-row self-healing pos ULP families at stage-edge positions (22123 @7897, 9560 @2120,
   basic-dk-2025-04 @7265, medium-marth-0912 @7060, slippi-..141746 @9611).
 
-Next session starts here: probe/classify the seven shared families, wire dk.json into the
-aggregate with classifications + locks, and record PPC snapshots.
+(Superseded by session 2 above.)
 
 ## Log
 

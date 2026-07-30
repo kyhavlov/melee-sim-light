@@ -162,7 +162,10 @@ void ftWalkCommon_800DFEC8(HSD_GObj* gobj, void (*arg_cb)(HSD_GObj*, float))
         float_result = ftAnim_8006F484(gobj);
         init_animFrame = fp->cur_anim_frame;
         quotient = init_animFrame / float_result;
-        adjusted_animFrame = fp->cur_anim_frame - float_result * quotient;
+        // GALE01 0x800E0010 fuses the walk-cycle wrap subtract
+        // (fnmsubs f0, f1, f0, f3).
+        adjusted_animFrame =
+            __fnmsubs(float_result, (float) quotient, fp->cur_anim_frame);
         final_animFrame = frame * (adjusted_animFrame / float_result);
         arg_cb(gobj, final_animFrame);
     }

@@ -2373,6 +2373,7 @@ void Fighter_Spaghetti_8006AD10(Fighter_GObj* gobj)
         vecLocal->x = vecLocal->y = vecLocal->z = c;                          \
     } while (0)
 
+
 void Fighter_procUpdate(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
@@ -2581,10 +2582,12 @@ void Fighter_procUpdate(Fighter_GObj* gobj)
             float C1 = 1.0f;
             float C2 = C1 - (float) fp->dmg.x194C / (float) fp->dmg.x1948;
 
-            selfVel.x =
-                C2 * (fp->self_vel.x - fp->xA4_unk_vel.x) + fp->xA4_unk_vel.x;
-            selfVel.y =
-                C2 * (fp->self_vel.y - fp->xA4_unk_vel.y) + fp->xA4_unk_vel.y;
+            // GALE01 0x8006BC7C/0x8006BC90 fuse the blend product onto the
+            // xA4 base (fmadds f0, f2, f0, f5) for both lanes.
+            selfVel.x = __fmadds(C2, fp->self_vel.x - fp->xA4_unk_vel.x,
+                                 fp->xA4_unk_vel.x);
+            selfVel.y = __fmadds(C2, fp->self_vel.y - fp->xA4_unk_vel.y,
+                                 fp->xA4_unk_vel.y);
 
             fp->dmg.x194C--;
             if (fp->dmg.x194C == 0) {
