@@ -643,7 +643,16 @@ bool ftColl_80076ED8(Fighter* fp0, HitCapsule* hit0, Fighter* fp1,
             goto retfalse;
         }
         state = checkTipLog(fp1, hit0);
-        if (state == HitCapsule_Disabled) {
+        // GALE01 0x8007702C branches to the return-false epilogue
+        // (0x80077444) when the victim is already registered in the hit
+        // group's phantom-victims list; the upstream NonMatching C instead
+        // fell through to the full-hit path below, converting a spent
+        // phantom graze into a fresh full hit one frame before retail's
+        // real overlap.
+        if (state != HitCapsule_Disabled) {
+            goto retfalse;
+        }
+        {
             float temp_dmg = 0.5f * dmg;
             if (!((int) temp_dmg) && dmg) {
                 temp_dmg = 1;

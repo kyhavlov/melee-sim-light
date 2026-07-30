@@ -1,6 +1,6 @@
 {
   "name": "pikachu",
-  "notes": "Pikachu validation suite: 13 singles across all six legal stages against Fox, Falco, Marth, Sheik, Peach, a Pikachu ditto, 2025-2026 Slippi and mainline captures plus two anonymized ranked recordings (played_on=network; the v3.16 master-master capture predates the UCF 1.0 cardinals rollout). The one Pokemon Stadium entry is frozen-form (is_frozen_ps); four non-frozen PS candidates from the same batch stayed out, as did a 2020 v3.7 capture predating the modern streams.",
+  "notes": "Pikachu validation suite: 25 singles across all six legal stages against Fox, Falco, Marth, Sheik, Peach, and a Pikachu ditto; 2025-2026 Slippi and mainline captures plus three anonymized ranked recordings (played_on=network; the v3.15/v3.16 captures predate the UCF 1.0 cardinals rollout). The one Pokemon Stadium entry is frozen-form (is_frozen_ps); four non-frozen PS candidates from the same batch stayed out, as did a 2020 v3.7 capture predating the modern streams.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -26,6 +26,42 @@
       "characters": {
         "1": "Pikachu",
         "2": "Pikachu"
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/40830_Game_20250330T140702.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Pikachu",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/41738_Game_20250420T131116.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Pikachu",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/41919_Game_20250423T163143.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Pikachu",
+        "2": "Falco"
       }
     },
     {
@@ -62,6 +98,18 @@
       "characters": {
         "1": "Pikachu",
         "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/77736_Game_20250506T000051.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Pikachu",
+        "2": "Falco"
       }
     },
     {
@@ -102,6 +150,34 @@
       }
     },
     {
+      "replay": "replays/validation/pikachu/diamond-platinum-65468eac6defc7ae336916cb.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Falco",
+        "2": "Pikachu"
+      },
+      "ucf_cardinals_1_0_enabled": false,
+      "played_on": "network"
+    },
+    {
+      "replay": "replays/validation/pikachu/diamond-platinum-c53c1ea834421338b65dd158.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Fox",
+        "2": "Pikachu"
+      },
+      "ucf_cardinals_1_0_enabled": false,
+      "played_on": "network"
+    },
+    {
       "replay": "replays/validation/pikachu/master-master-97beba9993588c0e724b06c2.slpz",
       "ports": [
         1,
@@ -128,6 +204,18 @@
       }
     },
     {
+      "replay": "replays/validation/pikachu/silver-fox-2026-04_Game_20260420T132214.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Pikachu",
+        "2": "Fox"
+      }
+    },
+    {
       "replay": "replays/validation/pikachu/slippi-2025-01_Game_20250127T220401.slpz",
       "ports": [
         1,
@@ -137,6 +225,30 @@
       "characters": {
         "1": "Pikachu",
         "2": "Sheik"
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2025-03a_Game_20250323T182057.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Pikachu",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2025-03b_Game_20250324T212734.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Falco",
+        "2": "Pikachu"
       }
     },
     {
@@ -152,6 +264,18 @@
       }
     },
     {
+      "replay": "replays/validation/pikachu/slippi-2025-04b_Game_20250409T172535.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Fox",
+        "2": "Pikachu"
+      }
+    },
+    {
       "replay": "replays/validation/pikachu/slippi-2025-05_Game_20250520T230951.slpz",
       "ports": [
         1,
@@ -161,6 +285,30 @@
       "characters": {
         "1": "Pikachu",
         "2": "Peach"
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2025-11_Game_20251114T162828.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Pikachu",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/pikachu/slippi-2026-07_Game_20260713T214222.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Pikachu",
+        "2": "Fox"
       }
     }
   ]

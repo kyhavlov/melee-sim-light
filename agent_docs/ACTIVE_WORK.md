@@ -46,6 +46,30 @@ several replays — ftPk_Init_UnkMotionStates1/2 part visibility toggles are liv
 
 ## Log
 
+- 2026-07-29 — `retained` (session 2: extended suite to 25 + the phantom-revisit decomp fix)
+  Scope: the 12 remaining usable batch replays joined pikachu.json (25 total; three anonymized
+  ranked now, the v3.15/v3.16 pair carrying cardinals=false — both bit-exact, which isolates
+  master-master's fork from the pre-cardinals flags). Container native 23/25, PPC 23/25,
+  identical fails.
+  **Fix (ledger canonical:phantom-revisit-hit-gate)**: 40830 (DL Pikachu/Falco) forked at 3702 —
+  our sim landed a full usmash hit one frame before retail. Retail collision probe
+  (MSL_COLLISION_PROBE on the engine-dump Dolphin) showed the frame-3702 capsule sweep
+  BIT-IDENTICAL to ours (two same-group grazes, coll_distance 0.0032/0.0092, both phantom-range)
+  with ftColl_80076ED8 returning (1, 0) where ours returned (1, 1). GALE01 asm
+  0x8007702C..0x80077444: a phantom-range contact whose victim is already in the hit group's
+  victims_2 registry (populated by the first phantom's inlineB0 across ALL same-group hitboxes)
+  returns FALSE; the NonMatching decomp fell through to the full-hit path instead. One-branch
+  fix; the sibling item path (ftColl_80077C60) was already faithful. 40830 → bit-exact 8,892;
+  aggregate 203/68/0 byte-stable (the bad branch never fires in the 271-replay corpus);
+  container pytest 43 green.
+  Remaining fails: (a) master-master (FoD ambience-item ULP from -24, both backends,
+  next session's target — the icies FoD construction-RNG/grIzumi toolkit applies);
+  (b) slippi-2025-11 = ONE 1-ULP pos_x row (fast-falling Falco hugging the YS right underside
+  wall, pos re-derived from the wall line each frame; 3,711-frame exact suffix; native and PPC
+  bit-identical) — meets the dolphin-ulp-motion-profile bar; classify when pikachu.json joins
+  the aggregate (a classification entry for a non-aggregate suite breaks
+  test_native_validation_compares_complete_classified_replays' case lookup).
+
 - 2026-07-29 — `retained` (session 1: the full packet, three hosted-portability fixes)
   Scope: full character packet + 13-replay suite; container gates green.
   1. **Thunder motion-vars pointer widening** (ledger pikachu-thunder-vars-pointer-widening):
