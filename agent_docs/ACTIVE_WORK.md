@@ -41,6 +41,18 @@ already ported; DK is their first live consumer.
   shoulder-timer / Hand Slap fusions** (`canonical:capture-follow-fmadds`) — retail-faithful
   boundaries, identity at current inputs.
 
+## Session 3 close (2026-07-30): THE ROLLOUT FUSION SET — aggregate 336 = 260 pass / 76 classified / 0 fail
+
+The "cargo-walk" family was misattributed: the diverging player is P1 JIGGLYPUFF in
+ftPr_MS_SpecialNTurn (351) — Rollout pinned at FD's edge, turning, speed decaying. The rollout
+TU carried FOURTEEN unported MWCC fusions (ftPr_SpecialN.c predates the fusion discipline):
+four Turn_Phys gr_vel accumulates (0x80140934-family — THE seed), four charge-spin roll-angle
+steps, two turn-spin steps, and the bounce-dust half-height (inline x4). Porting them retired
+the 22-row DK family to one wall-hug pos row, promoted classified puff
+Game_20260318T101341 to fully bit-exact BOTH backends (entry retired), and shrank
+rollout_ends_ys 64->2 and specials 849->817. All re-records native≡ppc; locks refreshed;
+the mislabeled DK classification rationale corrected.
+
 ## Session 2 close (2026-07-30): suite IN THE AGGREGATE — 336 = 259 pass / 77 classified / 0 fail
 
 All seven residual families classified with native+PPC snapshots (identical fingerprints both

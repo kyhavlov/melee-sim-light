@@ -4780,49 +4780,6 @@
       }
     },
     {
-      "replay": "replays/validation/puff/Game_20260318T101341.slpz",
-      "id": "dolphin-ulp-and-signed-zero-profile",
-      "owner": "Puff Rollout motion and fighter signed-zero publication",
-      "rationale": "The signed-zero lanes are now source-owned by the mainline-Dolphin fnmsubs zero profile; seventeen bounded one-ULP Rollout self-velocity rows remain. The matching Puff source preserves every discrete transition, exact output resumes for the final 1,530 rows, and native/PPC fingerprints agree. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground.",
-      "sources": [
-        "refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c",
-        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "refs/melee/src/sysdolphin/baselib/mtx.c"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 5678,
-          "first_mismatch_frame": 5556,
-          "first_render_visibility_mismatch_frame": null,
-          "frames": 8804,
-          "last_mismatch_frame": 5570,
-          "matched_frames": 8789,
-          "mismatch_count": 30,
-          "mismatch_fields_digest": "8413222bfea3033d75146f6f28f330085f3936ab9b7e7e499bae4a5d743a5201",
-          "mismatch_fingerprint": "01b6c23c8868c046",
-          "mismatched_frames": 15,
-          "render_visibility_mismatch_count": 0,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 3111
-        },
-        "ppc": {
-          "exact_prefix_frames": 5678,
-          "first_mismatch_frame": 5556,
-          "first_render_visibility_mismatch_frame": null,
-          "frames": 8804,
-          "last_mismatch_frame": 5570,
-          "matched_frames": 8789,
-          "mismatch_count": 30,
-          "mismatch_fields_digest": "8413222bfea3033d75146f6f28f330085f3936ab9b7e7e499bae4a5d743a5201",
-          "mismatch_fingerprint": "01b6c23c8868c046",
-          "mismatched_frames": 15,
-          "render_visibility_mismatch_count": 0,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 3111
-        }
-      }
-    },
-    {
       "replay": "replays/validation/puff/diamond-diamond-78251f79d12df3bcdb1d4abe.slpz",
       "id": "legacy-fod-hitlag-platform-publication",
       "owner": "Fountain moving-platform translation carried through hitlag exit",
@@ -4855,7 +4812,7 @@
       "replay": "replays/validation/puff/rollout_ends_ys.slpz",
       "id": "dolphin-ulp-motion-profile",
       "owner": "Puff Rollout and fighter-motion float execution profile",
-      "rationale": "The matching Puff Rollout source and common fighter callbacks leave only forty isolated rows of one-ULP self velocity or carried position. Native and PPC agree on the complete fingerprint, discrete gameplay remains aligned, and the replay returns to exact output after every interval. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual.",
+      "rationale": "The matching Puff Rollout source and common fighter callbacks leave only two isolated 1-ULP pos_x rows during a Yoshi's side-wall hug episode, self-healing at the next absolute snap. Native and PPC agree on the complete fingerprint; the earlier forty-row self-velocity family was retired by fusing the fourteen MWCC rollout sites (GALE01 0x80140934-family turn deceleration and the charge-spin/bounce-dust accumulates).",
       "sources": [
         "refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c",
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
@@ -4864,20 +4821,34 @@
       "expected": {
         "native": {
           "frames": 5528,
-          "matched_frames": 5497,
-          "mismatched_frames": 31,
-          "exact_prefix_frames": 2504,
-          "strict_suffix_frames": 775,
-          "first_mismatch_frame": 2382,
-          "last_mismatch_frame": 4630,
-          "mismatch_count": 64,
-          "mismatch_fingerprint": "97b52ffc38f1e65c",
+          "matched_frames": 5526,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 3752,
+          "strict_suffix_frames": 1773,
+          "first_mismatch_frame": 3630,
+          "last_mismatch_frame": 3632,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "add5315d306a6e07",
           "render_visibility_mismatch_count": 4,
           "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "12c68a6bcde5244b63d47251f1a2f6e4a2f786d6158f07eb2b9d0bd86c5561e6"
+          "mismatch_fields_digest": "bff62b709a71d0f4730faed7558bb73f653cd2643b2cec9abcecdbb2b8fa6720"
         },
-        "ppc": "native"
+        "ppc": {
+          "frames": 5528,
+          "matched_frames": 5526,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 3752,
+          "strict_suffix_frames": 1773,
+          "first_mismatch_frame": 3630,
+          "last_mismatch_frame": 3632,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "add5315d306a6e07",
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "bff62b709a71d0f4730faed7558bb73f653cd2643b2cec9abcecdbb2b8fa6720"
+        }
       }
     },
     {
@@ -4893,20 +4864,34 @@
       "expected": {
         "native": {
           "frames": 7653,
-          "matched_frames": 7245,
-          "mismatched_frames": 408,
+          "matched_frames": 7261,
+          "mismatched_frames": 392,
           "exact_prefix_frames": 4737,
-          "strict_suffix_frames": 977,
+          "strict_suffix_frames": 2524,
           "first_mismatch_frame": 4615,
-          "last_mismatch_frame": 6553,
-          "mismatch_count": 849,
-          "mismatch_fingerprint": "6ac6d51e10636772",
+          "last_mismatch_frame": 5006,
+          "mismatch_count": 817,
+          "mismatch_fingerprint": "93a791db9627dff2",
           "render_visibility_mismatch_count": 0,
           "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "6ef48957e2e1841a78db5c00358f7f0754a1187e3c481acd44a1c785e021315f"
+          "mismatch_fields_digest": "99dec85916beef92e183eaba98efa9d40d37c81b28cf80160a5b564f35f797b5"
         },
-        "ppc": "native"
+        "ppc": {
+          "frames": 7653,
+          "matched_frames": 7261,
+          "mismatched_frames": 392,
+          "exact_prefix_frames": 4737,
+          "strict_suffix_frames": 2524,
+          "first_mismatch_frame": 4615,
+          "last_mismatch_frame": 5006,
+          "mismatch_count": 817,
+          "mismatch_fingerprint": "93a791db9627dff2",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "99dec85916beef92e183eaba98efa9d40d37c81b28cf80160a5b564f35f797b5"
+        }
       }
     },
     {
@@ -5843,42 +5828,42 @@
     {
       "replay": "replays/validation/dk/slippi-2025-04_Game_20250422T152714.slpz",
       "id": "dolphin-ulp-motion-profile",
-      "owner": "DK cargo-walk speed lanes at the edge wall clamp",
-      "rationale": "The residual is a bounded 1-ULP family in DK's walk-speed pair while cargo-walking pinned at Final Destination's edge (sixteen speed rows, then a self-healing pos_x tail); no discrete state flips. PPC and native source runtimes agree bit-for-bit; the seed is the same edge/wall clamp rounding family as the retail-arbitrated 9560 entry.",
+      "owner": "airborne wall-hug pos_x re-derivation lanes",
+      "rationale": "The complete residual is one 1-ULP pos_x row on Jigglypuff during a wall-hug episode at Final Destination's edge, self-healing at the next absolute snap; no discrete state flips. PPC and native source runtimes agree bit-for-bit; same wall-hug clamp mechanism as the retail-arbitrated 9560 entry. The original 22-row family (Rollout edge-turn speed lanes) was retired by fusing the fourteen MWCC rollout sites (GALE01 0x80140934-family turn deceleration).",
       "sources": [
-        "refs/melee/src/melee/ft/ftwalkcommon.c",
+        "refs/melee/src/melee/ft/chara/ftPurin/ftPr_SpecialN.c::ftPr_SpecialNTurn_Phys",
         "refs/melee/src/melee/mp/mpcoll.c"
       ],
       "expected": {
         "native": {
           "frames": 11734,
-          "matched_frames": 11712,
-          "mismatched_frames": 22,
-          "exact_prefix_frames": 2785,
+          "matched_frames": 11733,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 7836,
           "strict_suffix_frames": 3897,
-          "first_mismatch_frame": 2663,
+          "first_mismatch_frame": 7714,
           "last_mismatch_frame": 7714,
-          "mismatch_count": 40,
-          "mismatch_fingerprint": "0e3033e5cd6bc56a",
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "5c8fc330d7472a28",
           "render_visibility_mismatch_count": 6,
           "first_render_visibility_mismatch_frame": 1034,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "54dc6aaec5613bd68a54255d7f36ec9f43446d4674a0ad0e7e4725541f5a1953"
+          "mismatch_fields_digest": "86a39b0173b7e7ef693fee6839207c45f520557b06ff1a85c980baee8dcd59b3"
         },
         "ppc": {
           "frames": 11734,
-          "matched_frames": 11712,
-          "mismatched_frames": 22,
-          "exact_prefix_frames": 2785,
+          "matched_frames": 11733,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 7836,
           "strict_suffix_frames": 3897,
-          "first_mismatch_frame": 2663,
+          "first_mismatch_frame": 7714,
           "last_mismatch_frame": 7714,
-          "mismatch_count": 40,
-          "mismatch_fingerprint": "0e3033e5cd6bc56a",
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "5c8fc330d7472a28",
           "render_visibility_mismatch_count": 6,
           "first_render_visibility_mismatch_frame": 1034,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "54dc6aaec5613bd68a54255d7f36ec9f43446d4674a0ad0e7e4725541f5a1953"
+          "mismatch_fields_digest": "86a39b0173b7e7ef693fee6839207c45f520557b06ff1a85c980baee8dcd59b3"
         }
       }
     }

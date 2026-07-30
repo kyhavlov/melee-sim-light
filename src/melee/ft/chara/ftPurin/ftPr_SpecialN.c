@@ -406,9 +406,12 @@ void ftPr_SpecialNLoop_Anim(HSD_GObj* gobj)
         Fighter_ChangeMotionState(gobj, ftPr_MS_SpecialNFull, mf,
                                   fp->cur_anim_frame, 0, 0, NULL);
     }
-    fp->mv.pr.specialn.x14 +=
-        fp->mv.pr.specialn.x34.x *
-        (fp->mv.pr.specialn.x2C * (deg_to_rad * da->xAC));
+    // GALE01 0x8013E214-family fuses the charge-spin step onto the roll
+    // angle (fmadds f0, f4, f1, f0).
+    fp->mv.pr.specialn.x14 =
+        __fmadds(fp->mv.pr.specialn.x34.x,
+                 fp->mv.pr.specialn.x2C * (deg_to_rad * da->xAC),
+                 fp->mv.pr.specialn.x14);
     normalizeAndSetRollAngle(gobj);
     ftPartSetRotY(fp, FtPart_TopN, M_PI_2);
 }
@@ -424,9 +427,12 @@ void ftPr_SpecialNFull_Anim(HSD_GObj* gobj)
         fp->mv.pr.specialn.x2C = da->xA4;
         fp->mv.pr.specialn.x30 = 1;
     }
-    fp->mv.pr.specialn.x14 +=
-        fp->mv.pr.specialn.x34.x *
-        (fp->mv.pr.specialn.x2C * (deg_to_rad * da->xAC));
+    // GALE01 0x8013E214-family fuses the charge-spin step onto the roll
+    // angle (fmadds f0, f4, f1, f0).
+    fp->mv.pr.specialn.x14 =
+        __fmadds(fp->mv.pr.specialn.x34.x,
+                 fp->mv.pr.specialn.x2C * (deg_to_rad * da->xAC),
+                 fp->mv.pr.specialn.x14);
     normalizeAndSetRollAngle(gobj);
     ftPartSetRotY(fp, FtPart_TopN, M_PI_2);
 }
@@ -554,9 +560,12 @@ void ftPr_SpecialAirNChargeLoop_Anim(HSD_GObj* gobj)
         Fighter_ChangeMotionState(gobj, ftPr_MS_SpecialAirNChargeFull, mf,
                                   fp->cur_anim_frame, 0, 0, NULL);
     }
-    fp->mv.pr.specialn.x14 +=
-        fp->mv.pr.specialn.x34.x *
-        (fp->mv.pr.specialn.x2C * (deg_to_rad * da->xAC));
+    // GALE01 0x8013E214-family fuses the charge-spin step onto the roll
+    // angle (fmadds f0, f4, f1, f0).
+    fp->mv.pr.specialn.x14 =
+        __fmadds(fp->mv.pr.specialn.x34.x,
+                 fp->mv.pr.specialn.x2C * (deg_to_rad * da->xAC),
+                 fp->mv.pr.specialn.x14);
     normalizeAndSetRollAngle(gobj);
     ftPartSetRotY(fp, FtPart_TopN, M_PI_2);
 }
@@ -572,9 +581,12 @@ void ftPr_SpecialAirNChargeFull_Anim(HSD_GObj* gobj)
         fp->mv.pr.specialn.x2C = da->xA4;
         fp->mv.pr.specialn.x30 = 1;
     }
-    fp->mv.pr.specialn.x14 +=
-        fp->mv.pr.specialn.x34.x *
-        (fp->mv.pr.specialn.x2C * (deg_to_rad * da->xAC));
+    // GALE01 0x8013E214-family fuses the charge-spin step onto the roll
+    // angle (fmadds f0, f4, f1, f0).
+    fp->mv.pr.specialn.x14 =
+        __fmadds(fp->mv.pr.specialn.x34.x,
+                 fp->mv.pr.specialn.x2C * (deg_to_rad * da->xAC),
+                 fp->mv.pr.specialn.x14);
     normalizeAndSetRollAngle(gobj);
     ftPartSetRotY(fp, FtPart_TopN, M_PI_2);
 }
@@ -657,8 +669,12 @@ void ftPr_SpecialAirNStartTurn_Anim(HSD_GObj* gobj)
     PAD_STACK(4);
     ftPr_SpecialS_8013DD54(gobj, true);
     scaleAnimStep(gobj, &scale);
-    fp->mv.pr.specialn.x14 +=
-        da->xBC * (f32) (0.2 * da->x6C * -fp->mv.pr.specialn.x34.x);
+    // GALE01 0x8013F8E8/0x8013FE7C fuse the turn-spin step onto the roll
+    // angle (fmadds f0, f3, f1, f0).
+    fp->mv.pr.specialn.x14 =
+        __fmadds(da->xBC,
+                 (f32) (0.2 * da->x6C * -fp->mv.pr.specialn.x34.x),
+                 fp->mv.pr.specialn.x14);
     normalizeAndSetRollAngle(gobj);
     fp->mv.pr.specialn.x0 -= 1;
     if (fp->mv.pr.specialn.x0 <= 0) {
@@ -698,8 +714,12 @@ void ftPr_SpecialNHit_Anim(HSD_GObj* gobj)
     Vec3 scale;
     PAD_STACK(4);
     scaleAnimStep(gobj, &scale);
-    fp->mv.pr.specialn.x14 +=
-        da->xBC * (f32) (0.2 * da->x6C * -fp->mv.pr.specialn.x34.x);
+    // GALE01 0x8013F8E8/0x8013FE7C fuse the turn-spin step onto the roll
+    // angle (fmadds f0, f3, f1, f0).
+    fp->mv.pr.specialn.x14 =
+        __fmadds(da->xBC,
+                 (f32) (0.2 * da->x6C * -fp->mv.pr.specialn.x34.x),
+                 fp->mv.pr.specialn.x14);
     normalizeAndSetRollAngle(gobj);
     ftPartSetRotY(fp, FtPart_TopN, M_PI_2);
 }
@@ -925,15 +945,21 @@ void ftPr_SpecialNTurn_Phys(HSD_GObj* gobj)
     f32 influence = da->xC8 * (x1C * slope);
     if (fp->coll_data.floor.normal.x > 0.0f) {
         if (x1C > 0.0f) {
-            fp->gr_vel += scale * (x1C + influence);
+            // GALE01 0x80140934 fuses the turn deceleration onto gr_vel
+            // (fmadds f0, f5, f1, f0).
+            fp->gr_vel = __fmadds(scale, x1C + influence, fp->gr_vel);
         } else {
-            fp->gr_vel += scale * (x1C + influence);
+            // GALE01 0x80140948: same fused accumulate.
+            fp->gr_vel = __fmadds(scale, x1C + influence, fp->gr_vel);
         }
     } else {
         if (x1C > 0.0f) {
-            fp->gr_vel += scale * (x1C - influence);
+            // GALE01 0x80140964: same fused accumulate on the negative
+            // slope-normal side.
+            fp->gr_vel = __fmadds(scale, x1C - influence, fp->gr_vel);
         } else {
-            fp->gr_vel += scale * (x1C - influence);
+            // GALE01 0x80140978: same fused accumulate.
+            fp->gr_vel = __fmadds(scale, x1C - influence, fp->gr_vel);
         }
     }
     fp->x74_anim_vel.y = 0;
@@ -1147,8 +1173,11 @@ static inline void wallBounceEffect(HSD_GObj* gobj, Fighter* fp, f32 dir,
     } else {
         pos->x -= ABS(fp2->coll_data.ecb.left.x);
     }
-    pos->y +=
-        0.5f * ABS(fp2->coll_data.ecb.top.y + fp2->coll_data.ecb.bottom.y);
+    // GALE01 0x80141328-family fuses the half-height offset onto the
+    // bounce-dust position (fmadds f0, f1, f2, f0).
+    pos->y = __fmadds(
+        0.5f, ABS(fp2->coll_data.ecb.top.y + fp2->coll_data.ecb.bottom.y),
+        pos->y);
     efSync_Spawn(0x406, gobj, pos, angle);
     Camera_80030E44(3, pos);
     ftCommon_8007EBAC(fp2, 0xC, 0xA);
