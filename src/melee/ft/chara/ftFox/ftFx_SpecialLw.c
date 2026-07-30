@@ -470,9 +470,12 @@ static void ftFx_SpecialLw_Turn(HSD_GObj* gobj)
         fp->cmd_vars[0] = 1;
         fp->facing_dir = -fp->facing_dir;
     }
+    // GALE01 0x800E8FBC-family: fnmsubs f1, f3, f0, f1 on the
+    // turn-step product.
     ftPartSetRotY(fp, 0,
-                  -((180 / da->x9C_FOX_REFLECTOR_TURN_FRAMES * deg_to_rad) -
-                    ftPartGetRotZ(fp, 0)));
+                  __fnmsubs(deg_to_rad,
+                            180 / da->x9C_FOX_REFLECTOR_TURN_FRAMES,
+                            ftPartGetRotZ(fp, 0)));
 }
 #pragma pop
 
@@ -490,9 +493,11 @@ static inline void ftFox_SpecialLw_Turn_Inline(HSD_GObj* gobj)
         fp->facing_dir = -fp->facing_dir;
     }
 
+    // GALE01 0x800E90B0/0x800E91C0: same fused turn step.
     ftPartSetRotY(fp, 0,
-                  -((deg_to_rad * (180 / da->x9C_FOX_REFLECTOR_TURN_FRAMES)) -
-                    ftPartGetRotZ(fp, 0)));
+                  __fnmsubs(deg_to_rad,
+                            180 / da->x9C_FOX_REFLECTOR_TURN_FRAMES,
+                            ftPartGetRotZ(fp, 0)));
 }
 
 void ftFx_SpecialLwTurn_Anim(HSD_GObj* gobj)

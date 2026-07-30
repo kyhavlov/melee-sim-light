@@ -466,7 +466,9 @@ void ftZd_SpecialHi_8013A058(HSD_GObj* gobj)
                 fp->mv.zd.specialhi.x4.y = inputVector.y;
 
                 // Update ground velocity
-                temp_f6 = ((attributes->x54 * var_f31) + attributes->x58) *
+                // GALE01 0x8013A194: fmadds f2, f3, f31, f2.
+                temp_f6 = __fmadds(attributes->x54, var_f31,
+                                   attributes->x58) *
                           cosf(temp_f5);
                 fp->gr_vel = fp->facing_dir * temp_f6;
 
@@ -558,9 +560,12 @@ void ftZd_SpecialHi_8013A244(HSD_GObj* gobj)
 
     fp->self_vel.x =
         fp->facing_dir *
-        (((attributes->x54 * var_f31) + attributes->x58) * cosf(var_f30));
+        // GALE01 0x8013A384/0x8013A3B0 fuse the launch-speed blend.
+        (__fmadds(attributes->x54, var_f31, attributes->x58) *
+         cosf(var_f30));
     fp->self_vel.y =
-        ((attributes->x54 * var_f31) + attributes->x58) * sinf(var_f30);
+        __fmadds(attributes->x54, var_f31, attributes->x58) *
+        sinf(var_f30);
 
     Fighter_ChangeMotionState(gobj, 353, 0, 35.0, 1.0, 0, NULL);
     ftAnim_8006EBA4(gobj);

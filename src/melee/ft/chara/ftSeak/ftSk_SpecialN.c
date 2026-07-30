@@ -48,7 +48,8 @@ void ftSk_SpecialN_80111FBC(HSD_GObj* gobj)
                 } else {
                     y_scale = da->xC;
                 }
-                pos.y += fp->x34_scale.y * y_scale;
+                // GALE01 0x80112044: fmadds f0, f1, f2, f0.
+                pos.y = __fmadds(fp->x34_scale.y, y_scale, pos.y);
             }
             pos.z = 0;
             {
@@ -453,16 +454,20 @@ void shootNeedles(Fighter_GObj* gobj)
             int rand;
             if (fp->ground_or_air == GA_Ground) {
                 x_scale = da->x0 * fp->facing_dir;
-                pos.x += fp->x34_scale.y * x_scale;
+                // GALE01 0x80112DC4/0x80112DF4 fuse both spawn-offset
+                // lanes (fmadds onto cur_pos).
+                pos.x = __fmadds(fp->x34_scale.y, x_scale, pos.x);
                 rand = HSD_Randi(9);
                 y_scale = da->x4 + needleYPosScale[rand];
-                pos.y += fp->x34_scale.y * y_scale;
+                pos.y = __fmadds(fp->x34_scale.y, y_scale, pos.y);
             } else {
                 x_scale = da->x8 * fp->facing_dir;
-                pos.x += fp->x34_scale.y * x_scale;
+                // GALE01 0x80112E18/0x80112E48/0x80112E4C: the air lane
+                // also fuses the doubled scatter onto the base offset.
+                pos.x = __fmadds(fp->x34_scale.y, x_scale, pos.x);
                 rand = HSD_Randi(9);
-                y_scale = (2.0f * needleYPosScale[rand]) + da->xC;
-                pos.y += fp->x34_scale.y * y_scale;
+                y_scale = __fmadds(2.0f, needleYPosScale[rand], da->xC);
+                pos.y = __fmadds(fp->x34_scale.y, y_scale, pos.y);
             }
             pos.z = 0;
 

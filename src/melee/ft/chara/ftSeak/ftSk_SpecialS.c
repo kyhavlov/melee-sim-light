@@ -60,7 +60,8 @@ void ftSk_SpecialS_80110490(Fighter* fp)
         v5 += 360;
     }
 
-    v6 = v5 * COMMON_DATA_F32[275] + fp->mv.sk.specials.x18;
+    // GALE01 0x80110538: fmadds f0, f3, f0, f2.
+    v6 = __fmadds(v5, COMMON_DATA_F32[275], fp->mv.sk.specials.x18);
 
     if (v6 > 360) {
         v6 -= 360;
@@ -77,8 +78,10 @@ void ftSk_SpecialS_80110490(Fighter* fp)
         v8 = 1;
     }
 
-    fp->mv.sk.specials.x14 +=
-        COMMON_DATA_F32[275] * (v8 - fp->mv.sk.specials.x14);
+    // GALE01 0x801105F4: fmadds f0, f2, f0, f1.
+    fp->mv.sk.specials.x14 =
+        __fmadds(COMMON_DATA_F32[275], v8 - fp->mv.sk.specials.x14,
+                 fp->mv.sk.specials.x14);
 }
 
 void ftSk_SpecialS_80110610(HSD_GObj* gobj, s32 arg1, float arg2)
@@ -99,7 +102,8 @@ void ftSk_SpecialS_80110610(HSD_GObj* gobj, s32 arg1, float arg2)
     ftSk_SpecialS_80110490(fp);
 
     {
-        float f = 0.0556F * fp->mv.sk.specials.x18 + 4;
+        // GALE01 0x80110680: fmadds f31, f2, f1, f0.
+        float f = __fmadds(0.0556F, fp->mv.sk.specials.x18, 4.0f);
 
         if (fp->mv.sk.specials.x14) {
             HSD_JObj* bone = fp->x8AC_animSkeleton;

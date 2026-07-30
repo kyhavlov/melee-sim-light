@@ -648,7 +648,10 @@ void ftCommon_8007DA24(Fighter* fp)
 
 float ftCommon_CalcHitlag(int dmg, FtMotionId msid, float mul)
 {
-    int tmp = dmg * p_ftCommonData->x198 + p_ftCommonData->x19C;
+    // GALE01 0x8007DAA8 fuses the hitlag blend before the truncation
+    // (fmadds f0, f3, f2, f0).
+    int tmp = (int) __fmadds((float) dmg, p_ftCommonData->x198,
+                             p_ftCommonData->x19C);
     float result = (int) (tmp * mul);
     if ((unsigned) msid - ftCo_MS_Squat <= 1) {
         result = (int) (result * p_ftCommonData->x1A0);
@@ -763,8 +766,10 @@ void ftCommon_8007DD7C(HSD_GObj* gobj, Vec3* v)
             {
                 ftCommon_8007F8B4(cur_ft, &sp24);
                 vtmp = &cur_ft->x2C4;
-                temp_f0 = (temp_r31->x * arg_ft->facing_dir + v->x) -
-                          (cur_ft->facing_dir * vtmp->x + sp24.x);
+                // GALE01 0x8007DE5C/0x8007DE64 fuse both nudge spans.
+                temp_f0 =
+                    __fmadds(temp_r31->x, arg_ft->facing_dir, v->x) -
+                    __fmadds(cur_ft->facing_dir, vtmp->x, sp24.x);
                 if (ABS(temp_f0) < temp_r31->y + vtmp->y) {
                     if (temp_f0) {
                         arg_ft->xF8_playerNudgeVel.x +=
@@ -823,8 +828,9 @@ void ftCommon_8007DFD0(HSD_GObj* gobj, Vec3* arg1)
         {
             ftCommon_8007F8B4(temp_r3, &sp1C);
             tmp = &temp_r3->x2C4;
-            temp_f1 = (temp_r31->x * fp->facing_dir + arg1->x) -
-                      (temp_r3->facing_dir * tmp->x + sp1C.x);
+            // GALE01 0x8007E070/0x8007E07C fuse both nudge spans.
+            temp_f1 = __fmadds(temp_r31->x, fp->facing_dir, arg1->x) -
+                      __fmadds(temp_r3->facing_dir, tmp->x, sp1C.x);
             if (ABS(temp_f1) < temp_r31->y + tmp->y) {
                 fp->xF8_playerNudgeVel.y -= p_ftCommonData->x45C;
             }
@@ -968,9 +974,10 @@ void ftCommon_8007E3EC(HSD_GObj* gobj)
         sp10.x -= fp->x1A7C.x;
         sp10.y -= fp->x1A7C.y;
         sp10.z -= fp->x1A7C.z;
-        fp->x1A7C.x += sp10.x * fp->x1A6C;
-        fp->x1A7C.y += sp10.y * fp->x1A6C;
-        fp->x1A7C.z += sp10.z * fp->x1A6C;
+        // GALE01 0x8007E4C8/0x8007E4DC/0x8007E4F0: fused smoothing.
+        fp->x1A7C.x = __fmadds(sp10.x, fp->x1A6C, fp->x1A7C.x);
+        fp->x1A7C.y = __fmadds(sp10.y, fp->x1A6C, fp->x1A7C.y);
+        fp->x1A7C.z = __fmadds(sp10.z, fp->x1A6C, fp->x1A7C.z);
         HSD_JObjSetTranslate(jobj, &fp->x1A7C);
     }
 }
@@ -1202,7 +1209,9 @@ void ftCommon_8007ED2C(Fighter* fp)
 
 void ftCommon_8007ED50(Fighter* fp, s32 arg1)
 {
-    float tmp = arg1 * p_ftCommonData->x138 + p_ftCommonData->x13C;
+    // GALE01 0x8007ED90: fmadds f0, f2, f1, f0.
+    float tmp =
+        __fmadds((float) arg1, p_ftCommonData->x138, p_ftCommonData->x13C);
     s32 val2 = tmp;
     if ((s32) tmp < 1) {
         return;
@@ -1212,7 +1221,9 @@ void ftCommon_8007ED50(Fighter* fp, s32 arg1)
 
 void ftCommon_8007EE0C(Fighter* fp, s32 arg1)
 {
-    float tmp = arg1 * p_ftCommonData->xEC + p_ftCommonData->xF0;
+    // GALE01 0x8007EE4C: fmadds f0, f2, f1, f0.
+    float tmp =
+        __fmadds((float) arg1, p_ftCommonData->xEC, p_ftCommonData->xF0);
     s32 val2 = tmp;
     if ((s32) tmp < 1) {
         return;
@@ -1608,7 +1619,9 @@ void ftCommon_8007FDA0(HSD_GObj* gobj)
 
     fp = gobj->user_data;
     temp_r30 = &fp->co_attrs.x130;
-    phi_f31 = fminf(p_ftCommonData->x710 * fp->x2024 + p_ftCommonData->x708,
+    // GALE01 0x8007FDF0: fmadds f31, f3, f1, f0.
+    phi_f31 = fminf(__fmadds(p_ftCommonData->x710, (float) fp->x2024,
+                             p_ftCommonData->x708),
                     p_ftCommonData->x70C);
     temp_f1 = 1.0f / phi_f31;
     sp20 = *temp_r30;
@@ -1699,8 +1712,10 @@ void ftCommon_80080174(Fighter* fp)
     }
     if (fp->x1980 != NULL) {
         v = &fp->co_attrs.x130;
-        if ((phi_f2 = p_ftCommonData->x710 * fp->x2024 +
-                      p_ftCommonData->x708) > (phi_f3 = p_ftCommonData->x70C))
+        // GALE01 0x800801E4: fmadds f2, f3, f1, f0.
+        if ((phi_f2 = __fmadds(p_ftCommonData->x710, (float) fp->x2024,
+                               p_ftCommonData->x708)) >
+            (phi_f3 = p_ftCommonData->x70C))
         {
             phi_f2 = phi_f3;
         }

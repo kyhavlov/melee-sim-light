@@ -133,7 +133,8 @@ void ftPp_SpecialHi_0_Phys(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
     if (!ftNn_Init_801230D0(gobj)) {
-        fp->cur_pos.x = -((8.0f * fp->facing_dir) - fp->cur_pos.x);
+        // GALE01 0x801233C8: fnmsubs f0, f2, f1, f0.
+        fp->cur_pos.x = __fnmsubs(8.0f, fp->facing_dir, fp->cur_pos.x);
         ftCo_Fall_Enter(gobj);
     }
 }
@@ -274,8 +275,11 @@ void ftNn_Init_801237F8(Fighter_GObj* nana_gobj)
     nana_fp->self_vel.x =
         nana_fp->facing_dir * (attrs->x13C * cosf(attrs->x140));
     nana_fp->self_vel.y = attrs->x13C * sinf(attrs->x140);
-    nana_fp->cur_pos.x += 4.0f * nana_fp->facing_dir * nana_fp->x34_scale.y;
-    nana_fp->cur_pos.y += 7.0f * nana_fp->x34_scale.y;
+    // GALE01 0x80123890/0x801238A4 fuse both respawn-offset lanes.
+    nana_fp->cur_pos.x = __fmadds(4.0f * nana_fp->facing_dir,
+                                  nana_fp->x34_scale.y, nana_fp->cur_pos.x);
+    nana_fp->cur_pos.y =
+        __fmadds(7.0f, nana_fp->x34_scale.y, nana_fp->cur_pos.y);
     Fighter_ChangeMotionState(nana_gobj, 365, 0, 0.0f, 1.0f, 0.0f, NULL);
     nana_fp->accessory4_cb = fn_80123218;
 }

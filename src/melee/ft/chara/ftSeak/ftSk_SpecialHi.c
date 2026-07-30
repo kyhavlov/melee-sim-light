@@ -502,8 +502,10 @@ void ftSk_SpecialHi_80113838(Fighter_GObj* gobj)
                     fp->mv.sk.specialhi.vel.y = lstick.y;
                     {
                         f32 temp_f6;
+                        // GALE01 0x80113974: fmadds f2, f3, f31, f2.
                         temp_f6 =
-                            ((attributes->x44 * stick_mag) + attributes->x48) *
+                            __fmadds(attributes->x44, stick_mag,
+                                     attributes->x48) *
                             cosf(temp_f1_5);
                         fp->gr_vel = fp->facing_dir * temp_f6;
                     }
@@ -563,11 +565,14 @@ void ftSk_SpecialHi_80113A30(Fighter_GObj* gobj)
         fp->mv.sk.specialhi.vel.y = 1.0f;
         var_f31 = 1.0f;
     }
+    // GALE01 0x80113B70/0x80113B9C fuse the launch-speed blend before
+    // the trig products.
     fp->self_vel.x =
         fp->facing_dir *
-        (((attributes->x44 * var_f31) + attributes->x48) * cosf(var_f30));
+        (__fmadds(attributes->x44, var_f31, attributes->x48) *
+         cosf(var_f30));
     fp->self_vel.y =
-        ((attributes->x44 * var_f31) + attributes->x48) * sinf(var_f30);
+        __fmadds(attributes->x44, var_f31, attributes->x48) * sinf(var_f30);
     Fighter_ChangeMotionState(gobj, 0x167, 0U, 35.0f, 1.0f, 0.0f, NULL);
     ftAnim_8006EBA4(gobj);
     ftAnim_SetAnimRate(gobj, 0.0f);

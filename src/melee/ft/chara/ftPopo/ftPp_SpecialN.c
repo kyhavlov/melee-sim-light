@@ -162,7 +162,8 @@ void ftPp_SpecialN_8011F500(Fighter_GObj* gobj)
         Vec3 pos;
         PAD_STACK(4 * 2);
         lb_8000B1CC(fp->parts[0].joint, NULL, &pos);
-        pos.x = da->xC * fp->facing_dir + pos.x;
+        // GALE01 0x8011F568: fmadds f0, f2, f1, f0.
+        pos.x = __fmadds(da->xC, fp->facing_dir, pos.x);
         pos.y += da->x10 + fp->fv.pp.x2250;
         fp->fv.pp.x222C = it_802C1590(gobj, &pos, 106, fp->facing_dir);
         ft_PlaySFX(fp, 130021, 127, 64);

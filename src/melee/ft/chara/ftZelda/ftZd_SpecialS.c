@@ -103,7 +103,8 @@ void ftZd_SpecialSStart_Anim(HSD_GObj* gobj)
 
         sp24.z = 0;
         temp_f2 = attributes->x20;
-        sp24.x = (temp_f2 * fp->facing_dir) + sp24.x;
+        // GALE01 0x8013B7F4/0x8013BB00: fmadds f0, f2, f1, f0.
+        sp24.x = __fmadds(temp_f2, fp->facing_dir, sp24.x);
         sp24.y += attributes->x24;
 
         temp_r3 = it_802C3BAC(gobj, &sp24, fp->facing_dir, temp_f2);
@@ -146,7 +147,8 @@ void ftZd_SpecialSLoop_Anim(HSD_GObj* gobj)
 
         sp20.z = 0;
         temp_f2 = attributes->x20;
-        sp20.x = (temp_f2 * fp->facing_dir) + sp20.x;
+        // GALE01 0x8013B910: fmadds f0, f2, f1, f0.
+        sp20.x = __fmadds(temp_f2, fp->facing_dir, sp20.x);
         sp20.y += attributes->x24;
 
         temp_r3_u32 = it_802C3BAC(gobj, &sp20, fp->facing_dir, temp_f2);
@@ -231,7 +233,8 @@ void ftZd_SpecialAirSStart_Anim(HSD_GObj* gobj)
 
         sp24.z = 0;
         temp_f2 = attributes->x20;
-        sp24.x = (temp_f2 * fp->facing_dir) + sp24.x;
+        // GALE01 0x8013B7F4/0x8013BB00: fmadds f0, f2, f1, f0.
+        sp24.x = __fmadds(temp_f2, fp->facing_dir, sp24.x);
         sp24.y += attributes->x24;
 
         temp_r3 = it_802C3BAC(gobj, &sp24, fp->facing_dir, temp_f2);
@@ -273,7 +276,8 @@ void ftZd_SpecialAirSLoop_Anim(HSD_GObj* gobj)
 
         sp20.z = 0;
         temp_f2 = attributes->x20;
-        sp20.x = temp_f2 * fp->facing_dir + sp20.x;
+        // GALE01 0x8013BC1C: fmadds f0, f2, f1, f0.
+        sp20.x = __fmadds(temp_f2, fp->facing_dir, sp20.x);
         sp20.y += attributes->x24;
 
         temp_r3 = it_802C3BAC(gobj, &sp20, fp->facing_dir, temp_f2);

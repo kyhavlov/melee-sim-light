@@ -294,9 +294,10 @@ static inline void ftPp_SpecialS_0_Coll_inline4(Fighter_GObj* nana_gobj,
         if (nana_fp->mv.pp.unk_80123954.x0 > 5) {
             nana_fp->mv.pp.unk_80123954.x0 = 5;
         }
-        nana_fp->cur_pos.x =
-            -((1.5f * (nana_fp->mv.pp.unk_80123954.x0 * nana_fp->facing_dir)) -
-              popo_fp->cur_pos.x);
+        // GALE01 0x801240A0/0x801242A8: fnmsubs f0, f4, f1, f0.
+        nana_fp->cur_pos.x = __fnmsubs(
+            1.5f, nana_fp->mv.pp.unk_80123954.x0 * nana_fp->facing_dir,
+            popo_fp->cur_pos.x);
         if (!ft_80082888(nana_gobj, &ftNn_Unk2_803CDD60)) {
             ftPp_SpecialS_0_Coll_inline3(nana_gobj);
         }
@@ -351,9 +352,10 @@ static inline void ftPp_SpecialS_1_Coll_inline4(Fighter_GObj* nana_gobj,
         if (nana_fp->mv.pp.unk_80123954.x0 > 5) {
             nana_fp->mv.pp.unk_80123954.x0 = 5;
         }
-        nana_fp->cur_pos.x =
-            -((1.5f * (nana_fp->mv.pp.unk_80123954.x0 * nana_fp->facing_dir)) -
-              popo_fp->cur_pos.x);
+        // GALE01 0x801240A0/0x801242A8: fnmsubs f0, f4, f1, f0.
+        nana_fp->cur_pos.x = __fnmsubs(
+            1.5f, nana_fp->mv.pp.unk_80123954.x0 * nana_fp->facing_dir,
+            popo_fp->cur_pos.x);
         if (ft_800824A0(nana_gobj, &ftNn_Unk2_803CDD60)) {
             ftPp_SpecialS_1_Coll_inline3(nana_gobj);
         }

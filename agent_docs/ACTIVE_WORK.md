@@ -41,6 +41,29 @@ already ported; DK is their first live consumer.
   shoulder-timer / Hand Slap fusions** (`canonical:capture-follow-fmadds`) — retail-faithful
   boundaries, identity at current inputs.
 
+## Session 4 (2026-07-30): pre-fusion-era audit — Tier A ports
+
+Corpus-wide inventory (grep fused ops per asm TU vs __f* markers per C TU) found the
+pre-fusion-era gap set. Ported with per-site asm verification (126 sites): Sheik chain (35),
+Ice Climbers belay string (28), Pikachu QA/Skull Bash/jolt spawns (18), Sheik
+needles/chain-charge/Vanish (12), Zelda Din spawn/Farore (7), Fox reflector turn (3), Icies
+squall/belay/spawns (11), ftcommon hitlag/nudge/grab-timer (12). Native aggregate byte-stable
+throughout (identity at current inputs); PPC pool-residue-fed lanes shift where
+backend-specific residuals are inexact (re-recorded).
+
+REMAINING INVENTORY (asm-vs-marker gaps, supported-domain candidates, unported):
+ftCo_Guard (8), itcoll (8), fighter.c (5), lbcollision (7), mplib (10 — likely inline
+double-count), ftCo_0A01 (75 — needs per-fn reachability triage: DeadUpStar etc.),
+Peach/Mario/Luigi SpecialS (2/2/1), Samus SpecialN/Lw_1 (2), items: din fire (3+2), toadspore
+(2), missile/chargeshot (2), sword/dosei/foods/freeze (4), heiho (4), iteffect (3), it_26B1
+(4), itmaplib (6), item.c (1); ft small TUs: ftCo_09F7 (6), JumpAerial (4), DamageIce (4),
+Damage/DamageFall/Throw/Thrown/TurnRun/CaptureCut/Bury/FlyReflect/DamageBind/DamageSong
+(2 each), ftpickupitem (3), ftlib (2), ft_07C1 (8), ft_0D4D (6), ft_0899/0C31/0D27/0DF0,
+ftCo_800C7590/7CA0; infra to triage per-function: lbvector (46), spline (58 — verify the
+session-6 port shape), mtx (98 — display vs gameplay split), grlib (8), grizumi (2),
+grpstadium (1), ground (1), groldpupupu (4), jobj (1). Skipped as unreachable: itlinkhookshot
+(113, Link), ftcpuattack (46, in-game AI), pobj/lbbgflash/ftafterimage/camera render, itzako.
+
 ## Session 3 close (2026-07-30): THE ROLLOUT FUSION SET — aggregate 336 = 260 pass / 76 classified / 0 fail
 
 The "cargo-walk" family was misattributed: the diverging player is P1 JIGGLYPUFF in

@@ -265,7 +265,9 @@ void ftPk_SpecialS0_Anim(HSD_GObj* gobj)
     ftPikachuAttributes* sa = fp->dat_attrs;
 
     if (fp->x914[0].state == HitCapsule_Enabled) {
-        float damage_amount = fp->mv.pk.unk3.x0 * sa->x2C + sa->x28;
+        // GALE01 0x801255D0/0x80125670: fmadds f1, f2, f1, f0.
+        float damage_amount =
+            __fmadds(fp->mv.pk.unk3.x0, sa->x2C, sa->x28);
         ftColl_8007ABD0(&fp->x914[0], damage_amount, gobj);
     }
 
@@ -283,7 +285,9 @@ void ftPk_SpecialAirS0_Anim(HSD_GObj* gobj)
     ftPikachuAttributes* sa = fp->dat_attrs;
 
     if (fp->x914[0].state == HitCapsule_Enabled) {
-        float damage_amount = fp->mv.pk.unk3.x0 * sa->x2C + sa->x28;
+        // GALE01 0x801255D0/0x80125670: fmadds f1, f2, f1, f0.
+        float damage_amount =
+            __fmadds(fp->mv.pk.unk3.x0, sa->x2C, sa->x28);
         ftColl_8007ABD0(&fp->x914[0], damage_amount, gobj);
     }
 
@@ -429,12 +433,15 @@ void ftPk_SpecialS_ChangeMotion_Unk10(HSD_GObj* gobj)
 
     fp->cmd_vars[0] = 0;
 
-    fp->self_vel.x = sa->x40 * fp->mv.pk.unk3.x0 + sa->x3C;
+    // GALE01 0x80125AA8: fmadds f0, f2, f1, f0.
+    fp->self_vel.x = __fmadds(sa->x40, fp->mv.pk.unk3.x0, sa->x3C);
     fp->self_vel.x *= fp->facing_dir;
 
     {
         float temp = 0.5f * fp->mv.pk.unk3.x0 / sa->x24;
-        fp->self_vel.y = 0.5f * sa->x44 + sa->x44 * temp;
+        // GALE01 0x80125AF0 fuses the charge term onto the half base
+        // (fmadds f0, f2, f4, f0).
+        fp->self_vel.y = __fmadds(temp, sa->x44, 0.5f * sa->x44);
     }
 
     Fighter_ChangeMotionState(gobj, 350, transition_flags3, fp->cur_anim_frame,

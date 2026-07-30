@@ -56,9 +56,11 @@ void ftPk_SpecialN_Anim(HSD_GObj* gobj)
 
         if (!fp->cmd_vars[1]) {
             fp->cmd_vars[1] = 1;
-            sp14.x = (fp->x34_scale.y * (pika_attr->x0 * fp->facing_dir)) +
-                     fp->cur_pos.x;
-            sp14.y = (pika_attr->x4 * fp->x34_scale.y) + fp->cur_pos.y;
+            // GALE01 0x80124970/0x80124984 fuse both spawn-offset lanes
+            // (fmadds f1, f3, f2, f1).
+            sp14.x = __fmadds(fp->x34_scale.y,
+                              pika_attr->x0 * fp->facing_dir, fp->cur_pos.x);
+            sp14.y = __fmadds(pika_attr->x4, fp->x34_scale.y, fp->cur_pos.y);
             sp14.z = 0.0f;
             it_802B338C(gobj, &sp14, fp->facing_dir, pika_attr->x14);
             switch (ftLib_800872A4(gobj)) {
@@ -90,9 +92,10 @@ void ftPk_SpecialAirN_Anim(HSD_GObj* gobj)
 
         if (!fp->cmd_vars[1]) {
             fp->cmd_vars[1] = 1;
-            sp14.x = (fp->x34_scale.y * (pika_attr->x8 * fp->facing_dir)) +
-                     fp->cur_pos.x;
-            sp14.y = (pika_attr->xC * fp->x34_scale.y) + fp->cur_pos.y;
+            // GALE01 0x80124A8C/0x80124AA0: same fused lanes, air spawn.
+            sp14.x = __fmadds(fp->x34_scale.y,
+                              pika_attr->x8 * fp->facing_dir, fp->cur_pos.x);
+            sp14.y = __fmadds(pika_attr->xC, fp->x34_scale.y, fp->cur_pos.y);
             sp14.z = 0.0f;
             it_802B338C(gobj, &sp14, fp->facing_dir, pika_attr->x14);
             switch (ftLib_800872A4(gobj)) {

@@ -359,8 +359,10 @@ void ftPp_SpecialS1_Phys(Fighter_GObj* gobj)
         temp_r5 = GET_FIGHTER(gobj);
         {
             ftIceClimberAttributes* da = temp_r5->dat_attrs;
-            temp_r5->xE4_ground_accel_1 +=
-                da->x6C * temp_r5->coll_data.floor.normal.x;
+            // GALE01 0x801200F8/0x801202A8: fmadds f0, f2, f1, f0.
+            temp_r5->xE4_ground_accel_1 =
+                __fmadds(da->x6C, temp_r5->coll_data.floor.normal.x,
+                         temp_r5->xE4_ground_accel_1);
         }
         ftCommon_ClampGrVel(fp, temp_r30->x38);
         ftCommon_ApplyGroundMovementNoSlide(gobj);
@@ -418,8 +420,10 @@ void ftPp_SpecialS2_Phys(Fighter_GObj* gobj)
         temp_r5 = GET_FIGHTER(gobj);
         {
             ftIceClimberAttributes* da = temp_r5->dat_attrs;
-            temp_r5->xE4_ground_accel_1 +=
-                da->x6C * temp_r5->coll_data.floor.normal.x;
+            // GALE01 0x801200F8/0x801202A8: fmadds f0, f2, f1, f0.
+            temp_r5->xE4_ground_accel_1 =
+                __fmadds(da->x6C, temp_r5->coll_data.floor.normal.x,
+                         temp_r5->xE4_ground_accel_1);
         }
         ftCommon_ClampGrVel(temp_r31, temp_r30->x38);
         ftCommon_ApplyGroundMovementNoSlide(gobj);

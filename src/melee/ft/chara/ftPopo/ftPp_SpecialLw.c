@@ -182,7 +182,8 @@ void fn_80122D2C(Fighter_GObj* gobj)
         if (fp->mv.pp.speciallw.x0 == 0) {
             ftIceClimberAttributes* da = fp->dat_attrs;
             lb_8000B1CC(fp->parts[FtPart_L3rdNa].joint, NULL, &pos);
-            pos.x += da->xBC * fp->facing_dir;
+            // GALE01 0x80122D94: fmadds f0, f2, f1, f0.
+            pos.x = __fmadds(da->xBC, fp->facing_dir, pos.x);
             pos.y += da->xC0;
             itClimbersBlizzard_Spawn(gobj, &pos, fp->facing_dir);
             fp->mv.pp.speciallw.x0 = da->xB8;

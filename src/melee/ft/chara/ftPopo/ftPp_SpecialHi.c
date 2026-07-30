@@ -63,7 +63,8 @@ void ftPp_SpecialS_80120E68(Fighter_GObj* gobj)
         fp->self_vel.x = fp2->cur_pos.x - fp->cur_pos.x;
         fp->self_vel.y = fp2->cur_pos.y - fp->cur_pos.y;
         fp->self_vel.z = 0.0F;
-        fp->self_vel.x = -(3.0F * fp2->facing_dir - fp->self_vel.x);
+        // GALE01 0x80120ED8: fnmsubs f0, f2, f1, f0.
+        fp->self_vel.x = __fnmsubs(3.0F, fp2->facing_dir, fp->self_vel.x);
         fp->self_vel.y += 5.0F;
         lbVector_Normalize(&fp->self_vel);
         dx = SQ(fp->cur_pos.x - fp2->cur_pos.x);

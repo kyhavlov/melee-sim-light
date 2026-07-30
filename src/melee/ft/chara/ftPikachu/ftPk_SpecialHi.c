@@ -199,9 +199,11 @@ void ftPk_SpecialHiStart1_Anim(HSD_GObj* gobj)
                 fp->parts[ftParts_GetBoneIndex(fp, FtPart_XRotN)].joint, 0,
                 &vec2);
             tempf = HSD_Randf();
-            vec2.x += 6 * tempf - 3;
+            // GALE01 0x80126238/0x8012625C fuse the spark scatter
+            // (fmadds f0, f2, f1, f0) before the accumulate.
+            vec2.x += __fmadds(6.0f, tempf, -3.0f);
             tempf = HSD_Randf();
-            vec2.y += 6 * tempf - 3;
+            vec2.y += __fmadds(6.0f, tempf, -3.0f);
             efSync_Spawn(1012, gobj, &vec2);
             fp->x2219_b0 = true;
             fp->pre_hitlag_cb = efLib_PauseAll;
@@ -240,9 +242,10 @@ void ftPk_SpecialAirHiStart1_Anim(HSD_GObj* gobj)
                 fp->parts[ftParts_GetBoneIndex(fp, FtPart_XRotN)].joint, 0,
                 &vec2);
             tempf = HSD_Randf();
-            vec2.x += (10 * tempf) - 5;
+            // GALE01 0x801263A8/0x801263CC: same fused scatter, air spread.
+            vec2.x += __fmadds(10.0f, tempf, -5.0f);
             tempf = HSD_Randf();
-            vec2.y += (10 * tempf) - 5;
+            vec2.y += __fmadds(10.0f, tempf, -5.0f);
             efSync_Spawn(1012, gobj, &vec2);
             fp->x2219_b0 = true;
             fp->pre_hitlag_cb = efLib_PauseAll;
@@ -265,8 +268,11 @@ void ftPk_SpecialHi_8012642C(HSD_GObj* gobj)
     ftPikachuAttributes* pika_attr = fp->dat_attrs;
 
     float half_pi = (float) M_PI_2;
-    float tempf = (fp->facing_dir * atan2f(fp->self_vel.x, fp->self_vel.y)) +
-                  (pika_attr->x78 - half_pi);
+    // GALE01 0x80126478 fuses the facing product onto the offset angle
+    // (fmadds f31, f3, f1, f0).
+    float tempf = __fmadds(fp->facing_dir,
+                           atan2f(fp->self_vel.x, fp->self_vel.y),
+                           pika_attr->x78 - half_pi);
 
     ftPartSetRotX(fp, ftParts_GetBoneIndex(fp, FtPart_XRotN), tempf);
     scl.x = pika_attr->x7C_scale.x;
@@ -335,7 +341,9 @@ void ftPk_SpecialHiStart1_Coll(HSD_GObj* gobj)
         if (collData->env_flags & Collide_FloorMask) {
             float angle =
                 atan2f(collData->floor.normal.x, collData->floor.normal.y);
-            float angle2 = (fighter2->facing_dir * angle) + pika_attr->x68;
+            // GALE01 0x801266BC: fmadds f31, f2, f1, f0.
+            float angle2 =
+                __fmadds(fighter2->facing_dir, angle, pika_attr->x68);
             ftPartSetRotX(fighter2,
                           ftParts_GetBoneIndex(fighter2, FtPart_XRotN),
                           angle2);
@@ -460,9 +468,12 @@ void ftPk_SpecialHi_ChangeMotion_Unk03(HSD_GObj* gobj)
     collData = &fp->coll_data;
     pika_attr = fp->dat_attrs;
     if (fp->coll_data.env_flags & Collide_FloorMask) {
-        float angle = (fp->facing_dir * atan2f(collData->floor.normal.x,
-                                               collData->floor.normal.y)) +
-                      pika_attr->x68;
+        // GALE01 0x80126B24: fmadds f31, f2, f1, f0.
+        float angle =
+            __fmadds(fp->facing_dir,
+                     atan2f(collData->floor.normal.x,
+                            collData->floor.normal.y),
+                     pika_attr->x68);
         ftPartSetRotX(fp, ftParts_GetBoneIndex(fp, FtPart_XRotN), angle);
     }
 
@@ -527,7 +538,8 @@ void ftPk_SpecialHi_80126C0C(HSD_GObj* gobj)
 
             // set ground velocity to (zip_slope * stick_mag) + zip_intercept
             // and then flip based on facing direction
-            fp->gr_vel = (pika_attr->x90 * stick_mag) + pika_attr->x94;
+            // GALE01 0x80126D3C: fmadds f0, f1, f31, f0.
+            fp->gr_vel = __fmadds(pika_attr->x90, stick_mag, pika_attr->x94);
             fp->gr_vel *= fp->facing_dir;
 
             // if second zip
@@ -609,10 +621,13 @@ void ftPk_SpecialHi_80126E1C(HSD_GObj* gobj)
 
     // compute velocity as (zip slope * stick_mag) + zip intercept
     // x velocity is the same but flips based on facing direction
-    temp_f2_2 = ((pika_attr->x90 * final_stick_mag) + pika_attr->x94) *
+    // GALE01 0x80126F70/0x80126F90 fuse the zip-speed blend before the
+    // trig products (fmadds f2, f3, f31, f2).
+    temp_f2_2 = __fmadds(pika_attr->x90, final_stick_mag, pika_attr->x94) *
                 cosf(some_angle);
     fp->self_vel.x = fp->facing_dir * temp_f2_2;
-    fp->self_vel.y = ((pika_attr->x90 * final_stick_mag) + pika_attr->x94) *
+    fp->self_vel.y = __fmadds(pika_attr->x90, final_stick_mag,
+                              pika_attr->x94) *
                      sinf(some_angle);
 
     // if second zip
