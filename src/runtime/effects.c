@@ -109,7 +109,22 @@ static void msl_effect_load_bank(MslCoreEffectData* data, int bank,
 
     effect_bank->archive =
         lbArchive_80016DBC(filename, &table, symbol, NULL);
-    if (table == NULL || table[0] == NULL) {
+    if (table == NULL) {
+        fprintf(stderr, "%s is missing %s command data\n", filename, symbol);
+        abort();
+    }
+    if (table[0] == NULL && table[1] == NULL) {
+        // A model-only effect archive carries no particle banks and retail
+        // skips psInitDataBank entirely (EfDkData.dat is the supported-domain
+        // case). Publish an empty command bank so generator lookups consume
+        // nothing. refs/melee/src/melee/ef/efasync.c::efAsync_LoadSync
+        effect_bank->command_bank = NULL;
+        effect_bank->count = 0;
+        effect_bank->commands = NULL;
+        effect_bank->id_base = 0;
+        return;
+    }
+    if (table[0] == NULL) {
         fprintf(stderr, "%s is missing %s command data\n", filename, symbol);
         abort();
     }
@@ -163,6 +178,9 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     // FTKIND_SAMUS to 2).
     msl_effect_load_bank(data, 2, "/EfSsData.dat", "effSamusDataTable");
     msl_effect_load_bank(data, 3, "/EfFxData.dat", "effFoxDataTable");
+    // Donkey Kong owns efAsync bank 8 (ftData_UnkBytePerCharacter maps
+    // FTKIND_DONKEY to 8).
+    msl_effect_load_bank(data, 8, "/EfDkData.dat", "effDonkeyDataTable");
     // Pikachu owns efAsync bank 7 (ftData_UnkBytePerCharacter maps
     // FTKIND_PIKACHU to 7; Pichu shares the bank in retail).
     msl_effect_load_bank(data, 7, "/EfPkData.dat", "effPikachuDataTable");

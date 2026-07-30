@@ -57,7 +57,15 @@ typedef struct MslFighterPoseJoint {
     uint32_t program_is_figa : 1;
     uint32_t program_filtered : 1;
     uint32_t decoder_synced : 1;
+    // Last integer frame published from the pose table, or
+    // MSL_FIGHTER_POSE_TABLE_FRAME_NONE when the decoder owns the tracks.
+    // Dropping out of the table path resyncs the track decoder at this
+    // exact integer frame so the wait-subtraction arithmetic reproduces the
+    // source engine's incremental accumulation bit-exactly.
+    uint32_t last_table_frame : 11;
 } MslFighterPoseJoint;
+
+#define MSL_FIGHTER_POSE_TABLE_FRAME_NONE 0x7FFu
 
 #ifdef MSL_CORE_NATIVE
 _Static_assert(sizeof(MslFighterPoseJoint) ==

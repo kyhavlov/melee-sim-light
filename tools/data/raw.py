@@ -26,6 +26,7 @@ SUPPORTED_CHARACTERS = (
     "popo",
     "nana",
     "pikachu",
+    "donkey",
 )
 SUPPORTED_STAGES = ("grnla", "grnba", "griz", "grps", "grst", "grop")
 

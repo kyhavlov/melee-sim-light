@@ -315,6 +315,19 @@ src/melee/ft/chara/ftPikachu/ftPk_SpecialLw.c	src/melee/ft/chara/ftPikachu/ftPk_
 src/melee/it/items/itpikachuthunder.c	src/melee/it/items/itpikachuthunder.c	Matching	pikachu-source-packet	compiled canonical Thunder bolt article owner
 src/melee/it/items/itpikachutjoltground.c	src/melee/it/items/itpikachutjoltground.c	Matching	pikachu-source-packet	compiled canonical ground thunder-jolt article owner
 src/melee/it/items/itpikachutjoltair.c	src/melee/it/items/itpikachutjoltair.c	Matching	pikachu-source-packet	compiled canonical air thunder-jolt article owner
+src/melee/ft/chara/ftDonkey/ftDk_Init.c	src/melee/ft/chara/ftDonkey/ftDk_Init.c	Matching	donkey-source-packet	compiled canonical Donkey Kong lifecycle, state registry, and data-owner callbacks
+src/melee/ft/chara/ftDonkey/ftDk_SpecialN.c	src/melee/ft/chara/ftDonkey/ftDk_SpecialN.c	Matching	donkey-source-packet	compiled canonical Giant Punch owner
+src/melee/ft/chara/ftDonkey/ftDk_SpecialS.c	src/melee/ft/chara/ftDonkey/ftDk_SpecialS.c	Matching	donkey-source-packet	compiled canonical Headbutt owner
+src/melee/ft/chara/ftDonkey/ftDk_SpecialHi.c	src/melee/ft/chara/ftDonkey/ftDk_SpecialHi.c	Matching	donkey-source-packet	compiled canonical Spinning Kong owner
+src/melee/ft/chara/ftDonkey/ftDk_SpecialLw.c	src/melee/ft/chara/ftDonkey/ftDk_SpecialLw.c	Matching	donkey-source-packet	compiled canonical Hand Slap owner
+src/melee/ft/chara/ftDonkey/ftDk_HeavyWait0.c	src/melee/ft/chara/ftDonkey/ftDk_HeavyWait0.c	Matching	donkey-source-packet	compiled canonical cargo-hold wait owner
+src/melee/ft/chara/ftDonkey/ftDk_HeavyWait1.c	src/melee/ft/chara/ftDonkey/ftDk_HeavyWait1.c	Matching	donkey-source-packet	compiled canonical cargo-hold kneebend/wait owner
+src/melee/ft/chara/ftDonkey/ftDk_HeavyWalk.c	src/melee/ft/chara/ftDonkey/ftDk_HeavyWalk.c	Matching	donkey-source-packet	compiled canonical cargo-hold walk owner
+src/melee/ft/chara/ftDonkey/ftDk_HeavyTurn.c	src/melee/ft/chara/ftDonkey/ftDk_HeavyTurn.c	Matching	donkey-source-packet	compiled canonical cargo-hold turn owner
+src/melee/ft/chara/ftDonkey/ftDk_HeavyJump.c	src/melee/ft/chara/ftDonkey/ftDk_HeavyJump.c	Matching	donkey-source-packet	compiled canonical cargo-hold jump owner
+src/melee/ft/chara/ftDonkey/ftDk_HeavyFall.c	src/melee/ft/chara/ftDonkey/ftDk_HeavyFall.c	Matching	donkey-source-packet	compiled canonical cargo-hold fall owner
+src/melee/ft/chara/ftDonkey/ftDk_HeavyLanding.c	src/melee/ft/chara/ftDonkey/ftDk_HeavyLanding.c	Matching	donkey-source-packet	compiled canonical cargo-hold landing owner
+src/melee/ft/chara/ftDonkey/ftDk_MS_345_0.c	src/melee/ft/chara/ftDonkey/ftDk_MS_345_0.c	Matching	donkey-source-packet	compiled canonical cargo-hold turn animation helper
 src/melee/it/items/itpeachturnip.c	src/melee/it/items/itpeachturnip.c	not-listed	peach-source-packet	compiled canonical Peach turnip and rare-pull constructor owner
 src/melee/it/items/itsword.c	src/melee/it/items/itsword.c	not-listed	peach-common-item-packet	compiled canonical Beam Sword owner reached by Peach item pull
 src/sysdolphin/baselib/aobj.c	src/sysdolphin/baselib/aobj.c	Matching	0001-hosted-c-compatibility.patch	compiled directly from canonical source by Makefile; adapted by historical patch 0001-hosted-c-compatibility.patch

@@ -21,7 +21,10 @@
 #include <dolphin/os/OSAlloc.h>
 
 enum {
-    MSL_MEMORY_GAME_DATA_BYTES = 64 * 1024 * 1024,
+    // 64 MiB filled up when the fourteenth character (Donkey Kong) joined
+    // the supported roster; the shared game-data arena is host memory, not
+    // a GameCube budget.
+    MSL_MEMORY_GAME_DATA_BYTES = 96 * 1024 * 1024,
     // Native supported-domain construction remains below 2.75 MiB after
     // bounded source pools and exact relocation metadata. Keep a measured
     // 3 MiB hard ceiling; runtime allocation is forbidden after sealing.

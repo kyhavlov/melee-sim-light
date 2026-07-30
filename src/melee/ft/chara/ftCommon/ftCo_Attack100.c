@@ -2625,8 +2625,10 @@ void ftCo_800DB464(Fighter_GObj* gobj)
     Vec3 pos;
     lb_8000B1CC(fp->parts[ftParts_GetBoneIndex(fp, FtPart_XRotN)].joint, NULL,
                 &pos);
-    pos.x = (fp->facing_dir * (fp->x1A70.z * fp->x34_scale.y)) + pos.x;
-    pos.y += fp->x1A70.y * fp->x34_scale.y;
+    // GALE01 0x800DB4B4/0x800DB4C8 fuse the hold-offset products onto the
+    // bone position (fmadds f1, f3, f2, f1) for both lanes.
+    pos.x = __fmadds(fp->facing_dir, fp->x1A70.z * fp->x34_scale.y, pos.x);
+    pos.y = __fmadds(fp->x1A70.y, fp->x34_scale.y, pos.y);
     pos.z = 0.0f;
     fp->cur_pos = pos;
 }

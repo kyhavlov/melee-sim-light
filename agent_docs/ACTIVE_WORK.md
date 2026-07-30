@@ -1,50 +1,71 @@
-# Active structural packet — Pikachu
+# Active structural packet — Donkey Kong
 
 ## Objective
 
-Add Pikachu (internal kind FTKIND_PIKACHU 12) to the supported domain: the five Matching chara
-TUs (`ftPk_Init/SpecialN/SpecialS/SpecialHi/SpecialLw`), the three Matching article owners
-(`itpikachuthunder`, `itpikachutjoltground`, `itpikachutjoltair` — `itthunder.c` is the Zapdos
-Pokémon, not a Pikachu article), registry rows, PlPk extraction, native DAT translation,
-part-admission row, effect bank 7, public API/viewer/validation admission, and a 13-replay
-suite (staged standalone, not yet in the aggregate).
+Add Donkey Kong (internal kind FTKIND_DONKEY 3) to the supported domain: the thirteen Matching
+chara TUs (`ftDk_Init/SpecialN/SpecialS/SpecialHi/SpecialLw`, the seven `ftDk_Heavy*` cargo-hold
+states, `ftDk_MS_345_0`), registry rows, PlDk extraction, native DAT translation
+(`MSL_FIGHTER_ARTICLES_NONE` — DK spawns no articles), part-admission row, effect bank 8,
+public API/viewer/validation admission, and a 27-replay suite (staged standalone, not yet in
+the aggregate). The cargo carrier/victim common owners (`ftCo_Cargo*`, `ftCo_Shouldered`) were
+already ported; DK is their first live consumer.
 
 ## Final boundary
 
-- **Owner (character):** the imported ftPikachu TUs, byte-identical to the pinned decomp except
-  the hosted `speciallw` motion-vars overlay (ledger
-  `canonical:pikachu-thunder-vars-pointer-widening`): retail packs the thunder `Item_GObj*` at
-  mv+0 under the mv+4 strike flag, and the flow addresses both words through `specialhi.x0/x4`
-  aliases; the hosted layout keeps the flag at its mv+4 alias position, moves the full-width
-  pointer past the aliased pair, and names the pointer's owner lane at the two enter-time
-  zeroing sites.
-- **Owner (articles):** hosted `it_803F3100`/`it_803F2F28` rows copied from `it_279C.c`; article
-  list `MslDatPikachuArticles[3]` (PlPk x48 slots 0..2 = thunder 81 / ground jolt 89 / air jolt
-  90, kinds carried in the attribute words xDC/x14/x18 because Pichu shares the code); thunder
-  and ground-jolt attribute blocks translate concretely, the air jolt reads no special
-  attributes.
-- **Data:** `PlPk*` (Nr/Re/Bu/Gr costumes) + `EfPkData.dat` extraction; manifest 137 files.
-- **Item misc lanes:** thunder owns all four sampled lanes (constructor-written); ground jolt
-  owns misc0/2/3 (misc1 = owner pointer byte); air jolt owns misc2/3 (xDE8 launch velocity) —
-  air-spawned jolt instances whose `it_802B3F88` write is not reached before export are an open
-  question (see suite state).
+- **Owner (character):** the imported ftDonkey TUs, byte-identical to the pinned decomp except
+  the OnLoad idempotent-store guard (ledger `canonical:donkey-onload-attr-store-guard`): retail
+  writes the three cargo-walk anim durations into the shared PlDk ftData ext-attr on every
+  fighter load; GameData preload performs the first mutation before the native DAT arena seals
+  read-only, later Match constructions recompute and skip the identical store (ftPe_Init_OnLoad
+  precedent). DK motion/fighter vars carry no pointers — neither Pikachu bug class applies.
+- **Effects:** EfDkData.dat is MODEL-ONLY — both leading effDonkeyDataTable words are
+  unrelocated NULLs and retail efAsync_LoadSync skips psInitDataBank entirely; both hosted
+  loaders now publish an empty command bank for that shape (ledger
+  `canonical:model-only-effect-bank`). All DK efSync ids (0x4C6..0x4CC) are pure
+  efLib model creates — no generator RNG cases needed.
+- **Data:** `PlDk*` (Nr/Bk/Re/Bu/Gr — five costumes) + `EfDkData.dat`; manifest 146 files.
+- **Capacity:** archive cache 3072 -> 4096 entries; shared game-data arena 64 -> 96 MiB
+  (fourteenth character).
+
+## Exactness fixes shipped with the packet
+
+- **Pose-table dropout resync** (ledger `canonical:fighter-pose-table-dropout-resync`): the
+  native pose engine re-derived track time from a fractional absolute frame when dropping from
+  the integer-frame table fast path to fractional-rate decoding (cargo walk anims switch rate
+  every frame). The decoder now resyncs at the recorded last table frame (integer wait
+  subtraction is exact) with a dry walk, so the following rate step reproduces the source
+  engine's incremental rounding bit-exactly. Root-caused from a 1-ULP carry-bone fork (victim
+  XRotN is ROBJ-constrained to DK's TransN2, publishing the animated spine chain directly into
+  pos). Three DK replays became fully bit-exact; two more dropped their native-only rows.
+- **HSD_FMod wrap fnmsubs** (`canonical:anim-loop-wrap-fnmsubs`), **capture-follow /
+  shoulder-timer / Hand Slap fusions** (`canonical:capture-follow-fmadds`) — retail-faithful
+  boundaries, identity at current inputs.
 
 ## Suite state (session 1 close, container authoritative)
 
-13 replays (all six stages; Fox/Falco/Marth/Sheik/Peach/ditto; Slippi netplay + mainline +
-two anonymized ranked with played_on=network, master-master v3.16 pre-cardinals):
-**container native 12 pass / 1 fail; PPC 12 pass / 1 fail** — both backends fail only
-master-master, identically: an item.pos_x/pos_y ULP family from frame -24 on FoD (2,507 rows,
-prefix 98) on the stage-ambience item stream; the same-stage v3.17 capture (97280) is
-bit-exact, so suspect the pre-3.18 recording lacks a stream (platform-height events?) whose
-absence shifts the construction/ambience RNG path. Next session starts here.
-Mac-native shows four extra env-only fails (speed_y_attack -0/+0 signed-zero and one jolt-vel
-ULP episode) — the documented macOS FP-drift class, absent in container.
-A recurring `state_flags[*][4]&0x80` render-visibility diagnostic (non-failing) fires on
-several replays — ftPk_Init_UnkMotionStates1/2 part visibility toggles are live for Pikachu
-(first ported character with non-NULL rows there); worth an audit when convenient.
+27 replays (all six stages; Fox/Falco/Marth/Sheik/Jigglypuff/Samus/Captain Falcon; Slippi
+netplay + anonymized ranked + mainline; both Pokémon Stadium entries event-verified frozen,
+three v3.18.0 PS candidates rejected — 3.18 recorders are silent on transformation events):
+**container native 20 pass / 7 fail; PPC 20 pass / 7 fail — identical failures and
+fingerprints on both backends.** The seven shared families:
+
+- `auto-dk-2025-04` @8654: 150 rows, Samus offstage low on FoD, a position resolve (wall-line
+  pick on the curved underside?) shifts ~0.017 then heals — the one non-ULP family; needs a
+  retail probe before classification.
+- `slippi-2025-04_..152714` @2663: DK walk-speed ULP family (speed_air/ground_x_self 16 rows +
+  pos_x tail).
+- Five 1–6-row self-healing pos ULP families at stage-edge positions (22123 @7897, 9560 @2120,
+  basic-dk-2025-04 @7265, medium-marth-0912 @7060, slippi-..141746 @9611).
+
+Next session starts here: probe/classify the seven shared families, wire dk.json into the
+aggregate with classifications + locks, and record PPC snapshots.
 
 ## Log
+
+- 2026-07-30 — `open` (this packet: DK source validation packet, suite staged standalone;
+  aggregate re-verified 239 pass / 70 classified / 0 fail native after re-recording the two
+  icies pool-residue analogs shifted by the arena growth — same ripple class as the Pikachu
+  packet).
 
 - 2026-07-30 — `closed` (samus suite extended 12 -> 25 from ~/SSBM/Replays/Samples/samus_replays.zip;
   aggregate 309 = 239 pass / 70 classified / 0 fail)

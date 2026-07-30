@@ -17,7 +17,7 @@ const module = await createModule({
 const OK = 0;
 const INVALID_ARGUMENT = 1;
 const INVALID_STATE = 3;
-const CONFIG_SIZE = 52;
+const CONFIG_SIZE = 53;
 const INPUT_SIZE = 52;
 const STATE_SIZE = 1302;
 const OBSERVATION_SIZE = 980;
@@ -96,8 +96,8 @@ const writeConfig = (row, stage, character) => {
   putF32(base + 16, 1);
   module.HEAPU8[base + 20] = 2;
   module.HEAPU8[base + 23] = 4;
-  module.HEAPU8[base + 32] = character;
-  module.HEAPU8[base + 37] = character;
+  module.HEAPU8[base + 33] = character;
+  module.HEAPU8[base + 38] = character;
 };
 writeConfig(0, 32, 1);
 writeConfig(1, 2, 9);

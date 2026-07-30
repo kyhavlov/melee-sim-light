@@ -47,9 +47,12 @@ void ftCo_8009C640(Fighter_GObj* gobj, FtMotionId msid)
 {
     Fighter* fp = gobj->user_data;
     PAD_STACK(8);
+    // GALE01 0x8009C684 fuses the percent product into the escape-timer
+    // add (fmadds f0, f3, f2, f0).
     ftCommon_InitGrab(fp, 0,
-                      (int) (fp->dmg.x1830_percent * p_ftCommonData->x4A0 +
-                             p_ftCommonData->x4A4));
+                      (int) __fmadds(fp->dmg.x1830_percent,
+                                     p_ftCommonData->x4A0,
+                                     p_ftCommonData->x4A4));
     fp->mv.co.shouldered.x0 = 0;
     fp->mv.co.shouldered.x4 = 0;
     ftCo_8009C5A4(gobj, msid);

@@ -28,6 +28,7 @@ def test_supported_character_and_stage_enums() -> None:
     assert [int(character) for character in msl.Character] == [
         1,
         2,
+        3,
         7,
         9,
         10,

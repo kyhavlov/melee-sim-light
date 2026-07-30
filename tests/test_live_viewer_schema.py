@@ -49,6 +49,7 @@ def test_live_viewer_supported_domain_and_assets() -> None:
         9: "Peach",
         15: "Jigglypuff",
         17: "Luigi", 0: "Mario", 21: "Dr. Mario", 10: "Ice Climbers",
+        3: "Donkey Kong",
         12: "Pikachu", 13: "Samus",
         18: "Marth",
         19: "Zelda",

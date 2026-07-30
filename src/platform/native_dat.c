@@ -930,6 +930,7 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataSamus") == 0 ||
         strcmp(symbol, "ftDataPopo") == 0 ||
         strcmp(symbol, "ftDataNana") == 0 ||
+        strcmp(symbol, "ftDataDonkey") == 0 ||
         strcmp(symbol, "ftDataPikachu") == 0 ||
         strcmp(symbol, "ftDataMario") == 0 ||
         strcmp(symbol, "ftDataDrmario") == 0 ||
@@ -1620,6 +1621,10 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftIceClimberAttributes,
                                           321, MSL_FIGHTER_ARTICLES_ICECLIMBER);
+    } else if (strcmp(symbol, "ftDataDonkey") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftDonkeyAttributes,
+                                          337, MSL_FIGHTER_ARTICLES_NONE);
     } else if (strcmp(symbol, "ftDataPikachu") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftPikachuAttributes,
@@ -1708,8 +1713,25 @@ int msl_native_effect_bank(HSD_Archive* archive, const char* symbol,
     HSD_PSCmdList** result;
     uint32_t i;
 
-    if (table == UINT32_MAX || (bank = raw_pointer(context, table)) == UINT32_MAX)
-    {
+    if (table == UINT32_MAX) {
+        return -1;
+    }
+    if ((bank = raw_pointer(context, table)) == UINT32_MAX) {
+        // A model-only effect archive carries no particle banks: both
+        // leading table words are unrelocated NULLs and retail skips
+        // psInitDataBank entirely (EfDkData.dat is the supported-domain
+        // case). Publish an empty command bank so generator lookups
+        // consume nothing, exactly like retail's absent bank.
+        // refs/melee/src/melee/ef/efasync.c::efAsync_LoadSync
+        if (table + 8 <= context->data_size &&
+            read_be32(context->data + table) == 0 &&
+            read_be32(context->data + table + 4) == 0 &&
+            raw_pointer(context, table + 4) == UINT32_MAX)
+        {
+            *count = 0;
+            *commands = NULL;
+            return 0;
+        }
         return -1;
     }
     version = read_be16(context->data + bank);

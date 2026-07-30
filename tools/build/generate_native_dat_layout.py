@@ -530,6 +530,7 @@ def main() -> None:
         "itClimbersIceAttributes",
         "itClimbersBlizzardAttributes",
         "itClimbersStringAttributes",
+        "ftDonkeyAttributes",
         "MslDatPikachuArticles",
         "ftPikachuAttributes",
         "itPikachuthunderAttributes",

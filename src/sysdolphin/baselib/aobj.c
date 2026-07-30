@@ -189,7 +189,9 @@ float HSD_FMod(float a, float b)
         return a;
     }
     quotient = a / b;
-    return a - b * quotient;
+    // GALE01 0x80364380 fuses the wrap subtract (fnmsubs f1, f31, f1, f30):
+    // the looped-anim frame position keeps the fused rounding boundary.
+    return __fnmsubs(b, (float) quotient, a);
 }
 
 HSD_AObj* HSD_AObjLoadDesc(HSD_AObjDesc* aobjdesc)

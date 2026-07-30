@@ -7,6 +7,7 @@
 #include "runtime/context.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <MetroTRK/intrinsics.h>
@@ -138,6 +139,7 @@ static void register_joint(HSD_JObj* joint)
     node->flags = AOBJ_NO_ANIM;
     node->joint = joint;
     node->framerate = 1.0F;
+    node->last_table_frame = MSL_FIGHTER_POSE_TABLE_FRAME_NONE;
     node->program_node_index = MSL_FIGHTER_POSE_PROGRAM_NODE_NONE;
     parent = pose_joint(joint->parent);
     node->parent_index = parent != NULL
@@ -435,6 +437,7 @@ static void release_joint(MslFighterPoseJoint* node)
     node->rewind_frame = 0.0F;
     node->end_frame = 0.0F;
     node->framerate = 1.0F;
+    node->last_table_frame = MSL_FIGHTER_POSE_TABLE_FRAME_NONE;
     node->program_node_index = MSL_FIGHTER_POSE_PROGRAM_NODE_NONE;
     node->program_is_figa = 0;
     node->program_filtered = 0;
@@ -696,6 +699,7 @@ void msl_fighter_pose_request_joint(HSD_JObj* joint, float frame)
     node->curr_frame = frame;
     node->flags = (node->flags & ~AOBJ_NO_ANIM) | AOBJ_FIRST_PLAY;
     node->decoder_synced = 1;
+    node->last_table_frame = MSL_FIGHTER_POSE_TABLE_FRAME_NONE;
     for (i = 0; i < node->track_count; ++i) {
         request_track(&pose->tracks[node->track_start + i], frame);
     }
@@ -1530,6 +1534,7 @@ static void interpret_joint(MslFighterPoseJoint* node)
             node->curr_frame = HSD_FMod(value, period) + node->rewind_frame;
             if (is_figa(node)) {
                 node->decoder_synced = 0;
+                node->last_table_frame = MSL_FIGHTER_POSE_TABLE_FRAME_NONE;
             } else {
                 for (i = 0; i < node->track_count; ++i) {
                     request_track(&pose->tracks[node->track_start + i],
@@ -1554,17 +1559,45 @@ static void interpret_joint(MslFighterPoseJoint* node)
             node, (uint32_t) node->curr_frame, publish);
         if (used_table) {
             node->decoder_synced = 0;
+            node->last_table_frame =
+                (uint32_t) node->curr_frame <
+                        MSL_FIGHTER_POSE_TABLE_FRAME_NONE
+                    ? (uint32_t) node->curr_frame
+                    : MSL_FIGHTER_POSE_TABLE_FRAME_NONE;
         }
     }
 #endif
     if (!used_table) {
         if (is_figa(node) && !node->decoder_synced) {
-            for (i = 0; i < node->track_count; ++i) {
-                request_track(&pose->tracks[node->track_start + i],
-                              node->curr_frame);
+            if (node->last_table_frame !=
+                MSL_FIGHTER_POSE_TABLE_FRAME_NONE)
+            {
+                // The table sampled this node at an exact integer frame.
+                // Rebuild the decoder there (integer wait subtraction is
+                // exact) and dry-walk without publishing; the ordinary
+                // rate step below then reproduces the source engine's
+                // incremental `time += rate` rounding bit-exactly instead
+                // of re-deriving the time from a fractional absolute
+                // frame.
+                float base = (float) node->last_table_frame;
+                for (i = 0; i < node->track_count; ++i) {
+                    request_track(&pose->tracks[node->track_start + i],
+                                  base);
+                }
+                for (i = 0; i < node->track_count; ++i) {
+                    interpret_track(node,
+                                    &pose->tracks[node->track_start + i],
+                                    0.0F, false, NULL);
+                }
+            } else {
+                for (i = 0; i < node->track_count; ++i) {
+                    request_track(&pose->tracks[node->track_start + i],
+                                  node->curr_frame);
+                }
+                rate = 0.0F;
             }
-            rate = 0.0F;
             node->decoder_synced = 1;
+            node->last_table_frame = MSL_FIGHTER_POSE_TABLE_FRAME_NONE;
         }
         for (i = 0; i < node->track_count; ++i) {
             interpret_track(node, &pose->tracks[node->track_start + i], rate,

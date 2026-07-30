@@ -13,6 +13,7 @@
 #include "ft/chara/ftLuigi/types.h"
 #include "ft/chara/ftMario/types.h"
 #include "ft/chara/ftMars/types.h"
+#include "ft/chara/ftDonkey/types.h"
 #include "ft/chara/ftPeach/types.h"
 #include "ft/chara/ftPikachu/types.h"
 #include "ft/chara/ftPopo/types.h"
@@ -267,6 +268,7 @@ void* msl_native_dat_type_roots[] = {
     (itClimbersIceAttributes*) 0,
     (itClimbersBlizzardAttributes*) 0,
     (itClimbersStringAttributes*) 0,
+    (ftDonkeyAttributes*) 0,
     (MslDatPikachuArticles*) 0,
     (ftPikachuAttributes*) 0,
     (itPikachuthunderAttributes*) 0,
