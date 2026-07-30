@@ -46,6 +46,46 @@ several replays — ftPk_Init_UnkMotionStates1/2 part visibility toggles are liv
 
 ## Log
 
+- 2026-07-30 — `closed` (samus suite extended 12 -> 25 from ~/SSBM/Replays/Samples/samus_replays.zip;
+  aggregate 309 = 239 pass / 70 classified / 0 fail)
+  **Event-based frozen-PS policy shipped**: PS admission now requires recorder version strictly
+  newer than 3.18.0 and zero `stadium_transformation` events over the full game, ignoring the
+  game-start `is_frozen_ps` flag. Validated against transforming controls (ics.zip v3.19 PS
+  games emit 13/27 events; two v3.18.0 non-frozen PS games emit ZERO over 3-5 minutes — at
+  3.18.0 exactly the recorder is silent, so absence proves nothing there). Both admitted PS
+  captures (medium-fox-2025-10, medium-sheik-2026-03, v3.19.0) show zero events over ~14k
+  frames.
+  **Re-wrap rejection class established (5 of 18 zip files rejected)**: one PS capture at
+  v3.18.0 exactly (Nicki, flag also false); one 2020 game and three anonymized ranked FoD
+  games re-wrapped to the 3.18 layout — payload sizes match 3.18 but raw_analog_y and/or raw
+  c-stick lanes are all-zero (genuine captures show thousands of nonzero samples) and gecko
+  lists are 2.8-4.9KB vs the genuine 57KB. The three ranked re-wraps fork discrete lanes
+  (action_id/facing) during the countdown under EVERY era-flag combination — the destroyed
+  raw pad lanes feed the UCF ring machinery, unmodelable by flags (first fork signature was
+  the cardinals one: retail speed 1.28375 = 1.3 x raw 0.9875 stick our cardinals patch snaps
+  to 1.0; flags moved matched 90 -> 101 only). The existing bit-exact diamond-platinum ranked
+  captures carry their TRUE older versions (peppi doesn't expose the newer lanes at all) —
+  version-vs-populated-lane disagreement is the re-wrap tell.
+  **FObj reserve fix (arena abort)**: medium-sheik-2026-06 (DL Sheik/Samus) aborted post-seal
+  (`HSD_ObjAllocAddFree` size-64 grow at used=686912). Backtrace (new glibc-gated
+  backtrace_symbols_fd dump on the msl_memory_alloc failure path, kept): Samus AIR
+  grapple-catch (ftCo_AirCatch_Anim -> it_802B7C18 -> it_802B743C) runs HSD_JObjAddAnimAll
+  across the doubled beam link chain, one FObj per track per link jobj, crossing the former
+  256-slot reserve -> now 512 (scalar.c pre-seed block). Replay then bit-exact both backends;
+  no classified fingerprint moved (pool growth is layout-neutral for the corpus).
+  **PPC snapshots recorded for the two samus classified entries** (icies-precedent
+  completion): fox-d18-2026-04 PPC residual is ONLY the 1-ULP pos_y @7389 row (the @9075
+  contact-gate flip is native-only, consistent with dolphin-ulp-contact-gate); master-samus
+  PPC keeps the taut-rope fork @15146 (390 rows vs native's 135). master-peach is PPC-exact
+  (its edge-stop flip is native-only). Digest key trap: compact snapshots store
+  `mismatch_fields_digest`, not a digest under `mismatch_fields` — the wrong key silently
+  reads as raw fields and reports drift/FAIL.
+  **Stale-PPC-binary trap**: build/melee_core/ppc/melee-core-ppc predated the Pikachu port and
+  every suite replay errored with the supported-character banner; `make ppc` first.
+  Gates (msl-luigi container): samus suite native 22/3/0, PPC 23/2/0; aggregate native
+  239/70/0 with output locks appended for exactly the 13 new replays; pytest 44 passed
+  (suite-inventory assertions bumped 296 -> 309, filtered cases stay 133 since every new
+  replay contains Samus).
 - 2026-07-29 — `retained` (session 3: both residual fails dispositioned; pikachu.json JOINED THE
   AGGREGATE — 296 = 226 pass / 70 classified / 0 fail)
   **master-master root-caused as a recorder-profile residual**: the drifting FoD items are Fox

@@ -2320,6 +2320,51 @@
       }
     },
     {
+      "replay": "replays/validation/samus/auto-fox-2025-06_Game_20250628T063629.slpz",
+      "expected": {
+        "native": {
+          "frames": 6305,
+          "actual_output_fingerprint": "9279a06204fc8ac8"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/samus/auto-fox-2025-08_Game_20250818T180409.slpz",
+      "expected": {
+        "native": {
+          "frames": 10101,
+          "actual_output_fingerprint": "c506c04399f11536"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/samus/basic-falco-2025-04_Game_20250415T011556.slpz",
+      "expected": {
+        "native": {
+          "frames": 14064,
+          "actual_output_fingerprint": "193930a72c56ef30"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/samus/basic-samus-2025-05_Game_20250518T024905.slpz",
+      "expected": {
+        "native": {
+          "frames": 11410,
+          "actual_output_fingerprint": "83fdd014343e0793"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/samus/diamond-fox-2026-01_Game_20260111T000309.slpz",
+      "expected": {
+        "native": {
+          "frames": 9507,
+          "actual_output_fingerprint": "ba2ce47fd6909356"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/samus/diamond-platinum-3a0b5b8362dab548ac01a813.slpz",
       "expected": {
         "native": {
@@ -2401,6 +2446,15 @@
       }
     },
     {
+      "replay": "replays/validation/samus/medium-fox-2025-10_Game_20251028T235456.slpz",
+      "expected": {
+        "native": {
+          "frames": 14301,
+          "actual_output_fingerprint": "3689f7d2ffc51c6c"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/samus/medium-fox-2025-11_Game_20251128T184658.slpz",
       "expected": {
         "native": {
@@ -2410,11 +2464,74 @@
       }
     },
     {
+      "replay": "replays/validation/samus/medium-fox-2025-12_Game_20251228T233723.slpz",
+      "expected": {
+        "native": {
+          "frames": 12364,
+          "actual_output_fingerprint": "2ed923ae2cec9c56"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/samus/medium-fox-2026-05_Game_20260504T060806.slpz",
+      "expected": {
+        "native": {
+          "frames": 7938,
+          "actual_output_fingerprint": "8b355f62c6728391"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/samus/medium-marth-2025-11_Game_20251110T032456.slpz",
       "expected": {
         "native": {
           "frames": 13986,
           "actual_output_fingerprint": "0699597b97f2f04f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/samus/medium-sheik-2026-03_Game_20260331T013351.slpz",
+      "expected": {
+        "native": {
+          "frames": 14242,
+          "actual_output_fingerprint": "e51679a54e97c1a7"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/samus/medium-sheik-2026-06_Game_20260601T030617.slpz",
+      "expected": {
+        "native": {
+          "frames": 14038,
+          "actual_output_fingerprint": "7af9537180850c09"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/samus/plat-samus-2026-04_Game_20260430T183148.slpz",
+      "expected": {
+        "native": {
+          "frames": 15993,
+          "actual_output_fingerprint": "f55b9d2a56e0f607"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/samus/ranked-marth-2025-09_Game_20250902T190726.slpz",
+      "expected": {
+        "native": {
+          "frames": 14444,
+          "actual_output_fingerprint": "2fbefda8fb8157ea"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/samus/slippi-2025-04_Game_20250411T201258.slpz",
+      "expected": {
+        "native": {
+          "frames": 7942,
+          "actual_output_fingerprint": "fcb338da15554990"
         }
       }
     },

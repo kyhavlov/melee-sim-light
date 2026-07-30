@@ -12,6 +12,9 @@
 #include <stdint.h>
 #ifndef MSL_CORE_WASM
 #include <sys/mman.h>
+#ifdef __GLIBC__
+#include <execinfo.h>
+#endif
 #endif
 #endif
 
@@ -294,7 +297,14 @@ void* msl_memory_alloc(MslMemoryContext* context, size_t size)
                 context->owner, context->sealed, size, context->used,
                 context->capacity, context->allocation_count,
                 context->allocation_capacity);
-abort();
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM) && defined(__GLIBC__)
+        {
+            void* frames[48];
+            int depth = backtrace(frames, 48);
+            backtrace_symbols_fd(frames, depth, 2);
+        }
+#endif
+        abort();
     }
     result = context->arena + aligned_used;
     context->used = aligned_used + size;

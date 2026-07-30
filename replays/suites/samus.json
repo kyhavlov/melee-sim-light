@@ -1,6 +1,6 @@
 {
   "name": "samus",
-  "notes": "Samus validation suite: 12 netplay singles across all six legal stages against Fox, Falco, Marth, Peach, Jigglypuff, and Captain Falcon, 2025-2026 Slippi and mainline captures. Pokemon Stadium entries are frozen-form only (is_frozen_ps). Anonymized ranked captures carry played_on=network; a 2021 capture predating the hitlag stream stayed out.",
+  "notes": "Samus validation suite: 25 netplay singles across all six legal stages against Fox, Falco, Marth, Sheik, Peach, Jigglypuff, and Captain Falcon, 2025-2026 Slippi and mainline captures. Pokemon Stadium entries are frozen-form only, verified by the absence of stadium_transformation events over the full game (recorder must be newer than 3.18.0 -- at 3.18.0 exactly the event stream is silent even on transforming stadium, so such captures are rejected; the game-start is_frozen_ps flag is not trusted). Anonymized ranked captures carry played_on=network. Rejected on input-lane fidelity: a 2021 capture predating the hitlag stream, and four captures re-wrapped to the 3.18 layout with zero-filled raw analog pad lanes (a 2020 local game and three anonymized ranked FoD games whose countdown-phase UCF decisions fork under every era-flag combination).",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -13,6 +13,66 @@
       "stage_id": 8,
       "characters": {
         "1": "Captain Falcon",
+        "2": "Samus"
+      }
+    },
+    {
+      "replay": "replays/validation/samus/auto-fox-2025-06_Game_20250628T063629.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Fox",
+        "2": "Samus"
+      }
+    },
+    {
+      "replay": "replays/validation/samus/auto-fox-2025-08_Game_20250818T180409.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Fox",
+        "2": "Samus"
+      }
+    },
+    {
+      "replay": "replays/validation/samus/basic-falco-2025-04_Game_20250415T011556.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Samus",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/samus/basic-samus-2025-05_Game_20250518T024905.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Fox",
+        "2": "Samus"
+      }
+    },
+    {
+      "replay": "replays/validation/samus/diamond-fox-2026-01_Game_20260111T000309.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
         "2": "Samus"
       }
     },
@@ -128,6 +188,18 @@
       }
     },
     {
+      "replay": "replays/validation/samus/medium-fox-2025-10_Game_20251028T235456.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Samus",
+        "2": "Fox"
+      }
+    },
+    {
       "replay": "replays/validation/samus/medium-fox-2025-11_Game_20251128T184658.slpz",
       "ports": [
         1,
@@ -140,6 +212,30 @@
       }
     },
     {
+      "replay": "replays/validation/samus/medium-fox-2025-12_Game_20251228T233723.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Fox",
+        "2": "Samus"
+      }
+    },
+    {
+      "replay": "replays/validation/samus/medium-fox-2026-05_Game_20260504T060806.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Samus",
+        "2": "Fox"
+      }
+    },
+    {
       "replay": "replays/validation/samus/medium-marth-2025-11_Game_20251110T032456.slpz",
       "ports": [
         1,
@@ -149,6 +245,66 @@
       "characters": {
         "1": "Samus",
         "2": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/samus/medium-sheik-2026-03_Game_20260331T013351.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Samus",
+        "2": "Sheik"
+      }
+    },
+    {
+      "replay": "replays/validation/samus/medium-sheik-2026-06_Game_20260601T030617.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Sheik",
+        "2": "Samus"
+      }
+    },
+    {
+      "replay": "replays/validation/samus/plat-samus-2026-04_Game_20260430T183148.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Samus",
+        "2": "Sheik"
+      }
+    },
+    {
+      "replay": "replays/validation/samus/ranked-marth-2025-09_Game_20250902T190726.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Marth",
+        "2": "Samus"
+      }
+    },
+    {
+      "replay": "replays/validation/samus/slippi-2025-04_Game_20250411T201258.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Samus"
       }
     }
   ]
