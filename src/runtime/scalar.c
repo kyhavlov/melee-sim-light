@@ -66,6 +66,7 @@ enum {
     MSL_CORE_CHAR_FOX = 1,
     MSL_CORE_CHAR_CAPTAIN_FALCON = 2,
     MSL_CORE_CHAR_DONKEY = 3,
+    MSL_CORE_CHAR_GANONDORF = 25,
     MSL_CORE_CHAR_SHEIK = 7,
     MSL_CORE_CHAR_PEACH = 9,
     MSL_CORE_CHAR_POPO = 10,
@@ -268,6 +269,8 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_POPONANA;
     case MSL_CORE_CHAR_DONKEY:
         return CKIND_DONKEY;
+    case MSL_CORE_CHAR_GANONDORF:
+        return CKIND_GANON;
     case MSL_CORE_CHAR_PIKACHU:
         return CKIND_PIKACHU;
     case MSL_CORE_CHAR_JIGGLYPUFF:
@@ -611,6 +614,7 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CORE_CHAR_SAMUS &&
             config->players[i].char_id != MSL_CORE_CHAR_POPO &&
             config->players[i].char_id != MSL_CORE_CHAR_DONKEY &&
+            config->players[i].char_id != MSL_CORE_CHAR_GANONDORF &&
             config->players[i].char_id != MSL_CORE_CHAR_PIKACHU &&
             config->players[i].char_id != MSL_CORE_CHAR_JIGGLYPUFF &&
             config->players[i].char_id != MSL_CORE_CHAR_LUIGI &&
@@ -624,7 +628,8 @@ static int validate_config(MslCoreMatchConfig* config)
                     "char_id=12 Pikachu, char_id=13 Samus, "
                     "char_id=15 Jigglypuff, char_id=17 Luigi, "
                     "char_id=18 Marth, "
-                    "char_id=19 Zelda, char_id=21 Dr. Mario, and char_id=22 Falco only\n");
+                    "char_id=19 Zelda, char_id=21 Dr. Mario, char_id=22 Falco, "
+                    "and char_id=25 Ganondorf only\n");
             return -1;
         }
         if (config->players[i].handicap == 0) {
@@ -676,6 +681,9 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
         (struct UnkCostumeList){ game_data->source.fighter.nana_costumes, 4 };
     game_data->source.fighter.costume_lists[FTKIND_DONKEY] =
         (struct UnkCostumeList){ game_data->source.fighter.donkey_costumes,
+                                 5 };
+    game_data->source.fighter.costume_lists[FTKIND_GANON] =
+        (struct UnkCostumeList){ game_data->source.fighter.ganon_costumes,
                                  5 };
     game_data->source.fighter.costume_lists[FTKIND_PIKACHU] =
         (struct UnkCostumeList){ game_data->source.fighter.pikachu_costumes,
@@ -1361,6 +1369,7 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         MSL_CORE_CHAR_POPO,
         MSL_CORE_CHAR_PIKACHU,
         MSL_CORE_CHAR_DONKEY,
+        MSL_CORE_CHAR_GANONDORF,
     };
     size_t i;
 

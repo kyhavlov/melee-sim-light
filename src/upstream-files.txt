@@ -427,6 +427,7 @@ src/melee/ft/chara/ftGameWatch/ftGw_SpecialLw.h
 src/melee/ft/chara/ftGameWatch/ftGw_SpecialN.h
 src/melee/ft/chara/ftGameWatch/ftGw_SpecialS.h
 src/melee/ft/chara/ftGameWatch/types.h
+src/melee/ft/chara/ftGanon/ftGn_Init.c
 src/melee/ft/chara/ftGanon/ftGn_Init.h
 src/melee/ft/chara/ftGigaKoopa/ftGk_Init.h
 src/melee/ft/chara/ftKirby/forward.h

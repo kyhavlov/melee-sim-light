@@ -931,6 +931,7 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataPopo") == 0 ||
         strcmp(symbol, "ftDataNana") == 0 ||
         strcmp(symbol, "ftDataDonkey") == 0 ||
+        strcmp(symbol, "ftDataGanon") == 0 ||
         strcmp(symbol, "ftDataPikachu") == 0 ||
         strcmp(symbol, "ftDataMario") == 0 ||
         strcmp(symbol, "ftDataDrmario") == 0 ||
@@ -1625,6 +1626,13 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftDonkeyAttributes,
                                           337, MSL_FIGHTER_ARTICLES_NONE);
+    } else if (strcmp(symbol, "ftDataGanon") == 0) {
+        // Ganondorf's ext-attr blob is Captain-shaped: ftGn_Init routes
+        // OnLoad/LoadSpecialAttrs through ftCa_Init_OnLoadForGanon and
+        // ftCa_Init_LoadSpecialAttrs, so translate with the Captain layout.
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftCaptain_DatAttrs,
+                                          318, MSL_FIGHTER_ARTICLES_NONE);
     } else if (strcmp(symbol, "ftDataPikachu") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftPikachuAttributes,

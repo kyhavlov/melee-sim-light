@@ -1235,8 +1235,15 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
             node->track_start = (uint16_t) track_start;
             node->track_count = (uint8_t) track_count;
             node->sample_count = program->sample_count;
-            programs->track_nodes[program->track_map_start + track_start] =
-                node_index;
+            // Only a tracked node owns a track_nodes map slot: request_figa
+            // looks nodes up by their first track index and returns early for
+            // trackless nodes. A trailing zero-track node (first hit by
+            // Ganondorf's animation bank) would otherwise write one entry
+            // past the final program's map region.
+            if (track_count != 0) {
+                programs->track_nodes[program->track_map_start + track_start] =
+                    node_index;
+            }
             node->direct = track_count != 0;
             for (track = 0; track < track_count; ++track) {
                 uint8_t type =

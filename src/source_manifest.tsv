@@ -328,6 +328,7 @@ src/melee/ft/chara/ftDonkey/ftDk_HeavyJump.c	src/melee/ft/chara/ftDonkey/ftDk_He
 src/melee/ft/chara/ftDonkey/ftDk_HeavyFall.c	src/melee/ft/chara/ftDonkey/ftDk_HeavyFall.c	Matching	donkey-source-packet	compiled canonical cargo-hold fall owner
 src/melee/ft/chara/ftDonkey/ftDk_HeavyLanding.c	src/melee/ft/chara/ftDonkey/ftDk_HeavyLanding.c	Matching	donkey-source-packet	compiled canonical cargo-hold landing owner
 src/melee/ft/chara/ftDonkey/ftDk_MS_345_0.c	src/melee/ft/chara/ftDonkey/ftDk_MS_345_0.c	Matching	donkey-source-packet	compiled canonical cargo-hold turn animation helper
+src/melee/ft/chara/ftGanon/ftGn_Init.c	src/melee/ft/chara/ftGanon/ftGn_Init.c	Matching	ganon-source-packet	compiled canonical Ganondorf lifecycle, state registry, and data-owner callbacks (specials owned by ftCaptain)
 src/melee/it/items/itpeachturnip.c	src/melee/it/items/itpeachturnip.c	not-listed	peach-source-packet	compiled canonical Peach turnip and rare-pull constructor owner
 src/melee/it/items/itsword.c	src/melee/it/items/itsword.c	not-listed	peach-common-item-packet	compiled canonical Beam Sword owner reached by Peach item pull
 src/sysdolphin/baselib/aobj.c	src/sysdolphin/baselib/aobj.c	Matching	0001-hosted-c-compatibility.patch	compiled directly from canonical source by Makefile; adapted by historical patch 0001-hosted-c-compatibility.patch

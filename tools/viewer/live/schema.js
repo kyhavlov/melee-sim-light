@@ -10,6 +10,7 @@ export const CHAR_MARIO = 0;
 export const CHAR_DRMARIO = 21;
 export const CHAR_ICE_CLIMBERS = 10;
 export const CHAR_DONKEY_KONG = 3;
+export const CHAR_GANONDORF = 25;
 export const CHAR_PIKACHU = 12;
 export const CHAR_SAMUS = 13;
 export const CHAR_MARTH = 18;
@@ -43,6 +44,7 @@ export const SUPPORTED_CHARACTERS = Object.freeze([
   Object.freeze({ id: CHAR_DRMARIO, label: "Dr. Mario" }),
   Object.freeze({ id: CHAR_ICE_CLIMBERS, label: "Ice Climbers" }),
   Object.freeze({ id: CHAR_DONKEY_KONG, label: "Donkey Kong" }),
+  Object.freeze({ id: CHAR_GANONDORF, label: "Ganondorf" }),
   Object.freeze({ id: CHAR_PIKACHU, label: "Pikachu" }),
   Object.freeze({ id: CHAR_SAMUS, label: "Samus" }),
   Object.freeze({ id: CHAR_MARTH, label: "Marth" }),

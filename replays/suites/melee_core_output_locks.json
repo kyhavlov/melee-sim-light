@@ -862,6 +862,276 @@
       }
     },
     {
+      "replay": "replays/validation/ganon/2025-03_Game_20250309T055449.slpz",
+      "expected": {
+        "native": {
+          "frames": 6202,
+          "actual_output_fingerprint": "c9cb0eb79ab582c2"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/24048_Game_20251122T004238.slpz",
+      "expected": {
+        "native": {
+          "frames": 13809,
+          "actual_output_fingerprint": "93a700fb961db84e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/24502_Game_20251220T231033.slpz",
+      "expected": {
+        "native": {
+          "frames": 9867,
+          "actual_output_fingerprint": "7d203403ed1d233d"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/24861_Game_20250501T152400.slpz",
+      "expected": {
+        "native": {
+          "frames": 10934,
+          "actual_output_fingerprint": "dadee302fbe53695"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/24891_Game_20250501T202120.slpz",
+      "expected": {
+        "native": {
+          "frames": 11140,
+          "actual_output_fingerprint": "9394a6dce2a213ba"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/25785_Game_20250616T092626.slpz",
+      "expected": {
+        "native": {
+          "frames": 5349,
+          "actual_output_fingerprint": "6883706bf7866e9f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/25827_Game_20250701T195419.slpz",
+      "expected": {
+        "native": {
+          "frames": 10877,
+          "actual_output_fingerprint": "0c5975c2faaeba03"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/3173_Game_20250411T181648.slpz",
+      "expected": {
+        "native": {
+          "frames": 13234,
+          "actual_output_fingerprint": "56e09c1220466c80"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/44253_Game_20250715T211256.slpz",
+      "expected": {
+        "native": {
+          "frames": 13329,
+          "actual_output_fingerprint": "31570f3c058f6f42"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/53413_Game_20250309T202842.slpz",
+      "expected": {
+        "native": {
+          "frames": 7596,
+          "actual_output_fingerprint": "8957fd209ad5f69b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/55606_Game_20251225T215433.slpz",
+      "expected": {
+        "native": {
+          "frames": 12746,
+          "actual_output_fingerprint": "ed7aad71fbff0661"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/55939_Game_20250802T005712.slpz",
+      "expected": {
+        "native": {
+          "frames": 11224,
+          "actual_output_fingerprint": "6fbfea42a6082832"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/auto-falco-2025-06_Game_20250617T025647.slpz",
+      "expected": {
+        "native": {
+          "frames": 11271,
+          "actual_output_fingerprint": "25d6a67956a02e0b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/auto-falco-2026-01_Game_20260112T035248.slpz",
+      "expected": {
+        "native": {
+          "frames": 5773,
+          "actual_output_fingerprint": "c47d75b90222b7f6"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/auto-fox-2025-05_Game_20250518T121042.slpz",
+      "expected": {
+        "native": {
+          "frames": 5991,
+          "actual_output_fingerprint": "f0a06fa212f7df1e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/auto-ganondorf-2025-09_Game_20250920T031504.slpz",
+      "expected": {
+        "native": {
+          "frames": 12452,
+          "actual_output_fingerprint": "6fb8eaf38df88292"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/auto-marth-2025-07_Game_20250712T212418.slpz",
+      "expected": {
+        "native": {
+          "frames": 8093,
+          "actual_output_fingerprint": "b4c4668eae639e4b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/basic-jigglypuff-2025-04_Game_20250426T161822.slpz",
+      "expected": {
+        "native": {
+          "frames": 7565,
+          "actual_output_fingerprint": "85fefed1de480b76"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/fox-d18-imitation-v3-2025-04_Game_20250419T163521.slpz",
+      "expected": {
+        "native": {
+          "frames": 11548,
+          "actual_output_fingerprint": "4df241238ef0e440"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/gm-falco-2026-05_Game_20260520T030317.slpz",
+      "expected": {
+        "native": {
+          "frames": 7048,
+          "actual_output_fingerprint": "fef2cb341e76bbf6"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/gm-fox-2025-09_Game_20250922T095115.slpz",
+      "expected": {
+        "native": {
+          "frames": 12581,
+          "actual_output_fingerprint": "95431ed6e95fcc90"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/gm-marth-2026-04_Game_20260427T152341.slpz",
+      "expected": {
+        "native": {
+          "frames": 9009,
+          "actual_output_fingerprint": "b77004da120710bd"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/gm-sheik-2026-03_Game_20260308T033806.slpz",
+      "expected": {
+        "native": {
+          "frames": 9630,
+          "actual_output_fingerprint": "36c9e5845bfc56b7"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/gold-fox-2026-06_Game_20260605T204805.slpz",
+      "expected": {
+        "native": {
+          "frames": 11054,
+          "actual_output_fingerprint": "f44022f275011ab3"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/medium-fox-2026-01_Game_20260122T160100.slpz",
+      "expected": {
+        "native": {
+          "frames": 7734,
+          "actual_output_fingerprint": "00b16ddd2d39acd3"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/medium-jigglypuff-2026-05_Game_20260511T025550.slpz",
+      "expected": {
+        "native": {
+          "frames": 9934,
+          "actual_output_fingerprint": "cf9396b2abf8355a"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/medium-peach-2026-01_Game_20260114T041806.slpz",
+      "expected": {
+        "native": {
+          "frames": 8214,
+          "actual_output_fingerprint": "1bfa237066ea0c88"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/medium-sheik-2026-02_Game_20260218T175200.slpz",
+      "expected": {
+        "native": {
+          "frames": 10765,
+          "actual_output_fingerprint": "3c7fd7ec3069aed0"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/slippi-2025-11_Game_20251123T172903.slpz",
+      "expected": {
+        "native": {
+          "frames": 6670,
+          "actual_output_fingerprint": "cf8b9d77045fe65e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/temp-7z_Game_20250415T231237.slpz",
+      "expected": {
+        "native": {
+          "frames": 13200,
+          "actual_output_fingerprint": "9feaebd31d3faca5"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/icies/auto-falco-2025-10_Game_20251013T073200.slpz",
       "expected": {
         "native": {

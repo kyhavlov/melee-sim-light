@@ -30,6 +30,7 @@ CHARACTERS = {
     'captain': (2, 'Ca', 'ftDataCaptain'),
     'seak': (7, 'Sk', 'ftDataSeak'),
     'donkey': (3, 'Dk', 'ftDataDonkey'),
+    'ganon': (25, 'Gn', 'ftDataGanon'),
     'peach': (9, 'Pe', 'ftDataPeach'),
     'popo': (10, 'Pp', 'ftDataPopo'),
     'nana': (11, 'Nn', 'ftDataNana'),
@@ -47,6 +48,7 @@ CHARACTERS = {
 SUBACTION_COUNTS = {
     0: 303, 1: 327, 2: 318, 3: 337, 7: 317, 9: 318, 10: 321, 11: 321,
     12: 320, 13: 313, 15: 327, 17: 312, 18: 327, 19: 311, 21: 303, 22: 327,
+    25: 318,
 }
 
 # Words consumed per fighter subaction event with opcode >= 10, indexed by

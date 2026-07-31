@@ -19,6 +19,7 @@
 #include "ftCommon/ftCo_Throw.h"
 #include "lb/lb_00B0.h"
 
+#include <MetroTRK/intrinsics.h>
 #include <baselib/gobj.h>
 #include <melee/cm/camera.h>
 #include <melee/ef/efsync.h>
@@ -89,8 +90,11 @@ void ftCo_800DE508(Fighter_GObj* gobj)
 
     lb_8000B1CC(fp->parts[ftParts_GetBoneIndex(fp, FtPart_XRotN)].joint, NULL,
                 &pos);
-    pos.x = (fp->facing_dir * (fp->x1A70.z * fp->x34_scale.y)) + pos.x;
-    pos.y += fp->x1A70.y * fp->x34_scale.y;
+    // GALE01 0x800DE558/0x800DE56C fuse the hold-offset products onto the
+    // bone position (fmadds f1, f3, f2, f1) for both lanes, matching the
+    // ftCo_800DB464 capture-follow shape.
+    pos.x = __fmadds(fp->facing_dir, fp->x1A70.z * fp->x34_scale.y, pos.x);
+    pos.y = __fmadds(fp->x1A70.y, fp->x34_scale.y, pos.y);
     pos.z = 0.0f;
     fp->cur_pos = pos;
 }

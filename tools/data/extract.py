@@ -43,6 +43,7 @@ PLAYER_PREFIXES = (
     "PlNn",
     "PlPk",
     "PlDk",
+    "PlGn",
 )
 REQUIRED_FILES = {
     "PlCo.dat",
@@ -62,6 +63,7 @@ REQUIRED_FILES = {
     "EfIcData.dat",
     "EfPkData.dat",
     "EfDkData.dat",
+    "EfGnData.dat",
     "GrNLa.dat",
     "GrNBa.dat",
     "GrIz.dat",

@@ -8,6 +8,7 @@ class Character(IntEnum):
     FOX = 1
     FALCON = 2
     DONKEY_KONG = 3
+    GANONDORF = 25
     SHEIK = 7
     PEACH = 9
     ICE_CLIMBERS = 10

@@ -361,6 +361,148 @@
       }
     },
     {
+      "replay": "replays/validation/ganon/2025-03_Game_20250309T055449.slpz",
+      "id": "transform-swap-stale-lcancel-byte",
+      "owner": "Slippi recorder LCancelStatus byte across the Sheik-to-Zelda swap",
+      "rationale": "The single residual row is l_cancel=80 on Zelda's first post-transform frame (5974, Sheik SpecialLw 361 -> Zelda 356): Slippi stores L-cancel status in the repurposed PlayerData+0x25FF byte, and the freshly activated Zelda sub-fighter's block carries stale retail memory for exactly one frame until the 8006c324 reset hook first runs. The hosted per-fighter lcancel model starts at 0, gameplay lanes are untouched, and native and PPC agree bit-for-bit on the full game.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Recording/GetLCancelStatus/GetLCancelStatus.asm",
+        "refs/slippi-ssbm-asm/Recording/GetLCancelStatus/ResetLCancelStatus.asm",
+        "src/platform/slippi.c::msl_slippi_lcancel_get"
+      ],
+      "expected": {
+        "native": {
+          "frames": 6202,
+          "matched_frames": 6201,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 6096,
+          "strict_suffix_frames": 105,
+          "first_mismatch_frame": 5974,
+          "last_mismatch_frame": 5974,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "831088f5ef475010",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "d0a90003328866c2bba85878a57f06b2152814083d805d080e031e1edb5f0512"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/24891_Game_20250501T202120.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "FoD moving-platform floor-line pick at the mid-frame throw-release resolve",
+      "rationale": "The residual is one bounded 35-row P1 pos_y episode: Ganondorf down-throws Marth over Fountain's descending right platform (recorded height 1.19994 at frame 10479), the ftCo_800DDDE4 release resolve places the victim on a floor line 0.075 below retail's (our resolved y 2.0251 vs retail 2.1001 back-computed from the recording; the descending platform line and the curved stage flank are within 0.075 at that x), and the constant offset rides the DamageFlyTop ballistic arc until the landing snap at 10514 heals it. pos_x is bit-exact through the whole episode, PPC and native agree bit-for-bit, and every other throw in the suite resolves exactly, so the seed is the same mp floor-line pick documented on the dk auto-dk-2025-04 entry (retail engine-dump playback reproduced the recording there).",
+      "sources": [
+        "src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4",
+        "src/melee/gr/grizumi.c::msl_grizumi_apply_replay_platform_height",
+        "refs/melee/src/melee/mp/mpcoll.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11140,
+          "matched_frames": 11105,
+          "mismatched_frames": 35,
+          "exact_prefix_frames": 10601,
+          "strict_suffix_frames": 504,
+          "first_mismatch_frame": 10479,
+          "last_mismatch_frame": 10513,
+          "mismatch_count": 35,
+          "mismatch_fingerprint": "c48695f6383f32d2",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "9883f88f0248f18b9087951c7acbdf9443e83782f956effe1fe32f74165efbbc"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/25827_Game_20250701T195419.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "offstage wall-hug clamp pos_x re-derivation",
+      "rationale": "The residual is a single self-healing 1-ULP pos_x row while Ganondorf pushes into Battlefield's side wall at x=72.843 (frame 3816); the wall-hug clamp re-derives pos_x from the wall line every frame and the known open X-at-Y interpolation seed flips the last bit. PPC and native agree bit-for-bit; same family as the dk 22123/9560 stage-edge entries.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E398"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10877,
+          "matched_frames": 10876,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 3938,
+          "strict_suffix_frames": 6938,
+          "first_mismatch_frame": 3816,
+          "last_mismatch_frame": 3816,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "ede99a3c6221949c",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "e7f355b4cf1e82dc1d5462e364b3fd8394103ffcde7498f87812a8aba8bd4df1"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/medium-fox-2026-01_Game_20260122T160100.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "offstage wall-hug clamp pos_x re-derivation",
+      "rationale": "The residual is a bounded self-healing 4-row 1-ULP pos_x episode while Ganondorf hugs Yoshi's Story's side wall at x=57.265 (frames 3819-3822); the wall-hug clamp re-derives pos_x from the wall line every frame and the known open X-at-Y interpolation seed flips the last bit. PPC and native agree bit-for-bit; same family as the dk 22123/9560 stage-edge entries.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E398"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7734,
+          "matched_frames": 7730,
+          "mismatched_frames": 4,
+          "exact_prefix_frames": 3941,
+          "strict_suffix_frames": 3789,
+          "first_mismatch_frame": 3819,
+          "last_mismatch_frame": 3822,
+          "mismatch_count": 4,
+          "mismatch_fingerprint": "65f7068c8d945693",
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "3bef66b5e1cb4c85225cf746be9169d1d2c9393ef6af8e9e2e180d3e5d0c6e12"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/ganon/medium-sheik-2026-02_Game_20260218T175200.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "offstage wall-hug clamp pos_x re-derivation",
+      "rationale": "The residual is a single self-healing 1-ULP pos_x row while Ganondorf hugs Yoshi's Story's side wall at x=57.331 (frame 5451); the wall-hug clamp re-derives pos_x from the wall line every frame and the known open X-at-Y interpolation seed flips the last bit. PPC and native agree bit-for-bit; same family as the dk 22123/9560 stage-edge entries.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E398"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10765,
+          "matched_frames": 10764,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 5573,
+          "strict_suffix_frames": 5191,
+          "first_mismatch_frame": 5451,
+          "last_mismatch_frame": 5451,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "6bd017b67de8fe04",
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "2a089249884a7050c3712c87e2773cfb0ddf9d67c9c1fa0eb28355a4021d9c24"
+        },
+        "ppc": "native"
+      }
+    },
+    {
       "replay": "replays/validation/icies/auto-falco-2025-10_Game_20251013T073200.slpz",
       "id": "unrecorded-item-pool-residue",
       "owner": "Slippi SendItemInfo raw union bytes over Ice Climbers article pointers and pool residue",

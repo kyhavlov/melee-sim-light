@@ -41,7 +41,7 @@ def test_melee_core_aggregate_is_unique_and_composed_from_focused_manifests() ->
     paths = [entry.replay for entry in aggregate.replays]
     manifests = suite_manifest_paths("replays/suites/melee_core_aggregate.json")
 
-    assert len(paths) == 336
+    assert len(paths) == 366
     assert len(paths) == len(set(paths))
     assert {path.name for path in manifests} == {
         "melee_core_aggregate.json",
@@ -55,4 +55,5 @@ def test_melee_core_aggregate_is_unique_and_composed_from_focused_manifests() ->
         "icies.json",
         "pikachu.json",
         "dk.json",
+        "ganon.json",
     }

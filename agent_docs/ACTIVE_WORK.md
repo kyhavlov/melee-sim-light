@@ -1,6 +1,99 @@
-# Active structural packet — Donkey Kong
+# Active structural packet — Ganondorf
 
 ## Objective
+
+Add Ganondorf (internal kind FTKIND_GANON 25, public/CSS char id 25) to the supported domain.
+Ganondorf is the Captain Falcon semi-clone: every special is owned by the already-ported
+`ftCa_Special*` TUs (their `FTKIND_GANON` branches select the Ganon gfx/motion variants), and
+the only character TU is the Matching `ftGn_Init.c` (motion-state table delegating to ftCa
+handlers, strings, item/knockback callbacks). Registry rows, PlGn extraction (five costumes
+Nr/Re/Bu/Gr/La + PlGnAJ + PlGnDViWaitAJ), native DAT translation reusing the Captain ext-attr
+layout (`ftCa_Init_OnLoadForGanon`/`ftCa_Init_LoadSpecialAttrs` are the shared owners; anim
+count 318; `MSL_FIGHTER_ARTICLES_NONE`), derived part-admission row (54 live / 30 cold of 84),
+public API/viewer/validation admission, and a 30-replay suite wired into the aggregate.
+
+## Final boundary
+
+- **Owner (character):** the imported `ftGn_Init.c`, byte-identical to the pinned decomp. No
+  OnLoad ext-attr mutation (ftCa_Init_OnLoadForGanon only pushes attrs — no DK-style store
+  guard needed); no motion/fighter-var pointers (fv/mv `.gn` alias the ftCaptain views).
+- **Effects:** EfGnData.dat owns efAsync bank 19 with a real particle bank, but the hosted
+  loaders do NOT load it — the Falcon precedent: every Ganon-reachable efSync id
+  (0x50B..0x50F -> efLib model creates on bank-19 model ids 0x4A38..0x4A3D) is model-backed
+  only, so no generator RNG projection consumes bank-19 ids (EfCaData bank 4 is likewise
+  unloaded for Falcon). `MSL_CORE_EFFECT_BANK_CAPACITY` stays 19.
+- **Data:** `PlGn*` + `EfGnData.dat`; manifest 146 -> 155 files; no capacity bumps needed for
+  the fifteenth character (arena and archive-cache headroom from the DK packet hold).
+- **Exactness fix shipped:** the ThrownLw follow `ftCo_800DE508` now ports its MWCC fusions
+  (GALE01 0x800DE558/0x800DE56C fmadds both lanes — the same shape as the fused
+  ftCo_800DB464 capture-follow twin); identity at current inputs (unit scale), aggregate
+  byte-stable.
+- **Heap-overflow fix shipped (fighter_pose.c pose-program map):** a FigaTree node with ZERO
+  tracks wrote its `track_nodes` map entry at the NEXT node's first-track position; a trailing
+  zero-track node in the final program wrote one uint16 past the calloc'd map. Ganondorf's
+  PlGnAJ bank is the first with such a tree, so every process that ran the 15-character
+  game-data preload corrupted its heap (symptom: `malloc(): invalid next size` aborts in
+  later in-process work — pytest EnvBatch tests after an in-process validate_one). The map is
+  only ever read at tracked nodes' first-track indices (request_figa early-returns for
+  trackless nodes), so skipping the write for zero-track nodes is read-identical: native
+  aggregate byte-stable after the fix, ASan-clean end-to-end (debug recipe: ASan-build
+  libmelee_core via `make python-library PYTHON_BUILD=/tmp/asan_build NATIVE_OBJ_DIR=... 
+  CFLAGS="-O1 -g -fsanitize=address ..."`, stub the ~34 gc-section-dead undefined symbols,
+  LD_PRELOAD libasan into python).
+
+## Suite state (container authoritative): aggregate 366 = 285 pass / 81 classified / 0 fail
+
+30 replays (all six stages: 5 FD / 5 BF / 5 FoD / 5 YS / 5 DL / 5 event-verified frozen PS;
+opponents Captain Falcon, Falco, Fox, Jigglypuff, Marth, Peach, Samus, Sheik; Slippi netplay +
+anonymized ranked + mainline; zero re-wraps, raw pad lanes populated in all 30 zip files):
+**container native 25 pass / 5 classified, PPC identical fingerprints on all five.**
+
+**FROZEN-PS POLICY CORRECTED (user-directed):** the Stadium Transformations event (0x41) was
+added at Slippi 3.18.0 (refs/slippi-wiki/SPEC.md) and fires on every transformation change, so
+zero `stadium_transformation` events over a full game proves frozen for ANY version >= 3.18.0.
+The prior "3.18 recorders are silent" note was a wrong inference from v3.18.0 controls whose
+non-frozen status came from the start-block `is_frozen_ps` flag — which is only trustworthy at
+3.19.0+. Empirical confirmation: the three v3.18.0 zero-event Stadium games in this zip
+validate fully bit-exact over 11-13k frames each against the frozen-only hosted Stadium model
+(a transforming game would diverge massively within the first ~75-second cycle). The five
+classified families:
+
+- `2025-03` @5974: single l_cancel row on Zelda's first post-transform frame (new mechanism id
+  `transform-swap-stale-lcancel-byte`): Slippi keeps L-cancel status in the repurposed
+  PlayerData+0x25FF byte and Zelda's freshly-swapped block carries stale retail memory (0x50)
+  for one frame until the 8006c324 reset hook runs; hosted per-fighter lcancel state starts 0.
+  Export-only lane, unmodelable without emulating uninitialized retail memory.
+- `24891` @10479: 35-row P1 pos_y episode — Ganondorf down-throws Marth over FoD's descending
+  right platform; the `ftCo_800DDDE4` mid-frame release resolve picks a floor line 0.075 below
+  retail's (our resolved y 2.0251 vs retail 2.1001 back-computed; the recorded platform height
+  1.19994 gives our line at +0.825, and the descending platform line vs the curved stage flank
+  sit within 0.075 at that x). pos_x bit-exact throughout; heals at the landing snap. Same mp
+  floor-line-pick seed as the dk `auto-dk-2025-04` entry (retail arbitration there showed
+  retail == recording). Debug recipe that isolated it: temp trace in ftCo_800DE508 (follow
+  inputs) + ftCo_800DDDE4 (release vec / resolve output / live platform heights via a temp
+  slippi.c accessor).
+- `25827` @3816 (BF x=72.84), `medium-fox` @3819..3822 (YS x=57.27), `medium-sheik` @5451
+  (YS x=57.33): the documented open wall-hug clamp 1-ULP pos_x re-derivation family, all
+  single-episode self-healing, identical on both backends.
+
+## Follow-ups
+
+- The dk suite rejected three v3.18.0 Stadium candidates under the old (wrong) "3.18 recorders
+  are silent" policy; under the corrected policy they are admissible if their
+  stadium_transformation streams are empty (verify with the frozen-model validation
+  arbitration). Same check applies to any earlier suite's v3.18.0 PS rejections.
+
+## Log
+
+- 2026-07-30 — `open` (this packet: Ganondorf source validation packet; all 30 zip files
+  admitted after the frozen-PS policy correction and wired straight into the aggregate with
+  locks + five classifications; aggregate 366 = 285 pass / 81 classified / 0 fail native;
+  PPC ganon suite identical fingerprints; fighter_pose track_nodes heap overflow found by the
+  15th character's preload and fixed).
+
+# Previous packet — Donkey Kong
+
+## Objective (closed)
 
 Add Donkey Kong (internal kind FTKIND_DONKEY 3) to the supported domain: the thirteen Matching
 chara TUs (`ftDk_Init/SpecialN/SpecialS/SpecialHi/SpecialLw`, the seven `ftDk_Heavy*` cargo-hold

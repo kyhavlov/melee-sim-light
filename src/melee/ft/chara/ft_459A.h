@@ -29,6 +29,7 @@ UnkCostumeStruct* msl_core_fighter_costumes(FighterKind kind);
 #define lbl_804599F0 (*msl_core_fighter_costumes(FTKIND_MARIO))
 #define ft_8045A3A8 (*msl_core_fighter_costumes(FTKIND_DRMARIO))
 #define ft_8045A420 (*msl_core_fighter_costumes(FTKIND_FALCO))
+#define ft_8045A540 (*msl_core_fighter_costumes(FTKIND_GANON))
 #else
 /* 4599F0 */ extern UnkCostumeStruct lbl_804599F0;
 /* 459A98 */ extern UnkCostumeStruct ft_80459A98;
@@ -52,10 +53,10 @@ UnkCostumeStruct* msl_core_fighter_costumes(FighterKind kind);
 /* 45A330 */ extern UnkCostumeStruct ft_8045A330;
 /* 45A3A8 */ extern UnkCostumeStruct ft_8045A3A8;
 /* 45A420 */ extern UnkCostumeStruct ft_8045A420;
+/* 45A540 */ extern UnkCostumeStruct ft_8045A540;
 #endif
 /* 45A480 */ extern UnkCostumeStruct ft_8045A480;
 /* 45A4E0 */ extern UnkCostumeStruct ft_8045A4E0;
-/* 45A540 */ extern UnkCostumeStruct ft_8045A540;
 /* 45A5B8 */ extern UnkCostumeStruct ft_8045A5B8;
 /* 45A630 */ extern UnkCostumeStruct ft_8045A630;
 /* 45A648 */ extern UnkCostumeStruct ft_8045A648;
