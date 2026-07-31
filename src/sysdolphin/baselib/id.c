@@ -6,6 +6,16 @@
 #ifdef MSL_CORE_HOSTED
 #include <runtime/context.h>
 #endif
+#ifdef MSL_CORE_NATIVE
+#include <platform/memory.h>
+#include <platform/native_dat.h>
+
+#ifndef MSL_CORE_WASM
+#include <dlfcn.h>
+#endif
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 
 HSD_ObjAllocData hsd_iddata;
 
@@ -19,6 +29,97 @@ HSD_ObjAllocData* HSD_IDGetAllocData(void)
 {
     return &hsd_iddata;
 }
+
+#ifdef MSL_CORE_NATIVE
+enum {
+    MSL_HSD_ID_OFFSET_MASK = 0x3FFFFFFF,
+    MSL_HSD_ID_REGION_MASK = 0xC0000000,
+    MSL_HSD_ID_NATIVE_DAT = 0x40000000,
+    MSL_HSD_ID_MATCH = 0x80000000,
+    MSL_HSD_ID_IMAGE = 0xC0000000,
+};
+
+static const uint8_t hsd_id_image_anchor;
+
+u32 msl_hsd_id_from_pointer(const void* pointer)
+{
+#ifndef MSL_CORE_WASM
+    Dl_info image_info;
+    Dl_info owner_info;
+#endif
+    uintptr_t begin;
+    uintptr_t offset;
+    uintptr_t value = (uintptr_t) pointer;
+    if (pointer == NULL) {
+        return 0;
+    }
+    if (msl_core_context_native_dat != NULL &&
+        msl_core_context_native_dat->arena != NULL)
+    {
+        begin = (uintptr_t) msl_core_context_native_dat->arena;
+        if (value >= begin &&
+            value - begin < msl_core_context_native_dat->arena_used)
+        {
+            if (value - begin > MSL_HSD_ID_OFFSET_MASK) {
+                fprintf(stderr, "native DAT HSD id exceeds its tagged range\n");
+                abort();
+            }
+            return MSL_HSD_ID_NATIVE_DAT | (u32) (value - begin);
+        }
+    }
+    if (msl_core_context_match != NULL &&
+        msl_core_context_memory != NULL &&
+        msl_core_context_memory->arena != NULL)
+    {
+        begin = (uintptr_t) msl_core_context_memory->arena;
+        if (value >= begin && value - begin < msl_core_context_memory->used) {
+            if (value - begin > MSL_HSD_ID_OFFSET_MASK) {
+                fprintf(stderr, "Match HSD id exceeds its tagged range\n");
+                abort();
+            }
+            return MSL_HSD_ID_MATCH | (u32) (value - begin);
+        }
+    }
+#ifdef MSL_CORE_WASM
+    // Wasm pointers are deterministic linear-memory guest addresses. Static
+    // descriptors therefore already have a stable image-relative currency.
+    if ((uintptr_t) pointer <= MSL_HSD_ID_OFFSET_MASK) {
+        return MSL_HSD_ID_IMAGE | (u32) (uintptr_t) pointer;
+    }
+#else
+    if (dladdr(&hsd_id_image_anchor, &owner_info) != 0 &&
+        dladdr(pointer, &image_info) != 0 && owner_info.dli_fbase != NULL &&
+        image_info.dli_fbase == owner_info.dli_fbase)
+    {
+        offset = value - (uintptr_t) image_info.dli_fbase;
+        if (offset > MSL_HSD_ID_OFFSET_MASK) {
+            fprintf(stderr, "HSD image id exceeds its tagged range\n");
+            abort();
+        }
+        return MSL_HSD_ID_IMAGE | (u32) offset;
+    }
+#endif
+    fprintf(stderr, "HSD pointer id has no bound arena owner\n");
+    abort();
+}
+
+void* msl_hsd_native_dat_pointer_from_id(u32 id)
+{
+    u32 offset = id & MSL_HSD_ID_OFFSET_MASK;
+    if (id == 0) {
+        return NULL;
+    }
+    if ((id & MSL_HSD_ID_REGION_MASK) != MSL_HSD_ID_NATIVE_DAT ||
+        msl_core_context_native_dat == NULL ||
+        msl_core_context_native_dat->arena == NULL ||
+        offset >= msl_core_context_native_dat->arena_used)
+    {
+        fprintf(stderr, "invalid native DAT HSD pointer id %08x\n", id);
+        abort();
+    }
+    return msl_core_context_native_dat->arena + offset;
+}
+#endif
 
 void HSD_IDInitAllocData(void)
 {

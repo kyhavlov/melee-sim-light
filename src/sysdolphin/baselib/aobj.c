@@ -219,10 +219,10 @@ HSD_AObj* HSD_AObjLoadDesc(HSD_AObjDesc* aobjdesc)
                 ref_INC(hsd_obj);
             } else {
 #ifdef MSL_CORE_NATIVE
-                // obj_id carries the truncated low 32 bits of the joint's
-                // native DAT arena address (its retail-width id).
+                // Hosted obj_id carries the source-width HSD identity token
+                // for this immutable native DAT joint.
                 phi_r30 = (HSD_Obj*) HSD_JObjLoadJoint(
-                    msl_native_dat_from_low32(aobjdesc->obj_id));
+                    msl_hsd_native_dat_pointer_from_id(aobjdesc->obj_id));
 #else
                 phi_r30 =
                     (HSD_Obj*) HSD_JObjLoadJoint((void*) aobjdesc->obj_id);

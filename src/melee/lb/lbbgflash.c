@@ -1003,7 +1003,8 @@ void lbBgFlash_80021A18(int arg0)
             lbl_804D63D8 = 1.0f;
             *user_data = (u8) arg0;
             lbArchive_LoadSymbols("LbBf.dat", &lbl_804D63DC,
-                                  "lbBgFlashColAnimData", NULL);
+                                  "lbBgFlashColAnimData",
+                                  MSL_LBARCHIVE_END);
             lbBgFlash_800208EC(6);
             fn_80021C1C();
             HSD_GObj_SetupProc(gobj, (HSD_GObjEvent) fn_80021B04, 1);

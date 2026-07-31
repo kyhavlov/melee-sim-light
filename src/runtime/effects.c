@@ -108,7 +108,7 @@ static void msl_effect_load_bank(MslCoreEffectData* data, int bank,
     u16 version;
 
     effect_bank->archive =
-        lbArchive_80016DBC(filename, &table, symbol, NULL);
+        lbArchive_80016DBC(filename, &table, symbol, MSL_LBARCHIVE_END);
     if (table == NULL || table[0] == NULL) {
         fprintf(stderr, "%s is missing %s command data\n", filename, symbol);
         abort();

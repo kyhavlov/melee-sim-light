@@ -803,9 +803,19 @@ HSD_JObj* Ground_801C13D0(s32 arg0, s32 depth)
 static HSD_JObj* get_jobj_inline(float phi_f0)
 {
     HSD_JObj* jobj;
+#ifdef MSL_CORE_NATIVE
+    Vec3 scale = { phi_f0, phi_f0, phi_f0 };
+    // The retail stack copy gives repeated loads one temporary pointer key.
+    // Hosted HSD ids must survive copy/save/restore, so use the immutable
+    // source descriptor's image-relative identity and publish the same scale
+    // on the newly loaded object before it can be consumed.
+    jobj = HSD_JObjLoadJoint((HSD_Joint*) &Ground_803B7E0C);
+    HSD_JObjSetScale(jobj, &scale);
+#else
     HSD_Joint sp14 = Ground_803B7E0C;
     sp14.scale.x = sp14.scale.y = sp14.scale.z = phi_f0;
     jobj = HSD_JObjLoadJoint(&sp14);
+#endif
     if (jobj == NULL) {
         OSReport("%s:%d: couldn t get jobj\n", __FILE__, 0x4C4);
         while (1) {

@@ -41,10 +41,10 @@ ifeq ($(UNAME_S),Darwin)
 CC := $(ROOT)/tools/build/ppc32_cc.sh
 QEMU := $(ROOT)/tools/build/qemu_ppc.sh
 TIMEOUT := $(ROOT)/tools/build/portable_timeout.sh
-# The runtime builds for the host architecture by default. Truncated (u32)
-# source addresses decode by offset from their owning arena
-# (msl_memory_from_low32), so no sub-4 GiB mappings are needed and arm64
-# macOS' 4 GiB __PAGEZERO floor is irrelevant. Override
+# The runtime builds for the host architecture by default. Source-width file
+# addresses and HSD ids are deterministic arena-offset tokens, so no sub-4 GiB
+# mappings are needed and arm64 macOS' 4 GiB __PAGEZERO floor is irrelevant.
+# Override
 # HOST_TARGET_ARCH=x86_64 on Apple Silicon to build the Rosetta 2 profile
 # that matches the validated linux/amd64 FP gates.
 HOST_ARCH_FLAGS := -arch $(HOST_TARGET_ARCH)
@@ -278,7 +278,7 @@ CFLAGS := \
 # diagnostics are otherwise suppressed. Wasm clang requires the same set.
 NATIVE_CFLAGS = $(CFLAGS) $(HOST_ARCH_FLAGS) -fno-pie \
 	-Wno-implicit-function-declaration -Wno-int-conversion \
-	-Wno-incompatible-pointer-types -Wno-return-mismatch
+	-Wno-incompatible-pointer-types
 NATIVE_LINK_FLAGS ?=
 # Native release uses a strict O1 source profile by default. The audited lists
 # below preserve lower exactness profiles or admit stronger measured owners.
@@ -286,7 +286,7 @@ NATIVE_RELEASE_CFLAGS := $(CFLAGS) -O1 -fno-pie -fomit-frame-pointer \
 	-fcf-protection=none -fno-asynchronous-unwind-tables -fno-unwind-tables
 NATIVE_BASE_CFLAGS := $(NATIVE_CFLAGS)
 WASM_CFLAGS = $(CFLAGS) -Wno-implicit-function-declaration -Wno-int-conversion \
-	-Wno-incompatible-pointer-types -Wno-return-mismatch
+	-Wno-incompatible-pointer-types
 LDLIBS := -lm
 
 # Melee's matching MSL trig implementation intentionally compiles its nested
@@ -299,6 +299,8 @@ $(NATIVE_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contr
 $(NATIVE_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
 $(NATIVE_OBJ_DIR)/src/runtime/savestate.o: NATIVE_CPPFLAGS += -D_GNU_SOURCE
 $(PYTHON_OBJ_DIR)/src/runtime/savestate.o: PYTHON_CPPFLAGS += -D_GNU_SOURCE
+$(NATIVE_OBJ_DIR)/gameplay/sysdolphin/baselib/id.o: NATIVE_CPPFLAGS += -D_GNU_SOURCE
+$(PYTHON_OBJ_DIR)/gameplay/sysdolphin/baselib/id.o: PYTHON_CPPFLAGS += -D_GNU_SOURCE
 $(NATIVE_RUNTIME_CENSUS_OBJ): NATIVE_CPPFLAGS += -D_GNU_SOURCE
 ifeq ($(NATIVE_GPROF),1)
 $(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_GPROF

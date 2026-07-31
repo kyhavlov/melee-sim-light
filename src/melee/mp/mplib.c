@@ -6466,7 +6466,11 @@ int mpLib_DrawMatchingLines(int value, int flag, const GXColor* color)
     }
 
     if (count_r28 == 0) {
+#ifdef MSL_CORE_NATIVE
+        return 0;
+#else
         return;
+#endif
     }
 
     line_r31 = groundCollLine;
@@ -6495,6 +6499,9 @@ int mpLib_DrawMatchingLines(int value, int flag, const GXColor* color)
         line_r31 += 1;
     }
     GXEnd();
+#ifdef MSL_CORE_NATIVE
+    return 0;
+#endif
 }
 
 static const GXColor mpLib_804D80F0 = { 0xFF, 0x40, 0x40, 0xFF };
