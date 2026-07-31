@@ -276,17 +276,19 @@ CFLAGS := \
 	-fdata-sections -w
 # GCC 14+ and Clang promote these legacy-C constructs to errors even when
 # diagnostics are otherwise suppressed. Wasm clang requires the same set.
-NATIVE_CFLAGS = $(CFLAGS) $(HOST_ARCH_FLAGS) -fno-pie \
+HOSTED_LEGACY_CFLAGS := \
 	-Wno-implicit-function-declaration -Wno-int-conversion \
 	-Wno-incompatible-pointer-types
+NATIVE_CFLAGS = $(CFLAGS) $(HOST_ARCH_FLAGS) -fno-pie \
+	$(HOSTED_LEGACY_CFLAGS)
 NATIVE_LINK_FLAGS ?=
 # Native release uses a strict O1 source profile by default. The audited lists
 # below preserve lower exactness profiles or admit stronger measured owners.
 NATIVE_RELEASE_CFLAGS := $(CFLAGS) -O1 -fno-pie -fomit-frame-pointer \
-	-fcf-protection=none -fno-asynchronous-unwind-tables -fno-unwind-tables
+	-fcf-protection=none -fno-asynchronous-unwind-tables -fno-unwind-tables \
+	$(HOSTED_LEGACY_CFLAGS)
 NATIVE_BASE_CFLAGS := $(NATIVE_CFLAGS)
-WASM_CFLAGS = $(CFLAGS) -Wno-implicit-function-declaration -Wno-int-conversion \
-	-Wno-incompatible-pointer-types
+WASM_CFLAGS = $(CFLAGS) $(HOSTED_LEGACY_CFLAGS)
 LDLIBS := -lm
 
 # Melee's matching MSL trig implementation intentionally compiles its nested
