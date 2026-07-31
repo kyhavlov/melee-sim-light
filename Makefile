@@ -24,6 +24,11 @@ WASM_GLIBC_STUB := $(WASM_LAYOUT_INCLUDE)/gnu/stubs-32.h
 PPC_GENERATED_DIR := $(PPC_BUILD)/generated
 TOOLCHAIN_ROOT := $(BUILD_ROOT)/toolchain/root
 TOOLCHAIN_STAMP := $(BUILD_ROOT)/toolchain/ready.stamp
+# Host-arch shared libraries the cross compiler itself links against. The
+# toolchain tree is populated for whichever architecture the host (or, on
+# macOS, the container) runs; see tools/build/host_arch.sh.
+TOOLCHAIN_MULTIARCH := $(shell $(ROOT)/tools/build/host_arch.sh multiarch)
+TOOLCHAIN_LIBDIR := $(TOOLCHAIN_ROOT)/usr/lib/$(TOOLCHAIN_MULTIARCH)
 CC := $(TOOLCHAIN_ROOT)/usr/bin/powerpc-linux-gnu-gcc-13
 QEMU := $(TOOLCHAIN_ROOT)/usr/bin/qemu-ppc-static
 SYSROOT := $(TOOLCHAIN_ROOT)
@@ -79,7 +84,7 @@ PY_EXT_LINK_FLAGS :=
 endif
 PPC_TYPES_TOOLCHAIN_DEP ?= $(TOOLCHAIN_STAMP)
 PPC_TYPES_COMPILE ?= env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
-	LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+	LD_LIBRARY_PATH="$(TOOLCHAIN_LIBDIR):$$LD_LIBRARY_PATH" \
 	"$(CC)" --sysroot="$(SYSROOT)"
 WASM_PROXY_COMPILE ?= "$(HOST_CC)" -m32 -malign-double \
 	-I"$(WASM_LAYOUT_INCLUDE)" -isystem /usr/include/x86_64-linux-gnu
@@ -457,21 +462,21 @@ $(TOOLCHAIN_STAMP): $(ROOT)/tools/build/setup_ppc32_toolchain.sh
 $(PPC_UPSTREAM_OBJS): $(PPC_OBJ_DIR)/gameplay/%.o: $(CORE)/%.c $(TOOLCHAIN_STAMP)
 	@mkdir -p "$(@D)"
 	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
-		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_LIBDIR):$$LD_LIBRARY_PATH" \
 		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) $(CFLAGS) \
 		-MMD -MP -c "$(CORE)/$*.c" -o "$@"
 
 $(PPC_OBJ_DIR)/%.o: $(ROOT)/%.c $(TOOLCHAIN_STAMP)
 	@mkdir -p "$(@D)"
 	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
-		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_LIBDIR):$$LD_LIBRARY_PATH" \
 		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) $(CFLAGS) \
 		-MMD -MP -c "$<" -o "$@"
 
 $(BINARY): $(PPC_OBJS)
 	@mkdir -p "$(@D)"
 	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
-		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_LIBDIR):$$LD_LIBRARY_PATH" \
 		"$(CC)" --sysroot="$(SYSROOT)" -Wl,--gc-sections $^ $(LDLIBS) -o "$@"
 
 $(NATIVE_UPSTREAM_OBJS): $(NATIVE_OBJ_DIR)/gameplay/%.o: $(CORE)/%.c
@@ -604,7 +609,7 @@ $(WASM_MATCH_RELOC_LAYOUT_OBJ): $(WASM_MATCH_RELOC_LAYOUT_SRC)
 $(PPC_MATCH_RELOC_TYPES_OBJ): $(MATCH_RELOC_TYPES_SRC) $(MATCH_RELOC_TYPES_DEF) $(TOOLCHAIN_STAMP)
 	@mkdir -p "$(@D)"
 	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
-		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_LIBDIR):$$LD_LIBRARY_PATH" \
 		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
@@ -615,7 +620,7 @@ $(PPC_MATCH_RELOC_LAYOUT_SRC): $(PPC_MATCH_RELOC_TYPES_OBJ) $(MATCH_RELOC_TYPES_
 $(PPC_MATCH_RELOC_LAYOUT_OBJ): $(PPC_MATCH_RELOC_LAYOUT_SRC) $(TOOLCHAIN_STAMP)
 	@mkdir -p "$(@D)"
 	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
-		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$LD_LIBRARY_PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_LIBDIR):$$LD_LIBRARY_PATH" \
 		"$(CC)" --sysroot="$(SYSROOT)" $(CPPFLAGS) $(CFLAGS) -MMD -MP -c "$<" -o "$@"
 
 $(NATIVE_BINARY): $(NATIVE_OBJS)
@@ -664,7 +669,7 @@ define link_smoke
 $(1): $(PPC_CORE_OBJS) $(2)
 	@mkdir -p "$$(@D)"
 	@env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$$$PATH" \
-		LD_LIBRARY_PATH="$(TOOLCHAIN_ROOT)/usr/lib/x86_64-linux-gnu:$$$$LD_LIBRARY_PATH" \
+		LD_LIBRARY_PATH="$(TOOLCHAIN_LIBDIR):$$$$LD_LIBRARY_PATH" \
 		"$(CC)" --sysroot="$(SYSROOT)" -Wl,--gc-sections $$^ $(LDLIBS) -o "$$@"
 endef
 

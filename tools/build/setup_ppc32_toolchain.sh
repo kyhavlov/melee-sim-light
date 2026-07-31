@@ -2,13 +2,23 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+source "$repo_root/tools/build/host_arch.sh"
 toolchain_dir="$repo_root/build/melee_core/toolchain"
-package_dir="$toolchain_dir/packages"
 sysroot="$toolchain_dir/root"
 stamp="$toolchain_dir/ready.stamp"
 
+# The compiler and qemu binaries are host-arch; the multiarch library
+# directory is the tell for which host a cached tree was populated for. A
+# tree built for the other architecture must be repopulated, not reused.
+# The package cache is per-arch because extraction unpacks every .deb it
+# finds: a shared directory would let stale foreign-arch packages overwrite
+# the binaries just downloaded.
+multiarch=$(msl_host_multiarch)
+package_dir="$toolchain_dir/packages/$multiarch"
+
 if [[ -x "$sysroot/usr/bin/powerpc-linux-gnu-gcc-13" &&
-      -x "$sysroot/usr/bin/qemu-ppc-static" ]]; then
+      -x "$sysroot/usr/bin/qemu-ppc-static" &&
+      -d "$sysroot/usr/lib/$multiarch" ]]; then
     touch "$stamp"
     exit 0
 fi
@@ -21,7 +31,7 @@ if [[ "$(uname -s)" == "Darwin" && -z "${MSL_TOOLCHAIN_IN_CONTAINER:-}" ]]; then
         echo "PPC reference toolchain setup on macOS requires docker" >&2
         exit 1
     fi
-    exec docker run --rm --platform linux/amd64 \
+    exec docker run --rm --platform "$(msl_host_platform)" \
         -v "$repo_root:$repo_root" -w "$repo_root" \
         -e MSL_TOOLCHAIN_IN_CONTAINER=1 \
         ubuntu:24.04 \
