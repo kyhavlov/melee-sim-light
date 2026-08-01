@@ -85,6 +85,20 @@ classified families:
 
 ## Log
 
+- 2026-08-01 — `merge` (macos-native-build update integrated): the collaborator's rebased
+  macos-native-build (deterministic hosted source identities + targeted compatibility flags +
+  -fpermissive removal) was linearized onto the original branch tips as
+  `macos-native-build-linear` (tree-identical to their tip) and merged. Conflicts: effects.c
+  (kept the DK model-only effect-bank path, adopted MSL_LBARCHIVE_END) and this doc. The
+  deterministic-token representation shifted item-var pool residues on the four
+  `unrecorded-item-pool-residue` icies classifications (item.misc* lanes only — every other
+  snapshot stat identical; verified by full pre/post field diffs in msl-luigi); native
+  snapshots + 4 output locks re-recorded. Container aggregate 366 = 285 pass / 81 classified /
+  0 fail. PPC snapshots for all four verified bit-identical pre/post merge (platinum's
+  aggregate-PPC snapshot was already stale beforehand — per-suite PPC remains the gate).
+  macOS-native aggregate unchanged (same 122/18/201 with identical drift fingerprints
+  pre/post; known non-gate signed-zero/ULP condition).
+
 - 2026-07-30 — `open` (this packet: Ganondorf source validation packet; all 30 zip files
   admitted after the frozen-PS policy correction and wired straight into the aggregate with
   locks + five classifications; aggregate 366 = 285 pass / 81 classified / 0 fail native;

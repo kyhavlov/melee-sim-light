@@ -521,8 +521,8 @@
           "strict_suffix_frames": 321,
           "first_mismatch_frame": -27,
           "last_mismatch_frame": 6482,
-          "mismatch_count": 745,
-          "mismatch_fingerprint": "a0386e39487b221e",
+          "mismatch_count": 750,
+          "mismatch_fingerprint": "3d62fb0881f2a865",
           "mismatch_fields": [
             {
               "field": "item.misc0[0]",
@@ -603,10 +603,22 @@
               "last_frame": 1088
             },
             {
+              "field": "item.misc0[4]",
+              "count": 1,
+              "first_frame": 1088,
+              "last_frame": 1088
+            },
+            {
               "field": "item.misc2[4]",
               "count": 1,
               "first_frame": 1088,
               "last_frame": 1088
+            },
+            {
+              "field": "item.misc0[3]",
+              "count": 4,
+              "first_frame": 1089,
+              "last_frame": 1092
             },
             {
               "field": "item.misc1[0]",
@@ -1536,8 +1548,8 @@
           "strict_suffix_frames": 119,
           "first_mismatch_frame": 297,
           "last_mismatch_frame": 11428,
-          "mismatch_count": 3769,
-          "mismatch_fingerprint": "a75f52d27bf6cd4f",
+          "mismatch_count": 3824,
+          "mismatch_fingerprint": "ea855f7576929f4a",
           "mismatch_fields": [
             {
               "field": "item.misc1[0]",
@@ -1547,7 +1559,7 @@
             },
             {
               "field": "item.misc2[0]",
-              "count": 792,
+              "count": 831,
               "first_frame": 297,
               "last_frame": 11428
             },
@@ -1565,7 +1577,7 @@
             },
             {
               "field": "item.misc2[1]",
-              "count": 426,
+              "count": 433,
               "first_frame": 302,
               "last_frame": 10798
             },
@@ -1583,7 +1595,7 @@
             },
             {
               "field": "item.misc2[2]",
-              "count": 162,
+              "count": 171,
               "first_frame": 307,
               "last_frame": 10798
             },
@@ -1986,19 +1998,19 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 181,
-          "first_mismatch_frame": 59,
-          "first_render_visibility_mismatch_frame": null,
           "frames": 6460,
-          "last_mismatch_frame": 4542,
           "matched_frames": 6186,
-          "mismatch_count": 914,
-          "mismatch_fields_digest": "78d1f7cf8c3c4beada940d6f228f3dc65cb7aebdc1385f92aacf82583c6f8719",
-          "mismatch_fingerprint": "f88b6f5d446ce6bb",
           "mismatched_frames": 274,
+          "exact_prefix_frames": 181,
+          "strict_suffix_frames": 1795,
+          "first_mismatch_frame": 59,
+          "last_mismatch_frame": 4542,
+          "mismatch_count": 857,
+          "mismatch_fingerprint": "75e6ae514b9820bf",
           "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 1795
+          "mismatch_fields_digest": "e557444f0be68f561c472aac6f5f45c11e23cb11db09db1a512481b7f149a76f"
         },
         "ppc": {
           "exact_prefix_frames": 181,
@@ -2432,19 +2444,19 @@
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 1735,
-          "first_mismatch_frame": 1613,
-          "first_render_visibility_mismatch_frame": null,
           "frames": 11243,
-          "last_mismatch_frame": 9290,
           "matched_frames": 11046,
-          "mismatch_count": 395,
-          "mismatch_fields_digest": "a901785aa5ba6d6484d18d32a9a25e1cb264b210717e6cd240889009df555399",
-          "mismatch_fingerprint": "ff4a829201e835d1",
           "mismatched_frames": 197,
+          "exact_prefix_frames": 1735,
+          "strict_suffix_frames": 1830,
+          "first_mismatch_frame": 1613,
+          "last_mismatch_frame": 9290,
+          "mismatch_count": 472,
+          "mismatch_fingerprint": "818f2122d691acdf",
           "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 1830
+          "mismatch_fields_digest": "ceb30da8ddd6e9d2d5a37fdda90921d1bdb98dc621948514f66af04491afb39c"
         },
         "ppc": {
           "frames": 11243,
