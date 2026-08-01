@@ -274,14 +274,9 @@ CFLAGS := \
 	-O0 -g -std=gnu11 -fgnu89-inline -fno-short-enums \
 	-fno-strict-aliasing -ffp-contract=off -ffunction-sections \
 	-fdata-sections -w
-# GCC 14+ promotes several legacy-C constructs (implicit-function-declaration,
-# int-conversion, incompatible-pointer-types, return-mismatch, ...) to default
-# errors. -fpermissive downgrades that whole family back to warnings so the
-# decomp sources build on modern host compilers. (-w still hides the warnings.)
-# Apple clang accepts -fpermissive but does not downgrade the legacy-C
-# error family in C the way GCC 14 does; the explicit -Wno- set (already
-# used for the Wasm clang build) covers both compilers.
-NATIVE_CFLAGS = $(CFLAGS) $(HOST_ARCH_FLAGS) -fno-pie -fpermissive \
+# GCC 14+ and Clang promote these legacy-C constructs to errors even when
+# diagnostics are otherwise suppressed. Wasm clang requires the same set.
+NATIVE_CFLAGS = $(CFLAGS) $(HOST_ARCH_FLAGS) -fno-pie \
 	-Wno-implicit-function-declaration -Wno-int-conversion \
 	-Wno-incompatible-pointer-types -Wno-return-mismatch
 NATIVE_LINK_FLAGS ?=
