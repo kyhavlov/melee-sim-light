@@ -169,11 +169,6 @@ EF_EffectDesc* msl_native_effect_models(HSD_Archive* archive,
 void msl_native_dat_finish_initialization(void);
 int msl_native_dat_owns(const void* pointer);
 void msl_native_dat_context_destroy(MslNativeDatContext* context);
-
-// Reconstruct the arena pointer whose truncated low 32 bits are `address`
-// (the retail-width id retained in AObjDesc::obj_id). Aborts on addresses
-// outside the native DAT arena.
-void* msl_native_dat_from_low32(uint32_t address);
 void msl_native_dat_for_each_figa(void (*visit)(FigaTree*, void*),
                                   void* context);
 

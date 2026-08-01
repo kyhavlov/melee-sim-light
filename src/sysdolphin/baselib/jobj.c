@@ -706,6 +706,7 @@ inline HSD_JObj* JObjLoadJointSub(HSD_Joint* joint, HSD_JObj* parent)
 static s32 JObjLoadCore(HSD_JObj* jobj, HSD_Joint* joint, HSD_JObj* parent,
                         bool skip_dobj)
 {
+    u32 id;
     if (!(joint->flags & JOBJ_INSTANCE)) {
         jobj->child = JObjLoadJointSub(joint->child, jobj);
     }
@@ -737,8 +738,9 @@ static s32 JObjLoadCore(HSD_JObj* jobj, HSD_Joint* joint, HSD_JObj* parent,
         jobj->envelopemtx = HSD_MtxAlloc();
         memcpy(jobj->envelopemtx, joint->mtx, sizeof(Mtx));
     }
-    HSD_IDInsertToTable(NULL, (u32) joint, jobj);
-    jobj->id = (u32) joint;
+    id = msl_hsd_id_from_pointer(joint);
+    HSD_IDInsertToTable(NULL, id, jobj);
+    jobj->id = id;
     return 0;
 }
 
@@ -805,6 +807,7 @@ static void msl_core_JObjLoadFilteredShallow(HSD_JObj* jobj,
                                              HSD_Joint* joint,
                                              HSD_JObj* parent)
 {
+    u32 id;
     jobj->parent = parent;
     jobj->flags |= joint->flags;
     if (union_type_spline(jobj)) {
@@ -833,8 +836,9 @@ static void msl_core_JObjLoadFilteredShallow(HSD_JObj* jobj,
         jobj->envelopemtx = HSD_MtxAlloc();
         memcpy(jobj->envelopemtx, joint->mtx, sizeof(Mtx));
     }
-    HSD_IDInsertToTable(NULL, (u32) joint, jobj);
-    jobj->id = (u32) joint;
+    id = msl_hsd_id_from_pointer(joint);
+    HSD_IDInsertToTable(NULL, id, jobj);
+    jobj->id = id;
 }
 
 static HSD_JObj* msl_core_load_filtered_joint_list(
@@ -916,7 +920,8 @@ HSD_JObj* msl_core_HSD_JObjLoadJointFiltered(HSD_Joint* joint,
         HSD_RObjResolveRefsAll(jobj->robj, source->robjdesc);
         if (jobj->flags & JOBJ_INSTANCE) {
             jobj->child =
-                HSD_IDGetDataFromTable(NULL, (u32) source->child, NULL);
+                HSD_IDGetDataFromTable(
+                    NULL, msl_hsd_id_from_pointer(source->child), NULL);
             HSD_ASSERT(1131, jobj->child);
             HSD_JObjRef(jobj->child);
         }
@@ -944,7 +949,8 @@ void HSD_JObjResolveRefs(HSD_JObj* jobj, HSD_Joint* joint)
     HSD_RObjResolveRefsAll(jobj->robj, joint->robjdesc);
     if (!!(jobj->flags & JOBJ_INSTANCE)) {
         HSD_JObjUnref(jobj->child);
-        jobj->child = HSD_IDGetDataFromTable(NULL, (u32) joint->child, NULL);
+        jobj->child = HSD_IDGetDataFromTable(
+            NULL, msl_hsd_id_from_pointer(joint->child), NULL);
         HSD_ASSERT(1108, jobj->child);
         HSD_JObjRef(jobj->child);
     }

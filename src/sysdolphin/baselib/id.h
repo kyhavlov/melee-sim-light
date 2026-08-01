@@ -40,6 +40,18 @@ void HSD_IDRemoveByIDFromTable(HSD_IDTable* table, u32 id);
 void* HSD_IDGetDataFromTable(HSD_IDTable* table, u32 id, s32* success);
 void _HSD_IDForgetMemory(void* low, void* high);
 
+#ifdef MSL_CORE_NATIVE
+// Hosted HSD pointer identity is a deterministic tagged arena offset. The ID
+// table remains source-width while true object/descriptor fields stay native
+// pointers. Conversion aborts outside a bound owner; inverse lookup is
+// intentionally limited to the native-DAT descriptors that consume it.
+u32 msl_hsd_id_from_pointer(const void* pointer);
+void* msl_hsd_native_dat_pointer_from_id(u32 id);
+#else
+#define msl_hsd_id_from_pointer(pointer) ((u32) (pointer))
+#define msl_hsd_native_dat_pointer_from_id(id) ((void*) (id))
+#endif
+
 static inline void* HSD_IDGetData(u32 id, s32* success)
 {
     return HSD_IDGetDataFromTable(NULL, id, success);

@@ -903,3 +903,35 @@ bounds. Ordinary singles falls 921,656 to 685,888 arena bytes (-25.6%); maximum 
 construction falls 1,266,476 to 997,972 (-21.2%); maximum pool storage falls 757,540 to 542,072
 (-28.4%). Alternating 512 measurements are neutral (-0.27%, +0.33%), so this is retained as a
 memory-capacity result.
+
+## macOS portability identity cleanup — 2026-07-31
+
+The PR #11 cleanup replaces ASLR-derived low-32 pointer identities with deterministic GameData,
+native-DAT, Match, and core-image tokens. Conversion occurs when source graphs are loaded or
+resolved; true match pointer fields and the production step loops remain unchanged.
+
+Six alternating same-host runs compared exact `experiment/decomp-port` (`a5f699e7`) with the final
+candidate on a Ryzen 9 9950X3D in the performance governor, using the same extracted data, packed
+153-replay manifest, release flags, resident observation history, and 65,536 measured match frames.
+Lower cycles/frame is better.
+
+| Environments/profile | Current median cycles/frame | Candidate median cycles/frame | Delta | Digest |
+|---:|---:|---:|---:|---:|
+| 256 / frequency core 8 | 47,900.1 | 47,326.3 | -1.20% | `8ef126a41244d514` |
+| 512 / V-cache core 0 | 43,673.2 | 43,922.8 | +0.57% | `6f91f23e3553a090` |
+
+The 512 delta is within the ordinary run/layout spread and no throughput gain is claimed. A
+temporary 256-sample lifecycle probe measured candidate/current medians of 0.4775/0.4780 ms save
+and 0.6595/0.6580 ms restore with the same 633,156-byte artifact. Sharing the ELF/Mach-O image walk
+with savestate relocation instead measured a repeatable +2.4% restore cost, so that refactor was
+rejected and the existing savestate implementation remains intact.
+
+After the final typed archive-sentinel and range-check cleanup, exact-candidate release samples
+measured 47,259.0 cycles/frame at resident 256 and 43,710.2 at resident 512. Both remain inside the
+retained alternating-run envelope and preserve digests `8ef126a41244d514` and
+`6f91f23e3553a090`, respectively.
+
+The final merge-review reduction was rechecked with three adjacent pre-cleanup-PR/candidate pairs
+under the same transient host load. Resident-256 medians move 52,347.3 to 51,354.5 cycles/frame
+(-1.90%, 83,575 candidate FPS); resident-512 medians move 46,100.2 to 45,855.3 (-0.53%, 93,598
+candidate FPS). Both digests remain unchanged, so the reduction is retained as performance-neutral.

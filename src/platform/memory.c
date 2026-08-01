@@ -88,23 +88,9 @@ int msl_memory_context_init(MslMemoryContext* context, MslMemoryOwner owner)
     }
 #else
     {
-        void* mapping;
-        // Raw retail archives still pass through 32-bit source APIs while
-        // GameData is built: truncated (u32) arena addresses circulate as
-        // lbFile source addresses and decode back through
-        // msl_memory_from_low32. Match graphs use native pointers
-        // throughout.
-        // refs/melee/src/melee/lb/lbfile.c::lbFile_800168A0
-        if (owner == MSL_MEMORY_GAME_DATA) {
-            mapping = msl_memory_map_low32_window(capacity);
-        } else {
-            mapping = mmap(NULL, capacity, PROT_READ | PROT_WRITE,
-                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-            if (mapping == MAP_FAILED) {
-                mapping = NULL;
-            }
-        }
-        if (mapping == NULL) {
+        void* mapping = mmap(NULL, capacity, PROT_READ | PROT_WRITE,
+                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (mapping == MAP_FAILED) {
             if (owner == MSL_MEMORY_GAME_DATA) {
                 free(context->allocations);
             }
@@ -194,47 +180,41 @@ size_t msl_memory_match_capacity(void)
 }
 
 #ifdef MSL_CORE_NATIVE
-#ifndef MSL_CORE_WASM
-// Truncated (u32) arena addresses are the retail-width currency of lbFile
-// source addresses, HSD id-table keys, and AObjDesc::obj_id. They decode
-// back to host pointers by offset from the owning arena, which is
-// unambiguous only when the arena's low-32-bit image neither wraps 2^32
-// nor touches zero. Any host address satisfying that is fine; no low
-// mapping is required (arm64 macOS forbids mappings below 4 GiB outright).
-void* msl_memory_map_low32_window(size_t size)
+uint32_t msl_memory_token(const MslMemoryContext* context,
+                          const void* pointer)
 {
-    enum { MSL_LOW32_WINDOW_ATTEMPTS = 64 };
-    void* rejected[MSL_LOW32_WINDOW_ATTEMPTS];
-    size_t rejected_count = 0;
-    void* mapping = NULL;
-    size_t i;
-
-    while (rejected_count < MSL_LOW32_WINDOW_ATTEMPTS) {
-        void* attempt = mmap(NULL, size, PROT_READ | PROT_WRITE,
-                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        uint64_t low;
-        if (attempt == MAP_FAILED) {
-            break;
-        }
-        low = (uint64_t) (uintptr_t) attempt & 0xffffffffu;
-        if (low != 0 && low + size <= ((uint64_t) 1 << 32)) {
-            mapping = attempt;
-            break;
-        }
-        rejected[rejected_count++] = attempt;
+    uintptr_t begin;
+    uintptr_t value;
+    size_t offset;
+    if (context == NULL || context->arena == NULL || pointer == NULL) {
+        fprintf(stderr, "invalid null arena token source\n");
+        abort();
     }
-    for (i = 0; i < rejected_count; ++i) {
-        munmap(rejected[i], size);
+    begin = (uintptr_t) context->arena;
+    value = (uintptr_t) pointer;
+    if (value < begin || value - begin >= context->used) {
+        fprintf(stderr, "arena token source is outside initialized data\n");
+        abort();
     }
-    return mapping;
+    offset = value - begin;
+    if (offset >= UINT32_MAX) {
+        fprintf(stderr, "arena token source exceeds source width\n");
+        abort();
+    }
+    return (uint32_t) offset + 1;
 }
-#endif
 
-void* msl_memory_from_low32(const MslMemoryContext* context, uint32_t address)
+void* msl_memory_from_token(const MslMemoryContext* context, uint32_t token)
 {
-    uint32_t offset = address - (uint32_t) (uintptr_t) context->arena;
-    if (context->arena == NULL || offset >= context->capacity) {
-        fprintf(stderr, "invalid low-32 arena address %08x\n", address);
+    uint32_t offset;
+    if (context == NULL || context->arena == NULL || token == 0) {
+        fprintf(stderr, "invalid arena token %08x\n", token);
+        abort();
+    }
+    offset = token - 1;
+    if (offset >= context->used) {
+        fprintf(stderr, "arena token is outside initialized data: %08x\n",
+                token);
         abort();
     }
     return context->arena + offset;

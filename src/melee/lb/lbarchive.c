@@ -14,18 +14,6 @@
 
 #pragma push
 #pragma dont_inline on
-// Retail callers terminate the variadic section/symbol pairs with a
-// literal int 0. On LP64 hosts that int initializes only the low 32 bits
-// of a stack-passed variadic slot; GNU toolchains happen to zero the full
-// slot while Apple clang leaves the upper bits undefined. Treat a slot
-// whose low 32 bits are clear as the retail terminator on Mach-O hosts.
-#if defined(__APPLE__)
-#define lbArchive_SectionsEnd(symbol) \
-    ((((uintptr_t) (symbol)) & 0xffffffffu) == 0)
-#else
-#define lbArchive_SectionsEnd(symbol) ((symbol) == NULL)
-#endif
-
 void lbArchive_InitializeDAT(HSD_Archive* archive, void* data, size_t length)
 {
     const char* symbol;
@@ -54,7 +42,7 @@ void lbArchive_LoadSections(HSD_Archive* archive, void** symbol, ...)
     va_list symbols;
 
     va_start(symbols, symbol);
-    for (; !lbArchive_SectionsEnd(symbol); symbol = va_arg(symbols, void**)) {
+    for (; symbol != NULL; symbol = va_arg(symbols, void**)) {
         symbol_name = va_arg(symbols, const char*);
         *symbol = NULL;
         *symbol = HSD_ArchiveGetPublicAddress(archive, symbol_name);
@@ -97,7 +85,7 @@ static inline void lbArchive_vLoadSectionsFatal(HSD_Archive* archive,
 {
     const char* symbol_name;
 
-    for (; !lbArchive_SectionsEnd(symbol); symbol = va_arg(symbols, void**)) {
+    for (; symbol != NULL; symbol = va_arg(symbols, void**)) {
         symbol_name = va_arg(symbols, const char*);
         *symbol = NULL;
         *symbol = HSD_ArchiveGetPublicAddress(archive, symbol_name);
@@ -113,7 +101,7 @@ static inline void lbArchive_vLoadSections(HSD_Archive* archive, void** symbol,
 {
     const char* symbol_name;
 
-    for (; !lbArchive_SectionsEnd(symbol); symbol = va_arg(symbols, void**)) {
+    for (; symbol != NULL; symbol = va_arg(symbols, void**)) {
         symbol_name = va_arg(symbols, const char*);
         *symbol = NULL;
         *symbol = HSD_ArchiveGetPublicAddress(archive, symbol_name);

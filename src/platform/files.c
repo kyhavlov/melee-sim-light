@@ -146,7 +146,8 @@ bool lbFile_800168A0(s32 heap, const char* basename, u32* source, u32* length)
 #ifdef MSL_CORE_NATIVE
     MslRawFileEntry* cached = raw_file_find(basename);
     if (cached != NULL) {
-        *source = (u32) (uintptr_t) cached->data;
+        *source = msl_memory_token(msl_core_game_memory_context(),
+                                   cached->data);
         *length = cached->size;
         return true;
     }
@@ -160,9 +161,13 @@ bool lbFile_800168A0(s32 heap, const char* basename, u32* source, u32* length)
 #endif
     (void) heap;
     lbFile_8001668C(basename, data, length);
-    // Truncated low 32 bits of the GameData arena address; decoded back
-    // via msl_memory_from_low32.
-    *source = (u32) (uintptr_t) data;
+#ifdef MSL_CORE_NATIVE
+    // Source APIs retain a u32 address shape. Hosted GameData owns this as a
+    // deterministic one-based arena offset rather than a host pointer.
+    *source = msl_memory_token(msl_core_game_memory_context(), data);
+#else
+    *source = (u32) data;
+#endif
     return true;
 }
 

@@ -583,7 +583,8 @@ void HSD_RObjResolveRefs(HSD_RObj* robj, HSD_RObjDesc* desc)
         switch (robj->flags & ROBJ_TYPE_MASK) {
         case REFTYPE_JOBJ:
             HSD_JObjUnrefThis(robj->u.jobj);
-            robj->u.jobj = HSD_IDGetData((u32) desc->u.joint, NULL);
+            robj->u.jobj = HSD_IDGetData(
+                msl_hsd_id_from_pointer(desc->u.joint), NULL);
             HSD_ASSERT(883, robj->u.jobj);
             HSD_JObjRefThis(robj->u.jobj);
             break;
@@ -901,7 +902,8 @@ void HSD_RvalueResolveRefs(HSD_Rvalue* rvalue, HSD_RvalueList* list)
 {
     if (rvalue != NULL && list != NULL) {
         HSD_JObjUnrefThis(rvalue->jobj);
-        rvalue->jobj = HSD_IDGetData((u32) list->joint, NULL);
+        rvalue->jobj = HSD_IDGetData(
+            msl_hsd_id_from_pointer(list->joint), NULL);
         HSD_ASSERT(1333, rvalue->jobj);
         HSD_JObjRefThis(rvalue->jobj);
     }

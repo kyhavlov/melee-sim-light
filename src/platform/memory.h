@@ -56,17 +56,12 @@ int msl_memory_context_owns(const MslMemoryContext* context,
                             const void* pointer);
 
 #ifdef MSL_CORE_NATIVE
-#ifndef MSL_CORE_WASM
-// Map an arena whose low-32-bit address image neither wraps 2^32 nor
-// touches zero, so truncated (u32) addresses inside it stay unique and
-// nonzero and decode back through msl_memory_from_low32. Returns NULL on
-// failure.
-void* msl_memory_map_low32_window(size_t size);
-#endif
-// Reconstruct the host pointer whose low 32 bits are `address`, known to
-// lie inside `context`'s arena. Aborts on addresses outside the arena.
-void* msl_memory_from_low32(const MslMemoryContext* context,
-                            uint32_t address);
+// Source-width file addresses are one-based byte offsets in their owning
+// GameData arena. Zero remains the retail null value. Both operations abort
+// when the pointer/token is outside the arena's initialized bytes.
+uint32_t msl_memory_token(const MslMemoryContext* context,
+                          const void* pointer);
+void* msl_memory_from_token(const MslMemoryContext* context, uint32_t token);
 #endif
 
 // Seal hosted HSD allocation after the match bootstrap, and make a raw

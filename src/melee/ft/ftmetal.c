@@ -181,7 +181,8 @@ void ft_800C85B8(Fighter_GObj* gobj)
         if (ftParts_8007506C(fp->kind, joint_idx) != 0) {
             joint_idx++;
         } else {
-            HSD_IDInsertToTable(NULL, (u32) sp20, fp->parts[joint_idx].joint);
+            HSD_IDInsertToTable(NULL, msl_hsd_id_from_pointer(sp20),
+                                fp->parts[joint_idx].joint);
             joint_idx++;
             ftAnim_GetNextJointInTree(&sp20, &sp1C);
         }

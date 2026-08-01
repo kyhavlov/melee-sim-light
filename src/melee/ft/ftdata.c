@@ -2071,7 +2071,7 @@ void ftData_8008572C(FighterKind kind)
 {
     if (gFtDataList[kind] == NULL) {
         lbArchive_80017040(NULL, ftData_803C1F40[kind].a, &gFtDataList[kind],
-                           ftData_803C1F40[kind].b, 0);
+                           ftData_803C1F40[kind].b, MSL_LBARCHIVE_END);
     }
 }
 
@@ -2103,12 +2103,14 @@ void ftData_80085820(FighterKind kind, int costume_id)
                 &temp_r5->x14_archive,
                 ftData_803C2360[kind][costume_id].dat_filename, temp_r5,
                 ftData_803C2360[kind][costume_id].joint_name, &temp_r5->x4,
-                ftData_803C2360[kind][costume_id].matanim_joint_name, 0);
+                ftData_803C2360[kind][costume_id].matanim_joint_name,
+                MSL_LBARCHIVE_END);
         } else {
             lbArchive_80017040(
                 &temp_r5->x14_archive,
                 ftData_803C2360[kind][costume_id].dat_filename, temp_r5,
-                ftData_803C2360[kind][costume_id].joint_name, 0,
+                ftData_803C2360[kind][costume_id].joint_name,
+                MSL_LBARCHIVE_END,
                 ftData_803C2360[kind][costume_id].matanim_joint_name);
             CostumeListsForeachCharacter[kind].costume_list[costume_id].x4 =
                 NULL;
@@ -2126,12 +2128,14 @@ void ftData_800858E4(FighterKind kind, int costume_id)
                 &temp_r5->x14_archive,
                 ftData_803C2360[kind][costume_id].dat_filename, temp_r5,
                 ftData_803C2360[kind][costume_id].joint_name, &temp_r5->x4,
-                ftData_803C2360[kind][costume_id].matanim_joint_name, 0);
+                ftData_803C2360[kind][costume_id].matanim_joint_name,
+                MSL_LBARCHIVE_END);
         } else {
             lbArchive_80017040(
                 &temp_r5->x14_archive,
                 ftData_803C2360[kind][costume_id].dat_filename, temp_r5,
-                ftData_803C2360[kind][costume_id].joint_name, 0,
+                ftData_803C2360[kind][costume_id].joint_name,
+                MSL_LBARCHIVE_END,
                 ftData_803C2360[kind][costume_id].matanim_joint_name);
             CostumeListsForeachCharacter[kind].costume_list[costume_id].x4 =
                 NULL;
@@ -2291,12 +2295,12 @@ void ftData_80085CD8(Fighter* fp, Fighter* arg1, int msid)
 #ifdef MSL_CORE_NATIVE
                     // The loaded PlFxAJ.dat subarchive is immutable and is the
                     // initialization-cache key for native graph translation.
-                    // x14 carries the truncated low 32 bits of its GameData
-                    // arena address (lbFile_800168A0 source + offset).
+                    // x14 carries its one-based GameData arena token
+                    // (lbFile_800168A0 source + source offset).
                     // refs/melee/src/melee/ft/ftdata.c::ftData_80085A14
                     temp_ret_2 = HSD_ArchiveParse(
                         &sp14,
-                        msl_memory_from_low32(msl_core_game_memory_context(),
+                        msl_memory_from_token(msl_core_game_memory_context(),
                                               temp_r4_2),
                         temp_r3->x8);
 #else
@@ -2368,7 +2372,7 @@ FigaTree* ftData_80085E50(Fighter* arg0, int msid)
                     // refs/melee/src/melee/ft/ftdata.c::ftData_80085A14
                     temp_ret_2 = HSD_ArchiveParse(
                         &sp10,
-                        msl_memory_from_low32(msl_core_game_memory_context(),
+                        msl_memory_from_token(msl_core_game_memory_context(),
                                               temp_r4_2),
                         temp_r3->x8);
 #else

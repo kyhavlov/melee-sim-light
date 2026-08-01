@@ -1,4 +1,5 @@
 #include "runtime/batch.h"
+#include "runtime/scalar.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -639,32 +640,40 @@ int main(int argc, char** argv)
         goto done;
     }
 
-    // The opaque artifact also survives destruction of its source GameData.
-    // Recreate equivalent immutable data, restore into a fresh batch, and
-    // require the same continuation. The native DAT graph is intentionally
-    // remapped at its low-address ABI base between the two lifetimes.
+    // Keep the source GameData resident while constructing an equivalent
+    // owner, forcing both its raw-file and native DAT arenas to distinct host
+    // addresses. Then destroy the source, restore its opaque artifact into
+    // the other owner, and cross the same animation/HSD continuation.
     msl_core_batch_destroy(other_batch);
-    phase = "restore after GameData recreation";
     other_batch = NULL;
-    msl_core_batch_destroy(batch);
-    batch = NULL;
-    msl_core_game_data_destroy(game_data);
-    game_data = NULL;
+    phase = "create simultaneous equivalent GameData";
     if (msl_core_game_data_create(argv[1], &other_game_data) != MSL_CORE_OK) {
         goto done;
     }
-    phase = "create batch after GameData recreation";
+    if (other_game_data->memory.arena == game_data->memory.arena
+#ifdef MSL_CORE_NATIVE
+        || other_game_data->native_dat.arena == game_data->native_dat.arena
+#endif
+    )
+    {
+        goto done;
+    }
+    phase = "create batch for equivalent GameData";
     if (msl_core_batch_create(other_game_data, 1, &other_batch) != MSL_CORE_OK)
     {
         goto done;
     }
-    phase = "restore checkpoint after GameData recreation";
+    msl_core_batch_destroy(batch);
+    batch = NULL;
+    msl_core_game_data_destroy(game_data);
+    game_data = NULL;
+    phase = "restore checkpoint after source GameData destruction";
     if (msl_core_batch_restore_match(other_batch, 0, snapshot,
                                      snapshot_size) != MSL_CORE_OK)
     {
         goto done;
     }
-    phase = "advance after GameData recreation";
+    phase = "advance with relocated equivalent GameData";
     for (frame = 0; frame < 60; ++frame) {
         if (msl_core_batch_step_matches(other_batch, &baseline_inputs[0],
                                         sizeof(baseline_inputs[0]), NULL,
@@ -673,7 +682,7 @@ int main(int argc, char** argv)
             goto done;
         }
     }
-    phase = "compare after GameData recreation";
+    phase = "compare relocated GameData continuation";
     if (msl_core_batch_write_state(other_batch, &other_state,
                                    sizeof(other_state), NULL,
                                    0) != MSL_CORE_OK ||

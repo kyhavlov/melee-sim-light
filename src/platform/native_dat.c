@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <baselib/jobj.h>
+#include <baselib/id.h>
 #include <baselib/memory.h>
 #include <baselib/psstructs.h>
 #include <melee/ft/types.h>
@@ -98,17 +99,6 @@ static int compare_u32(const void* lhs, const void* rhs)
     return a < b ? -1 : a > b;
 }
 
-void* msl_native_dat_from_low32(uint32_t address)
-{
-    MslNativeDatContext* context = msl_core_native_dat_context();
-    uint32_t offset = address - (uint32_t) (uintptr_t) context->arena;
-    if (context->arena == NULL || offset >= MSL_NATIVE_DAT_ARENA_BYTES) {
-        fprintf(stderr, "invalid low-32 native DAT address %08x\n", address);
-        abort();
-    }
-    return context->arena + offset;
-}
-
 static void* native_alloc(size_t size)
 {
     size_t aligned;
@@ -127,13 +117,10 @@ static void* native_alloc(size_t size)
             abort();
         }
 #else
-        // AObjDesc::obj_id retains truncated (u32) addresses of arena
-        // joints as retail ids; msl_native_dat_from_low32 reconstructs
-        // them, so the arena may live anywhere with a non-wrapping,
-        // nonzero low-32-bit image.
-        void* mapping =
-            msl_memory_map_low32_window(MSL_NATIVE_DAT_ARENA_BYTES);
-        if (mapping == NULL) {
+        void* mapping = mmap(NULL, MSL_NATIVE_DAT_ARENA_BYTES,
+                             PROT_READ | PROT_WRITE,
+                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (mapping == MAP_FAILED) {
             fprintf(stderr, "native DAT arena reservation failed\n");
             abort();
         }
@@ -623,9 +610,8 @@ static void translate_value(MslNativeArchive* context,
             // AObjDesc::obj_id is declared u32 because retail uses either an
             // object-table id or a relocated HSD_Joint address in the same
             // word. When the DAT relocation table marks it, materialize the
-            // Joint graph and retain the truncated low 32 bits of its arena
-            // address as the retail id — the same truncation HSD id-table
-            // keys use, decoded back via msl_native_dat_from_low32.
+            // Joint graph and retain its deterministic native-DAT offset id —
+            // the same source-width identity used by the hosted HSD table.
             // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjLoadDesc
             // refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjLoadJoint
             for (i = 0; i < type->field_count; ++i) {
@@ -634,12 +620,12 @@ static void translate_value(MslNativeArchive* context,
                 if (field->source_offset == 0x0C) {
                     uint32_t target = raw_pointer(context, field_source);
                     if (target != UINT32_MAX) {
-                        uintptr_t joint = (uintptr_t) translate_target(
+                        void* joint = translate_target(
                             context, target, msl_dat_root_HSD_Joint);
                         write_integer((uint8_t*) native +
                                           field->native_offset,
                                       field->type->native_size,
-                                      (uint32_t) joint);
+                                      msl_hsd_id_from_pointer(joint));
                         continue;
                     }
                 }
