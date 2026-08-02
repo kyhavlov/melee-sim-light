@@ -51,7 +51,10 @@ TIMEOUT := $(ROOT)/tools/build/portable_timeout.sh
 # mappings are needed and arm64 macOS' 4 GiB __PAGEZERO floor is irrelevant.
 # Override
 # HOST_TARGET_ARCH=x86_64 on Apple Silicon to build the Rosetta 2 profile
-# that matches the validated linux/amd64 FP gates.
+# that targets the gate architecture. Neither macOS profile is
+# gate-authoritative: recorded suite identities come from linux/amd64
+# GNU-toolchain builds (CI or a Linux container), and Apple clang codegen
+# has no recorded bit-exact equivalence to them.
 HOST_ARCH_FLAGS := -arch $(HOST_TARGET_ARCH)
 NATIVE_EXE_LINK_FLAGS := $(HOST_ARCH_FLAGS) -Wl,-dead_strip
 SHARED_LIB_LINK_FLAGS := $(HOST_ARCH_FLAGS) -shared -Wl,-dead_strip
