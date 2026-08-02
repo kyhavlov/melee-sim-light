@@ -99,5 +99,8 @@
   focused PPC validation, Wasm/native parity, viewer smoke, and all 45 Python tests pass. The five
   API tests require preloading the checked-in `_native.py` because pre-existing ignored in-tree
   CPython extension artifacts shadow it; all seven API tests pass under the source module.
+- Build boundary: `native-release` now builds only the portable release runtime. The Linux/x86-only
+  replay benchmark has its own `native-release-benchmark` owner, so it cannot block arm64 macOS
+  release validation on `x86intrin.h`, `__rdtscp`, `sched_getcpu`, or `taskset`.
 - Remaining external check: native macOS execution is still intentionally delegated to the
   contributor with actual Apple hardware. Local Makefile/static and cross-platform gates are clean.

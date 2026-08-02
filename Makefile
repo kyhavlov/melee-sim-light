@@ -378,7 +378,7 @@ endif
 
 NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_SUBSYSTEM_PROFILE)|$(NATIVE_RELEASE_O0_OBJS)|$(NATIVE_RELEASE_O1_OBJS)|$(NATIVE_RELEASE_O2_OBJS)|$(NATIVE_RELEASE_OPT_OBJS)
 
-.PHONY: all bootstrap extract ppc native python-library native-release runtime-census large-batch-smoke benchmark-prepare benchmark-native subsystem-profile benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-build viewer viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source-check validator validation-suite validation-supported-domain validation-release-supported-domain clean toolchain data-check ppc-smoke native-smoke test test-full format-check slpz-convert FORCE
+.PHONY: all bootstrap extract ppc native python-library native-release native-release-benchmark runtime-census large-batch-smoke benchmark-prepare benchmark-native subsystem-profile benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-build viewer viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source-check validator validation-suite validation-supported-domain validation-release-supported-domain clean toolchain data-check ppc-smoke native-smoke test test-full format-check slpz-convert FORCE
 
 all: native python-library
 
@@ -405,7 +405,14 @@ native-release:
 		*flto*) \
 			echo "LTO is not validated for the source-shaped gameplay build" >&2; exit 2;; \
 	esac
-	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" native "$(NATIVE_RELEASE_REPLAY_BENCH)" \
+	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" native \
+		NATIVE_BUILD="$(NATIVE_RELEASE_BUILD)" \
+		NATIVE_CFLAGS="$(NATIVE_RELEASE_CFLAGS)" NATIVE_RELEASE_PROFILE=1
+
+# The replay benchmark is Linux/x86-specific; portable release validation only
+# needs the runtime binary above.
+native-release-benchmark: native-release
+	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" "$(NATIVE_RELEASE_REPLAY_BENCH)" \
 		NATIVE_BUILD="$(NATIVE_RELEASE_BUILD)" \
 		NATIVE_CFLAGS="$(NATIVE_RELEASE_CFLAGS)" NATIVE_RELEASE_PROFILE=1
 
@@ -761,7 +768,7 @@ benchmark-prepare: validator
 		--suite "$(VALIDATION_SUITE)" --output "$(BENCHMARK_MANIFEST)" \
 		--characters "$(VALIDATION_CHARACTERS)" --stages "$(VALIDATION_STAGES)"
 
-benchmark-native: data-check benchmark-prepare native-release
+benchmark-native: data-check benchmark-prepare native-release-benchmark
 	@taskset -c "$(BENCHMARK_CPU)" "$(NATIVE_RELEASE_REPLAY_BENCH)" \
 		"$(DATA)" "$(BENCHMARK_MANIFEST)" --matches "$(BENCHMARK_MATCHES)" \
 		--resident-matches "$(BENCHMARK_RESIDENT_MATCHES)" \
