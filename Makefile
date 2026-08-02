@@ -101,7 +101,7 @@ WASM_LINK_FLAGS ?= -sSTACK_SIZE=1048576
 MSL_DATA_DIR ?= $(ROOT)/data
 DATA ?= $(abspath $(MSL_DATA_DIR))/raw
 VALIDATION_SUITE ?= replays/suites/melee_core_aggregate.json
-VALIDATION_CHARACTERS ?= Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach,Luigi,Mario,Dr. Mario,Samus,Pikachu,Donkey Kong,Ganondorf
+VALIDATION_CHARACTERS ?= Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach,Luigi,Mario,Dr. Mario,Samus,Ice Climbers,Pikachu,Donkey Kong,Ganondorf
 VALIDATION_STAGES ?= 32,31,3,2,8,28
 VALIDATION_BACKEND ?= native
 VALIDATION_WORKERS ?= 0
@@ -115,7 +115,11 @@ BENCHMARK_RESIDENT_MATCHES ?= $(BENCHMARK_MATCHES)
 BENCHMARK_MATCH_FRAMES ?= 65536
 BENCHMARK_WARMUP_TICKS ?= 8
 LARGE_BATCH_MATCHES ?= 256
+ifeq ($(UNAME_S),Darwin)
+RELEASE_ARCH_FLAGS ?=
+else
 RELEASE_ARCH_FLAGS ?= -march=native -mtune=native
+endif
 
 SOURCE_SYNC := $(ROOT)/tools/build/source_sync.sh
 UPSTREAM_ROOTS := MSL MetroTRK Runtime melee sysdolphin
@@ -289,9 +293,12 @@ NATIVE_CFLAGS = $(CFLAGS) $(HOST_ARCH_FLAGS) -fno-pie \
 NATIVE_LINK_FLAGS ?=
 # Native release uses a strict O1 source profile by default. The audited lists
 # below preserve lower exactness profiles or admit stronger measured owners.
+# `__fmadds` is an MWCC intrinsic, so release emits it directly instead of
+# paying an out-of-line call from every exact O0 source translation unit.
 NATIVE_RELEASE_CFLAGS := $(CFLAGS) -O1 -fno-pie -fomit-frame-pointer \
 	-fcf-protection=none -fno-asynchronous-unwind-tables -fno-unwind-tables \
-	$(HOSTED_LEGACY_CFLAGS)
+	$(HOSTED_LEGACY_CFLAGS) $(HOST_ARCH_FLAGS) $(FMA_FLAGS) \
+	-DMSL_NATIVE_INLINE_FMADDS
 NATIVE_BASE_CFLAGS := $(NATIVE_CFLAGS)
 WASM_CFLAGS = $(CFLAGS) $(HOSTED_LEGACY_CFLAGS)
 LDLIBS := -lm
@@ -720,7 +727,7 @@ ppc-smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE)
 	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
 		"$(DATA)"
 
-native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE)
+native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_RUNTIME_CENSUS)
 	@$(TIMEOUT) 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
@@ -730,6 +737,7 @@ native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL
 	@$(TIMEOUT) 5s "$(NATIVE_BATCH_API_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_PUBLIC_API_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_GAMEPLAY_PARTS_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 5s "$(NATIVE_RUNTIME_CENSUS)" "$(DATA)" >/dev/null
 
 wasm-smoke: data-check $(WASM_MODULE) $(NATIVE_WASM_PARITY)
 	@MSL_CORE_NATIVE_DIGEST="$$($(NATIVE_WASM_PARITY) "$(DATA)")" \

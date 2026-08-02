@@ -5602,8 +5602,8 @@ void ftCo_800AC5A0(Fighter* fp)
 {
     struct Fighter_x1A88_t* data;
     bool var_r0;
-    s8 stick_x;
-    s8 stick_y;
+    s8 stick_x = 0;
+    s8 stick_y = 0;
 
     data = &fp->x1A88;
     if (!fp->x221A_b3) {

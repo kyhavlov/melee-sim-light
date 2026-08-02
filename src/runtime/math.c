@@ -19,6 +19,7 @@ extern float MSL_TrigF_80400770[], MSL_TrigF_80400774[];
 
 static inline float lbRefract_80022DF8(float x);
 
+#ifndef MSL_NATIVE_INLINE_FMADDS
 float __fmadds(float a, float b, float c)
 {
 #ifdef MSL_CORE_NATIVE
@@ -29,6 +30,7 @@ float __fmadds(float a, float b, float c)
     return result;
 #endif
 }
+#endif
 
 // MetroWerks emits a scalar-single fnmsubs instruction for this intrinsic.
 float __fnmsubs(float a, float b, float c)

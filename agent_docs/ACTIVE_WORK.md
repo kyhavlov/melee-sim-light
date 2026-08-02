@@ -1,4 +1,100 @@
-# Active structural packet — Ganondorf
+# Active structural packet — `decomp-port-arm64-ppc` merge polish
+
+## Objective
+
+Bring the reviewed `decomp-port-arm64-ppc` tree to a mergeable state without widening its
+correctness policy or accepting regressions to the original eight-character runtime. The retained
+review evidence and experiment log live in `agent_docs/DECOMP_PORT_ARM64_PPC_{REVIEW,POLISH}.md`.
+
+## Final boundary
+
+- **Final owners:** `ftCo_800DA190` owns the character-specific grab accessory correction and must
+  read `Fighter.kind` rather than a PPC-width raw leading word; `ftCo_800AC5A0` owns the CPU-DI
+  command bytes and must not enqueue undefined host locals on its zero-knockback path;
+  fighter-pose admission owns live joint capacity; the existing fighter/dynamics publication
+  phases own the matrices they consume; Makefile/CI own complete gates and host architecture
+  selection.
+- **Canonical state:** one source-shaped Match state, one admitted fighter-pose graph, and the
+  existing JObj matrices/dynamics descriptors. No replay row, validator classification, benchmark
+  mode, or second synchronized cache becomes production state.
+- **Consumers:** native/PPC/Wasm simulation, 2- and 4-player reset/copy/save/restore, validation,
+  observation/viewer publication, and native/macOS build profiles.
+- **Displaced work/state:** remove redundant whole-chain publication and repeated match predicates
+  only where equivalent source state already exists; replace unconditional character-heavy pool
+  reservation with demand owned by the actual configuration if evidence permits. Do not restore
+  cold presentation graphs or displaced renderer machinery.
+- **Deletion boundary:** no tolerances, replay-fit clamps, re-recorded stale fingerprints, character
+  compatibility flags, fallback dispatch, debug bridges, or retained experimental variants. Every
+  performance candidate either passes focused equivalence gates and adjacent benchmarks or is
+  removed completely.
+
+## Acceptance
+
+- Original 153-replay domain: zero failures/errors with retained policy; full 366 aggregate: zero
+  unclassified failures/errors.
+- Focused metadata-preserving PPC checks pass for every touched classification; never use the
+  native-lock-only full PPC aggregate as a gate.
+- Four-Sheik Final Destination reset passes, and the runtime census covers every publicly admitted
+  character across 2/4-player and six-stage configurations without fixed-capacity overflow.
+- Common-domain release throughput at 256/512 and lifecycle save/restore return to the comparison
+  branch within normal adjacent-run variance, with stable per-ref digests and identical workloads.
+- `source-check`, format, native/PPC smoke, Python tests, Wasm/viewer smoke, and complete validation
+  selection pass. macOS-only behavior receives static coverage locally and collaborator execution
+  on actual hardware.
+
+## Log
+
+- 2026-08-01 — `retained`: review head `479d847d` has one native Samus contact failure, one stale Icies
+  PPC follower classification, a four-Sheik fighter-pose capacity abort, +12.85%/+13.54% release
+  cycles/frame at 256/512, and +8.45% snapshot/save/restore cost. Mechanical failures are a stale
+  source lock, two trailing spaces, an omitted Ice Climbers Makefile filter, inconsistent public
+  fighter documentation, and incoherent Rosetta release compile flags. Branch created locally as
+  `decomp-port-arm64-ppc-polish`; no remote update is authorized.
+- 2026-08-01 — `retained`: pose storage is sized from the admitted player count at 256 joints per
+  player, with a 1,024-joint four-player ceiling and a 16-bit capacity. A 16-character, six-stage,
+  2/4-player runtime census now exercises that boundary. Four Sheiks consume the observed maximum
+  of 1,016 joints; two-player snapshots fall from 686,676 to 659,348 bytes and save/restore return
+  to the comparison medians.
+- 2026-08-01 — `retained`: the Samus failure was not an mpColl discrepancy. `ftCo_800DA190` read
+  `*(s32 *) fp` as the fighter kind, relying on the retail 32-bit leading GObj pointer layout; on
+  the 64-bit host that is the pointer's upper half. Reading `fp->kind` restores the source-owned
+  Link/Samus/Young Link exclusion. The 15,481-frame focused replay then has no gameplay mismatch.
+- 2026-08-01 — `retained`: the Ice Climbers split was not follower collision or fma order. Retail
+  `ftCo_800AC5A0` carries caller-register residue for its unassigned CPU-DI bytes when the
+  pre-ProcessHit knockback vector is zero; hosted C instead consumed arbitrary uninitialized stack
+  bytes. Initializing the local command to neutral removes undefined behavior. Both backends then
+  retain only the already-classified item residue, with no follower mismatch.
+- 2026-08-01 — `rejected`: a post-solve dynamics refresh on the PPC path and an explicit
+  CaptureCut fmadd did not own the Ice Climbers mismatch and were removed completely.
+- 2026-08-01 — `retained`: remove the first of two whole-chain dynamics matrix publications in
+  `Fighter_ProcessHit_8006D1EC`. The later post-solve publication remains the canonical end-frame
+  owner added for retail-probed correctness. Seven exact replays whose locks originally depended
+  on dynamics publication remain byte-exact, while adjacent 256-batch sampling improves about
+  6--7% against the redundant-publication control; 512-batch sampling is neutral within noise.
+  A material common-domain throughput gap to `experiment/decomp-port` remains open.
+- 2026-08-01 — `retained`: the sole post-solve dynamics publication now consumes the JObj tree's
+  canonical dirty bits rather than forcing every link dirty. The solver's setters already
+  propagate dirtiness down each mutated chain. All seven retail-probed locks remain exact.
+- 2026-08-01 — `retained`: the larger FObj and class-piece reserves are selected only for a Match
+  containing Samus, the documented sole consumer through her grapple. The all-character census
+  still reaches the Samus high-water safely; the ordinary two-player snapshot is now 611,420
+  bytes, below the comparison branch's 633,156, with faster save/restore medians.
+- 2026-08-01 — `retained`: native release compiles the now-widespread `__fmadds` operation as the
+  compiler intrinsic it represents rather than an out-of-line call from O0 source-shaped TUs.
+  Debug, Python, Wasm, and PPC keep the existing external owner. Seven sensitive locks stay exact;
+  extending the treatment to fmsubs/fnmsubs regressed adjacent throughput and was removed.
+- 2026-08-01 — `retained`: final alternating common-domain samples close the original
+  +12.85%/+13.54% regression. Batch 256 median cycles/frame are 63,765.7 comparison versus
+  62,011.2 polished (-2.75%); batch 512 is 48,921.1 versus 49,625.9 (+1.44%). The per-ref digests
+  are stable and workloads identical; the remaining spread is ordinary machine contention, not a
+  material regression.
+- 2026-08-01 — `retained`: final native aggregate after the representation changes has 286 exact
+  passes / 80 classified / 0 failures / 0 errors over all 366 replays. The obsolete Samus
+  classification is deleted. Twenty-three Ice Climbers snapshots were refreshed only after a
+  guarded audit proved their drift was confined to the already-owned item identity/residue lanes;
+  the one mixed Dream Land entry retained its byte-identical pre-existing wind-puff fields.
+
+# Previous structural packet — Ganondorf
 
 ## Objective
 
@@ -37,7 +133,7 @@ public API/viewer/validation admission, and a 30-replay suite wired into the agg
   only ever read at tracked nodes' first-track indices (request_figa early-returns for
   trackless nodes), so skipping the write for zero-track nodes is read-identical: native
   aggregate byte-stable after the fix, ASan-clean end-to-end (debug recipe: ASan-build
-  libmelee_core via `make python-library PYTHON_BUILD=/tmp/asan_build NATIVE_OBJ_DIR=... 
+  libmelee_core via `make python-library PYTHON_BUILD=/tmp/asan_build NATIVE_OBJ_DIR=...`
   CFLAGS="-O1 -g -fsanitize=address ..."`, stub the ~34 gc-section-dead undefined symbols,
   LD_PRELOAD libasan into python).
 
@@ -732,7 +828,7 @@ slice, and follower-frame validation.
 - 2026-07-27 — `retained` (script-cadence layer probed; episodes converge on A2C80 recovery entry)
   The kScriptFinalize probe (0x800B49F4, logs per-build frame/x18/buffer bytes) shows retail
   building a state-4 recovery script EVERY air frame 3945-3982, demoting to x18=1 at the 3983
-  landing, and building the state-1 AA42C walk script at 3984: SetLstickY 0; 
+  landing, and building the state-1 AA42C walk script at 3984: SetLstickY 0;
   LstickXTowardDestination 0; WaitFor 2; LstickXTowardDestination 0x7F; Done - the WaitFor 2
   lands the full -127 exactly at 3986. Ours builds the same script one frame later (3985)
   because our x18 was 10 (not 4) through the recovery: our sim never entered the A2C80

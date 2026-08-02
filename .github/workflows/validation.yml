@@ -112,6 +112,9 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: make native validator python-library -j4 PY=python3
 
+      - name: Check source inventory
+        run: make source-check
+
       - name: Run the aggregate replay gate
         # Explicit bash turns on pipefail so the tee cannot mask a gate
         # failure.

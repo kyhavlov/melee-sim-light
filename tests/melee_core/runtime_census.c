@@ -203,7 +203,9 @@ static void print_class_storage(const MslCoreMatch* match) {
 }
 
 int main(int argc, char** argv) {
-  static const uint8_t characters[] = {1, 22, 18, 2, 7, 19, 15, 9};
+  static const uint8_t characters[] = {
+      1, 22, 18, 2, 7, 19, 15, 9, 17, 0, 21, 13, 10, 12, 3, 25,
+  };
   static const uint8_t stages[] = {32, 31, 3, 2, 8, 28};
   static const uint8_t player_counts[] = {2, 4};
   MslCoreGameData* game_data = NULL;

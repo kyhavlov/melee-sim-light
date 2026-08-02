@@ -3,6 +3,36 @@
 Only production-contract, correctness-green results belong here. Historical experiments remain in
 Git history and ignored triage artifacts, not in this active evidence file.
 
+## `decomp-port-arm64-ppc` merge polish — 2026-08-01
+
+The expanded character branch no longer publishes the retained dynamics chains twice per fighter:
+`Fighter_8006D9AC` is the sole post-solve/end-frame owner, and it consumes canonical JObj dirty
+state rather than forcing every link dirty. Native release also emits the source-authored
+`__fmadds` sites directly as the compiler intrinsic they represent; the debug, Python, Wasm, and
+PPC profiles keep the existing out-of-line owner. A broader fmsubs/fnmsubs inline candidate was
+measurably slower and is not retained.
+
+Match initialization keeps the established ordinary FObj/class-piece reserves and selects the
+larger measured reserves only when Samus is configured, because her grapple is their documented
+sole consumer. Pose storage is likewise sized at 256 joints per configured player under the final
+1,024-joint public ceiling. The ordinary two-player snapshot falls from the review head's 686,676
+bytes to 611,420, below the comparison branch's 633,156; save/restore measure 0.504/0.661 ms versus
+the comparison medians of 0.5265/0.691 ms. The complete census peaks safely at 1,016 pose joints
+for four Sheiks and preserves the larger Samus pool high-water.
+
+Final serialized common-domain samples use the same 153 replays, 65,536 match-frames, fixed CPUs,
+and stable per-ref digests. At resident batch 256, comparison/candidate median costs are
+63,765.7/62,011.2 cycles per frame (-2.75%). At batch 512 they are 48,921.1/49,625.9 (+1.44%).
+The remaining spread is normal host contention; this closes the review head's material
++12.85%/+13.54% regression. Digests differ across refs only because the branch deliberately
+changed hosted identities and the compare wire (`8ef126a41244d514`/`6f91f23e3553a090` comparison,
+`474828382690a770`/`a1178bdf42eb555a` candidate).
+
+The final native aggregate is 286 PASS / 80 unchanged CLASSIFIED / zero XPASS/fail/error over all
+366 replays and 3,501,461 frames. Seven dynamics-sensitive exact locks remain byte-identical;
+focused PPC Ice Climbers validation has only 187 established item-residue rows and no follower or
+physics mismatch.
+
 ## Canonical embedded stage-line topology — 2026-07-19
 
 Native stage collision now owns each mutable `MapLine` topology record directly inside its

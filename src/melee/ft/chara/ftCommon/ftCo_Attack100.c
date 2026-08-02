@@ -2047,9 +2047,8 @@ void fn_800DA054(Fighter_GObj* gobj)
 void fn_800DA190(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
-    s32 state = *(s32*) ((u8*) fp + 0x4);
 
-    switch (state) {
+    switch (fp->kind) {
     case 6:
     case 13:
     case 20:

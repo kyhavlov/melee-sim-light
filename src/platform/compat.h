@@ -16,7 +16,11 @@ typedef unsigned long __file_handle;
 typedef void (*__idle_proc)(void);
 
 float msl_dolphin_fnmsubs(float a, float b, float c);
+#ifdef MSL_NATIVE_INLINE_FMADDS
+#define __fmadds(a, b, c) __builtin_fmaf((a), (b), (c))
+#else
 float __fmadds(float a, float b, float c);
+#endif
 float __fmsubs(float a, float b, float c);
 float __fnmsubs(float a, float b, float c);
 

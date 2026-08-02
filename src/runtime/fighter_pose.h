@@ -10,9 +10,11 @@
 #include <melee/lb/forward.h>
 
 enum {
-    // The supported-domain construction census reaches 976 retained main and
-    // interpolation nodes for four Peach instances.
-    MSL_FIGHTER_POSE_JOINT_CAPACITY = 1000,
+    // Construction retains at most 256 main/interpolation nodes per configured
+    // player slot, including Sheik/Zelda's transform pair and Popo's follower.
+    MSL_FIGHTER_POSE_JOINTS_PER_PLAYER = 256,
+    MSL_FIGHTER_POSE_JOINT_CAPACITY =
+        MSL_FIGHTER_POSE_JOINTS_PER_PLAYER * 4,
     MSL_FIGHTER_POSE_TRACK_CAPACITY = 1024,
     MSL_FIGHTER_POSE_ECB_CAPACITY = 8,
     MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY = 32,
@@ -82,6 +84,7 @@ typedef struct MslFighterPose {
         uint16_t joints[MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY];
     } ecb[MSL_FIGHTER_POSE_ECB_CAPACITY];
     uint16_t joint_count;
+    uint16_t joint_capacity;
     uint16_t track_used;
     uint16_t ecb_count;
 } MslFighterPose;
@@ -119,7 +122,7 @@ typedef struct MslFighterPosePrograms {
     uint32_t track_node_count;
 } MslFighterPosePrograms;
 
-int msl_fighter_pose_init(MslFighterPose* pose);
+int msl_fighter_pose_init(MslFighterPose* pose, uint8_t player_count);
 int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs);
 void msl_fighter_pose_programs_deinit(MslFighterPosePrograms* programs);
 void msl_fighter_pose_register_tree(HSD_JObj* root);

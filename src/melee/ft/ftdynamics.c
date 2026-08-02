@@ -183,7 +183,6 @@ void msl_fighter_refresh_dynamics_matrices(Fighter* fp)
         for (; link != NULL; link = link->next) {
             HSD_JObj* jobj = link->desc.lb_unk0.jobj;
             if (jobj != NULL) {
-                HSD_JObjSetMtxDirty(jobj);
                 HSD_JObjSetupMatrix(jobj);
             }
         }

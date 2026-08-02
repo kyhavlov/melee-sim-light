@@ -4,9 +4,9 @@
 
 Build a high-performance, batched, deterministic Melee simulator for RL. Supported fighters are
 Fox, Falco, Marth, Sheik, Zelda, Captain Falcon, Jigglypuff, Peach, Luigi, Mario, Dr. Mario,
-Samus, and the Ice Climbers (Popo with the CPU-mimic Nana follower). RL 1.0 covers singles and
-doubles on Final Destination, Battlefield, Fountain of Dreams, frozen Pokemon Stadium, Yoshi's
-Story, and Dream Land N64. UCF is enabled by default.
+Samus, the Ice Climbers (Popo with the CPU-mimic Nana follower), Pikachu, Donkey Kong, and
+Ganondorf. RL 1.0 covers singles and doubles on Final Destination, Battlefield, Fountain of
+Dreams, frozen Pokemon Stadium, Yoshi's Story, and Dream Land N64. UCF is enabled by default.
 
 Correctness comes from gameplay-relevant source completion: port the relevant decomp call graphs,
 persistent state, tables, callback ownership, and scheduler order. Organize implementation by

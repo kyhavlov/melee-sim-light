@@ -97,12 +97,14 @@ bool msl_fighter_pose_path(const HSD_JObj* joint, HSD_JObj** path)
     return true;
 }
 
-int msl_fighter_pose_init(MslFighterPose* pose)
+int msl_fighter_pose_init(MslFighterPose* pose, uint8_t player_count)
 {
 #ifdef MSL_CORE_NATIVE
+    pose->joint_capacity =
+        MSL_FIGHTER_POSE_JOINTS_PER_PLAYER * player_count;
     pose->joints = HSD_MemAllocReloc(
-        sizeof(*pose->joints) * MSL_FIGHTER_POSE_JOINT_CAPACITY,
-        MSL_RELOC_FIGHTER_POSE_JOINT, MSL_FIGHTER_POSE_JOINT_CAPACITY,
+        sizeof(*pose->joints) * pose->joint_capacity,
+        MSL_RELOC_FIGHTER_POSE_JOINT, pose->joint_capacity,
         sizeof(*pose->joints), 0);
     pose->tracks = HSD_MemAllocReloc(
         sizeof(*pose->tracks) * MSL_FIGHTER_POSE_TRACK_CAPACITY,
@@ -117,6 +119,7 @@ int msl_fighter_pose_init(MslFighterPose* pose)
     return 0;
 #else
     (void) pose;
+    (void) player_count;
     return 0;
 #endif
 }
@@ -132,7 +135,7 @@ static void register_joint(HSD_JObj* joint)
         return;
     }
     HSD_ASSERT(70, joint->aobj == NULL);
-    HSD_ASSERT(71, pose->joint_count < MSL_FIGHTER_POSE_JOINT_CAPACITY);
+    HSD_ASSERT(71, pose->joint_count < pose->joint_capacity);
     node = &pose->joints[pose->joint_count++];
     memset(node, 0, sizeof(*node));
     node->magic = MSL_FIGHTER_POSE_MAGIC;

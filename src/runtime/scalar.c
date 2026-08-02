@@ -865,25 +865,29 @@ static int match_construct(MslCoreMatch* match,
     const MslCoreStageSpec* spec;
     UnkArchiveStruct* map_data;
     int i;
+#ifdef MSL_CORE_NATIVE
+    bool has_samus = false;
+#endif
 
     match->random.value = 1;
     match->random.active = &match->random.value;
     match->game_data = game_data;
     msl_core_bind_match(match);
+    match->config = *config;
+    if (validate_config(&match->config) != 0) {
+        return -1;
+    }
 #ifdef MSL_CORE_NATIVE
     msl_reloc_begin_match(match);
 #endif
     init_hsd();
 #ifdef MSL_CORE_NATIVE
     init_relocation_types();
-    if (msl_fighter_pose_init(&match->fighter_pose) != 0) {
+    if (msl_fighter_pose_init(&match->fighter_pose,
+                              match->config.num_players) != 0) {
         return -1;
     }
 #endif
-    match->config = *config;
-    if (validate_config(&match->config) != 0) {
-        return -1;
-    }
     spec = stage_spec(match->config.stage_id);
     match->stage_data = spec->source != NULL ? spec->source : &fd_stage_data;
     bind_stage_match(match);
@@ -1113,6 +1117,11 @@ static int match_construct(MslCoreMatch* match,
                                 ? &spec->teams_spawn[spawn_order]
                                 : &spec->singles_spawn[spawn_order];
         uint8_t encoded = match->config.players[i].facing_and_port;
+#ifdef MSL_CORE_NATIVE
+        if (match->config.players[i].char_id == MSL_CORE_CHAR_SAMUS) {
+            has_samus = true;
+        }
+#endif
         float facing = (encoded >> 1) == 0 ? (i == 0 ? 1.0F : -1.0F)
                                            : ((encoded & 1) ? 1.0F : -1.0F);
         Player_SetPlayerCharacter(
@@ -1244,7 +1253,7 @@ static int match_construct(MslCoreMatch* match,
     // doubled beam link chain (itsamusgrapple.c::it_802B743C via
     // ftCo_AirCatch_Anim), and every link jobj takes one FObj per track, so
     // the deepest supported air-catch crosses the former 256-slot reserve.
-    HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(), 512);
+    HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(), has_samus ? 512 : 256);
     HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 128);
     HSD_ObjAllocEnsureFree(HSD_RObjGetAllocData(), 16);
     HSD_ObjAllocEnsureFree(&gobj_alloc_data, 128);
@@ -1275,7 +1284,7 @@ static int match_construct(MslCoreMatch* match,
     // the deepest supported spawn crosses the former 128-piece reserve.
     // refs/melee/src/melee/it/items/{itpeachturnip.c,itsamusgrapple.c}
     // refs/melee/src/sysdolphin/baselib/{class.c,jobj.c}
-    hsdPreallocateMemPieces(256);
+    hsdPreallocateMemPieces(has_samus ? 256 : 128);
 
     // This Match's source allocation pools are complete. Shared DAT graphs
     // are sealed once, after GameData has preloaded the supported domain;
