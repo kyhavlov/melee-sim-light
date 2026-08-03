@@ -6,9 +6,10 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Provenance
 
-- Revision: `cc367cfe1fdb7c578706ebbedcdb0f367491b106`
+- Revision: benchmark-balancing change based on
+  `b3ade65ac45c588e8d8e0958a4cd575380cf78c3`
 - Release benchmark SHA-256:
-  `8949d99cf7270be2d778e89bb934f6d07d08c95d042ba22a7174f57d671ed29b`
+  `a461e1301379b32f00ea5e8eb56e73d3c60c31f1be387ee0749ee98821fec0ff`
 - Date: 2026-08-03
 - Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 7.0 x86-64
 - Compiler: GCC 13.3.0, strict native release profile, `-march=native -mtune=native`
@@ -26,11 +27,12 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Benchmark contract
 
-The benchmark packs all 366 aggregate replay cases, starts each unique replay once, and pre-rolls
-it by one of eight deterministic offsets from 200 through 900 frames. Repeated batch slots copy
-those initialized Matches through the production copy API. Timed play then advances 262,144
-match-frames with ordinary per-environment replay looping, a true resident 256/512 batch, and a
-caller-owned 128-frame observation/terminal history.
+The benchmark packs all 366 aggregate replay cases and assigns resident lanes proportionally
+across the complete ordered corpus. Each assigned unique replay is pre-rolled by one of eight
+deterministic offsets from 200 through 900 frames; repeated batch slots copy those initialized
+Matches through the production copy API. Timed play then advances 262,144 match-frames with
+ordinary per-environment replay looping, a true resident 256/512 batch, and a caller-owned
+128-frame observation/terminal history.
 
 ```sh
 make benchmark-9950x3d-vcache-256 BENCHMARK_MATCH_FRAMES=262144
@@ -41,15 +43,15 @@ The final exact candidate samples are:
 
 | Batch | Samples | Median cycles/frame | Median FPS | Digest |
 |---:|---|---:|---:|---:|
-| 256 | 3 | 40,722.9 | 105,394 | `5bd0cb90236b720d` |
-| 512 | 5 | 42,508.3 | 100,967 | `a5f79aeaf1a03b84` |
+| 256 | 3 | 42,429.7 | 101,155 | `bdff41cf74a54850` |
+| 512 | 5 | 40,783.0 | 105,239 | `ee9d93c545aa3ef9` |
 
-Raw 256 cycles/frame were `40,765.0`, `40,722.9`, and `40,252.5`. Raw 512 cycles/frame were
-`42,191.4`, `42,531.9`, `42,508.3`, `42,600.0`, and `42,102.0`; corresponding wall throughput was
-`101,726`, `100,911`, `100,967`, `100,750`, and `101,942` FPS. Cycles/frame is the primary
-comparison because wall FPS also reflects frequency and machine contention. Alternating parent
-controls establish that the correctness-only output change is throughput-neutral; see
-`HISTORY.md`.
+Raw 256 cycles/frame were `42,340.5`, `43,204.3`, and `42,429.7`; corresponding wall throughput
+was `101,367`, `99,341`, and `101,155` FPS. Raw 512 cycles/frame were `40,626.5`, `41,423.8`,
+`41,188.6`, `40,596.3`, and `40,783.0`; corresponding wall throughput was `105,644`, `103,611`,
+`104,202`, `105,723`, and `105,239` FPS. Cycles/frame is the primary comparison because wall FPS
+also reflects frequency and machine contention. The prior prefix-assigned benchmark is a different
+workload and is not an A/B performance control for these numbers.
 
 ## Current memory contract
 

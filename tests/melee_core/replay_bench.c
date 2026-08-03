@@ -245,11 +245,18 @@ static void workload_free(Workload* workload) {
   free(workload->reset_mask);
 }
 
+static uint32_t workload_case_index(uint32_t match_index, uint32_t match_count,
+                                    uint32_t case_count) {
+  return (uint32_t)(((uint64_t)match_index * case_count) / match_count);
+}
+
 static int workload_reset(MslCoreBatch* batch, Workload* workload) {
   uint32_t i;
   for (i = 0; i < workload->match_count; ++i) {
     uint32_t j;
-    uint32_t case_index = (workload->output_match_offset + i) % workload->case_count;
+    uint32_t case_index = workload_case_index(workload->output_match_offset + i,
+                                              workload->output_match_stride,
+                                              workload->case_count);
     workload->case_index[i] = case_index;
     workload->frame_index[i] = 0;
     workload->source_index[i] = i;
@@ -481,6 +488,7 @@ int main(int argc, char** argv) {
   uint32_t ticks;
   uint32_t case_count = 0;
   uint32_t preroll_source_count;
+  uint32_t previous_case_index = UINT32_MAX;
   uint32_t i;
   uint64_t digest = UINT64_C(14695981039346656037);
   uint64_t preroll_match_frames = 0;
@@ -540,8 +548,10 @@ int main(int argc, char** argv) {
     fprintf(stderr, "benchmark workload failed\n");
     goto done;
   }
-  for (i = 0; i < case_count; ++i) {
-    const MslCoreMatchConfig* config = &cases[i].header->config;
+  preroll_source_count = 0;
+  for (i = 0; i < match_count; ++i) {
+    uint32_t case_index = workload_case_index(i, match_count, case_count);
+    const MslCoreMatchConfig* config = &cases[case_index].header->config;
     uint32_t player;
     if (config->stage_id < 64) {
       stage_mask |= UINT64_C(1) << config->stage_id;
@@ -551,11 +561,12 @@ int main(int argc, char** argv) {
         character_mask |= UINT64_C(1) << config->players[player].char_id;
       }
     }
-  }
-  preroll_source_count = match_count < case_count ? match_count : case_count;
-  for (i = 0; i < preroll_source_count; ++i) {
-    preroll_match_frames +=
-        STARTUP_BASE_FRAMES + (i % STARTUP_GROUP_COUNT) * STARTUP_FRAME_GAP;
+    if (case_index != previous_case_index) {
+      ++preroll_source_count;
+      preroll_match_frames += STARTUP_BASE_FRAMES +
+                              (case_index % STARTUP_GROUP_COUNT) * STARTUP_FRAME_GAP;
+      previous_case_index = case_index;
+    }
   }
   if (run_sharded_pass(game_data, cases, case_count, match_count, resident_match_count, ticks,
                        warmup_ticks, 1, observations, terminals, &production) != 0) {

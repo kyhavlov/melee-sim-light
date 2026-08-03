@@ -23,9 +23,7 @@ implementation queue.
 3. Establish the approved final representation and deletion boundary first, then recover
    correctness and performance inside it. Never restore displaced machinery merely because an
    incomplete cut is red or slower.
-4. Log material experiments before and after execution. Stop and reconvene after two hours without
-   a retained result/completed deletion boundary, after two failures on the same architectural
-   unknown, or whenever benchmark provenance or the intended final path is uncertain.
+4. Log material experiments before and after execution.
 5. Never blanket-delete or replace substantial dirty work without explicit approval and a salvage
    inventory. Do not commit unless the user or active goal authorizes it.
 6. All durable performance history lives under `agent_docs/performance/`. Before a performance
