@@ -6,22 +6,23 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Provenance
 
-- Revision: local `perf/decomp-throughput` candidate based on
-  `4a344d568df0d338819ab25bacd3c44da1419227`
+- Revision: `cc367cfe1fdb7c578706ebbedcdb0f367491b106`
 - Release benchmark SHA-256:
-  `3ef66625839ca254b2448f43e2c541858526a185c3811b681c8beda8faec2637`
-- Date: 2026-08-02
+  `8949d99cf7270be2d778e89bb934f6d07d08c95d042ba22a7174f57d671ed29b`
+- Date: 2026-08-03
 - Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 7.0 x86-64
 - Compiler: GCC 13.3.0, strict native release profile, `-march=native -mtune=native`
 - Runtime: source-shaped per-Match scheduler with compact gameplay-live fighter pose, exact dense
   ordinary Figa samples, direct canonical fighter-animation spans, lazy mutable Figa decoder
   ownership, construction-bound dynamic-hurt membership, fused exact JObj/dynamics transforms,
   exact quaternion compiler boundaries, exact O1 fighter map collision, direct hosted scheduler
-  dispatch, and the 16-character merged runtime
-- Correctness: 366/366 accepted (`286 PASS`, `80 CLASSIFIED`, zero XPASS/fail/error) across
-  3,501,461 validated frames, with no new or widened classifications
-- Native source/API/copy/save-restore, sealed-allocation census, 45 Python tests, PPC, Wasm parity,
-  live viewer/browser, lifecycle, and formatting gates are green on this exact candidate
+  dispatch, source-defined Ice Climbers item projection, and the 16-character merged runtime
+- Correctness: 366/366 accepted (`310 PASS`, `56 CLASSIFIED`, zero XPASS/fail/error) across
+  3,501,461 validated frames. Twenty-five obsolete raw-pointer/pool-residue classifications are
+  replaced by one genuine Whispy RNG-phase classification, a net reduction of 24, without changing
+  gameplay.
+- Source synchronization, native API/copy/save-restore and sealed-allocation smoke, optimized
+  release validation, PPC smoke, and Wasm parity are green on this exact candidate.
 
 ## Benchmark contract
 
@@ -40,13 +41,15 @@ The final exact candidate samples are:
 
 | Batch | Samples | Median cycles/frame | Median FPS | Digest |
 |---:|---|---:|---:|---:|
-| 256 | 3 | 41,700.7 | 102,923 | `5bd0cb90236b720d` |
-| 512 | 5 | 42,310.7 | 101,439 | `932bcfbacb888ac4` |
+| 256 | 3 | 40,722.9 | 105,394 | `5bd0cb90236b720d` |
+| 512 | 5 | 42,508.3 | 100,967 | `a5f79aeaf1a03b84` |
 
-Raw 256 cycles/frame were `42,083.7`, `41,700.7`, and `41,614.7`. Raw 512 cycles/frame were
-`42,939.1`, `42,259.9`, `42,346.9`, `42,305.3`, and `42,310.7`; corresponding wall throughput was
-`99,954`, `101,561`, `101,352`, `101,452`, and `101,439` FPS. Cycles/frame is the primary
-comparison because wall FPS also reflects frequency and machine contention.
+Raw 256 cycles/frame were `40,765.0`, `40,722.9`, and `40,252.5`. Raw 512 cycles/frame were
+`42,191.4`, `42,531.9`, `42,508.3`, `42,600.0`, and `42,102.0`; corresponding wall throughput was
+`101,726`, `100,911`, `100,967`, `100,750`, and `101,942` FPS. Cycles/frame is the primary
+comparison because wall FPS also reflects frequency and machine contention. Alternating parent
+controls establish that the correctness-only output change is throughput-neutral; see
+`HISTORY.md`.
 
 ## Current memory contract
 

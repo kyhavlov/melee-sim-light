@@ -1,7 +1,34 @@
-# Retained performance evidence
+# Detailed performance history
 
-Only production-contract, correctness-green results belong here. Historical experiments remain in
-Git history and ignored triage artifacts, not in this active evidence file.
+This is the detailed retained and negative-result ledger inherited from the current decomp-port
+line. The current benchmark contract, concise retained summary, imported branch journals, and
+architectural attempt records are indexed in [`README.md`](README.md). Forensic artifacts remain
+under ignored `reports/triage/`.
+
+## Ice Climbers item-output canonicalization — 2026-08-03
+
+Ice, Blizzard, and Belay now publish only source-defined gameplay bytes in the four Slippi item
+misc lanes. Ice's scale byte is read from its named source member; owner/link/JObj pointers and
+bytes beyond each declared item-variable payload are excluded. This replaces 25 obsolete
+raw-pointer or fixed-pool-residue classifications with one genuine Whispy RNG-phase classification,
+a net reduction of 24, and refreshes 23 affected output locks without changing gameplay state or
+adding runtime storage.
+
+One candidate/parent/parent/candidate sequence against exact parent `de8879be`, using 262,144
+frames and eight warmup ticks, measures:
+
+| Resident matches | Parent median cycles/frame | Candidate median cycles/frame | Delta |
+|---:|---:|---:|---:|
+| 256 | 41,004.5 | 40,744.0 | -0.64% |
+| 512 | 42,501.2 | 42,361.7 | -0.33% |
+
+The 256 digest remains `5bd0cb90236b720d`. The 512 digest deliberately changes from parent
+`932bcfbacb888ac4` to `a5f79aeaf1a03b84` because the benchmark includes the corrected item-output
+projection. Both orders are within one percent; this is accepted as performance-neutral
+correctness work, not as a throughput optimization. The complete optimized-release gate is
+310 PASS / 56 unchanged CLASSIFIED / zero XPASS/fail/error over 366 replays and 3,501,461 frames;
+source/native/PPC/Wasm gates pass. Release benchmark SHA-256:
+`8949d99cf7270be2d778e89bb934f6d07d08c95d042ba22a7174f57d671ed29b`.
 
 ## Canonical pose/dynamics throughput checkpoint — 2026-08-02
 

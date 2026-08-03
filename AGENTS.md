@@ -28,6 +28,11 @@ implementation queue.
    unknown, or whenever benchmark provenance or the intended final path is uncertain.
 5. Never blanket-delete or replace substantial dirty work without explicit approval and a salvage
    inventory. Do not commit unless the user or active goal authorizes it.
+6. All durable performance history lives under `agent_docs/performance/`. Before a performance
+   packet, search that directory for the proposed owner, symbols, and approach, then review
+   `agent_docs/performance/README.md` and the relevant records. Add or update an indexed record
+   when an architectural candidate is rejected or when new evidence materially changes an earlier
+   conclusion.
 
 ## Runtime and source requirements
 
@@ -61,4 +66,4 @@ implementation queue.
 - Put forensic outputs under ignored `reports/triage/` and never hand-edit generated results.
 - New-core plans and evidence live only under `agent_docs/`.
 - A performance commit must include implementation, gates, and refreshed retained evidence in
-  `agent_docs/PERFORMANCE.md`.
+  `agent_docs/performance/HISTORY.md`.

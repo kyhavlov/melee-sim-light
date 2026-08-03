@@ -2,8 +2,8 @@
 
 This is the concise ledger of performance and memory work still represented in the canonical
 decomp-based runtime. Each entry identifies the commit that introduced the retained boundary.
-Correctness/source-completion patches and rejected experiments do not belong here; detailed
-negative results remain in `PERFORMANCE.md`.
+Correctness/source-completion patches and rejected experiments do not belong here. Rejected work
+is indexed in `README.md`; legacy measurements remain in `HISTORY.md`.
 
 Every throughput result uses the production release path and was accepted with the then-current
 complete replay gate and unchanged output digests. Absolute results from older commits are not
