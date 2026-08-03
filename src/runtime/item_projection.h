@@ -39,6 +39,9 @@ enum {
     MSL_CORE_ITEM_KIND_SAMUS_CHARGE_SHOT = 94,
     MSL_CORE_ITEM_KIND_SAMUS_MISSILE = 95,
     MSL_CORE_ITEM_KIND_SAMUS_GRAPPLE_BEAM = 96,
+    MSL_CORE_ITEM_KIND_ICE_CLIMBERS_ICE = 106,
+    MSL_CORE_ITEM_KIND_ICE_CLIMBERS_BLIZZARD = 107,
+    MSL_CORE_ITEM_KIND_ICE_CLIMBERS_BELAY = 113,
     MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE = 108,
     MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE = 109,
     MSL_CORE_ITEM_KIND_PEACH_TOAD_SPORE = 111,
@@ -160,6 +163,24 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // end before the xDEB/xDEF samples.
         // refs/melee/src/melee/it/itCharItems.h::itSamusGrapple_ItemVars
         return 0;
+    case MSL_CORE_ITEM_KIND_ICE_CLIMBERS_ICE:
+        // xDD4 is the fighter-owner pointer, xDD8 is the gameplay scale,
+        // and itClimbersIce_ItemVars ends at xDE0. The later samples are
+        // fixed-pool residue.
+        // refs/melee/src/melee/it/itCharItems.h::itClimbersIce_ItemVars
+        return MSL_CORE_ITEM_MISC1;
+    case MSL_CORE_ITEM_KIND_ICE_CLIMBERS_BLIZZARD:
+        // Only the xDD4 scale float occupies a sampled lane. The flag is at
+        // xDD8 and the payload ends before the later samples.
+        // refs/melee/src/melee/it/itCharItems.h::itClimbersBlizzard_ItemVars
+        return MSL_CORE_ITEM_MISC0;
+    case MSL_CORE_ITEM_KIND_ICE_CLIMBERS_BELAY:
+        // xDD4 is the rope scalar; xDD8 and xDDC are ItemLink pointers,
+        // xDE8 is a JObj pointer, and the final sample is past the payload.
+        // The scalar itself is not assigned until entry to state 3.
+        // refs/melee/src/melee/it/itCharItems.h::itClimbersString_ItemVars
+        // refs/melee/src/melee/it/items/itclimbersstring.c::it_802C3864
+        return state == 3 ? MSL_CORE_ITEM_MISC0 : 0;
     case MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE:
         // Its first source word is explicitly uninitialized padding.
         // refs/melee/src/melee/it/items/itzeldadinfire.c::it_802C1590

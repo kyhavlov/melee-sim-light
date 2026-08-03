@@ -1465,7 +1465,12 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
     // named 32-bit gameplay scalars.
     // refs/melee/src/melee/it/{itCommonItems.h,itCharItems.h}
     // refs/slippi-ssbm-asm/Recording/SendItemInfo.s
-    if (item->kind == It_Kind_Seak_Chain) {
+    if (item->kind == It_Kind_IceClimber_Ice) {
+        if (source_offset == 7) {
+            memcpy(&word, &item->xDD4_itemVar.climbersice.x4, sizeof(word));
+            return (uint8_t) word;
+        }
+    } else if (item->kind == It_Kind_Seak_Chain) {
         if (source_offset == 0x17) {
             memcpy(&word, &item->xDD4_itemVar.seakchain.x14, sizeof(word));
             return (uint8_t) word;
