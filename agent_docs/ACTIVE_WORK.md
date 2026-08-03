@@ -4,7 +4,8 @@
 
 Bring the reviewed `decomp-port-arm64-ppc` tree to a mergeable state without widening its
 correctness policy or accepting regressions to the original eight-character runtime. The retained
-review evidence and experiment log live in `agent_docs/DECOMP_PORT_ARM64_PPC_{REVIEW,POLISH}.md`.
+ownership and experiment log live below; retained performance evidence lives in
+`agent_docs/PERFORMANCE.md`.
 
 ## Final boundary
 
