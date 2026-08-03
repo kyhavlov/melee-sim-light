@@ -6,72 +6,72 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Provenance
 
-- Commit: canonical embedded stage-line topology (this commit)
-- Runtime: compact fighter pose/gameplay geometry, node-indexed dense exact ordinary Figa samples,
-  direct hosted
-  scheduler dispatch, demand-owned hurt capsules, exact O1 fighter map collision, the supported
-  64-node hosted dynamics pool, exact paired three-axis matrix trig, and fused ordinary JObj world
-  matrix publication, optimized PPC-exact hosted square root, fused exact dynamics transforms, with release-only
-  CET/frame-chain/unwind deletion, a strict optimized native source closure, and singular embedded
-  mutable stage-line topology
-- Date: 2026-07-19
-- Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 6.17 x86-64
+- Revision: local `perf/decomp-throughput` candidate based on
+  `4a344d568df0d338819ab25bacd3c44da1419227`
+- Release benchmark SHA-256:
+  `3ef66625839ca254b2448f43e2c541858526a185c3811b681c8beda8faec2637`
+- Date: 2026-08-02
+- Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 7.0 x86-64
 - Compiler: GCC 13.3.0, strict native release profile, `-march=native -mtune=native`
-- Correctness: 153/153 accepted (`63 PASS`, `90 CLASSIFIED`, zero XPASS/fail/error), with no new
-  or widened classifications
-- Native source/API/copy/save-restore, sealed-allocation census, Wasm parity, viewer, and formatting
-  gates: green
+- Runtime: source-shaped per-Match scheduler with compact gameplay-live fighter pose, exact dense
+  ordinary Figa samples, direct canonical fighter-animation spans, lazy mutable Figa decoder
+  ownership, construction-bound dynamic-hurt membership, fused exact JObj/dynamics transforms,
+  exact quaternion compiler boundaries, exact O1 fighter map collision, direct hosted scheduler
+  dispatch, and the 16-character merged runtime
+- Correctness: 366/366 accepted (`286 PASS`, `80 CLASSIFIED`, zero XPASS/fail/error) across
+  3,501,461 validated frames, with no new or widened classifications
+- Native source/API/copy/save-restore, sealed-allocation census, 45 Python tests, PPC, Wasm parity,
+  live viewer/browser, lifecycle, and formatting gates are green on this exact candidate
 
 ## Benchmark contract
 
-The benchmark packs all 153 supported-domain input tapes, starts each unique replay once, and
-pre-rolls it by one of eight deterministic offsets from 200 through 900 frames. Repeated batch
-slots copy those initialized Matches through the production copy API. Timed play then advances
-65,536 match-frames with ordinary per-environment replay looping, a true resident 256/512 batch,
-and a caller-owned 128-frame observation/terminal history.
+The benchmark packs all 366 aggregate replay cases, starts each unique replay once, and pre-rolls
+it by one of eight deterministic offsets from 200 through 900 frames. Repeated batch slots copy
+those initialized Matches through the production copy API. Timed play then advances 262,144
+match-frames with ordinary per-environment replay looping, a true resident 256/512 batch, and a
+caller-owned 128-frame observation/terminal history.
 
 ```sh
-make benchmark-9950x3d-vcache-256
-make benchmark-9950x3d-vcache-512
+make benchmark-9950x3d-vcache-256 BENCHMARK_MATCH_FRAMES=262144
+make benchmark-9950x3d-vcache-512 BENCHMARK_MATCH_FRAMES=262144
 ```
 
-| Batch | Digest |
-|---:|---:|
-| 256 | `8ef126a41244d514` |
-| 512 | `6f91f23e3553a090` |
+The final exact candidate samples are:
 
-The retained comparison medians are 102,667 FPS at 256 and 96,436 FPS at 512. For the latest fighter
-contact packet, adjacent 512 control/candidate median costs are 44,873.7/44,505.4 cycles/frame
-(-0.82%) and adjacent 256 costs are 42,247.1/41,804.5 (-1.05%), with the same digests.
+| Batch | Samples | Median cycles/frame | Median FPS | Digest |
+|---:|---|---:|---:|---:|
+| 256 | 3 | 41,700.7 | 102,923 | `5bd0cb90236b720d` |
+| 512 | 5 | 42,310.7 | 101,439 | `932bcfbacb888ac4` |
+
+Raw 256 cycles/frame were `42,083.7`, `41,700.7`, and `41,614.7`. Raw 512 cycles/frame were
+`42,939.1`, `42,259.9`, `42,346.9`, `42,305.3`, and `42,310.7`; corresponding wall throughput was
+`99,954`, `101,561`, `101,352`, `101,452`, and `101,439` FPS. Cycles/frame is the primary
+comparison because wall FPS also reflects frequency and machine contention.
 
 ## Current memory contract
 
-The compact pose and stage-line owners are initialized before gameplay and participate in typed
-relocation, arbitrary-index copy, and save/restore. The allocation lock remains exactly 631,820
-arena bytes and 824 allocations before and after gameplay. Four supported Peach instances reach 976 compact pose
-nodes inside the fixed 1,000-node capacity.
+The runtime census seals the ordinary stepped Match at 608,864 arena bytes and 843 allocations;
+both counts remain identical before and after gameplay. Its complete relocatable savestate is
+671,664 bytes. The simpler two-player lifecycle benchmark produces a 611,420-byte snapshot.
 
 | Measure | Current |
 |---|---:|
-| Ordinary stepped arena | 631,820 B |
-| Ordinary savestate | 693,972 B |
-| Initialization allocations | 824 |
-| Maximum reached arena | 960,000 B |
-| Maximum reached compact pose nodes | 976 / 1,000 |
+| Ordinary stepped arena | 608,864 B |
+| Runtime-census savestate | 671,664 B |
+| Initialization allocations | 843 |
+| Maximum reached arena | 973,328 B |
+| Maximum reached compact pose nodes | 1,016 / 1,024 |
 | Hosted fighter-dynamics pool | 10,752 B (64 nodes) |
 
-The public 128-frame observation history remains 127,488 bytes per environment and is caller-owned.
-Shared GameData additionally owns 10,718,160 compiled Figa values, 131,653 immutable node
-descriptors, and direct binding tables (43.44 MiB total), paid once per process rather than once per
-environment. The dense publication and direct-binding layouts add 1.23 MiB of process-global data
-while deleting sparse validity bits; per-Match memory is unchanged.
+The public 128-frame observation history remains 127,488 bytes per environment and is
+caller-owned. Shared GameData owns 72,404,776 initialized arena bytes plus the native DAT arena;
+that immutable/process-wide cost is not replicated per Match.
 
-## Current corrected profile
+## Owner-selection profile
 
-On the staggered 512 workload at this commit, the scheduler owns 93.90% of instrumented time. Its
-largest inclusive callback owners are hosted fighter maintenance (`Fighter_8006A360`, 29.12%),
-fighter map collision (`Fighter_procMap`, 13.77%), fighter dynamics (`Fighter_8006D9AC`, 7.94%),
-Spaghetti input/IASA (7.50%), and camera (3.79%). Cross-cutting phase attribution assigns 16.84% to
-fighter animation, 14.75% to pose animation, 12.92% to stage collision, 9.64% to action animation
-callbacks, and 5.08% to input/action callbacks. The profiler's 80,330 FPS is diagnostic overhead,
-not a throughput baseline; nested rows must not be added to their enclosing phase shares.
+The last bounded resident-512 subsystem profile, after canonical animation spans and quaternion
+cuts but before lazy decoder construction and the two small final deletions, assigns 14.99% to pose
+animation, 12.98% to stage collision, 8.10% to input/action, 6.83% to dynamics, and 3.93% to
+camera. A 4,096-frame portable-ISA instruction window assigns 9.74% self to `interpret_joint` and
+2.27% to eager Figa attachment/allocation/compaction, which selected lazy decoder ownership. This
+profile is for owner selection rather than final throughput; its nested rows must not be added.

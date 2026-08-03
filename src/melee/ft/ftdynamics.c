@@ -125,6 +125,7 @@ static bool ftCo_DynamicsOwnsHurtCapsule(Fighter* fp, DynamicsDesc* desc)
 {
     struct DynamicsData* dynamics;
     u32 hurt_index;
+    bool retained = false;
 
     for (dynamics = desc->data; dynamics != NULL; dynamics = dynamics->next) {
         HSD_JObj* joint = dynamics->desc.lb_unk0.jobj;
@@ -132,16 +133,21 @@ static bool ftCo_DynamicsOwnsHurtCapsule(Fighter* fp, DynamicsDesc* desc)
              ++hurt_index)
         {
             if (fp->hurt_capsules[hurt_index].capsule.bone == joint) {
-                return true;
+                fp->hurt_capsules[hurt_index].capsule.x24_b7 = true;
+                retained = true;
             }
         }
     }
-    return false;
+    return retained;
 }
 
 void ftCo_HeadlessPruneDynamics(Fighter* fp)
 {
     ssize_t i;
+
+    for (i = 0; i < fp->hurt_capsules_len; ++i) {
+        fp->hurt_capsules[i].capsule.x24_b7 = false;
+    }
 
     // Fighter dynamics only mutate their secondary JObj chains. In the
     // headless gameplay graph, a chain remains live when a source hurt
@@ -195,22 +201,9 @@ void ftCo_HeadlessPublishDynamicHurtCapsules(Fighter* fp)
 
     for (hurt_index = 0; hurt_index < fp->hurt_capsules_len; ++hurt_index) {
         FighterHurtCapsule* hurt = &fp->hurt_capsules[hurt_index];
-        ssize_t dynamics_index;
-
-        for (dynamics_index = 0; dynamics_index < fp->dynamics_num;
-             ++dynamics_index)
-        {
-            struct DynamicsData* dynamics =
-                fp->dynamic_bone_sets[dynamics_index].dyn_desc.data;
-            for (; dynamics != NULL; dynamics = dynamics->next) {
-                if (dynamics->desc.lb_unk0.jobj == hurt->capsule.bone) {
-                    lbColl_800083C4(&hurt->capsule);
-                    goto next_hurt;
-                }
-            }
+        if (hurt->capsule.x24_b7) {
+            lbColl_800083C4(&hurt->capsule);
         }
-    next_hurt:
-        continue;
     }
 }
 #endif

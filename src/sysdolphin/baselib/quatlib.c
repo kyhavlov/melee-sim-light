@@ -173,6 +173,9 @@ s32 EulerToQuat(Vec3* euler, Quaternion* q)
     return 0;
 }
 
+#ifdef MSL_CORE_NATIVE
+__attribute__((optimize("O2")))
+#endif
 s32 HSD_QuatLib_8037EF28(Quaternion* p, Quaternion* q, Quaternion* out, f32 t)
 {
     f32 cosom;

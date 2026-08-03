@@ -496,6 +496,88 @@ static void msl_dynamics_parent_axis(Mtx parent, const Vec3* world,
         (&local->x)[row] = zx + ty;
     }
 }
+
+static void msl_dynamics_rotate_euler(Vec3* rotate, const Vec3* axis,
+                                      float angle, Mtx matrix)
+{
+    Quaternion angle_quat;
+    Quaternion euler_quat;
+    Quaternion result_quat;
+    Vec3 euler = *rotate;
+    float len;
+    float inv_len;
+    float half_angle;
+    float s;
+    float cx;
+    float cy;
+    float cz;
+    float sx;
+    float sy;
+    float sz;
+    float cc;
+    float ss;
+    float x;
+    float y;
+    float z;
+    float w;
+
+    // Exact source sequence from the O0 quaternion helpers. Keeping this
+    // dynamics-only chain in its optimized owner avoids admitting the shared
+    // interpolation paths to a compiler profile that changes their results.
+    len = sqrtf(axis->x * axis->x + axis->y * axis->y +
+                axis->z * axis->z);
+    inv_len = 1.0F / len;
+    half_angle = 0.5F * angle;
+    angle_quat.w = cosf(half_angle);
+    s = sinf(half_angle);
+    angle_quat.x = s * (inv_len * axis->x);
+    angle_quat.y = s * (inv_len * axis->y);
+    angle_quat.z = s * (inv_len * axis->z);
+
+    cx = cosf(0.5F * euler.x);
+    cy = cosf(0.5F * euler.y);
+    cz = cosf(0.5F * euler.z);
+    sx = sinf(0.5F * euler.x);
+    sy = sinf(0.5F * euler.y);
+    sz = sinf(0.5F * euler.z);
+    ss = sy * sz;
+    cc = cy * cz;
+    euler_quat.w = cx * cc + sx * ss;
+    euler_quat.x = sx * cc - cx * ss;
+    euler_quat.y = cz * (cx * sy) + sz * (sx * cy);
+    euler_quat.z = sz * (cx * cy) - cz * (sx * sy);
+
+    x = euler_quat.w * angle_quat.x +
+        angle_quat.w * euler_quat.x +
+        (angle_quat.y * euler_quat.z - euler_quat.y * angle_quat.z);
+    y = euler_quat.w * angle_quat.y +
+        angle_quat.w * euler_quat.y +
+        (euler_quat.x * angle_quat.z - angle_quat.x * euler_quat.z);
+    z = euler_quat.w * angle_quat.z +
+        angle_quat.w * euler_quat.z +
+        (angle_quat.x * euler_quat.y - euler_quat.x * angle_quat.y);
+    w = angle_quat.w * euler_quat.w -
+        (angle_quat.z * euler_quat.z +
+         (angle_quat.x * euler_quat.x + angle_quat.y * euler_quat.y));
+    result_quat.x = x;
+    result_quat.y = y;
+    result_quat.z = z;
+    result_quat.w = w;
+
+    PSMTXQuat(matrix, &result_quat);
+    len = sqrtf(matrix[0][0] * matrix[0][0] +
+                matrix[1][0] * matrix[1][0]);
+    if (len > 1e-05F) {
+        euler.x = atan2f(matrix[2][1], matrix[2][2]);
+        euler.y = atan2f(-matrix[2][0], len);
+        euler.z = atan2f(matrix[1][0], matrix[0][0]);
+    } else {
+        euler.x = atan2f(-matrix[1][2], matrix[1][1]);
+        euler.y = atan2f(-matrix[2][0], len);
+        euler.z = 0.0F;
+    }
+    *rotate = euler;
+}
 #endif
 
 void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
@@ -1021,6 +1103,11 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
                 local_axis.y >= 0.00001f || local_axis.y <= -0.00001f ||
                 local_axis.z >= 0.00001f || local_axis.z <= -0.00001f)
             {
+#ifdef MSL_CORE_HOSTED
+                msl_dynamics_rotate_euler(&jobj->rotate, &local_axis,
+                                          angle_diff, bone_mtx);
+                HSD_JObjSetRotation(jobj, &jobj->rotate);
+#else
                 HSD_QuatLib_8037ECE0(&local_axis, &angle_quat, angle_diff);
                 euler_angles.x = jobj->rotate.x;
                 euler_angles.y = jobj->rotate.y;
@@ -1030,6 +1117,7 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
                 PSMTXQuat(bone_mtx, &result_quat);
                 HSD_QuatLib_8037EB28(bone_mtx, (Vec3*) &euler_angles);
                 HSD_JObjSetRotation(jobj, &euler_angles);
+#endif
                 HSD_JObjClearFlagsAll(jobj, 0x20000U);
             }
         }

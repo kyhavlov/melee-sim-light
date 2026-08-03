@@ -680,7 +680,17 @@ static HSD_JObj* ftParts_HeadlessLoadCompact(Fighter* fp, HSD_Joint* joint,
 HSD_JObj* ftParts_HeadlessLoadMain(Fighter* fp, HSD_Joint* joint)
 {
     HSD_JObj* root = ftParts_HeadlessLoadCompact(fp, joint, false);
+    int part_count = ftPartsTable[fp->kind]->parts_num;
+    int part;
     msl_fighter_pose_register_tree(root);
+    for (part = 0; part < part_count; ++part) {
+        HSD_JObj* jobj = fp->parts[part].joint;
+        if (fp->parts[part].flags_b1 &&
+            !(jobj->flags & JOBJ_MSL_GAMEPLAY_COLD))
+        {
+            msl_fighter_pose_bind_part(jobj, (uint8_t) part);
+        }
+    }
     // Init-only marker consumed by ftParts_SetupParts below. DObj state is
     // renderer-owned and the compact tree deliberately has no DObj list.
     fp->dobj_list.count = UINT32_MAX;

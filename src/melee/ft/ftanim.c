@@ -294,6 +294,9 @@ void ftAnim_8006E054(Fighter* fp, HSD_JObj* jobj, HSD_JObj* arg2,
 
 void ftAnim_8006E7B8(Fighter* fp, Fighter_Part part)
 {
+#ifdef MSL_CORE_NATIVE
+    msl_fighter_pose_animate_parts(fp->parts[part].joint, fp->parts);
+#else
     HSD_JObj* jobj;
     int i;
     HSD_JObj* temp_r30;
@@ -354,6 +357,7 @@ void ftAnim_8006E7B8(Fighter* fp, Fighter_Part part)
         }
     }
     HSD_AObjInvokeCallBacks();
+#endif
 }
 
 void ftAnim_8006E9B4(Fighter_GObj* gobj)
@@ -1083,6 +1087,13 @@ void ftAnim_80070108(Fighter* fp, Fighter_Part start, float t, float t_inv,
         }
 
         if (!fp->parts[i].flags_b0 && !fp->parts[i].flags_b5) {
+#ifdef MSL_CORE_NATIVE
+            // The interpolation skeleton was reset to this static pose before
+            // its attached animation ran. Unattached joints are unchanged.
+            if (!msl_fighter_pose_has_animation(fp->parts[i].x4_jobj2)) {
+                goto next_joint;
+            }
+#endif
             if (fp->parts[i].flags_b4) {
                 lb_8000B4FC(fp->parts[i].x4_jobj2, joint);
             } else {
@@ -1090,6 +1101,7 @@ void ftAnim_80070108(Fighter* fp, Fighter_Part start, float t, float t_inv,
                             fp->parts[i].x4_jobj2, t, t_inv);
             }
         }
+    next_joint:
         i++;
         ftAnim_GetNextJointInTree(&joint, &sp1C);
     }

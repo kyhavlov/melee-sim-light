@@ -3,6 +3,77 @@
 Only production-contract, correctness-green results belong here. Historical experiments remain in
 Git history and ignored triage artifacts, not in this active evidence file.
 
+## Canonical pose/dynamics throughput checkpoint — 2026-08-02
+
+The retained native/Wasm fighter animation path now consumes the compact pose arena's canonical
+preorder and construction-bound source-part identities directly. This deletes the repeated JObj
+DFS, sparse `FighterBone` search, and JObj-to-pose lookup from `ftAnim_8006E7B8` without adding a
+second schedule or growing the 56-byte Match-owned pose node. The track count and source-part index
+share the former 16-bit track-count slot; all extracted Figa nodes fit the asserted 8-bit count.
+
+Native Figa attachment no longer constructs mutable decoder tracks while the exact immutable
+integer-sample program owns evaluation. The existing decoder state is materialized from source
+tracks only when a fractional/non-table transition actually gives it ownership. Source identity is
+held by a 16-bit program index in existing padding, so the shared program node remains 16 bytes and
+per-Match state does not grow. Descriptor animation and PPC retain eager source decoders, and the
+existing exact table-to-decoder resynchronization remains the only transition path.
+
+Two exact compiler boundaries remove measured O0 quaternion overhead: the already optimized hosted
+dynamics owner contains the source-authored axis-angle/Euler operation sequence, while only
+`HSD_QuatLib_8037EF28` receives singular O2 admission. The rest of `quatlib.c`, PPC, and the
+correctness-sensitive shared conversion paths remain unchanged. Finally, construction marks
+retained dynamics-chain hurt owners in the existing hosted capsule bit, deleting the per-frame
+identity search, and the existing inactive-animation predicate is evaluated before entering the
+large interpreter. Neither cut adds state or changes publication order.
+
+Paired 262,144-frame evidence for the two largest independently isolated changes is:
+
+| Change | Resident 256 cycles/frame | Resident 512 cycles/frame | Digests |
+|---|---:|---:|---|
+| Canonical fighter pose span | `44,308.7 -> 42,785.8`; `44,617.9 -> 42,644.8` | `46,310.2 -> 45,506.8`; `46,683.9 -> 46,025.5` | exact |
+| Exact quaternion boundaries | `43,787.5 -> 42,666.2`; `43,194.1 -> 42,266.4` | `46,597.2 -> 44,523.2`; `45,975.4 -> 44,838.6` | exact |
+
+The final release benchmark SHA-256 is
+`3ef66625839ca254b2448f43e2c541858526a185c3811b681c8beda8faec2637`. Three final resident-256
+samples are `42,083.7`, `41,700.7`, and `41,614.7` cycles/frame, with median 102,923 FPS and digest
+`5bd0cb90236b720d`. Five final resident-512 samples are `42,939.1`, `42,259.9`, `42,346.9`,
+`42,305.3`, and `42,310.7` cycles/frame, with median 101,439 FPS and digest
+`932bcfbacb888ac4`. The first wall sample was 99,954 FPS; the other four tightly span
+101,352–101,561 FPS. Cycles/frame is the primary measure because wall throughput moves with host
+frequency and contention.
+
+The complete release validation remains 286 PASS / 80 unchanged CLASSIFIED / zero
+XPASS/fail/error across 366 replays and 3,501,461 frames. Source synchronization, native
+API/copy/save-restore and sealed allocation, 45 Python tests, PPC smoke, Wasm parity,
+viewer/browser, runtime census, lifecycle, and formatting gates pass. The ordinary stepped Match
+remains sealed at 608,864 arena bytes and 843 allocations; the relocatable savestate remains
+671,664 bytes. Wasm reports state digest `a8a4eceda2e87198`, viewer digest
+`5d40dda6e777c112`, and a 491,964-byte snapshot.
+
+## Authored-node alternate-pose blending — 2026-08-02
+
+`ftAnim_80070108` runs after the interpolation skeleton has been reset to its static authored pose
+and its attached Figa has been evaluated. The native canonical path now performs the final
+quaternion/SRT blend only for joints that actually carry attached animation. Unattached joints are
+still exactly the static pose that the blend would reproduce. Attached nodes retain the source
+traversal and `lb_8000C868` operation order; no action/character list, state, cache, allocation,
+snapshot byte, compatibility path, or runtime mode is added.
+
+The control/candidate release binaries are
+`52f5c10dd956b11db0186fa7ad214b0054a1c6f6c18aba62a5fa1224666fb1f7` and
+`00265ac015db0404e8ed27f7215d1ea5d4be7781cbb71db20696f664c03ac8ef`. Three alternating
+262,144-frame resident-256 pairs preserve digest `5bd0cb90236b720d`. Control cycles/frame are
+`46,107.4`, `46,342.1`, and `45,028.1`; candidates are `45,121.8`, `44,734.1`, and `45,157.7`.
+Medians improve `46,107.4 -> 45,121.8` (-2.14% cycles, +2.18% FPS).
+
+Three clean reverse-order resident-512 pairs preserve digest `932bcfbacb888ac4`. Candidate/control
+cycles/frame are `49,179.6/50,464.9`, `50,109.5/51,353.8`, and `50,697.2/50,168.8`; the median paired
+cycle change is -2.42%, while raw medians improve `50,464.9 -> 50,109.5` (-0.70%). The complete
+native gate remains 286 PASS / 80 unchanged CLASSIFIED / zero XPASS/fail/error over 366 replays
+and 3,501,461 frames. Source, native/API/copy/save-restore/allocation, ordinary tests, formatting,
+PPC smoke, Wasm parity, and viewer/browser smoke pass. Wasm reports state digest
+`a8a4eceda2e87198`, viewer digest `5d40dda6e777c112`, and a 491,964-byte snapshot.
+
 ## `decomp-port-arm64-ppc` merge polish — 2026-08-01
 
 The expanded character branch no longer publishes the retained dynamics chains twice per fighter:
