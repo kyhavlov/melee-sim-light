@@ -181,6 +181,10 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     // Donkey Kong owns efAsync bank 8 (ftData_UnkBytePerCharacter maps
     // FTKIND_DONKEY to 8).
     msl_effect_load_bank(data, 8, "/EfDkData.dat", "effDonkeyDataTable");
+    // Yoshi owns efAsync bank 9 (ftData_UnkBytePerCharacter maps
+    // FTKIND_YOSHI to 9). Both Yoshi-reachable efSync generator ids
+    // (0x4CD/0x4CE -> 0x2328) resolve into this bank.
+    msl_effect_load_bank(data, 9, "/EfYsData.dat", "effYoshiDataTable");
     // Pikachu owns efAsync bank 7 (ftData_UnkBytePerCharacter maps
     // FTKIND_PIKACHU to 7; Pichu shares the bank in retail).
     msl_effect_load_bank(data, 7, "/EfPkData.dat", "effPikachuDataTable");
@@ -455,6 +459,7 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
             msl_effect_consume_generator_rng(0x5F);
             break;
         case 0x4C3: msl_effect_consume_generator_rng(0x24C); break;
+        case 0x4CD:
         case 0x4CE: msl_effect_consume_generator_rng(0x2328); break;
         case 0x4D1: msl_effect_consume_generator_rng(0x64); break;
         case 0x4D3:
@@ -525,6 +530,17 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
     // f-smash hits). refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch
     case 0x3FD:
         msl_effect_consume_common_model_start(3);
+        break;
+    // Yoshi ground-pound landing dust and Egg Roll wall bump: straight
+    // model creations (efLib_Create_Attach_Pos(5) and (4)) with no
+    // dispatcher randomness; their frame-zero DPtcl events still initialize
+    // RNG-bearing generators.
+    // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch
+    case 0x3FF:
+        msl_effect_consume_common_model_start(5);
+        break;
+    case 0x406:
+        msl_effect_consume_common_model_start(4);
         break;
     case 0x427: {
         int i;

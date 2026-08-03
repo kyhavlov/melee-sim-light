@@ -70,7 +70,23 @@ typedef struct _ftYoshiAttributes { // x2D4 (fp->dat_attrs)
     float xE0;
     float xE4;
     float xE8;
-    u8 pad_xEC[0x114 - 0xEC];
+    // The retail blob is one region under two source views: ftYs_DatAttrs
+    // types these lanes as the Egg Throw floats (xEC..x110 ending in
+    // specialhi_base_angle at xF8 and the x104/x108 throw offset pair) that
+    // fn_8012E110 and ftYs_SpecialS_8012DF8C consume. The hosted DAT
+    // translation derives its byte-swap layout from this struct, so an
+    // untyped pad here would leave those float lanes big-endian.
+    // refs/melee/src/melee/ft/chara/ftYoshi/types.h::ftYs_DatAttrs
+    float xEC;
+    float xF0;
+    float xF4;
+    float xF8;
+    float xFC;
+    float x100;
+    float x104;
+    float x108;
+    float x10C;
+    float x110;
     float x114;
     float x118;
     float x11C;
@@ -85,8 +101,12 @@ struct ftYs_DatAttrs {
     /*   +0 */ char pad_0[0x10];
     /*  +10 */ Vec2 x10;
     /*  +18 */ float x18;
-    /*  +1C */ UNK_T x1C;
-    /*  +20 */ UNK_T x20;
+    // ftYoshiAttributes types these two lanes as floats; a host-width
+    // pointer here would widen the view and shift every later Egg Throw
+    // lane off its retail offset (the native STATIC_ASSERT is a no-op, so
+    // the 0x120 size check cannot catch it).
+    /*  +1C */ f32 x1C;
+    /*  +20 */ f32 x20;
     /*  +24 */ float x24;
     /*  +28 */ char pad_28[0xEC - 0x28];
     /*  +EC */ float xEC;
@@ -149,7 +169,10 @@ union ftYoshi_MotionVars {
         /* fp+2350 */ f32 x10;
         /* fp+2354 */ f32 x14;
         /* fp+2358 */ f32 x18;
-        /* fp+235C */ UNK_T x1C;
+        // A host-width pointer here would shift x20/x24 off the retail
+        // offsets that the ftCommon guard view aliases (the native
+        // STATIC_ASSERT is a no-op and cannot catch it).
+        /* fp+235C */ s32 x1C;
         /* fp+2360 */ int x20;
         /* fp+2364 */ int x24;
     } guard;

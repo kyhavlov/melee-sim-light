@@ -1,4 +1,60 @@
-# Active structural packet — `decomp-port-arm64-ppc` merge polish
+# Active structural packet — Yoshi
+
+## Objective
+
+Add Yoshi (internal kind FTKIND_YOSHI 14, public char id 14) to the supported domain with a
+30-replay suite. Yoshi is a full original: six chara TUs (ftYs_Init, ftYs_Guard egg-shield,
+SpecialN Egg Lay, NonMatching SpecialS Egg Roll, SpecialHi Egg Throw, SpecialLw Yoshi Bomb)
+and four article TUs (ityoshieggthrow 86, ityoshiegglay 87, ityoshistar 88, ityoshitongue =
+the eaten-item capture owner, no own kind). The victim-side ftCo_CaptureYoshi/ftCo_YoshiEgg
+TUs were already ported.
+
+## Final boundary
+
+- **Owners:** imported TUs byte-identical to the pin except ledgered hosted deltas;
+  msl_costume_matanim_end_frame (ftanim.c) owns the trackless-row published frame;
+  derive_gameplay_parts_mask.py CODE_ANCHORED owns raw parts[] spawn anchors.
+- **Data:** PlYs* (6 costumes Nr/Re/Bu/Ye/Pi/Aq + PlYsAJ + PlYsDViWaitAJ) + EfYsData.dat
+  (efAsync bank 9, LOADED: efSync 0x4CD/0x4CE consume generator 0x2328 = bank 9 id 0);
+  manifest 155 -> 165. Effects dispatch gains 0x3FF/0x406 (common model starts 5/4) and
+  0x4CD.
+- **Native DAT:** MslDatYoshiArticles = three Article slots + the swallow-victim egg
+  accessory HSD_Joint (slot 3, ftYs_SpecialN_8012CDD4); ftYoshiAttributes fully typed
+  (the xEC..x110 Egg Throw lanes carry their ftYs_DatAttrs float meaning).
+- **Retail-exactness deltas shipped (ledgered):** ftAnim_8006F3DC no-aobj fall-through
+  publishes the costume matanim end frame (the DOL dead-f1 behavior, probe-verified at
+  GALE01 0x803642C0; Yoshi is the only admitted fighter with trackless motion rows);
+  ftYs_DatAttrs +1C/+20 and guard mv +1C typed 4-byte (UNK_T host-width shifts); 26
+  MWCC fused sites ported across the six TUs and two item TUs with GALE01 addresses.
+
+## Suite state (container authoritative)
+
+- yoshi suite: native 29 pass / 1 classified / 0 fail (msl-luigi); PPC 29 pass /
+  1 classified / 0 fail (msl-arm64); the single classified entry
+  (fod-release-floor-pick, slippi-2025-02) carries byte-identical native and PPC
+  snapshots (fingerprint 7af1de179e6427a2) — the documented FoD mid-frame release
+  floor-line-pick seed plus its one downstream Egg Throw charge episode.
+- Aggregate 396 = 315 pass / 81 classified / 0 fail / 0 error with output locks
+  recorded for all 30 new replays (strictly additive; the pre-Yoshi 366 stayed
+  byte-stable through every change, re-verified three times).
+- Container pytest 44 green (1 skip). macOS native/wasm/viewer smokes pass
+  (viewer characters=17); source-check verified (196 files with local deltas).
+
+## Root-caused fixes shipped along the way (the mv pointer-width family)
+
+The tails all reduced to host-width pointer widenings inside the retail-aliased
+mv/attr views (the native STATIC_ASSERT is a no-op, so none of these could be
+caught by size checks — audit every new character's views for UNK_T/pointers):
+ftYs_DatAttrs +1C/+20 (shifted all Egg Throw angle/speed lanes by 0xC),
+ftYoshi guard mv +1C, ftCommon damage mv +C/+10 (its x14/x18..x1B stores are
+the union residue Yoshi's parry countdown consumes — probe-verified at GALE01
+0x8008DE10), the fighterthrow victim pointer (moved past the damage view's
+lanes after its high half was zeroed by the restored damage.x14 store), and the
+yoshiegg swallow-owner pointer (its shift seeded every remaining native-only
+1-ULP tail: DK @2354, Marth @3086, Falcon victim-egg @412, and the BF Falcon
+fork @6226 — all cleared by the restructure).
+
+# Previous structural packet — `decomp-port-arm64-ppc` merge polish
 
 ## Objective
 

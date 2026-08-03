@@ -32,6 +32,9 @@
 #include "it/items/itpeachtoadspore.h"
 #include "it/items/itpeachturnip.h"
 #include "it/items/itseakchain.h"
+#include "it/items/ityoshiegglay.h"
+#include "it/items/ityoshieggthrow.h"
+#include "it/items/ityoshistar.h"
 #include "it/items/itseakneedleheld.h"
 #include "it/items/itseakneedlethrown.h"
 #include "it/items/itseakvanish.h"
@@ -100,6 +103,9 @@ struct sdata_ItemGXLink it_803F2F28[118] = {
     [It_Kind_Pikachu_Thunder - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Pikachu_TJolt_Ground - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Pikachu_TJolt_Air - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Yoshi_EggThrow - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Yoshi_EggLay - It_Kind_Kuriboh] = { NULL },
+    [It_Kind_Yoshi_Star - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Mario_Fire - It_Kind_Kuriboh] = { NULL },
     [It_Kind_DrMario_Vitamin - It_Kind_Kuriboh] = { NULL },
     [It_Kind_Mario_Cape - It_Kind_Kuriboh] = { NULL },
@@ -300,6 +306,57 @@ struct ItemLogicTable it_803F3100[118] = {
         it_2725_Logic107_ShieldBounced,
         it_2725_Logic107_HitShield,
         itPikachuTJoltAir_Logic107_EvtUnk,
+    },
+    [It_Kind_Yoshi_EggThrow - It_Kind_Kuriboh] = {
+        it_803F7118,
+        NULL,
+        NULL,
+        itYoshiEggThrow_Logic43_PickedUp,
+        NULL,
+        NULL,
+        it_802B2C04,
+        NULL,
+        NULL,
+        it_802B2E5C,
+        it_2725_Logic43_Clanked,
+        NULL,
+        it_802B2F88,
+        it_802B2E7C,
+        it_802B2FA8,
+    },
+    [It_Kind_Yoshi_EggLay - It_Kind_Kuriboh] = {
+        it_803F94A0,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_27CF_Logic114_DmgReceived,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_27CF_Logic114_EvtUnk,
+    },
+    [It_Kind_Yoshi_Star - It_Kind_Kuriboh] = {
+        it_803F7158,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_802B309C,
+        NULL,
+        NULL,
+        it_802B314C,
+        it_802B30C0,
+        it_802B3108,
+        it_802B312C,
+        it_802B30E4,
+        it_802B3348,
     },
     [It_Kind_Mario_Fire - It_Kind_Kuriboh] = {
         it_803F6788,

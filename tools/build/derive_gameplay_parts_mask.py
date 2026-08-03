@@ -36,6 +36,7 @@ CHARACTERS = {
     'nana': (11, 'Nn', 'ftDataNana'),
     'pikachu': (12, 'Pk', 'ftDataPikachu'),
     'samus': (13, 'Ss', 'ftDataSamus'),
+    'yoshi': (14, 'Ys', 'ftDataYoshi'),
     'purin': (15, 'Pr', 'ftDataPurin'),
     'luigi': (17, 'Lg', 'ftDataLuigi'),
     'mars': (18, 'Ms', 'ftDataMars'),
@@ -47,7 +48,8 @@ CHARACTERS = {
 # Subaction counts per FighterKind (src/melee/ft/ftdata.c ftData_Table_Unk0).
 SUBACTION_COUNTS = {
     0: 303, 1: 327, 2: 318, 3: 337, 7: 317, 9: 318, 10: 321, 11: 321,
-    12: 320, 13: 313, 15: 327, 17: 312, 18: 327, 19: 311, 21: 303, 22: 327,
+    12: 320, 13: 313, 14: 314, 15: 327, 17: 312, 18: 327, 19: 311, 21: 303,
+    22: 327,
     25: 318,
 }
 
@@ -82,6 +84,9 @@ CODE_ANCHORED = {
     #          ftPp_* handlers, so the anchor set is symmetric.
     'popo': (0, 2, 26, 29, 47),
     'nana': (0, 2, 26, 29, 47),
+    #   yoshi: ftYs_SpecialHi.c fn_8012E110 spawns the Egg Throw egg at
+    #          parts[31] and attaches the held egg through bone id 0x1F.
+    'yoshi': (31,),
     #   pikachu: ftPk_SpecialLw.c thunder-loop efAsync anchors
     #          parts[FtPart_TopN=0] raw; every other part access resolves
     #          through ftParts_GetBoneIndex.

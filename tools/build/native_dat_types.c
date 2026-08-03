@@ -18,6 +18,7 @@
 #include "ft/chara/ftPikachu/types.h"
 #include "ft/chara/ftPopo/types.h"
 #include "ft/chara/ftSamus/types.h"
+#include "ft/chara/ftYoshi/types.h"
 #include "ft/chara/ftPurin/types.h"
 #include "ft/chara/ftSeak/types.h"
 #include "ft/chara/ftZelda/types.h"
@@ -177,6 +178,24 @@ typedef Article* MslDatIceClimberArticles[3];
 // slots carry presentation graphs no ported code reaches.
 // refs/melee/src/melee/ft/chara/ftPikachu/ftPk_Init.c
 typedef Article* MslDatPikachuArticles[3];
+// PlYs.dat's ftData.x48_items leads with the three articles
+// ftYs_Init_OnLoad registers as item kinds 86 (thrown egg), 88 (Yoshi Bomb
+// star), and 87 (egg-lay capture egg), followed by the capture-egg
+// accessory joint graph ftYs_SpecialN_8012CDD4 hands to
+// ftCommon_SetAccessory for the swallowed victim. The thrown egg carries a
+// concrete two-float attribute block; ityoshistar.c's file-local StarAttrs
+// shares that two-float shape, and the egg-lay article's attribute block
+// is never read by ported code (its DatAttrs are built from the fighter's
+// ext-attrs). The trailing DAT slots hold presentation graphs no ported
+// code reaches.
+// refs/melee/src/melee/ft/chara/ftYoshi/ftYs_Init.c
+// refs/melee/src/melee/ft/chara/ftYoshi/ftYs_SpecialN.c
+// refs/melee/src/melee/it/items/{ityoshieggthrow.c,ityoshistar.c,
+//   ityoshiegglay.c}
+typedef struct MslDatYoshiArticles {
+    Article* articles[3];
+    HSD_Joint* egg_accessory;
+} MslDatYoshiArticles;
 // ItCo.dat's public x4 table owns the 43 common-item Article graphs. Peach's
 // SpecialLw can reach BombHei, Dosei, and Sword even when stage items are off.
 // refs/melee/src/melee/it/iteffect.c::it_802787B4
@@ -273,6 +292,9 @@ void* msl_native_dat_type_roots[] = {
     (ftPikachuAttributes*) 0,
     (itPikachuthunderAttributes*) 0,
     (itPikachutJoltGroundAttributes*) 0,
+    (MslDatYoshiArticles*) 0,
+    (ftYoshiAttributes*) 0,
+    (itYoshiEggThrowAttributes*) 0,
     (MslDatCommonItemArticles*) 0,
     (itBombHeiAttributes*) 0,
     (itDoseiAttributes*) 0,

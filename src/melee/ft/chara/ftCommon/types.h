@@ -135,8 +135,11 @@ union ftCommon_MotionVars {
         /* fp+2340 */ float x0;
         /* fp+2344 */ int x4;
         /* fp+2348 */ int x8;
-        /* fp+234C */ UNK_T xC;
-        /* fp+2350 */ UNK_T x10;
+        // No ported code names these two lanes; host-width pointers here
+        // would shift x14..x1B off the retail offsets whose residue the
+        // Yoshi guard countdown consumes through the mv union.
+        /* fp+234C */ u32 xC;
+        /* fp+2350 */ u32 x10;
         /* fp+2354 */ float x14;
         /* fp+2358 */ u8 x18;
         /* fp+2359 */ u8 x19;
@@ -169,12 +172,22 @@ union ftCommon_MotionVars {
         /* fp+2340 */ bool x0; // itemget action is heavy type?
     } itemget;
     struct {
-        /* fp+2340 */ UNK_T x0;
+        // Retail packs the victim Fighter_GObj* at +C between the throw
+        // scalars. ftCo_8008DCE0's damage-view stores run between
+        // ftCo_800DE7C0's victim store and the fn_800DE798 read inside the
+        // motion-state change, and its x14/x18..x1B lanes alias this view;
+        // a host-width pointer among the scalars would put half of it under
+        // those aliased writes. Keep every scalar at its retail offset and
+        // hold the full-width pointer past the damage view's last lane.
+        /* fp+2340 */ u32 x0;
         /* fp+2344 */ int x4;
         /* fp+2348 */ float x8;
-        /* fp+234C */ HSD_GObj* victim;
+        /* fp+234C */ u32 xC_victim_lane;
         /* fp+2350 */ float self_vel_y;
         /* fp+2354 */ float self_vel_x;
+        u32 _host_pad18;
+        u32 _host_pad1C;
+        Fighter_GObj* victim;
     } fighterthrow;
     struct {
         /* fp+2340 */ float facing_dir;
@@ -266,7 +279,12 @@ union ftCommon_MotionVars {
         /* fp+2340 */ float x0;
     } downdamage;
     struct {
-        /* fp+2340 */ Fighter_GObj* x0;
+        // Retail leads with the swallowing Yoshi's Fighter_GObj*; a
+        // host-width pointer here would shift every later egg lane off the
+        // retail offsets whose union residue later states consume. The
+        // pointer keeps its full width past the aliased region and +0
+        // stays a retail-width lane.
+        /* fp+2340 */ u32 x0_lane;
         /* fp+2344 */ bool x4;
         /* fp+2348 */ float x8;
         /* fp+234C */ float xC;
@@ -274,6 +292,7 @@ union ftCommon_MotionVars {
         /* fp+2354 */ float x14;
         /* fp+2358 */ Vec3 x18;
         /* fp+2364 */ Vec3 scale;
+        Fighter_GObj* x0;
     } yoshiegg;
     struct {
         /* fp+2340 */ bool x0;

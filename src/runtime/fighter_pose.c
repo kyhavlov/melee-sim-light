@@ -1738,6 +1738,11 @@ float msl_fighter_pose_tree_frame(HSD_JObj* root)
     return node != NULL ? node->curr_frame : 0.0F;
 }
 
+int msl_fighter_pose_tree_has_animation(HSD_JObj* root)
+{
+    return first_animated(root) != NULL;
+}
+
 float msl_fighter_pose_tree_end(HSD_JObj* root)
 {
     MslFighterPoseJoint* node = first_animated(root);

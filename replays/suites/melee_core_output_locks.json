@@ -3229,6 +3229,276 @@
       }
     },
     {
+      "replay": "replays/validation/yoshi/2025-11_Game_20251121T135559.slpz",
+      "expected": {
+        "native": {
+          "frames": 10243,
+          "actual_output_fingerprint": "bd57a39e34756db6"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-fox-2025-03_Game_20250320T113345.slpz",
+      "expected": {
+        "native": {
+          "frames": 6518,
+          "actual_output_fingerprint": "736e33164aa6b27e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-fox-2025-04_Game_20250406T225523.slpz",
+      "expected": {
+        "native": {
+          "frames": 5081,
+          "actual_output_fingerprint": "dac8dfd1c11e6ed2"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-fox-2025-07_Game_20250720T031618.slpz",
+      "expected": {
+        "native": {
+          "frames": 7287,
+          "actual_output_fingerprint": "d0eeb5cca148e148"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-marth-2025-01_Game_20250130T000145.slpz",
+      "expected": {
+        "native": {
+          "frames": 6255,
+          "actual_output_fingerprint": "239253c81b0a8459"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-marth-2025-02_Game_20250210T112545.slpz",
+      "expected": {
+        "native": {
+          "frames": 13327,
+          "actual_output_fingerprint": "6aa0eee7416b6c30"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-peach-2025-02_Game_20250224T174042.slpz",
+      "expected": {
+        "native": {
+          "frames": 7945,
+          "actual_output_fingerprint": "8f8a3596667b8125"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-sheik-2025-07_Game_20250726T000623.slpz",
+      "expected": {
+        "native": {
+          "frames": 11349,
+          "actual_output_fingerprint": "8829c2d59aa2e499"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-yoshi-2025-03_Game_20250325T030821.slpz",
+      "expected": {
+        "native": {
+          "frames": 12549,
+          "actual_output_fingerprint": "84aeb6ea2872742e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-yoshi-2025-03_Game_20250325T222638.slpz",
+      "expected": {
+        "native": {
+          "frames": 8688,
+          "actual_output_fingerprint": "383dc94ba7c0c9a3"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-yoshi-2025-05_Game_20250509T135544.slpz",
+      "expected": {
+        "native": {
+          "frames": 6299,
+          "actual_output_fingerprint": "9c9b121b1d978092"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-yoshi-2025-05_Game_20250509T225947.slpz",
+      "expected": {
+        "native": {
+          "frames": 7502,
+          "actual_output_fingerprint": "56c4858b395d0530"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-yoshi-2025-05_Game_20250511T013955.slpz",
+      "expected": {
+        "native": {
+          "frames": 10714,
+          "actual_output_fingerprint": "e64e8a44147422ac"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/auto-yoshi-2025-11_Game_20251114T054113.slpz",
+      "expected": {
+        "native": {
+          "frames": 17130,
+          "actual_output_fingerprint": "369c1673804e818c"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/basic-falco-2025-04_Game_20250417T120004.slpz",
+      "expected": {
+        "native": {
+          "frames": 16767,
+          "actual_output_fingerprint": "2711355a9f4e8e4b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/gm-fox-2025-11_Game_20251123T205156.slpz",
+      "expected": {
+        "native": {
+          "frames": 12994,
+          "actual_output_fingerprint": "b0de4f1c1fdbdbae"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/gm-marth-2025-12_Game_20251203T224918.slpz",
+      "expected": {
+        "native": {
+          "frames": 7097,
+          "actual_output_fingerprint": "657435cf2a489f74"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/gm-yoshi-2026-05_Game_20260516T184947.slpz",
+      "expected": {
+        "native": {
+          "frames": 11485,
+          "actual_output_fingerprint": "a1ee4ada5823d190"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/master-falco-2026-03_Game_20260331T013633.slpz",
+      "expected": {
+        "native": {
+          "frames": 6850,
+          "actual_output_fingerprint": "5d6c36c82302f334"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/medium-falco-2025-09_Game_20250902T095243.slpz",
+      "expected": {
+        "native": {
+          "frames": 9741,
+          "actual_output_fingerprint": "b5cfcf74329c056a"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/medium-fox-2026-05_Game_20260524T034812.slpz",
+      "expected": {
+        "native": {
+          "frames": 13909,
+          "actual_output_fingerprint": "59fadcaca7e8758a"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/slippi-2025-02_Game_20250223T134637.slpz",
+      "expected": {
+        "native": {
+          "frames": 12828,
+          "actual_output_fingerprint": "6e47c8b67a1d2e00"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/slippi-2025-03_Game_20250311T224228.slpz",
+      "expected": {
+        "native": {
+          "frames": 8993,
+          "actual_output_fingerprint": "96f35bfd50af12dc"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/slippi-2025-03_Game_20250318T222544.slpz",
+      "expected": {
+        "native": {
+          "frames": 10517,
+          "actual_output_fingerprint": "e5d4b41eec8673f0"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/slippi-2025-03_Game_20250318T231327.slpz",
+      "expected": {
+        "native": {
+          "frames": 13789,
+          "actual_output_fingerprint": "0e4ec65a8e26ef9b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/slippi-2025-03_Game_20250321T181210.slpz",
+      "expected": {
+        "native": {
+          "frames": 9333,
+          "actual_output_fingerprint": "8390dfb6d0f52409"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/slippi-2025-04_Game_20250420T153429.slpz",
+      "expected": {
+        "native": {
+          "frames": 8589,
+          "actual_output_fingerprint": "93be353d443f1c3d"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/slippi-2025-05_Game_20250519T222212.slpz",
+      "expected": {
+        "native": {
+          "frames": 7637,
+          "actual_output_fingerprint": "5c8f0e760c56cff2"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/slippi-2025-05_Game_20250526T214539.slpz",
+      "expected": {
+        "native": {
+          "frames": 8658,
+          "actual_output_fingerprint": "13e3ddf4df3e21ad"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/slippi-2025-06_Game_20250626T221245.slpz",
+      "expected": {
+        "native": {
+          "frames": 20259,
+          "actual_output_fingerprint": "1e11adcfb1e68d9b"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz",
       "expected": {
         "native": {

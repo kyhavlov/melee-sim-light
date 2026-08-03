@@ -199,8 +199,10 @@ void ftCo_800BC3AC(Fighter_GObj* gobj)
 void ftCo_800BC3D0(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
-    fp->grab_timer = -(fp->dmg.x1838_percentTemp * ftYs_SpecialN_8012CDB4() -
-                       fp->grab_timer);
+    // GALE01 0x800BC3F0 fuses the mash-damage decay onto the escape timer
+    // (fnmsubs f0, f2, f1, f0).
+    fp->grab_timer = __fnmsubs(fp->dmg.x1838_percentTemp,
+                               ftYs_SpecialN_8012CDB4(), fp->grab_timer);
     if (fp->dmg.x18CC == 3 && ftCo_800C0C88(fp->dmg.x18D0)) {
         fp->grab_timer = 0;
     }

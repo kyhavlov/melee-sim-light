@@ -118,6 +118,7 @@ def test_native_validation_compares_complete_classified_replays() -> None:
         "pikachu.json",
         "dk.json",
         "ganon.json",
+        "yoshi.json",
     ):
         _suite, loaded_cases = load_suite_cases(
             ROOT / "replays/suites" / suite_name,

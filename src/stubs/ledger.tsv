@@ -95,14 +95,6 @@ ftNs_AttackLw4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind
 ftNs_AttackS4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftSs_SpecialLw_8012AEBC	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftSs_SpecialLw_8012AF38	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_Init_8012B8A4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_Init_8012BAC0	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_Init_8012BDA0	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_Init_8012BE3C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_Init_8012BECC	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_Shield_8012C600	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_Shield_8012C914	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_Shield_8012CC1C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftCo_800CD82C	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_800CDAB4	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 it_8028E774	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
@@ -210,15 +202,6 @@ ftMh_ThrownMasterHand_IASA	unsupported-fighter branch	unreachable	named abort	Fo
 ftMh_ThrownMasterHand_Phys	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftSb_Init_8014FBA4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftSs_Init_CreateThrowGrappleBeam	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_Shield_8012C1D4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_Shield_8012C49C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_Shield_8012C850	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_SpecialN_8012CD40	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_SpecialN_8012CD88	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_SpecialN_GetExtAttr28	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_SpecialN_GetExtAttr2C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_SpecialN_GetExtAttr34	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftYs_SpecialN_GetExtAttr38	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 grKongo_801D8270	unsupported-stage branch	unreachable	named abort	Final Destination cannot dispatch Kongo/Old Kongo owners
 grOldKongo_802105AC	unsupported-stage branch	unreachable	named abort	Final Destination cannot dispatch Kongo/Old Kongo owners
 it_80291CCC	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners

@@ -28,6 +28,7 @@ typedef struct MslSourceGameData {
         UnkCostumeStruct peach_costumes[5];
         UnkCostumeStruct puff_costumes[5];
         UnkCostumeStruct samus_costumes[5];
+        UnkCostumeStruct yoshi_costumes[6];
         UnkCostumeStruct popo_costumes[4];
         UnkCostumeStruct nana_costumes[4];
         UnkCostumeStruct donkey_costumes[5];

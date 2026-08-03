@@ -35,6 +35,9 @@ enum {
     MSL_CORE_ITEM_KIND_PIKACHU_THUNDER = 81,
     MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_GROUND = 89,
     MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_AIR = 90,
+    MSL_CORE_ITEM_KIND_YOSHI_EGG_THROW = 86,
+    MSL_CORE_ITEM_KIND_YOSHI_EGG_LAY = 87,
+    MSL_CORE_ITEM_KIND_YOSHI_STAR = 88,
     MSL_CORE_ITEM_KIND_SAMUS_BOMB = 93,
     MSL_CORE_ITEM_KIND_SAMUS_CHARGE_SHOT = 94,
     MSL_CORE_ITEM_KIND_SAMUS_MISSILE = 95,
@@ -133,6 +136,20 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // velocity vector written by it_802B3F88 on every air entry.
         // refs/melee/src/melee/it/itCharItems.h::itPikachutJoltAir_ItemVars
         return MSL_CORE_ITEM_MISC2 | MSL_CORE_ITEM_MISC3;
+    case MSL_CORE_ITEM_KIND_YOSHI_EGG_THROW:
+    case MSL_CORE_ITEM_KIND_YOSHI_STAR:
+        // Neither the thrown egg nor the Yoshi Bomb star declares an
+        // item-variable payload; every sampled misc lane is fixed-pool
+        // residue.
+        // refs/melee/src/melee/it/items/{ityoshieggthrow.c,ityoshistar.c}
+        return 0;
+    case MSL_CORE_ITEM_KIND_YOSHI_EGG_LAY:
+        // The egg-lay capture egg owns one constructor-written f32 at xDD4
+        // (the lifetime decay multiplier sampled through xDD7); nothing is
+        // declared past it.
+        // refs/melee/src/melee/it/itCommonItems.h::itYoshiEggLay_ItemVars
+        // refs/melee/src/melee/it/items/ityoshiegglay.c::it_802F2F34
+        return MSL_CORE_ITEM_MISC0;
     case MSL_CORE_ITEM_KIND_SAMUS_BOMB:
         // The morph-launch bool at xDD4 is first written by the explosion
         // event, not the constructor, so xDD7 carries fixed-pool residue for

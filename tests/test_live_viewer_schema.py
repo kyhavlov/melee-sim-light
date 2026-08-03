@@ -52,6 +52,7 @@ def test_live_viewer_supported_domain_and_assets() -> None:
         3: "Donkey Kong",
         25: "Ganondorf",
         12: "Pikachu", 13: "Samus",
+        14: "Yoshi",
         18: "Marth",
         19: "Zelda",
         22: "Falco",

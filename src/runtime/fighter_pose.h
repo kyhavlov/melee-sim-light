@@ -143,6 +143,7 @@ bool msl_fighter_pose_tree_is_animating(HSD_JObj* root);
 bool msl_fighter_pose_tree_rewound(HSD_JObj* root);
 float msl_fighter_pose_tree_rate(HSD_JObj* root);
 float msl_fighter_pose_tree_frame(HSD_JObj* root);
+int msl_fighter_pose_tree_has_animation(HSD_JObj* root);
 float msl_fighter_pose_tree_end(HSD_JObj* root);
 bool msl_fighter_pose_owns_joint(const HSD_JObj* joint);
 bool msl_fighter_pose_path(const HSD_JObj* joint, HSD_JObj** path);

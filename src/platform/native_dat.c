@@ -919,6 +919,7 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataDonkey") == 0 ||
         strcmp(symbol, "ftDataGanon") == 0 ||
         strcmp(symbol, "ftDataPikachu") == 0 ||
+        strcmp(symbol, "ftDataYoshi") == 0 ||
         strcmp(symbol, "ftDataMario") == 0 ||
         strcmp(symbol, "ftDataDrmario") == 0 ||
         strcmp(symbol, "ftDataMars") == 0 ||
@@ -1285,6 +1286,7 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_SAMUS,
     MSL_FIGHTER_ARTICLES_ICECLIMBER,
     MSL_FIGHTER_ARTICLES_PIKACHU,
+    MSL_FIGHTER_ARTICLES_YOSHI,
     MSL_FIGHTER_AUX_PURIN_PARTS,
 } MslFighterArticleProfile;
 
@@ -1457,6 +1459,26 @@ static ftData* translate_fighter_public(
         attr_types[0] = msl_dat_root_itPikachuthunderAttributes;
         attr_types[1] = msl_dat_root_itPikachutJoltGroundAttributes;
         break;
+    case MSL_FIGHTER_ARTICLES_YOSHI:
+        // PlYs.dat's x48_items leads with the three articles
+        // ftYs_Init_OnLoad registers as item kinds 86 (thrown egg), 88
+        // (Yoshi Bomb star), and 87 (egg-lay capture egg). The thrown egg
+        // and star both carry two-float attribute blocks (ityoshistar.c's
+        // file-local StarAttrs shares the itYoshiEggThrowAttributes shape);
+        // the egg-lay article's attribute block is never read by ported
+        // code -- its spawn attributes are built from the fighter's
+        // ext-attrs in ftYs_SpecialN.
+        // refs/melee/src/melee/ft/chara/ftYoshi/ftYs_Init.c
+        // refs/melee/src/melee/it/items/{ityoshieggthrow.c,ityoshistar.c,
+        //   ityoshiegglay.c}
+        article_list_type = msl_dat_root_MslDatYoshiArticles;
+        article_count = 3;
+        indices[0] = 0;
+        indices[1] = 1;
+        indices[2] = 2;
+        attr_types[0] = msl_dat_root_itYoshiEggThrowAttributes;
+        attr_types[1] = msl_dat_root_itYoshiEggThrowAttributes;
+        break;
     case MSL_FIGHTER_AUX_PURIN_PARTS:
         // x48_items is not an article table for Purin. Its second pointer owns
         // the costume FtPartsDesc consumed by ftPr_Init_8013C360.
@@ -1623,6 +1645,10 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftPikachuAttributes,
                                           320, MSL_FIGHTER_ARTICLES_PIKACHU);
+    } else if (strcmp(symbol, "ftDataYoshi") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftYoshiAttributes,
+                                          314, MSL_FIGHTER_ARTICLES_YOSHI);
     } else if (strcmp(symbol, "ftDataLuigi") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftLuigiAttributes, 312,

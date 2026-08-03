@@ -60,6 +60,7 @@ static int supported_character(uint8_t character) {
          character == MSL_CHARACTER_GANONDORF ||
          character == MSL_CHARACTER_PIKACHU ||
          character == MSL_CHARACTER_SAMUS ||
+         character == MSL_CHARACTER_YOSHI ||
          character == MSL_CHARACTER_JIGGLYPUFF || character == MSL_CHARACTER_LUIGI ||
          character == MSL_CHARACTER_MARTH ||
          character == MSL_CHARACTER_ZELDA || character == MSL_CHARACTER_FALCO;

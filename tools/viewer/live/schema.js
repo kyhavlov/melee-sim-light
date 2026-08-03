@@ -13,6 +13,7 @@ export const CHAR_DONKEY_KONG = 3;
 export const CHAR_GANONDORF = 25;
 export const CHAR_PIKACHU = 12;
 export const CHAR_SAMUS = 13;
+export const CHAR_YOSHI = 14;
 export const CHAR_MARTH = 18;
 export const CHAR_ZELDA = 19;
 export const CHAR_FALCO = 22;
@@ -47,6 +48,7 @@ export const SUPPORTED_CHARACTERS = Object.freeze([
   Object.freeze({ id: CHAR_GANONDORF, label: "Ganondorf" }),
   Object.freeze({ id: CHAR_PIKACHU, label: "Pikachu" }),
   Object.freeze({ id: CHAR_SAMUS, label: "Samus" }),
+  Object.freeze({ id: CHAR_YOSHI, label: "Yoshi" }),
   Object.freeze({ id: CHAR_MARTH, label: "Marth" }),
   Object.freeze({ id: CHAR_ZELDA, label: "Zelda" }),
   Object.freeze({ id: CHAR_FALCO, label: "Falco" }),

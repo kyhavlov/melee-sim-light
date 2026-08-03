@@ -1,0 +1,368 @@
+{
+ "name": "yoshi",
+ "notes": "Yoshi validation suite: 30 singles across all six legal stages against Captain Falcon, Donkey Kong, Falco, Fox, Marth, Peach, Sheik, and Yoshi mirrors; 2025-2026 Slippi and mainline captures. All five Pokemon Stadium entries are event-verified frozen: the stadium_transformation stream (spec 0x41, added 3.18.0) is empty over each full game (the game-start is_frozen_ps flag is only trustworthy at 3.19.0+ and is not consulted).",
+ "ucf_enabled": true,
+ "ucf_cardinals_1_0_enabled": true,
+ "replays": [
+  {
+   "replay": "replays/validation/yoshi/2025-11_Game_20251121T135559.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 28,
+   "characters": {
+    "1": "Marth",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/slippi-2025-02_Game_20250223T134637.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 2,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Marth"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/slippi-2025-03_Game_20250311T224228.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 3,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Fox"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/slippi-2025-03_Game_20250318T222544.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 8,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Donkey Kong"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/slippi-2025-03_Game_20250318T231327.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 31,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Falco"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/slippi-2025-03_Game_20250321T181210.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 31,
+   "characters": {
+    "1": "Captain Falcon",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/slippi-2025-04_Game_20250420T153429.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 8,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Falco"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/slippi-2025-05_Game_20250519T222212.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 2,
+   "characters": {
+    "1": "Fox",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/slippi-2025-05_Game_20250526T214539.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 31,
+   "characters": {
+    "1": "Captain Falcon",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/slippi-2025-06_Game_20250626T221245.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 28,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Peach"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-fox-2025-03_Game_20250320T113345.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 8,
+   "characters": {
+    "1": "Fox",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-fox-2025-04_Game_20250406T225523.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 3,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Fox"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-fox-2025-07_Game_20250720T031618.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 31,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Fox"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-marth-2025-01_Game_20250130T000145.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 3,
+   "characters": {
+    "1": "Marth",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-marth-2025-02_Game_20250210T112545.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Marth"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-peach-2025-02_Game_20250224T174042.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 3,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Peach"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-sheik-2025-07_Game_20250726T000623.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 2,
+   "characters": {
+    "1": "Sheik",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-yoshi-2025-03_Game_20250325T030821.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Captain Falcon",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-yoshi-2025-03_Game_20250325T222638.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Captain Falcon",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-yoshi-2025-05_Game_20250509T135544.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-yoshi-2025-05_Game_20250509T225947.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 3,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-yoshi-2025-05_Game_20250511T013955.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 8,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Falco"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/auto-yoshi-2025-11_Game_20251114T054113.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/basic-falco-2025-04_Game_20250417T120004.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 28,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Falco"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/gm-fox-2025-11_Game_20251123T205156.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 28,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Fox"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/gm-marth-2025-12_Game_20251203T224918.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 2,
+   "characters": {
+    "1": "Marth",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/gm-yoshi-2026-05_Game_20260516T184947.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 2,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Fox"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/master-falco-2026-03_Game_20260331T013633.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 31,
+   "characters": {
+    "1": "Falco",
+    "2": "Yoshi"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/medium-falco-2025-09_Game_20250902T095243.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 8,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Falco"
+   }
+  },
+  {
+   "replay": "replays/validation/yoshi/medium-fox-2026-05_Game_20260524T034812.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 28,
+   "characters": {
+    "1": "Yoshi",
+    "2": "Fox"
+   }
+  }
+ ]
+}
