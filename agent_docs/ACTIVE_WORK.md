@@ -61,18 +61,44 @@ entries are event-verified frozen (each declares the 0x41 stadium_transformation
 command and records zero events over the full game); every capture carries populated
 raw analog pad lanes, so none is a 3.18-layout re-wrap. Zero replays were rejected.
 
-**native 11 pass / 7 fail; PPC 14 pass / 4 fail.** The suite is deliberately left out of
+**native 12 pass / 6 fail; PPC 15 pass / 3 fail.** The suite is deliberately left out of
 `melee_core_aggregate` until the residuals are closed or classified with evidence.
+
+**Shield-damage fusion (closed a family on both backends).** `slippi-2025-02` diverged
+by 1 ULP on `shield_hp` for 2,033 rows from frame 10713, where Ness's shield is hit.
+`Fighter_ProcessHit_8006D1EC` carries two unported MWCC fusions in the shield-damage
+expression (GALE01 0x8006D2AC and 0x8006D2CC): the light-shield lerp between
+`x2DC`/`x2E0`, and the `x284` scale over the `x288` floor. Only the trailing subtraction
+from `shield_health` stays a plain `fsubs`. Porting both makes that replay fully
+bit-exact and moved PPC from 14 to 15 passes, and the 396-replay aggregate stayed
+**byte-stable with zero output drift** -- the fusion is identity on the entire existing
+corpus. The offsets confirm the mapping (`fp+0x199C` light-shield amount,
+`fp+0x19A0` the integer shield damage, `p_ftCommonData` +644/+648).
 
 Four families fail on BOTH backends:
 
 - `2025-03` (Frozen Stadium Ness/Peach) @1471: `speed_x_attack`/`speed_y_attack` 1 ULP
   (3.23155046 vs 3.23155022) seeding a `pos_y` episode. PPC 184 rows with a 15,716-frame
-  exact suffix; native 231 rows.
+  exact suffix; native 231 rows. Both lanes carry the *same* value, so the knockback
+  angle is exactly 45 degrees and the 1 ULP lives in the common `scaled_kb` factor, not
+  in the trig. Ruled out: the three knockback formula owners `ftColl_80079AB0/C70/EA8`
+  are already fully fused (6/6 each), and porting the two genuinely-unported fusions
+  found nearby -- the Sakurai-angle ramp `ftCo_Damage_CalcAngle` (GALE01 0x8008D8AC) and
+  `ftCo_CalcYScaledKnockback` (0x800CF678) -- left the fingerprint unchanged, because
+  this hit takes a fixed attack angle and the size scale is 1. Both were kept as
+  asm-verified source completions (identity at current inputs; aggregate byte-stable).
+  The remaining lead is `kb_applied`'s own inputs (percent/staleness/weight chain).
 - `2026-06` (Dream Land Sheik/Ness) @3922: a third item retail spawns and we do not
   (`item_count` 3 vs 2, `item.state[2]` 4). The one non-ULP family and the best next
   lead — identify the article and the spawn predicate.
-- `51444` (Frozen Stadium Peach/Ness) @10756: a single `item.misc3` lane, 6 rows on PPC.
+- `51444` (Frozen Stadium Peach/Ness) @10756: a single `item.misc3` lane, 6 rows on PPC
+  (native also moves `misc2`). The item is a **Mr. Saturn** (kind 7, state 11) that Peach
+  pulled -- not a Ness article -- so this is a pre-existing gap the suite merely exposes.
+  `itDosei_ItemVars` has no pointers, so native and retail layouts agree and no remap is
+  involved; `misc2`/`misc3` sample the `xDE4` position tracker's y and z. State 11's
+  `itDosei_UnkMotion11_Anim` does write `xDE4 = ip->pos`, so the existing
+  held/thrown state-list carve-out (states 1/4/5) is not obviously the right fix and the
+  lane needs its own audit before either masking or correcting it.
 - `slippi-2025-02` (Battlefield Ness/Pikachu) @10713: `shield_hp` 1 ULP, 2,033 rows,
   byte-identical fingerprint on both backends (1dd0a3e8a50fecc8).
 
