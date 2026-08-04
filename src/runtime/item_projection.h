@@ -214,12 +214,15 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
     case MSL_CORE_ITEM_KIND_LINK_BOMB:
     case MSL_CORE_ITEM_KIND_CLINK_BOMB:
         // x0's flag bits are written but its trailing x1/x2/x3 bytes never
-        // are, so xDD7 is unwritten residue; xDDB samples the x4 fuse-scale
-        // float written on every explode arm; the struct ends at x14, so
-        // xDEB/xDEF are past-member residue.
+        // are, so xDD7 is unwritten residue. xDDB samples the last byte of
+        // the x4 direction-sign float, which is unwritten pool residue for
+        // the whole held phase (it_8029F18C first writes it on the thrown
+        // transition) and a constant 0x00 afterwards (the byte of +/-1.0f),
+        // so no live export ever samples an owner-written varying value.
+        // The struct ends at x14, so xDEB/xDEF are past-member residue.
         // refs/melee/src/melee/it/itCharItems.h::itLinkBomb_ItemVars
-        // refs/melee/src/melee/it/items/itlinkbomb.c
-        return MSL_CORE_ITEM_MISC1;
+        // refs/melee/src/melee/it/items/itlinkbomb.c::it_8029F18C
+        return 0;
     case MSL_CORE_ITEM_KIND_LINK_BOOMERANG:
     case MSL_CORE_ITEM_KIND_CLINK_BOOMERANG:
         // No owner writes the leading xDD4 word; xDD8 (turn state), xDE8

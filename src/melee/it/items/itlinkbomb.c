@@ -520,8 +520,9 @@ void itLinkbomb_UnkMotion4_Phys(HSD_GObj* gobj)
     if (item->xDD4_itemVar.linkbomb.x0.b1) {
         temp_f2 = item->x40_vel.x;
         if (temp_f2 != zero) {
+            // GALE01 0x8029F63C: the held-bomb drag step fuses.
             item->x40_vel.x =
-                (sa->x2C * item->xDD4_itemVar.linkbomb.x4) + temp_f2;
+                __fmadds(sa->x2C, item->xDD4_itemVar.linkbomb.x4, temp_f2);
         }
         if (ABS(item->x40_vel.x) < sa->x30) {
             item->x40_vel.x = zero;

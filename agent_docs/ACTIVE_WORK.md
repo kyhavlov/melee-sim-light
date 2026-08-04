@@ -99,6 +99,22 @@ above: **0 pass / 60 fail / 0 error**, all 613,274 frames run end to end; prefix
 
 ## Log
 
+- 2026-08-04 — `checkpoint` (fused-op and mask batch): ported the audited MWCC fused-op
+  set for the Link item TUs — the hookshot's distance dot products (a fused TU-local twin
+  of it_802A3C98, whose out-of-line body must stay unfused for the cross-TU tether
+  callers), all eighteen chain position-update triples, the chain-count lerp
+  (GALE01 0x802A2680), the grip-scale double blend (0x802A2E28), the arrow's spread-angle
+  draw/charge lerps/polar lanes, and the bomb drag step (0x8029F63C); the ftLk/ftCl chara
+  TUs carry zero fused ops. Audit method: symbols.txt sizes + DOL disassembly via the
+  PPC toolchain objdump (scripted asm census; every hookshot sqrt expansion fuses except
+  the out-of-line it_802A3C98 body). Corrected the bomb misc1 mask to 0: xDDB is held-
+  phase pool residue (retail exports 0x5F pre-match heap bytes) and a constant 0x00 after
+  the thrown-transition sign write. Suite floor moved from 87 to ~1,130 matched frames;
+  still 0 pass / 60 fail / 0 error. Dominant remaining forks: the hookshot latch running
+  one frame late (item.state 3-vs-1 plus the action 361-vs-360 zair catch rows — the
+  lerp port did not close it, so the chain-link census at spawn is the open lead) and
+  the boomerang flight/turn fork (xDD8 spin counters drift after the turn).
+
 - 2026-08-04 — `open`: TU import + full registry/admission wiring + data extraction +
   suite staging landed; native-smoke, source-check, and the quick pytest set are green;
   the qemu-ppc toolchain fallback was cherry-picked from experiment/decomp-port at the

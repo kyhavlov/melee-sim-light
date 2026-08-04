@@ -123,7 +123,10 @@ s32 itLinkArrow_802A81C4(Item_GObj* gobj)
     case 6:
         rand = HSD_Randf();
         lookup_table = &it_803F6A84[ip->xDD4_itemVar.linkarrow.x9C];
-        temp = deg_to_rad * ((lookup_table[8] * rand) + lookup_table[0]);
+        // GALE01 0x802A8234/0x802A8264 (and the 0x802A975C/0x802A978C
+        // inlined copy): the spread-angle draw fuses.
+        temp = deg_to_rad *
+               __fmadds(lookup_table[8], rand, lookup_table[0]);
         z = ip->xDD4_itemVar.linkarrow.x94 + temp;
         break;
     case 1:
@@ -131,7 +134,10 @@ s32 itLinkArrow_802A81C4(Item_GObj* gobj)
     case 5:
         rand = HSD_Randf();
         lookup_table = &it_803F6A84[ip->xDD4_itemVar.linkarrow.x9C];
-        temp = deg_to_rad * ((lookup_table[8] * rand) + lookup_table[0]);
+        // GALE01 0x802A8234/0x802A8264 (and the 0x802A975C/0x802A978C
+        // inlined copy): the spread-angle draw fuses.
+        temp = deg_to_rad *
+               __fmadds(lookup_table[8], rand, lookup_table[0]);
         z = ip->xDD4_itemVar.linkarrow.x94 - temp;
         break;
     default:
@@ -276,10 +282,11 @@ bool itLinkArrow_802A850C(Item_GObj* gobj, Vec3* arg1, Vec3* arg2, f32 arg3,
         it_8027429C(gobj, &pos);
         ip->xDC8_word.flags.x14 = 0;
         it_8026B3A8(gobj);
+        // GALE01 0x802A85DC/0x802A85F4: both charge lerps fuse.
         ip->xDD4_itemVar.linkarrow.xA8 =
-            (arg4 * ((attr->x8 - attr->x4) / arg5)) + attr->x4;
+            __fmadds(arg4, (attr->x8 - attr->x4) / arg5, attr->x4);
         ip->xDD4_itemVar.linkarrow.xA4 =
-            (arg4 * ((attr->x10 - attr->xC) / arg5)) + attr->xC;
+            __fmadds(arg4, (attr->x10 - attr->xC) / arg5, attr->xC);
         ip->facing_dir = ftLib_800865C0(ip->xDD4_itemVar.linkarrow.xE0);
         HSD_JObjSetRotationY(jobj, M_PI_2 * ip->facing_dir);
         ip->pos = *arg1;
@@ -567,12 +574,14 @@ void itLinkarrow_UnkMotion2_Phys(HSD_GObj* gobj)
         (ftCo_80094098(item->xDD4_itemVar.linkarrow.xC4,
                        &item->xDD4_itemVar.linkarrow.xC8) *
          ftLib_800869D4(item->xDD4_itemVar.linkarrow.xC4));
-    item->pos.x = (item->xDD4_itemVar.linkarrow.xD4 *
-                   cosf(item->xDD4_itemVar.linkarrow.xD8)) +
-                  item->xDD4_itemVar.linkarrow.xC8;
-    item->pos.y = (item->xDD4_itemVar.linkarrow.xD4 *
-                   sinf(item->xDD4_itemVar.linkarrow.xD8)) +
-                  item->xDD4_itemVar.linkarrow.xCC;
+    // GALE01 0x802A93FC/0x802A9414 (and the 0x802A9C88/0x802A9CA0 shield
+    // deflection copy): both polar position lanes fuse.
+    item->pos.x = __fmadds(item->xDD4_itemVar.linkarrow.xD4,
+                           cosf(item->xDD4_itemVar.linkarrow.xD8),
+                           item->xDD4_itemVar.linkarrow.xC8);
+    item->pos.y = __fmadds(item->xDD4_itemVar.linkarrow.xD4,
+                           sinf(item->xDD4_itemVar.linkarrow.xD8),
+                           item->xDD4_itemVar.linkarrow.xCC);
     item->pos.z = 0.0f;
 }
 
@@ -798,12 +807,14 @@ bool itLinkArrow_Logic98_HitShield(Item_GObj* gobj)
                     atan2f(half_y - ip->xDD4_itemVar.linkarrow.xCC,
                            half_x - ip->xDD4_itemVar.linkarrow.xC8);
             }
-            ip->pos.x = ip->xDD4_itemVar.linkarrow.xD4 *
-                            cosf(ip->xDD4_itemVar.linkarrow.xD8) +
-                        ip->xDD4_itemVar.linkarrow.xC8;
-            ip->pos.y = ip->xDD4_itemVar.linkarrow.xD4 *
-                            sinf(ip->xDD4_itemVar.linkarrow.xD8) +
-                        ip->xDD4_itemVar.linkarrow.xCC;
+            // GALE01 0x802A9C88/0x802A9CA0: both shield-deflection polar
+            // lanes fuse.
+            ip->pos.x = __fmadds(ip->xDD4_itemVar.linkarrow.xD4,
+                                 cosf(ip->xDD4_itemVar.linkarrow.xD8),
+                                 ip->xDD4_itemVar.linkarrow.xC8);
+            ip->pos.y = __fmadds(ip->xDD4_itemVar.linkarrow.xD4,
+                                 sinf(ip->xDD4_itemVar.linkarrow.xD8),
+                                 ip->xDD4_itemVar.linkarrow.xCC);
             ip->pos.z = 0.0f;
             goto end;
         }
