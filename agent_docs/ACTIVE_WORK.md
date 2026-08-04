@@ -95,7 +95,20 @@ above: **0 pass / 60 fail / 0 error**, all 613,274 frames run end to end; prefix
    method applies (refs/melee/config/GALE01/symbols.txt sizes + DOL disassembly).
 2. **Boomerang misc1 (xDD8) families** (hundreds of rows, e.g. 219-vs-132) and 1-2 ULP
    pos_x rows — same fusion audit territory (deceleration/turn math).
-3. Various replays still fail in the first ~1,500 frames — untriaged beyond the above.
+3. **Fighter-attack-vs-item capsule forks with identical exported geometry** — the
+   second confirmed class: in slpfiles-2025-03 (BF Young Link ditto) at frame 41 the
+   hosted sim lands a 7-damage fighter attack on an item (P1 hitlag 5, item.damage 7,
+   item timer frozen) that retail never lands, while every exported position matches
+   through frame 40 (the only live item is P2's arrow stuck at (42.65, 0) and P1 is
+   50+ units away at (-9.47, 32.5)) — so a hosted item HURT capsule must be sitting at
+   a phantom position. Item hurt capsules ride `article->x8_hurtbones` bone ids through
+   `item->xBBC_dynamicBoneTable->bones[]` (it_8027163C) and their world positions come
+   from item model sub-bone jobj matrices — the suspect is stale/unsolved item sub-bone
+   matrices for the newly admitted article models (the arrow's x8_hurtbones is 0x9dd8 in
+   PlLk/PlCl). The zair whip case is the mirror image (item-side hitbox vs fighter).
+   Next: dump the arrow's xACC_itemHurtbox capsule world positions at frames 39..42 in
+   the hosted run and find whose matrix feeds the phantom.
+4. Various replays still fail in the first ~1,500 frames — untriaged beyond the above.
 
 ## Log
 
