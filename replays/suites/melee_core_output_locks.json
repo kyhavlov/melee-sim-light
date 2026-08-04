@@ -2437,6 +2437,15 @@
       }
     },
     {
+      "replay": "replays/validation/ness/53362_Game_20250504T004716.slpz",
+      "expected": {
+        "native": {
+          "frames": 10673,
+          "actual_output_fingerprint": "e4b0ddb2609a8517"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/ness/53870_Game_20250516T122158.slpz",
       "expected": {
         "native": {

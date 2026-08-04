@@ -55,8 +55,8 @@ admitted absorber, so `ftData_OnAbsorb` becomes a live table.
 
 ## Suite state (container authoritative) — IN THE AGGREGATE
 
-Superseded by "Second import" below: the suite is now 29 replays and the aggregate is
-425 = 333/92/0. The original eighteen-replay state is kept here for provenance.
+Superseded by "Second import" below: the suite is now 30 replays and the aggregate is
+426 = 333/93/0. The original eighteen-replay state is kept here for provenance.
 
 18 replays across all six legal stages (three each) against Captain Falcon, Falco, Fox,
 Jigglypuff, Marth, Peach, Pikachu, Sheik, and a Ness mirror. All three Pokemon Stadium
@@ -195,7 +195,7 @@ export lane -- `it_802BF800` reads it during the swing -- so retail genuinely
 consumes uninitialized memory here; in these three replays every fighter,
 physics, and other item lane stays exact.
 
-## Second import — twelve more captures, ten admitted (suite 18 -> 28)
+## Second import — twelve more captures, all admitted (suite 18 -> 30)
 
 A second Ness pool (`ness_replays_2.zip`) was screened and integrated. All twelve
 candidates passed admission: singles, two human ports, Ness present, all six legal
@@ -203,13 +203,14 @@ stages, versions 3.18.0/3.19.0, populated raw analog pad lanes on every capture 
 3.18-layout re-wraps), and both Pokemon Stadium entries event-verified frozen (0x41
 declared, zero events over the full game). No SHA overlapped the existing eighteen.
 
-**Eleven are in the gate.** The ness suite is **29 replays: 17 pass / 12 classified /
-0 fail** on native and **24 pass / 5 classified / 0 fail** on PPC, and
-`melee_core_aggregate` is **425 = 333 pass / 92 classified / 0 fail / 0 error**. Ten
-locks were added byte-additively when the captures were admitted; the standings fix
-below then added `49422`'s lock and rewrote exactly one existing lock
-(`puff/specials`), whose classification it retires. Five of the eleven are bit-exact on
-first contact; the other six are new rows in two already-named families.
+**All twelve are in the gate.** The ness suite is **30 replays: 17 pass / 13 classified /
+0 fail** on native and **24 pass / 6 classified / 0 fail** on PPC, back to five replays on
+each of the six legal stages, and `melee_core_aggregate` is
+**426 = 333 pass / 93 classified / 0 fail / 0 error**. Every lock was added
+byte-additively; the only existing lock this work rewrote is `puff/specials`, whose
+classification the standings fix retires. Five of the twelve are bit-exact on first
+contact, six are new rows in two already-named families, and one (`53362`) is carried as
+explicit debt under a new id.
 
 ### The six new residuals
 
@@ -298,35 +299,39 @@ briefly inverted a conclusion here. `touch` copied sources before `make`. `make 
 also does not rebuild the PPC binary; `make ppc` is separate, and a stale
 `melee-core-ppc` reproduces the old behavior long after the native fix lands.
 
-## OPEN DEFECT — hitlag-accumulated pad edges (one capture held out)
+## CLASSIFIED DEBT — hitlag-accumulated pad edges
 
-`53362_Game_20250504T004716` remains out of the gate. Its grab timer, standings rank
-and drain quantum all match retail; the divergence is one spurious mash trigger.
+`53362_Game_20250504T004716` is **in the suite**, carried as
+`hitlag-accumulated-pad-edge` with native and PPC snapshots. It is a known hosted defect
+rather than a recording artifact, classified as explicit debt so the replay keeps its
+coverage and so the eventual fix announces itself by breaking the entry -- the same way
+`puff/specials`'s `scene-standings-cache-gap` surfaced the standings fix.
 
-- Retail and the hosted build agree exactly through frame 1387 (timer 47/46/45 at
-  frames 1382/1383/1387). At 1387 the hosted `ftCommon_GrabMash` subtracts the 6-point
-  mash and retail subtracts nothing, so retail runs +6 from frame 1388 onward
-  (retail 44/…/6 at 1408 against the hosted 38/…/0). The hosted timer reaches exactly
-  0.0 at 1408 and trips the `<= 0` gate one frame before the throw.
-- The trigger is `fp->input.x668`, the newly-pressed mask. The recording holds A from
-  frame 1383 through 1387, i.e. the press edge lands on 1383, inside the pummel's
-  four-frame hitlag (1383..1386) during which the capture Anim -- and therefore
-  `ftCommon_GrabMash` -- does not run.
-- **Retail probe at the `ftCommon_GrabMash` entry** reads `x668 = 0x0000` on frames
-  1382, 1383, 1387, 1388 and 1389, with `x660` (previous held) stepping 0x20000 ->
-  0x20100 across the hitlag. The hosted build reads `x668 = 0x100` at 1387.
-- So retail has discarded the accumulated edge by the first post-hitlag frame.
-  `Fighter_Spaghetti_8006AD10_Inner1` accumulates (`x668 |= edge`) while
-  `fp->x2219_b5` is set and overwrites (`x668 = edge`) otherwise, so retail's overwrite
-  must land before `GrabMash` reads it on 1387 -- the hosted build still has the flag
-  set at that point, one frame late. `x2219_b5` is set for the captured partner by
-  `Fighter_UnkRecursiveFunc_8006D044`'s recursion through `fp->x1A5C` and cleared
-  through `Fighter_8006D10C_Inline1`, whose partner branch is gated on `x2219_b7` --
-  that gate is the place to look.
-
-This is an input-pipeline ordering question, not a grab question, and any change there
-has to be validated against the whole corpus (x668 feeds every `CheckInput` owner), so
-it is left as the next task rather than patched speculatively.
+- Retail and the hosted build agree exactly through frame 1387 (timer 47/46/45 at frames
+  1382/1383/1387). At 1387 the hosted `ftCommon_GrabMash` subtracts the 6-point mash and
+  retail subtracts nothing, so retail runs +6 from 1388 onward (44 against 38, and 6
+  against 0 at 1408). The hosted timer lands on exactly `0.0` at 1408 and trips
+  `ftCo_CaptureWaitHi_Anim`'s `grab_timer <= 0` gate one frame before the throw; the grab
+  breaks, `fn_800DAD18` stops re-anchoring the pair, and the match forks to the end.
+- Everything upstream is exact and retail-verified: seeded timer 60, standings rank 1, the
+  1-per-frame decrement and the 6-point mash quantum.
+- The trigger is `fp->input.x668`, the newly-pressed mask. The recording holds A from 1383
+  through 1387, so the press edge lands inside the pummel's four-frame hitlag
+  (1383..1386), during which the capture Anim -- and therefore `ftCommon_GrabMash` -- does
+  not run.
+- **Retail probe at the `ftCommon_GrabMash` entry** reads `x668 = 0x0000` on 1382, 1383,
+  1387, 1388 and 1389, with `x660` stepping 0x20000 -> 0x20100 across the hitlag. The
+  hosted build reads `x668 = 0x100` at 1387 **while reporting `x2219_b5 = 0` and
+  `held == x660 == 0x100`**, which makes this frame's own edge zero -- so what it serves is
+  a stale accumulation the priority-3 input update failed to overwrite, not a fresh press.
+- That is the sharp form of the lead. `Fighter_Spaghetti_8006AD10_Inner1` accumulates
+  (`x668 |= edge`) while `x2219_b5` is set and overwrites (`x668 = edge`) otherwise, and
+  `Fighter_8006A1BC` clears `x2219_b5` at process **priority 0**, ahead of the input update
+  at **priority 3** and the Anim at **priority 4** -- so the overwrite should already have
+  happened by the time `GrabMash` reads it. The guards to audit are `x221F_b3`,
+  `x2224_b2` and `x221D_b3` at the head of `Fighter_Spaghetti_8006AD10`.
+- Not patched under a single replay: `x668` feeds every `CheckInput` owner, so the fix
+  needs the full aggregate as its gate.
 
 ## Follow-ups
 
@@ -334,9 +339,9 @@ it is left as the next task rather than patched speculatively.
    remaining lead is `kb_applied`'s own input chain (percent/staleness/weight), since
    the formula owners and every fusion reachable from the angle path are already
    complete. A retail probe on the `ftColl_80079AB0` inputs would settle it.
-2. The hitlag-accumulated pad-edge defect above. Re-admitting
-   `53362_Game_20250504T004716` is the acceptance test; the corpus-wide risk is that
-   `x668` feeds every `CheckInput` owner, so the full aggregate is the gate.
+2. The hitlag-accumulated pad-edge defect above. Retiring the
+   `hitlag-accumulated-pad-edge` classification is the acceptance test; the corpus-wide
+   risk is that `x668` feeds every `CheckInput` owner, so the full aggregate is the gate.
 3. Probe captures are now self-terminating (`MSL_PROBE_EXIT_FRAME`, slippi-dolphin
    80e8cd15): a bounded window finishes in seconds instead of running to the external
    alarm, so retail ground truth is cheap enough to reach for early rather than last.

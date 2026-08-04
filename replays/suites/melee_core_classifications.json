@@ -5176,6 +5176,51 @@
     },
     "ppc": "native"
    }
+  },
+  {
+   "replay": "replays/validation/ness/53362_Game_20250504T004716.slpz",
+   "id": "hitlag-accumulated-pad-edge",
+   "owner": "Fighter_Spaghetti_8006AD10 pressed-input publication across a hitlag boundary",
+   "rationale": "Known hosted defect, carried as explicit debt so the replay keeps its coverage and the eventual fix announces itself. Captain Falcon's pummel puts Ness in four frames of hitlag (1383..1386) during which the capture Anim, and therefore ftCommon_GrabMash, does not run. The recording holds A from frame 1383 through 1387, so the press edge lands inside that window. Fighter_Spaghetti_8006AD10_Inner1 accumulates the edge into fp->input.x668 while fp->x2219_b5 is set and overwrites x668 with the current frame's edge otherwise, so on the first post-hitlag frame the stale press must be discarded. A retail probe at the ftCommon_GrabMash entry reads x668 = 0x0000 on frames 1382, 1383, 1387, 1388 and 1389 with x660 stepping 0x20000 -> 0x20100 across the hitlag; the hosted build reads x668 = 0x100 at 1387 even though it reports x2219_b5 = 0 and held == x660 == 0x100 there, which makes this frame's edge zero -- so the value it serves is a stale accumulation the prio-3 input update failed to overwrite, not a fresh press. The consequence is exactly one spurious 6-point mash trigger: the hosted and retail grab timers agree through frame 1387 (47/46/45 at 1382/1383/1387) and retail then runs +6 ahead (44 at 1388 against 38, 6 at 1408 against 0), so the hosted timer lands on exactly 0.0 at frame 1408 and trips ftCo_CaptureWaitHi_Anim's grab_timer <= 0 gate one frame before Captain Falcon's throw. The grab breaks, the pair stops being re-anchored by fn_800DAD18, and the match forks for the remainder. Everything upstream is exact and retail-verified: the seeded timer (60), the standings rank (1), the 1-per-frame decrement and the 6-point mash quantum all match. The fix is an input-pipeline ordering question -- Fighter_8006A1BC clears x2219_b5 at process priority 0, ahead of the priority-3 input update, so the overwrite should already have happened; the guards to audit are x221F_b3 / x2224_b2 / x221D_b3 in Fighter_Spaghetti_8006AD10 -- and x668 feeds every CheckInput owner, so it is not changed under a single replay. Both backends fork identically at frame 1408 and carry their own snapshots.",
+   "sources": [
+    "refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10",
+    "refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC",
+    "refs/melee/src/melee/ft/fighter.c::Fighter_8006D10C",
+    "refs/melee/src/melee/ft/ftcommon.c::ftCommon_GrabMash",
+    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 1530,
+     "first_mismatch_frame": 1408,
+     "first_render_visibility_mismatch_frame": 305,
+     "frames": 10673,
+     "last_mismatch_frame": 10550,
+     "matched_frames": 1530,
+     "mismatch_count": 360005,
+     "mismatch_fields_digest": "24d067d84b2ce68c51f305572f125dd7aa586bc9d7fbd1599a8ffd21b338535b",
+     "mismatch_fingerprint": "5324b806fd932f36",
+     "mismatched_frames": 9143,
+     "render_visibility_mismatch_count": 13158,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 0
+    },
+    "ppc": {
+     "exact_prefix_frames": 1530,
+     "first_mismatch_frame": 1408,
+     "first_render_visibility_mismatch_frame": 305,
+     "frames": 10673,
+     "last_mismatch_frame": 10550,
+     "matched_frames": 1530,
+     "mismatch_count": 360143,
+     "mismatch_fields_digest": "7ac1dc0b40605a6774c7098a4843b702d6ce805207ff952d63b1cf6d25cfa1e9",
+     "mismatch_fingerprint": "04d756ed23f07384",
+     "mismatched_frames": 9143,
+     "render_visibility_mismatch_count": 13158,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 0
+    }
+   }
   }
  ]
 }
