@@ -4798,6 +4798,225 @@
      "signed_zero_equal_count": 0
     }
    }
+  },
+  {
+   "replay": "replays/validation/ness/2026-06_Game_20260616T195545.slpz",
+   "id": "unmodeled-presentation-rng-stream-phase",
+   "owner": "Dream Land's replaced grOldPupupu blow machine versus the retail blow-timer RNG draw (ledger canonical:slippi-stage-event-publication)",
+   "rationale": "Engine-dump probe capture of retail's own RNG stream settles this. Retail's frame 3922 opens with a randi at LR 0x80211648 -- inside grOldPupupu_802113E0's rand_range blow timer -- before efAsync_Dispatch's 0x3EC rotation draw. The hosted build deliberately replaces Dream Land's wind machine with the recorded Slippi direction stream, because the retail timers sample the mid-frame RNG after effect draws that do not exist headlessly; the replacement consumes no RNG. That one-draw phase shift moves the following it_2725_Logic109_DmgDealt HSD_Randi(3) from the stream position returning 0 (the Sheik needle survives into its bounce state) to the neighbouring position returning 2 (the needle is destroyed). Every retail draw for the frame reproduces exactly from the recorded frame seed, including the surviving needle's Randi(8) = 5 bounce speed and its SetupBounce draws. Control: frame 3919 is an identical needle hit with no Whispy draw, and retail's sequence there matches the hosted one draw for draw. Only the needle's own item lanes diverge; every fighter, physics, and shield lane stays exact, and the episode self-heals.",
+   "sources": [
+    "refs/melee/src/melee/gr/groldpupupu.c::grOldPupupu_802113E0",
+    "refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt",
+    "refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch",
+    "src/upstream_delta_ledger.tsv::canonical:slippi-stage-event-publication"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 4044,
+     "first_mismatch_frame": 3922,
+     "first_render_visibility_mismatch_frame": 3342,
+     "frames": 14721,
+     "last_mismatch_frame": 9475,
+     "matched_frames": 14522,
+     "mismatch_count": 1778,
+     "mismatch_fields_digest": "f3521c713e962a4d1019523d713890f25a081bbef4f60030ffb7b6c1dc4ab964",
+     "mismatch_fingerprint": "971f7effb555be63",
+     "mismatched_frames": 199,
+     "render_visibility_mismatch_count": 2,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 5123
+    },
+    "ppc": {
+     "exact_prefix_frames": 4044,
+     "first_mismatch_frame": 3922,
+     "first_render_visibility_mismatch_frame": 3342,
+     "frames": 14721,
+     "last_mismatch_frame": 4073,
+     "matched_frames": 14569,
+     "mismatch_count": 1731,
+     "mismatch_fields_digest": "6f9738d5af7014509e1c76b5fd0a0d51cd372809af240345b7f1e9259c6577a7",
+     "mismatch_fingerprint": "39dbb255aa456a2a",
+     "mismatched_frames": 152,
+     "render_visibility_mismatch_count": 2,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 10525
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/ness/2025-03_Game_20250304T191933.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "knockback magnitude feeding ftCo_Damage_CalcVel",
+   "rationale": "One 1-ULP seed at frame 1471: speed_x_attack and speed_y_attack take the same value (3.23155046 recorded versus 3.23155022), so the knockback angle is exactly 45 degrees and both lanes carry the single scaled_kb factor rather than any trig difference. The episode reconverges and leaves a 3,958-frame exact suffix, and both backends produce the same first row. The knockback formula owners ftColl_80079AB0/80079C70/80079EA8 already carry their complete MWCC fused-op sets, and porting the two genuinely unported fusions reachable from this path -- the Sakurai-angle ramp in ftCo_Damage_CalcAngle and ftCo_CalcYScaledKnockback -- left the fingerprint unchanged because this hit uses a fixed attack angle and unit character scale. Discrete lanes, damage, and inputs are exact through the seed frame.",
+   "sources": [
+    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcVel",
+    "refs/melee/src/melee/ft/ftcoll.c::ftColl_80079AB0"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 1593,
+     "first_mismatch_frame": 1471,
+     "first_render_visibility_mismatch_frame": 8848,
+     "frames": 17493,
+     "last_mismatch_frame": 13412,
+     "matched_frames": 17262,
+     "mismatch_count": 562,
+     "mismatch_fields_digest": "748f11e03fb30738dec090c5774111a9c0680280beee32d9d562f2b6f0388f09",
+     "mismatch_fingerprint": "7532394a5724e55b",
+     "mismatched_frames": 231,
+     "render_visibility_mismatch_count": 1,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 3958
+    },
+    "ppc": {
+     "exact_prefix_frames": 1593,
+     "first_mismatch_frame": 1471,
+     "first_render_visibility_mismatch_frame": 8848,
+     "frames": 17493,
+     "last_mismatch_frame": 1654,
+     "matched_frames": 17309,
+     "mismatch_count": 515,
+     "mismatch_fields_digest": "4cf536efc71cc60383001037b02c78d0b35d3aea3722abc1fc8ac546c7a29a8c",
+     "mismatch_fingerprint": "2d694e8ace4b8e6e",
+     "mismatched_frames": 184,
+     "render_visibility_mismatch_count": 1,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 15716
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/ness/51444_Game_20250301T143614.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's x4 and Mr. Saturn's unwritten xDE4 tracker",
+   "rationale": "Two item-variable residue lanes, both on articles whose sampled members no owner writes in the observed state. item.misc1 is the Yo-Yo's x4, written only by it_802BFEC4 on the smash's final frame, so the live article samples its pool slot's previous occupant. item.misc2/misc3 are Mr. Saturn's xDE4 y and z, which itDosei_UnkMotion4 and UnkMotion5 do not write; the bytes the hosted run reports there are the halves of a 64-bit host pointer (the 0x00007FFF high word is plainly visible in the union), i.e. allocator identity left by the slot's previous occupant, which the console's 32-bit heap cannot be re-derived from. Every fighter, physics, and remaining item lane is exact and both episodes self-heal.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
+    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
+    "src/runtime/scalar.c::item_var_source_byte",
+    "refs/melee/src/melee/it/itCommonItems.h::itDosei_ItemVars",
+    "refs/melee/src/melee/it/items/itdosei.c"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 2936,
+     "first_mismatch_frame": 2814,
+     "first_render_visibility_mismatch_frame": 2311,
+     "frames": 14865,
+     "last_mismatch_frame": 10761,
+     "matched_frames": 14852,
+     "mismatch_count": 19,
+     "mismatch_fields_digest": "5fc2ac54680d0908c276120637b22908f30fe4352c9d4b3e7cb43a219561045a",
+     "mismatch_fingerprint": "399bfedec4133538",
+     "mismatched_frames": 13,
+     "render_visibility_mismatch_count": 13,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 3981
+    },
+    "ppc": {
+     "exact_prefix_frames": 10878,
+     "first_mismatch_frame": 10756,
+     "first_render_visibility_mismatch_frame": 2311,
+     "frames": 14865,
+     "last_mismatch_frame": 10761,
+     "matched_frames": 14859,
+     "mismatch_count": 6,
+     "mismatch_fields_digest": "7a9cf8af3a9a55f059f9e11ccff09c3e1ee15cde858d954756204b867d5d2034",
+     "mismatch_fingerprint": "5c30b883e57580f2",
+     "mismatched_frames": 6,
+     "render_visibility_mismatch_count": 13,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 3981
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/ness/2025-11_Game_20251124T141214.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
+   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive samples whatever the shared item-pool slot held from its previous occupant. Traced end to end: the hosted sim performs all of the replay's Yo-Yo smashes on the same pool slot with retail's spawn ids and computes x4 correctly (0x3D95C61D, whose low byte 29 is one of the values retail exports for this lane), but the preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose layout matches retail, is bit-exact on this replay. All fighter, physics, and other item lanes are exact.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
+    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 14159,
+     "first_mismatch_frame": 14037,
+     "first_render_visibility_mismatch_frame": null,
+     "frames": 19574,
+     "last_mismatch_frame": 14088,
+     "matched_frames": 19522,
+     "mismatch_count": 52,
+     "mismatch_fields_digest": "048d0186f4c39b39e80ba19cbbc8df56483b799b3c7730e283b9b6150fce1837",
+     "mismatch_fingerprint": "584ce294664497e0",
+     "mismatched_frames": 52,
+     "render_visibility_mismatch_count": 0,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 5363
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/ness/52757_Game_20250415T000609.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
+   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive samples whatever the shared item-pool slot held from its previous occupant. Traced end to end: the hosted sim performs all of the replay's Yo-Yo smashes on the same pool slot with retail's spawn ids and computes x4 correctly (0x3D95C61D, whose low byte 29 is one of the values retail exports for this lane), but the preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose layout matches retail, is bit-exact on this replay. All fighter, physics, and other item lanes are exact.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
+    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 3922,
+     "first_mismatch_frame": 3800,
+     "first_render_visibility_mismatch_frame": 237,
+     "frames": 6695,
+     "last_mismatch_frame": 5057,
+     "matched_frames": 6492,
+     "mismatch_count": 203,
+     "mismatch_fields_digest": "00cb21eb37baef9276688fd3fb7ce9b39379000e733590b980e0e6365ab8af1b",
+     "mismatch_fingerprint": "605b561cc38b0603",
+     "mismatched_frames": 203,
+     "render_visibility_mismatch_count": 1,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 1515
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/ness/53870_Game_20250516T122158.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
+   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive samples whatever the shared item-pool slot held from its previous occupant. Traced end to end: the hosted sim performs all of the replay's Yo-Yo smashes on the same pool slot with retail's spawn ids and computes x4 correctly (0x3D95C61D, whose low byte 29 is one of the values retail exports for this lane), but the preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose layout matches retail, is bit-exact on this replay. All fighter, physics, and other item lanes are exact.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
+    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 12092,
+     "first_mismatch_frame": 11970,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 13969,
+     "last_mismatch_frame": 12087,
+     "matched_frames": 13851,
+     "mismatch_count": 118,
+     "mismatch_fields_digest": "e645182e50ef4f5594429737c472bd84ea7aa6046c8cd1d5bb4f99af3d5f74a1",
+     "mismatch_fingerprint": "8ccfd3719f530ce6",
+     "mismatched_frames": 118,
+     "render_visibility_mismatch_count": 6,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 1759
+    }
+   }
   }
  ]
 }
