@@ -20,6 +20,7 @@
 #include "ft/chara/ftSamus/types.h"
 #include "ft/chara/ftYoshi/types.h"
 #include "ft/chara/ftNess/types.h"
+#include "ft/chara/ftLink/types.h"
 #include "ft/chara/ftPurin/types.h"
 #include "ft/chara/ftSeak/types.h"
 #include "ft/chara/ftZelda/types.h"
@@ -203,6 +204,19 @@ typedef Article* MslDatPikachuArticles[3];
 // plain Article graph.
 // refs/melee/src/melee/ft/chara/ftNess/ftNs_Init.c
 typedef Article* MslDatNessArticles[11];
+// PlLk.dat and PlCl.dat share one seven-slot x48_items layout: slots 0..4
+// are the bomb, boomerang, hookshot, arrow, and bow articles both OnLoads
+// register (item kinds 58..65 and 76/77); slot 5 is the milk-bottle article
+// only ftCl_Init_OnLoad registers as kind 123 (NULL in PlLk.dat); slot 6 is
+// the sword HSD_Joint accessory graph consumed by ftParts_800753D4.
+// refs/melee/src/melee/ft/chara/ftLink/ftLk_Init.c
+// refs/melee/src/melee/ft/chara/ftCLink/ftCl_Init.c
+// refs/melee/src/melee/it/items/{itlinkbomb.c,itlinkboomerang.c,
+//   itlinkhookshot.c,itlinkarrow.c,itlinkbow.c,itclinkmilk.c}
+typedef struct MslDatLinkArticles {
+    Article* articles[6];
+    HSD_Joint* sword_accessory;
+} MslDatLinkArticles;
 typedef struct MslDatYoshiArticles {
     Article* articles[3];
     HSD_Joint* egg_accessory;
@@ -346,4 +360,10 @@ void* msl_native_dat_type_roots[] = {
     (CrowdConfig*) 0,
     (struct Fighter_804D64FC_t*) 0,
     (struct Fighter_804D6534_t*) 0,
+    (MslDatLinkArticles*) 0,
+    (struct ftLk_DatAttrs*) 0,
+    (itLinkBombAttributes*) 0,
+    (itLinkBoomerangAttributes*) 0,
+    (itLinkHookshotAttributes*) 0,
+    (itLinkArrowAttributes*) 0,
 };

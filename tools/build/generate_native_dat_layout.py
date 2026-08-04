@@ -576,6 +576,12 @@ def main() -> None:
         "CrowdConfig",
         "Fighter_804D64FC_t",
         "Fighter_804D6534_t",
+        "MslDatLinkArticles",
+        "ftLk_DatAttrs",
+        "itLinkBombAttributes",
+        "itLinkBoomerangAttributes",
+        "itLinkHookshotAttributes",
+        "itLinkArrowAttributes",
     ]
     roots = [
         (name, builder.pair(src.named(name), dst.named(name))) for name in root_names

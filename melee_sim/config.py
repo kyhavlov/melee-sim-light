@@ -15,6 +15,8 @@ class Character(IntEnum):
     PIKACHU = 12
     SAMUS = 13
     NESS = 8
+    LINK = 6
+    YOUNG_LINK = 20
     YOSHI = 14
     JIGGLYPUFF = 15
     LUIGI = 17

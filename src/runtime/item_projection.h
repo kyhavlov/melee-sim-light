@@ -46,6 +46,17 @@ enum {
     MSL_CORE_ITEM_KIND_NESS_PKFLASH_EXPLODE = 78,
     MSL_CORE_ITEM_KIND_NESS_BAT = 101,
     MSL_CORE_ITEM_KIND_NESS_YOYO = 102,
+    MSL_CORE_ITEM_KIND_LINK_BOMB = 58,
+    MSL_CORE_ITEM_KIND_CLINK_BOMB = 59,
+    MSL_CORE_ITEM_KIND_LINK_BOOMERANG = 60,
+    MSL_CORE_ITEM_KIND_CLINK_BOOMERANG = 61,
+    MSL_CORE_ITEM_KIND_LINK_HOOKSHOT = 62,
+    MSL_CORE_ITEM_KIND_CLINK_HOOKSHOT = 63,
+    MSL_CORE_ITEM_KIND_LINK_ARROW = 64,
+    MSL_CORE_ITEM_KIND_CLINK_ARROW = 65,
+    MSL_CORE_ITEM_KIND_LINK_BOW = 76,
+    MSL_CORE_ITEM_KIND_CLINK_BOW = 77,
+    MSL_CORE_ITEM_KIND_CLINK_MILK = 123,
     MSL_CORE_ITEM_KIND_YOSHI_EGG_THROW = 86,
     MSL_CORE_ITEM_KIND_YOSHI_EGG_LAY = 87,
     MSL_CORE_ITEM_KIND_YOSHI_STAR = 88,
@@ -200,6 +211,51 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars
         // refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4
         return MSL_CORE_ITEM_MISC0;
+    case MSL_CORE_ITEM_KIND_LINK_BOMB:
+    case MSL_CORE_ITEM_KIND_CLINK_BOMB:
+        // x0's flag bits are written but its trailing x1/x2/x3 bytes never
+        // are, so xDD7 is unwritten residue; xDDB samples the x4 fuse-scale
+        // float written on every explode arm; the struct ends at x14, so
+        // xDEB/xDEF are past-member residue.
+        // refs/melee/src/melee/it/itCharItems.h::itLinkBomb_ItemVars
+        // refs/melee/src/melee/it/items/itlinkbomb.c
+        return MSL_CORE_ITEM_MISC1;
+    case MSL_CORE_ITEM_KIND_LINK_BOOMERANG:
+    case MSL_CORE_ITEM_KIND_CLINK_BOOMERANG:
+        // No owner writes the leading xDD4 word; xDD8 (turn state), xDE8
+        // (turn timer), and xDEC (catch state) are constructor- and
+        // motion-written scalars.
+        // refs/melee/src/melee/it/itCharItems.h::itLinkBoomerang_ItemVars
+        // refs/melee/src/melee/it/items/itlinkboomerang.c
+        return MSL_CORE_ITEM_MISC1 | MSL_CORE_ITEM_MISC2 |
+               MSL_CORE_ITEM_MISC3;
+    case MSL_CORE_ITEM_KIND_LINK_HOOKSHOT:
+    case MSL_CORE_ITEM_KIND_CLINK_HOOKSHOT:
+        // x0/x4 are ItemLink pointers (host-widened), x14's trailing bytes
+        // are padding, and the x18 float past the sampled window is the
+        // first owner-written scalar.
+        // refs/melee/src/melee/it/itCharItems.h::itLinkHookshot_ItemVars
+        // refs/melee/src/melee/it/items/itlinkhookshot.c
+        return 0;
+    case MSL_CORE_ITEM_KIND_LINK_ARROW:
+    case MSL_CORE_ITEM_KIND_CLINK_ARROW:
+        // The leading x0..x14 floats are never written by any owner; the
+        // first written member is the x18 spawn-position vector whose x
+        // lane xDEF samples.
+        // refs/melee/src/melee/it/itCharItems.h::itLinkArrow_ItemVars
+        // refs/melee/src/melee/it/items/itlinkarrow.c
+        return MSL_CORE_ITEM_MISC3;
+    case MSL_CORE_ITEM_KIND_LINK_BOW:
+    case MSL_CORE_ITEM_KIND_CLINK_BOW:
+        // x0 is the charge frame scalar written at draw start; x4 is the
+        // owner arrow GObj pointer and the struct ends there.
+        // refs/melee/src/melee/it/itCharItems.h::itLinkBow_ItemVars
+        // refs/melee/src/melee/it/items/itlinkbow.c
+        return MSL_CORE_ITEM_MISC0;
+    case MSL_CORE_ITEM_KIND_CLINK_MILK:
+        // The milk bottle declares only its owner Fighter_GObj pointer.
+        // refs/melee/src/melee/it/itCharItems.h::itCLinkMilk_ItemVars
+        return 0;
     case MSL_CORE_ITEM_KIND_YOSHI_EGG_THROW:
     case MSL_CORE_ITEM_KIND_YOSHI_STAR:
         // Neither the thrown egg nor the Yoshi Bomb star declares an

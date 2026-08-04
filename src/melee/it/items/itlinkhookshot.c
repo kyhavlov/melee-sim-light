@@ -29,6 +29,33 @@
 
 #include <MSL/math_ppc.h>
 
+#ifdef MSL_CORE_NATIVE
+#include <runtime/context.h>
+#include <runtime/source_state.h>
+
+// it_link_attr_math recomputes the x2C..x48 attribute lanes in place at
+// every hookshot spawn (it_802A2568): retail uses the article's DAT blob as
+// scratch. Hosted GameData is shared and immutable, so route every attribute
+// access through the match-owned per-kind mirror in MslSourceMatchState (the
+// Link and Young Link DAT blobs are distinct scratch in retail).
+itLinkHookshotAttributes* msl_link_hookshot_attrs(Item* ip)
+{
+    MslSourceMatchState* state = msl_core_source_match_state();
+    int idx = ip->kind == It_Kind_CLink_HShot ? 1 : 0;
+    if (!state->link_hookshot.seeded[idx]) {
+        state->link_hookshot.attrs[idx] =
+            *(itLinkHookshotAttributes*)
+                 ip->xC4_article_data->x4_specialAttributes;
+        state->link_hookshot.seeded[idx] = 1;
+    }
+    return &state->link_hookshot.attrs[idx];
+}
+#define MSL_LINK_HOOKSHOT_ATTRS(ip) msl_link_hookshot_attrs(ip)
+#else
+#define MSL_LINK_HOOKSHOT_ATTRS(ip) \
+    ((void*) (ip)->xC4_article_data->x4_specialAttributes)
+#endif
+
 /* 2A5770 */ static void it_802A5770_inline(ItemLink* link_1,
                                             itLinkHookshotAttributes* arg2,
                                             Fighter* arg3, s32 var_r29);
@@ -136,7 +163,7 @@ static inline void it_802A2568_inline(ItemLink* temp_r3_3, HSD_JObj* arg1,
 static inline HSD_JObj* it_link_get_joint(Item* arg0, s32 var_r31)
 {
     itLinkHookshotAttributes* temp_r3_4;
-    temp_r3_4 = arg0->xC4_article_data->x4_specialAttributes;
+    temp_r3_4 = MSL_LINK_HOOKSHOT_ATTRS(arg0);
     if ((var_r31 % 2) != 0) {
         return HSD_JObjLoadJoint(temp_r3_4->x54);
     } else {
@@ -147,7 +174,7 @@ static inline HSD_JObj* it_link_get_joint(Item* arg0, s32 var_r31)
 static inline HSD_JObj* it_link_get_joint_c(Item* arg0)
 {
     itLinkHookshotAttributes* temp_r3_4;
-    temp_r3_4 = arg0->xC4_article_data->x4_specialAttributes;
+    temp_r3_4 = MSL_LINK_HOOKSHOT_ATTRS(arg0);
     return HSD_JObjLoadJoint(temp_r3_4->x5C);
 }
 
@@ -197,7 +224,7 @@ HSD_JObj* it_802A2568(Item* arg0, HSD_JObj* arg1, s32 arg2, f32 arg8)
     HSD_JObj* last_jobj;
     Vec3 pos;
 
-    attr = arg0->xC4_article_data->x4_specialAttributes;
+    attr = MSL_LINK_HOOKSHOT_ATTRS(arg0);
     pos = it_803B8650;
 
     it_link_attr_math(attr, arg2, arg8);
@@ -401,7 +428,7 @@ bool itLinkhookshot_UnkMotion8_Anim(Item_GObj* arg0)
     item = GET_ITEM(arg0);
     jobj = arg0->hsd_obj;
     link_0 = item->xDD4_itemVar.linkhookshot.x0;
-    attr = item->xC4_article_data->x4_specialAttributes;
+    attr = MSL_LINK_HOOKSHOT_ATTRS(item);
     while ((link_0 != NULL) && link_0->x2C_b0) {
         link_0 = link_0->next;
         var_r5 += 1;
@@ -503,7 +530,7 @@ void it_802A2EE4(Item_GObj* arg0)
 
     Item* item = GET_ITEM(arg0);
     itLinkHookshotAttributes* attr =
-        item->xC4_article_data->x4_specialAttributes;
+        MSL_LINK_HOOKSHOT_ATTRS(item);
     ItemLink* item_link = item->xDD4_itemVar.linkhookshot.x0;
     Fighter* fp = item->owner->user_data;
 
@@ -579,7 +606,7 @@ static void fn_802A3110(HSD_GObj* arg0)
     Fighter* fp;
 
     fp = item->owner->user_data;
-    attr = item->xC4_article_data->x4_specialAttributes;
+    attr = MSL_LINK_HOOKSHOT_ATTRS(item);
     (void) attr;
     item_link = item->xDD4_itemVar.linkhookshot.x0;
     fn_802A3110_inline(item_link, &vec);
@@ -611,7 +638,7 @@ void it_802A3254(Item_GObj* arg0)
     u8 _padB[4];
 
     fp = item->owner->user_data;
-    attr = item->xC4_article_data->x4_specialAttributes;
+    attr = MSL_LINK_HOOKSHOT_ATTRS(item);
     (void) attr;
     item_link = item->xDD4_itemVar.linkhookshot.x4;
 
@@ -650,7 +677,7 @@ void fn_802A33A0(Item_GObj* arg0)
     u8 _padB[4];
 
     item = GET_ITEM(arg0);
-    attr = item->xC4_article_data->x4_specialAttributes;
+    attr = MSL_LINK_HOOKSHOT_ATTRS(item);
     fp = fn_802A33A0_GetFighter(item);
 
     item_link = item->xDD4_itemVar.linkhookshot.x4;
@@ -682,7 +709,7 @@ void it_802A3500(Item_GObj* arg0)
     u8 _padB[8];
     Item* item = GET_ITEM(arg0);
     itLinkHookshotAttributes* attr =
-        item->xC4_article_data->x4_specialAttributes;
+        MSL_LINK_HOOKSHOT_ATTRS(item);
     ItemLink* item_link;
     Fighter* fp = item->owner->user_data;
 
@@ -731,7 +758,7 @@ void it_802A3630(Item_GObj* arg0)
     Vec3 pos;
     Item* item = GET_ITEM(arg0);
     itLinkHookshotAttributes* attr =
-        item->xC4_article_data->x4_specialAttributes;
+        MSL_LINK_HOOKSHOT_ATTRS(item);
     Fighter* fp = item->owner->user_data;
     ItemLink* item_link = item->xDD4_itemVar.linkhookshot.x4;
 
@@ -768,7 +795,7 @@ void it_802A3828(Item_GObj* gobj)
 {
     Item* item = GET_ITEM(gobj);
     itLinkHookshotAttributes* attr =
-        item->xC4_article_data->x4_specialAttributes;
+        MSL_LINK_HOOKSHOT_ATTRS(item);
     Fighter* fp = GET_FIGHTER(item->owner);
     ItemLink* item_link = item->xDD4_itemVar.linkhookshot.x4;
     ftLk_DatAttrs* lk_attr = fp->dat_attrs;
@@ -819,7 +846,7 @@ void it_802A39FC(Item_GObj* gobj)
     Item* item = gobj->user_data;
     Fighter* fp;
     itLinkHookshotAttributes* attr =
-        item->xC4_article_data->x4_specialAttributes;
+        MSL_LINK_HOOKSHOT_ATTRS(item);
     f32 temp_f30_2;
     Vec3 pos;
     Vec3 pos_2;
@@ -2274,7 +2301,7 @@ void it_802A7B34(HSD_GObj* arg0)
     if (fp->fv.lk.xC != NULL) {
         Item* item = GET_ITEM(fp->fv.lk.xC);
         itLinkHookshotAttributes* attr =
-            item->xC4_article_data->x4_specialAttributes;
+            MSL_LINK_HOOKSHOT_ATTRS(item);
         ItemLink* item_link = item->xDD4_itemVar.linkhookshot.x0;
 
         it_802A2EE4_inline_alt_mtx_first(item_link, &vec);

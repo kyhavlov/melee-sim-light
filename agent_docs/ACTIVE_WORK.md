@@ -1,4 +1,111 @@
-# Active structural packet — Ness
+# Active structural packet — Link and Young Link
+
+## Objective
+
+Add Link (internal kind FTKIND_LINK 6, public char id 6) and Young Link (FTKIND_CLINK 20,
+public char id 20) to the supported domain with a 60-replay suite (five per stage for each
+character; mirrors and Link-vs-Young-Link games cover both). Link is a full original: six
+chara TUs (ftLk_Init, the Hylian-shield/down-air-bounce ftLk_AttackAir, bow ftLk_SpecialN,
+boomerang ftLk_SpecialS, spin attack ftLk_SpecialHi, bomb pull ftLk_SpecialLw). Young Link
+is the Link clone: ftCl_Init delegates 19 of 21 motion rows to ftLk handlers and adds the
+milk taunt ftCl_AppealS; his OnLoad also sets can_walljump. Shared article TUs own both
+kind pairs: itlinkbomb (58/59), itlinkboomerang (60/61), itlinkhookshot (62/63, previously
+imported for the Samus/Sheik/Icies tether family and now given its missing manifest row),
+itlinkarrow (64/65), itlinkbow (76/77), and itclinkmilk (123, Young Link only).
+
+## Final boundary
+
+- **Owners:** the fourteen imported TUs byte-identical to the pinned decomp except the
+  ledgered deltas below; `it_803F3100`/`it_803F2F28` own the eleven new logic rows
+  (including retail's Link-vs-Young-Link hookshot second-slot asymmetry);
+  `MslDatLinkArticles` (shared by PlLk/PlCl) owns the seven-slot x48 list: five articles,
+  the milk slot (NULL in PlLk), and the sword HSD_Joint accessory.
+- **Data:** PlLk*/PlCl* (five costumes each, Nr/Re/Bu/Bk/Wh, plus AJ and DViWaitAJ) +
+  EfLkData.dat; manifest 173 -> 190 files. Anim count 314 for both; ftData_UnkIntPairs
+  {0,14}; both kinds map to efAsync bank 6.
+- **Effects:** EfLkData.dat is MODEL-ONLY (both leading effLinkDataTable words are
+  unrelocated NULLs, the EfDkData/EfNsData shape) and there is no EfClData.dat — the two
+  kinds share bank 6. The spin-attack efSync ids 0x4BB/0x4BC are pure efLib model creates
+  on bank-6 model ids 0x1770..0x1773; the item-side ids (0x448 arrow sparkle,
+  0x41C/0x3F1 hookshot) resolve into the already-loaded common bank 0, so no generator
+  RNG projection consumes bank-6 ids.
+- **Parts:** derived rows 46 live / 30 cold of 76 (Link) and 46 live / 34 cold of 80
+  (Young Link), with CODE_ANCHORED spin-attack joints (raw parts[24]/[26]), the
+  GetBoneIndex left thumbs (35/37 — bomb, boomerang, and milk spawn anchors), and the
+  sword accessory attach/part pairs (67+68 / 71+72). The accessory part must stay live so
+  retail's ftAnim_8006E7B8 tree/part pairing, which counts the attached accessory node,
+  stays aligned in the compact hosted tree. The hookshot's parts[139] chain-joint store
+  is a runtime-anchored article slot like Samus's zair beam tip and stays outside the
+  admission mask. The derive tool's Fighter_804D6540 parsing was corrected (4-byte
+  {part, attach, mode, depth} records; only Kirby/Link/CLink have entries, so no prior
+  mask is affected).
+
+## Hosted representation decisions (all ledgered)
+
+- **Hookshot attr scratch mirror** (`canonical:link-hookshot-attr-scratch-mirror`):
+  it_link_attr_math recomputes the x2C..x48 attribute lanes in place at every hookshot
+  spawn — retail treats the shared DAT blob as scratch. Each match owns one writable
+  mirror per kind in MslSourceMatchState, seeded from the article on first use, exactly
+  the samus_grapple precedent; all 14 fetch sites route through it.
+- **ftLk_DatAttrs pointer-width lanes** (`canonical:link-datattrs-pointer-width`):
+  x94/x9C/xA0 were UNK_T; ftCo_Attack100.c's ftCo_LinkCatchAttrs view types the same
+  lanes s32, and the widened pointers shifted every later lane (da->xBC read 10 instead
+  of the hookshot kind 62). Typed s32, matching the yoshi-datattrs-pointer-width
+  precedent.
+- **Sword accessory joint identity** (`canonical:sword-accessory-joint-identity`):
+  ftParts_800753D4's retail stack copy of the isolated accessory joint becomes a Match
+  arena copy at fighter construction so both loads share one relocatable HSD id.
+- **OnLoad ext-attr store guards** (`canonical:link-onload-attr-store-guard`): both
+  OnLoads re-derive attackairlw_hit_anim_frame_end into the sealed DAT page; the
+  idempotent re-store is skipped, the donkey-onload-attr-store-guard shape.
+- **Boomerang self-stores** (`canonical:link-boomerang-attr-self-store`): three retail
+  `attrs->xC = attrs->xC` self-stores skipped against the sealed arena.
+- **Article span-packing exemption** (native_dat.c): PlLk.dat packs an unreferenced
+  hookshot joint blob between the boomerang Article and the next relocation target;
+  Articles are now never span-packed (each is a single object referenced slot-by-slot).
+- **Archive cache capacity** 4096 -> 8192: every fighter animation figatree slice takes
+  an entry, so the census scales with summed anim counts; the 18-character domain peaked
+  just under 4096.
+- **ft_8008A348's kind switch unguarded**: the hosted branch had excluded the
+  Link/CLink Hylian-shield arm from the Wait-enter path back when the callees were
+  unsupported-fighter stubs; the SquatWait twin was already live.
+
+## Pre-existing gaps closed while admitting
+
+- `api.c::supported_character` was missing Ness (neither Ness commit updated it).
+- `Makefile` VALIDATION_CHARACTERS was missing Ness.
+- The viewer's `externalCharId` was missing Ness (8->11) and Yoshi (14->17), so both
+  rendered the wrong slippilab zip; Young Link needs 20->21 and Link is identity.
+- `itlinkhookshot.c` was compiled without a source_manifest row.
+
+## Suite state — IN PROGRESS, NOT YET A GATE
+
+Staged 60 replays (screened from link_ylink_replays.zip: all singles, two human ports,
+supported opponents, six legal stages, populated raw analog pad lanes, zero SHA
+duplicates; all ten Stadium entries event-verified frozen — 0x41 declared, zero events).
+`replays/suites/links.json` is NOT yet in the aggregate. Native baseline after the fixes
+above: **0 pass / 60 fail / 0 error**, all 613,274 frames run end to end; prefixes range
+1,138..8,951. The dominant remaining families, in order:
+
+1. **Hookshot latch one frame late** (item.state 3-vs-1, a handful of rows per replay,
+   plus the action 361-vs-360 zair catch rows): the chain-link count from
+   it_link_attr_math's x2C derivation is suspected one off — the expression is a lerp
+   (`t*a + (1-t)*b`, a classic MWCC fmadds pair) feeding an s32 link-count compare.
+   The Link TU MWCC fused-op audit has NOT been done yet; the Ness packet's asm-vs-marker
+   method applies (refs/melee/config/GALE01/symbols.txt sizes + DOL disassembly).
+2. **Boomerang misc1 (xDD8) families** (hundreds of rows, e.g. 219-vs-132) and 1-2 ULP
+   pos_x rows — same fusion audit territory (deceleration/turn math).
+3. Various replays still fail in the first ~1,500 frames — untriaged beyond the above.
+
+## Log
+
+- 2026-08-04 — `open`: TU import + full registry/admission wiring + data extraction +
+  suite staging landed; native-smoke, source-check, and the quick pytest set are green;
+  the qemu-ppc toolchain fallback was cherry-picked from experiment/decomp-port at the
+  user's direction. PPC parity, fusion audit, residual classification, aggregate wiring,
+  and lock recording all remain.
+
+# Previous structural packet — Ness
 
 ## Objective
 

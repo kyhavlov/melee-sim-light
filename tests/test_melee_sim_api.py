@@ -36,6 +36,8 @@ def test_supported_character_and_stage_enums() -> None:
         12,
         13,
         8,
+        6,
+        20,
         14,
         15,
         17,

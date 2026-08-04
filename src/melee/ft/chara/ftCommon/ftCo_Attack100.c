@@ -1547,8 +1547,15 @@ bool fn_800D8EC8(Fighter_GObj* gobj)
         } else if (grav > (f32) attrs->x84) {
             if (grav <= (f32) attrs->x90) {
                 item = fp->fv.lk.xC;
+#ifdef MSL_CORE_NATIVE
+                // Read through the match-owned hookshot attribute mirror;
+                // retail treats the shared DAT blob as scratch.
+                // src/melee/it/items/itlinkhookshot.c::msl_link_hookshot_attrs
+                hookAttrs = msl_link_hookshot_attrs(GET_ITEM(item));
+#else
                 hookAttrs =
                     GET_ITEM(item)->xC4_article_data->x4_specialAttributes;
+#endif
                 if (grav == (f32) attrs->x88) {
                     jobj = fp->parts[ftParts_GetBoneIndex(fp, FtPart_RThumbNb)]
                                .joint;

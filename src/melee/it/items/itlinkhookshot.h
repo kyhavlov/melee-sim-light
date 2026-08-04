@@ -14,6 +14,13 @@
 
 #include <dolphin/mtx.h>
 
+#ifdef MSL_CORE_NATIVE
+// Match-owned writable mirror of the hookshot article's special attributes;
+// retail recomputes lanes of the shared DAT blob in place.
+// src/melee/it/items/itlinkhookshot.c::msl_link_hookshot_attrs
+itLinkHookshotAttributes* msl_link_hookshot_attrs(Item* ip);
+#endif
+
 /// /* 2A2418 */ void it_802A2418(Item_GObj*);
 /// /* 2A2B10 */ void it_802A2B10(Item_GObj* gobj);
 /// /* 2A2BA4 */ Item_GObj* it_802A2BA4(Fighter_GObj*, Vec3*, float, int);

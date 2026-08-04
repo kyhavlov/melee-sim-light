@@ -13,7 +13,12 @@ typedef struct EF_EffectDesc EF_EffectDesc;
 typedef struct FigaTree FigaTree;
 
 enum {
-    MSL_NATIVE_ARCHIVE_CACHE_CAPACITY = 4096,
+    // Every parsed archive takes one entry, including each fighter
+    // animation figatree subarchive slice, so the census scales with the
+    // summed anim counts of the preloaded characters (~315 per fighter).
+    // The 18-character domain peaked just under 4096; Link and Young Link
+    // are the nineteenth and twentieth admitted fighters and push past it.
+    MSL_NATIVE_ARCHIVE_CACHE_CAPACITY = 8192,
     MSL_NATIVE_DAT_ARENA_BYTES = 256 * 1024 * 1024,
 };
 
@@ -133,6 +138,12 @@ extern const MslDatType* const msl_dat_root_itFlashAttributes;
 extern const MslDatType* const msl_dat_root_itFlashExplAttributes;
 extern const MslDatType* const msl_dat_root_itPKThunderAttributes;
 extern const MslDatType* const msl_dat_root_itYoyoAttributes;
+extern const MslDatType* const msl_dat_root_MslDatLinkArticles;
+extern const MslDatType* const msl_dat_root_ftLk_DatAttrs;
+extern const MslDatType* const msl_dat_root_itLinkBombAttributes;
+extern const MslDatType* const msl_dat_root_itLinkBoomerangAttributes;
+extern const MslDatType* const msl_dat_root_itLinkHookshotAttributes;
+extern const MslDatType* const msl_dat_root_itLinkArrowAttributes;
 extern const MslDatType* const msl_dat_root_MslDatCommonItemArticles;
 extern const MslDatType* const msl_dat_root_itBombHeiAttributes;
 extern const MslDatType* const msl_dat_root_itDoseiAttributes;

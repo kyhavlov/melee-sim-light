@@ -114,7 +114,6 @@ void ft_8008A348(Fighter_GObj* gobj, float anim_blend)
         ftCo_8008A6D8(gobj, ftCo_MS_DeadUpFall);
     }
     ftCommon_8007EFC0(fp, p_ftCommonData->x5F0);
-#ifndef MSL_CORE_HOSTED
     switch (fp->kind) {
     case FTKIND_LINK:
         ftLk_AttackAir_800EB3BC(gobj);
@@ -125,5 +124,4 @@ void ft_8008A348(Fighter_GObj* gobj, float anim_blend)
     default:
         return;
     }
-#endif
 }

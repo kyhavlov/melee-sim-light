@@ -389,3 +389,17 @@ src/sysdolphin/baselib/texpdag.c	src/sysdolphin/baselib/texpdag.c	NonMatching	no
 src/sysdolphin/baselib/tobj.c	src/sysdolphin/baselib/tobj.c	Matching	none	compiled directly from canonical source by Makefile
 src/sysdolphin/baselib/util.c	src/sysdolphin/baselib/util.c	Matching	none	compiled directly from canonical source by Makefile
 src/sysdolphin/baselib/wobj.c	src/sysdolphin/baselib/wobj.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ft/chara/ftLink/ftLk_Init.c	src/melee/ft/chara/ftLink/ftLk_Init.c	Matching	links-source-packet	compiled canonical Link lifecycle, state registry, item callbacks, and data-owner callbacks
+src/melee/ft/chara/ftLink/ftLk_AttackAir.c	src/melee/ft/chara/ftLink/ftLk_AttackAir.c	Matching	links-source-packet	compiled canonical Link down-air bounce owner
+src/melee/ft/chara/ftLink/ftLk_SpecialN.c	src/melee/ft/chara/ftLink/ftLk_SpecialN.c	Matching	links-source-packet	compiled canonical bow charge/fire owner
+src/melee/ft/chara/ftLink/ftLk_SpecialS.c	src/melee/ft/chara/ftLink/ftLk_SpecialS.c	Matching	links-source-packet	compiled canonical boomerang throw/catch owner
+src/melee/ft/chara/ftLink/ftLk_SpecialHi.c	src/melee/ft/chara/ftLink/ftLk_SpecialHi.c	Matching	links-source-packet	compiled canonical spin-attack owner
+src/melee/ft/chara/ftLink/ftLk_SpecialLw.c	src/melee/ft/chara/ftLink/ftLk_SpecialLw.c	Matching	links-source-packet	compiled canonical bomb-pull owner
+src/melee/ft/chara/ftCLink/ftCl_Init.c	src/melee/ft/chara/ftCLink/ftCl_Init.c	Matching	links-source-packet	compiled canonical Young Link lifecycle delegating motion handlers to ftLink
+src/melee/ft/chara/ftCLink/ftCl_AppealS.c	src/melee/ft/chara/ftCLink/ftCl_AppealS.c	Matching	links-source-packet	compiled canonical Young Link milk-taunt owner
+src/melee/it/items/itlinkarrow.c	src/melee/it/items/itlinkarrow.c	Matching	links-source-packet	compiled canonical Link and Young Link arrow article owner
+src/melee/it/items/itlinkbomb.c	src/melee/it/items/itlinkbomb.c	Matching	links-source-packet	compiled canonical Link and Young Link bomb article owner
+src/melee/it/items/itlinkboomerang.c	src/melee/it/items/itlinkboomerang.c	Matching	links-source-packet	compiled canonical Link and Young Link boomerang article owner
+src/melee/it/items/itlinkbow.c	src/melee/it/items/itlinkbow.c	Matching	links-source-packet	compiled canonical Link and Young Link bow article owner
+src/melee/it/items/itclinkmilk.c	src/melee/it/items/itclinkmilk.c	Matching	links-source-packet	compiled canonical Young Link milk-bottle article owner
+src/melee/it/items/itlinkhookshot.c	src/melee/it/items/itlinkhookshot.c	NonMatching	links-source-packet	compiled canonical hookshot article owner, previously imported for the Samus/Sheik/Ice Climbers tether family without a manifest row

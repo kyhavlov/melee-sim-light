@@ -30,6 +30,8 @@ typedef struct MslSourceGameData {
         UnkCostumeStruct samus_costumes[5];
         UnkCostumeStruct yoshi_costumes[6];
         UnkCostumeStruct ness_costumes[4];
+        UnkCostumeStruct link_costumes[5];
+        UnkCostumeStruct clink_costumes[5];
         UnkCostumeStruct popo_costumes[4];
         UnkCostumeStruct nana_costumes[4];
         UnkCostumeStruct donkey_costumes[5];
@@ -199,6 +201,16 @@ typedef struct MslSourceMatchState {
         itSamusGrappleAttributes attrs;
         u8 seeded;
     } samus_grapple;
+    struct {
+        // itlinkhookshot.c::it_link_attr_math recomputes the x2C..x48 lanes
+        // of the hookshot article's special attributes in place at every
+        // hookshot spawn (it_802A2568): retail treats the DAT blob as
+        // scratch. Hosted GameData is shared and immutable, so each match
+        // owns one writable mirror per owning kind (the Link and Young Link
+        // DAT blobs are distinct), seeded from the article on first use.
+        itLinkHookshotAttributes attrs[2];
+        u8 seeded[2];
+    } link_hookshot;
 } MslSourceMatchState;
 
 #endif

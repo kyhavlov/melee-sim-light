@@ -68,8 +68,6 @@ it_8028B850	disabled item/non-Fox article branch	unreachable	named abort	items-o
 lbRefract_80022998	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
 lbRefract_80022BD0	renderer/light exclusion	unreachable	named abort	headless bootstrap schedules no light/GX consumer
 ftCh_Init_80156014	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftCl_Init_8014919C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftCl_Init_80149318	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftDk_MS_349_800E06D8	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftDr_Init_80149910	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftGw_Attack11_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
@@ -84,14 +82,16 @@ ftKb_SpecialNFx_800FDDF4	unsupported-fighter branch	unreachable	named abort	Fox 
 ftKb_SpecialNFx_800FDEB4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialNIc_80108CE8	unsupported-fighter branch	unreachable	named abort	Climbers-ice destruction notifies its owner through this callback only for Kirby's copied neutral special (item kind 0x6B)
 ftKb_SpecialNNs_800FEC78	unsupported-fighter branch	unreachable	named abort	PK Flash charge dispatch selects this callback only for Kirby's copied neutral special (item kind 0x6E)
+ftKb_SpecialNLk800FB394	unsupported-fighter branch	unreachable	named abort	Link bow/arrow logic reaches this owner only for Kirby's copied item kinds (0x8C..0x8F)
+ftKb_SpecialNLk800FB418	unsupported-fighter branch	unreachable	named abort	Link bow/arrow logic reaches this owner only for Kirby's copied item kinds (0x8C..0x8F)
+ftKb_SpecialNLk800FB444	unsupported-fighter branch	unreachable	named abort	Link bow/arrow logic reaches this owner only for Kirby's copied item kinds (0x8C..0x8F)
+ftKb_SpecialNLk800FB470	unsupported-fighter branch	unreachable	named abort	Link bow/arrow logic reaches this owner only for Kirby's copied item kinds (0x8C..0x8F)
 ftKb_SpecialNNs_800FECBC	unsupported-fighter branch	unreachable	named abort	PK Flash destruction notifies its owner through this callback only for Kirby's copied neutral special (item kind 0x6E)
 ftKb_SpecialNSk_80105FF0	unsupported-fighter branch	unreachable	named abort	Sheik needle-held dispatch selects this callback only for Kirby's copied neutral special
 ftKb_SpecialNSk_80106020	unsupported-fighter branch	unreachable	named abort	Sheik needle-held dispatch selects this callback only for Kirby's copied neutral special
 ftKb_SpecialN_800F1CD8	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialN_800F1F68	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialN_800F5D04	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftLk_AttackAir_800EB3BC	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftLk_AttackAir_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftMh_MS_341_8014FE58	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftSs_SpecialLw_8012AEBC	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftSs_SpecialLw_8012AF38	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
@@ -117,7 +117,6 @@ it_802950D4	disabled item branch	unreachable	named abort	transform copying calls
 it_8029A748	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8029A89C	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_8029A8F4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
-it_8029D968	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_802BAA94	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_802D09D0	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners
 it_802E5EF4	disabled item/non-Fox article branch	unreachable	named abort	items-off rules retain only Fox blaster/illusion/laser article owners

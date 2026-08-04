@@ -194,6 +194,17 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     // model create, so no generator RNG projection consumes bank-10 ids.
     // refs/melee/src/melee/ef/efasync.c::efAsync_LoadSync
     msl_effect_load_bank(data, 10, "/EfNsData.dat", "effNessDataTable");
+    // Link and Young Link share efAsync bank 6 (ftData_UnkBytePerCharacter
+    // maps FTKIND_LINK and FTKIND_CLINK to 6; there is no EfClData.dat).
+    // EfLkData.dat is MODEL-ONLY -- both leading effLinkDataTable words are
+    // unrelocated NULLs, the EfDkData.dat/EfNsData.dat shape -- so the hosted
+    // loader publishes an empty command bank. Every Link-reachable efSync id
+    // (0x4BB/0x4BC from the spin attack) is a pure efLib model create on
+    // bank-6 model ids 0x1770..0x1773, and the item-side ids (0x448 arrow
+    // sparkle, 0x41C/0x3F1 hookshot) resolve into the already-loaded common
+    // bank 0, so no generator RNG projection consumes bank-6 ids.
+    // refs/melee/src/melee/ef/efasync.c::{efAsync_DatEntries,efAsync_LoadSync}
+    msl_effect_load_bank(data, 6, "/EfLkData.dat", "effLinkDataTable");
     // Pikachu owns efAsync bank 7 (ftData_UnkBytePerCharacter maps
     // FTKIND_PIKACHU to 7; Pichu shares the bank in retail).
     msl_effect_load_bank(data, 7, "/EfPkData.dat", "effPikachuDataTable");

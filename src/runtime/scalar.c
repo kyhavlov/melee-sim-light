@@ -73,6 +73,8 @@ enum {
     MSL_CORE_CHAR_PIKACHU = 12,
     MSL_CORE_CHAR_SAMUS = 13,
     MSL_CORE_CHAR_NESS = 8,
+    MSL_CORE_CHAR_LINK = 6,
+    MSL_CORE_CHAR_YOUNG_LINK = 20,
     MSL_CORE_CHAR_YOSHI = 14,
     MSL_CORE_CHAR_JIGGLYPUFF = 15,
     MSL_CORE_CHAR_LUIGI = 17,
@@ -269,6 +271,10 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_SAMUS;
     case MSL_CORE_CHAR_NESS:
         return CKIND_NESS;
+    case MSL_CORE_CHAR_LINK:
+        return CKIND_LINK;
+    case MSL_CORE_CHAR_YOUNG_LINK:
+        return CKIND_CLINK;
     case MSL_CORE_CHAR_YOSHI:
         return CKIND_YOSHI;
     case MSL_CORE_CHAR_POPO:
@@ -619,6 +625,8 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CORE_CHAR_PEACH &&
             config->players[i].char_id != MSL_CORE_CHAR_SAMUS &&
             config->players[i].char_id != MSL_CORE_CHAR_NESS &&
+            config->players[i].char_id != MSL_CORE_CHAR_LINK &&
+            config->players[i].char_id != MSL_CORE_CHAR_YOUNG_LINK &&
             config->players[i].char_id != MSL_CORE_CHAR_YOSHI &&
             config->players[i].char_id != MSL_CORE_CHAR_POPO &&
             config->players[i].char_id != MSL_CORE_CHAR_DONKEY &&
@@ -634,7 +642,8 @@ static int validate_config(MslCoreMatchConfig* config)
                     "char_id=2 Captain Falcon, char_id=3 Donkey Kong, "
                     "char_id=7 Sheik, char_id=9 Peach, char_id=10 Ice Climbers, "
                     "char_id=12 Pikachu, char_id=13 Samus, "
-                    "char_id=8 Ness, char_id=14 Yoshi, "
+                    "char_id=6 Link, char_id=8 Ness, char_id=14 Yoshi, "
+                    "char_id=20 Young Link, "
                     "char_id=15 Jigglypuff, char_id=17 Luigi, "
                     "char_id=18 Marth, "
                     "char_id=19 Zelda, char_id=21 Dr. Mario, char_id=22 Falco, "
@@ -689,6 +698,11 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
                                  6 };
     game_data->source.fighter.costume_lists[FTKIND_NESS] =
         (struct UnkCostumeList){ game_data->source.fighter.ness_costumes, 4 };
+    game_data->source.fighter.costume_lists[FTKIND_LINK] =
+        (struct UnkCostumeList){ game_data->source.fighter.link_costumes, 5 };
+    game_data->source.fighter.costume_lists[FTKIND_CLINK] =
+        (struct UnkCostumeList){ game_data->source.fighter.clink_costumes,
+                                 5 };
     game_data->source.fighter.costume_lists[FTKIND_POPO] =
         (struct UnkCostumeList){ game_data->source.fighter.popo_costumes, 4 };
     game_data->source.fighter.costume_lists[FTKIND_NANA] =
@@ -1395,6 +1409,8 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         MSL_CORE_CHAR_GANONDORF,
         MSL_CORE_CHAR_YOSHI,
         MSL_CORE_CHAR_NESS,
+        MSL_CORE_CHAR_LINK,
+        MSL_CORE_CHAR_YOUNG_LINK,
     };
     size_t i;
 
