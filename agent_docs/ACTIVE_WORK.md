@@ -1,3 +1,104 @@
+# Active structural packet — Ness
+
+## Objective
+
+Add Ness (internal kind FTKIND_NESS 8, public/CSS char id 8) to the supported domain
+with an 18-replay suite. Ness is a full original: eight chara TUs (ftNs_Init, the Yo-Yo
+smashes ftNs_AttackHi4/ftNs_AttackLw4, the baseball-bat ftNs_AttackS4, PK Flash
+ftNs_SpecialN, PK Fire ftNs_SpecialS, PK Thunder + PK Thunder 2 ftNs_SpecialHi, PSI
+Magnet ftNs_SpecialLw) and eight article TUs (itnesspkfire 66, itnesspkfirepillar 67,
+itnesspkflash 68, itnesspkthunderball 69, itnesspkthundertrail 70..73,
+itnesspkflashexplode 78, itnessbat 101, itnessyoyo 102). Ness is also the first
+admitted absorber, so `ftData_OnAbsorb` becomes a live table.
+
+## Final boundary
+
+- **Owners:** the sixteen imported TUs byte-identical to the pinned decomp except the
+  ledgered MWCC fusion set; `ftData_OnAbsorb` owns the PSI Magnet absorb callback;
+  `MslDatNessArticles` owns the eleven-slot article list.
+- **Data:** PlNs* (four costumes Nr/Ye/Bu/Gr + PlNsAJ + PlNsDViWaitAJ) + EfNsData.dat;
+  manifest 165 -> 173 files. Anim count 326, ftData_UnkIntPairs 14,
+  ftData_UnkBytePerCharacter 10.
+- **Effects:** EfNsData.dat is MODEL-ONLY — both leading `effNessDataTable` words are
+  unrelocated NULLs, the EfDkData.dat shape — so the hosted loader publishes an empty
+  command bank for bank 10 and no generator RNG projection consumes bank-10 ids. Every
+  Ness-reachable efSync id (0x4EE/0x4EF PK Thunder, 0x4F0 PSI Magnet) is a pure efLib
+  model create; 0x406 was already modelled by the Yoshi packet.
+- **Parts:** derived row 36 live / 27 cold of 63, with a new CODE_ANCHORED `ness: (61,)`
+  for the raw `parts[61]` Yo-Yo hitbox transform in ftNs_AttackHi4.
+
+## Exactness work shipped
+
+- **Pose program-node id widened past sixteen characters** (the packet's one hosted
+  representation change): `MslFighterPoseJoint.program_node_index` was an 18-bit field
+  with a 0x3FFFF sentinel. Ness is the character that pushes the preloaded pose-node
+  count to 265,533, past that ceiling, and every suite replay aborted on the
+  fighter_pose.c admission assertion. The id is now a full `uint32_t`, which lands in
+  the struct's existing 64-bit tail padding — the gate profile's `sizeof` is unchanged
+  at 56 and only the 32-bit (PPC/Wasm) size moves 44 -> 48.
+- **The Ness MWCC fused-op set: 42 sites across 12 TUs**, each carrying its GALE01
+  address. The audit method is asm-vs-marker per function using the decomp's exact
+  symbol sizes (`refs/melee/config/GALE01/symbols.txt`); remaining per-function gaps
+  are all static helpers inlined into several callers (one C marker, several asm
+  copies): `NessFloatMath_PKThunder2`, `ftNess_atan2`, `getAttrStuff`,
+  `itNesspkflash_SetScale`, `it_802BF4A0_adjust_tail`, `ftNs_AttackHi4_YoyoApplyDamage`.
+  The seed that motivated the sweep: **PK Thunder's turn-radius steps**
+  (GALE01 0x802ABE08 fmadds / 0x802ABE24 fnmsubs). The ball's heading walks 90 degrees
+  down to zero in fifteen 6-degree steps; only the fused rounding leaves retail's
+  2^-28 residue where the unfused form collapses to an exact zero, so every steered
+  PK Thunder diverged on its first horizontal frame. Porting those two sites alone took
+  the suite from 0/18 to 7/18; the full set reached 11/18.
+- **PK Flash's leading item lane is not gameplay state**: no owner writes
+  `itPKFlush_ItemVars.xDD4` — not the constructor `it_802AAA80`, not any motion
+  callback — so its sampled Slippi byte is fixed-pool residue and the projection mask
+  keeps only MISC1 (the charge scale at xDD8).
+
+## Suite state (container authoritative, standalone — NOT yet in the aggregate)
+
+18 replays across all six legal stages (three each) against Captain Falcon, Falco, Fox,
+Jigglypuff, Marth, Peach, Pikachu, Sheik, and a Ness mirror. All three Pokemon Stadium
+entries are event-verified frozen (each declares the 0x41 stadium_transformation
+command and records zero events over the full game); every capture carries populated
+raw analog pad lanes, so none is a 3.18-layout re-wrap. Zero replays were rejected.
+
+**native 11 pass / 7 fail; PPC 14 pass / 4 fail.** The suite is deliberately left out of
+`melee_core_aggregate` until the residuals are closed or classified with evidence.
+
+Four families fail on BOTH backends:
+
+- `2025-03` (Frozen Stadium Ness/Peach) @1471: `speed_x_attack`/`speed_y_attack` 1 ULP
+  (3.23155046 vs 3.23155022) seeding a `pos_y` episode. PPC 184 rows with a 15,716-frame
+  exact suffix; native 231 rows.
+- `2026-06` (Dream Land Sheik/Ness) @3922: a third item retail spawns and we do not
+  (`item_count` 3 vs 2, `item.state[2]` 4). The one non-ULP family and the best next
+  lead — identify the article and the spawn predicate.
+- `51444` (Frozen Stadium Peach/Ness) @10756: a single `item.misc3` lane, 6 rows on PPC.
+- `slippi-2025-02` (Battlefield Ness/Pikachu) @10713: `shield_hp` 1 ULP, 2,033 rows,
+  byte-identical fingerprint on both backends (1dd0a3e8a50fecc8).
+
+Three more fail on NATIVE ONLY (`2025-11`, `52757`, `53870`): the dormant Yo-Yo
+article's `itNessYoyo_ItemVars.x4` lane (Slippi misc1). PPC reproduces retail exactly,
+so this is a host-width/native-FP residual in the article rather than a
+source-completeness gap — `x4` is written only by `it_802BFEC4`, whose inputs run
+through `HSD_JObjSetupMatrix`/`PSMTXConcat` on the string-link jobj.
+
+**Instrumentation trap worth remembering:** `--backend native` runs the validator's
+Python extension (`tools/validation/native.c` -> `VALIDATION_NATIVE`), not the
+standalone `melee-core-native`. A temporary trace added to a gameplay TU shows up in
+`melee-core-native` after `make native` while the validator keeps running its own
+already-linked objects, so the trace looks silent and invites a false "this code is
+never reached" conclusion. Rebuild `validator` too (and note it also embeds
+`item_projection.h`, so projection-mask edits need it as well).
+
+## Follow-ups
+
+1. Root-cause the `2026-06` missing article spawn (non-ULP, both backends).
+2. Root-cause or classify the shared 1-ULP families (`speed_*_attack`, `shield_hp`).
+3. Decide the Yo-Yo `x4` native-only residual: fix the host-width path or classify it
+   with PPC snapshots per the icies/Samus precedent.
+4. Then wire `ness.json` into `melee_core_aggregate` with output locks and update the
+   suite-inventory test pins (396 -> 414).
+
 # Active structural packet — Yoshi
 
 ## Objective
