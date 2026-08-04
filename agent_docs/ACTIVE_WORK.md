@@ -319,17 +319,24 @@ coverage and so the eventual fix announces itself by breaking the entry -- the s
   through 1387, so the press edge lands inside the pummel's four-frame hitlag
   (1383..1386), during which the capture Anim -- and therefore `ftCommon_GrabMash` -- does
   not run.
-- **Retail probe at the `ftCommon_GrabMash` entry** reads `x668 = 0x0000` on 1382, 1383,
-  1387, 1388 and 1389, with `x660` stepping 0x20000 -> 0x20100 across the hitlag. The
-  hosted build reads `x668 = 0x100` at 1387 **while reporting `x2219_b5 = 0` and
-  `held == x660 == 0x100`**, which makes this frame's own edge zero -- so what it serves is
-  a stale accumulation the priority-3 input update failed to overwrite, not a fresh press.
-- That is the sharp form of the lead. `Fighter_Spaghetti_8006AD10_Inner1` accumulates
-  (`x668 |= edge`) while `x2219_b5` is set and overwrites (`x668 = edge`) otherwise, and
-  `Fighter_8006A1BC` clears `x2219_b5` at process **priority 0**, ahead of the input update
-  at **priority 3** and the Anim at **priority 4** -- so the overwrite should already have
-  happened by the time `GrabMash` reads it. The guards to audit are `x221F_b3`,
-  `x2224_b2` and `x221D_b3` at the head of `Fighter_Spaghetti_8006AD10`.
+- **Retail probe at `Fighter_Spaghetti_8006AD10`'s entry**: the held Ness carries
+  `fp+0x2219 = 0x07` (bit 5 clear) and `input.x668 = 0` on *every* frame of the hitlag.
+  The hosted build has `x2219_b5` set and `x668 = 0x100` across the same frames.
+- **The input update is not at fault.** Instrumenting it with a shared sequence counter
+  shows it overwriting `x668` to 0 exactly as it should on the first frame the flag
+  clears, and shows the capture Anim consuming the update that immediately precedes it.
+  The earlier reading of this residual -- "the priority-3 update failed to overwrite" --
+  was wrong; the flag and the stale press are established earlier, when the pummel lands.
+- **`ftCo_Damage.c`'s capture-partner arm is the site.** That arm always runs
+  `other_fp->input.x668 = other_fp->input.x66C = 0`, with a conditional
+  `other_fp->x2219_b5 = true` above it. Instrumenting it shows the hosted build reaching
+  it at frame 1383 with **`fp` = Ness** (the captured fighter, whose `victim_gobj` points
+  back at the grabber) and **`other_fp` = Captain Falcon**, so it clears the *grabber's*
+  pressed mask and sets the *grabber's* hitlag flag while the victim's own `x668` and flag
+  are left untouched -- inverted relative to the effect retail produces on the victim.
+  Which fighter drives that arm for a pummel on a held opponent is the next thing to
+  settle; the port's copy of the line is byte-identical to the decomp, so this is a
+  branch-selection question, not a missing statement.
 - Not patched under a single replay: `x668` feeds every `CheckInput` owner, so the fix
   needs the full aggregate as its gate.
 
