@@ -204,7 +204,8 @@ bool ftNs_SpecialHi_ItemPKThunder_CheckNessCollide(HSD_GObj* gobj)
     switch (fp->mv.ns.specialhi.thunderColl) {
     case 0:
         pos = fp->cur_pos;
-        pos.y += 5.0f * fp->x34_scale.y;
+        // GALE01 0x80117C34: the self-collide probe height fuses.
+        pos.y = __fmadds(5.0f, fp->x34_scale.y, pos.y);
         it_802AB3F0(fp->fv.ns.pkthunder_gobj, &pair, 0);
         if (check_distance(&pos, &pair) == true) {
             fp->mv.ns.specialhi.thunderColl = 2;
@@ -218,7 +219,8 @@ bool ftNs_SpecialHi_ItemPKThunder_CheckNessCollide(HSD_GObj* gobj)
 
     case 1:
         pos2 = fp->cur_pos;
-        pos2.y += 5.0f * fp->x34_scale.y;
+        // GALE01 0x80117D04: the same probe height on the re-check.
+        pos2.y = __fmadds(5.0f, fp->x34_scale.y, pos2.y);
         it_802AB3F0(fp->fv.ns.pkthunder_gobj, &pair2, 0);
         if (!check_distance(&pos2, &pair2)) {
             fp->mv.ns.specialhi.thunderColl = 0;
@@ -545,7 +547,8 @@ void ftNs_SpecialHi_Enter(
 
         sp40.x = fp->cur_pos.x - fp->mv.ns.specialhi.collPos1.x;
         temp_f2 = fp->x34_scale.y;
-        temp_f1 = (temp_f3 * temp_f2) + fp->cur_pos.y;
+        // GALE01 0x801183DC: the PK Thunder 2 launch height fuses.
+        temp_f1 = __fmadds(temp_f3, temp_f2, fp->cur_pos.y);
         sp40.y = temp_f1 - fp->mv.ns.specialhi.collPos1.y;
         sp40.z = 0.0f;
 
@@ -594,10 +597,9 @@ void ftNs_SpecialHi_Enter(
                             (float) ness_attr2->x58_PK_THUNDER_2_UNK1;
                         fighter_data2 = GET_FIGHTER(gobj);
                         ftPartSetRotX(fighter_data2, 0,
-                                      (fighter_data2->facing_dir *
-                                       atan2f(fighter_data2->self_vel.x,
-                                              fighter_data2->self_vel.y)) -
-                                          (float) M_PI_2);
+                                      __fmsubs(fighter_data2->facing_dir,
+         atan2f(fighter_data2->self_vel.x, fighter_data2->self_vel.y),
+         (float) M_PI_2));
                         fighter_data2 = fp;
                         fighter_data2->death2_cb = NULL;
                         fighter_data2->take_dmg_cb = NULL;
@@ -652,7 +654,8 @@ NessFloatMath_PKThunder2(HSD_GObj* gobj) // Required for 0x80118570 to match
     fp = getFighter(gobj);
     temp_f2 = fp->cur_pos.x - fp->mv.ns.specialhi.collPos1.x;
     ness_attr = getFtSpecialAttrs(fp);
-    temp_f1 = ((5.0f * fp->x34_scale.y) + fp->cur_pos.y) -
+    // GALE01 0x801185C0: the aerial launch height fuses.
+    temp_f1 = __fmadds(5.0f, fp->x34_scale.y, fp->cur_pos.y) -
               fp->mv.ns.specialhi.collPos1.y;
     if (temp_f2 >= 0.0f) {
         phi_f0 = 1.0f;
@@ -692,9 +695,9 @@ void ftNs_SpecialAirHi_Enter(HSD_GObj* gobj)
     fighter_data3 = GET_FIGHTER(gobj);
     ftPartSetRotX(
         fighter_data3, 0,
-        (fighter_data3->facing_dir *
-         atan2f(fighter_data3->self_vel.x, fighter_data3->self_vel.y)) -
-            (float) M_PI_2);
+        __fmsubs(fighter_data3->facing_dir,
+         atan2f(fighter_data3->self_vel.x, fighter_data3->self_vel.y),
+         (float) M_PI_2));
     fighter_data2->death2_cb = NULL;
     fighter_data2->take_dmg_cb = NULL;
     fighter_data2->x1968_jumpsUsed = fighter_data2->co_attrs.max_jumps;
@@ -980,9 +983,9 @@ void ftNs_SpecialAirHiHold_Anim(HSD_GObj* gobj)
                 {
                     Fighter* fp4 = gobj->user_data;
                     ftPartSetRotX(fp4, 0,
-                                  (fp4->facing_dir *
-                                   atan2f(fp4->self_vel.x, fp4->self_vel.y)) -
-                                      (float) M_PI_2);
+                                  __fmsubs(fp4->facing_dir,
+         atan2f(fp4->self_vel.x, fp4->self_vel.y),
+         (float) M_PI_2));
                 }
 
                 fp1->death2_cb = NULL;
@@ -1205,9 +1208,10 @@ void ftNs_SpecialHi_Phys(HSD_GObj* gobj)
     float vel_y = fp0->self_vel.y;
     ftNessAttributes* ness_attr = fp0->dat_attrs;
 
+    // GALE01 0x80119048: the deceleration step fuses into fnmsubs.
     fp0->gr_vel =
-        -(ness_attr->x5C_PK_THUNDER_2_DECELERATION_RATE * fp0->facing_dir -
-          ground_vel);
+        __fnmsubs(ness_attr->x5C_PK_THUNDER_2_DECELERATION_RATE,
+                  fp0->facing_dir, ground_vel);
 
     if (fp0->facing_dir == +1) {
         if (fp0->gr_vel <= vel_epsilon) {
@@ -1232,8 +1236,9 @@ void ftNs_SpecialHi_Phys(HSD_GObj* gobj)
         Fighter* fp = gobj->user_data;
         ftPartSetRotX(
             fp, 0,
-            (fp->facing_dir * atan2f(fp->self_vel.x, fp->self_vel.y)) -
-                (float) M_PI_2);
+            __fmsubs(fp->facing_dir,
+         atan2f(fp->self_vel.x, fp->self_vel.y),
+         (float) M_PI_2));
     }
 }
 
@@ -1314,9 +1319,9 @@ inline void ftNess_atan2(HSD_GObj* gobj)
 
     ftPartSetRotX(
         fighter_data2, 0,
-        (fighter_data2->facing_dir *
-         atan2f(fighter_data2->self_vel.x, fighter_data2->self_vel.y)) -
-            (float) M_PI_2);
+        __fmsubs(fighter_data2->facing_dir,
+         atan2f(fighter_data2->self_vel.x, fighter_data2->self_vel.y),
+         (float) M_PI_2));
 }
 
 inline void* getFtSpecialAttrs2(Fighter* fp)

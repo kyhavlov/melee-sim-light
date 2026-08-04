@@ -1,3 +1,4 @@
+#include <MetroTRK/intrinsics.h>
 #include "ftNess/ftNs_SpecialN.h"
 
 #include <platform.h>
@@ -210,7 +211,8 @@ void ftNs_SpecialNStart_Anim(HSD_GObj* gobj)
 
             lb_8000B1CC(fp->parts[FtPart_L2ndNa].joint, NULL, &vec);
             vec.z = 0;
-            vec.y += 3 * fp->x34_scale.y;
+            // GALE01 0x8011716C: the PK Flash spawn height fuses.
+            vec.y = __fmadds(3, fp->x34_scale.y, vec.y);
 
             {
                 HSD_GObj* pk_flash = it_802AA8C0(
@@ -331,7 +333,9 @@ void ftNs_SpecialAirNStart_Anim(HSD_GObj* gobj)
                 lb_8000B1CC(fighter_data2->parts[FtPart_L2ndNa].joint, NULL,
                             &vec);
                 vec.z = 0;
-                vec.y += 3 * fighter_data2->x34_scale.y;
+                // GALE01 0x80117408: the aerial spawn height fuses.
+                vec.y =
+                    __fmadds(3, fighter_data2->x34_scale.y, vec.y);
 
                 {
                     HSD_GObj* flash_GObj =

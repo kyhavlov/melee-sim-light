@@ -1,3 +1,4 @@
+#include <MetroTRK/intrinsics.h>
 #include "ftNs_SpecialLw.h"
 
 #include "ftNs_Init.h"
@@ -475,9 +476,11 @@ static inline void getAttrStuff(HSD_GObj* arg0)
         temp_r30->cmd_vars[0] = 1;
         temp_r30->facing_dir = -temp_r30->facing_dir;
     }
+    // GALE01 0x8011A7D4: the turnaround step fuses into fnmsubs.
     ftPartSetRotY(temp_r30, 0,
-                  -((deg_to_rad * (180.0F / temp_r31->x78_PSI_MAGNET_UNK1)) -
-                    ftPartGetRotZ(temp_r30, 0)));
+                  __fnmsubs(deg_to_rad,
+                            180.0F / temp_r31->x78_PSI_MAGNET_UNK1,
+                            ftPartGetRotZ(temp_r30, 0)));
 }
 
 /// Ness's grounded PSI Magnet Turnaround Animation callback - _

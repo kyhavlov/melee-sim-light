@@ -1,3 +1,4 @@
+#include <MetroTRK/intrinsics.h>
 #include "itnesspkflash.h"
 
 #include <placeholder.h>
@@ -37,11 +38,14 @@ static inline void itNesspkflash_SetScale(HSD_JObj* jobj, Item* ip,
                                           itFlashAttributes* attr)
 {
     Vec3 scale;
-    scale.x = scale.y = scale.z = (ip->xDD4_itemVar.pkflush.xDD8_PKFlash *
-                                   ((attr->xC_FLASH_GRAPHIC_SIZE_GROWTH_MUL -
-                                     attr->x8_FLASH_GRAPHIC_SIZE_INIT_MUL) /
-                                    attr->x4_FLASH_HITBOX_SIZE_MUL)) +
-                                  attr->x8_FLASH_GRAPHIC_SIZE_INIT_MUL;
+    // GALE01 0x802AACA0 and friends: MWCC contracts the charge-scale ramp
+    // into fmadds at every inlined copy of this helper.
+    scale.x = scale.y = scale.z =
+        __fmadds(ip->xDD4_itemVar.pkflush.xDD8_PKFlash,
+                 (attr->xC_FLASH_GRAPHIC_SIZE_GROWTH_MUL -
+                  attr->x8_FLASH_GRAPHIC_SIZE_INIT_MUL) /
+                     attr->x4_FLASH_HITBOX_SIZE_MUL,
+                 attr->x8_FLASH_GRAPHIC_SIZE_INIT_MUL);
     HSD_JObjSetScale(jobj, &scale);
 }
 
@@ -169,8 +173,10 @@ void it_802AAA80(Item_GObj* gobj)
     it_80275158(gobj, attr->x0_FLASH_LIFETIMER);
     ip->xDD4_itemVar.pkflush.xDD8_PKFlash = 0.0f;
     ip->xDD4_itemVar.pkflush.xDDC_PKFlash = 0;
-    angle =
-        (0.017453292f * attr->x10_FLASH_UNK1 * ip->facing_dir) + (f32) M_PI_2;
+    // GALE01 0x802AAB08: the leading degree conversion rounds, then the
+    // facing multiply contracts into the M_PI_2 offset.
+    angle = __fmadds(0.017453292f * attr->x10_FLASH_UNK1, ip->facing_dir,
+                     (f32) M_PI_2);
     ip->x40_vel.x = -attr->x14_FLASH_PEAK_RISE_HEIGHT * cosf(angle);
     ip->x40_vel.y = attr->x14_FLASH_PEAK_RISE_HEIGHT * sinf(angle);
     ip->x40_vel.z = 0.0f;
@@ -301,7 +307,11 @@ void itNesspkflash_UnkMotion0_Phys(Item_GObj* gobj)
                 ftLib_800865D8(ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner,
                                &stick_x, &stick_y);
                 if (ABS(stick_x) > 0.2f) {
-                    ip->x40_vel.x += stick_x * attr->x18_FLASH_CONTROL;
+                    // GALE01 0x802AB098: the stick-control accumulate
+                    // fuses.
+                    ip->x40_vel.x = __fmadds(stick_x,
+                                             attr->x18_FLASH_CONTROL,
+                                             ip->x40_vel.x);
                     if (ABS(ip->x40_vel.x) > attr->x20_FLASH_UNK2) {
                         ip->x40_vel.x = (ip->x40_vel.x > 0.0f)
                                             ? attr->x20_FLASH_UNK2

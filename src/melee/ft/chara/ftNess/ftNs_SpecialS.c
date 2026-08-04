@@ -1,3 +1,4 @@
+#include <MetroTRK/intrinsics.h>
 #include "ftNess/ftNs_SpecialS.h"
 
 #include <platform.h>
@@ -46,7 +47,10 @@ void ftNs_SpecialS_ItemPKFireSpawn(
     if (FlagResult != false) {
         lb_8000B1CC(fp->parts[FtPart_R2ndNa].joint, NULL, &ItemBonePos);
 
-        ItemBonePos.x += ness_attr->x30_PKFIRE_SPAWN_X * fp->facing_dir;
+        // GALE01 0x80116BEC: the spawn-x offset fuses; the y offset
+        // (0x80116BFC) stays a plain fadds.
+        ItemBonePos.x = __fmadds(ness_attr->x30_PKFIRE_SPAWN_X,
+                                 fp->facing_dir, ItemBonePos.x);
         ItemBonePos.y += ness_attr->x34_PKFIRE_SPAWN_Y;
         ItemBonePos.z = 0.0f;
 

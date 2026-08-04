@@ -1,5 +1,7 @@
 #include "itnessyoyo.h"
 
+#include <MetroTRK/intrinsics.h>
+
 #include "math.h"
 
 #include "ft/chara/ftNess/ftNs_AttackHi4.h"
@@ -382,18 +384,20 @@ void it_802BF180(ItemLink* cur, Vec3* target, itYoyoAttributes* attrs,
     ItemLink* prev = cur->prev;
 
     it_802A3C98(&cur->pos, target, &dir);
-    cur->pos.x = (dir.x * length) + target->x;
-    cur->pos.y = (dir.y * length) + target->y;
-    cur->pos.z = (dir.z * length) + target->z;
+    // GALE01 0x802BF1C4..0x802BF1E4 and 0x802BF230..0x802BF250: MWCC
+    // contracts every string-link clamp into fmadds.
+    cur->pos.x = __fmadds(dir.x, length, target->x);
+    cur->pos.y = __fmadds(dir.y, length, target->y);
+    cur->pos.z = __fmadds(dir.z, length, target->z);
     while (prev != NULL) {
         prev->vel.y = 0.0f;
         it_802A4420(prev);
         it_802A43EC(prev);
         it_802A3D90(prev);
         if (it_802A3C98(&prev->pos, &cur->pos, &dir) > length) {
-            prev->pos.x = (dir.x * length) + cur->pos.x;
-            prev->pos.y = (dir.y * length) + cur->pos.y;
-            prev->pos.z = (dir.z * length) + cur->pos.z;
+            prev->pos.x = __fmadds(dir.x, length, cur->pos.x);
+            prev->pos.y = __fmadds(dir.y, length, cur->pos.y);
+            prev->pos.z = __fmadds(dir.z, length, cur->pos.z);
         }
         cur = prev;
         prev = prev->prev;
@@ -425,23 +429,23 @@ s32 it_802BF28C(ItemLink* link, Vec3* target, itYoyoAttributes* attrs,
                 next->pos = *target;
                 dist = it_802A3C98(&next->pos, &cur->pos, &dir);
                 if (dist > max_len) {
-                    next->pos.x = (dir.x * max_len) + cur->pos.x;
-                    next->pos.y = (dir.y * max_len) + cur->pos.y;
-                    next->pos.z = (dir.z * max_len) + cur->pos.z;
+                    next->pos.x = __fmadds(dir.x, max_len, cur->pos.x);
+                    next->pos.y = __fmadds(dir.y, max_len, cur->pos.y);
+                    next->pos.z = __fmadds(dir.z, max_len, cur->pos.z);
                 } else if (dist < min_len) {
                     if (it_802A3C98(&next->pos, target, &dir2) <= 0.1f) {
                         next->x2C_b0 = false;
                     } else {
-                        next->pos.x = (dir.x * min_len) + cur->pos.x;
-                        next->pos.y = (dir.y * min_len) + cur->pos.y;
-                        next->pos.z = (dir.z * min_len) + cur->pos.z;
+                        next->pos.x = __fmadds(dir.x, min_len, cur->pos.x);
+                        next->pos.y = __fmadds(dir.y, min_len, cur->pos.y);
+                        next->pos.z = __fmadds(dir.z, min_len, cur->pos.z);
                     }
                 }
             } else {
                 if (it_802A3C98(target, &cur->pos, &dir) > max_len) {
-                    next->pos.x = (dir.x * max_len) + cur->pos.x;
-                    next->pos.y = (dir.y * max_len) + cur->pos.y;
-                    next->pos.z = (dir.z * max_len) + cur->pos.z;
+                    next->pos.x = __fmadds(dir.x, max_len, cur->pos.x);
+                    next->pos.y = __fmadds(dir.y, max_len, cur->pos.y);
+                    next->pos.z = __fmadds(dir.z, max_len, cur->pos.z);
                     next->x2C_b0 = true;
                 } else {
                     return 0;
@@ -463,15 +467,15 @@ static inline void it_802BF4A0_adjust_tail(ItemLink* cur, Vec3* target,
     prev = cur->prev;
     tail = cur;
     it_802A3C98(&tail->pos, target, dir2);
-    cur->pos.x = (dir2->x * size) + target->x;
-    cur->pos.y = (dir2->y * size) + target->y;
-    cur->pos.z = (dir2->z * size) + target->z;
+    cur->pos.x = __fmadds(dir2->x, size, target->x);
+    cur->pos.y = __fmadds(dir2->y, size, target->y);
+    cur->pos.z = __fmadds(dir2->z, size, target->z);
 
     while (prev != NULL) {
         if (it_802A3C98(&prev->pos, &tail->pos, dir2) > size) {
-            prev->pos.x = (dir2->x * size) + tail->pos.x;
-            prev->pos.y = (dir2->y * size) + tail->pos.y;
-            prev->pos.z = (dir2->z * size) + tail->pos.z;
+            prev->pos.x = __fmadds(dir2->x, size, tail->pos.x);
+            prev->pos.y = __fmadds(dir2->y, size, tail->pos.y);
+            prev->pos.z = __fmadds(dir2->z, size, tail->pos.z);
         }
         tail = prev;
         prev = prev->prev;
@@ -497,7 +501,10 @@ s32 it_802BF4A0(ItemLink* link, Vec3* target, itYoyoAttributes* attrs,
     next = link->next;
 
     if (ABS(link->vel.x) < attrs->x2C_UNK3_MOD) {
-        link->vel.x += attrs->x28_YOYO_PULL_STRENGTH * ip->facing_dir;
+        // GALE01 0x802BF514: the pull-strength accumulate fuses.
+        link->vel.x =
+            __fmadds(attrs->x28_YOYO_PULL_STRENGTH, ip->facing_dir,
+                     link->vel.x);
     } else {
         link->vel.x = attrs->x2C_UNK3_MOD * ip->facing_dir;
     }
@@ -527,9 +534,9 @@ s32 it_802BF4A0(ItemLink* link, Vec3* target, itYoyoAttributes* attrs,
             it_802A4420(next);
             it_802BF030(cur, 0, size);
             if (it_802A3C98(&next->pos, &cur->pos, &dir) > size) {
-                next->pos.x = (dir.x * size) + cur->pos.x;
-                next->pos.y = (dir.y * size) + cur->pos.y;
-                next->pos.z = (dir.z * size) + cur->pos.z;
+                next->pos.x = __fmadds(dir.x, size, cur->pos.x);
+                next->pos.y = __fmadds(dir.y, size, cur->pos.y);
+                next->pos.z = __fmadds(dir.z, size, cur->pos.z);
             }
             it_802A43EC(next);
             it_802A42F4(next, 1.5 + target->y);
@@ -543,9 +550,9 @@ s32 it_802BF4A0(ItemLink* link, Vec3* target, itYoyoAttributes* attrs,
             if (count > charge_len) {
                 next->pos = *target;
             } else if (it_802A3C98(target, &cur->pos, &dir) > size) {
-                next->pos.x = (dir.x * size) + cur->pos.x;
-                next->pos.y = (dir.y * size) + cur->pos.y;
-                next->pos.z = (dir.z * size) + cur->pos.z;
+                next->pos.x = __fmadds(dir.x, size, cur->pos.x);
+                next->pos.y = __fmadds(dir.y, size, cur->pos.y);
+                next->pos.z = __fmadds(dir.z, size, cur->pos.z);
                 next->x2C_b0 = true;
                 it_802A43B8(next);
             } else if (coll_flags != 0) {

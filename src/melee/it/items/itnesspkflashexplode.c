@@ -1,3 +1,4 @@
+#include <MetroTRK/intrinsics.h>
 #include "itnesspkflashexplode.h"
 
 #include <placeholder.h>
@@ -104,20 +105,23 @@ bool itNessPKFlashExplode_UnkMotion0_Anim(Item_GObj* gobj)
     itFlashExplAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
     HSD_JObj* jobj = GET_JOBJ(gobj);
     Vec3 scale;
-    scale.x = scale.y = scale.z = (ip->xDD4_itemVar.pkflushexplode.xDD4 *
-                                   ((attr->x8_FLASH_EXPL_GRAPHIC_SIZE_GROWTH -
-                                     attr->x4_FLASH_EXPL_GRAPHIC_SIZE_INIT) /
-                                    attr->x0_FLASH_EXPL_HITBOX_SIZE_MUL)) +
-                                  attr->x4_FLASH_EXPL_GRAPHIC_SIZE_INIT;
+    // GALE01 0x802AFBF4: the explosion scale ramp fuses.
+    scale.x = scale.y = scale.z =
+        __fmadds(ip->xDD4_itemVar.pkflushexplode.xDD4,
+                 (attr->x8_FLASH_EXPL_GRAPHIC_SIZE_GROWTH -
+                  attr->x4_FLASH_EXPL_GRAPHIC_SIZE_INIT) /
+                     attr->x0_FLASH_EXPL_HITBOX_SIZE_MUL,
+                 attr->x4_FLASH_EXPL_GRAPHIC_SIZE_INIT);
     HSD_JObjSetScale(jobj, &scale);
 
     if (ip->xDB4_itcmd_var2 == 0 &&
         ip->x5D4_hitboxes[0].hit.state != HitCapsule_Disabled)
     {
+        // GALE01 0x802AFCA8: the charge damage scale fuses.
         it_80272460(&ip->x5D4_hitboxes[0].hit,
-                    (ip->xDD4_itemVar.pkflushexplode.xDD4 *
-                     attr->x10_FLASH_EXPL_DAMAGE_MUL) +
-                        attr->xC_FLASH_EXPL_BASE_DAMAGE,
+                    __fmadds(ip->xDD4_itemVar.pkflushexplode.xDD4,
+                             attr->x10_FLASH_EXPL_DAMAGE_MUL,
+                             attr->xC_FLASH_EXPL_BASE_DAMAGE),
                     gobj);
         ip->xDB4_itcmd_var2 = 1;
     }
