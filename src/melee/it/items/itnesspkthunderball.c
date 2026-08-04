@@ -1,5 +1,6 @@
 #include "itnesspkthunderball.h"
 
+#include <MetroTRK/intrinsics.h>
 #include <placeholder.h>
 
 #include "db/db.h"
@@ -329,12 +330,19 @@ void itNesspkthunderball_UnkMotion0_Phys(Item_GObj* gobj)
             lbVector_CrossprodNormalized(&ip->x40_vel, &stick, &cross);
 
             if (angle >= deg_to_rad * 45.0f) {
+                // GALE01 0x802ABE08/0x802ABE24: MWCC contracts both
+                // full-rate turn steps into fmadds/fnmsubs. The heading
+                // walks 90 degrees down to zero in fifteen 6-degree steps,
+                // and only the fused rounding leaves retail's 2^-28
+                // residue instead of an exact zero.
                 if (cross.z > 0.0f) {
-                    ip->xDD4_itemVar.pkthunder.angles[0] +=
-                        deg_to_rad * attr->x10_PKTHUNDER_TURN_RADIUS;
+                    ip->xDD4_itemVar.pkthunder.angles[0] =
+                        __fmadds(deg_to_rad, attr->x10_PKTHUNDER_TURN_RADIUS,
+                                 ip->xDD4_itemVar.pkthunder.angles[0]);
                 } else if (cross.z < 0.0f) {
-                    ip->xDD4_itemVar.pkthunder.angles[0] -=
-                        deg_to_rad * attr->x10_PKTHUNDER_TURN_RADIUS;
+                    ip->xDD4_itemVar.pkthunder.angles[0] =
+                        __fnmsubs(deg_to_rad, attr->x10_PKTHUNDER_TURN_RADIUS,
+                                  ip->xDD4_itemVar.pkthunder.angles[0]);
                 }
             }
             if (angle < deg_to_rad * 45.0f) {
