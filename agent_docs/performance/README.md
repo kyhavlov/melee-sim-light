@@ -37,6 +37,9 @@ representation may justify revisiting the same broad subsystem.
 - [`JOURNAL_2026-07-21_TO_23_SYSTEM_REWRITES.md`](JOURNAL_2026-07-21_TO_23_SYSTEM_REWRITES.md):
   historical compiled-pose/system-rewrite checkpoints imported from
   `experiments/decomp-port/system-rewrites`; these are evidence, not current runtime state.
+- [`JOURNAL_2026-08-03.md`](JOURNAL_2026-08-03.md): the first 150k-throughput campaign checkpoint,
+  including the complete retained and rejected owner experiments between `5fac340b` and the exact
+  wide-pose/Dream Land checkpoint.
 - [`PACKETS_2026-08-02.md`](PACKETS_2026-08-02.md): completed owner/deletion packet worklogs from
   the final push to the 100k baseline.
 - [`attempts/`](attempts/): one record per rejected architectural direction, including its revisit

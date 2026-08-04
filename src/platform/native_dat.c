@@ -9,6 +9,7 @@
 #include <baselib/id.h>
 #include <baselib/memory.h>
 #include <baselib/psstructs.h>
+#include <baselib/quatlib.h>
 #include <melee/ft/types.h>
 #include <melee/gr/ground.h>
 #include <melee/it/it_3F14.h>
@@ -467,7 +468,12 @@ static void* translate_target_count(MslNativeArchive* context,
         fprintf(stderr, "invalid native DAT extent for %s\n", type->name);
         abort();
     }
-    result = native_alloc((size_t) count * type->native_size);
+    if (strcmp(type->name, "HSD_Joint") == 0) {
+        HSD_ASSERT(470, count == 1);
+        result = native_alloc(type->native_size + sizeof(Quaternion));
+    } else {
+        result = native_alloc((size_t) count * type->native_size);
+    }
     add_memo(context, source_offset, type, result);
     for (i = 0; i < count; ++i) {
         translate_value(context, type,
@@ -599,6 +605,13 @@ static void translate_value(MslNativeArchive* context,
                 }
                 memcpy((uint8_t*) native + offsetof(HSD_Joint, u), &spline,
                        sizeof(spline));
+            }
+            {
+                HSD_Joint* joint = native;
+                Vec3 rotation = joint->rotation;
+                EulerToQuat(&rotation,
+                            (Quaternion*) ((uint8_t*) native +
+                                           type->native_size));
             }
             // The shared DWARF view omits HSD_Joint's anonymous union. Spline
             // is gameplay-bearing through HSD_A_J_PATH; DObj and particle

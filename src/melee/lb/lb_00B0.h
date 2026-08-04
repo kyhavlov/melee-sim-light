@@ -42,6 +42,14 @@
                               float, float);
 /* 00C7BC */ void lbCopyJObjSRT(HSD_JObj* src, HSD_JObj* dst);
 /* 00C868 */ void lb_8000C868(HSD_Joint*, HSD_JObj*, HSD_JObj*, float, float);
+#ifdef MSL_CORE_NATIVE
+void msl_lb_blend_joint_batch(HSD_Joint* const* authored,
+                              HSD_JObj* const* live, size_t count,
+                              float authored_weight, float live_weight);
+void msl_lb_blend_jobj_batch(HSD_JObj* const* first,
+                             HSD_JObj* const* second, size_t count,
+                             float first_weight, float second_weight);
+#endif
 /* 00CC5C */ s32 lbGetFreeColorRegister(s32 i0, HSD_MObj*, HSD_TExp*);
 /* 00CC8C */ s32 lb_8000CC8C(s32 i); // return type GXTevColorArg?
 /* 00CCA4 */ s32 lb_8000CCA4(s32 i);

@@ -1026,6 +1026,11 @@ void ftAnim_8006FE48(Fighter_GObj* fighter_gobj)
 void ftAnim_8006FE9C(Fighter* fp, Fighter_Part start, float t, float t_inv)
 {
     int i;
+#ifdef MSL_CORE_NATIVE
+    HSD_JObj* first[FIGHTER_PARTS_ALLOC_COUNT];
+    HSD_JObj* second[FIGHTER_PARTS_ALLOC_COUNT];
+    size_t blend_count = 0;
+#endif
     for (i = start; i < ftPartsTable[fp->kind]->parts_num; i++) {
         if (fp->parts[i].flags_b1 && !fp->parts[i].flags_b0 &&
             !fp->parts[i].flags_b5)
@@ -1033,11 +1038,19 @@ void ftAnim_8006FE9C(Fighter* fp, Fighter_Part start, float t, float t_inv)
             if (fp->parts[i].flags_b4) {
                 lbCopyJObjSRT(fp->parts[i].x4_jobj2, fp->parts[i].joint);
             } else {
+#ifdef MSL_CORE_NATIVE
+                first[blend_count] = fp->parts[i].x4_jobj2;
+                second[blend_count++] = fp->parts[i].joint;
+#else
                 lb_8000C490(fp->parts[i].x4_jobj2, fp->parts[i].joint,
                             fp->parts[i].joint, t, t_inv);
+#endif
             }
         }
     }
+#ifdef MSL_CORE_NATIVE
+    msl_lb_blend_jobj_batch(first, second, blend_count, t, t_inv);
+#endif
 }
 
 void ftAnim_8006FF74(Fighter* fp, Fighter_Part start)
@@ -1057,6 +1070,11 @@ void ftAnim_80070010(Fighter* fp, Fighter_Part start, float t, float t_inv,
 {
     int i = start; // r31
     s32 sp1C = 0;
+#ifdef MSL_CORE_NATIVE
+    HSD_Joint* authored[FIGHTER_PARTS_ALLOC_COUNT];
+    HSD_JObj* live[FIGHTER_PARTS_ALLOC_COUNT];
+    size_t blend_count = 0;
+#endif
 
     while (joint != NULL) {
         while (ftParts_8007506C(fp->kind, i) != 0) {
@@ -1066,13 +1084,21 @@ void ftAnim_80070010(Fighter* fp, Fighter_Part start, float t, float t_inv,
             if (fp->parts[i].flags_b4) {
                 lb_8000B4FC(fp->parts[i].joint, joint);
             } else {
+#ifdef MSL_CORE_NATIVE
+                authored[blend_count] = joint;
+                live[blend_count++] = fp->parts[i].joint;
+#else
                 lb_8000C868(joint, fp->parts[i].joint, fp->parts[i].joint, t,
                             t_inv);
+#endif
             }
         }
         i++;
         ftAnim_GetNextJointInTree(&joint, &sp1C);
     }
+#ifdef MSL_CORE_NATIVE
+    msl_lb_blend_joint_batch(authored, live, blend_count, t, t_inv);
+#endif
 }
 
 void ftAnim_80070108(Fighter* fp, Fighter_Part start, float t, float t_inv,
@@ -1080,6 +1106,11 @@ void ftAnim_80070108(Fighter* fp, Fighter_Part start, float t, float t_inv,
 {
     int i = start; // r31
     s32 sp1C = 0;
+#ifdef MSL_CORE_NATIVE
+    HSD_Joint* authored[FIGHTER_PARTS_ALLOC_COUNT];
+    HSD_JObj* live[FIGHTER_PARTS_ALLOC_COUNT];
+    size_t blend_count = 0;
+#endif
 
     while (joint != NULL) {
         while (ftParts_8007506C(fp->kind, i) != 0) {
@@ -1097,14 +1128,22 @@ void ftAnim_80070108(Fighter* fp, Fighter_Part start, float t, float t_inv,
             if (fp->parts[i].flags_b4) {
                 lb_8000B4FC(fp->parts[i].x4_jobj2, joint);
             } else {
+#ifdef MSL_CORE_NATIVE
+                authored[blend_count] = joint;
+                live[blend_count++] = fp->parts[i].x4_jobj2;
+#else
                 lb_8000C868(joint, fp->parts[i].x4_jobj2,
                             fp->parts[i].x4_jobj2, t, t_inv);
+#endif
             }
         }
     next_joint:
         i++;
         ftAnim_GetNextJointInTree(&joint, &sp1C);
     }
+#ifdef MSL_CORE_NATIVE
+    msl_lb_blend_joint_batch(authored, live, blend_count, t, t_inv);
+#endif
 }
 
 void ftAnim_80070200(Fighter* fp, ftData_x8_x8* r4, CostumeTObjList* r5,

@@ -235,6 +235,11 @@ void grOldPupupu_80210A24(Ground_GObj* gobj)
 
     if ((int) grOp_804D6A9C == 0 && gp->gv.oldpupupu.xD0 == 1) {
         gp->gv.oldpupupu.xD0 = 0;
+#ifdef MSL_CORE_NATIVE
+        // Object 7 owns Whispy's gameplay state. Object 1 consumes this
+        // handshake only to select a background animation.
+        return;
+#endif
         switch (gp->gv.oldpupupu.xC8) {
         case 0:
             grAnime_801C8138(

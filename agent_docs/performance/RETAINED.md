@@ -243,3 +243,20 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
   aliasing runtime enabled/hidden state into source-unused topology bits. Throughput is neutral;
   ordinary arena/savestate fall 1,612/1,076 bytes, initialization loses one allocation, and all
   correctness, API, snapshot, PPC, Wasm, and viewer gates remain green.
+
+## Exact wide fighter-pose blending
+
+- `This commit` **Batch exact fighter-pose blends and cull Dream Land background response** stores
+  each immutable authored joint's exact source quaternion alongside the translated native DAT
+  descriptor, evaluates live Euler inputs and general-slerp sine products through the existing
+  bit-exact wide trig owner, and publishes otherwise unchanged SRT and dirty flags in source order.
+  Dream Land object 1 still consumes and clears Whispy's gameplay-observed `xD0` handshake but no
+  longer starts the associated presentation-only background animation on the headless native path.
+- Three 262,144-frame alternating pairs against committed control `5fac340b` preserve both complete
+  benchmark digests and improve median paired throughput by 6.70% at resident 256 and 6.70% at
+  resident 512. Candidate medians are 38,882.2 / 37,318.4 cycles/frame and 110,383 / 115,009 FPS.
+  Every pair exceeds the required 5% checkpoint threshold. Match state and gameplay allocation are
+  unchanged; the sealed process-wide native DAT arena grows by 302,848 bytes.
+- Source synchronization, native smoke, PPC smoke, the 3,501,461-frame supported-domain suite,
+  public API/test, Wasm parity, and viewer smoke all pass. The full experiment and rejected-variant
+  record is in `JOURNAL_2026-08-03.md`.

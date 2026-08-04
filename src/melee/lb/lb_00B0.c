@@ -15,6 +15,8 @@
 #include <baselib/quatlib.h>
 #include <baselib/robj.h>
 #ifdef MSL_CORE_NATIVE
+#include <MSL/trigf.h>
+#include "platform/native_dat.h"
 #include "runtime/fighter_pose.h"
 #endif
 
@@ -679,10 +681,14 @@ void lb_8000C868(HSD_Joint* arg0, HSD_JObj* arg1, HSD_JObj* arg2, float arg8,
             }
         }
     }
+#ifdef MSL_CORE_NATIVE
+    spA4 = *msl_native_joint_quaternion(arg0);
+#else
     spC0.x = arg0->rotation.x;
     spC0.y = arg0->rotation.y;
     spC0.z = arg0->rotation.z;
     EulerToQuat(&spC0, &spA4);
+#endif
     if (temp_r31 != 0) {
         sp94 = arg1->rotate;
     } else {
@@ -712,6 +718,275 @@ void lb_8000C868(HSD_Joint* arg0, HSD_JObj* arg1, HSD_JObj* arg2, float arg8,
     HSD_JObjSetFlags(arg2, 0x20000U);
     HSD_JObjSetFlags(arg2, 0x40U);
 }
+
+#ifdef MSL_CORE_NATIVE
+enum {
+    MSL_LB_BLEND_MAX_JOINTS = 140,
+    MSL_LB_BLEND_MAX_EULERS = MSL_LB_BLEND_MAX_JOINTS * 2,
+};
+
+static inline void msl_blend_set_flags(HSD_JObj* joint, bool quaternion)
+{
+    if (HSD_JObjMtxIsDirty(joint)) {
+        if (quaternion) {
+            joint->flags |= JOBJ_USE_QUATERNION;
+        } else {
+            joint->flags &= ~JOBJ_USE_QUATERNION;
+        }
+    } else {
+        if (!quaternion) {
+            HSD_JObjClearFlags(joint, JOBJ_USE_QUATERNION);
+        }
+        HSD_JObjSetFlags(joint, quaternion ? JOBJ_USE_QUATERNION |
+                                                JOBJ_MTX_DIRTY
+                                          : JOBJ_MTX_DIRTY);
+    }
+}
+
+static void msl_euler_to_quat_batch(const Vec3* const* rotations,
+                                    Quaternion* const* outputs, size_t count)
+{
+    float angles[MSL_LB_BLEND_MAX_EULERS * 3];
+    float sin_values[MSL_LB_BLEND_MAX_EULERS * 3];
+    float cos_values[MSL_LB_BLEND_MAX_EULERS * 3];
+    size_t i;
+
+    HSD_ASSERT(733, count <= MSL_LB_BLEND_MAX_EULERS);
+    for (i = 0; i < count; ++i) {
+        size_t angle = i * 3;
+        angles[angle + 0] = 0.5F * rotations[i]->x;
+        angles[angle + 1] = 0.5F * rotations[i]->y;
+        angles[angle + 2] = 0.5F * rotations[i]->z;
+    }
+    msl_sincosf_many(angles, sin_values, cos_values, (int) count * 3);
+    for (i = 0; i < count; ++i) {
+        size_t angle = i * 3;
+        Quaternion* quat = outputs[i];
+        float sx = sin_values[angle + 0];
+        float sy = sin_values[angle + 1];
+        float sz = sin_values[angle + 2];
+        float cx = cos_values[angle + 0];
+        float cy = cos_values[angle + 1];
+        float cz = cos_values[angle + 2];
+        float ss = sy * sz;
+        float cc = cy * cz;
+        quat->w = __fmadds(cx, cc, sx * ss);
+        quat->x = __fmsubs(sx, cc, cx * ss);
+        quat->y = __fmadds(cz, cx * sy, sz * (sx * cy));
+        quat->z = __fmsubs(sz, cx * cy, cz * (sx * sy));
+    }
+}
+
+static void msl_blend_quaternion_batch(Quaternion* first, Quaternion* second,
+                                       HSD_JObj* const* output,
+                                       const uint8_t* active, size_t count,
+                                       float weight)
+{
+    float angles[MSL_LB_BLEND_MAX_JOINTS * 3];
+    float sin_values[MSL_LB_BLEND_MAX_JOINTS * 3];
+    float cos_values[MSL_LB_BLEND_MAX_JOINTS * 3];
+    uint8_t general_joint[MSL_LB_BLEND_MAX_JOINTS];
+    size_t general_count = 0;
+    size_t i;
+
+    for (i = 0; i < count; ++i) {
+        Quaternion sum;
+        Quaternion dif;
+        float cosom;
+        float theta;
+        size_t angle;
+        if (!active[i]) {
+            continue;
+        }
+        sum.x = SQ(first[i].x + second[i].x);
+        sum.y = SQ(first[i].y + second[i].y);
+        sum.z = SQ(first[i].z + second[i].z);
+        sum.w = SQ(first[i].w + second[i].w);
+        dif.x = SQ(first[i].x - second[i].x);
+        dif.y = SQ(first[i].y - second[i].y);
+        dif.z = SQ(first[i].z - second[i].z);
+        dif.w = SQ(first[i].w - second[i].w);
+        if (dif.x + dif.y + dif.z + dif.w >
+            sum.x + sum.y + sum.z + sum.w)
+        {
+            second[i].x = -second[i].x;
+            second[i].y = -second[i].y;
+            second[i].z = -second[i].z;
+            second[i].w = -second[i].w;
+        }
+        cosom = __fmadds(
+            first[i].w, second[i].w,
+            __fmadds(first[i].z, second[i].z,
+                     __fmadds(first[i].y, second[i].y,
+                              first[i].x * second[i].x)));
+        if ((1.0F + cosom) > 1e-10F &&
+            (1.0F - cosom) > 1e-10F)
+        {
+            theta = acosf(cosom);
+            angle = general_count * 3;
+            general_joint[general_count] = (uint8_t) i;
+            angles[angle + 0] = theta;
+            angles[angle + 1] = (1.0F - weight) * theta;
+            angles[angle + 2] = weight * theta;
+            ++general_count;
+        } else {
+            HSD_QuatLib_8037EF28(&first[i], &second[i], &output[i]->rotate,
+                                 weight);
+            msl_blend_set_flags(output[i], true);
+        }
+    }
+    msl_sincosf_many(angles, sin_values, cos_values,
+                     (int) general_count * 3);
+    for (i = 0; i < general_count; ++i) {
+        size_t joint = general_joint[i];
+        size_t angle = i * 3;
+        float sinom;
+        float sp;
+        float sq;
+        sinom = sin_values[angle + 0];
+        sp = sin_values[angle + 1] / sinom;
+        sq = sin_values[angle + 2] / sinom;
+        output[joint]->rotate.x =
+            __fmadds(sp, first[joint].x, sq * second[joint].x);
+        output[joint]->rotate.y =
+            __fmadds(sp, first[joint].y, sq * second[joint].y);
+        output[joint]->rotate.z =
+            __fmadds(sp, first[joint].z, sq * second[joint].z);
+        output[joint]->rotate.w =
+            __fmadds(sp, first[joint].w, sq * second[joint].w);
+        msl_blend_set_flags(output[joint], true);
+    }
+}
+
+void msl_lb_blend_joint_batch(HSD_Joint* const* authored,
+                              HSD_JObj* const* live, size_t count,
+                              float authored_weight, float live_weight)
+{
+    Quaternion source_quats[MSL_LB_BLEND_MAX_JOINTS];
+    Quaternion live_quats[MSL_LB_BLEND_MAX_JOINTS];
+    const Vec3* euler_rotations[MSL_LB_BLEND_MAX_EULERS];
+    Quaternion* euler_outputs[MSL_LB_BLEND_MAX_EULERS];
+    uint8_t active[MSL_LB_BLEND_MAX_JOINTS];
+    size_t euler_count = 0;
+    size_t i;
+
+    HSD_ASSERT(733, count <= MSL_LB_BLEND_MAX_JOINTS);
+    for (i = 0; i < count; ++i) {
+        HSD_Joint* source = authored[i];
+        HSD_JObj* joint = live[i];
+        bool is_quaternion = (joint->flags & JOBJ_USE_QUATERNION) != 0;
+        float dx;
+        float dy;
+        float dz;
+
+        joint->translate.x = __fmadds(source->position.x, authored_weight,
+                                     joint->translate.x * live_weight);
+        joint->translate.y = __fmadds(source->position.y, authored_weight,
+                                     joint->translate.y * live_weight);
+        joint->translate.z = __fmadds(source->position.z, authored_weight,
+                                     joint->translate.z * live_weight);
+        joint->scale.x = __fmadds(source->scale.x, authored_weight,
+                                 joint->scale.x * live_weight);
+        joint->scale.y = __fmadds(source->scale.y, authored_weight,
+                                 joint->scale.y * live_weight);
+        joint->scale.z = __fmadds(source->scale.z, authored_weight,
+                                 joint->scale.z * live_weight);
+        if (!is_quaternion) {
+            dx = source->rotation.x - joint->rotate.x;
+            dy = source->rotation.y - joint->rotate.y;
+            dz = source->rotation.z - joint->rotate.z;
+            if (fabsf(dx) <= 1e-4F && fabsf(dy) <= 1e-4F &&
+                fabsf(dz) <= 1e-4F)
+            {
+                joint->rotate.x = source->rotation.x;
+                joint->rotate.y = source->rotation.y;
+                joint->rotate.z = source->rotation.z;
+                msl_blend_set_flags(joint, false);
+                active[i] = 0;
+                continue;
+            }
+        }
+        active[i] = 1;
+        source_quats[i] = *msl_native_joint_quaternion(source);
+        if (is_quaternion) {
+            live_quats[i] = joint->rotate;
+        } else {
+            euler_rotations[euler_count] = (const Vec3*) &joint->rotate;
+            euler_outputs[euler_count] = &live_quats[i];
+            ++euler_count;
+        }
+    }
+    msl_euler_to_quat_batch(euler_rotations, euler_outputs, euler_count);
+    msl_blend_quaternion_batch(source_quats, live_quats, live, active, count,
+                               live_weight);
+}
+
+void msl_lb_blend_jobj_batch(HSD_JObj* const* first,
+                             HSD_JObj* const* second, size_t count,
+                             float first_weight, float second_weight)
+{
+    Quaternion first_quats[MSL_LB_BLEND_MAX_JOINTS];
+    Quaternion second_quats[MSL_LB_BLEND_MAX_JOINTS];
+    const Vec3* euler_rotations[MSL_LB_BLEND_MAX_EULERS];
+    Quaternion* euler_outputs[MSL_LB_BLEND_MAX_EULERS];
+    uint8_t active[MSL_LB_BLEND_MAX_JOINTS];
+    size_t euler_count = 0;
+    size_t i;
+
+    HSD_ASSERT(836, count <= MSL_LB_BLEND_MAX_JOINTS);
+    for (i = 0; i < count; ++i) {
+        HSD_JObj* lhs = first[i];
+        HSD_JObj* rhs = second[i];
+        bool lhs_quat = (lhs->flags & JOBJ_USE_QUATERNION) != 0;
+        bool rhs_quat = (rhs->flags & JOBJ_USE_QUATERNION) != 0;
+        float dx;
+        float dy;
+        float dz;
+
+        rhs->translate.x = __fmadds(lhs->translate.x, first_weight,
+                                    rhs->translate.x * second_weight);
+        rhs->translate.y = __fmadds(lhs->translate.y, first_weight,
+                                    rhs->translate.y * second_weight);
+        rhs->translate.z = __fmadds(lhs->translate.z, first_weight,
+                                    rhs->translate.z * second_weight);
+        rhs->scale.x = __fmadds(lhs->scale.x, first_weight,
+                                rhs->scale.x * second_weight);
+        rhs->scale.y = __fmadds(lhs->scale.y, first_weight,
+                                rhs->scale.y * second_weight);
+        rhs->scale.z = __fmadds(lhs->scale.z, first_weight,
+                                rhs->scale.z * second_weight);
+        if (!lhs_quat && !rhs_quat) {
+            dx = lhs->rotate.x - rhs->rotate.x;
+            dy = lhs->rotate.y - rhs->rotate.y;
+            dz = lhs->rotate.z - rhs->rotate.z;
+            if (fabsf(dx) <= 1e-4F && fabsf(dy) <= 1e-4F &&
+                fabsf(dz) <= 1e-4F)
+            {
+                rhs->rotate = lhs->rotate;
+                msl_blend_set_flags(rhs, false);
+                active[i] = 0;
+                continue;
+            }
+        }
+        active[i] = 1;
+        if (lhs_quat) {
+            first_quats[i] = lhs->rotate;
+        } else {
+            euler_rotations[euler_count] = (const Vec3*) &lhs->rotate;
+            euler_outputs[euler_count++] = &first_quats[i];
+        }
+        if (rhs_quat) {
+            second_quats[i] = rhs->rotate;
+        } else {
+            euler_rotations[euler_count] = (const Vec3*) &rhs->rotate;
+            euler_outputs[euler_count++] = &second_quats[i];
+        }
+    }
+    msl_euler_to_quat_batch(euler_rotations, euler_outputs, euler_count);
+    msl_blend_quaternion_batch(first_quats, second_quats, second, active,
+                               count, second_weight);
+}
+#endif
 
 static s32 lbGetFreeColorRegImpl(s32 i0, HSD_TevDesc* tevdesc, HSD_TExp* texp1,
                                  HSD_TExp* texp2)

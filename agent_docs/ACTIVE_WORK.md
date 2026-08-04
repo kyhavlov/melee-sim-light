@@ -1,3 +1,29 @@
+# Active performance campaign — 150k resident throughput
+
+## Contract and current control
+
+- Branch: `perf/decomp-throughput`; do not switch branches or create a worktree.
+- Current checkpoint candidate is based on `5fac340b`; the qualifying controlled evidence and
+  complete experiment history are in `agent_docs/performance/JOURNAL_2026-08-03.md`.
+- Frozen release binary: `build/melee_core/perf-candidate-wide-dl-handshake/replay-bench`,
+  SHA-256 `461dd9abaafb6205328fcfa0e0c113bc0c4bec277846559becdd8a57b54d8efd`.
+- Resident-256 candidate median: 38,882.2 cycles/frame and 110,383 FPS, digest
+  `bdff41cf74a54850`.
+- Resident-512 candidate median: 37,318.4 cycles/frame and 115,009 FPS, digest
+  `ee9d93c545aa3ef9`.
+- Final target: at least 150,000 controlled median FPS at both resident sizes, with exact output
+  and no gameplay allocation or unexplained memory growth.
+- A later checkpoint requires at least +5% controlled throughput over this checkpoint at both
+  sizes, using alternating parent/candidate cycle ratios and supporting wall FPS.
+
+## Next owner selection
+
+- The final 32,768-frame resident-512 profile assigns 14.62% to pose animation, 13.52% to stage
+  collision, 7.02% to fighter dynamics, 4.65% to input/action, and 4.17% to camera.
+- The narrow pose-blend and exact scalar alternatives exercised in the August 3 journal are
+  closed. Select a bounded source owner whose work can actually be deleted; do not add another
+  gathering, compatibility, or duplicated representation layer.
+
 # Previous structural packet — `decomp-port-arm64-ppc` merge polish
 
 ## Objective

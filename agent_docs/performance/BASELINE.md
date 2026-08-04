@@ -6,10 +6,10 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Provenance
 
-- Revision: benchmark-balancing change based on
-  `b3ade65ac45c588e8d8e0958a4cd575380cf78c3`
+- Revision: first 150k-campaign checkpoint candidate based on
+  `5fac340b3d7e639669701e17c98a2a5e86ff7e08`
 - Release benchmark SHA-256:
-  `a461e1301379b32f00ea5e8eb56e73d3c60c31f1be387ee0749ee98821fec0ff`
+  `461dd9abaafb6205328fcfa0e0c113bc0c4bec277846559becdd8a57b54d8efd`
 - Date: 2026-08-03
 - Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 7.0 x86-64
 - Compiler: GCC 13.3.0, strict native release profile, `-march=native -mtune=native`
@@ -17,7 +17,9 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
   ordinary Figa samples, direct canonical fighter-animation spans, lazy mutable Figa decoder
   ownership, construction-bound dynamic-hurt membership, fused exact JObj/dynamics transforms,
   exact quaternion compiler boundaries, exact O1 fighter map collision, direct hosted scheduler
-  dispatch, source-defined Ice Climbers item projection, and the 16-character merged runtime
+  dispatch, source-defined Ice Climbers item projection, immutable authored-joint quaternions,
+  exact batched fighter-pose blends, a handshake-preserving Dream Land background-animation cut,
+  and the 16-character merged runtime
 - Correctness: 366/366 accepted (`310 PASS`, `56 CLASSIFIED`, zero XPASS/fail/error) across
   3,501,461 validated frames. Twenty-five obsolete raw-pointer/pool-residue classifications are
   replaced by one genuine Whispy RNG-phase classification, a net reduction of 24, without changing
@@ -43,15 +45,17 @@ The final exact candidate samples are:
 
 | Batch | Samples | Median cycles/frame | Median FPS | Digest |
 |---:|---|---:|---:|---:|
-| 256 | 3 | 42,429.7 | 101,155 | `bdff41cf74a54850` |
-| 512 | 5 | 40,783.0 | 105,239 | `ee9d93c545aa3ef9` |
+| 256 | 3 | 38,882.2 | 110,383 | `bdff41cf74a54850` |
+| 512 | 3 | 37,318.4 | 115,009 | `ee9d93c545aa3ef9` |
 
-Raw 256 cycles/frame were `42,340.5`, `43,204.3`, and `42,429.7`; corresponding wall throughput
-was `101,367`, `99,341`, and `101,155` FPS. Raw 512 cycles/frame were `40,626.5`, `41,423.8`,
-`41,188.6`, `40,596.3`, and `40,783.0`; corresponding wall throughput was `105,644`, `103,611`,
-`104,202`, `105,723`, and `105,239` FPS. Cycles/frame is the primary comparison because wall FPS
-also reflects frequency and machine contention. The prior prefix-assigned benchmark is a different
-workload and is not an A/B performance control for these numbers.
+Raw candidate 256 cycles/frame were `38,882.2`, `39,065.1`, and `38,875.2`; corresponding wall
+throughput was `110,383`, `109,867`, and `110,403` FPS. Raw candidate 512 cycles/frame were
+`37,186.9`, `37,318.4`, and `37,721.1`; corresponding wall throughput was `115,416`, `115,009`,
+and `113,781` FPS. Three order-reversed pairs against frozen committed control `5fac340b` yield
+median paired throughput gains of 6.70% at both resident sizes; every pair exceeds 6.6%. Both
+digests are unchanged. Cycles/frame is the primary comparison because wall FPS also reflects
+frequency and machine contention. The prior prefix-assigned benchmark is a different workload and
+is not an A/B performance control for these numbers.
 
 ## Current memory contract
 
@@ -70,13 +74,15 @@ both counts remain identical before and after gameplay. Its complete relocatable
 
 The public 128-frame observation history remains 127,488 bytes per environment and is
 caller-owned. Shared GameData owns 72,404,776 initialized arena bytes plus the native DAT arena;
-that immutable/process-wide cost is not replicated per Match.
+that immutable/process-wide cost is not replicated per Match. Native DAT translation appends
+302,848 immutable bytes of authored-joint quaternions; Match size, savestate size, and gameplay
+allocation counts are unchanged.
 
 ## Owner-selection profile
 
-The last bounded resident-512 subsystem profile, after canonical animation spans and quaternion
-cuts but before lazy decoder construction and the two small final deletions, assigns 14.99% to pose
-animation, 12.98% to stage collision, 8.10% to input/action, 6.83% to dynamics, and 3.93% to
-camera. A 4,096-frame portable-ISA instruction window assigns 9.74% self to `interpret_joint` and
-2.27% to eager Figa attachment/allocation/compaction, which selected lazy decoder ownership. This
-profile is for owner selection rather than final throughput; its nested rows must not be added.
+The final bounded 32,768-frame resident-512 subsystem profile reports 47,078.7 diagnostic
+cycles/frame with digest `588be8489df1a62d`. It assigns 14.62% to pose animation, 13.52% to stage
+collision, 7.02% to `Fighter_8006D9AC`, 4.65% to input/action, 4.17% to camera, 2.38% to hit
+processing, and 0.69% to contact publication. Dream Land object 1's presentation response no
+longer appears among the top scheduled owners. This instrumented profile is for owner selection,
+not throughput; inclusive and nested rows must not be added.

@@ -6,7 +6,9 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <dolphin/mtx.h>
 #include <baselib/archive.h>
+#include <baselib/jobj.h>
 
 typedef struct _HSD_PSCmdList HSD_PSCmdList;
 typedef struct EF_EffectDesc EF_EffectDesc;
@@ -171,5 +173,13 @@ int msl_native_dat_owns(const void* pointer);
 void msl_native_dat_context_destroy(MslNativeDatContext* context);
 void msl_native_dat_for_each_figa(void (*visit)(FigaTree*, void*),
                                   void* context);
+
+static inline const Quaternion*
+msl_native_joint_quaternion(const HSD_Joint* joint)
+{
+    // Translation appends this exact derived value before sealing the native
+    // DAT arena; it remains immutable with its source descriptor.
+    return (const Quaternion*) (joint + 1);
+}
 
 #endif
