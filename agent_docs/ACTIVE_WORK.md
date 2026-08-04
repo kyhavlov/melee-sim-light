@@ -53,7 +53,7 @@ admitted absorber, so `ftData_OnAbsorb` becomes a live table.
   callback — so its sampled Slippi byte is fixed-pool residue and the projection mask
   keeps only MISC1 (the charge scale at xDD8).
 
-## Suite state (container authoritative, standalone — NOT yet in the aggregate)
+## Suite state (container authoritative) — IN THE AGGREGATE
 
 18 replays across all six legal stages (three each) against Captain Falcon, Falco, Fox,
 Jigglypuff, Marth, Peach, Pikachu, Sheik, and a Ness mirror. All three Pokemon Stadium
@@ -61,60 +61,58 @@ entries are event-verified frozen (each declares the 0x41 stadium_transformation
 command and records zero events over the full game); every capture carries populated
 raw analog pad lanes, so none is a 3.18-layout re-wrap. Zero replays were rejected.
 
-**native 12 pass / 6 fail; PPC 15 pass / 3 fail.** The suite is deliberately left out of
-`melee_core_aggregate` until the residuals are closed or classified with evidence.
+**ness suite: native 12 pass / 6 classified / 0 fail; PPC 15 pass / 3 classified /
+0 fail.** `ness.json` is wired into `melee_core_aggregate`, which is now
+**414 = 327 pass / 87 classified / 0 fail / 0 error**, with the eighteen output locks
+strictly additive (18 added, 0 changed) and the pre-Ness 396 byte-stable throughout.
 
-**Shield-damage fusion (closed a family on both backends).** `slippi-2025-02` diverged
-by 1 ULP on `shield_hp` for 2,033 rows from frame 10713, where Ness's shield is hit.
-`Fighter_ProcessHit_8006D1EC` carries two unported MWCC fusions in the shield-damage
-expression (GALE01 0x8006D2AC and 0x8006D2CC): the light-shield lerp between
-`x2DC`/`x2E0`, and the `x284` scale over the `x288` floor. Only the trailing subtraction
-from `shield_health` stays a plain `fsubs`. Porting both makes that replay fully
-bit-exact and moved PPC from 14 to 15 passes, and the 396-replay aggregate stayed
-**byte-stable with zero output drift** -- the fusion is identity on the entire existing
-corpus. The offsets confirm the mapping (`fp+0x199C` light-shield amount,
-`fp+0x19A0` the integer shield damage, `p_ftCommonData` +644/+648).
+### The six classified residuals, each root-caused
 
-Four families fail on BOTH backends:
+- `2026-06` (Dream Land Sheik/Ness) — **`unmodeled-presentation-rng-stream-phase`**.
+  Settled with an engine-dump probe capture of retail's own RNG stream. Retail's frame
+  3922 opens with a `randi` at LR 0x80211648, inside `grOldPupupu_802113E0`'s
+  rand_range blow timer, *before* `efAsync_Dispatch`'s 0x3EC rotation draw. The hosted
+  build deliberately replaces Dream Land's wind machine with the recorded Slippi
+  direction stream (ledger `canonical:slippi-stage-event-publication`) precisely
+  because the retail timers sample the mid-frame RNG after effect draws that do not
+  exist headlessly — so the replacement consumes no RNG. That one-draw phase shift
+  moves the following `it_2725_Logic109_DmgDealt` `HSD_Randi(3)` from the stream
+  position returning 0 (the Sheik needle survives into its bounce state) to the
+  neighbouring position returning 2 (destroyed). Every retail draw for the frame
+  reproduces exactly from the recorded frame seed, including the surviving needle's
+  `Randi(8)` = 5 bounce speed and its SetupBounce draws; the control frame 3919 is an
+  identical needle hit with no Whispy draw and matches the hosted sequence draw for
+  draw. Reinstating the retail machine is strictly worse — it forks fighter positions
+  through the wind push, which is why it was replaced.
+- `51444`, `2025-11`, `52757`, `53870` — **`unrecorded-item-pool-residue`**. The Ness
+  Yo-Yo's `itNessYoyo_ItemVars.x4` is written by exactly one owner, `it_802BFEC4`, and
+  only on the smash's final frame, so every frame the article is alive samples its
+  pool slot's previous occupant. Traced end to end: the hosted sim runs all of a
+  replay's Yo-Yo smashes on the same slot with retail's spawn ids and computes `x4`
+  correctly (0x3D95C61D, low byte 29 — one of the values retail exports). `51444`
+  additionally samples Mr. Saturn's `xDE4` y/z, which `itDosei_UnkMotion4`/`5` never
+  write; the bytes the hosted run reports there are the halves of a 64-bit host
+  pointer (the 0x00007FFF high word is plainly visible in the union). PPC, whose
+  layout matches retail, is bit-exact on the three Yo-Yo-only replays.
+- `2025-03` (Frozen Stadium Ness/Peach) — **`dolphin-ulp-motion-profile`**. One 1-ULP
+  seed at frame 1471 where `speed_x_attack` and `speed_y_attack` take the same value,
+  so the knockback angle is exactly 45 degrees and both lanes carry the single
+  `scaled_kb` factor rather than any trig difference. Self-heals into a 3,958-frame
+  exact suffix, same first row on both backends. The knockback formula owners
+  `ftColl_80079AB0/80079C70/80079EA8` already carry their complete fused-op sets.
 
-- `2025-03` (Frozen Stadium Ness/Peach) @1471: `speed_x_attack`/`speed_y_attack` 1 ULP
-  (3.23155046 vs 3.23155022) seeding a `pos_y` episode. PPC 184 rows with a 15,716-frame
-  exact suffix; native 231 rows. Both lanes carry the *same* value, so the knockback
-  angle is exactly 45 degrees and the 1 ULP lives in the common `scaled_kb` factor, not
-  in the trig. Ruled out: the three knockback formula owners `ftColl_80079AB0/C70/EA8`
-  are already fully fused (6/6 each), and porting the two genuinely-unported fusions
-  found nearby -- the Sakurai-angle ramp `ftCo_Damage_CalcAngle` (GALE01 0x8008D8AC) and
-  `ftCo_CalcYScaledKnockback` (0x800CF678) -- left the fingerprint unchanged, because
-  this hit takes a fixed attack angle and the size scale is 1. Both were kept as
-  asm-verified source completions (identity at current inputs; aggregate byte-stable).
-  The remaining lead is `kb_applied`'s own inputs (percent/staleness/weight chain).
-- `2026-06` (Dream Land Sheik/Ness) @3922: a third item retail spawns and we do not
-  (`item_count` 3 vs 2, `item.state[2]` 4). The one non-ULP family and the best next
-  lead — identify the article and the spawn predicate.
-- `51444` (Frozen Stadium Peach/Ness) @10756: a single `item.misc3` lane, 6 rows on PPC
-  (native also moves `misc2`). The item is a **Mr. Saturn** (kind 7, state 11) that Peach
-  pulled -- not a Ness article -- so this is a pre-existing gap the suite merely exposes.
-  `itDosei_ItemVars` has no pointers, so native and retail layouts agree and no remap is
-  involved; `misc2`/`misc3` sample the `xDE4` position tracker's y and z. State 11's
-  `itDosei_UnkMotion11_Anim` does write `xDE4 = ip->pos`, so the existing
-  held/thrown state-list carve-out (states 1/4/5) is not obviously the right fix and the
-  lane needs its own audit before either masking or correcting it.
-- `slippi-2025-02` (Battlefield Ness/Pikachu) @10713: `shield_hp` 1 ULP, 2,033 rows,
-  byte-identical fingerprint on both backends (1dd0a3e8a50fecc8).
+## Exactness fixes shipped while closing the residuals
 
-Three more fail on NATIVE ONLY (`2025-11`, `52757`, `53870`): the dormant Yo-Yo
-article's `itNessYoyo_ItemVars.x4` lane (Slippi misc1). PPC reproduces retail exactly,
-so this is a host-width/native-FP residual in the article rather than a
-source-completeness gap — `x4` is written only by `it_802BFEC4`, whose inputs run
-through `HSD_JObjSetupMatrix`/`PSMTXConcat` on the string-link jobj.
-
-**Instrumentation trap worth remembering:** `--backend native` runs the validator's
-Python extension (`tools/validation/native.c` -> `VALIDATION_NATIVE`), not the
-standalone `melee-core-native`. A temporary trace added to a gameplay TU shows up in
-`melee-core-native` after `make native` while the validator keeps running its own
-already-linked objects, so the trace looks silent and invites a false "this code is
-never reached" conclusion. Rebuild `validator` too (and note it also embeds
-`item_projection.h`, so projection-mask edits need it as well).
+- **Shield-damage fusion.** `slippi-2025-02` diverged by 1 ULP on `shield_hp` for
+  2,033 rows. `Fighter_ProcessHit_8006D1EC` carries two unported MWCC fusions in the
+  shield-damage expression (GALE01 0x8006D2AC and 0x8006D2CC): the light-shield lerp
+  between `x2DC`/`x2E0`, and the `x284` scale over the `x288` floor; only the trailing
+  subtraction from `shield_health` stays a plain `fsubs`. Porting both made that
+  replay fully bit-exact, moved PPC from 14 to 15 passes, and left the 396-replay
+  aggregate **byte-stable with zero output drift**.
+- **Sakurai-angle ramp** (`ftCo_Damage_CalcAngle`, GALE01 0x8008D8AC) and
+  **`ftCo_CalcYScaledKnockback`** (0x800CF678): asm-verified fusions, identity at
+  current inputs, aggregate byte-stable.
 
 ## Residual investigation — the `2026-06` "missing item" family is an RNG-draw gap
 
@@ -196,71 +194,13 @@ physics, and other item lane stays exact.
 
 ## Follow-ups
 
-1. Name the missing frame-3922 RNG consumer with the Dolphin probe.
-2. Root-cause or classify the shared 1-ULP families (`speed_*_attack`, `shield_hp`).
-3. Classify the Yo-Yo `x4` native-only residual (root-caused above) with native
-   and PPC snapshots under `unrecorded-item-pool-residue`; note that a
-   classification entry can only be added once `ness.json` is in the aggregate,
-   or `test_native_validation_compares_complete_classified_replays` fails its
-   case lookup (the Pikachu packet's trap).
-4. Then wire `ness.json` into `melee_core_aggregate` with output locks and update the
-   suite-inventory test pins (396 -> 414).
-
-# Active structural packet — Yoshi
-
-## Objective
-
-Add Yoshi (internal kind FTKIND_YOSHI 14, public char id 14) to the supported domain with a
-30-replay suite. Yoshi is a full original: six chara TUs (ftYs_Init, ftYs_Guard egg-shield,
-SpecialN Egg Lay, NonMatching SpecialS Egg Roll, SpecialHi Egg Throw, SpecialLw Yoshi Bomb)
-and four article TUs (ityoshieggthrow 86, ityoshiegglay 87, ityoshistar 88, ityoshitongue =
-the eaten-item capture owner, no own kind). The victim-side ftCo_CaptureYoshi/ftCo_YoshiEgg
-TUs were already ported.
-
-## Final boundary
-
-- **Owners:** imported TUs byte-identical to the pin except ledgered hosted deltas;
-  msl_costume_matanim_end_frame (ftanim.c) owns the trackless-row published frame;
-  derive_gameplay_parts_mask.py CODE_ANCHORED owns raw parts[] spawn anchors.
-- **Data:** PlYs* (6 costumes Nr/Re/Bu/Ye/Pi/Aq + PlYsAJ + PlYsDViWaitAJ) + EfYsData.dat
-  (efAsync bank 9, LOADED: efSync 0x4CD/0x4CE consume generator 0x2328 = bank 9 id 0);
-  manifest 155 -> 165. Effects dispatch gains 0x3FF/0x406 (common model starts 5/4) and
-  0x4CD.
-- **Native DAT:** MslDatYoshiArticles = three Article slots + the swallow-victim egg
-  accessory HSD_Joint (slot 3, ftYs_SpecialN_8012CDD4); ftYoshiAttributes fully typed
-  (the xEC..x110 Egg Throw lanes carry their ftYs_DatAttrs float meaning).
-- **Retail-exactness deltas shipped (ledgered):** ftAnim_8006F3DC no-aobj fall-through
-  publishes the costume matanim end frame (the DOL dead-f1 behavior, probe-verified at
-  GALE01 0x803642C0; Yoshi is the only admitted fighter with trackless motion rows);
-  ftYs_DatAttrs +1C/+20 and guard mv +1C typed 4-byte (UNK_T host-width shifts); 26
-  MWCC fused sites ported across the six TUs and two item TUs with GALE01 addresses.
-
-## Suite state (container authoritative)
-
-- yoshi suite: native 29 pass / 1 classified / 0 fail (msl-luigi); PPC 29 pass /
-  1 classified / 0 fail (msl-arm64); the single classified entry
-  (fod-release-floor-pick, slippi-2025-02) carries byte-identical native and PPC
-  snapshots (fingerprint 7af1de179e6427a2) — the documented FoD mid-frame release
-  floor-line-pick seed plus its one downstream Egg Throw charge episode.
-- Aggregate 396 = 315 pass / 81 classified / 0 fail / 0 error with output locks
-  recorded for all 30 new replays (strictly additive; the pre-Yoshi 366 stayed
-  byte-stable through every change, re-verified three times).
-- Container pytest 44 green (1 skip). macOS native/wasm/viewer smokes pass
-  (viewer characters=17); source-check verified (196 files with local deltas).
-
-## Root-caused fixes shipped along the way (the mv pointer-width family)
-
-The tails all reduced to host-width pointer widenings inside the retail-aliased
-mv/attr views (the native STATIC_ASSERT is a no-op, so none of these could be
-caught by size checks — audit every new character's views for UNK_T/pointers):
-ftYs_DatAttrs +1C/+20 (shifted all Egg Throw angle/speed lanes by 0xC),
-ftYoshi guard mv +1C, ftCommon damage mv +C/+10 (its x14/x18..x1B stores are
-the union residue Yoshi's parry countdown consumes — probe-verified at GALE01
-0x8008DE10), the fighterthrow victim pointer (moved past the damage view's
-lanes after its high half was zeroed by the restored damage.x14 store), and the
-yoshiegg swallow-owner pointer (its shift seeded every remaining native-only
-1-ULP tail: DK @2354, Marth @3086, Falcon victim-egg @412, and the BF Falcon
-fork @6226 — all cleared by the restructure).
+1. `2025-03`'s 1-ULP knockback seed is the one residual without a named mechanism; the
+   remaining lead is `kb_applied`'s own input chain (percent/staleness/weight), since
+   the formula owners and every fusion reachable from the angle path are already
+   complete. A retail probe on the `ftColl_80079AB0` inputs would settle it.
+2. The Mr. Saturn `xDE4` lane in `51444` is a pre-existing gap the Ness suite merely
+   exposed (a Peach-pulled item), not a Ness owner; if `itDosei` states 4/5 are ever
+   given an explicit past-member carve-out, that classification can be narrowed.
 
 # Previous structural packet — `decomp-port-arm64-ppc` merge polish
 
