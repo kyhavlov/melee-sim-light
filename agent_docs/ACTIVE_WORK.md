@@ -55,6 +55,9 @@ admitted absorber, so `ftData_OnAbsorb` becomes a live table.
 
 ## Suite state (container authoritative) — IN THE AGGREGATE
 
+Superseded by "Second import" below: the suite is now 28 replays and the aggregate is
+424 = 331/93/0. The original eighteen-replay state is kept here for provenance.
+
 18 replays across all six legal stages (three each) against Captain Falcon, Falco, Fox,
 Jigglypuff, Marth, Peach, Pikachu, Sheik, and a Ness mirror. All three Pokemon Stadium
 entries are event-verified frozen (each declares the 0x41 stadium_transformation
@@ -192,12 +195,102 @@ export lane -- `it_802BF800` reads it during the swing -- so retail genuinely
 consumes uninitialized memory here; in these three replays every fighter,
 physics, and other item lane stays exact.
 
+## Second import — twelve more captures, ten admitted (suite 18 -> 28)
+
+A second Ness pool (`ness_replays_2.zip`) was screened and integrated. All twelve
+candidates passed admission: singles, two human ports, Ness present, all six legal
+stages, versions 3.18.0/3.19.0, populated raw analog pad lanes on every capture (no
+3.18-layout re-wraps), and both Pokemon Stadium entries event-verified frozen (0x41
+declared, zero events over the full game). No SHA overlapped the existing eighteen.
+
+**Ten are in the gate.** The ness suite is **28 replays: 16 pass / 12 classified /
+0 fail** on native, and `melee_core_aggregate` is **424 = 331 pass / 93 classified /
+0 fail / 0 error** with the ten output locks **strictly additive (10 added, 0 changed,
+0 removed)** and the pre-existing 414 byte-stable. Four of the ten are bit-exact on
+first contact; the other six are new rows in two already-named families.
+
+### The six new residuals
+
+- `2025-07`, `2025-11_20251116`, `66686`, `auto-falco-2025-12` --
+  **`unrecorded-item-pool-residue`**, the established Yo-Yo `x4` lane. The diverging
+  article is item type 102 on every mismatch row and only `item.misc1` moves. **All
+  four are bit-exact on PPC**, which is the direct evidence that the lane is 64-bit
+  layout residue rather than a gameplay fork. (In `2025-11_20251116` the Yo-Yo is item
+  index 1 until a second article despawns at frame 8913 and index 0 afterwards, so both
+  reported lanes are the same article.)
+- `50321` -- same family, but this replay's first Yo-Yo spawns at frame 364, before any
+  other article has occupied the pool slot. The hosted pool is zero there, so `misc1`
+  reads 0 against the console's 82: the residue retail exports is pre-match heap content
+  no hosted run can re-derive. PPC narrows it to that first spawn alone (104 rows ending
+  at frame 467, leaving an 11,915-frame exact suffix) because its layout matches retail
+  for every later Yo-Yo, so this entry carries its own PPC snapshot.
+- `2025-02` -- **`dolphin-ulp-motion-profile`**. Peach's turnip (item type 99, id 132)
+  is dropped at frame 23119 with its release y one ULP high (0x42006f2d against
+  0x42006f2c). Nothing else diverges -- pos_x, both velocity lanes, timer, damage and
+  every fighter lane stay exact -- so the constant-gravity fall carries the offset
+  unchanged until the turnip crosses the blast zone and despawns at 23187, leaving a
+  140-frame exact suffix. **Both backends produce the identical snapshot** (same first
+  row, 69 rows, `f1639cfe9ff96f60`, same field digest), so it is a shared rounding step
+  against Dolphin, not a host FP profile or layout artifact.
+
+## OPEN DEFECT — the grab-timer standings term (two captures held out)
+
+`49422_Game_20250130T192133` and `53362_Game_20250504T004716` (both Captain Falcon
+grabbing Ness) are **deliberately not in the suite**: they fork on a real simulator
+defect, and classifying a defect would launder it into the gate. Both files are
+reproducible from `ness_replays_2.zip`. The chain is fully traced:
+
+- Ness is held in `CaptureWaitHi`; at the fork frame our sim breaks the grab
+  (grabber `CatchWait` 216 -> `CatchCut` 218, victim 224 -> `CaptureCut` 229) while
+  retail holds three more frames and throws. Both replays land on the identical wrong
+  hold geometry -- pair separation 9.758 against retail's 7.868 -- because
+  `fn_800DAD18` stops re-anchoring the victim once the capture ends.
+- The trigger is `ftCo_CaptureWaitHi_Anim`'s `fp->grab_timer <= 0` gate. Our timer
+  starts at 60 where retail's must be at least 11 higher.
+- The initial value is
+  `pct*x368 + (x358*(x35C - handicap) + x354) + x360*(x364 - (Player_80033BB8 + 1))`.
+  Ness's percent is genuinely 0 at both grabs (verified against the recordings) and the
+  handicap term is zero, so the **only** lever is the standings term: rank 0 gives 75,
+  rank 1 gives 60, and +15 is exactly what both replays need.
+- `Player_80033BB8` -> `gm_8016C5C0` -> `MatchPlayerData::is_big_loser`. Our port
+  recomputes that rank live from live Player statistics; retail reads it out of the
+  scene-guarded `lbl_8046B6A0.x24C` block, which `gm_8016C5C0` repopulates through
+  `gm_80166378` only when the stored guard word differs from `gm_801A4BA8()`.
+- The score formula itself is **not** the bug. The decomp writes `v = (u8)(...)` in
+  `fn_8016588C`'s default branch, but GALE01 0x80165A48..0x80165A78 loads x20/x24 with
+  `lwz` and applies the xC self-destruct rule with no narrowing, so the comparison is
+  plain signed and our `msl_match_standings_score` already matches it. That `(u8)` cast
+  is a decompilation artifact.
+
+**A freeze-at-first-query model was implemented and rejected.** It makes both replays
+bit-exact (49422 goes fully exact over all 12,422 frames; 53362 drops to Yo-Yo residue
+only) but **regresses six pre-existing replays** -- `marth/WellWornSmallGoshawk`,
+`marth/VigorousRelievedLlama`, `doubles_recent/Game_20260704T012353`,
+`doubles_recent/Game_20260704T005918`, `doubles_recent/Game_20260625T033446`,
+`icies/dl-marth-2025-04` -- so the block demonstrably refreshes mid-match. Live and
+frozen are each right somewhere and the two cannot be reconciled by query cadence:
+`53362` needs the value frozen from its only earlier query at frame 622, while
+`icies/dl-marth-2025-04` needs a refresh between its queries at 1347 and 2609. The
+refresh must be event-driven by something not yet identified, and naming it needs a
+retail probe of `lbl_8046B6A0.x24C.x0` / `Player_80033BB8` rather than more static
+reading. The change is reverted; the tree carries live standings.
+
+**Trap worth remembering:** `docker cp` preserves the source mtime, so copying an
+edited file into the container can leave it *older* than the existing object file and
+`make` will not rebuild. A "control test" run that way silently measures the previous
+binary -- it produced a false negative here that briefly inverted the conclusion.
+`touch` the copied sources before `make`.
+
 ## Follow-ups
 
 1. `2025-03`'s 1-ULP knockback seed is the one residual without a named mechanism; the
    remaining lead is `kb_applied`'s own input chain (percent/staleness/weight), since
    the formula owners and every fusion reachable from the angle path are already
    complete. A retail probe on the `ftColl_80079AB0` inputs would settle it.
+2. The grab-timer standings defect above. Highest-value next probe: capture retail's
+   `is_big_loser` for both slots across `49422` frames 900..6200 and
+   `icies/dl-marth-2025-04` frames 1300..2650, which discriminates the refresh cadence
+   directly. Re-admitting the two held-out captures is the acceptance test.
 2. The Mr. Saturn `xDE4` lane in `51444` is a pre-existing gap the Ness suite merely
    exposed (a Peach-pulled item), not a Ness owner; if `itDosei` states 4/5 are ever
    given an explicit past-member carve-out, that classification can be narrowed.

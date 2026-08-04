@@ -5017,6 +5017,194 @@
      "strict_suffix_frames": 1759
     }
    }
+  },
+  {
+   "replay": "replays/validation/ness/2025-07_Game_20250718T215851.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
+   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive its sampled item.misc1 lane is whatever the shared item-pool slot held from its previous occupant. The diverging article is item type 102 (itnessyoyo) on every mismatch row here, and only that one lane moves: all fighter, physics, shield and remaining item lanes stay exact and the episode self-heals when the Yo-Yo despawns. The preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose item-variable layout matches retail, is bit-exact on this replay, which is the direct evidence that the lane is layout residue and not a gameplay divergence.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
+    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 8740,
+     "first_mismatch_frame": 8618,
+     "first_render_visibility_mismatch_frame": null,
+     "frames": 15453,
+     "last_mismatch_frame": 12386,
+     "matched_frames": 15337,
+     "mismatch_count": 116,
+     "mismatch_fields_digest": "b1a468982715d134de5594356a4a5b334582396f8549727b61313074e426e022",
+     "mismatch_fingerprint": "d82c8496ef1872c7",
+     "mismatched_frames": 116,
+     "render_visibility_mismatch_count": 0,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 2944
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/ness/2025-11_Game_20251116T122343.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
+   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive its sampled item.misc1 lane is whatever the shared item-pool slot held from its previous occupant. The diverging article is item type 102 (itnessyoyo) on every mismatch row here, and only that one lane moves: all fighter, physics, shield and remaining item lanes stay exact and the episode self-heals when the Yo-Yo despawns. The preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose item-variable layout matches retail, is bit-exact on this replay, which is the direct evidence that the lane is layout residue and not a gameplay divergence. The Yo-Yo is item index 1 while a second article is live and index 0 after that article despawns at frame 8913, so both reported lanes are the same Yo-Yo.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
+    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 9007,
+     "first_mismatch_frame": 8885,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 10494,
+     "last_mismatch_frame": 8936,
+     "matched_frames": 10442,
+     "mismatch_count": 52,
+     "mismatch_fields_digest": "3ab403a2b00e84480a19707565466fbe57136736ab6977eb1d45dca3d5350dd6",
+     "mismatch_fingerprint": "0b6c533a6e28c765",
+     "mismatched_frames": 52,
+     "render_visibility_mismatch_count": 3,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 1435
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/ness/66686_Game_20250726T002501.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
+   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive its sampled item.misc1 lane is whatever the shared item-pool slot held from its previous occupant. The diverging article is item type 102 (itnessyoyo) on every mismatch row here, and only that one lane moves: all fighter, physics, shield and remaining item lanes stay exact and the episode self-heals when the Yo-Yo despawns. The preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose item-variable layout matches retail, is bit-exact on this replay, which is the direct evidence that the lane is layout residue and not a gameplay divergence.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
+    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 6441,
+     "first_mismatch_frame": 6319,
+     "first_render_visibility_mismatch_frame": 3334,
+     "frames": 12505,
+     "last_mismatch_frame": 6370,
+     "matched_frames": 12453,
+     "mismatch_count": 52,
+     "mismatch_fields_digest": "c42d4794c6f4702088b67f205f6b00e70140a3e2124e501698c08a48de7232cd",
+     "mismatch_fingerprint": "950bb8b5ab8445b5",
+     "mismatched_frames": 52,
+     "render_visibility_mismatch_count": 10,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 6012
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/ness/auto-falco-2025-12_Game_20251203T232441.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
+   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive its sampled item.misc1 lane is whatever the shared item-pool slot held from its previous occupant. The diverging article is item type 102 (itnessyoyo) on every mismatch row here, and only that one lane moves: all fighter, physics, shield and remaining item lanes stay exact and the episode self-heals when the Yo-Yo despawns. The preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose item-variable layout matches retail, is bit-exact on this replay, which is the direct evidence that the lane is layout residue and not a gameplay divergence.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
+    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 2124,
+     "first_mismatch_frame": 2002,
+     "first_render_visibility_mismatch_frame": null,
+     "frames": 11360,
+     "last_mismatch_frame": 2063,
+     "matched_frames": 11298,
+     "mismatch_count": 62,
+     "mismatch_fields_digest": "20eea07d122661c4cb7146d3d82681a9bb2fe5722290c07d99c2b30a45573738",
+     "mismatch_fingerprint": "6b4cab8063fea92e",
+     "mismatched_frames": 62,
+     "render_visibility_mismatch_count": 0,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 9174
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/ness/50321_Game_20250212T214328.slpz",
+   "id": "unrecorded-item-pool-residue",
+   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
+   "rationale": "Same never-written itNessYoyo_ItemVars.x4 lane as the rest of this family -- the diverging article is item type 102 on every mismatch row -- but this replay's very first Yo-Yo spawns at frame 364, before any other article has occupied the pool slot. The hosted pool is zero-initialized there, so the sampled item.misc1 reads 0 against the console's 82: the residue retail exports is pre-match heap content that no hosted run can re-derive. PPC narrows the episode to that first spawn alone (104 rows ending at frame 467 instead of 351 rows running to 11621, leaving an 11,915-frame exact suffix) because its item-variable layout matches retail for every later Yo-Yo; the surviving PPC rows are exactly the un-derivable pre-match bytes. All fighter, physics and remaining item lanes are exact on both backends.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
+    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
+    "src/runtime/scalar.c::item_var_source_byte"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 486,
+     "first_mismatch_frame": 364,
+     "first_render_visibility_mismatch_frame": 2206,
+     "frames": 12505,
+     "last_mismatch_frame": 11621,
+     "matched_frames": 12154,
+     "mismatch_count": 351,
+     "mismatch_fields_digest": "33a47bff4d8cf36a26e9f4147b4af7d16014ef461b021b3475708c5b1a1602a4",
+     "mismatch_fingerprint": "e7ac464b30e4eaa7",
+     "mismatched_frames": 351,
+     "render_visibility_mismatch_count": 13,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 761
+    },
+    "ppc": {
+     "exact_prefix_frames": 486,
+     "first_mismatch_frame": 364,
+     "first_render_visibility_mismatch_frame": 2206,
+     "frames": 12505,
+     "last_mismatch_frame": 467,
+     "matched_frames": 12401,
+     "mismatch_count": 104,
+     "mismatch_fields_digest": "090c310e4125849493821febb22aa2f8cb94083d0b796f003edb40d8ebd887c5",
+     "mismatch_fingerprint": "51a1bf69a5edb9b5",
+     "mismatched_frames": 104,
+     "render_visibility_mismatch_count": 13,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 11915
+    }
+   }
+  },
+  {
+   "replay": "replays/validation/ness/2025-02_Game_20250223T112902.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "Peach turnip release position feeding the item fall integrator",
+   "rationale": "One 1-ULP seed on a single item lane. Peach's turnip (item type 99, id 132) is dropped out of the carry state at frame 23119 and its release y is set one ULP high -- 32.1085701 (0x42006f2d) against 32.1085663 (0x42006f2c). Nothing else diverges: pos_x, both velocity lanes, the timer, damage and every fighter lane stay exact, so the offset is carried unchanged by the constant-gravity fall (vel_y ramps -0.204 per frame to the -1.836 terminal) until the turnip crosses the blast zone and despawns at frame 23187, which ends the episode and leaves a 140-frame exact suffix. Both backends produce the identical snapshot -- same first row, same 69 rows, same f1639cfe9ff96f60 fingerprint and same field digest -- so this is a shared rounding step against Dolphin rather than a host floating-point profile difference or a 64-bit layout artifact.",
+   "sources": [
+    "refs/melee/src/melee/it/item.c",
+    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 23241,
+     "first_mismatch_frame": 23119,
+     "first_render_visibility_mismatch_frame": null,
+     "frames": 23450,
+     "last_mismatch_frame": 23187,
+     "matched_frames": 23381,
+     "mismatch_count": 69,
+     "mismatch_fields_digest": "e8b7c055f39ed30558929676c755a853c5504fc5f64412f9ad08dbc90523d616",
+     "mismatch_fingerprint": "f1639cfe9ff96f60",
+     "mismatched_frames": 69,
+     "render_visibility_mismatch_count": 0,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 140
+    },
+    "ppc": "native"
+   }
   }
  ]
 }

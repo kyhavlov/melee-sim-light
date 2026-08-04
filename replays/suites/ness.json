@@ -1,6 +1,6 @@
 {
   "name": "ness",
-  "notes": "Ness validation suite: 18 singles across all six legal stages (three each) against Captain Falcon, Falco, Fox, Jigglypuff, Marth, Peach, Pikachu, Sheik, and a Ness mirror; 2025-2026 Slippi and mainline captures. All three Pokemon Stadium entries are event-verified frozen: each declares the stadium_transformation command (spec 0x41, added 3.18.0) and records zero events over the full game, so the frozen form is proven for these 3.18.0 recorders (the game-start is_frozen_ps flag is only trustworthy at 3.19.0+ and is not consulted). Every capture carries populated raw analog pad lanes, so none is a 3.18-layout re-wrap.",
+  "notes": "Ness validation suite: 28 singles across all six legal stages against Captain Falcon, Falco, Fox, Jigglypuff, Marth, Peach, Pikachu, Sheik, and a Ness mirror; 2025-2026 Slippi and mainline captures. All four Pokemon Stadium entries are event-verified frozen: each declares the stadium_transformation command (spec 0x41, added 3.18.0) and records zero events over the full game, so the frozen form is proven for these 3.18.0+ recorders (the game-start is_frozen_ps flag is only trustworthy at 3.19.0+ and is not consulted). Every capture carries populated raw analog pad lanes, so none is a 3.18-layout re-wrap. Two further Captain Falcon/Ness captures from the same import (49422_Game_20250130T192133 and 53362_Game_20250504T004716) are held out of the gate: both fork on the grab-timer standings term documented in agent_docs/ACTIVE_WORK.md, which is an open simulator defect rather than a recording artifact.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -13,6 +13,18 @@
       "stage_id": 8,
       "characters": {
         "1": "Captain Falcon",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/2025-02_Game_20250223T112902.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Peach",
         "2": "Ness"
       }
     },
@@ -65,6 +77,42 @@
       }
     },
     {
+      "replay": "replays/validation/ness/2025-07_Game_20250718T215851.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Ness",
+        "2": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/2025-11_Game_20251109T132039.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Ness",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/2025-11_Game_20251116T122343.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Ness",
+        "2": "Captain Falcon"
+      }
+    },
+    {
       "replay": "replays/validation/ness/2025-11_Game_20251124T141214.slpz",
       "ports": [
         1,
@@ -101,6 +149,18 @@
       }
     },
     {
+      "replay": "replays/validation/ness/420_Game_20250803T054852.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Falco",
+        "2": "Ness"
+      }
+    },
+    {
       "replay": "replays/validation/ness/49437_Game_20250130T204304.slpz",
       "ports": [
         1,
@@ -110,6 +170,18 @@
       "characters": {
         "1": "Ness",
         "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/50321_Game_20250212T214328.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Ness",
+        "2": "Fox"
       }
     },
     {
@@ -173,6 +245,18 @@
       }
     },
     {
+      "replay": "replays/validation/ness/54297_Game_20250528T075855.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Marth",
+        "2": "Ness"
+      }
+    },
+    {
       "replay": "replays/validation/ness/54459_Game_20250528T201050.slpz",
       "ports": [
         1,
@@ -209,6 +293,30 @@
       }
     },
     {
+      "replay": "replays/validation/ness/66686_Game_20250726T002501.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Ness",
+        "2": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/auto-falco-2025-12_Game_20251203T232441.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Ness",
+        "2": "Falco"
+      }
+    },
+    {
       "replay": "replays/validation/ness/slippi-2025-02_Game_20250226T225241.slpz",
       "ports": [
         1,
@@ -218,6 +326,18 @@
       "characters": {
         "1": "Ness",
         "2": "Pikachu"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/slippi-2025-11_Game_20251129T095409.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Ness"
       }
     }
   ]
