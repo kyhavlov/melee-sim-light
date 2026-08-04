@@ -112,7 +112,7 @@ above: **0 pass / 60 fail / 0 error**, all 613,274 frames run end to end; prefix
   the thrown-transition sign write. Suite floor moved from 87 to ~1,130 matched frames;
   still 0 pass / 60 fail / 0 error. Dominant remaining forks: the hookshot latch running
   one frame late (item.state 3-vs-1 plus the action 361-vs-360 zair catch rows — the
-  lerp port did not close it, so the chain-link census at spawn is the open lead) and
+  lerp port did not close it, so the census is now RULED OUT — a spawn trace shows x2C = 15 airborne / 22 for the 0x168 zair, and hand-evaluating retail's float chain gives the identical counts; the remaining lead is the per-frame pinning walk in it_802A4BFC: with identical census and head speed, retail pins the final link one frame earlier, so the next suspects are the head-velocity provenance (it_802A78B8's fighter-computed launch vector) and it_802A40D0's collision step) and
   the boomerang flight/turn fork (xDD8 spin counters drift after the turn).
 
 - 2026-08-04 — `open`: TU import + full registry/admission wiring + data extraction +
