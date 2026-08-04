@@ -3129,13 +3129,18 @@ void Fighter_ProcessHit_8006D1EC(Fighter_GObj* gobj)
         }
 
         if (fp->x221A_b7) {
-            fp->shield_health -=
-                (p_ftCommonData->x284 *
-                 ((fp->x19A0_shieldDamageTaken) *
-                  (1.0f - ((fp->lightshield_amount *
-                            (p_ftCommonData->x2E0 - p_ftCommonData->x2DC)) +
-                           p_ftCommonData->x2DC)))) +
-                p_ftCommonData->x288;
+            // GALE01 0x8006D2AC/0x8006D2CC: MWCC contracts both steps of the
+            // shield-damage scale -- the light-shield lerp between x2DC and
+            // x2E0, and the x284 scale over the x288 floor. Only the trailing
+            // subtraction from shield_health stays a plain fsubs.
+            fp->shield_health -= __fmadds(
+                p_ftCommonData->x284,
+                fp->x19A0_shieldDamageTaken *
+                    (1.0f -
+                     __fmadds(fp->lightshield_amount,
+                              p_ftCommonData->x2E0 - p_ftCommonData->x2DC,
+                              p_ftCommonData->x2DC)),
+                p_ftCommonData->x288);
             if (fp->shield_health < 0.0f) {
                 bool3 = 1;
                 fp->shield_health = p_ftCommonData->x280_unkShieldHealth;
