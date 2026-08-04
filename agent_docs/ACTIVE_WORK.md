@@ -90,9 +90,57 @@ already-linked objects, so the trace looks silent and invites a false "this code
 never reached" conclusion. Rebuild `validator` too (and note it also embeds
 `item_projection.h`, so projection-mask edits need it as well).
 
+## Residual investigation — the `2026-06` "missing item" family is an RNG-draw gap
+
+Root-caused to a single missing RNG draw; the retail draw sequence is fully pinned.
+
+The diverging item is not a Ness article at all: it is a **Sheik thrown needle**
+(kind 79). Slippi restores the RNG seed every frame in this online capture (the
+recorded seed steps by exactly 0x10000 per frame), and `frame_pre_random_seed`
+is a compared lane that matches for the whole replay, so each frame's draw
+stream starts identically and the divergence is strictly intra-frame.
+
+At frame 3922 (seed 0x0FCDD4E3) the needle hits Ness and retail runs
+`it_2725_Logic109_DmgDealt`, whose `HSD_Randi(3)` decides whether the needle
+survives into state 4 or is destroyed. Walking the LCG forward from that seed
+pins retail's sequence exactly, confirmed by three independent observables in
+the replay's own item stream:
+
+- draw 2 `Randi(3)` = 0 -> the needle survives,
+- draw 4 `Randi(8)` = 5 -> `ABS(it_803F7020[5])` = 2.5 = retail's recorded vel_y,
+- draws 5..10 `itSeakNeedleThrown_SetupBounce` -> `it_803F7000[5]` = +1.0 =
+  retail's post-hitlag vel_x, and `it_803F7040[4]` = -0.2 = its recorded vel_y
+  step.
+
+Our frame 3922 makes five draws: `[0]` the 0x3EC hit effect's `HSD_Randf`,
+`[1]` the needle's `Randi(3)` (= 2, so we destroy it), and `[2..4]` the three
+`it_80278800_rand_vec` draws of the destruction effect that only happens
+*because* we destroyed it. So **we are exactly one draw short before the
+needle's `Randi(3)`** (retail has two consumers there, we have one), plus one
+more between `Randi(3)` and `Randi(8)` that we never reach.
+
+Ruled out along the way: the effect-generator RNG model is faithful — common
+model 8's recorded generator 267 has `kind = 0x400100`, so the `kind & 0x100`
+branch in `hsd_8039F05C` skips the draw in retail exactly as our predicate
+does, and generator 63 has `random < 0`. The control frame 3919 is a needle
+hit that both sims destroy with the identical five-draw sequence, so the
+needle path itself is right; only frame 3922 carries the extra retail consumer.
+Ness's `ftNs_Init_OnDamage` is not the source either: none of its four
+articles (yo-yo, PK Flash, PK Thunder, bat) exists at that frame.
+
+Next step is the Dolphin engine-dump RNG probe ([[msl-dolphin-probe-workflow]])
+to name the missing consumer; everything else about the episode is settled.
+
+**Instrumentation trap (cost me two false conclusions):** the native backend
+runs `melee-core-native` as a `--server` subprocess whose `stderr` is
+`subprocess.PIPE` and never drained, so every temporary `fprintf` trace is
+silently swallowed and the traced code looks unreachable. Set `stderr=None` in
+`_NativeRunnerPool` while debugging. (`make validator` is separately required
+for `item_projection.h` changes.)
+
 ## Follow-ups
 
-1. Root-cause the `2026-06` missing article spawn (non-ULP, both backends).
+1. Name the missing frame-3922 RNG consumer with the Dolphin probe.
 2. Root-cause or classify the shared 1-ULP families (`speed_*_attack`, `shield_hp`).
 3. Decide the Yo-Yo `x4` native-only residual: fix the host-width path or classify it
    with PPC snapshots per the icies/Samus precedent.
