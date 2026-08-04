@@ -154,11 +154,14 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // refs/melee/src/melee/it/items/{itnesspkfire.c,itnesspkfirepillar.c}
         return 0;
     case MSL_CORE_ITEM_KIND_NESS_PKFLASH:
-        // xDD4/xDD8 are the charge counter and charge scale; xDE0 is the
-        // owner pointer and the struct ends at xDE4, so 0x17/0x1B are
-        // past-member residue.
+        // Only xDD8 (the charge scale) is written by ported code. No owner
+        // writes the leading xDD4 word at all -- neither the constructor
+        // it_802AAA80 nor any motion callback -- so its sampled byte is
+        // fixed-pool residue, and the struct ends at xDE4, leaving
+        // 0x17/0x1B past-member residue too.
         // refs/melee/src/melee/it/itPKFlash.h::itPKFlush_ItemVars
-        return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC1;
+        // refs/melee/src/melee/it/items/itnesspkflash.c
+        return MSL_CORE_ITEM_MISC1;
     case MSL_CORE_ITEM_KIND_NESS_PKFLASH_EXPLODE:
         // xDD4/xDD8 are the explosion timers; xDDC is the owner pointer and
         // nothing is declared past it.
