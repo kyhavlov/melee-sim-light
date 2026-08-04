@@ -1,0 +1,224 @@
+{
+  "name": "ness",
+  "notes": "Ness validation suite: 18 singles across all six legal stages (three each) against Captain Falcon, Falco, Fox, Jigglypuff, Marth, Peach, Pikachu, Sheik, and a Ness mirror; 2025-2026 Slippi and mainline captures. All three Pokemon Stadium entries are event-verified frozen: each declares the stadium_transformation command (spec 0x41, added 3.18.0) and records zero events over the full game, so the frozen form is proven for these 3.18.0 recorders (the game-start is_frozen_ps flag is only trustworthy at 3.19.0+ and is not consulted). Every capture carries populated raw analog pad lanes, so none is a 3.18-layout re-wrap.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/ness/2025-01_Game_20250131T175344.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/2025-03_Game_20250304T191933.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Ness",
+        "2": "Peach"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/2025-03_Game_20250324T205922.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Falco",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/2025-05_Game_20250531T124202.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Ness",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/2025-06_Game_20250611T131141.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Ness",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/2025-11_Game_20251124T141214.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Sheik",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/2026-04_Game_20260423T231823.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Ness",
+        "2": "Peach"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/2026-06_Game_20260616T195545.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Sheik",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/49437_Game_20250130T204304.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Ness",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/51444_Game_20250301T143614.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Peach",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/51616_Game_20250305T163913.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Ness",
+        "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/52426_Game_20250330T134109.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Marth",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/52757_Game_20250415T000609.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/53870_Game_20250516T122158.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Ness",
+        "2": "Captain Falcon"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/54459_Game_20250528T201050.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Sheik",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/58685_Game_20250313T002950.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/58720_Game_20250202T001254.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Ness",
+        "2": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/slippi-2025-02_Game_20250226T225241.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Ness",
+        "2": "Pikachu"
+      }
+    }
+  ]
+}
