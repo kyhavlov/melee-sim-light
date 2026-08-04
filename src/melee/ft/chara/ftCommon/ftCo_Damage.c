@@ -89,11 +89,14 @@ float ftCo_Damage_CalcAngle(Fighter* fp, float f)
     } else if (f < p_ftCommonData->x14C) {
         return 0;
     } else {
+        // GALE01 0x8008D8AC: MWCC contracts the Sakurai-angle ramp into
+        // fmadds; the trailing degree conversion stays a plain fmuls.
         float result =
-            deg_to_rad * (p_ftCommonData->x148 *
-                              ((f - p_ftCommonData->x14C) /
-                               (p_ftCommonData->x150 - p_ftCommonData->x14C)) +
-                          1);
+            deg_to_rad *
+            __fmadds(p_ftCommonData->x148,
+                     (f - p_ftCommonData->x14C) /
+                         (p_ftCommonData->x150 - p_ftCommonData->x14C),
+                     1);
         if (result > deg_to_rad * p_ftCommonData->x148) {
             result = deg_to_rad * p_ftCommonData->x148;
         }
