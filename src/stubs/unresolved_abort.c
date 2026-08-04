@@ -52,6 +52,8 @@ ABORT_STUB(ftKb_SpecialNFx_800FDEB4)
 ABORT_STUB(ftKb_SpecialNIc_80108CE8)
 ABORT_STUB(ftKb_SpecialNSk_80105FF0)
 ABORT_STUB(ftKb_SpecialNSk_80106020)
+ABORT_STUB(ftKb_SpecialNNs_800FEC78)
+ABORT_STUB(ftKb_SpecialNNs_800FECBC)
 ABORT_STUB(ftKb_SpecialNSs_800FCC14)
 ABORT_STUB(ftKb_SpecialNSs_800FCC6C)
 ABORT_STUB(ftKb_SpecialNSs_800FCCBC)
@@ -62,8 +64,6 @@ ABORT_STUB(ftKb_SpecialN_800F5D04)
 ABORT_STUB(ftLk_AttackAir_800EB3BC)
 ABORT_STUB(ftLk_AttackAir_Enter)
 ABORT_STUB(ftMh_MS_341_8014FE58)
-ABORT_STUB(ftNs_AttackLw4_Enter)
-ABORT_STUB(ftNs_AttackS4_Enter)
 
 // Held/common items and non-Fox articles are disabled by the current match
 // rules. These source branches remain loud if that domain assumption changes.

@@ -1084,14 +1084,15 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
     int64_t player_raw = rows->player_raw[i][0];
     uint8_t character = get_u8(&player->character, player_raw);
     uint8_t stocks = replay->start_stocks[i];
-    if (character != 1 && character != 2 && character != 3 && character != 7 && character != 9 &&
-        character != 10 && character != 12 && character != 13 && character != 14 &&
-        character != 15 && character != 17 && character != 18 && character != 19 &&
-        character != 21 && character != 22 && character != 25 && character != 0) {
+    if (character != 1 && character != 2 && character != 3 && character != 7 && character != 8 &&
+        character != 9 && character != 10 && character != 12 && character != 13 &&
+        character != 14 && character != 15 && character != 17 && character != 18 &&
+        character != 19 && character != 21 && character != 22 && character != 25 &&
+        character != 0) {
       snprintf(error, error_size,
                "Melee core requires Mario, Fox, Captain Falcon, Donkey Kong, Ganondorf, "
-               "Sheik, Peach, Ice Climbers, Pikachu, Samus, Yoshi, Jigglypuff, Luigi, Marth, "
-               "Zelda, Dr. Mario, or Falco players");
+               "Sheik, Peach, Ice Climbers, Pikachu, Samus, Ness, Yoshi, Jigglypuff, Luigi, "
+               "Marth, Zelda, Dr. Mario, or Falco players");
       return -1;
     }
     // Ice Climbers leader post rows carry internal kind 10 (Popo) and the

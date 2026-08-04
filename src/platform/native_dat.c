@@ -920,6 +920,7 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataGanon") == 0 ||
         strcmp(symbol, "ftDataPikachu") == 0 ||
         strcmp(symbol, "ftDataYoshi") == 0 ||
+        strcmp(symbol, "ftDataNess") == 0 ||
         strcmp(symbol, "ftDataMario") == 0 ||
         strcmp(symbol, "ftDataDrmario") == 0 ||
         strcmp(symbol, "ftDataMars") == 0 ||
@@ -1287,6 +1288,7 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_ICECLIMBER,
     MSL_FIGHTER_ARTICLES_PIKACHU,
     MSL_FIGHTER_ARTICLES_YOSHI,
+    MSL_FIGHTER_ARTICLES_NESS,
     MSL_FIGHTER_AUX_PURIN_PARTS,
 } MslFighterArticleProfile;
 
@@ -1298,7 +1300,7 @@ static ftData* translate_fighter_public(
     enum {
         FT_DATA_X48_ITEMS_SOURCE_OFFSET = 0x48,
         ARTICLE_SPECIAL_ATTRS_SOURCE_OFFSET = 0x04,
-        MAX_REACHED_ARTICLE_COUNT = 5,
+        MAX_REACHED_ARTICLE_COUNT = 11,
     };
     const MslDatType* article_list_type = NULL;
     const MslDatType* attr_types[MAX_REACHED_ARTICLE_COUNT] = { NULL };
@@ -1479,6 +1481,30 @@ static ftData* translate_fighter_public(
         attr_types[0] = msl_dat_root_itYoshiEggThrowAttributes;
         attr_types[1] = msl_dat_root_itYoshiEggThrowAttributes;
         break;
+    case MSL_FIGHTER_ARTICLES_NESS:
+        // PlNs.dat's x48_items carries the eleven articles ftNs_Init_OnLoad
+        // registers: [0] PK Fire, [1] PK Fire pillar, [2] PK Flash charge,
+        // [3] PK Thunder ball, [4..7] the four PK Thunder trail segments,
+        // [8] PK Flash explosion, [9] the baseball bat, and [10] the Yo-Yo.
+        // The trail segments and the bat read no special attributes; PK Fire
+        // shares the pillar's two-float attribute shape (it_802AA1D8 and the
+        // Logic23 spawn hooks read x0/x4 from its own article).
+        // refs/melee/src/melee/ft/chara/ftNess/ftNs_Init.c
+        // refs/melee/src/melee/it/items/{itnesspkfire.c,itnesspkfirepillar.c,
+        //   itnesspkflash.c,itnesspkflashexplode.c,itnesspkthunderball.c,
+        //   itnesspkthundertrail.c,itnessbat.c,itnessyoyo.c}
+        article_list_type = msl_dat_root_MslDatNessArticles;
+        article_count = 11;
+        for (i = 0; i < article_count; ++i) {
+            indices[i] = (uint8_t) i;
+        }
+        attr_types[0] = msl_dat_root_itNessPKFirepillarAttributes;
+        attr_types[1] = msl_dat_root_itNessPKFirepillarAttributes;
+        attr_types[2] = msl_dat_root_itFlashAttributes;
+        attr_types[3] = msl_dat_root_itPKThunderAttributes;
+        attr_types[8] = msl_dat_root_itFlashExplAttributes;
+        attr_types[10] = msl_dat_root_itYoyoAttributes;
+        break;
     case MSL_FIGHTER_AUX_PURIN_PARTS:
         // x48_items is not an article table for Purin. Its second pointer owns
         // the costume FtPartsDesc consumed by ftPr_Init_8013C360.
@@ -1649,6 +1675,10 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftYoshiAttributes,
                                           314, MSL_FIGHTER_ARTICLES_YOSHI);
+    } else if (strcmp(symbol, "ftDataNess") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftNessAttributes, 326,
+                                          MSL_FIGHTER_ARTICLES_NESS);
     } else if (strcmp(symbol, "ftDataLuigi") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftLuigiAttributes, 312,

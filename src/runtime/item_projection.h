@@ -35,6 +35,17 @@ enum {
     MSL_CORE_ITEM_KIND_PIKACHU_THUNDER = 81,
     MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_GROUND = 89,
     MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_AIR = 90,
+    MSL_CORE_ITEM_KIND_NESS_PKFIRE = 66,
+    MSL_CORE_ITEM_KIND_NESS_PKFIRE_PILLAR = 67,
+    MSL_CORE_ITEM_KIND_NESS_PKFLASH = 68,
+    MSL_CORE_ITEM_KIND_NESS_PKTHUNDER = 69,
+    MSL_CORE_ITEM_KIND_NESS_PKTHUNDER_TRAIL1 = 70,
+    MSL_CORE_ITEM_KIND_NESS_PKTHUNDER_TRAIL2 = 71,
+    MSL_CORE_ITEM_KIND_NESS_PKTHUNDER_TRAIL3 = 72,
+    MSL_CORE_ITEM_KIND_NESS_PKTHUNDER_TRAIL4 = 73,
+    MSL_CORE_ITEM_KIND_NESS_PKFLASH_EXPLODE = 78,
+    MSL_CORE_ITEM_KIND_NESS_BAT = 101,
+    MSL_CORE_ITEM_KIND_NESS_YOYO = 102,
     MSL_CORE_ITEM_KIND_YOSHI_EGG_THROW = 86,
     MSL_CORE_ITEM_KIND_YOSHI_EGG_LAY = 87,
     MSL_CORE_ITEM_KIND_YOSHI_STAR = 88,
@@ -136,6 +147,47 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // velocity vector written by it_802B3F88 on every air entry.
         // refs/melee/src/melee/it/itCharItems.h::itPikachutJoltAir_ItemVars
         return MSL_CORE_ITEM_MISC2 | MSL_CORE_ITEM_MISC3;
+    case MSL_CORE_ITEM_KIND_NESS_PKFIRE:
+    case MSL_CORE_ITEM_KIND_NESS_PKFIRE_PILLAR:
+        // Neither PK Fire article declares an item-variable payload; every
+        // sampled misc lane is fixed-pool residue.
+        // refs/melee/src/melee/it/items/{itnesspkfire.c,itnesspkfirepillar.c}
+        return 0;
+    case MSL_CORE_ITEM_KIND_NESS_PKFLASH:
+        // xDD4/xDD8 are the charge counter and charge scale; xDE0 is the
+        // owner pointer and the struct ends at xDE4, so 0x17/0x1B are
+        // past-member residue.
+        // refs/melee/src/melee/it/itPKFlash.h::itPKFlush_ItemVars
+        return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC1;
+    case MSL_CORE_ITEM_KIND_NESS_PKFLASH_EXPLODE:
+        // xDD4/xDD8 are the explosion timers; xDDC is the owner pointer and
+        // nothing is declared past it.
+        // refs/melee/src/melee/it/itPKFlash.h::itPKFlushExplode_ItemVars
+        return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC1;
+    case MSL_CORE_ITEM_KIND_NESS_PKTHUNDER:
+        // The ball leads with the six trail GObj pointers (xDD4[0..5]), so
+        // offsets 3/7/0x17 are all pointer bytes; 0x1B samples the first
+        // recorded trail position's x.
+        // refs/melee/src/melee/it/itPKThunder.h::itPKThunder_ItemVars
+        return MSL_CORE_ITEM_MISC3;
+    case MSL_CORE_ITEM_KIND_NESS_PKTHUNDER_TRAIL1:
+    case MSL_CORE_ITEM_KIND_NESS_PKTHUNDER_TRAIL2:
+    case MSL_CORE_ITEM_KIND_NESS_PKTHUNDER_TRAIL3:
+    case MSL_CORE_ITEM_KIND_NESS_PKTHUNDER_TRAIL4:
+        // x0 is the ball Item_GObj*; x4 is the trail's gameplay index and
+        // the struct ends at x8, so 0x17/0x1B are past-member residue.
+        // refs/melee/src/melee/it/itCharItems.h::itNesspkthundertrail_ItemVars
+        return MSL_CORE_ITEM_MISC1;
+    case MSL_CORE_ITEM_KIND_NESS_BAT:
+        // The bat declares only its owner GObj pointer.
+        // refs/melee/src/melee/it/itCharItems.h::itNessbat_ItemVars
+        return 0;
+    case MSL_CORE_ITEM_KIND_NESS_YOYO:
+        // x0/x4 are the charge state and charge scale; x8/xC are the string
+        // ItemLink chain, x10 the owner GObj, x14 padding and x18 the string
+        // joint, so only the leading pair is gameplay-owned.
+        // refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars
+        return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC1;
     case MSL_CORE_ITEM_KIND_YOSHI_EGG_THROW:
     case MSL_CORE_ITEM_KIND_YOSHI_STAR:
         // Neither the thrown egg nor the Yoshi Bomb star declares an

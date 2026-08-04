@@ -17,6 +17,7 @@ UnkCostumeStruct* msl_core_fighter_costumes(FighterKind kind);
 #define ft_80459B28 (*msl_core_fighter_costumes(FTKIND_FOX))
 #define ft_80459CA0 (*msl_core_fighter_costumes(FTKIND_DONKEY))
 #define ft_80459D18 (*msl_core_fighter_costumes(FTKIND_SEAK))
+#define ft_80459D90 (*msl_core_fighter_costumes(FTKIND_NESS))
 #define ft_80459DF0 (*msl_core_fighter_costumes(FTKIND_PEACH))
 #define ft_80459E68 (*msl_core_fighter_costumes(FTKIND_POPO))
 #define ft_80459F28 (*msl_core_fighter_costumes(FTKIND_PIKACHU))

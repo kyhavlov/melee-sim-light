@@ -339,6 +339,22 @@ src/melee/it/items/ityoshiegglay.c	src/melee/it/items/ityoshiegglay.c	Matching	y
 src/melee/it/items/ityoshieggthrow.c	src/melee/it/items/ityoshieggthrow.c	Matching	yoshi-source-packet	compiled canonical thrown-egg article owner
 src/melee/it/items/ityoshistar.c	src/melee/it/items/ityoshistar.c	Matching	yoshi-source-packet	compiled canonical Yoshi Bomb star article owner
 src/melee/it/items/ityoshitongue.c	src/melee/it/items/ityoshitongue.c	Matching	yoshi-source-packet	compiled canonical neutral-special tongue capture article owner
+src/melee/ft/chara/ftNess/ftNs_Init.c	src/melee/ft/chara/ftNess/ftNs_Init.c	Matching	ness-source-packet	compiled canonical Ness lifecycle, state registry, and data-owner callbacks
+src/melee/ft/chara/ftNess/ftNs_AttackHi4.c	src/melee/ft/chara/ftNess/ftNs_AttackHi4.c	Matching	ness-source-packet	compiled canonical Yo-Yo up-smash owner
+src/melee/ft/chara/ftNess/ftNs_AttackLw4.c	src/melee/ft/chara/ftNess/ftNs_AttackLw4.c	Matching	ness-source-packet	compiled canonical Yo-Yo down-smash owner
+src/melee/ft/chara/ftNess/ftNs_AttackS4.c	src/melee/ft/chara/ftNess/ftNs_AttackS4.c	Matching	ness-source-packet	compiled canonical baseball-bat forward-smash owner
+src/melee/ft/chara/ftNess/ftNs_SpecialN.c	src/melee/ft/chara/ftNess/ftNs_SpecialN.c	Matching	ness-source-packet	compiled canonical PK Flash owner
+src/melee/ft/chara/ftNess/ftNs_SpecialS.c	src/melee/ft/chara/ftNess/ftNs_SpecialS.c	Matching	ness-source-packet	compiled canonical PK Fire owner
+src/melee/ft/chara/ftNess/ftNs_SpecialHi.c	src/melee/ft/chara/ftNess/ftNs_SpecialHi.c	Matching	ness-source-packet	compiled canonical PK Thunder and PK Thunder 2 owner
+src/melee/ft/chara/ftNess/ftNs_SpecialLw.c	src/melee/ft/chara/ftNess/ftNs_SpecialLw.c	Matching	ness-source-packet	compiled canonical PSI Magnet owner
+src/melee/it/items/itnessbat.c	src/melee/it/items/itnessbat.c	Matching	ness-source-packet	compiled canonical baseball-bat article owner
+src/melee/it/items/itnessyoyo.c	src/melee/it/items/itnessyoyo.c	Matching	ness-source-packet	compiled canonical Yo-Yo article owner with its string link chain
+src/melee/it/items/itnesspkfire.c	src/melee/it/items/itnesspkfire.c	Matching	ness-source-packet	compiled canonical PK Fire bolt article owner
+src/melee/it/items/itnesspkfirepillar.c	src/melee/it/items/itnesspkfirepillar.c	Matching	ness-source-packet	compiled canonical PK Fire pillar article owner
+src/melee/it/items/itnesspkflash.c	src/melee/it/items/itnesspkflash.c	Matching	ness-source-packet	compiled canonical PK Flash charge article owner
+src/melee/it/items/itnesspkflashexplode.c	src/melee/it/items/itnesspkflashexplode.c	Matching	ness-source-packet	compiled canonical PK Flash explosion article owner
+src/melee/it/items/itnesspkthunderball.c	src/melee/it/items/itnesspkthunderball.c	Matching	ness-source-packet	compiled canonical PK Thunder ball article owner
+src/melee/it/items/itnesspkthundertrail.c	src/melee/it/items/itnesspkthundertrail.c	Matching	ness-source-packet	compiled canonical PK Thunder trail article owner
 src/melee/it/items/itpeachturnip.c	src/melee/it/items/itpeachturnip.c	not-listed	peach-source-packet	compiled canonical Peach turnip and rare-pull constructor owner
 src/melee/it/items/itsword.c	src/melee/it/items/itsword.c	not-listed	peach-common-item-packet	compiled canonical Beam Sword owner reached by Peach item pull
 src/sysdolphin/baselib/aobj.c	src/sysdolphin/baselib/aobj.c	Matching	0001-hosted-c-compatibility.patch	compiled directly from canonical source by Makefile; adapted by historical patch 0001-hosted-c-compatibility.patch

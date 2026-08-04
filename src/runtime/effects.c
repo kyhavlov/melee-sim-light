@@ -185,6 +185,15 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     // FTKIND_YOSHI to 9). Both Yoshi-reachable efSync generator ids
     // (0x4CD/0x4CE -> 0x2328) resolve into this bank.
     msl_effect_load_bank(data, 9, "/EfYsData.dat", "effYoshiDataTable");
+    // Ness owns efAsync bank 10 (ftData_UnkBytePerCharacter maps FTKIND_NESS
+    // to 10). EfNsData.dat is MODEL-ONLY -- both leading effNessDataTable
+    // words are unrelocated NULLs, the same shape as EfDkData.dat -- so
+    // retail efAsync_LoadSync skips psInitDataBank and the hosted loader
+    // publishes an empty command bank. Every Ness-reachable efSync id
+    // (0x4EE/0x4EF from PK Thunder, 0x4F0 from PSI Magnet) is a pure efLib
+    // model create, so no generator RNG projection consumes bank-10 ids.
+    // refs/melee/src/melee/ef/efasync.c::efAsync_LoadSync
+    msl_effect_load_bank(data, 10, "/EfNsData.dat", "effNessDataTable");
     // Pikachu owns efAsync bank 7 (ftData_UnkBytePerCharacter maps
     // FTKIND_PIKACHU to 7; Pichu shares the bank in retail).
     msl_effect_load_bank(data, 7, "/EfPkData.dat", "effPikachuDataTable");

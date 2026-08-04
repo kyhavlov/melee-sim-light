@@ -14,6 +14,7 @@ class Character(IntEnum):
     ICE_CLIMBERS = 10
     PIKACHU = 12
     SAMUS = 13
+    NESS = 8
     YOSHI = 14
     JIGGLYPUFF = 15
     LUIGI = 17

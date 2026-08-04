@@ -83,6 +83,8 @@ ftKb_SpecialNFx_800FDD4C	unsupported-fighter branch	unreachable	named abort	Fox 
 ftKb_SpecialNFx_800FDDF4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialNFx_800FDEB4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialNIc_80108CE8	unsupported-fighter branch	unreachable	named abort	Climbers-ice destruction notifies its owner through this callback only for Kirby's copied neutral special (item kind 0x6B)
+ftKb_SpecialNNs_800FEC78	unsupported-fighter branch	unreachable	named abort	PK Flash charge dispatch selects this callback only for Kirby's copied neutral special (item kind 0x6E)
+ftKb_SpecialNNs_800FECBC	unsupported-fighter branch	unreachable	named abort	PK Flash destruction notifies its owner through this callback only for Kirby's copied neutral special (item kind 0x6E)
 ftKb_SpecialNSk_80105FF0	unsupported-fighter branch	unreachable	named abort	Sheik needle-held dispatch selects this callback only for Kirby's copied neutral special
 ftKb_SpecialNSk_80106020	unsupported-fighter branch	unreachable	named abort	Sheik needle-held dispatch selects this callback only for Kirby's copied neutral special
 ftKb_SpecialN_800F1CD8	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
@@ -91,8 +93,6 @@ ftKb_SpecialN_800F5D04	unsupported-fighter branch	unreachable	named abort	Fox ki
 ftLk_AttackAir_800EB3BC	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftLk_AttackAir_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftMh_MS_341_8014FE58	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftNs_AttackLw4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftNs_AttackS4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftSs_SpecialLw_8012AEBC	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftSs_SpecialLw_8012AF38	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftCo_800CD82C	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback

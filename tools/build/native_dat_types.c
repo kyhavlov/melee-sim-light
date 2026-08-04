@@ -19,6 +19,7 @@
 #include "ft/chara/ftPopo/types.h"
 #include "ft/chara/ftSamus/types.h"
 #include "ft/chara/ftYoshi/types.h"
+#include "ft/chara/ftNess/types.h"
 #include "ft/chara/ftPurin/types.h"
 #include "ft/chara/ftSeak/types.h"
 #include "ft/chara/ftZelda/types.h"
@@ -28,6 +29,9 @@
 #include "it/it_3F14.h"
 #include "it/itCharItems.h"
 #include "it/itCommonItems.h"
+#include "it/itPKFlash.h"
+#include "it/itPKThunder.h"
+#include "it/itYoyo.h"
 #include "it/items/itdosei.h"
 #include "it/items/itseakneedlethrown.h"
 #include "it/items/types.h"
@@ -192,6 +196,13 @@ typedef Article* MslDatPikachuArticles[3];
 // refs/melee/src/melee/ft/chara/ftYoshi/ftYs_SpecialN.c
 // refs/melee/src/melee/it/items/{ityoshieggthrow.c,ityoshistar.c,
 //   ityoshiegglay.c}
+// PlNs.dat's ftData.x48_items owns the eleven articles ftNs_Init_OnLoad
+// registers as item kinds 66/67 (PK Fire bolt and pillar), 68 (PK Flash
+// charge), 69..73 (the PK Thunder ball and its four trail segments), 78 (PK
+// Flash explosion), 101 (baseball bat), and 102 (Yo-Yo). Every slot is a
+// plain Article graph.
+// refs/melee/src/melee/ft/chara/ftNess/ftNs_Init.c
+typedef Article* MslDatNessArticles[11];
 typedef struct MslDatYoshiArticles {
     Article* articles[3];
     HSD_Joint* egg_accessory;
@@ -295,6 +306,13 @@ void* msl_native_dat_type_roots[] = {
     (MslDatYoshiArticles*) 0,
     (ftYoshiAttributes*) 0,
     (itYoshiEggThrowAttributes*) 0,
+    (MslDatNessArticles*) 0,
+    (ftNessAttributes*) 0,
+    (itNessPKFirepillarAttributes*) 0,
+    (itFlashAttributes*) 0,
+    (itFlashExplAttributes*) 0,
+    (itPKThunderAttributes*) 0,
+    (itYoyoAttributes*) 0,
     (MslDatCommonItemArticles*) 0,
     (itBombHeiAttributes*) 0,
     (itDoseiAttributes*) 0,

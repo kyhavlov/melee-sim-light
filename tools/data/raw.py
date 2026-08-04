@@ -29,6 +29,7 @@ SUPPORTED_CHARACTERS = (
     "donkey",
     "ganon",
     "yoshi",
+    "ness",
 )
 SUPPORTED_STAGES = ("grnla", "grnba", "griz", "grps", "grst", "grop")
 
