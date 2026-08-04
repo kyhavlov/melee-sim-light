@@ -19,7 +19,11 @@ enum {
     MSL_FIGHTER_POSE_ECB_CAPACITY = 8,
     MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY = 32,
     MSL_FIGHTER_POSE_PROGRAM_NONE = 0x1FFF,
-    MSL_FIGHTER_POSE_PROGRAM_NODE_NONE = 0x3FFFF,
+    // Program-node ids index one dense array across every preloaded
+    // character's unique FigaTrees. Sixteen characters already publish
+    // 265,533 nodes, past the former 18-bit field, so the id owns a full
+    // word and the sentinel is the whole range.
+    MSL_FIGHTER_POSE_PROGRAM_NODE_NONE = 0xFFFFFFFFu,
 };
 
 typedef struct MslFighterPoseTrack {
@@ -55,7 +59,7 @@ typedef struct MslFighterPoseJoint {
     uint16_t track_count;
     uint16_t parent_index;
     uint16_t tree_count;
-    uint32_t program_node_index : 18;
+    uint32_t program_node_index;
     uint32_t program_is_figa : 1;
     uint32_t program_filtered : 1;
     uint32_t decoder_synced : 1;
@@ -71,7 +75,7 @@ typedef struct MslFighterPoseJoint {
 
 #ifdef MSL_CORE_NATIVE
 _Static_assert(sizeof(MslFighterPoseJoint) ==
-                   (sizeof(void*) == 8 ? 56 : 44),
+                   (sizeof(void*) == 8 ? 56 : 48),
                "fighter pose joint must not grow per-Match state");
 #endif
 
