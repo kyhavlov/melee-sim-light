@@ -138,12 +138,45 @@ silently swallowed and the traced code looks unreachable. Set `stderr=None` in
 `_NativeRunnerPool` while debugging. (`make validator` is separately required
 for `item_projection.h` changes.)
 
+## Residual investigation — the native-only Yo-Yo `misc1` family is pool residue
+
+The three native-only failures (`2025-11`, `52757`, `53870`) all diverge on one
+lane: `itNessYoyo_ItemVars.x4`, sampled as Slippi `misc1`. Traced end to end on
+`52757`:
+
+- `x4` is written by exactly one owner, `it_802BFEC4`, and only at the smash's
+  final frame (`yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME` = 49, which is
+  also the despawn frame). Nothing initializes it at spawn.
+- Our sim performs all three of the replay's Yo-Yo up-smashes, walks
+  `yoyoCurrentFrame` 3..49 each time, and computes `x4` correctly:
+  0x3D95C61D / 0x3D95C609 / 0x3D95C61D. The low byte 0x1D = 29 is exactly one of
+  the values retail exports for this lane, so the arithmetic owner is right.
+- The item pointer is the same pool slot for all three yo-yos, and the spawn ids
+  (51, 55, 72) match retail's.
+- Every export **during** a yo-yo's life reads `x4 == 0` in our sim, because the
+  single write lands on the last frame before the article despawns. Retail
+  exports a stale non-zero value there, i.e. the lane is read as item-pool
+  residue left by the slot's previous occupant.
+
+PPC reproduces retail exactly on all three replays; only 64-bit native differs,
+which is the signature of residue whose byte pattern depends on the preceding
+occupant's item-variable layout (pointer-widened on the host). This is the same
+mechanism as the existing `unrecorded-item-pool-residue` classification used for
+the Ice Climbers entries, and the natural disposition is to classify it with
+native and PPC snapshots rather than to "fix" it. Note `x4` is not purely an
+export lane -- `it_802BF800` reads it during the swing -- so retail genuinely
+consumes uninitialized memory here; in these three replays every fighter,
+physics, and other item lane stays exact.
+
 ## Follow-ups
 
 1. Name the missing frame-3922 RNG consumer with the Dolphin probe.
 2. Root-cause or classify the shared 1-ULP families (`speed_*_attack`, `shield_hp`).
-3. Decide the Yo-Yo `x4` native-only residual: fix the host-width path or classify it
-   with PPC snapshots per the icies/Samus precedent.
+3. Classify the Yo-Yo `x4` native-only residual (root-caused above) with native
+   and PPC snapshots under `unrecorded-item-pool-residue`; note that a
+   classification entry can only be added once `ness.json` is in the aggregate,
+   or `test_native_validation_compares_complete_classified_replays` fails its
+   case lookup (the Pikachu packet's trap).
 4. Then wire `ness.json` into `melee_core_aggregate` with output locks and update the
    suite-inventory test pins (396 -> 414).
 
