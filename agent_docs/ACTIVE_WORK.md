@@ -56,7 +56,8 @@ admitted absorber, so `ftData_OnAbsorb` becomes a live table.
 ## Suite state (container authoritative) — IN THE AGGREGATE
 
 Superseded by "Second import" below: the suite is now 30 replays and the aggregate is
-426 = 333/93/0. The original eighteen-replay state is kept here for provenance.
+426 = 333/93/0, then by the linux-host certification section at the end: the aggregate is
+now 426 = 342/84/0. The original eighteen-replay state is kept here for provenance.
 
 18 replays across all six legal stages (three each) against Captain Falcon, Falco, Fox,
 Jigglypuff, Marth, Peach, Pikachu, Sheik, and a Ness mirror. All three Pokemon Stadium
@@ -1719,3 +1720,57 @@ slice, and follower-frame validation.
   msl_nana_trace_file (gm_8016AEDC-based, prints F<frame>) in match.c, rand/randf
   trace in sysdolphin/baselib/random.c. Mainline bot captures are per-frame-seeded
   like online games (verified: base+frame<<16 stride in our stream).
+
+## Linux-host certification + the pool-residue lanes are retired (2026-08-04)
+
+Work moved to a native linux/amd64 host (Ryzen 9950X3D, Ubuntu 25.10). Certification per
+`agent_docs/ENVIRONMENT.md` surfaced that four ness identities and, run-to-run, even the
+same host's own fingerprints were unstable: the recorded snapshots hashed bytes that are
+halves of 64-bit host pointers, so they were only ever reproducible inside the recording
+container's memory layout. Measured directly: two back-to-back native runs of `50321`
+produced two different mismatch fingerprints from an identical mismatch shape, and a
+per-frame item-lane dump diffed across runs pinned every varying byte to one
+ASLR-randomized pointer byte (0x8C vs 0x84) read through the generic
+`item_var_source_byte` union path for articles whose native struct leads with widened
+pointers (bat, yo-yo slot residue, PK Fire/pillar/flash, Fox Illusion).
+
+Two projection-mask corrections retire the whole family, both inside the mask's existing
+taxonomy (source-proven non-gameplay lanes):
+
+- **Ness Yo-Yo misc1 (x4) is masked.** Its only owner, `it_802BFEC4`, writes it on the
+  despawn transition, so no live export ever samples an owner-written value — the same
+  never-written-at-sampling-time argument that already masks the PK Flash leading word.
+  The swing read (`it_802BF800`) consumes the same residue retail does; any gameplay
+  effect lands in directly compared lanes. misc0 (x0, the smash action id, written at
+  spawn) stays compared.
+- **Mr. Saturn misc2/3 are masked in every state.** Every `xDE4` write in `itdosei.c` is
+  `= ip->pos`, a copy of the directly compared position lanes, and the writing Anim
+  callbacks skip during item hitlag, so a state entered mid-hitlag (observed: state 11 at
+  `51444` 10756) samples stale bytes or pool residue.
+- **compare_row now requires both sides' masks to admit a misc lane** (generalizing the
+  extra-needle special case): inside a classified divergence the hosted slot can hold a
+  different article than the recording, and the bytes at an unowned offset are arena
+  placement, not gameplay. The slot disagreement still reports through item.type/state.
+
+Consequences, all gated: the nine `unrecorded-item-pool-residue` classifications (whole
+family) are deleted because their replays are now bit-exact on both backends;
+`2025-03`/`2026-06`/`53362` and peach `HeartyStiffMallard` re-recorded with **identical
+native and PPC snapshots** (the masked lanes were the entire backend delta in every fork
+capture); 13 output locks re-recorded (9 ness + 4 peach whose Saturn/kind-window bytes
+were canonicalized). Fingerprints are now process-location independent: three consecutive
+suite runs hash identically, and the aggregate reproduces bit-exactly under both gcc-15.2
+and the pinned gcc-13 (local dpkg unpack, `build/host-gcc13/`).
+
+Also fixed: `src/upstream.lock`'s tree digest was stale from the WIP import commit (its
+recorded value is not reproducible from its own pinned inputs under any sha tool/format
+variant; file_count was updated to 1155 but the digest was not). Re-recorded with
+`tools/build/source_sync.sh`'s canonical method; `make source-check` passes with 206
+local deltas.
+
+**Suite state (linux/amd64 host + gcc-13 cross-check authoritative): ness 30 = 26 pass /
+4 classified / 0 fail on native AND on PPC** (classified: `2025-02` + `2025-03`
+dolphin-ULP, `2026-06` presentation-RNG draw gap, `53362` hitlag pad-edge debt).
+Aggregate **426 = 342 pass / 84 classified / 0 fail / 0 error**, lock-clean, xpass-free.
+Host certification: source-check, native-smoke, aggregate, per-suite ness PPC
+(`--timeout 240`; qemu here needs ~100s on 17k-frame captures), pytest 45 passed /
+1 skipped (no local ISO at the tested path) — all green.

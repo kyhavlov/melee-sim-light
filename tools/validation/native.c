@@ -1728,14 +1728,15 @@ static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t 
         if ((!replay->item.instance_id_present &&
              spec->offset == offsetof(MslCoreItem, instance_id)) ||
             !item_field_is_gameplay_state(&expected.items[slot], spec) ||
-            (!expected.items[slot].exists &&
-             actual->items[slot].type == MSL_CORE_ITEM_KIND_SHEIK_NEEDLE_THROWN &&
-             !item_field_is_gameplay_state(&actual->items[slot], spec))) {
-          // When a classified item-count divergence places a thrown needle
-          // against an empty expected slot, its xDD4/xDD8 bytes are still
-          // uninitialized fixed-pool residue rather than gameplay state.
-          // Compare all owned fields for the extra needle, but do not make
-          // the fingerprint depend on native arena placement.
+            !item_field_is_gameplay_state(&actual->items[slot], spec)) {
+          // A sampled misc byte is a meaningful comparison only when the
+          // article on each side owns the sampled offset. Inside a
+          // classified divergence the hosted slot can hold a different
+          // article (or a different state) than the recording; the bytes at
+          // an unowned offset are fixed-pool residue or widened-pointer
+          // halves, so comparing them would make the fingerprint depend on
+          // native arena placement. The slot disagreement itself is still
+          // reported through the item.type/item.state rows.
           // refs/melee/src/melee/it/{itCharItems.h,
           //   items/itseakneedlethrown.c::it_802AFD8C}
           continue;

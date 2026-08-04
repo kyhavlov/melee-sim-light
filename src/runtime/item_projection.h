@@ -71,12 +71,14 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
 {
     switch (kind) {
     case MSL_CORE_ITEM_KIND_MR_SATURN:
-        // itDosei held/thrown states do not uniformly own xDE4.
+        // Every xDE4 write in itdosei.c is `= ip->pos`, a copy of the
+        // directly compared item position lanes, and the writing Anim
+        // callbacks skip during item hitlag, so a state entered mid-hitlag
+        // samples stale bytes or pool residue (the held/thrown states never
+        // write it at all). The y/z samples carry no independent gameplay
+        // signal in any state.
         // refs/melee/src/melee/it/items/itdosei.c
-        if (state == 1 || state == 4 || state == 5) {
-            return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC1;
-        }
-        break;
+        return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC1;
     case MSL_CORE_ITEM_KIND_FOX_BLASTER:
     case MSL_CORE_ITEM_KIND_FALCO_BLASTER:
         // xDE4[1..2] are presentation effect-object pointers.
@@ -186,11 +188,18 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // refs/melee/src/melee/it/itCharItems.h::itNessbat_ItemVars
         return 0;
     case MSL_CORE_ITEM_KIND_NESS_YOYO:
-        // x0/x4 are the charge state and charge scale; x8/xC are the string
-        // ItemLink chain, x10 the owner GObj, x14 padding and x18 the string
-        // joint, so only the leading pair is gameplay-owned.
+        // x0 is the smash action id, written at spawn. x4's only owner,
+        // it_802BFEC4, writes it on the despawn transition, so no live
+        // export ever samples an owner-written value there: like the PK
+        // Flash leading word, the sampled byte is fixed-pool residue for
+        // the article's whole exported life (the swing read in it_802BF800
+        // consumes the same residue retail does; its gameplay effect, if
+        // any, lands in directly compared lanes). x8/xC are the string
+        // ItemLink chain, x10 the owner GObj, x14 padding and x18 the
+        // string joint.
         // refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars
-        return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC1;
+        // refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4
+        return MSL_CORE_ITEM_MISC0;
     case MSL_CORE_ITEM_KIND_YOSHI_EGG_THROW:
     case MSL_CORE_ITEM_KIND_YOSHI_STAR:
         // Neither the thrown egg nor the Yoshi Bomb star declares an

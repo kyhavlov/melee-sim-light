@@ -43,6 +43,10 @@ make validator
 - **CI pins `ubuntu-24.04` for gcc-13** and says so because the replay gate asserts bit-exactness.
   The Makefile only defaults `HOST_CC ?= gcc`. If a host's default compiler is not gcc-13, build
   with `HOST_CC=gcc-13` until a newer GCC has been shown lock-clean over the full aggregate.
+  Measured 2026-08-04: gcc 15.2 (Ubuntu 25.10) reproduces the full aggregate bit-exactly against
+  the same locks as a gcc-13.4 build of the same tree. When the distro no longer packages gcc-13,
+  `apt-get download` + `dpkg-deb -x` into `build/host-gcc13/` with a `-B` wrapper script gives the
+  pinned compiler without root (see `build/host-gcc13/gcc13.sh` on the certified host).
 - The gate build is `-O0 -ffp-contract=off`; only `MSL/trigf.o` and `runtime/math.o` compile at
   `-O2 -ffp-contract=fast` with `-mfma`, which is why the profile is x86-64 in practice.
 - The **release** profile adds `-march=native -mtune=native` (`RELEASE_ARCH_FLAGS`), so that binary
@@ -66,7 +70,7 @@ make validator
      --workers N --output-locks replays/suites/melee_core_output_locks.json
    ```
    It must reproduce the aggregate identity recorded in `agent_docs/ACTIVE_WORK.md` under
-   "Suite state" — `426 = 333 pass / 93 classified / 0 fail / 0 error` at the time of writing —
+   "Suite state" — `426 = 342 pass / 84 classified / 0 fail / 0 error` at the time of writing —
    with zero lock failures.
 4. `make ppc` then one per-suite PPC run (`VALIDATION_SUITE=replays/suites/<char>.json
    VALIDATION_BACKEND=ppc`). Per-suite PPC is the gate; aggregate-PPC lock-fails by design.

@@ -3106,9 +3106,24 @@
      "frames": 15634,
      "last_mismatch_frame": 15511,
      "matched_frames": 6600,
-     "mismatch_count": 337434,
-     "mismatch_fields_digest": "f7c91a31dcf577f0d018bfbcbacfd1433a0a9d9147b2dc572cd2e39ebfa7eaa3",
-     "mismatch_fingerprint": "25590fac2df95868",
+     "mismatch_count": 336847,
+     "mismatch_fields_digest": "63fae70e4ee11acb7f0bc44560f51c4c59e9449e5e7029a2a1e6447345e17000",
+     "mismatch_fingerprint": "481cac23f67368e9",
+     "mismatched_frames": 9034,
+     "render_visibility_mismatch_count": 12589,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 0
+    },
+    "ppc": {
+     "exact_prefix_frames": 907,
+     "first_mismatch_frame": 785,
+     "first_render_visibility_mismatch_frame": 6678,
+     "frames": 15634,
+     "last_mismatch_frame": 15511,
+     "matched_frames": 6600,
+     "mismatch_count": 336847,
+     "mismatch_fields_digest": "63fae70e4ee11acb7f0bc44560f51c4c59e9449e5e7029a2a1e6447345e17000",
+     "mismatch_fingerprint": "481cac23f67368e9",
      "mismatched_frames": 9034,
      "render_visibility_mismatch_count": 12589,
      "signed_zero_equal_count": 0,
@@ -4789,15 +4804,15 @@
      "first_mismatch_frame": 3922,
      "first_render_visibility_mismatch_frame": 3342,
      "frames": 14721,
-     "last_mismatch_frame": 9475,
-     "matched_frames": 14522,
-     "mismatch_count": 1778,
-     "mismatch_fields_digest": "f3521c713e962a4d1019523d713890f25a081bbef4f60030ffb7b6c1dc4ab964",
-     "mismatch_fingerprint": "971f7effb555be63",
-     "mismatched_frames": 199,
+     "last_mismatch_frame": 4073,
+     "matched_frames": 14569,
+     "mismatch_count": 1731,
+     "mismatch_fields_digest": "6f9738d5af7014509e1c76b5fd0a0d51cd372809af240345b7f1e9259c6577a7",
+     "mismatch_fingerprint": "39dbb255aa456a2a",
+     "mismatched_frames": 152,
      "render_visibility_mismatch_count": 2,
      "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 5123
+     "strict_suffix_frames": 10525
     },
     "ppc": {
      "exact_prefix_frames": 4044,
@@ -4831,15 +4846,15 @@
      "first_mismatch_frame": 1471,
      "first_render_visibility_mismatch_frame": 8848,
      "frames": 17493,
-     "last_mismatch_frame": 13412,
-     "matched_frames": 17262,
-     "mismatch_count": 562,
-     "mismatch_fields_digest": "748f11e03fb30738dec090c5774111a9c0680280beee32d9d562f2b6f0388f09",
-     "mismatch_fingerprint": "7532394a5724e55b",
-     "mismatched_frames": 231,
+     "last_mismatch_frame": 1654,
+     "matched_frames": 17309,
+     "mismatch_count": 515,
+     "mismatch_fields_digest": "4cf536efc71cc60383001037b02c78d0b35d3aea3722abc1fc8ac546c7a29a8c",
+     "mismatch_fingerprint": "2d694e8ace4b8e6e",
+     "mismatched_frames": 184,
      "render_visibility_mismatch_count": 1,
      "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 3958
+     "strict_suffix_frames": 15716
     },
     "ppc": {
      "exact_prefix_frames": 1593,
@@ -4855,299 +4870,6 @@
      "render_visibility_mismatch_count": 1,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 15716
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/ness/51444_Game_20250301T143614.slpz",
-   "id": "unrecorded-item-pool-residue",
-   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's x4 and Mr. Saturn's unwritten xDE4 tracker",
-   "rationale": "Two item-variable residue lanes, both on articles whose sampled members no owner writes in the observed state. item.misc1 is the Yo-Yo's x4, written only by it_802BFEC4 on the smash's final frame, so the live article samples its pool slot's previous occupant. item.misc2/misc3 are Mr. Saturn's xDE4 y and z, which itDosei_UnkMotion4 and UnkMotion5 do not write; the bytes the hosted run reports there are the halves of a 64-bit host pointer (the 0x00007FFF high word is plainly visible in the union), i.e. allocator identity left by the slot's previous occupant, which the console's 32-bit heap cannot be re-derived from. Every fighter, physics, and remaining item lane is exact and both episodes self-heal.",
-   "sources": [
-    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
-    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
-    "src/runtime/scalar.c::item_var_source_byte",
-    "refs/melee/src/melee/it/itCommonItems.h::itDosei_ItemVars",
-    "refs/melee/src/melee/it/items/itdosei.c"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 2936,
-     "first_mismatch_frame": 2814,
-     "first_render_visibility_mismatch_frame": 2311,
-     "frames": 14865,
-     "last_mismatch_frame": 10761,
-     "matched_frames": 14852,
-     "mismatch_count": 19,
-     "mismatch_fields_digest": "5fc2ac54680d0908c276120637b22908f30fe4352c9d4b3e7cb43a219561045a",
-     "mismatch_fingerprint": "399bfedec4133538",
-     "mismatched_frames": 13,
-     "render_visibility_mismatch_count": 13,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 3981
-    },
-    "ppc": {
-     "exact_prefix_frames": 10878,
-     "first_mismatch_frame": 10756,
-     "first_render_visibility_mismatch_frame": 2311,
-     "frames": 14865,
-     "last_mismatch_frame": 10761,
-     "matched_frames": 14859,
-     "mismatch_count": 6,
-     "mismatch_fields_digest": "7a9cf8af3a9a55f059f9e11ccff09c3e1ee15cde858d954756204b867d5d2034",
-     "mismatch_fingerprint": "5c30b883e57580f2",
-     "mismatched_frames": 6,
-     "render_visibility_mismatch_count": 13,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 3981
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/ness/2025-11_Game_20251124T141214.slpz",
-   "id": "unrecorded-item-pool-residue",
-   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
-   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive samples whatever the shared item-pool slot held from its previous occupant. Traced end to end: the hosted sim performs all of the replay's Yo-Yo smashes on the same pool slot with retail's spawn ids and computes x4 correctly (0x3D95C61D, whose low byte 29 is one of the values retail exports for this lane), but the preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose layout matches retail, is bit-exact on this replay. All fighter, physics, and other item lanes are exact.",
-   "sources": [
-    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
-    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
-    "src/runtime/scalar.c::item_var_source_byte"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 14159,
-     "first_mismatch_frame": 14037,
-     "first_render_visibility_mismatch_frame": null,
-     "frames": 19574,
-     "last_mismatch_frame": 14088,
-     "matched_frames": 19522,
-     "mismatch_count": 52,
-     "mismatch_fields_digest": "048d0186f4c39b39e80ba19cbbc8df56483b799b3c7730e283b9b6150fce1837",
-     "mismatch_fingerprint": "584ce294664497e0",
-     "mismatched_frames": 52,
-     "render_visibility_mismatch_count": 0,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 5363
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/ness/52757_Game_20250415T000609.slpz",
-   "id": "unrecorded-item-pool-residue",
-   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
-   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive samples whatever the shared item-pool slot held from its previous occupant. Traced end to end: the hosted sim performs all of the replay's Yo-Yo smashes on the same pool slot with retail's spawn ids and computes x4 correctly (0x3D95C61D, whose low byte 29 is one of the values retail exports for this lane), but the preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose layout matches retail, is bit-exact on this replay. All fighter, physics, and other item lanes are exact.",
-   "sources": [
-    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
-    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
-    "src/runtime/scalar.c::item_var_source_byte"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 3922,
-     "first_mismatch_frame": 3800,
-     "first_render_visibility_mismatch_frame": 237,
-     "frames": 6695,
-     "last_mismatch_frame": 5057,
-     "matched_frames": 6492,
-     "mismatch_count": 203,
-     "mismatch_fields_digest": "00cb21eb37baef9276688fd3fb7ce9b39379000e733590b980e0e6365ab8af1b",
-     "mismatch_fingerprint": "605b561cc38b0603",
-     "mismatched_frames": 203,
-     "render_visibility_mismatch_count": 1,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 1515
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/ness/53870_Game_20250516T122158.slpz",
-   "id": "unrecorded-item-pool-residue",
-   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
-   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive samples whatever the shared item-pool slot held from its previous occupant. Traced end to end: the hosted sim performs all of the replay's Yo-Yo smashes on the same pool slot with retail's spawn ids and computes x4 correctly (0x3D95C61D, whose low byte 29 is one of the values retail exports for this lane), but the preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose layout matches retail, is bit-exact on this replay. All fighter, physics, and other item lanes are exact.",
-   "sources": [
-    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
-    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
-    "src/runtime/scalar.c::item_var_source_byte"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 12092,
-     "first_mismatch_frame": 11970,
-     "first_render_visibility_mismatch_frame": -122,
-     "frames": 13969,
-     "last_mismatch_frame": 12087,
-     "matched_frames": 13851,
-     "mismatch_count": 118,
-     "mismatch_fields_digest": "e645182e50ef4f5594429737c472bd84ea7aa6046c8cd1d5bb4f99af3d5f74a1",
-     "mismatch_fingerprint": "8ccfd3719f530ce6",
-     "mismatched_frames": 118,
-     "render_visibility_mismatch_count": 6,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 1759
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/ness/2025-07_Game_20250718T215851.slpz",
-   "id": "unrecorded-item-pool-residue",
-   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
-   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive its sampled item.misc1 lane is whatever the shared item-pool slot held from its previous occupant. The diverging article is item type 102 (itnessyoyo) on every mismatch row here, and only that one lane moves: all fighter, physics, shield and remaining item lanes stay exact and the episode self-heals when the Yo-Yo despawns. The preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose item-variable layout matches retail, is bit-exact on this replay, which is the direct evidence that the lane is layout residue and not a gameplay divergence.",
-   "sources": [
-    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
-    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
-    "src/runtime/scalar.c::item_var_source_byte"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 8740,
-     "first_mismatch_frame": 8618,
-     "first_render_visibility_mismatch_frame": null,
-     "frames": 15453,
-     "last_mismatch_frame": 12386,
-     "matched_frames": 15337,
-     "mismatch_count": 116,
-     "mismatch_fields_digest": "b1a468982715d134de5594356a4a5b334582396f8549727b61313074e426e022",
-     "mismatch_fingerprint": "d82c8496ef1872c7",
-     "mismatched_frames": 116,
-     "render_visibility_mismatch_count": 0,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 2944
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/ness/2025-11_Game_20251116T122343.slpz",
-   "id": "unrecorded-item-pool-residue",
-   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
-   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive its sampled item.misc1 lane is whatever the shared item-pool slot held from its previous occupant. The diverging article is item type 102 (itnessyoyo) on every mismatch row here, and only that one lane moves: all fighter, physics, shield and remaining item lanes stay exact and the episode self-heals when the Yo-Yo despawns. The preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose item-variable layout matches retail, is bit-exact on this replay, which is the direct evidence that the lane is layout residue and not a gameplay divergence. The Yo-Yo is item index 1 while a second article is live and index 0 after that article despawns at frame 8913, so both reported lanes are the same Yo-Yo.",
-   "sources": [
-    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
-    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
-    "src/runtime/scalar.c::item_var_source_byte"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 9007,
-     "first_mismatch_frame": 8885,
-     "first_render_visibility_mismatch_frame": -122,
-     "frames": 10494,
-     "last_mismatch_frame": 8936,
-     "matched_frames": 10442,
-     "mismatch_count": 52,
-     "mismatch_fields_digest": "3ab403a2b00e84480a19707565466fbe57136736ab6977eb1d45dca3d5350dd6",
-     "mismatch_fingerprint": "0b6c533a6e28c765",
-     "mismatched_frames": 52,
-     "render_visibility_mismatch_count": 3,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 1435
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/ness/66686_Game_20250726T002501.slpz",
-   "id": "unrecorded-item-pool-residue",
-   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
-   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive its sampled item.misc1 lane is whatever the shared item-pool slot held from its previous occupant. The diverging article is item type 102 (itnessyoyo) on every mismatch row here, and only that one lane moves: all fighter, physics, shield and remaining item lanes stay exact and the episode self-heals when the Yo-Yo despawns. The preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose item-variable layout matches retail, is bit-exact on this replay, which is the direct evidence that the lane is layout residue and not a gameplay divergence.",
-   "sources": [
-    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
-    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
-    "src/runtime/scalar.c::item_var_source_byte"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 6441,
-     "first_mismatch_frame": 6319,
-     "first_render_visibility_mismatch_frame": 3334,
-     "frames": 12505,
-     "last_mismatch_frame": 6370,
-     "matched_frames": 12453,
-     "mismatch_count": 52,
-     "mismatch_fields_digest": "c42d4794c6f4702088b67f205f6b00e70140a3e2124e501698c08a48de7232cd",
-     "mismatch_fingerprint": "950bb8b5ab8445b5",
-     "mismatched_frames": 52,
-     "render_visibility_mismatch_count": 10,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 6012
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/ness/auto-falco-2025-12_Game_20251203T232441.slpz",
-   "id": "unrecorded-item-pool-residue",
-   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
-   "rationale": "it_802BFEC4 is the only writer of the Yo-Yo article's x4, and it runs on the smash's final frame (yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME = 49, which is also the despawn frame), so every frame the article is alive its sampled item.misc1 lane is whatever the shared item-pool slot held from its previous occupant. The diverging article is item type 102 (itnessyoyo) on every mismatch row here, and only that one lane moves: all fighter, physics, shield and remaining item lanes stay exact and the episode self-heals when the Yo-Yo despawns. The preceding occupant's item-variable members are pointer-widened on the 64-bit host, so the residue byte cannot reproduce the console's. PPC, whose item-variable layout matches retail, is bit-exact on this replay, which is the direct evidence that the lane is layout residue and not a gameplay divergence.",
-   "sources": [
-    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
-    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
-    "src/runtime/scalar.c::item_var_source_byte"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 2124,
-     "first_mismatch_frame": 2002,
-     "first_render_visibility_mismatch_frame": null,
-     "frames": 11360,
-     "last_mismatch_frame": 2063,
-     "matched_frames": 11298,
-     "mismatch_count": 62,
-     "mismatch_fields_digest": "20eea07d122661c4cb7146d3d82681a9bb2fe5722290c07d99c2b30a45573738",
-     "mismatch_fingerprint": "6b4cab8063fea92e",
-     "mismatched_frames": 62,
-     "render_visibility_mismatch_count": 0,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 9174
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/ness/50321_Game_20250212T214328.slpz",
-   "id": "unrecorded-item-pool-residue",
-   "owner": "Slippi SendItemInfo raw union bytes over the Ness Yo-Yo's never-initialized itNessYoyo_ItemVars.x4",
-   "rationale": "Same never-written itNessYoyo_ItemVars.x4 lane as the rest of this family -- the diverging article is item type 102 on every mismatch row -- but this replay's very first Yo-Yo spawns at frame 364, before any other article has occupied the pool slot. The hosted pool is zero-initialized there, so the sampled item.misc1 reads 0 against the console's 82: the residue retail exports is pre-match heap content that no hosted run can re-derive. PPC narrows the episode to that first spawn alone (104 rows ending at frame 467 instead of 351 rows running to 11621, leaving an 11,915-frame exact suffix) because its item-variable layout matches retail for every later Yo-Yo; the surviving PPC rows are exactly the un-derivable pre-match bytes. All fighter, physics and remaining item lanes are exact on both backends.",
-   "sources": [
-    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-    "refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars",
-    "refs/melee/src/melee/it/items/itnessyoyo.c::it_802BFEC4",
-    "src/runtime/scalar.c::item_var_source_byte"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 486,
-     "first_mismatch_frame": 364,
-     "first_render_visibility_mismatch_frame": 2206,
-     "frames": 12505,
-     "last_mismatch_frame": 11621,
-     "matched_frames": 12154,
-     "mismatch_count": 351,
-     "mismatch_fields_digest": "33a47bff4d8cf36a26e9f4147b4af7d16014ef461b021b3475708c5b1a1602a4",
-     "mismatch_fingerprint": "e7ac464b30e4eaa7",
-     "mismatched_frames": 351,
-     "render_visibility_mismatch_count": 13,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 761
-    },
-    "ppc": {
-     "exact_prefix_frames": 486,
-     "first_mismatch_frame": 364,
-     "first_render_visibility_mismatch_frame": 2206,
-     "frames": 12505,
-     "last_mismatch_frame": 467,
-     "matched_frames": 12401,
-     "mismatch_count": 104,
-     "mismatch_fields_digest": "090c310e4125849493821febb22aa2f8cb94083d0b796f003edb40d8ebd887c5",
-     "mismatch_fingerprint": "51a1bf69a5edb9b5",
-     "mismatched_frames": 104,
-     "render_visibility_mismatch_count": 13,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 11915
     }
    }
   },
@@ -5199,9 +4921,9 @@
      "frames": 10673,
      "last_mismatch_frame": 10550,
      "matched_frames": 1530,
-     "mismatch_count": 360005,
-     "mismatch_fields_digest": "24d067d84b2ce68c51f305572f125dd7aa586bc9d7fbd1599a8ffd21b338535b",
-     "mismatch_fingerprint": "5324b806fd932f36",
+     "mismatch_count": 358984,
+     "mismatch_fields_digest": "4de6aff34450a6659eecc0c0c33a77598c7a0d0acaef0e15df888a8ce753676b",
+     "mismatch_fingerprint": "10654baa0687c296",
      "mismatched_frames": 9143,
      "render_visibility_mismatch_count": 13158,
      "signed_zero_equal_count": 0,
@@ -5214,9 +4936,9 @@
      "frames": 10673,
      "last_mismatch_frame": 10550,
      "matched_frames": 1530,
-     "mismatch_count": 360143,
-     "mismatch_fields_digest": "7ac1dc0b40605a6774c7098a4843b702d6ce805207ff952d63b1cf6d25cfa1e9",
-     "mismatch_fingerprint": "04d756ed23f07384",
+     "mismatch_count": 358984,
+     "mismatch_fields_digest": "4de6aff34450a6659eecc0c0c33a77598c7a0d0acaef0e15df888a8ce753676b",
+     "mismatch_fingerprint": "10654baa0687c296",
      "mismatched_frames": 9143,
      "render_visibility_mismatch_count": 13158,
      "signed_zero_equal_count": 0,
