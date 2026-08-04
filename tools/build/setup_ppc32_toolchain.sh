@@ -61,7 +61,6 @@ packages=(
     libgomp1-powerpc-cross
     libubsan1-powerpc-cross
     linux-libc-dev-powerpc-cross
-    qemu-user-static
     # Host-side shared libraries the cross compiler itself links against.
     # Hosts with a native gcc already have them; the containerized macOS
     # path runs the toolchain in a bare image and needs them in-tree.
@@ -76,6 +75,13 @@ packages=(
     zlib1g
 )
 
+# qemu-user-static was dropped from recent Ubuntu releases. Download it where
+# apt still ships it (e.g. the noble CI runner); hosts without a candidate
+# fall back to their own qemu-ppc after extraction.
+if apt-get download --print-uris qemu-user-static >/dev/null 2>&1; then
+    packages+=(qemu-user-static)
+fi
+
 mkdir -p "$package_dir" "$sysroot"
 (
     cd "$package_dir"
@@ -85,6 +91,17 @@ mkdir -p "$package_dir" "$sysroot"
 while IFS= read -r -d '' package; do
     dpkg-deb -x "$package" "$sysroot"
 done < <(find "$package_dir" -maxdepth 1 -type f -name '*.deb' -print0)
+
+# qemu-user-static is unavailable on recent Ubuntu releases. Fall back to the
+# host's qemu-ppc (dynamic is fine: the Makefile runs it as `qemu-ppc-static
+# -L <sysroot>`, so the loader difference is immaterial here).
+if [[ ! -x "$sysroot/usr/bin/qemu-ppc-static" ]]; then
+    host_qemu=$(command -v qemu-ppc-static || command -v qemu-ppc || true)
+    if [[ -n "$host_qemu" ]]; then
+        mkdir -p "$sysroot/usr/bin"
+        ln -sf "$host_qemu" "$sysroot/usr/bin/qemu-ppc-static"
+    fi
+fi
 
 if [[ ! -x "$sysroot/usr/bin/powerpc-linux-gnu-gcc-13" ||
       ! -x "$sysroot/usr/bin/qemu-ppc-static" ]]; then
