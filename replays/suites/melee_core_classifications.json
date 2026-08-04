@@ -2895,11 +2895,13 @@
   },
   {
    "replay": "replays/validation/marth/WingedGorgeousPanther.slpz",
-   "id": "incomplete-nintendont-post-frame-stream",
-   "owner": "legacy Nintendont/Slippi post-frame publication",
-   "rationale": "At frame 9793 the legacy Nintendont recording abruptly replaces P3 post-only fields with absence sentinels (animation_index UINT_MAX and state_age -1) while retaining three stocks and frozen fighter values through game end. The source runtime continues the live fighter. Those missing post-frame observations cannot be reconstructed as gameplay; native and PPC agree on the complete 710-row boundary.",
+   "id": "held-down-shield-press-escape-decision",
+   "owner": "ftCo_Escape spot-dodge tilt-timer gate (open port defect)",
+   "rationale": "OPEN PORT DEFECT held as a classification, not an unreconstructible observation. At frame 9793 P3 Falco's PassiveStandF ends and the player presses shield with the left stick already held down-left (recorded lstick x -0.6875, y -0.7125, past the down threshold since 9791). Retail takes GuardOn (178) into Guard (179) and shields for 25 frames; this port takes the vanilla spot-dodge gate in ftCo_80099794 (inlineB0: lstick.y <= ftCommonData x314 AND x671_timer_lstick_tilt_y < x318) and enters Escape (235) instead, with 14 intangible frames and an undepleted shield (60.0 vs 59.72). Leading hypothesis: the down-tilt timer x671 is armed a frame late in this pad profile, so a two-frame-old hold still reads as a fresh smash. The earlier absence-sentinel reading of this residual was wrong: through 9793-9817 the stream publishes decaying shield HP (60.00 -> 53.28 at 0.28/frame), advancing action ids and incrementing instance ids, and animation_index UINT_MAX with state_age -1 is simply how this stream represents every Guard/Entry/Dead row (41 such runs on P3, 33 on P4, all inside the 9,915-row exact prefix); P3 resumes ordinary live rows at 9818 and finishes the game at three stocks. Gameplay resyncs bit-exactly by 9868 (state flags) and 9916 (shield HP); every row from there to 10502 differs only in the global attack-instance counters (instance_id, instance_hit_by, item.instance_id), each off by one because the 25-frame divergence allocated one different id, and that off-by-one is what marks all 710 tail rows mismatched. Ruled out: all 16 combinations of the UCF rollout flags reproduce this identical fingerprint, and msl_ucf_suppress_spotdodge requires mpColl_IsOnPlatform so it cannot fire on the main stage floor. Native and PPC agree on the complete 710-row boundary.",
    "sources": [
-    "refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm",
+    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_80099794",
+    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_Anim",
+    "refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10",
     "refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm"
    ],
    "expected": {

@@ -356,6 +356,31 @@ coverage and so the eventual fix announces itself by breaking the entry -- the s
    exposed (a Peach-pulled item), not a Ness owner; if `itDosei` states 4/5 are ever
    given an explicit past-member carve-out, that classification can be narrowed.
 
+## Reclassified debt — marth WingedGorgeousPanther @9793
+
+`incomplete-nintendont-post-frame-stream` was a misread and is now
+`held-down-shield-press-escape-decision` (owner moved from the Nintendont
+recorder to `ftCo_Escape`). The recorder is live across the whole window: shield
+HP decays 60.00 -> 53.28 at 0.28/frame while the action id advances GuardOn ->
+Guard and instance ids increment, and `animation_index` UINT_MAX with
+`state_age` -1 is just this stream's Guard/Entry/Dead representation (41 runs on
+P3, 33 on P4, every earlier one inside the 9,915-row exact prefix). The real
+divergence is ours: PassiveStandF ends at 9793 and the player presses shield
+with the stick already held down-left (lstick -0.6875, -0.7125, past the down
+threshold since 9791); retail shields, we take `ftCo_80099794`'s spot-dodge gate
+(`lstick.y <= x314 && x671_timer_lstick_tilt_y < x318`) into Escape with 14
+intangible frames. Suspect the x671 down-tilt timer being armed a frame late, so
+a two-frame-old hold still reads as a fresh smash — a retail probe at 9793 would
+settle it. Gameplay resyncs bit-exactly by 9916; the rest of the 710-row tail is
+only the global attack-instance counters off by one. Not UCF: all 16 rollout-flag
+combinations reproduce fingerprint `3d95a3cb4754c703`, and
+`msl_ucf_suppress_spotdodge` needs `mpColl_IsOnPlatform` so it cannot fire on the
+main stage floor. The `expected` snapshot is untouched, so this is a text-only
+re-own: the replay still classifies at the same fingerprint and no suite count
+moves. Verified on the yoshi base it was recorded against (marth stage-3 native
+`pass=1 classified=2 fail=0`, msl-luigi); not re-run against this packet's build,
+which the edit cannot affect.
+
 # Previous structural packet — `decomp-port-arm64-ppc` merge polish
 
 ## Objective
