@@ -435,6 +435,11 @@ int gm_8016B1C4(void) { return 0; }
 bool gm_8016B1D8(void) { return false; }
 int gm_8016B204(void) { return 1; }
 float gm_8016B248(void) { return msl_damage_ratio; }
+
+// lbl_8046B6A0.x24C.xC, the versus self-destruct score rule consumed by
+// fn_8016588C. See msl_match_standings_score for the retail evidence.
+#define MSL_SD_SCORE_RULE (-2)
+
 static int msl_match_standings_score(int slot)
 {
     int other;
@@ -460,10 +465,23 @@ static int msl_match_standings_score(int slot)
         }
     }
 
-    // Standard stock VS uses -1 for the self-destruct score rule.
+    // fn_8016588C's default (stock VS) branch is
+    //     score = (x20 - (x24 - xA)) + xA * (s8) xC
+    // over full-word KO and fall counters with no narrowing -- GALE01
+    // 0x80165A48..0x80165A78, where the decomp's `v = (u8)(...)` cast is a
+    // decompilation artifact. xC is the versus self-destruct score rule; it
+    // is -2, so a self-destruct costs its fall plus one more point rather
+    // than cancelling out. Retail-probe-verified on two Captain Falcon/Ness
+    // grabs: at 49422 frame 6118 the grabbed Ness sits on 1 KO / 2 falls
+    // against a Falcon on 2 KOs / 2 falls / 1 self-destruct, and retail's
+    // Player_80033BB8 answers 0 (a tie at -1 apiece) where the -1 rule would
+    // rank Ness the loser; at 53362 frame 1374, where neither player has a
+    // self-destruct, retail answers 1 exactly as this expression does. The
+    // rank feeds ftCommon_InitGrab's x360*(x364 - (rank+1)) term, so the
+    // wrong rule shortened the grab timer by 15 and broke the hold early.
     // refs/melee/src/melee/gm/gm_1601.c::{fn_8016588C,gm_80165AC0,
     //     fn_80165E7C,fn_80165FA4}
-    return kos - (falls - self_destructs) - self_destructs;
+    return kos - (falls - self_destructs) + self_destructs * MSL_SD_SCORE_RULE;
 }
 
 int gm_8016C5C0(int slot)

@@ -2374,6 +2374,15 @@
       }
     },
     {
+      "replay": "replays/validation/ness/49422_Game_20250130T192133.slpz",
+      "expected": {
+        "native": {
+          "frames": 12422,
+          "actual_output_fingerprint": "d7f9f82b666d4298"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/ness/49437_Game_20250130T204304.slpz",
       "expected": {
         "native": {
@@ -3062,7 +3071,7 @@
       "expected": {
         "native": {
           "frames": 7653,
-          "actual_output_fingerprint": "26cb9549585d44ae"
+          "actual_output_fingerprint": "420b3765ac6ca43f"
         }
       }
     },

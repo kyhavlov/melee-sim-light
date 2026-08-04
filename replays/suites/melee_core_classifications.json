@@ -3984,35 +3984,6 @@
    }
   },
   {
-   "replay": "replays/validation/puff/specials.slpz",
-   "id": "scene-standings-cache-gap",
-   "owner": "MatchEnd loser-rank cache used by DamageSong",
-   "rationale": "Puff's imported Sing and common DamageSong callbacks are source-exact. The residual starts when the minimal headless gm_8016C5C0 projection supplies a loser rank one above retail's scene-owned MatchEnd cache, shortening one Sing timer by exactly 15 frames; action and timer consequences reconverge for the final 977 transitions. This classification leaves the scene standings aggregate as explicit debt rather than fitting Sing or the replay row.",
-   "sources": [
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c::ftCo_800C318C",
-    "refs/melee/src/melee/gm/gm_16AE.c::gm_8016C5C0",
-    "refs/melee/src/melee/gm/gm_1601.c::gm_80166378"
-   ],
-   "expected": {
-    "native": {
-     "frames": 7653,
-     "matched_frames": 7261,
-     "mismatched_frames": 392,
-     "exact_prefix_frames": 4737,
-     "strict_suffix_frames": 2524,
-     "first_mismatch_frame": 4615,
-     "last_mismatch_frame": 5006,
-     "mismatch_count": 817,
-     "mismatch_fingerprint": "93a791db9627dff2",
-     "render_visibility_mismatch_count": 0,
-     "first_render_visibility_mismatch_frame": null,
-     "signed_zero_equal_count": 0,
-     "mismatch_fields_digest": "99dec85916beef92e183eaba98efa9d40d37c81b28cf80160a5b564f35f797b5"
-    },
-    "ppc": "native"
-   }
-  },
-  {
    "replay": "replays/validation/samus/fox-d18-2026-04_Game_20260419T223341.slpz",
    "id": "dolphin-ulp-contact-gate",
    "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",

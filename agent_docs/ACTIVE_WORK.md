@@ -55,8 +55,8 @@ admitted absorber, so `ftData_OnAbsorb` becomes a live table.
 
 ## Suite state (container authoritative) — IN THE AGGREGATE
 
-Superseded by "Second import" below: the suite is now 28 replays and the aggregate is
-424 = 331/93/0. The original eighteen-replay state is kept here for provenance.
+Superseded by "Second import" below: the suite is now 29 replays and the aggregate is
+425 = 333/92/0. The original eighteen-replay state is kept here for provenance.
 
 18 replays across all six legal stages (three each) against Captain Falcon, Falco, Fox,
 Jigglypuff, Marth, Peach, Pikachu, Sheik, and a Ness mirror. All three Pokemon Stadium
@@ -203,10 +203,12 @@ stages, versions 3.18.0/3.19.0, populated raw analog pad lanes on every capture 
 3.18-layout re-wraps), and both Pokemon Stadium entries event-verified frozen (0x41
 declared, zero events over the full game). No SHA overlapped the existing eighteen.
 
-**Ten are in the gate.** The ness suite is **28 replays: 16 pass / 12 classified /
-0 fail** on native, and `melee_core_aggregate` is **424 = 331 pass / 93 classified /
-0 fail / 0 error** with the ten output locks **strictly additive (10 added, 0 changed,
-0 removed)** and the pre-existing 414 byte-stable. Four of the ten are bit-exact on
+**Eleven are in the gate.** The ness suite is **29 replays: 17 pass / 12 classified /
+0 fail** on native and **24 pass / 5 classified / 0 fail** on PPC, and
+`melee_core_aggregate` is **425 = 333 pass / 92 classified / 0 fail / 0 error**. Ten
+locks were added byte-additively when the captures were admitted; the standings fix
+below then added `49422`'s lock and rewrote exactly one existing lock
+(`puff/specials`), whose classification it retires. Five of the eleven are bit-exact on
 first contact; the other six are new rows in two already-named families.
 
 ### The six new residuals
@@ -233,53 +235,86 @@ first contact; the other six are new rows in two already-named families.
   row, 69 rows, `f1639cfe9ff96f60`, same field digest), so it is a shared rounding step
   against Dolphin, not a host FP profile or layout artifact.
 
-## OPEN DEFECT — the grab-timer standings term (two captures held out)
+## RESOLVED — the grab-timer standings term (self-destruct score rule)
 
-`49422_Game_20250130T192133` and `53362_Game_20250504T004716` (both Captain Falcon
-grabbing Ness) are **deliberately not in the suite**: they fork on a real simulator
-defect, and classifying a defect would launder it into the gate. Both files are
-reproducible from `ness_replays_2.zip`. The chain is fully traced:
+`49422_Game_20250130T192133` is **fixed and back in the suite**, bit-exact over all
+12,422 frames. The chain, settled by a retail probe rather than inference:
 
-- Ness is held in `CaptureWaitHi`; at the fork frame our sim breaks the grab
-  (grabber `CatchWait` 216 -> `CatchCut` 218, victim 224 -> `CaptureCut` 229) while
-  retail holds three more frames and throws. Both replays land on the identical wrong
-  hold geometry -- pair separation 9.758 against retail's 7.868 -- because
-  `fn_800DAD18` stops re-anchoring the victim once the capture ends.
-- The trigger is `ftCo_CaptureWaitHi_Anim`'s `fp->grab_timer <= 0` gate. Our timer
-  starts at 60 where retail's must be at least 11 higher.
-- The initial value is
+- Ness is held in `CaptureWaitHi`; our sim broke the grab (grabber `CatchWait` 216 ->
+  `CatchCut` 218, victim 224 -> `CaptureCut` 229) where retail held three more frames
+  and threw. `ftCo_CaptureWaitHi_Anim`'s gate is `grab_timer <= 0` against
+  `ftCo_804D90D0`, which the DOL confirms is exactly `0.0` with a real `<=`
+  (`fcmpo` + `cror eq,lt,eq`, GALE01 0x800DB968).
+- The seed value is
   `pct*x368 + (x358*(x35C - handicap) + x354) + x360*(x364 - (Player_80033BB8 + 1))`.
-  Ness's percent is genuinely 0 at both grabs (verified against the recordings) and the
-  handicap term is zero, so the **only** lever is the standings term: rank 0 gives 75,
-  rank 1 gives 60, and +15 is exactly what both replays need.
-- `Player_80033BB8` -> `gm_8016C5C0` -> `MatchPlayerData::is_big_loser`. Our port
-  recomputes that rank live from live Player statistics; retail reads it out of the
-  scene-guarded `lbl_8046B6A0.x24C` block, which `gm_8016C5C0` repopulates through
-  `gm_80166378` only when the stored guard word differs from `gm_801A4BA8()`.
-- The score formula itself is **not** the bug. The decomp writes `v = (u8)(...)` in
-  `fn_8016588C`'s default branch, but GALE01 0x80165A48..0x80165A78 loads x20/x24 with
-  `lwz` and applies the xC self-destruct rule with no narrowing, so the comparison is
-  plain signed and our `msl_match_standings_score` already matches it. That `(u8)` cast
-  is a decompilation artifact.
+  Ness's percent is genuinely 0 at the grab and every capture in the corpus runs
+  handicap 9, so the standings term is the only lever: rank 0 seeds 75, rank 1 seeds 60.
+- **Retail probe at 49422 frame 6118** (`ftCommon_InitGrab` entry, the
+  `stfs f1,0x1A4C(r3)` at GALE01 0x8007DBCC): retail seeds **75** and
+  `Player_80033BB8` returns **0**, where the hosted build computed 1.
+- **Retail probe at 53362 frame 1374**: retail seeds **60** and the rank is **1**,
+  matching the hosted build exactly. The difference between the two: at 49422 the
+  Falcon carries a self-destruct, at 53362 nobody does.
 
-**A freeze-at-first-query model was implemented and rejected.** It makes both replays
-bit-exact (49422 goes fully exact over all 12,422 frames; 53362 drops to Yo-Yo residue
-only) but **regresses six pre-existing replays** -- `marth/WellWornSmallGoshawk`,
-`marth/VigorousRelievedLlama`, `doubles_recent/Game_20260704T012353`,
-`doubles_recent/Game_20260704T005918`, `doubles_recent/Game_20260625T033446`,
-`icies/dl-marth-2025-04` -- so the block demonstrably refreshes mid-match. Live and
-frozen are each right somewhere and the two cannot be reconciled by query cadence:
-`53362` needs the value frozen from its only earlier query at frame 622, while
-`icies/dl-marth-2025-04` needs a refresh between its queries at 1347 and 2609. The
-refresh must be event-driven by something not yet identified, and naming it needs a
-retail probe of `lbl_8046B6A0.x24C.x0` / `Player_80033BB8` rather than more static
-reading. The change is reverted; the tree carries live standings.
+That isolates the bug to the self-destruct term of `fn_8016588C`'s stock-VS score,
+`(x20 - (x24 - xA)) + xA * (s8) xC`. The rule `xC` is **-2**, not -1: a self-destruct
+costs its fall plus one more point instead of cancelling out. With -2 the 49422 frame
+is a tie at -1 apiece (rank 0, matching retail) while 53362 is untouched (rank 1,
+matching retail). Separately confirmed against the asm that the decomp's
+`v = (u8)(...)` narrowing in that branch is an artifact -- GALE01
+0x80165A48..0x80165A78 loads x20/x24 with `lwz` and never truncates -- so the rest of
+the expression was already right.
+
+**The fix retires pre-existing debt.** `puff/specials.slpz` carried a
+`scene-standings-cache-gap` classification whose rationale reads "the minimal headless
+gm_8016C5C0 projection supplies a loser rank one above retail's scene-owned MatchEnd
+cache, shortening one Sing timer by exactly 15 frames" -- the same off-by-one, reached
+through Sing instead of a grab. That replay is now bit-exact on both backends and its
+classification is deleted; its output lock is the one lock this change rewrites.
+
+**A freeze-at-first-query model was tried first and rejected.** It also fixes 49422,
+but by accident: it regresses six pre-existing replays (`marth/WellWornSmallGoshawk`,
+`marth/VigorousRelievedLlama`, three `doubles_recent`, `icies/dl-marth-2025-04`), and
+the retail probe then showed the block is not stale at all -- retail's rank at 53362
+frame 1374 is the live value. Live standings are correct; only the score rule was wrong.
 
 **Trap worth remembering:** `docker cp` preserves the source mtime, so copying an
 edited file into the container can leave it *older* than the existing object file and
 `make` will not rebuild. A "control test" run that way silently measures the previous
 binary -- it produced a false negative here that briefly inverted the conclusion.
-`touch` the copied sources before `make`.
+`touch` copied sources before `make`. `make native` also does not rebuild the PPC
+binary; `make ppc` is separate, and a stale `melee-core-ppc` will reproduce the old
+behavior long after the native fix lands.
+
+## OPEN DEFECT — hitlag-accumulated pad edges (one capture held out)
+
+`53362_Game_20250504T004716` remains out of the gate. Its grab timer, standings rank
+and drain quantum all match retail; the divergence is one spurious mash trigger.
+
+- Retail and the hosted build agree exactly through frame 1387 (timer 47/46/45 at
+  frames 1382/1383/1387). At 1387 the hosted `ftCommon_GrabMash` subtracts the 6-point
+  mash and retail subtracts nothing, so retail runs +6 from frame 1388 onward
+  (retail 44/…/6 at 1408 against the hosted 38/…/0). The hosted timer reaches exactly
+  0.0 at 1408 and trips the `<= 0` gate one frame before the throw.
+- The trigger is `fp->input.x668`, the newly-pressed mask. The recording holds A from
+  frame 1383 through 1387, i.e. the press edge lands on 1383, inside the pummel's
+  four-frame hitlag (1383..1386) during which the capture Anim -- and therefore
+  `ftCommon_GrabMash` -- does not run.
+- **Retail probe at the `ftCommon_GrabMash` entry** reads `x668 = 0x0000` on frames
+  1382, 1383, 1387, 1388 and 1389, with `x660` (previous held) stepping 0x20000 ->
+  0x20100 across the hitlag. The hosted build reads `x668 = 0x100` at 1387.
+- So retail has discarded the accumulated edge by the first post-hitlag frame.
+  `Fighter_Spaghetti_8006AD10_Inner1` accumulates (`x668 |= edge`) while
+  `fp->x2219_b5` is set and overwrites (`x668 = edge`) otherwise, so retail's overwrite
+  must land before `GrabMash` reads it on 1387 -- the hosted build still has the flag
+  set at that point, one frame late. `x2219_b5` is set for the captured partner by
+  `Fighter_UnkRecursiveFunc_8006D044`'s recursion through `fp->x1A5C` and cleared
+  through `Fighter_8006D10C_Inline1`, whose partner branch is gated on `x2219_b7` --
+  that gate is the place to look.
+
+This is an input-pipeline ordering question, not a grab question, and any change there
+has to be validated against the whole corpus (x668 feeds every `CheckInput` owner), so
+it is left as the next task rather than patched speculatively.
 
 ## Follow-ups
 
@@ -287,10 +322,12 @@ binary -- it produced a false negative here that briefly inverted the conclusion
    remaining lead is `kb_applied`'s own input chain (percent/staleness/weight), since
    the formula owners and every fusion reachable from the angle path are already
    complete. A retail probe on the `ftColl_80079AB0` inputs would settle it.
-2. The grab-timer standings defect above. Highest-value next probe: capture retail's
-   `is_big_loser` for both slots across `49422` frames 900..6200 and
-   `icies/dl-marth-2025-04` frames 1300..2650, which discriminates the refresh cadence
-   directly. Re-admitting the two held-out captures is the acceptance test.
+2. The hitlag-accumulated pad-edge defect above. Re-admitting
+   `53362_Game_20250504T004716` is the acceptance test; the corpus-wide risk is that
+   `x668` feeds every `CheckInput` owner, so the full aggregate is the gate.
+3. Probe captures are now self-terminating (`MSL_PROBE_EXIT_FRAME`, slippi-dolphin
+   80e8cd15): a bounded window finishes in seconds instead of running to the external
+   alarm, so retail ground truth is cheap enough to reach for early rather than last.
 2. The Mr. Saturn `xDE4` lane in `51444` is a pre-existing gap the Ness suite merely
    exposed (a Peach-pulled item), not a Ness owner; if `itDosei` states 4/5 are ever
    given an explicit past-member carve-out, that classification can be narrowed.
