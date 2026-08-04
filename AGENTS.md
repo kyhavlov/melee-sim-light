@@ -58,6 +58,8 @@ implementation queue.
   authoritative only from linux/amd64 GNU-toolchain builds: CI, a native Linux host, or the Linux
   container on macOS. macOS-built binaries — arm64 or the Rosetta `HOST_TARGET_ARCH=x86_64`
   profile — have no recorded bit-exact equivalence and must not record suite results.
+  `agent_docs/ENVIRONMENT.md` covers host bring-up, the toolchain pins the gate depends on, and
+  the procedure that certifies a new host before it records identities.
 - Put forensic outputs under ignored `reports/triage/` and never hand-edit generated results.
 - New-core plans and evidence live only under `agent_docs/`.
 - A performance commit must include implementation, gates, and refreshed retained evidence in

@@ -155,8 +155,8 @@ needle path itself is right; only frame 3922 carries the extra retail consumer.
 Ness's `ftNs_Init_OnDamage` is not the source either: none of its four
 articles (yo-yo, PK Flash, PK Thunder, bat) exists at that frame.
 
-Next step is the Dolphin engine-dump RNG probe ([[msl-dolphin-probe-workflow]])
-to name the missing consumer; everything else about the episode is settled.
+Next step is the Dolphin engine-dump RNG probe (`refs/README.md`) to name the
+missing consumer; everything else about the episode is settled.
 
 **Instrumentation trap (cost me two false conclusions):** the native backend
 runs `melee-core-native` as a `--server` subprocess whose `stderr` is
