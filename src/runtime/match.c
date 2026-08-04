@@ -436,52 +436,36 @@ bool gm_8016B1D8(void) { return false; }
 int gm_8016B204(void) { return 1; }
 float gm_8016B248(void) { return msl_damage_ratio; }
 
-// lbl_8046B6A0.x24C.xC, the versus self-destruct score rule consumed by
-// fn_8016588C. See msl_match_standings_score for the retail evidence.
-#define MSL_SD_SCORE_RULE (-2)
-
 static int msl_match_standings_score(int slot)
 {
-    int other;
-    int kos = 0;
-    int falls = Player_GetFalls(slot);
-    int self_destructs = (int) Player_GetSuicideCount(slot);
+    // fn_8016588C dispatches on the match mode in lbl_8046B6A0.x24C.x5, and a
+    // stock versus match runs mode 1, NOT the KO-minus-falls default branch.
+    // Mode 1 scores a live player by their remaining stock count and nothing
+    // else: GALE01 0x80165988 loads MatchPlayerData::stocks with `lbz` and
+    // sign-extends it straight into the result. Only a player already out of
+    // stocks takes the second arm, where the score collapses to their survival
+    // time minus 0xFFFFFF (0x8016599C..0x801659B4, an unsigned divide by 60)
+    // so an eliminated slot always ranks last.
+    //
+    // Retail-probe-verified twice, both at the gm_80166378 refresh that the
+    // grab's own standings query triggers, so this is the live value and not a
+    // cached one: at 49422 frame 6118 both players hold 2 stocks and retail's
+    // Player_80033BB8 answers 0 for the grabbed Ness even though he trails on
+    // KOs minus falls (1 KO / 2 falls against 2 KOs / 2 falls / 1 self-destruct
+    // -- the Falcon's self-destruct denies him the KO credit that the old
+    // expression scored by); at 53362 frame 1374 the stocks are 4 against 3 and
+    // retail answers 1. Both probes reported mode x5 = 1.
+    //
+    // The rank feeds ftCommon_InitGrab's x360*(x364 - (rank+1)) term, so
+    // scoring by KOs and falls shortened the grab timer by 15 whenever a
+    // self-destruct had skewed the two columns apart.
+    // refs/melee/src/melee/gm/gm_1601.c::{fn_8016588C,fn_80165AC0,gm_80166378}
+    int stocks = Player_GetStocks(slot);
 
-    for (other = 0; other < 4; ++other) {
-        int count;
-        if (Player_GetPlayerSlotType(other) == Gm_PKind_NA) {
-            continue;
-        }
-        count = Player_GetKOsByPlayerIndex(slot, other);
-        if (other == slot) {
-            self_destructs += count;
-            falls += count;
-        } else if (!msl_is_teams ||
-                   Player_GetTeam(other) != Player_GetTeam(slot)) {
-            kos += count;
-        } else {
-            self_destructs += count;
-            falls += count;
-        }
+    if (stocks != 0) {
+        return stocks;
     }
-
-    // fn_8016588C's default (stock VS) branch is
-    //     score = (x20 - (x24 - xA)) + xA * (s8) xC
-    // over full-word KO and fall counters with no narrowing -- GALE01
-    // 0x80165A48..0x80165A78, where the decomp's `v = (u8)(...)` cast is a
-    // decompilation artifact. xC is the versus self-destruct score rule; it
-    // is -2, so a self-destruct costs its fall plus one more point rather
-    // than cancelling out. Retail-probe-verified on two Captain Falcon/Ness
-    // grabs: at 49422 frame 6118 the grabbed Ness sits on 1 KO / 2 falls
-    // against a Falcon on 2 KOs / 2 falls / 1 self-destruct, and retail's
-    // Player_80033BB8 answers 0 (a tie at -1 apiece) where the -1 rule would
-    // rank Ness the loser; at 53362 frame 1374, where neither player has a
-    // self-destruct, retail answers 1 exactly as this expression does. The
-    // rank feeds ftCommon_InitGrab's x360*(x364 - (rank+1)) term, so the
-    // wrong rule shortened the grab timer by 15 and broke the hold early.
-    // refs/melee/src/melee/gm/gm_1601.c::{fn_8016588C,gm_80165AC0,
-    //     fn_80165E7C,fn_80165FA4}
-    return kos - (falls - self_destructs) + self_destructs * MSL_SD_SCORE_RULE;
+    return (int) (Player_GetMatchFrameCount(slot) / 60u) - 0xFFFFFF;
 }
 
 int gm_8016C5C0(int slot)

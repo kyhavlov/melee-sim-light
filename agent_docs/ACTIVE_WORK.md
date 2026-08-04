@@ -235,10 +235,10 @@ first contact; the other six are new rows in two already-named families.
   row, 69 rows, `f1639cfe9ff96f60`, same field digest), so it is a shared rounding step
   against Dolphin, not a host FP profile or layout artifact.
 
-## RESOLVED — the grab-timer standings term (self-destruct score rule)
+## RESOLVED — the grab-timer standings term (stock-mode scoring)
 
 `49422_Game_20250130T192133` is **fixed and back in the suite**, bit-exact over all
-12,422 frames. The chain, settled by a retail probe rather than inference:
+12,422 frames on both backends. The chain, settled by retail probes:
 
 - Ness is held in `CaptureWaitHi`; our sim broke the grab (grabber `CatchWait` 216 ->
   `CatchCut` 218, victim 224 -> `CaptureCut` 229) where retail held three more frames
@@ -247,44 +247,56 @@ first contact; the other six are new rows in two already-named families.
   (`fcmpo` + `cror eq,lt,eq`, GALE01 0x800DB968).
 - The seed value is
   `pct*x368 + (x358*(x35C - handicap) + x354) + x360*(x364 - (Player_80033BB8 + 1))`.
-  Ness's percent is genuinely 0 at the grab and every capture in the corpus runs
-  handicap 9, so the standings term is the only lever: rank 0 seeds 75, rank 1 seeds 60.
+  Ness's percent is genuinely 0 at the grab and every capture runs handicap 9, so the
+  standings term is the only lever: rank 0 seeds 75, rank 1 seeds 60.
 - **Retail probe at 49422 frame 6118** (`ftCommon_InitGrab` entry, the
   `stfs f1,0x1A4C(r3)` at GALE01 0x8007DBCC): retail seeds **75** and
   `Player_80033BB8` returns **0**, where the hosted build computed 1.
 - **Retail probe at 53362 frame 1374**: retail seeds **60** and the rank is **1**,
-  matching the hosted build exactly. The difference between the two: at 49422 the
-  Falcon carries a self-destruct, at 53362 nobody does.
+  matching the hosted build.
 
-That isolates the bug to the self-destruct term of `fn_8016588C`'s stock-VS score,
-`(x20 - (x24 - xA)) + xA * (s8) xC`. The rule `xC` is **-2**, not -1: a self-destruct
-costs its fall plus one more point instead of cancelling out. With -2 the 49422 frame
-is a tie at -1 apiece (rank 0, matching retail) while 53362 is untouched (rank 1,
-matching retail). Separately confirmed against the asm that the decomp's
-`v = (u8)(...)` narrowing in that branch is an artifact -- GALE01
-0x80165A48..0x80165A78 loads x20/x24 with `lwz` and never truncates -- so the rest of
-the expression was already right.
+**The rule is stock count, not KOs minus falls.** `fn_8016588C` dispatches on the match
+mode in `lbl_8046B6A0.x24C.x5`, and a probe of both queries reports **x5 = 1** -- the
+stock-versus arm, not the KO-minus-falls default the hosted projection had ported. Mode 1
+scores a live player by their remaining stocks and nothing else: GALE01 0x80165988 loads
+`MatchPlayerData::stocks` with `lbz` and sign-extends it straight into the result. Only a
+slot already out of stocks takes the second arm, where the score collapses to survival
+time minus 0xFFFFFF (0x8016599C..0x801659B4) so an eliminated player always ranks last.
+
+That explains both probes directly. At 49422 frame 6118 both players hold 2 stocks, so
+the standings tie and Ness is not the loser -- while KOs minus falls put him behind,
+because the Falcon's self-destruct denied him the KO credit the old expression scored by.
+At 53362 frame 1374 the stocks are 4 against 3 and the rank is 1, which both rules agree
+on. In matches without self-destructs the two formulas order players identically, which
+is why the corpus never caught this.
+
+**The block is refreshed live.** The same probe shows `gm_80166378` running at frame 6118
+inside that very query, so the scene-guarded cache is repopulated on demand -- the value
+retail served is the live one. An earlier freeze-at-first-query model was tried and
+rejected: it fixes 49422 by accident and regresses six pre-existing replays
+(`marth/WellWornSmallGoshawk`, `marth/VigorousRelievedLlama`, three `doubles_recent`,
+`icies/dl-marth-2025-04`).
 
 **The fix retires pre-existing debt.** `puff/specials.slpz` carried a
 `scene-standings-cache-gap` classification whose rationale reads "the minimal headless
 gm_8016C5C0 projection supplies a loser rank one above retail's scene-owned MatchEnd
-cache, shortening one Sing timer by exactly 15 frames" -- the same off-by-one, reached
-through Sing instead of a grab. That replay is now bit-exact on both backends and its
-classification is deleted; its output lock is the one lock this change rewrites.
+cache, shortening one Sing timer by exactly 15 frames" -- the same off-by-one reached
+through Sing instead of a grab. That replay is now bit-exact on both backends, its
+classification is deleted, and its output lock is the one lock this change rewrites.
 
-**A freeze-at-first-query model was tried first and rejected.** It also fixes 49422,
-but by accident: it regresses six pre-existing replays (`marth/WellWornSmallGoshawk`,
-`marth/VigorousRelievedLlama`, three `doubles_recent`, `icies/dl-marth-2025-04`), and
-the retail probe then showed the block is not stale at all -- retail's rank at 53362
-frame 1374 is the live value. Live standings are correct; only the score rule was wrong.
+**Method note.** A first pass mis-attributed this to the self-destruct score rule
+(`xC = -2`) by reasoning backwards from two rank observations instead of reading the
+executed branch. Both models happen to produce identical output on the whole 425-replay
+corpus, so the corpus could not tell them apart; only probing `fn_8016588C` itself showed
+the default branch never executes. When a formula has a mode switch, probe which arm runs
+before fitting parameters to the result.
 
-**Trap worth remembering:** `docker cp` preserves the source mtime, so copying an
-edited file into the container can leave it *older* than the existing object file and
-`make` will not rebuild. A "control test" run that way silently measures the previous
-binary -- it produced a false negative here that briefly inverted the conclusion.
-`touch` copied sources before `make`. `make native` also does not rebuild the PPC
-binary; `make ppc` is separate, and a stale `melee-core-ppc` will reproduce the old
-behavior long after the native fix lands.
+**Traps worth remembering:** `docker cp` preserves the source mtime, so copying an edited
+file into the container can leave it *older* than the existing object file and `make` will
+not rebuild -- a "control test" run that way silently measures the previous binary, which
+briefly inverted a conclusion here. `touch` copied sources before `make`. `make native`
+also does not rebuild the PPC binary; `make ppc` is separate, and a stale
+`melee-core-ppc` reproduces the old behavior long after the native fix lands.
 
 ## OPEN DEFECT — hitlag-accumulated pad edges (one capture held out)
 
