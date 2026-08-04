@@ -37,23 +37,40 @@ function f32(view, offset) {
   return view.getFloat32(offset, true);
 }
 
+// Indexed by internal character id; values are external character ids
+// (the animation-zip order in slippi-viewer's animationCache.ts).
+const EXTERNAL_CHAR_ID_BY_INTERNAL = [
+  8, // Mario
+  2, // Fox
+  0, // Captain Falcon
+  1, // Donkey Kong
+  4, // Kirby
+  5, // Bowser
+  6, // Link
+  19, // Sheik
+  11, // Ness
+  12, // Peach
+  14, // Popo
+  14, // Nana
+  13, // Pikachu
+  16, // Samus
+  17, // Yoshi
+  15, // Jigglypuff
+  10, // Mewtwo
+  7, // Luigi
+  9, // Marth
+  18, // Zelda
+  21, // Young Link
+  22, // Dr. Mario
+  20, // Falco
+  24, // Pichu
+  3, // Mr. Game & Watch
+  25, // Ganondorf
+  23, // Roy
+];
+
 function externalCharId(internalCharId) {
-  if (internalCharId === 1) return 2;
-  if (internalCharId === 2) return 0;
-  if (internalCharId === 7) return 19;
-  if (internalCharId === 9) return 12;
-  if (internalCharId === 17) return 7;
-  if (internalCharId === 0) return 8;
-  if (internalCharId === 21) return 22;
-  if (internalCharId === 10) return 14;
-  if (internalCharId === 11) return 14;
-  if (internalCharId === 3) return 1;
-  if (internalCharId === 12) return 13;
-  if (internalCharId === 13) return 16;
-  if (internalCharId === 18) return 9;
-  if (internalCharId === 19) return 18;
-  if (internalCharId === 22) return 20;
-  return internalCharId;
+  return EXTERNAL_CHAR_ID_BY_INTERNAL[internalCharId] ?? internalCharId;
 }
 
 function controllerInput(frameNumber, playerIndex, controller) {

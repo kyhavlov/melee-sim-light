@@ -27,10 +27,12 @@ def _characters(source: str) -> list[tuple[int, str]]:
 
 
 def _external_ids(source: str) -> dict[int, int]:
+    match = re.search(r"EXTERNAL_CHAR_ID_BY_INTERNAL = \[(.*?)\];", source, re.S)
+    assert match is not None
     return {
-        int(internal): int(external)
-        for internal, external in re.findall(
-            r"if \(internalCharId === (\d+)\) return (\d+);", source
+        internal: int(external)
+        for internal, external in enumerate(
+            re.findall(r"^\s*(\d+),", match.group(1), re.M)
         )
     }
 
@@ -70,9 +72,30 @@ def test_live_viewer_supported_domain_and_assets() -> None:
         for line in manifest.splitlines()
         if line and not line.startswith("#")
     }
+    zip_by_label = {
+        "Fox": "fox.zip",
+        "Captain Falcon": "captainFalcon.zip",
+        "Sheik": "sheik.zip",
+        "Peach": "peach.zip",
+        "Jigglypuff": "jigglypuff.zip",
+        "Luigi": "luigi.zip",
+        "Mario": "mario.zip",
+        "Dr. Mario": "doctorMario.zip",
+        "Ice Climbers": "iceClimbers.zip",
+        "Donkey Kong": "donkeyKong.zip",
+        "Ganondorf": "ganondorf.zip",
+        "Pikachu": "pikachu.zip",
+        "Samus": "samus.zip",
+        "Ness": "ness.zip",
+        "Yoshi": "yoshi.zip",
+        "Marth": "marth.zip",
+        "Zelda": "zelda.zip",
+        "Falco": "falco.zip",
+    }
     external = _external_ids(adapter)
-    for internal_id in expected:
-        filename = Path(zips[external.get(internal_id, internal_id)]).name
+    for internal_id, label in expected.items():
+        filename = Path(zips[external[internal_id]]).name
+        assert filename == zip_by_label[label], label
         assert filename in packaged
 
 
