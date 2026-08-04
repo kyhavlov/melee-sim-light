@@ -97,12 +97,14 @@ typedef struct MslFighterPoseProgram {
     uint32_t node_start;
     uint32_t track_map_start;
     uint32_t track_count;
+    uint32_t value_start;
+    uint32_t frame_value_count;
     uint16_t node_count;
     uint16_t sample_count;
 } MslFighterPoseProgram;
 
 typedef struct MslFighterPoseProgramNode {
-    uint32_t value_start;
+    uint32_t frame_value_offset;
     uint16_t track_start;
     uint16_t type_mask;
     uint16_t sample_count;
@@ -132,6 +134,10 @@ typedef struct MslFighterPosePrograms {
 int msl_fighter_pose_init(MslFighterPose* pose, uint8_t player_count);
 int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs);
 void msl_fighter_pose_programs_deinit(MslFighterPosePrograms* programs);
+#ifdef MSL_CORE_NATIVE
+uint16_t msl_fighter_pose_program_token(const FigaTree* tree);
+FigaTree* msl_fighter_pose_program_tree(uint16_t token);
+#endif
 void msl_fighter_pose_register_tree(HSD_JObj* root);
 void msl_fighter_pose_bind_part(HSD_JObj* joint, uint8_t part);
 void msl_fighter_pose_remove_tree(HSD_JObj* root);

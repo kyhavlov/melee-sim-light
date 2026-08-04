@@ -73,6 +73,20 @@ static uint16_t find_program(const FigaTree* tree)
 }
 #endif
 
+#ifdef MSL_CORE_NATIVE
+uint16_t msl_fighter_pose_program_token(const FigaTree* tree)
+{
+    return (uint16_t) (find_program(tree) + 1);
+}
+
+FigaTree* msl_fighter_pose_program_tree(uint16_t token)
+{
+    const MslFighterPosePrograms* programs = active_programs();
+    HSD_ASSERT(72, token != 0 && token <= programs->program_count);
+    return programs->programs[token - 1].tree;
+}
+#endif
+
 static MslFighterPoseJoint* pose_joint(const HSD_JObj* joint)
 {
     MslFighterPoseJoint* node;
@@ -1287,6 +1301,8 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
         program->node_start = node_count;
         program->track_map_start = (uint32_t) track_node_count;
         program->track_count = figa_track_count(program->tree);
+        program->value_start = (uint32_t) value_count;
+        program->frame_value_count = 0;
         track_node_count += program->track_count;
         HSD_ASSERT(495, figa_node_count(program->tree) <= UINT16_MAX);
         program->node_count = (uint16_t) figa_node_count(program->tree);
@@ -1328,13 +1344,14 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
             }
             if (node->direct) {
                 node->value_count = (uint8_t) mask_count(node->type_mask);
-                node->value_start = (uint32_t) value_count;
-                value_count +=
-                    (uint64_t) node->value_count * program->sample_count;
-                HSD_ASSERT(503, value_count <= UINT32_MAX);
+                node->frame_value_offset = program->frame_value_count;
+                program->frame_value_count += node->value_count;
             }
             track_start += track_count;
         }
+        value_count +=
+            (uint64_t) program->frame_value_count * program->sample_count;
+        HSD_ASSERT(503, value_count <= UINT32_MAX);
         HSD_ASSERT(505, *source_node == -1);
         HSD_ASSERT(506, track_start == program->track_count);
     }
@@ -1376,8 +1393,9 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
                                         &value))
                     {
                         uint32_t value_index =
-                            node->value_start +
-                            sample * node->value_count + slot;
+                            program->value_start +
+                            sample * program->frame_value_count +
+                            node->frame_value_offset + slot;
                         programs->values[value_index] = value;
                     } else {
                         node->direct = 0;
@@ -1456,8 +1474,13 @@ static bool publish_program_sample(MslFighterPoseJoint* node,
                             (1U << HSD_A_J_TRAY) |
                             (1U << HSD_A_J_TRAZ));
     }
-    values = &programs->values[program_node->value_start +
-                               sample * program_node->value_count];
+    {
+        const MslFighterPoseProgram* program =
+            &programs->programs[program_node->program_index];
+        values = &programs->values[program->value_start +
+                                   sample * program->frame_value_count +
+                                   program_node->frame_value_offset];
+    }
 #define PUBLISH_ROTX(value)                                                   \
     do {                                                                     \
         if (joint->flags & JOBJ_JOINT1) {                                    \

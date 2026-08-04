@@ -2010,6 +2010,7 @@ static void Fighter_Spaghetti_8006AD10_Inner1(Fighter* fp)
 void Fighter_Spaghetti_8006AD10(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
+    bool cpu_input;
     float tempf1;
     float tempf0;
 
@@ -2022,6 +2023,7 @@ void Fighter_Spaghetti_8006AD10(Fighter_GObj* gobj)
 
     if (!fp->x221F_b3) {
         if (!fp->x2224_b2) {
+            cpu_input = ftCo_800A2040(fp);
             if (!fp->x221D_b3) {
                 SET_STICKS(fp->input.lstick1.x, fp->input.lstick1.y,
                            fp->input.x630, fp->input.x634);
@@ -2039,7 +2041,7 @@ void Fighter_Spaghetti_8006AD10(Fighter_GObj* gobj)
                 fp->input.x660 = fp->input.held_inputs;
             }
 
-            if (ftCo_800A2040(fp)) {
+            if (cpu_input) {
                 SET_STICKS(fp->input.lstick.x, fp->input.lstick.y,
                            ftCo_800A17E4(fp), ftCo_800A1874(fp));
                 if (DbLevel < 3 && !gm_8016B41C()) {
@@ -2095,7 +2097,7 @@ void Fighter_Spaghetti_8006AD10(Fighter_GObj* gobj)
                 fp->input.x650 = 0.0f;
             }
 
-            if (ftCo_800A2040(fp)) {
+            if (cpu_input) {
                 fp->input.held_inputs = ftCo_800A198C(fp);
             } else {
                 fp->input.held_inputs =
@@ -2104,7 +2106,7 @@ void Fighter_Spaghetti_8006AD10(Fighter_GObj* gobj)
 
             if (gm_8016B0FC()) {
                 fp->input.x650 = 0.0f;
-                if (ftCo_800A2040(fp)) {
+                if (cpu_input) {
                     fp->input.held_inputs &= HSD_PAD_A | HSD_PAD_XY;
                 } else {
                     fp->input.held_inputs &= HSD_PAD_A;

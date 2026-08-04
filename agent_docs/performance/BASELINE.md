@@ -6,10 +6,9 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Provenance
 
-- Revision: first 150k-campaign checkpoint candidate based on
-  `5fac340b3d7e639669701e17c98a2a5e86ff7e08`
+- Revision: second 150k-campaign checkpoint candidate based on `ee32fbc1`
 - Release benchmark SHA-256:
-  `461dd9abaafb6205328fcfa0e0c113bc0c4bec277846559becdd8a57b54d8efd`
+  `d5de6ab2f3b66415f1cf15b129ea8d773098e2b5693015044feced5e3c6665e0`
 - Date: 2026-08-03
 - Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 7.0 x86-64
 - Compiler: GCC 13.3.0, strict native release profile, `-march=native -mtune=native`
@@ -18,7 +17,9 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
   ownership, construction-bound dynamic-hurt membership, fused exact JObj/dynamics transforms,
   exact quaternion compiler boundaries, exact O1 fighter map collision, direct hosted scheduler
   dispatch, source-defined Ice Climbers item projection, immutable authored-joint quaternions,
-  exact batched fighter-pose blends, a handshake-preserving Dream Land background-animation cut,
+  exact batched fighter-pose blends, frame-major compiled Figa samples, direct native motion-program
+  binding, register-generated exact wide-trig quadrant factors, duplicate input-predicate deletion,
+  exact negative-wall-query culling, a handshake-preserving Dream Land background-animation cut,
   and the 16-character merged runtime
 - Correctness: 366/366 accepted (`310 PASS`, `56 CLASSIFIED`, zero XPASS/fail/error) across
   3,501,461 validated frames. Twenty-five obsolete raw-pointer/pool-residue classifications are
@@ -45,17 +46,17 @@ The final exact candidate samples are:
 
 | Batch | Samples | Median cycles/frame | Median FPS | Digest |
 |---:|---|---:|---:|---:|
-| 256 | 3 | 38,882.2 | 110,383 | `bdff41cf74a54850` |
-| 512 | 3 | 37,318.4 | 115,009 | `ee9d93c545aa3ef9` |
+| 256 | 3 | 36,908.0 | 116,288 | `bdff41cf74a54850` |
+| 512 | 3 | 35,267.5 | 121,697 | `ee9d93c545aa3ef9` |
 
-Raw candidate 256 cycles/frame were `38,882.2`, `39,065.1`, and `38,875.2`; corresponding wall
-throughput was `110,383`, `109,867`, and `110,403` FPS. Raw candidate 512 cycles/frame were
-`37,186.9`, `37,318.4`, and `37,721.1`; corresponding wall throughput was `115,416`, `115,009`,
-and `113,781` FPS. Three order-reversed pairs against frozen committed control `5fac340b` yield
-median paired throughput gains of 6.70% at both resident sizes; every pair exceeds 6.6%. Both
-digests are unchanged. Cycles/frame is the primary comparison because wall FPS also reflects
-frequency and machine contention. The prior prefix-assigned benchmark is a different workload and
-is not an A/B performance control for these numbers.
+Raw candidate 256 cycles/frame were `37,104.3`, `36,891.6`, and `36,908.0`; corresponding wall
+throughput was `115,673`, `116,339`, and `116,288` FPS. Raw candidate 512 cycles/frame were
+`35,267.5`, `35,327.1`, and `35,249.0`; corresponding wall throughput was `121,697`, `121,492`,
+and `121,761` FPS. Three alternating pairs against frozen committed control `ee32fbc1` yield
+median paired throughput gains of 5.33% at resident 256 and 6.30% at resident 512. Ratios of raw
+medians are +5.33% and +6.24%. Both digests are unchanged. Cycles/frame is the primary comparison
+because wall FPS also reflects frequency and machine contention. The prior prefix-assigned
+benchmark is a different workload and is not an A/B performance control for these numbers.
 
 ## Current memory contract
 
@@ -75,14 +76,15 @@ both counts remain identical before and after gameplay. Its complete relocatable
 The public 128-frame observation history remains 127,488 bytes per environment and is
 caller-owned. Shared GameData owns 72,404,776 initialized arena bytes plus the native DAT arena;
 that immutable/process-wide cost is not replicated per Match. Native DAT translation appends
-302,848 immutable bytes of authored-joint quaternions; Match size, savestate size, and gameplay
-allocation counts are unchanged.
+302,848 immutable bytes of authored-joint quaternions. The compiled-pose program descriptors add
+26,472 process-wide bytes (eight bytes across 3,309 programs) for frame-row ownership; compiled
+sample count is unchanged. Match size, savestate size, and gameplay allocation counts are
+unchanged.
 
 ## Owner-selection profile
 
-The final bounded 32,768-frame resident-512 subsystem profile reports 47,078.7 diagnostic
-cycles/frame with digest `588be8489df1a62d`. It assigns 14.62% to pose animation, 13.52% to stage
-collision, 7.02% to `Fighter_8006D9AC`, 4.65% to input/action, 4.17% to camera, 2.38% to hit
-processing, and 0.69% to contact publication. Dream Land object 1's presentation response no
-longer appears among the top scheduled owners. This instrumented profile is for owner selection,
+The final bounded 32,768-frame resident-512 subsystem profile reports 45,307.3 diagnostic
+cycles/frame with digest `588be8489df1a62d`. It assigns 14.23% to pose animation, 12.75% to stage
+collision, 7.25% to `Fighter_8006D9AC`, 6.71% to input/action, 4.32% to camera, 2.32% to hit
+processing, and 0.70% to contact publication. This instrumented profile is for owner selection,
 not throughput; inclusive and nested rows must not be added.

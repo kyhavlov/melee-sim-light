@@ -40,6 +40,9 @@ representation may justify revisiting the same broad subsystem.
 - [`JOURNAL_2026-08-03.md`](JOURNAL_2026-08-03.md): the first 150k-throughput campaign checkpoint,
   including the complete retained and rejected owner experiments between `5fac340b` and the exact
   wide-pose/Dream Land checkpoint.
+- [`JOURNAL_2026-08-03_CHECKPOINT_2.md`](JOURNAL_2026-08-03_CHECKPOINT_2.md): the second
+  150k-throughput checkpoint, including all retained and rejected experiments between `ee32fbc1`
+  and the frame-local pose/motion/collision checkpoint.
 - [`PACKETS_2026-08-02.md`](PACKETS_2026-08-02.md): completed owner/deletion packet worklogs from
   the final push to the 100k baseline.
 - [`attempts/`](attempts/): one record per rejected architectural direction, including its revisit

@@ -3,13 +3,14 @@
 ## Contract and current control
 
 - Branch: `perf/decomp-throughput`; do not switch branches or create a worktree.
-- Current checkpoint candidate is based on `5fac340b`; the qualifying controlled evidence and
-  complete experiment history are in `agent_docs/performance/JOURNAL_2026-08-03.md`.
-- Frozen release binary: `build/melee_core/perf-candidate-wide-dl-handshake/replay-bench`,
-  SHA-256 `461dd9abaafb6205328fcfa0e0c113bc0c4bec277846559becdd8a57b54d8efd`.
-- Resident-256 candidate median: 38,882.2 cycles/frame and 110,383 FPS, digest
+- Current checkpoint: the second 150k-campaign checkpoint based on `ee32fbc1`; its complete
+  experiment history and qualifying evidence are in
+  `agent_docs/performance/JOURNAL_2026-08-03_CHECKPOINT_2.md`.
+- Release benchmark SHA-256:
+  `d5de6ab2f3b66415f1cf15b129ea8d773098e2b5693015044feced5e3c6665e0`.
+- Resident-256 candidate median: 36,908.0 cycles/frame and 116,288 FPS, digest
   `bdff41cf74a54850`.
-- Resident-512 candidate median: 37,318.4 cycles/frame and 115,009 FPS, digest
+- Resident-512 candidate median: 35,267.5 cycles/frame and 121,697 FPS, digest
   `ee9d93c545aa3ef9`.
 - Final target: at least 150,000 controlled median FPS at both resident sizes, with exact output
   and no gameplay allocation or unexplained memory growth.
@@ -18,11 +19,14 @@
 
 ## Next owner selection
 
-- The final 32,768-frame resident-512 profile assigns 14.62% to pose animation, 13.52% to stage
-  collision, 7.02% to fighter dynamics, 4.65% to input/action, and 4.17% to camera.
-- The narrow pose-blend and exact scalar alternatives exercised in the August 3 journal are
-  closed. Select a bounded source owner whose work can actually be deleted; do not add another
-  gathering, compatibility, or duplicated representation layer.
+- The final bounded resident-512 profile is 45,307.3 diagnostic cycles/frame. Pose animation owns
+  14.23%, stage collision 12.75%, fighter dynamics 7.25%, input/action 6.71%, and camera 4.32%.
+- The retained stage-collision fast path removes only provably duplicate negative wall queries;
+  action-specific collision specialization, ECB vector reduction, and a shared wall broad phase
+  are closed by this checkpoint's measurements.
+- Select the next bounded owner only after searching `agent_docs/performance/`. Record its final
+  owner, canonical state, consumers, displaced work/state, and complete deletion boundary here
+  before implementation. Compiler-setting experiments remain excluded.
 
 # Previous structural packet — `decomp-port-arm64-ppc` merge polish
 

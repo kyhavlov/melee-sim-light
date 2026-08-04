@@ -2508,6 +2508,7 @@ bool mpColl_80046904(CollData* coll, u32 flags)
 
     do {
         bool r3;
+        bool check_wall_again;
         float x_after_collide_right;
         float x_after_collide_left;
         float y_after_collide_floor;
@@ -2518,7 +2519,8 @@ bool mpColl_80046904(CollData* coll, u32 flags)
         x_after_collide_left = 0.0F;
         prev_b6 = coll->x34_flags.b6;
         squeeze_flags = 0;
-        if (mpColl_80045B74_LeftWall(coll)) {     // Physics_LeftWallCheckAir
+        check_wall_again = mpColl_80045B74_LeftWall(coll);
+        if (check_wall_again) {                   // Physics_LeftWallCheckAir
             if (mpColl_80046224_LeftWall(coll)) { // Physics_LeftWallCollideAir
                 left_right_flags |= 1;
                 squeeze_flags |= 8;
@@ -2527,6 +2529,7 @@ bool mpColl_80046904(CollData* coll, u32 flags)
         }
 
         if (mpColl_80044E10_RightWall(coll)) { // Physics_RightWallCheckAir
+            check_wall_again = true;
             if (mpColl_800454A4_RightWall(
                     coll)) { // Physics_RightWallCollideAir
                 left_right_flags |= 2;
@@ -2535,21 +2538,25 @@ bool mpColl_80046904(CollData* coll, u32 flags)
             x_after_collide_right = coll->cur_pos.x;
         }
 
-        if (mpColl_80045B74_LeftWall(coll)) {     // Physics_LeftWallCheckAir
-            if (mpColl_80046224_LeftWall(coll)) { // Physics_LeftWallCollideAir
-                left_right_flags |= 1;
-                squeeze_flags |= 8;
+        if (check_wall_again) {
+            if (mpColl_80045B74_LeftWall(coll)) { // Physics_LeftWallCheckAir
+                if (mpColl_80046224_LeftWall(
+                        coll)) { // Physics_LeftWallCollideAir
+                    left_right_flags |= 1;
+                    squeeze_flags |= 8;
+                }
+                x_after_collide_left = coll->cur_pos.x;
             }
-            x_after_collide_left = coll->cur_pos.x;
-        }
 
-        if (mpColl_80044E10_RightWall(coll)) { // Physics_RightWallCheckAir
-            if (mpColl_800454A4_RightWall(
-                    coll)) { // Physics_RightWallCollideAir
-                left_right_flags |= 2;
-                squeeze_flags |= 4;
+            if (mpColl_80044E10_RightWall(
+                    coll)) { // Physics_RightWallCheckAir
+                if (mpColl_800454A4_RightWall(
+                        coll)) { // Physics_RightWallCollideAir
+                    left_right_flags |= 2;
+                    squeeze_flags |= 4;
+                }
+                x_after_collide_right = coll->cur_pos.x;
             }
-            x_after_collide_right = coll->cur_pos.x;
         }
 
         if ((squeeze_flags & 0xC) == 0xC) {
@@ -4016,10 +4023,12 @@ bool mpColl_8004ACE4(CollData* coll, int flags)
         bool hit_right;   // r25
         bool hit_floor;   // r25
         bool hit_ceiling; // r26
+        bool check_wall_again;
         hit_right = false;
         prev_b6 = coll->x34_flags.b6;
         hit_left = 0;
-        if (mpColl_80049778_LeftWall(coll)) {
+        check_wall_again = mpColl_80049778_LeftWall(coll);
+        if (check_wall_again) {
             hit_left = mpColl_80049EAC_LeftWall(coll);
             if (hit_left) {
                 left_right |= 1;
@@ -4030,6 +4039,7 @@ bool mpColl_8004ACE4(CollData* coll, int flags)
             coll->x34_flags.b5 = true;
         }
         if (mpColl_80048AB0_RightWall(coll)) {
+            check_wall_again = true;
             hit_right = mpColl_800491C8_RightWall(coll);
             if (hit_right) {
                 left_right |= 2;
@@ -4039,21 +4049,23 @@ bool mpColl_8004ACE4(CollData* coll, int flags)
             x_after_right = coll->cur_pos.x;
             coll->x34_flags.b5 = true;
         }
-        if (mpColl_80049778_LeftWall(coll)) {
-            hit_left |= mpColl_80049EAC_LeftWall(coll);
-            if (hit_left) {
-                left_right |= 1;
+        if (check_wall_again) {
+            if (mpColl_80049778_LeftWall(coll)) {
+                hit_left |= mpColl_80049EAC_LeftWall(coll);
+                if (hit_left) {
+                    left_right |= 1;
+                }
+                x_after_left = coll->cur_pos.x;
+                coll->x34_flags.b5 = true;
             }
-            x_after_left = coll->cur_pos.x;
-            coll->x34_flags.b5 = true;
-        }
-        if (mpColl_80048AB0_RightWall(coll)) {
-            hit_right |= mpColl_800491C8_RightWall(coll);
-            if (hit_right) {
-                left_right |= 2;
+            if (mpColl_80048AB0_RightWall(coll)) {
+                hit_right |= mpColl_800491C8_RightWall(coll);
+                if (hit_right) {
+                    left_right |= 2;
+                }
+                x_after_right = coll->cur_pos.x;
+                coll->x34_flags.b5 = true;
             }
-            x_after_right = coll->cur_pos.x;
-            coll->x34_flags.b5 = true;
         }
 
         if (hit_left && hit_right) {

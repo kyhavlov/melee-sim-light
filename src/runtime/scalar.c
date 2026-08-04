@@ -727,6 +727,8 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
     {
         return -1;
     }
+    msl_core_bind_game_data(game_data);
+    msl_ft_data_bind_motion_programs();
     game_data->fingerprint = fingerprint_game_data(game_data);
     msl_core_bind_game_data(game_data);
     msl_host_finish_initialization();
@@ -1333,6 +1335,14 @@ static int preload_match_configuration(MslCoreGameData* game_data,
     result = msl_core_match_init(match, game_data, &config, &previous_input);
     if (result == 0) {
         int costume_id;
+        int kind;
+
+        for (kind = 0; kind < FTKIND_MAX; ++kind) {
+            if (match->source.fighter.data_list[kind] != NULL) {
+                game_data->source.fighter.data_list[kind] =
+                    match->source.fighter.data_list[kind];
+            }
+        }
 
         // Fighter_Create reaches only the configured costume, while a public
         // Match may select any source-declared costume after immutable

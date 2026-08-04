@@ -8,6 +8,7 @@
 #ifdef MSL_CORE_NATIVE
 #include "platform/memory.h"
 #include "runtime/context.h"
+#include "runtime/fighter_pose.h"
 #endif
 
 #include "ef/efasync.h"
@@ -2251,8 +2252,73 @@ void ftData_80085B98(Fighter* fp, int arg1, int arg2)
     }
 }
 
+#ifdef MSL_CORE_NATIVE
+enum {
+    MSL_FIGHTER_MOTION_PROGRAM = 0x80000000U,
+};
+
+static FigaTree* native_motion_tree(struct Fighter_WaitAnimData* motion)
+{
+    HSD_Archive archive;
+    FigaTree* tree;
+
+    if (motion->x14 & MSL_FIGHTER_MOTION_PROGRAM) {
+        return msl_fighter_pose_program_tree((uint16_t) motion->x14);
+    }
+    HSD_ASSERT(0x9E0,
+               HSD_ArchiveParse(
+                   &archive,
+                   msl_memory_from_token(msl_core_game_memory_context(),
+                                         motion->x14),
+                   motion->x8) == 0);
+    tree = HSD_ArchiveGetPublicAddress(&archive, motion->x0);
+    HSD_ASSERT(0x9E1, tree != NULL);
+    return tree;
+}
+
+void msl_ft_data_bind_motion_programs(void)
+{
+    int kind;
+
+    for (kind = 0; kind < FTKIND_MAX; ++kind) {
+        ftData* data = gFtDataList[kind];
+        int count = ftData_Table_Unk0[kind].count;
+        int motion;
+
+        if (data == NULL || ftData_Table_Unk0[kind].data == NULL) {
+            continue;
+        }
+        for (motion = 0; motion < count; ++motion) {
+            struct Fighter_WaitAnimData* record = &data->xC[motion];
+            uint16_t token;
+
+            if (record->x14 == 0) {
+                continue;
+            }
+            HSD_ASSERT(0x9E2,
+                       !(record->x14 & MSL_FIGHTER_MOTION_PROGRAM));
+            token = msl_fighter_pose_program_token(
+                native_motion_tree(record));
+            record->x14 = MSL_FIGHTER_MOTION_PROGRAM | token;
+        }
+    }
+}
+#endif
+
 void ftData_80085CD8(Fighter* fp, Fighter* arg1, int msid)
 {
+#ifdef MSL_CORE_NATIVE
+    if (msid < arg1->x58C) {
+        struct Fighter_WaitAnimData* motion =
+            ftData_80085FD4(arg1, msid);
+        u32 token = motion->x14;
+
+        if (token != (u32) fp->x5A4) {
+            fp->x590 = token != 0 ? native_motion_tree(motion) : NULL;
+            fp->x5A4 = (void*) (uintptr_t) token;
+        }
+    }
+#else
     HSD_Archive sp14;
     Fighter* temp_r3_3;
     s32 temp_ret;
@@ -2329,10 +2395,25 @@ void ftData_80085CD8(Fighter* fp, Fighter* arg1, int msid)
             fp->x5A4 = (void*) temp_r3->x14;
         }
     }
+#endif
 }
 
 FigaTree* ftData_80085E50(Fighter* arg0, int msid)
 {
+#ifdef MSL_CORE_NATIVE
+    if (msid < arg0->x58C) {
+        struct Fighter_WaitAnimData* motion =
+            ftData_80085FD4(arg0, msid);
+        u32 token = motion->x14;
+
+        if (token != (u32) arg0->x5A8) {
+            arg0->x598 = token != 0 ? native_motion_tree(motion) : NULL;
+            arg0->x5A8 = (void*) (uintptr_t) token;
+        }
+        return arg0->x598;
+    }
+    return NULL;
+#else
     HSD_Archive sp10;
     Fighter* temp_r3_3;
     int temp_ret;
@@ -2403,6 +2484,7 @@ FigaTree* ftData_80085E50(Fighter* arg0, int msid)
         return arg0->x598;
     }
     return NULL;
+#endif
 }
 
 struct Fighter_WaitAnimData* ftData_80085FD4(Fighter* fp, int msid)

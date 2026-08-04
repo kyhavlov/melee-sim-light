@@ -19,6 +19,9 @@
 /* 0858E4 */ void ftData_800858E4(FighterKind, int costume_id);
 /* 0859A8 */ void ftData_800859A8(Fighter*);
 /* 085A14 */ void ftData_80085A14(FighterKind);
+#ifdef MSL_CORE_NATIVE
+void msl_ft_data_bind_motion_programs(void);
+#endif
 /* 085B10 */ void ftData_80085B10(Fighter*);
 /* 085B98 */ void ftData_80085B98(Fighter*, int, int);
 /* 085CD8 */ void ftData_80085CD8(Fighter*, Fighter*, enum_t msid);

@@ -260,3 +260,19 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 - Source synchronization, native smoke, PPC smoke, the 3,501,461-frame supported-domain suite,
   public API/test, Wasm parity, and viewer smoke all pass. The full experiment and rejected-variant
   record is in `JOURNAL_2026-08-03.md`.
+
+## Frame-local pose and collision work deletion
+
+- `This commit` transposes the existing compiled Figa values to program-owned frame rows, replaces
+  two exact AVX-512 quadrant gathers with register masks, binds each native fighter motion record
+  directly to its compiled pose program before GameData is sealed, evaluates the repeated CPU
+  input-owner predicate once, and skips the source collision driver's second left/right wall pass
+  only when both first checks were negative and therefore changed no relevant state.
+- Three 262,144-frame alternating pairs against `ee32fbc1` preserve both production digests and
+  improve median paired throughput by 5.33% at resident 256 and 6.30% at resident 512. Candidate
+  medians are 36,908.0 / 35,267.5 cycles/frame and 116,288 / 121,697 FPS. Match storage,
+  savestate size, and gameplay allocation are unchanged; the frame-row descriptors add 26,472
+  process-wide immutable bytes while the compiled sample count remains unchanged.
+- Source synchronization, native smoke, PPC smoke, the 3,501,461-frame optimized-release suite,
+  allocation/save-restore census, Wasm parity, and viewer smoke pass. The complete
+  retained/rejected experiment record is in `JOURNAL_2026-08-03_CHECKPOINT_2.md`.

@@ -166,7 +166,8 @@ void msl_sincosf_many(const f32* xyz, f32* sin_out, f32* cos_out, int count)
         __m512 normal_cos;
         __m512 small_sin;
         __m512 small_cos;
-        __m512i quadrant;
+        __mmask16 negative_quadrant;
+        __mmask16 odd;
         __mmask16 even;
         __mmask16 small;
 
@@ -174,12 +175,16 @@ void msl_sincosf_many(const f32* xyz, f32* sin_out, f32* cos_out, int count)
         y = _mm512_fmadd_ps(x, _mm512_set1_ps(__four_over_pi_m1[1]), y);
         y = _mm512_fmadd_ps(x, _mm512_set1_ps(__four_over_pi_m1[2]), y);
         y = _mm512_fmadd_ps(x, _mm512_set1_ps(__four_over_pi_m1[3]), y);
-        quadrant = _mm512_and_epi32(_mm512_slli_epi32(n, 1),
-                                    _mm512_set1_epi32(6));
-        base = _mm512_i32gather_ps(quadrant, __sincos_on_quadrant, 4);
-        next = _mm512_i32gather_ps(_mm512_add_epi32(
-                                       quadrant, _mm512_set1_epi32(1)),
-                                   __sincos_on_quadrant, 4);
+        odd = _mm512_test_epi32_mask(n, _mm512_set1_epi32(1));
+        even = (__mmask16) ~odd;
+        negative_quadrant =
+            _mm512_test_epi32_mask(n, _mm512_set1_epi32(2));
+        base = _mm512_maskz_mov_ps(odd, _mm512_set1_ps(1.0F));
+        base = _mm512_mask_sub_ps(base, odd & negative_quadrant,
+                                  _mm512_setzero_ps(), base);
+        next = _mm512_maskz_mov_ps(even, _mm512_set1_ps(1.0F));
+        next = _mm512_mask_sub_ps(next, even & negative_quadrant,
+                                  _mm512_setzero_ps(), next);
         small = _mm512_cmp_ps_mask(
             _mm512_abs_ps(y), _mm512_set1_ps(__epsilon), _CMP_LT_OQ);
         if (small == (__mmask16) 0xFFFF) {
@@ -212,9 +217,6 @@ void msl_sincosf_many(const f32* xyz, f32* sin_out, f32* cos_out, int count)
         sin_poly = _mm512_fmadd_ps(sin_poly, ysq,
                                    _mm512_set1_ps(__sincos_poly[9]));
 
-        even = _mm512_cmpeq_epi32_mask(
-            _mm512_and_epi32(n, _mm512_set1_epi32(1)),
-            _mm512_setzero_si512());
         normal_sin = _mm512_mask_blend_ps(
             even, _mm512_mul_ps(cos_poly, base),
             _mm512_mul_ps(_mm512_mul_ps(sin_poly, y), next));
