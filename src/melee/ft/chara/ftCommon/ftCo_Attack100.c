@@ -636,7 +636,16 @@ void ft_800D76B8(Fighter_GObj* gobj)
             f32 x2340;
             s32 x2344;
         } ItemScopeVars;
+#ifdef MSL_CORE_HOSTED
+        // Same raw fp+0x2340 walk as above: address the mv union base.
+        typedef struct {
+            f32 x2340;
+            s32 x2344;
+        } ItemScopeMv;
+        ItemScopeMv* vars = (ItemScopeMv*) &fp->mv;
+#else
         ItemScopeVars* vars = (ItemScopeVars*) fp;
+#endif
 
         ftAnim_8006EBA4(gobj);
         vars->x2340 = *(f32*) &ftCo_804D9020;
@@ -671,7 +680,16 @@ void ft_800D7770(Fighter_GObj* gobj)
             f32 x2340;
             s32 x2344;
         } ItemScopeVars;
+#ifdef MSL_CORE_HOSTED
+        // Same raw fp+0x2340 walk as above: address the mv union base.
+        typedef struct {
+            f32 x2340;
+            s32 x2344;
+        } ItemScopeMv;
+        ItemScopeMv* vars = (ItemScopeMv*) &fp->mv;
+#else
         ItemScopeVars* vars = (ItemScopeVars*) fp;
+#endif
 
         ftAnim_8006EBA4(gobj);
         ftCommon_ClampAirDrift(fp);
@@ -725,8 +743,15 @@ void fn_800D7938(Fighter_GObj* gobj)
     temp_r30 = gobj;
     temp_r31 = GET_FIGHTER(temp_r30);
     if (temp_r31->item_gobj != NULL) {
+#ifdef MSL_CORE_HOSTED
+        // Retail reaches the fp+0x2340 motion-var lane by raw byte offset;
+        // hosted Fighter widens earlier members, so address the mv union.
+        temp_r4 = it_80291DAC(temp_r31->item_gobj,
+                              (s32) * (f32*) &temp_r31->mv);
+#else
         temp_r4 = it_80291DAC(temp_r31->item_gobj,
                               (s32) ((FighterOverlay*) temp_r31)->x2340);
+#endif
         if (temp_r4 != -1) {
             it_80291F14(temp_r31->item_gobj, temp_r4);
         }
@@ -752,7 +777,16 @@ void fn_800D79B4(HSD_GObj* gobj, void (*cb_ground)(HSD_GObj*),
         f32 timer; // 0x2340
         s32 flag;  // 0x2344
     } FighterOverlay;
+#ifdef MSL_CORE_HOSTED
+    // Same raw fp+0x2340 walk: address the mv union base.
+    typedef struct {
+        f32 timer;
+        s32 flag;
+    } FighterMvOverlay;
+    FighterMvOverlay* fp_ovl = (FighterMvOverlay*) &fp->mv;
+#else
     FighterOverlay* fp_ovl = (FighterOverlay*) fp;
+#endif
 
     // Use this specific cast to generate the correct 'lfs' instruction for the
     // global int
@@ -765,15 +799,26 @@ void fn_800D79B4(HSD_GObj* gobj, void (*cb_ground)(HSD_GObj*),
     // Access 0x2344 (Flag) via overlay
     if (fp_ovl->flag == 0) {
         // Access 0x65C (Input) via raw pointer to match ASM
+#ifdef MSL_CORE_HOSTED
+        // Hosted Fighter widens earlier members; read the named lane.
+        if ((u32) fp->input.held_inputs & HSD_PAD_A) {
+#else
         if (*(u32*) ((u8*) fp + 0x65C) & HSD_PAD_A) {
+#endif
             // Access 0x2340 (Timer) via overlay
             fp_ovl->timer += *(f32*) &ftCo_804D9024;
         }
     }
 
+#ifdef MSL_CORE_HOSTED
+    if (!((u32) fp->input.held_inputs & HSD_PAD_A)) {
+        fp_ovl->flag = 1;
+    }
+#else
     if (!(*(u32*) ((u8*) fp + 0x65C) & HSD_PAD_A)) {
         fp_ovl->flag = 1;
     }
+#endif
 
     // Timer to int conversion
     stack_var = (s32) fp_ovl->timer;
@@ -991,7 +1036,12 @@ void ftCo_ItemScopeRapid_IASA(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
     if (fp->input.x668 & HSD_PAD_A) {
+#ifdef MSL_CORE_HOSTED
+        // Same raw fp+0x2340 walk: address the mv union base.
+        *(s32*) &fp->mv = *(s32*) ((u8*) p_ftCommonData + 0x5BC);
+#else
         *(s32*) ((u8*) fp + 0x2340) = *(s32*) ((u8*) p_ftCommonData + 0x5BC);
+#endif
     }
 }
 
@@ -1000,7 +1050,12 @@ void ftCo_ItemScopeAirRapid_IASA(Fighter_GObj* gobj)
     Fighter* fp = *(Fighter**) ((u8*) gobj + 0x2C);
 
     if (fp->input.x668 & HSD_PAD_A) {
+#ifdef MSL_CORE_HOSTED
+        // Same raw fp+0x2340 walk: address the mv union base.
+        *(s32*) &fp->mv = *(s32*) ((u8*) p_ftCommonData + 0x5BC);
+#else
         *(s32*) ((u8*) fp + 0x2340) = *(s32*) ((u8*) p_ftCommonData + 0x5BC);
+#endif
     }
 }
 
