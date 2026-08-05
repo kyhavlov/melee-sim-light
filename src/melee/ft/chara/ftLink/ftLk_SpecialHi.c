@@ -126,12 +126,25 @@ void ftLk_SpecialHi_Coll(HSD_GObj* gobj)
 void ftLk_SpecialAirHi_Coll(HSD_GObj* gobj)
 {
     u8 _[8];
+#ifdef MSL_CORE_HOSTED
+    // Retail reads the spin-attack landing lag by casting the ext-attr
+    // blob to Fighter* and walking to fp+0x30 (facing_dir1). Hosted
+    // Fighter offsets differ, so read the ftLk_DatAttrs::x30 lane that
+    // walk actually addresses; PPC keeps the retail cast.
+    ftLk_DatAttrs* da = GET_FIGHTER(gobj)->dat_attrs;
+    if (ft_CheckGroundAndLedge(gobj, 0)) {
+        ftCo_LandingFallSpecial_Enter(gobj, false, da->x30);
+    } else if (ftCliffCommon_80081298(gobj)) {
+        return;
+    }
+#else
     Fighter* fp = GET_FIGHTER(gobj)->dat_attrs;
     if (ft_CheckGroundAndLedge(gobj, 0)) {
         ftCo_LandingFallSpecial_Enter(gobj, false, fp->facing_dir1);
     } else if (ftCliffCommon_80081298(gobj)) {
         return;
     }
+#endif
 }
 
 static void doColl(HSD_GObj* gobj)
