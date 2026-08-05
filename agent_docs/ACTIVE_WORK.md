@@ -119,7 +119,8 @@ cross-partition is 11 both-pass / 20 native-only-fail (HOST-WIDTH class) / 29 bo
 class.
 
 Width-class leads (native-only fails), from the 20-replay first-mismatch census:
-- `action_id expected=43 (Turn) actual=14/18/178` in ~10 replays — the hosted native
+- RESOLVED (was the top width family): `action 43` was ftCo_MS_LandingFallSpecial, not Turn — the spin-attack landing lag read via the Fighter-cast attr walk (facing_dir1 = ftLk_DatAttrs::x30); fixed and ledgered, 11 -> 31 passes.
+- (stale text below kept for provenance) `action_id expected=43 (Turn) actual=14/18/178` in ~10 replays — the hosted native
   build ABORTS a Turn after one frame (43 -> Wait at e.g. slpfiles-2025-05_0518 frame
   1646, entered from the bomb-pull end 357) because ftAnim_IsFramesRemaining goes
   false; PPC running the identical hosted C keeps the Turn and passes, so an upstream
@@ -150,6 +151,21 @@ Logic-class leads (both-backend fails):
   closed most of it — re-census which replays still carry it.
 - 1–2 ULP families: 18932 item.pos_x 2-ULP episode; redxlink_0221 percent 1-ULP at a
   damage application (staling multiply chain is the suspect).
+
+Standing after the landing-lag fix: **native 31 pass / 29 fail — Link 16/31, Young
+Link 16/34** (goal 20/30 each; need +4 per side from the 29 both-backend fails). The 29
+are almost all SMALL self-healing episodes now: three 1-row fails (redxlink_0221 percent
+1-ULP at a damage application — staling-multiply suspect; slippi-2025-01 pos_x 1 row;
+slippi-2025-08_0805 pos_y 1 row), then 2..31-row pos_y/speed_y episodes. The dominant
+recurring shape: a 1-ULP pos_y with a ~32-ULP speed_y_self in fighter state 361
+(ftLk_MS_AirCatchHit — the offstage zair catch fall, e.g. 32106 @1649, slpfiles-2025-10
+@1650): ftCo_AirCatchHit_Phys runs `self_vel = pos_delta` + shared ftCommon_Fall, so the
+seed is the catch-hit ENTRY velocity, fed by the hookshot chain geometry (the pin-walk
+normalize margins measured as razor-thin earlier, e.g. +2.4e-7 at one boundary). Range
+audits confirm ZERO fused ops in the whole ftLk/ftCl address ranges and none reachable
+in ftCo_AirCatch (the two fmadds nearby belong to ftCo_DamageBind's 800C4550). Next
+lever: dual-backend (native-vs-PPC) frame-stamped traces of the 4BFC walk at the catch
+frame to find the first differing float, since PPC is bit-exact against retail here.
 
 Fixed this session (all committed): tether launch reads through the hookshot scratch
 mirror (0 -> 11 passes; probe-verified retail derives the launch from the scaled x38
