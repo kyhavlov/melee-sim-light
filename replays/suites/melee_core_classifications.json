@@ -605,6 +605,102 @@
    }
   },
   {
+   "replay": "replays/validation/icies/ys-peach-2025-02_23549_Game_20250221T133850.slpz",
+   "id": "peach-parasol-landing-teardown-window",
+   "owner": "ftPe parasol teardown against the Slippi item sample point at a FallSpecial landing",
+   "rationale": "One exported row (frame 2076): the hosted projection publishes Peach's closed parasol article (spawn id 11, its frozen spawn-position row at 67.36/-11.93) one item sample longer than the recording. The recorded episode's last row is 2075 and the window is exactly Peach's landing out of FallSpecial (recorded post state 35 -> 14 across 2075 -> 2076), whose transition tears the article down (ftPe_8011D598 -> it_802BDB94). Slippi samples items from a player-plink GObj proc installed before fighter processing (SendItemInfo), so the teardown lands one sample apart between the recording schedule and the hosted publication boundary; whether retail retires the article in the preceding item phase or in the landing frame's fighter phase needs the Dolphin scenario probe. Every fighter, follower, physics, and item gameplay lane is exact on both sides of the window (2,198-frame exact prefix, 10,110-frame strict suffix), and both backends produce identical fingerprints.",
+   "sources": [
+    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+    "refs/melee/src/melee/ft/chara/ftPeach/ftPe_SpecialHi.c::ftPe_8011D518",
+    "refs/melee/src/melee/it/items/itpeachparasol.c::it_802BDB94"
+   ],
+   "expected": {
+    "native": {
+     "frames": 12309,
+     "matched_frames": 12308,
+     "mismatched_frames": 1,
+     "exact_prefix_frames": 2198,
+     "strict_suffix_frames": 10110,
+     "first_mismatch_frame": 2076,
+     "last_mismatch_frame": 2076,
+     "mismatch_count": 11,
+     "mismatch_fingerprint": "ed25d016f39d4dd5",
+     "mismatch_fields": [
+      {
+       "field": "item_count",
+       "count": 1,
+       "first_frame": 2076,
+       "last_frame": 2076
+      },
+      {
+       "field": "item.exists[1]",
+       "count": 1,
+       "first_frame": 2076,
+       "last_frame": 2076
+      },
+      {
+       "field": "item.state[1]",
+       "count": 1,
+       "first_frame": 2076,
+       "last_frame": 2076
+      },
+      {
+       "field": "item.type[1]",
+       "count": 1,
+       "first_frame": 2076,
+       "last_frame": 2076
+      },
+      {
+       "field": "item.owner[1]",
+       "count": 1,
+       "first_frame": 2076,
+       "last_frame": 2076
+      },
+      {
+       "field": "item.instance_id[1]",
+       "count": 1,
+       "first_frame": 2076,
+       "last_frame": 2076
+      },
+      {
+       "field": "item.direction[1]",
+       "count": 1,
+       "first_frame": 2076,
+       "last_frame": 2076
+      },
+      {
+       "field": "item.pos_x[1]",
+       "count": 1,
+       "first_frame": 2076,
+       "last_frame": 2076
+      },
+      {
+       "field": "item.pos_y[1]",
+       "count": 1,
+       "first_frame": 2076,
+       "last_frame": 2076
+      },
+      {
+       "field": "item.timer[1]",
+       "count": 1,
+       "first_frame": 2076,
+       "last_frame": 2076
+      },
+      {
+       "field": "item.spawn_id[1]",
+       "count": 1,
+       "first_frame": 2076,
+       "last_frame": 2076
+      }
+     ],
+     "render_visibility_mismatch_count": 4,
+     "first_render_visibility_mismatch_frame": -122,
+     "signed_zero_equal_count": 0
+    },
+    "ppc": "native"
+   }
+  },
+  {
    "replay": "replays/validation/luigi/platinum-platinum-c20d9507b199f01838e901d0.slpz",
    "id": "dolphin-ulp-motion-profile",
    "owner": "collision pose float execution profile",

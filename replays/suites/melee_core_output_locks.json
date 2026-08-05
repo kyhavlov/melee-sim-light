@@ -1402,6 +1402,15 @@
       }
     },
     {
+      "replay": "replays/validation/icies/ys-peach-2025-02_23549_Game_20250221T133850.slpz",
+      "expected": {
+        "native": {
+          "frames": 12309,
+          "actual_output_fingerprint": "379c73aadc502a56"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/links/106_Game_20250421T233442.slpz",
       "expected": {
         "native": {

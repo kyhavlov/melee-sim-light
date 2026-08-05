@@ -1,6 +1,6 @@
 {
  "name": "icies",
- "notes": "Ice Climbers validation suite: 30 netplay singles across all six legal stages (2022-2026 Slippi, ranked-anonymized, and mainline captures) against Fox, Falco, Marth, Sheik, Peach, and Donkey Kong plus an Ice Climbers ditto. Pokemon Stadium entries are frozen-form only: pre-3.19 captures are event-verified frozen (the stadium_transformation stream, spec 0x41, is declared and empty over each full game) because the game-start is_frozen_ps flag is only trustworthy at 3.19.0+; the import pool excluded four non-frozen Stadium games and a 2022 FoD capture predating the animation_index stream. Every game carries Slippi follower (Nana) frames for both climbers where present. The two ranked-anonymized captures (master-diamond, platinum-platinum) ran the classic UCF profile - dashback + shield drop without the pad-ring additions - so their sdi/shield-sdi/extended-shield-drop flags are off (retail-probe-verified on master-diamond frames -19 and 682). The 2026-08 popo_replays.zip import added five screened singles (one each on Fountain, frozen Stadium, Dream Land, Battlefield, and Final Destination); its sixth game (23549, Ice Climbers/Peach on Yoshi's) was rejected for a one-frame hosted extra-article divergence at frame 2076.",
+ "notes": "Ice Climbers validation suite: 31 netplay singles across all six legal stages (2022-2026 Slippi, ranked-anonymized, and mainline captures) against Fox, Falco, Marth, Sheik, Peach, and Donkey Kong plus an Ice Climbers ditto. Pokemon Stadium entries are frozen-form only: pre-3.19 captures are event-verified frozen (the stadium_transformation stream, spec 0x41, is declared and empty over each full game) because the game-start is_frozen_ps flag is only trustworthy at 3.19.0+; the import pool excluded four non-frozen Stadium games and a 2022 FoD capture predating the animation_index stream. Every game carries Slippi follower (Nana) frames for both climbers where present. The two ranked-anonymized captures (master-diamond, platinum-platinum) ran the classic UCF profile - dashback + shield drop without the pad-ring additions - so their sdi/shield-sdi/extended-shield-drop flags are off (retail-probe-verified on master-diamond frames -19 and 682). The 2026-08 popo_replays.zip import added six screened singles (one per legal stage). Its Yoshi's game (23549, Ice Climbers/Peach) carries the peach-parasol-landing-teardown-window classification: the hosted projection publishes the closed parasol article one item-sample longer than the recording at Peach's FallSpecial landing.",
  "ucf_enabled": true,
  "ucf_cardinals_1_0_enabled": true,
  "replays": [
@@ -372,6 +372,18 @@
    "characters": {
     "1": "Fox",
     "2": "Ice Climbers"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/ys-peach-2025-02_23549_Game_20250221T133850.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 8,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Peach"
    }
   }
  ]

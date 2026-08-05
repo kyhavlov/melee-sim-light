@@ -2051,8 +2051,8 @@ The 2026-08 `popo_replays.zip` import added five screened singles to the icies s
 (25 -> 30; Fountain, frozen Stadium, Dream Land, Battlefield, FD; opponents add
 Donkey Kong). The Stadium capture is 3.18.0, where is_frozen_ps is untrustworthy, and
 is event-verified frozen (0x41 declared and empty over the full game). The zip's sixth
-game (`23549`, Ice Climbers/Peach on Yoshi's) was rejected: one hosted extra-article
-frame at 2076 (item_count 2-vs-1, self-healing) — untriaged, kept out of the suite.
+game (`23549`, Ice Climbers/Peach on Yoshi's) was initially rejected for a one-frame
+item_count divergence at 2076; it was triaged and admitted the next day (below).
 
 **Suite state: icies 30 = 29 pass / 1 classified / 0 fail on native AND on PPC**
 (classified: `dl-fox-2025-05` wind-RNG draw gap). Aggregate **491 = 425 pass / 66
@@ -2060,3 +2060,23 @@ classified / 0 fail / 0 error**, lock-clean, xpass-free (30 icies output locks
 re-recorded/added; aggregate coverage tests bumped 486 -> 491). source-check,
 native-smoke, format-check, and pytest green (the parallel-oracle test only fails
 when run alongside a live aggregate run — worker OOM-kill, passes in isolation).
+
+## 23549 admitted under peach-parasol-landing-teardown-window (2026-08-05)
+
+The rejected sixth popo game is triaged and in the suite (31 replays). The frame-2076
+divergence is not an extra article: the hosted projection publishes Peach's closed
+parasol (spawn id 11, its frozen spawn-position row at 67.36/-11.93) exactly one item
+sample longer than the recording. The recorded episode ends at 2075 and the window is
+her landing out of FallSpecial (recorded post state 35 -> 14 across 2075 -> 2076),
+whose transition tears the article down (`ftPe_8011D518` / `it_802BDB94`); Slippi
+samples items from a player-plink GObj proc installed before fighter processing, so
+the teardown lands one sample apart between the recording schedule and the hosted
+publication boundary. Whether retail retires the article in the preceding item phase
+or the landing frame's fighter phase needs the Dolphin scenario probe. Native and PPC
+fingerprints are identical (`ed25d016f39d4dd5`), so the PPC snapshot aliases native.
+
+**Suite state: icies 31 = 29 pass / 2 classified / 0 fail on native AND on PPC**
+(classified: `dl-fox-2025-05` wind-RNG draw gap, `ys-peach-2025-02_23549` parasol
+teardown window). Aggregate **492 = 425 pass / 67 classified / 0 fail / 0 error**,
+lock-clean, xpass-free; the 23549 output lock is recorded and the aggregate coverage
+tests bumped 491 -> 492.
