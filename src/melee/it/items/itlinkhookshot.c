@@ -4,6 +4,7 @@
 
 #include "dolphin/mtx.h"
 #include "dolphin/types.h"
+#include <MSL/math_ppc.h>
 #include "ef/efsync.h"
 #include "ft/chara/ftCommon/ftCo_AirCatch.h"
 #include "ft/chara/ftCommon/ftCo_CliffJump.h"
@@ -939,7 +940,16 @@ float it_802A3C98(Vec3* arg0, Vec3* arg1, Vec3* arg2)
     arg2->y = arg0->y - arg1->y;
     arg2->z = arg0->z - arg1->z;
 
+#ifdef MSL_CORE_HOSTED
+    // Retail's out-of-line body keeps the dot product unfused but still uses
+    // MWCC's inline sqrtf — frsqrte plus three fused-fnmsub Newton steps
+    // (GALE01 0x802A3CF8..0x802A3D38) — which occasionally differs from the
+    // correctly-rounded libc sqrtf by one ULP.
+    len = msl_gekko_sqrtf(arg2->x * arg2->x + arg2->y * arg2->y +
+                          arg2->z * arg2->z);
+#else
     len = sqrtf(arg2->x * arg2->x + arg2->y * arg2->y + arg2->z * arg2->z);
+#endif
     if (len == (f64) 0.0F) {
         inv = (f64) 0.0F;
     } else {
@@ -966,8 +976,8 @@ static float it_802A3C98_msl_fused(Vec3* arg0, Vec3* arg1, Vec3* arg2)
     arg2->y = arg0->y - arg1->y;
     arg2->z = arg0->z - arg1->z;
 
-    len = sqrtf(__fmadds(arg2->z, arg2->z,
-                         __fmadds(arg2->x, arg2->x, arg2->y * arg2->y)));
+    len = msl_gekko_sqrtf(__fmadds(
+        arg2->z, arg2->z, __fmadds(arg2->x, arg2->x, arg2->y * arg2->y)));
     if (len == (f64) 0.0F) {
         inv = (f64) 0.0F;
     } else {
@@ -1311,8 +1321,8 @@ static inline f64 it_802A6A78_normalize_diff(Vec3* a, Vec3* b, Vec3* vec)
     vec->z = a->z - b->z;
     // MWCC fuses the distance dot product in every expansion (e.g. GALE01
     // 0x802A6B94/0x802A6B98): y*y stays a plain product, x and z fuse.
-    len = sqrtf(__fmadds(vec->z, vec->z,
-                         __fmadds(vec->x, vec->x, vec->y * vec->y)));
+    len = msl_gekko_sqrtf(__fmadds(
+        vec->z, vec->z, __fmadds(vec->x, vec->x, vec->y * vec->y)));
     if (len == 0.0F) {
         inv = 0.0F;
     } else {
@@ -1735,11 +1745,18 @@ s32 it_802A5FE0(ItemLink* link_0, ItemLink* link_0_2, Vec3* arg2,
 
 static inline f32 my_sqrt(f32 x)
 {
+#ifdef MSL_CORE_HOSTED
+    // Retail's inline expansion (GALE01 0x802A65BC..0x802A65F4) computes each
+    // (3 - x * g * g) term as one fused fnmsub; the plain C below rounds the
+    // x * g * g product to double first, which can perturb the final frsp.
+    return msl_gekko_sqrtf(x);
+#else
     f64 guess = __frsqrte(x);
     guess = 0.5 * guess * (3.0 - (guess * guess * x));
     guess = 0.5 * guess * (3.0 - (guess * guess * x));
     guess = 0.5 * guess * (3.0 - (guess * guess * x));
     return x * guess;
+#endif
 }
 
 static void it_802A4758_no_inline(ItemLink* link_0, Vec3* arg1,
@@ -1802,8 +1819,10 @@ void it_802A6474(ItemLink* link_0, ItemLink* link_1, Vec3* pos,
             segment_dz = next_link->pos.z;
             segment_dz -= cur_link->pos.z;
             segment_len = segment_dy * segment_dy;
-            segment_len = (segment_dx * segment_dx) + segment_len;
-            segment_len = (segment_dz * segment_dz) + segment_len;
+            // MWCC fuses the x and z accumulations of the segment length
+            // dot product (GALE01 0x802A65AC/0x802A65B0).
+            segment_len = __fmadds(segment_dx, segment_dx, segment_len);
+            segment_len = __fmadds(segment_dz, segment_dz, segment_len);
             if (segment_len > 0.0f) {
                 segment_len_tmp = my_sqrt(segment_len);
                 segment_len = segment_len_tmp;
@@ -1834,8 +1853,10 @@ void it_802A6474(ItemLink* link_0, ItemLink* link_1, Vec3* pos,
     target_dx -= cur_link->pos.x;
     target_dz = pos->z - cur_link->pos.z;
     target_len = target_dy * target_dy;
-    target_len = (target_dx * target_dx) + target_len;
-    target_len = (target_dz * target_dz) + target_len;
+    // MWCC fuses the x and z accumulations here too (GALE01
+    // 0x802A66AC/0x802A66B0).
+    target_len = __fmadds(target_dx, target_dx, target_len);
+    target_len = __fmadds(target_dz, target_dz, target_len);
     if (target_len > 0.0f) {
         target_len_tmp = my_sqrt(target_len);
         target_len = target_len_tmp;
