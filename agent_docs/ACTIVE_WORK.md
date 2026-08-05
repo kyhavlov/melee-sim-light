@@ -1,5 +1,1333 @@
 # Active performance campaign — 150k resident throughput
 
+## Retained exact scalar cut — native `acosf` estimate seed
+
+- **Owner and canonical result:** `acosf` remains the sole inverse-cosine owner and its binary32
+  return remains the only result. Preserve the source radicand, three ordered binary32 Newton
+  refinements, `atanf` reduction, exceptional behavior, and every consumer.
+- **Displaced work and boundary:** on native x86 only, seed the unchanged refinements with the
+  hardware reciprocal-square-root estimate instead of the general software Gekko estimate table.
+  Both seeds supply roughly 12 bits and the retained refinements own convergence. Add no table,
+  state, cache, approximation at the returned-result boundary, allocation, or compiler control;
+  PPC, Wasm, arm64, and every other `__frsqrte` caller remain unchanged.
+- **Acceptance:** first require exact benchmark digests and the complete 3,501,461-frame validation
+  gate. Then compare the complete aggregate against frozen committed `02cfe013` at resident 256
+  and 512. Reject the seed if convergence changes any output or it does not recover material cost.
+- **Result:** retain. Replacing the completed reciprocal with `1.0F / sqrtf(radicand)` was not
+  exact: full validation exposed eight wall-hug replay failures after quaternion interpolation
+  changed two ECB origin matrices and widened the right/left ECB extrema by one ULP. Object-level
+  reverse bisection isolated `runtime/math.o`, and restoring the Gekko path removed all failures.
+  The final x86 form changes only the estimate seed: `rsqrtss` feeds all three original binary32
+  Newton refinements. It preserves the complete 3,501,461-frame gate and both benchmark digests,
+  shrinks `acosf` from 205 to 154 bytes, and removes its call to the 345-byte software estimate
+  leaf. Non-x86 paths retain the Gekko seed.
+
+## Rejected dynamics product cut — authored natural basis
+
+- **Proposed owner and canonical state:** each hosted `DynamicsData` link would own one exact 3x3
+  natural basis compiled from its immutable authored `unk_58` Euler rotation when `lb_80011710`
+  binds the link.
+- **Consumers and displaced work:** the natural-direction half of `lb_8001044C` consumes that
+  basis directly. This displaces one complete `lbVector_CreateEulerMatrix` evaluation—six private
+  quintic trig streams plus the exact Euler products—for every solved link on every frame. The
+  current animated JObj rotation still uses the live evaluator, and the direction product retains
+  its multiply/two-FMA/scale and transform operation order.
+- **Deletion boundary:** add no cache lookup, alternate live rotation, gameplay allocation,
+  approximation, compiler control, or action/character admission. PPC retains the source layout
+  and evaluation. Require exact production digests and controlled gains at resident 256 and 512
+  against the frozen pre-cut dynamics-product candidate.
+- **Result:** reject and remove. All three exact implementations lose resident-256 throughput:
+  parallel packed 3x3 Match state with an eight-argument row kernel loses about 0.3--0.6%, an
+  in-place basis over three descriptor regions dead after binding loses about 1.1%, and packed 3x4
+  Match state with a six-argument kernel loses about 0.75%. The last form keeps the source fields
+  intact and deletes one `lbVector_CreateEulerMatrix` call, but grows `lb_8001044C` by 78 bytes and
+  still adds 3 KiB per Match. The saved six polynomial streams do not repay the extra basis loads,
+  footprint, and code layout in this solver. Remove the cache and restore the byte-frozen immediate
+  owner exactly (SHA-256 `7e0e05b68790d5b14d0fa44f8b76a8e23a2f86682c7e9fc1f96918e247e434cf`).
+
+## Retained collision cut — complete ceiling-pass broad phase
+
+- **Final owner and canonical state:** `mpLib` remains the singular mutable stage-line and range
+  owner; `CollData` remains the sole current/previous ECB and collision-result state. No geometry,
+  result, or validity state is added.
+- **Consumers and displaced work:** the grounded and airborne collision drivers repeatedly enter
+  `mpColl_80044AD8_Ceiling`, while the current timed contract records no ceiling response. Before
+  its full swept-segment query, test the complete current/previous top-point bounds against the
+  same enabled ceiling ranges used by the source query. A negative result deletes the full remap,
+  extension, and narrow intersection pass. Wall-connected ceiling resolution retains the source
+  path, as do all remapped joints.
+- **Deletion boundary:** use a conservative two-unit envelope required by source ceiling endpoint
+  extension; preserve line/joint order and every admitted query. Add no cached bounds, index,
+  alternate collision path, stage/action admission, approximation, allocation, or compiler
+  control. Require exact short/reset digests and gains at both resident sizes against frozen
+  immediate control SHA-256
+  `7e0e05b68790d5b14d0fa44f8b76a8e23a2f86682c7e9fc1f96918e247e434cf`.
+- **Result:** retain. The completed range owner keeps remapped joints and every wall-connected
+  ceiling case on the source path, while rejecting only static line ranges whose raw endpoint box,
+  expanded by two units for both source endpoint extensions, cannot overlap the swept top point.
+  The complete supported-domain gate remains 310 pass / 56 classified / 0 fail.
+
+## Active dynamics product cut — direct constrained/current directions
+
+- **Final owner and canonical state:** `lb_8001044C` remains the singular exact dynamics solver;
+  each link's JObj SRT, solver history, world origin, and the carried parent matrix remain the only
+  mutable state. The two normalized natural/current direction vectors remain transient solver
+  values.
+- **Consumers and displaced work:** each live link currently materializes one complete constrained
+  3x4 matrix and one complete current 3x4 matrix solely to transform the same child translation,
+  subtract the already-known origin, and discard both matrices. A single exact helper now evaluates
+  each local basis component with the existing multiply/two-FMA/scale order and immediately feeds
+  the unchanged paired-single-shaped transform/add/subtract sequence. This deletes 24 transient
+  matrix stores and their reloads per solved link while preserving every binary32 boundary.
+- **Deletion boundary:** the later post-constraint parent-matrix publication, Euler/quaternion
+  update, source solver order, collision/ground work, PPC/Wasm path, JObj matrices, state,
+  allocation, and outputs are unchanged. Add no cached basis, alternate solver, admission,
+  approximation, compiler control, or persistent product. Require exact short/reset digests and
+  controlled gains at resident 256 and 512 against frozen candidate SHA-256
+  `6cb8554595c554f8958b5086c8d21fa196983a1f4b0b0e62e74d697ed097a5b4`.
+- **First emitted form:** both digests are exact and the resident-256 C/A/A/C center improves about
+  2.0%, but resident 512 regresses about 1.3%. Generated code explains the split: GCC turns the
+  local three-row loop into a 1,090-byte alias-checked two-row vector path plus one scalar row and
+  grows `lb_8001044C` from 7,532 to 7,807 bytes. Retain the product boundary for one direct emitted
+  refinement: express the three independent rows as three exact SSE/FMA lanes, removing runtime
+  alias checks and the partial auto-vectorization. Reject the whole cut if that final form still
+  loses either size.
+- **Final direct form:** retain provisionally. The exact three-lane kernel is 315 bytes and leaves
+  the solver's 7,807-byte extent unchanged. Its resident-256 C/A/A/C center improves about 1.5%.
+  Four alternating resident-512 pairs change throughput by +4.20%, -5.18%, +2.06%, and +5.17%; the
+  one negative arm is an isolated candidate-frequency outlier, while the other three pairs and the
+  median center support a roughly +3.1% gain. Both digests are unchanged. Confirm the complete
+  retained aggregate against committed `02cfe013` before checkpoint disposition.
+
+## Active owner cut — ordinary compiled-table pose clock
+
+- **Final owner and canonical state:** `MslFighterPoseJoint` remains the singular animation clock,
+  and the existing immutable compact Figa samples remain the singular value source for admitted
+  integer frames. No clock, pose, decoder, or matrix state is added.
+- **Consumers and displaced work:** the ordinary native `framerate == 1`, nonterminal integer
+  step publishes the existing table sample directly and updates the same frame/decoder/count
+  fields. It displaces entry into the complete 4,150-byte loop/resync/track interpreter for this
+  already-direct case. First play, rewind/loop/end transitions, fractional or negative frames,
+  missing samples, descriptor animation, filtered publication, and `AOBJ_NO_UPDATE` semantics
+  remain in their exact current owners.
+- **Evidence and deletion boundary:** the current resident-512 profile records 1,922,947 compiled
+  publications among 2,184,225 active joint evaluations (88.04%), while pose animation owns 15.23%
+  of the instrumented contract. This cut adds no fallback representation or compatibility bridge:
+  the fast case and the mutable decoder are the two existing mutually exclusive owners, with only
+  their common clock dispatch shortened. Require exact short/reset digests and controlled gains at
+  both resident sizes against frozen candidate SHA-256 `6cb8554595c554f8958b5086c8d21fa196983a1f4b0b0e62e74d697ed097a5b4`.
+- **Result:** reject and remove. Both production digests remain exact and `interpret_joint` shrinks
+  from 4,150 to 3,519 emitted bytes, but the added common-case admission is not profitable. A
+  C/A/A/C resident-256 screen centers near 39,196 cycles/frame for the frozen owner and 39,657 for
+  the direct clock (about -1.2% throughput); resident 512 centers near 38,352 versus 40,156 (about
+  -4.5%), including one visibly disturbed candidate arm but no evidence of a gain. Restore the
+  current singular interpreter exactly. Common-case incidence and emitted size do not outweigh its
+  already well-arranged fallthrough and code layout.
+
+## Active code-owner cut — complete decoder-block outline
+
+- **Owner and boundary:** `interpret_joint` remains the exact node clock/table/decoder-transition
+  owner. Move its complete `!used_table` decoder materialization, resynchronization, and track walk
+  into one private helper; do not split or duplicate any state transition.
+- **Displaced work:** the dominant compiled-table path currently enters a 4,150-byte function whose
+  rare decoder block carries large stack/register and code-footprint costs. The older rejected
+  experiment forced `interpret_track` out of line and added a call for every decoded track. This
+  form adds no call on a table hit and at most one block call on a miss, leaving the existing track
+  evaluator free to inline inside the slow owner.
+- **Acceptance:** first require emitted `interpret_joint` to become materially smaller with one
+  cold helper and no new fast-path call, then preserve both exact digests and beat the byte-frozen
+  current aggregate at resident 256 and 512. Remove the refactor if GCC folds it back together or
+  either size loses.
+- **Result:** reject before timing. GCC folds the helper back into its only caller and grows
+  `interpret_joint` from 4,150 to 4,200 bytes, so the fast path receives no code-footprint or
+  prologue reduction. Remove the helper. Forcing this boundary would require the prohibited
+  per-function attributes or a much larger translation-unit split, neither justified by this
+  failed emitted-code precondition.
+
+## Current cleaned aggregate against committed checkpoint
+
+- Final release benchmark SHA-256 is
+  `45b02500e300c850250385bf9c0dd6e34edd0bcb808f6019b47eebc81ede3318`. It restores the already-
+  committed exact negative-wall gate after correctness bisection, retains the exact x86 `acosf`
+  estimate seed and ceiling broad phase, and contains none of the rejected tiled/SRT/pointer-backed
+  machinery. Three alternating 262,144-frame CPU-0 pairs preserve the committed digests at both
+  resident sizes.
+- Resident 256 control/candidate pairs are `40,151.7/38,846.5`, `41,980.1/38,234.8`, and
+  `42,482.3/38,060.3` cycles/frame: paired throughput gains are +3.36%, +9.80%, and +11.62%, median
+  **+9.80%**. Candidate medians are 38,234.8 cycles/frame and 112,253 FPS.
+- Resident 512 control/candidate pairs are `43,706.7/40,383.1`, `41,485.3/40,117.3`, and
+  `43,006.9/38,966.4`: +8.23%, +3.41%, and +10.37%, median **+8.23%**. Candidate medians are
+  40,117.3 cycles/frame and 106,985 FPS.
+- This is a qualifying checkpoint against `02cfe013`: both controlled median ratios exceed +5%.
+  Absolute FPS is below the prior checkpoint's recorded run, but every adjacent frozen-parent run
+  is also slower in this host window, and every candidate beats its paired parent. The campaign
+  remains open because neither observed median reaches 150k FPS.
+
+## Active cleanup — lossless pose-sample compaction ablation
+
+- **Boundary:** retain the current exact compiled-Figa publisher, pose-node ownership, native JObj
+  semantics, and every independent correctness fix. Remove only the construction-time rewrite
+  that converts the original program-relative frame-major sample table into absolute per-node
+  constant/dynamic spans.
+- **Reason and acceptance:** the compact table was kept provisionally to feed the later contiguous
+  tiled publisher, but that publisher was rejected and removed. The compaction itself was neutral
+  at resident 256 and only tentatively positive at 512 under contention. Compare the restored
+  original table directly with the byte-frozen current aggregate at both resident sizes; retain
+  the simpler table only if exact digests hold and neither size loses.
+- **Result:** reject the cleanup and retain compaction. The restored original table preserves the
+  65,536-frame resident-256 digest, but costs 39,282.4 cycles/frame versus 37,801.5 for the
+  byte-frozen compact-table control, a 3.9% throughput loss. Restore the compact representation
+  exactly; a failed required size does not warrant a resident-512 run.
+
+## Active reconciliation — exact general matrix concat owner
+
+- **Owner and boundary:** `PSMTXConcat` remains the singular exact affine-product owner. The dirty
+  tree currently carries the 12-lane AVX-512 implementation, while the same worklog contains both
+  an immediate both-size retained result and a later current-layout rejection. Ablate it only by
+  restoring the upstream scalar multiply/two-FMA/translation-FMA stream with complete alias
+  handling; inputs, outputs, operation order, state, allocation, and non-x86 behavior are exact.
+- **Acceptance:** compare the scalar ablation directly against the byte-frozen AVX-512 owner after
+  inline canonical JObj matrices have been restored. Keep whichever exact form improves both
+  resident sizes; do not retain contradictory provenance or tune another SIMD width.
+- **Result:** retain the AVX-512 owner. The scalar ablation preserves the 131,072-frame resident-256
+  digest, but its C/A/A/C symmetric center is about 38,948 cycles/frame versus 37,755 for the
+  byte-frozen vector owner, a 3.1% throughput loss. Restore the exact 12-lane implementation
+  byte-for-byte and close the contradictory record; a failed required size does not justify a
+  resident-512 screen.
+
+## Rejected collision cut — pre-extension line rejection
+
+- **Owner and canonical state:** `mpLib` remains the singular stage-line topology, endpoint, and
+  extension owner. `CollLine`/`CollVtx` and the source endpoint-extension arithmetic remain
+  unchanged.
+- **Consumers and displaced work:** the ordinary floor and ceiling scans may reject a candidate
+  before `mpLib_8004ED5C` only when it has at most one connected endpoint and both query endpoints
+  lie outside a conservative bound around the raw line. An admitted candidate executes the full
+  extension and intersection in source order. This deletes square-root/divide/extension work for
+  provably separated lines without adding geometry state, a cache, index, approximation, gameplay
+  allocation, compiler control, or alternate result path.
+- **Deletion boundary and acceptance:** lines extended at both ends, remapped queries, and every
+  PPC/Wasm call retain the source path. Require exact short and reset-crossing digests, emitted
+  rejection before `mpLib_8004ED5C`, and controlled gains at resident 256 and 512 against the
+  frozen current aggregate. Remove the precheck completely if either size loses.
+- **Result:** reject and remove. Both 65,536-frame digests remain exact. Against the nearest frozen
+  aggregate, resident 256 improves about 1.25% at the C/A/A/C symmetric center, but resident 512
+  regresses about 2.5%. Re-reading topology and raw endpoints before the source extension costs
+  more than the rejected one-sided population saves at the larger working set. Restore direct
+  `mpLib_8004ED5C` entry and do not add a cached bound or wider admission around this leaf.
+
+## Rejected owner cut — direct immutable-within-frame stage bounds
+
+- **Owner and boundary:** `StageInfo` remains the singular mutable stage-camera/blast-zone owner.
+  Native callers read the four camera bounds and four blast-zone offsets through exact header
+  accessors instead of crossing tiny out-of-line runtime functions millions of times. The same two
+  source fields are loaded and added in the same binary32 order at every call site; no value is
+  cached, copied, hoisted across a mutation, or approximated. PPC/Wasm retain the source ABI.
+- **Consumers and deletion:** existing camera, collision, fighter death/offscreen, item, and stage
+  consumers are unchanged except that native compilation deletes the eight getter call boundaries.
+  Add no state, synchronization, allocation, compiler control, or wider camera rewrite. Require
+  exact short digests and controlled gains at both resident sizes against the frozen horizontal-
+  intersection candidate; remove the inline cut if either size loses.
+- **Result:** reject and remove. Both short digests remain exact and resident 256's C/A/A/C center
+  appears 4.39% faster, but resident 512 does not reproduce a gain: reverse pairs change from
+  roughly +2.6% to -3.0% with execution order, and the four paired ratios center near neutral.
+  The compiler also emits several translation-unit-local getter copies rather than deleting all
+  boundaries. Restore the singular out-of-line accessors; call count alone does not justify the
+  source/header expansion.
+
+## Active collision cut — inline intersection rejection
+
+- **Owner and boundary:** `mpLib` remains the singular source-ordered stage-line intersection
+  owner. Inline only its exact four-axis endpoint rejection at the existing query sites and enter
+  one out-of-line narrow owner for surviving candidates. This deletes argument setup/call/return
+  work on rejected lines without adding geometry state, an index, approximation, compiler control,
+  or a second collision result path; PPC/Wasm preserve the same comparisons and narrow arithmetic.
+- **Acceptance:** emitted callers must contain the rejection and one shared narrow call, both
+  production digests must remain exact, and controlled resident 256/512 timing must beat the
+  byte-frozen immediate candidate. Remove the split if either size loses.
+- **First result:** retain provisionally while accumulating. Both short and 65,536-frame digests
+  remain exact. A C/A/A/C screen centers at about 38,835 cycles/frame for the immediate control
+  versus 38,783 for the split at resident 256 (+0.14%), and 41,302 versus 40,053 at resident 512
+  (+3.12%). The emitted 610-byte narrow owner is shared by 24 call sites; rejected candidates now
+  branch before argument publication. The 256 result needs aggregate confirmation and is not a
+  standalone performance claim.
+- **Rejected refinement:** inlining only the X rejection and restoring Y rejection to the shared
+  narrow owner reduces caller growth, but loses the resident-256 C/A/A/C center by about 2.5%.
+  Restore both exact rejection axes at the call site; early Y rejection is demanded work deletion,
+  not disposable code-size growth.
+- **Horizontal extension:** retained provisionally. The four native call sites preserve the exact
+  source comparisons and endpoint ordering before entering the narrow arithmetic. GCC profitably
+  inlines the complete narrow body at these four sites rather than emitting the requested shared
+  helper: text grows by 2,368 bytes, while rejected lines perform no call or narrow arithmetic.
+  Both short digests remain exact. Against the frozen generic-split/part-table candidate, C/A/A/C
+  screens improve from 40,108.4 to 39,228.1 cycles/frame at resident 256 (+2.24% throughput) and
+  from 41,357.1 to 40,520.7 at resident 512 (+2.06%). This is a retained local result, not a
+  checkpoint claim.
+- **Rejected vertical extension:** the symmetric exact cut to `mpLineIntersectionV` duplicates its
+  narrow body through the four wall-query owners and is not profitable. Both short digests remain
+  exact, but the combined horizontal/vertical candidate loses a resident-256 C/A/A/C screen even
+  against the slower pre-horizontal control: 37,794.1 versus 38,314.8 cycles/frame (-1.36%
+  throughput). Restore the singular out-of-line vertical owner completely; do not spend a
+  resident-512 screen on a failed required size.
+- **Rejected floor/ceiling refinement:** keep one shared generic narrow owner for all wall and
+  secondary query sites, but place its unchanged arithmetic directly in the four dominant ordinary
+  and remapped floor/ceiling scans after the retained endpoint rejection. This mirrors the
+  profitable horizontal boundary without duplicating the narrow body through every call site.
+  Canonical endpoints, comparisons, binary64 FMA/divide order, outputs, and candidate order remain
+  unchanged. Retain only if emitted code limits duplication to those four sites, both digests are
+  exact, and both resident sizes beat the frozen immediate aggregate.
+- **Refinement result:** reject before timing. Factoring the narrow body behind a selectable inline
+  wrapper lets GCC propagate it through the nominally shared entry as well, growing release text
+  by 9,824 bytes rather than limiting duplication to four sites. That fails the explicit code-size
+  boundary and would make a timing result inseparable from broad layout churn. Restore the original
+  610-byte shared narrow owner and four call names completely; do not add a compiler attribute or
+  a second source copy merely to force this layout.
+
+## Active representation cut — immutable fighter-part membership
+
+- **Final owner and canonical state:** the loaded `PlCo.dat` special-part descriptors remain the
+  source definition. Native GameData compiles their exact `(fighter kind, u8 part) -> 1 << index`
+  result once into one immutable direct table; no Match or Fighter copy exists.
+- **Consumers and deletion boundary:** every existing `ftParts_8007506C` caller receives the same
+  value while the native hot owner deletes its repeated pointer chase and linear descriptor scan.
+  Out-of-range inputs return the same zero. PPC/Wasm retain the source loop. Add no allocation,
+  gameplay mutation, cache invalidation, approximation, compiler control, or alternate result.
+- **Acceptance:** exact short/reset digests, then controlled resident 256/512 comparison against
+  the frozen intersection candidate. Remove the table and initialization if either size loses.
+- **First result:** retain provisionally. The direct owner shrinks from 152 to 73 release bytes and
+  preserves both short and 65,536-frame digests. C/A/A/C geometric centers improve about 0.87% at
+  resident 256 (38,820 to 38,485 cycles/frame) and 1.62% at resident 512 (39,747 to 39,114) despite
+  strong frequency drift in the latter sequence. Confirm as part of the committed-parent aggregate;
+  this is not an independent checkpoint.
+
+## Rejected arithmetic cut — scalar quadrant sign publication
+
+- **Owner and boundary:** native scalar `sinf`, `cosf`, and the retained shared-reduction `tanf`
+  remain the exact reduction/polynomial owners. Their already-computed quadrant integer directly
+  flips the final binary32 sign bit, deleting indexed `+1/-1/0` table loads and factor multiplies.
+  PPC/Wasm retain the source path; there is no new state, approximation, call surface, or compiler
+  control.
+- **Acceptance:** preserve short and reset-crossing digests, then beat the byte-frozen immediate
+  control at resident 256 and 512. Remove the cut if either size loses.
+- **Result:** reject and remove. Both short digests and the resident-256 65,536-frame digest remain
+  exact, and release `sinf`/`cosf` shrink from 576/569 to 364/359 bytes. The controlled C/A/A/C
+  screen nevertheless centers at about 37,665 cycles/frame for the frozen owner versus 37,933 for
+  the sign-bit form, roughly 0.7% slower. The indexed factor operations schedule better inside
+  these scalar helper-heavy functions; do not infer a production gain from the wide kernel's
+  independently retained sign selection.
+
+## Rejected arithmetic packet — exact three-angle camera tangent
+
+- **Final owner and canonical state:** scalar `tanf` remains the general exact tangent owner.
+  Native x86 `Camera_80029CF8` owns two already-adjacent groups of three transient tangent inputs
+  and consumes their three binary32 quotients immediately; no result becomes persistent state.
+- **Consumers:** the vertical and horizontal frustum-distance/offset calculations consume the same
+  six tangent values in the same source order. Every other tangent call, non-x86 native build,
+  PPC, and Wasm retains scalar `tanf`.
+- **Displaced work and deletion boundary:** evaluate each three-angle group's identical reduction,
+  sine polynomial, cosine polynomial, parity selection, and division in three SIMD lanes. Unlike
+  the rejected `msl_sincosf3`, tangent already demands both polynomial families for every scalar
+  input; no mixed-lane family is speculative. Delete six scalar call/reduction chains only. Add no
+  approximation, lookup table, cache, state, allocation, compiler setting/attribute, or fallback
+  dispatch.
+- **Acceptance:** prove all six reached tangent bits through exact short/reset digests, inspect the
+  emitted kernel for one vector division and no scalar lane calls, then require controlled gains
+  at both resident sizes against the frozen shared-tangent aggregate.
+- **Result:** reject and remove. Both short and 65,536-frame digests remain exact, and the emitted
+  379-byte kernel contains one packed division and no scalar tangent calls. Packing three lanes is
+  nevertheless not a production win: resident 256 is only +0.29% on the quieter same-CCD core and
+  changes sign on CPU 0, while the resident-512 eight-arm median regresses materially (35,963.1
+  control versus 37,146.7 candidate cycles/frame under noisy host load). Stack packing, extraction,
+  and the added call boundary outweigh polynomial overlap. Remove the API, kernel, arrays, and
+  camera substitutions completely; width-three camera arithmetic is closed.
+
+## Rejected arithmetic cut — native scalar trig helper boundaries
+
+- **Final owner and canonical state:** scalar `sinf`, `cosf`, and the retained exact `tanf` pair
+  keep the same reduction, polynomial, quadrant, and binary32 publication owners.
+- **Displaced work and deletion boundary:** on native non-Wasm builds, lower the exact absolute
+  value and fused negative multiply-add operations directly instead of crossing the retail ABI
+  helper boundaries. The current `fabsf__Ff` path performs two calls around one sign-bit clear;
+  the pre-tangent diagnostic counts 6,484,122 such calls, and retained tangent adds one per call.
+  Add no approximation, alternate polynomial, compiler profile/attribute, state, or fallback.
+- **Consumers and acceptance:** all scalar trig callers consume unchanged results; PPC and Wasm
+  retain their existing helpers. Require exact short/reset digests and a controlled improvement at
+  both resident sizes against the frozen tangent-only binary.
+- **Result:** reject and remove. Exact short digests pass, but the candidate loses about 0.85% at
+  resident 256 on CPU 0 and 1.64% at resident 512 on a quieter core in the same V-cache CCD.
+  Removing the boundaries shrinks `sinf`, `cosf`, and `tanf` by 164 text bytes and shifts every
+  downstream hot function, including wide pose trig and matrix publication. The whole-program
+  layout loss exceeds the local call deletion. Restore the retail helper boundaries; do not treat
+  call-count deletion as sufficient evidence in this translation unit.
+
+## Rejected consumer cut — camera stage-bound snapshot
+
+- **Final owner and canonical state:** `stage_info` remains the sole stage camera-bound and
+  scrolling-ground owner. `Camera_8002958C` takes one value snapshot after its subject-admission
+  pass and uses it only for the remainder of that synchronous camera-bounds pass.
+- **Consumers:** the five boundary classifications and their immediate clamp responses for each
+  admitted camera subject consume the snapshot. The public `Camera_80029124` entry point and every
+  other camera/stage consumer retain their existing live reads.
+- **Displaced work and deletion boundary:** delete repeated `Camera_80029124`, stage accessor, and
+  `Ground_801C4368` traversals inside `Camera_8002958C`; compare against the same four binary32
+  bounds and publish the same selected bound values directly. Add no persistent cache, duplicate
+  state, scheduler seam, approximation, gameplay allocation, or changed public contract.
+- **Evidence and acceptance:** the diagnostic 262,144-frame profile records 3,251,810
+  `Camera_80029124` calls and 8,283,979 bottom-bound accessor calls. Require exact short and
+  reset-crossing digests plus alternating immediate-control results at both resident sizes before
+  retention.
+- **Result:** reject and remove. Both 4,096-frame digests remain exact. Against a frozen
+  tangent-only binary, eight alternating 32,768-frame arms put the resident-256 medians at
+  37,215.0 control versus 37,206.7 candidate cycles/frame (0.02%) and resident 512 at 36,316.8
+  versus 36,151.2 (0.46%). The optimized production accessors are already cheap enough that
+  keeping four bounds live across the subject loop erases the deleted traversal at the smaller
+  working set. The added representation is not justified; do not infer production opportunity
+  from `-pg` call counts alone.
+
+## Active arithmetic owner — exact scalar tangent pair
+
+- **Final owner and canonical state:** `tanf` remains the singular tangent owner and returns the
+  same binary32 quotient of the source-exact `sinf(x)` and `cosf(x)` results. It owns no mutable
+  state and changes no caller, input, output, or exceptional-value contract.
+- **Consumers:** camera projection, fighter visibility, stage/item helpers, and every other native
+  tangent caller continue to call `tanf`. Standalone `sinf` and `cosf`, wide fighter-pose trig,
+  PPC, and Wasm retain their existing owners.
+- **Displaced work and deletion boundary:** evaluate the shared range reduction and quadrant once,
+  then evaluate the same one sine and one cosine polynomial stream and divide the exact published
+  pair. Delete only the second reduction, quadrant conversion, small-angle test, and associated
+  table loads performed by the current `sin__Ff(x) / cos__Ff(x)` call chain. Add no approximation,
+  lookup, cache, persistent state, SIMD setup, compiler control, or alternate tangent result.
+- **Acceptance:** exact short and reset-crossing digests first, then alternating resident-256/512
+  comparisons against the frozen cleaned aggregate. Retain only if both sizes improve; the
+  campaign checkpoint still requires at least +5% controlled throughput over `02cfe013` at both
+  sizes.
+- **Result:** retain unstaged. The exact 4,096-frame digests are `1177a913e8074ce6` at resident
+  256 and `bf73773bda54d9d4` at resident 512; the exact 65,536-frame digests are
+  `e6f2a9b270b4161b` and `75046e348333b63b`. Against the frozen immediate pre-change binary, a
+  65,536-frame C/A/A/C alternation changes resident-256 geometric centers from about 36,972 to
+  36,465 cycles/frame (1.37% faster) and resident-512 centers from about 36,495 to 35,582
+  cycles/frame (2.50% faster). The change deletes a duplicated evaluation from every tangent call
+  and improves both sizes without adding state or relocating work into a consumer. It remains
+  part of the dirty aggregate pending a controlled committed-parent checkpoint.
+- **Rejected direct-quotient refinement:** the normal polynomial path multiplies numerator and
+  denominator by the same exact quadrant factor (`+1` or `-1`) before dividing them. Publish the
+  same quotient directly by parity, retaining the reduction, both polynomial operation streams,
+  numerator product, and final division. In the small-angle path, use the same fused sine product
+  for even quadrants and the exact signed reciprocal for odd quadrants. Delete only factor-table
+  loads, cancelling sign multiplies, and local pair materialization. Require the same digests and
+  an isolated both-size gain against the frozen paired tangent binary.
+- **Refinement result:** reject and remove. Both short and 65,536-frame digests remain exact, and
+  resident 512 improves about 1.5% in an eight-arm same-CCD screen. Resident 256, however, loses
+  about 0.75--0.85% in independent eight-arm screens on CPU 0 and CPU 4. The direct quotient's
+  smaller code/layout does not satisfy the required both-size throughput shape; retain the
+  original shared-pair form exactly.
+
+## Rejected owner cut — demand-owned dynamics matrix refresh
+
+- **Final owner and canonical state:** each retained dynamics JObj keeps its existing canonical SRT,
+  dirty flag, and matrix. The solver leaves matrices dirty after publishing the exact solved pose;
+  `ftCo_8009CB40`, the source owner that later reads a raw translation column while transferring
+  animation ownership, publishes that matrix immediately before the read.
+- **Consumers:** dynamic hurt capsules continue to use the solver's exact transient products at
+  their existing phase. Any ordinary JObj matrix consumer still enters `HSD_JObjSetupMatrix`.
+  Save/restore and copy preserve the same singular dirty/matrix state and must continue exactly.
+- **Displaced work and deletion boundary:** delete `Fighter_8006D9AC`'s unconditional post-solve
+  walk over every retained dynamics link. Do not add a refresh bit, cache, second matrix, action or
+  character admission, approximate transform, gameplay allocation, or alternate solver. The rare
+  raw reader pays the complete existing setup; no stale clean matrix may be observed.
+- **Acceptance:** exact short digests, dynamics-sensitive replays, native copy/save/restore and
+  allocation gates, then controlled resident-256/512 comparison against the frozen cleaned
+  aggregate. A complete supported-domain gate is required before retention because future-frame
+  animation toggles are the correctness boundary.
+- **Result:** reject and remove. Publishing at the later raw reader is incorrect because animation
+  has already overwritten the solved JObj SRT; the resident-512 digest diverges after the first
+  reset. Keeping the solver-owned `unk_2C` across that toggle restores the exact 65,536-frame
+  digest, but loses in both alternating directions at both sizes. Symmetric centers change from
+  37,974 to 38,420 cycles/frame at resident 256 and from 37,831 to 38,833 at resident 512. The
+  existing end-of-dynamics publication is a correctness owner and is also faster than deferring
+  its downstream work. Restore it completely; do not retry this demand-publication cut.
+
+## Active owner cut — terminal ECB origin positions
+
+- **Final owner and canonical state:** the compact fighter-pose ECB closure remains the sole
+  stage-collision transform owner. JObj SRT, dirty flags, and matrices remain canonical; a terminal
+  ECB origin whose matrix is dirty publishes only its demanded world position and leaves that
+  matrix dirty for any later full-matrix consumer.
+- **Consumers:** `mpColl_LoadECB_JObj` consumes the same six exact world positions. Any later
+  hurt/hit/shield, dynamics, attachment, camera, or source JObj consumer enters the unchanged
+  matrix owner and publishes the full matrix on demand.
+- **Displaced work and deletion boundary:** construction marks ECB origins that have no other ECB
+  origin below them and satisfy the existing ordinary-matrix invariant. At the ECB seam, compute
+  their translation column directly from the already-published parent matrix and delete their
+  sine/cosine evaluation, local 3x3 SRT construction, world-basis product, scale-sidecar mutation,
+  and clean publication. Add no cached position, second matrix, action/character admission,
+  approximation, gameplay allocation, scheduler seam, or compatibility path.
+- **Result:** reject and remove. The position-only path preserved both short and 65,536-frame
+  digests. Resident 256 improved at the symmetric center by about 2.2%, but resident 512 lost in
+  both directions (`36,510.9 -> 36,706.4` and `37,284.0 -> 38,399.3` cycles/frame). Deferring the
+  terminal matrices moves demanded work into later geometry consumers and harms the larger working
+  set. Restore full matrix publication; do not extend this into another ECB product cache.
+
+## Rejected representation packet — gameplay-live compiled Figa samples
+
+- **Final owner and canonical state:** `MslFighterPosePrograms` remains the one immutable exact
+  integer-frame sample owner. Its program/node identities and source Figa streams remain unchanged,
+  but the compiled value stream contains rows only for program nodes that can bind a retained
+  native fighter JObj. Omitted presentation-only joints keep no compiled samples and never acquire
+  mutable pose state.
+- **Consumers:** the existing compact fighter-pose publisher consumes the same exact binary32
+  values through the same program/node identity. Motion binding, fractional/non-unit decoder
+  transitions, JObj SRT/dirty state, matrices, collision, dynamics, contact, and output ordering do
+  not change.
+- **Displaced state/work:** delete exact sample rows compiled for Figa nodes whose corresponding
+  fighter part is structurally replaced by the cold JObj sentinel. This is not demand caching:
+  GameData construction derives the complete admitted set from every bound fighter motion and the
+  construction-owned gameplay-part masks before allocating the final sample stream.
+- **Deletion boundary:** no second value table, runtime cache, lazy gameplay allocation, replay or
+  character heuristic, compatibility bridge, approximate encoding, or decoder fallback for an
+  admitted integer row. A cold-node attachment is an initialization invariant failure. PPC/Wasm
+  retain their existing source-shaped representation.
+- **Acceptance:** first measure the exact row/byte ceiling from the full 16-character motion bank.
+  Retain the representation only if it deletes a material fraction of the 19,855,156-value
+  (75.7 MiB) stream, preserves all exact production outputs and allocation/save-restore contracts,
+  and improves both resident sizes against the frozen dirty aggregate. The campaign checkpoint
+  still requires at least +5% over committed `02cfe013` at both sizes.
+- **Rejected encoding preflight:** the current stream has 5,989,205 globally unique float bit
+  patterns. The hottest 65,535 cover only 58.18%; a lossless escape stream would average about
+  3.68 bytes/value before its dictionary and add a branch to every publication. Per-program
+  16-bit dictionaries are also nonviable: 3,309 dictionaries contain 9,647,090 values in total,
+  reducing 79,420,624 raw bytes to only 78,298,672 bytes before alignment/metadata and adding an
+  indirection to every load. Do not implement value dictionaries; remove cold rows at their real
+  ownership boundary instead.
+- **Result:** the complete construction-time closure retained 14,333,871 of 19,855,156 values,
+  removing 5,521,285 values (21.1 MiB, 27.8%) with no gameplay cache, state, or fallback. Runtime
+  admission survived all 366 benchmark pre-roll sources and both exact short digests. An isolated
+  same-source all-row/compact-row ABBA, however, changed the resident-256 geometric center from
+  38,747 to 39,096 cycles/frame (-0.90% throughput) and resident 512 from 38,177 to 38,063
+  (+0.30%). The compact layout helps dramatically on the non-V-cache CCD, but the canonical
+  V-cache benchmark already absorbs the immutable footprint; removing cold rows does not delete
+  executed publication and slightly harms the smaller batch. Remove the packet completely. The
+  detailed attempt record is
+  `agent_docs/performance/attempts/2026-08-04-gameplay-live-figa-samples.md`.
+
+## Active arithmetic packet — exact pose/ECB trig product
+
+- **Final owner and canonical state:** `msl_sincosf_many` remains the one exact native wide
+  sine/cosine owner; canonical JObj SRT and matrices remain unchanged. Its immediate
+  `HSD_MtxSRTConcatTrig` consumers retain the source-ordered local-to-world product.
+- **Consumers:** compact fighter ECB publication and the existing exact fighter-pose blend/matrix
+  paths. PPC/Wasm and scalar tails retain their current owners.
+- **Measured boundary:** the current 4,096-frame resident-512 Callgrind window assigns 7.44% self
+  instructions to `msl_sincosf_many` and 3.62% to `HSD_MtxSRTConcatTrig`. No other untouched self
+  owner reaches 1.5%. This is an instruction profile for selection, not a throughput result.
+- **Displaced work:** derive the quadrant sign directly from the already-computed integer quadrant
+  and select the exact sine/cosine polynomial result by parity. Delete multiply-by-zero/one
+  factor construction and application in the normal wide path; then simplify only product work
+  made redundant at the immediate matrix consumer. Preserve reduction, polynomial/FMA order,
+  signed results, small-angle behavior, state, allocation, and publication order.
+- **Deletion boundary:** no lookup/cache, precomputed stream, alternate pose, consumer bridge,
+  approximation, compiler setting, phase seam, or scalar fallback is added. If exact sign-bit
+  selection or the complete immediate product is not faster at both resident sizes, remove that
+  portion rather than widening the packet.
+- **Acceptance:** exact short production digests first. Measure against the frozen dirty aggregate,
+  then run controlled alternating committed-parent/candidate comparisons at resident 256 and 512.
+  The campaign checkpoint still requires at least +5% over `02cfe013` at both sizes.
+- **First retained form:** exact sign-bit selection removes quadrant factor construction and six
+  factor applications from each non-small wide block without changing the 612-byte kernel extent.
+  Both 32,768-frame production digests remain exact and native smoke passes. A 65,536-frame ABBA
+  screen against the frozen dirty aggregate improves resident 256 by 2.23% at the symmetric
+  center (`40,444.3 -> 39,561.8` cycles/frame). Resident-512 controls center at 42,056.5 and the
+  three candidate arms are 39,509.6, 39,765.1, and 40,205.5 cycles/frame; the candidate median is
+  5.76% faster. These are immediate-candidate screens, not the committed-parent checkpoint; retain
+  the exact cut while running long parent/candidate controls.
+- **Isolated kernel confirmation:** a production-flag AVX-512 harness over 80 representative pose
+  angles runs the frozen owner at 111.49/113.44 cycles per call and the final blend-before-sign
+  form at 96.72/96.74 cycles per call, a 14.2% paired-median kernel reduction with the same output
+  checksum. The production-prefix digests independently prove exact reached outputs. This confirms
+  the deletion itself despite whole-program timing being temporarily contaminated by live external
+  Path of Exile, Dolphin, and Chrome workloads; during that load the unchanged frozen dirty binary
+  ranges from 37.7k to 42.8k cycles/frame, so no checkpoint claim uses those runs.
+- **Immediate-product screen, rejected:** only 1,577 of 203,502 profiled concat calls require
+  non-unit parent-scale correction. A separate exact unit-scale leaf shrinks the common function
+  from 566 to 364 bytes and is bit-identical. In-process timing is 16.998--17.391 cycles for the
+  generic unit-scale call and 15.291--15.568 for the leaf, but production must perform the same
+  three parent-scale tests before choosing that leaf; the isolated reduction merely moves those
+  tests to the caller. Its resident-256 whole-runtime symmetric center is only 0.56% faster under
+  load and the 512 arms are invalid. Restore the singular matrix owner rather than keep a second
+  call surface with no defensible deleted work.
+
+### Whole-block canonical-zero admission
+
+- **Owner and canonical state:** `msl_sincosf_many` remains the singular exact owner of every
+  input angle and output pair. Its callers, ordering, arrays, and matrix/quaternion consumers do
+  not change.
+- **Displaced work and deletion boundary:** before range reduction, admit an AVX-512 block only
+  when every active input is bitwise canonical `+0.0F`; publish the exact `sin=+0.0F` and
+  `cos=1.0F` results directly. Negative zero, every nonzero value, partial mixed blocks, PPC,
+  Wasm, and non-AVX-512 native execution retain the complete existing evaluator. This deletes
+  four reduction FMAs, integer quadrant conversion, both polynomial streams, and lane selection
+  for an admitted block without adding state, a per-lane branch, a lookup, approximation, or a
+  second evaluator.
+- **Why this is a distinct bounded revisit:** the rejected zero-Euler candidate placed a hot
+  per-lane test in the general path and was mixed at resident 256. This test is one block-level
+  predicate over the already-loaded vector and is valuable only if ordinary pose/matrix batches
+  naturally contain all-zero blocks. Require exact short digests and a controlled gain at both
+  resident sizes against the frozen post-sign-selection aggregate; otherwise remove it fully.
+- **Result:** reject and remove. The exact resident-256 digest remains
+  `e6f2a9b270b4161b`, but a 65,536-frame ABBA under the same live host load gives controls
+  `37,960.8`/`40,701.5` and candidates `40,093.6`/`41,727.3` cycles/frame. Both directions lose;
+  the symmetric center is about 4% slower. One extra vector test and hot-loop branch cost more
+  than the admitted whole-zero blocks. Do not spend a resident-512 arm or revisit zero-angle
+  admission inside this owner.
+
+## Active structural preflight — common fighter action-phase ownership
+
+- **Final owner:** each supported common MotionState family owns its animation, input, physics,
+  and collision callbacks directly. The source scheduler retains the four existing phase cuts and
+  fighter order; character-specific motions retain their distinct source owners.
+- **Canonical state and consumers:** `Fighter`, its current `motion_id`, `MotionState`, input,
+  motion variables, `CollData`, and pose remain the only gameplay state. Later hit/contact,
+  dynamics, camera, observation, copy, and save/restore consumers continue to read those owners.
+- **Candidate deletion:** for a common family with material measured coverage, replace its repeated
+  callback shells and duplicated generic transition/predicate work with one purpose-built exact
+  implementation per existing phase. Delete the admitted source callbacks from the hosted path;
+  do not put a dispatcher in front of the same work or retain an admitted fallback.
+- **Boundary:** no batch suspension, callback tape, alternate action state, synchronized summary,
+  action/replay training list, gameplay allocation, compiler control, or approximate arithmetic.
+  A family is admitted by source MotionState ownership, not benchmark identity. PPC and Wasm keep
+  the upstream callbacks until a portable final path is justified.
+- **Preflight:** attribute callback cycles and calls by current MotionState and phase on one bounded
+  resident-512 production window. Proceed only if a small coherent common family owns enough of
+  the complete contract for a multi-point gain after required physics/collision work is excluded.
+  Remove all attribution code before production timing. If coverage is diffuse or dominated by
+  irreducible shared map/pose work, close this cut without writing a callback framework.
+- **Acceptance:** exact production digests, then focused family transitions and the complete
+  supported-domain/allocation/copy/save/restore gates. Controlled resident-256 and resident-512
+  comparisons must improve the retained dirty aggregate; the campaign commit still requires at
+  least +5% over `02cfe013` at both sizes.
+- **Result:** close before implementation and remove the attribution. The 16,384-frame
+  resident-512 profile assigns 6.90% to action animation, 4.37% to input, 0.83% to physics, and
+  12.22% to collision callbacks, but the per-motion split shows no new coherent direct owner.
+  Guard/GuardOn account for about 3.6% through the already-closed exact two-blend pose pipeline;
+  Wait is about 1.7% including shared stage collision, and Dash, Fall, Jump, Landing, attacks, and
+  damage are diffuse. Nearly all apparent remaining scale is the same canonical pose and `mpColl`
+  work measured by their existing owners. A common-action executor would therefore add dispatch
+  and duplicate hundreds of callbacks without deleting a multi-point operation boundary. Do not
+  build it; select the contact event lifetime below instead.
+
+## Active representation packet — singular ordinary main-pose clock
+
+- **Final owner and canonical state:** one compact pose span owns the ordinary main fighter Figa
+  frame/rate/loop state. Its member joints own only authored channel publication and exceptional
+  decoder state; they do not mirror the span clock while the span is admitted.
+- **Consumers:** `msl_fighter_pose_animate_parts`, frame/end queries, animation requests/rate
+  changes, transition/blend handoff, and decoder resynchronization consume that same span owner.
+  JObj SRT and matrices remain the singular published geometry consumed by collision/contact.
+- **Displaced work/state:** replace the measured per-node clock/loop/table-admission interpreter
+  for the ordinary main-pose population with one source-ordered frame advance followed by one
+  contiguous frame-row publication walk. Delete follower clock updates and repeated program/sample
+  lookup; do not add a second fast-path clock, copied result cache, callback tape, or batch seam.
+- **Exceptional transition:** a fractional/non-unit/descriptor or independently authored mutation
+  explicitly materializes the span clock once into its member decoder states and transfers
+  ownership to the existing scalar path. A complete main-tree animation bind re-establishes the
+  singular owner; there is no simultaneous synchronized state.
+- **Bound and acceptance:** this packet is confined to compact fighter pose state, attachment/rate
+  APIs, and the existing span consumer. Prior measurement found 1,618,766 ordinary main-pose nodes
+  with identical clocks/program order and assigned 9.74% self instructions to repeated node
+  interpretation. Require exact production digests, full validation/copy/save-restore/allocation,
+  and controlled gains at resident 256 and 512. The retained boundary must be complete; an audit,
+  mirrored follower shortcut, or setup-only representation is not a result.
+- **Current result, not retained:** the singular clock, explicit exceptional materialization, and
+  one frame-row publisher preserve both short production digests. After removing the old per-node
+  API handoff, two resident-256 65,536-frame directions improve `40,980.4 -> 40,721.0` and
+  `39,758.0 -> 39,378.7` cycles/frame (+0.64%/+0.96%). The earlier clock-only form was similarly
+  +0.57--0.75% at resident 256 and had a clean -3.92% resident-512 reverse, proving that clock
+  deletion alone cannot realize the prior 9.74% inclusive instruction attribution. A follow-up
+  omitted `HSD_JObjCheckDepend` only when publication provably dirtied the same node; it remained
+  exact but changed the two resident-256 directions to -1.10%/-0.24%, so that omission is removed.
+  The packet remains unstaged and unaccepted pending a stable 512 measurement, but its measured
+  ceiling no longer justifies expanding pose state or geometry scope on setup value alone.
+- **Final result:** reject and remove the complete packet. The 262,144-frame resident-256 ABBA
+  pairs change `39,625.4 -> 40,190.9` and `39,158.6 -> 38,927.4` cycles/frame, leaving the
+  symmetric center about 0.4% slower. Resident 512 changes `41,686.3 -> 44,074.5` and
+  `42,962.1 -> 42,874.4`, about 2.6% slower by symmetric center. Digests remain exact. The
+  singular clock deletes real interpreter work, but ownership admission, exceptional
+  materialization, and the row publisher cost more at the complete working set. Remove the clock
+  bit, reused track index, span publisher, API redirections, and all group branches. Do not revisit
+  per-node pose clocks without also replacing the downstream JObj publication/consumer layout;
+  the measured scalar clock boundary is closed.
+
+## Active code-owner cut — resident Fighter pointer in exact native owners
+
+- **Owner and scope:** preserve the existing `Fighter` object as the only gameplay-state owner.
+  In the central O0-exact fighter scheduler, keep the already-fetched `Fighter*` in a C register
+  for the lifetime of each source owner instead of reloading its stack slot before nearly every
+  field access. This changes pointer storage only: no state, ordering, arithmetic, allocation,
+  callback, ABI, or compiler setting changes.
+- **Evidence before expansion:** `Fighter_ProcessHit_8006D1EC` shrinks from 3,492 to 2,789 native
+  bytes. Two 65,536-frame resident-256 reverse pairs against the byte-frozen immediate control
+  preserve digest `e6f2a9b270b4161b` and improve paired cycles/frame by 2.09% and 1.31%.
+- **Bound:** apply this first to the 32 local Fighter fetches in `fighter.c`, which owns the shared
+  per-frame scheduler phases. Retain or expand into other hot source owners only if alternating
+  whole-program measurements show material aggregate gain; do not mechanically annotate the
+  roughly 1,700 action callbacks without demand evidence.
+- **Result:** reject and remove. ProcessHit alone is not portable across the two resident working
+  sets: resident-256 short pairs initially improve 2.09% and 1.31%, but resident-512 reverse pairs
+  are +0.16% and -0.83%. Expanding the same storage request through all 32 central fetches makes a
+  clean resident-256 reverse pair 5.08% slower, showing register displacement in larger owners.
+  Generated code size is not the limiting ownership boundary; do not annotate the action corpus.
+
+## Owner audit — action collision callbacks
+
+- **Question:** the current profile assigns roughly 13% of the complete contract to
+  `Fighter_procMap`'s action-owned collision callback, but that aggregate does not identify a
+  deletable representation boundary. Attribute the existing callback bodies by exact function
+  pointer under the disposable subsystem profiler before selecting the next structural cut.
+- **Boundary:** profiling counters only; no release code, state, allocation, callback order, or
+  gameplay output changes. Remove the attribution after recording its call/cycle distribution.
+- **Decision rule:** choose a direct owner only if a small callback family carries material cost
+  and shares canonical state/products. A diffuse distribution means an action-callback rewrite is
+  another generic scheduler project and should not be pursued.
+- **Result:** remove the attribution. The current 16,384-frame resident-512 profile assigns 13.03%
+  to all collision callbacks, but no action owns a useful boundary: `AttackAir` is 1.27%,
+  `DamageFly` 0.87%, `Wait` 0.76%, `Dash` 0.74%, `JumpAerial` 0.70%, `Landing` 0.69%, and `Jump`
+  0.69%; all others are smaller. This reproduces the earlier callback census and confirms that
+  actions converge in the shared air/ground `mpColl` owners. Do not specialize action wrappers.
+
+## Rejected representation cut — dense canonical JObj matrices
+
+- **Final owner and canonical state:** every native `HSD_JObj` keeps one matrix, owned by the
+  existing `HSD_Mtx` object pool. `HSD_JObj::mtx` becomes a pointer to that matrix on native only;
+  PPC and Wasm retain the upstream inline field and layout.
+- **Consumers and displaced state:** preallocate the matrix pool once before stage/fighter JObj
+  construction so canonical matrices occupy a dense 48-byte stream instead of being embedded in
+  184-byte graph nodes. The JObj itself shrinks to topology, SRT, flags, animation links, and one
+  matrix pointer. Existing setup, collision, dynamics, hit/hurt, contact, camera, and viewer code
+  continues to read and write `jobj->mtx` directly.
+- **Deletion boundary:** remove every native inline main matrix. Do not add a pose matrix mirror,
+  lookup table, fallback layout, lazy product, runtime allocation, changed matrix arithmetic, or
+  compiler control. `JObjInit`/`JObjRelease` allocate/free the sole matrix through the existing
+  source pool; the preconstruction reserve covers the configured pose capacity plus the established
+  transient headroom.
+- **Why this is not the rejected JObj reorder:** the prior 176/192-byte layouts kept matrices
+  interleaved with graph nodes and measured at most cache-noise-scale effects. This cut separates
+  the two demand streams: pose publication scans smaller JObjs, while matrix consumers traverse a
+  dense matrix allocation. It must repay its pointer load and any memory growth at both resident
+  sizes or be rejected.
+- **Acceptance:** unchanged exact digests, allocation lock, copy/save/restore, and focused native
+  gates, followed by alternating comparisons against the frozen current aggregate and committed
+  checkpoint at resident 256 and 512. Profile the retained form before claiming that cycle movement
+  is a gain. The campaign checkpoint still requires at least +5% at both sizes over `02cfe013`.
+- **Result:** reject and remove. The dense form preserves both short digests but costs `40,447.1`
+  cycles/frame at resident 256 and `39,379.9` at resident 512, roughly 9–10% slower than the frozen
+  current aggregate. A source-owner ablation that removes the reserve while keeping pointer-backed
+  matrices falls further to `47,679.5` cycles/frame at resident 256. The reserve therefore recovers
+  real locality, but the representation still loses the profitable adjacency between each JObj's
+  SRT/topology state and its demanded matrix plus a dependent pointer fetch on every matrix use.
+  Restore the inline matrix and generator without carrying an alternate layout. Future canonical
+  geometry work must delete product/owner work, not merely separate the same products in memory.
+- **2026-08-04 salvage correction:** the pointer-backed implementation survived the later tiled-
+  transform cleanup because its hunks correctly predated that packet, but the cleanup mistook
+  independent ownership for positive disposition. Restore the inline matrix, remove its pool
+  allocation/free and native-layout exception, and compare the repaired aggregate directly. This
+  is the completed rejection above, not a new representation experiment.
+
+## Active structural packet — packed resident Match arenas
+
+- **Final owner and canonical state:** `MslCoreBatch::match_arenas` remains the singular contiguous
+  native storage mapping, and each `MslCoreMatch::memory` arena remains the only owner of its
+  source graph. The complete supported construction census is below 1 MiB, versus the current
+  3 MiB fixed stride.
+- **Consumers and displaced state:** bind every batch slot at a 1 MiB stride and advise the one
+  Linux mapping for transparent huge pages. This deletes 2 MiB of unreachable virtual capacity
+  per slot and lets each 2 MiB page cover two adjacent Matches instead of straddling sparse 3 MiB
+  reservations. Mac, Wasm, and PPC keep portable ordinary-page behavior.
+- **Deletion boundary:** no second arena, copied hot state, gameplay allocation, state reorder,
+  changed pointer identity, compiler control, scheduler seam, or output change. Mapping and
+  allocation counts remain identical; exhaustion stays a hard construction failure. Measure peak
+  RSS alongside throughput and reject the advice if physical-memory growth is disproportionate.
+- **Acceptance:** exact short digests and supported construction/native copy/save/restore/allocation
+  gates, followed by controlled resident-256/512 comparisons against a byte-frozen pre-packet
+  aggregate. The campaign checkpoint still requires at least +5% over `02cfe013` at both sizes.
+- **Result:** reject and restore the 3 MiB bound. Both packed forms preserve the short digest. A
+  1 MiB ordinary-page stride is 0.65% slower at resident 256 (`36,883.5 -> 37,122.8`
+  cycles/frame) with unchanged roughly 448 MiB process RSS. Transparent huge-page advice is
+  decisively worse: `43,029.4` cycles/frame (-14.3% throughput) and 564 MiB RSS (+116 MiB).
+  Translation was not the missing owner, and physically populating sparse arena capacity evicts
+  useful state. Remove the advice and capacity change; do not pursue OS page policy as the 150k
+  path.
+
+## Active owner cut — exact dynamics angle admission
+
+- **Final owner and canonical state:** the native dynamics angle helpers remain the sole owners of
+  the source-ordered squared lengths, dot product, cosine cutoff, and demanded deviation angle.
+  Existing compiled cutoff bits in `DynamicsData` remain canonical.
+- **Consumers and displaced work:** max-angle, convergence, and deviation predicates first compare
+  the already-required binary32 dot and squared lengths against a deliberately widened IEEE error
+  interval around the cutoff. A result outside that interval is mathematically on the same side as
+  the source cosine and deletes both square roots, their product, division, and clamp. The narrow
+  interval, non-finite/subnormal inputs, and every demanded deviation angle execute the existing
+  exact path unchanged.
+- **Deletion boundary:** no approximate output, changed cutoff, cached runtime result, state,
+  allocation, action/character admission, compiler control, or reordered source product. The
+  bound may only decide a Boolean when its margin exceeds the maximum normal binary32
+  sqrt/product/divide rounding envelope; ambiguity always falls through to exact arithmetic.
+- **Acceptance:** count exact fallbacks only in a disposable screen, then remove the counters.
+  Require unchanged short and full-suite output plus controlled gains at resident 256 and 512
+  against `reports/triage/replay-bench-pre-packed-arena`. Retain only if both sizes repay the
+  extra comparison and the total aggregate advances the campaign checkpoint.
+- **Result:** reject and remove after the first exact resident-256 screen. The widened proof band
+  preserves digest `4124834367a202ec`, but costs `36,883.5 -> 37,337.6` cycles/frame (-1.22%
+  throughput). Computing the double-precision squared comparison on every call costs more than the
+  skipped scalar hardware roots. Restore the direct exact cosine helpers and do not add a more
+  elaborate admission around already-cheap hardware square roots.
+
+## Active owner cut — frame-local camera clipping
+
+- **Final owner and canonical state:** `Camera_8002958C` remains the singular gameplay-camera
+  bounds owner. Live `CmSubject` state, `stage_info`, and `CameraTransformState` remain canonical.
+- **Consumers and displaced work:** resolve the stage ground limit and four immutable-within-call
+  camera bounds once, then use one inline exact clamp for the base and four extent points of every
+  admitted subject. This deletes five repeated `Camera_80029124` calls, ground queries, stage
+  getter families, and duplicated clamp blocks per subject while retaining both source subject
+  passes and their mutation order.
+- **Deletion boundary:** frame-local scalars only; no persistent cache, subject copy, changed
+  admission, camera approximation, stage/action allowlist, allocation, compiler control, or
+  output change. PPC/Wasm retain the upstream call shape.
+- **Acceptance:** exact short digests and camera-focused/full validation, then alternating
+  resident-256/512 comparisons against the frozen pre-packet aggregate. Retain only if both sizes
+  improve and the aggregate materially advances the +5% checkpoint.
+- **Result:** reject and remove. The exact native form shrinks `Camera_8002958C` from 1,618 to
+  1,264 bytes and removes 29 generated calls, but this demanded scalar work is not the whole-frame
+  bottleneck. A 65,536-frame resident-256 reversal is neutral-negative (`36,596.2 -> 36,563.0`
+  cycles/frame when the control follows), and resident 512 loses `35,974.0 -> 36,224.6` in the
+  adjacent 32,768-frame screen. Restore the upstream owner; do not treat source call count or text
+  deletion as throughput evidence.
+
+## Checkpoint-closing operation — paired exact dynamics lengths
+
+- **Final owner and canonical state:** the three retained native dynamics angle predicates remain
+  the sole consumers of their two source-ordered vector lengths; their existing cosine/cutoff
+  results and `DynamicsData` remain canonical.
+- **Displaced work and boundary:** construct the two squared lengths with the existing scalar
+  operation order, evaluate both nonnegative binary32 values with one two-lane hardware square
+  root, then continue through the unchanged multiply, cosine, clamp, and cutoff paths. This deletes
+  one scalar square-root instruction per angle call without adding state, allocation, a second
+  result, approximation, compiler control, or non-x86 behavior.
+- **Why this bounded revisit:** the prior exact implementation improved resident 512 by
+  0.35–1.62% and was neutral at resident 256. The current aggregate is independently above +5% at
+  resident 256 but immediately below it at resident 512, so this is a finite checkpoint-closing
+  test, not a renewed scalar search. Compare directly against frozen pre-change binary
+  `reports/triage/replay-bench-pre-dynamics-pair-current` at both sizes; remove it if either size
+  has a controlled loss.
+- **Result:** reject and remove. Both short digests remain exact, but the first 65,536-frame
+  resident-256 adjacency worsens `36,079.9 -> 37,336.2` cycles/frame (-3.36% throughput). The prior
+  mixed/neutral 256 result does not survive the current aggregate, so no resident-512 fishing is
+  justified. Restore the two scalar square roots and retain no SIMD helper or include.
+
+## 2026-08-04 reconvene — scalar search exhausted
+
+- The current exact dirty aggregate remains below the checkpoint: a 131,072-frame ABBA comparison
+  against committed `02cfe013` centers at about +4.28% throughput for resident 256 and +4.34% for
+  resident 512. It is retained unstaged, but does not authorize a commit.
+- A fresh 16,384-frame resident-512 production-path profile assigns 26.93% of the contract to
+  `Fighter_8006A360`, 13.97% to `Fighter_procMap`, 6.23% to `Fighter_8006D9AC`, and 4.11% to the
+  camera. Inside animation, pose publication is 14.57% and action animation callbacks are 6.93%.
+- The recent scalar/layout screens are sub-point, mixed, or negative. Stop searching those leaves.
+  Reaching 150k from the current roughly 121--127k candidate requires a bounded canonical cut that
+  removes work across fighter animation and its map/geometry consumers; a pose-only scheduler seam,
+  scalar product sidecar, generic operation scheduler, or another source-layout tweak is already
+  disproven by retained history.
+
+## Active operation packet — batched exact blend arccosine
+
+- **Final owner and canonical state:** the existing native skeleton blend in `lb_00B0` remains the
+  sole owner of each live JObj quaternion. Its already-contiguous temporary cosine/angle rows are
+  transient operation inputs, not persistent gameplay state.
+- **Consumers:** the same quaternion slerp loop consumes the angles immediately before its retained
+  wide sine/cosine pass. No other animation, scheduler, pose, or geometry owner changes.
+- **Displaced work and deletion boundary:** collect the already-admitted finite interior cosines,
+  evaluate the exact `acosf` square-root, reduction, `atanf` polynomial, and final subtraction in
+  SIMD lanes, then delete the corresponding scalar `acosf` calls. Preserve every binary32
+  multiply, divide, fused polynomial operation, lookup value, comparison, result order, and scalar
+  exceptional fallback. Add no state, table, allocation, approximation, dispatch flag, compiler
+  setting, or scheduler seam.
+- **Cost model and acceptance:** the timed resident-512 census assigned 153,817 `acosf` calls to
+  this already-batched owner. Unlike the rejected cross-Match publisher, inputs and outputs are
+  contiguous and the downstream trig pass already pays the same batch boundary. Require both short
+  digests, focused blend equivalence, full exact validation, and controlled gains at resident 256
+  and 512 against both the frozen pre-packet aggregate and committed `02cfe013`.
+- **Result:** reject and remove. The exact implementation processed useful widths (most batches
+  contained 12--32 interior lanes, totaling 153,817 calls in the resident-512 window), so lane
+  occupancy was not the failure. Direct cycle attribution measured the complete SIMD arccosine at
+  only 1.83M cycles over 32,768 match-frames, about 56 cycles/frame and 0.16% of the whole
+  contract. The first uninstrumented screen was correspondingly mixed (`37,250.5 -> 38,068.2`
+  cycles/frame at resident 256 and `35,306.0 -> 35,191.8` at resident 512). The scalar hardware
+  square root and short fused `atanf` are already cheap; six indexed gathers and vector setup only
+  trade a sub-point leaf. Remove the kernel, exported lookup, call-site packing, and every counter.
+  This corrects the count-only census: blend arccosine is frequent but not a material cycle owner.
+
+## Active operation reassessment — exact wide general matrix concat
+
+- **Final owner and canonical state:** `PSMTXConcat` remains the singular general affine product
+  owner and publishes only its existing 3x4 output. No matrix representation or caller changes.
+- **Displaced work:** the previously exact AVX-512 form loads both complete inputs before any
+  publication, evaluates all twelve output lanes with the source multiply/two-FMA order, and uses
+  the same final `fmaf(1, translation, value)` only on columns 3/7/11. This deletes the scalar
+  row/column loops and alias temporary/copy without changing any arithmetic result.
+- **Why reassess:** the earlier form repeatedly improved resident 256 by 2.15--2.43%, had a clean
+  +1.52% resident-512 reversal, and agrees with an older +1.27% exact SSE result; it was removed
+  after frequency-correlated 512 runs and a later narrower AVX2 form failed. The current retained
+  math/pose chain is materially different, and a controlled long ABBA can resolve the wide form
+  directly rather than treating the failed AVX2 replacement as its result.
+- **Boundary and acceptance:** native AVX-512 only; portable native, PPC, and Wasm retain the same
+  scalar owner. Add no compiler setting, target attribute, state, allocation, approximation, or
+  consumer specialization. Require exact digests and a controlled gain at both resident sizes
+  against the frozen current aggregate; remove it if either size loses in the long alternating
+  comparison.
+- **Result:** retain. Both 32,768-frame digests remain exact, and the emitted owner is the intended
+  twelve-lane load, three row broadcasts, multiply/two-FMA sequence, masked translation FMA, and
+  one masked store. Two 65,536-frame reversals improve resident 256 from `36,646.6/36,694.6` to
+  `36,279.8/36,289.2` cycles/frame (about +1.06% paired throughput) and resident 512 from
+  `35,410.0/35,337.7` to `34,787.0/34,929.4` (about +1.48%). This deletes the hot scalar loop and
+  alias-copy path with no new state or consumer seam; retain it for the accumulated checkpoint.
+- **2026-08-04 source audit:** later rejected matrix-product refinements accidentally restored the
+  scalar owner while leaving the accepted result recorded above. Reinstate the exact accepted
+  twelve-lane implementation and re-run both digests plus controlled aggregate timing; do not
+  treat the historical result alone as current checkpoint evidence.
+
+## Structural preflight — resident Match hot/cold ownership
+
+- **Candidate final owner:** `MslCoreMatch` remains the singular mutable gameplay owner, but large
+  construction allocations that are immutable after sealing or never consumed in the supported
+  headless runtime move to shared `MslCoreGameData` ownership or are deleted. Mutable reached
+  records remain in the Match arena; no gameplay field is mirrored between owners.
+- **Canonical state and consumers:** source GObj/Fighter/item/stage records, compact fighter pose,
+  scheduler lists, and every replay-observed mutable byte remain authoritative. The preflight maps
+  the 608,864-byte ordinary arena by actual allocation callsite and size, then traces the largest
+  records to their runtime readers before selecting a cut.
+- **Displaced state and deletion boundary:** a retained packet must remove a substantial replicated
+  allocation and its initialization/copy/relocation footprint, not merely reserve fewer virtual
+  bytes or reorder Fighter fields. Immutable state has one process-wide owner; dead state has no
+  owner. Add no pointer compatibility layer, synchronized copy, per-frame lookup table, gameplay
+  allocation, or unexplained memory growth.
+- **Acceptance:** first inventory without changing production behavior, then admit only a boundary
+  with a credible multi-point whole-runtime ceiling at both resident sizes. The implementation must
+  preserve exact output, allocation sealing, arbitrary-index copy/save/restore, PPC/Wasm behavior,
+  and the complete supported-domain gate. Remove all allocation diagnostics before timing.
+- **Inventory result:** the ordinary arena is dominated by dormant preallocated object pools. They
+  do not enter the timed frame and prior capacity cuts confirm that byte deletion alone is neutral.
+  The distinct top-level `MslCoreMatch` layout does expose one live cut: its 256-entry asynchronous
+  effect queue occupies 10,240 bytes immediately before the source state visited by every gameplay
+  owner. A complete resident-512 workload reaches only seven simultaneous entries.
+
+## Active state packet — supported headless effect queue
+
+- **Final owner:** `MslCoreEffectState` remains the sole Match-owned asynchronous effect queue. It
+  contains 32 fixed nodes, over four times the measured resident maximum, and retains the same
+  intrusive free/list ownership and source priority-9 flush order.
+- **Canonical state and consumers:** `efAsync_Spawn`, `efAsync_QueueFlush`, and
+  `efAsync_QueueClear` consume the one queue directly. Camera-shake parameters and RNG-bearing
+  effect dispatch remain exact; immediate effects still allocate and release through the same
+  owner.
+- **Displaced state and deletion boundary:** delete 224 unreachable queue nodes and 8,960 bytes
+  from every top-level Match. Add no secondary queue, spill allocation, overflow fallback, runtime
+  growth, or changed dispatch. Exhaustion remains a hard invariant failure.
+- **Acceptance:** both exact benchmark digests and the complete supported-domain effect/action
+  corpus must remain green. Retain only if the smaller top-level Match improves both resident sizes
+  against the frozen aggregate; otherwise restore 256 nodes rather than keeping a memory-only cut.
+- **Result:** reject and restore 256 nodes. The smaller owner preserves both short digests, but an
+  adjacent frozen-control/candidate pair is effectively identical at resident 256
+  (`36,683.1 -> 36,685.9` cycles/frame) and only +0.05% at resident 512
+  (`35,116.8 -> 35,099.4`). This confirms that dormant top-level bytes are not the active resident
+  working set. Remove the capacity change rather than retaining memory-only churn.
+
+## Active structural packet — native stage-vertex hot/cold ownership
+
+- **Final owner:** native `mpLib` keeps one Match-owned vertex allocation, but its three source
+  products become three canonical dense streams: current world position, immutable/local position,
+  and previous world position. The current-position stream is the sole hot endpoint owner for all
+  floor, ceiling, wall, line, island, and stage consumers. PPC and Wasm retain the source AoS.
+- **Canonical state and consumers:** vertex indices and `MapLine` topology remain unchanged. Stage
+  transform/mutation owners write the corresponding current stream; speed/remap owners consume the
+  previous stream; reset/transform owners consume the local stream. No endpoint or derived line
+  product is copied into `CollLine`, and every existing vertex API resolves the same singular
+  fields.
+- **Displaced state/work:** replace the 24-byte `CollVtx` stride touched by every endpoint query
+  with an 8-byte current-position stride. The local and previous streams occupy the remainder of
+  the same allocation, so allocation count and total vertex bytes do not grow. This deletes cold
+  local/previous cache lines from the 13% stage-collision owner and creates contiguous current
+  coordinates for a later exact narrow-phase kernel without a gather cache.
+- **Deletion boundary:** no source-shaped native `CollVtx` AoS, mirrored endpoint, line cache,
+  setter synchronization, compatibility flag, gameplay allocation, approximation, stage/action
+  allowlist, or fallback query is retained. Native save/restore relocates the three interior views
+  into the one allocation. If the complete representation cannot preserve exact output and improve
+  both resident sizes after its immediate consumers are converted, remove it as a unit rather than
+  retaining setup-only churn.
+- **Acceptance:** exact short digests, source/native/copy/save/restore/allocation and Wasm gates,
+  then alternating comparisons against the frozen aggregate at resident 256 and 512. The campaign
+  checkpoint remains at least +5% over committed `02cfe013` at both sizes.
+- **2026-08-04 result:** reject and remove before consumer expansion. Splitting the singular native
+  vertex allocation into dense current/local/previous streams preserved both short exact digests,
+  but a controlled screen was only about +0.4% at resident 256 and -0.15% at resident 512. The
+  intended in-place floor consumer does not supply a credible larger ceiling: the already-recorded
+  live-range census found no ranges of eight lines, 62.8% of ranges contain at most three lines,
+  and 44.2% of ranges require callback or remap handling; exact AABB gates, compact source-order
+  plans, and direct indexed iteration have also already lost. The dense split therefore leaves
+  setup-only representation churn without a complete both-size gain. Restore the source-shaped
+  24-byte singular vertex record and do not revisit stage-vertex layout without a traversal that
+  deletes a materially different measured owner.
+
+## Active structural preflight — canonical pose-to-geometry deletion ceiling
+
+- **Candidate final owner:** the registered native fighter-pose graph would remain the singular
+  animation/topology owner, but one compact canonical product layout would replace admitted
+  `HSD_JObj` SRT/matrix storage from source animation publication through ECB, hurt, hit, shield,
+  attachment, dynamics, and camera consumption. Generic nonfighter JObjs and PPC/Wasm retain the
+  source representation.
+- **Canonical state and consumers:** authored pose clocks, mutable source callbacks, dynamics
+  mutations, and exact operation order remain authoritative. A retained cut must give immediate
+  gameplay consumers direct access to the one compact state; it may not mirror JObj products,
+  retain a per-fighter sidecar, or hand every demand back through the generic matrix API.
+- **Displaced work and deletion boundary:** delete the admitted JObj SRT/matrix fields' runtime
+  ownership, dirty-tree traversal, scattered matrix publication, and repeated consumer lookup as
+  one cut. Do not add a batch scheduler seam, fallback dispatch, action/character allowlist,
+  approximate math, gameplay allocation, or compatibility bridge. Unsupported source mutation
+  cannot keep both representations live; it must remain outside the admitted graph or be ported to
+  the singular compact owner.
+- **Required preflight:** the current runtime already compiles integer pose samples and builds a
+  compact ECB ancestor closure. Attribute the remaining pose evaluator, dirty dependency,
+  matrix/origin publication, and non-ECB geometry consumers separately on the timed resident-512
+  contract. Compare those executed costs with the rejected compiled sidecar's 80.5M-cycle pose
+  saving and downstream relocation. Proceed only with a bounded representation whose complete
+  deletion ceiling can materially advance the 150k target; do not infer a double-digit gain from
+  inclusive pose and stage-collision buckets.
+- **Acceptance:** remove all counters/timers after the census. The eventual packet must preserve
+  exact short and full-suite output, allocation/state contracts, and improve both resident sizes
+  against the byte-frozen current aggregate. The campaign checkpoint remains at least +5% over
+  committed `02cfe013` at both sizes.
+- **2026-08-04 result:** close this representation before implementation. A timed resident-512
+  census records 6,760,978 physical pose-node visits, 140,146 compact ECB publications, and
+  839,526 non-ECB point/pair publications over 65,536 match-frames. With profiler serialization,
+  the compact ECB seam attributes 33.7M cycles to closure scanning, 16.0M to wide trig, and 87.7M
+  to demanded matrix publication; non-ECB matrix/product consumers attribute another 76.8M. The
+  pose-node dependency/interpreter/RObj split confirms a large inclusive region, but its exact
+  parts cannot be added to the production profile because per-node RDTSCP perturbs the loop.
+  More importantly, the complete prior singular compiled-pose owner already removed this same
+  source animation/geometry boundary and delivered less than 1% whole-runtime gain after its
+  saved 80.5M animation cycles relocated into stage/contact consumers. Earlier direct dynamics,
+  grounded-IK, secondary-pose, fractional-rate, and transition continuations likewise produced
+  multi-fold isolated wins without a reliable cumulative scale gain. Replacing canonical JObj
+  storage would therefore repeat a measured architecture failure, not expose a new double-digit
+  ceiling. Remove every timer and profiler-target change. Any future pose proposal must change the
+  downstream stage/contact algorithm or batch storage itself; it cannot be another scalar compact
+  owner, sidecar, or source-to-compact handoff.
+
+## Active structural packet — mutation-aware fixed fighter scheduling
+
+- **Final owner:** the hosted native GObj scheduler remains the sole priority/order owner. At the
+  canonical p-link-8 position it directly visits the already-canonical fighter GObj list and calls
+  the fifteen fixed source fighter phases; those fighters no longer also own fifteen generic proc
+  records. PPC and Wasm retain the upstream generic schedule.
+- **Canonical state and consumers:** `HSD_GObj_Entities->fighters` remains the singular fighter
+  order. Scheduler priority remains canonical for action/effect/item timing queries. One transient
+  proc-list mutation bit, written by the existing insert/remove owners, says whether a fighter
+  callback invalidated the already-known continuation of the current generic priority list.
+- **Displaced work and deletion boundary:** delete 15 proc allocations per native fighter, their
+  priority-list traversal, indirect owner calls, per-proc epoch/flag traffic, and the prior fixed
+  attempt's unconditional rescan from the priority head. Dispatch priority once, call every fighter
+  directly, and resume the saved later-p-link proc unless the mutation bit requires a live rescan.
+  Add no copied fighter list, callback table, phase mask, compatibility path, allocation, or changed
+  order. Current-GObj/pending mutation semantics remain published around every direct call.
+- **Prior-attempt distinction:** the exact 2026-07-19 candidate lost every pair because it switched
+  per fighter, factored the generic hot loop, and rescanned the live proc list from its head after
+  every fighter phase. This revisit keeps the proven current generic loop intact and removes that
+  rescan in the ordinary non-mutating case. If the complete form still loses either resident size,
+  remove it and close fixed fighter scheduling rather than tuning another dispatch variant.
+- **Acceptance:** both production digests first, then alternating frozen-aggregate comparisons at
+  resident 256 and 512. A retained result must improve the whole runtime at both sizes and carry no
+  native Match-state/allocation regression beyond deleting proc records; the campaign commit still
+  requires at least +5% over `02cfe013` at both sizes.
+- **2026-08-04 result:** reject and remove the complete revisit. It preserved both exact digests and
+  passed the native scheduler/API/copy/allocation smoke after the fixed path was correctly limited
+  to an all-fighter proc-free p-link-8 list. CPU-8 screens initially appeared 3--8% favorable, but
+  the core was under severe frequency/contender drift and those results do not reproduce on the
+  canonical CPU-0 V-Cache contract. Adjacent resident-256 CPU-0 comparisons against the frozen
+  aggregate are `35,979.4 -> 36,091.5` and `35,979.4 -> 36,028.5` cycles/frame: 0.14--0.31%
+  slower. Removing proc traversal is repaid by the p-link admission scan, fixed-phase dispatch,
+  current-owner publication, and preserved mutation semantics even without the old unconditional
+  rescan. All runtime changes are removed. Fixed fighter scheduling is closed; do not repeat it by
+  changing dispatch shape again.
+
+## Active structural preflight — batch-native pose/geometry occupancy
+
+- **Candidate final owner:** `MslCoreBatch` would own one fixed fighter pose/geometry phase across
+  selected Matches. Match pose clocks and authored mutations would remain singular state; admitted
+  sampled SRT and demanded world products would move to one batch-native canonical layout, with
+  the corresponding fighter JObj SRT/matrix products deleted from the admitted path rather than
+  mirrored.
+- **Consumers:** the bounded cut is fighter pose publication plus its immediate ECB/stage,
+  hit/hurt/shield/contact, dynamics, attachment, and camera geometry consumers. Generic scene
+  animation, items, arbitrary source callbacks, and the rest of gameplay are outside the cut.
+- **Displaced code/state and deletion boundary:** a retained implementation must delete scalar
+  direct-row publication, repeated fighter JObj matrix setup, and consumer-side reconstruction for
+  admitted products. It may not add the rejected per-fighter sidecar, synchronized matrices, a
+  fallback state, action/character allowlists, gameplay allocation, or a generic callback tape.
+  Exceptional authored/fractional ownership must make one explicit source-shaped transition; it
+  cannot keep both representations live.
+- **Preflight question:** before another multi-thousand-line cut, measure per-batch direct-row keys
+  and exact eight-lane occupancy at resident 256 and 512. Count both contiguous identical
+  program/sample rows and looser same-shape rows that would require gathers. The prior scalar
+  compiled owner proved correctness but lost its saved animation cycles in handoffs and scattered
+  consumers; proceed only if current resident batches expose enough real lane density to amortize
+  the already-measured 7--9% scheduler seam and fund deletion across the complete owner.
+- **Acceptance:** this census is diagnostic only and must be removed after measurement. A
+  production packet remains acceptable only with exact output/full validation and a controlled
+  whole-runtime gain at both resident sizes; an occupancy result is not itself retained progress.
+- **2026-08-04 result:** reject the contiguous program/sample kernel before production work. The
+  resident-256 census observes 9,709,792 direct rows over 1,036 batch steps: exact-key eight-lane
+  occupancy is 13.8%, only 0.4% of rows belong to groups of at least eight, and the largest group
+  is 12. Resident 512 observes 13,147,946 rows over 972 steps: occupancy is 14.9%, 1.0% of rows
+  belong to groups of at least eight, and the largest group is 18. Grouping only by publication
+  shape reaches 97.4%/98.1% occupancy, but requires scattered value/state gathers and consumer
+  handoffs—the rejected compiled-owner shape—while still paying the 7--9% scheduler seam. All
+  census code is removed. Do not implement a contiguous batch pose kernel or infer lane density
+  from repeated benchmark cases; a future batch-native proposal must first eliminate the scatter
+  by changing canonical storage across a wider owner.
+
+## Active structural packet — state-local Match execution order
+
+- **Final owner:** `MslCoreBatch` remains the sole owner of independent-Match execution order. Each
+  `MslCoreMatch`, its source scheduler, mutable state, RNG, and output slot remain canonical and
+  execute one complete frame without interruption.
+- **Consumers and displaced work:** the batch step may visit independent Matches in a stable
+  stage/action-family order derived from their already-canonical current fighter state. This aims
+  to remove repeated instruction, branch, immutable pose-program, and stage-geometry working-set
+  turnover without introducing the rejected cross-Match scheduler seam. Output APIs continue to
+  address Matches by public batch index.
+- **Deletion boundary:** use the existing reset-index scratch after reset; add no mutable gameplay
+  state, allocation, cache, callback grouping, phase split, approximation, compiler control, or
+  benchmark-only admission. A Match still runs its complete source scheduler while resident. The
+  order must cover every selected initialized Match exactly once and remain deterministic.
+- **Acceptance:** exact short digests first, then a bounded both-size comparison against the
+  byte-frozen aggregate. Retain only if locality savings clearly repay ordering work at both sizes;
+  otherwise remove the experiment completely and do not turn it into a scheduling framework.
+- **Result:** reject and remove. Stable stage/action-family ordering preserves exact digests but
+  loses at both sizes: resident 256 changes `36,324.1 -> 36,652.7` cycles/frame (-0.90%
+  throughput), and resident 512 changes `34,788.1 -> 35,166.8` (-1.08%). Sequential public-index
+  order provides better Match-arena/TLB locality than whole-Match code/data grouping repays. Remove
+  the bucket computation and scratch order completely; this also rules out dynamic whole-Match
+  sorting as the missing batch-native gain.
+
+## Active output-locality packet — reverse publication visitation
+
+- **Final owner:** public batch index remains the only observation/terminal addressing owner;
+  every output row and Match retains its existing canonical state and index.
+- **Displaced work:** keep the source scheduler's winning forward Match-arena traversal, but visit
+  independent Matches in reverse while writing the caller's large observation history and terminal
+  rows. Publication then finishes from low-index Match state immediately before the next forward
+  step, instead of leaving the next step's first Matches displaced by high-index state and output
+  stores.
+- **Boundary:** only batch visitation order changes. Output byte addresses, row format, validation,
+  masks, scalar writers, state, allocation, compiler profile, and per-Match operation order remain
+  unchanged. Add no cache, streaming-store path, API, or benchmark admission.
+- **Acceptance:** exact short digests and a bounded frozen-candidate comparison at both sizes.
+  Remove immediately if reverse output stores cost more than recovered Match locality.
+- **Result:** reject and remove. Digests remain exact, but reverse publication loses against the
+  frozen aggregate: resident 256 changes `36,468.7 -> 36,697.3` cycles/frame (-0.62%
+  throughput), and resident 512 changes `34,860.6 -> 35,131.6` (-0.77%). Backward writes cost more
+  than any next-step Match warming. Restore both forward loops; traversal reordering is closed.
+- **Bounded refinement:** test only the small terminal pass in reverse after the winning forward
+  observation writer. This preserves sequential 980-byte observation stores while leaving the
+  low-index Match terminal fields most recently read before the next step. One line changes; reject
+  on the first both-size loss and do not add explicit prefetching.
+- **Refinement result:** reject without a resident-512 screen. The exact resident-256 adjacency
+  loses `36,295.7 -> 36,339.3` cycles/frame. Restore forward terminal visitation. Output/traversal
+  locality is fully closed; no prefetch or streaming-store follow-up is justified by these results.
+
+## Aggregate cleanup — provisional output-context deletion
+
+- **Control:** the byte-frozen exact aggregate at SHA-256
+  `13a93b1753dea7a841bbafca35e66ad8c6e4a4ba1e66631f06da0b467a341cd3`, measured
+  +3.52%/+4.43% against committed `02cfe013` at resident 256/512.
+- **Question:** the direct observation/terminal context packet was retained despite timing that
+  changed sign. Restore only its two owner binds, source stock reads, and bound item traversal;
+  retain the separately measured zeroed-output, wire-inline, popcount, and canonicalization work.
+  This is a coherent ablation of an uncertain retained packet, not a new compatibility path.
+- **Decision boundary:** exact short digests first, then alternating both-size timing against the
+  frozen aggregate. Keep the simpler source owner if it is faster; otherwise restore the complete
+  direct packet. No state, allocation, output, compiler, or API contract may change.
+- **Result:** retain the direct packet. After correcting the ablation's terminal binding, both
+  digests are exact. The source-owner ablation costs `36,993.8` cycles/frame between frozen
+  resident-256 controls at `36,468.2` and `36,268.2` (about 2.0% slower by symmetric center), and
+  costs `35,262.3` between resident-512 controls at `34,853.9` and `34,869.2` (about 1.1% slower).
+  Restore the direct item traversal, stock reads, and deleted output binds completely.
+
+## Active structural packet — exact collision-driver hot path
+
+- **Final owner:** native `mpColl` remains the sole fighter stage-collision owner. The existing
+  `CollData`, canonical fighter JObj matrices, and Match-owned `mpLib` line graph remain the only
+  mutable geometry and contact state.
+- **Consumers:** ordinary MotionState collision callbacks continue to enter the same air/ground
+  drivers and publish floor, wall, ceiling, ledge, ECB, environment-flag, and fighter-position
+  results before later contact and camera phases.
+- **Displaced work:** first measure the complete ECB, air-driver, and ground-driver costs and the
+  incidence of their response-only paths. Reshape the two dominant drivers so the measured common
+  path no longer carries cold squeeze, connected-surface, ledge, or floor-recovery machinery in
+  its live code/data flow. Preserve every admitted query and response in source order.
+- **Deletion boundary:** no second `CollData`, cached ECB/contact, stage/action admission list,
+  external line index, callback bridge, persistent state, allocation, approximation, compiler
+  control, or cross-Match scheduler seam. A retained result must remove executed control/spill/
+  publication work from the complete source owner; merely moving it behind another wrapper or
+  changing code layout without a controlled gain is not sufficient.
+- **Acceptance:** exact resident-256/512 digests, focused stage-collision validation including
+  hard/soft floors, ledges, walls/ceilings, and moving platforms, then alternating production
+  binaries against the frozen current candidate. The campaign checkpoint still requires at least
+  +5% over committed `02cfe013` at both sizes.
+- **Incidence result:** over 32,768 timed resident-512 frames, 69,858 JObj ECB publications consume
+  80.1M net cycles. Their bound closures average 21.31 nodes, 20.30 dirty nodes, and 18.57 direct
+  Euler nodes; those direct nodes span 8.14 dependency depths per call, so cross-node SIMD exposes
+  only 2.28 independent nodes per depth. The 47,315 air-driver calls consume 25.3M cycles and the
+  36,662 ground-driver calls consume 47.1M. Ground never repeats and takes its current-floor
+  response 36,469 times (99.47%); air repeats 2,187 times and finds only 960 floor candidates.
+  Neither driver records a horizontal squeeze or ceiling response in the timed workload.
+- **Design consequence:** reject a hot/cold driver split before production editing. The cold
+  response blocks are not executed cost, while a depth-batched ECB matrix kernel would average
+  only 28.5% occupancy at eight lanes and would repeat the already-rejected gather/scatter shape.
+  Continue inside the same owner by deleting demanded projection products, not by rearranging cold
+  source or building another matrix sidecar.
+
+### Exact current-line normal product
+
+- **Final owner:** each native `CollLine` owns the normalized current-line direction derived from
+  its canonical endpoint delta. `CollVtx::pos` remains the sole endpoint state; the product is
+  valid only when both exact binary32 delta bits match.
+- **Consumers and deletion:** the four direct line-projection helpers and `mpLineGetNormal` consume
+  that product, deleting repeated PPC reciprocal-estimate/Newton normalization when fighters or
+  queries revisit an unchanged line. Translation-only moving platforms naturally reuse it;
+  rotation or deformation invalidates it by delta mismatch. Remapped query-local geometry keeps
+  its source normalization.
+- **Boundary:** native only; PPC retains the source-sized line. No epoch heuristic, setter hook,
+  stage admission, second endpoint state, allocation, approximation, or external lookup table.
+  The line record grows from 16 to 32 bytes so the product remains in the already-loaded owner;
+  retain only if exact gates and both resident sizes repay that explicit state cost.
+- **Result:** reject and remove. Both production digests remain exact, but the first reversed
+  32,768-frame screen loses at both sizes: resident 256 changes `36,344.4 -> 36,474.8`
+  cycles/frame and resident 512 changes `34,892.0 -> 34,947.2`. Exact delta comparison and the
+  larger mutable record cost more than the repeated normalization they remove. Do not add this
+  product or broaden it to more collision-query sites.
+
+## Rejected owner cut — axis-aligned collision-line extension
+
+- **Final owner:** `mpLib_8004ED5C` remains the sole extended-endpoint owner. Source `CollVtx`,
+  `MapLine` adjacency, and the four published endpoint scalars remain canonical.
+- **Deletion boundary:** for an exactly horizontal or vertical line, the length is the absolute
+  nonzero axis delta. Use that identity to delete the two squares, add, and hardware square root;
+  retain the source divisions and additions so signed-zero and publication order stay unchanged.
+  General lines keep the complete source expression. Add no metadata, cache, state, allocation,
+  tolerance, or approximation.
+- **Acceptance:** exact production digests first, then a short both-size screen against the frozen
+  current candidate. Remove immediately if either size fails; do not broaden the experiment.
+- **Result:** both 32,768- and 65,536-frame digests remain exact, but the longer reverse loses at
+  both sizes: resident 256 changes `35,984.6 -> 36,054.4` cycles/frame and resident 512 changes
+  `35,275.8 -> 35,278.0`. The axis classification and changed loop layout consume the removed
+  square-root work. Remove the candidate completely and do not extend this leaf.
+
+## Active structural packet — direct hosted map-line consumption
+
+- **Final owner:** native `mpColl` remains the fighter collision-state owner and native `mpLib`
+  remains the singular mutable stage-line owner. The packet may replace repeated public scalar
+  queries between those two owners with one source-shaped direct consumer, but may not cache or
+  duplicate line state.
+- **Canonical state and consumers:** existing `CollData`, `CollLine`, `MapLine`, `CollVtx`, moving
+  joint transforms, topology, flags, normals, and source callback order remain canonical. PPC and
+  Wasm retain their upstream call graph.
+- **Displaced work:** first count the native calls that repeatedly validate and re-resolve the same
+  line, kind, endpoints, flags, and normal during one fighter map callback. A retained form must
+  delete those API/TLS/pointer traversals from the complete dominant floor/ceiling/wall consumers;
+  it may not merely add a broad phase or another line representation.
+- **Deletion boundary:** no compiler-profile changes, action/character specialization, persistent
+  state, allocation, approximation, scheduler seam, fallback dispatch, or dual collision path.
+  Preserve exact PPC arithmetic and candidate order. Remove all census hooks before production
+  timing.
+- **Provenance correction:** historical `4383ba3e` measured context-access deletion and a temporary
+  `mpcoll.c -O3` admission together; it does not isolate an 18% collision-source ceiling. Current
+  evidence only proves a 12--13% complete stage-collision owner and repeated cross-unit scalar
+  queries. Proceed from the call census and generated code, not the combined historical number.
+- **Result:** reject this as the next structural owner. Over 32,768 timed resident-512 frames, the
+  broad scans execute about 57,255 floor, 2,008 ceiling, 39,665 left-wall, and 40,119 right-wall
+  calls. Their immediate scalar follow-ups total only 89,410 validity, 43,777 kind, 33,767 flag,
+  1,423 normal, and 57,411 line-projection calls—about eleven small API entries per frame. The
+  generated floor projection already hoists the active line/vertex pointers across its loop; the
+  only repeated TLS resolution is on optional output paths. A combined line-view API would remove
+  call shells, not the broad scans, intersections, normalization, or ECB products, and cannot
+  materially move the 150k target. Remove the census and do not build another scalar map wrapper.
+
+## Rejected structural packet — tiled batch-native fighter animation
+
+- **Final owner:** the batch step owns a small fixed tile of independent Matches while source
+  scheduler priority 1 owns `Fighter_8006A360`; within each Match, fighter and callback order stay
+  unchanged.
+- **Canonical state:** existing Match-owned fighter pose nodes, clocks, JObj SRT/dirty state, and
+  source scheduler state. The packet may change their physical hot layout only if the old layout is
+  deleted in the same cut; it may not add a synchronized pose or geometry cache.
+- **Consumers:** priority-1 fighter animation and its immediate canonical pose publisher. Later
+  action, map, dynamics, hit/contact, and observation owners continue only after the complete
+  priority-1 tile has published the same state in the same per-Match order.
+- **Displaced work:** first measure the exact cost of pausing a two/four-Match tile around priority
+  1. The retained implementation must repay that seam by evaluating direct compiled pose rows as
+  one batch-native operation, removing the corresponding scalar interpreter/publication work
+  rather than wrapping it. Generic/fractional/decoder cases stay on their singular existing owner.
+- **Deletion boundary:** no whole-batch phase grouping, compatibility path, fallback state,
+  gameplay allocation, compiler control, or approximate math. A tile finishes before advancing to
+  the next tile, bounding cache displacement. Do not accept a seam-only result or claim future
+  vectorization as a gain; retain only a completed direct owner with exact output and a material
+  net whole-runtime improvement.
+- **2026-08-04 seam experiment:** implement only the exact small-tile scheduling boundary first and
+  compare it to the byte-frozen retained candidate. This is cost attribution, not a retainable
+  endpoint. If the seam tax is too large for the 14.34% pose owner to repay, optimize or reshape the
+  boundary from the measured causes before building a large kernel.
+- **Result:** a two-Match tile preserves both exact digests but costs 7.01% at resident 256
+  (`36,402.9 -> 38,955.2` cycles/frame) and 8.86% at resident 512
+  (`34,880.3 -> 37,970.7`). The tile is already the smallest useful cross-Match group; its two
+  extra context/scheduler residencies dominate before a kernel exists. Even a zero-cost replacement
+  of the complete 14.34% pose bucket leaves only 5--7 points of impossible best-case headroom, so
+  a real direct kernel cannot justify this boundary. Remove the tiled scheduler completely. Any
+  batch-native revisit must absorb a substantially wider canonical owner without adding another
+  scheduler suspension; do not build the pose-only kernel behind this seam.
+
+## Rejected structural packet — canonical fighter matrix validity
+
+- **Final owner:** native registered fighter JObjs remain the sole SRT and world-matrix owners;
+  their compact pose nodes may own exact parent/version validity metadata only if it replaces the
+  source dirty-propagation work for the admitted tree.
+- **Canonical state and consumers:** authored/live JObj SRT, exact JObj matrices, parent topology,
+  and every existing ECB, hit/hurt, dynamics, attachment, and action consumer remain unchanged.
+  Matrix demand must observe the same source-ordered arithmetic and bits.
+- **Displaced work:** the current dense pose table republishes rows even when all authored bits are
+  unchanged, then forces exact matrix reconstruction downstream. A prior unrestricted equality
+  test found 25.0% repeated rows but changed output because a clean matrix can encode an older
+  ancestor/dynamics product. First split repeated dominant rotation rows by current dirty/parent
+  validity. Then replace that ambiguous Boolean contract with one canonical parent-validity owner,
+  so an unchanged clean row is reusable only when its complete parent product is still current.
+- **Deletion boundary:** the retained form must delete redundant SRT stores, dirty propagation, and
+  the corresponding matrix/trig rebuild as one operation. It may not add a second matrix/SRT,
+  setter-maintained compatibility state, action/character admission, fallback dispatch, gameplay
+  allocation, approximate comparison, or compiler control. Generic non-fighter JObjs retain the
+  source dirty owner. Version wrap must be deterministic and exact rather than assumed impossible.
+- **First measurement:** on the exact retained candidate, count dominant `0x00E` direct rows that
+  are bit-identical before publication and partition them by current/parent dirtiness. Remove the
+  census before production timing. Proceed only if clean repeated rows expose enough downstream
+  matrix work to repay a complete validity representation.
+- **Result:** the timed resident-512 census records 1,229,111 dominant `0x00E` rows and 204,301
+  bit-identical repeats. Every repeated row is already matrix-dirty; zero has a clean parent, a
+  clean complete ancestry, or a clean root. The repeated local rotation is therefore not the
+  matrix rebuild owner: an actual ancestor change already demands the downstream product. A
+  generation representation cannot delete that work and would only add validity metadata around
+  an existing correct dirty fact. Remove all counters/profile build hooks. This rejects the
+  canonical-validity packet by measured deletion ceiling, not because an incomplete implementation
+  was slow.
+
 ## Contract and current control
 
 - Branch: `perf/decomp-throughput`; do not switch branches or create a worktree.
@@ -17,6 +1345,548 @@
 - A later checkpoint requires at least +5% controlled throughput over this checkpoint at both
   sizes, using alternating parent/candidate cycle ratios and supporting wall FPS.
 
+## Active checkpoint-closing packet — complementary exact owner cuts
+
+- **Reopened exact affine owner:** reassess the already-completed AVX-512 `PSMTXConcat` deletion
+  as part of the aggregate checkpoint rather than requiring this operation to win each resident
+  size in isolation. The current aggregate is about 1.5% short at resident 256 and 0.6% short at
+  resident 512. The prior complete-alias form preserved both digests, reduced the owner from 1,279
+  to 151 bytes, improved both resident-256 directions by 2.15--2.43%, and had positive historical
+  and clean resident-512 evidence; it was removed only after a frequency-correlated 512 sequence
+  changed sign. Canonical matrices, operation/FMA order, alias behavior, callers, non-x86 paths,
+  state, and allocation remain unchanged. Use the existing native ISA with no target attribute or
+  build-setting change. Retain only if the complete candidate clears +5% against `02cfe013` at
+  both sizes under the campaign's controlled alternating contract.
+- **Result:** exact short and 65,536-frame digests remain unchanged, but the operation no longer
+  wins in the current candidate layout. At resident 256 the 32,768-frame forward pair loses
+  `36,350.4 -> 36,520.1` cycles/frame and the 65,536-frame reverse pair loses
+  `36,084.2 <- 36,181.7`; resident 512 likewise loses `34,834.8 -> 34,938.9` and
+  `34,644.2 <- 34,666.0`. Remove the AVX-512 owner completely. The older favorable result was
+  real for its binary but is not transferable evidence for this checkpoint.
+
+- **Current aggregate:** against committed checkpoint `02cfe013`, the restored candidate's
+  131,072-frame alternating centers are 36,085.1 versus 37,353.9 cycles/frame at resident 256
+  (+3.52% throughput) and 34,352.5 versus 35,875.7 at resident 512 (+4.43%). The remaining
+  checkpoint gaps are therefore about 1.5% and 0.6%; no individual experiment or older workload
+  is a substitute for the final aggregate comparison.
+- **Dynamics owner:** the three initialization-compiled `acosf` cutoffs remain the sole exact
+  decision products. Construction proves their authored thresholds nonnegative; the max-angle and
+  deviation helpers therefore return false for the source zero-angle case, while the convergence
+  helper is called only behind the existing positive-threshold gate and returns true. Remove the
+  otherwise redundant threshold argument and comparison from all three hot calls. Canonical
+  vectors, cutoff bits, strictness, nonzero arithmetic, and the one demanded deviation angle stay
+  unchanged. A completed earlier form measured about +1.08% at resident 256 and neutral-positive
+  at 512, but was removed under an individual-both-sizes rule; it is being reassessed only as part
+  of this controlled aggregate checkpoint.
+- **Context owner:** `msl_core_bind_match` remains the singular complete hosted-context publisher.
+  Matches in one production batch share immutable `GameData`, but every per-Match bind republishes
+  its files, source tables, pose programs, native DAT, and other immutable pointers. Guard those
+  stores with the already-canonical active `GameData` identity while continuing to publish every
+  Match-owned pointer unconditionally. Cross-GameData and bootstrap binding remain complete. A
+  prior complete screen improved resident 512 by 1.22--2.30% and was mixed at 256; the dynamics
+  cut supplies the complementary measured 256 gain.
+- **Deletion boundary:** no new state, cache, compatibility path, allocation, compiler control, or
+  changed output. Retain both only if exact digests and a final alternating comparison against the
+  actual `02cfe013` binary clear +5% at both sizes; otherwise use individual ablations to keep only
+  changes with demonstrated aggregate value.
+- **Result:** both short production digests remain exact, but the complementary result does not
+  survive the current binary. At resident 256, two 65,536-frame controls for the context-plus-
+  dynamics form cost 35,989.2/36,100.0 cycles/frame versus candidates at 36,750.1/36,519.0. After
+  removing the context guard, the dynamics-only form still centers about 0.7% slower (controls
+  36,442.5/36,061.4; candidates 36,894.9/36,119.1). Remove both changes completely. Earlier
+  isolated screens were code-layout-sensitive and are not bankable aggregate evidence; do not
+  reassemble these scalar cuts for checkpoint arithmetic.
+
+## Active owner cut — sealed native archive lookup
+
+- **Final owner:** `MslNativeDatContext::archive_cache` remains the singular process-wide map from
+  immutable source DAT span to translated native `HSD_Archive`.
+- **Canonical state and consumers:** cache entries and returned archive graphs are unchanged.
+  Initialization keeps insertion-order linear lookup while it is still discovering archives.
+  `msl_native_dat_finish_initialization` seals and sorts the complete cache once; later match reset
+  and motion/archive consumers use exact binary lookup by source address and file size.
+- **Displaced work and deletion boundary:** remove gameplay/reset-time linear scans across as many
+  as 4,096 archive entries. Callgrind attributes 1.17% self instructions to
+  `msl_native_archive_parse` on the production workload even though every post-seal call is a cache
+  hit. Add no table, per-Match state, allocation, fallback graph, or changed translation. A miss
+  after sealing remains the existing fatal invariant.
+- **Acceptance:** exact digests first, then controlled both-size timing against the frozen current
+  candidate. Retain only if the complete workload benefits; startup-only improvement does not
+  count.
+- **First form rejected:** sorting the 3,423-entry sealed cache and calling libc `bsearch` preserves
+  both digests but regresses the resident-256 65,536-frame symmetric center about 1.2%. The
+  workload's hot entries make the current scan cheaper than generic comparison/call overhead.
+  Remove the sort and comparator. Screen one final direct form: a 16 KiB process-wide table of
+  one-based cache indices, built at the existing seal and probed inline by the exact source-span
+  key. This is a bounded immutable index, not another translated graph or per-Match cache.
+- **Final result rejected:** the direct sealed index also preserves both digests but loses the
+  resident-256 65,536-frame symmetric center by about 1.0--1.1% (controls 35,940.0/35,957.7;
+  candidates 36,340.0/36,288.1 cycles/frame). The added 16 KiB shared table and hash probe are
+  worse than the current workload's hot-biased linear hits. Remove the table, hash, sort, and all
+  lookup changes. The Callgrind self attribution is not a useful production deletion boundary.
+
+## Rejected structural packet — canonical fighter quaternion mode
+
+- **Final owner:** the registered compact fighter-pose tree owns each admitted JObj's Euler versus
+  quaternion interpretation; generic unregistered JObjs retain `HSD_JObj::flags`.
+- **Canonical state:** one tree generation plus one generation per compact node replaces the
+  repeatedly cleared `JOBJ_USE_QUATERNION` bit for native registered fighter trees. The mode is not
+  mirrored in the JObj flag. Generation storage must fit existing pose-node padding and retain the
+  56-byte node.
+- **Consumers:** source flag APIs, exact blend publication, fighter matrix construction, ECB
+  transformation, and fighter action code that tests rotation representation.
+- **Displaced work and deletion boundary:** ordinary no-blend animation advances the tree
+  generation once instead of recursively touching every physical JObj. Every native registered-
+  fighter read/write must use the singular generation owner; no summary bit, setter-maintained
+  cache, compatibility flag, allocation, approximate math, or PPC/Wasm change is admitted.
+- **First measurement:** time only the existing recursive clear inside `ftAnim_8006E9B4` and count
+  its calls. Implement the representation only if eliminating that complete seam has enough
+  measured ceiling to materially advance the current aggregate candidate.
+- **Result:** disposable RDTSCP instrumentation attributed 112.9M cycles (3.88% of its perturbed
+  resident-512 contract) to 138,559 recursive clears. A complete exact generation owner filled
+  existing pose-node padding, redirected every native fighter quaternion-mode reader/writer, and
+  retained source classical-scale dirty propagation. The first form that fell back for classical
+  trees lost about 0.9% at resident 256 and 1.4% at resident 512. A compact preorder list then
+  admitted classical trees, and the final form avoided descendant visits whenever clearing a clean
+  classical root had already dirtied its subtree. It preserved all production digests but improved
+  only about 0.21% at resident 256 and 0.63% at resident 512 in 65,536-frame symmetric screens.
+  The instrumented ceiling did not survive production integration: source-required dirty
+  propagation and generation-aware representation reads consume nearly all of it. Remove the
+  generation state, mode APIs, classical list, profiler bucket, and every redirected consumer.
+  Do not repeat flag-clear traversal or lazy-generation variants without a canonical matrix/SRT
+  representation that deletes the classical-scale dirty contract itself.
+
+## Rejected representation packet — pose-owned part animation admission
+
+- **Final owner:** each retained native `MslFighterPoseJoint` owns the source part's mutable
+  `flags_b0/flags_b5` animation-admission byte. PPC/Wasm retain `FighterBone` because their pose
+  and source layouts differ.
+- **Canonical state and consumers:** the byte occupies existing native pose-node padding. The
+  compact pose traversal consumes it directly; transition, blend, dynamics, and frame-query code
+  resolve the physical part JObj to that same node. Omitted presentation-only cold parts have no
+  mutable admission state and retain the existing zero/discard behavior.
+- **Displaced state:** remove the current native JObj-padding byte and every native runtime read or
+  write through it. `FighterBone::flags_b0/flags_b5` remain layout-only on native and are neither
+  read nor synchronized.
+- **Deletion boundary:** one singular byte per retained node, no mirror, lookup table, setter hook,
+  allocation, state growth, fallback owner, or gameplay branch in the hot pose traversal. Preserve
+  all source transitions, save/restore, PPC/Wasm behavior, and exact output.
+- **Evidence threshold:** the earlier disposable pose-node mirror isolated about +1.4% at
+  resident-256. Retain the singular form only if controlled both-size timing beats the current
+  JObj owner and the aggregate candidate crosses or materially approaches the +5% checkpoint.
+- **Result:** the singular pose-node owner preserves both short production digests and keeps the
+  node at 56 bytes, but a 131,072-frame resident-256 ABBA screen regresses from a symmetric
+  35,781.0 to 36,948.9 cycles/frame (about 3.16% lower throughput). The prior +1.4% mirror was not
+  evidence for this final representation: it kept transition, frame-query, blend, and dynamics
+  consumers on the JObj byte. Singular node ownership adds a dependent `JObj -> aobj -> pose node`
+  load to those consumers. Remove the node byte/accessors and retain the JObj-padding owner, which
+  is the only direct singular location shared by both the compact traversal and source consumers.
+- **2026-08-04 provenance correction:** retain the pose-node owner. Rebuilding the stated removal
+  against the byte-frozen complete owner disproves the anomalous bracket above: two adjacent
+  65,536-frame resident-256 directions cost `39,507.3/39,517.5` cycles/frame without the owner
+  versus `39,033.8/39,053.6` with it, a repeatable 1.19% throughput gain with the exact digest.
+  The restored release binary is byte-identical to frozen control
+  `4af703ae783f3d740edf3d58c8567e106dcd97f7590910111e6c3fe90379f4c4`. The older JObj-padding
+  form is not present in the current source and must not be treated as a control. Keep the
+  complete singular pose-node representation; reject only the misleading historical timing.
+
+## Active structural packet — grounded collision continuity
+
+- **Final owner:** `mpColl_8004ACE4` remains the singular grounded collision/response owner;
+  `CollData` and its published floor line remain the only mutable state.
+- **Canonical state:** current/previous root position and ECB, current floor identity/normal/flags,
+  source line topology, transformed stage vertices, and the existing collision epoch.
+- **Consumers:** grounded MotionState collision callbacks through the existing `mpColl_8004B*`
+  entries and `Fighter_procMap`; no action-specific replacement is admitted.
+- **Candidate deletion:** when existing state and geometry can prove that the swept ECB remains on
+  its current floor and cannot touch a wall, ceiling, edge, or different floor, publish the same
+  grounded result without entering the general multi-surface search. The current-floor projection
+  remains source arithmetic and must execute in the same order.
+- **Deletion boundary:** the retained form must remove the corresponding wall/ceiling/global-floor
+  traversal as one coherent common path. It may add no cached contact, alternate collision state,
+  stage/action identifiers, tolerance, approximation, gameplay allocation, or fallback
+  representation. Moving or remapped surfaces must remain source-owned.
+- **First measurement:** attribute grounded-driver outcomes and internal cycle groups on the timed
+  production workload. Proceed only if one exact admission covers enough of the 12.75% stage-map
+  owner to provide a multi-point whole-runtime ceiling; remove the census before timing production.
+- **2026-08-04 — rejected by measured ceiling:** the first 20,000 grounded calls complete exactly
+  one driver iteration; 19,866 (99.33%) retain the current floor, with zero wall candidates, wall
+  hits, ceiling hits, or different-floor publications and only 72 air fallbacks. That population
+  is real, but the timed groups cap the useful deletion: wall checks consume 4.89M cycles, ceiling
+  3.94M, current-floor/connected-wall work 10.38M, and the final different-floor search 6.92M.
+  Even deleting every general subpass while retaining the required current-floor projection saves
+  only about 15.7M cycles, roughly 1.1% of the instrumented whole contract. Position and ECB are
+  both bit-identical on only 447 calls, so there is no simple state-reuse proof covering the large
+  population; the collision epoch is current on only 309 calls because source ground owners
+  publish it independently. Do not build a cached collision result or unsafe static-stage/action
+  admission for a one-point ceiling. Remove all counters/timers and leave `mpcoll.c` byte-clean.
+- **2026-08-04 — rejected refinement:** keep the source wall broad phase as the exact
+  conservative admission owner. Ground collision now evaluates that admission at the driver seam:
+  an empty side does not enter the corresponding large wall-query owner, and when both sides are
+  empty and the current-floor projection leaves root X/Y bit-identical, the connected-wall queries
+  and second identical ceiling query are provably redundant. Any possible wall, floor projection,
+  moving/remapped response, edge, or changed position retains the complete source sequence. Final
+  state remains `CollData`; there is no cached contact, stage/action key, alternate geometry,
+  approximation, allocation, or changed publication order. Both 32,768-frame digests remain exact.
+  A first adjacent 65,536-frame screen against the frozen pre-change candidate improves resident
+  256 `36,187.2 -> 35,829.8` cycles/frame (+1.00%) and resident 512
+  `35,523.5 -> 34,549.0` (+2.82% in reverse order). Treat those as a positive screen, not final
+  attribution. The complete supported-domain gate disproved the admission: eight wall-hug rows
+  changed `pos_x` by one or two ULPs. Restoring the connected-floor queries did not remove any of
+  the failures, and restoring the repeated ceiling query did not remove them either; the
+  caller-side broad-phase admission itself changes the correctness-sensitive wall path. Remove the
+  caller admission and both query omissions completely. The rebuilt benchmark is again
+  byte-identical to the frozen pre-packet candidate, SHA-256
+  `13a93b1753dea7a841bbafca35e66ad8c6e4a4ba1e66631f06da0b467a341cd3`.
+
+## Active structural packet — shared immutable stage geometry
+
+- **Final owner:** `MslCoreGameData` owns one sealed collision line/vertex image for each supported
+  stage whose geometry is immutable after construction. Final Destination, Battlefield, frozen
+  Pokemon Stadium, and Dream Land are admitted; Fountain of Dreams and Yoshi's Story retain their
+  complete Match-owned moving geometry.
+- **Canonical state:** the shared `CollLine`/`CollVtx` arrays are the only runtime line topology,
+  flags, and vertex coordinates for an admitted static stage. Each Match retains its mutable
+  `CollJoint` list, callbacks, bounds, collision epoch, and all contact state.
+- **Consumers:** existing `mpLib`/`mpColl` queries consume the shared arrays through the unchanged
+  bound source pointers. No query wrapper, cache, spatial index, or alternate collision path is
+  added.
+- **Displaced state/work:** delete one full line and vertex copy, its relocation records, and its
+  resident working set from every admitted Match. Construction may use a temporary private image
+  while source stage setup runs, but it must compare bit-for-bit with the sealed GameData image,
+  release that temporary image before the Match is sealed, and leave no production bridge.
+- **Deletion boundary:** any post-construction line/vertex mutation on an admitted stage is an
+  invariant failure. Moving stages stay entirely source-owned and Match-local. Preserve line
+  order, topology, flags, vertex bits, mutable joints, save/restore, output, and allocation
+  behavior. Retain only if the complete suite proves the immutable-stage boundary and controlled
+  resident-256/512 timing beats the frozen current candidate.
+- **2026-08-04 — rejected:** the complete representation was built for the four static stages.
+  GameData preload captured one sealed image per stage; later Match construction used private
+  temporary arrays, required a bit-for-bit final comparison, released them before sealing, and
+  left the existing query path reading only the shared image. The 32,768-frame resident-512 digest
+  remains exact, but the first adjacent comparison is neutral/slower (`35,043.0 -> 35,081.4`
+  cycles/frame), and two longer 65,536-frame candidate samples lose against their adjacent control
+  (`34,849.4 -> 34,969.4` and `34,849.4 -> 35,122.3`). The line/vertex image is already small;
+  collision remains arithmetic/control-bound, so shared residency deletes bytes but not executed
+  work. Remove the GameData owner, temporary construction path, mutation assertions, and all state
+  changes. The rebuilt release benchmark is again byte-identical to the frozen candidate,
+  `13a93b1753dea7a841bbafca35e66ad8c6e4a4ba1e66631f06da0b467a341cd3`.
+
+- 2026-08-04 — `rejected structural packet`: size the singular Match-owned fighter-pose track arena
+  to the configured fighter population instead of reserving the four-player maximum in every
+  Match. `MslFighterPose::tracks` remains the sole mutable decoder-track owner and keeps the same
+  element type, indices, relocation ownership, compaction, and consumers. Construction already
+  sizes the adjacent joint arena to 256 entries per configured player; use that same capacity for
+  tracks, while the four-player maximum remains 1,024. Displaced state is only unreachable arena
+  capacity in one- and two-player Matches; there is no second state, runtime allocation, changed
+  gameplay path, fallback, or new lookup. Retain only if the complete supported-domain gate proves
+  the per-player bound and controlled resident-256/512 timing improves the current candidate. The
+  short digest remains exact, but resident-256 screens change sign: the first 32,768-frame pair
+  loses 0.51%, while the reversed 65,536-frame pair improves 0.68%. The arena is dormant on the
+  measured direct-program path, so the smaller allocation neither removes executed work nor gives
+  a stable cache effect. Restore the fixed track capacity rather than carrying a validation-wide
+  bound change with no demonstrated throughput value.
+
+- 2026-08-04 — `rejected structural packet`: move ordinary hosted fighter matrix-dependency
+  propagation from animation-time traversal to the canonical matrix demand. Construction proves
+  every compact-pose JObj uses the ordinary parent dependency (no user matrix, IK/effector,
+  independent-SRT, RObj, or custom matrix method). `HSD_JObj::flags` and `mtx` remain the sole
+  dirty and world-matrix state. Animation publishes only its node's source-authored dirty bit;
+  a demanded compact matrix recursively publishes dirty ancestors in parent order, while the ECB
+  closure carries each node's parent slot and propagates rebuilds through its existing preorder
+  batch. The one gameplay consumer that observes dirtiness itself uses the same effective
+  ancestor predicate. Displaced work is `HSD_JObjCheckDepend` on every physical pose node every
+  frame; consumers, matrix arithmetic/order, SRT, state size, allocation, and non-native behavior
+  remain unchanged. Add no dirty summary, cache, alternate matrix, fallback topology, or phase.
+  Retain only if exact full-domain output and controlled both-size timing show demanded propagation
+  deletes rather than relocates the traversal. The complete path preserves the short digest, but
+  the first resident-256 screen rises from roughly 36.5k to 38.1k cycles/frame. Removing the
+  generic setup hook and keeping demand propagation only in compact transform/ECB consumers still
+  loses 2.25% in an adjacent comparison (`36,414.2 -> 37,235.5`). The animation-time predicate is
+  cheap because it walks the already-hot preorder once; moving authority to scattered capsule,
+  dynamics, and ECB demands repeatedly walks ancestors and reconstructs the same dependency.
+  Remove the setup API, parent-slot encoding, consumer change, invariant expansion, and traversal
+  deletion completely. This closes demand-propagated dirtiness without a canonical matrix layout
+  that can answer ancestor generation in constant time.
+
+- 2026-08-04 — `rejected structural packet`: make the existing canonical JObj matrices, rather than
+  a pose/product sidecar, the cross-consumer result of fighter pose evaluation. At the current ECB
+  demand seam, evaluate the complete registered fighter tree's dirty ordinary matrices in preorder
+  with one exact wide-trig pass. Final SRT/matrix owners remain the JObjs, and later dynamics,
+  stage-collision, hit/hurt/contact, attachment, and camera consumers continue reading those same
+  matrices. Any exceptional JObj uses its source setup method in the same preorder; any later SRT
+  mutation dirties and rebuilds normally. The displaced boundary is repeated scattered lazy matrix
+  setup and trig in immediate downstream consumers, not animation sampling or source callbacks.
+  Add no matrix table, cache, alternate geometry, approximation, phase scheduler, or gameplay
+  allocation. First screen the complete-tree demand shape at the existing seam; if it is positive,
+  move the singular publication earlier only when measurement proves additional consumers can
+  reuse it without rebuilding. The exact short digest remains `1177a913e8074ce6`, but evaluating
+  the complete tree at the ECB seam costs about 38,798 cycles/frame at resident 256, roughly 7%
+  slower than the current candidate. Current profiling accounts for only about 57 demanded matrix
+  builds/frame: roughly 43 already covered by the retained ECB wide-trig path and 15 scattered
+  elsewhere. Eagerly publishing the whole tree creates substantially more products than consumers
+  request; moving the same work earlier cannot recover the observed loss from eliminating at most
+  those 15 later demands. Remove the complete-tree traversal and enlarged stack packet. This
+  rejects eager complete-tree materialization, not a demand-driven canonical matrix owner.
+
+- 2026-08-04 — `rejected structural packet`: remove repeated exact endpoint-extension math from
+  stage collision queries. `CollVtx` remains the sole mutable endpoint owner and `MapLine` remains
+  the topology owner. Each Match's loaded stage geometry owns a compact derived record containing
+  only the exact extension quotients for lines whose owning joint never transforms its vertices;
+  moving/remapped joints continue through the source calculation. `mpLineGetPrev/Next` remains in
+  every query so line enable/hide and adjacency changes retain source authority. Immediate floor
+  and ceiling consumers use the derived quotients only after the same adjacency decisions and in
+  the same float-add order. The displaced boundary is their repeated length square root and two to
+  four divisions per admitted static line; there is no second mutable geometry state, gameplay
+  allocation, approximation, or topology cache. First measure total/static call ownership, then
+  retain the implementation only if exact validation and controlled both-size timing show that the
+  demanded work is actually deleted rather than relocated. The census is substantial: about 244
+  calls/frame, 92.7% on non-transformed joints, with both endpoint extensions requested by 81.6%
+  of calls. All implementations preserve the short production digest. But a separate exact-product
+  array loses about 1.4% at resident 256, while embedding the four required quotients doubles the
+  hot `CollLine` stride and improves its ABBA center only 0.42%. The smallest form—one embedded
+  distance, retaining the source divisions and deleting only the square root—loses about 1.19%.
+  Exact hardware square root/division are cheaper here than expanding the per-Match geometry
+  stream or adding a second indexed stream. Remove all metadata, allocation, invalidation, and
+  consumer changes. This closes cached line-extension products unless the line representation is
+  itself replaced as part of a wider collision owner.
+
+- 2026-08-04 — `rejected structural packet`: make the existing native64 `Fighter` allocation one
+  canonical hot-first record without adding or copying state. The final owner remains `Fighter`;
+  every field keeps its name, type, lifetime, address stability, save/restore ownership, and direct
+  source consumer. Move the three color overlays, authored hit/hurt capsule storage, and the large
+  CPU command-state block behind fighter/motion variables, and omit the source-offset-only collider
+  padding on native64. This moves the damage/shield state, callbacks, command fields, and flags used
+  across animation, input, map, contact, and hit phases roughly five KiB closer to the already-hot
+  identity/position/input/collision prefix. The moved hit/hurt/CPU blocks remain contiguous arrays
+  or structs and are still consumed directly; there is no pointer indirection, sidecar, mirror,
+  getter conversion, allocation, fallback, or changed state size apart from dead padding. PPC and
+  Wasm keep source order. Generated relocation metadata follows the one actual native layout.
+  Consumers are all existing Fighter field accesses; displaced work is cache-line/page traffic from
+  interposing large phase-specific blocks between the common prefix and common tail. The deletion
+  boundary is complete at the type layout—no API integration layer exists. Retain only if exact
+  outputs, relocation/save-restore, memory/allocation gates, and controlled resident-256/512 timing
+  all improve; otherwise restore the source order as one packet. Both tested layouts preserve the
+  production digest. Moving every proposed block regresses the resident-256 131,072-frame ABBA
+  center about 2.4%. Keeping hit/hurt capsules beside collision state and moving only overlays,
+  CPU command state, and dead padding still loses the 65,536-frame center about 0.4%. The source
+  placement is not merely cold interposition: hit/hurt geometry and the nominal CPU block remain
+  active through contact, command scripts, and follower input, while changing their offsets also
+  perturbs the large action closure. Restore the complete source order and padding. This is the
+  second completed layout shape on this architectural unknown, so do not keep permuting Fighter
+  fields without a measured consumer-owned split that deletes state or indirection rather than
+  moving it.
+
+- 2026-08-04 — `rejected structural packet`: delete repeated immutable camera-bound and projection
+  evaluation across the singular standard-camera frame. Final mutable owners remain each
+  `CmSubject`, `CameraTransformState`, and the existing stage/camera globals; canonical output
+  remains the same bounds, transform, and fighter visibility bits. `Camera_8002958C` currently
+  evaluates the same stage limits and pure default-ground height for each of five subject points,
+  then repeats those exact reads to apply the classification. Load the immutable frame values once
+  and use one compact classify-and-clamp leaf for all five points. The camera depth calculation
+  also evaluates an identical half-FOV tangent twice, and the later headless visibility pass
+  evaluates the same FOV tangent once per fighter; compute each identical frame-local value once
+  at its existing owner and pass the scalar product to its immediate consumers. Displaced work is
+  only duplicate pure ground/stage reads, duplicate comparisons/clamps, and duplicate tangent
+  evaluation. Subject order, classification boundaries, float operation order, smoothing, camera
+  state, visibility publication, non-native source behavior, allocation, and output remain
+  unchanged. Add no cache, persistent state, approximation, compiler control, or alternate camera.
+  Retain only with exact digests and a controlled gain at both resident sizes against the frozen
+  current candidate; otherwise remove the packet as a unit. The complete bounds/trig form preserves
+  both short digests but loses the resident-256 ABBA center by about 0.25%. Removing the bounds
+  consolidation and screening the duplicate-tangent deletion alone is worse: its 65,536-frame
+  resident-256 center loses about 1.3%. The compiler/source layout already makes these pure calls
+  cheaper than keeping the derived scalars live across the larger camera owners. Remove the helper,
+  frame locals, and both trig handoffs completely. This independently confirms the earlier mixed
+  camera-limit and frustum-coefficient results; close frame-local camera commoning rather than
+  spending another resident-512 screen.
+
+- 2026-08-04 — `retained correctness integration`: native64 stores the canonical hosted fighter-
+  part animation-admission byte in existing HSD_JObj alignment padding, but wasm32 has no byte
+  between `flags` and `u`. Restrict that representation to non-Wasm native builds. Wasm retains
+  the existing source `FighterBone` flags and construction-time pose-node part identity; no dual
+  owner exists within either target. Also emit the provisional native hardware `sqrtf` as an
+  explicit scalar `sqrtss`/`fsqrt` instruction so the unoptimized native smoke binary cannot lower
+  its own builtin to a recursive `sqrtf` call. `wasm-smoke` now passes with matching native/Wasm
+  state digest `a8a4eceda2e87198`; these are build/correctness repairs, not additional speed claims.
+
+- 2026-08-04 — `rejected diagnostic`: test a wider pose/geometry deletion instead of another interpreter
+  leaf. Count direct Figa publications whose complete authored SRT row is bit-identical to the
+  canonical JObj values already present. If this population is material, the final owner remains
+  the JObj SRT and dirty flag; its immediate matrix/ECB/contact consumers may reuse the existing
+  matrix only when neither the node nor its parent changed. The proposed deletion boundary is the
+  redundant SRT stores, dirty propagation, and downstream matrix reconstruction for an unchanged
+  row. Add no cache, state, allocation, approximation, or alternate pose. Remove the counters
+  before any timing and proceed only if measured reuse can delete substantial demanded work.
+  Of five million direct publications, 1,247,936 (25.0%) repeat the existing SRT bits, including
+  622,065 of 3,236,069 rotation triplets and 152,684 of 553,364 rotation/translation rows. But
+  making the dirty publication conditional immediately changes the resident-256 digest
+  `4124834367a202ec -> 40acb356c8663479`: equal authored SRT does not prove the current matrix is
+  still the authored product after dynamics and other matrix owners run. The source dirty event is
+  restoration authority, not redundant cache invalidation. Remove the counters and conditional
+  publication completely; the rebuilt source again matches frozen candidate SHA-256
+  `13a93b1753dea7a841bbafca35e66ad8c6e4a4ba1e66631f06da0b467a341cd3`.
+
+- 2026-08-04 — `rejected structural experiment`: batch the dominant direct rotation-row publication inside
+  the existing compact pose traversal. Final mutable owners remain each `MslFighterPoseJoint`
+  clock and its canonical JObj SRT/dirty state; immutable frame-major program values remain the
+  sole sample owner. For consecutive ordinary direct `0x00E` table frames with no RObj or special
+  dependency behavior, advance the existing node clocks in source order, publish the dirty bit at
+  the same dependency seam, and gather/scatter eight independent three-float rows together before
+  any general node or callback. This also deletes the generic dependency call for these nodes:
+  their source publication unconditionally makes the same JObj dirty, and the admitted topology
+  has no other dependency side effect. Every loop/decoder/fractional/general/filtered-nonrotation,
+  RObj, PPC/Wasm, and non-wide path retains the singular source owner. Displaced work is repeated
+  table admission, scalar row loads/stores, and generic dependency classification for the admitted
+  run. Add no persistent state, allocation, sidecar pose, cache, approximate math, or fallback
+  representation. Flush before any operation that can observe an SRT value. Retain only with exact
+  digests, full gates, and a material both-size gain over the frozen candidate. The complete fast
+  path preserves both digests. Eight-lane AVX-512 gather/scatter loses about 1.1% at resident 256;
+  hardware scatter is more expensive than the three adjacent scalar stores. Replacing the wide
+  flush with scalar copies recovers most of that loss but still regresses the resident-256 ABBA
+  center about 0.45%. The duplicated clock/table admission and pending-row machinery cost more
+  than deleting the generic dependency shell. Remove the batch, fast interpreter, intrinsics, and
+  traversal changes completely. This confirms that scattered canonical JObj publication cannot
+  be repaired by a gather/scatter wrapper; a future pose rewrite would have to change the final
+  canonical hot layout, not add another scalar sidecar or pending row.
+
+- 2026-08-04 — `rejected diagnostic`: test whether the batched quaternion owner repeats complete exact
+  interpolation factors across resident Matches. Final gameplay state would remain the two input
+  quaternions, weight, and published JObj quaternion; a hit keyed by the exact `cosom` and weight
+  bits could reuse only the pure `sp`/`sq` result and delete one `acosf` plus three sine lanes.
+  First count exact keys and direct-map conflicts with fixed diagnostic storage. Add no production
+  cache or state unless the measured hit population and a bounded deterministic ownership model
+  can delete substantial demanded math; remove all census machinery before timing. A 65,536-slot
+  exact direct map hits only 158,576 of the first 500,000 requests (31.7%) and incurs 277,906
+  replacements. That ceiling applies to only the blend owner's subset of scalar angles while
+  adding a large mutable process cache to every lookup; it cannot provide the missing whole-frame
+  scale and is not a clean canonical-state boundary. Remove the table, counters, and reporting
+  without implementing a production cache.
+
+- 2026-08-04 — `rejected structural experiment`: extend the retained exact fighter wall broad phase to
+  ceiling and airborne-floor sweeps, and complete the boundary instead of rescanning line endpoints
+  before every rejection. Final geometry owners remain the source `CollLine`/`CollVtx` records;
+  each constructed `CollJoint` owns one conservative immutable AABB per static line kind plus a
+  dynamic-kind mask. `CollData` and the source `mpCheck*` families remain the sole mutable contact
+  and response owners. Wall, ceiling, and floor consumers test their complete previous/current ECB
+  bounds against that metadata; any moving/remapped joint or matching dynamic-line kind enters the
+  source path. Canonical contacts, line order, transformations, tolerances, normals, and responses
+  do not change. Displaced work is the broad phase's per-query joint-line/endpoint traversal and
+  every rejected narrow-phase traversal/intersection. There is no allocation, mutable cache,
+  alternate topology, approximation, or fallback representation; construction metadata is rebuilt
+  deterministically with the existing Match. Retain only with exact digests and controlled gains
+  at both resident sizes. The endpoint-scan form is exact and improves the resident-256 center
+  about 0.6--0.8%, but is mixed/neutral at resident 512; adding the identical floor boundary does
+  not improve it. Completing the deletion with construction-owned per-kind `CollJoint` bounds is
+  also exact, but coarse joint bounds admit more false positives and growing the hot joint record
+  perturbs the Match layout: its resident-256 ABBA center regresses by about 3.2%. This is the
+  second failure of the same line-index/bounds unknown, consistent with the earlier rejected Y-bin
+  and flat-plan work. Remove floor/ceiling admissions, metadata, construction, and generalized API
+  completely. The rebuilt source again matches frozen candidate SHA-256
+  `13a93b1753dea7a841bbafca35e66ad8c6e4a4ba1e66631f06da0b467a341cd3`.
+
+- 2026-08-04 — `rejected`: keep `atanf` as the sole exact reduction, polynomial, and result owner.
+  Its middle-range index currently addresses six coefficients through offsets spread across a
+  192-byte source-shaped table, even though those coefficients are consumed together for exactly
+  one range. Replace that immutable layout with one compact record per range and a separate common
+  polynomial vector. Preserve every constant bit pattern, comparison, division, fused operation,
+  accumulation order, exceptional result, caller, state, allocation, and non-native behavior.
+  This completely replaces the old table—no cache, alternate evaluator, approximation, or compiler
+  setting. Retain only with exact digests and controlled gains at both resident sizes against the
+  frozen pre-layout candidate.
+  Both short production digests remain exact. A resident-256 ABBA center improves about 0.72%, but
+  both resident-512 adjacencies lose (the symmetric center is roughly 3% slower under the same
+  frequency drift). Compact records save immutable bytes but make the hot indexed code worse at the
+  required scale. Restore the source-shaped table and singular evaluator completely.
+- 2026-08-04 — `rejected`: retain the exact four cutoff keys in `atanf`, but select the lower or upper
+  two by the already-loaded absolute float word's one-bit `< 1.0F` partition. Each middle-range
+  call then performs two threshold comparisons rather than four. Preserve all boundary predicates,
+  reduction and polynomial operations, exceptional behavior, constants, state, allocation, and
+  non-native source; add no table or approximation. Retain only with exact digests and controlled
+  gains at both resident sizes against the frozen four-comparison candidate.
+  The short digest remains exact, but the resident-256 ABBA center is effectively neutral/slower:
+  36,747 cycles/frame for four comparisons versus 36,784 for the partitioned form. The added branch
+  replaces two cheap independent integer comparisons and cannot pass the required first size.
+  Restore the four-comparison count and do not spend a resident-512 screen.
+- 2026-08-04 — `rejected`: keep `Fighter_ProcessHit_8006D1EC` as the sole hit-resolution and per-frame
+  cleanup owner. On an ordinary hosted frame, the shield, delayed damage, contact, grab, sound,
+  hitlag-entry, and attacker-shield-knockback discriminators can all prove their branches inert,
+  yet the source-shaped owner still walks each decision before reaching the same canonical reset,
+  afterimage, and hurt-publication tail. Admit that complete no-event predicate directly to the
+  existing reset label. Preserve every reset store, shield regeneration/drain, delayed effect,
+  callback, hitlag transition, afterimage, hurt publication, ordering, output, allocation, and
+  non-hosted source. Add no flag, cache, duplicated tail, or approximate condition. Retain only
+  with exact digests and controlled gains at both resident sizes against the frozen pre-entry
+  candidate.
+  Both short digests remain exact, but the complete resident-256 ABBA center regresses about 2.3%:
+  36,542 cycles/frame for the source decision tree versus 37,386 for the explicit no-event entry.
+  Loading every scattered discriminator up front costs more than the well-predicted source branches
+  and no-op leaves. Remove the predicate and label completely; do not spend a resident-512 screen or
+  add a synchronized aggregate flag merely to make this fast path cheap.
+- 2026-08-04 — `not executed; superseded`: keep the source decision tree, but move each of its three
+  ordinary no-op leaf predicates to the immediate call site: capture handling requires
+  `x2224_b3`, pending damage sound requires `x1908 != -1 || x190C != NULL`, and afterimage work
+  requires `x2100 != -1`. Each callee currently reloads that same Fighter and predicate before
+  returning. Displace only those common call/return and repeated `GET_FIGHTER` shells; preserve
+  predicate timing, callbacks, state, reset/publication order, output, allocation, and non-hosted
+  behavior. Add no aggregate admission or state. Retain only with exact digests and controlled
+  gains at both sizes; if it fails, close ProcessHit shell work.
+  Do not implement this leaf. The current aggregate remains roughly +4.0% / +2.8% at resident
+  256/512 while the final target needs a structural reduction; further ProcessHit shell tuning is
+  local-minimum work with at most a fraction of its 2.4% inclusive owner. Close this owner and move
+  to the shared resident working-set boundary.
+- 2026-08-04 — `rejected diagnostic`: determine whether whole-Match execution locality has enough headroom
+  for a batch-owned stable permutation. Temporarily traverse the initialized batch once per
+  supported configured lead character while still executing each selected Match's complete source
+  scheduler contiguously and storing every output by original lane index. This changes no Match
+  state, within-Match order, phase seam, allocation, or API result. The diagnostic deliberately
+  pays repeated batch scans; proceed to a real init/reset-owned permutation only if exact digests
+  and both sizes show a gain materially larger than that scan cost. Otherwise remove the grouping
+  loop completely.
+  Both short digests remain exact, but the resident-256 ABBA center loses about 1.24%: original
+  lane order centers at 36,368 cycles/frame and lead-character grouping at 36,826. Repeated scans
+  are not concealing useful locality, so do not build a maintained permutation or spend a
+  resident-512 screen. Restore the one-pass lane-order scheduler completely.
+
+- 2026-08-03 — `rejected`: keep `msl_core_bind_match` as the sole hosted context publisher and the
+  existing thread-local GameData pointer as the canonical identity of its immutable half. Batch
+  stepping and output repeatedly bind different Matches that share one GameData, yet each bind
+  republishes the same files, source data, fighter tables, pose programs, and native-DAT pointers.
+  Guard only those GameData-derived stores with the existing identity comparison; continue to
+  publish every Match-owned context field on every bind. Preserve cross-GameData rebinding,
+  bootstrap binding, ordering, state, allocation, PPC/Wasm behavior, and all outputs. Add no cache
+  or new context field, and retain only if exact digests and both resident sizes improve against
+  the frozen pre-change candidate.
+  The factored publisher reduces the ordinary same-GameData bind from 633 to 434 bytes. Two
+  resident-512 reversals favor it by 1.22% and 2.30%, while resident 256 changes sign under the
+  current frequency drift. After the output path stops rebinding, this guard applies only to the
+  once-per-frame gameplay bind and its added branch/cold helper has no stable both-size gain. The
+  complete context refactor is removed; keep the original unconditional singular publisher.
+- 2026-08-03 — `retained candidate, below checkpoint`: direct observation and terminal projection already own their
+  `MslCoreMatch`. Their only context-dependent consumers are the Match's canonical GObj item list
+  and source player-stock slots, yet both currently publish the complete gameplay TLS context.
+  Pass the Match explicitly to the internal item writer and read those two canonical owners
+  directly, deleting both output-only full binds and the stock getter shells. Preserve item/player
+  order, bytes, validation, gameplay source calls, output APIs, state, allocation, and PPC/Wasm
+  behavior. This completes the output-side context deletion that the earlier stock-only test did
+  not: add no partial context, copied stock state, alternate item list, or combined-output API.
+  Both production-prefix digests remain exact. Alternating measurements are frequency-correlated
+  and change sign, but the complete form deletes two full context publications, two stock getter
+  families, and the bound-item precondition with no compensating state or branch. Keep it
+  provisional for the aggregate checkpoint rather than assigning an unsupported point estimate.
+- 2026-08-03 — `rejected`: keep `stage_ground` as the sole Ground owner and bind the two FoD platform
+  indices or one Yoshi's Randall index once after supported-stage construction. Observation and
+  viewer projection currently rescan all 64 Ground slots every frame for those unchanged actors.
+  Store two byte indices in existing `MslCoreMatch` tail padding and consume the same live Ground
+  fields directly, displacing only those repeated identity scans. Preserve actor state, stage
+  process order, output bytes, save/restore, allocation, and every non-FoD/Yoshi path. Add no
+  pointer cache or duplicate stage value; require unchanged Match size, exact digests, and gains at
+  both resident sizes against the frozen direct-output candidate.
+  The two indices consume only existing Match tail padding and preserve both digests, but two
+  resident-512 reversals regress consistently: `37,918.0 -> 39,691.0` and
+  `39,717.8 -> 41,640.5` cycles/frame (4.7--4.8%). Remove the indices, construction scan, and both
+  direct consumers completely; the sparse stage-output scan is layout-cheap at batch scale.
+
 ## Next owner selection
 
 - The final bounded resident-512 profile is 45,307.3 diagnostic cycles/frame. Pose animation owns
@@ -27,6 +1897,1453 @@
 - Select the next bounded owner only after searching `agent_docs/performance/`. Record its final
   owner, canonical state, consumers, displaced work/state, and complete deletion boundary here
   before implementation. Compiler-setting experiments remain excluded.
+- 2026-08-04 — `diagnostic`: the current bounded profile leaves 6.71% in source-owned fighter
+  input/IASA callbacks, but the retained history has no callback-identity split for that bucket.
+  Temporarily attribute the existing callback invocation by function pointer over one 32,768-frame
+  resident-512 window. This changes no production owner or state. Remove the timer immediately;
+  only pursue a callback if it exposes repeated generic work with a complete local deletion
+  boundary large enough to survive whole-runtime measurement.
+  The current exact 32,768-frame resident-512 split puts the whole input-callback bucket at 4.40%.
+  It is fragmented: Wait owns 0.71%, Jump 0.58%, Dash 0.52%, and every other callback is below the
+  report's 0.5% cutoff. Remove the timer. Do not specialize an action callback; a useful input
+  packet must delete repeated common transition checks across several source owners without adding
+  another dispatcher or cached state.
+- 2026-08-04 — `rejected`: keep `MslFighterPoseJoint` as the singular mutable animation owner and each
+  JObj `aobj` pointer as its direct identity. The hot pose loop scans 56-byte nodes, but the
+  dedicated 32-bit identity magic and final alignment padding consume eight bytes while the
+  animation flags leave bits 0--25 unused. Tag those unused bits and move the existing packed
+  program metadata into the vacated leading word, shrinking each node to 48 bytes. Pointer offsets,
+  every clock/track/program field, canonical JObj SRT, source order, allocation count, relocation
+  pointer layout, non-native behavior, and outputs remain unchanged. The old magic member and
+  trailing padding are the complete deletion boundary; add no side table, cache, alternate node,
+  or compatibility path. Retain only with exact digests and controlled gains at both sizes.
+  The first form tags low animation-flag bits and is exact, but loses both resident-256 directions:
+  36,513.5 -> 37,167.2 and 36,270.8 -> 36,536.8 cycles/frame. The masked identity test replaces a
+  single magic equality inside frequently queried pose ownership. Test one final form using an
+  equality tag in otherwise-unused native64 JObj padding, preserving the original flags offset and
+  one-check identity shape while retaining the 48-byte node. If it also loses, restore the 56-byte
+  layout and close node compaction.
+  The equality-tag form improves the resident-256 symmetric center about 1.71%, but resident 512
+  does not survive control reversal: the first symmetric center is only +0.22%, and a repeated
+  forward pair loses 37,124.9 -> 38,303.9 cycles/frame (-3.08%). Restore the original magic,
+  metadata position, padding, and 56-byte layout completely. A smaller stride is not intrinsically
+  better for this interleaved batch working set; do not retry node compaction without deleting
+  materially more per-node work at the same boundary.
+- 2026-08-04 — `rejected`: keep the retained compiled cosine cutoffs as the sole exact decision owner.
+  The three source-authored dynamics thresholds are immutable and nonnegative, but each hot helper
+  still receives the float threshold solely to reproduce the zero-length `lbVector_Angle` result.
+  Assert that existing data invariant while compiling the cutoffs, then make the greater helpers
+  return false and the convergence less-helper return true for the same zero angle. Displace only
+  the redundant float argument and exceptional comparison; preserve vector products, cutoffs,
+  strictness, nonzero decisions, solver order, state, allocation, non-native source, and output.
+  Add no approximation or new metadata. Retain only if exact digests and both resident sizes improve
+  against the frozen current candidate.
+  Both short digests remain exact and the resident-256 symmetric center improves about 1.08%.
+  Resident 512 is neutral: its center changes only 35,894.1 -> 35,869.1 cycles/frame (+0.07%), with
+  the forward direction slightly negative. Restore the threshold arguments and exact exceptional
+  comparisons; the ABI deletion does not demonstrate a gain at both required sizes.
+- 2026-08-04 — `rejected`: keep the compact pose preorder, JObj pointers, and JObj state as the sole
+  canonical owners. Unlike the rejected next-Match header prefetch, the hot pose scan already knows
+  the exact upcoming pointer chase, and the successful part-flag ownership cut proved that its JObj
+  access is latency-sensitive at resident 512. Prefetch only the fourth upcoming JObj while walking
+  the existing span, displacing no operation or state. Preserve node/JObj order, every read/write,
+  allocation, non-native output, and exact behavior; add no cache, staging buffer, or persistent
+  metadata. Retain only with exact digests and gains at both sizes against the frozen current binary.
+  The exact resident-256 ABBA screen changes sign with order; its symmetric center regresses about
+  0.57% (36,980.2 -> 37,193.6 cycles/frame). Remove the prefetch completely without spending a
+  resident-512 screen. Hardware allocation/prefetch plus the established JObj layout already serves
+  this stream better than an extra lookahead load and branch.
+- 2026-08-04 — `rejected after completed boundary`: make one attached direct Figa program clock the canonical clock for an
+  ordinary fighter-pose tree. The timed resident-512 census records 1,618,766 ordinary main-pose
+  Figa node evaluations with identical program, pre-clock state, and program order; the existing
+  frame-major table already makes their immutable values one contiguous row. Retain one existing
+  `MslFighterPoseJoint` clock as the group owner and make the other attached nodes refer to it,
+  deleting their repeated clock advance, loop/end classification, integer/table admission, and
+  per-node clock writes. Consumers remain the same source-ordered JObj SRT publisher and AObj
+  counters. A single-joint request, non-unit rate, different program/filter, or decoder-owned node
+  splits back to independent existing clocks before mutation; no second clock, sample table,
+  fallback representation, allocation, approximation, or changed output is admitted. The pointer
+  index occupies existing tail padding and does not grow per-Match state. Retain only with exact
+  digests, full validation, a completed owner/split boundary, and gains at both resident sizes.
+  The completed implementation preserves the production digest and shares 1,865,696 of 3,367,078
+  animated nodes (55.4%) in the timed resident-512 census. It advances one clock, handles
+  independent-request/rate splits, and reuses the owner's frame-row base directly for followers.
+  A resident-256 ABBA screen nevertheless puts the symmetric control/candidate centers at
+  37,585.7/37,815.3 cycles/frame, making the candidate about 0.61% slower. Per-joint SRT
+  classification/publication remains demanded and dominates the removed scalar clock work; the
+  owner metadata and split boundary add net cost even at broad coverage. Remove the clock index,
+  grouping/split machinery, direct-row bridge, and census completely. Do not retry per-tree clock
+  ownership without also deleting a materially larger per-joint publication boundary.
+- 2026-08-04 — `rejected`: keep each compact fighter JObj's existing flags, parent, and matrix as the
+  canonical dependency state. `animate_node` still enters the fully generic `HSD_JObjCheckDepend`
+  for every physical pose node; historical inner timing assigns 121.7M cycles to 6.49M calls. Prove
+  at registration that the complete native compact roster has no user-defined matrix, effector,
+  independent-SRT, or RObj dependency cases. Under that invariant the exact owner is only: when a
+  clean node has a dirty parent, mark the node dirty. Perform that predicate directly in the compact
+  span, displacing the generic call and its unreachable classification only. Preserve parent-first
+  order, every dirty bit and matrix, non-native source behavior, output, state, and allocation. Add
+  no cache, summary bit, alternate pose, or fallback. Reject on an invariant failure, digest change,
+  or loss at either resident size. The stronger invariant holds across construction and both short
+  production digests. The source-ordered direct predicate has a +0.97% resident-256 ABBA center but
+  a -0.47% resident-512 center with directions split by the package-frequency ramp. Moving the
+  predicate after animation so ordinary publications can satisfy it performs worse: both
+  resident-512 directions lose, and the symmetric center regresses about 2.9%. Restore the generic
+  dependency owner and the narrower retained registration assertion completely. This is consistent
+  with the prior failed dirty guard/full-predicate inline: compact loop layout outweighs the small
+  generic classification deletion.
+- 2026-08-04 — `rejected refinement`: preserve the out-of-line dependency call boundary that keeps
+  `animate_node` compact, but place one native compact-pose leaf beside the generic JObj owner. The
+  registration invariant above makes its only operation the exact clean-child/dirty-parent test;
+  the leaf deletes generic user-matrix/effector/RObj classification without expanding the pose loop.
+  Canonical state, ordering, consumers, non-native code, allocation, and output remain unchanged.
+  This is the final bounded dependency-owner shape; retain only with exact digests and controlled
+  gains at both sizes, otherwise restore the generic source call and assertion. Both short digests
+  remain exact, but both sides of the resident-256 ABBA screen lose; the symmetric center regresses
+  from 38,820.3 to 40,350.4 cycles/frame (about 3.8%). The separate leaf perturbs the already-tuned
+  JObj/pose call layout more than its predictable generic branches cost. Remove the symbol,
+  declaration, stronger invariant, and call-site change completely; the dependency owner is closed.
+- 2026-08-04 — `retained candidate, below checkpoint`: make each admitted physical JObj the canonical native owner of its
+  source part's mutable animation-admission bits (`FighterBone.flags_b0` and `flags_b5`). The
+  compact animation loop already scans contiguous `MslFighterPoseJoint` nodes, but currently uses
+  `source_part_index` to fetch those two bits from a separate 24-byte-stride `FighterBone` table;
+  the resident-512 diagnostic attributes 273,582 last-level misses (21.85% of the run) to
+  `msl_fighter_pose_animate_parts`. Store the two bits in existing native64 JObj alignment padding,
+  have the compact loop consume them directly, and redirect every native `ftanim`/`ftdynamics`
+  read and write to that singular owner. The PPC/Wasm source fields remain unchanged; on native
+  they become layout-only and are neither read nor synchronized. Omitted presentation-only cold
+  parts share a sentinel and have no mutable admission state; writes to them remain intentionally
+  discarded. Remove the part-table and source-index lookup from the hot pose loop. Preserve source operation order, all flag
+  transitions, save/restore, state size, allocation, and output. The deletion boundary is complete
+  only when no native runtime use of either source bit remains. Retain only with exact digests and
+  controlled gains at both resident sizes against the frozen pre-change candidate.
+  A complete packed-per-fighter owner preserved both digests but enlarged the source-parts pool
+  object by 140 bytes; its resident-256 center lost roughly 5.5%. An exact temporary mirror into
+  pose-node padding isolated the hot lookup itself at about +1.4% resident-256, proving the miss
+  lead while also proving that dual state was unnecessary and could not be retained. The final
+  singular JObj owner occupies bytes that were already native64 padding, leaves every allocation
+  and struct offset unchanged, and preserves both 32k and 131k production digests (including a
+  resident-512 reset). Its resident-256 ABBA center is 36,508.0 -> 36,322.7 cycles/frame (+0.51%;
+  directions -0.45%/+1.47% under the host frequency ramp). Resident-512 centers are 37,449.7 ->
+  35,518.7 (+5.44%; directions +2.75%/+8.13%). Keep this small exact 256 gain and large batch-scale
+  locality gain provisional; it does not independently qualify the aggregate checkpoint.
+- 2026-08-04 — `active singular-owner refinement`: make `MslFighterPoseJoint` own those two bits
+  instead. The compact pose node is already the admitted physical animation owner and has one byte
+  of existing alignment space beside its track count; its hot traversal can therefore consume the
+  bits without following `node->joint`. Native part APIs resolve the same node through the JObj's
+  existing canonical `aobj` binding, while the shared cold sentinel remains outside the admitted
+  pose and reads as clear/discards writes. Delete the provisional JObj-padding owner and every
+  native source-bit use in the same cut. This adds no byte, mirror, table, allocation, or fallback.
+  Require exact digests and controlled gains at both resident sizes against the frozen aggregate;
+  otherwise restore the singular JObj form.
+  `retained below checkpoint`: both 32,768-frame digests remain exact. A resident-256 frozen-binary
+  reversal centers at 36,849.5 -> 36,516.9 cycles/frame (+0.91%); resident 512 centers at
+  35,124.6 -> 35,049.2 (+0.21%). Keep the simpler singular node owner, but do not claim a campaign
+  checkpoint from this short screen.
+- 2026-08-04 — `rejected dependency refinement`: active native pose nodes always republished dirty
+  state over the complete 366-case construction/preroll and both short exact digest screens, so a
+  completed candidate skipped `HSD_JObjCheckDepend` only for that population. A frozen-binary
+  resident-256 reversal against the pose-node owner centers at 36,461.9 -> 36,429.7 cycles/frame,
+  only +0.09%. Restore the source dependency call; that token result does not justify a stronger
+  runtime invariant, and no consumer-side propagation or layout variant follows from it.
+- 2026-08-04 — `rejected packed-word refinement`: placing the part bits in unused low positions of
+  the node's AObj flag word also stays exact, but a frozen resident-256 reversal loses about 0.26%
+  against the separate byte already occupying alignment space. Restore the byte owner; preserving
+  and rewriting the mixed-purpose word perturbs the interpreter more than one nearby byte load.
+- 2026-08-04 — `rejected traversal refinement`: carrying direct begin/end node pointers removes the
+  indexed loop's repeated bound-pose-base reload and shrinks the native span consumer by 74 bytes,
+  but a frozen resident-256 reversal loses about 0.34% against the indexed byte-owner control.
+  Restore the existing indexed traversal; the extra live pointer/register pressure costs more than
+  its cheap local-exec load.
+- 2026-08-04 — `active hosted debug deletion`: the hosted platform has no `DbLevel` writer and
+  initializes it to zero, but fighter update/map and mpColl begin/end still reload it before
+  unreachable retail diagnostics. Make zero canonical at the hosted db interface so the complete
+  compiler closure deletes those reports and checks. PPC retains mutable retail state; no gameplay
+  branch, output, allocation, or compiler setting changes. Retain only with exact digests and a
+  controlled gain at both resident sizes.
+  `rejected`: both short digests remain exact and the hot diagnostics disappear from the linked
+  owners, but the resident-256 reversal loses about 0.98% against the frozen pose-node control.
+  Restore the ordinary db symbol; broad source-layout displacement outweighs four predictable
+  zero-level branches.
+- 2026-08-04 — `rejected`: when the dynamics convergence limit accepts `natural_dir`, it assigns that
+  vector exactly to `link_dir`; the immediately following max-deviation owner then recomputes
+  `lbVector_Angle(natural_dir, link_dir)` only to test whether two identical vectors exceed the
+  positive authored deviation limit. Carry that exact convergence result across the adjacent
+  source statements and omit only the redundant self-angle/deviation block. The vectors,
+  convergence comparison and rotation, non-converged deviation path, solver state/order,
+  PPC/Wasm behavior, allocation, and output remain unchanged. Add no cache or approximation;
+  reject on either digest mismatch or a loss at either resident size.
+  Both short digests remain exact, but the added carried boolean/layout costs more than the
+  self-angle calls it avoids: resident-256 reversals regress `35,820.6 -> 36,156.1` and
+  `35,855.1 -> 36,135.9` cycles/frame (0.9% on both sides). Restore the adjacent source owners and
+  do not spend a resident-512 screen on a failed required size.
+- 2026-08-04 — `rejected`: `Camera_8002958C` tests five derived positions per active subject against
+  the same stage camera limits. Each `Camera_80029124` call reloads the four immutable frame-local
+  limits and repeats the pure `Ground_801C4368` publication. Load those exact values once for this
+  bounds traversal and use one private native predicate for its five tests; leave boundary
+  clamping, subject order, transforms, smoothing history, all other callers, PPC/Wasm behavior,
+  state, allocation, and operation ordering unchanged. Add no cache or approximation. Retain only
+  with exact digests and gains at both resident sizes. The narrower comparison-only form preserves
+  the short and 131,072-frame digests and improves the resident-256 alternating center from
+  36,854.6 to 36,209.9 cycles/frame (+1.78%). Resident-512 samples are host-disturbed and do not
+  establish a gain: the first adjacent pair is only +0.64%, while a later pair reverses by 2.23%.
+  The consolidated history records two earlier complete variants of the same snapshot boundary as
+  neutral/slower at resident 512. Remove the helper and frame-local limits completely; do not retry
+  this camera owner without a different product/deletion boundary.
+- 2026-08-04 — `rejected after final screen`: keep `PSMTXConcat` as the singular exact affine-matrix
+  owner and its 3x4 output as canonical state. A 2026-07-19 x86 vector implementation preserved
+  the production digest and measured about +1.27% at resident 512, but was removed only because a
+  future source-boundary fusion was expected to displace it. The retained SRT fusion does not
+  displace general concat calls in collision, dynamics, articles, and JObj consumers. Re-evaluate
+  the same operation stream using the existing native build ISA, with all six input rows loaded
+  before any store so every supported alias case remains exact. Displace only scalar lane
+  repetition and the alias temporary/copy; preserve multiply/FMA order, output bits, all callers,
+  PPC/Wasm/arm64 behavior, state, and allocation. Add no compiler flag, target attribute, alternate
+  matrix state, approximation, or consumer change. Retain only with exact digests and controlled
+  gains at both resident sizes against the frozen current candidate.
+  The complete-alias AVX-512 form reduces the owner from 1,279 to 151 bytes and evaluates all 12
+  lanes in one multiply/two-FMA stream plus the three ordered translation FMAs. Both short digests
+  remain exact. Resident-256 reversals improve `37,776.4 -> 36,980.2` (+2.15%) and
+  `38,118.5 -> 37,213.1` (+2.43%) cycles/frame. Resident-512 is obscured by strong run-order
+  frequency movement: the cleanest reverse improves `38,932.1 -> 38,350.7` (+1.52%), while a
+  later forward pair changes sign (`37,823.9 -> 38,932.1`); an earlier control was independently
+  disturbed at 42,970.0 and is discarded. Historical evidence for the same smaller SSE operation
+  stream was +1.27% at resident 512. The final AVX2/SSE form was screened against the frozen
+  pre-change candidate over 262,144 frames: its resident-256 symmetric center is about 0.33%
+  slower, while resident 512 is about 0.85% faster with the two directions disagreeing
+  (+2.15%/-0.37%). It therefore fails the required both-size rule. Restore the scalar source owner
+  completely; retain none of the native general-concat path.
+- 2026-08-04 — `rejected refinement`: the exact AVX-512 concat deletes the scalar owner but loads four
+  64-byte permutation vectors and performs four full-width indexed permutes per call. Test the same
+  singular operation stream as two rows in one AVX2 register plus one SSE row: each 128-bit lane
+  can broadcast its row coefficients with immediate shuffles, so no index vectors or indexed
+  permutes remain. Load all input rows before publication to retain every exact alias case, and
+  preserve the multiply/two-FMA/translation-FMA boundaries lane-for-lane. This changes no state,
+  consumer, allocation, compiler setting, or non-x86 path. Compare directly against the frozen
+  AVX-512 candidate at both resident sizes, and retain only if exact digests and controlled timing
+  show the narrower kernel is better. The narrower kernel is preferable to AVX-512 in isolated
+  screens, but the final comparison above shows that the complete native general-concat rewrite
+  still loses at resident 256. Remove both implementations together.
+- 2026-08-04 — `rejected refinement`: if the AVX2/SSE concat shape survives its isolated screen, use
+  that same loaded-row helper for `HSD_MtxSRTConcatTrig`'s final parent product. Unlike the rejected
+  AVX-512 reuse, its three exact local rows are consumed directly as XMM inputs and parent rows
+  need only one two-row insert; there are no ZMM packs or indexed permutes. The helper replaces two
+  SSE row streams with one AVX2 stream and retains the third SSE row, preserving all nine local SRT
+  values and every multiply/FMA/publication bit. Add no new API, state, fallback, or compiler
+  control. The exact form shrinks `HSD_MtxSRTConcatTrig` by 34 bytes, but its resident-256
+  reversals follow run order at roughly -2.4%/+2.9%. Resident 512 likewise changes from a 5.2%
+  candidate win to a 0.6% loss in reverse. There is no stable gain from replacing two compact SSE
+  row streams. Restore the established three-row product and keep the loaded-row helper only in
+  general concat, where it deletes a much larger scalar/alias owner.
+- 2026-08-04 — `rejected refinement`: reuse the new 12-lane concat kernel for the final parent
+  product inside `HSD_MtxSRTConcatTrig`, leaving its nine exact local Euler values unchanged. Both
+  short digests remain exact and the owner shrinks only 39 bytes (`0x236 -> 0x20f`). Two
+  resident-256 reversals change entirely with run order: the candidate loses
+  `37,505.3 -> 38,678.0`, then wins `37,997.8 -> 37,618.1`. Packing the three freshly constructed
+  XMM rows into ZMM lanes deletes little executed work and adds wide permutes. Keep the established
+  compact three-row SSE/FMA product; retain AVX-512 only in the general concat where it deletes
+  the scalar 12-lane owner.
+- 2026-08-04 — `open`: keep `acosf` as the sole source-exact inverse-cosine owner and its
+  binary32 result as the only canonical product. Its positive radicand currently enters the PPC
+  estimate table and three binary32 Newton refinements before the unchanged `atanf` consumer;
+  ordinary native `sqrtf` call sites already compile to a correctly rounded hardware square root.
+  Test whether `1.0F / sqrtf(radicand)` produces the identical reciprocal on the complete
+  production-prefix corpus, displacing only the table lookup and Newton chain. Preserve radicand
+  construction, exceptional branches, `atanf`, every output, state, allocation, and non-native
+  behavior. Add no approximation, cache, alternate result, or compiler setting. Reject
+  immediately on either short digest; retain only if the complete exact gates and both resident
+  sizes improve against the frozen pre-change candidate.
+  Both 32,768- and 131,072-frame production digests remain exact at both resident sizes. Native
+  `acosf` shrinks from 201 to 108 bytes: the table call and all three Newton chains become one
+  `sqrtss` and one `divss`. A follow-up directly divides `x` by the square root and deletes the
+  final multiply, but duplicates the `atanf`/subtraction tail and changes sign under alternating
+  timing at both sizes; restore the smaller singular-tail reciprocal form. Initial end-to-end
+  screens are strongly frequency-correlated but include clean favorable pairs up to 3.4%; retain
+  the reciprocal form provisionally and require the complete aggregate checkpoint screen plus
+  full exact validation before treating it as proven.
+- 2026-08-04 — `retained candidate, below checkpoint`: keep process-wide hosted `sqrtf` as the singular square-root owner and its
+  binary32 return as the sole canonical result. The retained implementation reproduces PPC's
+  reciprocal-estimate call, three double-precision fused Newton steps, multiply, narrowing, and
+  volatile reload, while optimized native call sites that GCC can see already issue one hardware
+  square root with exact benchmark output. Test the same correctly rounded native square root in
+  the out-of-line owner, displacing the estimate/Newton chain and stack publication only. Preserve
+  positive/negative zero, negative values, NaN behavior, every caller and output, state,
+  allocation, and PPC behavior. Add no approximation, alternate result, compiler setting, or
+  per-call dispatch. Reject immediately on either short digest; retain only with the full exact
+  gates and controlled gains at both resident sizes against the frozen hardware-`acosf` candidate.
+  The complete 32,768-frame production digests remain exact at both resident sizes, and the owner
+  shrinks from 137 bytes plus the 345-byte general estimate leaf to a 21-byte positive-test and
+  `sqrtss`. Alternating initial screens are frequency-correlated; the clean pairs range from a
+  small loss to +1.65% at resident 256 and +1.04%/+3.62% at resident 512. Retain provisionally for
+  an aggregate screen. The only remaining positive-float estimate consumer is `asinf`'s private
+  reciprocal-square-root path (14,260 calls in the prior 32,768-frame census). Give it the same
+  hardware reciprocal without changing exceptional behavior; both short digests remain exact.
+  This makes the specialized estimate helper dead, so restore `dolphin_mtx.c`'s original private
+  tables and delete the helper and its otherwise-unnecessary table-scope churn completely. A later
+  current-chain ablation restored the old estimate/Newton owner without changing any other retained
+  source: it lost both resident-256 reversals by 0.97% and 0.60%, and reduced the aggregate
+  checkpoint gain from roughly 2% to roughly 0.5%. Restore the hardware `sqrtf`/private `asinf`
+  path; the earlier mixed screen was not representative of its interaction with the retained chain.
+- 2026-08-04 — `open`: keep `atanf` as the sole exact reduction/polynomial/result owner. It already
+  extracts the absolute binary32 word for the retained four-threshold middle classifier, but then
+  reloads the outer silver-ratio constants and performs two ordered floating comparisons. For a
+  finite nonnegative binary32 value those predicates are exactly unsigned bit comparisons. Use
+  the existing absolute word for the two outer admissions and retain a cold explicit NaN path,
+  displacing only the constant loads and FP comparisons. Preserve both inclusive boundaries,
+  infinity/NaN/signed-zero behavior and payload flow, every reduction and polynomial operation,
+  state, allocation, and non-native source. Add no table, approximation, alternate result, or
+  compiler setting. Retain only with exact digests and a gain at both sizes against the frozen
+  hardware-square-root candidate.
+  Both short digests remain exact, but the compiler turns the two guarded bit predicates into two
+  integer range checks, grows `atanf` from 329 to 345 bytes, and loses both resident-256 reversals:
+  `37,888.7 -> 38,735.3` and `37,956.9 -> 39,401.2` cycles/frame. Restore the original outer float
+  comparisons and all three constants completely; do not spend a resident-512 screen on a failed
+  required size.
+- 2026-08-04 — `open corrected revisit`: keep `PSVECNormalize` as the sole exact vector-normalization
+  owner and its published vector as canonical state. The earlier direct-float attempt narrowed the
+  PPC estimate to binary32 before `estimate * force_25_bit(estimate)`, even though the source keeps
+  the estimate in binary64 until that product; its digest failure therefore does not reject a
+  direct input classifier. For the common finite positive-normal binary32 magnitude, reconstruct
+  the identical binary64 estimate bits directly from that float's exponent/interpolation, then run
+  the unchanged 25-bit rounding, Newton correction, and component publications. Every zero,
+  subnormal, negative, infinity, and NaN magnitude remains on the complete general emulator.
+  Displace only its redundant binary64 class decode/normalization on the admitted path. Share the
+  existing immutable estimate tables; add no state, approximation, alternate vector, allocation,
+  compiler setting, or consumer change. Retain only with exact digests and controlled gains at
+  both resident sizes against the frozen hardware-square-root candidate.
+  The corrected binary64 estimate preserves both short digests. An explicit external exceptional
+  leaf reduces the hot owner from 565 to 292 bytes, and simplifying the estimate exponent to the
+  exact normal-float identity `1086 - ((e + 1) >> 1)` reduces it to 279 bytes. Resident-512 wins
+  four consecutive reversals by 0.89--2.92%. Resident-256 does not: two 131,072-frame brackets in
+  opposite orders place the candidate about 1.06% and 1.68% behind the frozen control. The required
+  both-size gain is absent after completing and tightening the intended path. Restore the original
+  table scope, general normalizer, and runtime fallback leaf completely; retain none of this
+  mixed-workload implementation.
+- 2026-08-04 — `retained after ablation`: recheck the initialization-compiled dynamics angle
+  cutoffs after native `acosf` stops using the PPC estimate/Newton sequence. The cutoffs remain
+  final immutable threshold products consumed by the same three solver comparisons; removing
+  them restores the complete exact angle calls without changing state or allocation. Both forms
+  preserve the short digests. Two resident-256 pairs favor the cutoffs by about 1.1%; resident-512
+  results reverse with run order under observed package-frequency drift. Restore the cutoffs
+  exactly: their local boundary still deletes demanded work and the only controlled required-size
+  evidence favors retention. The rebuilt source is byte-identical to frozen pre-ablation candidate
+  `939be5eaea7075c52b498a2ebc4e92d2544f4feb3e80e8234055db0295352981`.
+- 2026-08-04 — `rejected`: keep `lbColl_80006E58` and `lbColl_800077A0` as the final owners of their
+  three collision distances and the published binary32 values as canonical products. Each local
+  source sequence accepts a positive binary32 squared distance, performs three binary64 PPC
+  reciprocal-square-root refinements, multiplies by the distance, and narrows to binary32. Test
+  the already-retained correctly rounded native square root at those exact publication sites,
+  displacing only the estimate/classification/Newton chains. Preserve every distance expression,
+  volatile publication, comparison, contact result, state, allocation, and non-native path. Add
+  no cache, approximation, alternate result, or compiler setting. Reject on either short digest
+  or a loss at either resident size against the frozen hardware-square-root candidate.
+  Both short digests remain exact and the three local estimate/Newton chains become direct native
+  square roots. The resident-256 reversal nevertheless loses on both sides: controls cost
+  38,388.3 and 38,244.2 cycles/frame versus candidates at 38,969.8 and 38,571.3. Restore all three
+  local source sequences without spending a resident-512 screen on a failed required size. Their
+  code placement and volatile stores evidently schedule better inside these sparse collision paths.
+- 2026-08-04 — `profile`: a counter-only ordinary-release caller census, reset after construction,
+  preroll, and warmup, measures only the timed 32,768 resident-512 match-frames. It records about
+  313,000 `acosf` calls and 250,000 `atan2f` calls, far below the earlier all-lifecycle census that
+  included construction. `msl_blend_quaternion_batch` owns 153,817 `acosf` calls. Fighter dynamics
+  owns about 133,000 more `acosf` calls plus three adjacent 44,184-call `atan2f` streams; camera
+  owns two 37,568-call `atan2f` streams. The remaining callers are small. Remove all counters and
+  reporting. Angle work is still material, but optimization must occur inside these three real
+  consumers; global memoization or broad scalar-math work was justified by an inflated count.
+- 2026-08-04 — `rejected`: keep hosted headless dynamics pruning as the final owner of live fighter
+  chains and `Fighter::dynamics_num` as their canonical count. `ftCo_8009DD94` still publishes all
+  source dynamics-collider positions and runs dynamics-animation ownership after pruning has made
+  the count zero, although both products are consumed only by the absent solver/chains (or retail
+  debug presentation). Return at the dynamics owner when no chain remains, displacing those dead
+  walks and the empty refresh pass. Retained hurt chains, solver history, fighter pose, callbacks,
+  PPC/Wasm behavior, state, and allocation remain unchanged. Add no flag, cache, approximation, or
+  alternate path. Require exact digests and controlled gains at both resident sizes.
+  Both short digests remain exact. The 256 bracket changes with package-frequency drift and does
+  not show a stable adjacency win; the cleaner 512 sequence loses, with the frozen owner at
+  38,406.8 cycles/frame and two zero-chain-exit candidates at 38,827.6 and 38,730.0. The skipped
+  empty walks are cheaper than the new branch and changed hot layout. Restore the unconditional
+  source owner completely.
+- 2026-08-04 — `retained candidate, below checkpoint`: keep the compact pose decoder's `parse_float` as the sole owner of compressed
+  scalar expansion. Non-float source encodings are signed/unsigned 8/16-bit integers divided by
+  `2^(fraction & 31)`; both the integer numerator and power-of-two result are exactly representable
+  in binary32. Construct that normal binary32 scale directly and multiply, displacing the variable
+  integer-to-float conversion and divide while preserving every decoded bit, command/cursor state,
+  publication, non-native behavior, allocation, and consumer. Add no table, cache, approximation,
+  state, or compiler setting. Require exact digests and gains at both resident sizes.
+  A current-chain ablation restores the source integer-to-float division and preserves the short
+  digest, but loses the resident-256 ABBA center by about 1.19%: the multiply candidate centers at
+  36,842 cycles/frame versus 37,286 for the division form. Restore the direct exact scale and do
+  not spend a resident-512 screen on an ablation that failed one required size.
+- 2026-08-04 — `open`: extend the existing compiled integer-sample owner to Figa nodes with
+  repeated ordinary SRT track types. Canonical output remains the final source-ordered JObj SRT:
+  construction already evaluates every track in source order and writes repeated types to the
+  same immutable sample slot, so the later track owns the identical final channel value. Displace
+  the mutable decoder, track-state traversal, and repeated publication only for those admitted
+  integer frames. Fractional/table-exit transitions, non-SRT/path types, descriptor animations,
+  JObj state, callbacks, allocation ceilings, PPC/Wasm behavior, and source order remain unchanged.
+  Add no state, second evaluator, cache, approximation, action list, or compiler setting. Reject
+  on either digest mismatch; retain only if a construction/runtime census confirms meaningful new
+  direct coverage and both resident sizes improve against the frozen current candidate.
+  `rejected by census`: the relaxed compiler remains exact, but a disposable runtime attribution
+  records 13,147,946 compiled-table publications and zero publications from a repeated-type node
+  over the 32,768-frame resident-512 contract. No live decoder work is displaced. Restore the
+  conservative uniqueness admission and remove the descriptor marker, counters, and report; do
+  not time a zero-incidence path.
+- 2026-08-04 — `profile`: timed-only compact-pose attribution resets after construction, preroll,
+  and warmup. Of 2,184,225 active joint evaluations in the 32,768-frame resident-512 contract,
+  1,922,947 (88.04%) use the exact compiled integer table. The remaining 261,262 Figa calls are
+  all already-direct programs forced through the mutable decoder by timing: 219,418 have a
+  non-unit rate and 41,844 have a fractional frame at unit rate; only 16 descriptor calls remain,
+  with zero non-direct, negative-frame, or out-of-range Figa calls. The expanded roster therefore
+  makes fractional decoding live, but the completed 2026-07-22 compiled fractional owner already
+  cost 765 source lines, 32.5 MiB shared data, and 816 bytes per fighter for a noise-bound
+  whole-simulator result despite a 3.48x isolated speedup. Do not repeat that representation as a
+  scalar pose-only cut. A revisit needs a materially smaller direct evaluator or a wider boundary
+  that deletes downstream pose products; remove all counters, rate histogram, reset hook, and
+  reporting.
+- 2026-08-04 — `rejected`: keep `MslCoreMatch::fighters` as the singular convenience pointer to each
+  active leader entity. Source respawn reuses leader GObjs; only `Player_SwapTransformedStates`
+  changes slot-zero identity for the supported Sheik/Zelda pair, while Popo's separately owned Nana
+  follower can be recreated. Refresh leaders only for configured Sheik/Zelda slots and preserve the
+  existing Popo follower refresh, null validation, output/render ordering, state, allocation, and
+  non-native behavior. Displace only the redundant `Player_GetEntityAtIndex(slot, 0)` lookups for
+  every other fighter. Add no cache, flag, character proxy for missing gameplay state, or fallback;
+  the character admission names the source transformation owner itself. Require exact digests and
+  controlled gains at both resident sizes against the frozen post-matrix-cleanup candidate. Both
+  short digests remain exact, but the resident-256 ABBA center regresses from 38,268.1 to 38,530.9
+  cycles/frame (about 0.7%). The repeated lookup is cheaper than the new per-slot character branch;
+  restore the unconditional leader refresh and do not spend a 512 screen on a failed required size.
+- 2026-08-04 — `rejected`: keep `Fighter_procMap` as the source collision-callback owner for every
+  supported fighter. Its unconditional post-callback call to `ftKb_SpecialN_800F1D24` can do work
+  only when `Fighter::kind == FTKIND_KIRBY`; Kirby is outside the supported roster, and the hosted
+  exclusion is therefore a literal empty function. Exclude that call only from the hosted supported
+  runtime, displacing the call boundary and no state or gameplay operation. Preserve the source call
+  for non-hosted builds, every supported collision callback and ordering, output, allocation, and
+  exact digest. Add no roster test or runtime branch. Retain only if controlled measurements improve
+  both resident sizes against the frozen pre-change candidate. Both short digests remain exact, but
+  the resident-256 ABBA bracket follows run order: `39,121.9 -> 37,766.6`, then
+  `39,061.4 -> 37,656.5` cycles/frame in the reverse direction. The symmetric center makes the
+  candidate about 0.07% slower. Restore the source call and do not spend a resident-512 screen on
+  a failed required size.
+- 2026-08-04 — `retained candidate, below checkpoint`: keep the active `MslCoreMatch` as the singular authority for the complete
+  hosted owner bundle. `msl_core_match_step_prepare` binds that bundle, and the direct scalar
+  scheduler leaves the same Match active, but `msl_core_match_step_finish` unconditionally
+  republishes every owner before its post-frame work. Enter finish through the existing
+  `bind_scheduler_owners` identity gate instead: it performs the complete bind whenever finish is
+  invoked for a different Match and otherwise deletes only the redundant same-Match publication.
+  Canonical Match/TLS state, public split-scheduler behavior, ordering, outputs, allocation,
+  PPC/Wasm behavior, and every owner remain unchanged. Add no cache or new state. Require exact
+  digests and controlled gains at both resident sizes against the frozen current candidate.
+  Both short digests remain exact. Resident-512 reversals improve `38,194.2 -> 37,998.1` and
+  `37,378.9 -> 36,964.9` cycles/frame (+0.52%/+1.12%). Resident 256 is more frequency-sensitive:
+  one bracket reverses sign around a disturbed 38,444.3 candidate run, but the clean forward pair
+  improves `37,508.5 -> 37,226.5` (+0.76%) and a later reverse improves
+  `38,922.9 -> 37,804.8` (+2.96%). Retain the exact deletion and let the aggregate checkpoint
+  bracket determine its contribution rather than selecting the disturbed isolated pair.
+  A later retained-source audit found this one-line cut had been displaced while its evidence
+  remained in the worklog. Restoring it preserves both short digests; current resident-512 reverse
+  pairs are neutral and +1.71%, consistent with the original retained result.
+- 2026-08-04 — `rejected`: keep the standard camera transform/FOV as the sole canonical projection
+  input for the render-owned fighter visibility pass. Every visible fighter currently recomputes
+  the same ordered half-FOV conversion and exact `tanf` reciprocal even though the FOV cannot
+  change during that Match-wide pass. Compute the identical cotangent once when the existing view
+  is first built and pass that transient scalar to the point projections, displacing only repeated
+  trig evaluation. Preserve view construction, point order and arithmetic, visibility/magnifier/
+  DeadUp state, allocation, non-native behavior, and every output. Add no cache, persistent state,
+  approximation, alternate camera, or compiler setting. Both short digests remain exact and the
+  explicit form shrinks `msl_camera_publish_match_visibility` from 889 to 812 bytes. Disassembly,
+  however, shows the pre-change compiler already hoists the one `tanf` call out of the fighter
+  loop; the rewrite deletes no executed trig. Resident-256 reversals follow run order, while the
+  cleaner resident-512 reverse loses `38,479.9 -> 38,865.8` cycles/frame. Restore the original
+  source completely; do not retry this already-optimized loop invariant.
+- 2026-08-04 — `rejected by census`: before implementing any in-place SIMD rejection for
+  `mpCheckFloorRemap`, measure the live floor/dynamic range widths and callback/remap population.
+  The only plausible boundary is the existing source-ordered line loop: a retained form may batch
+  conservative endpoint rejection but must feed admitted lines into the unchanged scalar narrow
+  phase in original order. It may add no index, cached bounds, Match state, alternate topology,
+  approximation, or gameplay allocation. Do not implement if the live ranges are too short to
+  amortize vector gathers/masks. The first 100,000 calls visit 108,170 admitted joint ranges:
+  34,554 contain one line, 33,326 contain two or three, 40,290 contain four through seven, and none
+  contain eight or more; 37,594 ranges are remapped and 10,227 calls carry callbacks. There is no
+  width for a 16-lane kernel, while four-lane gathers would duplicate the exact AABB work around
+  short, pointer-chasing ranges already shown to lose with scalar gates. Remove all counters and
+  reporting and do not implement the vector front end. A future stage rewrite needs a different
+  canonical traversal, not SIMD wrapped around these source ranges.
+- 2026-08-04 — `rejected`: keep `mpCheckFloorRemap` as the singular source-ordered floor-query owner.
+  Its source-shaped floor loop jumps back through the same body for each joint's dynamic range,
+  but the hosted compiler emits two complete copies of the 3.2 KiB query body. Iterate the two
+  existing ranges through one ordinary outer loop so both consume one scalar narrow phase in the
+  identical order. Displace only duplicated native instructions; preserve callback/line order,
+  all vertices/flags/intersections/results, state, allocation, PPC/Wasm behavior, and outputs. Add
+  no helper, index, cache, alternate topology, approximation, or compiler setting. Both digests
+  remain exact, but GCC had already shared nearly all of the apparent duplication: the outer loop
+  shrinks the 3,233-byte function by only 40 bytes while adding a range branch to every short
+  joint range. Resident-256 reversals follow run order rather than showing a gain. Restore the
+  source-shaped range transition completely without spending a resident-512 screen on a failed
+  required size.
+- 2026-08-03 — `rejected by census`: test whether the three adjacent `atan2f` evaluations in
+  `msl_dynamics_rotate_euler` admit one exact native three-lane evaluator. Final state remains the
+  live dynamics Euler rotation; the singular consumer is the existing matrix-to-Euler conversion.
+  A retained form would displace only three scalar call/classification/polynomial chains, preserve
+  every per-lane operation and exceptional result, and leave PPC/Wasm on the source path. It may
+  add no cache, table, mutable state, approximation, or alternate rotation. First count the
+  all-positive-denominator/small-ratio population; implement only if that common path is large
+  enough to repay one aggregate admission and SIMD setup. Only 26,390 / 100,000 calls (26.39%)
+  put all three lanes on that common path. The other calls require per-lane quadrant/reduction and
+  lookup handling, recreating the masked/gather overhead that already made the wider exact angle
+  batches slower. Remove the counters and print without implementing another vector evaluator.
+- 2026-08-03 — `rejected`: reassess only the always-adjacent nonsingular matrix-to-Euler triplet
+  without masked lookup gathers. Keep scalar `atan2f`/`atanf` as the source definition and the live
+  Euler vector as canonical state. Prepare each lane's exact scalar quadrant and reduction state,
+  evaluate only the shared seven-deep polynomial in one native three-lane FMA chain, then apply the
+  source corrections per lane. This displaces three serialized polynomial chains and call shells;
+  matrix construction, division/reduction order, exceptional paths, state, and ARM/PPC/Wasm remain
+  unchanged. Retain only if exact digests and both resident sizes beat the frozen pre-change
+  candidate; otherwise remove the helper and call site completely. Both digests remain exact, but
+  resident 256 changes sign across the two reversals and resident 512 loses both: the cleaner
+  reverse costs `38,593.5 -> 39,091.2` cycles/frame (+1.29%). Scalar lane preparation, packing,
+  and extraction outweigh overlapping the polynomial. Remove the helper, API, intrinsic include,
+  and call site completely.
+- 2026-08-03 — `rejected`: retain `lb_8001044C` as the dynamics owner and its normalized
+  `natural_dir`, `current_dir`, `saved_dir`, and changing `link_dir` vectors as the only canonical
+  state. The source recomputes the unchanged normalized `natural_dir` length for convergence and
+  deviation, and the unchanged `saved_dir` length for max-angle and final angular velocity.
+  Compute each of those two exact lengths once after normalization and pass it through the existing
+  dynamics-only angle leaves, displacing only repeated identical square-root products. Preserve
+  dot/FMA order, link-length evaluation, threshold keys, `acosf`, rotations, state, allocation,
+  PPC/Wasm behavior, and every output. Add no cached Match state or alternate vector; retain only
+  if both digests and both resident sizes improve against the pre-change candidate. The complete
+  cut is exact at both short digests but loses decisively: resident 256 changes from 38,379.6 to
+  39,394.3 cycles/frame and resident 512 from 38,227.8 to 39,433.1. Hoisting the two square roots
+  into the already-large solver and widening the runtime-angle ABI costs more than recomputation in
+  the compact leaves. Restore the original leaf signatures and all call sites completely; do not
+  retry frame-local length caching without a wider dynamics kernel that already owns the angle
+  consumers.
+- 2026-08-03 — `rejected`: keep the retained positive-normal PPC `frsqrte` table helper as the sole
+  `acosf`/`asinf` estimate owner. Its fixed-point table result is currently packed as binary64 and
+  immediately converted to binary32; only the low three fixed-point bits participate in that
+  round-to-nearest-even conversion. Pack the identical binary32 exponent/significand directly and
+  displace only the temporary binary64 value and hardware narrowing. Preserve the corrected
+  half-exponent rule, table/interpolation, exact rounding, Newton steps, exceptional admission,
+  outputs, state, allocation, and non-native path. Retain only with exact digests and improvement
+  at both resident sizes against the pre-change candidate. Direct packing preserves both digests,
+  but enclosed screens lose at both sizes: resident-256 candidate 39,968.3 cycles/frame versus
+  controls 38,585.2/40,448.3, and resident-512 candidate 40,084.5 versus controls
+  38,349.8/40,135.8. The extra integer rounding/control chain schedules worse than the native
+  narrowing despite deleting the temporary double. Restore the retained binary64 pack and cast
+  completely.
+- 2026-08-03 — `rejected`: keep `Fighter_Spaghetti_8006AD10` as the sole input-recurrence owner and
+  every existing timer byte as canonical state. Its O0 source closure repeats the same byte
+  increment, reload, compare, branch, and corrective store for each `0xFE`-saturating stick/trigger
+  timer. On native builds, express the identical complete-byte transition directly: increment with
+  byte wrap, then subtract one only from the `0xFF` result. This preserves even the unreachable
+  incoming-`0xFF` behavior (`0xFF -> 0`), all reset/admission branches, UCF order, state, allocation,
+  and non-native source operation. Displace only repeated clamp control; retain only with exact
+  digests and improvement at both resident sizes. Both digests remain exact, but two 65,536-frame
+  resident-512 reversals lose: candidate costs are 39,665.2 and 40,175.9 cycles/frame versus
+  controls 39,077.9 and 38,878.0. Shorter screens change sign at resident 256. The saturated source
+  branches are predictable and avoiding their reload/corrective store does not repay the added
+  byte dependency chain. Restore the original source blocks and remove the macro completely.
+- 2026-08-03 — `rejected`: test whether a construction-time static-stage spatial index has enough
+  admission to justify implementation. Final gameplay owner would remain the source-ordered
+  `mpCheck*` query families; canonical mutable vertices, line flags/topology, query order, and
+  intersection arithmetic would not change. Immutable construction metadata would conservatively
+  identify original-order static-line candidates for the query AABB, while remapped/dynamic joints
+  retain the source scan. This differs from the rejected per-line AABB gate: it is useful only if
+  it skips most static candidates before loading their endpoints or entering narrow phase. First
+  count static floor-remap line visits and exact endpoint-AABB overlaps in one bounded ordinary
+  release run. Of 1,000,000 visited eligible static lines, only 7,117 overlap both axes (0.71%);
+  X alone admits 294,515 (29.45%) and Y alone admits 59,597 (5.96%). All counters and printing are
+  removed. A one-dimensional immutable Y endpoint index conservatively admitted source-ordered
+  static candidates; dynamic/remapped joints and callback queries retained their source scans.
+  Merely testing its bitset inside the existing loop was neutral. Jumping directly between admitted
+  IDs was exact at both short digests, and an internal all-lines ablation misleadingly suggested
+  gains of 0.85% at resident 256 and 1.96% at resident 512. A real pre-index control, with index
+  construction and query work compiled out, reverses that result: resident-512 indexed runs were
+  39,281 and 40,638 cycles/frame versus pre-index runs of 38,550, 38,453, and 38,152. Resident 256
+  was mixed under contention (indexed 38,900/39,683 versus pre-index 40,004), so the required
+  both-size gain is absent and 512 has a repeated 4--6% regression. Extending the same index to the
+  endpoint-expanded non-remap floor path was exact but slower again. Per-joint candidate iteration,
+  binary searches, and roughly 4 MiB of resident-512 index state cost more than the rejected narrow
+  phases. Remove the representation, allocation, and hot-loop edits completely. A revisit needs a
+  compact source-order query plan that bypasses joint traversal itself and must be proven in
+  isolation against an actual pre-index control; do not retry a per-line membership gate or this
+  per-joint bitset iterator.
+- 2026-08-03 — `rejected reassessment`: test the remaining spatial-index hypothesis with the deletion
+  boundary the rejected form lacked. Final owner remains `mpCheckFloorRemap`; canonical vertices,
+  line/joint state, callback order, narrow-phase arithmetic, and result publication do not change.
+  Build one compact per-Match sequence in the source's exact joint/static/dynamic traversal order
+  plus conservative Y-bin masks. Ordinary no-callback queries enumerate only admitted sequence
+  entries globally, deleting the linked-joint and rejected-line traversal itself. Callback,
+  nonzero-offset, remapped, and dynamic work remains fully admitted; moving-capable joints are
+  conservative. Add no result cache, alternate topology, changed line order, approximation,
+  gameplay allocation, or fallback dispatch. The complete plan must remain a few kilobytes per
+  Match, preserve both digests, and beat the frozen true pre-plan binary at both resident sizes;
+  otherwise remove it completely. The first binned form changed the resident-256 digest because
+  collision joints acquire moving JObjs after `mpLibLoad`; `dynamic_count` therefore cannot prove
+  that a joint's authored floor vertices remain static. Conservatively admitting every floor line
+  restores the exact `4124834367a202ec` digest and isolates the traversal deletion, but loses
+  decisively at resident 512: candidate runs cost 40,411.0 and 40,959.7 cycles/frame versus
+  bracketed true pre-plan controls at 39,064.0 and 38,357.2. The linked-joint traversal is not the
+  material cost, and a flat sequence plus bitset iteration adds roughly 5% without eliminating
+  narrow work. Remove the plan, Match allocation, inferred-field storage, and query-loop changes
+  completely. Do not retry an external line index unless an existing immutable stage owner can
+  prove post-attachment world bounds without synchronization hooks; focus instead on deleting
+  demanded work inside an existing hot owner.
+- 2026-08-03 — `rejected`: keep the three retained dynamics angle leaves as the sole cosine and
+  comparison owners. Their measured 708,501 calls per 32,768 resident-512 frames evaluate two
+  exact source `sqrtf` lengths each, and each length currently enters `sqrtf` and then the general
+  binary64 `__frsqrte` classifier. The squared vector lengths that pass as finite positive normals
+  can enter the existing PPC estimate table directly and execute the same three binary64 Newton
+  steps and final float publication; exceptional inputs retain the singular general `sqrtf` path.
+  Displace only the redundant call/classification boundary inside these dynamics consumers.
+  Preserve estimate bits, FMA/multiply ordering, zero/subnormal/infinity/NaN behavior, cosine
+  ordering, thresholds, state, allocation, PPC/Wasm behavior, and all outputs. Add no cached
+  length, alternate state, approximation, or compiler setting. Retain only if exact digests and
+  both resident sizes improve against the frozen pre-change candidate. Disassembly of the true
+  pre-change control disproves the presumed call boundary: GCC already recognizes each local
+  `sqrtf` and emits an exact direct `vsqrtss` in all three angle leaves. The explicit source-exact
+  PPC estimator instead adds a call, classification, and three binary64 Newton steps. Digests stay
+  exact, but resident-512 reversals lose `38,363.7 -> 39,282.0` and
+  `37,426.9 -> 38,552.4` cycles/frame. Remove the estimator export, local square-root leaf, and
+  all call-site changes completely. Do not retry a dynamics square-root call optimization; the
+  current generated hot path has no such call to delete.
+- 2026-08-03 — `rejected`: keep the retained initialization-compiled `acosf` comparison boundary as
+  the sole threshold product, but store the boundary float rather than its integer total-order
+  key. Runtime cosines are clamped to finite `[-1, 1]` or handled as NaN, so native float
+  comparison has exactly the same order; `acosf(-0)` and `acosf(+0)` are equal, so collapsing the
+  two zero encodings also preserves the source predicate. Displace the per-call memcpy, sign test,
+  complement/XOR, and integer comparison from all three angle leaves. Preserve binary-search
+  construction, strict/non-strict boundaries, cosine arithmetic, NaN/zero semantics, state size,
+  allocation, PPC/Wasm behavior, and all outputs. Add no table, cache, approximation, or alternate
+  state. Retain only with exact digests and gains at both resident sizes against the frozen
+  integer-key candidate. Both short digests remain exact, but resident-512 reversals lose
+  `38,214.6 -> 38,542.0` and `38,214.5 -> 39,005.1` cycles/frame. The direct float predicate does
+  not improve the generated clamp/NaN/branch schedule enough to replace the compact integer key.
+  Restore the key representation, loader, helper signatures, and comparisons completely.
+- 2026-08-03 — `rejected`: keep each dynamics angle leaf as the owner of its two source-ordered vector
+  lengths. Current x86-64 disassembly evaluates the independent squared lengths with identical
+  scalar FMA chains followed by two `sqrtss` instructions. Pack only those two lanes, retain the
+  same per-lane multiply/FMA order, and issue one exact `sqrtps`; the existing cosine multiply,
+  divide, clamp, cutoff, and result paths remain scalar and unchanged. ARM/PPC/Wasm retain the
+  existing source expressions. This displaces one hardware square-root instruction per angle
+  call without changing the representation, state, allocation, or mathematical operation within
+  either lane. Retain only with exact digests and gains at both resident sizes against the frozen
+  scalar-root candidate. Both digests remain exact. Resident-512 reversals improve
+  `37,703.3 -> 37,103.7` and `38,910.5 -> 38,772.8` cycles/frame (+1.62%/+0.35%), but resident 256
+  does not retain a gain: after one candidate-side contention outlier, the clean pairs are a 0.40%
+  win and a 0.07% loss (`38,147.9 -> 38,120.3`). Packing and extracting the two lanes repays one
+  square-root instruction only at the larger resident size. Restore the scalar expressions and
+  remove the x86 intrinsic helper/include completely.
+- 2026-08-03 — `retained candidate, below checkpoint`: keep each observation/compare record as the sole canonical output owner and
+  its one full-record clear as the zero-value publication. Both internal item-writer callers clear
+  their complete parent record before publication, yet the item writer clears all 768 item bytes
+  again and rebinds the already-active Match; each populated 56-byte observation player is also
+  cleared again. Rename the internal item boundary to state its zeroed-output precondition and
+  delete only those duplicate clears and same-Match bind. Preserve every written byte, absent-slot
+  zero, item ordering/canonicalization, public API validation, state, allocation, and output. Add
+  no dirty tracking or alternate projection. Retain only with exact digests and gains at both
+  resident sizes against the frozen pre-output-cut candidate.
+  The first complete clear/bind deletion is positive at resident 512 but controlled-neutral at
+  resident 256. Complete the same immediate boundary before disposition: the item writer already
+  knows its dense emitted-item count, while direct production observation currently calls the misc
+  canonicalizer for all 15 slots, including zeroed absent slots. Return the existing count and
+  canonicalize only emitted slots in the direct path; compare-derived observation and viewer paths
+  retain full-array canonicalization because they do not own that live count. This adds no state or
+  scan and preserves dense item order and all absent bytes. Both short and 131,072-frame digests
+  remain exact. Two resident-256 reversals improve `38,841.5 -> 38,378.5` and
+  `39,286.0 -> 38,811.2` cycles/frame (+1.21%/+1.22%). Resident-512 timing is noisier under active
+  machine contention: the first clean pair loses 0.57%, while subsequent reversals and low-cost
+  samples favor the candidate; the lowest adjacent reverse improves `38,675.5 -> 37,107.3`
+  (+4.23%), and the best candidate is below the best control. Retain this direct deletion
+  provisionally because both-size evidence is positive overall and no compensating work/state is
+  added; re-evaluate it in the final aggregate checkpoint rather than attributing a precise 512
+  point gain now. Frozen candidate SHA-256:
+  `5fee77e963a0856a7ed6c349ed154ba9130dda93ba65781bee30a85cd51f74cb`.
+  Continue only within this output boundary: direct observation and terminal projection already
+  own `MslCoreMatch`, whose canonical `MslPlayerState::slots` contains the exact stock byte read by
+  `Player_GetStocks`. Read that field directly in output projection and remove terminal's complete
+  Match bind, which exists solely for those getter calls. Apply the same direct read in the cold
+  compare projector for one consistent output owner. Gameplay source calls remain unchanged; add
+  no copied stock state or changed slot mapping.
+  The complete direct-stock form changes sign at resident 256. Narrowing it to only terminal's
+  stock read and bind deletion still changes sign in two 131,072-frame reversals: one loses about
+  1.7%, and the reverse improves about 1.5% amid frequency drift. This is below stable attribution
+  and does not improve the proven item-count cut. Restore every direct stock read and terminal bind;
+  retain no stock-access change.
+  The terminal's fixed eight-team bit-count loop is a separate pure consumer of its already-built
+  canonical `team_mask`; current disassembly expands it into a long SIMD compare/mask/reduction.
+  Replace only that loop with the exact population count of the same byte. This changes no team
+  admission, mask construction, output width, state, or architecture contract. Disassembly
+  replaces the prior SIMD compare/mask/reduction with one `popcnt`. Both digests remain exact.
+  Resident-256 reversals improve +0.07% and +1.73%; resident-512 reversals improve +4.11% and
+  +1.17% under the same frequency drift. Retain the one-line reduction and remeasure its aggregate
+  contribution at checkpoint. Frozen candidate SHA-256:
+  `c7f74b5388b7718fa8c5afed5f71f0e37f3fb768b55a281c0d330ff1ce6566b3`.
+- 2026-08-03 — `retained candidate, below checkpoint`: keep the packed wire records as the canonical output and the six existing
+  endian helpers as their only byte-order operation. Disassembly shows every player observation
+  still makes nine `put_lef32` and four `put_le16` calls; four-player frames therefore pay up to 52
+  call/return boundaries for trivial byte stores, with more in item, terminal, compare, and viewer
+  projection. Define those internal primitives as the same `static inline` byte operations in
+  `wire.h` and delete their out-of-line copies. Preserve exact wire bytes, unaligned access safety,
+  float bit patterns, big/little-endian behavior, public structures, state, allocation, and all
+  higher-level projection. Add no native-only casts, compiler attributes, or settings. Retain only
+  with exact digests and gains at both resident sizes against the frozen output-popcount candidate.
+  Both digests remain exact, every wire-helper call disappears from `write_player`, and the hot
+  functions shrink (`write_player` 570 -> 556 bytes; `msl_core_match_write_observation` 1,266 ->
+  1,234 bytes). Resident-512 reversals improve `39,174.1 -> 37,709.8` and
+  `38,540.7 -> 37,923.6` cycles/frame (+3.88%/+1.63%). Resident-256 has one frequency-skewed losing
+  pair, one strongly favorable reverse, and the deciding adjacent pair improves
+  `38,940.3 -> 38,227.6` (+1.86%). Retain the inline primitives while accumulating and require
+  both sizes again in the aggregate checkpoint. Frozen candidate SHA-256:
+  `f3b0130dd321df19fa389d937425fb9f59f350ca29534b84bee74cc24c2192ad`.
+  After wire inlining, `write_player` has exactly one remaining call. Isolate only its stock
+  projection: the function already owns `MslCoreMatch`, and the canonical source slot contains the
+  same byte returned by `Player_GetStocks`. Directly read that byte without changing terminal,
+  compare, or gameplay call sites. This is narrower than the rejected broad stock-access change
+  and must independently improve both sizes against the frozen wire-inline candidate. It preserves
+  both digests and shrinks `write_player` by 16 bytes, but repeated resident-512 reversals simply
+  follow frequency direction and flip sign by 2--3%; no stable incremental gain is attributable.
+  Restore the getter and retain no direct stock read.
+- 2026-08-03 — `rejected broad phase`: the remaining standard-camera owner is 4.32% of the current controlled
+  profile. `Camera_80029CF8` constructs the target camera from subject bounds and immediately
+  `Camera_8002A768` reconstructs four world-space frustum corners to decide whether stage-bound
+  correction is required. Count actual correction admissions over the complete 366-case
+  initialization/preroll before changing code. If negative frames dominate, test a conservative
+  proof from the already-computed target bounds that enters the unchanged exact corner owner only
+  when correction may be needed. Final mutable owner remains `CameraTransformState`; canonical
+  subject bounds, transform, correction, visibility, viewer output, and scheduler order remain
+  unchanged. Displace only provably unnecessary corner reconstruction; add no cached transform,
+  alternate camera state, approximation, allocation, or persistent diagnostic. A correctly
+  relinked 65,536-frame resident-512 census observes correction in 20,716 of the first 300,000
+  calls (6.91%). Coarse interior proofs using symmetric margins of 0.75x, 1.0x, and 1.25x target
+  depth admit only 6.77%, 1.83%, and 0.08% of calls; the 0.5x margin admits 28.8% but has 70 false
+  negatives and is not exact. Remove all counters. A useful revisit must carry the producer's
+  actual frustum products across the immediate call boundary; another coarse branch cannot delete
+  enough demanded work.
+- 2026-08-03 — `rejected`: keep `Camera_8002958C` as the sole subject-bounds owner, but snapshot
+  its ground floor and four stage-camera bounds once before the admitted-subject traversal. Each
+  subject currently runs five `Camera_80029124` probes, and every probe repeats the same
+  `Ground_801C4368` plus stage getters; a reported boundary then repeats the ground query again for
+  the identical bottom clamp. No callback or topology mutation occurs inside this traversal.
+  Replace only those repeated reads with frame-local scalars and the same ordered comparisons and
+  clamps. Preserve subject admission and mutation, source extent order, camera products, correction,
+  PPC/Wasm behavior, state, allocation, and all outputs. Add no persistent cache or alternate owner;
+  retain only with exact digests and gains at both resident sizes from a verified relinked binary.
+  The implementation preserves both short digests and shrinks `Camera_8002958C` from 1,618 to
+  1,471 bytes. A short resident-256 bracket appears positive, but the required resident-512 screen
+  reverses: candidate runs at 37,353 and 38,327 cycles/frame surround a 36,868 frozen control.
+  Repeated pure getter calls are layout/issue-cheap here, while folding all comparisons into the
+  already large camera owner is slower. Restore the source calls, locals, and clamps completely.
+- 2026-08-03 — `rejected`: keep `PSMTXConcat` as the singular exact affine-product owner and
+  each destination matrix as its sole canonical result. The native compiler currently versions
+  and expands the fixed 3x4 kernel because it cannot prove that the three matrix arguments do not
+  partially overlap, although the source contract handles only exact destination aliasing. Load
+  the complete right operand before publication and evaluate each row with the same mul/FMA order,
+  displacing only runtime alias checks, scalar fallback copies, and auto-vectorization shuffles.
+  Preserve exact in-place behavior, translation rounding, PPC/Wasm source, state, allocation, and
+  every consumer. Add no compiler attribute or setting. This deliberately re-evaluates the 2026-07-19
+  isolated affine kernel because current campaign policy accumulates exact one-point code gains;
+  retain only if both current digests and both resident sizes improve against the frozen
+  lbvector-inline candidate. The explicit kernel shrinks the native leaf from 1,279 to 173 bytes
+  and preserves both digests, but longer 131,072-frame reversals remain mixed at both sizes:
+  resident 256 changes from a 0.85% win to a 0.31% loss, and resident 512 changes from a 2.68% win
+  to a 0.32% loss before a separately observed CPU-0 contention event. The change cannot support a
+  retained improvement at both sizes; restore the compiler-generated exact-aliasing path and do
+  not count code size as throughput evidence.
+- 2026-08-03 — `rejected before implementation`: keep each dynamics JObj matrix as the sole canonical world transform
+  and `lb_8001044C` as the exact solved-chain owner. The solver already constructs the final world
+  basis for every rotated link in source order, but `Fighter_8006D9AC` later walks the same dirty
+  links and reconstructs those matrices again solely to reproduce retail's end-of-frame render
+  publication. Publish the already-computed final basis to the matching JObj as each link is
+  completed, and complete the tail basis once, displacing the entire redundant post-solve matrix
+  walk. Preserve the existing JObj matrix representation and dirty semantics, exact transform
+  operations, re-anchor reads, hurtbox consumers, scheduler order, PPC behavior, allocation, and
+  all outputs. Add no cache, alternate state, fallback path, or approximation. Retain only if the
+  seven dynamics-sensitive source locks, both benchmark digests, full validation, and both
+  resident sizes remain exact and improve. The consolidated August 3 journal records this exact
+  boundary already: solver `unk_2C` and render-matrix translation are not interchangeable, replay
+  33692 forks under the substitution, and separate attribution caps the complete demanded refresh
+  at 0.55% of the contract. Preserving the distinct exact render operation stream while sharing
+  the traversal cannot materially advance the target. Make no runtime change and keep the existing
+  post-solve publication.
+- 2026-08-03 — `retained candidate, below checkpoint`: the dominant compiled-pose masks publish rotation X on most dense table
+  hits. Count the existing `PUBLISH_ROTX` entries and the subset that actually enters the
+  `JOBJ_JOINT1` IK-hint lookup before adding any classification bit or specialized publisher.
+  Remove the counters immediately after one bounded resident-512 census; proceed only if the
+  avoided joint-flag/IK path has a material hot population and a representation-free deletion.
+  The complete 366-case initialization and 200,700-frame preroll construct 86,378 retained pose
+  joints and execute 9,334,593 rotation-X publications; none of the retained joints has
+  `JOBJ_JOINT1`. Make absence of that unsupported IK joint class an initialization assertion and
+  remove its unreachable RObj lookup from the native generic and dense pose publishers. PPC/Wasm
+  retain the source path. This adds no state or gameplay branch; counters and printing are removed.
+  `interpret_joint` shrinks from 4,635 to 4,182 bytes. Both short digests remain exact; enclosed
+  resident-256 screens improve 0.52--3.20%, and two resident-512 reverse screens improve 1.72% and
+  2.12% (a longer frequency-drifting screen is neutral). Retain while accumulating and confirm in
+  the final alternating checkpoint screen.
+- 2026-08-03 — `retained candidate, below checkpoint`: use the same construction census to test whether any retained native pose
+  joint admits `JOBJ_MTX_INDEP_SRT`, and count actual dense publications taking that exception.
+  The native publisher currently reloads and tests this flag after every successful table write.
+  Remove diagnostic counters immediately; delete the branch only behind a construction invariant,
+  with the source exception unchanged for PPC/Wasm and non-pose JObjs. All 86,378 constructed pose
+  joints and 11,074,192 observed dense publications have the flag clear. Extend the initialization
+  assertion and publish the canonical dirty bit directly in both native pose paths; retain no
+  counter, print, or gameplay admission branch.
+- 2026-08-03 — `rejected`: keep each active compact fighter-pose node as the source animation
+  owner, but census whether any native Figa or AnimJoint attachment admits `AOBJ_NO_UPDATE` and
+  whether the fighter flag API can set it. If the complete 366-case construction/preroll proves
+  this source mode absent, make its absence an initialization/API invariant and remove the runtime
+  publication predicate from `interpret_joint` and its dense publisher. Preserve explicit dry
+  decoder walks, all clock/loop/end behavior, JObj SRT, callbacks, PPC/Wasm behavior, allocation,
+  and exact outputs. Add no state or alternate path; retain only if both digests and both resident
+  sizes improve over the frozen pose-invariant candidate. Native assertions survive the complete
+  366-case construction/preroll, and deleting the gate shrinks `interpret_joint` by 121 bytes, but
+  an enclosed resident-256 screen is neutral/slower: controls are 38,474.9 and 38,943.0
+  cycles/frame around a 38,824.4 candidate with the exact digest. Restore the source flag and
+  publication behavior rather than retaining an unmeasured domain restriction.
+- 2026-08-03 — `rejected`: keep the dense program node's existing `type_mask` and JObj SRT as
+  the sole publication inputs/output, but admit the measured `0x00E` rotation triplet before the
+  generic switch. It owns 63.31% of dense publications and currently enters a range check plus an
+  indirect jump whose historical instruction profile mispredicts frequently. Displace only that
+  dispatch for the common mask; preserve value loads/stores, dirty publication, every other mask,
+  representation, state, PPC/Wasm behavior, and exact output. Add no classifier field or duplicate
+  publisher. Retain only if disassembly shows a direct common branch and both resident sizes beat
+  the frozen pose-invariant candidate. The compiler emits the intended direct `0x00E` branch and
+  changes `interpret_joint` by only two bytes, but alternating 131,072-frame resident-256 runs do
+  not retain the apparent first-pair win. Candidate median is 38,069 cycles/frame versus 37,849 for
+  the frozen control, about a 0.6% loss with the exact digest amid large machine-frequency drift.
+  Restore the compact switch; do not treat dispatch shape or code size as a gain.
+- 2026-08-03 — `rejected after provenance repair`: keep `lbVector_Sin`/`lbVector_Cos`'s source-authored approximate
+  quintic operation streams as the exact coefficient owners for axis rotation and Euler-matrix
+  construction. Native callers always require both results for the same angle, yet currently run
+  the two independent scalar polynomial streams serially. Evaluate those streams in two SIMD lanes
+  after the same scalar binary64 range comparisons/reductions, retaining every binary32 multiply
+  and fused operation in its original lane order. Displace only serial issue across the pair;
+  preserve all outputs, axis/matrix operation order, generic consumers, PPC/Wasm scalar code,
+  state, and allocation. Add no cache, table, approximation, or API. Retain only if both digests,
+  focused gates, and controlled resident-256/512 comparisons improve over the frozen pose candidate.
+  The compiler emits the paired SIMD streams and shrinks the three callers by 32, 32, and 80 bytes,
+  but the timing screen accidentally used a `replay-bench` that had not been relinked after the
+  runtime-object rebuild. Its exact digests therefore prove only the frozen prior binary, and none
+  of its timing is candidate evidence. Remove the SIMD source rather than retain an unmeasured
+  rewrite. Any revisit must use `native-release-benchmark` and verify the executable timestamp and
+  hash before timing. Reapply the same bounded source now that the explicit relink contract is
+  established; compare its verified executable directly to the frozen pose-invariant binary. The
+  relinked candidate preserves both 131,072-frame digests. Resident 256 is approximately +0.17%
+  in one bracket. A reverse resident-512 bracket is 38,214 cycles/frame versus controls averaging
+  38,236 (+0.06%), while the opposite order changes sign under measured whole-machine frequency
+  drift. Packed issue is controlled-neutral on the native core. Restore the scalar source; the
+  small code-size reduction does not justify ISA-specific machinery.
+- 2026-08-03 — `rejected`: keep the four source-authored fused-subtract operations in
+  `ftcoll.c` as the exact contact/combo owners, but expand their native intrinsics locally instead
+  of calling the six-byte shared leaves from O0 fighter code. Displace only call/return and live
+  spill boundaries in `comboCount_Push` and the angle-362 hurt-midpoint path. Preserve every
+  operand, FMA, sign, branch, state update, PPC/Wasm path, contact result, and allocation. Add no
+  helper or broader intrinsic policy; retain only with exact digests and gains at both sizes over
+  the frozen pose-invariant candidate. The two-call combo leaf shrinks by two bytes, but the rare
+  midpoint path grows the 6.4 KiB contact owner by eight bytes. The resident-256 digest remains
+  exact while an enclosed 32,768-frame screen regresses about 1.7% against its surrounding
+  controls. Restore both shared intrinsic calls and do not spend a resident-512 screen on a failed
+  required size.
+- 2026-08-03 — `rejected before timing`: keep `atanf` as the singular exact PPC approximation owner and
+  preserve its reduction, lookup, polynomial, signs, and every caller. The mid-range transform
+  pays two out-of-line `__fnmsubs` calls while keeping the reciprocal and lookup values live.
+  Expand only those two authored scalar-single operations inside `atanf`, displacing their
+  call/return and spills. Leave the shared intrinsic symbol, other math, PPC/Wasm behavior, state,
+  allocation, and compiler profile unchanged. This is distinct from the rejected trig-tail local
+  expansion; retain only with exact digests and gains at both resident sizes over the frozen
+  pose-invariant candidate. Disassembly shows the existing O2 translation unit already inlines
+  both calls: the function remains 329 bytes and contains the fused instructions directly. The
+  explicit expression merely selects the opposite signed FMA forms and reverses the final subtract;
+  it deletes no work. Restore the source intrinsic calls without benchmarking an empty rewrite.
+- 2026-08-03 — `rejected`: keep the three hosted dynamics comparison leaves as the final owners
+  of their source-exact `lbVector_Angle` decisions, with live vectors and compiled immutable acos
+  cutoffs as canonical inputs. Before evaluating two square roots, their product, and a divide,
+  compare the already source-ordered dot and squared lengths against the cutoff's squared cosine
+  using binary64 products and a conservative relative exclusion band. Opposite signs decide
+  directly; non-finite, tiny, or near-boundary inputs enter the complete existing exact path.
+  A taken deviation that consumes the angle also enters the exact path. Displace exact sqrt/divide
+  work only for decisions proven outside the band. Add no state, table, approximation, changed
+  output, or alternate canonical result; PPC/Wasm remain source-shaped. First run an always-exact
+  diagnostic that counts fast decisions and asserts their classifications against the existing
+  result. Retain a final no-counter fast path only if the observed coverage is material, mismatches
+  are zero, full validation is exact, and both resident sizes improve over the frozen pose
+  candidate. With a conservative `1e-4` squared-ratio exclusion band, 492,727 of the first 500,000
+  comparisons (98.55%) are decided outside the exact path and all 492,727 agree with the existing
+  result. The final helper additionally admits only finite normal squared lengths, a safely valid
+  length product above `1e-18`, a finite float-range product, and a boundary at least `2^-20` from
+  zero; every other class falls back. Remove all counters/printing and use the fast result directly
+  for the two Boolean consumers and only the false, angle-not-consumed deviation result. Exact
+  deviation angles retain the original sqrt/divide/acos stream.
+  The first complete form regresses the resident-256 enclosed screen: the deviation consumer is
+  true often enough that its speculative squared work is then followed by the full exact stream.
+  Remove that consumer from the fast path and retain the experiment only in the max/convergence
+  leaves, where every successful classification deletes the complete exact computation.
+  Max-plus-convergence is neutral/slightly slower at resident 256. Convergence is only 38,954 of
+  the measured calls and cannot amortize another expanded classifier leaf; restore its exact path
+  as well and isolate the dense max-angle consumer before disposition.
+  The isolated max leaf still loses about 0.9%. Its binary64 products and conversions cost nearly
+  as much as the hardware square roots they displace. Screen one final strictly conservative float
+  form with a ten-times-wider `1e-3` exclusion band; binary32 product error remains far inside that
+  band, and any close result retains the exact path. The compact max-only form also loses: enclosed
+  resident-256 controls are 37,759.0 and 37,701.3 cycles/frame versus 38,678.4 for the candidate,
+  about a 2.5% regression with the exact digest. The diagnostic's 492,727 fast decisions therefore
+  did not translate into cheaper execution: expanded classification, extra products, and code
+  pressure cost more than the compact hardware-square-root/divide leaf they displaced. Restore the
+  original compiled cutoff keys and exact comparison leaves, including storage and APIs; retain no
+  classifier, counter, or alternate path.
+- 2026-08-03 — `rejected`: keep the PPC `fres` estimate as the exact reciprocal seed owner used
+  by `PSMTXInverse` and `PSMTXQuat`. Both callers compute a binary32 determinant/norm and currently
+  widen it to binary64 before inlining the general binary64 classification and estimate path. Map
+  every binary32 class directly to the identical final binary32 seed, including the two upper
+  subnormal bins, signed zero/infinity, overflow-to-zero, and NaN quieting. Displace only widening,
+  64-bit classification, and double-result narrowing; preserve the estimate table, Newton steps,
+  matrix operation order, PPC/Wasm behavior, state, and all consumers. Add no approximation,
+  compiler attribute, setting, table, or fallback owner. The direct mapping halves
+  `PSMTXInverse`/`PSMTXQuat` to 512/268 bytes and preserves both digests. An isolated affine-only
+  ablation, however, shows the direct form improving resident 256 by about 1% while losing both
+  131,072-frame resident-512 reversals: `35,316.2 -> 36,681.8` and
+  `36,858.8 -> 37,800.6` cycles/frame. Restore the original double-domain emulator and table scope;
+  retain none of this mixed-size candidate.
+- 2026-08-03 — `rejected`: keep `PSVECNormalize`'s PPC `frsqrte` seed and Newton sequence as the
+  exact vector-normalization owner. Its magnitude is binary32, but the current native leaf widens
+  it and inlines the full binary64 instruction emulator before narrowing the seed. Classify the
+  original binary32 and generate the identical binary64-table estimate narrowed to binary32,
+  including signed zero, subnormals, infinity, NaN, and negative inputs; leave the existing public
+  positive-normal leaf intact for its angle consumers. Displace only redundant binary64 input
+  decoding. Preserve the 25-bit multiply rounding, Newton/FMA order, results, callers, PPC/Wasm,
+  state, and allocation. The first resident-512 screen changes digest
+  `9c1f37ab084f8ef2 -> a469d6a694cf45f1`; the direct float mapping therefore misses a source
+  rounding/classification case. Restore the complete binary64 emulator and the original compact
+  positive-normal helper before further timing; retain none of this experiment.
+- 2026-08-03 — `rejected`: keep `PSMTXMultVec` as the singular paired-single affine/vector owner
+  and its caller's `Vec` as the canonical result. Native auto-vectorization currently reconstructs
+  matrix columns piecemeal and computes the third lane separately. Load all three rows before any
+  publication, transpose them once in registers, and evaluate all three lanes with the same
+  multiply, two FMA, and final-add boundaries. Displace only redundant loads/shuffles and scalar
+  tail scheduling. Preserve complete source/destination alias behavior, exact results, PPC/Wasm,
+  state, allocation, and all consumers. Add no compiler attribute or setting. Both short digests
+  remain exact and the leaf shrinks from 179 to 96 bytes, but the resident-256 enclosed screen is
+  neutral while resident 512 loses about 1.6--1.8%. Reconstructing all four columns costs more than
+  the compiler's asymmetric two-lane/scalar schedule. Restore the source loop completely.
+- 2026-08-03 — `rejected after completed deletion`: keep `msl_dynamics_rotate_euler` as the final hosted dynamics
+  rotation owner and live `HSD_JObj::rotate` as the sole canonical result. Its temporary
+  `PSMTXQuat` product is consumed immediately by the source-exact matrix-to-Euler sequence, which
+  reads seven of twelve entries; the scratch matrix is overwritten before any later use. Compute
+  exactly those seven entries from the same quaternion, PPC `fres` seed, Newton step, and ordered
+  FMAs inside the dynamics owner, then run the unchanged `sqrtf`/`atan2f` conversion and publish
+  the same Euler vector. Displace the general matrix call, two unused off-diagonal products, five
+  unused matrix entries, all twelve stores, and the scratch argument at this one hosted call site.
+  General `PSMTXQuat`, PPC/Wasm source paths, quaternion/Euler state, solver order, allocation, and
+  all consumers remain unchanged. Add no cache, second representation, approximation, fallback,
+  or compiler setting. Every form preserves both benchmark digests. The first direct form exposes
+  an exact 84-byte positive-normal `fres` seed and removes the dead matrix entries, but grows the
+  already-large solver by 162 bytes and loses both resident-256 reversals. Moving the seven-entry
+  projection to one external leaf shrinks the solver by 254 bytes yet still loses both reversals
+  (`37,744.1 -> 38,275.8` and `37,926.3 -> 38,139.4` cycles/frame). Moving the complete existing
+  axis-angle/Euler conversion behind a coherent optimized leaf shrinks the solver by 990 bytes but
+  loses more (`38,364.0 -> 38,909.3` and `38,502.2 -> 40,043.3`), confirming that its sequential
+  state is scheduled better in the current inlined owner. Restore the original singular
+  `PSMTXQuat` call, full scratch product, inlined conversion, private tables, and symbol surface
+  completely. A worthwhile dynamics rewrite must break repeated exact angle evaluation, not prune
+  a few matrix products around it.
+- 2026-08-03 — `retained candidate, below checkpoint`: keep the live solver vectors and authored max/convergence/deviation
+  thresholds as final owners. An ordinary-release census over 32,768 resident-512 frames observes
+  335,471 solved links: max-angle comparisons execute 334,076 times, convergence comparisons
+  38,954 times, and deviation comparisons 335,471 times. Max-angle is true 190,680 times;
+  convergence is true only 563 times; deviation is true 162,180 times. These three source calls
+  currently evaluate full exact `lbVector_Angle`; max and convergence discard every angle, while
+  deviation discards it on 173,291 false branches. During existing dynamics initialization,
+  compile the exact monotonic `acosf` comparison boundaries for all three immutable thresholds
+  into otherwise unread hosted descriptor words. At runtime, compute each source-ordered clamped
+  cosine once, compare its ordered float bits to the compiled boundary, and evaluate `acosf` only
+  for a taken deviation that consumes the value. This displaces roughly 546,000 observed exact
+  `acosf` calls without duplicating vector math. Preserve zero-length handling, dot/FMA and length
+  order, clamp semantics, strict comparison boundaries, canonical Euler/dynamics state, PPC/Wasm
+  behavior, allocation, and all consumers. This deliberately reassesses the rejected sparse
+  max-angle-only cutoff as one coherent three-consumer deletion. Both production-prefix digests
+  remain exact. Inlining the three cosine/cutoff paths grows the 7KB solver by 288 bytes and gives
+  mixed 512 results. A shared external cosine leaf keeps the solver small but adds a second call
+  per comparison and loses two resident-256 long pairs by 0.61--0.75%. The retained shape uses
+  three ordinary runtime-math leaves with the cosine preparation expanded once inside each, so
+  every replaced source angle remains one call and `lb_8001044C` grows only 32 bytes. Two 131,072-
+  frame reversals improve resident 256 `37,000.3 -> 36,933.0` and `37,211.4 -> 37,062.3`
+  cycles/frame (+0.18%/+0.40%); resident 512 improves `36,139.2 -> 35,906.2` and
+  `36,035.9 -> 35,834.1` (+0.65%/+0.56%). Retain the three exact cutoffs and one-level leaves
+  uncommitted while accumulating a qualifying checkpoint; retain no instrumentation or alternate
+  compiler shape.
+- 2026-08-03 — `retained candidate, below checkpoint`: keep `lbvector.c` as the final owner of its source-authored
+  scalar-single fused subtract operations and preserve every operand, rounding, sign, and call-site
+  order. The native release already expands `__fmadds` directly, but the equally exact six-byte
+  `__fmsubs`/`__fnmsubs` leaves remain out of line; `lbVector_RotateAboutUnitAxis` alone pays four
+  such calls around every dynamics rotation and spills its live vector/trig state across them.
+  Expand only those two intrinsics inside `lbvector.c`, displacing their call/return and spill
+  boundaries without changing polynomial, rotation, matrix, state, PPC/Wasm behavior, allocation,
+  or any compiler setting. This is narrower than the rejected process-wide inline candidate.
+  `lbVector_RotateAboutUnitAxis` shrinks from 749 to 451 bytes and contains no remaining intrinsic
+  calls; both production-prefix digests stay exact. With the retained three-angle cutoff, a long
+  pair against the frozen pre-cutoff angle candidate improves resident 256
+  `38,173.9 -> 37,182.8` cycles/frame (+2.67%) and resident 512
+  `36,193.3 -> 35,469.1` (+2.04%). Short enclosed screens agree at both sizes. Retain the two
+  translation-unit-local intrinsic definitions uncommitted; do not broaden them process-wide.
+- 2026-08-03 — `rejected`: apply the same source-exact local intrinsic boundary only to
+  `lbcollision.c`, whose 11 fused-subtract sites include the measured hit/contact kernel. Preserve
+  every expression and result while removing only the six-byte leaf calls and their live-state
+  spills inside this translation unit. Do not broaden to matrix, fighter, or generic source; retain
+  only if both digests and both resident sizes improve over the frozen lbvector-inline candidate.
+  Both digests remain exact and resident 256 improves 0.50--0.72% in the short enclosed screen,
+  but resident 512 loses 0.78% against the preceding control and 0.11% against the following
+  control. The contact kernel does not execute densely enough at 512 to repay its expanded local
+  code. Remove both macros completely and keep the singular shared intrinsic leaves for this
+  translation unit.
+- 2026-08-03 — `rejected`: apply the local fused-subtract boundary to the singular
+  `sysdolphin/baselib/mtx.c` owner. `HSD_MtxInverse` is reached by hurt/contact transforms and
+  currently contains 18 calls to the six-byte intrinsic leaves, with three more each in its
+  inverse-concat and inverse-transpose siblings. Expand only those already-authored operations in
+  this translation unit; preserve determinant/cofactor ordering, exact zeros, matrix state,
+  PPC/Wasm behavior, allocation, and every caller. This tests a compact shared leaf rather than
+  the rejected process-wide expansion; retain only with exact gains at both resident sizes over
+  the frozen lbvector-inline candidate. `HSD_MtxInverse` shrinks from 805 to 591 bytes and all
+  digests remain exact. Resident 256 improves 0.38--0.46% in the enclosed screen, but resident 512
+  loses 0.84%/0.21%. The inverse family is not dense enough in the larger working set to repay its
+  expanded cofactor code. Remove both local macros and retain the shared leaves.
+- 2026-08-03 — `rejected`: test the same local intrinsic deletion only in `camera.c`.
+  `Camera_80029CF8` is inside the sole dominant camera owner and pays four fused-subtract leaf
+  calls per frustum solve. Expand those four source-authored operations in place while preserving
+  every bound, smoothing input, exact zero, output, PPC/Wasm path, state, and allocation. Do not
+  alter camera behavior or broaden to other files; compare exactly against the frozen
+  lbvector-inline candidate at both resident sizes. The function shrinks by 55 bytes and the
+  resident-256 digest remains exact, but the enclosed candidate loses 1.05% against the preceding
+  control and 0.12% against the following control. Remove both macros without spending a 512
+  screen on a candidate that already fails one required size.
+- 2026-08-03 — `rejected`: expand `__fmsubs` only inside `lb_00B0.c`'s native batched
+  Euler-to-quaternion publisher. Its hot output loop pays two leaf calls per Euler while retaining
+  six trig values, two products, and the output pointer across each call. Preserve the exact two
+  fused expressions, batch order, quaternion results, scalar/PPC/Wasm paths, state, and allocation;
+  displace only these repeated call/spill boundaries. This does not alter the trig evaluator or
+  broaden intrinsic expansion beyond the one native blend owner. Compare against the frozen
+  lbvector-inline candidate at both resident sizes. The leaf shrinks from 483 to 385 bytes and
+  both digests remain exact, but resident 256 changes sign around neutral and resident 512 loses
+  0.57--0.97% in the enclosed screen. The batch already amortizes surrounding work, and expanding
+  these two operations perturbs its compact output loop. Remove the local macro completely.
+- 2026-08-03 — `rejected`: keep `lbVector_RotateAboutUnitAxis` as the final owner and preserve
+  its two source range reductions plus identical fused quintic sine/cosine operation streams. The
+  current scalar leaf evaluates the sine polynomial and the cosine polynomial serially even though
+  their reduced inputs are independent. On native x86 FMA, pack the two already source-reduced
+  floats into two lanes and execute the same three/four ordered multiplies, `fmsubs`, and `fmadds`
+  per lane, then feed the unchanged scalar rotation. Displace only serial polynomial issue; retain
+  scalar/PPC/Wasm/arm64 behavior, every range boundary, value, signed zero, state, and allocation.
+  This differs from the rejected general masked trig batches: it has exactly two always-live lanes,
+  one shared polynomial shape, no gather, and no temporary array. Require exact digests and gains
+  at both resident sizes over the frozen lbvector-inline candidate. The native function shrinks
+  another 32 bytes and the resident-256 digest remains exact, but the enclosed candidate loses
+  5.14% against the preceding control and 1.35% against the following control. Two-lane packing,
+  broadcast, and extraction cost more than the scalar compiler's scheduling. Remove the intrinsics
+  and helper completely without spending a 512 screen on a failed required size.
+- 2026-08-03 — `retained`: keep `acosf`/`asinf` as the final owners and preserve their exact PPC
+  reciprocal-square-root estimate, three Newton steps, and `atanf` consumers. After their
+  binary32 radicands pass `result > 0`, each value is necessarily finite, positive, and normal when
+  promoted to binary64. Let these calls use the same estimate table and interpolation directly,
+  displacing only `__frsqrte`'s unreachable zero, sign, NaN/infinity, and subnormal classification.
+  General `__frsqrte`, vector normalization, all arithmetic/results, state, allocation, and
+  non-native behavior remain unchanged. Add no approximation, cache, alternate output, or compiler
+  attribute. An initial float-exponent compression failed both digest screens and was corrected to
+  reproduce the estimate's fixed-point half-exponent boundary exactly before timing. Two clean
+  reversals against the pre-change candidate preserve both digests and improve resident 256 by
+  0.24%/0.61% and resident 512 by 0.27%/0.48%. Retain the shared table and 103-byte positive-float
+  seed leaf.
+- 2026-08-03 — `rejected`: keep `lbColl_80006E58` and `sqrtf_store` as the final owners of their
+  exact contact distances. Each reciprocal-square-root seed is consumed only after its binary32
+  squared distance passes `> 0`; use the same positive-normal float-to-double estimate primitive
+  while preserving every double Newton operation, volatile float publication, comparison, and
+  contact result. Displace only general seed classification and the caller's float-to-double
+  promotion at those three sites. Add no collision admission, approximation, state, allocation,
+  or non-native change; the complete boundary is the three seed calls and one shared exact helper.
+  Both digests remain exact, but two reversals lose about 1.9--2.1% at resident 256
+  (`37,396.1 -> 38,166.6` and `37,573.9 -> 38,275.5` cycles/frame) and are neutral/slightly worse
+  at resident 512 (`36,106.0 -> 36,176.1` and `36,129.5 -> 36,148.4`). The collision seeds are too
+  sparse for another out-of-line leaf and its layout displacement. Restore all three general calls
+  and remove the float-to-double helper completely.
+- 2026-08-03 — `rejected`: keep process-wide hosted `sqrtf` as the final owner and preserve its
+  PPC seed, three fused double Newton steps, volatile float publication, and all exceptional
+  behavior. Since its positive input began as binary32, test deriving the identical binary64 PPC
+  seed through a positive-normal float classifier, falling back to general `__frsqrte` for zero,
+  subnormal, infinity, and NaN. This displaces only the general estimator classification for
+  ordinary positive inputs and adds no approximation, state, allocation, or compiler setting.
+  Both benchmark digests remain exact, but resident-256 reversals change sign (+1.61% then -0.56%)
+  and the completed resident-512 pair loses 0.12%. The extra leaf and its special-value admission
+  do not produce a stable whole-runtime gain. Restore `sqrtf`'s direct general seed call and remove
+  the double-result helper completely.
+- 2026-08-03 — `retained`: keep `atanf` as the final owner and its existing reduction row,
+  polynomial, corrections, and sign publication as the exact canonical result. In the middle
+  magnitude range, the source exponent switch computes exactly the number of four ascending
+  positive-float bit thresholds crossed. Compute that same index directly from the absolute bits,
+  displacing only the switch and its duplicated index assignments. Preserve every threshold and
+  strict boundary, reduction arithmetic, lookup, NaN/large/small path, state, allocation, and
+  non-native source shape. Add no new table, approximation, alternate result, or compiler setting.
+  The function shrinks from 709 to 329 bytes and both digests remain exact. Short reversals improve
+  resident 256 by 1.26%/0.50% and are mixed at resident 512; longer 131,072-frame pairs confirm
+  `37,251.0 -> 36,859.9` cycles/frame (+1.06%) at resident 256 and `35,522.1 -> 35,487.9`
+  (+0.10%) at resident 512. Retain the direct four-threshold count. A follow-up skips the two
+  exact-zero correction additions for the `-1` row, but grows the leaf by 24 bytes and loses both
+  reversals: resident 256 changes `37,421.1 -> 37,898.7` and `37,513.5 -> 37,658.7`; resident 512
+  changes `35,920.1 -> 36,129.2` and `35,975.4 -> 36,090.4`. Restore the unconditional adds; their
+  straight-line scheduling is cheaper than the extra branch even when both values are zero.
+  Next, test replacing the retained native four-scalar-compare/add classifier with one 128-bit
+  integer threshold comparison and a four-bit population count. The four constants and inclusive
+  boundaries are identical; this changes no reduction or arithmetic and adds only one 16-byte
+  immutable vector, while non-native code keeps the retained scalar count. It shrinks `atanf` by
+  another 32 bytes and remains exact, but the clean short reversal loses both sizes. A longer
+  full-frequency pair improves resident 256 by 0.49% (`37,415.6 -> 37,234.9`) while regressing
+  resident 512 by 1.21% (`36,099.7 -> 36,536.8`). Remove the vector constant/intrinsics and retain
+  the four scalar comparisons, which behave better under the larger resident working set.
+- 2026-08-03 — `diagnostic unavailable`: a short call-stack sample of the retained production
+  binary requires Linux perf events, but this host has `perf_event_paranoid=4`. Do not trigger a
+  special instrumentation rebuild as a substitute; continue from the retained bounded owner
+  profile and direct binary inspection.
+- 2026-08-03 — `rejected`: keep `atanf` as the final owner and preserve its retained exact
+  reduction, polynomial, corrections, and result. The middle-range classifier currently evaluates
+  all four ordered bit thresholds even though the answer is one of five monotonic bins. Test an
+  exact two-level binary decision tree, displacing two integer comparisons per reached
+  middle-range call without changing a threshold, boundary, table, arithmetic operation, state,
+  allocation, non-native path, or compiler setting. Require exact digests and improvement at both
+  resident sizes over the frozen lbvector-inline candidate; otherwise restore the four-count
+  classifier completely. The decision tree grows the leaf from 329 to 342 bytes and preserves the
+  resident-256 digest, but its enclosed screen loses 0.17% to the average of the surrounding
+  controls. The branches cost more than the two displaced integer comparisons. Restore the
+  straight-line four-count classifier without spending a resident-512 screen on a failed required
+  size.
+- 2026-08-03 — `rejected`: keep `lbVector_Sin`/`lbVector_Cos` as the final owners of their
+  source-authored binary32 inputs, double-constant range reductions, and exact polynomial results.
+  A binary32 input exceeds the source double `M_PI` boundary exactly when it exceeds the largest
+  representable float below pi (`0x1.921fb4p+1F`), symmetrically for negative inputs. Replace only
+  the promoted double comparisons with those equivalent float comparisons, retaining the original
+  double add/subtract and float rounding when reduction is taken. This displaces four hot
+  float-to-double conversions and double comparisons per unit-axis rotation without changing any
+  result, branch boundary, canonical vector, state, allocation, PPC/Wasm path, or compiler setting.
+  Require exact digests and gains at both resident sizes over the frozen lbvector-inline candidate.
+  The compiler retains the conversions needed by the conditional double add/subtract, the unit-axis
+  leaf does not shrink, and the resident-256 digest remains exact, but the enclosed screen loses
+  0.52% against the average surrounding controls. Restore the double comparisons and remove the
+  native threshold; this does not eliminate enough work to justify a resident-512 screen.
+- 2026-08-03 — `rejected`: keep scalar `sinf`/`cosf` as the final owners of their source-exact
+  reduction, small-angle classification, polynomial, and publication. Native release currently
+  reaches the small-angle comparison through `fabsf__Ff` and then `__fabsf`, paying two call
+  boundaries and spilling the reduced angle on every scalar trig evaluation even though the final
+  leaf only clears the binary32 sign bit. Use the compiler's exact scalar absolute-value operation
+  directly at these two comparisons on native, retaining the source call on PPC/Wasm. Displace
+  only the wrapper/leaf calls and spills; preserve every bit result including zeros, infinities and
+  NaN payloads, all arithmetic/order, state, allocation, and compiler settings. Require both exact
+  digests and controlled gains at both resident sizes over the frozen lbvector-inline candidate.
+  The same native-local boundary also expands the source-exact `fnmsubs` used by the scalar cosine
+  small-angle result, displacing its remaining tail call while leaving the wide evaluator and every
+  non-native path unchanged. The scalar leaves shrink by 53/43 bytes and both digests remain exact,
+  but two long resident-256 reversals change from -0.19% to +0.13% and the resident-512 reversals
+  are likewise unstable (+3.20% during a frequency ramp, then -0.78% after it settles). The direct
+  instruction reduction does not survive whole-runtime measurement. Restore both source calls and
+  remove the local macros rather than retain a neutral code divergence.
+- 2026-08-03 — `rejected`: isolate the scalar trig owner's source-exact `fnmsubs` boundary after
+  rejecting the combined absolute-value change. The retained 4,096-frame callgrind census records
+  335,296 `__fnmsubs` calls from `msl_sincosf_many` alone, chiefly scalar tails around short exact
+  wide batches, plus the scalar `cosf` small-angle call. Expand only these already-authored fused
+  operations inside `trigf.c`; preserve signed-zero behavior, arguments, output, reduction,
+  polynomials, wide lanes, state, allocation, non-native paths, and compiler settings. This is one
+  dense measured call boundary, not the rejected process-wide expansion. Require exact digests and
+  gains at both resident sizes over the frozen lbvector-inline candidate. The trig leaf shrinks by
+  two bytes and scalar cosine by twenty; the resident-256 digest remains exact, but an enclosed long
+  screen loses 0.71% to the average of its two controls after the preceding simple pairs track a
+  strong frequency drift. The already-wide tail does not benefit from expanding this operation.
+  Restore both shared intrinsic calls and remove the local macro without spending a resident-512
+  screen on a failed required size.
+- 2026-08-03 — `rejected`: keep the three immutable dynamics angle thresholds and their compiled
+  exact boundary values as final owners. The retained cutoff compiler stores each boundary's
+  monotonic ordered-float key, forcing every runtime comparison to reconstruct an ordered key with
+  sign classification. Because each runtime cosine is clamped to finite `[-1, 1]` or remains NaN,
+  store the float at that same boundary and use the equivalent native float comparisons directly;
+  NaN remains false and the duplicate `-0/+0` acos result cannot split a boundary. Displace only
+  key reconstruction and raw-word loads; preserve binary search, all vector/angle arithmetic,
+  strictness, decisions, state bytes, allocation, non-native paths, and compiler settings. Require
+  exact digests and gains at both resident sizes over the frozen lbvector-inline candidate. Passing
+  the boundary as a float shrinks each leaf but moves the extra argument into the SIMD register
+  class, perturbs the 7KB solver call sites, and repeatedly loses about 4% at resident 512 despite a
+  resident-256 long win. Keep the existing integer argument ABI/storage and reinterpret the compiled
+  boundary bits once inside each leaf before judging the comparison deletion itself. That form
+  preserves the ABI and both digests and gives a +0.63% enclosed long resident-256 result, but two
+  enclosed resident-512 screens lose 2.9% and 0.47%. The integer-key branches are evidently cheaper
+  in the larger working set than the numeric comparison layout. Restore the ordered keys, loads,
+  helpers, and initialization exactly.
+- 2026-08-03 — `rejected`: keep `PSMTXRotAxisRad` as the final owner of axis normalization,
+  scalar sine/cosine, and matrix publication. The headless camera calls this general primitive once
+  every frame with the source-authored roll `-0.0F`; a retained callgrind census records 4,096 of
+  4,230 calls from that one consumer. Handle exact positive/negative zero before scalar trig by
+  publishing `sine = radians` and `cosine = 1.0F`, displacing only the redundant general range
+  reduction/polynomials while preserving the input zero sign and all following normalization,
+  matrix arithmetic/stores, state, allocation, nonzero behavior, and compiler settings. Add no
+  camera-specific state or alternate matrix representation. Require exact digests and gains at both
+  resident sizes over the frozen lbvector-inline candidate. The zero result is exact, but the
+  general leaf grows by 37 bytes and two enclosed resident-256 screens lose 1.76% and 3.85%. The
+  removed scalar trig is too cheap relative to the demanded normalization/matrix path, and the
+  branch/layout expansion is harmful. Restore the unconditional source calls and original leaf
+  completely without spending a resident-512 screen on a failed required size.
+- 2026-08-03 — `rejected`: keep the platform PPC `frsqrte` tables as the singular immutable
+  estimate owner and `acosf`/`asinf` as the only consumers of the retained positive-normal binary32
+  seed. The current external 103-byte helper forces `acosf` to spill its radicand/input around about
+  2.8 million calls in the 32,768-frame resident-512 census. Move that exact positive-normal body
+  into the consuming runtime-math translation unit as a private inline evaluator, while the general
+  platform estimator continues to use the same exported immutable tables. Displace the external
+  helper symbol, call/return, and spills only; preserve bit construction, double-to-float rounding,
+  Newton steps, results, exceptional admission, state, allocation, non-native paths, and compiler
+  settings. Require exact digests and gains at both sizes over the frozen lbvector-inline candidate.
+  The external helper disappears and inlined `acosf` grows by only 57 net bytes, but both enclosed
+  resident-256 screens lose about 1.0% with the exact digest. The seed's integer/table dependency
+  chain expands the already-hot angle leaf and does not schedule better than the spill/call boundary.
+  Restore the private platform tables and singular external helper completely without spending a
+  resident-512 screen on a failed required size.
+- 2026-08-03 — `profile`: a temporary counter-only ordinary release run over 32,768 resident-512
+  frames observes 4,620,300 `atanf` evaluations: 2,792,508 reached through `acosf`, 1,810,561
+  through `atan2f`, 14,260 through `asinf`, and only 2,971 elsewhere. This census required one
+  incremental 2.6-second build and one ordinary 2.5-second benchmark; all counters and reporting
+  code were removed immediately. Exact angle evaluation is a material global owner, but its
+  scalar polynomial dependency chain—not generic `sqrtf` classification—is the plausible cost.
+- 2026-08-03 — `rejected`: expose the unchanged exact `atanf` body as a private inline evaluator
+  for `acosf`, its 2.79-million-call consumer, while retaining the public scalar leaf for every
+  other caller. This displaces only the call boundary and spills; reduction, lookup, polynomial,
+  corrections, signs, and results are unchanged. The compiler does inline it, growing `acosf`
+  from 201 to 565 bytes, and both digests remain exact. A longer full-frequency resident-256 pair
+  loses 0.18% (`38,469.2 -> 38,539.6` cycles/frame), while the shorter resident-512 screen is
+  neutral. The duplicated hot body increases instruction footprint without breaking the exact
+  scalar dependency chain. Restore the singular external `atanf` owner completely.
+- 2026-08-03 — `rejected by census`: an exact memo must skip enough full scalar polynomial chains
+  to repay hashing, lookup, and mutable cache footprint. A one-run direct-mapped census over the
+  same 32,768 resident-512 workload finds only 11.1%, 14.2%, 18.3%, and 23.8% `atanf` argument
+  reuse at 256/1,024/4,096/16,384 entries. Separating its dominant owners does not reveal a hidden
+  high-reuse stream: `acosf` input reuse is 8.3%/12.2%/18.4%, and paired `atan2f` input reuse is
+  15.8%/18.4%/20.0% at 256/1,024/4,096 entries. This is far below the prior 95.3%-hit immutable
+  quaternion memo that already regressed, while these caches would be larger mutable global state.
+  Remove all census arrays, counters, hashing, and reporting; do not implement an angle memo.
+- 2026-08-03 — `rejected`: keep `Fighter_Spaghetti_8006AD10` as the final input owner and its
+  existing `Fighter::input` fields as canonical state. Native/Wasm `SET_STICKS` call sites assign
+  the same x field and then y field directly instead of materializing and spilling two pointers to
+  those fields in the source-profiled function. Preserve argument evaluation, assignment order,
+  values, callback order, PPC source shape, state, allocation, and every input classification.
+  Displace only the address temporaries at the eight existing call sites; add no helper, cache,
+  input representation, approximation, or compiler setting. The function shrinks by 238 bytes;
+  a longer pair is +0.43% at resident 256 and effectively neutral (-0.05%) at resident 512, so keep
+  it provisional while completing this owner. Replacing sixteen source increment/clamp sequences
+  with an exact single assignment shrinks another 98 bytes but loses both reversals, including
+  0.74--1.60% at resident 512. Restore every counter sequence and retain no timer macro. The
+  stick-only longer result is +0.43% at resident 256 but -0.05% at resident 512, after short
+  reversals change sign. Restore the source pointer macro as well; code-size reduction alone is not
+  a stable contract gain.
+- 2026-08-03 — `rejected`: keep `HSD_GObj::user_data` as the sole canonical fighter-owner field.
+  Within `fighter.c`'s major input, physics, map, hit, and maintenance phases, consume that field
+  directly instead of calling the source-profiled four-instruction `HSD_GObjGetUserData` leaf at
+  every `GET_FIGHTER`. Preserve the pointer, callback order, all state, external accessor semantics,
+  PPC source shape, allocation, and consumers. Displace only the accessor calls in this translation
+  unit; add no cached pointer, layout change, alternate object representation, or compiler setting.
+  The major phase functions each shrink by four bytes and both digests remain exact, but resident
+  256 loses both reversals (`37,617.0 -> 37,782.7` and `37,598.7 -> 37,690.8` cycles/frame), while
+  resident 512 changes sign. Remove the local override and do not broaden it to the shared header.
+- 2026-08-03 — `rejected`: keep `lb_8001044C` as the final fighter-dynamics owner and its local
+  normalized directions plus the source `DynamicsData` chain as the only canonical state. The
+  solver's exact source-ordered angle products are consumed only by its stiffness, constraint,
+  convergence, deviation, and angular-velocity decisions. Test retaining each immutable normalized
+  direction's length across its two angle uses, displacing three redundant `sqrtf` evaluations per
+  solved link while recomputing every mutable link length at the original use. Preserve vector
+  values, dot/FMA order, length-product operand order, clamps, `acosf`, decisions, public state,
+  allocation, PPC/Wasm source paths, and all consumers. The complete deletion boundary is the six
+  hosted angle calls plus the three local cached scalars; retain no general vector API, persistent
+  cache, approximation, alternate solver, or compatibility path. The generic exact helper loses
+  at both resident sizes (`37,715.7 -> 37,926.5` cycles/frame at resident 256 and
+  `36,195.1 -> 36,307.9` at resident 512). Moving the remaining mutable-vector square root into
+  specialized exact leaf helpers makes the 256 loss larger (`37,546.3 -> 38,129.9`). The solver
+  grows by 209--264 bytes and spills the three cached scalars, while stiffness, convergence,
+  max-angle, and final-air paths do not all execute on every link; the presumed three-square-root
+  saving is therefore neither unconditional nor large enough to repay integration cost. Remove
+  the helpers, declarations, cached scalars, and call-site split completely.
+- 2026-08-03 — `rejected`: keep `lb_8001044C` and its source-local vectors as the final dynamics
+  owner and canonical state. Its twelve reached cross-product/normalization pairs currently cross
+  two external API boundaries and round-trip the same result through memory. Replace each adjacent
+  pair with the existing source-owned `lbVector_CrossprodNormalized`, which performs the identical
+  `PSVECCrossProduct` followed by the identical `lbVector_Normalize` in one leaf. Preserve argument
+  order, float operations, branch order, result storage, downstream rotation, PPC/Wasm behavior,
+  state, and allocation. The deletion boundary is only the twelve redundant normalize calls and
+  their caller-side reload boundary; add no new helper, state, approximation, or solver split.
+  Both digests remain exact and the solver shrinks by 208 bytes, but the combined leaf loses
+  `37,590.6 -> 38,357.7` cycles/frame at resident 256 and `36,027.6 -> 36,625.8` at resident 512.
+  Keeping the result pointer live across the internal cross-product call adds callee save/restore
+  and a larger combined leaf; the existing two tiny leaves schedule better despite the extra call.
+  Restore all twelve source pairs completely.
+- 2026-08-03 — `diagnostic unavailable`: count the actual per-link admissions for the dynamics angle comparisons
+  before considering a comparison-only replacement. Instrument only the opt-in subsystem-profile
+  build; production code and output remain untouched. Distinguish stiffness, max-angle,
+  convergence, and final airborne executions so any redundant-math ceiling is based on paths that
+  execute twice for the same immutable direction rather than static source occurrences. The
+  special profile target invalidated its compile-flag stamp and started rebuilding the full source
+  closure, exceeding the bounded inner-loop budget. Stop that route and remove all counters/report
+  hooks without drawing an ownership inference; do not repeat a full profiler build for this leaf.
+- 2026-08-03 — `rejected`: keep each `DynamicsData` link and its authored `unk_88` max angle as
+  the final owner and canonical state. The max-angle branch currently evaluates an exact `acosf`
+  only to compare its result with that immutable threshold; the angle value is never consumed.
+  During existing dynamics initialization, compile the exact monotonic `acosf` comparison boundary
+  into the otherwise unused hosted `unk_94` word by binary-searching every possible clamped float
+  input. At runtime, preserve the source length, dot/FMA, division, clamp, zero-length, NaN, and
+  comparison semantics while replacing only that `acosf` with an exact cutoff comparison. PPC
+  retains source behavior and layout. The deletion boundary is one comparison-only angle call and
+  one already-present unused word per link; add no approximate math, persistent side table,
+  alternate solver, allocation, or fallback dispatch. The cutoff preserves both benchmark digests,
+  including source zero-length and NaN behavior, but loses `37,560.3 -> 37,802.8` cycles/frame at
+  resident 256 and `35,984.3 -> 36,130.2` at resident 512. The max-angle admission is too sparse
+  for deleting its `acosf` to repay the additional cutoff load and larger solver/control layout.
+  Remove the cutoff compiler, unused-word overlay, helper, and call-site split completely.
+- 2026-08-03 — `experiment`: keep the caller-provided batch mask as the sole admission owner and
+  preserve every masked/unmasked loop, order, API result, and output. The release build currently
+  leaves the tiny `selected` predicate out of line, so the ordinary unmasked benchmark pays two
+  calls per Match in step validation/execution and one each in observation and terminal publication.
+  Mark the existing leaf inline so those loops consume the same null-mask/byte test directly.
+  Displace only call/return overhead; add no alternate batch path, state, allocation, assumption
+  about masks, compiler flag, or changed error checking.
+  Two 32,768-frame reversals preserve both digests and consistently improve throughput: resident
+  256 pairs change `37,913.8 -> 37,887.0` and `38,090.4 -> 37,942.1` cycles/frame; resident 512
+  changes `36,251.2 -> 36,052.6` and `36,442.6 -> 36,162.7`. Retain the one-keyword deletion.
+  A null-mask outer fast path only in step deletes both remaining per-Match mask branches but grows
+  the owner by 131 bytes. Despite exact digests, the resulting complete candidate loses to the
+  frozen control at both sizes (`37,731.5 -> 38,221.2` cycles/frame at resident 256 and
+  `36,094.9 -> 36,221.3` at resident 512), whereas the inline-only form won both reversals. Remove
+  the duplicated loops and retain only the inline predicate.
+- 2026-08-03 — `rejected`: keep `Player_8003248C` and `Fighter::x1A88.xC` as the sole canonical
+  CPU-input ownership state. Hosted fighter maintenance, input, and hurt-publication gates call the
+  tiny O0 source wrapper several times per Fighter frame. Consume the same player-kind lookup and
+  state comparison through one local inline predicate at the three fighter.c call sites, while PPC
+  and other source consumers retain `ftCo_800A2040`. Displace only the wrapper's stack/call shell;
+  preserve the player query, order, decisions, state, and outputs, with no cached result, new state,
+  supported-domain proxy, compiler attribute, or changed CPU behavior. The local function is not
+  inlined by fighter.c's exact source profile; explicit source expansion preserves both digests but
+  is noise-sized/mixed against the selected-inline candidate. Resident 256 changes
+  `37,743.1 -> 37,669.1` then `37,669.0 -> 37,778.7` cycles/frame, while resident 512 improves only
+  `36,059.9 -> 36,029.6` and `36,061.0 -> 36,002.9`. Restore all three source calls rather than
+  duplicate the predicate in O0 owners.
+- 2026-08-03 — `rejected`: keep `msl_core_batch_write_observation` as the final owner of the exact
+  980-byte public wire row; caller memory remains the sole canonical output consumed after return.
+  For the normal unmasked contiguous x86 batch, test building one row in a reused hot stack object
+  and publishing it with aligned non-temporal stores, displacing only cache-allocating output
+  stores that otherwise evict simulation state before the next tick. Masked/strided batches,
+  singular observation, ARM/Wasm/PPC, bytes, ordering, API, allocation, and state remain unchanged.
+  The deletion boundary is this one contiguous batch path. Digests remain exact, but the stack-row
+  copy costs more than the avoided write allocation: `37,548.5 -> 37,980.8` cycles/frame at
+  resident 256 and `36,008.7 -> 36,333.4` at resident 512. Remove the helper and fast path fully.
+- 2026-08-03 — `rejected`: keep the sealed Match bump arena as the sole canonical storage owner and
+  preserve every allocation, offset, relocation, and consumer. Current supported-domain census
+  reaches 973,328 bytes after retained pool/pose compaction, but the native batch still spaces
+  lanes by the obsolete 3 MiB construction ceiling. Test a 1 MiB hard ceiling, deleting only the
+  unused virtual gap between arenas; add no padding, huge-page advice, allocation, split mapping,
+  or state. The boundary is the one native capacity constant. Digests remain exact and the
+  benchmark constructs successfully, but the power-of-two stride regresses both short reversals:
+  `37,551.5 -> 37,836.6` cycles/frame at resident 256 and `35,897.0 -> 36,235.8` at resident 512.
+  The unused virtual range is not demanded memory and its spacing is beneficial. Restore 3 MiB.
+- 2026-08-03 — `rejected`: keep `HSD_MtxSRTConcatTrig` as the final owner and each JObj `mtx` as the
+  sole canonical world transform consumed by ECB and other matrix readers. Test replacing only
+  the x86 FMA kernel's three repeated 128-bit parent-row products with one exact 512-bit product
+  over all 12 output lanes. Local SRT construction, parent-product FMA order, translation-lane
+  operation, output layout, scalar/non-AVX-512 path, state, and allocation remain unchanged. The
+  deletion boundary is the old three-row SIMD loop; retain only with exact digests and controlled
+  improvement at both resident sizes. The first all-row AVX-512 form is exact but loses the short
+  reversal (`37,768.5 -> 37,888.8` cycles/frame at resident 256 and `35,926.6 -> 37,047.7` at
+  resident 512). Sustained ZMM execution and cross-lane permutes overwhelm the row-loop deletion.
+  Remove that form and screen only a two-row AVX2 product plus the proven third-row SSE product,
+  which avoids the wide-vector penalty while sharing half the repeated parent-product setup. That
+  form is exact but neutral/mixed: `37,593.1 -> 37,677.0` cycles/frame at resident 256 and
+  `35,989.7 -> 35,960.7` at resident 512. Permuting repeated parent coefficients costs the same as
+  their cheap row-local broadcasts. Restore the original three-row kernel completely.
+- 2026-08-03 — `rejected`: keep `HSD_JObjSetFlags`/`HSD_JObjClearFlags` as the final owners of JObj
+  flag mutation and keep `HSD_JObj::flags` as the sole canonical state. Their callers and dirty
+  descendants remain the only consumers. On native builds, test displacing only the duplicated
+  inline recursive matrix-dirty body with the existing exact out-of-line
+  `(HSD_JObjSetMtxDirty)` owner; preserve the source-shaped inline path for PPC. The deletion
+  boundary is exactly the two native calls, with no new state, admission, allocation, or fallback.
+  Digests remain exact, but the first 32,768-frame reversed screen is decisively slower:
+  `37,522.0 -> 39,000.0` cycles/frame at resident 256 and `36,120.1 -> 37,334.6` at resident 512.
+  The extra hot call/return costs much more than the duplicated code footprint. Restore both
+  inlined source paths completely.
+- 2026-08-03 — `rejected`: reuse only a true first-pass `Camera_8002928C` result inside the same
+  `Camera_8002958C` call while preserving every false/countdown call. Subject state, bounds, and both
+  digests remain exact, but two short reversals consistently regress: about 0.9% at resident-256
+  (`37,532.8/37,579.4` control versus `37,883.1/37,908.0` candidate) and 0.3% at resident-512
+  (`36,023.2 -> 36,128.8` in the clean reversal). The bounded stack result stream and larger camera
+  owner cost more than the small predicate. Restore both source traversals and all calls.
+- 2026-08-03 — `rejected`: make native `lbCopyJObjSRT` use the existing exact hosted pose-flag
+  transition from the wide blend kernels. Canonical SRT, flags, propagation, and both digests remain
+  exact, but two 32,768-frame reversals lose at both sizes: the second pairs change
+  `37,567.1 -> 37,668.8` cycles/frame at resident-256 and `35,992.9 -> 36,067.8` at resident-512.
+  Expanding the copy leaf from 115 to 155 bytes and adding its hosted dirty admission costs more
+  than the hot generic Get/Set/Clear calls. Restore the source copy and private blend transition.
+- 2026-08-03 — `rejected`: collapse headless item render-matrix publication from three transparency-
+  pass DFS walks to one mask-carrying DFS. Final JObj matrices, dirty/visibility/transparency flags,
+  and both short digests remain exact, with no added state or allocation. The complete 0.67% bucket
+  was the ceiling, but the candidate regresses resident-256 by 0.86% (`37,576.0 -> 37,899.9`
+  cycles/frame) and is neutral/slightly worse at resident-512 (`35,950.6 -> 35,975.4`). The active
+  item trees are small and pass-major traversal/order is already favorable. Restore all three
+  source display passes; retain no combined traversal.
+- 2026-08-03 — `audit`: current callback attribution on the balanced 32,768-frame resident-512
+  profile assigns 1.97% of the complete contract to `ftCo_Guard_Anim` and 1.14% to
+  `ftCo_GuardOn_Anim`; the next targets are Wait at 0.75% and Fall at 0.65%. Remove the callback
+  timer completely. Any action-animation work should stay inside Guard's existing two ordered pose
+  blends and their immediate traversal/publication boundary; broad action dispatch work cannot
+  materially advance the target.
+- 2026-08-03 — `audit`: measure bit-identical overwrite frequency in the dominant compiled-pose
+  masks before proposing any unchanged-value cull. Final state would remain canonical JObj SRT and
+  dirty flags; the only possible deletion is a store of the same bit pattern while the joint is
+  already dirty. Do not add per-sample metadata or invalidation machinery unless the existing
+  joint values themselves prove a large, cheap admission population.
+- 2026-08-03 — `rejected before implementation`: the 32,768-frame resident-512 census finds
+  1,516,280 bit-identical writes among 8,449,532 dominant rotation-only publications (18.0%) and
+  399,554 among 1,500,808 rotation-plus-translation publications (26.6%); all are already dirty.
+  The two exact `memcmp` admissions alone raise measured pose cost by about 11.7M cycles. Hot
+  same-value stores are cheaper than testing every publication, while precomputed change metadata
+  would require invalidation proof for external pose writers. Remove all census code and do not
+  build that table/branch.
+- 2026-08-03 — `rejected`: reuse the existing private guard interpolation skeleton only when its two
+  canonical directional inputs (`guard.x4` blend magnitude and `guard.x8` frame) remain bit-equal
+  across `ftCo_80091BC4` and no ordinary motion-transition blend is active. Final owner is still
+  `ftCo_80091E78`; canonical mutable state remains those guard fields plus the one source
+  `x8AC_animSkeleton`. Consumers still copy/blend that skeleton into the main pose every callback.
+  Displace only reattachment, static reset, same-frame animation, and authored blend that would
+  reconstruct the already-live private skeleton. A nonzero `x8A4_animBlendFrames` always takes the
+  source path because the preceding main animation phase can mutate the skeleton. Add no cache,
+  marker, table, allocation, alternate pose, or action dispatch. A 32,768-frame resident-512
+  census found only 269 eligible reuses among 11,320 private-pose rebuilds (2.38%). Controlled
+  resident-256 measurements regressed by 2.39% and 1.14%; the broad admission cost cannot be
+  repaid by this population. The implementation and census are removed.
+- 2026-08-03 — `rejected before implementation`: specialize the dominant air/ground collision
+  drivers for their one-pass case. The measured 1.015 average loop count does not represent
+  interpolation or setup that can be bypassed: the first body is the demanded collision query,
+  while the repeat machinery is only the final dirty/squeeze flag comparison. A fast path would
+  duplicate the large driver to remove two comparisons, so make no source change.
+- 2026-08-03 — `rejected`: compute `Camera_8002958C`'s stable stage clipping bounds once per subject-
+  bounds traversal. Final state remains the source `CameraTransformState`; the subject list and
+  stage state remain the only inputs, and the existing camera pipeline remains the only consumer.
+  Displace only repeated `Ground_801C4368` and stage-bound accessor calls made by each of five
+  point classifications per subject and again during boundary clamping. Preserve point order,
+  comparison/clamp order, and float operations exactly; add no cache, Match state, approximation,
+  alternate camera, or changed offline-copy scheduling. Both short digests remain exact and the
+  hot function shrinks from 1,618 to 1,439 bytes, but short screens lose about 0.6% at both sizes;
+  a longer resident-512 pair is neutral/slightly worse at 35,416.5 versus 35,402.1 cycles/frame.
+  The stable accessors are already cheap and predictable, so remove the specialization completely.
+- 2026-08-03 — `rejected`: finish each AVX-512 fused ordinary world-matrix row with one masked vector
+  add of the parent translation instead of shuffling the translation lane to scalar, adding, and
+  inserting it twice. Final owner remains `mtx_srt_concat_trig`; canonical JObj matrices, exact
+  FMA order, inputs, outputs, and all consumers are unchanged. The mask leaves the three rotation
+  lanes bit-identical and updates only lane three. Non-AVX-512 native, Wasm, and PPC retain the
+  existing implementation. Both short digests remain exact and the function shrinks by 72 bytes,
+  but resident-512 controlled reversals change sign (+0.33%, then -0.08%) and the short screen
+  loses. Mask-register setup and merge traffic absorb the smaller instruction stream; remove it.
+- 2026-08-03 — `rejected`: cache `mpLib_8004ED5C`'s exact extended collision-line endpoints for the
+  current collision epoch. Profiling attributed 525,304 calls and 21.40M cycles (1.39% of the
+  diagnostic contract), establishing the entire possible ceiling. Storing the product inside
+  `CollLine` preserved exact output but enlarged every line from 16 to 40 bytes and regressed both
+  resident sizes by about 1.5--1.8%. A separate indexed cache also preserved exact output but
+  regressed short screens by 1.68% at resident-256 and 0.47% at resident-512. Cache lookup and state
+  traffic cost more than the source arithmetic, including for the repeated population. Remove both
+  cache forms and all profiling; retain canonical vertices/topology and on-demand construction.
 
 # Previous structural packet — `decomp-port-arm64-ppc` merge polish
 
@@ -1366,3 +4683,415 @@ slice, and follower-frame validation.
   msl_nana_trace_file (gm_8016AEDC-based, prints F<frame>) in match.c, rand/randf
   trace in sysdolphin/baselib/random.c. Mainline bot captures are per-frame-seeded
   like online games (verified: base+frame<<16 stride in our stream).
+
+## Active structural packet — canonical ordinary Figa program clock
+
+- **Final owner and canonical state:** for a native registered fighter subtree whose attached
+  nodes all consume the same direct compiled Figa program, the first attached pose node owns the
+  one frame, rate, rewind, end, and animation-flag state. The remaining admitted nodes retain only
+  their existing program-node identity, filtered-publication bit, and canonical JObj SRT output;
+  their dormant per-node clock words are not updated in parallel.
+- **Consumers:** the existing fighter-parts animation traversal publishes one frame-major program
+  row into the same JObjs, then runs the same dependency and RObj owners. Tree request/rate/flag
+  queries consume the singular clock directly. An individual-node request, non-direct decoder,
+  excluded part, or different animation owner first materializes the shared clock back into the
+  existing per-node state and then continues through the singular source path.
+- **Displaced work and deletion boundary:** delete repeated clock advance, loop/end admission,
+  table lookup, active/ended accounting, and clock-state stores from every later node in the
+  ordinary main-pose span. Encode the clock owner in the otherwise-unused `track_start` word only
+  while every admitted node has zero mutable decoder tracks; add no sidecar, copied pose, setter
+  hook, callback tape, action/character list, allocation, compiler control, or approximate math.
+  The group is one canonical owner, not a fast-path cache: dissolution is an ownership transfer,
+  and no grouped node retains independently changing clock state.
+- **Bounded scope and acceptance:** native direct compiled Figa subtrees only; descriptor,
+  fractional/non-table, individually requested, filtered-out, PPC, and Wasm owners remain source
+  shaped. Keep the implementation only if both production digests, focused animation
+  request/rate/loop transitions, copy/save/restore/allocation gates, and controlled resident-256
+  and resident-512 timing improve. The campaign checkpoint still requires at least +5% over
+  committed `02cfe013` at both sizes; do not justify the representation with future geometry work.
+
+**Closed — rejected 2026-08-04.** The exact full implementation regressed controlled resident-256
+throughput by 3.9--4.2% and resident-512 by 0.5--0.6%. The implementation was removed in full. The
+complete ownership, correctness, binary-provenance, and ABBA evidence is retained in
+`agent_docs/performance/attempts/2026-08-04-shared-figa-program-clock.md`.
+
+## Active structural packet — resident step/output fusion
+
+- **Final owner and canonical state:** the runtime batch loop owns iteration across independent
+  Matches; each `MslCoreMatch` and the caller-owned observation/terminal rows remain the only
+  mutable state. No field or output representation changes.
+- **Consumers:** the existing public `msl_batch_step[_masked]` operation and the production replay
+  benchmark consume the fused runtime operation. Standalone step, observe, and terminal APIs remain
+  source-compatible and keep their existing semantics.
+- **Displaced work and deletion boundary:** replace the production operation's three complete
+  resident-batch sweeps (step all, observe all, terminal all) with one validation pass and one
+  per-Match `step -> observation -> terminal` loop. Delete repeated selection, initialization,
+  viewpoint, row-address, and cold Match revisit work from that operation. Do not interleave
+  scheduler phases across Matches, copy state, add a cache/sidecar, allocate, or change output
+  ordering within a Match.
+- **Bounded scope and acceptance:** core batch runtime, public API call site, and production
+  benchmark call site only. Preserve masked-step behavior (only selected Matches step, every Match
+  is observed), exact digests, allocation/save-restore behavior, and standalone API gates. Retain
+  only if controlled resident-256 and resident-512 throughput improves.
+
+**Closed — rejected 2026-08-04.** Exact same-source comparisons regressed resident-256 throughput
+by 0.5--1.8% and resident-512 by 3.0%. The implementation was removed in full; retained evidence
+and revisit criteria are in
+`agent_docs/performance/attempts/2026-08-04-resident-step-output-fusion.md`.
+
+## Current aggregate checkpoint screen — 2026-08-04
+
+- Frozen committed control: `02cfe013`; candidate is the clean retained dirty aggregate after
+  removing both rejected structural packets. Strict native release, CPU 0, balanced 366-case
+  manifest, 262,144 measured match-frames, eight warmup ticks.
+- Resident 256 control/candidate pairs are `41,259.8/38,405.2`,
+  `40,870.5/40,160.5`, and `39,474.1/38,353.1` cycles/frame. Paired throughput gains are 7.43%,
+  1.77%, and 2.92%; median is **+2.92%**, digest `bdff41cf74a54850`.
+- Resident 512 control/candidate pairs are `39,595.9/37,030.3`,
+  `38,904.2/38,543.6`, and `39,066.9/36,518.7` cycles/frame. Paired throughput gains are 6.93%,
+  0.94%, and 6.98%; median is **+6.93%**, digest `ee9d93c545aa3ef9`.
+- Decision: no checkpoint commit. Resident 256 is below the required +5%, despite a real aggregate
+  win and a qualifying resident-512 median.
+- Fresh target attribution again places 17.23% in pose animation, 12.16% in stage collision, and
+  7.07% in action-animation callbacks. The latter is dominated by the already-documented guard
+  pipeline (`ftCo_Guard_Anim` 2.01%, `ftCo_GuardOn_Anim` 1.11%); exact guard fusion and
+  frame-completion query rewrites are closed negative results, so do not retry them as the next
+  packet.
+- A fresh 32,768-frame resident-512 profile tested the only previously unreviewed generic owner,
+  fighter command-script execution. It owns 9.92M cycles, only 0.60% of the 1.647B-cycle
+  instrumented contract. The same profile places pose animation at 15.81%, stage collision at
+  12.59%, action-animation callbacks at 7.12%, dynamics at 5.92%, and input/action callbacks at
+  4.55%. Command-script compilation cannot materially advance the target even at a zero-cost
+  ceiling; do not build it. The remaining large scalar owners have all had their narrow deletion
+  boundaries exhausted in the retained history. Further work must replace a cross-owner canonical
+  state/execution boundary, not continue callback, wrapper, or arithmetic-leaf accumulation.
+
+## Rejected geometry packet — unchanged direct-pose publication
+
+- **Final owner and canonical state:** each registered fighter JObj remains the sole owner of its
+  SRT, dirty flag, and world matrix. The compact pose program remains the sole immutable sample
+  owner. A pose node may omit a source dirty publication only when every authored component in the
+  direct row is bit-identical to the current canonical SRT and construction has proved that no
+  retained external matrix owner can make that JObj matrix disagree with its SRT.
+- **Consumers:** the existing stage ECB, hurt/hit/contact, dynamics, camera, attachment, and action
+  consumers continue reading the same JObj fields and matrices. No product cache or consumer API is
+  introduced.
+- **Displaced code/state:** direct Figa publication currently stores the same values and marks the
+  matrix dirty even for repeated rows, forcing later matrix/trig reconstruction. A prior census
+  measured 1,247,936 bit-identical rows among five million direct publications (25.0%). The earlier
+  unconditional omission changed output because retained dynamics and other direct-matrix owners
+  can leave a clean matrix that is not the authored SRT product; it did not test a complete
+  construction-owned exclusion.
+- **Deletion boundary:** mark every retained dynamics-chain JObj as externally matrix-authored in
+  existing pose-node descriptor bits during construction. Only ordinary direct program rows on
+  unmarked nodes may compare-and-omit their complete publication; marked, decoder, filtered,
+  quaternion/path/RObj, blend, root-placement, and non-native owners retain source behavior. Add no
+  mutable cache, synchronized state, allocation, character/action list, approximation, fallback, or
+  compiler control. If the first exact screens still expose another matrix writer, attribute and
+  include that finite source owner before performance disposition rather than weakening the proof.
+- **Acceptance:** both production digests and the full supported-domain gate must remain exact. The
+  complete candidate must delete downstream matrix setups in a fresh counter/profile and improve
+  controlled resident-256 and resident-512 throughput; otherwise remove it and record the closed
+  matrix-writer boundary in the indexed history.
+- **Result:** remove completely. Marking dynamics-authored JObjs at construction made the omission
+  exact at both short resident sizes, but the hot comparisons cost more than the downstream matrix
+  work they avoided. Two resident-256 directions were noisy (`40,928.8 -> 40,954.8` and
+  `42,272.7 -> 41,572.1` cycles/frame), centering about 0.8% faster. Both resident-512 directions
+  were decisively slower (`42,408.5 -> 46,391.5` and `40,839.3 -> 46,131.5`), a 10.0% throughput
+  regression at the symmetric center. Exact digests were `4124834367a202ec` and
+  `588be8489df1a62d`. Repeated-row detection is therefore closed: changing demanded geometry must
+  remove the scalar publication/consumer boundary, not put comparison work in front of it. Full
+  evidence and revisit criteria are in
+  `agent_docs/performance/attempts/2026-08-04-unchanged-direct-pose-publication.md`.
+
+## Active batch packet — configuration-local resident order
+
+- **Final owner:** `MslCoreBatch` assigns public lanes to stable physical Match slots before first
+  full construction. Public lane indices, input/output rows, masks, and reset/copy/save/restore
+  indices remain unchanged through two inverse index arrays; gameplay always traverses physical
+  Match storage sequentially.
+- **Canonical state and consumers:** each `MslCoreMatch` remains the sole mutable gameplay owner.
+  The order contains indices only and is consumed by the existing Match-major production step.
+  Ordering is rebuilt after a reset, copy, or restore can change a lane's configuration.
+- **Displaced work:** the current manifest-order loop alternates unrelated character code, motion
+  banks, and stage topology across arenas. A construction/configuration-local order groups the
+  immutable owners reused by the complete frame without splitting the source scheduler or
+  republishing hosted context inside a Match.
+- **Deletion boundary:** no gameplay state, callback, phase, arithmetic, allocation after batch
+  creation, worker, scheduler seam, compatibility path, or approximation. Match arenas never move
+  after construction. The final form is two allocated inverse index arrays and a one-time stable
+  assignment by supported character tuple and stage when the first reset initializes the complete
+  batch; a batch first initialized partially keeps identity assignment.
+- **Acceptance:** preserve both production digests plus mask, arbitrary-index copy/save/restore,
+  and allocation behavior. Compare against a byte-frozen immediate dirty aggregate at resident 256
+  and 512. If static configuration locality is insufficient, reassess current action/callback
+  locality inside this same index owner before rejecting the packet; do not turn it into phase
+  interleaving or a generic scheduler framework.
+- **Rejected first form:** sorting only the hot execution index preserves both short digests but
+  jumps among the existing 3 MiB physical arena strides. Resident 256 was only 0.64% faster in the
+  first direction. At resident 512 the two candidate runs cost `53,278.3` and `53,872.1`
+  cycles/frame against adjacent controls `44,815.4` and `47,267.3`, about 10--14% slower. This
+  disproves logical-only reordering, not configuration locality: the completed representation must
+  assign configurations to physical slots before Match construction and retain sequential arena
+  traversal. The logical-only loop and rebuild hooks are removed rather than layered underneath it.
+- **Global physical screen:** the complete two-map physical form passes native mapping/lifecycle
+  smoke and exact production digests. Against committed `02cfe013`, three resident-256 pairs are
+  +6.08%, +4.08%, and +7.39% (median +6.08%). Five resident-512 pairs are +2.45%, +4.39%, -5.89%,
+  +4.04%, and +1.94% (median +2.45%) under measured host contention. A direct 262,144-frame
+  immediate-control pair at 512 is only +0.44%. Global grouping therefore does not yet repay the
+  public input/output row permutation at the larger resident size.
+- **Final integration refinement:** confine physical assignment to 128-lane groups. The roughly
+  128 KiB observation write window and its public index pages remain local while each group still
+  contains enough repeated character/stage owners to improve source-code and immutable-data reuse.
+  This is a fixed cache-derived layout, not a runtime knob. Compare it to both the global form and
+  the immediate aggregate; retain only the best exact form at both sizes.
+- **Result:** reject and remove the physical assignment. The final adaptive form used one global
+  group through resident 256 and 128-lane groups above it. It preserved both production digests
+  and all batch-index/API smoke, and one resident-512 immediate pair improved 7.1%. Isolation at
+  resident 256 did not survive reversal: the symmetric 131,072-frame center regressed about 1.9%
+  against the frozen immediate aggregate. The apparent +3.04% median against committed
+  `02cfe013` therefore mixed this packet with earlier dirty wins and is not attribution. The two
+  inverse maps, construction sort, and every API translation are removed; only the pre-existing
+  aggregate remains. Full evidence and revisit criteria are indexed in
+  `agent_docs/performance/attempts/2026-08-04-configuration-local-resident-order.md`.
+
+## Stale duplicate record — dense canonical JObj matrices
+
+- **Final owner and canonical state:** each native non-Wasm `HSD_JObj` retains one canonical matrix
+  through an owned `MtxPtr`; the existing Match-local HSD matrix pool owns the 48-byte storage.
+  PPC and Wasm retain the retail inline matrix. JObj SRT, dirty flags, topology, animation state,
+  and all matrix values and lifetimes remain singular and unchanged.
+- **Consumers:** every existing pose, dependency, ECB, dynamics, hit/hurt/contact, attachment,
+  stage, item, camera, and viewer consumer continues using `jobj->mtx`. C array-to-pointer decay
+  already gives these consumers the same expression type, so no lookup API, admission branch, or
+  compatibility wrapper is introduced.
+- **Displaced state/work:** remove the 48-byte inline matrix from the native 184-byte mixed JObj
+  record and replace it with one eight-byte pointer, shrinking the hot SRT/topology object to 144
+  bytes. Matrices allocated in JObj construction occupy one dense 48-byte pool stream instead of
+  being interleaved at a 184-byte stride with graph, animation, and material pointers.
+- **Deletion boundary:** the old inline storage is absent; there is no copied matrix, cache,
+  fallback dispatch, phase seam, gameplay-time allocation, approximation, compiler control, or
+  changed operation order. Construction allocates the matrix before publication and JObj release
+  returns it to the same fixed pool. Generated relocation includes the one matrix pointer, and the
+  sealed runtime reserve must cover all later JObj construction.
+- **Why this differs from closed layout work:** the rejected 176/192-byte JObj packets merely
+  reordered or aligned the same interleaved bytes. This cut changes the canonical storage boundary
+  and densifies both independently consumed streams while reducing the JObj stride.
+- **Acceptance:** require exact production digests, native API/copy/save/restore/allocation gates,
+  and controlled improvement at both resident sizes against the frozen immediate aggregate. A
+  fresh cache profile must show where matrix/JObj misses moved. Reject the complete representation
+  if its extra pointer load and pool metadata outweigh the denser streams; do not follow it with
+  field-padding tuning.
+- **Disposition:** this duplicate proposal was superseded by the completed 9--10% negative result
+  recorded earlier in this file. Its code has now been removed after the tiled-packet salvage
+  error was identified; the canonical matrix is inline again.
+
+## Active representation packet — compact resident Match arena stride
+
+- **Final owner and canonical state:** `MslCoreBatch` retains one fixed sealed arena per Match and
+  every source object, pointer, relocation token, byte, and lifetime remains unchanged. The batch
+  arena mapping owns only the distance between otherwise independent Match graphs.
+- **Consumers:** every Match-major animation, collision, input, dynamics, contact, camera, and
+  output owner traverses the same graph at the smaller resident stride. Reset, copy, save/restore,
+  arbitrary-index APIs, and Wasm use the same fixed-capacity contract.
+- **Displaced state and deletion boundary:** reduce the stale 3 MiB native lane reserve to 1.25 MiB
+  after exhaustive current construction measured a 1,017,744-byte maximum, leaving about 29%
+  headroom. Delete only unreachable virtual lane slack; add no compactor, pointer rewrite, dynamic
+  capacity, fallback allocation, gameplay allocation, scheduler change, or platform hint.
+- **Acceptance:** exact digests, maximum-construction/runtime-census, native allocation and
+  copy/save/restore gates, then controlled immediate A/B at resident 256 and 512 against frozen
+  dense-JObj candidate `cecbc384...`. Retain only if the smaller cross-Match address stride
+  improves both resident sizes; otherwise restore 3 MiB and record the result.
+
+**Closed — rejected 2026-08-04.** Exact 65,536-frame ABBA screens center roughly 2% faster at
+resident 256 but roughly 2% slower at resident 512. The one-line capacity change is removed; full
+evidence and revisit criteria are in
+`agent_docs/performance/attempts/2026-08-04-compact-resident-arena-stride.md`.
+
+## Closed representation packet — canonical fighter JObj SRT
+
+- **Final owner and canonical state:** each registered native fighter-pose node owns its one
+  40-byte `MslJObjSRT`; its HSD_JObj points to that record. Non-fighter native JObjs own the same
+  shape in one Match-local fixed pool. PPC and Wasm retain the inline retail fields. The existing
+  dense matrix pool remains the one derived world-matrix owner.
+- **Consumers:** compact Figa evaluation, dependencies, blends, dynamics, ECB, hit/hurt/contact,
+  attachments, camera, and viewer all consume the singular SRT through the JObj. The hot compact
+  pose loop writes SRT beside its clock/program metadata instead of scattering stores into a
+  separate class-object stream.
+- **Displaced state and deletion boundary:** delete the native inline JObj rotation, scale, and
+  translation fields. Construction registration transfers their value into the pose node and
+  returns the temporary generic record to its fixed pool. Add no shadow SRT, cache, dirty compare,
+  fallback dispatch, scheduler seam, gameplay allocation, approximation, or operation reordering.
+- **Bounded scope and potential:** one 40-byte record, the existing pose-node allocation, one
+  generic fixed pool, and direct JObj SRT access conversion. Raw per-node state stays effectively
+  flat while the 18% pose owner and its collision/dynamics/contact consumers stop traversing two
+  independently allocated mutable streams. Require exact digests and full native lifecycle,
+  allocation, copy/save/restore validation before controlled immediate 256/512 A/B.
+- **Result:** reject and remove both complete ownership forms. Pose-node ownership enlarged the
+  mandatory pose record from 56 to 96 bytes and improved the short symmetric centers only about
+  0.7% at resident 256 and 0.6% at resident 512. Fixed-pool ownership restored the 56-byte pose
+  record, but its 65,536-frame bracket regressed the resident-256 center about 3.2% while improving
+  resident 512 only about 0.5%. Both forms preserved exact digests. The final source-timed profile
+  still assigns 18.01% to pose animation, 12.02% to stage collision, and 30.86% to the inclusive
+  scheduled fighter owner: SRT relocation did not delete demanded work. The pointer, pool,
+  registration transfer, and all access conversions are removed. Detailed evidence is indexed in
+  `agent_docs/performance/attempts/2026-08-04-canonical-jobj-srt.md`.
+
+## Current aggregate recheck — 2026-08-04 evening
+
+- Frozen committed control remains `02cfe013`; the candidate is the retained dirty aggregate with
+  dense canonical JObj matrices and without the rejected SRT, arena-stride, resident-order,
+  repeated-publication, shared-clock, or fused-output experiments. Three 262,144-frame alternating
+  pairs preserved digests `bdff41cf74a54850` / `ee9d93c545aa3ef9`.
+- Resident 256 paired throughput changes were +3.73%, +3.57%, and +5.91% (median **+3.73%**).
+  Resident 512 changes were -5.19%, +1.68%, and +0.82% (median **+0.82%**). The first 512 pair is
+  an outlier, but the remaining evidence still plainly fails the +5% checkpoint requirement.
+- The host was materially contended during this screen (Path of Exile on CPU 31 and Dolphin on CPU
+  28, plus browser load); cycles ratios remain the disposition metric and no absolute-FPS claim is
+  drawn. There is no checkpoint commit. Stop accumulating arithmetic leaves: the retained profile
+  still demands a representation with a multi-thousand-cycle ceiling.
+
+## Active representation packet — lossless compact pose samples
+
+- **Final owner and canonical state:** each immutable direct Figa program remains the sole owner of
+  the exact sampled float bits. A node whose complete authored row is bit-identical at every sample
+  owns one constant row; every other admitted node owns the same frame-major sampled rows as today.
+  Mutable JObj SRT, animation clocks, decoder fallback state, and dirty-matrix semantics are
+  unchanged and singular.
+- **Consumers:** the existing compact pose interpreter selects the node's one exact row and feeds
+  the unchanged mask-specialized JObj publication. Stage collision, dynamics, contact, hit/hurt,
+  camera, attachment, PPC, and Wasm consumers remain untouched.
+- **Displaced work/state and deletion boundary:** delete repeated copies of motion-wide constant
+  rows from the immutable frame table. The construction census contains 19,855,156 floats
+  (75.7 MiB); 46,537 direct nodes are constant for their complete motion, so node-level compaction
+  removes 16.6 MiB while adding only one retained row per such node. The old duplicated rows are
+  absent after construction. Add no dictionary lookup, quantization, approximate math, mutable
+  cache, sidecar pose, gameplay allocation, compatibility bridge, or compiler control.
+- **Bounded progression and acceptance:** implement and measure node-level compaction first. If it
+  proves the table is bandwidth/cache-sensitive, extend the same singular representation to the
+  39,317 mixed nodes whose constant components can remove another roughly 12 MiB. If the first
+  form is neutral or slower, record that the 75.7 MiB table is not the limiting owner and remove
+  the representation rather than tuning encodings. Require exact production digests, native
+  smoke/allocation/save-restore, controlled immediate 256/512 A/B, then comparison with committed
+  `02cfe013`; the campaign checkpoint remains +5% at both resident sizes.
+- **First-form result:** the initial constant/dynamic branch was approximately -0.6% at resident
+  256 and +1.0% at 512 and was replaced, not tuned. The corrected representation gives every node
+  one absolute value offset and one sample stride (zero for a constant row), so publication uses a
+  branchless address calculation and no longer loads the program row base/stride. It preserves the
+  established 65,536-frame digests. Against the frozen immediate aggregate, the 256 C/A and A/C
+  arms were `39,726.0/39,514.5` and `39,725.4/39,486.0` cycles/frame (neutral symmetric center);
+  the 512 arms were `42,025.3/39,862.3` and `39,741.0/39,964.4` (about +3.0% at the symmetric
+  center under heavy host contention). Keep this form provisional for the immediate contiguous
+  program-span publisher: it reduces the immutable table and removes program lookup from precisely
+  that consumer, but it is not independently a campaign checkpoint or justification for more
+  memory-only encoding work.
+
+## Active representation packet — tiled canonical fighter transforms
+
+- **Measured reason for the cut:** the current resident-512 profile assigns 30.86% of the complete
+  contract to `Fighter_8006A360`, including 18.01% to pose animation, and another 13.04% to
+  `Fighter_procMap`. The historical exact batch-pose attempt paid about 6% for its scheduler seam
+  and then lost additional time gathering and scattering SRT into independently allocated Match
+  JObj graphs. Its completed result requires genuinely tiled mutable SRT before another batch
+  evaluator is justified. Scalar pose clocks, sample encodings, JObj field ordering, and isolated
+  ECB kernels have already failed to remove this producer/consumer cost.
+- **Final owner and canonical state:** `MslCoreBatch` owns fixed eight-lane tiles of hosted fighter
+  transform records. Each record contains the one exact mutable SRT and derived world matrix for a
+  fighter gameplay JObj. The fighter-pose preorder supplies the stable node coordinate; each JObj
+  retains topology, flags, animation attachment, and one pointer to its canonical record. No
+  inline or Match-local fighter SRT/matrix remains synchronized with it. Native nonfighter JObjs
+  retain the generic scalar owner; PPC and Wasm retain the retail inline representation.
+- **Consumers:** main-pose publication, dependencies and blends, root placement, ECB, hit/hurt and
+  shield geometry, attachments, dynamics, camera, viewer output, JObj mutation APIs, Match copy,
+  and save/restore all read or mutate the same record. The batch scheduler groups the existing
+  priority-one main-pose cut within each eight-Match tile and demanded fighter geometry is evaluated
+  from the same tile before its existing source-ordered consumers resume.
+- **Displaced work and deletion boundary:** delete scattered native fighter SRT/matrix allocation,
+  the historical batch publisher's cross-arena gathers/scatters, and repeated scalar setup for
+  tile-ready demanded fighter matrices. Do not introduce a pose cache, copied geometry packet,
+  source/candidate flag, lazy production bridge, gameplay allocation, changed f32 ordering, or a
+  generic operation scheduler. Exceptional source-authored JObj methods still operate on the same
+  canonical record through the scalar exact method; they do not hand ownership to another state.
+- **Lifecycle boundary:** batch creation reserves the fixed record capacity. Reset binds fighter
+  construction to its lane; arbitrary-index copy and save/restore serialize the strided records as
+  part of that Match's canonical graph. Partial resets may rewrite one lane but never allocate or
+  repack gameplay state. The existing public lane order remains unchanged.
+- **Bounded implementation order:** first move hosted fighter SRT to the tiled record and restore
+  every lifecycle/correctness invariant; then land the exact tiled main-pose publisher; then move
+  its demanded matrices and the immediate ECB/hit/hurt consumers into the same record owner. These
+  are stages of one representation cut, not separately retainable setup. If the initial scalar
+  conversion is slower, continue through the batch producer and demanded-consumer deletion before
+  judging the packet.
+- **Acceptance:** exact resident digests, zero gameplay allocation, arbitrary-index reset/copy/
+  save/restore, full supported-domain validation, and controlled alternating comparisons against
+  both frozen `02cfe013` and the frozen immediate dirty aggregate at resident 256 and 512. Retain
+  only a complete ownership/deletion boundary; a qualifying commit still requires at least +5%
+  throughput at both sizes, while the campaign remains open until both exceed 150k FPS.
+
+### Completion correction — 2026-08-04
+
+- The history already rejects generic tile-resident scheduling and a pose-only batch seam. Those
+  are not new hypotheses and cannot justify this packet. The temporary single-context-pointer
+  consolidation likewise repeats a closed context-layout direction and must not survive the final
+  deletion boundary unless a complete transformed owner independently proves it necessary.
+- The remaining materially different hypothesis is the canonical tile itself: exact publication
+  shapes cover more than 97% of direct rows, while the current implementation still executes one
+  scalar publisher per lane. The first retained-capable kernel is therefore the dominant `0x00E`
+  rotation row (63.3% of dense publications) over eight lanes, with singular tiled JObj state and
+  no scalar product cache. Clock/dependency/dirty semantics stay lane-owned and exact.
+- This is only evidence for continuing the wider matrix/map boundary if it removes enough pose
+  work to repay the already measured scheduler seam. A neutral scalar-equivalent result closes
+  the tile representation; it does not justify another SRT layout or scheduler variation.
+### 2026-08-04 tiled scheduler/direct-pose diagnostic
+
+- The exact whole-batch phase sweep cost about 49.2k cycles/frame on the
+  4,096-frame resident-256 screen. Restricting the same scheduler seam to
+  eight-Match physical tiles reduced that to 45.3k without changing digest
+  `1177a913e8074ce6`, proving the whole-batch working set was one real loss.
+- Next diagnostic only: force admitted pose lanes through the scalar owner
+  while retaining the tiled scheduler. This is an internal ownership
+  ablation, not a parent control or retainable result; it separates scheduler
+  seam cost from the new direct pose traversal before either is redesigned.
+- Admission was high (`25,705 / 27,776`, 92.5%), so fallback was not the
+  regression. Eight-lane scalar pose measured about 46.1k cycles/frame and
+  direct pose about 45.3k on short screens; the direct owner recovered only
+  about 0.8k inside a much larger scheduler-seam loss.
+- Replacing dozens of TLS publications with one prepared context pointer did
+  not change the eight-lane total (~49.2k before and after the isolated
+  change). The dominant cost is therefore not TLS stores. It is scheduler
+  splitting and loss of Match residency; the extra pointer layer is not
+  justified as a standalone optimization.
+- Completing all scheduler priorities within a bounded tile reduced the
+  exact short screen from ~49.2k to ~45.3k at width eight. Width two screened
+  around 44-45k and width one around 41-43k, all with exact digest
+  `1177a913e8074ce6`. Short-run variance is too high to rank the last two, but
+  the monotonic working-set result is sufficient: cross-Match pose batching
+  does not recover its scheduler seam at this owner size. No result here is a
+  performance candidate or checkpoint.
+
+### 2026-08-04 tiled SIMD disposition
+
+- The dominant `0x00E` publisher was completed as a real eight-lane AVX2
+  gather/AVX-512 scatter kernel over the singular tiled JObj state. It preserves
+  the exact 4,096-frame resident-256 digest `1177a913e8074ce6`, the 32,768-frame
+  resident-256 digest `4124834367a202ec`, and the 32,768-frame resident-512
+  digest `588be8489df1a62d`.
+- At resident 256, reversed scalar/vector comparisons were effectively neutral:
+  the clean symmetric centers were 46,177.7 scalar versus 46,204.8 vector
+  cycles/frame (vector 0.06% slower). A separate bracket, excluding one obvious
+  contended vector outlier, was likewise neutral.
+- At resident 512, reversed pairs were 44,957.7/44,620.2 and
+  43,911.5/43,146.2 scalar/vector cycles/frame. Their symmetric centers are
+  44,434.6 scalar and 43,883.2 vector, so the kernel recovers about 1.25% inside
+  the tiled candidate.
+- That local recovery does not repay the architecture: the complete vector
+  candidate remains about 43.9k cycles/frame at resident 512 versus 35,267.5
+  for committed `02cfe013`, and its resident-256 screens remain around 45-47k
+  versus 36,908.0. The completed kernel therefore disproves the remaining
+  materially distinct tiled-publisher hypothesis. Do not spend more time on
+  tile widths, scalar scheduler variants, TLS/context consolidation, or
+  gather/scatter pose publication.
+- No part of the tiled scheduler/context/external-JObj ownership packet is a
+  retained performance result. Preserve the earlier dense canonical matrix and
+  lossless compact-sample work while inventorying this packet for removal; do
+  not blanket-delete it without the required salvage inventory and approval.

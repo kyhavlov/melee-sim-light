@@ -29,6 +29,8 @@
 
 #ifdef MSL_CORE_NATIVE
 #include "runtime/fighter_pose.h"
+#include "runtime/context.h"
+#include "runtime/source_state.h"
 // GALE01 part admission for the supported headless domain. The table closes
 // source-owned hit/hurt/contact descriptors, ECB/IK and dynamics chains,
 // capture/throw and article attachments, character-special anchors, and every
@@ -627,8 +629,7 @@ static HSD_JObj* ftParts_HeadlessLoadCompact(Fighter* fp, HSD_Joint* joint,
             // Source FigaTree streams enumerate every costume-skeleton node.
             // Preserve that part-table membership for their source-index scan.
             // Attachment receives the cold sentinel for omitted presentation
-            // nodes and lbAnim consumes those tracks without source work;
-            // flags_b0 remains the source-owned dynamics/visibility bit.
+            // nodes and lbAnim consumes those tracks without source work.
             // refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006FCE4,
             //   ftAnim_8006FA58}
             fp->parts[part].flags_b1 = true;
@@ -680,9 +681,12 @@ static HSD_JObj* ftParts_HeadlessLoadCompact(Fighter* fp, HSD_Joint* joint,
 HSD_JObj* ftParts_HeadlessLoadMain(Fighter* fp, HSD_Joint* joint)
 {
     HSD_JObj* root = ftParts_HeadlessLoadCompact(fp, joint, false);
+#ifdef MSL_CORE_WASM
     int part_count = ftPartsTable[fp->kind]->parts_num;
     int part;
+#endif
     msl_fighter_pose_register_tree(root);
+#ifdef MSL_CORE_WASM
     for (part = 0; part < part_count; ++part) {
         HSD_JObj* jobj = fp->parts[part].joint;
         if (fp->parts[part].flags_b1 &&
@@ -691,6 +695,7 @@ HSD_JObj* ftParts_HeadlessLoadMain(Fighter* fp, HSD_Joint* joint)
             msl_fighter_pose_bind_part(jobj, (uint8_t) part);
         }
     }
+#endif
     // Init-only marker consumed by ftParts_SetupParts below. DObj state is
     // renderer-owned and the compact tree deliberately has no DObj list.
     fp->dobj_list.count = UINT32_MAX;
@@ -1051,6 +1056,13 @@ int ftPartsRemap(size_t to_table_idx, size_t from_table_idx, size_t joint_idx)
 
 u32 ftParts_8007506C(enum FighterKind ftkind, int part)
 {
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+    if ((u32) ftkind < FTKIND_MAX && (u32) part <= UINT8_MAX) {
+        return msl_core_context_source_game_data->fighter
+            .part_flags[ftkind][part];
+    }
+    return 0;
+#else
     struct Fighter_804D6540_x0_t* var_r3;
     int i;
     struct Fighter_804D6540_t* temp_r3;
@@ -1065,6 +1077,7 @@ u32 ftParts_8007506C(enum FighterKind ftkind, int part)
         }
     }
     return 0;
+#endif
 }
 
 void ftParts_800750C8(Fighter* fp, enum_t arg1, bool arg2)

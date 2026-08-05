@@ -7,6 +7,7 @@
 
 #include "ft/ft_0877.h"
 #include "ft/ftcoll.h"
+#include "ft/fighter.h"
 #include "ft/inlines.h"
 #include "ft/types.h"
 #include "gr/ground.h"
@@ -52,7 +53,9 @@ void ftCo_8009CB40(Fighter* fp, ssize_t bone_idx, bool arg2, FigaTree* arg3)
         }
         while (data != NULL) {
             if (var_r29 < (s32) arg3) {
-                if (inverse_flag != 0 && !(fp->parts[bone_id].flags_b0)) {
+                if (inverse_flag != 0 &&
+                    !msl_fighter_part_flag_b0(fp, bone_id))
+                {
                     data->desc.lb_unk0.unk_2C.x =
                         data->desc.lb_unk0.jobj->mtx[0][3];
                     data->desc.lb_unk0.unk_2C.y =
@@ -69,9 +72,9 @@ void ftCo_8009CB40(Fighter* fp, ssize_t bone_idx, bool arg2, FigaTree* arg3)
                     temp_jobj = data->desc.lb_unk0.jobj;
                     HSD_JObjSetScale(temp_jobj, &data->desc.lb_unk0.scale);
                 }
-                fp->parts[bone_id].flags_b0 = inverse_flag;
+                msl_fighter_set_part_flag_b0(fp, bone_id, inverse_flag);
             } else {
-                if (flag != 0 && !(fp->parts[bone_id].flags_b0)) {
+                if (flag != 0 && !msl_fighter_part_flag_b0(fp, bone_id)) {
                     data->desc.lb_unk0.unk_2C.x =
                         data->desc.lb_unk0.jobj->mtx[0][3];
                     data->desc.lb_unk0.unk_2C.y =
@@ -85,9 +88,9 @@ void ftCo_8009CB40(Fighter* fp, ssize_t bone_idx, bool arg2, FigaTree* arg3)
                     temp_jobj = data->desc.lb_unk0.jobj;
                     HSD_JObjSetScale(temp_jobj, &data->desc.lb_unk0.scale);
                 }
-                fp->parts[bone_id].flags_b0 = flag;
+                msl_fighter_set_part_flag_b0(fp, bone_id, flag);
             }
-            if (fp->parts[bone_id].flags_b0) {
+            if (msl_fighter_part_flag_b0(fp, bone_id)) {
                 HSD_JObjClearFlags(var_r30, 0x20000U);
             }
             var_r30 = HSD_JObjGetChild(var_r30);
@@ -451,7 +454,7 @@ void ftCo_8009D81C(Fighter* fp)
         for (i = 0; i < fp->dynamics_num; i++) {
             s32 bone_id =
                 hat->hat_dynamics[3]->ftDynamicBones->array[i].bone_id;
-            fp->parts[bone_id].flags_b0 = true;
+            msl_fighter_set_part_flag_b0(fp, bone_id, true);
             lb_8000FD48(
                 fp->parts[bone_id].joint, &fp->dynamic_bone_sets[i].dyn_desc,
                 hat->hat_dynamics[3]->ftDynamicBones->array[i].dyn_desc.count);
@@ -610,7 +613,7 @@ void ftCo_8009DB50(Fighter* fp)
         for (i = 0; i < fp->dynamics_num; i++) {
             s32 bone_id =
                 hat->hat_dynamics[4]->ftDynamicBones->array[i].bone_id;
-            fp->parts[bone_id].flags_b0 = true;
+            msl_fighter_set_part_flag_b0(fp, bone_id, true);
             lb_8000FD48(
                 fp->parts[bone_id].joint, &fp->dynamic_bone_sets[i].dyn_desc,
                 hat->hat_dynamics[4]->ftDynamicBones->array[i].dyn_desc.count);
@@ -759,12 +762,12 @@ enum_t ftCo_8009E318(Fighter_GObj* gobj, enum Fighter_Part arg1, f32 arg2)
              cur = cur->next, j++)
         {
             if (cur->desc.lb_unk0.jobj == part_jobj) {
-                if (fp->parts[arg1].flags_b0) {
-                    fp->parts[arg1].flags_b0 = false;
+                if (msl_fighter_part_flag_b0(fp, arg1)) {
+                    msl_fighter_set_part_flag_b0(fp, arg1, false);
                     fp->dynamic_bone_sets[i].bone_id = j + 1;
                     goto exit_true;
                 } else {
-                    fp->parts[arg1].flags_b0 = true;
+                    msl_fighter_set_part_flag_b0(fp, arg1, true);
                     fp->dynamic_bone_sets[i].bone_id = j;
                     goto exit_false;
                 }

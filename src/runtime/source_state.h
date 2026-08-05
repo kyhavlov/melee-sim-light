@@ -41,6 +41,9 @@ typedef struct MslSourceGameData {
         UnkCostumeStruct falco_costumes[4];
         HSD_Joint* puff_hat_joints[6];
         void* common_data[23];
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+        uint32_t part_flags[FTKIND_MAX][UINT8_MAX + 1];
+#endif
         /* refs/melee/src/melee/ft/ftdata.c:ftData_Table_Unk0 */
         ftData_UnkCountStruct animation_data[FTKIND_MAX];
     } fighter;

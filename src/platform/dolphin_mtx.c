@@ -268,6 +268,34 @@ void PSMTXTranspose(Mtx src, Mtx dst)
 
 void PSMTXConcat(Mtx a, Mtx b, Mtx out)
 {
+#if defined(__AVX512F__)
+    static const int indices0[16] = {
+        0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8, 0, 0, 0, 0,
+    };
+    static const int indices1[16] = {
+        1, 1, 1, 1, 5, 5, 5, 5, 9, 9, 9, 9, 1, 1, 1, 1,
+    };
+    static const int indices2[16] = {
+        2, 2, 2, 2, 6, 6, 6, 6, 10, 10, 10, 10, 2, 2, 2, 2,
+    };
+    __m512 rows = _mm512_castps128_ps512(_mm_loadu_ps(a[0]));
+    __m512 result;
+
+    rows = _mm512_insertf32x4(rows, _mm_loadu_ps(a[1]), 1);
+    rows = _mm512_insertf32x4(rows, _mm_loadu_ps(a[2]), 2);
+    result = _mm512_mul_ps(
+        _mm512_permutexvar_ps(_mm512_loadu_si512(indices0), rows),
+        _mm512_broadcast_f32x4(_mm_loadu_ps(b[0])));
+    result = _mm512_fmadd_ps(
+        _mm512_permutexvar_ps(_mm512_loadu_si512(indices1), rows),
+        _mm512_broadcast_f32x4(_mm_loadu_ps(b[1])), result);
+    result = _mm512_fmadd_ps(
+        _mm512_permutexvar_ps(_mm512_loadu_si512(indices2), rows),
+        _mm512_broadcast_f32x4(_mm_loadu_ps(b[2])), result);
+    result = _mm512_mask3_fmadd_ps(_mm512_set1_ps(1.0F), rows, result,
+                                   (__mmask16) 0x0888);
+    _mm512_mask_storeu_ps(&out[0][0], (__mmask16) 0x0FFF, result);
+#else
     Mtx temporary;
     float (*result)[4] = out == a || out == b ? temporary : out;
     int row;
@@ -292,6 +320,7 @@ void PSMTXConcat(Mtx a, Mtx b, Mtx out)
     if (result == temporary) {
         memcpy(out, temporary, sizeof(Mtx));
     }
+#endif
 }
 
 static inline __attribute__((always_inline)) void

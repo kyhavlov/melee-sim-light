@@ -12,6 +12,10 @@
 #include <baselib/cobj.h>
 #include <baselib/debug.h>
 
+#ifdef MSL_CORE_NATIVE
+#define __fmsubs(a, b, c) __builtin_fmaf((a), (b), -(c))
+#endif
+
 static float lbVector_Len(Vec3* vec)
 {
     return sqrtf(vec->x * vec->x + vec->y * vec->y + vec->z * vec->z);

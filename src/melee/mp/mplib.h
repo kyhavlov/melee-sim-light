@@ -34,9 +34,11 @@
                                          u32* flags_out, Vec3* normal_out);
 /* 04E684 */ int mpLib_8004E684_RightWall(int line_id, Vec3*, float* x_out,
                                           u32* flags_out, Vec3* normal_out);
+#if !defined(MSL_CORE_NATIVE) || defined(MSL_CORE_WASM)
 /* 04EBF8 */ bool mpLineIntersectionH(float* int_x, float* int_y, float a0x,
                                       float a0y, float a1x, float b0x,
                                       float b0y, float b1x, float b1y);
+#endif
 /* 04ED5C */ void mpLib_8004ED5C(int, float*, float*, float*, float*);
 /* 04F008 */ bool mpCheckFloor(float ax, float ay, float bx, float by,
                                float y_offset, Vec3* vec_out, int* line_id_out,
@@ -185,7 +187,7 @@
 /* 058560 */ void mpLib_80058560(void);
 /* 058614 */ void mpLib_80058614_Floor(void);
 #ifdef MSL_CORE_NATIVE
-bool mpLib_WallBroadphase(float left, float bottom, float right, float top,
+bool mpLib_LineBroadphase(float left, float bottom, float right, float top,
                           u32 kind, int joint_id_skip, int joint_id_only);
 #endif
 /* 0587FC */ void mpLib_800587FC(HSD_GObj*);

@@ -1621,6 +1621,33 @@ bool mpColl_80044AD8_Ceiling(CollData* coll, int left_right)
     prev_top.y = coll->prev_pos.y + coll->prev_ecb.top.y;
     top.x = coll->cur_pos.x + coll->ecb.top.x;
     top.y = coll->cur_pos.y + coll->ecb.top.y;
+#ifdef MSL_CORE_NATIVE
+    if (left_right == 0) {
+        const float tolerance = 2.0F;
+        float left = prev_top.x;
+        float bottom = prev_top.y;
+        float right = top.x;
+        float bound_top = top.y;
+
+        if (right < left) {
+            float swap = left;
+            left = right;
+            right = swap;
+        }
+        if (bound_top < bottom) {
+            float swap = bottom;
+            bottom = bound_top;
+            bound_top = swap;
+        }
+        if (!mpLib_LineBroadphase(
+                left - tolerance, bottom - tolerance, right + tolerance,
+                bound_top + tolerance, CollLine_Ceiling, coll->joint_id_skip,
+                coll->joint_id_only))
+        {
+            return false;
+        }
+    }
+#endif
     if (coll->x38 != mpColl_804D64AC) {
         hit_ceiling = mpCheckCeilingRemap(
             prev_top.x, prev_top.y, top.x, top.y, &coll->contact,
@@ -1755,7 +1782,7 @@ static bool mpColl_WallBroadphase(CollData* coll, u32 kind)
     right += tolerance;
     top += tolerance;
 
-    return mpLib_WallBroadphase(left, bottom, right, top, kind,
+    return mpLib_LineBroadphase(left, bottom, right, top, kind,
                                 coll->joint_id_skip, coll->joint_id_only);
 }
 #endif

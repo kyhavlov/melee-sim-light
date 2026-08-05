@@ -12,11 +12,66 @@
 #include <dolphin/mtx.h>
 #include <baselib/objalloc.h>
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+#include "runtime/fighter_pose.h"
+#endif
+
 enum {
     FIGHTER_PARTS_ALLOC_COUNT = 0x8C0 / 0x10,
     FIGHTER_DOBJ_ALLOC_COUNT = 0x1F0 / 4,
     FIGHTER_X2040_ALLOC_COUNT = 0x80 / 4,
 };
+
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+#define msl_fighter_part_anim_flags(fp, part)                                \
+    (((fp)->parts[(part)].joint->flags & JOBJ_MSL_GAMEPLAY_COLD)             \
+         ? 0                                                                 \
+         : ((MslFighterPoseJoint*) (fp)->parts[(part)].joint->aobj)          \
+               ->part_anim_flags)
+#define msl_fighter_part_flag_b0(fp, part)                                   \
+    ((msl_fighter_part_anim_flags((fp), (part)) &                            \
+      MSL_FIGHTER_POSE_PART_FLAG_B0) != 0)
+#define msl_fighter_part_flag_b5(fp, part)                                   \
+    ((msl_fighter_part_anim_flags((fp), (part)) &                            \
+      MSL_FIGHTER_POSE_PART_FLAG_B5) != 0)
+#define msl_fighter_set_part_flag_b0(fp, part, value)                        \
+    do {                                                                      \
+        bool msl_part_value = (value);                                        \
+        if (!((fp)->parts[(part)].joint->flags & JOBJ_MSL_GAMEPLAY_COLD)) {   \
+            HSD_JObj* msl_part_joint = (fp)->parts[(part)].joint;             \
+            MslFighterPoseJoint* msl_part_pose =                              \
+                (MslFighterPoseJoint*) msl_part_joint->aobj;                  \
+            msl_part_pose->part_anim_flags =                                  \
+                (msl_part_pose->part_anim_flags &                             \
+                 ~MSL_FIGHTER_POSE_PART_FLAG_B0) |                            \
+                (msl_part_value ? MSL_FIGHTER_POSE_PART_FLAG_B0 : 0);         \
+        }                                                                     \
+    } while (0)
+#define msl_fighter_set_part_flag_b5(fp, part, value)                        \
+    do {                                                                      \
+        bool msl_part_value = (value);                                        \
+        if (!((fp)->parts[(part)].joint->flags & JOBJ_MSL_GAMEPLAY_COLD)) {   \
+            HSD_JObj* msl_part_joint = (fp)->parts[(part)].joint;             \
+            MslFighterPoseJoint* msl_part_pose =                              \
+                (MslFighterPoseJoint*) msl_part_joint->aobj;                  \
+            msl_part_pose->part_anim_flags =                                  \
+                (msl_part_pose->part_anim_flags &                             \
+                 ~MSL_FIGHTER_POSE_PART_FLAG_B5) |                            \
+                (msl_part_value ? MSL_FIGHTER_POSE_PART_FLAG_B5 : 0);         \
+        }                                                                     \
+    } while (0)
+#else
+#define msl_fighter_part_flag_b0(fp, part) ((fp)->parts[(part)].flags_b0)
+#define msl_fighter_part_flag_b5(fp, part) ((fp)->parts[(part)].flags_b5)
+#define msl_fighter_set_part_flag_b0(fp, part, value)                        \
+    ((fp)->parts[(part)].flags_b0 = (value))
+#define msl_fighter_set_part_flag_b5(fp, part, value)                        \
+    ((fp)->parts[(part)].flags_b5 = (value))
+#endif
+
+#define msl_fighter_part_can_animate(fp, part)                               \
+    (!msl_fighter_part_flag_b0((fp), (part)) &&                              \
+     !msl_fighter_part_flag_b5((fp), (part)))
 
 struct Fighter_804D64FC_t {
     u8** cmdscripts; ///< +00 per-character command script arrays

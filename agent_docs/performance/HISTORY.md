@@ -821,6 +821,17 @@ The complete exact candidate is preserved in named stash
 `rejected-fixed-hosted-fighter-scheduler-20260719`; no unrolled code-size or leaf-dispatch variant
 was pursued.
 
+A 2026-08-04 bounded revisit removed the original candidate's concrete overheads: it dispatched
+priority once instead of once per fighter, kept the winning generic hot loop in place, resumed its
+saved later-p-link process in the ordinary case, and rescanned only when an existing insert/remove
+owner marked the proc list mutated. It also admitted the direct path only for an all-fighter,
+proc-free p-link-8 list, preserving the generic scheduler API. Both digests and native smoke stayed
+exact. CPU-8 timings were invalidated by large frequency/contender drift; on the canonical CPU-0
+V-Cache contract, adjacent resident-256 frozen-control/candidate costs were
+`35,979.4/36,091.5` and `35,979.4/36,028.5` cycles/frame, a 0.14--0.31% regression. The entire
+revisit was removed. This closes fixed fighter scheduling after both the source-shaped and
+mutation-aware implementations; another dispatch rearrangement is not a justified revisit.
+
 ### Rejected unsupported casual fighter-status deletion
 
 The hosted priority-0/1 Fighter owners removed every per-frame maintenance block for unsupported

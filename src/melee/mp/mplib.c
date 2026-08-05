@@ -83,10 +83,6 @@ struct mpLib_803BF248_t {
 /* 458868 */ mpCollisionBox mpLib_80458868[2];
 #endif
 
-/* 04E97C */ static bool mpLineIntersection(float a0x, float a0y, float a1x,
-                                            float a1y, float b0x, float b0y,
-                                            float b1x, float b1y, float* int_x,
-                                            float* int_y);
 #ifdef MSL_CORE_NATIVE
 #define MSL_MP_LIB (msl_core_source_match_state()->mp_lib)
 #define didCheckBounding MSL_MP_LIB.did_check_bounding
@@ -1496,34 +1492,13 @@ int mpLib_8004E684_RightWall(int line_id, Vec3* vec, float* x_out,
 }
 
 /// direction dependent line intersection
-bool mpLineIntersection(float a0x, float a0y, float a1x, float a1y, float b0x,
-                        float b0y, float b1x, float b1y, float* int_x,
-                        float* int_y)
+bool msl_mp_line_intersection_narrow(float a0x, float a0y, float a1x,
+                                     float a1y, float b0x, float b0y,
+                                     float b1x, float b1y, float* int_x,
+                                     float* int_y)
 {
     bool b1_below_a = false;
     bool b2_above_a = false;
-
-    // b entirely left/right of a
-    if (a0x <= a1x) {
-        if ((b0x < a0x && b1x < a0x) || (a1x < b0x && a1x < b1x)) {
-            return false;
-        }
-    } else {
-        if ((b0x < a1x && b1x < a1x) || (a0x < b0x && a0x < b1x)) {
-            return false;
-        }
-    }
-
-    // b entirely above/below a
-    if (a0y <= a1y) {
-        if ((b0y < a0y && b1y < a0y) || (a1y < b0y && a1y < b1y)) {
-            return false;
-        }
-    } else {
-        if ((b0y < a1y && b1y < a1y) || (a0y < b0y && a0y < b1y)) {
-            return false;
-        }
-    }
 
     {
         double ah = a1y - a0y;
@@ -1642,17 +1617,57 @@ bool mpLineIntersection(float a0x, float a0y, float a1x, float a1y, float b0x,
     }
 }
 
+static inline bool mpLineIntersection(float a0x, float a0y, float a1x,
+                                      float a1y, float b0x, float b0y,
+                                      float b1x, float b1y, float* int_x,
+                                      float* int_y)
+{
+    // b entirely left/right of a
+    if (a0x <= a1x) {
+        if ((b0x < a0x && b1x < a0x) || (a1x < b0x && a1x < b1x)) {
+            return false;
+        }
+    } else if ((b0x < a1x && b1x < a1x) ||
+               (a0x < b0x && a0x < b1x))
+    {
+        return false;
+    }
+
+    // b entirely above/below a
+    if (a0y <= a1y) {
+        if ((b0y < a0y && b1y < a0y) || (a1y < b0y && a1y < b1y)) {
+            return false;
+        }
+    } else if ((b0y < a1y && b1y < a1y) ||
+               (a0y < b0y && a0y < b1y))
+    {
+        return false;
+    }
+
+    return msl_mp_line_intersection_narrow(a0x, a0y, a1x, a1y, b0x, b0y,
+                                           b1x, b1y, int_x, int_y);
+}
+
 /// line intersection between a and b, where a is a horizontal line
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+static bool msl_mp_line_intersection_h_narrow(
+    float* int_x, float* int_y, float min_ax, float a0y, float max_ax,
+    float b0x, float b0y, float b1x, float b1y)
+#else
 bool mpLineIntersectionH(float* int_x, float* int_y, float a0x, float a0y,
                          float a1x, float b0x, float b0y, float b1x, float b1y)
+#endif
 {
+#if !defined(MSL_CORE_NATIVE) || defined(MSL_CORE_WASM)
     float max_ax;
     float min_ax;
+#endif
     double dbx;
     double dby;
     double new_x;
     double dx;
 
+#if !defined(MSL_CORE_NATIVE) || defined(MSL_CORE_WASM)
     if (a0x < a1x) {
         if ((b0x < a0x && b1x < a0x) || (a1x < b0x && a1x < b1x)) {
             return false;
@@ -1672,6 +1687,7 @@ bool mpLineIntersectionH(float* int_x, float* int_y, float a0x, float a0y,
         min_ax = a1x;
         max_ax = a0x;
     }
+#endif
     dby = b1y - b0y;
     dbx = b1x - b0x;
     if (ABS(dby) < 0.0001) {
@@ -1700,6 +1716,38 @@ bool mpLineIntersectionH(float* int_x, float* int_y, float a0x, float a0y,
     *int_y = a0y;
     return true;
 }
+
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+static inline bool mpLineIntersectionH(float* int_x, float* int_y, float a0x,
+                                       float a0y, float a1x, float b0x,
+                                       float b0y, float b1x, float b1y)
+{
+    float min_ax;
+    float max_ax;
+
+    if (a0x < a1x) {
+        if ((b0x < a0x && b1x < a0x) || (a1x < b0x && a1x < b1x)) {
+            return false;
+        }
+        if (b0y - a0y < -0.0001 || b1y - a0y > 0.0001) {
+            return false;
+        }
+        min_ax = a0x;
+        max_ax = a1x;
+    } else {
+        if ((b0x < a1x && b1x < a1x) || (a0x < b0x && a0x < b1x)) {
+            return false;
+        }
+        if (b1y - a0y < -0.0001 || b0y - a0y > 0.0001) {
+            return false;
+        }
+        min_ax = a1x;
+        max_ax = a0x;
+    }
+    return msl_mp_line_intersection_h_narrow(
+        int_x, int_y, min_ax, a0y, max_ax, b0x, b0y, b1x, b1y);
+}
+#endif
 
 void mpLib_8004ED5C(int line_id, float* x0_out, float* y0_out, float* x1_out,
                     float* y1_out)
@@ -6068,7 +6116,7 @@ bool mpCheckedBounding(void)
 // against the same line ranges. Reject only when the complete current/previous
 // ECB bounds cannot overlap any eligible static wall. Remapped joints retain
 // the exact source path because their query is transformed into current space.
-static bool mpLib_WallRangeIntersects(CollJoint* joint, int start, int count,
+static bool mpLib_LineRangeIntersects(CollJoint* joint, int start, int count,
                                       float left, float bottom, float right,
                                       float top, u32 kind)
 {
@@ -6107,7 +6155,7 @@ static bool mpLib_WallRangeIntersects(CollJoint* joint, int start, int count,
     return false;
 }
 
-bool mpLib_WallBroadphase(float left, float bottom, float right, float top,
+bool mpLib_LineBroadphase(float left, float bottom, float right, float top,
                           u32 kind, int joint_id_skip, int joint_id_only)
 {
     CollJoint* joints = groundCollJoint;
@@ -6126,16 +6174,19 @@ bool mpLib_WallBroadphase(float left, float bottom, float right, float top,
         }
 
         map_joint = joint->inner;
-        if (kind == CollLine_LeftWall) {
+        if (kind == CollLine_Ceiling) {
+            start = map_joint->ceiling_start;
+            count = map_joint->ceiling_count;
+        } else if (kind == CollLine_LeftWall) {
             start = map_joint->left_wall_start;
             count = map_joint->left_wall_count;
         } else {
             start = map_joint->right_wall_start;
             count = map_joint->right_wall_count;
         }
-        if (mpLib_WallRangeIntersects(joint, start, count, left, bottom,
+        if (mpLib_LineRangeIntersects(joint, start, count, left, bottom,
                                       right, top, kind) ||
-            mpLib_WallRangeIntersects(joint, map_joint->dynamic_start,
+            mpLib_LineRangeIntersects(joint, map_joint->dynamic_start,
                                       map_joint->dynamic_count, left, bottom,
                                       right, top, kind))
         {

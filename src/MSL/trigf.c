@@ -160,15 +160,12 @@ void msl_sincosf_many(const f32* xyz, f32* sin_out, f32* cos_out, int count)
         __m512 ysq;
         __m512 sin_poly;
         __m512 cos_poly;
-        __m512 base;
-        __m512 next;
+        __m512 sign;
         __m512 normal_sin;
         __m512 normal_cos;
         __m512 small_sin;
         __m512 small_cos;
-        __mmask16 negative_quadrant;
         __mmask16 odd;
-        __mmask16 even;
         __mmask16 small;
 
         y = _mm512_fmadd_ps(x, _mm512_set1_ps(__four_over_pi_m1[0]), y);
@@ -176,22 +173,20 @@ void msl_sincosf_many(const f32* xyz, f32* sin_out, f32* cos_out, int count)
         y = _mm512_fmadd_ps(x, _mm512_set1_ps(__four_over_pi_m1[2]), y);
         y = _mm512_fmadd_ps(x, _mm512_set1_ps(__four_over_pi_m1[3]), y);
         odd = _mm512_test_epi32_mask(n, _mm512_set1_epi32(1));
-        even = (__mmask16) ~odd;
-        negative_quadrant =
-            _mm512_test_epi32_mask(n, _mm512_set1_epi32(2));
-        base = _mm512_maskz_mov_ps(odd, _mm512_set1_ps(1.0F));
-        base = _mm512_mask_sub_ps(base, odd & negative_quadrant,
-                                  _mm512_setzero_ps(), base);
-        next = _mm512_maskz_mov_ps(even, _mm512_set1_ps(1.0F));
-        next = _mm512_mask_sub_ps(next, even & negative_quadrant,
-                                  _mm512_setzero_ps(), next);
+        sign = _mm512_castsi512_ps(_mm512_slli_epi32(
+            _mm512_and_epi32(n, _mm512_set1_epi32(2)), 30));
         small = _mm512_cmp_ps_mask(
             _mm512_abs_ps(y), _mm512_set1_ps(__epsilon), _CMP_LT_OQ);
         if (small == (__mmask16) 0xFFFF) {
             small_sin = _mm512_fmadd_ps(
-                _mm512_mul_ps(next, y),
-                _mm512_set1_ps(__sincos_poly[9]), base);
-            small_cos = _mm512_fnmadd_ps(y, base, next);
+                y, _mm512_set1_ps(__sincos_poly[9]),
+                _mm512_setzero_ps());
+            small_sin = _mm512_mask_mov_ps(
+                small_sin, odd, _mm512_set1_ps(1.0F));
+            small_cos = _mm512_mask_sub_ps(
+                _mm512_set1_ps(1.0F), odd, _mm512_setzero_ps(), y);
+            small_sin = _mm512_xor_ps(small_sin, sign);
+            small_cos = _mm512_xor_ps(small_cos, sign);
             _mm512_mask_storeu_ps(&sin_out[i], lanes, small_sin);
             _mm512_mask_storeu_ps(&cos_out[i], lanes, small_cos);
             continue;
@@ -217,26 +212,23 @@ void msl_sincosf_many(const f32* xyz, f32* sin_out, f32* cos_out, int count)
         sin_poly = _mm512_fmadd_ps(sin_poly, ysq,
                                    _mm512_set1_ps(__sincos_poly[9]));
 
-        normal_sin = _mm512_mask_blend_ps(
-            even, _mm512_mul_ps(cos_poly, base),
-            _mm512_mul_ps(_mm512_mul_ps(sin_poly, y), next));
-        normal_cos = _mm512_mask_blend_ps(
-            even,
-            _mm512_mul_ps(_mm512_mul_ps(_mm512_sub_ps(
-                                            _mm512_setzero_ps(), sin_poly),
-                                        y),
-                          base),
-            _mm512_mul_ps(cos_poly, next));
+        normal_sin = _mm512_mul_ps(sin_poly, y);
+        normal_cos = _mm512_mask_sub_ps(
+            cos_poly, odd, _mm512_setzero_ps(), normal_sin);
+        normal_sin = _mm512_mask_mov_ps(normal_sin, odd, cos_poly);
         small_sin = _mm512_fmadd_ps(
-            _mm512_mul_ps(next, y),
-            _mm512_set1_ps(__sincos_poly[9]), base);
-        small_cos = _mm512_fnmadd_ps(y, base, next);
-        _mm512_mask_storeu_ps(
-            &sin_out[i], lanes,
-            _mm512_mask_blend_ps(small, normal_sin, small_sin));
-        _mm512_mask_storeu_ps(
-            &cos_out[i], lanes,
-            _mm512_mask_blend_ps(small, normal_cos, small_cos));
+            y, _mm512_set1_ps(__sincos_poly[9]),
+            _mm512_setzero_ps());
+        small_sin = _mm512_mask_mov_ps(
+            small_sin, odd, _mm512_set1_ps(1.0F));
+        small_cos = _mm512_mask_sub_ps(
+            _mm512_set1_ps(1.0F), odd, _mm512_setzero_ps(), y);
+        normal_sin = _mm512_mask_mov_ps(normal_sin, small, small_sin);
+        normal_cos = _mm512_mask_mov_ps(normal_cos, small, small_cos);
+        normal_sin = _mm512_xor_ps(normal_sin, sign);
+        normal_cos = _mm512_xor_ps(normal_cos, sign);
+        _mm512_mask_storeu_ps(&sin_out[i], lanes, normal_sin);
+        _mm512_mask_storeu_ps(&cos_out[i], lanes, normal_cos);
     }
 #endif
 
@@ -328,7 +320,75 @@ f32 cos__Ff(f32 x)
 
 #pragma dont_inline reset
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+static inline void msl_tanf_sincos(f32 x, f32* sin_out, f32* cos_out)
+{
+    int n;
+    f32 y;
+    f32 ysq;
+    f32 sin_z;
+    f32 cos_z;
+
+    sin_z = (2.0f / (f32) M_PI) * x;
+    n = (__HI(x) & 0x80000000) ? (int) (sin_z - 0.5f)
+                               : (int) (sin_z + 0.5f);
+    y = __fmadds(
+        __four_over_pi_m1[3], x,
+        __fmadds(__four_over_pi_m1[2], x,
+                 __fmadds(__four_over_pi_m1[1], x,
+                          __fmadds(__four_over_pi_m1[0], x, x - n * 2))));
+    n &= 3;
+
+    if (fabsf__Ff(y) < __epsilon) {
+        n <<= 1;
+        *sin_out = __fmadds(__sincos_poly[9],
+                            __sincos_on_quadrant[n + 1] * y,
+                            __sincos_on_quadrant[n]);
+        *cos_out = __fnmsubs(y, __sincos_on_quadrant[n],
+                             __sincos_on_quadrant[n + 1]);
+        return;
+    }
+
+    ysq = y * y;
+    cos_z = __fmadds(
+        ysq,
+        __fmadds(ysq,
+                 __fmadds(ysq,
+                          __fmadds(__sincos_poly[0], ysq,
+                                   __sincos_poly[2]),
+                          __sincos_poly[4]),
+                 __sincos_poly[6]),
+        __sincos_poly[8]);
+    sin_z = __fmadds(
+        ysq,
+        __fmadds(ysq,
+                 __fmadds(ysq,
+                          __fmadds(__sincos_poly[1], ysq,
+                                   __sincos_poly[3]),
+                          __sincos_poly[5]),
+                 __sincos_poly[7]),
+        __sincos_poly[9]);
+    if (n & 1) {
+        n <<= 1;
+        *sin_out = cos_z * __sincos_on_quadrant[n];
+        *cos_out = (-sin_z * y) * __sincos_on_quadrant[n];
+    } else {
+        n <<= 1;
+        *sin_out = (sin_z * y) * __sincos_on_quadrant[n + 1];
+        *cos_out = cos_z * __sincos_on_quadrant[n + 1];
+    }
+}
+#endif
+
 f32 tanf(f32 x)
 {
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+    f32 sin_x;
+    f32 cos_x;
+
+    msl_tanf_sincos(x, &sin_x, &cos_x);
+    return sin_x / cos_x;
+#else
     return sin__Ff(x) / cos__Ff(x);
+#endif
 }

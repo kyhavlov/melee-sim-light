@@ -45,8 +45,18 @@
 #include <melee/mp/mplib.h>
 #include <melee/sc/types.h>
 #include <MSL/trigf.h> // IWYU pragma: keep
+#if defined(__x86_64__) && defined(__FMA__)
+#include <immintrin.h>
+#endif
 #ifdef MSL_CORE_NATIVE
 #include <platform/memory.h>
+
+bool msl_dynamics_angle_greater(Vec3* a, Vec3* b, float threshold,
+                                u32 cutoff);
+bool msl_dynamics_angle_less(Vec3* a, Vec3* b, float threshold,
+                             u32 cutoff);
+bool msl_dynamics_angle_greater_value(Vec3* a, Vec3* b, float threshold,
+                                      u32 cutoff, float* angle);
 #endif
 
 typedef bool (*lb_803BA248_fn)(ColorOverlay*);
@@ -468,19 +478,76 @@ static void msl_dynamics_build_basis(Mtx parent, const Vec3* translate,
     }
 }
 
-static void msl_dynamics_transform_direction(Mtx basis, const Vec3* source,
-                                             const Vec3* origin,
-                                             Vec3* direction)
+static void msl_dynamics_build_direction(Mtx parent, const Vec3* rotate,
+                                         const Vec3* scale,
+                                         const Vec3* origin,
+                                         const Vec3* local,
+                                         Vec3* direction)
 {
-    int row;
+    Mtx rotation;
 
-    for (row = 0; row != 3; ++row) {
-        float xy0 = basis[row][0] * source->x;
-        float xy1 = basis[row][1] * source->y;
-        float zx = fmaf(basis[row][2], source->z, xy0);
-        float ty = fmaf(basis[row][3], 1.0F, xy1);
-        (&direction->x)[row] = zx + ty - (&origin->x)[row];
+    lbVector_CreateEulerMatrix(rotation, (Quaternion*) rotate);
+#if defined(__x86_64__) && defined(__FMA__)
+    {
+        __m128 parent0 = _mm_setr_ps(parent[0][0], parent[1][0],
+                                     parent[2][0], 0.0F);
+        __m128 parent1 = _mm_setr_ps(parent[0][1], parent[1][1],
+                                     parent[2][1], 0.0F);
+        __m128 parent2 = _mm_setr_ps(parent[0][2], parent[1][2],
+                                     parent[2][2], 0.0F);
+        __m128 basis0 = _mm_mul_ps(parent0, _mm_set1_ps(rotation[0][0]));
+        __m128 basis1 = _mm_mul_ps(parent0, _mm_set1_ps(rotation[0][1]));
+        __m128 basis2 = _mm_mul_ps(parent0, _mm_set1_ps(rotation[0][2]));
+        __m128 origin3 = _mm_setr_ps(origin->x, origin->y, origin->z, 0.0F);
+        __m128 value;
+        uint64_t xy;
+
+        basis0 = _mm_fmadd_ps(parent1, _mm_set1_ps(rotation[1][0]), basis0);
+        basis1 = _mm_fmadd_ps(parent1, _mm_set1_ps(rotation[1][1]), basis1);
+        basis2 = _mm_fmadd_ps(parent1, _mm_set1_ps(rotation[1][2]), basis2);
+        basis0 = _mm_fmadd_ps(parent2, _mm_set1_ps(rotation[2][0]), basis0);
+        basis1 = _mm_fmadd_ps(parent2, _mm_set1_ps(rotation[2][1]), basis1);
+        basis2 = _mm_fmadd_ps(parent2, _mm_set1_ps(rotation[2][2]), basis2);
+        basis0 = _mm_mul_ps(basis0, _mm_set1_ps(scale->x));
+        basis1 = _mm_mul_ps(basis1, _mm_set1_ps(scale->y));
+        basis2 = _mm_mul_ps(basis2, _mm_set1_ps(scale->z));
+
+        value = _mm_mul_ps(basis0, _mm_set1_ps(local->x));
+        value = _mm_fmadd_ps(basis2, _mm_set1_ps(local->z), value);
+        value = _mm_add_ps(
+            value,
+            _mm_fmadd_ps(origin3, _mm_set1_ps(1.0F),
+                          _mm_mul_ps(basis1, _mm_set1_ps(local->y))));
+        value = _mm_sub_ps(value, origin3);
+        xy = (uint64_t) _mm_cvtsi128_si64(_mm_castps_si128(value));
+        memcpy(&direction->x, &xy, sizeof(xy));
+        direction->z = _mm_cvtss_f32(
+            _mm_shuffle_ps(value, value, _MM_SHUFFLE(2, 2, 2, 2)));
     }
+#else
+    {
+        int row;
+
+        for (row = 0; row != 3; ++row) {
+            float basis[3];
+            int column;
+
+            for (column = 0; column != 3; ++column) {
+                float value = parent[row][0] * rotation[0][column];
+                value = fmaf(rotation[1][column], parent[row][1], value);
+                value = fmaf(rotation[2][column], parent[row][2], value);
+                basis[column] = value * (&scale->x)[column];
+            }
+            {
+                float xy0 = basis[0] * local->x;
+                float xy1 = basis[1] * local->y;
+                float zx = fmaf(basis[2], local->z, xy0);
+                float ty = fmaf((&origin->x)[row], 1.0F, xy1);
+                (&direction->x)[row] = zx + ty - (&origin->x)[row];
+            }
+        }
+    }
+#endif
 }
 
 static void msl_dynamics_parent_axis(Mtx parent, const Vec3* world,
@@ -578,6 +645,57 @@ static void msl_dynamics_rotate_euler(Vec3* rotate, const Vec3* axis,
     }
     *rotate = euler;
 }
+
+#ifdef MSL_CORE_NATIVE
+static u32 msl_float_order_key(float value)
+{
+    u32 bits;
+
+    memcpy(&bits, &value, sizeof(bits));
+    return (bits & UINT32_C(0x80000000)) != 0 ? ~bits
+                                              : bits ^ UINT32_C(0x80000000);
+}
+
+static float msl_float_from_order_key(u32 key)
+{
+    u32 bits = (key & UINT32_C(0x80000000)) != 0
+                   ? key ^ UINT32_C(0x80000000)
+                   : ~key;
+    float value;
+
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+static u32 msl_compile_acos_cutoff(float threshold, bool strict_less)
+{
+    u64 low = msl_float_order_key(-1.0F);
+    u64 high = (u64) msl_float_order_key(1.0F) + 1;
+
+    while (low < high) {
+        u64 middle = low + (high - low) / 2;
+        float angle = acosf(msl_float_from_order_key((u32) middle));
+        bool above_boundary =
+            strict_less ? angle < threshold : angle <= threshold;
+
+        if (above_boundary) {
+            high = middle;
+        } else {
+            low = middle + 1;
+        }
+    }
+    return (u32) low;
+}
+
+static u32 msl_load_acos_cutoff(const float* storage)
+{
+    u32 cutoff;
+
+    memcpy(&cutoff, storage, sizeof(cutoff));
+    return cutoff;
+}
+
+#endif
 #endif
 
 void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
@@ -671,12 +789,6 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
 #ifdef MSL_CORE_HOSTED
         msl_dynamics_transform_origin(parent_mtx, &jobj->translate,
                                       &cur->desc.lb_unk0.unk_2C);
-        msl_dynamics_build_basis(parent_mtx, &jobj->translate,
-                                 &cur->desc.lb_unk0.unk_58, &jobj->scale,
-                                 &cur->desc.lb_unk0.unk_2C, constrained_mtx);
-        msl_dynamics_build_basis(parent_mtx, &jobj->translate, &jobj->rotate,
-                                 &jobj->scale, &cur->desc.lb_unk0.unk_2C,
-                                 bone_mtx);
 #else
         PSMTXTrans(trans_mtx, jobj->translate.x, jobj->translate.y,
                    jobj->translate.z);
@@ -705,11 +817,13 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
 
         /* Compute natural bone direction */
 #ifdef MSL_CORE_HOSTED
-        msl_dynamics_transform_direction(
-            constrained_mtx, &jobj->child->translate,
-            &cur->desc.lb_unk0.unk_2C, &natural_dir);
+        msl_dynamics_build_direction(
+            parent_mtx, &cur->desc.lb_unk0.unk_58, &jobj->scale,
+            &cur->desc.lb_unk0.unk_2C, &jobj->child->translate,
+            &natural_dir);
 #else
-        PSMTXMultVec(constrained_mtx, &jobj->child->translate, &natural_dir);
+        PSMTXMultVec(constrained_mtx, &jobj->child->translate,
+                     &natural_dir);
         natural_dir.x -= cur->desc.lb_unk0.unk_2C.x;
         natural_dir.y -= cur->desc.lb_unk0.unk_2C.y;
         natural_dir.z -= cur->desc.lb_unk0.unk_2C.z;
@@ -717,9 +831,10 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
 
         /* Compute current bone direction */
 #ifdef MSL_CORE_HOSTED
-        msl_dynamics_transform_direction(bone_mtx, &jobj->child->translate,
-                                         &cur->desc.lb_unk0.unk_2C,
-                                         &current_dir);
+        msl_dynamics_build_direction(
+            parent_mtx, &jobj->rotate, &jobj->scale,
+            &cur->desc.lb_unk0.unk_2C, &jobj->child->translate,
+            &current_dir);
 #else
         PSMTXMultVec(bone_mtx, &jobj->child->translate, &current_dir);
         current_dir.x -= cur->desc.lb_unk0.unk_2C.x;
@@ -808,8 +923,15 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
                 cur->desc.lb_unk0.unk_8C * cur->desc.lb_unk0.unk_48)
             {
                 Vec3 clamp_dir = saved_dir;
+#ifdef MSL_CORE_NATIVE
+                if (msl_dynamics_angle_greater(
+                        &clamp_dir, &link_dir, cur->desc.lb_unk0.unk_88,
+                        msl_load_acos_cutoff(
+                            &cur->desc.lb_unk0.unk_6C.x)))
+#else
                 if (lbVector_Angle(&clamp_dir, &link_dir) >
                     cur->desc.lb_unk0.unk_88)
+#endif
                 {
                     PSVECCrossProduct(&clamp_dir, &link_dir, &cross_vec);
                     lbVector_Normalize(&cross_vec);
@@ -821,8 +943,15 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
 
             /* Apply convergence limit */
             if (cur->desc.lb_unk0.unk_50 > 0.0) {
+#ifdef MSL_CORE_NATIVE
+                if (msl_dynamics_angle_less(
+                        &natural_dir, &link_dir, cur->desc.lb_unk0.unk_50,
+                        msl_load_acos_cutoff(
+                            &cur->desc.lb_unk0.unk_6C.y)))
+#else
                 if (lbVector_Angle(&natural_dir, &link_dir) <
                     cur->desc.lb_unk0.unk_50)
+#endif
                 {
                     link_dir = natural_dir;
                 } else {
@@ -835,8 +964,20 @@ void lb_8001044C(DynamicsDesc* desc, void* colliders_raw, int num_colliders,
 
             /* Apply max angle deviation */
             {
+#ifdef MSL_CORE_NATIVE
+                f32 dev_angle;
+                if (msl_dynamics_angle_greater_value(
+                        &natural_dir, &link_dir, cur->desc.lb_unk0.unk_68,
+                        msl_load_acos_cutoff(
+                            &cur->desc.lb_unk0.unk_6C.z),
+                        &dev_angle))
+#else
                 f32 dev_angle = lbVector_Angle(&natural_dir, &link_dir);
                 if (dev_angle > cur->desc.lb_unk0.unk_68) {
+#endif
+#ifdef MSL_CORE_NATIVE
+                {
+#endif
                     PSVECCrossProduct(&link_dir, &natural_dir, &cross_vec);
                     lbVector_Normalize(&cross_vec);
                     lbVector_RotateAboutUnitAxis(&link_dir, &cross_vec,
@@ -1252,6 +1393,23 @@ void lb_80011710(DynamicsDesc* arg0, DynamicsDesc* arg1)
         data1->desc.lb_unk0.unk_78 = data0[i].unk_28;
         data1->desc.lb_unk0.unk_84 = data0[i].unk_34;
         data1->desc.lb_unk0.unk_88 = data0[i].unk_38;
+#ifdef MSL_CORE_NATIVE
+        {
+            u32 cutoff = msl_compile_acos_cutoff(
+                data1->desc.lb_unk0.unk_88, false);
+
+            memcpy(&data1->desc.lb_unk0.unk_6C.x, &cutoff,
+                   sizeof(cutoff));
+            cutoff = msl_compile_acos_cutoff(data1->desc.lb_unk0.unk_50,
+                                             true);
+            memcpy(&data1->desc.lb_unk0.unk_6C.y, &cutoff,
+                   sizeof(cutoff));
+            cutoff = msl_compile_acos_cutoff(data1->desc.lb_unk0.unk_68,
+                                             false);
+            memcpy(&data1->desc.lb_unk0.unk_6C.z, &cutoff,
+                   sizeof(cutoff));
+        }
+#endif
         if (data1->desc.lb_unk0.unk_48 != 0.0) {
             data1->desc.lb_unk0.unk_8C =
                 arg0->pos.z / data1->desc.lb_unk0.unk_48;

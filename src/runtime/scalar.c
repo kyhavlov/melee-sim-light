@@ -1653,19 +1653,18 @@ static void write_item_compare(uint8_t* item_out, Item_GObj* gobj)
     item_out[offsetof(MslCoreItem, misc3)] = item_var_source_byte(item, 0x1B);
 }
 
-void msl_core_match_write_items(const MslCoreMatch* match,
-                                MslCoreItem items[MSL_CORE_MAX_ITEMS])
+int msl_core_write_items_into_zeroed(
+    const MslCoreMatch* match, MslCoreItem items[MSL_CORE_MAX_ITEMS])
 {
     Item_GObj* item_gobj;
     int item_slot = 0;
 
-    memset(items, 0, sizeof(MslCoreItem) * MSL_CORE_MAX_ITEMS);
-    msl_core_bind_match((MslCoreMatch*) match);
-    item_gobj = (Item_GObj*) HSD_GObj_Entities->items;
+    item_gobj = (Item_GObj*) match->gobj.entities->items;
     while (item_gobj != NULL && item_slot < MSL_CORE_MAX_ITEMS) {
         write_item_compare((uint8_t*) &items[item_slot++], item_gobj);
         item_gobj = (Item_GObj*) item_gobj->next;
     }
+    return item_slot;
 }
 
 static uint8_t ppc_state_bit(unsigned int value, unsigned int index)
@@ -1880,7 +1879,7 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
                state_flags, sizeof(state_flags));
     }
 
-    msl_core_match_write_items(match, compare->items);
+    (void) msl_core_write_items_into_zeroed(match, compare->items);
 }
 
 static void apply_replay_stage_events(MslCoreMatch* match)
@@ -2116,7 +2115,7 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
     if (match == NULL) {
         return -1;
     }
-    bind_step_owners(match);
+    bind_scheduler_owners(match);
     for (i = 0; i < match->config.num_players; ++i) {
         // Player_SwapTransformedStates keeps the active Sheik/Zelda half in
         // source entity slot zero. Refresh this convenience pointer after the

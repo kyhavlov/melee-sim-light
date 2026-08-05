@@ -6,10 +6,10 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Provenance
 
-- Revision: second 150k-campaign checkpoint candidate based on `ee32fbc1`
+- Revision: third 150k-campaign checkpoint candidate based on `02cfe013`
 - Release benchmark SHA-256:
-  `d5de6ab2f3b66415f1cf15b129ea8d773098e2b5693015044feced5e3c6665e0`
-- Date: 2026-08-03
+  `45b02500e300c850250385bf9c0dd6e34edd0bcb808f6019b47eebc81ede3318`
+- Date: 2026-08-04
 - Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 7.0 x86-64
 - Compiler: GCC 13.3.0, strict native release profile, `-march=native -mtune=native`
 - Runtime: source-shaped per-Match scheduler with compact gameplay-live fighter pose, exact dense
@@ -20,7 +20,10 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
   exact batched fighter-pose blends, frame-major compiled Figa samples, direct native motion-program
   binding, register-generated exact wide-trig quadrant factors, duplicate input-predicate deletion,
   exact negative-wall-query culling, a handshake-preserving Dream Land background-animation cut,
-  and the 16-character merged runtime
+  compact lossless pose samples, exact native general matrix concat, direct dynamics direction
+  products, exact scalar tangent sharing, direct fighter-part membership, exact stage-intersection
+  rejection, direct output publication, native exact square-root owners, a conservative ceiling
+  broad phase, an exact native x86 `acosf` estimate seed, and the 16-character merged runtime
 - Correctness: 366/366 accepted (`310 PASS`, `56 CLASSIFIED`, zero XPASS/fail/error) across
   3,501,461 validated frames. Twenty-five obsolete raw-pointer/pool-residue classifications are
   replaced by one genuine Whispy RNG-phase classification, a net reduction of 24, without changing
@@ -46,17 +49,22 @@ The final exact candidate samples are:
 
 | Batch | Samples | Median cycles/frame | Median FPS | Digest |
 |---:|---|---:|---:|---:|
-| 256 | 3 | 36,908.0 | 116,288 | `bdff41cf74a54850` |
-| 512 | 3 | 35,267.5 | 121,697 | `ee9d93c545aa3ef9` |
+| 256 | 3 | 38,234.8 | 112,253 | `bdff41cf74a54850` |
+| 512 | 3 | 40,117.3 | 106,985 | `ee9d93c545aa3ef9` |
 
-Raw candidate 256 cycles/frame were `37,104.3`, `36,891.6`, and `36,908.0`; corresponding wall
-throughput was `115,673`, `116,339`, and `116,288` FPS. Raw candidate 512 cycles/frame were
-`35,267.5`, `35,327.1`, and `35,249.0`; corresponding wall throughput was `121,697`, `121,492`,
-and `121,761` FPS. Three alternating pairs against frozen committed control `ee32fbc1` yield
-median paired throughput gains of 5.33% at resident 256 and 6.30% at resident 512. Ratios of raw
-medians are +5.33% and +6.24%. Both digests are unchanged. Cycles/frame is the primary comparison
-because wall FPS also reflects frequency and machine contention. The prior prefix-assigned
-benchmark is a different workload and is not an A/B performance control for these numbers.
+Raw candidate 256 cycles/frame were `38,846.5`, `38,234.8`, and `38,060.3`; corresponding wall
+throughput was `110,485`, `112,253`, and `112,767` FPS. Raw candidate 512 cycles/frame were
+`40,383.1`, `40,117.3`, and `38,966.4`; corresponding wall throughput was `106,281`, `106,985`,
+and `110,145` FPS. Three alternating pairs against frozen committed control `02cfe013` yield
+median paired throughput gains of 9.80% at resident 256 and 8.23% at resident 512. The complete
+paired gains were +3.36%/+9.80%/+11.62% and +8.23%/+3.41%/+10.37%, respectively; no arm is
+filtered. Both digests are unchanged.
+
+Absolute FPS is lower than the preceding checkpoint's recorded host window, but the adjacent
+frozen-parent runs are lower by the same frequency/load effect: parent FPS spans 101,029--106,893
+at 256 and 98,199--103,457 at 512, and every final candidate beats its paired parent. The
+alternating ratios are therefore the checkpoint comparison; the observed candidate FPS supports
+direction but does not claim that the 150k campaign target has been reached.
 
 ## Current memory contract
 
@@ -83,8 +91,9 @@ unchanged.
 
 ## Owner-selection profile
 
-The final bounded 32,768-frame resident-512 subsystem profile reports 45,307.3 diagnostic
-cycles/frame with digest `588be8489df1a62d`. It assigns 14.23% to pose animation, 12.75% to stage
-collision, 7.25% to `Fighter_8006D9AC`, 6.71% to input/action, 4.32% to camera, 2.32% to hit
-processing, and 0.70% to contact publication. This instrumented profile is for owner selection,
-not throughput; inclusive and nested rows must not be added.
+The final bounded 32,768-frame resident-512 subsystem profile reports 53,544.0 diagnostic
+cycles/frame with digest `588be8489df1a62d`. It assigns 16.93% to pose animation, 11.46% to stage
+collision, 5.48% to `Fighter_8006D9AC`, 4.32% to input/action, 3.36% to camera, 2.28% to hit
+processing, and 0.93% to contact publication. This instrumented profile is for owner selection,
+not throughput; inclusive and nested rows must not be added, and its absolute cycle count is not
+comparable to the production benchmark.

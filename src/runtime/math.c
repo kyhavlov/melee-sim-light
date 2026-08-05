@@ -121,7 +121,11 @@ float acosf(float x)
     float result = 1.0F - x * x;
     if (result > 0) {
         float guess;
+#if defined(MSL_CORE_NATIVE) && defined(__x86_64__)
+        __asm__("rsqrtss %1, %0" : "=x"(guess) : "x"(result));
+#else
         guess = __frsqrte(result);
+#endif
         guess = 0.5f * guess * (3.0f - guess * guess * result);
         guess = 0.5f * guess * (3.0f - guess * guess * result);
         guess = 0.5f * guess * (3.0f - guess * guess * result);
@@ -142,12 +146,16 @@ float asinf(float x)
 static inline float lbRefract_80022DF8(float x)
 {
     if (x > 0.0f) {
+#ifdef MSL_CORE_NATIVE
+        return 1.0F / sqrtf(x);
+#else
         float guess;
         guess = __frsqrte(x);
         guess = 0.5f * guess * (3.0f - guess * guess * x);
         guess = 0.5f * guess * (3.0f - guess * guess * x);
         guess = 0.5f * guess * (3.0f - guess * guess * x);
         return guess;
+#endif
     }
 
     if (x) {
@@ -158,11 +166,6 @@ static inline float lbRefract_80022DF8(float x)
 }
 
 #define SILVER_RATIO_1_CONJUGATE lbRefract3_804D7DD4
-
-#define BITWISE_INF 0x7F800000 /* = +Infinity */
-#define BITWISE_0_5 0x3F000000 /* = 0.5f */
-#define BITWISE_1_0 0x3F800000 /* = 1.0f */
-#define BITWISE_2_0 0x40000000 /* = 2.0f */
 
 #define BITWISE_THRESHOLD_0 0x3F08D5B9 /* = 0.534511148929596f */
 #define BITWISE_THRESHOLD_1 0x3F521801 /* = 0.8206787705421448f */
@@ -235,36 +238,11 @@ float atanf(float x)
         x_ge_ratio = true;
         result = 1.0f / x;
     } else if (silver_ratio_conjugate < x) {
-        lookup_index = 0;
-        switch (BITWISE(x) & BITWISE_INF) {
-        case BITWISE_0_5: {
-            if (!(SIGNED_BITWISE(x) < BITWISE_THRESHOLD_0)) {
-                lookup_index = 1;
-            }
-
-            if (!(SIGNED_BITWISE(x) < BITWISE_THRESHOLD_1)) {
-                lookup_index += 1;
-            }
-
-            break;
-        }
-        case BITWISE_1_0: {
-            lookup_index = 2;
-            if (!(SIGNED_BITWISE(x) < BITWISE_THRESHOLD_2)) {
-                lookup_index = 3;
-            }
-
-            if (!(SIGNED_BITWISE(x) < BITWISE_THRESHOLD_3)) {
-                lookup_index += 1;
-            }
-
-            break;
-        }
-        case BITWISE_2_0: {
-            lookup_index = 4;
-            break;
-        }
-        }
+        s32 x_bits = SIGNED_BITWISE(x);
+        lookup_index = (x_bits >= BITWISE_THRESHOLD_0) +
+                       (x_bits >= BITWISE_THRESHOLD_1) +
+                       (x_bits >= BITWISE_THRESHOLD_2) +
+                       (x_bits >= BITWISE_THRESHOLD_3);
         {
             float offset_39;
             float offset_33;
@@ -313,3 +291,84 @@ float atanf(float x)
     BITWISE(result) |= sign_bit_x;
     return result;
 }
+
+#ifdef MSL_CORE_NATIVE
+static u32 msl_math_float_order_key(float value)
+{
+    u32 bits;
+
+    memcpy(&bits, &value, sizeof(bits));
+    return (bits & UINT32_C(0x80000000)) != 0 ? ~bits
+                                              : bits ^ UINT32_C(0x80000000);
+}
+
+#define MSL_DYNAMICS_ANGLE_COSINE(a_arg, b_arg, cosine_out, valid_out)        \
+    do {                                                                      \
+        Vec3* msl_a = (a_arg);                                                \
+        Vec3* msl_b = (b_arg);                                                \
+        float msl_lena = sqrtf(msl_a->x * msl_a->x +                         \
+                               msl_a->y * msl_a->y + msl_a->z * msl_a->z);   \
+        float msl_lenb = sqrtf(msl_b->x * msl_b->x +                         \
+                               msl_b->y * msl_b->y + msl_b->z * msl_b->z);   \
+        float msl_lena_lenb = msl_lena * msl_lenb;                            \
+        (valid_out) = msl_lena_lenb > 0.0000000001F;                          \
+        if (valid_out) {                                                      \
+            (cosine_out) =                                                    \
+                __fmadds(msl_a->z, msl_b->z,                                 \
+                         __fmadds(msl_a->x, msl_b->x,                        \
+                                  msl_a->y * msl_b->y)) /                    \
+                msl_lena_lenb;                                               \
+            if ((cosine_out) > 1.0F) {                                       \
+                (cosine_out) = 1.0F;                                         \
+            }                                                                \
+            if ((cosine_out) < -1.0F) {                                      \
+                (cosine_out) = -1.0F;                                        \
+            }                                                                \
+        }                                                                     \
+    } while (0)
+
+bool msl_dynamics_angle_greater(Vec3* a, Vec3* b, float threshold,
+                                u32 cutoff)
+{
+    float cosine;
+    bool valid;
+
+    MSL_DYNAMICS_ANGLE_COSINE(a, b, cosine, valid);
+    if (!valid) {
+        return 0.0F > threshold;
+    }
+    return cosine == cosine && msl_math_float_order_key(cosine) < cutoff;
+}
+
+bool msl_dynamics_angle_less(Vec3* a, Vec3* b, float threshold,
+                             u32 cutoff)
+{
+    float cosine;
+    bool valid;
+
+    MSL_DYNAMICS_ANGLE_COSINE(a, b, cosine, valid);
+    if (!valid) {
+        return 0.0F < threshold;
+    }
+    return cosine == cosine && msl_math_float_order_key(cosine) >= cutoff;
+}
+
+bool msl_dynamics_angle_greater_value(Vec3* a, Vec3* b, float threshold,
+                                      u32 cutoff, float* angle)
+{
+    float cosine;
+    bool valid;
+
+    MSL_DYNAMICS_ANGLE_COSINE(a, b, cosine, valid);
+    if (!valid) {
+        *angle = 0.0F;
+        return 0.0F > threshold;
+    }
+    if (cosine != cosine || msl_math_float_order_key(cosine) >= cutoff) {
+        return false;
+    }
+    *angle = acosf(cosine);
+    return true;
+}
+#undef MSL_DYNAMICS_ANGLE_COSINE
+#endif

@@ -88,6 +88,26 @@ Together these failures rule out both extremes already tried: a generic operatio
 per-fighter scalar product sidecar. They do not rule out a complete batch-native owner with one
 canonical state and a measured deletion boundary.
 
+### 2026-08-04 batch-native occupancy preflight
+
+A bounded census tested whether the current resident workload supplies enough identical direct
+pose rows to replace the scalar owner with a contiguous eight-lane kernel. Resident 256 produced
+9,709,792 direct rows across 1,036 batch steps; exact program/node/sample groups achieved only
+13.8% lane occupancy, only 0.4% of rows belonged to groups of at least eight, and the largest
+group was 12. Resident 512 produced 13,147,946 rows across 972 steps; exact occupancy was 14.9%,
+only 1.0% of rows belonged to groups of at least eight, and the largest group was 18.
+
+Grouping only by publication shape reaches 97.4% and 98.1% occupancy, respectively, but each lane
+then gathers a different immutable sample and scattered mutable JObj destination. That is the
+same gather/scatter and handoff shape whose scalar and batched variants were neutral or slower in
+this attempt. It also cannot repay the independently measured 7--9% cost of suspending the source
+scheduler around a pose-only batch phase. The temporary census was removed completely.
+
+This rules out a contiguous program/sample batch kernel on the current canonical layout. It does
+not rule out batch execution after a wider canonical-state cutover makes same-shape inputs and
+immediate geometry outputs contiguous; such a proposal must name and delete that scattered state
+before implementation rather than treating vector occupancy as sufficient.
+
 ## Salvage and revisit rule
 
 The compiled runtime and its integration are not retained. The independent Ice Climbers item

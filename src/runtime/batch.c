@@ -22,7 +22,7 @@ struct MslCoreBatch {
     uint32_t reset_index_capacity;
 };
 
-static int selected(const uint8_t* mask, size_t stride, uint32_t index)
+static inline int selected(const uint8_t* mask, size_t stride, uint32_t index)
 {
     return mask == NULL || mask[(size_t) index * stride] != 0;
 }

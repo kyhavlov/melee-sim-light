@@ -3,8 +3,6 @@
 #include "ft/fighter.h"
 #include "ft/types.h"
 #include "gr/types.h"
-#include "pl/player.h"
-#include "runtime/context.h"
 #include "runtime/item_projection.h"
 #include "runtime/scalar.h"
 
@@ -77,7 +75,6 @@ static void write_player_from_compare(const MslCoreCompare* compare,
     uint8_t hurtbox =
         source[offsetof(MslCoreCompare, hurtbox_state) + player];
 
-    memset(output, 0, sizeof(*output));
     out[offsetof(MslCoreObservationPlayer, present)] = 1;
     out[offsetof(MslCoreObservationPlayer, source_player)] = (uint8_t) player;
     out[offsetof(MslCoreObservationPlayer, team_relation)] = relation;
@@ -130,7 +127,6 @@ static void write_player(const MslCoreMatch* match, int player,
     int hurtbox = fp->x1988 != 0 ? fp->x1988 : fp->x198C;
     int jumps_left = fp->co_attrs.max_jumps - fp->x1968_jumpsUsed;
 
-    memset(output, 0, sizeof(*output));
     out[offsetof(MslCoreObservationPlayer, present)] = 1;
     out[offsetof(MslCoreObservationPlayer, source_player)] = (uint8_t) player;
     out[offsetof(MslCoreObservationPlayer, team_relation)] = relation;
@@ -163,7 +159,7 @@ static void write_player(const MslCoreMatch* match, int player,
             float_frames_u16(hitstun));
     out[offsetof(MslCoreObservationPlayer, char_id)] = fp->kind;
     out[offsetof(MslCoreObservationPlayer, stocks)] =
-        (uint8_t) Player_GetStocks(fp->player_id);
+        (uint8_t) match->source.player.slots[fp->player_id].stocks;
     out[offsetof(MslCoreObservationPlayer, facing)] =
         fp->facing_dir > 0.0F;
     out[offsetof(MslCoreObservationPlayer, on_ground)] =
@@ -230,11 +226,10 @@ static void write_stage(const MslCoreMatch* match,
     }
 }
 
-void msl_core_canonicalize_production_items(
-    MslCoreItem items[MSL_CORE_MAX_ITEMS])
+static void canonicalize_production_items(MslCoreItem* items, int count)
 {
     int slot;
-    for (slot = 0; slot < MSL_CORE_MAX_ITEMS; ++slot) {
+    for (slot = 0; slot < count; ++slot) {
         MslCoreItem* item = &items[slot];
         uint8_t mask = msl_core_item_gameplay_misc_mask(
             msl_core_get_le16(&item->type), item->state);
@@ -253,6 +248,12 @@ void msl_core_canonicalize_production_items(
     }
 }
 
+void msl_core_canonicalize_production_items(
+    MslCoreItem items[MSL_CORE_MAX_ITEMS])
+{
+    canonicalize_production_items(items, MSL_CORE_MAX_ITEMS);
+}
+
 int msl_core_match_write_observation(const MslCoreMatch* match,
                                      uint8_t viewpoint_player,
                                      MslCoreObservation* output)
@@ -261,13 +262,13 @@ int msl_core_match_write_observation(const MslCoreMatch* match,
     uint8_t viewpoint_team;
     int player;
     int slot = 0;
+    int item_count;
 
     if (match == NULL || output == NULL ||
         viewpoint_player >= match->config.num_players)
     {
         return -1;
     }
-    msl_core_bind_match((MslCoreMatch*) match);
     out = (uint8_t*) output;
     memset(output, 0, sizeof(*output));
     put_u32(out, offsetof(MslCoreObservation, frame_id),
@@ -301,8 +302,8 @@ int msl_core_match_write_observation(const MslCoreMatch* match,
             write_player(match, player, 2, &output->slots[slot++]);
         }
     }
-    msl_core_match_write_items(match, output->items);
-    msl_core_canonicalize_production_items(output->items);
+    item_count = msl_core_write_items_into_zeroed(match, output->items);
+    canonicalize_production_items(output->items, item_count);
     return 0;
 }
 
@@ -380,17 +381,16 @@ void msl_core_match_write_terminal(const MslCoreMatch* match,
     uint8_t alive_teams = 0;
     uint8_t max_reached;
     int player;
-    int team;
 
     memset(output, 0, sizeof(*output));
-    msl_core_bind_match((MslCoreMatch*) match);
     put_u32(out, offsetof(MslCoreTerminal, frame_id),
             (uint32_t) match->frame_id);
     put_u32(out, offsetof(MslCoreTerminal, stage_id),
             match->config.stage_id);
     for (player = 0; player < match->config.num_players; ++player) {
         const Fighter* fp = GET_FIGHTER(match->fighters[player]);
-        uint8_t stocks = (uint8_t) Player_GetStocks(fp->player_id);
+        uint8_t stocks =
+            (uint8_t) match->source.player.slots[fp->player_id].stocks;
         if (stocks == 0) {
             stockout = 1;
         } else {
@@ -399,9 +399,7 @@ void msl_core_match_write_terminal(const MslCoreMatch* match,
             team_mask |= (uint8_t) (1U << (team_id < 8 ? team_id : 7));
         }
     }
-    for (team = 0; team < 8; ++team) {
-        alive_teams += (team_mask & (uint8_t) (1U << team)) != 0;
-    }
+    alive_teams = (uint8_t) __builtin_popcount((unsigned int) team_mask);
     max_reached = max_frame_id >= 0 && match->frame_id >= max_frame_id;
     out[offsetof(MslCoreTerminal, done)] = match->rules.ended || max_reached;
     out[offsetof(MslCoreTerminal, match_ended)] = match->rules.ended != 0;

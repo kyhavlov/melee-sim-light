@@ -22,6 +22,8 @@ representation may justify revisiting the same broad subsystem.
 
 ## Files
 
+- [`../PERFORMANCE.md`](../PERFORMANCE.md): concise current checkpoint result and gate status
+  required by the repository performance-commit contract.
 - [`BASELINE.md`](BASELINE.md): current production benchmark contract, binary provenance, digests,
   correctness gates, memory contract, and owner-selection profile.
 - [`RETAINED.md`](RETAINED.md): concise commit-oriented ledger of performance work still present in
@@ -67,11 +69,53 @@ representation may justify revisiting the same broad subsystem.
 
 ## Architectural attempts
 
+- [Tiled fighter transforms and SIMD
+  publication](attempts/2026-08-04-tiled-fighter-transforms.md): the real
+  eight-lane kernel was neutral at resident 256 and recovered only 1.25% at
+  resident 512 inside a complete candidate still roughly 20-25% slower than
+  the committed baseline. Do not revisit tile widths, scheduler splits,
+  context consolidation, or gather/scatter publication; a future batch-native
+  layout must eliminate those boundaries outright.
 - [Compiled fighter motion to gameplay
   geometry](attempts/2026-08-03-compiled-fighter-motion-geometry.md): exact, but less than 1% faster for
   roughly 8k changed lines. A per-fighter scalar product cache does not remove enough scheduler,
   map, contact, or source-state cost. A revisit needs a batch-native owner and deletion boundary,
   not more consumer wrappers.
+- [Gameplay-live compiled Figa
+  samples](attempts/2026-08-04-gameplay-live-figa-samples.md): construction-time motion/part
+  closure removed 27.8% of the exact immutable sample stream, but was 0.90% slower at resident 256
+  and only 0.30% faster at 512 on the canonical V-cache CCD. Cold-byte deletion is not pose-work
+  deletion; revisit only with a representation that also removes demanded publication or proves a
+  materially different cache target.
+- [Shared Figa program
+  clock](attempts/2026-08-04-shared-figa-program-clock.md): a singular exact clock for direct
+  looping and non-looping fighter programs was 3.9--4.2% slower at resident 256 and 0.5--0.6%
+  slower at 512. Per-node clock math is already cheap; a revisit must delete traversal or demanded
+  publication too.
+- [Resident step/output
+  fusion](attempts/2026-08-04-resident-step-output-fusion.md): one per-Match
+  `step -> observation -> terminal` sweep preserved exact output but regressed 0.5--1.8% at
+  resident 256 and 3.0% at 512. A full scalar frame does not leave enough useful Match state hot;
+  revisit only after a materially smaller canonical representation.
+- [Unchanged direct-pose
+  publication](attempts/2026-08-04-unchanged-direct-pose-publication.md): construction-owned
+  exclusion of dynamics-authored matrices made repeated-row suppression exact, but hot SRT
+  comparisons were about 10.0% slower at resident 512. Revisit only by removing the scalar
+  publication/consumer boundary itself, not by adding dirty-detection work.
+- [Configuration-local resident
+  order](attempts/2026-08-04-configuration-local-resident-order.md): stable physical sorting was
+  exact and helped one resident-512 screen, but its isolated resident-256 symmetric center was
+  about 1.9% slower. Revisit only with a smaller canonical Match hot state or a public-row layout
+  that does not pay the inverse permutation.
+- [Compact resident Match arena
+  stride](attempts/2026-08-04-compact-resident-arena-stride.md): reducing unused per-lane virtual
+  reserve from 3 MiB to 1.25 MiB was exact but about 2% slower at resident 512. Revisit only with
+  actual live-state repacking, not another capacity or page-layout choice.
+- [Canonical native JObj
+  SRT](attempts/2026-08-04-canonical-jobj-srt.md): moving the singular 40-byte SRT into the compact
+  pose node or a dense fixed pool preserved exact output but did not lower the 18% pose owner; the
+  better form was below 1%, and the pool form regressed resident 256. Revisit only as part of a
+  wider producer/consumer deletion, not another layout.
 - General operation-owner rewrite (2026-07-20; summarized in the compiled-motion record): about
   94k lines and 3.7–6.0x slower. Operation-granular scheduling and generic ownership machinery
   overwhelm the work being optimized.

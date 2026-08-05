@@ -245,6 +245,26 @@ void Fighter_LoadCommonData(void)
     // loop unrolling doesn't work (only up to 8 elements)
 #ifdef MSL_CORE_HOSTED
     memcpy(msl_core_fighter_common_data(), pData, sizeof(void*) * 23);
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+    {
+        MslSourceGameData* source = msl_core_context_source_game_data;
+        int kind;
+
+        memset(source->fighter.part_flags, 0,
+               sizeof(source->fighter.part_flags));
+        for (kind = 0; kind < FTKIND_MAX; ++kind) {
+            struct Fighter_804D6540_t* desc = Fighter_804D6540[kind];
+            int i;
+
+            if (desc == NULL) {
+                continue;
+            }
+            for (i = 0; i < desc->x4; ++i) {
+                source->fighter.part_flags[kind][desc->x0[i].x0] = 1U << i;
+            }
+        }
+    }
+#endif
 #else
     p_ftCommonData = pData[0]; // p_ftCommonData
     Fighter_804D6550 = pData[1];

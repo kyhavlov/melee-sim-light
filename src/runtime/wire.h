@@ -5,6 +5,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 enum {
     MSL_CORE_MAX_PLAYERS = MSL_MAX_PLAYERS,
@@ -346,12 +347,50 @@ _Static_assert(sizeof(MslCoreViewerCamera) == 28,
 _Static_assert(sizeof(MslCoreViewerState) == 2332,
                "MslCoreViewerState wire size");
 
-uint16_t msl_core_get_le16(const void* ptr);
-uint32_t msl_core_get_le32(const void* ptr);
-float msl_core_get_lef32(const void* ptr);
-void msl_core_put_le16(void* ptr, uint16_t value);
-void msl_core_put_le32(void* ptr, uint32_t value);
-void msl_core_put_lef32(void* ptr, float value);
+static inline uint16_t msl_core_get_le16(const void* ptr)
+{
+    const uint8_t* p = ptr;
+    return (uint16_t) p[0] | (uint16_t) ((uint16_t) p[1] << 8);
+}
+
+static inline uint32_t msl_core_get_le32(const void* ptr)
+{
+    const uint8_t* p = ptr;
+    return (uint32_t) p[0] | ((uint32_t) p[1] << 8) |
+           ((uint32_t) p[2] << 16) | ((uint32_t) p[3] << 24);
+}
+
+static inline float msl_core_get_lef32(const void* ptr)
+{
+    uint32_t bits = msl_core_get_le32(ptr);
+    float value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+static inline void msl_core_put_le16(void* ptr, uint16_t value)
+{
+    uint8_t* p = ptr;
+    p[0] = (uint8_t) value;
+    p[1] = (uint8_t) (value >> 8);
+}
+
+static inline void msl_core_put_le32(void* ptr, uint32_t value)
+{
+    uint8_t* p = ptr;
+    p[0] = (uint8_t) value;
+    p[1] = (uint8_t) (value >> 8);
+    p[2] = (uint8_t) (value >> 16);
+    p[3] = (uint8_t) (value >> 24);
+}
+
+static inline void msl_core_put_lef32(void* ptr, float value)
+{
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    msl_core_put_le32(ptr, bits);
+}
+
 void msl_core_decode_match_config(MslCoreMatchConfig* config,
                                   const uint8_t* wire);
 void msl_core_decode_stage_events(MslCoreStageEvents* events,

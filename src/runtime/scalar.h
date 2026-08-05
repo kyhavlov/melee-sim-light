@@ -150,7 +150,7 @@ HSD_GObjEvent msl_core_match_scheduler_invoke_owner(MslCoreMatch* match,
                                                     HSD_GObjEvent owner);
 int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed);
 const MslCoreCompare* msl_core_match_output(const MslCoreMatch* match);
-void msl_core_match_write_items(const MslCoreMatch* match,
-                                MslCoreItem items[MSL_CORE_MAX_ITEMS]);
+int msl_core_write_items_into_zeroed(
+    const MslCoreMatch* match, MslCoreItem items[MSL_CORE_MAX_ITEMS]);
 
 #endif

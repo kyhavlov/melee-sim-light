@@ -295,7 +295,11 @@ void ftAnim_8006E054(Fighter* fp, HSD_JObj* jobj, HSD_JObj* arg2,
 void ftAnim_8006E7B8(Fighter* fp, Fighter_Part part)
 {
 #ifdef MSL_CORE_NATIVE
+#ifdef MSL_CORE_WASM
     msl_fighter_pose_animate_parts(fp->parts[part].joint, fp->parts);
+#else
+    msl_fighter_pose_animate_parts(fp->parts[part].joint);
+#endif
 #else
     HSD_JObj* jobj;
     int i;
@@ -329,7 +333,7 @@ void ftAnim_8006E7B8(Fighter* fp, Fighter_Part part)
         if (fp->parts[i].xC <= temp_r27 && i != part) {
             break;
         }
-        if (!fp->parts[i].flags_b0 && !fp->parts[i].flags_b5) {
+        if (msl_fighter_part_can_animate(fp, i)) {
             HSD_JObjAnim(jobj);
         }
         i++;
@@ -590,16 +594,17 @@ bool ftAnim_IsFramesRemaining(Fighter_GObj* gobj)
 
     if (fp->x8A4_animBlendFrames == 0.0F) {
         for (i = 0; i < ftPartsTable[fp->kind]->parts_num; i++) {
-            if (fp->parts[i].flags_b1 && !fp->parts[i].flags_b0 &&
-                !fp->parts[i].flags_b5 && lb_8000B074(fp->parts[i].joint))
+            if (fp->parts[i].flags_b1 &&
+                msl_fighter_part_can_animate(fp, i) &&
+                lb_8000B074(fp->parts[i].joint))
             {
                 return true;
             }
         }
     } else {
         for (i = 0; i < ftPartsTable[fp->kind]->parts_num; i++) {
-            if (fp->parts[i].flags_b1 && !fp->parts[i].flags_b0 &&
-                !fp->parts[i].flags_b5 &&
+            if (fp->parts[i].flags_b1 &&
+                msl_fighter_part_can_animate(fp, i) &&
                 lb_8000B074(fp->parts[i].x4_jobj2))
             {
                 return true;
@@ -633,8 +638,8 @@ float ftAnim_8006F3DC(Fighter_GObj* fighter_gobj)
     if (fp->x8A4_animBlendFrames == 0.0F) {
         int i;
         for (i = 0; i < ftPartsTable[fp->kind]->parts_num; i++) {
-            if (fp->parts[i].flags_b1 && !fp->parts[i].flags_b0 &&
-                !fp->parts[i].flags_b5)
+            if (fp->parts[i].flags_b1 &&
+                msl_fighter_part_can_animate(fp, i))
             {
                 HSD_AObj* aobj = fp->parts[i].joint->aobj;
                 if (aobj != 0) {
@@ -715,7 +720,7 @@ void ftAnim_8006F4C8(Fighter* fp, bool do_blending, FigaTree* tree)
             HSD_ASSERTREPORT(767, 0, "atree data error! player %d\n",
                              fp->player_id);
         }
-        if (!fp->parts[i].flags_b0 && !fp->parts[i].flags_b5) {
+        if (msl_fighter_part_can_animate(fp, i)) {
             HSD_JObj* jobj = get_part_joint(fp, i, do_blending);
             ftAnim_AttachAll(jobj, tree, cur_track, *cur_node);
         }
@@ -771,8 +776,8 @@ void ftAnim_8006F628(Fighter* fp, Fighter_Part part, bool do_blending)
         {
             int tmp = ftPartsRemap(fp->kind, kind, i);
             if (tmp != 0xFFU) {
-                if (fp->parts[tmp].flags_b1 && !fp->parts[tmp].flags_b0 &&
-                    !fp->parts[tmp].flags_b5)
+                if (fp->parts[tmp].flags_b1 &&
+                    msl_fighter_part_can_animate(fp, tmp))
                 {
                     HSD_JObj* jobj = get_part_joint(fp, tmp, do_blending);
                     if (fp->parts[tmp].flags_b3) {
@@ -848,7 +853,7 @@ void ftAnim_8006F7C8(Fighter* ft, Fighter_Part part, int arg2, FigaTree* tree)
             break;
         }
 
-        if (!ft->parts[r22].flags_b0 && !ft->parts[r22].flags_b5) {
+        if (msl_fighter_part_can_animate(ft, r22)) {
             HSD_JObj* r3;
             if (arg2) {
                 r3 = ft->parts[r22].x4_jobj2;
@@ -903,16 +908,16 @@ void ftAnim_8006FA58(Fighter* fp, Fighter_Part part, HSD_Joint* joint)
             i++;
         }
         if (i == fp->ft_data->x8->x10) {
-            if (fp->parts[i].flags_b0) {
+            if (msl_fighter_part_flag_b0(fp, i)) {
                 lb_8000B760(fp->parts[i].joint, joint);
-            } else if (!fp->parts[i].flags_b5) {
+            } else if (!msl_fighter_part_flag_b5(fp, i)) {
                 lb_8000B5DC(fp->parts[i].joint, joint);
             }
             ftCommon_8007F6A4(fp, fp->parts[i].joint);
         } else {
-            if (fp->parts[i].flags_b0) {
+            if (msl_fighter_part_flag_b0(fp, i)) {
                 lb_8000B6A4(fp->parts[i].joint, joint);
-            } else if (!fp->parts[i].flags_b5) {
+            } else if (!msl_fighter_part_flag_b5(fp, i)) {
                 lb_8000B4FC(fp->parts[i].joint, joint);
             }
         }
@@ -931,18 +936,18 @@ void ftAnim_8006FB88(Fighter* fp, Fighter_Part part, HSD_Joint* joint)
             i++;
         }
         if (i == fp->ft_data->x8->x10) {
-            if (fp->parts[i].flags_b0) {
+            if (msl_fighter_part_flag_b0(fp, i)) {
                 lb_8000B760(fp->parts[i].x4_jobj2, joint);
                 HSD_JObjClearFlags(fp->parts[i].x4_jobj2, JOBJ_USE_QUATERNION);
-            } else if (!fp->parts[i].flags_b5) {
+            } else if (!msl_fighter_part_flag_b5(fp, i)) {
                 lb_8000B5DC(fp->parts[i].x4_jobj2, joint);
             }
             ftCommon_8007F6A4(fp, fp->parts[i].x4_jobj2);
         } else {
-            if (fp->parts[i].flags_b0) {
+            if (msl_fighter_part_flag_b0(fp, i)) {
                 lb_8000B6A4(fp->parts[i].x4_jobj2, joint);
                 HSD_JObjClearFlags(fp->parts[i].x4_jobj2, JOBJ_USE_QUATERNION);
-            } else if (!fp->parts[i].flags_b5) {
+            } else if (!msl_fighter_part_flag_b5(fp, i)) {
                 lb_8000B4FC(fp->parts[i].x4_jobj2, joint);
             }
         }
@@ -980,8 +985,8 @@ void ftAnim_8006FCE4(Fighter* fp, bool do_blending)
 
         part = ftPartsRemap(fp->kind, kind, i);
         if (part != 0xFFU) {
-            if (fp->parts[part].flags_b1 && !fp->parts[part].flags_b0 &&
-                !fp->parts[part].flags_b5)
+            if (fp->parts[part].flags_b1 &&
+                msl_fighter_part_can_animate(fp, part))
             {
                 HSD_JObj* jobj = get_part_joint(fp, part, do_blending);
                 if (fp->parts[part].flags_b3) {
@@ -1032,8 +1037,8 @@ void ftAnim_8006FE9C(Fighter* fp, Fighter_Part start, float t, float t_inv)
     size_t blend_count = 0;
 #endif
     for (i = start; i < ftPartsTable[fp->kind]->parts_num; i++) {
-        if (fp->parts[i].flags_b1 && !fp->parts[i].flags_b0 &&
-            !fp->parts[i].flags_b5)
+        if (fp->parts[i].flags_b1 &&
+            msl_fighter_part_can_animate(fp, i))
         {
             if (fp->parts[i].flags_b4) {
                 lbCopyJObjSRT(fp->parts[i].x4_jobj2, fp->parts[i].joint);
@@ -1057,8 +1062,8 @@ void ftAnim_8006FF74(Fighter* fp, Fighter_Part start)
 {
     int i;
     for (i = start; i < ftPartsTable[fp->kind]->parts_num; i++) {
-        if (fp->parts[i].flags_b1 && !fp->parts[i].flags_b0 &&
-            !fp->parts[i].flags_b5)
+        if (fp->parts[i].flags_b1 &&
+            msl_fighter_part_can_animate(fp, i))
         {
             lbCopyJObjSRT(fp->parts[i].x4_jobj2, fp->parts[i].joint);
         }
@@ -1080,7 +1085,7 @@ void ftAnim_80070010(Fighter* fp, Fighter_Part start, float t, float t_inv,
         while (ftParts_8007506C(fp->kind, i) != 0) {
             i++;
         }
-        if (!fp->parts[i].flags_b0 && !fp->parts[i].flags_b5) {
+        if (msl_fighter_part_can_animate(fp, i)) {
             if (fp->parts[i].flags_b4) {
                 lb_8000B4FC(fp->parts[i].joint, joint);
             } else {
@@ -1117,7 +1122,7 @@ void ftAnim_80070108(Fighter* fp, Fighter_Part start, float t, float t_inv,
             i++;
         }
 
-        if (!fp->parts[i].flags_b0 && !fp->parts[i].flags_b5) {
+        if (msl_fighter_part_can_animate(fp, i)) {
 #ifdef MSL_CORE_NATIVE
             // The interpolation skeleton was reset to this static pose before
             // its attached animation ran. Unattached joints are unchanged.
@@ -1324,7 +1329,7 @@ void ftAnim_800707B0(Fighter_GObj* arg0)
             }
             for (j = 0; j < temp_r26->x2; j++) {
                 int temp_r0 = var_r29[j];
-                if (fp->parts[temp_r0].flags_b5) {
+                if (msl_fighter_part_flag_b5(fp, temp_r0)) {
                     if (var_f29) {
                         temp_r3 = &fp->parts[temp_r0];
                         lb_8000C490(temp_r3->x4_jobj2, temp_r3->joint,
@@ -1348,7 +1353,7 @@ void ftAnim_80070904(Fighter* fp, Fighter_Part start, HSD_AnimJoint* animjoint)
         while (ftParts_8007506C(fp->kind, i) != 0) {
             i++;
         }
-        if (!fp->parts[i].flags_b0 && animjoint->aobjdesc != NULL) {
+        if (!msl_fighter_part_flag_b0(fp, i) && animjoint->aobjdesc != NULL) {
             HSD_JObj* jobj = fp->parts[i].x4_jobj2;
 #ifdef MSL_CORE_NATIVE
             msl_fighter_pose_attach_anim_joint(jobj, animjoint);
@@ -1358,7 +1363,7 @@ void ftAnim_80070904(Fighter* fp, Fighter_Part start, HSD_AnimJoint* animjoint)
             HSD_JObjClearFlags(jobj, 0x20000);
             HSD_JObjReqAnimByFlags(jobj, 1, 0.0F);
             HSD_JObjAnim(jobj);
-            fp->parts[i].flags_b5 = true;
+            msl_fighter_set_part_flag_b5(fp, i, true);
         }
         i++;
         ftAnim_GetNextAnimJointInTree(&animjoint, &sp14);
@@ -1423,7 +1428,7 @@ void ftAnim_80070A10(Fighter* ft, Fighter_Part part, FigaTree* tree)
             break;
         }
 
-        if (!ft->parts[r22].flags_b0 && !ft->parts[r22].flags_b5) {
+        if (msl_fighter_part_can_animate(ft, r22)) {
             HSD_JObj* r3 = ft->parts[r22].x4_jobj2;
             ftAnim_AttachAll(r3, tree, tracks, *nodes);
         }
@@ -1473,8 +1478,8 @@ static inline void some_inline(Fighter* fp, int start,
             i++;
         }
 
-        if (fp->parts[i].flags_b5) {
-            fp->parts[i].flags_b5 = false;
+        if (msl_fighter_part_flag_b5(fp, i)) {
+            msl_fighter_set_part_flag_b5(fp, i, false);
         }
 
         i++;
@@ -1534,7 +1539,7 @@ void ftAnim_80070F28(HSD_GObj* gobj)
 
             for (j = 0; j < data->x2; j++) {
                 u8 part_idx = parts_list[j];
-                fp->parts[part_idx].flags_b5 = false;
+                msl_fighter_set_part_flag_b5(fp, part_idx, false);
             }
             slot->x11 = -1;
         }

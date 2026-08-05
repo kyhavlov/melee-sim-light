@@ -276,3 +276,29 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
 - Source synchronization, native smoke, PPC smoke, the 3,501,461-frame optimized-release suite,
   allocation/save-restore census, Wasm parity, and viewer smoke pass. The complete
   retained/rejected experiment record is in `JOURNAL_2026-08-03_CHECKPOINT_2.md`.
+
+## Exact scalar, pose, geometry, and output work deletion
+
+- `This commit` retains the completed exact aggregate since `02cfe013`: lossless compact pose
+  samples; exact AVX-512 general matrix concat and wide-trig quadrant publication; direct fighter
+  part membership; direct dynamics direction products; shared exact scalar tangent reduction;
+  earlier rejection inside generic and horizontal stage-line intersection; direct canonical
+  observation/item publication; and exact hosted square-root/arccosine boundaries.
+- The final collision addition generalizes the existing conservative wall-range scan to ceiling
+  ranges. Ordinary ceiling queries return early only when a static line AABB, expanded by the two
+  units required for source endpoint extension, cannot overlap the swept ECB top. Remapped joints
+  and wall-connected ceiling cases retain the source path.
+- Native x86 `acosf` replaces only Gekko's software-emulated reciprocal-square-root estimate seed
+  with `rsqrtss`; all three source-ordered binary32 Newton refinements and the unchanged `atanf`
+  tail remain. The rejected completed-reciprocal shortcut changed quaternion-derived ECB bounds by
+  one ULP and failed eight full-suite output locks. The final form is exact across all 3,501,461
+  validation frames, shrinks `acosf` from 205 to 154 bytes, and removes its hot call to the
+  345-byte general estimate leaf. Non-x86 behavior is unchanged.
+- Three 262,144-frame alternating pairs against `02cfe013` preserve digests
+  `bdff41cf74a54850` / `ee9d93c545aa3ef9`. Median paired throughput improves 9.80% at resident
+  256 and 8.23% at resident 512. Candidate medians in the measured host window are 38,234.8 /
+  40,117.3 cycles/frame and 112,253 / 106,985 FPS. Every candidate arm beats its paired parent;
+  the campaign remains open because the observed medians are still below 150k FPS.
+- Source synchronization, native API/copy/save-restore and sealed-allocation smoke, PPC smoke,
+  complete optimized-release validation, Wasm parity, and viewer/browser smoke are green. Match
+  storage, savestate size, and gameplay allocation counts remain unchanged.

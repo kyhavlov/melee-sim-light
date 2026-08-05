@@ -54,7 +54,11 @@ typedef struct MslFighterPoseJoint {
     float framerate;
     uint16_t track_start;
     uint8_t track_count;
+#ifdef MSL_CORE_WASM
     uint8_t source_part_index;
+#elif defined(MSL_CORE_NATIVE)
+    uint8_t part_anim_flags;
+#endif
     uint16_t parent_index;
     uint16_t tree_count;
     uint32_t program_node_index : 18;
@@ -70,8 +74,13 @@ typedef struct MslFighterPoseJoint {
 } MslFighterPoseJoint;
 
 #define MSL_FIGHTER_POSE_TABLE_FRAME_NONE 0x7FFu
+#ifdef MSL_CORE_WASM
 #define MSL_FIGHTER_POSE_PART_NONE UINT8_MAX
-
+#endif
+enum {
+    MSL_FIGHTER_POSE_PART_FLAG_B0 = 1 << 0,
+    MSL_FIGHTER_POSE_PART_FLAG_B5 = 1 << 5,
+};
 #ifdef MSL_CORE_NATIVE
 _Static_assert(sizeof(MslFighterPoseJoint) ==
                    (sizeof(void*) == 8 ? 56 : 44),
@@ -111,8 +120,7 @@ typedef struct MslFighterPoseProgramNode {
     uint16_t program_index;
     uint8_t track_count;
     uint8_t value_count;
-    uint8_t direct;
-    uint8_t pad;
+    uint16_t sample_stride;
 } MslFighterPoseProgramNode;
 
 _Static_assert(sizeof(MslFighterPoseProgramNode) == 16,
@@ -139,7 +147,9 @@ uint16_t msl_fighter_pose_program_token(const FigaTree* tree);
 FigaTree* msl_fighter_pose_program_tree(uint16_t token);
 #endif
 void msl_fighter_pose_register_tree(HSD_JObj* root);
+#ifdef MSL_CORE_WASM
 void msl_fighter_pose_bind_part(HSD_JObj* joint, uint8_t part);
+#endif
 void msl_fighter_pose_remove_tree(HSD_JObj* root);
 void msl_fighter_pose_attach_figa(HSD_JObj* joint, FigaTree* tree,
                                   FigaTrack* tracks, int track_count,
@@ -152,8 +162,12 @@ void msl_fighter_pose_set_tree_flags(HSD_JObj* root, uint32_t flags);
 void msl_fighter_pose_set_tree_rate(HSD_JObj* root, float rate);
 void msl_fighter_pose_animate_joint(HSD_JObj* joint);
 void msl_fighter_pose_animate_tree(HSD_JObj* root);
+#ifdef MSL_CORE_WASM
 void msl_fighter_pose_animate_parts(HSD_JObj* root,
                                     const FighterBone* parts);
+#else
+void msl_fighter_pose_animate_parts(HSD_JObj* root);
+#endif
 bool msl_fighter_pose_is_animating(HSD_JObj* joint);
 bool msl_fighter_pose_has_animation(const HSD_JObj* joint);
 bool msl_fighter_pose_tree_is_animating(HSD_JObj* root);
