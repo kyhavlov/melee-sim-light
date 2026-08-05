@@ -1,0 +1,48 @@
+# Pinned PPC reference toolchain packages: filename, deb architecture,
+# sha256, immutable Launchpad archive URL. Every host (noble CI runner,
+# newer-Ubuntu dev machines, the containerized macOS path) extracts these
+# exact bytes, so the reference compiler, binutils, and qemu are identical
+# to the certified linux gate host regardless of what the local apt
+# archive currently carries. Versions were recorded from the noble
+# (24.04) runner archive on 2026-08-05; bump deliberately, re-recording
+# hashes, since PPC codegen identity is part of the suite identities.
+# Rows with arch "all" apply to every host; "amd64"/"arm64" rows follow
+# host_arch.sh (Apple Silicon populates the arm64 tree).
+binutils-common_2.42-4ubuntu2.10_amd64.deb	amd64	d136073f5e2153f3df11c1d08d66727b9466b28ff483f50085f14bbe3464b5ee	https://launchpad.net/ubuntu/+archive/primary/+files/binutils-common_2.42-4ubuntu2.10_amd64.deb
+binutils-common_2.42-4ubuntu2.10_arm64.deb	arm64	e2930005b9e4d599cfa8ebddd1d888cbcef7ebec38c8c7dfbc4babbdeaa52c3b	https://launchpad.net/ubuntu/+archive/primary/+files/binutils-common_2.42-4ubuntu2.10_arm64.deb
+binutils-powerpc-linux-gnu_2.42-4ubuntu2.10_amd64.deb	amd64	549d0fd6431442cf51d6e9221a78b4787f385a2f3a8d14226fb7d35c6e0c3562	https://launchpad.net/ubuntu/+archive/primary/+files/binutils-powerpc-linux-gnu_2.42-4ubuntu2.10_amd64.deb
+binutils-powerpc-linux-gnu_2.42-4ubuntu2.10_arm64.deb	arm64	ee534a4d356befc667eac3faf2533802a57a5a718adf0669e449816a8d780a79	https://launchpad.net/ubuntu/+archive/primary/+files/binutils-powerpc-linux-gnu_2.42-4ubuntu2.10_arm64.deb
+cpp-13-powerpc-linux-gnu_13.3.0-6ubuntu2~24.04.1cross1_amd64.deb	amd64	cc0f6af71c882816c592c0aad4c7cf46b27cdca5558077149c06fb6fd5f6550e	https://launchpad.net/ubuntu/+archive/primary/+files/cpp-13-powerpc-linux-gnu_13.3.0-6ubuntu2~24.04.1cross1_amd64.deb
+cpp-13-powerpc-linux-gnu_13.3.0-6ubuntu2~24.04.1cross1_arm64.deb	arm64	8066801973f9e33196b5e19462784e2f2596d4b3a947378d626b92f8284f34ce	https://launchpad.net/ubuntu/+archive/primary/+files/cpp-13-powerpc-linux-gnu_13.3.0-6ubuntu2~24.04.1cross1_arm64.deb
+gcc-13-cross-base_13.3.0-6ubuntu2~24.04.1cross1_all.deb	all	02676468c2f71d57be2fbd6e6f74462ab419a49db15a1b1f031b2460a2954cd3	https://launchpad.net/ubuntu/+archive/primary/+files/gcc-13-cross-base_13.3.0-6ubuntu2~24.04.1cross1_all.deb
+gcc-13-powerpc-linux-gnu-base_13.3.0-6ubuntu2~24.04.1cross1_amd64.deb	amd64	16570416741c1e735a100160f537ea5f55427e5b27d6ef00689d3ff9229f497e	https://launchpad.net/ubuntu/+archive/primary/+files/gcc-13-powerpc-linux-gnu-base_13.3.0-6ubuntu2~24.04.1cross1_amd64.deb
+gcc-13-powerpc-linux-gnu-base_13.3.0-6ubuntu2~24.04.1cross1_arm64.deb	arm64	be5d4dcd5ec8fb2459eef7cb513e4f344afe8f31b1c30dc41006b5908de4f73c	https://launchpad.net/ubuntu/+archive/primary/+files/gcc-13-powerpc-linux-gnu-base_13.3.0-6ubuntu2~24.04.1cross1_arm64.deb
+gcc-13-powerpc-linux-gnu_13.3.0-6ubuntu2~24.04.1cross1_amd64.deb	amd64	8b88d013e1874830fa1da68dbad2c2cdf681ab22893501463f4c8f081f6da4fe	https://launchpad.net/ubuntu/+archive/primary/+files/gcc-13-powerpc-linux-gnu_13.3.0-6ubuntu2~24.04.1cross1_amd64.deb
+gcc-13-powerpc-linux-gnu_13.3.0-6ubuntu2~24.04.1cross1_arm64.deb	arm64	7cdca54ae282c6532978e89f060cb6c587b13c3b71f60b5eb663da3103275665	https://launchpad.net/ubuntu/+archive/primary/+files/gcc-13-powerpc-linux-gnu_13.3.0-6ubuntu2~24.04.1cross1_arm64.deb
+libasan8-powerpc-cross_14.2.0-4ubuntu2~24.04.1cross1_all.deb	all	68a3b335bdd4fb83c90ab30abab09a1bd368d2d231138fb7834832e8c04c9fa9	https://launchpad.net/ubuntu/+archive/primary/+files/libasan8-powerpc-cross_14.2.0-4ubuntu2~24.04.1cross1_all.deb
+libatomic1-powerpc-cross_14.2.0-4ubuntu2~24.04.1cross1_all.deb	all	e4336586da2590251755bd34c1537bc4420edb5b94cadb0592f2edf58f49c8d0	https://launchpad.net/ubuntu/+archive/primary/+files/libatomic1-powerpc-cross_14.2.0-4ubuntu2~24.04.1cross1_all.deb
+libbinutils_2.42-4ubuntu2.10_amd64.deb	amd64	064dce00ce94e1fc2d33779cb0071088f4c8aac79e85345f2e78a020f7d14699	https://launchpad.net/ubuntu/+archive/primary/+files/libbinutils_2.42-4ubuntu2.10_amd64.deb
+libbinutils_2.42-4ubuntu2.10_arm64.deb	arm64	c86634a7471aa27439b9bef7bd91ca8136f01f938c93bf6abe16a8fca758e849	https://launchpad.net/ubuntu/+archive/primary/+files/libbinutils_2.42-4ubuntu2.10_arm64.deb
+libc6-dev-powerpc-cross_2.39-0ubuntu8cross1_all.deb	all	a079ee496442f958950a271e4efc08cbe3bc991ce11ea57fed34a62ce2733805	https://launchpad.net/ubuntu/+archive/primary/+files/libc6-dev-powerpc-cross_2.39-0ubuntu8cross1_all.deb
+libc6-powerpc-cross_2.39-0ubuntu8cross1_all.deb	all	7a06e50a59bc5aa9b01f420172f1192a26a26060ca0ebd596e972a004bffa1e8	https://launchpad.net/ubuntu/+archive/primary/+files/libc6-powerpc-cross_2.39-0ubuntu8cross1_all.deb
+libgcc-13-dev-powerpc-cross_13.3.0-6ubuntu2~24.04.1cross1_all.deb	all	2fbdd7ee5f2cb26dba36da412d68e319a0ea3d610b002503f1eac12e7470a850	https://launchpad.net/ubuntu/+archive/primary/+files/libgcc-13-dev-powerpc-cross_13.3.0-6ubuntu2~24.04.1cross1_all.deb
+libgcc-s1-powerpc-cross_14.2.0-4ubuntu2~24.04.1cross1_all.deb	all	f8b310583b425c8a966ee14142253a7c97ed173a21116ae9727c092d84c9c248	https://launchpad.net/ubuntu/+archive/primary/+files/libgcc-s1-powerpc-cross_14.2.0-4ubuntu2~24.04.1cross1_all.deb
+libgmp10_6.3.0+dfsg-2ubuntu6.1_amd64.deb	amd64	285f8a505dfa8e1b33f357a9d8d3477ad35bf18c0b34771a6df4c25923f3ae0d	https://launchpad.net/ubuntu/+archive/primary/+files/libgmp10_6.3.0+dfsg-2ubuntu6.1_amd64.deb
+libgmp10_6.3.0+dfsg-2ubuntu6.1_arm64.deb	arm64	5a783429ec1a29fb74a9a59c1699579dd9742bd35722280b9ce10e1f3916b003	https://launchpad.net/ubuntu/+archive/primary/+files/libgmp10_6.3.0+dfsg-2ubuntu6.1_arm64.deb
+libgomp1-powerpc-cross_14.2.0-4ubuntu2~24.04.1cross1_all.deb	all	8908a902c6538453585f06d2765336d7f1bb201e4f19d84ea848c998a6fd2292	https://launchpad.net/ubuntu/+archive/primary/+files/libgomp1-powerpc-cross_14.2.0-4ubuntu2~24.04.1cross1_all.deb
+libisl23_0.26-3build1.1_amd64.deb	amd64	4e040926e50fb961fae9bf95660189d468336a4a17bc321872c434fc8f777e7f	https://launchpad.net/ubuntu/+archive/primary/+files/libisl23_0.26-3build1.1_amd64.deb
+libisl23_0.26-3build1.1_arm64.deb	arm64	250bff60f1405c2fa7cd8cdd839f83105c7fec9b42ed6cb5f62e1bcda709bbc2	https://launchpad.net/ubuntu/+archive/primary/+files/libisl23_0.26-3build1.1_arm64.deb
+libmpc3_1.3.1-1build1.1_amd64.deb	amd64	cebe6098bb3d66fdacac9dc6fe406a651216d9c00f27c3f9c159d15d96cdf864	https://launchpad.net/ubuntu/+archive/primary/+files/libmpc3_1.3.1-1build1.1_amd64.deb
+libmpc3_1.3.1-1build1.1_arm64.deb	arm64	efc4a44fb7382db33bf3adbfd0058201fd73d0e56fd48662d653e9a93f6139da	https://launchpad.net/ubuntu/+archive/primary/+files/libmpc3_1.3.1-1build1.1_arm64.deb
+libmpfr6_4.2.1-1build1.1_amd64.deb	amd64	aebc1c8b69a1f98bb43dfc268daecd181116dbf40b13ee4e822eb4bdd52b493a	https://launchpad.net/ubuntu/+archive/primary/+files/libmpfr6_4.2.1-1build1.1_amd64.deb
+libmpfr6_4.2.1-1build1.1_arm64.deb	arm64	83517e4377082a35dcce66ec5310881a848486279f64d737919d1819b7884201	https://launchpad.net/ubuntu/+archive/primary/+files/libmpfr6_4.2.1-1build1.1_arm64.deb
+libsframe1_2.42-4ubuntu2.10_amd64.deb	amd64	72093fb456864db55f1352bfa5e952a94f7abaff64e71dff1fbf001db1984564	https://launchpad.net/ubuntu/+archive/primary/+files/libsframe1_2.42-4ubuntu2.10_amd64.deb
+libsframe1_2.42-4ubuntu2.10_arm64.deb	arm64	4e2ef8c92da324c7f8e8f055c8c698e37c93b886602766e7e72ac178835c9a31	https://launchpad.net/ubuntu/+archive/primary/+files/libsframe1_2.42-4ubuntu2.10_arm64.deb
+libubsan1-powerpc-cross_14.2.0-4ubuntu2~24.04.1cross1_all.deb	all	9746815507277dc45235e89f1de796be7e5f6c3b6c6af088ebfbaff49a2a9edd	https://launchpad.net/ubuntu/+archive/primary/+files/libubsan1-powerpc-cross_14.2.0-4ubuntu2~24.04.1cross1_all.deb
+libzstd1_1.5.5+dfsg2-2build1.1_amd64.deb	amd64	dfcf25061e07aad7efd3f4f880ba5ad4d4d09ebe7fc8cc77ab6b8a161d6d4727	https://launchpad.net/ubuntu/+archive/primary/+files/libzstd1_1.5.5+dfsg2-2build1.1_amd64.deb
+libzstd1_1.5.5+dfsg2-2build1.1_arm64.deb	arm64	ea7d6e9fde577ea14dbf07fdfb74d6287eb09c6cba4a9d63abdcb87b0ec54bcc	https://launchpad.net/ubuntu/+archive/primary/+files/libzstd1_1.5.5+dfsg2-2build1.1_arm64.deb
+linux-libc-dev-powerpc-cross_6.8.0-25.25cross1_all.deb	all	c18015906b9aeac14888a4b54a373b8f7617dcb5517d213ad3a5b9e692f75968	https://launchpad.net/ubuntu/+archive/primary/+files/linux-libc-dev-powerpc-cross_6.8.0-25.25cross1_all.deb
+qemu-user-static_8.2.2+ds-0ubuntu1.17_amd64.deb	amd64	4558164baf4250d4dcc0dcbcf114b44b4b77b5fed773267187e72cedae883fdc	https://launchpad.net/ubuntu/+archive/primary/+files/qemu-user-static_8.2.2+ds-0ubuntu1.17_amd64.deb
+qemu-user-static_8.2.2+ds-0ubuntu1.17_arm64.deb	arm64	73fa4601fb0113b2aa042f9231eb38069d4746e3d2248087fb24112e6690f613	https://launchpad.net/ubuntu/+archive/primary/+files/qemu-user-static_8.2.2+ds-0ubuntu1.17_arm64.deb
+zlib1g_1.3.dfsg-3.1ubuntu2.1_amd64.deb	amd64	7074b6a2f6367a10d280c00a1cb02e74277709180bab4f2491a2f355ab2d6c20	https://launchpad.net/ubuntu/+archive/primary/+files/zlib1g_1.3.dfsg-3.1ubuntu2.1_amd64.deb
+zlib1g_1.3.dfsg-3.1ubuntu2.1_arm64.deb	arm64	cbe3d39ec32d3cc27c021ae4af11e7c67bdf9d700d573207e0941d4038056278	https://launchpad.net/ubuntu/+archive/primary/+files/zlib1g_1.3.dfsg-3.1ubuntu2.1_arm64.deb

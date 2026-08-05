@@ -472,7 +472,9 @@ $(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(CORE)/runtime/wire.h $(CORE)/ru
 
 toolchain: $(TOOLCHAIN_STAMP)
 
-$(TOOLCHAIN_STAMP): $(ROOT)/tools/build/setup_ppc32_toolchain.sh
+$(TOOLCHAIN_STAMP): $(ROOT)/tools/build/setup_ppc32_toolchain.sh \
+		$(ROOT)/tools/build/ppc32_toolchain_packages.tsv \
+		$(ROOT)/tools/build/host_arch.sh
 	@$(ROOT)/tools/build/setup_ppc32_toolchain.sh
 
 $(PPC_UPSTREAM_OBJS): $(PPC_OBJ_DIR)/gameplay/%.o: $(CORE)/%.c $(TOOLCHAIN_STAMP)

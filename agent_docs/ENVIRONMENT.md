@@ -28,7 +28,7 @@ copied only between hosts of the same architecture.
 ```sh
 git lfs pull
 make bootstrap ISO=/path/to/SSBM.iso     # uv sync --dev, extract, native, python-library
-make toolchain                           # PPC cross gcc-13 + qemu-user-static, unpacked in-tree
+make toolchain                           # pinned PPC cross gcc-13 + qemu, unpacked in-tree from ppc32_toolchain_packages.tsv
 make validator
 ```
 
