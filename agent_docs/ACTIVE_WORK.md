@@ -163,9 +163,18 @@ recurring shape: a 1-ULP pos_y with a ~32-ULP speed_y_self in fighter state 361
 seed is the catch-hit ENTRY velocity, fed by the hookshot chain geometry (the pin-walk
 normalize margins measured as razor-thin earlier, e.g. +2.4e-7 at one boundary). Range
 audits confirm ZERO fused ops in the whole ftLk/ftCl address ranges and none reachable
-in ftCo_AirCatch (the two fmadds nearby belong to ftCo_DamageBind's 800C4550). Next
-lever: dual-backend (native-vs-PPC) frame-stamped traces of the 4BFC walk at the catch
-frame to find the first differing float, since PPC is bit-exact against retail here.
+in ftCo_AirCatch (the two fmadds nearby belong to ftCo_DamageBind's 800C4550). MEASURED (32106): bit-hex dual-backend traces of ftCo_AirCatchHit_Phys inputs
+(pos_delta, self_vel, cur_pos) are IDENTICAL between native and PPC for all 41
+state-361 frames — including frames after the 1649 pos_y[0] 1-ULP export mismatch that
+only native shows. Internal gameplay state never diverges (the wall-hug clamp
+re-derives pos each frame, so nothing feeds back), which means the divergence is
+confined to the exported coll-clamped position at the mismatch frames: either
+mpColl_800471F8's clamp output ULP-differs between x86 and qemu-PPC without ever
+persisting (suspect: helpers in runtime/math.o / MSL/trigf.o, the only -O2
+-ffp-contract=fast -mfma objects, reached by a new PS-wall path), or the export
+samples a lane (coll_data.cur_pos?) that differs from fp->cur_pos. Next: trace
+end-of-frame fp->cur_pos vs coll_data.cur_pos vs the exported row for P1 frames
+1645..1655 on both backends; then look at the mpColl wall projection expression.
 
 Fixed this session (all committed): tether launch reads through the hookshot scratch
 mirror (0 -> 11 passes; probe-verified retail derives the launch from the scaled x38

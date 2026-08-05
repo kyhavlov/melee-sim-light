@@ -1135,18 +1135,6 @@ void Fighter_ChangeMotionState(Fighter_GObj* gobj, FtMotionId msid,
                                f32 anim_speed, f32 anim_blend,
                                Fighter_GObj* arg3)
 {
-#include <stdio.h>
-    {
-        Fighter* fpt = GET_FIGHTER(gobj);
-        if ((fpt->kind == FTKIND_LINK || fpt->kind == FTKIND_CLINK) &&
-            (msid == 43 || (fpt->motion_id >= 356 && fpt->motion_id <= 359)))
-        {
-            fprintf(stderr,
-                    "MSLTRACE cms from=%d to=%d start=%.4f speed=%.4f blend=%.4f x=%.3f\n",
-                    (int) fpt->motion_id, (int) msid, anim_start, anim_speed,
-                    anim_blend, fpt->cur_pos.x);
-        }
-    }
     HSD_JObj* jobj = GET_JOBJ(gobj);
     Fighter* fp = GET_FIGHTER(gobj);
     MotionState* new_motion_state;
