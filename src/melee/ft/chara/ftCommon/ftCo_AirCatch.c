@@ -124,23 +124,6 @@ void ftCo_800C3CC0(Fighter_GObj* gobj)
 
 void ftCo_AirCatch_Anim(Fighter_GObj* gobj)
 {
-#include <stdio.h>
-    {
-        Fighter* fpp = GET_FIGHTER(gobj);
-        int hi;
-        for (hi = 0; hi < 4; ++hi) {
-            if (fpp->x914[hi].state != 0) {
-                fprintf(stderr,
-                        "MSLTRACE zairhit i=%d st=%d jobj=%p pos=(%.3f,%.3f) dmg=%.1f\n",
-                        hi, fpp->x914[hi].state, (void*) fpp->x914[hi].jobj,
-                        fpp->x914[hi].x4C.x, fpp->x914[hi].x4C.y,
-                        fpp->x914[hi].damage);
-            }
-        }
-        fprintf(stderr, "MSLTRACE zair fp=(%.3f,%.3f) parts139=%p\n",
-                fpp->cur_pos.x, fpp->cur_pos.y,
-                (void*) fpp->parts[139].joint);
-    }
 
     Fighter* fp = GET_FIGHTER(gobj);
 
