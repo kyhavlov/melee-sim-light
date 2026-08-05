@@ -1702,8 +1702,16 @@ bool fn_800D9228(Fighter_GObj* gobj)
         {
             Item_GObj* tether_gobj = fp->fv.lk.xC;
             Item* tether_ip = tether_gobj->user_data;
+#ifdef MSL_CORE_NATIVE
+            // The tether view aliases the hookshot attribute lanes
+            // it_link_attr_math derives in place at spawn; read the
+            // match-owned mirror.
+            struct TetherAttributes* tether_data =
+                (struct TetherAttributes*) msl_link_hookshot_attrs(tether_ip);
+#else
             struct TetherAttributes* tether_data =
                 tether_ip->xC4_article_data->x4_specialAttributes;
+#endif
 
             if (fp->mv.co.catch.x0 == (f32) da->x98) {
                 Vec3 pos;
