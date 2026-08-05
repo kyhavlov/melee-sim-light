@@ -117,7 +117,10 @@ jobs:
 
       - name: Run the aggregate replay gate
         # Explicit bash turns on pipefail so the tee cannot mask a gate
-        # failure.
+        # failure. The 8s native per-case default is calibrated for the
+        # validated container; shared hosted runners can run several times
+        # slower depending on region, so give each case timeout headroom
+        # (correctness is frame comparison, never wall clock).
         shell: bash
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -125,6 +128,7 @@ jobs:
           python3 -m tools.validation.validate_replay \
             --suite replays/suites/melee_core_aggregate.json \
             --backend native --no-build --workers 4 \
+            --timeout 30 \
             --output-locks replays/suites/melee_core_output_locks.json \
             | tee aggregate.log
           grep -E "^\[native\] summary" aggregate.log >> "$GITHUB_STEP_SUMMARY"

@@ -9,6 +9,7 @@ import os
 import queue
 import re
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from functools import lru_cache
@@ -101,32 +102,53 @@ class _NativeRunnerPool:
     def __init__(self, count: int) -> None:
         self._available: queue.LifoQueue[_NativeRunner] = queue.LifoQueue()
         self._runners: list[_NativeRunner] = []
+        self._lock = threading.Lock()
         try:
             for _ in range(count):
-                process = subprocess.Popen(
-                    [str(NATIVE_BINARY), str(game_data_dir()), "--server"],
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    bufsize=0,
-                )
-                assert process.stdin is not None and process.stdout is not None
-                runner = _NativeRunner(
-                    process=process,
-                    stdin_fd=process.stdin.fileno(),
-                    stdout_fd=process.stdout.fileno(),
-                )
+                runner = self._spawn()
                 self._runners.append(runner)
                 self._available.put(runner)
         except Exception:
             self.close()
             raise
 
+    def _spawn(self) -> _NativeRunner:
+        process = subprocess.Popen(
+            [str(NATIVE_BINARY), str(game_data_dir()), "--server"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+        )
+        assert process.stdin is not None and process.stdout is not None
+        return _NativeRunner(
+            process=process,
+            stdin_fd=process.stdin.fileno(),
+            stdout_fd=process.stdout.fileno(),
+        )
+
     def acquire(self) -> _NativeRunner:
         return self._available.get()
 
     def release(self, runner: _NativeRunner) -> None:
         self._available.put(runner)
+
+    def discard(self, runner: _NativeRunner) -> None:
+        # A case that failed mid-session leaves the runner's streams at an
+        # undefined position (a partially written job, unread output), so the
+        # next job's header would be read as frame payload. Retire the process
+        # and hand the pool a fresh one instead of poisoning later cases.
+        with self._lock:
+            self._runners.remove(runner)
+        for stream in (runner.process.stdin, runner.process.stdout, runner.process.stderr):
+            if stream is not None and not stream.closed:
+                stream.close()
+        runner.process.kill()
+        runner.process.wait()
+        replacement = self._spawn()
+        with self._lock:
+            self._runners.append(replacement)
+        self._available.put(replacement)
 
     def close(self) -> None:
         errors: list[str] = []
@@ -592,8 +614,13 @@ def _validate_case(
                 played_on=case.played_on,
                 runner=runner,
             )
+        except Exception:
+            if runner is not None and runner_pool is not None:
+                runner_pool.discard(runner)
+                runner = None
+            raise
         finally:
-            if runner is not None:
+            if runner is not None and runner_pool is not None:
                 runner_pool.release(runner)
         return ReplayOutcome(case, result, None, time.perf_counter() - started)
     except Exception as exc:
