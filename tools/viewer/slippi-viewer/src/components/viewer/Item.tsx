@@ -52,6 +52,24 @@ export function Item(props: { item: ItemUpdate }) {
       <Match when={itemName() === "Shyguy (Heiho)"}>
         <FlyGuy item={props.item} />
       </Match>
+      <Match
+        when={
+          itemName() === "Link's bomb" || itemName() === "Young Link's bomb"
+        }
+      >
+        <LinkBomb item={props.item} />
+      </Match>
+      <Match
+        when={
+          itemName() === "Link's boomerang" ||
+          itemName() === "Young Link's boomerang"
+        }
+      >
+        <LinkBoomerang item={props.item} />
+      </Match>
+      <Match when={itemName() === "Arrow" || itemName() === "Fire Arrow"}>
+        <LinkArrow item={props.item} />
+      </Match>
     </Switch>
   );
 }
@@ -148,23 +166,23 @@ function YoshiEgg(props: { item: ItemUpdate }) {
 }
 
 function Turnip(props: { item: ItemUpdate }) {
-  // states: 0 = held, 1 = bouncing?, 2 = thrown
+  // states: 0 = held (first pickup), 1 = bouncing, 2 = thrown, 3 = dropped,
+  // 4 = held after being caught. Once a turnip has been held before,
+  // itPeachTurnip_Logic56_PickedUp re-enters hold as state 4, whose anim/phys
+  // are no-ops, so the item's own position stays frozen at the catch point.
   // face: props.item.peachTurnipFace
   const ownerState = createMemo(() => getOwner(props.item).state);
+  const held = createMemo(
+    () => props.item.state === 0 || props.item.state === 4
+  );
   return (
     <>
       <circle
-        cx={
-          props.item.state === 0 ? ownerState().xPosition : props.item.xPosition
-        }
-        cy={
-          props.item.state === 0
-            ? ownerState().yPosition + 8
-            : props.item.yPosition
-        }
+        cx={held() ? ownerState().xPosition : props.item.xPosition}
+        cy={held() ? ownerState().yPosition + 8 : props.item.yPosition}
         r={600 / 256}
         fill="darkgray"
-        opacity={props.item.state === 0 ? 0.5 : 1}
+        opacity={held() ? 0.5 : 1}
       />
     </>
   );
@@ -342,6 +360,101 @@ function FlyGuy(props: { item: ItemUpdate }) {
         fill="#aa0000"
       />
     </>
+  );
+}
+
+function LinkBomb(props: { item: ItemUpdate }) {
+  // states: 0 = held (also re-entered on catch/pickup), 2 = thrown,
+  // 3 = dropped/falling, 4 = resting on the ground, 5 = exploding,
+  // 6 = knocked airborne. Held bombs keep a stale item position, so draw
+  // them at the owner like held turnips.
+  const ownerState = createMemo(() => getOwner(props.item).state);
+  const held = createMemo(() => props.item.state === 0);
+  return (
+    <>
+      <circle
+        cx={held() ? ownerState().xPosition : props.item.xPosition}
+        cy={held() ? ownerState().yPosition + 8 : props.item.yPosition}
+        r={(props.item.state === 5 ? 2500 : 500) / 256}
+        fill="darkgray"
+        opacity={held() ? 0.5 : 1}
+      />
+    </>
+  );
+}
+
+function LinkBoomerang(props: { item: ItemUpdate }) {
+  // states: 0 = in hand during the throw windup, 1 = outbound, 2 = returning,
+  // 3 = spinning down after stalling
+  const ownerState = createMemo(() => getOwner(props.item).state);
+  const held = createMemo(() => props.item.state === 0);
+  const x = createMemo(() =>
+    held() ? ownerState().xPosition : props.item.xPosition
+  );
+  const y = createMemo(() =>
+    held() ? ownerState().yPosition + 8 : props.item.yPosition
+  );
+  const spin = createMemo(() => (props.item.frameNumber * 40) % 360);
+  const armLength = 900 / 256;
+  return (
+    <g transform={`rotate(${spin()} ${x()} ${y()})`} opacity={held() ? 0.5 : 1}>
+      <line
+        x1={x() - armLength}
+        y1={y()}
+        x2={x() + armLength}
+        y2={y()}
+        stroke="darkgray"
+        stroke-width={0.8}
+        stroke-linecap="round"
+      />
+      <line
+        x1={x()}
+        y1={y() - armLength}
+        x2={x()}
+        y2={y() + armLength}
+        stroke="darkgray"
+        stroke-width={0.8}
+        stroke-linecap="round"
+      />
+    </g>
+  );
+}
+
+function LinkArrow(props: { item: ItemUpdate }) {
+  // states: 0 = nocked while the bow charges, 1 = flying, 2 = stopped by a
+  // shield, 3/4 = stuck in the ground
+  const ownerState = createMemo(() => getOwner(props.item).state);
+  const nocked = createMemo(() => props.item.state === 0);
+  const direction = createMemo(() => {
+    if (
+      props.item.state === 1 &&
+      (props.item.xVelocity !== 0 || props.item.yVelocity !== 0)
+    ) {
+      return Math.atan2(props.item.yVelocity, props.item.xVelocity);
+    }
+    return props.item.facingDirection >= 0 ? 0 : Math.PI;
+  });
+  const x = createMemo(() =>
+    nocked() ? ownerState().xPosition : props.item.xPosition
+  );
+  const y = createMemo(() =>
+    nocked() ? ownerState().yPosition + 8 : props.item.yPosition
+  );
+  const halfLength = 1200 / 256;
+  const color = createMemo(() =>
+    itemNamesById[props.item.typeId] === "Fire Arrow" ? "orangered" : "darkgray"
+  );
+  return (
+    <line
+      x1={x() - Math.cos(direction()) * halfLength}
+      y1={y() - Math.sin(direction()) * halfLength}
+      x2={x() + Math.cos(direction()) * halfLength}
+      y2={y() + Math.sin(direction()) * halfLength}
+      stroke={color()}
+      stroke-width={0.7}
+      stroke-linecap="round"
+      opacity={nocked() ? 0.5 : 1}
+    />
   );
 }
 
