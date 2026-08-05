@@ -1,6 +1,6 @@
 {
  "name": "icies",
- "notes": "Ice Climbers validation suite: 25 netplay singles across all six legal stages (2022-2026 Slippi, ranked-anonymized, and mainline captures) against Fox, Falco, Marth, Sheik, and Peach plus an Ice Climbers ditto. Pokemon Stadium entries are frozen-form only (is_frozen_ps); the import pool excluded four non-frozen Stadium games and a 2022 FoD capture predating the animation_index stream. Every game carries Slippi follower (Nana) frames for both climbers where present. The two ranked-anonymized captures (master-diamond, platinum-platinum) ran the classic UCF profile - dashback + shield drop without the pad-ring additions - so their sdi/shield-sdi/extended-shield-drop flags are off (retail-probe-verified on master-diamond frames -19 and 682).",
+ "notes": "Ice Climbers validation suite: 30 netplay singles across all six legal stages (2022-2026 Slippi, ranked-anonymized, and mainline captures) against Fox, Falco, Marth, Sheik, Peach, and Donkey Kong plus an Ice Climbers ditto. Pokemon Stadium entries are frozen-form only: pre-3.19 captures are event-verified frozen (the stadium_transformation stream, spec 0x41, is declared and empty over each full game) because the game-start is_frozen_ps flag is only trustworthy at 3.19.0+; the import pool excluded four non-frozen Stadium games and a 2022 FoD capture predating the animation_index stream. Every game carries Slippi follower (Nana) frames for both climbers where present. The two ranked-anonymized captures (master-diamond, platinum-platinum) ran the classic UCF profile - dashback + shield drop without the pad-ring additions - so their sdi/shield-sdi/extended-shield-drop flags are off (retail-probe-verified on master-diamond frames -19 and 682). The 2026-08 popo_replays.zip import added five screened singles (one each on Fountain, frozen Stadium, Dream Land, Battlefield, and Final Destination); its sixth game (23549, Ice Climbers/Peach on Yoshi's) was rejected for a one-frame hosted extra-article divergence at frame 2076.",
  "ucf_enabled": true,
  "ucf_cardinals_1_0_enabled": true,
  "replays": [
@@ -65,6 +65,18 @@
    }
   },
   {
+   "replay": "replays/validation/icies/bf-dk-2025-12_Game_20251222T224142.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 31,
+   "characters": {
+    "1": "Donkey Kong",
+    "2": "Ice Climbers"
+   }
+  },
+  {
    "replay": "replays/validation/icies/bf-falco-2025-03_Game_20250329T000322.slpz",
    "ports": [
     1,
@@ -113,6 +125,18 @@
    }
   },
   {
+   "replay": "replays/validation/icies/dl-fox-2025-08_Game_20250831T204147.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 28,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Fox"
+   }
+  },
+  {
    "replay": "replays/validation/icies/dl-fox-2025-09_Game_20250911T223118.slpz",
    "ports": [
     1,
@@ -158,6 +182,30 @@
    "characters": {
     "1": "Ice Climbers",
     "2": "Falco"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/fd-peach-2025-05_Game_20250531T123551.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Peach"
+   }
+  },
+  {
+   "replay": "replays/validation/icies/fod-fox-2025-03_Game_20250326T160358.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 2,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Fox"
    }
   },
   {
@@ -289,6 +337,18 @@
    "ucf_sdi_enabled": false,
    "ucf_shield_sdi_enabled": false,
    "ucf_shield_drop_extended_enabled": false
+  },
+  {
+   "replay": "replays/validation/icies/ps-fox-2025-08_Game_20250801T213237.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 3,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Fox"
+   }
   },
   {
    "replay": "replays/validation/icies/ys-fox-2025-06_Game_20250606T191516.slpz",

@@ -28,6 +28,9 @@ enum {
     MSL_CORE_ITEM_KIND_PEACH_PARASOL = 103,
     MSL_CORE_ITEM_KIND_PEACH_TOAD = 104,
     MSL_CORE_ITEM_KIND_LUIGI_FIREBALL = 105,
+    MSL_CORE_ITEM_KIND_ICECLIMBER_ICE = 106,
+    MSL_CORE_ITEM_KIND_ICECLIMBER_BLIZZARD = 107,
+    MSL_CORE_ITEM_KIND_ICECLIMBER_GUM_STRINGS = 113,
     MSL_CORE_ITEM_KIND_MARIO_FIREBALL = 48,
     MSL_CORE_ITEM_KIND_DRMARIO_VITAMIN = 49,
     MSL_CORE_ITEM_KIND_MARIO_CAPE = 83,
@@ -147,6 +150,38 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // variables; sampled misc lanes are fixed-pool residue.
         // refs/melee/src/melee/it/items/{itmariofireball.c,
         // itdrmariopill.c,itmariocape.c}
+        return 0;
+    case MSL_CORE_ITEM_KIND_ICECLIMBER_ICE:
+        // x0 is the spawner GObj pointer written at spawn (it_802C1590), so
+        // xDD7 samples allocator identity. x4 is the live scale, written at
+        // spawn from x60_scale and decayed by every bounce
+        // (itClimbersice_UnkMotion0_Anim), so xDDB is gameplay-owned for the
+        // article's whole life. The declared struct ends at xC, leaving
+        // 0x17/0x1B past-member residue.
+        // refs/melee/src/melee/it/itCharItems.h::itClimbersIce_ItemVars
+        // refs/melee/src/melee/it/items/itclimbersice.c::it_802C1590
+        return MSL_CORE_ITEM_MISC1;
+    case MSL_CORE_ITEM_KIND_ICECLIMBER_BLIZZARD:
+        // x0 is the scale written at spawn (itClimbersBlizzard_Spawn), so
+        // xDD7 is gameplay-owned for the article's whole life. The only
+        // other member is the flag0 bit in xDD8's leading byte, so offset 7
+        // samples an unwritten byte and 0x17/0x1B fall past the declared
+        // members.
+        // refs/melee/src/melee/it/itCharItems.h::itClimbersBlizzard_ItemVars
+        // refs/melee/src/melee/it/items/itclimbersblizzard.c
+        //   ::itClimbersBlizzard_Spawn
+        return MSL_CORE_ITEM_MISC0;
+    case MSL_CORE_ITEM_KIND_ICECLIMBER_GUM_STRINGS:
+        // x0's only owner write is the constant 2.25f (it_802C3864) whose
+        // sampled low byte is 0x00; the spawn constructor (it_802C27D4)
+        // leaves it unwritten, so no live export ever samples a varying
+        // owner-written value -- the Link-bomb direction-sign argument.
+        // x4/x8 are the string ItemLink chain, xC the owner GObj, x14 the
+        // tail joint, and the struct ends there, so every sampled lane is
+        // pointer identity, residue, or a constant.
+        // refs/melee/src/melee/it/itCharItems.h::itClimbersString_ItemVars
+        // refs/melee/src/melee/it/items/itclimbersstring.c
+        //   ::{it_802C27D4,it_802C3864}
         return 0;
     case MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_GROUND:
         // xDD7 samples the crawl angle (constructor-written via

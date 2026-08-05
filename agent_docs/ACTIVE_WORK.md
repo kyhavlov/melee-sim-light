@@ -2021,3 +2021,42 @@ Aggregate **426 = 342 pass / 84 classified / 0 fail / 0 error**, lock-clean, xpa
 Host certification: source-check, native-smoke, aggregate, per-suite ness PPC
 (`--timeout 240`; qemu here needs ~100s on 17k-frame captures), pytest 45 passed /
 1 skipped (no local ISO at the tested path) — all green.
+
+## Icies misc-lane retirement + popo_replays import (2026-08-05)
+
+The Ice Climbers article lanes joined the projection mask's source-proven non-gameplay
+taxonomy, retiring the whole `unrecorded-item-pool-residue` family (24 replays) and the
+belay-string `unrecorded-item-pointer-identity` classification:
+
+- **Ice (106) keeps misc1 only.** x0 is the spawner GObj pointer written at spawn
+  (`it_802C1590`) — allocator identity; x4 is the live scale, spawn-written from
+  x60_scale and bounce-decayed (`itClimbersice_UnkMotion0_Anim`), so xDDB stays
+  compared; the declared struct ends at xC, leaving 0x17/0x1B past-member residue.
+- **Blizzard (107) keeps misc0 only.** x0 is the spawn-written scale
+  (`itClimbersBlizzard_Spawn`); the only other member is the flag0 bit in xDD8's
+  leading byte, so offset 7 samples an unwritten byte and 0x17/0x1B fall past the
+  declared members.
+- **Gum strings (113) is fully masked.** x0's only owner write is the constant 2.25f
+  (`it_802C3864`) whose sampled low byte is 0x00 and the spawn constructor
+  (`it_802C27D4`) leaves it unwritten — the Link-bomb direction-sign argument; x4/x8
+  are the string ItemLink chain, xC the owner GObj, x14 the tail joint, and the
+  struct ends there.
+
+`dl-fox-2025-05` was a two-residue entry; its wind-machine half survives alone under a
+new `dreamland-wind-rng-draw-gap` id (grOldPupupu_802113E0's idle-cycle rand_range
+pair is still not consumed by the hosted wind-direction mirror; 11 forked frames,
+5205-5215, identical native/PPC fingerprints so the PPC snapshot aliases native).
+
+The 2026-08 `popo_replays.zip` import added five screened singles to the icies suite
+(25 -> 30; Fountain, frozen Stadium, Dream Land, Battlefield, FD; opponents add
+Donkey Kong). The Stadium capture is 3.18.0, where is_frozen_ps is untrustworthy, and
+is event-verified frozen (0x41 declared and empty over the full game). The zip's sixth
+game (`23549`, Ice Climbers/Peach on Yoshi's) was rejected: one hosted extra-article
+frame at 2076 (item_count 2-vs-1, self-healing) — untriaged, kept out of the suite.
+
+**Suite state: icies 30 = 29 pass / 1 classified / 0 fail on native AND on PPC**
+(classified: `dl-fox-2025-05` wind-RNG draw gap). Aggregate **491 = 425 pass / 66
+classified / 0 fail / 0 error**, lock-clean, xpass-free (30 icies output locks
+re-recorded/added; aggregate coverage tests bumped 486 -> 491). source-check,
+native-smoke, format-check, and pytest green (the parallel-oracle test only fails
+when run alongside a live aggregate run — worker OOM-kill, passes in isolation).
