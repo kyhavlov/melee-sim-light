@@ -4945,6 +4945,178 @@
      "strict_suffix_frames": 0
     }
    }
+  },
+  {
+   "replay": "replays/validation/links/18932_Game_20250611T185955.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "Link article flight position across a knife-edge Fountain contact",
+   "rationale": "Ten consecutive item.pos_x rows on one Link article flight (frames 6873..6882), seeded 2 ULPs low (0xc13bbd02 vs 0xc13bbd00) and self-healing into a 4,709-frame exact suffix. Native and PPC agree bit-for-bit, so the residual is a knife-edge float profile in the article's flight step, not a backend width or logic gap; every fighter, physics, and remaining item lane is exact. The boomerang/arrow flight owners carry their complete audited MWCC fused-op sets (canonical:link-hookshot-chain-solver-gekko-rounding closed the sibling hookshot family), and no discrete lane forks.",
+   "sources": [
+    "refs/melee/src/melee/it/items/itlinkboomerang.c",
+    "refs/melee/src/melee/it/items/itlinkarrow.c",
+    "src/upstream_delta_ledger.tsv::canonical:link-hookshot-chain-solver-gekko-rounding"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 6995,
+     "first_mismatch_frame": 6873,
+     "first_render_visibility_mismatch_frame": 4596,
+     "frames": 11714,
+     "last_mismatch_frame": 6882,
+     "matched_frames": 11704,
+     "mismatch_count": 10,
+     "mismatch_fields_digest": "0e28d8db758ce75b11b399ecd3e18af2c129349b8b2e942262434354c4f9e347",
+     "mismatch_fingerprint": "dbafddb2739cd7ad",
+     "mismatched_frames": 10,
+     "render_visibility_mismatch_count": 10,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 4709
+    },
+    "ppc": "native"
+   }
+  },
+  {
+   "replay": "replays/validation/links/redxlink_Game_20250310T205424.slpz",
+   "id": "hitlag-accumulated-pad-edge",
+   "owner": "ftCo_Damage.c capture-partner arm knockback gate for a thrown victim taking dthrow item hits",
+   "rationale": "Second face of the Ness 53362 partner-arm inversion, measured victim-side. P1 Link rides Falco's down throw (ThrownLw, state 242) whose blaster shots land as item hits (case-2 damage-log entries, 1 damage each); a KBSET/EC90 trace shows the hosted resolver assigning the thrown victim nonzero kb_applied (52.7..54.0) for every shot, so the victim - whose victim_gobj points back at the thrower - drives ftCo_8008EC90's partner arm itself instead of exiting the !kb_applied top gate as retail's victim does (the Ness retail probe). The recording holds the tech press (L at frame 283) inside the shots' hitlag window; the swallowed press edge leaves the 20-frame tech window unarmed, so retail techs the landing at frame 301 (PassiveStandF, msid 200) while the hosted build takes DownBoundU (183) and the match forks for the remainder. Everything upstream is exact for 423 rows; both backends fork identically. Same debt as the Ness entry: x668 and kb_applied feed every CheckInput and damage owner, so the fix needs the full aggregate as its gate.",
+   "sources": [
+    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c",
+    "refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C",
+    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c",
+    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 423,
+     "first_mismatch_frame": 301,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 8157,
+     "last_mismatch_frame": 8034,
+     "matched_frames": 423,
+     "mismatch_count": 318025,
+     "mismatch_fields_digest": "ca7d6116d486c5b54637e07425d962d6dac730fadb835f33ae5ffeeb84284616",
+     "mismatch_fingerprint": "0c53146abad047bf",
+     "mismatched_frames": 7734,
+     "render_visibility_mismatch_count": 8483,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 0
+    },
+    "ppc": "native"
+   }
+  },
+  {
+   "replay": "replays/validation/links/slippi-2025-01_Game_20250129T125630.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "fighter position across a knife-edge Stadium contact",
+   "rationale": "A single pos_x row at frame 9958, 1 ULP low (0xc2be3884 vs 0xc2be3885), reconverging immediately into a 4,114-frame exact suffix. Native and PPC agree bit-for-bit; all discrete lanes, damage, and inputs are exact through the seed frame. Same position-only knife-edge profile as the established dolphin-ulp-motion-profile entries: the collision arithmetic owners are asm-verified faithful (canonical:mp-ecb-wall-fmadds) and the residual enters at sub-tolerance scale from the bone-pose-derived ECB edge.",
+   "sources": [
+    "refs/melee/src/melee/mp/mpcoll.c",
+    "src/upstream_delta_ledger.tsv::canonical:mp-ecb-wall-fmadds"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 10080,
+     "first_mismatch_frame": 9958,
+     "first_render_visibility_mismatch_frame": 659,
+     "frames": 14195,
+     "last_mismatch_frame": 9958,
+     "matched_frames": 14194,
+     "mismatch_count": 1,
+     "mismatch_fields_digest": "4fced41418a9017f2b9e0b606f0a3f332cce85b5c3dae6b06e97996ced692cc3",
+     "mismatch_fingerprint": "2c7c237763cbb6af",
+     "mismatched_frames": 1,
+     "render_visibility_mismatch_count": 12,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 4114
+    },
+    "ppc": "native"
+   }
+  },
+  {
+   "replay": "replays/validation/links/slippi-2025-08_Game_20250815T041837.slpz",
+   "id": "hitlag-accumulated-pad-edge",
+   "owner": "thrown-victim release position out of Young Link's down throw",
+   "rationale": "P2 Fox rides Young Link's down throw (ThrownLw through frame 3502, all ride-pose rows exact) and leaves the release one anim pose high: pos_y runs a constant +0.1125 offset for the 17 airborne rows 3503..3519 with every velocity lane exact, then the successful platform tech at 3520 (Passive, both sides) rescues the episode into a 3,481-frame exact suffix. The offset is a throw-release bone-pose difference in the same capture/thrown partner machinery as the partner-arm inversion (the thrower is the fighter the inverted arm marks in-hitlag), carried as the same explicit debt; native and PPC agree bit-for-bit.",
+   "sources": [
+    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c",
+    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 3625,
+     "first_mismatch_frame": 3503,
+     "first_render_visibility_mismatch_frame": 551,
+     "frames": 7123,
+     "last_mismatch_frame": 3519,
+     "matched_frames": 7106,
+     "mismatch_count": 17,
+     "mismatch_fields_digest": "8677721240388675a6d90165a62041dcc954d0b21aed6d56f2614e6d6581e392",
+     "mismatch_fingerprint": "31339012c4efcb1f",
+     "mismatched_frames": 17,
+     "render_visibility_mismatch_count": 2,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 3481
+    },
+    "ppc": "native"
+   }
+  },
+  {
+   "replay": "replays/validation/links/slippi-games-2025-05_Game_20250519T133635.slpz",
+   "id": "link-boomerang-deflect-fork",
+   "owner": "Young Link boomerang surface-deflect gate on Yoshi's Story",
+   "rationale": "Known hosted defect, carried as explicit debt so the replay keeps its coverage and the eventual fix announces itself. At frame 4185 the recording's boomerang takes a speed-preserving velocity rotation - retail's surface deflect (vel (-1.647, +0.699), the it_802A15EC mirror against a Yoshi's line) - while the hosted flight never sees the contact: a collision trace shows itLinkboomerang_UnkMotion2_Coll running with env_flags 0 on every frame of the window, so the hosted boomerang turns without deflecting (vel (-1.711, -0.523), same magnitude). Positions stay bit-exact through the fork frame and the episode self-heals at the catch (frame 4283, 969-frame exact suffix); native and PPC agree bit-for-bit. Root cause needs the Dolphin engine-dump probe for retail's per-frame item collision flags (drivers in reports/triage/dolphin/); the recorded flight/turn-fork lead in ACTIVE_WORK.md owns the follow-up.",
+   "sources": [
+    "refs/melee/src/melee/it/items/itlinkboomerang.c::it_802A15EC",
+    "refs/melee/src/melee/it/itmaplib.c",
+    "agent_docs/ACTIVE_WORK.md"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 4307,
+     "first_mismatch_frame": 4185,
+     "first_render_visibility_mismatch_frame": -122,
+     "frames": 5375,
+     "last_mismatch_frame": 4283,
+     "matched_frames": 5276,
+     "mismatch_count": 202,
+     "mismatch_fields_digest": "c3f4c7426c585ec559edcf1935693dcf4f6cb954df1ab9de3632da251a45d29e",
+     "mismatch_fingerprint": "d979c6dde2b7fac4",
+     "mismatched_frames": 99,
+     "render_visibility_mismatch_count": 2,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 969
+    },
+    "ppc": "native"
+   }
+  },
+  {
+   "replay": "replays/validation/links/slpfiles-2025-10_Game_20251020T000422.slpz",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "self-velocity friction lane across a knife-edge Fountain slope contact",
+   "rationale": "Two rows at frames 7362..7363: speed_air_x_self and speed_ground_x_self carry the same value 2 ULPs low (0x3e1a101b vs 0x3e1a101d) and reconverge into a 3,714-frame exact suffix. Native and PPC agree bit-for-bit and every position, discrete, and item lane is exact - a single knife-edge seed in the slope-projected ground friction profile at sub-tolerance scale, matching the established dolphin-ulp-motion-profile family.",
+   "sources": [
+    "refs/melee/src/melee/ft/ftcommon.c",
+    "refs/melee/src/melee/mp/mplib.c"
+   ],
+   "expected": {
+    "native": {
+     "exact_prefix_frames": 7484,
+     "first_mismatch_frame": 7362,
+     "first_render_visibility_mismatch_frame": null,
+     "frames": 11200,
+     "last_mismatch_frame": 7363,
+     "matched_frames": 11198,
+     "mismatch_count": 4,
+     "mismatch_fields_digest": "8dacfc071b6d15c3e271a6ff5a065f2d3520f454b0ccf4b1ed422baad0cd5936",
+     "mismatch_fingerprint": "3bffd725fb39e58d",
+     "mismatched_frames": 2,
+     "render_visibility_mismatch_count": 0,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 3714
+    },
+    "ppc": "native"
+   }
   }
  ]
 }

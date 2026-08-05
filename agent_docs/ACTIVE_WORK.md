@@ -78,14 +78,24 @@ itlinkarrow (64/65), itlinkbow (76/77), and itclinkmilk (123, Young Link only).
   rendered the wrong slippilab zip; Young Link needs 20->21 and Link is identity.
 - `itlinkhookshot.c` was compiled without a source_manifest row.
 
-## Suite state — IN PROGRESS, NOT YET A GATE
+## Suite state — GATE (54 pass + 6 classified / 0 fail, both backends)
 
 Staged 60 replays (screened from link_ylink_replays.zip: all singles, two human ports,
 supported opponents, six legal stages, populated raw analog pad lanes, zero SHA
 duplicates; all ten Stadium entries event-verified frozen — 0x41 declared, zero events).
-`replays/suites/links.json` is NOT yet in the aggregate. Native baseline after the fixes
-above: **0 pass / 60 fail / 0 error**, all 613,274 frames run end to end; prefixes range
-1,138..8,951. The dominant remaining families, in order:
+`replays/suites/links.json` IS in the aggregate (426 -> 486 replays; test counts bumped
+in test_aggregate_suite_coverage and test_melee_core_validation_runner), all 60 output
+locks recorded, and the six residuals classified with both-backend snapshots
+(native == ppc bit-for-bit on every one): redxlink_0310 and slippi-2025-08_0815 under
+`hitlag-accumulated-pad-edge` (the Ness partner-arm debt, now measured victim-side:
+the thrown victim's kb_applied is nonzero for dthrow item hits where retail's stays 0,
+so the victim drives ftCo_8008EC90's partner arm and the tech press during laser
+hitlag is swallowed), slippi-games-2025-05 under a new `link-boomerang-deflect-fork`
+id (hosted UnkMotion2_Coll env_flags stay 0 through retail's surface deflect; needs
+the Dolphin item-collision probe), and 18932 / slippi-2025-01 / slpfiles-2025-10_1020
+under `dolphin-ulp-motion-profile` (1-2 ULP self-healing seeds).
+
+Historical note — the dominant families as first triaged (all since closed):
 
 1. **Hookshot latch one frame late** (item.state 3-vs-1, a handful of rows per replay,
    plus the action 361-vs-360 zair catch rows): the chain-link count from
@@ -152,8 +162,22 @@ Logic-class leads (both-backend fails):
 - 1–2 ULP families: 18932 item.pos_x 2-ULP episode; redxlink_0221 percent 1-ULP at a
   damage application (staling multiply chain is the suspect).
 
-Standing after the landing-lag fix: **native 31 pass / 29 fail — Link 16/31, Young
-Link 16/34** (goal 20/30 each; need +4 per side from the 29 both-backend fails). The 29
+**GOAL MET (2026-08-05): native and PPC both 54 pass + 6 classified / 0 fail — Link
+27/31 passing, Young Link 32/34 passing** (goal was 20/30 each). The three closing
+fixes: (1) `link-hookshot-chain-solver-gekko-rounding` — it_802A6474's four sum-of-
+squares fmadds plus the Gekko frsqrte sqrt (fused fnmsub Newton terms) replacing libc
+sqrtf across the hookshot TU, which the 32106 frame-1649 retail probe localized to the
+latched-hang chain-constraint (self_vel += cur_pos − pos_2 amplifies knife-edge ULPs);
+this flipped 20 replays including the whole offstage-fall family. (2)
+`thrown-item-damage-gekko-rounding` — it_8026B1D4's speed-scaled thrown-item damage
+(Gekko sqrt + fmadds fold), closing the three percent-ULP residuals. (3)
+`lbvector-cosangle-gekko-rounding` — retail-faithful CosAngle (behavior-neutral at the
+current corpus, gates the boomerang deflect branch). Full native aggregate green: 396
+pass + 90 classified / 0 fail across 4.81M frames; the two icies pool-residue analogs
+were re-recorded for the Link preload shift (b1955a02 precedent).
+
+(Stale text below kept for provenance.) Standing after the landing-lag fix: native 31 pass / 29 fail — Link 16/31, Young
+Link 16/34 (goal 20/30 each; need +4 per side from the 29 both-backend fails). The 29
 are almost all SMALL self-healing episodes now: three 1-row fails (redxlink_0221 percent
 1-ULP at a damage application — staling-multiply suspect; slippi-2025-01 pos_x 1 row;
 slippi-2025-08_0805 pos_y 1 row), then 2..31-row pos_y/speed_y episodes. The dominant
@@ -183,6 +207,21 @@ fp-offset overlays (fp+0x2340 mv lanes, fp+0x65C held inputs), the Hylian-shield
 unguarded in ft_8008A348, thumb/accessory parts admission, and the bomb misc1 mask.
 
 ## Log
+
+- 2026-08-05 — `closed` (goal met, suite gated): the retail probe on 32106 frames
+  1643..1655 (hookshot latched to the Stadium wall) proved every frame-1649 input
+  bit-shared and pinned the fork inside the chain-constraint step; the DOL showed the
+  two hosted mis-emulations (unfused length dot products, libc sqrtf vs the Gekko
+  frsqrte+fnmsub sequence) — fixing them took the suite 31 -> 51. The same class in
+  it_8026B1D4 (thrown-item speed damage, traced via Fighter_TakeDamage bit-hex: raw
+  dmg 0x40c820c3 vs retail 0x40c820c4) took it to 54. lbVector_CosAngle ported
+  (behavior-neutral). Six residuals classified (both backends bit-identical), 60 locks
+  recorded, links.json wired into the aggregate (486), test counts bumped, icies
+  pool-residue analogs re-recorded for the Link preload shift. Native aggregate: 396
+  pass + 90 classified / 0 fail. Open leads for a future pass: the capture/thrown
+  partner-arm inversion (now measured from BOTH faces — grabber-side mash debt and
+  victim-side kb_applied/tech-swallow; fix needs the full aggregate as its gate) and
+  the boomerang deflect-fork Dolphin item-collision probe.
 
 - 2026-08-04 — `checkpoint` (fused-op and mask batch): ported the audited MWCC fused-op
   set for the Link item TUs — the hookshot's distance dot products (a fused TU-local twin
