@@ -37,6 +37,7 @@
 #include <common_structs.h>
 #include <baselib/gobj.h>
 #include <baselib/jobj.h>
+#include <MSL/math_ppc.h>
 #include <MetroTRK/intrinsics.h>
 
 static inline float _sqrtfItem(float x)
@@ -65,12 +66,25 @@ f32 it_8026B1D4(HSD_GObj* gobj, HitCapsule* itemHitboxUnk)
     f32 ret = itemHitboxUnk->damage;
     const Item* ip = gobj->user_data;
     if (ip->xDC8_word.flags.x14 != 0) {
+#ifdef MSL_CORE_HOSTED
+        // Retail (GALE01 0x8026B218..0x8026B258) expands the sqrt as the
+        // Gekko frsqrte Newton sequence with fused fnmsub terms and folds
+        // the speed scale into one fmadds (0x8026B274); the unfused host
+        // shapes shift every thrown-item damage by knife-edge ULPs.
+        f32 itemSpeed = msl_gekko_sqrtf(ip->x40_vel.x * ip->x40_vel.x +
+                                        ip->x40_vel.y * ip->x40_vel.y +
+                                        ip->x40_vel.z * ip->x40_vel.z);
+
+        ret = __fmadds(itemSpeed, it_804D6D28->x80_float[5], ret);
+        ret += it_804D6D28->x80_float[6];
+#else
         f32 itemSpeed = _sqrtfItem(ip->x40_vel.x * ip->x40_vel.x +
                                    ip->x40_vel.y * ip->x40_vel.y +
                                    ip->x40_vel.z * ip->x40_vel.z);
 
         ret += itemSpeed * it_804D6D28->x80_float[5];
         ret += it_804D6D28->x80_float[6];
+#endif
         if (ret <= 1.0) {
             return ret = 1;
         }
