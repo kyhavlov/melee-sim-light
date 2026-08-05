@@ -110,6 +110,46 @@ above: **0 pass / 60 fail / 0 error**, all 613,274 frames run end to end; prefix
    the hosted run and find whose matrix feeds the phantom.
 4. Various replays still fail in the first ~1,500 frames — untriaged beyond the above.
 
+## Session goal and standing (2026-08-04, in progress)
+
+**Goal: 20/30 passing per character.** Current native: 11 pass / 49 fail (Link 6/31,
+Young Link 5/34 counting mirrors both ways). PPC oracle: 31 pass / 29 fail — the
+cross-partition is 11 both-pass / 20 native-only-fail (HOST-WIDTH class) / 29 both-fail
+(true logic). Work the width class down first (mechanical, ~+15 passes), then the logic
+class.
+
+Width-class leads (native-only fails), from the 20-replay first-mismatch census:
+- `action_id expected=43 (Turn) actual=14/18/178` in ~10 replays — a Turn/pivot the
+  hosted sim misses. 15082's instance at 2008 stopped reproducing in a frames-limited
+  rerun after the Attack100 overlay fixes; verify against the full run before trusting.
+- `pos_x` one-frame ±0.12..0.18 nudges in ~9 replays — looks like fighter-vs-item
+  jostle push. Both smell like more raw-offset or width-shifted reads; sweep remaining
+  `(u8*) fp +`/pad-overlay casts and item-side field views in ftCommon/it TUs.
+
+Logic-class leads (both-backend fails):
+- The grab/pummel mash divergence = the Ness packet's `hitlag-accumulated-pad-edge`
+  debt, now load-bearing (e.g. redxlink_0310 @301: retail Falco throw connects, hosted
+  victim escapes earlier). Progress on the deferred question: retail's pummeled victim
+  exits ftCo_Damage's top gate (`!fp->dmg.kb_applied` — a pummel applies no knockback),
+  so the capture-partner arm must run on the GRABBER's side (fp=grabber, other=victim),
+  clearing the VICTIM's x668 — matching the retail probe (victim x668=0, victim b5
+  clear, x183C_applied==0 skips the b5 block). The hosted build instead runs the arm
+  with fp=victim (its kb_applied is set where retail's is not) and clears the grabber.
+  Root-cause why hosted computes kb_applied for a pummeled held victim.
+- The hookshot latch one-frame-late family persists in some replays (item.state 3-vs-1,
+  361-vs-360): the probe table (reports/triage/link_hookshot_probe.md) shows retail
+  anchors + steps the head on the it_802A78B8 fire frame, steps one vel/frame, freezes
+  during owner hitlag, latches after the census; the launch-speed fix (tether mirror)
+  closed most of it — re-census which replays still carry it.
+- 1–2 ULP families: 18932 item.pos_x 2-ULP episode; redxlink_0221 percent 1-ULP at a
+  damage application (staling multiply chain is the suspect).
+
+Fixed this session (all committed): tether launch reads through the hookshot scratch
+mirror (0 -> 11 passes; probe-verified retail derives the launch from the scaled x38
+lane), the arrow spread-table pointer-width NaN (phantom item hits), the Attack100 raw
+fp-offset overlays (fp+0x2340 mv lanes, fp+0x65C held inputs), the Hylian-shield arm
+unguarded in ft_8008A348, thumb/accessory parts admission, and the bomb misc1 mask.
+
 ## Log
 
 - 2026-08-04 — `checkpoint` (fused-op and mask batch): ported the audited MWCC fused-op
