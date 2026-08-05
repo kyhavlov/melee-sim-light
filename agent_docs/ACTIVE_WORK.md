@@ -119,9 +119,16 @@ cross-partition is 11 both-pass / 20 native-only-fail (HOST-WIDTH class) / 29 bo
 class.
 
 Width-class leads (native-only fails), from the 20-replay first-mismatch census:
-- `action_id expected=43 (Turn) actual=14/18/178` in ~10 replays — a Turn/pivot the
-  hosted sim misses. 15082's instance at 2008 stopped reproducing in a frames-limited
-  rerun after the Attack100 overlay fixes; verify against the full run before trusting.
+- `action_id expected=43 (Turn) actual=14/18/178` in ~10 replays — the hosted native
+  build ABORTS a Turn after one frame (43 -> Wait at e.g. slpfiles-2025-05_0518 frame
+  1646, entered from the bomb-pull end 357) because ftAnim_IsFramesRemaining goes
+  false; PPC running the identical hosted C keeps the Turn and passes, so an upstream
+  width-poisoned lane (anim rate or track state, likely set during the bomb-pull /
+  item-hold path) differs between the backends. Frames-limited runs (frames=1700) did
+  NOT reproduce the fork while full runs do, deterministically — the input-tape length
+  affects the divergence, which itself smells like reading past prepared state. Next:
+  frame-stamped dual-backend traces of the ChangeMotionState args (rate/start) for the
+  1645 Turn entry and of the bomb-pull end transition.
 - `pos_x` one-frame ±0.12..0.18 nudges in ~9 replays — looks like fighter-vs-item
   jostle push. Both smell like more raw-offset or width-shifted reads; sweep remaining
   `(u8*) fp +`/pad-overlay casts and item-side field views in ftCommon/it TUs.
