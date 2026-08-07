@@ -896,6 +896,7 @@ static int match_construct(MslCoreMatch* match,
 #ifdef MSL_CORE_NATIVE
     uint32_t samus_count = 0;
     uint32_t ness_count = 0;
+    uint32_t link_count = 0;
 #endif
 
     match->random.value = 1;
@@ -1153,6 +1154,11 @@ static int match_construct(MslCoreMatch* match,
         if (match->config.players[i].char_id == MSL_CORE_CHAR_NESS) {
             ness_count += 1;
         }
+        if (match->config.players[i].char_id == MSL_CORE_CHAR_LINK ||
+            match->config.players[i].char_id == MSL_CORE_CHAR_YOUNG_LINK)
+        {
+            link_count += 1;
+        }
 #endif
         float facing = (encoded >> 1) == 0 ? (i == 0 ? 1.0F : -1.0F)
                                            : ((encoded & 1) ? 1.0F : -1.0F);
@@ -1310,7 +1316,13 @@ static int match_construct(MslCoreMatch* match,
     HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(),
                            256 + 128 * ness_count + 256 * samus_count);
     HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 128);
-    HSD_ObjAllocEnsureFree(HSD_RObjGetAllocData(), 16);
+    // Link and Young Link carry four RObjs each against two for every other
+    // supported fighter, so four Link ports land on exactly 16 live RObjs and
+    // filled the former flat 16-slot reserve to the last slot. Nothing is live
+    // at seal, so that reserve was the whole capacity and any additional
+    // consumer in the same match would have aborted.
+    // refs/melee/src/sysdolphin/baselib/robj.c
+    HSD_ObjAllocEnsureFree(HSD_RObjGetAllocData(), 16 + 8 * link_count);
     // Each grapple beam link is its own GObj, so the same per-fighter bound
     // applies: four-Samus air grapple-catches measured 170 live GObjs
     // (21 / 60 / 106 / 170 for zero, one, two, and four Samus) against the
@@ -1334,7 +1346,17 @@ static int match_construct(MslCoreMatch* match,
     // one, two, and four Samus, so four ports sat at 150 against a 151 link
     // reserve and any variation in the approach overflowed it.
     // refs/melee/src/melee/it/{item.c,items/itseakchain.c,items/itsamusgrapple.c}
-    msl_item_reserve_runtime_pools(MSL_CORE_MAX_ITEMS, 151 + 64 * samus_count);
+    // MSL_CORE_MAX_ITEMS is the width of the observation item array, not a
+    // gameplay limit: msl_core_match_write_items publishes the first fifteen
+    // live items and stops. Sizing the pool from it conflated the two, so a
+    // sixteenth simultaneous item aborted instead of simply going unpublished.
+    // Pikachu's Thunder is four articles per fighter, so a four-Pikachu mirror
+    // reaches sixteen live items at any thunder cadence and crashed; every
+    // other supported lineup measured eight or fewer. Eight per port keeps
+    // twice the measured worst case, and two-port matches -- the common RL
+    // shape -- barely move.
+    msl_item_reserve_runtime_pools(8 * match->config.num_players,
+                                   151 + 64 * samus_count);
     // The compact construction graph no longer leaves renderer JObjs on the
     // class free list. Preserve runtime headroom for the reached source class
     // sizes: supported item/effect graphs can cross the former 64-piece JObj

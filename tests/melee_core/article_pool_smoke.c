@@ -43,6 +43,7 @@
 #include <baselib/fobj.h>
 #include <baselib/gobj.h>
 #include <baselib/objalloc.h>
+#include <baselib/robj.h>
 #include "it/forward.h"
 #include "it/item.h"
 
@@ -64,6 +65,15 @@ enum {
   // so the values are repeated rather than shared.
   CHAR_NESS = 8,
   CHAR_SAMUS = 13,
+  CHAR_LINK = 6,
+  CHAR_YOUNG_LINK = 20,
+  CHAR_PIKACHU = 12,
+  // Thunder cadence for Pikachu ports. The article count per fighter is fixed,
+  // so any cadence that keeps four ports overlapping reaches the same peak.
+  THUNDER_PERIOD = 30,
+  THUNDER_HOLD = 3,
+  // Frames each Link move is held; the article overlap needs a long slot.
+  LINK_SLOT = 40,
   // Full stick deflection on the source input wire.
   STICK_MAX = 80,
 };
@@ -82,24 +92,35 @@ typedef struct Scenario {
   uint32_t expected_detonations;
   // Concurrent live grapple beams the scenario must actually produce.
   uint32_t expected_grapples;
+  // Live RObjs / items the scenario must actually reach. The item figure is
+  // read from the pool rather than the observation, which stops at fifteen.
+  uint32_t expected_robjs;
+  uint32_t expected_items;
 } Scenario;
 
 static const Scenario scenarios[] = {
     // Worst FObj case for a single fighter: every port charges from the same
     // frame, so the detonations and their article loads overlap.
-    {"four-ness-dreamland", 28, 4, {8, 8, 8, 8}, GRAPPLE_GROUND, 4, 0},
+    {"four-ness-dreamland", 28, 4, {8, 8, 8, 8}, GRAPPLE_GROUND, 4, 0, 0, 0},
     // Worst case for every other pool. Four airborne grapple-catches overran
     // the AObj, GObj, and class mem-piece reserves, each of which was a flat
     // constant sized against one port.
-    {"four-samus-air-fd", 32, 4, {13, 13, 13, 13}, GRAPPLE_AIR, 0, 2},
+    {"four-samus-air-fd", 32, 4, {13, 13, 13, 13}, GRAPPLE_AIR, 0, 2, 0, 0},
     // Mixed lineup: Ness and Samus bursts overlap, so the reserve has to
     // cover their sum rather than the larger of the two. This scenario does
     // not abort under a per-fighter maximum -- it was thin there rather than
     // broken -- so the headroom bar below is what guards the sum form.
-    {"ness-samus-dreamland", 28, 4, {8, 8, 13, 13}, GRAPPLE_GROUND, 2, 2},
+    {"ness-samus-dreamland", 28, 4, {8, 8, 13, 13}, GRAPPLE_GROUND, 2, 2, 0, 0},
     // The pairing reported from RL: Ness's detonation lands on top of Link's
     // resident article graph, the heaviest in the supported roster after Ness.
-    {"ness-link-dreamland", 28, 2, {8, 6, 0, 0}, GRAPPLE_GROUND, 1, 0},
+    {"ness-link-dreamland", 28, 2, {8, 6, 0, 0}, GRAPPLE_GROUND, 1, 0, 0, 0},
+    // Link and Young Link carry twice the RObjs of any other fighter, so four
+    // Link ports sat on exactly the flat 16-slot reserve with nothing spare.
+    {"four-link-fd", 32, 4, {6, 6, 6, 6}, GRAPPLE_GROUND, 0, 0, 16, 0},
+    // Pikachu's Thunder is four articles per fighter, so a four-Pikachu mirror
+    // wants sixteen live items against a pool that was sized from the
+    // fifteen-wide observation array and aborted on the sixteenth.
+    {"four-pikachu-fd", 32, 4, {12, 12, 12, 12}, GRAPPLE_GROUND, 0, 0, 0, 16},
 };
 
 static void config_init(MslCoreMatchConfig* config, const Scenario* scenario) {
@@ -147,6 +168,18 @@ static void live_articles(const MslCoreMatch* match, uint32_t* detonations,
   }
 }
 
+// item_alloc_data is file-static in item.c, so locate its pool by object size
+// in this match's allocator context instead of by symbol.
+static HSD_ObjAllocData* pool_by_size(MslCoreMatch* match, u32 object_bytes) {
+  u32 i;
+  for (i = 0; i < match->objalloc.count; ++i) {
+    if (match->objalloc.values[i].size == object_bytes) {
+      return &match->objalloc.values[i];
+    }
+  }
+  return NULL;
+}
+
 // used + free is the pool's capacity; it is constant unless the pool grew, and
 // growing after the seal aborts the process rather than returning here.
 static int check_pool(const char* scenario_name, const char* pool_name, HSD_ObjAllocData* data,
@@ -176,6 +209,9 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
   uint32_t aobj_peak = 0;
   uint32_t gobj_peak = 0;
   uint32_t link_peak = 0;
+  uint32_t robj_peak = 0;
+  uint32_t item_peak = 0;
+  HSD_ObjAllocData* item_pool;
   uint32_t detonation_peak = 0;
   uint32_t grapple_peak = 0;
   int frame;
@@ -193,6 +229,8 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     uint32_t aobj_used;
     uint32_t gobj_used;
     uint32_t link_used;
+    uint32_t robj_used;
+    uint32_t item_used;
     uint8_t player;
 
     memset(&input, 0, sizeof(input));
@@ -217,6 +255,49 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
           } else {
             input.p[player].main_x = (int8_t)(pos_x > 0.0F ? -STICK_MAX : STICK_MAX);
           }
+        } else if (scenario->char_ids[player] == CHAR_PIKACHU) {
+          // Down-B is Thunder; up-B is Quick Attack and spawns nothing.
+          if ((frame + player) % THUNDER_PERIOD < THUNDER_HOLD) {
+            input.p[player].buttons = PAD_BUTTON_B;
+            input.p[player].main_y = -STICK_MAX;
+          }
+        } else if (scenario->char_ids[player] == CHAR_LINK ||
+                   scenario->char_ids[player] == CHAR_YOUNG_LINK) {
+          // The hookshot is a tether, so these ports need the grapple cadence
+          // as well as their specials. Hold each move for a full slot: the
+          // RObj high water needs the articles to overlap, which a fast cycle
+          // never reaches.
+          int slot = ((frame - CHARGE_START_FRAME) / LINK_SLOT) % 6;
+          int phase = (frame - CHARGE_START_FRAME) % LINK_SLOT;
+          if (phase < 4) {
+            switch (slot) {
+              case 0: /* bow */
+                input.p[player].buttons = PAD_BUTTON_B;
+                break;
+              case 1: /* boomerang */
+                input.p[player].buttons = PAD_BUTTON_B;
+                input.p[player].main_x = STICK_MAX;
+                break;
+              case 2: /* spin attack */
+                input.p[player].buttons = PAD_BUTTON_B;
+                input.p[player].main_y = STICK_MAX;
+                break;
+              case 3: /* bomb pull */
+                input.p[player].buttons = PAD_BUTTON_B;
+                input.p[player].main_y = -STICK_MAX;
+                break;
+              case 4: /* ground hookshot */
+                input.p[player].buttons = PAD_TRIGGER_Z;
+                break;
+              default: /* jump, then airborne hookshot below */
+                input.p[player].buttons = PAD_BUTTON_X;
+                break;
+            }
+          } else if (slot == 5 && (phase == 6 || phase == 7 || phase == 20 || phase == 21)) {
+            input.p[player].buttons = PAD_TRIGGER_Z;
+          } else if (slot == 4 && phase % 12 < 2) {
+            input.p[player].buttons = PAD_TRIGGER_Z;
+          }
         } else {
           // Every other port drives its own neutral special, so the measured
           // burst sits on top of a realistic resident article load rather than
@@ -240,6 +321,9 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     aobj_used = HSD_ObjAllocResolve(HSD_AObjGetAllocData())->used;
     gobj_used = HSD_ObjAllocResolve(&gobj_alloc_data)->used;
     link_used = HSD_ObjAllocResolve(&item_link_alloc_data)->used;
+    robj_used = HSD_ObjAllocResolve(HSD_RObjGetAllocData())->used;
+    item_pool = pool_by_size(match, (u32) sizeof(Item));
+    item_used = item_pool != NULL ? item_pool->used : 0;
     live_articles(match, &detonations, &grapples);
     if (fobj_used > fobj_peak) {
       fobj_peak = fobj_used;
@@ -253,6 +337,12 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     if (link_used > link_peak) {
       link_peak = link_used;
     }
+    if (robj_used > robj_peak) {
+      robj_peak = robj_used;
+    }
+    if (item_used > item_peak) {
+      item_peak = item_used;
+    }
     if (detonations > detonation_peak) {
       detonation_peak = detonations;
     }
@@ -261,12 +351,27 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     }
   }
 
-  printf("%s detonations=%u grapples=%u\n", scenario->name, detonation_peak, grapple_peak);
+  printf("%s detonations=%u grapples=%u robjs=%u items=%u\n", scenario->name, detonation_peak,
+         grapple_peak, robj_peak, item_peak);
   if (detonation_peak < scenario->expected_detonations) {
     fprintf(stderr,
             "%s: saw %u concurrent PK Flash detonations, expected %u; the scripted inputs no "
             "longer reach the article burst this test exists to cover\n",
             scenario->name, detonation_peak, scenario->expected_detonations);
+    return -1;
+  }
+  if (robj_peak < scenario->expected_robjs) {
+    fprintf(stderr,
+            "%s: saw %u live RObjs, expected %u; the scripted inputs no longer reach the "
+            "state this test exists to cover\n",
+            scenario->name, robj_peak, scenario->expected_robjs);
+    return -1;
+  }
+  if (item_peak < scenario->expected_items) {
+    fprintf(stderr,
+            "%s: saw %u live items, expected %u; the scripted inputs no longer reach the "
+            "state this test exists to cover\n",
+            scenario->name, item_peak, scenario->expected_items);
     return -1;
   }
   if (grapple_peak < scenario->expected_grapples) {
@@ -292,6 +397,17 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
   // The grapple beam is an ItemLink chain, and four ports sat at 150 of a 151
   // link reserve before it was scaled, so this pool needs an explicit bar.
   if (check_pool(scenario->name, "item_link", &item_link_alloc_data, link_peak) != 0) {
+    return -1;
+  }
+  if (check_pool(scenario->name, "robj", HSD_RObjGetAllocData(), robj_peak) != 0) {
+    return -1;
+  }
+  item_pool = pool_by_size(match, (u32) sizeof(Item));
+  if (item_pool == NULL) {
+    fprintf(stderr, "%s: no item pool in this match\n", scenario->name);
+    return -1;
+  }
+  if (check_pool(scenario->name, "item", item_pool, item_peak) != 0) {
     return -1;
   }
   return 0;
