@@ -29,7 +29,10 @@ TOOLCHAIN_STAMP := $(BUILD_ROOT)/toolchain/ready.stamp
 # macOS, the container) runs; see tools/build/host_arch.sh.
 TOOLCHAIN_MULTIARCH := $(shell $(ROOT)/tools/build/host_arch.sh multiarch)
 TOOLCHAIN_LIBDIR := $(TOOLCHAIN_ROOT)/usr/lib/$(TOOLCHAIN_MULTIARCH)
-CC := $(TOOLCHAIN_ROOT)/usr/bin/powerpc-linux-gnu-gcc-13
+# ppc32_cc.sh execs the pinned compiler directly when the host can run it
+# and falls back to an ubuntu:24.04 container when it cannot (macOS, or
+# Linux with a glibc older than the noble toolchain packages need).
+CC := $(ROOT)/tools/build/ppc32_cc.sh
 QEMU := $(TOOLCHAIN_ROOT)/usr/bin/qemu-ppc-static
 SYSROOT := $(TOOLCHAIN_ROOT)
 QEMU_SYSROOT := $(TOOLCHAIN_ROOT)/usr/powerpc-linux-gnu

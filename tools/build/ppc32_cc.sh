@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Run the pinned powerpc-linux-gnu cross compiler from the local toolchain
-# root. Hosts that cannot execute the Linux toolchain binaries (macOS) run
-# the identical compiler inside a Linux container with the repository
-# bind-mounted at the same absolute path, so dependency files and DWARF
-# paths stay host-valid.
+# root. Hosts that cannot execute the Linux toolchain binaries (macOS, or
+# Linux with a glibc older than the noble packages need) run the identical
+# compiler inside a Linux container with the repository bind-mounted at
+# the same absolute path, so dependency files and DWARF paths stay
+# host-valid.
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -12,13 +13,19 @@ sysroot="$repo_root/build/melee_core/toolchain/root"
 cross_cc="$sysroot/usr/bin/powerpc-linux-gnu-gcc-13"
 libdir="$sysroot/usr/lib/$(msl_host_multiarch)"
 
-if [[ "$(uname -s)" != "Darwin" ]]; then
+if [[ "$(uname -s)" != "Darwin" ]] && \
+        env PATH="$sysroot/usr/bin:$PATH" \
+            LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}" \
+            "$cross_cc" --version >/dev/null 2>&1; then
     exec env PATH="$sysroot/usr/bin:$PATH" \
         LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}" \
         "$cross_cc" "$@"
 fi
 
+# --user keeps outputs host-owned; root-owned objects in the bind mount
+# would break incremental rebuilds outside the container.
 exec docker run --rm --platform "$(msl_host_platform)" \
+    --user "$(id -u):$(id -g)" \
     -v "$repo_root:$repo_root" -w "$PWD" \
     -e PATH="$sysroot/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     -e LD_LIBRARY_PATH="$libdir" \
