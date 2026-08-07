@@ -895,6 +895,7 @@ static int match_construct(MslCoreMatch* match,
     int i;
 #ifdef MSL_CORE_NATIVE
     bool has_samus = false;
+    uint32_t ness_count = 0;
 #endif
 
     match->random.value = 1;
@@ -1149,6 +1150,9 @@ static int match_construct(MslCoreMatch* match,
         if (match->config.players[i].char_id == MSL_CORE_CHAR_SAMUS) {
             has_samus = true;
         }
+        if (match->config.players[i].char_id == MSL_CORE_CHAR_NESS) {
+            ness_count += 1;
+        }
 #endif
         float facing = (encoded >> 1) == 0 ? (i == 0 ? 1.0F : -1.0F)
                                            : ((encoded & 1) ? 1.0F : -1.0F);
@@ -1277,11 +1281,30 @@ static int match_construct(MslCoreMatch* match,
     // tests/melee_core/runtime_census.c
     // refs/melee/src/melee/gr/grstory.c
     HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(), 128);
+    // Article animation loads a whole joint graph in a single frame, so the
+    // FObj bound is set by concurrent per-fighter bursts rather than by a
+    // match-wide constant.
     // Samus's air grapple-catch replays the deploy animation across the
     // doubled beam link chain (itsamusgrapple.c::it_802B743C via
     // ftCo_AirCatch_Anim), and every link jobj takes one FObj per track, so
     // the deepest supported air-catch crosses the former 256-slot reserve.
-    HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(), has_samus ? 512 : 256);
+    // Ness's PK Flash detonation is the deepest supported article graph:
+    // itNessPKFlashExplode_UnkMotion0_Anim walks the explosion joint tree
+    // through Item_80268BE0/HSD_JObjAddAnim and takes about 80 FObjs per
+    // simultaneous detonation, so a flat reserve is a per-Ness bound in
+    // disguise. Four max-charge detonations measured 359 live FObjs on Dream
+    // Land N64 and overran the former flat reserve while the Match arena was
+    // sealed; 128 per Ness keeps that worst case at well under half capacity.
+    // refs/melee/src/melee/it/items/{itnesspkflashexplode.c,itsamusgrapple.c}
+    // tests/melee_core/article_pool_smoke.c
+    {
+        uint32_t fobj_reserve = has_samus ? 512 : 256;
+        uint32_t ness_reserve = 256 + 128 * ness_count;
+        if (ness_reserve > fobj_reserve) {
+            fobj_reserve = ness_reserve;
+        }
+        HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(), fobj_reserve);
+    }
     HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 128);
     HSD_ObjAllocEnsureFree(HSD_RObjGetAllocData(), 16);
     HSD_ObjAllocEnsureFree(&gobj_alloc_data, 128);
