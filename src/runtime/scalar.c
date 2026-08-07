@@ -894,7 +894,7 @@ static int match_construct(MslCoreMatch* match,
     UnkArchiveStruct* map_data;
     int i;
 #ifdef MSL_CORE_NATIVE
-    bool has_samus = false;
+    uint32_t samus_count = 0;
     uint32_t ness_count = 0;
 #endif
 
@@ -1148,7 +1148,7 @@ static int match_construct(MslCoreMatch* match,
         uint8_t encoded = match->config.players[i].facing_and_port;
 #ifdef MSL_CORE_NATIVE
         if (match->config.players[i].char_id == MSL_CORE_CHAR_SAMUS) {
-            has_samus = true;
+            samus_count += 1;
         }
         if (match->config.players[i].char_id == MSL_CORE_CHAR_NESS) {
             ness_count += 1;
@@ -1282,29 +1282,28 @@ static int match_construct(MslCoreMatch* match,
     // refs/melee/src/melee/gr/grstory.c
     HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(), 128);
     // Article animation loads a whole joint graph in a single frame, so the
-    // FObj bound is set by concurrent per-fighter bursts rather than by a
-    // match-wide constant.
-    // Samus's air grapple-catch replays the deploy animation across the
-    // doubled beam link chain (itsamusgrapple.c::it_802B743C via
-    // ftCo_AirCatch_Anim), and every link jobj takes one FObj per track, so
-    // the deepest supported air-catch crosses the former 256-slot reserve.
-    // Ness's PK Flash detonation is the deepest supported article graph:
-    // itNessPKFlashExplode_UnkMotion0_Anim walks the explosion joint tree
-    // through Item_80268BE0/HSD_JObjAddAnim and takes about 80 FObjs per
-    // simultaneous detonation, so a flat reserve is a per-Ness bound in
-    // disguise. Four max-charge detonations measured 359 live FObjs on Dream
-    // Land N64 and overran the former flat reserve while the Match arena was
-    // sealed; 128 per Ness keeps that worst case at well under half capacity.
+    // FObj bound is the sum of the concurrent per-fighter bursts. Every port
+    // can contribute its own, and bursts from different fighters overlap, so
+    // neither a match-wide constant nor a per-fighter maximum bounds a mixed
+    // lineup. Ness x2 + Samus x2 measures 356 live FObjs from the in-tree
+    // scenario and 405 from a harder driver, against 359 for four-Ness and
+    // 362 for four-Samus; a maximum rule covered that case with only about a
+    // quarter of the pool spare, the thinnest margin in the tree.
+    // Ness's PK Flash detonation walks the explosion joint tree through
+    // itNessPKFlashExplode_UnkMotion0_Anim / Item_80268BE0 / HSD_JObjAddAnim
+    // and takes about 80 FObjs per simultaneous detonation.
+    // Samus's grapple deploy animation runs across the beam link chain
+    // (itsamusgrapple.c::it_802B743C via ftCo_AirCatch_Anim, doubled on the
+    // catch), and every link jobj takes one FObj per track: about 90 per
+    // simultaneous ground grapple, measured 92 / 182 / 362 live for one, two,
+    // and four Samus. The air grapple-catch that motivated the original flat
+    // 512 could not be measured -- four-Samus air exhausts the GObj and class
+    // mem-piece pools first -- so Samus keeps its established 256 per fighter
+    // rather than being reduced to Ness's measured rate.
     // refs/melee/src/melee/it/items/{itnesspkflashexplode.c,itsamusgrapple.c}
     // tests/melee_core/article_pool_smoke.c
-    {
-        uint32_t fobj_reserve = has_samus ? 512 : 256;
-        uint32_t ness_reserve = 256 + 128 * ness_count;
-        if (ness_reserve > fobj_reserve) {
-            fobj_reserve = ness_reserve;
-        }
-        HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(), fobj_reserve);
-    }
+    HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(),
+                           256 + 128 * ness_count + 256 * samus_count);
     HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 128);
     HSD_ObjAllocEnsureFree(HSD_RObjGetAllocData(), 16);
     HSD_ObjAllocEnsureFree(&gobj_alloc_data, 128);
@@ -1335,7 +1334,7 @@ static int match_construct(MslCoreMatch* match,
     // the deepest supported spawn crosses the former 128-piece reserve.
     // refs/melee/src/melee/it/items/{itpeachturnip.c,itsamusgrapple.c}
     // refs/melee/src/sysdolphin/baselib/{class.c,jobj.c}
-    hsdPreallocateMemPieces(has_samus ? 256 : 128);
+    hsdPreallocateMemPieces(samus_count != 0 ? 256 : 128);
 
     // This Match's source allocation pools are complete. Shared DAT graphs
     // are sealed once, after GameData has preloaded the supported domain;
