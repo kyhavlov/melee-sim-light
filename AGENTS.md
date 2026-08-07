@@ -4,9 +4,10 @@
 
 Build a high-performance, batched, deterministic Melee simulator for RL. Supported fighters are
 Fox, Falco, Marth, Sheik, Zelda, Captain Falcon, Jigglypuff, Peach, Luigi, Mario, Dr. Mario,
-Samus, the Ice Climbers (Popo with the CPU-mimic Nana follower), Pikachu, Donkey Kong, and
-Ganondorf. RL 1.0 covers singles and doubles on Final Destination, Battlefield, Fountain of
-Dreams, frozen Pokemon Stadium, Yoshi's Story, and Dream Land N64. UCF is enabled by default.
+Samus, the Ice Climbers (Popo with the CPU-mimic Nana follower), Pikachu, Donkey Kong,
+Ganondorf, Yoshi, Ness, Link, and Young Link. RL 1.0 covers singles and doubles on Final
+Destination, Battlefield, Fountain of Dreams, frozen Pokemon Stadium, Yoshi's Story, and Dream
+Land N64. UCF is enabled by default.
 
 Correctness comes from gameplay-relevant source completion: port the relevant decomp call graphs,
 persistent state, tables, callback ownership, and scheduler order. Organize implementation by
@@ -44,6 +45,11 @@ implementation queue.
 - Stage geometry and fighter animation/move/hitbox/hurtbox data come from extracted game files.
 - A runtime artifact change updates extractor, deterministic layout, required loader, and fresh
   extraction smoke together.
+- Admitting a fighter updates the roster above, both `supported_character` gates (`src/api.c` and
+  `src/runtime/batch.c`), `VALIDATION_CHARACTERS`, and the viewer's `EXTERNAL_CHAR_ID_BY_INTERNAL`
+  together. Each of these has been missed separately.
+- Per-fighter runtime reserves are per-fighter bounds, not match-wide constants: size them by the
+  count of that fighter in the match, since four ports can each contribute the same worst case.
 - Preserve upstream-shaped formatting. No root command may blanket-format imported gameplay.
 
 ## Routine workflow
