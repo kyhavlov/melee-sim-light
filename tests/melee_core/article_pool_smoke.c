@@ -11,16 +11,24 @@
 // aborted in HSD_ObjAllocAddFree, because growing a pool after the Match arena
 // is sealed by msl_memory_finish_initialization is forbidden.
 //
+// The burst is not confined to one pool. A joint graph costs FObj tracks,
+// AObjs, GObjs, class mem-pieces, and -- for the beam chains -- ItemLinks all
+// at once, and each of those reserves was an independent flat constant sized
+// against a single port. Four airborne Samus grapple-catches walked through
+// them one at a time: GObj, then class mem-pieces, then AObj, then ItemLink at
+// 150 of a 151 link reserve.
+//
 // Each scenario drives its fighters into that burst, then asserts both that
-// the articles actually spawned and that the pools kept real headroom. The
+// the articles actually spawned and that every pool kept real headroom. The
 // article assertions are what keep this test honest: without them, a timing
 // change that stopped the scripted inputs from reaching the burst would leave
-// the test silently covering nothing. The headroom bar is the forward guard --
-// only four-Ness aborts outright on the pre-fix reserve, so for the mixed
-// lineup the margin check is the whole assertion.
+// the test silently covering nothing. The headroom bar is the forward guard,
+// and it is the whole assertion for lineups that were merely thin rather than
+// broken. The class mem-piece allocator has no pool record to sample, so
+// completing a scenario without aborting in hsdAllocMemPiece is its check.
 //
-// refs/melee/src/melee/it/items/itnesspkflashexplode.c
-// refs/melee/src/sysdolphin/baselib/{objalloc.c,fobj.c,aobj.c}
+// refs/melee/src/melee/it/items/{itnesspkflashexplode.c,itsamusgrapple.c}
+// refs/melee/src/sysdolphin/baselib/{objalloc.c,fobj.c,aobj.c,gobj.c,class.c}
 // src/runtime/scalar.c::msl_core_match_reset
 
 #include "runtime/scalar.h"
@@ -33,8 +41,10 @@
 #include <dolphin/pad.h>
 #include <baselib/aobj.h>
 #include <baselib/fobj.h>
+#include <baselib/gobj.h>
 #include <baselib/objalloc.h>
 #include "it/forward.h"
+#include "it/item.h"
 
 enum {
   // The entry animation is still running well past this; a B edge pressed
@@ -58,11 +68,16 @@ enum {
   STICK_MAX = 80,
 };
 
+// Samus's grapple has two reachable shapes and the airborne one is deeper:
+// four ports measured 452 live FObjs in the air against 362 on the ground.
+typedef enum GrappleMode { GRAPPLE_GROUND, GRAPPLE_AIR } GrappleMode;
+
 typedef struct Scenario {
   const char* name;
   uint8_t stage_id;
   uint8_t num_players;
   uint8_t char_ids[MSL_CORE_MAX_PLAYERS];
+  GrappleMode grapple_mode;
   // Concurrent PK Flash detonations the scenario must actually produce.
   uint32_t expected_detonations;
   // Concurrent live grapple beams the scenario must actually produce.
@@ -70,18 +85,21 @@ typedef struct Scenario {
 } Scenario;
 
 static const Scenario scenarios[] = {
-    // Worst single-fighter case: every port charges from the same frame, so
-    // the detonations and their article loads overlap.
-    {"four-ness-dreamland", 28, 4, {8, 8, 8, 8}, 4, 0},
+    // Worst FObj case for a single fighter: every port charges from the same
+    // frame, so the detonations and their article loads overlap.
+    {"four-ness-dreamland", 28, 4, {8, 8, 8, 8}, GRAPPLE_GROUND, 4, 0},
+    // Worst case for every other pool. Four airborne grapple-catches overran
+    // the AObj, GObj, and class mem-piece reserves, each of which was a flat
+    // constant sized against one port.
+    {"four-samus-air-fd", 32, 4, {13, 13, 13, 13}, GRAPPLE_AIR, 0, 2},
     // Mixed lineup: Ness and Samus bursts overlap, so the reserve has to
     // cover their sum rather than the larger of the two. This scenario does
     // not abort under a per-fighter maximum -- it was thin there rather than
-    // broken -- so the headroom bar below is what actually guards the sum
-    // form, and it is the only coverage of the Samus grapple article.
-    {"ness-samus-dreamland", 28, 4, {8, 8, 13, 13}, 2, 2},
+    // broken -- so the headroom bar below is what guards the sum form.
+    {"ness-samus-dreamland", 28, 4, {8, 8, 13, 13}, GRAPPLE_GROUND, 2, 2},
     // The pairing reported from RL: Ness's detonation lands on top of Link's
     // resident article graph, the heaviest in the supported roster after Ness.
-    {"ness-link-dreamland", 28, 2, {8, 6, 0, 0}, 1, 0},
+    {"ness-link-dreamland", 28, 2, {8, 6, 0, 0}, GRAPPLE_GROUND, 1, 0},
 };
 
 static void config_init(MslCoreMatchConfig* config, const Scenario* scenario) {
@@ -156,6 +174,8 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
   MslCoreObservation observation = {0};
   uint32_t fobj_peak = 0;
   uint32_t aobj_peak = 0;
+  uint32_t gobj_peak = 0;
+  uint32_t link_peak = 0;
   uint32_t detonation_peak = 0;
   uint32_t grapple_peak = 0;
   int frame;
@@ -171,6 +191,8 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     uint32_t grapples;
     uint32_t fobj_used;
     uint32_t aobj_used;
+    uint32_t gobj_used;
+    uint32_t link_used;
     uint8_t player;
 
     memset(&input, 0, sizeof(input));
@@ -184,7 +206,13 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
           // Walk toward the stage centre so the grapple reaches a target and
           // takes the doubled beam-link path, then grab on a fixed cadence.
           float pos_x = observation.slots[player].pos_x;
-          if ((frame + player * 3) % GRAPPLE_PERIOD < GRAPPLE_HOLD) {
+          int phase = (frame + player * 3) % GRAPPLE_PERIOD;
+          if (scenario->grapple_mode == GRAPPLE_AIR && phase == 0) {
+            // Jump first so the following Z is the airborne grapple-catch.
+            input.p[player].buttons = PAD_BUTTON_X;
+          } else if (scenario->grapple_mode == GRAPPLE_AIR
+                         ? (phase >= 4 && phase < 4 + GRAPPLE_HOLD)
+                         : phase < GRAPPLE_HOLD) {
             input.p[player].buttons = PAD_TRIGGER_Z;
           } else {
             input.p[player].main_x = (int8_t)(pos_x > 0.0F ? -STICK_MAX : STICK_MAX);
@@ -210,12 +238,20 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     // loaded, so end-of-match values miss the burst entirely.
     fobj_used = HSD_ObjAllocResolve(HSD_FObjGetAllocData())->used;
     aobj_used = HSD_ObjAllocResolve(HSD_AObjGetAllocData())->used;
+    gobj_used = HSD_ObjAllocResolve(&gobj_alloc_data)->used;
+    link_used = HSD_ObjAllocResolve(&item_link_alloc_data)->used;
     live_articles(match, &detonations, &grapples);
     if (fobj_used > fobj_peak) {
       fobj_peak = fobj_used;
     }
     if (aobj_used > aobj_peak) {
       aobj_peak = aobj_used;
+    }
+    if (gobj_used > gobj_peak) {
+      gobj_peak = gobj_used;
+    }
+    if (link_used > link_peak) {
+      link_peak = link_used;
     }
     if (detonations > detonation_peak) {
       detonation_peak = detonations;
@@ -243,9 +279,19 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
   if (check_pool(scenario->name, "fobj", HSD_FObjGetAllocData(), fobj_peak) != 0) {
     return -1;
   }
-  // The same detonation takes one AObj per animated joint, so the AObj reserve
-  // has to clear the burst too.
+  // The same burst takes one AObj per animated joint and one GObj per beam
+  // link, so those reserves have to clear it too. The class mem-piece
+  // allocator is the fourth consumer; it has no pool record to sample, so
+  // reaching this line without aborting in hsdAllocMemPiece is its assertion.
   if (check_pool(scenario->name, "aobj", HSD_AObjGetAllocData(), aobj_peak) != 0) {
+    return -1;
+  }
+  if (check_pool(scenario->name, "gobj", &gobj_alloc_data, gobj_peak) != 0) {
+    return -1;
+  }
+  // The grapple beam is an ItemLink chain, and four ports sat at 150 of a 151
+  // link reserve before it was scaled, so this pool needs an explicit bar.
+  if (check_pool(scenario->name, "item_link", &item_link_alloc_data, link_peak) != 0) {
     return -1;
   }
   return 0;

@@ -342,7 +342,11 @@ void hsdFreeMemPiece(void* mem, s32 size)
 
 void hsdPreallocateMemPieces(u32 minimum_free)
 {
-    enum { MAXIMUM_RESERVE = 256 };
+    // The reserve is a per-fighter bound, so four ports of the same expensive
+    // fighter can ask for four times the one-port figure: four-Samus air
+    // grapple-catches need 320 pieces per reached size class. This scratch
+    // array only has to outlast the reserve loop below.
+    enum { MAXIMUM_RESERVE = 512 };
     void* pieces[MAXIMUM_RESERVE];
     s32 size_class_count = nb_memory_list;
     s32 i;

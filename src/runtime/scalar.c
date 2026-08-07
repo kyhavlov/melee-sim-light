@@ -1280,7 +1280,12 @@ static int match_construct(MslCoreMatch* match,
     // refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,id.c,mtx.c,robj.c}
     // tests/melee_core/runtime_census.c
     // refs/melee/src/melee/gr/grstory.c
-    HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(), 128);
+    // Samus's grapple-catch loads one AObj per animated joint of the beam
+    // link chain alongside its FObj tracks, so this reserve is per-fighter
+    // too: four-Samus air grapple-catches measured 151 live AObjs (5 / 46 /
+    // 91 / 151 for zero, one, two, and four Samus) against the former
+    // 136-slot capacity.
+    HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(), 128 + 64 * samus_count);
     // Article animation loads a whole joint graph in a single frame, so the
     // FObj bound is the sum of the concurrent per-fighter bursts. Every port
     // can contribute its own, and bursts from different fighters overlap, so
@@ -1306,7 +1311,11 @@ static int match_construct(MslCoreMatch* match,
                            256 + 128 * ness_count + 256 * samus_count);
     HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 128);
     HSD_ObjAllocEnsureFree(HSD_RObjGetAllocData(), 16);
-    HSD_ObjAllocEnsureFree(&gobj_alloc_data, 128);
+    // Each grapple beam link is its own GObj, so the same per-fighter bound
+    // applies: four-Samus air grapple-catches measured 170 live GObjs
+    // (21 / 60 / 106 / 170 for zero, one, two, and four Samus) against the
+    // former 142-slot capacity.
+    HSD_ObjAllocEnsureFree(&gobj_alloc_data, 128 + 64 * samus_count);
     HSD_ObjAllocEnsureFree(&gobjproc_alloc_data, 256);
     // The reached Peach article graph consumes twelve temporary matrix-pool
     // slots. The resulting fifteen-item bound rounds to the established
@@ -1319,10 +1328,13 @@ static int match_construct(MslCoreMatch* match,
     // refs/melee/src/sysdolphin/baselib/mtx.c::{HSD_VecAlloc,HSD_VecFree}
     HSD_ObjAllocEnsureFree(HSD_VecGetAllocData(), 128);
     // Item and dynamic-bone objects are bounded by the public simultaneous
-    // item contract. Keep the established source ItemLink ceiling for
-    // multi-fighter Sheik chains rather than deriving it from replay rows.
-    // refs/melee/src/melee/it/{item.c,items/itseakchain.c}
-    msl_item_reserve_runtime_pools(MSL_CORE_MAX_ITEMS, 151);
+    // item contract. The ItemLink ceiling was established for multi-fighter
+    // Sheik chains, but Samus's grapple beam is a link chain too and scales
+    // per fighter: air grapple-catches measured 45 / 90 / 150 live links for
+    // one, two, and four Samus, so four ports sat at 150 against a 151 link
+    // reserve and any variation in the approach overflowed it.
+    // refs/melee/src/melee/it/{item.c,items/itseakchain.c,items/itsamusgrapple.c}
+    msl_item_reserve_runtime_pools(MSL_CORE_MAX_ITEMS, 151 + 64 * samus_count);
     // The compact construction graph no longer leaves renderer JObjs on the
     // class free list. Preserve runtime headroom for the reached source class
     // sizes: supported item/effect graphs can cross the former 64-piece JObj
@@ -1331,10 +1343,14 @@ static int match_construct(MslCoreMatch* match,
     // Match, so this does not restore the former all-class slab reserve.
     // Samus's ground grapple-grab doubles the beam link count
     // (itsamusgrapple.c::it_802B75FC), and each link loads a jobj graph, so
-    // the deepest supported spawn crosses the former 128-piece reserve.
+    // the deepest supported spawn crosses the former 128-piece reserve. This
+    // is per-fighter as well: the minimum that survives the air grapple-catch
+    // is 128 / 192 / 320 pieces for one, two, and four Samus, so the former
+    // flat 256 covered one or two ports and failed on four. 96 per Samus
+    // clears the measured four-port minimum by 60%.
     // refs/melee/src/melee/it/items/{itpeachturnip.c,itsamusgrapple.c}
     // refs/melee/src/sysdolphin/baselib/{class.c,jobj.c}
-    hsdPreallocateMemPieces(samus_count != 0 ? 256 : 128);
+    hsdPreallocateMemPieces(128 + 96 * samus_count);
 
     // This Match's source allocation pools are complete. Shared DAT graphs
     // are sealed once, after GameData has preloaded the supported domain;
