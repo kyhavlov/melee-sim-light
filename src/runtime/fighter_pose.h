@@ -15,7 +15,15 @@ enum {
     MSL_FIGHTER_POSE_JOINTS_PER_PLAYER = 256,
     MSL_FIGHTER_POSE_JOINT_CAPACITY =
         MSL_FIGHTER_POSE_JOINTS_PER_PLAYER * 4,
-    MSL_FIGHTER_POSE_TRACK_CAPACITY = 1024,
+    // Live animation tracks are per-fighter state too: each Ice Climbers
+    // port keeps about 265 tracks attached across Popo and Nana, so four
+    // Ice Climbers ports hold 1058 live tracks (measured post-compaction)
+    // against the former flat 1024 and aborted in allocate_tracks. Zelda,
+    // the next-widest port at 446 across a four-port mirror, fits well
+    // inside the same per-player figure.
+    MSL_FIGHTER_POSE_TRACKS_PER_PLAYER = 384,
+    MSL_FIGHTER_POSE_TRACK_CAPACITY =
+        MSL_FIGHTER_POSE_TRACKS_PER_PLAYER * 4,
     MSL_FIGHTER_POSE_ECB_CAPACITY = 8,
     MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY = 32,
     MSL_FIGHTER_POSE_PROGRAM_NONE = 0x1FFF,
@@ -90,6 +98,7 @@ typedef struct MslFighterPose {
     uint16_t joint_count;
     uint16_t joint_capacity;
     uint16_t track_used;
+    uint16_t track_capacity;
     uint16_t ecb_count;
 } MslFighterPose;
 

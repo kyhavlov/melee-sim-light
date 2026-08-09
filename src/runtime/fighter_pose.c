@@ -106,9 +106,11 @@ int msl_fighter_pose_init(MslFighterPose* pose, uint8_t player_count)
         sizeof(*pose->joints) * pose->joint_capacity,
         MSL_RELOC_FIGHTER_POSE_JOINT, pose->joint_capacity,
         sizeof(*pose->joints), 0);
+    pose->track_capacity =
+        MSL_FIGHTER_POSE_TRACKS_PER_PLAYER * player_count;
     pose->tracks = HSD_MemAllocReloc(
-        sizeof(*pose->tracks) * MSL_FIGHTER_POSE_TRACK_CAPACITY,
-        MSL_RELOC_FIGHTER_POSE_TRACK, MSL_FIGHTER_POSE_TRACK_CAPACITY,
+        sizeof(*pose->tracks) * pose->track_capacity,
+        MSL_RELOC_FIGHTER_POSE_TRACK, pose->track_capacity,
         sizeof(*pose->tracks), 0);
     if (pose->joints == NULL || pose->tracks == NULL) {
         return -1;
@@ -509,12 +511,11 @@ static MslFighterPoseTrack* allocate_tracks(MslFighterPoseJoint* node,
                                             uint16_t count)
 {
     MslFighterPose* pose = active_pose();
-    if ((uint32_t) pose->track_used + count > MSL_FIGHTER_POSE_TRACK_CAPACITY)
-    {
+    if ((uint32_t) pose->track_used + count > pose->track_capacity) {
         compact_tracks(pose);
     }
-    HSD_ASSERT(163, (uint32_t) pose->track_used + count <=
-                        MSL_FIGHTER_POSE_TRACK_CAPACITY);
+    HSD_ASSERT(163,
+               (uint32_t) pose->track_used + count <= pose->track_capacity);
     node->track_start = pose->track_used;
     node->track_count = count;
     pose->track_used += count;

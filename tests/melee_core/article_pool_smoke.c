@@ -74,6 +74,16 @@ enum {
   THUNDER_HOLD = 3,
   // Frames each Link move is held; the article overlap needs a long slot.
   LINK_SLOT = 40,
+  CHAR_POPO = 10,
+  // Ice Climbers ports walk the full move set on this cadence; the live
+  // animation-track high water needs both climbers churning through wide
+  // animations, which any single held move never reaches.
+  ICS_SLOT = 40,
+  // Ness's steered PK Thunder: cast on this cadence, then rotate the stick
+  // so the head stays airborne and the whole seven-piece trail persists.
+  PK_THUNDER_PERIOD = 220,
+  PK_THUNDER_CAST = 30,
+  PK_THUNDER_STEER_END = 190,
   // Full stick deflection on the source input wire.
   STICK_MAX = 80,
 };
@@ -82,12 +92,25 @@ enum {
 // four ports measured 452 live FObjs in the air against 362 on the ground.
 typedef enum GrappleMode { GRAPPLE_GROUND, GRAPPLE_AIR } GrappleMode;
 
+// Ness ports either charge PK Flash to its automatic detonation or cast and
+// steer PK Thunder, whose head plus trail is seven live items at once.
+typedef enum NessMode { NESS_FLASH, NESS_THUNDER } NessMode;
+
+// Ice Climbers ports either walk the whole move set -- the animation-track
+// high water needs both climbers churning through wide animations -- or
+// alternate Ice Shot and Blizzard to stack the most concurrent items.
+typedef enum IcsMode { ICS_CYCLE, ICS_STORM } IcsMode;
+
 typedef struct Scenario {
   const char* name;
   uint8_t stage_id;
   uint8_t num_players;
   uint8_t char_ids[MSL_CORE_MAX_PLAYERS];
   GrappleMode grapple_mode;
+  NessMode ness_mode;
+  IcsMode ics_mode;
+  // Frames to run; 0 means TOTAL_FRAMES.
+  uint32_t frames;
   // Concurrent PK Flash detonations the scenario must actually produce.
   uint32_t expected_detonations;
   // Concurrent live grapple beams the scenario must actually produce.
@@ -96,31 +119,49 @@ typedef struct Scenario {
   // read from the pool rather than the observation, which stops at fifteen.
   uint32_t expected_robjs;
   uint32_t expected_items;
+  // Concurrent Blizzard puffs / PK Thunder pieces the scenario must actually
+  // produce, read from the published observation window.
+  uint32_t expected_blizzards;
+  uint32_t expected_thunder;
 } Scenario;
 
 static const Scenario scenarios[] = {
     // Worst FObj case for a single fighter: every port charges from the same
     // frame, so the detonations and their article loads overlap.
-    {"four-ness-dreamland", 28, 4, {8, 8, 8, 8}, GRAPPLE_GROUND, 4, 0, 0, 0},
+    {"four-ness-dreamland", 28, 4, {8, 8, 8, 8}, GRAPPLE_GROUND, NESS_FLASH, ICS_CYCLE,
+     0, 4, 0, 0, 0, 0, 0},
     // Worst case for every other pool. Four airborne grapple-catches overran
     // the AObj, GObj, and class mem-piece reserves, each of which was a flat
     // constant sized against one port.
-    {"four-samus-air-fd", 32, 4, {13, 13, 13, 13}, GRAPPLE_AIR, 0, 2, 0, 0},
+    {"four-samus-air-fd", 32, 4, {13, 13, 13, 13}, GRAPPLE_AIR, NESS_FLASH, ICS_CYCLE, 0,
+     0, 2, 0, 0, 0, 0},
     // Mixed lineup: Ness and Samus bursts overlap, so the reserve has to
     // cover their sum rather than the larger of the two. This scenario does
     // not abort under a per-fighter maximum -- it was thin there rather than
     // broken -- so the headroom bar below is what guards the sum form.
-    {"ness-samus-dreamland", 28, 4, {8, 8, 13, 13}, GRAPPLE_GROUND, 2, 2, 0, 0},
+    {"ness-samus-dreamland", 28, 4, {8, 8, 13, 13}, GRAPPLE_GROUND, NESS_FLASH,
+     ICS_CYCLE, 0, 2, 2, 0, 0, 0, 0},
     // The pairing reported from RL: Ness's detonation lands on top of Link's
     // resident article graph, the heaviest in the supported roster after Ness.
-    {"ness-link-dreamland", 28, 2, {8, 6, 0, 0}, GRAPPLE_GROUND, 1, 0, 0, 0},
+    {"ness-link-dreamland", 28, 2, {8, 6, 0, 0}, GRAPPLE_GROUND, NESS_FLASH, ICS_CYCLE,
+     0, 1, 0, 0, 0, 0, 0},
     // Link and Young Link carry twice the RObjs of any other fighter, so four
     // Link ports sat on exactly the flat 16-slot reserve with nothing spare.
-    {"four-link-fd", 32, 4, {6, 6, 6, 6}, GRAPPLE_GROUND, 0, 0, 16, 0},
+    {"four-link-fd", 32, 4, {6, 6, 6, 6}, GRAPPLE_GROUND, NESS_FLASH, ICS_CYCLE,
+     0, 0, 0, 16, 0, 0, 0},
     // Pikachu's Thunder is four articles per fighter, so a four-Pikachu mirror
     // wants sixteen live items against a pool that was sized from the
     // fifteen-wide observation array and aborted on the sixteenth.
-    {"four-pikachu-fd", 32, 4, {12, 12, 12, 12}, GRAPPLE_GROUND, 0, 0, 0, 16},
+    {"four-pikachu-fd", 32, 4, {12, 12, 12, 12}, GRAPPLE_GROUND, NESS_FLASH, ICS_CYCLE,
+     0, 0, 0, 0, 16, 0, 0},
+    // Eight climbers churning through the full move set keep more live
+    // animation tracks attached than four of any other fighter: 1058 measured
+    // post-compaction against the former flat 1024-track capacity, which
+    // asserted in allocate_tracks. The track arena is a bump cursor with no
+    // live-count to sample, so completing the cycle without that assert is
+    // the check; the Blizzard bar proves the ports actually run their moves.
+    {"four-ics-fd", 32, 4, {10, 10, 10, 10}, GRAPPLE_GROUND, NESS_FLASH, ICS_CYCLE,
+     1380, 0, 0, 0, 0, 6, 0},
 };
 
 static void config_init(MslCoreMatchConfig* config, const Scenario* scenario) {
@@ -150,11 +191,14 @@ static int step(MslCoreMatch* match, const MslCoreInput* input) {
 }
 
 static void live_articles(const MslCoreMatch* match, uint32_t* detonations,
-                          uint32_t* grapples) {
+                          uint32_t* grapples, uint32_t* blizzards,
+                          uint32_t* thunder) {
   MslCoreItem items[MSL_CORE_MAX_ITEMS];
   int i;
   *detonations = 0;
   *grapples = 0;
+  *blizzards = 0;
+  *thunder = 0;
   msl_core_match_write_items(match, items);
   for (i = 0; i < MSL_CORE_MAX_ITEMS; ++i) {
     if (!items[i].exists) {
@@ -164,6 +208,11 @@ static void live_articles(const MslCoreMatch* match, uint32_t* detonations,
       *detonations += 1;
     } else if (items[i].type == It_Kind_Samus_GBeam) {
       *grapples += 1;
+    } else if (items[i].type == It_Kind_IceClimber_Blizzard) {
+      *blizzards += 1;
+    } else if (items[i].type >= It_Kind_Ness_PKThunder &&
+               items[i].type <= It_Kind_Ness_PKThunder4) {
+      *thunder += 1;
     }
   }
 }
@@ -214,6 +263,10 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
   HSD_ObjAllocData* item_pool;
   uint32_t detonation_peak = 0;
   uint32_t grapple_peak = 0;
+  uint32_t blizzard_peak = 0;
+  uint32_t thunder_peak = 0;
+  int total_frames =
+      scenario->frames != 0 ? (int)scenario->frames : TOTAL_FRAMES;
   int frame;
 
   config_init(&config, scenario);
@@ -222,9 +275,11 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     return -1;
   }
 
-  for (frame = 0; frame < TOTAL_FRAMES; ++frame) {
+  for (frame = 0; frame < total_frames; ++frame) {
     uint32_t detonations;
     uint32_t grapples;
+    uint32_t blizzards;
+    uint32_t thunder;
     uint32_t fobj_used;
     uint32_t aobj_used;
     uint32_t gobj_used;
@@ -236,10 +291,100 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     memset(&input, 0, sizeof(input));
     if (frame >= CHARGE_START_FRAME) {
       for (player = 0; player < scenario->num_players; ++player) {
-        if (scenario->char_ids[player] == CHAR_NESS) {
+        if (scenario->char_ids[player] == CHAR_NESS &&
+            scenario->ness_mode == NESS_THUNDER) {
+          // Cast PK Thunder, then rotate the stick through eight directions
+          // so the head keeps flying and the whole trail stays live. The
+          // rotation is open loop; the liveness bar below is what proves the
+          // trail actually persisted.
+          static const int8_t steer_x[8] = {0, 56, 80, 56, 0, -56, -80, -56};
+          static const int8_t steer_y[8] = {80, 56, 0, -56, -80, -56, 0, 56};
+          float pos_x = observation.slots[player].pos_x;
+          int phase = (frame - CHARGE_START_FRAME) % PK_THUNDER_PERIOD;
+          if (phase < 3) {
+            // PK Fire toward the centre keeps one more item live beside the
+            // trail, matching what an RL policy freely mixes in.
+            input.p[player].buttons = PAD_BUTTON_B;
+            input.p[player].main_x =
+                (int8_t)(pos_x > 0.0F ? -STICK_MAX : STICK_MAX);
+          } else if (phase >= PK_THUNDER_CAST && phase < PK_THUNDER_CAST + 3) {
+            input.p[player].buttons = PAD_BUTTON_B;
+            input.p[player].main_y = STICK_MAX;
+          } else if (phase >= PK_THUNDER_CAST + 4 &&
+                     phase < PK_THUNDER_STEER_END) {
+            int dir = ((phase - PK_THUNDER_CAST - 4) / 9) % 8;
+            input.p[player].main_x = steer_x[dir];
+            input.p[player].main_y = steer_y[dir];
+          }
+        } else if (scenario->char_ids[player] == CHAR_NESS) {
           // Hold B with a neutral stick and no other button: any extra input
           // cancels the charge before it reaches the automatic detonation.
           input.p[player].buttons = PAD_BUTTON_B;
+        } else if (scenario->char_ids[player] == CHAR_POPO) {
+          float pos_x = observation.slots[player].pos_x;
+          int8_t toward = (int8_t)(pos_x > 0.0F ? -STICK_MAX : STICK_MAX);
+          if (scenario->ics_mode == ICS_STORM) {
+            // Alternate Ice Shot and Blizzard: one port's densest item mix,
+            // an ice block per climber plus the puff stream.
+            int slot = ((frame - CHARGE_START_FRAME) / (ICS_SLOT + 5)) % 2;
+            int phase = (frame - CHARGE_START_FRAME) % (ICS_SLOT + 5);
+            if (phase < 4) {
+              input.p[player].buttons = PAD_BUTTON_B;
+              if (slot == 0) {
+                input.p[player].main_y = -STICK_MAX;
+              } else {
+                input.p[player].main_x = toward;
+              }
+            }
+          } else {
+            // Walk the full move set so both climbers keep churning through
+            // wide animations; a single held move never reaches the live
+            // track high water.
+            int slot = ((frame - CHARGE_START_FRAME) / ICS_SLOT) % 10;
+            int phase = (frame - CHARGE_START_FRAME) % ICS_SLOT;
+            if (phase < 4) {
+              switch (slot) {
+                case 0: /* ice shot */
+                  input.p[player].buttons = PAD_BUTTON_B;
+                  break;
+                case 1: /* squall hammer */
+                  input.p[player].buttons = PAD_BUTTON_B;
+                  input.p[player].main_x = toward;
+                  break;
+                case 2: /* belay */
+                  input.p[player].buttons = PAD_BUTTON_B;
+                  input.p[player].main_y = STICK_MAX;
+                  break;
+                case 3: /* blizzard */
+                  input.p[player].buttons = PAD_BUTTON_B;
+                  input.p[player].main_y = -STICK_MAX;
+                  break;
+                case 4: /* grab */
+                  input.p[player].buttons = PAD_TRIGGER_Z;
+                  break;
+                case 5: /* jump */
+                  input.p[player].buttons = PAD_BUTTON_X;
+                  break;
+                case 6: /* forward smash */
+                  input.p[player].c_x = STICK_MAX;
+                  break;
+                case 7: /* up smash */
+                  input.p[player].c_y = STICK_MAX;
+                  break;
+                case 8: /* down smash */
+                  input.p[player].c_y = -STICK_MAX;
+                  break;
+                default: /* second blizzard */
+                  input.p[player].buttons = PAD_BUTTON_B;
+                  input.p[player].main_y = -STICK_MAX;
+                  break;
+              }
+            } else if (slot == 4 && phase % 12 < 2) {
+              input.p[player].buttons = PAD_TRIGGER_Z;
+            } else if (phase > 8) {
+              input.p[player].main_x = toward;
+            }
+          }
         } else if (scenario->char_ids[player] == CHAR_SAMUS) {
           // Walk toward the stage centre so the grapple reaches a target and
           // takes the doubled beam-link path, then grab on a fixed cadence.
@@ -324,7 +469,7 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     robj_used = HSD_ObjAllocResolve(HSD_RObjGetAllocData())->used;
     item_pool = pool_by_size(match, (u32) sizeof(Item));
     item_used = item_pool != NULL ? item_pool->used : 0;
-    live_articles(match, &detonations, &grapples);
+    live_articles(match, &detonations, &grapples, &blizzards, &thunder);
     if (fobj_used > fobj_peak) {
       fobj_peak = fobj_used;
     }
@@ -349,10 +494,17 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     if (grapples > grapple_peak) {
       grapple_peak = grapples;
     }
+    if (blizzards > blizzard_peak) {
+      blizzard_peak = blizzards;
+    }
+    if (thunder > thunder_peak) {
+      thunder_peak = thunder;
+    }
   }
 
-  printf("%s detonations=%u grapples=%u robjs=%u items=%u\n", scenario->name, detonation_peak,
-         grapple_peak, robj_peak, item_peak);
+  printf("%s detonations=%u grapples=%u robjs=%u items=%u blizzards=%u thunder=%u\n",
+         scenario->name, detonation_peak, grapple_peak, robj_peak, item_peak, blizzard_peak,
+         thunder_peak);
   if (detonation_peak < scenario->expected_detonations) {
     fprintf(stderr,
             "%s: saw %u concurrent PK Flash detonations, expected %u; the scripted inputs no "
@@ -379,6 +531,20 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
             "%s: saw %u concurrent grapple beams, expected %u; the scripted inputs no longer "
             "reach the article burst this test exists to cover\n",
             scenario->name, grapple_peak, scenario->expected_grapples);
+    return -1;
+  }
+  if (blizzard_peak < scenario->expected_blizzards) {
+    fprintf(stderr,
+            "%s: saw %u concurrent Blizzard puffs, expected %u; the scripted inputs no longer "
+            "reach the state this test exists to cover\n",
+            scenario->name, blizzard_peak, scenario->expected_blizzards);
+    return -1;
+  }
+  if (thunder_peak < scenario->expected_thunder) {
+    fprintf(stderr,
+            "%s: saw %u concurrent PK Thunder pieces, expected %u; the scripted inputs no "
+            "longer reach the state this test exists to cover\n",
+            scenario->name, thunder_peak, scenario->expected_thunder);
     return -1;
   }
   if (check_pool(scenario->name, "fobj", HSD_FObjGetAllocData(), fobj_peak) != 0) {
