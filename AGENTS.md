@@ -50,6 +50,8 @@ implementation queue.
   together. Each of these has been missed separately.
 - Per-fighter runtime reserves are per-fighter bounds, not match-wide constants: size them by the
   count of that fighter in the match, since four ports can each contribute the same worst case.
+  Follower fighters (Nana) and stage-owned spawners (Yoshi's Story's Shy Guys) contribute on top
+  of the ports.
 - Preserve upstream-shaped formatting. No root command may blanket-format imported gameplay.
 
 ## Routine workflow

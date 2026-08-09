@@ -897,6 +897,7 @@ static int match_construct(MslCoreMatch* match,
     uint32_t samus_count = 0;
     uint32_t ness_count = 0;
     uint32_t link_count = 0;
+    uint32_t item_reserve = 0;
 #endif
 
     match->random.value = 1;
@@ -1159,6 +1160,32 @@ static int match_construct(MslCoreMatch* match,
         {
             link_count += 1;
         }
+        // Per-fighter concurrent item worst cases, measured with every pool
+        // reserve raised. Ness's steered PK Thunder is seven items at once
+        // (head plus six trail segments) with a PK Fire bolt or pillar still
+        // live beside it. One Ice Climbers port holds five Blizzard puffs
+        // across Popo and Nana plus an ice block per climber. Sheik's chain
+        // plus a needle volley and Zelda's transform earn Sheik's rate.
+        // Pikachu's Thunder is four, Link and Young Link stack bombs,
+        // boomerang and arrows, and Samus mixes bombs with missiles; every
+        // other supported fighter measured at most two.
+        switch (match->config.players[i].char_id) {
+        case MSL_CORE_CHAR_NESS:
+        case MSL_CORE_CHAR_POPO:
+            item_reserve += 10;
+            break;
+        case MSL_CORE_CHAR_SHEIK:
+        case MSL_CORE_CHAR_ZELDA:
+        case MSL_CORE_CHAR_PIKACHU:
+        case MSL_CORE_CHAR_SAMUS:
+        case MSL_CORE_CHAR_LINK:
+        case MSL_CORE_CHAR_YOUNG_LINK:
+            item_reserve += 8;
+            break;
+        default:
+            item_reserve += 6;
+            break;
+        }
 #endif
         float facing = (encoded >> 1) == 0 ? (i == 0 ? 1.0F : -1.0F)
                                            : ((encoded & 1) ? 1.0F : -1.0F);
@@ -1348,15 +1375,19 @@ static int match_construct(MslCoreMatch* match,
     // refs/melee/src/melee/it/{item.c,items/itseakchain.c,items/itsamusgrapple.c}
     // MSL_CORE_MAX_ITEMS is the width of the observation item array, not a
     // gameplay limit: msl_core_match_write_items publishes the first fifteen
-    // live items and stops. Sizing the pool from it conflated the two, so a
-    // sixteenth simultaneous item aborted instead of simply going unpublished.
-    // Pikachu's Thunder is four articles per fighter, so a four-Pikachu mirror
-    // reaches sixteen live items at any thunder cadence and crashed; every
-    // other supported lineup measured eight or fewer. Eight per port keeps
-    // twice the measured worst case, and two-port matches -- the common RL
-    // shape -- barely move.
-    msl_item_reserve_runtime_pools(8 * match->config.num_players,
-                                   151 + 64 * samus_count);
+    // live items and stops. The pool itself is sized from the per-fighter
+    // rates accumulated above, not from that width and not from a flat
+    // per-port figure: a uniform eight per port missed Ness against the Ice
+    // Climbers on Yoshi's Story, where a steered PK Thunder (seven items),
+    // a Blizzard (five puffs) and the stage's own Shy Guys (waves of three
+    // to five, grStory_801E3418) demand seventeen against the sixteen that
+    // two ports bought. Stage-owned spawners are a match-wide producer on
+    // top of the fighters, so Yoshi's Story adds a flat eight over its
+    // measured five-Heiho ceiling.
+    msl_item_reserve_runtime_pools(
+        (match->config.stage_id == MSL_CORE_STAGE_YOSHIS_STORY ? 8u : 0u) +
+            item_reserve,
+        151 + 64 * samus_count);
     // The compact construction graph no longer leaves renderer JObjs on the
     // class free list. Preserve runtime headroom for the reached source class
     // sizes: supported item/effect graphs can cross the former 64-piece JObj

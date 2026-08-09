@@ -162,6 +162,14 @@ static const Scenario scenarios[] = {
     // the check; the Blizzard bar proves the ports actually run their moves.
     {"four-ics-fd", 32, 4, {10, 10, 10, 10}, GRAPPLE_GROUND, NESS_FLASH, ICS_CYCLE,
      1380, 0, 0, 0, 0, 6, 0},
+    // The second pairing reported from RL: a steered PK Thunder is seven live
+    // items, an Ice Climbers port holds five Blizzard puffs plus ice blocks,
+    // and Yoshi's Story's own Shy Guys add waves of three to five on top.
+    // Under the former flat eight-per-port item reserve the two ports bought
+    // sixteen slots and the seventeenth spawn aborted in
+    // itClimbersBlizzard_Spawn.
+    {"ness-ics-yoshis", 8, 2, {8, 10, 0, 0}, GRAPPLE_GROUND, NESS_THUNDER,
+     ICS_STORM, 700, 0, 0, 0, 15, 4, 6},
 };
 
 static void config_init(MslCoreMatchConfig* config, const Scenario* scenario) {
