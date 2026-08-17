@@ -897,6 +897,9 @@ static int match_construct(MslCoreMatch* match,
     uint32_t samus_count = 0;
     uint32_t ness_count = 0;
     uint32_t link_count = 0;
+    uint32_t sheik_count = 0;
+    uint32_t ics_count = 0;
+    uint32_t peach_count = 0;
     uint32_t item_reserve = 0;
 #endif
 
@@ -1160,6 +1163,19 @@ static int match_construct(MslCoreMatch* match,
         {
             link_count += 1;
         }
+        // A Zelda port can transform mid-match, so it earns Sheik's chain
+        // reserve as well as Sheik's item rate below.
+        if (match->config.players[i].char_id == MSL_CORE_CHAR_SHEIK ||
+            match->config.players[i].char_id == MSL_CORE_CHAR_ZELDA)
+        {
+            sheik_count += 1;
+        }
+        if (match->config.players[i].char_id == MSL_CORE_CHAR_POPO) {
+            ics_count += 1;
+        }
+        if (match->config.players[i].char_id == MSL_CORE_CHAR_PEACH) {
+            peach_count += 1;
+        }
         // Per-fighter concurrent item worst cases, measured with every pool
         // reserve raised. Ness's steered PK Thunder is seven items at once
         // (head plus six trail segments) with a PK Fire bolt or pillar still
@@ -1340,8 +1356,15 @@ static int match_construct(MslCoreMatch* match,
     // rather than being reduced to Ness's measured rate.
     // refs/melee/src/melee/it/items/{itnesspkflashexplode.c,itsamusgrapple.c}
     // tests/melee_core/article_pool_smoke.c
+    // Chaos soaks measured two more lineups sitting close to the flat base:
+    // four Link peaked at 258 live FObjs and four Peach at 240 against the
+    // 283-slot capacity it bought them. Link and Young Link overlap bow,
+    // boomerang, bomb, and hookshot track loads; Peach overlaps turnip and
+    // parasol graphs; both earn explicit terms.
+    // tests/melee_core/pool_chaos_soak.c
     HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(),
-                           256 + 128 * ness_count + 256 * samus_count);
+                           256 + 128 * ness_count + 256 * samus_count +
+                               32 * link_count + 32 * peach_count);
     HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 128);
     // Link and Young Link carry four RObjs each against two for every other
     // supported fighter, so four Link ports land on exactly 16 live RObjs and
@@ -1354,13 +1377,25 @@ static int match_construct(MslCoreMatch* match,
     // applies: four-Samus air grapple-catches measured 170 live GObjs
     // (21 / 60 / 106 / 170 for zero, one, two, and four Samus) against the
     // former 142-slot capacity.
-    HSD_ObjAllocEnsureFree(&gobj_alloc_data, 128 + 64 * samus_count);
-    HSD_ObjAllocEnsureFree(&gobjproc_alloc_data, 256);
+    HSD_ObjAllocEnsureFree(&gobj_alloc_data,
+                           128 + 64 * samus_count + 32 * link_count +
+                               32 * sheik_count + 64 * ics_count);
+    // Every live item GObj schedules a proc, and Ness's steered PK Thunder
+    // plus PK Fire pillars keep the most item GObjs alive at once: an
+    // hour-long four-Ness chaos soak peaked at 365 live procs against the
+    // former flat 256, aborting in HSD_GObj_SetupProc. Two Ness beside two
+    // Pikachu measured 267, so one Ness already leaves the flat figure thin.
+    // tests/melee_core/pool_chaos_soak.c
+    HSD_ObjAllocEnsureFree(&gobjproc_alloc_data, 256 + 64 * ness_count);
     // The reached Peach article graph consumes twelve temporary matrix-pool
     // slots. The resulting fifteen-item bound rounds to the established
     // 256-slot small-object reserve.
     // refs/melee/src/sysdolphin/baselib/mtx.c::{HSD_MtxAlloc,HSD_MtxFree}
-    HSD_ObjAllocEnsureFree(HSD_MtxGetAllocData(), 256);
+    // Four-Samus chaos peaked at 240 live matrix-pool slots of the flat 256,
+    // six percent spare; every other lineup stays under 224. Give Samus the
+    // margin explicitly rather than leaving it to luck.
+    // tests/melee_core/pool_chaos_soak.c
+    HSD_ObjAllocEnsureFree(HSD_MtxGetAllocData(), 256 + 32 * samus_count);
     // Transient effect and collision paths can retain Vec nodes across many
     // frames; the source object is only twelve bytes, so keep the established
     // full-replay reserve without imposing that count on large pools.
@@ -1387,23 +1422,40 @@ static int match_construct(MslCoreMatch* match,
     msl_item_reserve_runtime_pools(
         (match->config.stage_id == MSL_CORE_STAGE_YOSHIS_STORY ? 8u : 0u) +
             item_reserve,
-        151 + 64 * samus_count);
+        151 + 64 * samus_count + 24 * link_count + 32 * sheik_count +
+            48 * ics_count);
     // The compact construction graph no longer leaves renderer JObjs on the
     // class free list. Preserve runtime headroom for the reached source class
     // sizes: supported item/effect graphs can cross the former 64-piece JObj
     // reserve while the Match arena is sealed.
     // hsdPreallocateMemPieces skips every size class not reached by this
     // Match, so this does not restore the former all-class slab reserve.
-    // Samus's ground grapple-grab doubles the beam link count
-    // (itsamusgrapple.c::it_802B75FC), and each link loads a jobj graph, so
-    // the deepest supported spawn crosses the former 128-piece reserve. This
-    // is per-fighter as well: the minimum that survives the air grapple-catch
-    // is 128 / 192 / 320 pieces for one, two, and four Samus, so the former
-    // flat 256 covered one or two ports and failed on four. 96 per Samus
-    // clears the measured four-port minimum by 60%.
-    // refs/melee/src/melee/it/items/{itpeachturnip.c,itsamusgrapple.c}
+    // Per-fighter scaling lives on the targeted JObj floor below; every
+    // measured class-piece burst -- Samus grapples, tether chains, item and
+    // explosion graphs -- lands in the JObj size class, so the generic
+    // minimum only has to cover the small classes' modest churn.
     // refs/melee/src/sysdolphin/baselib/{class.c,jobj.c}
-    hsdPreallocateMemPieces(128 + 96 * samus_count);
+    hsdPreallocateMemPieces(128);
+    // Every article graph a fighter can load mid-match -- tether chains,
+    // Samus's grapple beam, item and explosion graphs -- allocates its JObjs
+    // from one size class, and that demand is the sum of the concurrent
+    // per-port bursts. Chaos soaks measured the class's live growth over the
+    // seal at 98 for Peach vs Link (the pairing whose Link zair aborted an
+    // RL run against the former flat 128), 124-146 for four-Link, four-Ness,
+    // and four-Ice-Climbers mirrors, and 395 for four Samus, whose scripted
+    // air grapple-catch minimum of 320 the earlier per-Samus term existed
+    // for. 128 per port clears the worst four-port figure by 60% and the
+    // reported two-port RL crash by 4x.
+    // This floor also forces the size bucket to exist before the seal:
+    // hsdPreallocateMemPieces skips classes construction never reached, so a
+    // light lineup could otherwise seal with no JObj pieces at all and abort
+    // on its first lazy tether-chain load (ftCo_AirCatch_Anim ->
+    // it_802A2BA4 -> HSD_JObjLoadJoint -> hsdAllocMemPiece).
+    // refs/melee/src/melee/it/items/{itlinkhookshot.c,itsamusgrapple.c,
+    //   itseakchain.c,itclimbersstring.c,itpeachturnip.c}
+    // tests/melee_core/{article_pool_smoke.c,pool_chaos_soak.c}
+    hsdPreallocateMemPiecesForClass(HSD_CLASS_INFO(&hsdJObj),
+                                    128 + 128 * match->config.num_players);
 
     // This Match's source allocation pools are complete. Shared DAT graphs
     // are sealed once, after GameData has preloaded the supported domain;

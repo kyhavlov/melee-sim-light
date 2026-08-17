@@ -417,6 +417,35 @@ void hsdPreallocateMemPieces(u32 minimum_free)
     }
 }
 
+void hsdPreallocateMemPiecesForClass(HSD_ClassInfo* info, u32 minimum_free)
+{
+    // A targeted floor for one class's size bucket, on top of the generic
+    // per-reached-class minimum above. Unlike hsdPreallocateMemPieces this
+    // does not skip an unreached class: GetMemoryEntry creates the size
+    // bucket while the Match arena is still unsealed, so a lineup whose
+    // construction never touches the class cannot seal with a zero reserve
+    // and then abort on the class's first lazy in-match graph load.
+    // refs/melee/src/sysdolphin/baselib/class.c::hsdAllocMemPiece
+    enum { MAXIMUM_TARGETED_RESERVE = 1024 };
+    void* pieces[MAXIMUM_TARGETED_RESERVE];
+    s32 size = OSRoundUp32B(info->head.obj_size);
+    HSD_MemoryEntry* entry = GetMemoryEntry(size / 32 - 1);
+    u32 needed;
+    u32 j;
+
+    HSD_ASSERT(0x1003, minimum_free <= MAXIMUM_TARGETED_RESERVE);
+    HSD_ASSERT(0x1004, entry != NULL);
+    needed = entry->nb_free < minimum_free ? minimum_free - entry->nb_free
+                                           : 0;
+    for (j = 0; j < needed; ++j) {
+        pieces[j] = hsdAllocMemPiece(size);
+        HSD_ASSERT(0x1005, pieces[j] != NULL);
+    }
+    for (j = 0; j < needed; ++j) {
+        hsdFreeMemPiece(pieces[j], size);
+    }
+}
+
 /// _hsdClassAlloc
 HSD_Class* _hsdClassAlloc(HSD_ClassInfo* info)
 {

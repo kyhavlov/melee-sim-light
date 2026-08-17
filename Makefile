@@ -718,6 +718,7 @@ $(eval $(call link_native_smoke,$(NATIVE_BATCH_API_SMOKE),$(NATIVE_OBJ_DIR)/test
 $(eval $(call link_native_smoke,$(NATIVE_PUBLIC_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/public_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_GAMEPLAY_PARTS_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/gameplay_parts_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_ARTICLE_POOL_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/article_pool_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/pool-chaos-soak,$(NATIVE_OBJ_DIR)/tests/melee_core/pool_chaos_soak.o))
 $(eval $(call link_native_smoke,$(NATIVE_WASM_PARITY),$(NATIVE_OBJ_DIR)/tests/melee_core/wasm_parity.o))
 $(eval $(call link_native_smoke,$(NATIVE_LIFECYCLE_BENCH),$(NATIVE_OBJ_DIR)/tests/melee_core/lifecycle_bench.o))
 $(eval $(call link_native_smoke,$(NATIVE_REPLAY_BENCH),$(NATIVE_REPLAY_BENCH_OBJ)))

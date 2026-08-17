@@ -24,8 +24,11 @@
 // change that stopped the scripted inputs from reaching the burst would leave
 // the test silently covering nothing. The headroom bar is the forward guard,
 // and it is the whole assertion for lineups that were merely thin rather than
-// broken. The class mem-piece allocator has no pool record to sample, so
-// completing a scenario without aborting in hsdAllocMemPiece is its check.
+// broken. The class mem-piece allocator is sampled through the match's own
+// class context (per-class live growth over the seal state, printed as
+// mem_piece); completing a scenario without aborting in hsdAllocMemPiece is
+// still the reserve's assertion, since the reserve is free pieces rather
+// than live ones.
 //
 // refs/melee/src/melee/it/items/{itnesspkflashexplode.c,itsamusgrapple.c}
 // refs/melee/src/sysdolphin/baselib/{objalloc.c,fobj.c,aobj.c,gobj.c,class.c}
@@ -66,6 +69,8 @@ enum {
   CHAR_NESS = 8,
   CHAR_SAMUS = 13,
   CHAR_LINK = 6,
+  CHAR_SHEIK = 7,
+  CHAR_PEACH = 9,
   CHAR_YOUNG_LINK = 20,
   CHAR_PIKACHU = 12,
   // Thunder cadence for Pikachu ports. The article count per fighter is fixed,
@@ -86,6 +91,29 @@ enum {
   PK_THUNDER_STEER_END = 190,
   // Full stick deflection on the source input wire.
   STICK_MAX = 80,
+  // Cold-tether cadence: jump, fire the aerial hookshot, land, repeat. The
+  // ports are staggered so several chains load their joint graphs at once.
+  TETHER_PERIOD = 24,
+  TETHER_HOLD = 2,
+  // Sheik's chain dangles while B is held; hold long enough that every
+  // port's chain is fully paid out at once before recasting.
+  CHAIN_PERIOD = 90,
+  CHAIN_CAST = 4,
+  CHAIN_HOLD_END = 70,
+  // Belay cadence for cold Ice Climbers ports. The string article only lives
+  // for the toss, so the period stays short to keep ports overlapping.
+  BELAY_PERIOD = 40,
+  BELAY_HOLD = 3,
+  // Turnip cadence for Peach ports in cold-tether scenarios: pull on the
+  // ground, then toss, so a fresh vegetable jobj graph is loading while the
+  // tether burst arrives -- the state an actual RL match sits in.
+  TURNIP_PERIOD = 45,
+  TURNIP_HOLD = 3,
+  TURNIP_TOSS = 30,
+  // Size classes the mem-piece sampler can track; nb_memory_list is 32 in
+  // every reached configuration, so this only needs to stay comfortably
+  // above it.
+  CLASS_SAMPLE_MAX = 64,
 };
 
 // Samus's grapple has two reachable shapes and the airborne one is deeper:
@@ -101,6 +129,14 @@ typedef enum NessMode { NESS_FLASH, NESS_THUNDER } NessMode;
 // alternate Ice Shot and Blizzard to stack the most concurrent items.
 typedef enum IcsMode { ICS_CYCLE, ICS_STORM } IcsMode;
 
+// Cold-tether scenarios drive nothing but the tether, so its joint-graph
+// burst lands on class free lists exactly as they stood at the seal. The
+// move-cycling scenarios warm those lists with earlier articles and therefore
+// cannot reach the state an RL policy does when the first article of the
+// match is an aerial hookshot (ftCo_AirCatch_Anim -> it_802A2BA4 ->
+// HSD_JObjLoadJoint aborted in hsdAllocMemPiece's source-block HSD_MemAlloc).
+typedef enum TetherMode { TETHER_NONE, TETHER_COLD } TetherMode;
+
 typedef struct Scenario {
   const char* name;
   uint8_t stage_id;
@@ -109,6 +145,7 @@ typedef struct Scenario {
   GrappleMode grapple_mode;
   NessMode ness_mode;
   IcsMode ics_mode;
+  TetherMode tether_mode;
   // Frames to run; 0 means TOTAL_FRAMES.
   uint32_t frames;
   // Concurrent PK Flash detonations the scenario must actually produce.
@@ -123,37 +160,40 @@ typedef struct Scenario {
   // produce, read from the published observation window.
   uint32_t expected_blizzards;
   uint32_t expected_thunder;
+  // Concurrent live tether articles (hookshots, Sheik chains, Belay strings)
+  // the scenario must actually produce.
+  uint32_t expected_tethers;
 } Scenario;
 
 static const Scenario scenarios[] = {
     // Worst FObj case for a single fighter: every port charges from the same
     // frame, so the detonations and their article loads overlap.
     {"four-ness-dreamland", 28, 4, {8, 8, 8, 8}, GRAPPLE_GROUND, NESS_FLASH, ICS_CYCLE,
-     0, 4, 0, 0, 0, 0, 0},
+     TETHER_NONE, 0, 4, 0, 0, 0, 0, 0},
     // Worst case for every other pool. Four airborne grapple-catches overran
     // the AObj, GObj, and class mem-piece reserves, each of which was a flat
     // constant sized against one port.
-    {"four-samus-air-fd", 32, 4, {13, 13, 13, 13}, GRAPPLE_AIR, NESS_FLASH, ICS_CYCLE, 0,
-     0, 2, 0, 0, 0, 0},
+    {"four-samus-air-fd", 32, 4, {13, 13, 13, 13}, GRAPPLE_AIR, NESS_FLASH, ICS_CYCLE,
+     TETHER_NONE, 0, 0, 2, 0, 0, 0, 0},
     // Mixed lineup: Ness and Samus bursts overlap, so the reserve has to
     // cover their sum rather than the larger of the two. This scenario does
     // not abort under a per-fighter maximum -- it was thin there rather than
     // broken -- so the headroom bar below is what guards the sum form.
     {"ness-samus-dreamland", 28, 4, {8, 8, 13, 13}, GRAPPLE_GROUND, NESS_FLASH,
-     ICS_CYCLE, 0, 2, 2, 0, 0, 0, 0},
+     ICS_CYCLE, TETHER_NONE, 0, 2, 2, 0, 0, 0, 0},
     // The pairing reported from RL: Ness's detonation lands on top of Link's
     // resident article graph, the heaviest in the supported roster after Ness.
     {"ness-link-dreamland", 28, 2, {8, 6, 0, 0}, GRAPPLE_GROUND, NESS_FLASH, ICS_CYCLE,
-     0, 1, 0, 0, 0, 0, 0},
+     TETHER_NONE, 0, 1, 0, 0, 0, 0, 0},
     // Link and Young Link carry twice the RObjs of any other fighter, so four
     // Link ports sat on exactly the flat 16-slot reserve with nothing spare.
     {"four-link-fd", 32, 4, {6, 6, 6, 6}, GRAPPLE_GROUND, NESS_FLASH, ICS_CYCLE,
-     0, 0, 0, 16, 0, 0, 0},
+     TETHER_NONE, 0, 0, 0, 16, 0, 0, 0},
     // Pikachu's Thunder is four articles per fighter, so a four-Pikachu mirror
     // wants sixteen live items against a pool that was sized from the
     // fifteen-wide observation array and aborted on the sixteenth.
     {"four-pikachu-fd", 32, 4, {12, 12, 12, 12}, GRAPPLE_GROUND, NESS_FLASH, ICS_CYCLE,
-     0, 0, 0, 0, 16, 0, 0},
+     TETHER_NONE, 0, 0, 0, 0, 16, 0, 0},
     // Eight climbers churning through the full move set keep more live
     // animation tracks attached than four of any other fighter: 1058 measured
     // post-compaction against the former flat 1024-track capacity, which
@@ -161,7 +201,7 @@ static const Scenario scenarios[] = {
     // live-count to sample, so completing the cycle without that assert is
     // the check; the Blizzard bar proves the ports actually run their moves.
     {"four-ics-fd", 32, 4, {10, 10, 10, 10}, GRAPPLE_GROUND, NESS_FLASH, ICS_CYCLE,
-     1380, 0, 0, 0, 0, 6, 0},
+     TETHER_NONE, 1380, 0, 0, 0, 0, 6, 0},
     // The second pairing reported from RL: a steered PK Thunder is seven live
     // items, an Ice Climbers port holds five Blizzard puffs plus ice blocks,
     // and Yoshi's Story's own Shy Guys add waves of three to five on top.
@@ -169,7 +209,35 @@ static const Scenario scenarios[] = {
     // sixteen slots and the seventeenth spawn aborted in
     // itClimbersBlizzard_Spawn.
     {"ness-ics-yoshis", 8, 2, {8, 10, 0, 0}, GRAPPLE_GROUND, NESS_THUNDER,
-     ICS_STORM, 700, 0, 0, 0, 15, 4, 6},
+     ICS_STORM, TETHER_NONE, 700, 0, 0, 0, 15, 4, 6},
+    // The third pairing reported from RL: an aerial hookshot whose chain
+    // joint graph is the first article of the match. Every earlier Link
+    // scenario cycles bow and boomerang first, and those spawns warm the
+    // class mem-piece free lists, so the burst never landed on the seal-state
+    // lists an RL policy reaches by simply jumping and pressing Z.
+    {"four-link-zair-cold-fd", 32, 4, {6, 6, 6, 6}, GRAPPLE_GROUND, NESS_FLASH,
+     ICS_CYCLE, TETHER_COLD, 0, 0, 0, 0, 0, 0, 0, 2},
+    // Young Link's hookshot shares itlinkhookshot.c but loads its own DAT
+    // graph, so the cold burst is measured separately rather than assumed.
+    {"four-ylink-zair-cold-fd", 32, 4, {20, 20, 20, 20}, GRAPPLE_GROUND,
+     NESS_FLASH, ICS_CYCLE, TETHER_COLD, 0, 0, 0, 0, 0, 0, 0, 2},
+    // Sheik's chain is the same lazy tether shape: side-B pays the chain out
+    // link by link while B is held, and no earlier scenario drove it at all.
+    {"four-sheik-chain-fd", 32, 4, {7, 7, 7, 7}, GRAPPLE_GROUND, NESS_FLASH,
+     ICS_CYCLE, TETHER_COLD, 0, 0, 0, 0, 0, 0, 0, 2},
+    // The exact lineup reported from RL, identified by matching the abort's
+    // seal fingerprint (used=572744 allocations=930) against a sweep of every
+    // supported (stage, char-pair): Peach vs Link on Dream Land. One Link's
+    // first zair aborted in hsdAllocMemPiece's source-block HSD_MemAlloc
+    // (size=1024) because this lineup seals with the JObj size class never
+    // reached, so hsdPreallocateMemPieces skipped it and the class had zero
+    // free pieces.
+    {"peach-link-zair-cold-dreamland", 28, 2, {9, 6, 0, 0}, GRAPPLE_GROUND,
+     NESS_FLASH, ICS_CYCLE, TETHER_COLD, 0, 0, 0, 0, 0, 0, 0, 1},
+    // Belay's string is the fourth tether. The move-set cycle reaches it only
+    // after four other specials have warmed the lists; here it comes first.
+    {"four-ics-belay-cold-fd", 32, 4, {10, 10, 10, 10}, GRAPPLE_GROUND,
+     NESS_FLASH, ICS_CYCLE, TETHER_COLD, 0, 0, 0, 0, 0, 0, 0, 1},
 };
 
 static void config_init(MslCoreMatchConfig* config, const Scenario* scenario) {
@@ -200,13 +268,14 @@ static int step(MslCoreMatch* match, const MslCoreInput* input) {
 
 static void live_articles(const MslCoreMatch* match, uint32_t* detonations,
                           uint32_t* grapples, uint32_t* blizzards,
-                          uint32_t* thunder) {
+                          uint32_t* thunder, uint32_t* tethers) {
   MslCoreItem items[MSL_CORE_MAX_ITEMS];
   int i;
   *detonations = 0;
   *grapples = 0;
   *blizzards = 0;
   *thunder = 0;
+  *tethers = 0;
   msl_core_match_write_items(match, items);
   for (i = 0; i < MSL_CORE_MAX_ITEMS; ++i) {
     if (!items[i].exists) {
@@ -221,6 +290,30 @@ static void live_articles(const MslCoreMatch* match, uint32_t* detonations,
     } else if (items[i].type >= It_Kind_Ness_PKThunder &&
                items[i].type <= It_Kind_Ness_PKThunder4) {
       *thunder += 1;
+    } else if (items[i].type == It_Kind_Link_HShot ||
+               items[i].type == It_Kind_CLink_HShot ||
+               items[i].type == It_Kind_Seak_Chain ||
+               items[i].type == It_Kind_IceClimber_GumStrings) {
+      *tethers += 1;
+    }
+  }
+}
+
+// Live class mem-pieces per size class, read from this match's own class
+// context. hsdPreallocateMemPieces ensures a minimum FREE piece count per
+// reached size class at the seal, so the figure that sizes that reserve is
+// the worst per-class growth of live pieces over the seal state, not a raw
+// peak. The source-block carve in hsdAllocMemPiece bumps nb_alloc and
+// nb_free together, so nb_alloc - nb_free is exactly the live count.
+static void sample_class_live(const MslCoreMatch* match,
+                              uint32_t live[CLASS_SAMPLE_MAX]) {
+  const HSD_ClassContext* context = &match->class_state;
+  s32 i;
+  memset(live, 0, CLASS_SAMPLE_MAX * sizeof(live[0]));
+  for (i = 0; i < context->nb_memory_list && i < CLASS_SAMPLE_MAX; ++i) {
+    const HSD_MemoryEntry* entry = context->memory_list[i];
+    if (entry != NULL) {
+      live[i] = entry->nb_alloc - entry->nb_free;
     }
   }
 }
@@ -273,21 +366,32 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
   uint32_t grapple_peak = 0;
   uint32_t blizzard_peak = 0;
   uint32_t thunder_peak = 0;
+  uint32_t tether_peak = 0;
+  uint32_t class_seal[CLASS_SAMPLE_MAX];
+  uint32_t class_live[CLASS_SAMPLE_MAX];
+  uint32_t class_delta_peak[CLASS_SAMPLE_MAX] = {0};
+  uint32_t class_worst_delta = 0;
+  uint32_t class_worst_size = 0;
   int total_frames =
       scenario->frames != 0 ? (int)scenario->frames : TOTAL_FRAMES;
   int frame;
+  int class_index;
 
   config_init(&config, scenario);
   if (msl_core_match_reset(match, game_data, &config, &previous) != 0) {
     fprintf(stderr, "%s: match reset failed\n", scenario->name);
     return -1;
   }
+  // The post-reset state is the seal state hsdPreallocateMemPieces reserved
+  // against; per-class growth is measured relative to it.
+  sample_class_live(match, class_seal);
 
   for (frame = 0; frame < total_frames; ++frame) {
     uint32_t detonations;
     uint32_t grapples;
     uint32_t blizzards;
     uint32_t thunder;
+    uint32_t tethers;
     uint32_t fobj_used;
     uint32_t aobj_used;
     uint32_t gobj_used;
@@ -299,7 +403,52 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     memset(&input, 0, sizeof(input));
     if (frame >= CHARGE_START_FRAME) {
       for (player = 0; player < scenario->num_players; ++player) {
-        if (scenario->char_ids[player] == CHAR_NESS &&
+        if (scenario->tether_mode == TETHER_COLD) {
+          // Drive only the tether so its joint-graph burst lands on the class
+          // free lists exactly as the seal left them; any earlier special
+          // would warm them and hide the cold-start cost.
+          uint8_t tether_char = scenario->char_ids[player];
+          if (tether_char == CHAR_LINK || tether_char == CHAR_YOUNG_LINK) {
+            // Jump, then Z: the airborne catch that aborted in RL.
+            int phase = (frame + player * 3) % TETHER_PERIOD;
+            if (phase == 0) {
+              input.p[player].buttons = PAD_BUTTON_X;
+            } else if (phase >= 4 && phase < 4 + TETHER_HOLD) {
+              input.p[player].buttons = PAD_TRIGGER_Z;
+            }
+          } else if (tether_char == CHAR_SHEIK) {
+            // Side-B toward the centre casts the chain; keep holding B so
+            // the chain pays out to full length before recasting.
+            float pos_x = observation.slots[player].pos_x;
+            int phase =
+                (frame - CHARGE_START_FRAME + player * 7) % CHAIN_PERIOD;
+            if (phase < CHAIN_HOLD_END) {
+              input.p[player].buttons = PAD_BUTTON_B;
+              if (phase < CHAIN_CAST) {
+                input.p[player].main_x =
+                    (int8_t)(pos_x > 0.0F ? -STICK_MAX : STICK_MAX);
+              }
+            }
+          } else if (tether_char == CHAR_PEACH) {
+            // Not a tether: Peach is here because the reported RL crash was
+            // Peach vs Link, and her turnip pulls feed on the same class
+            // mem-piece allocator the hookshot chain needs.
+            int phase = (frame + player * 11) % TURNIP_PERIOD;
+            if (phase < TURNIP_HOLD) {
+              input.p[player].buttons = PAD_BUTTON_B;
+              input.p[player].main_y = -STICK_MAX;
+            } else if (phase >= TURNIP_TOSS && phase < TURNIP_TOSS + 3) {
+              input.p[player].buttons = PAD_TRIGGER_Z;
+            }
+          } else if (tether_char == CHAR_POPO) {
+            // Up-B is Belay; the string article spawns on the toss.
+            int phase = (frame + player * 5) % BELAY_PERIOD;
+            if (phase < BELAY_HOLD) {
+              input.p[player].buttons = PAD_BUTTON_B;
+              input.p[player].main_y = STICK_MAX;
+            }
+          }
+        } else if (scenario->char_ids[player] == CHAR_NESS &&
             scenario->ness_mode == NESS_THUNDER) {
           // Cast PK Thunder, then rotate the stick through eight directions
           // so the head keeps flying and the whole trail stays live. The
@@ -477,7 +626,17 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     robj_used = HSD_ObjAllocResolve(HSD_RObjGetAllocData())->used;
     item_pool = pool_by_size(match, (u32) sizeof(Item));
     item_used = item_pool != NULL ? item_pool->used : 0;
-    live_articles(match, &detonations, &grapples, &blizzards, &thunder);
+    live_articles(match, &detonations, &grapples, &blizzards, &thunder,
+                  &tethers);
+    sample_class_live(match, class_live);
+    for (class_index = 0; class_index < CLASS_SAMPLE_MAX; ++class_index) {
+      uint32_t delta = class_live[class_index] > class_seal[class_index]
+                           ? class_live[class_index] - class_seal[class_index]
+                           : 0;
+      if (delta > class_delta_peak[class_index]) {
+        class_delta_peak[class_index] = delta;
+      }
+    }
     if (fobj_used > fobj_peak) {
       fobj_peak = fobj_used;
     }
@@ -508,11 +667,26 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
     if (thunder > thunder_peak) {
       thunder_peak = thunder;
     }
+    if (tethers > tether_peak) {
+      tether_peak = tethers;
+    }
   }
 
-  printf("%s detonations=%u grapples=%u robjs=%u items=%u blizzards=%u thunder=%u\n",
+  for (class_index = 0; class_index < CLASS_SAMPLE_MAX; ++class_index) {
+    if (class_delta_peak[class_index] > class_worst_delta) {
+      const HSD_MemoryEntry* entry = match->class_state.memory_list[class_index];
+      class_worst_delta = class_delta_peak[class_index];
+      class_worst_size = entry != NULL ? entry->size : 0;
+    }
+  }
+  printf("%s detonations=%u grapples=%u robjs=%u items=%u blizzards=%u thunder=%u tethers=%u\n",
          scenario->name, detonation_peak, grapple_peak, robj_peak, item_peak, blizzard_peak,
-         thunder_peak);
+         thunder_peak, tether_peak);
+  // The class mem-piece reserve is per reached size class, so the figure that
+  // sizes hsdPreallocateMemPieces is the worst single class's live growth
+  // over the seal state.
+  printf("%s mem_piece worst_class_bytes=%u growth_over_seal=%u\n", scenario->name,
+         class_worst_size, class_worst_delta);
   if (detonation_peak < scenario->expected_detonations) {
     fprintf(stderr,
             "%s: saw %u concurrent PK Flash detonations, expected %u; the scripted inputs no "
@@ -553,6 +727,13 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
             "%s: saw %u concurrent PK Thunder pieces, expected %u; the scripted inputs no "
             "longer reach the state this test exists to cover\n",
             scenario->name, thunder_peak, scenario->expected_thunder);
+    return -1;
+  }
+  if (tether_peak < scenario->expected_tethers) {
+    fprintf(stderr,
+            "%s: saw %u concurrent tether articles, expected %u; the scripted inputs no "
+            "longer reach the cold tether burst this test exists to cover\n",
+            scenario->name, tether_peak, scenario->expected_tethers);
     return -1;
   }
   if (check_pool(scenario->name, "fobj", HSD_FObjGetAllocData(), fobj_peak) != 0) {

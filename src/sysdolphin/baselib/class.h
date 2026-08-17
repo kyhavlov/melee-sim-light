@@ -89,6 +89,7 @@ void OSReport_PrintSpaces(s32 count);
 void* hsdAllocMemPiece(s32 size);
 void hsdFreeMemPiece(void* mem, s32 size);
 void hsdPreallocateMemPieces(u32 minimum_free);
+void hsdPreallocateMemPiecesForClass(HSD_ClassInfo* info, u32 minimum_free);
 void* hsdNew(HSD_ClassInfo*);
 bool hsdChangeClass(void* object, void* class_info);
 bool hsdIsDescendantOf(void* info, void* p);
