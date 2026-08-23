@@ -3022,51 +3022,6 @@
    }
   },
   {
-   "replay": "replays/validation/ness/53362_Game_20250504T004716.slpz",
-   "id": "hitlag-accumulated-pad-edge",
-   "owner": "Fighter_Spaghetti_8006AD10 pressed-input publication across a hitlag boundary",
-   "rationale": "Known hosted defect, carried as explicit debt so the replay keeps its coverage and the eventual fix announces itself. Captain Falcon's pummel puts Ness in four frames of hitlag (1383..1386) during which the capture Anim, and therefore ftCommon_GrabMash, does not run, and the recording holds A from 1383 through 1387 so the press edge lands inside that window. The consequence is exactly one spurious 6-point mash trigger: the hosted and retail grab timers agree through frame 1387 (47/46/45 at 1382/1383/1387) and retail then runs +6 ahead (44 at 1388 against 38, 6 at 1408 against 0), so the hosted timer lands on exactly 0.0 at frame 1408 and trips ftCo_CaptureWaitHi_Anim's grab_timer <= 0 gate one frame before the throw. The grab breaks, fn_800DAD18 stops re-anchoring the pair, and the match forks for the remainder. Everything upstream is exact and retail-verified: the seeded timer (60), the standings rank (1), the 1-per-frame decrement and the 6-point mash quantum all match. MEASURED CAUSE: a retail probe at Fighter_Spaghetti_8006AD10's entry shows the held Ness carrying fp+0x2219 = 0x07 (bit 5 clear) and input.x668 = 0 on every frame of the hitlag, while the hosted build has x2219_b5 set and x668 = 0x100 there. The hosted input update is not at fault -- it overwrites x668 to 0 exactly as it should on the first frame the flag clears; the flag and the stale press are established earlier, when the pummel lands. ftCo_Damage.c's capture-partner arm (the `other_fp->input.x668 = other_fp->input.x66C = 0` line, and the `other_fp->x2219_b5 = true` above it) is the site: instrumenting it shows the hosted build reaching that arm at frame 1383 with fp = Ness (the captured fighter, whose victim_gobj points back at the grabber) and other_fp = Captain Falcon, so it clears the GRABBER's pressed mask and sets the GRABBER's hitlag flag while the victim's own x668 and flag are left untouched -- inverted relative to the effect retail produces on the victim. Which fighter drives that arm for a pummel on a held opponent is the thing to settle next. Not patched under a single replay: x668 feeds every CheckInput owner, so the fix needs the full aggregate as its gate. Both backends fork identically at frame 1408 and carry their own snapshots.",
-   "sources": [
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c",
-    "refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10",
-    "refs/melee/src/melee/ft/fighter.c::Fighter_UnkRecursiveFunc_8006D044",
-    "refs/melee/src/melee/ft/ftcommon.c::ftCommon_GrabMash",
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 1530,
-     "first_mismatch_frame": 1408,
-     "first_render_visibility_mismatch_frame": 305,
-     "frames": 10673,
-     "last_mismatch_frame": 10550,
-     "matched_frames": 1530,
-     "mismatch_count": 358984,
-     "mismatch_fields_digest": "4de6aff34450a6659eecc0c0c33a77598c7a0d0acaef0e15df888a8ce753676b",
-     "mismatch_fingerprint": "10654baa0687c296",
-     "mismatched_frames": 9143,
-     "render_visibility_mismatch_count": 13158,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 0
-    },
-    "ppc": {
-     "exact_prefix_frames": 1530,
-     "first_mismatch_frame": 1408,
-     "first_render_visibility_mismatch_frame": 305,
-     "frames": 10673,
-     "last_mismatch_frame": 10550,
-     "matched_frames": 1530,
-     "mismatch_count": 358984,
-     "mismatch_fields_digest": "4de6aff34450a6659eecc0c0c33a77598c7a0d0acaef0e15df888a8ce753676b",
-     "mismatch_fingerprint": "10654baa0687c296",
-     "mismatched_frames": 9143,
-     "render_visibility_mismatch_count": 13158,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 0
-    }
-   }
-  },
-  {
    "replay": "replays/validation/links/18932_Game_20250611T185955.slpz",
    "id": "dolphin-ulp-motion-profile",
    "owner": "Link article flight position across a knife-edge Fountain contact",
@@ -3091,36 +3046,6 @@
      "render_visibility_mismatch_count": 10,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 4709
-    },
-    "ppc": "native"
-   }
-  },
-  {
-   "replay": "replays/validation/links/redxlink_Game_20250310T205424.slpz",
-   "id": "hitlag-accumulated-pad-edge",
-   "owner": "ftCo_Damage.c capture-partner arm knockback gate for a thrown victim taking dthrow item hits",
-   "rationale": "Second face of the Ness 53362 partner-arm inversion, measured victim-side. P1 Link rides Falco's down throw (ThrownLw, state 242) whose blaster shots land as item hits (case-2 damage-log entries, 1 damage each); a KBSET/EC90 trace shows the hosted resolver assigning the thrown victim nonzero kb_applied (52.7..54.0) for every shot, so the victim - whose victim_gobj points back at the thrower - drives ftCo_8008EC90's partner arm itself instead of exiting the !kb_applied top gate as retail's victim does (the Ness retail probe). The recording holds the tech press (L at frame 283) inside the shots' hitlag window; the swallowed press edge leaves the 20-frame tech window unarmed, so retail techs the landing at frame 301 (PassiveStandF, msid 200) while the hosted build takes DownBoundU (183) and the match forks for the remainder. Everything upstream is exact for 423 rows; both backends fork identically. Same debt as the Ness entry: x668 and kb_applied feed every CheckInput and damage owner, so the fix needs the full aggregate as its gate.",
-   "sources": [
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c",
-    "refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C",
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c",
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c"
-   ],
-   "expected": {
-    "native": {
-     "exact_prefix_frames": 423,
-     "first_mismatch_frame": 301,
-     "first_render_visibility_mismatch_frame": -122,
-     "frames": 8157,
-     "last_mismatch_frame": 8034,
-     "matched_frames": 423,
-     "mismatch_count": 318025,
-     "mismatch_fields_digest": "ca7d6116d486c5b54637e07425d962d6dac730fadb835f33ae5ffeeb84284616",
-     "mismatch_fingerprint": "0c53146abad047bf",
-     "mismatched_frames": 7734,
-     "render_visibility_mismatch_count": 8483,
-     "signed_zero_equal_count": 0,
-     "strict_suffix_frames": 0
     },
     "ppc": "native"
    }
@@ -3155,12 +3080,12 @@
   },
   {
    "replay": "replays/validation/links/slippi-2025-08_Game_20250815T041837.slpz",
-   "id": "hitlag-accumulated-pad-edge",
-   "owner": "thrown-victim release position out of Young Link's down throw",
-   "rationale": "P2 Fox rides Young Link's down throw (ThrownLw through frame 3502, all ride-pose rows exact) and leaves the release one anim pose high: pos_y runs a constant +0.1125 offset for the 17 airborne rows 3503..3519 with every velocity lane exact, then the successful platform tech at 3520 (Passive, both sides) rescues the episode into a 3,481-frame exact suffix. The offset is a throw-release bone-pose difference in the same capture/thrown partner machinery as the partner-arm inversion (the thrower is the fighter the inverted arm marks in-hitlag), carried as the same explicit debt; native and PPC agree bit-for-bit.",
+   "id": "thrown-release-pose-offset",
+   "owner": "ftCo_Thrown release pose out of Young Link's down throw (open port defect)",
+   "rationale": "OPEN PORT DEFECT held as a classification. P2 Fox rides Young Link's down throw (ThrownLw through frame 3502, all ride-pose rows exact) and leaves the release one anim pose high: pos_y runs a constant +0.1125 offset for the 17 airborne rows 3503..3519 with every velocity lane exact, then the successful platform tech at 3520 (Passive, both sides) rescues the episode into a 3,481-frame exact suffix. Formerly filed under hitlag-accumulated-pad-edge; that id was retired on 2026-08-23 when the ftCo_8008EC90 pressed-mask clear was corrected to the damaged fighter (retail DOL 0x8008F078..84 stores to r29 = fp, not other_fp) and the fix left this fingerprint untouched, so the offset is a separate throw-release pose mechanism, not the partner-arm inversion. Native and PPC agree bit-for-bit.",
    "sources": [
     "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c",
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c"
+    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c"
    ],
    "expected": {
     "native": {

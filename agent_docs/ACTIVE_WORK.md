@@ -208,6 +208,22 @@ unguarded in ft_8008A348, thumb/accessory parts admission, and the bomb misc1 ma
 
 ## Log
 
+- 2026-08-23 — `closed` (partner-arm inversion): retail probe on 53362 frames 1378..1410
+  (reports/triage/ness_partner_probe/README.md) showed retail ALSO runs ftCo_8008EC90 with
+  fp = the pummeled victim (kb_applied 41.09 — a pummel does carry knockback; the earlier
+  "bit 5 clear" reading was an MWCC MSB-first bitfield misread, 0x2219=0x07 has b5 SET), and
+  that the victim's own x668 goes 0x100 -> 0 between the arm and the next input update. The
+  DOL (0x8008F078..84) stores the zero to r29 = fp, not r27 = other_fp: the decomp line
+  `other_fp->input.x668 = other_fp->input.x66C = 0` is a decomp error. Fixed to `fp->...`
+  in ftCo_Damage.c. Effect: 53362 and redxlink_0310 become exact end-to-end (10,673 and
+  8,157 rows), locks re-recorded (native==ppc); the third `hitlag-accumulated-pad-edge`
+  entry (links slippi-2025-08, +0.1125 throw-release pos_y) was unaffected and is re-owned as
+  `thrown-release-pose-offset` (same fingerprint, text-only). Native aggregate 492 = 427 pass
+  / 65 classified / 0 fail; per-suite PPC ness 27/3/0 and links 55/5/0 (PPC needs
+  `--timeout 180` with 8 workers on this host — the default 30 s trips on the longest
+  replays). `make source-check` fails on the untouched HEAD too (refs/melee snapshot digest),
+  unrelated. pytest 47 passed.
+
 - 2026-08-05 — `closed` (goal met, suite gated): the retail probe on 32106 frames
   1643..1655 (hookshot latched to the Stadium wall) proved every frame-1649 input
   bit-shared and pinned the fork inside the chain-constraint step; the DOL showed the
@@ -547,7 +563,10 @@ briefly inverted a conclusion here. `touch` copied sources before `make`. `make 
 also does not rebuild the PPC binary; `make ppc` is separate, and a stale
 `melee-core-ppc` reproduces the old behavior long after the native fix lands.
 
-## CLASSIFIED DEBT — hitlag-accumulated pad edges
+## RESOLVED (2026-08-23) — hitlag-accumulated pad edges
+
+**Resolved:** the arm clears the damaged fighter's own x668/x66C (DOL r29 = fp); see the
+2026-08-23 log entry in the Link packet. The text below is kept for provenance.
 
 `53362_Game_20250504T004716` is **in the suite**, carried as
 `hitlag-accumulated-pad-edge` with native and PPC snapshots. It is a known hosted defect
