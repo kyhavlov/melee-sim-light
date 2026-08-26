@@ -1,4 +1,130 @@
-# Active structural packet — Link and Young Link
+# Structural packet — per-fighter sealed-arena reserves (`decomp-port-mem`, landed)
+
+## Objective
+
+Stop the RL fleet's post-seal arena aborts. Every runtime pool reserve that
+`msl_core_match_reset` buys before `msl_memory_finish_initialization` seals the Match
+arena was a flat match-wide constant sized against one port's worst case (or, for FObj,
+a `has_samus ? 512 : 256` branch). Four ports can each contribute the same article burst,
+so the fleet hit `HSD_ObjAllocAddFree` / `HSD_MemAlloc` "arena allocation failed" aborts
+mid-match on ordinary lineups: four Ness (FObj, PK Flash detonations), four Samus air
+grapple-catches (GObj -> class mem-piece -> AObj -> ItemLink in turn), four Pikachu
+(item pool at Thunder's four articles), Ness vs Ice Climbers on Yoshi's Story (item pool:
+seven-item PK Thunder + five Blizzard puffs + stage Shy Guys), a four-Ice-Climbers
+mirror (pose track arena at 1058 live tracks), and Peach vs Link on Dream Land (the
+192-byte JObj mem-piece class under a lazily loaded aerial hookshot). The packet is
+landed across commits `066cffdd`..`3cd7ead3` (2026-08-07..08-17); this section is its
+ledger, written after the fact on 2026-08-26.
+
+## Final boundary
+
+- **Owner:** the reserve block in `src/runtime/scalar.c::msl_core_match_reset` (the
+  `HSD_ObjAllocEnsureFree` calls, `msl_item_reserve_runtime_pools`,
+  `hsdPreallocateMemPieces`, and the new `hsdPreallocateMemPiecesForClass` in
+  `src/sysdolphin/baselib/class.c`), plus the per-player pose arenas in
+  `src/runtime/fighter_pose.h`. Every reserve is a per-fighter term summed over the
+  configured ports (bursts from different fighters overlap in time, so the operator is a
+  sum, never a maximum), plus a stage term where the stage itself spawns.
+- **Canonical state:** none added. The counts (`samus_count`, `ness_count`, `link_count`
+  for Link/Young Link, `sheik_count` for Sheik and transform-capable Zelda, `ics_count`,
+  `peach_count`, the accumulated `item_reserve`) are reset-time locals derived from
+  `match->config`; the pools themselves are the pre-existing HSD ObjAlloc/mem-piece owners.
+- **Consumers:** every sealed Match (native, PPC, Wasm share the reserve code on the
+  `MSL_CORE_NATIVE` path), savestate size, and the runtime census.
+- **Displaced:** the flat constants, the `has_samus` FObj branch, the flat 1024-track pose
+  arena, and sizing the item pool from `MSL_CORE_MAX_ITEMS` (the observation array's
+  width — `msl_core_match_write_items` publishes the first fifteen live items and stops —
+  not a gameplay limit; the pool is now independent of it).
+- **Deletion boundary:** no post-seal growth path, no fallback allocation, no lineup
+  special-casing beyond the per-fighter terms. Reserves are validated only by measured
+  high water against real capacity with a 20% headroom bar; no reserve is raised without
+  a scenario that reaches the burst and proves the articles were live.
+
+## The reserve terms (all `refs/melee`-owned pools, measured with the reserve raised)
+
+| Pool | Reserve | Measured worst (four-port unless noted) |
+|---|---|---|
+| AObj (`HSD_AObjGetAllocData`) | 128 + 64/Samus | 151 live, four-Samus air grapple-catch (5/46/91/151 for 0/1/2/4) |
+| FObj | 256 + 128/Ness + 256/Samus + 32/Link + 32/Peach | 359 four-Ness (~80 per PK Flash detonation); 362 four-Samus ground (452 air); 356..405 Ness x2 + Samus x2; 258 four-Link; 240 four-Peach |
+| IDEntry | 128 (flat) | peaked <= 78% roster-wide, left alone |
+| RObj | 16 + 8/Link | 16 of the former 16 for four Link (4 RObjs each vs 2 for every other fighter) |
+| GObj | 128 + 64/Samus + 32/Link + 32/Sheik(+Zelda) + 64/Ice Climbers | 170 four-Samus air; 184 four-Climbers Belay (aborted at HEAD before) |
+| GObjProc | 256 + 64/Ness | 365 live procs in a four-Ness chaos soak (aborted the flat 256); 267 for Ness x2 + Pikachu x2 |
+| Mtx | 256 + 32/Samus | 240 of 256 four-Samus chaos |
+| Vec, dynamic-bone | flat (128 / item-bound) | <= 78%, left alone |
+| ItemLink | 151 + 64/Samus + 24/Link + 32/Sheik(+Zelda) + 48/Ice Climbers | 150 of 151 four-Samus air (99%); 160 four-Climbers Belay |
+| Item pool | per fighter: 10 Ness/Ice Climbers, 8 Sheik/Zelda/Pikachu/Samus/Link/Young Link, 6 others; + 8 flat on Yoshi's Story | 16 four-Pikachu Thunder (structural at every cadence 20..120); 17 Ness vs Climbers on Yoshi's (7 + 5 + Shy Guy waves of 3..5) |
+| Class mem-pieces, generic | 128 flat (`MAXIMUM_RESERVE` 256 -> 512) | small classes' churn only |
+| JObj class (192 B) floor | 128 + 128/port (`hsdPreallocateMemPiecesForClass`, also forces the bucket to exist) | growth over seal: 98 Peach-Link (the RL crash, former flat 128), 124..146 four-Link/-Ness/-Climbers, 395 four-Samus (scripted air catch minimum 320) |
+| Pose joints | 256/player (pre-existing) | 1,016 four-Sheik (census) |
+| Pose tracks | 384/player (was flat 1024) | 1,058 four-Ice-Climbers (~265 per port across Popo and Nana); Zelda next at 446 |
+
+## Evidence and acceptance
+
+- `tests/melee_core/article_pool_smoke.c` (in `native-smoke`) drives thirteen scripted
+  scenarios — four-ness-dreamland, four-samus-air-fd, ness-samus-dreamland,
+  ness-link-dreamland, four-link-fd, four-pikachu-fd, four-ics-fd, ness-ics-yoshis, the
+  cold-tether set (four-link-zair-cold-fd, four-ylink-zair-cold-fd, four-sheik-chain-fd,
+  peach-link-zair-cold-dreamland, four-ics-belay-cold-fd) — each asserting the burst
+  actually happened (live detonations, beams, RObjs, pool-counted items, tethers) and
+  that every pool kept 20% headroom. The cold-tether scenarios matter because a
+  move-cycling driver warms the free lists with earlier spawns and never reaches the
+  seal-state lists an RL policy hits by jumping and pressing Z. Reverting each reserve
+  was checked separately: each reproduces its abort or fails the headroom bar.
+- `tests/melee_core/pool_chaos_soak.c` (built on demand, not in `native-smoke`): a
+  deterministic 60,000-frame pseudo-random soak that prints every pool's and class
+  bucket's high water; a fifteen-lineup audit shows no aborts and every pool under 80%
+  of capacity, and it is the instrument for any future reserve change.
+- Runtime census (`make runtime-census`, 20 characters x 6 stages x 2/4 players):
+  maximum arena use 973,328 -> 1,026,296 -> 1,132,368 -> 1,195,716 -> 1,311,096 of
+  3,145,728 across the series (worst config four Sheik on Yoshi's Story); relocation
+  records 5,371 of 16,384; pose joints 1,016 of 1,024. The ordinary two-player lock is
+  608,100 arena bytes / 868 allocations before and after gameplay, savestate 671,140
+  bytes (the sized-per-player track arena more than pays for the per-port item and
+  JObj terms at two ports; four-player matches pay the rest).
+- Gates at each commit: source-check (until the Link-era lock drift, fixed 2026-08-26),
+  native-smoke, ppc, python-library; the Wasm target was unverified on this host (no
+  emcc) — the change is plain C on the shared path. Replay locks and classified
+  fingerprints did not move (pool growth is layout-neutral for the corpus; the
+  `b1955a02` preload-shift precedent did not recur).
+
+## Log
+
+- 2026-08-07 — `retained` (`066cffdd`, `b7aefa05`): FObj per Ness (four-Ness aborted at
+  359 against 283), then the composition fixed from maximum to sum with Samus as another
+  per-fighter term; the `has_samus` branch is deleted.
+- 2026-08-07 — `retained` (`19c849be`, `0ff5bb19`): AObj/GObj/mem-piece/ItemLink per
+  Samus (four-Samus air grapple-catch aborted through four pools in turn); a twenty-
+  fighter four-port sweep of every remaining flat reserve found RObj at 16/16 (four Link)
+  and the item pool aborting at sixteen (four Pikachu); the other five flat reserves
+  peaked <= 78% and stay.
+- 2026-08-07 — `retained` (`65bf041c`): AGENTS.md roster brought to twenty and the
+  per-fighter-reserve rule recorded as a convention.
+- 2026-08-09 — `retained` (`a4eafdf2`, `de75ca49`): pose track arena 384/player (four
+  Ice Climbers asserted `allocate_tracks` at 1058 live); item pool moved from a flat
+  eight per port to measured per-fighter rates plus a Yoshi's Story Shy Guy term after
+  an RL abort in `itClimbersBlizzard_Spawn` (Ness vs Climbers, seventeen live items).
+- 2026-08-17 — `retained` (`3cd7ead3`): the 192-byte JObj mem-piece class gets a per-port
+  floor that also creates the bucket before the seal (an RL abort in
+  `ftCo_AirCatch_Anim -> it_link_get_joint -> HSD_JObjLoadJoint`, Peach vs Link, Dream
+  Land); GObjProc per Ness, GObj/ItemLink per Link/Sheik/Climbers, Mtx per Samus, FObj
+  per Link/Peach from the new chaos soak, which found three latent aborts beside the
+  reported one.
+- 2026-08-26 — `retained`: ledger written; `CURRENT_BASELINE.md`'s memory-contract table
+  refreshed from the census at this HEAD (it had carried the 2026-07-19 figures through
+  the whole series).
+- 2026-08-26 — `retained` (throughput/digest check of the packet): control `d59b65ba`
+  (pre-packet) versus candidate `3cd7ead3` (packet head, before the partner-arm gameplay
+  fix), same release profile, the retained 153-replay eight-character 256-batch workload,
+  three alternating samples each on CPU 0 of this host. Digests are identical on every
+  run (`474828382690a770`), so the reserves are gameplay-neutral. Median cycles/frame
+  129,981.2 control versus 132,630.9 candidate (+2.0%), with samples 126,658..154,144 and
+  128,807..136,931 — inside this host's run-to-run spread (a Ryzen 9 3950X shared with
+  other jobs, load about 3), so no material cost is claimed or excluded beyond that. The
+  absolute figures are not comparable to the retained 9950X3D medians; see
+  `CURRENT_BASELINE.md`.
+
+# Previous structural packet — Link and Young Link
 
 ## Objective
 
