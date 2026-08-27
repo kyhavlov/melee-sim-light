@@ -85,7 +85,13 @@ Two engine-dump probes (`reports/triage/run_hookshot_probe.py`, out under
   ScaryFrankPorcupine PASS 26,844/26,844. The peach suite's other ten PPC "fails" are
   classification entries that carry only a `native` snapshot — their PPC fingerprints
   equal the native ones (e.g. TameEmbellishedSparrow 65e7d85cca69a2b5) — so the oracle
-  agrees; peach was never PPC-recorded. pytest 47 passed. Not committed.
+  agrees; peach was never PPC-recorded. pytest 47 passed. Committed as `61a2d260`.
+- 2026-08-26 — `retained` (`a3158608`, follow-up): the production profile now matches the
+  Slippi netplay injection list (`Output/InjectionLists/list_netplay.json`: the full UCF
+  0.84 bundle) — `src/api.c` turns on the extended shield drop, and the Python package's
+  `ucf_cardinals_1_0_enabled` default (`melee_sim/config.py`, `env_batch.py`) flips to
+  True so bots train under 1.0 cardinals as they would see online. Validation suites are
+  untouched (per-entry flags).
 
 # Structural packet — per-fighter sealed-arena reserves (`decomp-port-mem`, landed)
 
