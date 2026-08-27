@@ -72,10 +72,10 @@ Two engine-dump probes (`reports/triage/run_hookshot_probe.py`, out under
 - Trap noted while triaging: running `validate_replay` on a bare positional replay path
   does not apply the suite's per-entry UCF profile, so `WingedGorgeousPanther` falsely
   forks at 3864 (`ucf_cardinals_1_0_enabled` false in its suite entry). Use `--suite`.
-- Observation, not changed: `src/api.c` sets the production profile without
-  `ucf_shield_drop_extended_enabled` (it stays 0 from the memset), so production RL runs
-  the classic shield drop only. Whether that matches the intended Slippi target is a
-  user decision.
+- `src/api.c` had set the production profile without `ucf_shield_drop_extended_enabled`
+  (it stayed 0 from the memset), so production RL ran the classic shield drop only; at the
+  user's direction the extended (counter-based) shield drop is now on in production too,
+  matching current Slippi.
 
 ## Log
 
