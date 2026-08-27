@@ -1,3 +1,92 @@
+# Correctness lead — the classic UCF shield drop is two rollouts (2026-08-26, landed)
+
+## Objective
+
+Close the one open residual that carried a named gameplay mechanism:
+`held-down-shield-press-escape-decision` (marth `WingedGorgeousPanther` @9793, P3 Falco
+shielding off a held-down rim press on the frozen Stadium main floor where the hosted
+build spot-dodged). The ledgered suspect — the `x671` down-tilt timer arming a frame late —
+was wrong; the vanilla gate is exact.
+
+## What the retail probe showed
+
+Two engine-dump probes (`reports/triage/run_hookshot_probe.py`, out under
+`reports/triage/marth_escape_probe{,_b}/`) on frames 9787..9795 with PC hits at
+`Fighter_8006AD10`, `ft_8008A348`, `ftCo_Wait_IASA`, `ftCo_80099794`, `ftCo_80099894`,
+`ftCo_80091A4C`:
+
+- Retail's `x671` is 0/1/2/3 on 9790..9793 exactly as hosted (reset when `lstick.y`
+  crosses `-xC` at 9790); `held` carries L throughout (the trigger was held since the
+  tech, not pressed at 9793); `x670` is 6; `cstick` is 0.
+- At 9793 the PassiveStandF anim end runs `ft_8008A348` -> Wait, then `Wait_IASA` calls
+  `ftCo_80099794`, which **enters `ftCo_80099894`** (the vanilla gate passes: `-0.7125 <=
+  x314`, `3 < x318`) — and yet `ftCo_80091A4C` runs next and the frame ends in GuardOn.
+- `coll_data.floor.index` is 34 with `floor.flags` **0** (main floor), so the UCF 0.84
+  shield-drop code (`External/UCF 0.84/UCF/UCF Shield Drop.asm`: `floor.index != -1 &&
+  floor.flags & 0x100`, i.e. `mpColl_IsOnPlatform`) could not have suppressed it.
+- The replay's own embedded gecko list (event 0x3D via 0x10 splitters) carries a
+  304-byte code at `800998A4` that is `External/UCF 0.8/Logic/UCF SD.asm`: c-stick gate,
+  a float rim test (`((int(|v|*80 - 0x37270000) + 2) / 80)` per axis, squares summed
+  `>= 1.0` in single precision), `x670 > 3`, `lstick.y > -0.8`, **no platform test**;
+  its suppress path pops `ftCo_80099894`'s frame and returns to the caller's `li r3,0`,
+  which is why the spot-dodge check reports false and the Guard check follows.
+
+## Final boundary
+
+- **Owner:** `src/runtime/match.c::msl_ucf_suppress_spotdodge` selects between the two
+  codes on `ucf_shield_drop_084_enabled` (new `MslCoreMatchRules` field, wire byte 32,
+  `MslCoreMatchConfig` 53 -> 54 bytes, `MslCoreStreamJobHeader` 109 -> 110). On = the 0.84
+  platform-gated integer rim test (unchanged); off = the 0.8 float rim test everywhere.
+- **Plumbing:** `wire.h/.c`, `match.h/.c`, `scalar.c`, `api.c` (production = 0.84),
+  `tools/validation/native.c` (both entry points), `suite_io.py`, `validate_replay.py`,
+  the four C smokes/benches, `tools/viewer/schema.c` + regenerated
+  `schema.generated.js` + `sim.js`. Suite entries carry
+  `"ucf_shield_drop_084_enabled": false` per replay, defaulting true.
+- **Corpus profile:** a scan of every validation replay's embedded gecko list
+  (`reports/triage/gecko_scan.txt`, driver `reports/triage/gecko_scan.py` — the 0x800998A4
+  body is 200 bytes for 0.84 and 304 bytes for 0.8; only runtime scratch words, the
+  `backup` frame size and the branch-back differ within a version) finds **16 recordings
+  with the 0.8 code**, and each of those sixteen also matches none of the other 0.84
+  bundle files (their dashback/SDI codes are the older bundle too — an open lead if any of
+  them ever forks on a dashback/SDI decision). Flagged: falcon OddballCleanViper; icies
+  master-diamond, platinum-platinum; luigi slippi_01.07.22; marios 6082, platinum-platinum,
+  ranked-anonymized platinum-platinum, Slippi-20220321; marth BreakableMundaneElephant,
+  FemaleWorthyAlpaca, WingedGorgeousPanther; peach HeartyStiffMallard, ScaryFrankPorcupine;
+  pikachu diamond-platinum; puff master-diamond; samus diamond-platinum.
+- **Ledger:** `canonical:ucf-classic-shield-drop-version-flag` in
+  `src/upstream_delta_ledger.tsv`.
+
+## Evidence and acceptance
+
+- `WingedGorgeousPanther` 9,915 -> **10,625/10,625 exact**; `peach/ScaryFrankPorcupine`
+  (classified `dolphin-ulp-item-motion-profile` @25891, 38 rows) turned out to be the
+  same fork and is **26,844/26,844 exact**. Both classifications retired (65 -> 63) and
+  their locks re-recorded (`008c3a4a80f7a6dc` -> `a2f43edd9a4b6306`, `916b55fd67d0ab1a`
+  -> `ea018e8ffbc9f96e`); no other lock moved.
+- Native aggregate: **429 pass / 63 classified / 0 fail / 0 error** (4,876,298 frames).
+  Every other flagged replay reproduces its previous outcome, so the 0.8 predicate is
+  corpus-neutral except where it closes forks.
+- Gates on this host (gcc 15.2, recorded lock-clean): `source-check`, `format-check`,
+  `native-smoke`, `python-library`; the Wasm/viewer targets are unverified (no emcc) but
+  the schema regenerated cleanly and `sim.js` writes the new byte.
+- Trap noted while triaging: running `validate_replay` on a bare positional replay path
+  does not apply the suite's per-entry UCF profile, so `WingedGorgeousPanther` falsely
+  forks at 3864 (`ucf_cardinals_1_0_enabled` false in its suite entry). Use `--suite`.
+- Observation, not changed: `src/api.c` sets the production profile without
+  `ucf_shield_drop_extended_enabled` (it stays 0 from the memset), so production RL runs
+  the classic shield drop only. Whether that matches the intended Slippi target is a
+  user decision.
+
+## Log
+
+- 2026-08-26 — `retained`: probes, corpus scan, flag, suite profiles, classification
+  retirement, lock re-record, ledger row. PPC parity (binary rebuilt for the 54-byte
+  config): marth 17 pass / 2 classified / 0 fail with WingedGorgeousPanther PASS;
+  ScaryFrankPorcupine PASS 26,844/26,844. The peach suite's other ten PPC "fails" are
+  classification entries that carry only a `native` snapshot — their PPC fingerprints
+  equal the native ones (e.g. TameEmbellishedSparrow 65e7d85cca69a2b5) — so the oracle
+  agrees; peach was never PPC-recorded. pytest 47 passed. Not committed.
+
 # Structural packet — per-fighter sealed-arena reserves (`decomp-port-mem`, landed)
 
 ## Objective
@@ -750,6 +839,8 @@ coverage and so the eventual fix announces itself by breaking the entry -- the s
    given an explicit past-member carve-out, that classification can be narrowed.
 
 ## Reclassified debt — marth WingedGorgeousPanther @9793
+
+**RESOLVED (2026-08-26): not the tilt timer — the recording ran the UCF 0.8 shield drop with no platform gate; see the top section. Kept for provenance.**
 
 `incomplete-nintendont-post-frame-stream` was a misread and is now
 `held-down-shield-press-escape-decision` (owner moved from the Nintendont

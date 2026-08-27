@@ -258,6 +258,7 @@
   },
   {
    "replay": "replays/validation/icies/master-diamond-e1f45bc846c8b64f90b35a94.slpz",
+   "ucf_shield_drop_084_enabled": false,
    "ports": [
     1,
     2
@@ -323,6 +324,7 @@
   },
   {
    "replay": "replays/validation/icies/platinum-platinum-83d0989d367f6d26c0df4863.slpz",
+   "ucf_shield_drop_084_enabled": false,
    "ports": [
     1,
     2

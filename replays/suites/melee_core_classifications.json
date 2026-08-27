@@ -1014,36 +1014,6 @@
    }
   },
   {
-   "replay": "replays/validation/marth/WingedGorgeousPanther.slpz",
-   "id": "held-down-shield-press-escape-decision",
-   "owner": "ftCo_Escape spot-dodge tilt-timer gate (open port defect)",
-   "rationale": "OPEN PORT DEFECT held as a classification, not an unreconstructible observation. At frame 9793 P3 Falco's PassiveStandF ends and the player presses shield with the left stick already held down-left (recorded lstick x -0.6875, y -0.7125, past the down threshold since 9791). Retail takes GuardOn (178) into Guard (179) and shields for 25 frames; this port takes the vanilla spot-dodge gate in ftCo_80099794 (inlineB0: lstick.y <= ftCommonData x314 AND x671_timer_lstick_tilt_y < x318) and enters Escape (235) instead, with 14 intangible frames and an undepleted shield (60.0 vs 59.72). Leading hypothesis: the down-tilt timer x671 is armed a frame late in this pad profile, so a two-frame-old hold still reads as a fresh smash. The earlier absence-sentinel reading of this residual was wrong: through 9793-9817 the stream publishes decaying shield HP (60.00 -> 53.28 at 0.28/frame), advancing action ids and incrementing instance ids, and animation_index UINT_MAX with state_age -1 is simply how this stream represents every Guard/Entry/Dead row (41 such runs on P3, 33 on P4, all inside the 9,915-row exact prefix); P3 resumes ordinary live rows at 9818 and finishes the game at three stocks. Gameplay resyncs bit-exactly by 9868 (state flags) and 9916 (shield HP); every row from there to 10502 differs only in the global attack-instance counters (instance_id, instance_hit_by, item.instance_id), each off by one because the 25-frame divergence allocated one different id, and that off-by-one is what marks all 710 tail rows mismatched. Ruled out: all 16 combinations of the UCF rollout flags reproduce this identical fingerprint, and msl_ucf_suppress_spotdodge requires mpColl_IsOnPlatform so it cannot fire on the main stage floor. Native and PPC agree on the complete 710-row boundary.",
-   "sources": [
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_80099794",
-    "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_Anim",
-    "refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10",
-    "refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm"
-   ],
-   "expected": {
-    "native": {
-     "frames": 10625,
-     "matched_frames": 9915,
-     "mismatched_frames": 710,
-     "exact_prefix_frames": 9915,
-     "strict_suffix_frames": 0,
-     "first_mismatch_frame": 9793,
-     "last_mismatch_frame": 10502,
-     "mismatch_count": 2937,
-     "mismatch_fingerprint": "3d95a3cb4754c703",
-     "mismatch_fields_digest": "6f6f16982e0d6937fa3bb79571e4d1cdf0f4f8bcae1b28a7686477986b4985a1",
-     "render_visibility_mismatch_count": 0,
-     "first_render_visibility_mismatch_frame": null,
-     "signed_zero_equal_count": 0
-    },
-    "ppc": "native"
-   }
-  },
-  {
    "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
    "id": "dolphin-ulp-item-motion-profile",
    "owner": "Mr. Saturn and turnip gravity/position float execution",
@@ -1918,34 +1888,6 @@
      "render_visibility_mismatch_count": 624,
      "first_render_visibility_mismatch_frame": 3716,
      "signed_zero_equal_count": 0
-    }
-   }
-  },
-  {
-   "replay": "replays/validation/peach/ScaryFrankPorcupine.slpz",
-   "id": "dolphin-ulp-item-motion-profile",
-   "owner": "thrown-item gravity and position float execution",
-   "rationale": "After selecting this old capture's explicit pre-Cardinals profile, all residuals are sparse ULP-scale item velocity/position lanes from source gravity and integration. The final 570 transitions are strict, and the exact fingerprint preserves bit-level drift detection. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
-   "sources": [
-    "refs/melee/src/melee/it/it_2725.c::it_80272860",
-    "refs/melee/src/melee/it/item.c::Item_80268E5C",
-    "refs/melee/src/melee/it/items/itpeachturnip.c"
-   ],
-   "expected": {
-    "native": {
-     "frames": 26844,
-     "matched_frames": 26806,
-     "mismatched_frames": 38,
-     "exact_prefix_frames": 26013,
-     "strict_suffix_frames": 793,
-     "first_mismatch_frame": 25891,
-     "last_mismatch_frame": 25928,
-     "mismatch_count": 150,
-     "mismatch_fingerprint": "31e72c938ffd4692",
-     "render_visibility_mismatch_count": 0,
-     "first_render_visibility_mismatch_frame": null,
-     "signed_zero_equal_count": 0,
-     "mismatch_fields_digest": "765529eb44031e2cd31e5b2ee877a42faad55b76340acc48bd1a62e9aea9df04"
     }
    }
   },

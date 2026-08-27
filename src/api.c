@@ -97,6 +97,7 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
   target->ucf_cardinals_1_0_enabled = source->ucf_cardinals;
   target->ucf_shield_sdi_enabled = 1;
   target->ucf_sdi_enabled = 1;
+  target->ucf_shield_drop_084_enabled = 1;
 
   for (player = 0; player < source->num_players; ++player) {
     const MslPlayerConfig* src = &source->players[player];

@@ -40,6 +40,8 @@ int main(void)
           "ucfCardinals10Enabled");
     FIELD(MslCoreMatchConfig, ucf_shield_sdi_enabled, "ucfShieldSdiEnabled");
     FIELD(MslCoreMatchConfig, ucf_sdi_enabled, "ucfSdiEnabled");
+    FIELD(MslCoreMatchConfig, ucf_shield_drop_084_enabled,
+          "ucfShieldDrop084Enabled");
     FIELD(MslCoreMatchConfig, stage_event_streams, "stageEventStreams");
     FIELD(MslCoreMatchConfig, players, "players");
     puts("});");

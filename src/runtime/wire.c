@@ -80,6 +80,8 @@ void msl_core_decode_match_config(MslCoreMatchConfig* config,
         wire[offsetof(MslCoreMatchConfig, ucf_sdi_enabled)];
     config->ucf_shield_drop_extended_enabled =
         wire[offsetof(MslCoreMatchConfig, ucf_shield_drop_extended_enabled)];
+    config->ucf_shield_drop_084_enabled =
+        wire[offsetof(MslCoreMatchConfig, ucf_shield_drop_084_enabled)];
     config->stage_event_streams =
         wire[offsetof(MslCoreMatchConfig, stage_event_streams)];
     memcpy(config->players, wire + offsetof(MslCoreMatchConfig, players),

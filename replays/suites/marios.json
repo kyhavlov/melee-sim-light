@@ -126,6 +126,7 @@
     },
     {
       "replay": "replays/validation/marios/6082_Game_20231226T153224.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "ports": [
         1,
         4
@@ -176,6 +177,7 @@
     },
     {
       "replay": "replays/validation/marios/Slippi-20220321_Game_20220322T011940.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "ports": [
         1,
         2
@@ -578,6 +580,7 @@
     },
     {
       "replay": "replays/validation/marios/platinum-platinum-4aa6d15f587e02246006b7e0.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "ports": [
         1,
         2
@@ -592,6 +595,7 @@
     },
     {
       "replay": "replays/validation/marios/ranked-anonymized_platinum-platinum-7d58208ea7f4c046a0da2ae1.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "ports": [
         1,
         2

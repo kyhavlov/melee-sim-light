@@ -151,6 +151,7 @@
     },
     {
       "replay": "replays/validation/pikachu/diamond-platinum-65468eac6defc7ae336916cb.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "ports": [
         1,
         2

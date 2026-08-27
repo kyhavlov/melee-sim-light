@@ -109,6 +109,15 @@ typedef struct MslCoreMatchConfig {
     // only.
     // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF Shield Drop Extended.asm
     uint8_t ucf_shield_drop_extended_enabled;
+    // The classic shield drop itself shipped in two versions. UCF 0.84 gates
+    // the spot-dodge suppression on standing on a platform line; the earlier
+    // UCF 0.8 code (unchanged since 0.73) has no platform check and applies
+    // its float rim test everywhere, so a rim-coordinate shield press with the
+    // stick held down on the main floor shields instead of spot-dodging.
+    // Recordings whose embedded gecko list carries the 0.8 code clear this.
+    // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF Shield Drop.asm
+    // refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF SD.asm
+    uint8_t ucf_shield_drop_084_enabled;
     // Bit 0: Slippi 3.18+ FoD platform events; bit 1: Dream Land Whispy
     // direction events. A present stream is authoritative even on frames with
     // no event, where the last published value remains active.
@@ -321,9 +330,9 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size")
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 16, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 72, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 53,
+_Static_assert(sizeof(MslCoreMatchConfig) == 54,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 109,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 110,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");

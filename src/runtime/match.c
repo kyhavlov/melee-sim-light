@@ -37,6 +37,8 @@ static _Thread_local MslCoreMatchRules* msl_bound_match_rules;
 #define msl_ucf_sdi_enabled (msl_bound_match_rules->ucf_sdi_enabled)
 #define msl_ucf_shield_drop_extended_enabled \
     (msl_bound_match_rules->ucf_shield_drop_extended_enabled)
+#define msl_ucf_shield_drop_084_enabled \
+    (msl_bound_match_rules->ucf_shield_drop_084_enabled)
 #define msl_match_frame_count (msl_bound_match_rules->frame_count)
 #define msl_match_ended (msl_bound_match_rules->ended)
 #define msl_respawn_reservation_timer                                         \
@@ -100,7 +102,8 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
                                int ucf_cardinals_1_0_enabled,
                                int ucf_shield_sdi_enabled,
                                int ucf_sdi_enabled,
-                               int ucf_shield_drop_extended_enabled)
+                               int ucf_shield_drop_extended_enabled,
+                               int ucf_shield_drop_084_enabled)
 {
     memset(rules, 0, sizeof(*rules));
     msl_core_bind_match_rules(rules);
@@ -115,6 +118,7 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
     msl_ucf_sdi_enabled = ucf_sdi_enabled != 0;
     msl_ucf_shield_drop_extended_enabled =
         ucf_shield_drop_extended_enabled != 0;
+    msl_ucf_shield_drop_084_enabled = ucf_shield_drop_084_enabled != 0;
 }
 
 bool msl_core_uses_online_fnmsubs_zero(void)
@@ -374,12 +378,43 @@ bool msl_ucf_shield_sdi_check(const Fighter* fp)
            dx * dx > 62 * 62;
 }
 
+static float msl_ucf_08_rim_lane(float value)
+{
+    // refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF SD.asm::DoSomething.
+    // |v| * 80 - 0x37270000 (fmuls then fsubs, unfused), truncated, + 2, then
+    // divided back by 80 in single precision.
+    float scaled = msl_absf(value) * 80.0F;
+    int steps = (int) (scaled - 0x1.4EP-17F) + 2;
+    return (float) steps / 80.0F;
+}
+
 bool msl_ucf_suppress_spotdodge(const Fighter* fp)
 {
-    // Direct projection of refs/ucf/src/shielddrop/shielddrop.S. The common
-    // Escape owner calls this at both vanilla spot-dodge entry sites.
-    if (fp->input.cstick.y <= p_ftCommonData->x314 ||
-        fp->x670_timer_lstick_tilt_x < p_ftCommonData->x320 ||
+    // The common Escape owner calls this at both vanilla spot-dodge entry
+    // sites; the gecko hooks ftCo_80099894+0x10 and, when it suppresses,
+    // unwinds to the caller's `li r3, 0` so the check reports no dodge.
+    if (fp->input.cstick.y <= p_ftCommonData->x314) {
+        return false;
+    }
+    if (!msl_ucf_shield_drop_084_enabled) {
+        // refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF SD.asm: the float
+        // rim test, then the tilt timer, then the -0.8 floor; no platform
+        // check, and the timer bound is the literal 3 rather than x320.
+        // Retail-probe-verified on marth WingedGorgeousPanther frame 9793:
+        // Falco on the Stadium main floor (floor.flags 0) shields off a
+        // held-down rim press instead of spot-dodging.
+        float x = msl_ucf_08_rim_lane(fp->input.lstick.x);
+        float y = msl_ucf_08_rim_lane(fp->input.lstick.y);
+        if (x * x + y * y < 1.0F) {
+            return false;
+        }
+        return fp->x670_timer_lstick_tilt_x > 3 &&
+               -0.8F < fp->input.lstick.y;
+    }
+    // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF Shield Drop.asm
+    // (refs/ucf/src/shielddrop/shielddrop.S): coll_data.floor.index != -1
+    // and floor.flags & LINE_FLAG_PLATFORM, i.e. mpColl_IsOnPlatform.
+    if (fp->x670_timer_lstick_tilt_x < p_ftCommonData->x320 ||
         fp->input.lstick.y <= -0.8F ||
         !mpColl_IsOnPlatform((CollData*) &fp->coll_data))
     {

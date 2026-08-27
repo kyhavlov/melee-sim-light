@@ -91,6 +91,7 @@
     },
     {
       "replay": "replays/validation/samus/diamond-platinum-e9cd78b1cd4439a0f7945269.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "ports": [
         1,
         2

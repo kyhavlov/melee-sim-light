@@ -486,6 +486,7 @@
     },
     {
       "replay": "replays/validation/marth/BreakableMundaneElephant.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "ports": [
         3,
         4
@@ -522,6 +523,7 @@
     },
     {
       "replay": "replays/validation/marth/WingedGorgeousPanther.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "ucf_cardinals_1_0_enabled": false,
       "ports": [
         3,
@@ -595,6 +597,7 @@
     },
     {
       "replay": "replays/validation/marth/FemaleWorthyAlpaca.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "ucf_cardinals_1_0_enabled": false,
       "ports": [
         1,
@@ -1004,6 +1007,7 @@
     },
     {
       "replay": "replays/validation/falcon/OddballCleanViper.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "ucf_cardinals_1_0_enabled": false,
       "ucf_shield_sdi_enabled": false,
       "ucf_sdi_enabled": false,
