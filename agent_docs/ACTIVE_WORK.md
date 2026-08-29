@@ -83,9 +83,26 @@ Two engine-dump probes (`reports/triage/run_hookshot_probe.py`, out under
   retirement, lock re-record, ledger row. PPC parity (binary rebuilt for the 54-byte
   config): marth 17 pass / 2 classified / 0 fail with WingedGorgeousPanther PASS;
   ScaryFrankPorcupine PASS 26,844/26,844. The peach suite's other ten PPC "fails" are
-  classification entries that carry only a `native` snapshot — their PPC fingerprints
-  equal the native ones (e.g. TameEmbellishedSparrow 65e7d85cca69a2b5) — so the oracle
-  agrees; peach was never PPC-recorded. pytest 47 passed. Committed as `61a2d260`.
+  classification entries that carry only a `native` snapshot; peach was never
+  PPC-recorded. (Corrected 2026-08-28: only eight of the ten PPC fingerprints equal
+  native, e.g. TameEmbellishedSparrow 65e7d85cca69a2b5; CandidThankfulCockroach and
+  CapitalPristineTarsier differ — see the 2026-08-28 entry.) pytest 47 passed.
+  Committed as `61a2d260`.
+- 2026-08-28 — `retained`: peach and marios PPC-recorded. `make ppc` on `5c0a91ac`, then
+  per-suite PPC with `VALIDATION_WORKERS=8 --timeout 180` (the auto 16-worker default trips
+  the 30s PPC timeout on 15k+ frame replays and reports them as `error`). peach PPC
+  9 pass / 1 classified / 10 unrecorded before; eight of the ten PPC fingerprints equal
+  native and are now `"ppc": "native"` aliases. Two differ and carry their own PPC snapshot:
+  CandidThankfulCockroach (native 17b7be538e5e236a / 62 rows -> PPC 6002eb36f1ec85ea /
+  120 rows) and CapitalPristineTarsier (851c665507f1483b / 60 -> b3f57dbd9b3539c0 / 117).
+  Both are the ledgered PPC-wider `dolphin-ulp-motion-profile` shape (cf. sheik
+  GlaringRosyAlpaca 38/117, WavyRundownAardvark 50/107): a ~120-row 1-ULP root-position
+  window on the airborne port-2 fighter (y ~127..160) that starts 1-3 frames earlier on
+  PPC; percent residuals and strict suffixes are identical across backends. marios PPC
+  44 pass / 6 unrecorded, all six fingerprints equal native -> aliases. After recording:
+  peach native and PPC 9 pass / 11 classified / 0 fail; marios native and PPC 44 pass /
+  6 classified / 0 fail. Still native-only: aggregate_recent (2), battlefield_recent (1),
+  pokemon_stadium_recent (1). Logs: `reports/triage/{peach,marios}-ppc-head-5c0a91ac.txt`.
 - 2026-08-26 — `retained` (`a3158608`, follow-up): the production profile now matches the
   Slippi netplay injection list (`Output/InjectionLists/list_netplay.json`: the full UCF
   0.84 bundle) — `src/api.c` turns on the extended shield drop, and the Python package's

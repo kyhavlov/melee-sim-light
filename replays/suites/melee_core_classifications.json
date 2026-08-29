@@ -753,7 +753,8 @@
      "first_render_visibility_mismatch_frame": null,
      "signed_zero_equal_count": 0,
      "mismatch_fields_digest": "d8ea98de2ec88d8b978a254f97f4d93d6a2272e6f085c8fbcc887f9a22ae8e1f"
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -781,7 +782,8 @@
      "first_render_visibility_mismatch_frame": -122,
      "signed_zero_equal_count": 0,
      "mismatch_fields_digest": "0c9db191ec89c53374e607aa0d0ffbaa30a146b7836fdbc3ed7143c12c05c743"
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -809,7 +811,8 @@
      "render_visibility_mismatch_count": 0,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 1624
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -837,7 +840,8 @@
      "render_visibility_mismatch_count": 0,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 984
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -890,7 +894,8 @@
      "render_visibility_mismatch_count": 0,
      "first_render_visibility_mismatch_frame": null,
      "signed_zero_equal_count": 0
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -918,7 +923,8 @@
      "first_render_visibility_mismatch_frame": -122,
      "signed_zero_equal_count": 0,
      "mismatch_fields_digest": "c940c8411ba15d20498fc86bb0d0595ec8091932c129a9d00a6f919f17fc3d81"
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -1017,7 +1023,7 @@
    "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
    "id": "dolphin-ulp-item-motion-profile",
    "owner": "Mr. Saturn and turnip gravity/position float execution",
-   "rationale": "State-aware validation excludes only Mr. Saturn's uninitialized held/thrown xDE4 bytes; all remaining residuals are bounded ULP-scale common-item velocities and positions from imported source gravity/integration. The final 3,439 transitions are strict. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual.",
+   "rationale": "State-aware validation excludes only Mr. Saturn's uninitialized held/thrown xDE4 bytes; all remaining residuals are bounded ULP-scale common-item velocities and positions from imported source gravity/integration. The final 3,439 transitions are strict. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. PPC snapshot recorded 2026-08-28 (melee-core-ppc at 5c0a91ac): the PPC backend reproduces the same residual families but widens the airborne Jigglypuff root-position ULP window to 2820..2947 (120 rows vs native's 62, first row one frame earlier); the percent residuals and the 3,439-transition strict suffix are identical on both backends.",
    "sources": [
     "refs/melee/src/melee/it/items/itdosei.c",
     "refs/melee/src/melee/it/items/itpeachturnip.c",
@@ -1039,6 +1045,21 @@
      "render_visibility_mismatch_count": 7,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 3439
+    },
+    "ppc": {
+     "exact_prefix_frames": 2942,
+     "first_mismatch_frame": 2820,
+     "first_render_visibility_mismatch_frame": 1839,
+     "frames": 14007,
+     "last_mismatch_frame": 10445,
+     "matched_frames": 13887,
+     "mismatch_count": 187,
+     "mismatch_fields_digest": "acf89681fc6fe53ae83cb778e04b9b6d4a779b0b3a2e04701a40a7097fb6971e",
+     "mismatch_fingerprint": "6002eb36f1ec85ea",
+     "mismatched_frames": 120,
+     "render_visibility_mismatch_count": 7,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 3439
     }
    }
   },
@@ -1046,7 +1067,7 @@
    "replay": "replays/validation/peach/CapitalPristineTarsier.slpz",
    "id": "dolphin-ulp-fighter-and-item-profile",
    "owner": "fighter root motion and thrown-item gravity float execution",
-   "rationale": "The complete residual contains bounded ULP-scale fighter root motion and thrown-item velocity/position intervals. Source discrete state remains aligned, and the exact fingerprint includes 158 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual.",
+   "rationale": "The complete residual contains bounded ULP-scale fighter root motion and thrown-item velocity/position intervals. Source discrete state remains aligned, and the exact fingerprint includes 158 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. PPC snapshot recorded 2026-08-28 (melee-core-ppc at 5c0a91ac): the PPC backend reproduces the same residual families but widens the airborne Peach root-position ULP window to 3712..3839 (117 rows vs native's 60, first row three frames earlier); the percent residuals and the 158-transition strict suffix are identical on both backends.",
    "sources": [
     "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
     "refs/melee/src/melee/it/it_2725.c::it_80272860",
@@ -1065,6 +1086,21 @@
      "mismatch_fields_digest": "a735a3ac08323337ecb43d0bd7085dc43b795b6bbeed046881a9b93a9c7ebbe4",
      "mismatch_fingerprint": "851c665507f1483b",
      "mismatched_frames": 60,
+     "render_visibility_mismatch_count": 8,
+     "signed_zero_equal_count": 0,
+     "strict_suffix_frames": 158
+    },
+    "ppc": {
+     "exact_prefix_frames": 3834,
+     "first_mismatch_frame": 3712,
+     "first_render_visibility_mismatch_frame": 7181,
+     "frames": 16491,
+     "last_mismatch_frame": 16210,
+     "matched_frames": 16374,
+     "mismatch_count": 180,
+     "mismatch_fields_digest": "5e1c15c99f6b336bd2f7a1d1852a5f56b5ac0b65016117f5231ed41313de90fd",
+     "mismatch_fingerprint": "b3f57dbd9b3539c0",
+     "mismatched_frames": 117,
      "render_visibility_mismatch_count": 8,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 158
@@ -1096,7 +1132,8 @@
      "render_visibility_mismatch_count": 11,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 5075
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -1125,7 +1162,8 @@
      "render_visibility_mismatch_count": 10,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 352
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -1174,7 +1212,8 @@
      "render_visibility_mismatch_count": 19,
      "first_render_visibility_mismatch_frame": 500,
      "signed_zero_equal_count": 0
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -1247,7 +1286,8 @@
      "first_render_visibility_mismatch_frame": 2941,
      "signed_zero_equal_count": 0,
      "mismatch_fields_digest": "8732317e4d6f734ceafdc5037f716b912d45cdb091cb8d7f9241b69009542547"
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -1888,7 +1928,8 @@
      "render_visibility_mismatch_count": 624,
      "first_render_visibility_mismatch_frame": 3716,
      "signed_zero_equal_count": 0
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -1917,7 +1958,8 @@
      "first_render_visibility_mismatch_frame": -122,
      "signed_zero_equal_count": 0,
      "mismatch_fields_digest": "97db1d02e6ec71be19b5202b390f5d50d68531eb536f8a1c3fa4b0692f939a99"
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -1946,7 +1988,8 @@
      "render_visibility_mismatch_count": 25,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 0
-    }
+    },
+    "ppc": "native"
    }
   },
   {
@@ -1974,7 +2017,8 @@
      "render_visibility_mismatch_count": 0,
      "signed_zero_equal_count": 0,
      "strict_suffix_frames": 1856
-    }
+    },
+    "ppc": "native"
    }
   },
   {
