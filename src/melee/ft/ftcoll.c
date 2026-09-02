@@ -926,11 +926,24 @@ void ftColl_80077688(Item* item, HitCapsule* hurt, Fighter* fp, Vec3* pos,
                 cos_val = cosf(angle);
                 sin_val = sinf(angle);
 
+#ifdef MSL_CORE_HOSTED
+                // GALE01 0x80077818..0x8007782C: `fcmpo pos->x, 0; cror
+                // eq,gt,eq; bne -> fneg` keeps +cos on the pos->x >= 0 side
+                // and negates it otherwise, so a countered projectile is
+                // deflected away from the counter's side. The upstream decomp
+                // has the two arms swapped.
+                if (pos->x >= 0.0f) {
+                    item->xC58.x = cos_val;
+                } else {
+                    item->xC58.x = -cos_val;
+                }
+#else
                 if (pos->x >= 0.0f) {
                     item->xC58.x = -cos_val;
                 } else {
                     item->xC58.x = cos_val;
                 }
+#endif
                 item->xC58.y = sin_val;
                 item->xC58.z = 0.0f;
                 item->xDCE_flag.b4 = 1;

@@ -1,3 +1,74 @@
+# Correctness lead — the two Link open port defects (2026-08-30, landed)
+
+## Objective
+
+Close the two classifications carried as explicit open port defects:
+`link-boomerang-deflect-fork` (links `slippi-games-2025-05` @4185, 202 rows) and
+`thrown-release-pose-offset` (links `slippi-2025-08` @3503, 17 rows). Neither was what its
+ledger text said.
+
+## What the traces showed
+
+- **Boomerang:** there is no Yoshi's Story line at (-43.4, 10.7). The recording's item freezes
+  for ten frames with its timer held at 246 while P1 Marth goes 369 -> 370
+  (`ftMs_MS_SpecialLw` -> `SpecialLwHit`): the boomerang hit Marth's Counter. A hosted trace
+  proved the hit is registered (`ftColl_80077688` runs on the frame, `xDCE_flag.b4/b5` set,
+  `Item_80269DC8` dispatches the boomerang's `it_802A2320` mirror against `xC58`), and the
+  hosted post-mirror velocity (-1.711, -0.523) is exactly the recording's pre-mirror velocity
+  (-1.7866, -0.0937) reflected across n = (-0.1736, 0.9848); the recording's (-1.6468, 0.6991)
+  is the reflection across (+0.1736, 0.9848). `p_ftCommonData->x2D0` is 80, so the sign of
+  `xC58.x` is the whole defect. The DOL at 0x80077818..0x8007782C (`fcmpo pos->x, 0; cror
+  eq,gt,eq; bne -> fneg`) keeps +cos on the `pos->x >= 0` side; `refs/melee`'s
+  `ftColl_80077688` has the two arms swapped, so every projectile that hits a counter shield
+  was mirrored into the counter's side.
+- **Throw release:** P1 Young Link stands on a Fountain platform rising 0.1125/frame. The
+  release vec from `ftCo_800DDDE4` lands below the platform (y -2.12) and `mpColl_800471F8`
+  snaps the victim onto the line — hosted at the frame's new height (6.3376), retail at the
+  previous one (6.2251 = 8.048 - 1.823). Retail's platform update is `grIzumi_801CC358`,
+  registered by `grIzumi_801CBCE8` at priority 4 (after `Fighter_8006A360` at 1, before
+  `Fighter_procMap` at 6), and Slippi's `SendFountainInfo.asm` hooks 0x801CC998 inside it.
+  The hosted runtime published the recorded height in `apply_replay_stage_events` at frame
+  start and the priority-4 callback's replay branch was a no-op (`was_applied`), so every
+  mid-frame floor resolve in the fighter anim phase saw the platform one phase early.
+
+## Final boundary
+
+- `src/melee/ft/ftcoll.c::ftColl_80077688`: hosted branch with the DOL's arm order
+  (`canonical:counter-shield-item-deflect-normal-sign`, upstream-candidate).
+- `src/runtime/scalar.c::apply_replay_stage_events` no longer publishes Fountain heights;
+  `src/melee/gr/grizumi.c::grIzumi_801CC358`'s replay branch owns the publication at retail's
+  scheduler point; `msl_slippi_fod_platform_{was_applied,mark_applied}` and
+  `MslCoreSlippiState::fod_platform_applied_mask` are deleted
+  (`canonical:fountain-platform-replay-publication-phase`, hosted-replay-policy). Dream Land's
+  Whispy direction publication is untouched.
+
+## Evidence and acceptance
+
+- Native aggregate at this change: **429 pass / 59 classified / 0 fail / 0 error**
+  (4,876,298 frames). Four entries turned exact and were retired (63 -> 59):
+  `links/slippi-games-2025-05` 5,275 -> 5,375/5,375; `links/slippi-2025-08` 7,106 ->
+  7,123/7,123; `ganon/24891` (35-row FoD throw-release `dolphin-ulp-motion-profile`) 11,140/
+  11,140; `yoshi/slippi-2025-02` (`fod-release-floor-pick`, 358 rows) 12,828/12,828. No other
+  replay's outcome or lock moved; the four locks were re-recorded from the aggregate run.
+- The `fod-release-floor-pick` text had already named this seed ("same mp floor-line-pick seed
+  as the probed dk auto-dk-2025-04 and ganon FoD throw-release entries"); dk `auto-dk-2025-04`
+  is the Samus wall-hug ULP family, not a release resolve, and is unchanged.
+- Gates on this host: `source-check`, `format-check`, `native-smoke`, pytest; PPC parity on
+  the four retired replays recorded in the log below. Wasm/viewer unverified (no emcc).
+
+## Log
+
+- 2026-08-30 — `retained`: both fixes, four classifications retired, four locks re-recorded,
+  two ledger rows. Native aggregate after the lock re-record: 433 pass / 59 classified / 0
+  fail / 0 error. PPC (fresh `make ppc`, `--timeout 180`): all four retired replays PASS at
+  full length (links 7,123 and 5,375; ganon 11,140; yoshi 12,828). `source-check`,
+  `format-check`, `native-smoke`, pytest 47 passed. Trace recipe: temporary `fprintf` at the `ftcoll.c` item-vs-shield check
+  (`x221B_*`, `shield_hit` world position via `lb_8000B1CC`, `lbColl_80007BCC` result) and at
+  `ftColl_80077688`; at `Item_80269DC8` (`xDCE_flag.b4/b5`, `xC58`); at `ftCo_800DDDE4`
+  (thrower `cur_pos`/root translate, release vec, resolve output); and a same-file order trace
+  in `msl_ground_headless_epoch_proc`, `Fighter_8006A360`, `grIzumi_801CC358`, and
+  `Fighter_procMap` with `gm_8016AEDC()` as the frame stamp (Slippi id + 123).
+
 # Correctness lead — the classic UCF shield drop is two rollouts (2026-08-26, landed)
 
 ## Objective

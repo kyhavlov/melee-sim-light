@@ -902,7 +902,7 @@
       "expected": {
         "native": {
           "frames": 11140,
-          "actual_output_fingerprint": "9394a6dce2a213ba"
+          "actual_output_fingerprint": "ee69db440a8bf8dc"
         }
       }
     },
@@ -1685,7 +1685,7 @@
       "expected": {
         "native": {
           "frames": 7123,
-          "actual_output_fingerprint": "a6e47f07e5fb79af"
+          "actual_output_fingerprint": "013b6d8a9be2814f"
         }
       }
     },
@@ -1730,7 +1730,7 @@
       "expected": {
         "native": {
           "frames": 5375,
-          "actual_output_fingerprint": "e3a0f945318ff1ef"
+          "actual_output_fingerprint": "37f099100b8aea13"
         }
       }
     },
@@ -4286,7 +4286,7 @@
       "expected": {
         "native": {
           "frames": 12828,
-          "actual_output_fingerprint": "6e47c8b67a1d2e00"
+          "actual_output_fingerprint": "d6ebee7f219b9190"
         }
       }
     },

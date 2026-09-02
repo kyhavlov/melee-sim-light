@@ -2105,36 +2105,15 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
 static void apply_replay_stage_events(MslCoreMatch* match)
 {
     int i;
-    if (match->config.stage_id == MSL_CORE_STAGE_FOUNTAIN_OF_DREAMS &&
-        (match->config.stage_event_streams & 1) != 0)
-    {
-        for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
-            Ground* gp = &match->stage_ground[i];
-            f32 height;
-            bool changed;
-            if (!match->stage_ground_used[i] || gp->map_id != 4) {
-                continue;
-            }
-            // grIzumi creates the left/right collision actors in the reverse
-            // order of Slippi's 0=right, 1=left event protocol. Publish the
-            // event through the source xD0/JObj/mpLib owner before fighter
-            // collision runs, then the source callback observes the same
-            // retained height later in the scheduler.
-            // refs/slippi-ssbm-asm/Recording/Stages/SendFountainInfo.asm
-            // refs/melee/src/melee/gr/grizumi.c::{
-            //   grIzumi_801CC358,grIzumi_801CCBDC}
-            if (msl_slippi_fod_platform_height(1 - gp->gv.izumi3.xC8,
-                                               gp->gv.izumi3.xD0, &height,
-                                               &changed))
-            {
-                msl_grizumi_apply_replay_platform_height(gp->gobj, height,
-                                                          changed);
-                msl_slippi_fod_platform_mark_applied(
-                    1 - gp->gv.izumi3.xC8);
-            }
-        }
-    } else if (match->config.stage_id == MSL_CORE_STAGE_DREAM_LAND &&
-               (match->config.stage_event_streams & 2) != 0)
+    // Fountain of Dreams platform heights are not published here: Slippi
+    // records them from inside grIzumi_801CC358 (SendFountainInfo.asm at
+    // 0x801CC998), the priority-4 stage proc that runs after Fighter_8006A360
+    // and before Fighter_procMap, and the source callback's replay branch
+    // applies the recorded height at exactly that scheduler point. Publishing
+    // it at frame start let mid-frame floor resolves (ftCo_800DDDE4's throw
+    // release, grab releases) see the platform one phase early.
+    if (match->config.stage_id == MSL_CORE_STAGE_DREAM_LAND &&
+        (match->config.stage_event_streams & 2) != 0)
     {
         u8 direction;
         if (msl_slippi_dreamland_whispy_direction(&direction)) {
