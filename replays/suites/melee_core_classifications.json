@@ -871,13 +871,12 @@
   },
   {
    "replay": "replays/validation/marios/medium-fox-2026-04_Game_20260413T180551.slpz",
-   "id": "dolphin-ulp-dynamic-bone-capsule-gate",
-   "owner": "Mario-line grab/hit checks against Fox dynamic-bone tail hurt capsules",
-   "rationale": "Bounded retail interpreter probes reproduce the Fox tail dynamics stream bit-exactly from spawn through the probed windows after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing). The remaining seed is a mid-frame animation-ownership reset (ftCo_8009CB40 anim-to-dynamics transition during Turn) whose lazily-sampled world matrix the replay does not record; the chaotic tail then forks a grab/hit capsule check on tail hurtboxes with complete downstream consequence.",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "offstage wall-hug clamp pos_x re-derivation",
+   "rationale": "The complete residual is one 1-ULP pos_x row on Dr. Mario falling down Yoshi's Story's right side wall (frame 8813, x hugging 56.95 before snapping to the absolute wall clamp at 56.962 the next frame); no discrete state flips and the 23-frame suffix is exact. Same offstage wall-hug clamp mechanism as the retail-arbitrated 9560 entry. The original frame-910 dynamic-bone capsule-gate fork (mid-frame ftCo_8009CB40 anim-ownership reset forking a Fox tail-hurtbox grab/hit capsule check) was retired by the spline path-evaluator fusing (58f3f9e3), which aligned the animation-sampled bone poses feeding the capsule check; this replay re-recorded from 473 rows to one.",
    "sources": [
-    "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-    "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
-    "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+    "refs/melee/src/melee/mp/mpcoll.c",
+    "refs/melee/src/melee/mp/mplib.c"
    ],
    "expected": {
     "native": {
@@ -992,14 +991,13 @@
   },
   {
    "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
-   "id": "dolphin-ulp-item-motion-profile",
-   "owner": "Mr. Saturn and turnip gravity/position float execution",
-   "rationale": "State-aware validation excludes only Mr. Saturn's uninitialized held/thrown xDE4 bytes; all remaining residuals are bounded ULP-scale common-item velocities and positions from imported source gravity/integration. The final 3,439 transitions are strict. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. PPC snapshot recorded 2026-08-28 (melee-core-ppc at 5c0a91ac): the PPC backend reproduces the same residual families but widens the airborne Jigglypuff root-position ULP window to 2820..2947 (120 rows vs native's 62, first row one frame earlier); the percent residuals and the 3,439-transition strict suffix are identical on both backends.",
+   "id": "mixed-dolphin-ulp-render-profile",
+   "owner": "fighter position float profile and magnifier render schedule",
+   "rationale": "The complete residual is a bounded airborne-Jigglypuff root-position ULP window (80 pos_x/pos_y rows at 2821..2946) plus two 1% magnifier rows on Peach (6415 and 10445, both with Peach far offscreen right of Battlefield, each ticking one frame before the recording and resyncing at the recorded tick); the 3,439-frame suffix is strict and no item lane remains. State-aware validation still excludes Mr. Saturn's uninitialized held/thrown xDE4 bytes. The replay records neither the Dolphin float profile nor the VI/render boundary that publishes x221F_b0. The original thrown-item ULP families were absorbed by the item victim-bounce fmadds boundary (c47e87e3), the sincosf fidelity fix (c5464af0), the MWCC fusing sweep (597a7b7b), and the lbVector_Rotate fusing (50e8aadb). PPC snapshot recorded 2026-08-28 (melee-core-ppc at 5c0a91ac): the PPC backend reproduces the same residual families but widens the airborne Jigglypuff root-position ULP window to 2820..2947 (120 rows vs native's 62, first row one frame earlier); the percent residuals and the 3,439-transition strict suffix are identical on both backends.",
    "sources": [
-    "refs/melee/src/melee/it/items/itdosei.c",
-    "refs/melee/src/melee/it/items/itpeachturnip.c",
-    "refs/melee/src/melee/it/it_2725.c::it_80272860",
-    "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
+    "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+    "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+    "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
    ],
    "expected": {
     "native": {
@@ -1080,13 +1078,15 @@
   },
   {
    "replay": "replays/validation/peach/DisgustingLivelyRaven.slpz",
-   "id": "dolphin-ulp-item-motion-profile",
-   "owner": "thrown-item gravity and position float execution",
-   "rationale": "The residual is limited to bounded ULP-scale thrown-item velocity and position intervals produced by source gravity/integration, followed by 5,013 strict transitions. No item state or Peach mechanic is fitted. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
+   "id": "mixed-dolphin-ulp-render-profile",
+   "owner": "thrown-item position float profile and magnifier render schedule",
+   "rationale": "The complete residual is one 1% magnifier row and a bounded thrown-item ULP tail: at frame 7474 the hosted magnifier ticks Peach (offscreen right of Yoshi's Story at (117, 16)) one frame before the recording, resyncing at the recorded tick, and frames 7740..7762 carry 23 ULP-scale item.pos_x rows from source item integration; the 5,075-frame suffix is strict. The replay records neither the Dolphin float profile nor the VI/render boundary that publishes x221F_b0. Re-recorded after the item victim-bounce fmadds boundary (c47e87e3), the MWCC fusing sweep (597a7b7b), and the dynamics-force restoration (e6e657a7) absorbed the original frame-6401 thrown-item families (378 rows to 24).",
    "sources": [
     "refs/melee/src/melee/it/it_2725.c::it_80272860",
     "refs/melee/src/melee/it/item.c",
-    "refs/melee/src/melee/it/items/itpeachturnip.c"
+    "refs/melee/src/melee/it/items/itpeachturnip.c",
+    "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+    "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
    ],
    "expected": {
     "native": {
@@ -1109,14 +1109,13 @@
   },
   {
    "replay": "replays/validation/peach/ExpertWorthlessFinch.slpz",
-   "id": "dolphin-ulp-item-motion-profile",
-   "owner": "turnip/common-item gravity and position float execution",
-   "rationale": "Restoring Peach's 32-bit source owner-pointer layout places the Bob-omb scale lane correctly and removes the prior metadata displacement. The complete remainder is bounded ULP-scale source item gravity/position with 352 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
+   "id": "vanilla-magnifier-render-schedule",
+   "owner": "ifMagnify/Fighter_8006A360 render-publication boundary",
+   "rationale": "The complete residual is five 1% magnifier damage rows: the hosted schedule ticks one frame earlier than the recording at three offscreen episodes (percent[0] at 7208 and 7268 with Peach parasol-drifting far off Final Destination's top-right corner, percent[1] at 11174..11557 with Jigglypuff deep off the left side), each resyncing at the recorded tick; the 352-frame suffix is strict and no item or motion lane remains. The replay does not record the VI/render boundary that publishes x221F_b0. The original Bob-omb scale-lane placement holds, and the thrown-item ULP families were absorbed by the item victim-bounce fmadds boundary (c47e87e3), the MWCC fusing sweep (597a7b7b), and the dynamics-force restoration (e6e657a7); this replay re-recorded from 461 rows to five.",
    "sources": [
-    "refs/melee/src/melee/it/itCharItems.h::itPeachTurnip_ItemVars",
-    "refs/melee/src/melee/it/items/itpeachturnip.c::it_802BD4AC",
-    "refs/melee/src/melee/it/items/itbombhei.c",
-    "refs/melee/src/melee/it/it_2725.c::it_80272860"
+    "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+    "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
+    "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
    ],
    "expected": {
     "native": {
@@ -1265,7 +1264,7 @@
    "replay": "replays/validation/peach/SmugConfusedTermite.slpz",
    "id": "dolphin-ulp-motion-profile",
    "owner": "fighter and item position float execution",
-   "rationale": "Correcting the shared 32-bit item-throw motion-var layout removed the wrong shield-throw action and 12,584 downstream mismatch rows. The complete remainder is 25 isolated ULP-scale fighter/item position rows with 2,353 strict trailing transitions. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
+   "rationale": "Correcting the shared 32-bit item-throw motion-var layout removed the wrong shield-throw action and 12,584 downstream mismatch rows. The complete remainder is 16 isolated ULP-scale rows -- 15 item.pos_y rows at 3595..3609 and one self-healing pos_x row at 10422 against Yoshi's Story's right edge -- with 2,353 strict trailing transitions. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. The earlier frame-2892 family was retired by the spline path-evaluator fusing (58f3f9e3).",
    "sources": [
     "refs/melee/src/melee/ft/chara/ftCommon/types.h::ftCommon_MotionVars",
     "refs/melee/src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c::ftCo_8009515C",
@@ -1293,14 +1292,13 @@
   },
   {
    "replay": "replays/validation/peach/TameEmbellishedSparrow.slpz",
-   "id": "dolphin-ulp-item-and-motion-profile",
-   "owner": "item transform and fighter self-velocity float execution",
-   "rationale": "The complete residual consists of sparse ULP-scale item positions and fighter velocities produced by the imported source transform, gravity, and integration paths. Discrete gameplay remains source-driven; the exact fingerprint prevents this execution profile from becoming a tolerance. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
+   "id": "vanilla-magnifier-render-schedule",
+   "owner": "ifMagnify/Fighter_8006A360 render-publication boundary",
+   "rationale": "The complete residual is one unreturned 1% magnifier tick and its downstream consequence: at frame 13507 the hosted schedule ticks Marth (deep offscreen at (-112, -12) recovering left of Fountain) while the recording holds 98.5216 -- Marth regains the stage before the retail schedule fires, so the +1% persists to the game's final frame 14229. Every row is on Marth's slot and downstream of the tick: percent to game end, knockback speeds off by 0.54% (a 1% knockback delta at 99%), the dependent position lanes, a changed landing at 13694 (on_ground/action/jumps flips), and a final-frame is_dead/stocks flip where the hosted +1% kills Marth on the last frame. The replay does not record the VI/render boundary that publishes x221F_b0; the exact fingerprint pins the full consequence tail. The prior sparse item/fighter ULP families at 7387 were absorbed by the fused-op boundaries (b5700609, 0a8592bf, c47e87e3, 597a7b7b) and the dynamics-force restoration (e6e657a7); this replay re-recorded from 2,709 rows at 7387 to this single-seed tail.",
    "sources": [
-    "refs/melee/src/melee/it/item.c",
-    "refs/melee/src/melee/it/it_2725.c",
-    "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-    "refs/melee/src/sysdolphin/baselib/mtx.c"
+    "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+    "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
+    "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
    ],
    "expected": {
     "native": {
@@ -1437,12 +1435,11 @@
   },
   {
    "replay": "replays/validation/samus/fox-d18-2026-04_Game_20260419T223341.slpz",
-   "id": "dolphin-ulp-contact-gate",
-   "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",
-   "rationale": "Bit-exact through the 7,511-frame prefix and the 5,151-frame strict suffix. After the subaction-hitbox part-admission fix retired the frame-903 45-degree contact flip, the residual is one 1-ULP pos_y row at frame 7389 and an 81-row damage-state selection flip at 9075 (action 88 vs 91) seeded by ULP-scale knockback inputs.",
+   "id": "dolphin-ulp-motion-profile",
+   "owner": "Samus zair hang-release pos_y re-derivation",
+   "rationale": "The complete residual is one 1-ULP pos_y row on Samus the frame after a zair wall-hang release below Battlefield's right ledge (frame 7389); the hidden grapple-chain integration seeds the release position (the master-samus mechanism), the 7,511-frame prefix and 5,151-frame strict suffix are exact, and native and PPC record the identical fingerprint. The frame-903 45-degree contact flip was retired by the subaction-hitbox part admission (73ecdd51), and the frame-9075 damage-state selection family (action 88 vs 91, seeded by ULP-scale knockback inputs) by the smoke-puff model-start draw consumption (2c0c510e); this replay re-recorded from 223 rows to one.",
    "sources": [
-    "refs/melee/src/melee/ft/ftcoll.c",
-    "refs/melee/src/melee/lb/lbcollision.c"
+    "refs/melee/src/melee/it/items/itsamusgrapple.c::it_802BA5DC"
    ],
    "expected": {
     "native": {
@@ -1516,7 +1513,7 @@
    "replay": "replays/validation/sheik/GlaringRosyAlpaca.slpz",
    "id": "dolphin-ulp-motion-profile",
    "owner": "fighter position and velocity float execution profile",
-   "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter motion with isolated one-byte historical-position samples from thrown needles, followed by an exact suffix; the replay records Dolphin but not its build or float/JIT execution profile. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism. PPC snapshot re-recorded after the post-solve dynamics matrix refresh (the hosted CB40 anim-ownership toggle now samples solved-pose matrices, and the PPC backend shares the hosted runtime).",
+   "rationale": "The bounded residual is ULP-scale Sheik root motion (pos_x/pos_y rows at 3427..3541) followed by an exact suffix; no needle lane remains, and the replay records Dolphin but not its build or float/JIT execution profile. Native and PPC record separate fingerprints of the same family (the PPC window opens at 3419, wider at 177 rows). Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor). PPC snapshot re-recorded after the post-solve dynamics matrix refresh (the hosted CB40 anim-ownership toggle now samples solved-pose matrices, and the PPC backend shares the hosted runtime).",
    "sources": [
     "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
     "refs/melee/src/sysdolphin/baselib/mtx.c",
@@ -1560,7 +1557,7 @@
    "replay": "replays/validation/sheik/WavyRundownAardvark.slpz",
    "id": "dolphin-ulp-motion-profile",
    "owner": "fighter position and velocity float execution profile",
-   "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter motion with isolated one-byte historical-position samples from thrown needles, followed by an exact suffix; the replay records Dolphin but not its build or float/JIT execution profile. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism. PPC snapshot re-recorded after the post-solve dynamics matrix refresh (the hosted CB40 anim-ownership toggle now samples solved-pose matrices, and the PPC backend shares the hosted runtime).",
+   "rationale": "The bounded residual is ULP-scale Sheik root motion (pos_x/pos_y rows at 967..1091) followed by an exact suffix; no needle lane remains, and the replay records Dolphin but not its build or float/JIT execution profile. Native and PPC record separate fingerprints of the same family (the PPC window opens at 964, wider at 153 rows). Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor). PPC snapshot re-recorded after the post-solve dynamics matrix refresh (the hosted CB40 anim-ownership toggle now samples solved-pose matrices, and the PPC backend shares the hosted runtime).",
    "sources": [
     "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
     "refs/melee/src/sysdolphin/baselib/mtx.c",

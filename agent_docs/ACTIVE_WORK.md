@@ -1,3 +1,88 @@
+# Correctness lead — stale-rationale audit of the dolphin-ulp family: six re-owned (2026-09-03, landed)
+
+## Objective
+
+Execute the standing lead from the HummingDismalCat pass: audit every `dolphin-ulp-*`
+classification (37 entries) by diffing its birth-commit `first_mismatch_frame`/rationale
+against the current record, and re-triage the current first fork of any entry whose
+fingerprint moved without its prose being re-owned.
+
+## What the archaeology showed
+
+- Per-entry ledger timelines over all 71 commits of `melee_core_classifications.json`
+  found 13 entries whose first mismatch frame moved since birth; two more (Cockroach,
+  Aardvark) drifted on mismatch-count-only re-records. Four of the movers (dk 152714,
+  puff rollout_ends_ys, samus master-samus, peach CapitalPristineTarsier) had been properly
+  re-owned; the rest had mechanically re-recorded fingerprints under untouched or
+  append-only prose.
+- **Six entries were misattributed** (defect class in id/prose wrong for the current rows;
+  each current fork verified by a fresh strict native run plus peppi lane dumps):
+  - marios `medium-fox-2026-04` (`dolphin-ulp-dynamic-bone-capsule-gate`, rationale
+    byte-identical since birth): the frame-910 capsule fork was retired by the spline
+    path-evaluator fusing (`58f3f9e3`, 473 rows -> 1). What remains is one self-healing
+    1-ULP pos_x row at 8813 — Dr. Mario falling down Yoshi's right side wall onto the
+    absolute wall clamp. Re-owned as `dolphin-ulp-motion-profile` (wall-hug family).
+  - samus `fox-d18-2026-04` (`dolphin-ulp-contact-gate`): the prose's 81-row damage-state
+    flip at 9075 was retired by the smoke-puff draw consumption (`2c0c510e`, 223 rows -> 1).
+    What remains is one 1-ULP pos_y row at 7389, the frame after a zair wall-hang release
+    under Battlefield's ledge. Re-owned as `dolphin-ulp-motion-profile`.
+  - peach `ExpertWorthlessFinch` (`dolphin-ulp-item-motion-profile`): all five remaining
+    rows are whole-point (+1.0 exactly) percent rows — the hosted magnifier ticks one frame
+    before the recording at three offscreen episodes, resyncing at the recorded tick. Zero
+    item or motion lanes remain. Re-owned as `vanilla-magnifier-render-schedule`.
+  - peach `TameEmbellishedSparrow` (`dolphin-ulp-item-and-motion-profile`, "discrete
+    gameplay remains source-driven"): the current 2,285-row tail from 13507 is one
+    unreturned magnifier tick on Marth (deep offscreen at (-112, -12); the recording never
+    ticks — Marth regains the stage first) whose +1% persists to game end with full
+    consequence: 0.54% knockback deltas, a changed landing at 13694, and a final-frame
+    is_dead/stocks flip. Re-owned as `vanilla-magnifier-render-schedule`; the exact
+    fingerprint pins the consequence tail.
+  - peach `DisgustingLivelyRaven`: first row is a one-frame-early magnifier tick (Peach
+    offscreen at (117, 16) on Yoshi's), then 23 ULP item.pos rows. Re-owned as
+    `mixed-dolphin-ulp-render-profile`.
+  - peach `CandidThankfulCockroach` (`dolphin-ulp-item-motion-profile`): current rows are
+    80 airborne-Jigglypuff root-position ULPs plus two magnifier ticks on Peach — no item
+    lane at all. Re-owned as `mixed-dolphin-ulp-render-profile`; PPC snapshot paragraph
+    kept verbatim (still accurate).
+- **Three carried provably stale prose under the right class** (fixed in place): peach
+  `SmugConfusedTermite` ("25 rows" -> the actual 16), sheik `GlaringRosyAlpaca` and
+  `WavyRundownAardvark` (core sentence still claimed thrown-needle one-byte samples — zero
+  needle rows remain — and "PPC and native agree bit-for-bit" — their recorded PPC
+  fingerprints differ from native).
+- The magnifier identifications are lane-dump-backed: at every whole-point percent row the
+  affected fighter is far offscreen and the recording ticks +1.0 exactly one frame after
+  the hosted run (Finch 7208/7268/11174, Raven 7474, Cockroach 6415/10445), matching the
+  `vanilla-magnifier-render-schedule` unrecorded-VI/render-boundary mechanism.
+
+## Final boundary
+
+- Prose/id/owner/sources re-owned on nine entries in
+  `replays/suites/melee_core_classifications.json`; every `expected` block (fingerprints,
+  native and PPC) untouched, no suite membership, lock, or gameplay code changed. Ids used
+  are existing families only (`dolphin-ulp-motion-profile`,
+  `vanilla-magnifier-render-schedule`, `mixed-dolphin-ulp-render-profile`).
+
+## Evidence and acceptance
+
+- Native aggregate after re-owning: 433 pass / 58 classified / 0 fail / 0 error (unchanged
+  from the HummingDismalCat baseline; no outcome moved). Affected suites native: peach
+  9 pass / 10 classified, marios 44/6, samus 23/2, sheik 16/4, all 0 fail. PPC
+  (`--timeout 180`, 8 workers) on the same four suites: parity, 0 fail.
+- Triage evidence: per-commit ledger timelines (scratchpad git archaeology), strict
+  single-replay native runs for all eight suspect replays, and peppi lane dumps around
+  every claimed magnifier row and both single-row residuals.
+- The pikachu `master-master` entry records first_mismatch_frame -24 (countdown phase);
+  it is birth-stable with a fresh rationale and was left alone, noted here as the one
+  oddity outside the audit's mover criterion.
+
+## Log
+
+- 2026-09-03 — `retained`: birth-vs-current audit of all 37 `dolphin-ulp-*` entries, six
+  re-owns + three prose corrections, suite + aggregate verification. The audit criterion
+  that caught them: fingerprint moved (or count moved) while the rationale stayed
+  byte-identical or append-only. Every remaining `dolphin-ulp-*` entry now has prose that
+  matches its current first fork.
+
 # Correctness lead — the peach HummingDismalCat residual is an unfrozen Stadium capture (2026-09-03, landed)
 
 ## Objective
