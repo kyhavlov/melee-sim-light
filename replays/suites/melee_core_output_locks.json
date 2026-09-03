@@ -3211,15 +3211,6 @@
       }
     },
     {
-      "replay": "replays/validation/peach/HummingDismalCat.slpz",
-      "expected": {
-        "native": {
-          "frames": 6803,
-          "actual_output_fingerprint": "177a69c7512ba10e"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/peach/MadeUpEnchantedStingray.slpz",
       "expected": {
         "native": {

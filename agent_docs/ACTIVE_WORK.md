@@ -1,3 +1,72 @@
+# Correctness lead — the peach HummingDismalCat residual is an unfrozen Stadium capture (2026-09-03, landed)
+
+## Objective
+
+Re-triage the largest classified residual whose rationale had no retail evidence:
+`peach/HummingDismalCat` under `unmodeled-presentation-rng-stream-phase` (72,738 rows from
+4177, 2,504 mismatched frames with no recovery). The ledgered story — a DamageFlyRoll
+`HSD_Randf` landing one stream position off against an excluded presentation draw — was
+written for a different fork and no longer described the fingerprint.
+
+## What the traces showed
+
+- **The rationale was stale.** At the classification's birth (peach packet, `cc1996be`) the
+  first mismatch was frame 3721 and really was the DamageFlyRoll gate. `2c0c510e` (smoke-puff
+  model-start draw consumption in efSync_Spawn) closed that fork and re-recorded this replay's
+  fingerprint as today's `6a532077b54167b0` @4177 — the text was never re-owned.
+- **The current fork is not RNG.** A hosted RNG-draw trace (temporary env-gated logging in
+  `random.c`, callers resolved with addr2line) shows the fork frame consuming only the
+  Stadium fly-by `randi(200)`, the `ftCo_8009F834` efAsync jitter triple, and modeled effect
+  draws — no gameplay-gated draw at all. Both runs land the identical turnip hit on P1 Fox at
+  4177 (`speed_x_attack[0]` agrees to 1 ULP at 4188); the fork is the post-hit floor resolve:
+  retail freezes Fox at (25.0000, 1.2501) on ground 36, hosted at (24.4517, 0.0001) on
+  ground 34 — and no line in the frozen Stadium set passes through (25, 1.25).
+- **The recording's Stadium transforms.** The capture carries 13 `stadium_transformation`
+  events: type 6 phases at Slippi 3709/3710/3711/4013/4194/4315/4316 and type 5 (revert) at
+  5722..6328. The first mismatch (4177) sits between the phase-4 and phase-5 events, the
+  earliest recorded standing row off the frozen height set is 4187 (P1, ground 36,
+  y = 1.2501 — the transformed floor Fox lands on out of hitlag), and the recording stands
+  fighters on grounds 41..50 at heights the frozen line set does not contain, all inside the
+  4177..6680 mismatch window. The hosted owner deliberately disables the transformation
+  loader (`grStadium_801D1518`), so divergence at first transformed-terrain contact is the
+  designed behavior for an out-of-domain capture, not a defect.
+- **The capture is unique.** A corpus scan of every suite entry on stage 3 finds
+  HummingDismalCat is the only one recording transformation events (older captures predate
+  the event lane entirely; every one of those either passes exactly or carries an unrelated
+  classification).
+
+## Final boundary
+
+- The capture is outside the supported domain (RL 1.0 covers frozen Pokemon Stadium; later
+  suites event-verify frozen at admission and would have rejected it). Retired rather than
+  reclassified: removed from `replays/suites/peach.json` (20 -> 19; notes updated), its
+  classification (59 -> 58) and output lock (492 -> 491) deleted, the `.slpz` deleted, and
+  the two suite-count pins in `tests/` moved 492 -> 491. No gameplay code changed.
+
+## Evidence and acceptance
+
+- Native aggregate after retirement: **433 pass / 58 classified / 0 fail / 0 error** at
+  4,869,495 frames — exactly the previous 4,876,298 minus this replay's 6,803, with no other
+  outcome moved. peach suite native and PPC (`--timeout 180`, 8 workers): 9 pass /
+  10 classified / 0 fail on both backends.
+- Gates on this host: `source-check`, `format-check`, `native-smoke`, pytest 47 passed. The
+  temporary `random.c` trace instrumentation was reverted before any result was recorded.
+- Method note: no Dolphin probe was needed — the recording itself declares the
+  transformation. Validator mismatch frames are Slippi frame ids (the recorded P1 row at
+  Slippi 4177 is bit-identical to the reported expected row); the hosted trace stamp
+  `gm_8016AEDC()` remains Slippi id + 123.
+
+## Log
+
+- 2026-09-03 — `retained`: re-triage, corpus transformation scan
+  (`reports/triage/hdc_rng_native2.txt`, peppi lane dumps), suite/classification/lock
+  retirement, test-count pins, aggregate + PPC parity, gates. The sibling
+  `unmodeled-presentation-rng-stream-phase` entry (ness `2026-06`) is probe-backed and
+  untouched. Standing correctness lead from this pass: classification rationales are not
+  re-verified when re-records move a fingerprint — the remaining `dolphin-ulp-*` family
+  (34 entries) carries the same risk and deserves the same birth-commit-vs-current-fork
+  audit before any is trusted as evidence.
+
 # Correctness lead — the two Link open port defects (2026-08-30, landed)
 
 ## Objective
