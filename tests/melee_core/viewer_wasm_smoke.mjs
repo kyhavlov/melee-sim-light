@@ -8,6 +8,8 @@ import {
   CHAR_JIGGLYPUFF,
   CHAR_PEACH,
   CHAR_SHEIK,
+  CHAR_YOSHI,
+  CHAR_BOWSER,
   STAGE_FINAL_DESTINATION,
   STAGE_FOUNTAIN_OF_DREAMS,
   STAGE_YOSHIS_STORY,
@@ -74,6 +76,30 @@ try {
     assert.equal(current.players[0].state.internalCharacterId, character.id);
     assert.equal(viewerSettingsFromState(sim.viewerView()).stageId, stage.id);
     step();
+  }
+
+  // Exercise the imported special callbacks and article creation through the
+  // wasm32 function table, with the same sealed module allocation.
+  for (const character of [CHAR_YOSHI, CHAR_BOWSER]) {
+    for (const [mainX, mainY] of [[0, 0], [1, 0], [0, 1], [0, -1]]) {
+      reset({ p1Char: character, stageId: STAGE_FINAL_DESTINATION });
+      let sawSpecial = false;
+      let sawArticle = false;
+      for (let index = 0; index < 160; index += 1) {
+        const active = index < 30;
+        const current = step(controllers(active
+          ? { ...neutral(), buttons: BUTTONS.B, mainX, mainY }
+          : neutral()));
+        sawSpecial ||= current.players[0].state.actionStateId >= 341;
+        sawArticle ||= current.items.length > 0;
+      }
+      assert(sawSpecial, `character ${character} special (${mainX}, ${mainY})`);
+      if ((character === CHAR_YOSHI && mainY === 1) ||
+          (character === CHAR_BOWSER && mainX === 0 && mainY === 0)) {
+        assert(sawArticle, `character ${character} special article`);
+      }
+      assert.equal(sim.module.HEAPU8.buffer.byteLength, heapSize);
+    }
   }
 
   reset({ stageId: STAGE_FOUNTAIN_OF_DREAMS });

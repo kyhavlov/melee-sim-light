@@ -18,7 +18,7 @@ runtime paths allocate nothing after initialization.
 
 ## Correctness
 
-The canonical gate is the 153-replay `melee_core_aggregate` suite. Exact rows must remain exact;
+The canonical gate is the 404-replay `melee_core_aggregate` suite. Exact rows must remain exact;
 the existing classified rows are locked by complete mismatch fingerprints and may not be widened.
 Validation uses replay RNG/stage-event authority where Slippi playback does, while free-running
 runtime semantics remain source-owned.

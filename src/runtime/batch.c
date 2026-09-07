@@ -56,6 +56,8 @@ static int supported_character(uint8_t char_id)
            char_id == MSL_CHARACTER_ICE_CLIMBERS ||
            char_id == MSL_CHARACTER_DONKEY_KONG ||
            char_id == MSL_CHARACTER_GANONDORF ||
+           char_id == MSL_CHARACTER_YOSHI ||
+           char_id == MSL_CHARACTER_BOWSER ||
            char_id == MSL_CHARACTER_PIKACHU ||
            char_id == MSL_CHARACTER_SAMUS ||
            char_id == MSL_CHARACTER_JIGGLYPUFF ||

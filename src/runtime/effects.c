@@ -181,6 +181,8 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     // Donkey Kong owns efAsync bank 8 (ftData_UnkBytePerCharacter maps
     // FTKIND_DONKEY to 8).
     msl_effect_load_bank(data, 8, "/EfDkData.dat", "effDonkeyDataTable");
+    msl_effect_load_bank(data, 9, "/EfYsData.dat", "effYoshiDataTable");
+    msl_effect_load_bank(data, 12, "/EfKpData.dat", "effKoopaDataTable");
     // Pikachu owns efAsync bank 7 (ftData_UnkBytePerCharacter maps
     // FTKIND_PIKACHU to 7; Pichu shares the bank in retail).
     msl_effect_load_bank(data, 7, "/EfPkData.dat", "effPikachuDataTable");

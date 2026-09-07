@@ -288,12 +288,10 @@ host, with production digests `bdc54107c51fa3d7` and `3fb5823d90657775`.
   ranges. Ordinary ceiling queries return early only when a static line AABB, expanded by the two
   units required for source endpoint extension, cannot overlap the swept ECB top. Remapped joints
   and wall-connected ceiling cases retain the source path.
-- Native x86 `acosf` replaces only Gekko's software-emulated reciprocal-square-root estimate seed
-  with `rsqrtss`; all three source-ordered binary32 Newton refinements and the unchanged `atanf`
-  tail remain. The rejected completed-reciprocal shortcut changed quaternion-derived ECB bounds by
-  one ULP and failed eight full-suite output locks. The final form is exact across all 3,501,461
-  validation frames, shrinks `acosf` from 205 to 154 bytes, and removes its hot call to the
-  345-byte general estimate leaf. Non-x86 behavior is unchanged.
+- `acosf` retains the Gekko estimate seed and all three source-ordered f32
+  refinements. The former x86 `rsqrtss` substitution passed the 16-character
+  gate but fails two Bowser flame-steering recordings; it is removed as
+  documented in [the expanded-domain counterexample](HISTORY.md#bowser-disproves-the-x86-acos-estimate-equivalence--2026-09-07).
 - Three 262,144-frame alternating pairs against `02cfe013` preserve digests
   `bdff41cf74a54850` / `ee9d93c545aa3ef9`. Median paired throughput improves 9.80% at resident
   256 and 8.23% at resident 512. Candidate medians in the measured host window are 38,234.8 /

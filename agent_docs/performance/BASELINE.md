@@ -23,7 +23,7 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
   compact lossless pose samples, exact native general matrix concat, direct dynamics direction
   products, exact scalar tangent sharing, direct fighter-part membership, exact stage-intersection
   rejection, direct output publication, native exact square-root owners, a conservative ceiling
-  broad phase, an exact native x86 `acosf` estimate seed, and the 16-character merged runtime
+  broad phase, a native x86 `acosf` estimate seed (retired after Bowser counterexamples; see HISTORY.md), and the 16-character merged runtime
 - Correctness: 366/366 accepted (`310 PASS`, `56 CLASSIFIED`, zero XPASS/fail/error) across
   3,501,461 validated frames. Twenty-five obsolete raw-pointer/pool-residue classifications are
   replaced by one genuine Whispy RNG-phase classification, a net reduction of 24, without changing

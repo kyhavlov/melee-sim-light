@@ -3,13 +3,11 @@
 
 #include <platform.h>
 
-#include "ft/forward.h"
+#include <melee/ft/forward.h>
+#include <melee/ft/chara/ftYoshi/forward.h>
+#include <sysdolphin/baselib/forward.h>
 
-#include "ft/types.h"
-
-#include "ftCommon/forward.h"
-#include "ftYoshi/forward.h"
-#include <baselib/forward.h>
+#include <melee/ft/types.h>
 
 /* 12B6E8 */ void ftYs_Init_8012B6E8(Fighter* fp,
                                      struct S_UNK_YOSHI1* unk_struct_arg);
@@ -29,6 +27,10 @@
 /* 12BC90 */ void ftYs_Init_LoadSpecialAttrs(HSD_GObj* gobj);
 /* 12BCC8 */ void ftYs_Init_OnKnockbackEnter(HSD_GObj* gobj);
 /* 12BD34 */ void ftYs_Init_OnKnockbackExit(HSD_GObj* gobj);
+/* 3B75C0 */ extern Vec3 const ftYs_Unk1_803B75C0;
 /* 3CE6D0 */ extern MotionState ftYs_Init_MotionStateTable[ftYs_MS_SelfCount];
+#ifndef MSL_CORE_HOSTED
+/* 45A000 */ extern UnkCostumeStruct ft_8045A000[6];
+#endif
 
 #endif

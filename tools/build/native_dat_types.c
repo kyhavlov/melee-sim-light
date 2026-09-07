@@ -21,6 +21,8 @@
 #include "ft/chara/ftPurin/types.h"
 #include "ft/chara/ftSeak/types.h"
 #include "ft/chara/ftZelda/types.h"
+#include "ft/chara/ftYoshi/types.h"
+#include "ft/chara/ftKoopa/types.h"
 #include "ft/fighter.h"
 #include "ft/types.h"
 #include "gr/types.h"
@@ -28,6 +30,8 @@
 #include "it/itCharItems.h"
 #include "it/itCommonItems.h"
 #include "it/items/itdosei.h"
+#include "it/items/ityoshistar.h"
+#include "it/items/itkoopaflame.h"
 #include "it/items/itseakneedlethrown.h"
 #include "it/items/types.h"
 #include "lb/lbanim.h"
@@ -177,6 +181,13 @@ typedef Article* MslDatIceClimberArticles[3];
 // slots carry presentation graphs no ported code reaches.
 // refs/melee/src/melee/ft/chara/ftPikachu/ftPk_Init.c
 typedef Article* MslDatPikachuArticles[3];
+// ftYs_Init_OnLoad registers three articles; ftYs_SpecialN_8012CDD4 returns
+// the fourth slot's joint graph for the captured fighter's egg accessory.
+typedef struct MslDatYoshiArticles {
+    Article* articles[3];
+    HSD_Joint* capture_egg;
+} MslDatYoshiArticles;
+typedef Article* MslDatKoopaArticles[1];
 // ItCo.dat's public x4 table owns the 43 common-item Article graphs. Peach's
 // SpecialLw can reach BombHei, Dosei, and Sword even when stage items are off.
 // refs/melee/src/melee/it/iteffect.c::it_802787B4
@@ -270,6 +281,13 @@ void* msl_native_dat_type_roots[] = {
     (itClimbersStringAttributes*) 0,
     (ftDonkeyAttributes*) 0,
     (MslDatPikachuArticles*) 0,
+    (MslDatYoshiArticles*) 0,
+    (ftYoshiAttributes*) 0,
+    (ftKoopaAttributes*) 0,
+    (MslDatKoopaArticles*) 0,
+    (itKoopaFlame_Attributes*) 0,
+    (itYoshiEggThrowAttributes*) 0,
+    (StarAttrs*) 0,
     (ftPikachuAttributes*) 0,
     (itPikachuthunderAttributes*) 0,
     (itPikachutJoltGroundAttributes*) 0,

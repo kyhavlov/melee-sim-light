@@ -32,6 +32,8 @@ typedef struct MslSourceGameData {
         UnkCostumeStruct nana_costumes[4];
         UnkCostumeStruct donkey_costumes[5];
         UnkCostumeStruct ganon_costumes[5];
+        UnkCostumeStruct yoshi_costumes[6];
+        UnkCostumeStruct koopa_costumes[4];
         UnkCostumeStruct pikachu_costumes[4];
         UnkCostumeStruct luigi_costumes[4];
         UnkCostumeStruct mario_costumes[5];

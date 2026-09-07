@@ -932,6 +932,8 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataDonkey") == 0 ||
         strcmp(symbol, "ftDataGanon") == 0 ||
         strcmp(symbol, "ftDataPikachu") == 0 ||
+        strcmp(symbol, "ftDataYoshi") == 0 ||
+        strcmp(symbol, "ftDataKoopa") == 0 ||
         strcmp(symbol, "ftDataMario") == 0 ||
         strcmp(symbol, "ftDataDrmario") == 0 ||
         strcmp(symbol, "ftDataMars") == 0 ||
@@ -1298,6 +1300,8 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_SAMUS,
     MSL_FIGHTER_ARTICLES_ICECLIMBER,
     MSL_FIGHTER_ARTICLES_PIKACHU,
+    MSL_FIGHTER_ARTICLES_YOSHI,
+    MSL_FIGHTER_ARTICLES_KOOPA,
     MSL_FIGHTER_AUX_PURIN_PARTS,
 } MslFighterArticleProfile;
 
@@ -1470,6 +1474,24 @@ static ftData* translate_fighter_public(
         attr_types[0] = msl_dat_root_itPikachuthunderAttributes;
         attr_types[1] = msl_dat_root_itPikachutJoltGroundAttributes;
         break;
+    case MSL_FIGHTER_ARTICLES_KOOPA:
+        // ftKp_Init_OnLoad registers the single Flame article.
+        article_list_type = msl_dat_root_MslDatKoopaArticles;
+        article_count = 1;
+        indices[0] = 0;
+        attr_types[0] = msl_dat_root_itKoopaFlame_Attributes;
+        break;
+    case MSL_FIGHTER_ARTICLES_YOSHI:
+        // ftYs_Init_OnLoad: EggThrow, Star, EggLay. The fourth list slot
+        // is the victim's egg accessory, translated by the structural type.
+        article_list_type = msl_dat_root_MslDatYoshiArticles;
+        article_count = 3;
+        indices[0] = 0;
+        indices[1] = 1;
+        indices[2] = 2;
+        attr_types[0] = msl_dat_root_itYoshiEggThrowAttributes;
+        attr_types[1] = msl_dat_root_StarAttrs;
+        break;
     case MSL_FIGHTER_AUX_PURIN_PARTS:
         // x48_items is not an article table for Purin. Its second pointer owns
         // the costume FtPartsDesc consumed by ftPr_Init_8013C360.
@@ -1621,6 +1643,14 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftIceClimberAttributes,
                                           321, MSL_FIGHTER_ARTICLES_ICECLIMBER);
+    } else if (strcmp(symbol, "ftDataKoopa") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftKoopaAttributes,
+                                          316, MSL_FIGHTER_ARTICLES_KOOPA);
+    } else if (strcmp(symbol, "ftDataYoshi") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftYoshiAttributes,
+                                          314, MSL_FIGHTER_ARTICLES_YOSHI);
     } else if (strcmp(symbol, "ftDataDonkey") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftDonkeyAttributes,

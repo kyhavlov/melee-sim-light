@@ -217,34 +217,6 @@
       }
     },
     {
-      "replay": "replays/validation/doubles_recent/Game_20260704T005918.slpz",
-      "id": "doubles-dolphin-ulp-damage-profile",
-      "owner": "fighter accumulated-damage float execution profile",
-      "rationale": "PPC and native agree on a bounded 219-row one-ULP accumulated-damage interval. Every other compared field is exact, and 6,660 strict transitions follow; the replay records Dolphin without its float/JIT profile.",
-      "sources": [
-        "refs/melee/src/melee/ft/fighter.c::Fighter_TakeDamage_8006CC7C",
-        "refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C"
-      ],
-      "expected": {
-        "native": {
-          "frames": 9407,
-          "matched_frames": 9188,
-          "mismatched_frames": 219,
-          "exact_prefix_frames": 2528,
-          "strict_suffix_frames": 6660,
-          "first_mismatch_frame": 2406,
-          "last_mismatch_frame": 2624,
-          "mismatch_count": 219,
-          "mismatch_fingerprint": "ed94c412b736fd6f",
-          "mismatch_fields_digest": "6144002362a644e8d151e58f90337291617c1fd425a78bd1a7197de8b972e2b6",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/falcon/EmotionalNaturalLemur.slpz",
       "id": "vanilla-magnifier-render-schedule",
       "owner": "ifMagnify/Fighter_8006A360 render-publication boundary",
@@ -2644,6 +2616,373 @@
           "first_render_visibility_mismatch_frame": 1034,
           "signed_zero_equal_count": 0,
           "mismatch_fields_digest": "86a39b0173b7e7ef693fee6839207c45f520557b06ff1a85c980baee8dcd59b3"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/StudiousExpertFalcon.slpz",
+      "id": "yoshi-bowser-source-proven-residual",
+      "owner": "Yoshi held-shield animation cursor",
+      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
+        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
+        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11195,
+          "matched_frames": 11177,
+          "mismatched_frames": 18,
+          "exact_prefix_frames": 1994,
+          "strict_suffix_frames": 7691,
+          "first_mismatch_frame": 1872,
+          "last_mismatch_frame": 3381,
+          "mismatch_count": 18,
+          "mismatch_fingerprint": "cc3cd3c7c0ebad36",
+          "mismatch_fields": [
+            {
+              "field": "action_frame[0]",
+              "count": 18,
+              "first_frame": 1872,
+              "last_frame": 3381
+            }
+          ],
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/SlightAccomplishedEagle.slpz",
+      "id": "yoshi-bowser-source-proven-residual",
+      "owner": "Yoshi held-shield animation cursor",
+      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
+        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
+        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 6971,
+          "matched_frames": 6954,
+          "mismatched_frames": 17,
+          "exact_prefix_frames": 3140,
+          "strict_suffix_frames": 1462,
+          "first_mismatch_frame": 3018,
+          "last_mismatch_frame": 5386,
+          "mismatch_count": 17,
+          "mismatch_fingerprint": "7f94791b68b1e7e5",
+          "mismatch_fields": [
+            {
+              "field": "action_frame[1]",
+              "count": 17,
+              "first_frame": 3018,
+              "last_frame": 5386
+            }
+          ],
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/SaneVapidGiraffe.slpz",
+      "id": "yoshi-bowser-source-proven-residual",
+      "owner": "Yoshi held-shield animation cursor",
+      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
+        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
+        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 5442,
+          "matched_frames": 5417,
+          "mismatched_frames": 25,
+          "exact_prefix_frames": 1560,
+          "strict_suffix_frames": 149,
+          "first_mismatch_frame": 1438,
+          "last_mismatch_frame": 5170,
+          "mismatch_count": 25,
+          "mismatch_fingerprint": "49525ab64240f20d",
+          "mismatch_fields": [
+            {
+              "field": "action_frame[0]",
+              "count": 25,
+              "first_frame": 1438,
+              "last_frame": 5170
+            }
+          ],
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/ImpracticalScratchyMouse.slpz",
+      "id": "yoshi-bowser-source-proven-residual",
+      "owner": "Yoshi held-shield animation cursor",
+      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
+        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
+        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 8978,
+          "matched_frames": 8914,
+          "mismatched_frames": 64,
+          "exact_prefix_frames": 2015,
+          "strict_suffix_frames": 699,
+          "first_mismatch_frame": 1893,
+          "last_mismatch_frame": 8156,
+          "mismatch_count": 64,
+          "mismatch_fingerprint": "5ffb913007b16c09",
+          "mismatch_fields": [
+            {
+              "field": "action_frame[0]",
+              "count": 64,
+              "first_frame": 1893,
+              "last_frame": 8156
+            }
+          ],
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/CarefreeDefenselessTermite.slpz",
+      "id": "yoshi-bowser-source-proven-residual",
+      "owner": "Yoshi held-shield animation cursor",
+      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
+        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
+        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 9801,
+          "matched_frames": 9771,
+          "mismatched_frames": 30,
+          "exact_prefix_frames": 1523,
+          "strict_suffix_frames": 1507,
+          "first_mismatch_frame": 1401,
+          "last_mismatch_frame": 8171,
+          "mismatch_count": 30,
+          "mismatch_fingerprint": "fda4e5bf2aa6e8bc",
+          "mismatch_fields": [
+            {
+              "field": "action_frame[0]",
+              "count": 30,
+              "first_frame": 1401,
+              "last_frame": 8171
+            }
+          ],
+          "render_visibility_mismatch_count": 2,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/ClumsyImaginaryOkapi.slpz",
+      "id": "yoshi-bowser-source-proven-residual",
+      "owner": "Yoshi held-shield animation cursor; offstage wall-hug clamp pos_x re-derivation",
+      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed. One wall-contact position differs by one ULP, with native and PPC agreeing on the same bounded source re-derivation and every other gameplay field exact. This is the existing Dolphin wall-clamp execution-profile family, with the exact new row separately locked.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
+        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
+        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c",
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_8004D024",
+        "refs/melee/src/melee/mp/mplib.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 7969,
+          "matched_frames": 7926,
+          "mismatched_frames": 43,
+          "exact_prefix_frames": 208,
+          "strict_suffix_frames": 76,
+          "first_mismatch_frame": 86,
+          "last_mismatch_frame": 7770,
+          "mismatch_count": 43,
+          "mismatch_fingerprint": "fc06e7c66a6cdd6d",
+          "mismatch_fields": [
+            {
+              "field": "action_frame[0]",
+              "count": 42,
+              "first_frame": 86,
+              "last_frame": 4616
+            },
+            {
+              "field": "pos_x[0]",
+              "count": 1,
+              "first_frame": 7770,
+              "last_frame": 7770
+            }
+          ],
+          "render_visibility_mismatch_count": 2,
+          "first_render_visibility_mismatch_frame": 3192,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/StupendousAnnualGoldfish.slpz",
+      "id": "yoshi-bowser-source-proven-residual",
+      "owner": "Yoshi held-shield animation cursor",
+      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
+        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
+        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11670,
+          "matched_frames": 11665,
+          "mismatched_frames": 5,
+          "exact_prefix_frames": 3611,
+          "strict_suffix_frames": 8054,
+          "first_mismatch_frame": 3489,
+          "last_mismatch_frame": 3493,
+          "mismatch_count": 5,
+          "mismatch_fingerprint": "c00abfb439b077f9",
+          "mismatch_fields": [
+            {
+              "field": "action_frame[0]",
+              "count": 5,
+              "first_frame": 3489,
+              "last_frame": 3493
+            }
+          ],
+          "render_visibility_mismatch_count": 1,
+          "first_render_visibility_mismatch_frame": 7744,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/CurvyNervousRam.slpz",
+      "id": "yoshi-bowser-source-proven-residual",
+      "owner": "Yoshi held-shield animation cursor",
+      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
+        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
+        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 10521,
+          "matched_frames": 10505,
+          "mismatched_frames": 16,
+          "exact_prefix_frames": 536,
+          "strict_suffix_frames": 8602,
+          "first_mismatch_frame": 414,
+          "last_mismatch_frame": 1796,
+          "mismatch_count": 16,
+          "mismatch_fingerprint": "695ffd6814aa6ce0",
+          "mismatch_fields": [
+            {
+              "field": "action_frame[0]",
+              "count": 16,
+              "first_frame": 414,
+              "last_frame": 1796
+            }
+          ],
+          "render_visibility_mismatch_count": 5,
+          "first_render_visibility_mismatch_frame": 1821,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/SophisticatedGiganticHeron.slpz",
+      "id": "yoshi-bowser-source-proven-residual",
+      "owner": "offstage wall-hug clamp pos_x re-derivation",
+      "rationale": "One wall-contact position differs by one ULP, with native and PPC agreeing on the same bounded source re-derivation and every other gameplay field exact. This is the existing Dolphin wall-clamp execution-profile family, with the exact new row separately locked.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_8004D024",
+        "refs/melee/src/melee/mp/mplib.c"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11949,
+          "matched_frames": 11948,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 4728,
+          "strict_suffix_frames": 7220,
+          "first_mismatch_frame": 4606,
+          "last_mismatch_frame": 4606,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "76205c4cd15acdf6",
+          "mismatch_fields": [
+            {
+              "field": "pos_x[1]",
+              "count": 1,
+              "first_frame": 4606,
+              "last_frame": 4606
+            }
+          ],
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/MildMurkyNewt.slpz",
+      "id": "fixed-pool-chain-preassignment-residue",
+      "owner": "Sheik chain constructor x18 initialization boundary",
+      "rationale": "The ten raw item.misc3 rows belong to Sheik chain (kind 97) before its first dynamic-chain publication. Retail itSeakChain_Spawn reads x18 before assignment; the existing hosted constructor initializes this word to zero. The original allocator residue is 33. Native and PPC agree on all residual rows and every other field is exact. Preserve the existing deterministic constructor policy and the strict raw comparison; the later live x18 scalar is not masked.",
+      "sources": [
+        "src/melee/it/items/itseakchain.c::itSeakChain_Spawn",
+        "src/melee/it/items/itseakchain.c::it_802BC080",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
+      ],
+      "expected": {
+        "native": {
+          "frames": 14105,
+          "matched_frames": 14095,
+          "mismatched_frames": 10,
+          "exact_prefix_frames": 11946,
+          "strict_suffix_frames": 2149,
+          "first_mismatch_frame": 11824,
+          "last_mismatch_frame": 11833,
+          "mismatch_count": 10,
+          "mismatch_fingerprint": "ae6c2c702265bc34",
+          "mismatch_fields": [
+            {
+              "field": "item.misc3[0]",
+              "count": 10,
+              "first_frame": 11824,
+              "last_frame": 11833
+            }
+          ],
+          "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": 6276,
+          "signed_zero_equal_count": 0
         },
         "ppc": "native"
       }

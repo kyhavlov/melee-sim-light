@@ -1,8 +1,9 @@
 #ifndef MELEE_FT_CHARA_FTKOOPA_TYPES_H
 #define MELEE_FT_CHARA_FTKOOPA_TYPES_H
 
-#include <placeholder.h>
 #include <platform.h>
+
+#include <placeholder.h>
 
 struct ftKoopa_FighterVars {
     /* 0x222C */ float x222C;
@@ -12,9 +13,9 @@ struct ftKoopa_FighterVars {
 union ftKoopa_MotionVars {
     /// @todo Proper state name.
     struct ftKoopa_State1Vars {
-        UNK_T x0;
+        int x0;
         bool x4;
-        UNK_T x8;
+        int x8;
         bool xC;
     } unk1;
     /// @todo Possibly #ftKoopa_State1Vars.

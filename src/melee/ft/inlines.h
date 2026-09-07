@@ -2,6 +2,7 @@
 #define MELEE_FT_INLINES_H
 
 #include <platform.h>
+#include <melee/ef/eflib.h>
 
 #include "ft/forward.h"
 
@@ -45,6 +46,12 @@
 #endif
 
 /// @deprecated Use #GET_FIGHTER instead.
+static inline void Fighter_SetEffectHitlagCallbacks(Fighter* fp)
+{
+    fp->pre_hitlag_cb = efLib_PauseAll;
+    fp->post_hitlag_cb = efLib_ResumeAll;
+}
+
 static inline Fighter* getFighter(Fighter_GObj* gobj)
 {
     return gobj->user_data;

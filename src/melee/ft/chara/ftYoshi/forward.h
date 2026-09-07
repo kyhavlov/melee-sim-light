@@ -1,8 +1,8 @@
 #ifndef MELEE_FT_CHARA_FTYOSHI_FORWARD_H
 #define MELEE_FT_CHARA_FTYOSHI_FORWARD_H
 
-#include "ft/forward.h"
-#include "ftCommon/forward.h"
+#include <melee/ft/forward.h>
+#include <melee/ft/chara/ftCommon/forward.h>
 
 struct S_UNK_YOSHI1;
 typedef struct ftYs_DatAttrs ftYs_DatAttrs;
@@ -44,6 +44,12 @@ static MotionFlags const ftYs_MF_SpecialHi =
     ftYs_MF_SpecialAirS | Ft_MF_SkipParasol;
 
 static MotionFlags const ftYs_MF_MS_368 = ftYs_MF_MS_366 | Ft_MF_SkipParasol;
+
+static MotionFlags const ftYs_MF_SpecialN_Coll =
+    ftCommon_GroundAirColl_MF | Ft_MF_KeepGfx | Ft_MF_SkipModel;
+
+static MotionFlags const ftYs_MF_SpecialN_CollHit =
+    ftYs_MF_SpecialN_Coll | Ft_MF_SkipHit;
 
 typedef enum ftYoshi_MotionState {
     ftYs_MS_GuardOn_0 = ftCo_MS_Count,

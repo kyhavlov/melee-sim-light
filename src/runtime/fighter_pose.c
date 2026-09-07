@@ -225,13 +225,11 @@ void msl_fighter_pose_set_root_position(HSD_JObj* root, const Vec3* position)
     bool affected[MSL_FIGHTER_POSE_JOINT_CAPACITY];
     uint16_t root_index;
     uint16_t i;
+    bool unchanged = memcmp(&root->translate, position, sizeof(*position)) == 0;
 
     HSD_ASSERT(150, root_node != NULL);
     root_index = (uint16_t) (root_node - pose->joints);
     HSD_ASSERT(151, root_node->parent_index == UINT16_MAX);
-    if (memcmp(&root->translate, position, sizeof(*position)) == 0) {
-        return;
-    }
     root->translate = *position;
     if (HSD_JObjMtxIsDirty(root)) {
         return;
@@ -261,6 +259,12 @@ void msl_fighter_pose_set_root_position(HSD_JObj* root, const Vec3* position)
             (joint->flags & JOBJ_MTX_INDEP_SRT))
         {
             HSD_JObjSetMtxDirty(joint);
+            continue;
+        }
+        // A stationary root still invalidates source constraints: a captured
+        // fighter can stand still while the other fighter's target bone moves.
+        // Only ordinary local matrix products are redundant in that case.
+        if (unchanged) {
             continue;
         }
         for (row = 0; row != 3; ++row) {

@@ -1,3 +1,4 @@
+import { externalCharId } from "../msltrace1.js";
 import {
   BUTTONS,
   ITEM_SIZE,
@@ -35,25 +36,6 @@ function u32(view, offset) {
 
 function f32(view, offset) {
   return view.getFloat32(offset, true);
-}
-
-function externalCharId(internalCharId) {
-  if (internalCharId === 1) return 2;
-  if (internalCharId === 2) return 0;
-  if (internalCharId === 7) return 19;
-  if (internalCharId === 9) return 12;
-  if (internalCharId === 17) return 7;
-  if (internalCharId === 0) return 8;
-  if (internalCharId === 21) return 22;
-  if (internalCharId === 10) return 14;
-  if (internalCharId === 11) return 14;
-  if (internalCharId === 3) return 1;
-  if (internalCharId === 12) return 13;
-  if (internalCharId === 13) return 16;
-  if (internalCharId === 18) return 9;
-  if (internalCharId === 19) return 18;
-  if (internalCharId === 22) return 20;
-  return internalCharId;
 }
 
 function controllerInput(frameNumber, playerIndex, controller) {

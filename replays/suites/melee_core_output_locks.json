@@ -151,6 +151,159 @@
       }
     },
     {
+      "replay": "replays/validation/bowser/BigHeartedStormyHedgehog.slpz",
+      "expected": {
+        "native": {
+          "frames": 9438,
+          "actual_output_fingerprint": "3089aa046bf5cd70"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/BusyNervousWoodcock.slpz",
+      "expected": {
+        "native": {
+          "frames": 8034,
+          "actual_output_fingerprint": "f534d82fbd07a29e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/CylindricalWryTarsier.slpz",
+      "expected": {
+        "native": {
+          "frames": 9437,
+          "actual_output_fingerprint": "d2636e8b744a67f0"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/DoubleEveryScorpion.slpz",
+      "expected": {
+        "native": {
+          "frames": 7328,
+          "actual_output_fingerprint": "0d9d422c73a24940"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/JuvenileRedGoshawk.slpz",
+      "expected": {
+        "native": {
+          "frames": 15810,
+          "actual_output_fingerprint": "cc7ee24bac5c1137"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/MildMurkyNewt.slpz",
+      "expected": {
+        "native": {
+          "frames": 14105,
+          "actual_output_fingerprint": "d9ab32ebd1fba152"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/MustyGummyLemur.slpz",
+      "expected": {
+        "native": {
+          "frames": 9027,
+          "actual_output_fingerprint": "6031473efb938987"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/SophisticatedGiganticHeron.slpz",
+      "expected": {
+        "native": {
+          "frames": 11949,
+          "actual_output_fingerprint": "a2dd39f8b4e941fb"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-downb-platform.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "078cf0bdafea400f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-flame-contact.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "546fd6c160ed728d"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-flame.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "7125a94da7f4177e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-ground-upb.slpz",
+      "expected": {
+        "native": {
+          "frames": 303,
+          "actual_output_fingerprint": "814122422b093a85"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-sideb-chomp.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "1ec18cd374b583b5"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-sideb-hit.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "5a3ab0be492c41ac"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-sideb.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "4528f0071bc5aac7"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-upb-off-edge.slpz",
+      "expected": {
+        "native": {
+          "frames": 443,
+          "actual_output_fingerprint": "eec88dcde1bdb4de"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-upb.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "31c52e289cfa5c0b"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
       "expected": {
         "native": {
@@ -479,7 +632,7 @@
       "expected": {
         "native": {
           "frames": 9407,
-          "actual_output_fingerprint": "8d47d7cec6d66c23"
+          "actual_output_fingerprint": "d8a64375e24d3290"
         }
       }
     },
@@ -3225,6 +3378,195 @@
         "native": {
           "frames": 8434,
           "actual_output_fingerprint": "35f3d00f153d87aa"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/CarefreeDefenselessTermite.slpz",
+      "expected": {
+        "native": {
+          "frames": 9801,
+          "actual_output_fingerprint": "aa7c16f62a08c792"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/ClumsyImaginaryOkapi.slpz",
+      "expected": {
+        "native": {
+          "frames": 7969,
+          "actual_output_fingerprint": "18e04c745e688c99"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/CurvyNervousRam.slpz",
+      "expected": {
+        "native": {
+          "frames": 10521,
+          "actual_output_fingerprint": "c2e2cfe9ed445ee5"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/ImpracticalScratchyMouse.slpz",
+      "expected": {
+        "native": {
+          "frames": 8978,
+          "actual_output_fingerprint": "bde88b44b24ed664"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/KindheartedKnobbyMouse.slpz",
+      "expected": {
+        "native": {
+          "frames": 3579,
+          "actual_output_fingerprint": "a28b77f788adc9ef"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/KnottyCoarseNewt.slpz",
+      "expected": {
+        "native": {
+          "frames": 13893,
+          "actual_output_fingerprint": "a8aef83fdb358233"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/SaneVapidGiraffe.slpz",
+      "expected": {
+        "native": {
+          "frames": 5442,
+          "actual_output_fingerprint": "ccec7145fb9825c7"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/SlightAccomplishedEagle.slpz",
+      "expected": {
+        "native": {
+          "frames": 6971,
+          "actual_output_fingerprint": "da31753d333c5059"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/StudiousExpertFalcon.slpz",
+      "expected": {
+        "native": {
+          "frames": 11195,
+          "actual_output_fingerprint": "ea2a324ca9ba5a37"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/StupendousAnnualGoldfish.slpz",
+      "expected": {
+        "native": {
+          "frames": 11670,
+          "actual_output_fingerprint": "ef330a0bf9773c5e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/yoshi-downb-platform.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "c63a88e855af9f79"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/yoshi-egglay-air.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "db4f952b5c53b38e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/yoshi-egglay-damage.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "6974cf9ab5aabcf7"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/yoshi-egglay-ground.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "9182bbb7ab7e1f2e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/yoshi-eggroll-hit.slpz",
+      "expected": {
+        "native": {
+          "frames": 443,
+          "actual_output_fingerprint": "26a9b088ab232734"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/yoshi-eggroll-land-start.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "967555ff75bcd6d3"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/yoshi-eggroll-off-edge.slpz",
+      "expected": {
+        "native": {
+          "frames": 403,
+          "actual_output_fingerprint": "bb0c89eb3e91ecf6"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/yoshi-eggroll-shield.slpz",
+      "expected": {
+        "native": {
+          "frames": 443,
+          "actual_output_fingerprint": "1e808ebee35ef7b6"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/yoshi-eggroll-turn.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "276585a63258b435"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/yoshi-eggthrow-charge.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "9d2bb9a534554996"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/yoshi/yoshi-guard-grab.slpz",
+      "expected": {
+        "native": {
+          "frames": 883,
+          "actual_output_fingerprint": "30fedbc1d11723ff"
         }
       }
     },

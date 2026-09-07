@@ -3,10 +3,9 @@
 
 #include <platform.h>
 
-#include "ft/types.h"
+#include <melee/ft/chara/ftKoopa/forward.h>
 
-#include "ftKoopa/forward.h"
-#include <baselib/forward.h>
+#include <melee/ft/types.h>
 
 /* 132A0C */ void ftKp_Init_OnDeath(Fighter_GObj* gobj);
 /* 132A64 */ void ftKp_Init_UnkMotionStates3(Fighter_GObj* gobj);
@@ -20,6 +19,16 @@
 /* 132D00 */ void ftKp_Init_LoadSpecialAttrs(Fighter_GObj* gobj);
 /* 132D38 */ void ftKp_Init_OnKnockbackEnter(Fighter_GObj* gobj);
 /* 132D7C */ void ftKp_Init_OnKnockbackExit(Fighter_GObj* gobj);
+/* 3CEDC0 */ extern MotionState ftKp_Init_MotionStateTable[ftKp_MS_SelfCount];
+/* 3CF0A0 */ extern char ftKp_Init_DatFilename[];
+/* 3CF0AC */ extern char ftKp_Init_DataName[];
+/* 3CF1E0 */ extern char ftKp_Init_AnimDatFilename[];
+/* 3CF25C */ extern Fighter_DemoStrings ftKp_Init_DemoMotionFilenames;
+/* 3CF26C */ extern Fighter_CostumeStrings ftKp_Init_CostumeStrings[];
+#ifndef MSL_CORE_HOSTED
+/* 45A090 */ extern UnkCostumeStruct ft_8045A090[4];
+#endif
+
 /* 132DC0 */ float ftKp_SpecialS_80132DC0(Fighter_GObj* gobj);
 /* 132DD0 */ float ftKp_SpecialS_80132DD0(Fighter_GObj* gobj);
 /* 132DE0 */ float ftKp_SpecialS_80132DE0(Fighter_GObj* gobj);
@@ -76,11 +85,5 @@
 /* 1344C8 */ void ftKp_SpecialAirSEndF_Coll(Fighter_GObj* gobj);
 /* 1344F0 */ void ftKp_SpecialAirSEndB_Coll(Fighter_GObj* gobj);
 
-/* 3CEDC0 */ extern MotionState ftKp_Init_MotionStateTable[ftKp_MS_SelfCount];
-/* 3CF0A0 */ extern char ftKp_Init_DatFilename[];
-/* 3CF0AC */ extern char ftKp_Init_DataName[];
-/* 3CF1E0 */ extern char ftKp_Init_AnimDatFilename[];
-/* 3CF25C */ extern Fighter_DemoStrings ftKp_Init_DemoMotionFilenames;
-/* 3CF26C */ extern Fighter_CostumeStrings ftKp_Init_CostumeStrings[];
 
 #endif

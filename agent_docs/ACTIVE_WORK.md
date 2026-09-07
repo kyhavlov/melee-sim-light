@@ -1,7 +1,94 @@
+# Character support — Yoshi, then Bowser (2026-09-07)
+
+- **Viewer ID correction (user report):** Yoshi internal 14 fell through to external
+  14 (Ice Climbers), selecting the Popo model. The existing converter in
+  `tools/viewer/msltrace1.js` becomes the single internal-to-Slippi-ID owner for
+  both trace settings and `live/viewer_adapter.js`. Complete its supported mapping,
+  including Yoshi 14 -> 17, and delete the adapter's duplicate converter. No
+  gameplay/wire state changes. Verify model identity against the renderer's ID
+  names and the production browser's requested animation archive.
+  **Result:** fixed; all supported ID/name checks pass, and the rebuilt production
+  browser smoke selects Yoshi and confirms external ID 17 plus a completed
+  `yoshi.zip` request. Live/Wasm smoke also passes. The previous package-presence
+  assertion could accept the wrong already-packaged character archive.
+- **Authorized scope:** complete both characters to the existing supported-domain parity,
+  including all six stages, singles/three-player teams/doubles, C/Python/Wasm/viewer,
+  original full-game replays and focused real Slippi recordings. Separate completed
+  character commits are authorized. Preserve the pre-existing deletion of
+  `data/stages/slippi_neutral_spawns.json`.
+- **Final owners:** Yoshi's lifecycle/guard/special callbacks and egg/tongue/star articles;
+  Bowser's lifecycle/special callbacks and flame article; their already-imported common
+  capture/victim owners. Source completion covers complete reachable gameplay call graphs,
+  not just paths exercised by replays. Current upstream is
+  `32420c5f464f211842120c186390a30868b793cd`; all eleven character TUs and five article TUs
+  are Matching there, including the now-matched Yoshi Egg Roll. Preserve the hosted
+  source layout/names while recording newer source provenance and adaptations in the
+  source manifest/delta ledger.
+- **Canonical state:** source Fighter/motion/item vars and match-owned contexts remain
+  singular. Immutable fighter/article DAT graphs, animation/part tables and effects
+  belong to GameData; every live pointer must participate in generated relocation.
+  Construction reserves the full reached pool capacity before arenas seal.
+- **Consumers:** common fighter dispatch, collision/hit/damage/shield/capture, item scheduler,
+  pose/attachments, observation, reset/copy/save/restore, replay validation and live viewer.
+- **Displaced code/state and deletion boundary:** remove the newly reached unsupported
+  abort stubs and omitted registry rows. Add no approximated moves, mirrored fighter state,
+  replay-conditioned gameplay, runtime allocation, compatibility flags, or alternate
+  dispatch. Extend extraction, deterministic layout, required loaders and fresh extraction
+  checks together; maintain the existing authoritative regression locks.
+- **Pose index capacity cut:** the expanded immutable Figa program bank has 267,980
+  nodes, exceeding the prior 18-bit node token (262,143 sentinel). The sole
+  `MslFighterPoseJoint.program_node_index` becomes a full `uint32_t`; its three
+  flags and 11-bit last-table frame share the following `uint16_t`. This uses
+  native trailing padding (56-byte joint unchanged) and grows 32-bit joints
+  from 44 to 48 bytes. Consumers remain the pose attach/materialize/sample
+  owners and generated snapshot layout. Delete the 18-bit ceiling; add no second
+  token, extra table, lookup fallback, or gameplay allocation. Validate source,
+  native/Wasm layouts, lifecycle relocation, and the complete prior replay locks.
+- **Bowser math counterexample experiment:** flame wall/floor steering is exact
+  in PPC but has native-only 4- and 19-frame float islands. Test the retained
+  x86 `acosf` estimate-seed substitution against the Gekko seed with the same
+  three source refinements. The `acosf` return remains the sole result; no
+  per-character admission, alternate return evaluator, or extra state. Retain
+  a correction only if the source-matched PPC/replay bits arbitrate it, and
+  update indexed performance evidence if the prior exactness claim is disproved.
+- **Stationary root constraint publication:** native/PPC traces show the
+  CaptureWait victim's root position repeating while Bowser's constraint bone
+  moves. `msl_fighter_pose_set_root_position` returned before invalidating the
+  dependent RObj subtree; PPC's source setter dirties it each publication.
+  Keep the canonical flat pose preorder/root matrix owner, but preserve RObj/IK
+  invalidation even for identical root positions. Skip redundant ordinary
+  matrix products in that case. No cached state, extra schedule, character gate,
+  or restored generic traversal; the old early return is the deletion boundary.
+- **Sequence and acceptance:** establish baseline; complete Yoshi source/data/registry and
+  lifecycle gates; audit and record missing special-move cases; validate full games and
+  microreplays; checkpoint the whole domain; then repeat for Bowser. Finish with native
+  debug/release, Python lifecycle, source, Wasm/viewer and allocation/save/restore gates.
+  Existing classified residuals may not be widened. New residuals require source/retail
+  evidence at least as strong as the existing character packets.
+- **Completed character checkpoint:** all source/data/API/viewer owners are ported.
+  Added 18 full games and 20 original microreplays (190,427 transitions). Debug
+  and strict release pass the expanded 404-replay gate: 339 PASS, 65 CLASSIFIED,
+  0 FAIL/ERROR, 3,691,888 transitions. PPC agrees with every new residual snapshot;
+  all microreplays are exact. The old doubles charged-damage classification is
+  retired, with only its prior output lock refreshed. Source/native/costume/parts,
+  Wasm/live and production browser, and Python lifecycle/restore checks pass. Detailed provenance and
+  explicit remaining recording coverage gaps are in `YOSHI_BOWSER_SUPPORT.md`.
+  The character commit excludes the concurrent reward packet's source, hooks,
+  bindings and coordination notes.
+- **Recording feasibility already verified:** the supplied Slippi Online doublesbot
+  AppImage plus the local Slippi-AI/libmelee environment produced original 3.19.1
+  Bowser grounded up-B and Yoshi Egg Roll off-edge recordings with normal -123 starts
+  and no-contest ends. Offline LRAS needs a release/repress after the retail pause
+  timer. Scratch evidence and the controller driver are in ignored
+  `reports/triage/yoshi_bowser_recording_probe/`.
+
 # Active performance campaign — 150k resident throughput
 
-## Retained exact scalar cut — native `acosf` estimate seed
+## Retired scalar candidate — native `acosf` estimate seed
 
+- **Superseded 2026-09-07:** Bowser flame steering disproved the seed-equivalence claim
+  below. The character packet restores the canonical Gekko seed on every backend;
+  see `performance/HISTORY.md` for the counterexamples. The following is historical.
 - **Owner and canonical result:** `acosf` remains the sole inverse-cosine owner and its binary32
   return remains the only result. Preserve the source radicand, three ordered binary32 Newton
   refinements, `atanf` reduction, exceptional behavior, and every consumer.

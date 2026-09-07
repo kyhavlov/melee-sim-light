@@ -138,6 +138,9 @@ if (production) {
           frames: frameCount,
           stage: replay?.settings?.stageId,
           character: replay?.settings?.playerSettings?.[0]?.internalCharacterIds?.[0],
+          externalCharacter: replay?.settings?.playerSettings?.[0]?.externalCharacterId,
+          yoshiModel: performance.getEntriesByType("resource").some(
+            entry => new URL(entry.name).pathname.endsWith("/zips/yoshi.zip") && entry.responseEnd > 0),
           keyboard: current?.players?.[0]?.inputs?.processed?.joystickX === 1,
           trace: window.__mslTraceSaved === true,
           api: typeof viewer?.setLiveReplayData === "function" && typeof viewer?.setFrame === "function",
@@ -169,7 +172,7 @@ if (production) {
           };
           document.querySelector("#save-trace").click();
           const character = document.querySelector("#p1-character");
-          character.value = "15";
+          character.value = "14";
           character.dispatchEvent(new Event("change"));
           document.querySelector('button[data-stage-id="8"]').click();
         })()`,
@@ -178,7 +181,9 @@ if (production) {
       changedSelection &&
       state.frames >= 2 &&
       state.stage === 8 &&
-      state.character === 15 &&
+      state.character === 14 &&
+      state.externalCharacter === 17 &&
+      state.yoshiModel &&
       state.trace &&
       state.api &&
       state.svg

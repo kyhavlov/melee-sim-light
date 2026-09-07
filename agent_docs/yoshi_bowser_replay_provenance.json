@@ -1,0 +1,1256 @@
+[
+  {
+    "replay": "replays/validation/yoshi/StudiousExpertFalcon.slpz",
+    "source": "https://slippilab.com/api/replay/StudiousExpertFalcon.slp",
+    "original_sha256": "1fc5c46d0b54a145364c0d23349fe1d63b8d5147aa72b81f269e544a12917f64",
+    "compressed_sha256": "eef30961026f3ce216cdd315d7e5b028eedd6353c12a6a79ff825f3bf3bf790c",
+    "bytes": 3877592,
+    "frames": 11222,
+    "first_frame": -123,
+    "last_frame": 11072,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8BAP//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/SlightAccomplishedEagle.slpz",
+    "source": "https://slippilab.com/api/replay/SlightAccomplishedEagle.slp",
+    "original_sha256": "a46448ea11708c62c88cf960ae651ec81b5e326a3aceac2035599a5d5c4de82b",
+    "compressed_sha256": "286c3ab47f17006299daa74538414db890dba4ca4b2858eba8aa0ab0940b55dd",
+    "bytes": 2362076,
+    "frames": 6979,
+    "first_frame": -123,
+    "last_frame": 6848,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8BAP//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/SaneVapidGiraffe.slpz",
+    "source": "https://slippilab.com/api/replay/SaneVapidGiraffe.slp",
+    "original_sha256": "853eabba030b977757d777b853f5b929f43880f2e091280fb430a52010f3f453",
+    "compressed_sha256": "28361abebc73adee63d482f16055d93e300e3de16960f3f08c93dd8f21a89d9a",
+    "bytes": 1893425,
+    "frames": 5480,
+    "first_frame": -123,
+    "last_frame": 5319,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/ImpracticalScratchyMouse.slpz",
+    "source": "https://slippilab.com/api/replay/ImpracticalScratchyMouse.slp",
+    "original_sha256": "8fc966997739079e0156a354be97a983cca159b1dc5a7f2c566866fd2f32516c",
+    "compressed_sha256": "a5008096afe91dc195ac1a561a39e09d14392c8a1745c7e510ef9527a04994d5",
+    "bytes": 3049863,
+    "frames": 8979,
+    "first_frame": -123,
+    "last_frame": 8855,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwEAAf//",
+      "lras_initiator": "P2",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/KindheartedKnobbyMouse.slpz",
+    "source": "https://slippilab.com/api/replay/KindheartedKnobbyMouse.slp",
+    "original_sha256": "4e7a407eb5728fc69ea066d35aee875222bab315a2c008ff79360b25a151f03d",
+    "compressed_sha256": "a401556b7af75b79b1ba721b5fdda3ad8adf7318e685bb4d05857b2e5ccb636b",
+    "bytes": 1399713,
+    "frames": 3585,
+    "first_frame": -123,
+    "last_frame": 3456,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwEAAf//",
+      "lras_initiator": "P2",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/CarefreeDefenselessTermite.slpz",
+    "source": "https://slippilab.com/api/replay/CarefreeDefenselessTermite.slp",
+    "original_sha256": "7fb84d48ac94bcfffeea1cd4024ca1c7c7ddd5f75b7079a524178aced9b6e152",
+    "compressed_sha256": "949798c63ccd84b585ad5db3404368d8a6ae2a7d384e727516ca0ea57af6ed4c",
+    "bytes": 4201668,
+    "frames": 9802,
+    "first_frame": -123,
+    "last_frame": 9678,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8BAP//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/KnottyCoarseNewt.slpz",
+    "source": "https://slippilab.com/api/replay/KnottyCoarseNewt.slp",
+    "original_sha256": "7073aa730cd59cf6d16616d6a95f8a3b5a78ec04289a8d35826eee08292ada1a",
+    "compressed_sha256": "8eb3266abfe6e5b7e39f0c9bb030d71ed6f7c3e4614b5521021b8a84611fb7ae",
+    "bytes": 5863469,
+    "frames": 13923,
+    "first_frame": -123,
+    "last_frame": 13770,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8AAf//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/ClumsyImaginaryOkapi.slpz",
+    "source": "https://slippilab.com/api/replay/ClumsyImaginaryOkapi.slp",
+    "original_sha256": "63a2f52836fcd971a776553d2ea13cb91e5373d9b5c9107176525757cc853dbf",
+    "compressed_sha256": "72f605f63bed2ebd7c37f93bf6ff4e8ee53607a3c75e752286fc7a1c9df68466",
+    "bytes": 2728834,
+    "frames": 7984,
+    "first_frame": -123,
+    "last_frame": 7846,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8BAP//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/StupendousAnnualGoldfish.slpz",
+    "source": "https://slippilab.com/api/replay/StupendousAnnualGoldfish.slp",
+    "original_sha256": "70ad2ded1d59d6b0bf5e45076e5c5823d6c7cafe48b608136ebf1d4479788426",
+    "compressed_sha256": "2bf6907021b460c06cfffdcce1d06e949e496431bd64cbc4d3ecea3414062463",
+    "bytes": 3926086,
+    "frames": 11671,
+    "first_frame": -123,
+    "last_frame": 11547,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8AAf//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/CurvyNervousRam.slpz",
+    "source": "https://slippilab.com/api/replay/CurvyNervousRam.slp",
+    "original_sha256": "d7cb729201305af528a771e0ddc6ca2e91eb9f924dc117657ef6208aebc44bf9",
+    "compressed_sha256": "dcb012b441f6d5312748d4d30915e9ea039a1d059c60613968b648ed5c3e8184",
+    "bytes": 3591864,
+    "frames": 10523,
+    "first_frame": -123,
+    "last_frame": 10398,
+    "version": {
+      "version": [
+        3,
+        19,
+        0
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8AAf//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/yoshi-downb-platform.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "342a979276e1cd2fbb0b5817ce33d2a45e08ca9e5b102a3034b2d72eb031ce4e",
+    "compressed_sha256": "a7becc5eecd5aa122a452e147af376438d0acb15bd1577bc049efa8864ada145",
+    "bytes": 354902,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/yoshi-egglay-air.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "66facd081a9c07c87db74a87581ad020d3cda5acb145dd6aabe0c4ec20528dd2",
+    "compressed_sha256": "e72bcb25d280689975d1562a16e9f8aca1d2171c92f6c107abeb790c36980d2a",
+    "bytes": 486662,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/yoshi-egglay-damage.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "7e3fb8a4b982196bbe4bcdb1f271cc7c188b48cdaf97d17b5d896044efbad0a5",
+    "compressed_sha256": "c71984cbf1f2f5260da69e437c54d23ab17a4a3a9cd6f8e1dc4e6d5d3014fae2",
+    "bytes": 349142,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/yoshi-egglay-ground.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "2b5732a972a3b4de4de598d17f2b9df48a8b7ee1d55ed96410bae97239eed937",
+    "compressed_sha256": "ad8348bcaf33f3cccbe6c623d8e4c7e3a2089e915f7c8ab3af136262e993563c",
+    "bytes": 349142,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/yoshi-eggroll-hit.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "5f11c8dd1978e36ac9ed23ce2678f3db78071f9803244591fffb155fd96bcafc",
+    "compressed_sha256": "68fbe1f7650700447cd5b2c6776a0c36571b140de12c79f2317c185274dd3f2b",
+    "bytes": 205702,
+    "frames": 444,
+    "first_frame": -123,
+    "last_frame": 320,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwABAP//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/yoshi-eggroll-land-start.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "3eb52330c4d93509d7443aca1e937a746ce78a05951c25fa995aab0445c801a7",
+    "compressed_sha256": "d7a99a6df1f6d8c39f4d3fad8bf4ec9f1bb92dbe6a20a142d8c0a12ed4952ff2",
+    "bytes": 349142,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwABAP//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/yoshi-eggroll-off-edge.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "da1bdb485aae77009b7790a0e5bae274d5dda30f16166ae1787fcf2892d514cf",
+    "compressed_sha256": "ba74bf1f2a4a1b05c8f5818543d1237e3414c53fbeaa844ee81b96716c9480e5",
+    "bytes": 192662,
+    "frames": 404,
+    "first_frame": -123,
+    "last_frame": 280,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwABAP//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/yoshi-eggroll-shield.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "5756a5ffd22641d1c617d4ff9f4df9bd5b33d2e37c0897e48274a161d8f2571a",
+    "compressed_sha256": "68745b14b139f406a92825c019a00d9e615ff886441171d7d4c451c085697203",
+    "bytes": 205702,
+    "frames": 444,
+    "first_frame": -123,
+    "last_frame": 320,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwABAP//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/yoshi-eggroll-turn.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "381f40e7eea64f266941758964abb0ee492e913c82b4ac8e9c5e5d537a15ad89",
+    "compressed_sha256": "741c72bf5ac385b626f9b6ce25f84a24278efe1412ba4933c178f4f9992d2841",
+    "bytes": 349142,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/yoshi-eggthrow-charge.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "ac2d99d59348df4922a214e64ab30796ffb90986b59708b53112e504f807faee",
+    "compressed_sha256": "fbeb6259ba84e82d6f623a6cc08da638a8c22088e8318fa2a45fc0fb8703ca57",
+    "bytes": 367052,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/yoshi/yoshi-guard-grab.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "cbd06f3cce580c6ca01c2b1aa3338c90b491312497826a1c8675df56af4cd7e3",
+    "compressed_sha256": "5ac5240cb79dc7f05cf37cec15f487326363adcefeec32da25c2a15b23d06914",
+    "bytes": 349142,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/DoubleEveryScorpion.slpz",
+    "source": "https://slippilab.com/api/replay/DoubleEveryScorpion.slp",
+    "original_sha256": "14969d874da8fa651e470c83b9c148cc250c1815fabd82fd4dad98e580472dbd",
+    "compressed_sha256": "58e101128ebae8a6b6442f1bf346421b6849c99d3a074dcb7311f9e871715ca6",
+    "bytes": 2509176,
+    "frames": 7331,
+    "first_frame": -123,
+    "last_frame": 7205,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8BAP//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/JuvenileRedGoshawk.slpz",
+    "source": "https://slippilab.com/api/replay/JuvenileRedGoshawk.slp",
+    "original_sha256": "8c6d53829ca7ee025530309b469c607bfb7c1ece97cc6a062ecad369d7e5ac89",
+    "compressed_sha256": "a92cdfea1140e3f3e40d1d7c58f6bb9d2fa157bb19a5fc7b05abe0b609531275",
+    "bytes": 5651092,
+    "frames": 15877,
+    "first_frame": -123,
+    "last_frame": 15687,
+    "version": {
+      "version": [
+        3,
+        19,
+        0
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8BAP//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/MustyGummyLemur.slpz",
+    "source": "https://slippilab.com/api/replay/MustyGummyLemur.slp",
+    "original_sha256": "296905c98431f25b5bef4dcead3c769304146bb6c303ea3d3552800a27376d8d",
+    "compressed_sha256": "7bce780d63ee79377a325ef70864a48dd1ed1b53cd9e4c6b8c2275175186df37",
+    "bytes": 3255645,
+    "frames": 9396,
+    "first_frame": -123,
+    "last_frame": 8904,
+    "version": {
+      "version": [
+        3,
+        19,
+        0
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8BAP//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/BusyNervousWoodcock.slpz",
+    "source": "https://slippilab.com/api/replay/BusyNervousWoodcock.slp",
+    "original_sha256": "0be956bb560f30bf1512e71d87d28672588f64fb9b78dcb5f42c1730dabd7e8b",
+    "compressed_sha256": "9e23b83e44c86799fccb34c03d00983181c3b9699c2c756119e3c403ea4dd6c5",
+    "bytes": 2966447,
+    "frames": 8422,
+    "first_frame": -123,
+    "last_frame": 7911,
+    "version": {
+      "version": [
+        3,
+        19,
+        0
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8AAf//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/CylindricalWryTarsier.slpz",
+    "source": "https://slippilab.com/api/replay/CylindricalWryTarsier.slp",
+    "original_sha256": "faa51ae3173a25a34cbbe616bdc15b7a69c68f66bd42baad5eb4125105a4ab1a",
+    "compressed_sha256": "b1f3e030fcb40dbc9b63a243e7ff913bf6f6ac2435283f481a76f51ef0bdb7cd",
+    "bytes": 3238902,
+    "frames": 9639,
+    "first_frame": -123,
+    "last_frame": 9314,
+    "version": {
+      "version": [
+        3,
+        19,
+        0
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8AAf//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/BigHeartedStormyHedgehog.slpz",
+    "source": "https://slippilab.com/api/replay/BigHeartedStormyHedgehog.slp",
+    "original_sha256": "2d26c3207a598b258e3426d1dba97726ace614e11e32c653948949869f859b4c",
+    "compressed_sha256": "df918d714f9cec18342ffcd1a6d5cb8228bf8a055a7e7ed561f34fea3bc34028",
+    "bytes": 4005943,
+    "frames": 9439,
+    "first_frame": -123,
+    "last_frame": 9315,
+    "version": {
+      "version": [
+        3,
+        19,
+        0
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8AAf//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/SophisticatedGiganticHeron.slpz",
+    "source": "https://slippilab.com/api/replay/SophisticatedGiganticHeron.slp",
+    "original_sha256": "3d5365637e4b8b5f05d027ed7657c748dddf58578fa38c5d55f875fe33f1bb49",
+    "compressed_sha256": "71c5ccf67e21059577fd9551bcf742242f3a82c430f416a0c60c350fbd59acc4",
+    "bytes": 5009026,
+    "frames": 12366,
+    "first_frame": -123,
+    "last_frame": 11826,
+    "version": {
+      "version": [
+        3,
+        19,
+        0
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8BAP//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/MildMurkyNewt.slpz",
+    "source": "https://slippilab.com/api/replay/MildMurkyNewt.slp",
+    "original_sha256": "54de97e422c1bc3297e5f449abb4fb8933d586d95be95ecd8ab703e84a34bc17",
+    "compressed_sha256": "d89501df449de7b512ebad49513245ff6c338269bd14c6482869b420782ee254",
+    "bytes": 6351205,
+    "frames": 18026,
+    "first_frame": -123,
+    "last_frame": 13982,
+    "version": {
+      "version": [
+        3,
+        19,
+        0
+      ]
+    },
+    "end": {
+      "method": "Game",
+      "bytes": "Av8BAP//",
+      "lras_initiator": null,
+      "players": [
+        {
+          "port": "P1",
+          "placement": 1
+        },
+        {
+          "port": "P2",
+          "placement": 0
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/bowser-downb-platform.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "2444d550da58786aaa9144e9a244d756167f740e1ba9f33d945b41ee7c394548",
+    "compressed_sha256": "03791e89ff59c34a6362e3e7fbb9df9c299ebb82efb6527629143fa145dd8a07",
+    "bytes": 349141,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/bowser-flame-contact.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "6b37a3e87e2c2207f87cc9f7f9f00e6dc9f04efc1ec9cc237c6a37d6092c3461",
+    "compressed_sha256": "bb1d8935d37989e08f81b8feab45ef0dd12d27e750f02e0c2f885f15d1663a3b",
+    "bytes": 390721,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/bowser-flame.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "8bd1a570d254d1519e2206dfdf47cf03a1a3f6445674e21c336880d3554dd5e9",
+    "compressed_sha256": "9211927bf857f52312656e3d898a23bde693477bef6ad15823d2bc9f63216dc9",
+    "bytes": 457501,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/bowser-ground-upb.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "8855d3a83609a0e95f0bb3c1385f1c834e0a929bd510d4dcb0b728668caf97b1",
+    "compressed_sha256": "ce37ada3dabfb2f10a50919607852e639eed9895b3f2c7dfd0b08d7d24b8df0e",
+    "bytes": 160061,
+    "frames": 304,
+    "first_frame": -123,
+    "last_frame": 180,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/bowser-sideb-chomp.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "b0880be37fd551919c0c99dec7865cd8efe603b00252b8821f673820e92479ce",
+    "compressed_sha256": "15215e56e938540024415f087115a257732d2e624ecab28cc1fa3b53ab46ccf2",
+    "bytes": 349141,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/bowser-sideb-hit.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "89b88bcfcc2e08c2364b99b158c6610752dc8c619099052d2ee18bcf023a087e",
+    "compressed_sha256": "869637ccb6a0fec790ea6ca820897a685676b28847347f5cee70121d80f7fa25",
+    "bytes": 349141,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/bowser-sideb.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "fe329d821dbaf7f64ea14141f82d273d80c5a0879db83ff3c7c8b4f2627697cd",
+    "compressed_sha256": "7d6bd11278317545383f7498cba7cb545ae591b6b1319e5948aba42c5385cbbb",
+    "bytes": 349141,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/bowser-upb-off-edge.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "d644fcdcf65e31addaf9fca0cc36489c1a7c998b1ea917eaf89e7528d0b90dbf",
+    "compressed_sha256": "3d567aca5bf6e93c08f1ccec7e31c4284516d75b6c11830bc098fa4a835a9c5e",
+    "bytes": 205701,
+    "frames": 444,
+    "first_frame": -123,
+    "last_frame": 320,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  },
+  {
+    "replay": "replays/validation/bowser/bowser-upb.slpz",
+    "source": "normal controller-driven Slippi Online doublesbot AppImage VS recording",
+    "original_sha256": "3b47ca2cce89d38b8df2ba6ebe8cc22112dab0d6e63aff87a02904c1fa689b99",
+    "compressed_sha256": "1ba426a16242f2097f77a507ffeccf2585121a17eed390443146d2d3ef04ccde",
+    "bytes": 349141,
+    "frames": 884,
+    "first_frame": -123,
+    "last_frame": 760,
+    "version": {
+      "version": [
+        3,
+        19,
+        1
+      ]
+    },
+    "end": {
+      "method": "NoContest",
+      "bytes": "BwAAAf//",
+      "lras_initiator": "P1",
+      "players": [
+        {
+          "port": "P1",
+          "placement": 0
+        },
+        {
+          "port": "P2",
+          "placement": 1
+        }
+      ]
+    },
+    "stadium_transformation_events": 0
+  }
+]

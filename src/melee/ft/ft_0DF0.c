@@ -70,9 +70,9 @@ f32 ftCo_800DEEB8(Fighter* fp, f32 arg1)
     if (attrs->state != SmashState_Release) {
         return arg1;
     }
-    return arg1 * ((attrs->x2120_damageMul - 1.0F) *
-                       (attrs->x2118_frames / attrs->x211C_holdFrame) +
-                   1.0F);
+    // GALE01 800DEEDC fuses the charged multiplier before applying damage.
+    return arg1 * __fmadds(attrs->x2120_damageMul - 1.0F,
+                          attrs->x2118_frames / attrs->x211C_holdFrame, 1.0F);
 }
 
 Vec2* ftCo_800DEEE8(Fighter* fp, Vec2* shift)

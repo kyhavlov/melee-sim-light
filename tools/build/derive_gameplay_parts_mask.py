@@ -31,6 +31,8 @@ CHARACTERS = {
     'seak': (7, 'Sk', 'ftDataSeak'),
     'donkey': (3, 'Dk', 'ftDataDonkey'),
     'ganon': (25, 'Gn', 'ftDataGanon'),
+    'yoshi': (14, 'Ys', 'ftDataYoshi'),
+    'koopa': (5, 'Kp', 'ftDataKoopa'),
     'peach': (9, 'Pe', 'ftDataPeach'),
     'popo': (10, 'Pp', 'ftDataPopo'),
     'nana': (11, 'Nn', 'ftDataNana'),
@@ -48,7 +50,7 @@ CHARACTERS = {
 SUBACTION_COUNTS = {
     0: 303, 1: 327, 2: 318, 3: 337, 7: 317, 9: 318, 10: 321, 11: 321,
     12: 320, 13: 313, 15: 327, 17: 312, 18: 327, 19: 311, 21: 303, 22: 327,
-    25: 318,
+    25: 318, 14: 314, 5: 316,
 }
 
 # Words consumed per fighter subaction event with opcode >= 10, indexed by
@@ -72,6 +74,8 @@ NCANON = 54  # FtPart_TopN .. FtPart_TransN2
 #          anchor parts[FtPart_ThrowN=51], ftSs_SpecialN.c missile spawn
 #          parts[FtPart_56=56].
 CODE_ANCHORED = {
+    # Koopa: ftKp_SpecialN spawns Flame at raw mouth part 48.
+    'koopa': (48,),
     'samus': (50, 51, 56),
     #   popo/nana: ftPp_SpecialN.c ice-shot spawn parts[FtPart_TopN=0],
     #          ftPp_SpecialLw.c blizzard anchors parts[FtPart_L3rdNa=26] and
@@ -90,6 +94,9 @@ CODE_ANCHORED = {
     #          parts[FtPart_TopN=0] raw and ftDk_SpecialLw.c on
     #          parts[FtPart_TransN=1].
     'donkey': (0, 1),
+    # Yoshi: Egg Roll transforms root/rotation parts and samples part 4;
+    # SpecialHi samples part 31 and SpecialLw samples TransN (1).
+    'yoshi': (0, 1, 2, 4, 31),
 }
 
 # Luigi's audited admission row (joint indices), the canonical anchor.

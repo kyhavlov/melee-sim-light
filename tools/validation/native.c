@@ -1087,9 +1087,9 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
     if (character != 1 && character != 2 && character != 3 && character != 7 && character != 9 &&
         character != 10 && character != 12 && character != 13 && character != 15 &&
         character != 17 && character != 18 && character != 19 && character != 21 &&
-        character != 22 && character != 25 && character != 0) {
+        character != 22 && character != 25 && character != 14 && character != 5 && character != 0) {
       snprintf(error, error_size,
-               "Melee core requires Mario, Fox, Captain Falcon, Donkey Kong, Ganondorf, "
+               "Melee core requires Mario, Fox, Captain Falcon, Donkey Kong, Ganondorf, Yoshi, Bowser, "
                "Sheik, Peach, Ice Climbers, Pikachu, Samus, Jigglypuff, Luigi, Marth, Zelda, "
                "Dr. Mario, or Falco players");
       return -1;

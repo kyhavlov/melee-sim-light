@@ -1,10 +1,11 @@
 #ifndef MELEE_FT_CHARA_FTYOSHI_TYPES_H
 #define MELEE_FT_CHARA_FTYOSHI_TYPES_H
 
-#include <placeholder.h>
 #include <platform.h>
 
 #include <melee/it/forward.h>
+
+#include <placeholder.h>
 
 struct ftYoshi_FighterVars {
     /* 0x222C */ Vec3 x222C;
@@ -70,7 +71,16 @@ typedef struct _ftYoshiAttributes { // x2D4 (fp->dat_attrs)
     float xE0;
     float xE4;
     float xE8;
-    u8 pad_xEC[0x114 - 0xEC];
+    float xEC;
+    float xF0;
+    float xF4;
+    float specialhi_base_angle;
+    float xFC;
+    float x100;
+    float x104;
+    float x108;
+    float x10C;
+    float x110;
     float x114;
     float x118;
     float x11C;
@@ -85,8 +95,8 @@ struct ftYs_DatAttrs {
     /*   +0 */ char pad_0[0x10];
     /*  +10 */ Vec2 x10;
     /*  +18 */ float x18;
-    /*  +1C */ UNK_T x1C;
-    /*  +20 */ UNK_T x20;
+    /*  +1C */ float x1C;
+    /*  +20 */ float x20;
     /*  +24 */ float x24;
     /*  +28 */ char pad_28[0xEC - 0x28];
     /*  +EC */ float xEC;
@@ -149,7 +159,7 @@ union ftYoshi_MotionVars {
         /* fp+2350 */ f32 x10;
         /* fp+2354 */ f32 x14;
         /* fp+2358 */ f32 x18;
-        /* fp+235C */ UNK_T x1C;
+        /* fp+235C */ int x1C;
         /* fp+2360 */ int x20;
         /* fp+2364 */ int x24;
     } guard;

@@ -1,0 +1,212 @@
+{
+  "name": "bowser",
+  "notes": "Bowser source-completion challenge: original SlippiLab full games plus controller-driven special-move microreplays. Every recording starts normally at -123 and contains a game end. Stadium recordings use frozen Stadium and have no transformation events. See agent_docs/YOSHI_BOWSER_SUPPORT.md for provenance, branch coverage, and exact residual ownership.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/bowser/DoubleEveryScorpion.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Bowser",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/JuvenileRedGoshawk.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Bowser",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/MustyGummyLemur.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Bowser",
+        "2": "Ganondorf"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/BusyNervousWoodcock.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Bowser",
+        "2": "Donkey Kong"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/CylindricalWryTarsier.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Bowser",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/BigHeartedStormyHedgehog.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Bowser",
+        "2": "Marth"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/SophisticatedGiganticHeron.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Bowser",
+        "2": "Donkey Kong"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/MildMurkyNewt.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Sheik",
+        "2": "Bowser"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-downb-platform.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Bowser",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-flame-contact.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Bowser",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-flame.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Bowser",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-ground-upb.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Bowser",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-sideb-chomp.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Bowser",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-sideb-hit.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Bowser",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-sideb.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Bowser",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-upb-off-edge.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Bowser",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/bowser-upb.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Bowser",
+        "2": "Fox"
+      }
+    }
+  ]
+}

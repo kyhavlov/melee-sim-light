@@ -38,6 +38,11 @@
 #include "it/items/itsword.h"
 #include "it/items/itzeldadinfire.h"
 #include "it/items/itzeldadinfireexplode.h"
+#include "it/items/ityoshieggthrow.h"
+#include "it/items/ityoshiegglay.h"
+#include "it/items/ityoshistar.h"
+#include "it/items/itkoopaflame.h"
+#include "it/items/ityoshitongue.h"
 #include "it/itzako.h"
 #include "pl/plattack.h"
 #include "pl/plbonuslib.h"
@@ -114,6 +119,75 @@ struct sdata_ItemGXLink it_803F2F28[118] = {
 };
 
 struct ItemLogicTable it_803F3100[118] = {
+    [It_Kind_Koopa_Flame - It_Kind_Kuriboh] = {
+        ItemStateTable_KoopaFlame,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        itKoopaFlame_Logic111_DmgDealt,
+        NULL,
+        NULL,
+        itKoopaFlame_Logic111_Reflected,
+        itKoopaFlame_Logic111_Clanked,
+        itKoopaFlame_Logic111_Absorbed,
+        itKoopaFlame_Logic111_ShieldBounced,
+        itKoopaFlame_Logic111_HitShield,
+        itKoopaFlame_Logic111_EvtUnk,
+    },
+    [It_Kind_Yoshi_EggThrow - It_Kind_Kuriboh] = {
+        it_803F7118,
+        NULL,
+        NULL,
+        itYoshiEggThrow_Logic43_PickedUp,
+        NULL,
+        NULL,
+        it_802B2C04,
+        NULL,
+        NULL,
+        it_802B2E5C,
+        it_2725_Logic43_Clanked,
+        NULL,
+        it_802B2F88,
+        it_802B2E7C,
+        it_802B2FA8,
+    },
+    [It_Kind_Yoshi_EggLay - It_Kind_Kuriboh] = {
+        it_803F94A0,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_27CF_Logic114_DmgReceived,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_27CF_Logic114_EvtUnk,
+    },
+    [It_Kind_Yoshi_Star - It_Kind_Kuriboh] = {
+        it_803F7158,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        it_802B309C,
+        NULL,
+        NULL,
+        it_802B314C,
+        it_802B30C0,
+        it_802B3108,
+        it_802B312C,
+        it_802B30E4,
+        it_802B3348,
+    },
+
     [It_Kind_Fox_Laser - It_Kind_Kuriboh] = {
         it_803F67D0,
         NULL,

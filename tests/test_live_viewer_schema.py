@@ -37,7 +37,8 @@ def _external_ids(source: str) -> dict[int, int]:
 
 def test_live_viewer_supported_domain_and_assets() -> None:
     schema = (ROOT / "tools/viewer/live/schema.js").read_text()
-    adapter = (ROOT / "tools/viewer/live/viewer_adapter.js").read_text()
+    converter = (ROOT / "tools/viewer/msltrace1.js").read_text()
+    ids = (ROOT / "tools/viewer/slippi-viewer/src/common/ids.ts").read_text()
     animation_cache = (
         ROOT / "tools/viewer/slippi-viewer/src/viewer/animationCache.ts"
     ).read_text()
@@ -51,6 +52,8 @@ def test_live_viewer_supported_domain_and_assets() -> None:
         17: "Luigi", 0: "Mario", 21: "Dr. Mario", 10: "Ice Climbers",
         3: "Donkey Kong",
         25: "Ganondorf",
+        14: "Yoshi",
+        5: "Bowser",
         12: "Pikachu", 13: "Samus",
         18: "Marth",
         19: "Zelda",
@@ -68,9 +71,14 @@ def test_live_viewer_supported_domain_and_assets() -> None:
         for line in manifest.splitlines()
         if line and not line.startswith("#")
     }
-    external = _external_ids(adapter)
-    for internal_id in expected:
-        filename = Path(zips[external.get(internal_id, internal_id)]).name
+    names_match = re.search(r"characterNameByExternalId = \[(.*?)\]", ids, re.S)
+    assert names_match is not None
+    external_names = re.findall(r'"([^"]+)"', names_match.group(1))
+    external = _external_ids(converter)
+    for internal_id, name in expected.items():
+        external_id = external.get(internal_id, internal_id)
+        assert external_names[external_id] == name
+        filename = Path(zips[external_id]).name
         assert filename in packaged
 
 

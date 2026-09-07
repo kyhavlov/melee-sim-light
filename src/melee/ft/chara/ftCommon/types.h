@@ -277,7 +277,7 @@ union ftCommon_MotionVars {
     } yoshiegg;
     struct {
         /* fp+2340 */ bool x0;
-        /* fp+2344 */ UNK_T x4;
+        /* fp+2344 */ u32 x4;
         /* fp+2348 */ float x8;
         /* fp+234C */ float xC;
         /* fp+2350 */ float x10;

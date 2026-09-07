@@ -69,6 +69,45 @@ def test_python_wire_layout_matches_public_c_api() -> None:
     assert np.all(players["main_stick_y"] == 0.5)
 
 
+def test_yoshi_bowser_articles_restore_at_another_batch_index(monkeypatch) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=2, length=128, num_players=4) as env:
+        for stage in msl.Stage:
+            config = msl.MatchConfig(stage=stage, is_teams=True, players=tuple(
+                msl.PlayerConfig(character, team_id=team)
+                for character, team in zip(
+                    (msl.Character.YOSHI, msl.Character.BOWSER) * 2,
+                    (0, 1, 1, 0))))
+            env.configure_matches([config, config])
+            env.reset_all()
+
+            def step(special=False):
+                if env.t == env.length:
+                    env.reset_cursor()
+                actions = env.controller_action_view[env.t]["players"]
+                actions["buttons"] = 0
+                actions["main_stick_x"] = 0.5
+                actions["main_stick_y"] = 0.5
+                if special:
+                    actions["buttons"]["B"] = True
+                    actions["main_stick_y"][:, ::2] = 1.0
+                env.step()
+
+            for _ in range(150):
+                step()
+            for _ in range(30):
+                step(special=True)
+            assert np.any(env.current_frame[0]["items"]["exists"])
+            saved = env.save(0)
+            for _ in range(64):
+                step()
+            expected = env.current_frame[0].tobytes()
+            env.restore(1, saved)
+            for _ in range(64):
+                step()
+            assert env.current_frame[1].tobytes() == expected
+
+
 def test_doubles_continues_until_entire_team_is_eliminated(monkeypatch) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
     with msl.EnvBatch(batch_size=1, length=128, num_players=4) as env:
@@ -106,6 +145,8 @@ def test_supported_character_and_stage_enums() -> None:
         2,
         3,
         25,
+        14,
+        5,
         7,
         9,
         10,

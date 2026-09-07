@@ -1,11 +1,10 @@
 #ifndef GALE01_12CDE8
 #define GALE01_12CDE8
 
-#include <placeholder.h>
 #include <platform.h>
 
-#include "ft/forward.h"
-#include <baselib/forward.h>
+#include <melee/ft/forward.h>
+#include <sysdolphin/baselib/forward.h>
 
 #include <dolphin/mtx.h>
 
@@ -68,6 +67,5 @@
 /* 12DE88 */ void ftYs_SpecialN2_0_Coll(Fighter_GObj* gobj);
 /* 12DEB0 */ void ftYs_SpecialAirN2_1_Coll(Fighter_GObj* gobj);
 /* 12DED8 */ void ftYs_SpecialAirN2_0_Coll(Fighter_GObj* gobj);
-/* 3B75C0 */ extern Vec3 const ftYs_Unk1_803B75C0;
 
 #endif

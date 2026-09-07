@@ -121,11 +121,7 @@ float acosf(float x)
     float result = 1.0F - x * x;
     if (result > 0) {
         float guess;
-#if defined(MSL_CORE_NATIVE) && defined(__x86_64__)
-        __asm__("rsqrtss %1, %0" : "=x"(guess) : "x"(result));
-#else
         guess = __frsqrte(result);
-#endif
         guess = 0.5f * guess * (3.0f - guess * guess * result);
         guess = 0.5f * guess * (3.0f - guess * guess * result);
         guess = 0.5f * guess * (3.0f - guess * guess * result);

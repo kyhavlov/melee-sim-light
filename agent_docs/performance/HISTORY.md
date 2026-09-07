@@ -5,6 +5,70 @@ line. The current benchmark contract, concise retained summary, imported branch 
 architectural attempt records are indexed in [`README.md`](README.md). Forensic artifacts remain
 under ignored `reports/triage/`.
 
+## Bowser disproves the x86 acos estimate equivalence — 2026-09-07
+
+The Yoshi/Bowser support packet starts from `3a71888c`. Adding the matched
+Bowser flame owner exercises `itKoopaFlame_Update_Angle`'s `lbVector_Angle`
+consumer beyond the former 16-character corpus. Native x86 has a 19-frame
+flame velocity/position island in `JuvenileRedGoshawk.slp` (first 3756) and a
+four-frame island in `MustyGummyLemur.slp` (first 5569). The PPC reference
+matches both original recordings exactly.
+
+A bounded one-owner experiment replaces only `acosf`'s `rsqrtss` seed with
+`__frsqrte`, preserving the radicand, three ordered f32 Newton refinements,
+`atanf`, exceptional behavior, and every caller. Both native cases then match
+all 24,837 frames, including the live normalized-direction item bytes. The
+three rounded refinements do not guarantee a seed-independent result. The
+former 3,501,461-frame gate was valid evidence for that corpus, but its
+extrapolation to all supported gameplay is disproved.
+
+Retain the source Gekko estimate as the singular seed on every backend. Remove
+the native estimate substitution; no per-character path, approximate return,
+new state, or fallback is introduced. The rest of the completed scalar math
+and collision work remains. This is a correctness correction, with no claim
+that it preserves the prior throughput gain. Revisit requires source-exact
+results across the expanded domain and a general argument about the returned
+bits, not only the former replay set. Scratch build/validation logs are under
+`reports/triage/yoshi_bowser_port/acos-gekkoseed-*`.
+
+## Stationary fighter roots retain constraint invalidation — 2026-09-07
+
+The Bowser packet at parent `3a71888c` exposes a missing dependency in
+`msl_fighter_pose_set_root_position`: identical root coordinates caused an
+early return, although a capture RObj could point at the other fighter's
+moving bone. Native/PPC traces at Cylindrical frame 855 show the native
+victim's matrix staying clean and holding the previous attachment position;
+the source setter dirties the subtree and PPC follows Bowser's TransN2.
+The same defect appears for two rows of Sheik's capture in MildMurkyNewt.
+
+Keep the flat canonical preorder and direct root matrix publication. Traverse
+the affected descendants for constraint/IK invalidation even when the root
+position repeats, while omitting ordinary redundant matrix products. No new
+state or alternative traversal is added. The two full native fingerprints
+then equal PPC: the capture-position differences disappear completely. A
+separate diagnostic forcing compact decoder evaluation left both original
+fingerprints unchanged, ruling out the immutable integer pose table.
+
+Adding Yoshi and Bowser also grows the shared animation bank to 267,980 nodes,
+beyond its old 18-bit token. Widen that one token to uint32 and place its flags
+in the existing native trailing padding: the native pose joint stays 56 bytes;
+the 32-bit layout grows from 44 to 48 bytes. This is source-completion capacity
+work, with no claimed throughput gain. Full expanded-domain gates and the
+prior exact output locks remain the acceptance criterion.
+
+The completed character checkpoint passes `source-check`, native lifecycle and
+costume/parts census, Python team and live-article cross-index restore checks,
+and Wasm/live and production browser tests. Debug and strict release each preserve the expanded
+404-replay output locks: 339 PASS, 65 CLASSIFIED, 0 FAIL/ERROR across 3,691,888
+transitions. The 38 added replays contribute 190,427 transitions; all 20 real
+microreplays are exact on both native and PPC. The charged-smash source fix
+retires the old doubles damage classification and refreshes only that prior
+output lock; the other 365 old locks are unchanged. See
+`../YOSHI_BOWSER_SUPPORT.md` for the complete port and evidence limits.
+The character-only commit tree also passes source/native lifecycle, focused
+Python and both full debug/release gates in an isolated checkout without the
+concurrent reward additions; all 404 retained outputs remain unchanged.
+
 ## Python release library and item capacity correction — 2026-09-05
 
 Slippi-AI uses `perf/decomp-throughput` at `f3f0f299` (runtime through

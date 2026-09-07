@@ -67,6 +67,8 @@ enum {
     MSL_CORE_CHAR_CAPTAIN_FALCON = 2,
     MSL_CORE_CHAR_DONKEY = 3,
     MSL_CORE_CHAR_GANONDORF = 25,
+    MSL_CHAR_YOSHI = 14,
+    MSL_CHAR_BOWSER = 5,
     MSL_CORE_CHAR_SHEIK = 7,
     MSL_CORE_CHAR_PEACH = 9,
     MSL_CORE_CHAR_POPO = 10,
@@ -271,6 +273,10 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_DONKEY;
     case MSL_CORE_CHAR_GANONDORF:
         return CKIND_GANON;
+    case MSL_CHAR_YOSHI:
+        return CKIND_YOSHI;
+    case MSL_CHAR_BOWSER:
+        return CKIND_KOOPA;
     case MSL_CORE_CHAR_PIKACHU:
         return CKIND_PIKACHU;
     case MSL_CORE_CHAR_JIGGLYPUFF:
@@ -615,6 +621,8 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CORE_CHAR_POPO &&
             config->players[i].char_id != MSL_CORE_CHAR_DONKEY &&
             config->players[i].char_id != MSL_CORE_CHAR_GANONDORF &&
+            config->players[i].char_id != MSL_CHAR_YOSHI &&
+            config->players[i].char_id != MSL_CHAR_BOWSER &&
             config->players[i].char_id != MSL_CORE_CHAR_PIKACHU &&
             config->players[i].char_id != MSL_CORE_CHAR_JIGGLYPUFF &&
             config->players[i].char_id != MSL_CORE_CHAR_LUIGI &&
@@ -625,7 +633,7 @@ static int validate_config(MslCoreMatchConfig* config)
                     "current core supports external char_id=0 Mario, char_id=1 Fox, "
                     "char_id=2 Captain Falcon, char_id=3 Donkey Kong, "
                     "char_id=7 Sheik, char_id=9 Peach, char_id=10 Ice Climbers, "
-                    "char_id=12 Pikachu, char_id=13 Samus, "
+                    "char_id=12 Pikachu, char_id=13 Samus, char_id=14 Yoshi, char_id=5 Bowser, "
                     "char_id=15 Jigglypuff, char_id=17 Luigi, "
                     "char_id=18 Marth, "
                     "char_id=19 Zelda, char_id=21 Dr. Mario, char_id=22 Falco, "
@@ -686,6 +694,10 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
     game_data->source.fighter.costume_lists[FTKIND_DONKEY] =
         (struct UnkCostumeList){ game_data->source.fighter.donkey_costumes,
                                  5 };
+    game_data->source.fighter.costume_lists[FTKIND_KOOPA] =
+        (struct UnkCostumeList){ game_data->source.fighter.koopa_costumes, 4 };
+    game_data->source.fighter.costume_lists[FTKIND_YOSHI] =
+        (struct UnkCostumeList){ game_data->source.fighter.yoshi_costumes, 6 };
     game_data->source.fighter.costume_lists[FTKIND_GANON] =
         (struct UnkCostumeList){ game_data->source.fighter.ganon_costumes,
                                  5 };
@@ -1408,6 +1420,8 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         MSL_CORE_CHAR_PIKACHU,
         MSL_CORE_CHAR_DONKEY,
         MSL_CORE_CHAR_GANONDORF,
+        MSL_CHAR_YOSHI,
+        MSL_CHAR_BOWSER,
     };
     size_t i;
 
@@ -1494,6 +1508,15 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
     // named 32-bit gameplay scalars.
     // refs/melee/src/melee/it/{itCommonItems.h,itCharItems.h}
     // refs/slippi-ssbm-asm/Recording/SendItemInfo.s
+    if (item->kind == It_Kind_Yoshi_EggThrow ||
+        item->kind == It_Kind_Yoshi_Star ||
+        (item->kind == It_Kind_Yoshi_EggLay && source_offset != 3))
+    {
+        // EggThrow/Star never write item vars; EggLay owns only xDD4.
+        // Reused native union storage can contain widened host pointers.
+        // Keep these unowned source bytes deterministic, as for Blizzard.
+        return 0;
+    }
     if (item->kind == It_Kind_IceClimber_Ice) {
         if (source_offset == 7) {
             memcpy(&word, &item->xDD4_itemVar.climbersice.x4, sizeof(word));

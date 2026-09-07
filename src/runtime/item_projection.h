@@ -22,6 +22,9 @@ enum {
     MSL_CORE_ITEM_KIND_SHEIK_NEEDLE_THROWN = 79,
     MSL_CORE_ITEM_KIND_SHEIK_NEEDLE_HELD = 80,
     MSL_CORE_ITEM_KIND_SHEIK_VANISH = 85,
+    MSL_ITEM_KIND_YOSHI_EGG_THROW = 86,
+    MSL_ITEM_KIND_YOSHI_EGG_LAY = 87,
+    MSL_ITEM_KIND_YOSHI_STAR = 88,
     MSL_CORE_ITEM_KIND_SHEIK_CHAIN = 97,
     MSL_CORE_ITEM_KIND_PEACH_EXPLODE = 98,
     MSL_CORE_ITEM_KIND_PEACH_TURNIP = 99,
@@ -94,6 +97,15 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // This article declares no item-variable payload.
         // refs/melee/src/melee/it/items/itseakvanish.c
         return 0;
+    case MSL_ITEM_KIND_YOSHI_EGG_THROW:
+    case MSL_ITEM_KIND_YOSHI_STAR:
+        // These articles own no xDD4 payload.
+        // refs/melee/src/melee/it/items/{ityoshieggthrow.c,ityoshistar.c}
+        return 0;
+    case MSL_ITEM_KIND_YOSHI_EGG_LAY:
+        // Only xDD4 is assigned by it_802F2F34.
+        // refs/melee/src/melee/it/itCommonItems.h::itYoshiEggLay_ItemVars
+        return MSL_CORE_ITEM_MISC0;
     case MSL_CORE_ITEM_KIND_SHEIK_CHAIN:
         // The first samples are ItemLink pointers; x14/x18 are scalars.
         // refs/melee/src/melee/it/itCharItems.h::itSeakChain_ItemVars
