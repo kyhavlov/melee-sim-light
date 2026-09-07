@@ -40,6 +40,7 @@ class PlayerConfig:
     controller_port: int | None = None
     costume: int = 0
     handicap: int = 9
+    start_percent: int = 0
 
 
 @dataclass(frozen=True, slots=True)

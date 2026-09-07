@@ -34,8 +34,8 @@ struct MslBatch {
 
 _Static_assert(MSL_OK == MSL_CORE_OK, "result values must agree");
 _Static_assert(MSL_INCOMPATIBLE == MSL_CORE_INCOMPATIBLE, "result values must agree");
-_Static_assert(sizeof(MslPlayerConfig) == 6, "MslPlayerConfig layout");
-_Static_assert(sizeof(MslMatchConfig) == 48, "MslMatchConfig layout");
+_Static_assert(sizeof(MslPlayerConfig) == 7, "MslPlayerConfig layout");
+_Static_assert(sizeof(MslMatchConfig) == 52, "MslMatchConfig layout");
 _Static_assert(sizeof(MslInputPlayer) == 8, "MslInputPlayer layout");
 _Static_assert(sizeof(MslInput) == 32, "MslInput layout");
 _Static_assert(sizeof(MslItem) == 48, "MslItem layout");
@@ -70,7 +70,7 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
   uint32_t player;
 
   if (source == NULL || target == NULL || !supported_stage(source->stage) ||
-      (source->num_players != 2 && source->num_players != 4) || !isfinite(source->damage_ratio) ||
+      (source->num_players < 2 || source->num_players > 4) || !isfinite(source->damage_ratio) ||
       source->damage_ratio <= 0.0F || source->stocks == 0 ||
       source->viewpoint_player >= source->num_players || source->is_teams > 1 ||
       source->friendly_fire > 1 || source->ucf_cardinals > 1) {
@@ -103,7 +103,8 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
     if (!supported_character(src->character) || src->team < MSL_TEAM_AUTO || src->team > 2 ||
         src->facing < MSL_FACING_LEFT || src->facing > MSL_FACING_RIGHT ||
         src->controller_port < MSL_CONTROLLER_PORT_AUTO ||
-        src->controller_port >= MSL_MAX_PLAYERS || src->handicap < 1 || src->handicap > 9) {
+        src->controller_port >= MSL_MAX_PLAYERS || src->handicap < 1 || src->handicap > 9 ||
+        src->start_percent > 100) {
       return -1;
     }
 
@@ -125,6 +126,7 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
                   ((port + 1) << 1));
     dst->costume_id = src->costume;
     dst->handicap = src->handicap;
+    dst->start_percent = src->start_percent;
   }
   return 0;
 }

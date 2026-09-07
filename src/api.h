@@ -94,6 +94,7 @@ typedef struct MslPlayerConfig {
   int8_t controller_port;
   uint8_t costume;
   uint8_t handicap;
+  uint8_t start_percent; /* Initial damage, 0..100; zero on later stock respawns. */
 } MslPlayerConfig;
 
 typedef struct MslMatchConfig {

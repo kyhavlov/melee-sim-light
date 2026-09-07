@@ -5171,3 +5171,45 @@ Validation after cleanup: python-release, source-check, native-smoke, and all
 10 native API tests passed. App learner/agent/environment checks passed; the old
 mixed fake-env test was updated to pass the current player mapping and passed.
 The isolated server checkout now links data/raw to the existing extracted data.
+
+## Mixed training environments — 2026-09-07
+
+Follow-up: user requested fresh 2v1 starts at one stock and independently random
+0..100 percent. Match player configuration owns explicit starting percent;
+the existing Player_SetHUDDamage initialization feeds Fighter_Create, including
+paired entities, without a live-state setter. Slippi-AI samples per-lane seeded
+integers for the next fresh reset; stored native endgames remain authoritative.
+Update C/Python wire sizes together and test initialization, partial/automatic
+resets, sharding determinism, restored-state preservation and a mixed GPU run.
+Completed: native release/source-check/native-smoke, all ten API tests, eleven
+app environment checks and generated viewer-schema check pass. A new mixed
+512/256/512 GPU run completed 20 policy updates with 783 fresh 2v1 starts and
+finite metrics; entry/partial/automatic-reset percent checks also pass.
+
+User authorized mixed 1v1/2v1/2v2 training, plain three-player teams starts until
+natural endgames are collected, and measured negligible overhead. Native owner:
+existing public/runtime match configuration admits three players through the
+normal source VS construction; Match remains canonical. Slippi-AI owns fixed
+worker/player slices, one batched policy/learner, and the bounded event-start bank.
+The bank stores full validated native saves only on natural 2v2-to-2v1 events,
+plus short public observation/controller history; no periodic native snapshots,
+TD-error selection, character mutation, or rewritten physics. Restored endgames
+keep their original four-player Match and eliminated teammate; the three surviving
+controllers use an explicit source mapping. Admission excludes stock-shareable
+solo survivors so the absent policy cannot suppress a legal teammate revival.
+Deletion boundary: replace fixed equal-player global batch indexing in the sim
+rollout/worker adapter; retain homogeneous layouts as the same one-group case.
+No deployed source or frozen experiment library changes. Before-state inventory
+and patches: Slippi-AI reports/triage/mixed_envs_20260907/.
+Validation: native three-player API/gameplay gates, role/observation/controller
+mapping, episode/stock-share semantics, exact saved-start/prefix continuation,
+mixed PPO smoke and equivalent-work CPU/GPU overhead measurements on gigaserver.
+
+Implemented normal three-player VS construction in the existing API/runtime
+validation, plus an optional Python step mask for held replay warmup. No wire ABI
+or native Match representation changes. Native source-check, native-smoke and
+all ten API tests pass, including three-player teams across the supported roster.
+The app's paired 1,280-env frozen-policy check captured 55 natural events with
+identical final trajectories, measuring +0.20% mean update time; timing noise
+precludes a strict sub-1% bound. See the indexed performance history below for
+the comparison contract, rejected intermediate overhead and warmup accounting.

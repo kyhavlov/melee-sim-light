@@ -23,3 +23,11 @@ source checks, ten Python API tests and the guarded RL/evaluation checks pass.
 The separate periodic replay curriculum was retired after its matched experiment
 showed no measurable strength gain and 20% more time per update. Evidence and
 retained boundaries are recorded in [the integration history](performance/HISTORY.md).
+
+Mixed RL now admits normal three-player team matches, explicit starting percents,
+and masked stepping for recorded-history warmup. The paired 1,280-env recording
+check measured +0.20% mean update time with identical trajectories, but its wide
+timing interval does not establish a strict sub-1% bound. The random-percent
+follow-up passed native/API/reset checks and another mixed GPU run. See
+[mixed-training evidence](performance/HISTORY.md#mixed-training-groups-and-natural-2v1-starts--2026-09-07)
+for workload details, warmup costs and the configuration ABI change.

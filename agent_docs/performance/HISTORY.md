@@ -1123,3 +1123,71 @@ which did not remove the full-training cost. Future replay work needs a better
 selection criterion before revisiting this implementation. Evidence and frozen
 libraries remain under Slippi-AI reports/triage/replay_buffer_20260906/; previous
 implementation and full experiment notes are in the 2026-09-07 curriculum stash.
+
+## Mixed training groups and natural 2v1 starts — 2026-09-07
+
+User requested mixed 1v1/2v1/2v2 training with normal three-player team starts
+until natural endgames become available, and negligible overhead. Existing Match
+construction now accepts three players; the wire ABI and source gameplay remain
+unchanged. `EnvBatch.step_and_reset(step_mask=...)` holds saved native states
+while the app warms current recurrence with recorded public inputs. The app owns
+fixed player/worker slices and a shared 32-entry FIFO with uniform sampling;
+only natural irreversible 4-to-3 transitions capture native saves. The original
+characters/state survive restoration. No periodic native capture or TD ranking.
+
+Native source-check, native-smoke and all ten Python API tests pass. The former
+negative three-player API fixture now rejects one player; positive coverage
+includes three/four-player teams across the supported roster. The app verifies
+exact restored continuation, held warmup, controller/source mapping, rewards and
+loss masks, and runs actual mixed PPO training. The 104-step learning run includes
+100 policy updates, 93 admissions, 410 restored starts and 1,064 empty-bank fresh
+starts. Warmup consumed 0.48% of scheduled environment frames on average, rising
+to 1.65% in the final rollout; throughput excludes these held frames. This is
+functional validation, not evidence of a playing-strength gain.
+
+Initial four-process ABBA measurements (1,280 envs, 512/256/512 mode split,
+80-frame rollouts, FP16, full PPO with zero learning rate, microbatch 1,280)
+measured 2.53% recording overhead with exact matching final trajectories.
+Packing replay metadata alone did not reliably improve whole-update throughput
+(second ABBA mean-of-medians overhead 3.08%). The final implementation uses bulk
+byte copies for native history and ordinary packed inference whenever recorded
+actions are unused. Separate packed-JIT input layouts share the same policy/RNG;
+packed FP16/FP32 regression checks verify exact recurrent state and samples
+while switching ordinary/recorded signatures.
+
+A more controlled final benchmark alternated off/record arms within one process,
+with separate actors and recurrence but one frozen learner. Recording-only leaves
+reset selection unchanged to keep computation/gameplay equivalent. Across 84
+timed updates per arm after 20 startup updates, mean update time was
+0.68568485/0.68708673 seconds (+0.20%); medians 0.66626718/0.67116268 (+0.73%).
+Learner means differed by 0.04%. It captured 55 natural events; both final
+game/action/reset hashes were
+`3641a1a2daefef2d1412d359869979502162bc7acbf027f9e165d94f6339280c`.
+An eight-update block bootstrap gives a wide -4.91% to +5.57% interval for mean
+whole-update overhead: small observed overhead, not a certified sub-1% ceiling.
+Restored-start warmup and changing the mix alter useful compute and must be
+accounted for separately from recording overhead.
+
+Evidence: isolated Slippi-AI `reports/triage/mixed_envs_20260907/`, including
+before-state tarballs/patches, `bench_complete.json`, packed ABBA logs,
+`paired_fast/{paired_timings.jsonl,paired_complete.json,summary.json}`, and
+training/check logs. The original deployed checkout and frozen experiment
+libraries remain untouched. No commits or long strength experiment requested.
+
+Follow-up: fresh three-player starts now use one stock and independent uniform
+integer percents in 0..100 on every fresh reset, as requested. Per-player seeded
+draws live in the Slippi-AI adapter's next-reset configuration. Native
+`Player_SetHUDDamage` seeds the player owner before `Fighter_Create`; no live
+fighter mutation or per-frame randomization. Saved endgames keep their native
+percents. The new `start_percent` byte expands public match config from 48 to 52
+bytes and internal match config from 53 to 57; C/Python bindings and generated
+viewer schema were updated together, and libraries must be rebuilt together.
+Native release/source-check/native-smoke, ten API tests (including exact roster
+starts at 0/37/100), eleven app environment checks and viewer-schema checks pass.
+A final assertion confirms percents survive normal entry before automatic reset.
+A 24-iteration mixed GPU run (four burn-in, twenty policy updates; 512/256/512
+environments) exercised 783 fresh three-player starts with all metrics finite.
+The 900-frame limit leaves the bank empty in this short run; exact-restore tests
+and the preceding longer training run cover bank reuse. Evidence is under
+Slippi-AI `reports/triage/mixed_envs_20260907/random_percents/`. This behavior change
+was not treated as an equivalent-work throughput comparison.

@@ -11,18 +11,25 @@ from melee_sim import dtypes
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_envbatch_constructs_four_player_matches(monkeypatch) -> None:
+def test_envbatch_constructs_three_and_four_player_teams(monkeypatch) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
-    with msl.EnvBatch(batch_size=2, length=4, num_players=4) as env:
-        for character in msl.Character:
-            env.configure_matches([msl.MatchConfig(
-                players=tuple(msl.PlayerConfig(character, team_id=t)
-                              for t in (0, 1, 1, 0)), is_teams=True)] * 2)
-            env.reset_all()
-            assert np.all(env.current_frame["num_players"] == 4)
-            assert np.all(env.current_frame["slots"]["present"] == 1)
-            env.step()
-            assert np.all(env.current_frame["frame_id"] == -122)
+    for count in (3, 4):
+        with msl.EnvBatch(batch_size=2, length=4, num_players=count) as env:
+            for character in msl.Character:
+                env.configure_matches([msl.MatchConfig(
+                    players=tuple(msl.PlayerConfig(character, team_id=t, start_percent=p)
+                                  for t, p in zip((0, 1, 1, 0)[:count], (0, 37, 100, 62))),
+                    stocks=1, is_teams=True)] * 2)
+                env.reset_all()
+                assert np.all(env.current_frame["num_players"] == count)
+                assert np.all(env.current_frame["slots"]["present"].sum(axis=1) == count)
+                for row in env.current_frame:
+                    slots = row['slots'][row['slots']['present'] != 0]
+                    slots = slots[np.argsort(slots['source_player'])]
+                    np.testing.assert_array_equal(slots['percent'], (0, 37, 100, 62)[:count])
+                    np.testing.assert_array_equal(slots['stocks'], 1)
+                env.step()
+                assert np.all(env.current_frame["frame_id"] == -122)
 
 
 def test_peach_pull_throw_reserves_runtime_items(monkeypatch) -> None:
@@ -52,7 +59,7 @@ def test_peach_pull_throw_reserves_runtime_items(monkeypatch) -> None:
 def test_python_wire_layout_matches_public_c_api() -> None:
     assert dtypes.controller_input_dtype().itemsize == 112
     assert dtypes.input_dtype().itemsize == 32
-    assert dtypes.match_config_dtype().itemsize == 48
+    assert dtypes.match_config_dtype().itemsize == 52
     assert dtypes.gamestate_dtype().itemsize == 980
     assert dtypes.terminal_dtype().itemsize == 16
 
@@ -139,6 +146,11 @@ def test_envbatch_controller_step_and_arbitrary_restore(monkeypatch) -> None:
 def test_match_config_preserves_per_environment_values(monkeypatch) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
     with msl.EnvBatch(batch_size=2, length=1) as env:
+        for percent in (-1, 101, 12.5, float('nan')):
+            with np.testing.assert_raises(ValueError):
+                env.configure_match(config=msl.MatchConfig(players=(
+                    msl.PlayerConfig(msl.Character.FOX, start_percent=percent),
+                    msl.PlayerConfig(msl.Character.FOX))))
         env.configure_matches(
             [
                 msl.MatchConfig(stage=msl.Stage.BATTLEFIELD),

@@ -49,8 +49,8 @@ class EnvBatch:
         self.num_players = int(num_players)
         if self.batch_size <= 0:
             raise ValueError("batch_size must be positive")
-        if self.num_players not in (2, 4):
-            raise ValueError("num_players must be 2 or 4")
+        if self.num_players not in (2, 3, 4):
+            raise ValueError("num_players must be 2, 3, or 4")
         self.data_dir = _resolve_data_dir(data_dir)
         self.t = 0
         self._handle = ctypes.c_void_p()
@@ -259,7 +259,7 @@ class EnvBatch:
             np.copyto(self.buffers.gamestate[0], self.buffers.gamestate[self.t])
         self.t = 0
 
-    def step_and_reset(self) -> tuple[np.ndarray, np.ndarray]:
+    def step_and_reset(self, step_mask: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
         """Reset matches that finished last step, then step the rest.
 
         Matches flagged done by the previous call are reset in place: their
@@ -274,6 +274,8 @@ class EnvBatch:
         ``terminal`` is a view of the step's terminal records, whose ``done``
         field marks terminal rows.
 
+        An optional step_mask holds selected lanes without changing reset handling.
+
         Wraps the cursor (carrying the current observation to slot 0) when the
         ring is exhausted, so callers never index past the per-step buffers;
         write actions through ``current_action_frame``, which is wrap-aware.
@@ -283,11 +285,14 @@ class EnvBatch:
             self.reset_cursor()
         fresh = self._pending_reset.astype(np.bool_)
         fresh_ids = np.flatnonzero(fresh)
-        step_mask = None
+        if step_mask is not None and step_mask.shape != (self.batch_size,):
+            raise ValueError("step_mask must have shape (batch_size,)")
         if fresh_ids.size:
             self.reset_matches(fresh_ids)
+            np.logical_not(fresh, out=self._step_mask_scratch)
+            if step_mask is not None:
+                self._step_mask_scratch &= np.asarray(step_mask, dtype=np.uint8)
             step_mask = self._step_mask_scratch
-            np.logical_not(fresh, out=step_mask)
         step_t = self.t
         self.step(step_mask)
         terminal = self.terminal_view[step_t]
@@ -450,12 +455,13 @@ def _env_ids(buffers: Buffers, env_ids: Sequence[int] | np.ndarray | None) -> np
 
 
 def _default_players(num_players: int) -> tuple[PlayerConfig, ...]:
-    if num_players in (2, 4):
-        return (
+    if num_players in (2, 3, 4):
+        players = (
             PlayerConfig(Character.FOX),
             PlayerConfig(Character.FALCO),
-        ) * (num_players // 2)
-    raise ValueError("num_players must be 2 or 4")
+        ) * 2
+        return players[:num_players]
+    raise ValueError("num_players must be 2, 3, or 4")
 
 
 def _write_match_config(
@@ -482,6 +488,8 @@ def _write_match_config(
         port = -1 if player.controller_port is None else int(player.controller_port)
         if not -1 <= port < 4:
             raise ValueError("controller_port must be in 0..3")
+        if not 0 <= player.start_percent <= 100 or int(player.start_percent) != player.start_percent:
+            raise ValueError("start_percent must be an integer in 0..100")
         target = row["players"][index]
         target["character"] = int(player.character)
         target["team"] = team
@@ -489,3 +497,4 @@ def _write_match_config(
         target["controller_port"] = port
         target["costume"] = int(player.costume)
         target["handicap"] = int(player.handicap)
+        target["start_percent"] = int(player.start_percent)

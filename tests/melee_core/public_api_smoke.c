@@ -49,11 +49,24 @@ int main(int argc, char** argv) {
   }
 
   phase = "invalid config";
-  configs[1].num_players = 3;
+  configs[1].num_players = 1;
   if (msl_batch_reset(batch, configs, reset_mask, observations) != MSL_INVALID_ARGUMENT) {
     goto done;
   }
+  phase = "three-player team config";
+  configs[1].num_players = 3;
+  configs[1].is_teams = 1;
+  if (msl_batch_reset(batch, configs, reset_mask, observations) != MSL_OK ||
+      msl_batch_observe(batch, observations, terminals) != MSL_OK ||
+      observations[1].num_players != 3 || observations[1].is_teams != 1 ||
+      terminals[1].alive_count != 3 || terminals[1].alive_team_count != 2) {
+    goto done;
+  }
   configs[1].num_players = 2;
+  configs[1].is_teams = 0;
+  if (msl_batch_reset(batch, configs, reset_mask, observations) != MSL_OK) {
+    goto done;
+  }
 
   phase = "save";
   if (msl_batch_save_size(batch, 0, &save_size) != MSL_OK || save_size == 0 ||

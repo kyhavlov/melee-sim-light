@@ -72,7 +72,7 @@ static int valid_config(const MslCoreMatchConfig* config)
     uint8_t source_slots[MSL_CORE_MAX_PLAYERS];
     uint32_t player;
     if (config == NULL || !supported_stage(config->stage_id) ||
-        (config->num_players != 2 && config->num_players != 4) ||
+        (config->num_players < 2 || config->num_players > 4) ||
         !isfinite(config->match_damage_ratio) ||
         config->match_damage_ratio < 0.0F)
     {
@@ -85,6 +85,7 @@ static int valid_config(const MslCoreMatchConfig* config)
         source_slots[player] = port == 0 ? (uint8_t) player : (uint8_t) (port - 1);
         if (!supported_character(config->players[player].char_id) ||
             config->players[player].handicap > 9 ||
+            config->players[player].start_percent > 100 ||
             (config->is_teams && config->players[player].team_id > 2) ||
             source_slots[player] >= MSL_CORE_MAX_PLAYERS)
         {

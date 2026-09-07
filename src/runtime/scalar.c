@@ -595,10 +595,10 @@ static int validate_config(MslCoreMatchConfig* config)
                 "2,3,8,28,31,32\n");
         return -1;
     }
-    if (config->num_players != 0 && config->num_players != 2 &&
-        config->num_players != 4) {
+    if (config->num_players != 0 &&
+        (config->num_players < 2 || config->num_players > 4)) {
         fprintf(stderr,
-                "current core requires num_players=2 or 4 (or zero default)\n");
+                "current core requires num_players=2, 3, or 4 (or zero default)\n");
         return -1;
     }
     if (config->num_players == 0) {
@@ -640,6 +640,10 @@ static int validate_config(MslCoreMatchConfig* config)
         }
         if (config->is_teams && config->players[i].team_id > 2) {
             fprintf(stderr, "player team id must be in the source range 0..2\n");
+            return -1;
+        }
+        if (config->players[i].start_percent > 100) {
+            fprintf(stderr, "starting percent must be in 0..100\n");
             return -1;
         }
     }
@@ -1136,6 +1140,9 @@ static int match_construct(MslCoreMatch* match,
         Player_SetSlottype(slot, Gm_PKind_Human);
         Player_SetTeam(slot, match->config.players[i].team_id);
         Player_SetStocks(slot, match->config.stock_count);
+        // Player_SetHUDDamage initializes both player entities; Fighter_Create
+        // reads Player_GetDamage before entry, without damage/hitstun callbacks.
+        Player_SetHUDDamage(slot, match->config.players[i].start_percent);
         Player_SetCostumeId(slot, match->config.players[i].costume_id);
         // Standard VS forwards PlayerInitData.handicap into the player owner;
         // grab duration and several damage formulas read it at runtime.

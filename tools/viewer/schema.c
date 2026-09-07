@@ -50,6 +50,7 @@ int main(void)
     FIELD(MslCoreMatchPlayerConfig, facing_and_port, "facingAndPort");
     FIELD(MslCoreMatchPlayerConfig, costume_id, "costumeId");
     FIELD(MslCoreMatchPlayerConfig, handicap, "handicap");
+    FIELD(MslCoreMatchPlayerConfig, start_percent, "startPercent");
     puts("});");
 
     puts("export const inputPlayerOffsets = Object.freeze({");

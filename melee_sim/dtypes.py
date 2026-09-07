@@ -9,7 +9,7 @@ MAX_PLAYERS = 4
 _SIZES = {
     "controller_input": 112,
     "input": 32,
-    "match_config": 48,
+    "match_config": 52,
     "gamestate": 980,
     "terminal": 16,
 }
@@ -98,6 +98,7 @@ def match_player_config_dtype() -> np.dtype:
             ("controller_port", "i1"),
             ("costume", "u1"),
             ("handicap", "u1"),
+            ("start_percent", "u1"),
         ],
         align=False,
     )

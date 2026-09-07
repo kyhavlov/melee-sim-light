@@ -22,6 +22,7 @@ representation may justify revisiting the same broad subsystem.
 
 ## Files
 
+- [Mixed training groups and natural 2v1 starts](HISTORY.md#mixed-training-groups-and-natural-2v1-starts--2026-09-07): normal three-player teams, exact event restores, mixed PPO and recording/warmup overhead measurements.
 - [`TARGET_ARCHITECTURE.md`](TARGET_ARCHITECTURE.md): final canonical batch-native state,
   execution shape, hosted-runtime deletion boundary, throughput case, and cutover discipline for
   the 500k campaign.
