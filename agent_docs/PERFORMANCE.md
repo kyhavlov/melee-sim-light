@@ -15,3 +15,11 @@ The complete 3,501,461-frame validation gate reports 310 pass, 56 expected class
 zero failures. Source synchronization, native API/copy/save-restore and sealed-allocation smoke,
 PPC smoke, Wasm parity, and viewer/browser smoke are green. No compiler-setting experiment or
 correctness compromise is part of the checkpoint.
+
+The Slippi-AI integration additionally retains a strict PIC `python-release`
+target, source-sized Peach item/JObj reserves, team-based stockout termination,
+and source-owned destructor/color-overlay relocation fixes. Native smoke,
+source checks, ten Python API tests and the guarded RL/evaluation checks pass.
+The separate periodic replay curriculum was retired after its matched experiment
+showed no measurable strength gain and 20% more time per update. Evidence and
+retained boundaries are recorded in [the integration history](performance/HISTORY.md).

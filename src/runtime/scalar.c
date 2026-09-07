@@ -869,6 +869,8 @@ static int match_construct(MslCoreMatch* match,
     int i;
 #ifdef MSL_CORE_NATIVE
     bool has_samus = false;
+    bool has_peach = false;
+    u32 runtime_item_count;
 #endif
 
     match->random.value = 1;
@@ -1123,6 +1125,9 @@ static int match_construct(MslCoreMatch* match,
         if (match->config.players[i].char_id == MSL_CORE_CHAR_SAMUS) {
             has_samus = true;
         }
+        if (match->config.players[i].char_id == MSL_CORE_CHAR_PEACH) {
+            has_peach = true;
+        }
 #endif
         float facing = (encoded >> 1) == 0 ? (i == 0 ? 1.0F : -1.0F)
                                            : ((encoded & 1) ? 1.0F : -1.0F);
@@ -1270,11 +1275,11 @@ static int match_construct(MslCoreMatch* match,
     // full-replay reserve without imposing that count on large pools.
     // refs/melee/src/sysdolphin/baselib/mtx.c::{HSD_VecAlloc,HSD_VecFree}
     HSD_ObjAllocEnsureFree(HSD_VecGetAllocData(), 128);
-    // Item and dynamic-bone objects are bounded by the public simultaneous
-    // item contract. Keep the established source ItemLink ceiling for
+    // Item and dynamic-bone objects use the source category limits, separate
+    // from the public observation slot count. Keep the source ItemLink ceiling for
     // multi-fighter Sheik chains rather than deriving it from replay rows.
     // refs/melee/src/melee/it/{item.c,items/itseakchain.c}
-    msl_item_reserve_runtime_pools(MSL_CORE_MAX_ITEMS, 151);
+    runtime_item_count = msl_item_reserve_runtime_pools(has_peach, 151);
     // The compact construction graph no longer leaves renderer JObjs on the
     // class free list. Preserve runtime headroom for the reached source class
     // sizes: supported item/effect graphs can cross the former 64-piece JObj
@@ -1287,6 +1292,13 @@ static int match_construct(MslCoreMatch* match,
     // refs/melee/src/melee/it/items/{itpeachturnip.c,itsamusgrapple.c}
     // refs/melee/src/sysdolphin/baselib/{class.c,jobj.c}
     hsdPreallocateMemPieces(has_samus ? 256 : 128);
+    if (has_peach) {
+        // Peach's turnip graph has 17 JObjs, the largest of her reached
+        // article graphs (PlPe.dat; itpeachturnip.c::it_802BD4AC -> Item_802680CC).
+        // Cover the source item limits plus the other runtime class consumers.
+        msl_class_reserve_pieces(sizeof(HSD_JObj),
+                                (has_samus ? 256 : 128) + 17 * runtime_item_count);
+    }
 
     // This Match's source allocation pools are complete. Shared DAT graphs
     // are sealed once, after GameData has preloaded the supported domain;

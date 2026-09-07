@@ -11,6 +11,44 @@ from melee_sim import dtypes
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_envbatch_constructs_four_player_matches(monkeypatch) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=2, length=4, num_players=4) as env:
+        for character in msl.Character:
+            env.configure_matches([msl.MatchConfig(
+                players=tuple(msl.PlayerConfig(character, team_id=t)
+                              for t in (0, 1, 1, 0)), is_teams=True)] * 2)
+            env.reset_all()
+            assert np.all(env.current_frame["num_players"] == 4)
+            assert np.all(env.current_frame["slots"]["present"] == 1)
+            env.step()
+            assert np.all(env.current_frame["frame_id"] == -122)
+
+
+def test_peach_pull_throw_reserves_runtime_items(monkeypatch) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=64, length=128, num_players=4) as env:
+        env.configure_matches([msl.MatchConfig(
+            stage=tuple(msl.Stage)[i % 6], seed=i,
+            players=tuple(msl.PlayerConfig(msl.Character.PEACH, team_id=t)
+                          for t in (0, 1, 1, 0)),
+            is_teams=True, friendly_fire=True) for i in range(env.batch_size)])
+        env.reset_all()
+        peak_items = 0
+        for tick in range(8000):
+            if env.t == env.length:
+                env.reset_cursor()
+            action = env.controller_action_view[env.t]["players"]
+            action["main_stick_y"] = 0.0 if tick % 80 < 40 else 0.5
+            action["buttons"]["B"] = tick % 80 < 20
+            action["buttons"]["A"] = 40 <= tick % 80 < 60
+            env.step_and_reset()
+            peak_items = max(peak_items, int(env.current_frame["items"]["exists"].sum(axis=1).max()))
+        # The old JObj reserve failed near frame 300; the old item-object
+        # reserve failed near 6500 even after enlarging only the JObj pool.
+        assert peak_items == 15
+
+
 def test_python_wire_layout_matches_public_c_api() -> None:
     assert dtypes.controller_input_dtype().itemsize == 112
     assert dtypes.input_dtype().itemsize == 32
@@ -22,6 +60,37 @@ def test_python_wire_layout_matches_public_c_api() -> None:
     players = buffers.controller_action_view["players"]
     assert np.all(players["main_stick_x"] == 0.5)
     assert np.all(players["main_stick_y"] == 0.5)
+
+
+def test_doubles_continues_until_entire_team_is_eliminated(monkeypatch) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=1, length=128, num_players=4) as env:
+        env.configure_matches([msl.MatchConfig(
+            stage=msl.Stage.FINAL_DESTINATION,
+            players=tuple(msl.PlayerConfig(msl.Character.FOX, team_id=t)
+                          for t in (0, 1, 1, 0)), is_teams=True)])
+        env.reset_all()
+        first_elimination = None
+        for tick in range(10000):
+            if env.t == env.length:
+                env.reset_cursor()
+            actions = env.controller_action_view[env.t]["players"]
+            actions["main_stick_x"] = 0.5
+            target = 1 if first_elimination is None else 2
+            actions[0, target]["main_stick_x"] = 1.0
+            _, terminal = env.step_and_reset()
+            slots = env.current_frame["slots"][0]
+            stocks = slots["stocks"][np.argsort(slots["source_player"])]
+            if stocks[1] == 0 and first_elimination is None:
+                first_elimination = tick
+            if terminal["done"][0]:
+                assert stocks[1] == stocks[2] == 0
+                assert stocks[0] == stocks[3] == 4
+                assert terminal["alive_team_count"][0] == 1
+                assert tick > first_elimination + 120
+                break
+        else:
+            raise AssertionError("scripted team stockout never completed")
 
 
 def test_supported_character_and_stage_enums() -> None:

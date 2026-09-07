@@ -76,8 +76,7 @@ void HSD_GObj_80391304(HSD_GObjLibInitDataType* arg0)
     }
 
     if (nfuncs != 0) {
-        var_r8 = (sizeof(GObjFunc)) * nfuncs;
-        HSD_GObj_804D7810 = HSD_MemAlloc(var_r8);
+        HSD_GObj_804D7810 = alloc_pointer_array(nfuncs);
 
         var_r8 = 0;
         for (cur = arg0->funcs; cur != NULL; cur = cur->next) {

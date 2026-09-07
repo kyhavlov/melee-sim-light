@@ -633,10 +633,22 @@ void gm_80167320(int slot, bool subchar)
     }
 
     if (Player_GetStocks(slot) == 0) {
+        unsigned int alive_sides = 0;
+        int other;
+
         // The source does not create another fighter on the final stock.
-        // gm_8016AC44 only updates scene-owned costume bookkeeping; retain the
-        // gameplay-visible terminal fact locally for the headless match owner.
-        msl_match_ended = true;
+        // Standard stock elimination counts surviving players or teams.
+        // refs/melee/src/melee/gm/gm_16AE.c::{gm_GetFFAOutcome,
+        //     gm_GetTeamBattleOutcome}
+        for (other = 0; other < 6; ++other) {
+            if (Player_GetPlayerSlotType(other) != Gm_PKind_NA &&
+                Player_GetStocks(other) > 0)
+            {
+                int side = msl_is_teams ? Player_GetTeam(other) : other;
+                alive_sides |= 1U << side;
+            }
+        }
+        msl_match_ended = (alive_sides & (alive_sides - 1)) == 0;
         return;
     }
 

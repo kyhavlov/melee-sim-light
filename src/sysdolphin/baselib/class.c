@@ -413,6 +413,28 @@ void hsdPreallocateMemPieces(u32 minimum_free)
     }
 }
 
+#ifdef MSL_CORE_NATIVE
+void msl_class_reserve_pieces(s32 size, u32 minimum_free)
+{
+    HSD_MemoryEntry* entry = GetMemoryEntry((size + 31) / 32 - 1);
+    HSD_FreeList* pieces = NULL;
+    u32 needed = entry->nb_free < minimum_free ? minimum_free - entry->nb_free : 0;
+    // Keep temporary pieces live until the source free list has grown to its
+    // initialization bound. Only this reached size class receives the reserve.
+    while (needed-- != 0) {
+        HSD_FreeList* piece = hsdAllocMemPiece(size);
+        HSD_ASSERT(0x1003, piece != NULL);
+        piece->next = pieces;
+        pieces = piece;
+    }
+    while (pieces != NULL) {
+        HSD_FreeList* next = pieces->next;
+        hsdFreeMemPiece(pieces, size);
+        pieces = next;
+    }
+}
+#endif
+
 /// _hsdClassAlloc
 HSD_Class* _hsdClassAlloc(HSD_ClassInfo* info)
 {

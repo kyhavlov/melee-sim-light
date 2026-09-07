@@ -377,6 +377,11 @@ $(NATIVE_RELEASE_O0_OBJS): override NATIVE_CFLAGS += -O0
 $(NATIVE_RELEASE_O1_OBJS): override NATIVE_CFLAGS += -O1 $(RELEASE_ARCH_FLAGS)
 $(NATIVE_RELEASE_O2_OBJS): override NATIVE_CFLAGS += -O2 $(RELEASE_ARCH_FLAGS)
 $(NATIVE_RELEASE_OPT_OBJS): override NATIVE_CFLAGS += -O3 $(RELEASE_ARCH_FLAGS)
+$(patsubst $(NATIVE_OBJ_DIR)/%,$(PYTHON_OBJ_DIR)/%,$(NATIVE_RELEASE_O0_OBJS)): override NATIVE_CFLAGS += -O0
+$(patsubst $(NATIVE_OBJ_DIR)/%,$(PYTHON_OBJ_DIR)/%,$(NATIVE_RELEASE_O1_OBJS)): override NATIVE_CFLAGS += -O1 $(RELEASE_ARCH_FLAGS)
+$(patsubst $(NATIVE_OBJ_DIR)/%,$(PYTHON_OBJ_DIR)/%,$(NATIVE_RELEASE_O2_OBJS)): override NATIVE_CFLAGS += -O2 $(RELEASE_ARCH_FLAGS)
+$(patsubst $(NATIVE_OBJ_DIR)/%,$(PYTHON_OBJ_DIR)/%,$(NATIVE_RELEASE_OPT_OBJS)): override NATIVE_CFLAGS += -O3 $(RELEASE_ARCH_FLAGS)
+$(PYTHON_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += $(RELEASE_ARCH_FLAGS)
 endif
 
 NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_SUBSYSTEM_PROFILE)|$(NATIVE_RELEASE_O0_OBJS)|$(NATIVE_RELEASE_O1_OBJS)|$(NATIVE_RELEASE_O2_OBJS)|$(NATIVE_RELEASE_OPT_OBJS)
@@ -401,13 +406,21 @@ native: $(NATIVE_BINARY)
 
 python-library: $(PYTHON_LIBRARY)
 
-native-release:
+.PHONY: python-release strict-release-flags
+python-release: strict-release-flags
+	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" python-library \
+		PYTHON_BUILD="$(BUILD_ROOT)/python-release" \
+		NATIVE_CFLAGS="$(NATIVE_RELEASE_CFLAGS)" NATIVE_RELEASE_PROFILE=1
+
+strict-release-flags:
 	@case "$(NATIVE_RELEASE_CFLAGS) $(RELEASE_ARCH_FLAGS) $(NATIVE_LINK_FLAGS)" in \
 		*Ofast*|*fast-math*|*unsafe-math*|*finite-math*|*associative-math*|*reciprocal-math*|*fp-contract=fast*) \
 			echo "unsafe floating-point flag in strict release build" >&2; exit 2;; \
 		*flto*) \
 			echo "LTO is not validated for the source-shaped gameplay build" >&2; exit 2;; \
 	esac
+
+native-release: strict-release-flags
 	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" native \
 		NATIVE_BUILD="$(NATIVE_RELEASE_BUILD)" \
 		NATIVE_CFLAGS="$(NATIVE_RELEASE_CFLAGS)" NATIVE_RELEASE_PROFILE=1

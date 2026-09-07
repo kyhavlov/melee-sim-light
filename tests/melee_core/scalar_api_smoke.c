@@ -1,5 +1,9 @@
 #include "runtime/scalar.h"
 #include "runtime/wire.h"
+#include "runtime/context.h"
+#include "runtime/match.h"
+#include "gm/gm_1601.h"
+#include "pl/player.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,5 +51,34 @@ int main(int argc, char** argv)
         fprintf(stderr, "private scalar API produced an invalid first row\n");
         return 1;
     }
+    Player_SetStocks(match.source_slots[0], 0);
+    gm_80167320(match.source_slots[0], false);
+    if (!match.rules.ended) {
+        fprintf(stderr, "singles last stock did not end the match\n");
+        return 1;
+    }
+    config.num_players = 4;
+    config.is_teams = 1;
+    config.players[2].char_id = config.players[0].char_id;
+    config.players[3].char_id = config.players[0].char_id;
+    config.players[1].team_id = config.players[2].team_id = 1;
+    if (msl_core_match_reset(&match, &game_data, &config, &previous_input) != 0) {
+        return 1;
+    }
+    msl_core_bind_match(&match);
+    msl_core_bind_match_rules(&match.rules);
+    Player_SetStocks(match.source_slots[1], 0);
+    gm_80167320(match.source_slots[1], false);
+    if (match.rules.ended) {
+        fprintf(stderr, "doubles ended with a living teammate\n");
+        return 1;
+    }
+    Player_SetStocks(match.source_slots[2], 0);
+    gm_80167320(match.source_slots[2], false);
+    if (!match.rules.ended) {
+        fprintf(stderr, "doubles team elimination did not end the match\n");
+        return 1;
+    }
+    msl_core_match_destroy(&match);
     return 0;
 }

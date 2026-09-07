@@ -1,5 +1,7 @@
 #include "runtime/scalar.h"
 #include "runtime/observation.h"
+#include "ft/types.h"
+#include "it/types.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -200,6 +202,35 @@ static int observation_projection_matches(const MslCoreMatch* match,
     return 1;
 }
 
+/* Nested color loops overlay pointer/count slots beyond CommandInfo's
+ * declared three entries; every owning object must relocate all six. */
+static int color_return_slots_registered(void)
+{
+    const MslRelocType types[] = { MSL_RELOC_FIGHTER, MSL_RELOC_FIGHTER,
+                                  MSL_RELOC_FIGHTER, MSL_RELOC_ITEM };
+    const size_t bases[] = { offsetof(Fighter, x408), offsetof(Fighter, x488),
+                             offsetof(Fighter, x508),
+                             offsetof(Item, x548_colorOverlay) };
+    size_t owner, slot;
+    for (owner = 0; owner < 4; ++owner) {
+        const MslRelocTypeDesc* desc = &msl_reloc_type_descs[types[owner]];
+        for (slot = 0; slot < 6; ++slot) {
+            size_t offset = bases[owner] + offsetof(ColorOverlay, x10_ptr2) +
+                            slot * sizeof(void*);
+            uint32_t field;
+            for (field = 0; field < desc->pointer_count; ++field) {
+                if (desc->pointer_offsets[field] == offset) break;
+            }
+            if (field == desc->pointer_count) {
+                fprintf(stderr, "missing color return slot: owner=%zu slot=%zu\n",
+                        owner, slot);
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
 int main(int argc, char** argv)
 {
     enum {
@@ -233,6 +264,8 @@ int main(int argc, char** argv)
 #endif
     int match_index;
     int frame;
+
+    if (!color_return_slots_registered()) return 1;
 
     if (argc != 2) {
         fprintf(stderr, "usage: %s GAME_DATA\n", argv[0]);

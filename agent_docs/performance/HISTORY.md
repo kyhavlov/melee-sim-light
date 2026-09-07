@@ -5,6 +5,42 @@ line. The current benchmark contract, concise retained summary, imported branch 
 architectural attempt records are indexed in [`README.md`](README.md). Forensic artifacts remain
 under ignored `reports/triage/`.
 
+## Python release library and item capacity correction — 2026-09-05
+
+Slippi-AI uses `perf/decomp-throughput` at `f3f0f299` (runtime through
+`8cbd742c`). `python-release` now builds PIC objects in a separate directory
+with the existing strict per-source native release profiles and unsafe-FP/LTO
+rejection. No new compiler optimization was admitted.
+
+A 512-environment Fox/Peach doubles RL run exposed two initialization capacity
+errors. The first sealed-arena abort was a turnip JObj allocation after the
+128-piece reserve was exhausted. Reserving 256 pieces alone was rejected: a
+scripted 64-match pull/throw probe then exhausted the 15-object Item pool near
+frame 6500. The observation's 15 slots are not the source gameplay limit:
+ItCo.dat permits 80 category-8 character articles and 40 category-0 common items.
+
+Item and DynamicBone reservations now use those source limits, including
+common items when Peach is configured. Only the JObj size class gets extra
+Peach article headroom: 17 joints per possible item, the maximum reached
+Peach graph size, in addition to the existing runtime headroom. The arena stays
+sealed and the 3 MiB per-match ceiling remains unchanged. This is a correctness
+and capacity fix, not a claimed native throughput optimization.
+
+On gigaserver, the release library passes 768,000 scripted Peach frames, all
+nine Python API tests (including a 512,000-frame regression and four-player
+construction across the full roster), and `native-smoke` including the
+construction census and copy/save/restore/allocation checks. Logs live under
+Slippi-AI `reports/triage/decomp_fp16_rl_20260905/`. End-to-end RL throughput is
+reported separately in Slippi-AI `docs/decomp_fp16_rl.md`.
+
+The completed-game audit also found premature doubles termination in
+`runtime/match.c::gm_80167320`: the first eliminated player ended the match.
+The handler now applies `gm_GetFFAOutcome` / `gm_GetTeamBattleOutcome`'s
+surviving-side criterion. Native scalar regression covers singles and both
+doubles eliminations; a full scripted Python game verifies that surviving
+teammates continue playing. The earlier RL evaluation is superseded, and the
+final Slippi-AI demonstration starts fresh with this correction.
+
 ## Ice Climbers item-output canonicalization — 2026-08-03
 
 Ice, Blizzard, and Belay now publish only source-defined gameplay bytes in the four Slippi item
@@ -1074,3 +1110,16 @@ The final merge-review reduction was rechecked with three adjacent pre-cleanup-P
 under the same transient host load. Resident-256 medians move 52,347.3 to 51,354.5 cycles/frame
 (-1.90%, 83,575 candidate FPS); resident-512 medians move 46,100.2 to 45,855.3 (-0.53%, 93,598
 candidate FPS). Both digests remain unchanged, so the reduction is retained as performance-neutral.
+
+## Replay curriculum retired — 2026-09-07
+
+The matched 1,000-update experiment found no measurable playing-strength benefit
+and cost 20.0% more time per update. User requested stashing the replay/drill
+implementation. Capture/seal optimization and the companion are no longer active;
+the source-owned destructor/color-return relocation corrections remain, with the
+context-smoke coverage. Per-capture hashing had previously cost 96.2% in the native
+64-lane screen; admission-time sealing reduced that isolated overhead to 7.24%,
+which did not remove the full-training cost. Future replay work needs a better
+selection criterion before revisiting this implementation. Evidence and frozen
+libraries remain under Slippi-AI reports/triage/replay_buffer_20260906/; previous
+implementation and full experiment notes are in the 2026-09-07 curriculum stash.

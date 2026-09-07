@@ -412,16 +412,24 @@ struct ColorOverlay {
     s32 x4_pri;   // 0x4  this colanims priority, lower = will persist
     union ColorOverlay_x8_t* x8_ptr1; // 0x8
     s32 xC_loop;                      // 0xc
-    s32* x10_ptr2;                    // 0x10
-    s32 x14;                          // 0x14
-    s32* x18_alloc;                   // 0x18
-    s32 x1c;                          // 0x1c
-    s32 x20;                          // 0x20
-    s32 x24;                          // 0x24
+    // Color scripts use this prefix as CommandInfo's return stack. Its
+    // declared three slots are incomplete: nested color scripts use six.
+    // Expose those pointer/count aliases without changing the source layout.
     union {
-        enum_t i;
-        struct ColorOverlay_UnkInner* ptr;
-    } x28_colanim;            // 0x28, id for the color animation in effect
+        struct {
+            s32* x10_ptr2;            // 0x10
+            s32 x14;                 // 0x14
+            s32* x18_alloc;           // 0x18
+            s32 x1c;                 // 0x1c
+            s32 x20;                 // 0x20
+            s32 x24;                 // 0x24
+            union {
+                enum_t i;
+                struct ColorOverlay_UnkInner* ptr;
+            } x28_colanim;
+        };
+        union CmdUnion* command_returns[6];
+    };
     GXColor x2C_hex;          // 0x2C
     f32 x30_color_red;        // 0x30
     f32 x34_color_green;      // 0x34

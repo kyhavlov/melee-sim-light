@@ -111,11 +111,19 @@ static HSD_ObjAllocData item_dynamic_bones_alloc_data;
 HSD_ObjAllocData item_link_alloc_data;
 
 #ifdef MSL_CORE_NATIVE
-void msl_item_reserve_runtime_pools(u32 item_count, u32 link_count)
+u32 msl_item_reserve_runtime_pools(bool common_items, u32 link_count)
 {
+    // Item_802674AC assigns supported fighter articles to category 8 and
+    // Peach's rare pulls to category 0. Item_8026784C enforces these separate
+    // ItCo.dat limits; the public observation's 15 slots are not a spawn cap.
+    u32 item_count = it_804D6D28->x1C;
+    if (common_items) {
+        item_count += it_804D6D28->x0;
+    }
     HSD_ObjAllocEnsureFree(&item_alloc_data, item_count);
     HSD_ObjAllocEnsureFree(&item_dynamic_bones_alloc_data, item_count);
     HSD_ObjAllocEnsureFree(&item_link_alloc_data, link_count);
+    return item_count;
 }
 #endif
 #ifndef MSL_CORE_HOSTED

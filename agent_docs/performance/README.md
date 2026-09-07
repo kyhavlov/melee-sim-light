@@ -33,6 +33,9 @@ representation may justify revisiting the same broad subsystem.
   the runtime.
 - [`HISTORY.md`](HISTORY.md): detailed retained evidence and the legacy bounded negative-result
   ledger.
+- [Python release library and item capacity correction](HISTORY.md#python-release-library-and-item-capacity-correction--2026-09-05): strict PIC release profiles,
+  rejected partial Peach reservations, source-bounded item pools, and full-team
+  RL validation.
 - [`JOURNAL_2026-07-23.md`](JOURNAL_2026-07-23.md): cumulative scalar-owner optimization journal
   imported from the historical `melee-sim-light-decompport` checkout, including its retained cuts,
   rejected cuts, controlled measurements, and owner profile.
@@ -188,3 +191,5 @@ experiments are grouped here by the lesson they test:
 
 When a new result supersedes one of these conclusions, update the relevant attempt record and this
 index in the same change.
+
+- [Replay curriculum retired](HISTORY.md#replay-curriculum-retired--2026-09-07): negative training result; experiment stashed, general relocation fixes retained.

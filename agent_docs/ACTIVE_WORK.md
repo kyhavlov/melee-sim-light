@@ -5095,3 +5095,79 @@ evidence and revisit criteria are in
   retained performance result. Preserve the earlier dense canonical matrix and
   lossless compact-sample work while inventorying this packet for removal; do
   not blanket-delete it without the required salvage inventory and approval.
+
+## 2026-09-05 Slippi-AI Python release library
+
+Owner: root Makefile. Reuse the existing strict native release optimization
+allowlists for Python PIC objects and expose a separate `python-release` target.
+Consumers: Slippi-AI decomp RL on gigaserver via `MSL_CORE_LIBRARY`.
+No gameplay state, source profiles, or API representation changes. Debug and
+release object directories remain separate. Validation will compare bounded
+native API behavior and run real Slippi-AI RL/evaluation through the release
+library; every workload is guarded by Discord activity on gigaserver.
+
+The doubles integration exposed an API constructor bug: `EnvBatch(num_players=4)`
+called `_default_players(4)`, which raised before callers could configure the
+match. Defaults now repeat Fox/Falco for four slots; explicit match configuration
+continues to own characters and teams. The public Python API regression covers
+construction, reset, and stepping. The release target shares the native target's
+unsafe compiler-flag rejection. No native gameplay sources changed.
+
+2026-09-05 long RL result: Fox/Peach doubles at 512 environments aborts a
+worker around update 75 with `msl_memory_alloc(owner=1,sealed=1,size=1024)`
+(`used=801036`, capacity 3 MiB). Eight bounded API tests did not reach this.
+Investigate the exact runtime allocation owner with a separate debug library;
+do not unseal arenas or weaken the no-allocation invariant. Preserve the
+failed run at Slippi-AI `reports/triage/decomp_fp16_rl_20260905/demo.log`.
+
+Root cause confirmed by a 64-match scripted Peach pull/throw probe in both
+debug and release builds. `ftPe_SpecialLw::spawnVeg -> it_802BD4AC ->
+Item_802680CC -> HSD_JObjLoadJoint -> hsdAllocMemPiece` exhausts the 128-piece
+reserve. The extracted turnip graph has 17 JObjs; Peach's other reached article
+graphs have at most 14. A 256-piece reserve cleared that failure but then hit
+the 15-object Item pool near frame 6500. ItCo.dat permits 80 character items
+and 40 common items; 15 is only the public observation slot count.
+
+Final owners: `item.c` derives Item/DynamicBone pool capacity from the source
+category limits; `scalar.c` enables common-item capacity when Peach is present
+and reserves 17 joints per possible Peach item plus existing runtime headroom;
+`class.c::msl_class_reserve_pieces` reserves only that reached size class.
+All allocation remains in initialization. Temporary diagnostics are removed.
+The 768,000-frame probe passes, as do all nine Python API tests (including
+four-player construction for every supported character and a 512,000-frame
+regression) and `native-smoke` with the complete construction census.
+
+2026-09-05 terminal audit: doubles evaluation exposed `gm_80167320`
+ending a match at the first player's last stock, while another member of
+that team remained alive. Keep the canonical terminal flag in MatchRules;
+replace the unconditional assignment with the source stock-elimination
+criterion from `gm_16AE.c::{gm_GetFFAOutcome,gm_GetTeamBattleOutcome}`:
+at most one player (singles) or team (doubles) retains stocks. Preserve
+stock stealing and final-stock fighter teardown. Validate source callbacks
+and full Python API games, then rerun the RL demonstration/evaluation.
+
+Validation: native-smoke passed with the singles/doubles callback regression;
+the scripted full Python doubles game passed. A fresh 150-policy-update RL
+run completed without allocation failures. Evaluation won 128–0 plus 32–0
+on a second seed set with reversed model arguments; all 160 terminal records
+were independently checked to contain a fully eliminated losing team.
+Final steady RL throughput was 47,449 unique environment FPS (33,722 including
+startup and saves). Earlier premature-terminal results are superseded.
+
+## Curriculum cleanup — 2026-09-07
+
+User requested stashing the unsuccessful replay/drill experiments while retaining
+the foundations for mixed singles, doubles, and asymmetric endgames. Removed the
+native curriculum companion, capture/seal split, and drill-only position helper.
+Canonical state remains MslBatch/Match; ordinary public save/restore owns snapshots.
+Retained the pre-experiment release/item-capacity/four-player/whole-team-terminal
+patch and source-owned destructor/color-stack relocation fixes with context smoke.
+The relocation owners are gobjinit.c and lb/types.h; generated metadata serves all
+copy/save/restore consumers without custom restore logic. No new mixed-start API.
+Salvage inventory and full before-state archives: Slippi-AI
+reports/triage/experiment_cleanup_20260907/. Full native stash:
+165fcc34f3d5ffe4bba5d33ab6a3bec8be7708ff (baseline and relocation fixes reapplied).
+Validation after cleanup: python-release, source-check, native-smoke, and all
+10 native API tests passed. App learner/agent/environment checks passed; the old
+mixed fake-env test was updated to pass the current player mapping and passed.
+The isolated server checkout now links data/raw to the existing extracted data.

@@ -450,12 +450,12 @@ def _env_ids(buffers: Buffers, env_ids: Sequence[int] | np.ndarray | None) -> np
 
 
 def _default_players(num_players: int) -> tuple[PlayerConfig, ...]:
-    if num_players == 2:
+    if num_players in (2, 4):
         return (
             PlayerConfig(Character.FOX),
             PlayerConfig(Character.FALCO),
-        )
-    raise ValueError("players must be provided for a four-player match")
+        ) * (num_players // 2)
+    raise ValueError("num_players must be 2 or 4")
 
 
 def _write_match_config(
