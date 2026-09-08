@@ -8,6 +8,25 @@ built on the [SSBM Decompilation](https://github.com/doldecomp/melee) project.
 The simulator core is C. The public Python package is `melee_sim`, with a thin
 NumPy API over native batch execution.
 
+Currently supports all competitive stages, and all characters except for Kirby, Mewtwo,
+Mr. Game & Watch, Pichu, and Roy.
+
+Gameplay should be 1:1 parity with vanilla Melee/Slippi, with the following remaining exception:
+
+- Offscreen magnifier damage isn't frame-exact: 1% ticks can shift, affecting knockback and survival.
+  Melee gates this damage through rendering, which can lag gameplay updates. The sim uses one
+  deterministic visibility update per step; emulating console display/polling timing is outside its RL scope.
+
+A few other exceptions prevent exact Slippi replay reproduction: historical rounding differences,
+missing raw inputs, and uninitialized recorded bytes. These don't represent missing gameplay mechanics
+for RL; reproducing them is either not useful or impossible with the information recorded.
+
+Benchmarks:
+| CPU | Batch size | Per-core FPS |
+| ---: | ---: | ---: |
+| AMD Ryzen 9 9950X3D | 256 | 116,598 |
+| AMD Ryzen 9 9950X3D | 512 | 120,618 |
+
 ## Quick Start
 
 Prerequisites:
