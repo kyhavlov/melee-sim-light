@@ -1,5 +1,7 @@
 #include "ftNs_AttackHi4.h"
 
+#include <MetroTRK/intrinsics.h>
+
 #include "ftNs_Init.h"
 
 #include "ft/fighter.h"
@@ -80,10 +82,14 @@ static void ftNs_AttackHi4_YoyoApplyDamage(float unk_float, HSD_GObj* gobj)
 
             charge_duration = ness_attr->xAC_YOYO_CHARGE_DURATION;
             charge_duration2 = unk_float / charge_duration;
-            damage_mul = ness_attr->xB0_YOYO_DAMAGE_MUL * mul - 1.0f;
+            // GALE01 0x80114FC0/0x80114FC4: both steps of the charge
+            // damage scale are fused.
+            damage_mul =
+                __fmsubs(mul, ness_attr->xB0_YOYO_DAMAGE_MUL, 1.0f);
 
             final_damage =
-                fp->x914->damage * (damage_mul * charge_duration2 + 1.0f);
+                fp->x914->damage *
+                __fmadds(damage_mul, charge_duration2, 1.0f);
 
             ftColl_8007ABD0(&fp->x914[0], final_damage, gobj);
         }
@@ -250,12 +256,14 @@ void ftNs_AttackHi4_YoyoSetHitPosUnk(HSD_GObj* gobj, float pos_unk)
 
     sp30 = fp->fv.ns.yoyo_hitbox_pos;
     pos_update = 1.0f - pos_unk;
+    // GALE01 0x801153B8/0x801153CC/0x801153E0: MWCC rounds the trailing
+    // product and contracts the leading one into the add.
     fp->fv.ns.yoyo_hitbox_pos.x =
-        (float) ((sp3C.x * pos_unk) + (sp30.x * pos_update));
+        __fmadds(sp3C.x, pos_unk, sp30.x * pos_update);
     fp->fv.ns.yoyo_hitbox_pos.y =
-        (float) ((sp3C.y * pos_unk) + (sp30.y * pos_update));
+        __fmadds(sp3C.y, pos_unk, sp30.y * pos_update);
     fp->fv.ns.yoyo_hitbox_pos.z =
-        (float) ((sp3C.z * pos_unk) + (sp30.z * pos_update));
+        __fmadds(sp3C.z, pos_unk, sp30.z * pos_update);
 }
 
 bool ftNs_AttackHi4_YoyoCheckNoObstruct(HSD_GObj* gobj)
@@ -282,7 +290,8 @@ bool ftNs_AttackHi4_YoyoCheckNoObstruct(HSD_GObj* gobj)
         sp14 = fp->fv.ns.yoyo_hitbox_pos;
         sp20 = sp14;
         sp20.y += fp->x34_scale.y;
-        sp14.y += -1.0f * fp->x34_scale.y;
+        // GALE01 0x801154FC: the mirrored-scale offset fuses.
+        sp14.y = __fmadds(-1.0f, fp->x34_scale.y, sp14.y);
         if ((ftNs_AttackHi4_YoyoCheckEnvColl(gobj, &sp20, &sp14, 1.5f) &
              Collide_FloorPush) != 0)
         {
@@ -410,15 +419,17 @@ void ftNs_AttackHi4_YoyoSetChargeDamage(HSD_GObj* gobj)
     if ((0.0f != smashChargeFrames) &&
         ((s32) fighter_data2->x914->state == HitCapsule_Enabled))
     {
-        ftColl_8007ABD0(fighter_data2->x914,
-                        (u32) (fighter_data2->x914->damage *
-                               ((((0.0039059999398887157f *
-                                   ness_attr->xB0_YOYO_DAMAGE_MUL) -
-                                  1.0f) *
-                                 (smashChargeFrames /
-                                  ness_attr->xAC_YOYO_CHARGE_DURATION)) +
-                                1.0f)),
-                        gobj);
+        // GALE01 0x80115748/0x8011574C: the smash-charge damage scale
+        // contracts into fmsubs and fmadds around the charge ratio.
+        ftColl_8007ABD0(
+            fighter_data2->x914,
+            (u32) (fighter_data2->x914->damage *
+                   __fmadds(__fmsubs(0.0039059999398887157f,
+                                     ness_attr->xB0_YOYO_DAMAGE_MUL, 1.0f),
+                            smashChargeFrames /
+                                ness_attr->xAC_YOYO_CHARGE_DURATION,
+                            1.0f)),
+            gobj);
     }
 }
 
@@ -699,7 +710,9 @@ void ftNs_AttackHi4_Anim(HSD_GObj* gobj)
                  0) &&
                 (sp24 = fighter_data2->fv.ns.yoyo_hitbox_pos, sp18 = sp24,
                  sp18.y += fighter_data2->x34_scale.y,
-                 sp24.y += -1.0f * fighter_data2->x34_scale.y,
+                 // GALE01 0x80115E10: the mirrored-scale offset fuses.
+                 sp24.y = __fmadds(-1.0f, fighter_data2->x34_scale.y,
+                                   sp24.y),
                  (((ftNs_AttackHi4_YoyoCheckEnvColl(gobj, &sp18, &sp24, 1.5f) &
                     Collide_FloorPush) == 0) == 0)))
             {
@@ -964,12 +977,14 @@ void ftNs_AttackHi4Release_Phys(
         ftNs_AttackHi4_YoyoSetUnkPos(gobj, &sp24);
         sp30 = fighter_data2->fv.ns.yoyo_hitbox_pos;
         temp_f2 = 1.0f - phi_f31;
+        // GALE01 0x801163A8/0x801163BC/0x801163D0: the release-frame
+        // hitbox lerp fuses exactly like the charge-frame one.
         fighter_data2->fv.ns.yoyo_hitbox_pos.x =
-            (float) ((sp24.x * phi_f31) + (sp30.x * temp_f2));
+            __fmadds(sp24.x, phi_f31, sp30.x * temp_f2);
         fighter_data2->fv.ns.yoyo_hitbox_pos.y =
-            (float) ((sp24.y * phi_f31) + (sp30.y * temp_f2));
+            __fmadds(sp24.y, phi_f31, sp30.y * temp_f2);
         fighter_data2->fv.ns.yoyo_hitbox_pos.z =
-            (float) ((sp24.z * phi_f31) + (sp30.z * temp_f2));
+            __fmadds(sp24.z, phi_f31, sp30.z * temp_f2);
         return;
     }
     fighter_data3 = GET_FIGHTER(gobj);

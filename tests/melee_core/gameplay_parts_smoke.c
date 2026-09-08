@@ -138,11 +138,13 @@ static int verify_constructed_match(const FighterSpec* fighter, int part_count,
         int physical = ftParts_8007506C(fighter->kind, part) == 0;
 
         if (!physical) {
-            if (joint != NULL) {
-                fprintf(stderr, "%s nonphysical part %d has a JObj\n",
-                        fighter->name, part);
-                return -1;
-            }
+            // ftParts_SetupParts skips accessory parts, but a character
+            // OnLoad may then bind its loaded accessory JObj there: Link and
+            // Young Link store the sword accessory at the Fighter_804D6540
+            // entry's x0 slot through ftParts_800753D4/ftParts_80074194, so
+            // no skeleton-admission invariant applies to these slots.
+            // refs/melee/src/melee/ft/ftparts.c::{ftParts_SetupParts,
+            //   ftParts_800753D4}
             continue;
         }
         if (joint == NULL ||
@@ -198,9 +200,12 @@ int main(int argc, char** argv)
     { FTKIND_POPO, 10, "Popo" },
     { FTKIND_DONKEY, 3, "Donkey Kong" },
     { FTKIND_GANON, 25, "Ganondorf" },
-    { FTKIND_YOSHI, 14, "Yoshi" },
     { FTKIND_KOOPA, 5, "Bowser" },
     { FTKIND_PIKACHU, 12, "Pikachu" },
+    { FTKIND_YOSHI, 14, "Yoshi" },
+    { FTKIND_NESS, 8, "Ness" },
+    { FTKIND_LINK, 6, "Link" },
+    { FTKIND_CLINK, 20, "Young Link" },
         { FTKIND_MARS, 18, "Marth" },   { FTKIND_ZELDA, 19, "Zelda" },
         { FTKIND_FALCO, 22, "Falco" },
     };

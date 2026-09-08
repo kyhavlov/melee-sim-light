@@ -7,6 +7,7 @@
 #include <sysdolphin/baselib/gobj.h>
 #include <sysdolphin/baselib/id.h>
 #include <sysdolphin/baselib/jobj.h>
+#include <sysdolphin/baselib/mobj.h>
 #include <sysdolphin/baselib/mtx.h>
 #include <sysdolphin/baselib/object.h>
 #include <sysdolphin/baselib/robj.h>
@@ -626,14 +627,65 @@ bool ftAnim_8006F368(Fighter* fp, Fighter_Part part)
     return false;
 }
 
+#ifdef MSL_CORE_HOSTED
+// Retail ftAnim_8006F3DC has no return statement on its no-aobj path (the
+// BUGFIX return below is decomp-only): the DOL falls through and hands back
+// whatever f1 last held. During the fighter anim tick the final f1 write is
+// HSD_AObjInterpretAnim's trailing end-frame load (GALE01 0x803642C0) for
+// the last evaluated costume material-anim AObj, so the published frame is
+// the costume matanim end frame. Yoshi is the only admitted fighter with
+// trackless motion rows (the egg-shield poses live in the costume model,
+// not a figatree), and his egg matanims share one end frame -- the same
+// value ftYs_Init_OnLoad captures into the ext-attr matanim length under
+// the source's "yoshi matanim frame not same" assert. Derive it from the
+// same immutable costume archive data here.
+// refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+// refs/melee/src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_8012B6E8
+float msl_costume_matanim_end_frame(Fighter* fp)
+{
+    HSD_MatAnimJoint* stack[64];
+    int depth = 0;
+    HSD_MatAnimJoint* joint =
+        CostumeListsForeachCharacter[fp->kind]
+            .costume_list[fp->x619_costume_id]
+            .x4;
+
+    while (joint != NULL || depth > 0) {
+        HSD_MatAnim* matanim;
+        if (joint == NULL) {
+            joint = stack[--depth];
+            continue;
+        }
+        for (matanim = joint->matanim; matanim != NULL;
+             matanim = matanim->next)
+        {
+            if (matanim->aobjdesc != NULL) {
+                return matanim->aobjdesc->end_frame;
+            }
+        }
+        if (joint->next != NULL && depth < 64) {
+            stack[depth++] = joint->next;
+        }
+        joint = joint->child;
+    }
+    return 0.0F;
+}
+#endif
+
 float ftAnim_8006F3DC(Fighter_GObj* fighter_gobj)
 {
     Fighter* fp = GET_FIGHTER(fighter_gobj);
 
 #ifdef MSL_CORE_NATIVE
-    return msl_fighter_pose_tree_frame(
-        fp->x8A4_animBlendFrames == 0.0F ? GET_JOBJ(fighter_gobj)
-                                        : fp->x8AC_animSkeleton);
+    {
+        HSD_JObj* root = fp->x8A4_animBlendFrames == 0.0F
+                             ? GET_JOBJ(fighter_gobj)
+                             : fp->x8AC_animSkeleton;
+        if (!msl_fighter_pose_tree_has_animation(root)) {
+            return msl_costume_matanim_end_frame(fp);
+        }
+        return msl_fighter_pose_tree_frame(root);
+    }
 #else
     if (fp->x8A4_animBlendFrames == 0.0F) {
         int i;
@@ -647,8 +699,12 @@ float ftAnim_8006F3DC(Fighter_GObj* fighter_gobj)
                 }
             }
         }
+#ifdef MSL_CORE_HOSTED
+        return msl_costume_matanim_end_frame(fp);
+#else
 #ifdef BUGFIX
         return 0.0F;
+#endif
 #endif
     } else {
         return lbGetJObjCurrFrame(fp->x8AC_animSkeleton);

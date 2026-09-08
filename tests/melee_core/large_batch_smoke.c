@@ -104,6 +104,7 @@ static void config_init(MslCoreMatchConfig* config, uint32_t index)
     config->ucf_cardinals_1_0_enabled = 1;
     config->ucf_shield_sdi_enabled = 1;
     config->ucf_sdi_enabled = 1;
+    config->ucf_shield_drop_084_enabled = 1;
     for (player = 0; player < config->num_players; ++player) {
         config->players[player].char_id = characters[variant];
     }

@@ -20,6 +20,7 @@
 #include <sysdolphin/baselib/displayfunc.h>
 #include <sysdolphin/baselib/gobj.h>
 #include <sysdolphin/baselib/jobj.h>
+#include <sysdolphin/baselib/memory.h>
 #include <sysdolphin/baselib/mtx.h>
 #include <sysdolphin/baselib/perf.h>
 #include <sysdolphin/baselib/pobj.h>
@@ -200,6 +201,37 @@ static const u8 gameplay_part_masks[FTKIND_MAX][MAX_FT_PARTS] = {
         [29] = 1, [30] = 1, [31] = 1, [37] = 1, [41] = 1, [42] = 1,
         [43] = 1, [44] = 1, [47] = 1, [48] = 1, [49] = 1, [50] = 1,
         [51] = 1, [56] = 1, [58] = 1,
+    },
+    // ness: 36 live / 27 cold of 63 parts
+    [FTKIND_NESS] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [7] = 1, [8] = 1, [9] = 1, [10] = 1, [11] = 1, [12] = 1,
+        [13] = 1, [14] = 1, [23] = 1, [24] = 1, [25] = 1, [29] = 1,
+        [30] = 1, [31] = 1, [32] = 1, [33] = 1, [42] = 1, [43] = 1,
+        [44] = 1, [47] = 1, [48] = 1, [49] = 1, [50] = 1, [51] = 1,
+        [54] = 1, [55] = 1, [56] = 1, [57] = 1, [58] = 1, [61] = 1,
+    },
+    // link: 46 live / 30 cold of 76 parts
+    [FTKIND_LINK] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [6] = 1, [7] = 1, [8] = 1, [9] = 1, [11] = 1, [12] = 1,
+        [13] = 1, [14] = 1, [15] = 1, [17] = 1, [18] = 1, [19] = 1,
+        [20] = 1, [21] = 1, [22] = 1, [23] = 1, [24] = 1, [25] = 1,
+        [26] = 1, [27] = 1, [28] = 1, [29] = 1, [35] = 1, [39] = 1,
+        [40] = 1, [41] = 1, [42] = 1, [43] = 1, [44] = 1, [51] = 1,
+        [52] = 1, [53] = 1, [54] = 1, [55] = 1, [64] = 1, [65] = 1,
+        [66] = 1, [67] = 1, [68] = 1, [74] = 1,
+    },
+    // clink: 46 live / 34 cold of 80 parts
+    [FTKIND_CLINK] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [6] = 1, [7] = 1, [8] = 1, [9] = 1, [11] = 1, [12] = 1,
+        [13] = 1, [14] = 1, [15] = 1, [17] = 1, [18] = 1, [19] = 1,
+        [20] = 1, [21] = 1, [22] = 1, [25] = 1, [26] = 1, [27] = 1,
+        [28] = 1, [29] = 1, [30] = 1, [31] = 1, [37] = 1, [41] = 1,
+        [42] = 1, [43] = 1, [44] = 1, [45] = 1, [46] = 1, [53] = 1,
+        [54] = 1, [55] = 1, [56] = 1, [59] = 1, [68] = 1, [69] = 1,
+        [70] = 1, [71] = 1, [72] = 1, [78] = 1,
     },
     [FTKIND_MARS] = {
         [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
@@ -1253,7 +1285,9 @@ void ftParts_800753D4(Fighter* arg0, struct Fighter_804D6540_x0_t* arg1,
                       HSD_Joint* arg2)
 {
     HSD_Joint* sp6C;
+#ifndef MSL_CORE_HOSTED
     HSD_Joint sp2C;
+#endif
 
     HSD_JObj* temp_r31;
     HSD_JObj* temp_r30;
@@ -1268,15 +1302,39 @@ void ftParts_800753D4(Fighter* arg0, struct Fighter_804D6540_x0_t* arg1,
             ftAnim_GetNextJointInTree(&sp6C, &depth);
         }
     }
+#ifdef MSL_CORE_HOSTED
+    {
+        // The retail stack copy gives both accessory loads one temporary
+        // pointer key. Hosted HSD ids must survive copy/save/restore, so
+        // materialize the isolated single-joint copy in the Match arena at
+        // fighter construction; its offset identity relocates with the
+        // match, and both loads share it exactly as retail's stack key does.
+        // refs/melee/src/melee/ft/ftparts.c::ftParts_800753D4
+        HSD_Joint* iso = HSD_MemAlloc(sizeof(*iso));
+        *iso = *sp6C;
+        iso->next = 0;
+        iso->child = 0;
+        temp_r30 = ftParts_8007482C(iso);
+        temp_r31 = ftParts_8007482C(iso);
+    }
+#else
     sp2C = *sp6C;
     sp2C.next = 0;
     sp2C.child = 0;
 
     temp_r30 = ftParts_8007482C(&sp2C);
     temp_r31 = ftParts_8007482C(&sp2C);
+#endif
 
     ftParts_80075304(arg1->x2, arg0->parts[arg1->x1].joint, temp_r30);
     ftParts_80075304(arg1->x2, arg0->parts[arg1->x1].x4_jobj2, temp_r31);
+#ifdef MSL_CORE_NATIVE
+    msl_fighter_pose_insert_joint(temp_r30);
+    msl_fighter_pose_insert_joint(temp_r31);
+#ifdef MSL_CORE_WASM
+    msl_fighter_pose_bind_part(temp_r30, arg1->x0);
+#endif
+#endif
 
     tree_depth = arg0->parts[arg1->x1].xC;
     if (arg1->x2 == 0 || arg1->x2 == 1) {

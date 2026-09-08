@@ -362,35 +362,6 @@
       }
     },
     {
-      "replay": "replays/validation/ganon/24891_Game_20250501T202120.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "FoD moving-platform floor-line pick at the mid-frame throw-release resolve",
-      "rationale": "The residual is one bounded 35-row P1 pos_y episode: Ganondorf down-throws Marth over Fountain's descending right platform (recorded height 1.19994 at frame 10479), the ftCo_800DDDE4 release resolve places the victim on a floor line 0.075 below retail's (our resolved y 2.0251 vs retail 2.1001 back-computed from the recording; the descending platform line and the curved stage flank are within 0.075 at that x), and the constant offset rides the DamageFlyTop ballistic arc until the landing snap at 10514 heals it. pos_x is bit-exact through the whole episode, PPC and native agree bit-for-bit, and every other throw in the suite resolves exactly, so the seed is the same mp floor-line pick documented on the dk auto-dk-2025-04 entry (retail engine-dump playback reproduced the recording there).",
-      "sources": [
-        "src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4",
-        "src/melee/gr/grizumi.c::msl_grizumi_apply_replay_platform_height",
-        "refs/melee/src/melee/mp/mpcoll.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 11140,
-          "matched_frames": 11105,
-          "mismatched_frames": 35,
-          "exact_prefix_frames": 10601,
-          "strict_suffix_frames": 504,
-          "first_mismatch_frame": 10479,
-          "last_mismatch_frame": 10513,
-          "mismatch_count": 35,
-          "mismatch_fingerprint": "c48695f6383f32d2",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "9883f88f0248f18b9087951c7acbdf9443e83782f956effe1fe32f74165efbbc"
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/ganon/25827_Game_20250701T195419.slpz",
       "id": "dolphin-ulp-motion-profile",
       "owner": "offstage wall-hug clamp pos_x re-derivation",
@@ -476,14 +447,13 @@
     },
     {
       "replay": "replays/validation/icies/dl-fox-2025-05_Game_20250504T134832.slpz",
-      "id": "dream-land-whispy-rng-phase",
-      "owner": "Dream Land Whispy hosted replay-direction mirror and shared gameplay RNG stream",
-      "rationale": "One Blizzard puff differs for frames 5205-5215 because its source spawn-angle HSD_Randf samples the stream two LCG steps early. Retail Whispy consumes a rand_range pair in grOldPupupu_802113E0 before this spawn; the hosted stage path instead mirrors Slippi's gameplay-bearing wind direction because running the effect-coupled retail machine live shifts wind timing in other Dream Land replays. Fighter, follower, item lifetime, and all other projected gameplay rows remain exact. This existing stage-event/RNG boundary is unchanged by the item-output canonicalization.",
+      "id": "dreamland-wind-rng-draw-gap",
+      "owner": "grOldPupupu wind-machine rand_range draws excluded by the hosted wind-direction mirror",
+      "rationale": "One blizzard puff's pos/vel lanes fork for eleven frames (5205-5215): the puff's spawn-angle HSD_Randf samples the stream two LCG steps early because grOldPupupu_802113E0's idle-cycle rand_range pair (retail pre-seeds 3177732693/2397774788, interpreter-probe verified) is not consumed by the hosted wind-direction mirror. Running the retail machine live restores this stream bit-exactly but re-rolls latent effect-stream gaps in other Dream Land replays, so the mirror stays and this one puff episode is classified. The replay's former Ice Climbers misc-lane residue is retired by the article projection mask.",
       "sources": [
         "refs/melee/src/melee/gr/groldpupupu.c::grOldPupupu_802113E0",
         "src/melee/gr/groldpupupu.c::grOldPupupu_802113E0",
-        "refs/melee/src/melee/it/items/itclimbersblizzard.c::itClimbersBlizzard_802C2248",
-        "src/melee/it/items/itclimbersblizzard.c::itClimbersBlizzard_802C2248"
+        "src/runtime/item_projection.h::msl_core_item_gameplay_misc_mask"
       ],
       "expected": {
         "native": {
@@ -496,26 +466,181 @@
           "last_mismatch_frame": 5215,
           "mismatch_count": 44,
           "mismatch_fingerprint": "e78fdff97ed2b13a",
+          "mismatch_fields": [
+            {
+              "field": "item.vel_x[2]",
+              "count": 1,
+              "first_frame": 5205,
+              "last_frame": 5205
+            },
+            {
+              "field": "item.vel_y[2]",
+              "count": 1,
+              "first_frame": 5205,
+              "last_frame": 5205
+            },
+            {
+              "field": "item.pos_x[2]",
+              "count": 1,
+              "first_frame": 5205,
+              "last_frame": 5205
+            },
+            {
+              "field": "item.pos_y[2]",
+              "count": 1,
+              "first_frame": 5205,
+              "last_frame": 5205
+            },
+            {
+              "field": "item.vel_x[1]",
+              "count": 5,
+              "first_frame": 5206,
+              "last_frame": 5210
+            },
+            {
+              "field": "item.vel_y[1]",
+              "count": 5,
+              "first_frame": 5206,
+              "last_frame": 5210
+            },
+            {
+              "field": "item.pos_x[1]",
+              "count": 5,
+              "first_frame": 5206,
+              "last_frame": 5210
+            },
+            {
+              "field": "item.pos_y[1]",
+              "count": 5,
+              "first_frame": 5206,
+              "last_frame": 5210
+            },
+            {
+              "field": "item.vel_x[0]",
+              "count": 5,
+              "first_frame": 5211,
+              "last_frame": 5215
+            },
+            {
+              "field": "item.vel_y[0]",
+              "count": 5,
+              "first_frame": 5211,
+              "last_frame": 5215
+            },
+            {
+              "field": "item.pos_x[0]",
+              "count": 5,
+              "first_frame": 5211,
+              "last_frame": 5215
+            },
+            {
+              "field": "item.pos_y[0]",
+              "count": 5,
+              "first_frame": 5211,
+              "last_frame": 5215
+            }
+          ],
           "render_visibility_mismatch_count": 5,
           "first_render_visibility_mismatch_frame": 2004,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "f17334f50375737a7178251bdebc282b0ec9d365ca828ba7f51b263a928d3fac"
+          "signed_zero_equal_count": 0
         },
-        "ppc": {
-          "frames": 11083,
-          "matched_frames": 11072,
-          "mismatched_frames": 11,
-          "exact_prefix_frames": 5327,
-          "strict_suffix_frames": 5745,
-          "first_mismatch_frame": 5205,
-          "last_mismatch_frame": 5215,
-          "mismatch_count": 44,
-          "mismatch_fingerprint": "e78fdff97ed2b13a",
-          "render_visibility_mismatch_count": 5,
-          "first_render_visibility_mismatch_frame": 2004,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "f17334f50375737a7178251bdebc282b0ec9d365ca828ba7f51b263a928d3fac"
-        }
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/icies/ys-peach-2025-02_23549_Game_20250221T133850.slpz",
+      "id": "peach-parasol-landing-teardown-window",
+      "owner": "ftPe parasol teardown against the Slippi item sample point at a FallSpecial landing",
+      "rationale": "One exported row (frame 2076): the hosted projection publishes Peach's closed parasol article (spawn id 11, its frozen spawn-position row at 67.36/-11.93) one item sample longer than the recording. The recorded episode's last row is 2075 and the window is exactly Peach's landing out of FallSpecial (recorded post state 35 -> 14 across 2075 -> 2076), whose transition tears the article down (ftPe_8011D598 -> it_802BDB94). Slippi samples items from a player-plink GObj proc installed before fighter processing (SendItemInfo), so the teardown lands one sample apart between the recording schedule and the hosted publication boundary; whether retail retires the article in the preceding item phase or in the landing frame's fighter phase needs the Dolphin scenario probe. Every fighter, follower, physics, and item gameplay lane is exact on both sides of the window (2,198-frame exact prefix, 10,110-frame strict suffix), and both backends produce identical fingerprints.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+        "refs/melee/src/melee/ft/chara/ftPeach/ftPe_SpecialHi.c::ftPe_8011D518",
+        "refs/melee/src/melee/it/items/itpeachparasol.c::it_802BDB94"
+      ],
+      "expected": {
+        "native": {
+          "frames": 12309,
+          "matched_frames": 12308,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 2198,
+          "strict_suffix_frames": 10110,
+          "first_mismatch_frame": 2076,
+          "last_mismatch_frame": 2076,
+          "mismatch_count": 11,
+          "mismatch_fingerprint": "ed25d016f39d4dd5",
+          "mismatch_fields": [
+            {
+              "field": "item_count",
+              "count": 1,
+              "first_frame": 2076,
+              "last_frame": 2076
+            },
+            {
+              "field": "item.exists[1]",
+              "count": 1,
+              "first_frame": 2076,
+              "last_frame": 2076
+            },
+            {
+              "field": "item.state[1]",
+              "count": 1,
+              "first_frame": 2076,
+              "last_frame": 2076
+            },
+            {
+              "field": "item.type[1]",
+              "count": 1,
+              "first_frame": 2076,
+              "last_frame": 2076
+            },
+            {
+              "field": "item.owner[1]",
+              "count": 1,
+              "first_frame": 2076,
+              "last_frame": 2076
+            },
+            {
+              "field": "item.instance_id[1]",
+              "count": 1,
+              "first_frame": 2076,
+              "last_frame": 2076
+            },
+            {
+              "field": "item.direction[1]",
+              "count": 1,
+              "first_frame": 2076,
+              "last_frame": 2076
+            },
+            {
+              "field": "item.pos_x[1]",
+              "count": 1,
+              "first_frame": 2076,
+              "last_frame": 2076
+            },
+            {
+              "field": "item.pos_y[1]",
+              "count": 1,
+              "first_frame": 2076,
+              "last_frame": 2076
+            },
+            {
+              "field": "item.timer[1]",
+              "count": 1,
+              "first_frame": 2076,
+              "last_frame": 2076
+            },
+            {
+              "field": "item.spawn_id[1]",
+              "count": 1,
+              "first_frame": 2076,
+              "last_frame": 2076
+            }
+          ],
+          "render_visibility_mismatch_count": 4,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0
+        },
+        "ppc": "native"
       }
     },
     {
@@ -571,7 +696,8 @@
           "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
           "mismatch_fields_digest": "d8ea98de2ec88d8b978a254f97f4d93d6a2272e6f085c8fbcc887f9a22ae8e1f"
-        }
+        },
+        "ppc": "native"
       }
     },
     {
@@ -599,7 +725,8 @@
           "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
           "mismatch_fields_digest": "0c9db191ec89c53374e607aa0d0ffbaa30a146b7836fdbc3ed7143c12c05c743"
-        }
+        },
+        "ppc": "native"
       }
     },
     {
@@ -627,7 +754,8 @@
           "render_visibility_mismatch_count": 0,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 1624
-        }
+        },
+        "ppc": "native"
       }
     },
     {
@@ -655,7 +783,8 @@
           "render_visibility_mismatch_count": 0,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 984
-        }
+        },
+        "ppc": "native"
       }
     },
     {
@@ -708,18 +837,18 @@
           "render_visibility_mismatch_count": 0,
           "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0
-        }
+        },
+        "ppc": "native"
       }
     },
     {
       "replay": "replays/validation/marios/medium-fox-2026-04_Game_20260413T180551.slpz",
-      "id": "dolphin-ulp-dynamic-bone-capsule-gate",
-      "owner": "Mario-line grab/hit checks against Fox dynamic-bone tail hurt capsules",
-      "rationale": "Bounded retail interpreter probes reproduce the Fox tail dynamics stream bit-exactly from spawn through the probed windows after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing). The remaining seed is a mid-frame animation-ownership reset (ftCo_8009CB40 anim-to-dynamics transition during Turn) whose lazily-sampled world matrix the replay does not record; the chaotic tail then forks a grab/hit capsule check on tail hurtboxes with complete downstream consequence.",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "offstage wall-hug clamp pos_x re-derivation",
+      "rationale": "The complete residual is one 1-ULP pos_x row on Dr. Mario falling down Yoshi's Story's right side wall (frame 8813, x hugging 56.95 before snapping to the absolute wall clamp at 56.962 the next frame); no discrete state flips and the 23-frame suffix is exact. Same offstage wall-hug clamp mechanism as the retail-arbitrated 9560 entry. The original frame-910 dynamic-bone capsule-gate fork (mid-frame ftCo_8009CB40 anim-ownership reset forking a Fox tail-hurtbox grab/hit capsule check) was retired by the spline path-evaluator fusing (58f3f9e3), which aligned the animation-sampled bone poses feeding the capsule check; this replay re-recorded from 473 rows to one.",
       "sources": [
-        "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-        "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
-        "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "refs/melee/src/melee/mp/mplib.c"
       ],
       "expected": {
         "native": {
@@ -736,7 +865,8 @@
           "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
           "mismatch_fields_digest": "c940c8411ba15d20498fc86bb0d0595ec8091932c129a9d00a6f919f17fc3d81"
-        }
+        },
+        "ppc": "native"
       }
     },
     {
@@ -832,43 +962,14 @@
       }
     },
     {
-      "replay": "replays/validation/marth/WingedGorgeousPanther.slpz",
-      "id": "incomplete-nintendont-post-frame-stream",
-      "owner": "legacy Nintendont/Slippi post-frame publication",
-      "rationale": "At frame 9793 the legacy Nintendont recording abruptly replaces P3 post-only fields with absence sentinels (animation_index UINT_MAX and state_age -1) while retaining three stocks and frozen fighter values through game end. The source runtime continues the live fighter. Those missing post-frame observations cannot be reconstructed as gameplay; native and PPC agree on the complete 710-row boundary.",
-      "sources": [
-        "refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm",
-        "refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm"
-      ],
-      "expected": {
-        "native": {
-          "frames": 10625,
-          "matched_frames": 9915,
-          "mismatched_frames": 710,
-          "exact_prefix_frames": 9915,
-          "strict_suffix_frames": 0,
-          "first_mismatch_frame": 9793,
-          "last_mismatch_frame": 10502,
-          "mismatch_count": 2937,
-          "mismatch_fingerprint": "3d95a3cb4754c703",
-          "mismatch_fields_digest": "6f6f16982e0d6937fa3bb79571e4d1cdf0f4f8bcae1b28a7686477986b4985a1",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
-      "id": "dolphin-ulp-item-motion-profile",
-      "owner": "Mr. Saturn and turnip gravity/position float execution",
-      "rationale": "State-aware validation excludes only Mr. Saturn's uninitialized held/thrown xDE4 bytes; all remaining residuals are bounded ULP-scale common-item velocities and positions from imported source gravity/integration. The final 3,439 transitions are strict. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual.",
+      "id": "mixed-dolphin-ulp-render-profile",
+      "owner": "fighter position float profile and magnifier render schedule",
+      "rationale": "The complete residual is a bounded airborne-Jigglypuff root-position ULP window (80 pos_x/pos_y rows at 2821..2946) plus two 1% magnifier rows on Peach (6415 and 10445, both with Peach far offscreen right of Battlefield, each ticking one frame before the recording and resyncing at the recorded tick); the 3,439-frame suffix is strict and no item lane remains. State-aware validation still excludes Mr. Saturn's uninitialized held/thrown xDE4 bytes. The replay records neither the Dolphin float profile nor the VI/render boundary that publishes x221F_b0. The original thrown-item ULP families were absorbed by the item victim-bounce fmadds boundary (c47e87e3), the sincosf fidelity fix (c5464af0), the MWCC fusing sweep (597a7b7b), and the lbVector_Rotate fusing (50e8aadb). PPC snapshot recorded 2026-08-28 (melee-core-ppc at 5c0a91ac): the PPC backend reproduces the same residual families but widens the airborne Jigglypuff root-position ULP window to 2820..2947 (120 rows vs native's 62, first row one frame earlier); the percent residuals and the 3,439-transition strict suffix are identical on both backends.",
       "sources": [
-        "refs/melee/src/melee/it/items/itdosei.c",
-        "refs/melee/src/melee/it/items/itpeachturnip.c",
-        "refs/melee/src/melee/it/it_2725.c::it_80272860",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
       ],
       "expected": {
         "native": {
@@ -885,6 +986,21 @@
           "render_visibility_mismatch_count": 7,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 3439
+        },
+        "ppc": {
+          "exact_prefix_frames": 2942,
+          "first_mismatch_frame": 2820,
+          "first_render_visibility_mismatch_frame": 1839,
+          "frames": 14007,
+          "last_mismatch_frame": 10445,
+          "matched_frames": 13887,
+          "mismatch_count": 187,
+          "mismatch_fields_digest": "acf89681fc6fe53ae83cb778e04b9b6d4a779b0b3a2e04701a40a7097fb6971e",
+          "mismatch_fingerprint": "6002eb36f1ec85ea",
+          "mismatched_frames": 120,
+          "render_visibility_mismatch_count": 7,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 3439
         }
       }
     },
@@ -892,7 +1008,7 @@
       "replay": "replays/validation/peach/CapitalPristineTarsier.slpz",
       "id": "dolphin-ulp-fighter-and-item-profile",
       "owner": "fighter root motion and thrown-item gravity float execution",
-      "rationale": "The complete residual contains bounded ULP-scale fighter root motion and thrown-item velocity/position intervals. Source discrete state remains aligned, and the exact fingerprint includes 158 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual.",
+      "rationale": "The complete residual contains bounded ULP-scale fighter root motion and thrown-item velocity/position intervals. Source discrete state remains aligned, and the exact fingerprint includes 158 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. PPC snapshot recorded 2026-08-28 (melee-core-ppc at 5c0a91ac): the PPC backend reproduces the same residual families but widens the airborne Peach root-position ULP window to 3712..3839 (117 rows vs native's 60, first row three frames earlier); the percent residuals and the 158-transition strict suffix are identical on both backends.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
@@ -914,18 +1030,35 @@
           "render_visibility_mismatch_count": 8,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 158
+        },
+        "ppc": {
+          "exact_prefix_frames": 3834,
+          "first_mismatch_frame": 3712,
+          "first_render_visibility_mismatch_frame": 7181,
+          "frames": 16491,
+          "last_mismatch_frame": 16210,
+          "matched_frames": 16374,
+          "mismatch_count": 180,
+          "mismatch_fields_digest": "5e1c15c99f6b336bd2f7a1d1852a5f56b5ac0b65016117f5231ed41313de90fd",
+          "mismatch_fingerprint": "b3f57dbd9b3539c0",
+          "mismatched_frames": 117,
+          "render_visibility_mismatch_count": 8,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 158
         }
       }
     },
     {
       "replay": "replays/validation/peach/DisgustingLivelyRaven.slpz",
-      "id": "dolphin-ulp-item-motion-profile",
-      "owner": "thrown-item gravity and position float execution",
-      "rationale": "The residual is limited to bounded ULP-scale thrown-item velocity and position intervals produced by source gravity/integration, followed by 5,013 strict transitions. No item state or Peach mechanic is fitted. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
+      "id": "mixed-dolphin-ulp-render-profile",
+      "owner": "thrown-item position float profile and magnifier render schedule",
+      "rationale": "The complete residual is one 1% magnifier row and a bounded thrown-item ULP tail: at frame 7474 the hosted magnifier ticks Peach (offscreen right of Yoshi's Story at (117, 16)) one frame before the recording, resyncing at the recorded tick, and frames 7740..7762 carry 23 ULP-scale item.pos_x rows from source item integration; the 5,075-frame suffix is strict. The replay records neither the Dolphin float profile nor the VI/render boundary that publishes x221F_b0. Re-recorded after the item victim-bounce fmadds boundary (c47e87e3), the MWCC fusing sweep (597a7b7b), and the dynamics-force restoration (e6e657a7) absorbed the original frame-6401 thrown-item families (378 rows to 24).",
       "sources": [
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
         "refs/melee/src/melee/it/item.c",
-        "refs/melee/src/melee/it/items/itpeachturnip.c"
+        "refs/melee/src/melee/it/items/itpeachturnip.c",
+        "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
       ],
       "expected": {
         "native": {
@@ -942,19 +1075,19 @@
           "render_visibility_mismatch_count": 11,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 5075
-        }
+        },
+        "ppc": "native"
       }
     },
     {
       "replay": "replays/validation/peach/ExpertWorthlessFinch.slpz",
-      "id": "dolphin-ulp-item-motion-profile",
-      "owner": "turnip/common-item gravity and position float execution",
-      "rationale": "Restoring Peach's 32-bit source owner-pointer layout places the Bob-omb scale lane correctly and removes the prior metadata displacement. The complete remainder is bounded ULP-scale source item gravity/position with 352 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
+      "id": "vanilla-magnifier-render-schedule",
+      "owner": "ifMagnify/Fighter_8006A360 render-publication boundary",
+      "rationale": "The complete residual is five 1% magnifier damage rows: the hosted schedule ticks one frame earlier than the recording at three offscreen episodes (percent[0] at 7208 and 7268 with Peach parasol-drifting far off Final Destination's top-right corner, percent[1] at 11174..11557 with Jigglypuff deep off the left side), each resyncing at the recorded tick; the 352-frame suffix is strict and no item or motion lane remains. The replay does not record the VI/render boundary that publishes x221F_b0. The original Bob-omb scale-lane placement holds, and the thrown-item ULP families were absorbed by the item victim-bounce fmadds boundary (c47e87e3), the MWCC fusing sweep (597a7b7b), and the dynamics-force restoration (e6e657a7); this replay re-recorded from 461 rows to five.",
       "sources": [
-        "refs/melee/src/melee/it/itCharItems.h::itPeachTurnip_ItemVars",
-        "refs/melee/src/melee/it/items/itpeachturnip.c::it_802BD4AC",
-        "refs/melee/src/melee/it/items/itbombhei.c",
-        "refs/melee/src/melee/it/it_2725.c::it_80272860"
+        "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
       ],
       "expected": {
         "native": {
@@ -971,7 +1104,8 @@
           "render_visibility_mismatch_count": 10,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 352
-        }
+        },
+        "ppc": "native"
       }
     },
     {
@@ -1020,7 +1154,8 @@
           "render_visibility_mismatch_count": 19,
           "first_render_visibility_mismatch_frame": 500,
           "signed_zero_equal_count": 0
-        }
+        },
+        "ppc": "native"
       }
     },
     {
@@ -1042,9 +1177,24 @@
           "frames": 15634,
           "last_mismatch_frame": 15511,
           "matched_frames": 6600,
-          "mismatch_count": 337434,
-          "mismatch_fields_digest": "f7c91a31dcf577f0d018bfbcbacfd1433a0a9d9147b2dc572cd2e39ebfa7eaa3",
-          "mismatch_fingerprint": "25590fac2df95868",
+          "mismatch_count": 336847,
+          "mismatch_fields_digest": "63fae70e4ee11acb7f0bc44560f51c4c59e9449e5e7029a2a1e6447345e17000",
+          "mismatch_fingerprint": "481cac23f67368e9",
+          "mismatched_frames": 9034,
+          "render_visibility_mismatch_count": 12589,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 0
+        },
+        "ppc": {
+          "exact_prefix_frames": 907,
+          "first_mismatch_frame": 785,
+          "first_render_visibility_mismatch_frame": 6678,
+          "frames": 15634,
+          "last_mismatch_frame": 15511,
+          "matched_frames": 6600,
+          "mismatch_count": 336847,
+          "mismatch_fields_digest": "63fae70e4ee11acb7f0bc44560f51c4c59e9449e5e7029a2a1e6447345e17000",
+          "mismatch_fingerprint": "481cac23f67368e9",
           "mismatched_frames": 9034,
           "render_visibility_mismatch_count": 12589,
           "signed_zero_equal_count": 0,
@@ -1078,683 +1228,15 @@
           "first_render_visibility_mismatch_frame": 2941,
           "signed_zero_equal_count": 0,
           "mismatch_fields_digest": "8732317e4d6f734ceafdc5037f716b912d45cdb091cb8d7f9241b69009542547"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/HummingDismalCat.slpz",
-      "id": "unmodeled-presentation-rng-stream-phase",
-      "owner": "DamageFlyRoll gate versus post-input particle/effect RNG scheduler",
-      "rationale": "The first causal difference is the source DamageFlyRoll HSD_Randf gate with exact deterministic contact, damage, position, and input setup. Bounded native and PPC runs produce the same neighboring-stream DamageFlyHi result while the recording selects DamageFlyRoll. The exact downstream fingerprint records excluded presentation RNG phase rather than changing free-running gameplay RNG.",
-      "sources": [
-        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
-        "refs/melee/src/melee/ef/efsync.c::efSync_Spawn",
-        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
-      ],
-      "expected": {
-        "native": {
-          "frames": 6803,
-          "matched_frames": 4299,
-          "mismatched_frames": 2504,
-          "exact_prefix_frames": 4299,
-          "strict_suffix_frames": 0,
-          "first_mismatch_frame": 4177,
-          "last_mismatch_frame": 6680,
-          "mismatch_count": 72738,
-          "mismatch_fingerprint": "6a532077b54167b0",
-          "mismatch_fields": [
-            {
-              "field": "pos_x[0]",
-              "count": 2504,
-              "first_frame": 4177,
-              "last_frame": 6680
-            },
-            {
-              "field": "pos_y[0]",
-              "count": 1900,
-              "first_frame": 4177,
-              "last_frame": 6680
-            },
-            {
-              "field": "ground_id[0]",
-              "count": 2504,
-              "first_frame": 4177,
-              "last_frame": 6680
-            },
-            {
-              "field": "speed_x_attack[0]",
-              "count": 313,
-              "first_frame": 4188,
-              "last_frame": 6218
-            },
-            {
-              "field": "speed_air_x_self[0]",
-              "count": 1249,
-              "first_frame": 4191,
-              "last_frame": 6676
-            },
-            {
-              "field": "speed_ground_x_self[0]",
-              "count": 773,
-              "first_frame": 4201,
-              "last_frame": 6676
-            },
-            {
-              "field": "action_id[0]",
-              "count": 1712,
-              "first_frame": 4201,
-              "last_frame": 6680
-            },
-            {
-              "field": "action_frame[0]",
-              "count": 1721,
-              "first_frame": 4201,
-              "last_frame": 6680
-            },
-            {
-              "field": "animation_index[0]",
-              "count": 1686,
-              "first_frame": 4201,
-              "last_frame": 6680
-            },
-            {
-              "field": "instance_id[0]",
-              "count": 2252,
-              "first_frame": 4201,
-              "last_frame": 6680
-            },
-            {
-              "field": "instance_id[1]",
-              "count": 2333,
-              "first_frame": 4207,
-              "last_frame": 6680
-            },
-            {
-              "field": "on_ground[0]",
-              "count": 916,
-              "first_frame": 4228,
-              "last_frame": 6680
-            },
-            {
-              "field": "jumps_left[0]",
-              "count": 1119,
-              "first_frame": 4228,
-              "last_frame": 6680
-            },
-            {
-              "field": "l_cancel[0]",
-              "count": 15,
-              "first_frame": 4228,
-              "last_frame": 6136
-            },
-            {
-              "field": "speed_y_self[0]",
-              "count": 1087,
-              "first_frame": 4229,
-              "last_frame": 6679
-            },
-            {
-              "field": "pos_y[1]",
-              "count": 1267,
-              "first_frame": 4252,
-              "last_frame": 6680
-            },
-            {
-              "field": "speed_ground_x_self[1]",
-              "count": 495,
-              "first_frame": 4252,
-              "last_frame": 6680
-            },
-            {
-              "field": "on_ground[1]",
-              "count": 735,
-              "first_frame": 4252,
-              "last_frame": 6680
-            },
-            {
-              "field": "action_id[1]",
-              "count": 1628,
-              "first_frame": 4252,
-              "last_frame": 6680
-            },
-            {
-              "field": "action_frame[1]",
-              "count": 1879,
-              "first_frame": 4252,
-              "last_frame": 6680
-            },
-            {
-              "field": "jumps_left[1]",
-              "count": 735,
-              "first_frame": 4252,
-              "last_frame": 6680
-            },
-            {
-              "field": "l_cancel[1]",
-              "count": 6,
-              "first_frame": 4252,
-              "last_frame": 5295
-            },
-            {
-              "field": "ground_id[1]",
-              "count": 2125,
-              "first_frame": 4252,
-              "last_frame": 6480
-            },
-            {
-              "field": "animation_index[1]",
-              "count": 1540,
-              "first_frame": 4252,
-              "last_frame": 6680
-            },
-            {
-              "field": "pos_x[1]",
-              "count": 2428,
-              "first_frame": 4253,
-              "last_frame": 6680
-            },
-            {
-              "field": "speed_air_x_self[1]",
-              "count": 709,
-              "first_frame": 4253,
-              "last_frame": 6680
-            },
-            {
-              "field": "speed_y_self[1]",
-              "count": 843,
-              "first_frame": 4253,
-              "last_frame": 6680
-            },
-            {
-              "field": "hurtbox_state[0]",
-              "count": 401,
-              "first_frame": 4267,
-              "last_frame": 6680
-            },
-            {
-              "field": "state_flags[6]",
-              "count": 463,
-              "first_frame": 4284,
-              "last_frame": 6640
-            },
-            {
-              "field": "state_flags[0]",
-              "count": 1367,
-              "first_frame": 4285,
-              "last_frame": 6680
-            },
-            {
-              "field": "state_flags[8]",
-              "count": 570,
-              "first_frame": 4285,
-              "last_frame": 6674
-            },
-            {
-              "field": "speed_x_attack[1]",
-              "count": 467,
-              "first_frame": 4355,
-              "last_frame": 6674
-            },
-            {
-              "field": "speed_y_attack[1]",
-              "count": 587,
-              "first_frame": 4355,
-              "last_frame": 6674
-            },
-            {
-              "field": "facing[1]",
-              "count": 1199,
-              "first_frame": 4355,
-              "last_frame": 6658
-            },
-            {
-              "field": "percent[1]",
-              "count": 2326,
-              "first_frame": 4355,
-              "last_frame": 6680
-            },
-            {
-              "field": "hitlag[0]",
-              "count": 137,
-              "first_frame": 4355,
-              "last_frame": 6640
-            },
-            {
-              "field": "hitlag[1]",
-              "count": 149,
-              "first_frame": 4355,
-              "last_frame": 6640
-            },
-            {
-              "field": "hitstun[1]",
-              "count": 401,
-              "first_frame": 4355,
-              "last_frame": 6674
-            },
-            {
-              "field": "instance_hit_by[1]",
-              "count": 2326,
-              "first_frame": 4355,
-              "last_frame": 6680
-            },
-            {
-              "field": "last_attack_landed[0]",
-              "count": 2326,
-              "first_frame": 4355,
-              "last_frame": 6680
-            },
-            {
-              "field": "last_hit_by[1]",
-              "count": 963,
-              "first_frame": 4355,
-              "last_frame": 6680
-            },
-            {
-              "field": "state_flags[1]",
-              "count": 305,
-              "first_frame": 4355,
-              "last_frame": 6680
-            },
-            {
-              "field": "combo_count[0]",
-              "count": 1715,
-              "first_frame": 4360,
-              "last_frame": 6680
-            },
-            {
-              "field": "item.instance_id[0]",
-              "count": 308,
-              "first_frame": 4400,
-              "last_frame": 6429
-            },
-            {
-              "field": "item.pos_x[0]",
-              "count": 308,
-              "first_frame": 4400,
-              "last_frame": 6429
-            },
-            {
-              "field": "item.pos_y[0]",
-              "count": 308,
-              "first_frame": 4400,
-              "last_frame": 6429
-            },
-            {
-              "field": "item.instance_id[1]",
-              "count": 84,
-              "first_frame": 4409,
-              "last_frame": 6424
-            },
-            {
-              "field": "item.pos_x[1]",
-              "count": 84,
-              "first_frame": 4409,
-              "last_frame": 6424
-            },
-            {
-              "field": "item.pos_y[1]",
-              "count": 84,
-              "first_frame": 4409,
-              "last_frame": 6424
-            },
-            {
-              "field": "item_count",
-              "count": 113,
-              "first_frame": 4411,
-              "last_frame": 6429
-            },
-            {
-              "field": "item.state[0]",
-              "count": 84,
-              "first_frame": 4411,
-              "last_frame": 6429
-            },
-            {
-              "field": "item.type[0]",
-              "count": 100,
-              "first_frame": 4411,
-              "last_frame": 6429
-            },
-            {
-              "field": "item.vel_x[0]",
-              "count": 31,
-              "first_frame": 4411,
-              "last_frame": 6364
-            },
-            {
-              "field": "item.timer[0]",
-              "count": 100,
-              "first_frame": 4411,
-              "last_frame": 6429
-            },
-            {
-              "field": "item.spawn_id[0]",
-              "count": 271,
-              "first_frame": 4411,
-              "last_frame": 6429
-            },
-            {
-              "field": "item.misc0[0]",
-              "count": 50,
-              "first_frame": 4411,
-              "last_frame": 6429
-            },
-            {
-              "field": "item.misc1[0]",
-              "count": 240,
-              "first_frame": 4411,
-              "last_frame": 6429
-            },
-            {
-              "field": "item.exists[1]",
-              "count": 68,
-              "first_frame": 4411,
-              "last_frame": 6424
-            },
-            {
-              "field": "item.type[1]",
-              "count": 68,
-              "first_frame": 4411,
-              "last_frame": 6424
-            },
-            {
-              "field": "item.direction[1]",
-              "count": 68,
-              "first_frame": 4411,
-              "last_frame": 6424
-            },
-            {
-              "field": "item.vel_x[1]",
-              "count": 68,
-              "first_frame": 4411,
-              "last_frame": 6424
-            },
-            {
-              "field": "item.timer[1]",
-              "count": 73,
-              "first_frame": 4411,
-              "last_frame": 6424
-            },
-            {
-              "field": "item.spawn_id[1]",
-              "count": 78,
-              "first_frame": 4411,
-              "last_frame": 6424
-            },
-            {
-              "field": "item.misc0[1]",
-              "count": 28,
-              "first_frame": 4411,
-              "last_frame": 6424
-            },
-            {
-              "field": "item.exists[0]",
-              "count": 86,
-              "first_frame": 4415,
-              "last_frame": 6429
-            },
-            {
-              "field": "item.direction[0]",
-              "count": 86,
-              "first_frame": 4415,
-              "last_frame": 6429
-            },
-            {
-              "field": "state_flags[3]",
-              "count": 674,
-              "first_frame": 4451,
-              "last_frame": 6680
-            },
-            {
-              "field": "item.vel_y[1]",
-              "count": 43,
-              "first_frame": 4512,
-              "last_frame": 6424
-            },
-            {
-              "field": "item.misc1[1]",
-              "count": 43,
-              "first_frame": 4512,
-              "last_frame": 6424
-            },
-            {
-              "field": "item.exists[2]",
-              "count": 7,
-              "first_frame": 4518,
-              "last_frame": 4524
-            },
-            {
-              "field": "item.type[2]",
-              "count": 7,
-              "first_frame": 4518,
-              "last_frame": 4524
-            },
-            {
-              "field": "item.instance_id[2]",
-              "count": 7,
-              "first_frame": 4518,
-              "last_frame": 4524
-            },
-            {
-              "field": "item.direction[2]",
-              "count": 7,
-              "first_frame": 4518,
-              "last_frame": 4524
-            },
-            {
-              "field": "item.vel_x[2]",
-              "count": 7,
-              "first_frame": 4518,
-              "last_frame": 4524
-            },
-            {
-              "field": "item.vel_y[2]",
-              "count": 7,
-              "first_frame": 4518,
-              "last_frame": 4524
-            },
-            {
-              "field": "item.pos_x[2]",
-              "count": 7,
-              "first_frame": 4518,
-              "last_frame": 4524
-            },
-            {
-              "field": "item.pos_y[2]",
-              "count": 7,
-              "first_frame": 4518,
-              "last_frame": 4524
-            },
-            {
-              "field": "item.timer[2]",
-              "count": 7,
-              "first_frame": 4518,
-              "last_frame": 4524
-            },
-            {
-              "field": "item.spawn_id[2]",
-              "count": 7,
-              "first_frame": 4518,
-              "last_frame": 4524
-            },
-            {
-              "field": "item.misc0[2]",
-              "count": 4,
-              "first_frame": 4518,
-              "last_frame": 4521
-            },
-            {
-              "field": "item.misc1[2]",
-              "count": 7,
-              "first_frame": 4518,
-              "last_frame": 4524
-            },
-            {
-              "field": "item.vel_y[0]",
-              "count": 22,
-              "first_frame": 4525,
-              "last_frame": 6364
-            },
-            {
-              "field": "stocks[1]",
-              "count": 2139,
-              "first_frame": 4542,
-              "last_frame": 6680
-            },
-            {
-              "field": "state_flags[9]",
-              "count": 45,
-              "first_frame": 4542,
-              "last_frame": 4586
-            },
-            {
-              "field": "facing[0]",
-              "count": 553,
-              "first_frame": 4581,
-              "last_frame": 6680
-            },
-            {
-              "field": "last_attack_landed[1]",
-              "count": 2094,
-              "first_frame": 4587,
-              "last_frame": 6680
-            },
-            {
-              "field": "combo_count[1]",
-              "count": 735,
-              "first_frame": 4587,
-              "last_frame": 5321
-            },
-            {
-              "field": "hurtbox_state[1]",
-              "count": 276,
-              "first_frame": 4647,
-              "last_frame": 6489
-            },
-            {
-              "field": "stocks[0]",
-              "count": 1971,
-              "first_frame": 4710,
-              "last_frame": 6680
-            },
-            {
-              "field": "state_flags[4]",
-              "count": 120,
-              "first_frame": 4710,
-              "last_frame": 6619
-            },
-            {
-              "field": "state_flags[2]",
-              "count": 172,
-              "first_frame": 4731,
-              "last_frame": 6680
-            },
-            {
-              "field": "shield_hp[0]",
-              "count": 887,
-              "first_frame": 4732,
-              "last_frame": 6649
-            },
-            {
-              "field": "state_flags[5]",
-              "count": 1678,
-              "first_frame": 4758,
-              "last_frame": 6680
-            },
-            {
-              "field": "percent[0]",
-              "count": 1911,
-              "first_frame": 4770,
-              "last_frame": 6680
-            },
-            {
-              "field": "instance_hit_by[0]",
-              "count": 1911,
-              "first_frame": 4770,
-              "last_frame": 6680
-            },
-            {
-              "field": "state_flags[7]",
-              "count": 103,
-              "first_frame": 4820,
-              "last_frame": 6463
-            },
-            {
-              "field": "shield_hp[1]",
-              "count": 855,
-              "first_frame": 4821,
-              "last_frame": 6525
-            },
-            {
-              "field": "speed_y_attack[0]",
-              "count": 550,
-              "first_frame": 5322,
-              "last_frame": 6218
-            },
-            {
-              "field": "hitstun[0]",
-              "count": 175,
-              "first_frame": 5322,
-              "last_frame": 6189
-            },
-            {
-              "field": "last_hit_by[0]",
-              "count": 712,
-              "first_frame": 5322,
-              "last_frame": 6318
-            },
-            {
-              "field": "item.state[1]",
-              "count": 23,
-              "first_frame": 5631,
-              "last_frame": 6424
-            },
-            {
-              "field": "item.owner[0]",
-              "count": 1,
-              "first_frame": 6364,
-              "last_frame": 6364
-            }
-          ],
-          "render_visibility_mismatch_count": 624,
-          "first_render_visibility_mismatch_frame": 3716,
-          "signed_zero_equal_count": 0
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/ScaryFrankPorcupine.slpz",
-      "id": "dolphin-ulp-item-motion-profile",
-      "owner": "thrown-item gravity and position float execution",
-      "rationale": "After selecting this old capture's explicit pre-Cardinals profile, all residuals are sparse ULP-scale item velocity/position lanes from source gravity and integration. The final 570 transitions are strict, and the exact fingerprint preserves bit-level drift detection. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding.",
-      "sources": [
-        "refs/melee/src/melee/it/it_2725.c::it_80272860",
-        "refs/melee/src/melee/it/item.c::Item_80268E5C",
-        "refs/melee/src/melee/it/items/itpeachturnip.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 26844,
-          "matched_frames": 26806,
-          "mismatched_frames": 38,
-          "exact_prefix_frames": 26013,
-          "strict_suffix_frames": 793,
-          "first_mismatch_frame": 25891,
-          "last_mismatch_frame": 25928,
-          "mismatch_count": 150,
-          "mismatch_fingerprint": "31e72c938ffd4692",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "765529eb44031e2cd31e5b2ee877a42faad55b76340acc48bd1a62e9aea9df04"
-        }
+        },
+        "ppc": "native"
       }
     },
     {
       "replay": "replays/validation/peach/SmugConfusedTermite.slpz",
       "id": "dolphin-ulp-motion-profile",
       "owner": "fighter and item position float execution",
-      "rationale": "Correcting the shared 32-bit item-throw motion-var layout removed the wrong shield-throw action and 12,584 downstream mismatch rows. The complete remainder is 25 isolated ULP-scale fighter/item position rows with 2,353 strict trailing transitions. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
+      "rationale": "Correcting the shared 32-bit item-throw motion-var layout removed the wrong shield-throw action and 12,584 downstream mismatch rows. The complete remainder is 16 isolated ULP-scale rows -- 15 item.pos_y rows at 3595..3609 and one self-healing pos_x row at 10422 against Yoshi's Story's right edge -- with 2,353 strict trailing transitions. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. The earlier frame-2892 family was retired by the spline path-evaluator fusing (58f3f9e3).",
       "sources": [
         "refs/melee/src/melee/ft/chara/ftCommon/types.h::ftCommon_MotionVars",
         "refs/melee/src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c::ftCo_8009515C",
@@ -1776,19 +1258,19 @@
           "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
           "mismatch_fields_digest": "97db1d02e6ec71be19b5202b390f5d50d68531eb536f8a1c3fa4b0692f939a99"
-        }
+        },
+        "ppc": "native"
       }
     },
     {
       "replay": "replays/validation/peach/TameEmbellishedSparrow.slpz",
-      "id": "dolphin-ulp-item-and-motion-profile",
-      "owner": "item transform and fighter self-velocity float execution",
-      "rationale": "The complete residual consists of sparse ULP-scale item positions and fighter velocities produced by the imported source transform, gravity, and integration paths. Discrete gameplay remains source-driven; the exact fingerprint prevents this execution profile from becoming a tolerance. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
+      "id": "vanilla-magnifier-render-schedule",
+      "owner": "ifMagnify/Fighter_8006A360 render-publication boundary",
+      "rationale": "The complete residual is one unreturned 1% magnifier tick and its downstream consequence: at frame 13507 the hosted schedule ticks Marth (deep offscreen at (-112, -12) recovering left of Fountain) while the recording holds 98.5216 -- Marth regains the stage before the retail schedule fires, so the +1% persists to the game's final frame 14229. Every row is on Marth's slot and downstream of the tick: percent to game end, knockback speeds off by 0.54% (a 1% knockback delta at 99%), the dependent position lanes, a changed landing at 13694 (on_ground/action/jumps flips), and a final-frame is_dead/stocks flip where the hosted +1% kills Marth on the last frame. The replay does not record the VI/render boundary that publishes x221F_b0; the exact fingerprint pins the full consequence tail. The prior sparse item/fighter ULP families at 7387 were absorbed by the fused-op boundaries (b5700609, 0a8592bf, c47e87e3, 597a7b7b) and the dynamics-force restoration (e6e657a7); this replay re-recorded from 2,709 rows at 7387 to this single-seed tail.",
       "sources": [
-        "refs/melee/src/melee/it/item.c",
-        "refs/melee/src/melee/it/it_2725.c",
-        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "refs/melee/src/sysdolphin/baselib/mtx.c"
+        "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
       ],
       "expected": {
         "native": {
@@ -1805,7 +1287,8 @@
           "render_visibility_mismatch_count": 25,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 0
-        }
+        },
+        "ppc": "native"
       }
     },
     {
@@ -1833,7 +1316,8 @@
           "render_visibility_mismatch_count": 0,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 1856
-        }
+        },
+        "ppc": "native"
       }
     },
     {
@@ -1922,42 +1406,12 @@
       }
     },
     {
-      "replay": "replays/validation/puff/specials.slpz",
-      "id": "scene-standings-cache-gap",
-      "owner": "MatchEnd loser-rank cache used by DamageSong",
-      "rationale": "Puff's imported Sing and common DamageSong callbacks are source-exact. The residual starts when the minimal headless gm_8016C5C0 projection supplies a loser rank one above retail's scene-owned MatchEnd cache, shortening one Sing timer by exactly 15 frames; action and timer consequences reconverge for the final 977 transitions. This classification leaves the scene standings aggregate as explicit debt rather than fitting Sing or the replay row.",
-      "sources": [
-        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageSong.c::ftCo_800C318C",
-        "refs/melee/src/melee/gm/gm_16AE.c::gm_8016C5C0",
-        "refs/melee/src/melee/gm/gm_1601.c::gm_80166378"
-      ],
-      "expected": {
-        "native": {
-          "frames": 7653,
-          "matched_frames": 7261,
-          "mismatched_frames": 392,
-          "exact_prefix_frames": 4737,
-          "strict_suffix_frames": 2524,
-          "first_mismatch_frame": 4615,
-          "last_mismatch_frame": 5006,
-          "mismatch_count": 817,
-          "mismatch_fingerprint": "93a791db9627dff2",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "99dec85916beef92e183eaba98efa9d40d37c81b28cf80160a5b564f35f797b5"
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/samus/fox-d18-2026-04_Game_20260419T223341.slpz",
-      "id": "dolphin-ulp-contact-gate",
-      "owner": "Samus contact decisions seeded by ULP-scale capsule and knockback inputs",
-      "rationale": "Bit-exact through the 7,511-frame prefix and the 5,151-frame strict suffix. After the subaction-hitbox part-admission fix retired the frame-903 45-degree contact flip, the residual is one 1-ULP pos_y row at frame 7389 and an 81-row damage-state selection flip at 9075 (action 88 vs 91) seeded by ULP-scale knockback inputs.",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "Samus zair hang-release pos_y re-derivation",
+      "rationale": "The complete residual is one 1-ULP pos_y row on Samus the frame after a zair wall-hang release below Battlefield's right ledge (frame 7389); the hidden grapple-chain integration seeds the release position (the master-samus mechanism), the 7,511-frame prefix and 5,151-frame strict suffix are exact, and native and PPC record the identical fingerprint. The frame-903 45-degree contact flip was retired by the subaction-hitbox part admission (73ecdd51), and the frame-9075 damage-state selection family (action 88 vs 91, seeded by ULP-scale knockback inputs) by the smoke-puff model-start draw consumption (2c0c510e); this replay re-recorded from 223 rows to one.",
       "sources": [
-        "refs/melee/src/melee/ft/ftcoll.c",
-        "refs/melee/src/melee/lb/lbcollision.c"
+        "refs/melee/src/melee/it/items/itsamusgrapple.c::it_802BA5DC"
       ],
       "expected": {
         "native": {
@@ -2031,7 +1485,7 @@
       "replay": "replays/validation/sheik/GlaringRosyAlpaca.slpz",
       "id": "dolphin-ulp-motion-profile",
       "owner": "fighter position and velocity float execution profile",
-      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter motion with isolated one-byte historical-position samples from thrown needles, followed by an exact suffix; the replay records Dolphin but not its build or float/JIT execution profile. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism. PPC snapshot re-recorded after the post-solve dynamics matrix refresh (the hosted CB40 anim-ownership toggle now samples solved-pose matrices, and the PPC backend shares the hosted runtime).",
+      "rationale": "The bounded residual is ULP-scale Sheik root motion (pos_x/pos_y rows at 3427..3541) followed by an exact suffix; no needle lane remains, and the replay records Dolphin but not its build or float/JIT execution profile. Native and PPC record separate fingerprints of the same family (the PPC window opens at 3419, wider at 177 rows). Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor). PPC snapshot re-recorded after the post-solve dynamics matrix refresh (the hosted CB40 anim-ownership toggle now samples solved-pose matrices, and the PPC backend shares the hosted runtime).",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
@@ -2075,7 +1529,7 @@
       "replay": "replays/validation/sheik/WavyRundownAardvark.slpz",
       "id": "dolphin-ulp-motion-profile",
       "owner": "fighter position and velocity float execution profile",
-      "rationale": "PPC and native source runtimes agree bit-for-bit. The bounded residual combines ULP-scale fighter motion with isolated one-byte historical-position samples from thrown needles, followed by an exact suffix; the replay records Dolphin but not its build or float/JIT execution profile. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism. PPC snapshot re-recorded after the post-solve dynamics matrix refresh (the hosted CB40 anim-ownership toggle now samples solved-pose matrices, and the PPC backend shares the hosted runtime).",
+      "rationale": "The bounded residual is ULP-scale Sheik root motion (pos_x/pos_y rows at 967..1091) followed by an exact suffix; no needle lane remains, and the replay records Dolphin but not its build or float/JIT execution profile. Native and PPC record separate fingerprints of the same family (the PPC window opens at 964, wider at 153 rows). Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor). PPC snapshot re-recorded after the post-solve dynamics matrix refresh (the hosted CB40 anim-ownership toggle now samples solved-pose matrices, and the PPC backend shares the hosted runtime).",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
@@ -2621,215 +2075,183 @@
       }
     },
     {
-      "replay": "replays/validation/yoshi/StudiousExpertFalcon.slpz",
-      "id": "yoshi-bowser-source-proven-residual",
-      "owner": "Yoshi held-shield animation cursor",
-      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
+      "replay": "replays/validation/ness/2026-06_Game_20260616T195545.slpz",
+      "id": "unmodeled-presentation-rng-stream-phase",
+      "owner": "Dream Land's replaced grOldPupupu blow machine versus the retail blow-timer RNG draw (ledger canonical:slippi-stage-event-publication)",
+      "rationale": "Engine-dump probe capture of retail's own RNG stream settles this. Retail's frame 3922 opens with a randi at LR 0x80211648 -- inside grOldPupupu_802113E0's rand_range blow timer -- before efAsync_Dispatch's 0x3EC rotation draw. The hosted build deliberately replaces Dream Land's wind machine with the recorded Slippi direction stream, because the retail timers sample the mid-frame RNG after effect draws that do not exist headlessly; the replacement consumes no RNG. That one-draw phase shift moves the following it_2725_Logic109_DmgDealt HSD_Randi(3) from the stream position returning 0 (the Sheik needle survives into its bounce state) to the neighbouring position returning 2 (the needle is destroyed). Every retail draw for the frame reproduces exactly from the recorded frame seed, including the surviving needle's Randi(8) = 5 bounce speed and its SetupBounce draws. Control: frame 3919 is an identical needle hit with no Whispy draw, and retail's sequence there matches the hosted one draw for draw. Only the needle's own item lanes diverge; every fighter, physics, and shield lane stays exact, and the episode self-heals.",
       "sources": [
-        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
-        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
-        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
+        "refs/melee/src/melee/gr/groldpupupu.c::grOldPupupu_802113E0",
+        "refs/melee/src/melee/it/items/itseakneedlethrown.c::it_2725_Logic109_DmgDealt",
+        "refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch",
+        "src/upstream_delta_ledger.tsv::canonical:slippi-stage-event-publication"
       ],
       "expected": {
         "native": {
-          "frames": 11195,
-          "matched_frames": 11177,
-          "mismatched_frames": 18,
-          "exact_prefix_frames": 1994,
-          "strict_suffix_frames": 7691,
-          "first_mismatch_frame": 1872,
-          "last_mismatch_frame": 3381,
-          "mismatch_count": 18,
-          "mismatch_fingerprint": "cc3cd3c7c0ebad36",
-          "mismatch_fields": [
-            {
-              "field": "action_frame[0]",
-              "count": 18,
-              "first_frame": 1872,
-              "last_frame": 3381
-            }
-          ],
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/yoshi/SlightAccomplishedEagle.slpz",
-      "id": "yoshi-bowser-source-proven-residual",
-      "owner": "Yoshi held-shield animation cursor",
-      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
-      "sources": [
-        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
-        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
-        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 6971,
-          "matched_frames": 6954,
-          "mismatched_frames": 17,
-          "exact_prefix_frames": 3140,
-          "strict_suffix_frames": 1462,
-          "first_mismatch_frame": 3018,
-          "last_mismatch_frame": 5386,
-          "mismatch_count": 17,
-          "mismatch_fingerprint": "7f94791b68b1e7e5",
-          "mismatch_fields": [
-            {
-              "field": "action_frame[1]",
-              "count": 17,
-              "first_frame": 3018,
-              "last_frame": 5386
-            }
-          ],
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/yoshi/SaneVapidGiraffe.slpz",
-      "id": "yoshi-bowser-source-proven-residual",
-      "owner": "Yoshi held-shield animation cursor",
-      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
-      "sources": [
-        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
-        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
-        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 5442,
-          "matched_frames": 5417,
-          "mismatched_frames": 25,
-          "exact_prefix_frames": 1560,
-          "strict_suffix_frames": 149,
-          "first_mismatch_frame": 1438,
-          "last_mismatch_frame": 5170,
-          "mismatch_count": 25,
-          "mismatch_fingerprint": "49525ab64240f20d",
-          "mismatch_fields": [
-            {
-              "field": "action_frame[0]",
-              "count": 25,
-              "first_frame": 1438,
-              "last_frame": 5170
-            }
-          ],
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/yoshi/ImpracticalScratchyMouse.slpz",
-      "id": "yoshi-bowser-source-proven-residual",
-      "owner": "Yoshi held-shield animation cursor",
-      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
-      "sources": [
-        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
-        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
-        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 8978,
-          "matched_frames": 8914,
-          "mismatched_frames": 64,
-          "exact_prefix_frames": 2015,
-          "strict_suffix_frames": 699,
-          "first_mismatch_frame": 1893,
-          "last_mismatch_frame": 8156,
-          "mismatch_count": 64,
-          "mismatch_fingerprint": "5ffb913007b16c09",
-          "mismatch_fields": [
-            {
-              "field": "action_frame[0]",
-              "count": 64,
-              "first_frame": 1893,
-              "last_frame": 8156
-            }
-          ],
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/yoshi/CarefreeDefenselessTermite.slpz",
-      "id": "yoshi-bowser-source-proven-residual",
-      "owner": "Yoshi held-shield animation cursor",
-      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
-      "sources": [
-        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
-        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
-        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 9801,
-          "matched_frames": 9771,
-          "mismatched_frames": 30,
-          "exact_prefix_frames": 1523,
-          "strict_suffix_frames": 1507,
-          "first_mismatch_frame": 1401,
-          "last_mismatch_frame": 8171,
-          "mismatch_count": 30,
-          "mismatch_fingerprint": "fda4e5bf2aa6e8bc",
-          "mismatch_fields": [
-            {
-              "field": "action_frame[0]",
-              "count": 30,
-              "first_frame": 1401,
-              "last_frame": 8171
-            }
-          ],
+          "exact_prefix_frames": 4044,
+          "first_mismatch_frame": 3922,
+          "first_render_visibility_mismatch_frame": 3342,
+          "frames": 14721,
+          "last_mismatch_frame": 4073,
+          "matched_frames": 14569,
+          "mismatch_count": 1731,
+          "mismatch_fields_digest": "6f9738d5af7014509e1c76b5fd0a0d51cd372809af240345b7f1e9259c6577a7",
+          "mismatch_fingerprint": "39dbb255aa456a2a",
+          "mismatched_frames": 152,
           "render_visibility_mismatch_count": 2,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 10525
+        },
+        "ppc": {
+          "exact_prefix_frames": 4044,
+          "first_mismatch_frame": 3922,
+          "first_render_visibility_mismatch_frame": 3342,
+          "frames": 14721,
+          "last_mismatch_frame": 4073,
+          "matched_frames": 14569,
+          "mismatch_count": 1731,
+          "mismatch_fields_digest": "6f9738d5af7014509e1c76b5fd0a0d51cd372809af240345b7f1e9259c6577a7",
+          "mismatch_fingerprint": "39dbb255aa456a2a",
+          "mismatched_frames": 152,
+          "render_visibility_mismatch_count": 2,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 10525
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/ness/2025-02_Game_20250223T112902.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "Peach turnip release position feeding the item fall integrator",
+      "rationale": "One 1-ULP seed on a single item lane. Peach's turnip (item type 99, id 132) is dropped out of the carry state at frame 23119 and its release y is set one ULP high -- 32.1085701 (0x42006f2d) against 32.1085663 (0x42006f2c). Nothing else diverges: pos_x, both velocity lanes, the timer, damage and every fighter lane stay exact, so the offset is carried unchanged by the constant-gravity fall (vel_y ramps -0.204 per frame to the -1.836 terminal) until the turnip crosses the blast zone and despawns at frame 23187, which ends the episode and leaves a 140-frame exact suffix. Both backends produce the identical snapshot -- same first row, same 69 rows, same f1639cfe9ff96f60 fingerprint and same field digest -- so this is a shared rounding step against Dolphin rather than a host floating-point profile difference or a 64-bit layout artifact.",
+      "sources": [
+        "refs/melee/src/melee/it/item.c",
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 23241,
+          "first_mismatch_frame": 23119,
+          "first_render_visibility_mismatch_frame": null,
+          "frames": 23450,
+          "last_mismatch_frame": 23187,
+          "matched_frames": 23381,
+          "mismatch_count": 69,
+          "mismatch_fields_digest": "e8b7c055f39ed30558929676c755a853c5504fc5f64412f9ad08dbc90523d616",
+          "mismatch_fingerprint": "f1639cfe9ff96f60",
+          "mismatched_frames": 69,
+          "render_visibility_mismatch_count": 0,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 140
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/links/18932_Game_20250611T185955.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "Link article flight position across a knife-edge Fountain contact",
+      "rationale": "Ten consecutive item.pos_x rows on one Link article flight (frames 6873..6882), seeded 2 ULPs low (0xc13bbd02 vs 0xc13bbd00) and self-healing into a 4,709-frame exact suffix. Native and PPC agree bit-for-bit, so the residual is a knife-edge float profile in the article's flight step, not a backend width or logic gap; every fighter, physics, and remaining item lane is exact. The boomerang/arrow flight owners carry their complete audited MWCC fused-op sets (canonical:link-hookshot-chain-solver-gekko-rounding closed the sibling hookshot family), and no discrete lane forks.",
+      "sources": [
+        "refs/melee/src/melee/it/items/itlinkboomerang.c",
+        "refs/melee/src/melee/it/items/itlinkarrow.c",
+        "src/upstream_delta_ledger.tsv::canonical:link-hookshot-chain-solver-gekko-rounding"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 6995,
+          "first_mismatch_frame": 6873,
+          "first_render_visibility_mismatch_frame": 4596,
+          "frames": 11714,
+          "last_mismatch_frame": 6882,
+          "matched_frames": 11704,
+          "mismatch_count": 10,
+          "mismatch_fields_digest": "0e28d8db758ce75b11b399ecd3e18af2c129349b8b2e942262434354c4f9e347",
+          "mismatch_fingerprint": "dbafddb2739cd7ad",
+          "mismatched_frames": 10,
+          "render_visibility_mismatch_count": 10,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 4709
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/links/slippi-2025-01_Game_20250129T125630.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "fighter position across a knife-edge Stadium contact",
+      "rationale": "A single pos_x row at frame 9958, 1 ULP low (0xc2be3884 vs 0xc2be3885), reconverging immediately into a 4,114-frame exact suffix. Native and PPC agree bit-for-bit; all discrete lanes, damage, and inputs are exact through the seed frame. Same position-only knife-edge profile as the established dolphin-ulp-motion-profile entries: the collision arithmetic owners are asm-verified faithful (canonical:mp-ecb-wall-fmadds) and the residual enters at sub-tolerance scale from the bone-pose-derived ECB edge.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "src/upstream_delta_ledger.tsv::canonical:mp-ecb-wall-fmadds"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 10080,
+          "first_mismatch_frame": 9958,
+          "first_render_visibility_mismatch_frame": 659,
+          "frames": 14195,
+          "last_mismatch_frame": 9958,
+          "matched_frames": 14194,
+          "mismatch_count": 1,
+          "mismatch_fields_digest": "4fced41418a9017f2b9e0b606f0a3f332cce85b5c3dae6b06e97996ced692cc3",
+          "mismatch_fingerprint": "2c7c237763cbb6af",
+          "mismatched_frames": 1,
+          "render_visibility_mismatch_count": 12,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 4114
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/links/slpfiles-2025-10_Game_20251020T000422.slpz",
+      "id": "dolphin-ulp-motion-profile",
+      "owner": "self-velocity friction lane across a knife-edge Fountain slope contact",
+      "rationale": "Two rows at frames 7362..7363: speed_air_x_self and speed_ground_x_self carry the same value 2 ULPs low (0x3e1a101b vs 0x3e1a101d) and reconverge into a 3,714-frame exact suffix. Native and PPC agree bit-for-bit and every position, discrete, and item lane is exact - a single knife-edge seed in the slope-projected ground friction profile at sub-tolerance scale, matching the established dolphin-ulp-motion-profile family.",
+      "sources": [
+        "refs/melee/src/melee/ft/ftcommon.c",
+        "refs/melee/src/melee/mp/mplib.c"
+      ],
+      "expected": {
+        "native": {
+          "exact_prefix_frames": 7484,
+          "first_mismatch_frame": 7362,
+          "first_render_visibility_mismatch_frame": null,
+          "frames": 11200,
+          "last_mismatch_frame": 7363,
+          "matched_frames": 11198,
+          "mismatch_count": 4,
+          "mismatch_fields_digest": "8dacfc071b6d15c3e271a6ff5a065f2d3520f454b0ccf4b1ed422baad0cd5936",
+          "mismatch_fingerprint": "3bffd725fb39e58d",
+          "mismatched_frames": 2,
+          "render_visibility_mismatch_count": 0,
+          "signed_zero_equal_count": 0,
+          "strict_suffix_frames": 3714
         },
         "ppc": "native"
       }
     },
     {
       "replay": "replays/validation/yoshi/ClumsyImaginaryOkapi.slpz",
-      "id": "yoshi-bowser-source-proven-residual",
-      "owner": "Yoshi held-shield animation cursor; offstage wall-hug clamp pos_x re-derivation",
-      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed. One wall-contact position differs by one ULP, with native and PPC agreeing on the same bounded source re-derivation and every other gameplay field exact. This is the existing Dolphin wall-clamp execution-profile family, with the exact new row separately locked.",
+      "id": "dolphin-ulp-wall-clamp",
+      "owner": "mpColl wall-contact pos_x re-derivation",
+      "rationale": "One wall-contact position differs by one ULP at frame 7770, with native and PPC agreeing on the same bounded source re-derivation and every other gameplay field exact. This retains the original Dolphin wall-clamp execution-profile residual. The merged costume-matanim publication owner resolves the former 42 GuardHold animation-frame rows; no tolerance is widened.",
       "sources": [
-        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
-        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
-        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c",
         "refs/melee/src/melee/mp/mpcoll.c::mpColl_8004D024",
         "refs/melee/src/melee/mp/mplib.c"
       ],
       "expected": {
         "native": {
           "frames": 7969,
-          "matched_frames": 7926,
-          "mismatched_frames": 43,
-          "exact_prefix_frames": 208,
+          "matched_frames": 7968,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 7892,
           "strict_suffix_frames": 76,
-          "first_mismatch_frame": 86,
+          "first_mismatch_frame": 7770,
           "last_mismatch_frame": 7770,
-          "mismatch_count": 43,
-          "mismatch_fingerprint": "fc06e7c66a6cdd6d",
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "58d1664fe7e745d6",
           "mismatch_fields": [
-            {
-              "field": "action_frame[0]",
-              "count": 42,
-              "first_frame": 86,
-              "last_frame": 4616
-            },
             {
               "field": "pos_x[0]",
               "count": 1,
@@ -2839,78 +2261,6 @@
           ],
           "render_visibility_mismatch_count": 2,
           "first_render_visibility_mismatch_frame": 3192,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/yoshi/StupendousAnnualGoldfish.slpz",
-      "id": "yoshi-bowser-source-proven-residual",
-      "owner": "Yoshi held-shield animation cursor",
-      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
-      "sources": [
-        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
-        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
-        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 11670,
-          "matched_frames": 11665,
-          "mismatched_frames": 5,
-          "exact_prefix_frames": 3611,
-          "strict_suffix_frames": 8054,
-          "first_mismatch_frame": 3489,
-          "last_mismatch_frame": 3493,
-          "mismatch_count": 5,
-          "mismatch_fingerprint": "c00abfb439b077f9",
-          "mismatch_fields": [
-            {
-              "field": "action_frame[0]",
-              "count": 5,
-              "first_frame": 3489,
-              "last_frame": 3493
-            }
-          ],
-          "render_visibility_mismatch_count": 1,
-          "first_render_visibility_mismatch_frame": 7744,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/yoshi/CurvyNervousRam.slpz",
-      "id": "yoshi-bowser-source-proven-residual",
-      "owner": "Yoshi held-shield animation cursor",
-      "rationale": "Yoshi GuardHold (342, animation -1) has no joint AObj. Retail ftAnim_8006F3DC has a non-void fallthrough which leaves f1 as caller register residue; these original recordings report 100 while the hosted no-animation result is 0. Guard gameplay uses its source timers and shield state. Native and PPC agree on every exact residual row; the controller-driven shield recording is fully exact. No comparison tolerance is changed.",
-      "sources": [
-        "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC (8006F468 no-AObj fallthrough)",
-        "src/melee/ft/chara/ftYoshi/ftYs_Init.c::ftYs_Init_MotionStateTable[GuardHold]",
-        "src/melee/ft/chara/ftYoshi/ftYs_Guard.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 10521,
-          "matched_frames": 10505,
-          "mismatched_frames": 16,
-          "exact_prefix_frames": 536,
-          "strict_suffix_frames": 8602,
-          "first_mismatch_frame": 414,
-          "last_mismatch_frame": 1796,
-          "mismatch_count": 16,
-          "mismatch_fingerprint": "695ffd6814aa6ce0",
-          "mismatch_fields": [
-            {
-              "field": "action_frame[0]",
-              "count": 16,
-              "first_frame": 414,
-              "last_frame": 1796
-            }
-          ],
-          "render_visibility_mismatch_count": 5,
-          "first_render_visibility_mismatch_frame": 1821,
           "signed_zero_equal_count": 0
         },
         "ppc": "native"

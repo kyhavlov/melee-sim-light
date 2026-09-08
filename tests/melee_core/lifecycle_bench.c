@@ -35,6 +35,7 @@ static void config_init(MslCoreMatchConfig* config)
     config->ucf_cardinals_1_0_enabled = 1;
     config->ucf_shield_sdi_enabled = 1;
     config->ucf_sdi_enabled = 1;
+    config->ucf_shield_drop_084_enabled = 1;
     config->players[0].char_id = 1;
     config->players[1].char_id = 22;
 }

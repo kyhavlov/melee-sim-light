@@ -62,6 +62,9 @@ static int supported_character(uint8_t character) {
          character == MSL_CHARACTER_BOWSER ||
          character == MSL_CHARACTER_PIKACHU ||
          character == MSL_CHARACTER_SAMUS ||
+         character == MSL_CHARACTER_NESS ||
+         character == MSL_CHARACTER_LINK ||
+         character == MSL_CHARACTER_YOUNG_LINK ||
          character == MSL_CHARACTER_JIGGLYPUFF || character == MSL_CHARACTER_LUIGI ||
          character == MSL_CHARACTER_MARTH ||
          character == MSL_CHARACTER_ZELDA || character == MSL_CHARACTER_FALCO;
@@ -95,6 +98,8 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
   target->ucf_cardinals_1_0_enabled = source->ucf_cardinals;
   target->ucf_shield_sdi_enabled = 1;
   target->ucf_sdi_enabled = 1;
+  target->ucf_shield_drop_extended_enabled = 1;
+  target->ucf_shield_drop_084_enabled = 1;
 
   for (player = 0; player < source->num_players; ++player) {
     const MslPlayerConfig* src = &source->players[player];

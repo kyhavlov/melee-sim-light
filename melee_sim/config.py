@@ -16,6 +16,9 @@ class Character(IntEnum):
     ICE_CLIMBERS = 10
     PIKACHU = 12
     SAMUS = 13
+    NESS = 8
+    LINK = 6
+    YOUNG_LINK = 20
     JIGGLYPUFF = 15
     LUIGI = 17
     MARIO = 0
@@ -56,4 +59,4 @@ class MatchConfig:
     is_teams: bool = False
     friendly_fire: bool = False
     viewpoint_player: int = 0
-    ucf_cardinals_1_0_enabled: bool = False
+    ucf_cardinals_1_0_enabled: bool = True

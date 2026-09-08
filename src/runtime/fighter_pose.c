@@ -121,9 +121,11 @@ int msl_fighter_pose_init(MslFighterPose* pose, uint8_t player_count)
         sizeof(*pose->joints) * pose->joint_capacity,
         MSL_RELOC_FIGHTER_POSE_JOINT, pose->joint_capacity,
         sizeof(*pose->joints), 0);
+    pose->track_capacity =
+        MSL_FIGHTER_POSE_TRACKS_PER_PLAYER * player_count;
     pose->tracks = HSD_MemAllocReloc(
-        sizeof(*pose->tracks) * MSL_FIGHTER_POSE_TRACK_CAPACITY,
-        MSL_RELOC_FIGHTER_POSE_TRACK, MSL_FIGHTER_POSE_TRACK_CAPACITY,
+        sizeof(*pose->tracks) * pose->track_capacity,
+        MSL_RELOC_FIGHTER_POSE_TRACK, pose->track_capacity,
         sizeof(*pose->tracks), 0);
     if (pose->joints == NULL || pose->tracks == NULL) {
         return -1;
@@ -204,6 +206,67 @@ void msl_fighter_pose_register_tree(HSD_JObj* root)
         return;
     }
     register_tree(root);
+}
+
+void msl_fighter_pose_insert_joint(HSD_JObj* joint)
+{
+    MslFighterPose* pose = active_pose();
+    MslFighterPoseJoint* parent = pose_joint(joint->parent);
+    MslFighterPoseJoint added;
+    HSD_JObj* sibling;
+    uint16_t index;
+    uint16_t i;
+    uint16_t count = pose->joint_count;
+
+    // ftParts_800753D4 inserts a single accessory joint during OnLoad,
+    // after the costume trees exist. Keep the final array in source preorder.
+    HSD_ASSERT(145, parent != NULL && pose_joint(joint) == NULL);
+    index = (uint16_t) (parent - pose->joints) + 1;
+    for (sibling = joint->parent->child; sibling != joint;
+         sibling = sibling->next)
+    {
+        MslFighterPoseJoint* node = pose_joint(sibling);
+        HSD_ASSERT(146, sibling != NULL);
+        if (node != NULL) {
+            index += node->tree_count;
+        }
+    }
+    register_joint(joint);
+    added = pose->joints[count];
+    added.tree_count = 1;
+    for (sibling = joint->child; sibling != NULL; sibling = sibling->next) {
+        MslFighterPoseJoint* node = pose_joint(sibling);
+        if (node != NULL) {
+            added.tree_count += node->tree_count;
+        }
+    }
+    memmove(&pose->joints[index + 1], &pose->joints[index],
+            (count - index) * sizeof(*pose->joints));
+    pose->joints[index] = added;
+    for (i = index; i < pose->joint_count; ++i) {
+        pose->joints[i].joint->aobj = (HSD_AObj*) &pose->joints[i];
+    }
+    for (i = 0; i < pose->joint_count; ++i) {
+        MslFighterPoseJoint* node = &pose->joints[i];
+        parent = pose_joint(node->joint->parent);
+        node->parent_index = parent != NULL
+                                 ? (uint16_t) (parent - pose->joints)
+                                 : UINT16_MAX;
+    }
+    for (sibling = joint->parent; sibling != NULL; sibling = sibling->parent) {
+        ++pose_joint(sibling)->tree_count;
+    }
+    for (i = 0; i < pose->ecb_count; ++i) {
+        uint16_t j;
+        if (pose->ecb[i].origin >= index) {
+            ++pose->ecb[i].origin;
+        }
+        for (j = 0; j < pose->ecb[i].joint_count; ++j) {
+            if ((pose->ecb[i].joints[j] & 0x7FFF) >= index) {
+                ++pose->ecb[i].joints[j];
+            }
+        }
+    }
 }
 
 #ifdef MSL_CORE_WASM
@@ -548,12 +611,11 @@ static MslFighterPoseTrack* allocate_tracks(MslFighterPoseJoint* node,
 {
     MslFighterPose* pose = active_pose();
     HSD_ASSERT(162, count <= UINT8_MAX);
-    if ((uint32_t) pose->track_used + count > MSL_FIGHTER_POSE_TRACK_CAPACITY)
-    {
+    if ((uint32_t) pose->track_used + count > pose->track_capacity) {
         compact_tracks(pose);
     }
-    HSD_ASSERT(163, (uint32_t) pose->track_used + count <=
-                        MSL_FIGHTER_POSE_TRACK_CAPACITY);
+    HSD_ASSERT(163,
+               (uint32_t) pose->track_used + count <= pose->track_capacity);
     node->track_start = pose->track_used;
     node->track_count = count;
     pose->track_used += count;
@@ -2027,6 +2089,11 @@ float msl_fighter_pose_tree_frame(HSD_JObj* root)
 {
     MslFighterPoseJoint* node = first_animated(root);
     return node != NULL ? node->curr_frame : 0.0F;
+}
+
+int msl_fighter_pose_tree_has_animation(HSD_JObj* root)
+{
+    return first_animated(root) != NULL;
 }
 
 float msl_fighter_pose_tree_end(HSD_JObj* root)

@@ -124,6 +124,7 @@ void ftCo_800C3CC0(Fighter_GObj* gobj)
 
 void ftCo_AirCatch_Anim(Fighter_GObj* gobj)
 {
+
     Fighter* fp = GET_FIGHTER(gobj);
 
     if (fp->kind == FTKIND_LINK || fp->kind == FTKIND_CLINK) {
@@ -146,8 +147,18 @@ void ftCo_AirCatch_Anim(Fighter_GObj* gobj)
             if (fp->mv.co.aircatch.x0 <= da->xB0) {
                 Item_GObj* tether_gobj = fp->fv.lk.xC;
                 Item* tether_ip = GET_ITEM(fp->fv.lk.xC);
+#ifdef MSL_CORE_NATIVE
+                // The tether view aliases the hookshot attribute lanes
+                // it_link_attr_math derives in place at spawn (pos_x_0 is
+                // the derived x38 launch speed); read the match-owned
+                // mirror like the Samus grapple twin below.
+                struct TetherAttributes* tether_data =
+                    (struct TetherAttributes*)
+                        msl_link_hookshot_attrs(tether_ip);
+#else
                 struct TetherAttributes* tether_data =
                     tether_ip->xC4_article_data->x4_specialAttributes;
+#endif
 
                 if (fp->mv.co.aircatch.x0 == da->xA8) {
                     Vec3 pos = { 1.8, 0, 0 };

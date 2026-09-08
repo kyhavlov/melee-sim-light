@@ -25,12 +25,22 @@ msl_host_multiarch() {
     esac
 }
 
+# Debian package architecture selecting host-arch rows of the pinned
+# toolchain manifest (ppc32_toolchain_packages.tsv).
+msl_host_deb_arch() {
+    case "$(uname -m)" in
+        arm64 | aarch64) echo "arm64" ;;
+        *) echo "amd64" ;;
+    esac
+}
+
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     case "${1:-}" in
         platform) msl_host_platform ;;
         multiarch) msl_host_multiarch ;;
+        deb-arch) msl_host_deb_arch ;;
         *)
-            echo "usage: $0 platform|multiarch" >&2
+            echo "usage: $0 platform|multiarch|deb-arch" >&2
             exit 2
             ;;
     esac

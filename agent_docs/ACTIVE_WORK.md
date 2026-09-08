@@ -1,3 +1,77 @@
+# Pre/post merge throughput check — 2026-09-08
+
+- Measure frozen pre-merge 152f703d against merged b0601914. No gameplay changes.
+- Use 403 shared recordings (pre-merge 404 minus the retired unfrozen Stadium
+  capture), identical ordinary-input tapes/configuration semantics and lane order.
+- Strict GCC release, CPU 0 on the 9950X3D, resident 256/512, 262144 match-frames,
+  eight warmup ticks, three alternating pairs per size. Compare digests and
+  report any gameplay differences separately from timing. Neither default suite
+  expansion nor startup time should be mistaken for steady throughput changes.
+- Scratch: reports/triage/decomp_merge_benchmark/. Record results under performance/.
+- Audit follow-up: initial flattened manifest serialized absent per-replay flags
+  as null; loader treats those as false and played_on null as a literal string.
+  Initial measurements remain an equivalent custom-profile comparison, but not
+  the intended canonical replay profile. Preserve them under initial-null-profile/
+  and repeat the same bounded protocol with absent keys omitted before amending
+  the benchmark record. Do not interpret this tooling mistake as runtime drift.
+- Complete after the profile correction: median match-frames/s pre/post is
+  121806/119942 at 256 lanes (-1.53%) and 125740/125084 at 512 (-0.52%).
+  All pre/post digests and normalized tapes match. The corrected changes remain
+  within the initial small differences the user accepted; no optimization
+  packet. Details, original samples and correction are in performance/HISTORY.md.
+
+# decomp-port-dev integration — 2026-09-08
+
+- Request: evaluate and prepare integration of origin/decomp-port-dev into dev;
+  prefer rebase only if clean. Complete the verified local merge; no push.
+- Baselines: dev 152f703d; incoming 22136d7d; merge base 4a344d56.
+  Worktree was clean. Trial merge-tree: 53 conflicting paths, 72 incoming and
+  11 dev-only commits. Use one merge on integration/decomp-port-dev.
+- Final owners: retain dev canonical pose/performance, Bowser, team/RL and
+  Yoshi source completion; integrate incoming Ness/Link/Young Link source owners,
+  per-fighter pool sizing, UCF, common gameplay fixes and validation/tooling.
+- Canonical state: existing match-owned Fighter/Item/pose and generated relocation;
+  combine capacity requirements inside their existing initialization owners.
+- Pool resolution: retain dev source-sized Item reserve plus the source five-Heiho
+  wave on Yoshi's Story; combine incoming per-tether ItemLink and per-fighter
+  AObj/FObj/GObj reserves. One msl_class_reserve_pieces owner supplies both the
+  incoming per-port JObj floor and dev full Peach-item graph bound. Delete the
+  duplicate capped class helper and empirical per-fighter Item-count switch.
+- Consumers: native/Python/PPC/Wasm/viewer, reset/copy/save/restore, validation.
+- Displaced code/deletion boundary: duplicate Yoshi implementations and ID mapping
+  become one reviewed owner; preserve both replay corpora. No dual pose indices,
+  allocation fallback, duplicate state, restored legacy performance machinery,
+  or hand-edited generated replay identities. Regenerate generated layouts/schema.
+- Accessory integration found by article-pool smoke: Link's OnLoad inserts the
+  sword part after the compact main/interpolation trees were registered. Native
+  part flags live in pose nodes, so its unregistered JObj crashes on Landing.
+  Final owner is the existing flat pose array: construction inserts the new joint
+  into source preorder, repairs node pointers/parent spans/ECB indices, and binds
+  the Wasm part index. The source accessory callback owns when this occurs.
+  No runtime fallback, separate accessory animation state, or old traversal is
+  restored. Verify mixed Link article scenarios plus cross-index save/restore.
+- First combined native gate: 462 PASS / 58 CLASSIFIED / 9 output-drift / 0
+  ERROR over 5,059,922 transitions. No new replay mismatch signatures. Eight
+  dev Yoshi hashes and one incoming Ness hash differ. A captured server stream
+  against the frozen dev binary isolates Yoshi's changed action-frame publication
+  to the incoming costume-matanim no-AObj owner (100 instead of 0); item-byte
+  differences are separately masked pool residue. Compare the incoming parent
+  for the Ness hash before changing any retained lock. Build an isolated parent
+  binary; do not infer equivalence from aggregate counts.
+- Experiment plan: inspect Yoshi differences and all semantic overlaps; prepare
+  merge candidate; run source/layout/fresh extraction and native lifecycle gates,
+  then combined replay checks and release/Wasm/viewer checks as available.
+  Record actual blockers and remaining verification in DECOMP_DEV_INTEGRATION.md.
+
+- Final checkpoint: native and strict release both accept all 529 replays /
+  5,059,922 transitions (470 PASS, 59 CLASSIFIED, zero XPASS/FAIL/ERROR).
+  Eight classifications retired and one narrowed from source corrections;
+  nine locks regenerated only after native/PPC verification. All 58 Python
+  tests pass; source/native/article/costume, Wasm and production browser gates
+  pass, plus 256-lane/lifecycle smoke and the 378-configuration census.
+  Detailed feature inventory, resolutions, evidence and remaining performance/
+  long-soak verification are in DECOMP_DEV_INTEGRATION.md.
+
 # Character support — Yoshi, then Bowser (2026-09-07)
 
 - **Viewer ID correction (user report):** Yoshi internal 14 fell through to external
@@ -3432,6 +3506,1121 @@
   traffic cost more than the source arithmetic, including for the repeated population. Remove both
   cache forms and all profiling; retain canonical vertices/topology and on-demand construction.
 
+# Correctness lead — stale-rationale audit of the dolphin-ulp family: six re-owned (2026-09-03, landed)
+
+## Objective
+
+Execute the standing lead from the HummingDismalCat pass: audit every `dolphin-ulp-*`
+classification (37 entries) by diffing its birth-commit `first_mismatch_frame`/rationale
+against the current record, and re-triage the current first fork of any entry whose
+fingerprint moved without its prose being re-owned.
+
+## What the archaeology showed
+
+- Per-entry ledger timelines over all 71 commits of `melee_core_classifications.json`
+  found 13 entries whose first mismatch frame moved since birth; two more (Cockroach,
+  Aardvark) drifted on mismatch-count-only re-records. Four of the movers (dk 152714,
+  puff rollout_ends_ys, samus master-samus, peach CapitalPristineTarsier) had been properly
+  re-owned; the rest had mechanically re-recorded fingerprints under untouched or
+  append-only prose.
+- **Six entries were misattributed** (defect class in id/prose wrong for the current rows;
+  each current fork verified by a fresh strict native run plus peppi lane dumps):
+  - marios `medium-fox-2026-04` (`dolphin-ulp-dynamic-bone-capsule-gate`, rationale
+    byte-identical since birth): the frame-910 capsule fork was retired by the spline
+    path-evaluator fusing (`58f3f9e3`, 473 rows -> 1). What remains is one self-healing
+    1-ULP pos_x row at 8813 — Dr. Mario falling down Yoshi's right side wall onto the
+    absolute wall clamp. Re-owned as `dolphin-ulp-motion-profile` (wall-hug family).
+  - samus `fox-d18-2026-04` (`dolphin-ulp-contact-gate`): the prose's 81-row damage-state
+    flip at 9075 was retired by the smoke-puff draw consumption (`2c0c510e`, 223 rows -> 1).
+    What remains is one 1-ULP pos_y row at 7389, the frame after a zair wall-hang release
+    under Battlefield's ledge. Re-owned as `dolphin-ulp-motion-profile`.
+  - peach `ExpertWorthlessFinch` (`dolphin-ulp-item-motion-profile`): all five remaining
+    rows are whole-point (+1.0 exactly) percent rows — the hosted magnifier ticks one frame
+    before the recording at three offscreen episodes, resyncing at the recorded tick. Zero
+    item or motion lanes remain. Re-owned as `vanilla-magnifier-render-schedule`.
+  - peach `TameEmbellishedSparrow` (`dolphin-ulp-item-and-motion-profile`, "discrete
+    gameplay remains source-driven"): the current 2,285-row tail from 13507 is one
+    unreturned magnifier tick on Marth (deep offscreen at (-112, -12); the recording never
+    ticks — Marth regains the stage first) whose +1% persists to game end with full
+    consequence: 0.54% knockback deltas, a changed landing at 13694, and a final-frame
+    is_dead/stocks flip. Re-owned as `vanilla-magnifier-render-schedule`; the exact
+    fingerprint pins the consequence tail.
+  - peach `DisgustingLivelyRaven`: first row is a one-frame-early magnifier tick (Peach
+    offscreen at (117, 16) on Yoshi's), then 23 ULP item.pos rows. Re-owned as
+    `mixed-dolphin-ulp-render-profile`.
+  - peach `CandidThankfulCockroach` (`dolphin-ulp-item-motion-profile`): current rows are
+    80 airborne-Jigglypuff root-position ULPs plus two magnifier ticks on Peach — no item
+    lane at all. Re-owned as `mixed-dolphin-ulp-render-profile`; PPC snapshot paragraph
+    kept verbatim (still accurate).
+- **Three carried provably stale prose under the right class** (fixed in place): peach
+  `SmugConfusedTermite` ("25 rows" -> the actual 16), sheik `GlaringRosyAlpaca` and
+  `WavyRundownAardvark` (core sentence still claimed thrown-needle one-byte samples — zero
+  needle rows remain — and "PPC and native agree bit-for-bit" — their recorded PPC
+  fingerprints differ from native).
+- The magnifier identifications are lane-dump-backed: at every whole-point percent row the
+  affected fighter is far offscreen and the recording ticks +1.0 exactly one frame after
+  the hosted run (Finch 7208/7268/11174, Raven 7474, Cockroach 6415/10445), matching the
+  `vanilla-magnifier-render-schedule` unrecorded-VI/render-boundary mechanism.
+
+## Final boundary
+
+- Prose/id/owner/sources re-owned on nine entries in
+  `replays/suites/melee_core_classifications.json`; every `expected` block (fingerprints,
+  native and PPC) untouched, no suite membership, lock, or gameplay code changed. Ids used
+  are existing families only (`dolphin-ulp-motion-profile`,
+  `vanilla-magnifier-render-schedule`, `mixed-dolphin-ulp-render-profile`).
+
+## Evidence and acceptance
+
+- Native aggregate after re-owning: 433 pass / 58 classified / 0 fail / 0 error (unchanged
+  from the HummingDismalCat baseline; no outcome moved). Affected suites native: peach
+  9 pass / 10 classified, marios 44/6, samus 23/2, sheik 16/4, all 0 fail. PPC
+  (`--timeout 180`, 8 workers) on the same four suites: parity, 0 fail.
+- Triage evidence: per-commit ledger timelines (scratchpad git archaeology), strict
+  single-replay native runs for all eight suspect replays, and peppi lane dumps around
+  every claimed magnifier row and both single-row residuals.
+- The pikachu `master-master` entry records first_mismatch_frame -24 (countdown phase);
+  it is birth-stable with a fresh rationale and was left alone, noted here as the one
+  oddity outside the audit's mover criterion.
+
+## Log
+
+- 2026-09-03 — `retained`: birth-vs-current audit of all 37 `dolphin-ulp-*` entries, six
+  re-owns + three prose corrections, suite + aggregate verification. The audit criterion
+  that caught them: fingerprint moved (or count moved) while the rationale stayed
+  byte-identical or append-only. Every remaining `dolphin-ulp-*` entry now has prose that
+  matches its current first fork.
+
+# Correctness lead — the peach HummingDismalCat residual is an unfrozen Stadium capture (2026-09-03, landed)
+
+## Objective
+
+Re-triage the largest classified residual whose rationale had no retail evidence:
+`peach/HummingDismalCat` under `unmodeled-presentation-rng-stream-phase` (72,738 rows from
+4177, 2,504 mismatched frames with no recovery). The ledgered story — a DamageFlyRoll
+`HSD_Randf` landing one stream position off against an excluded presentation draw — was
+written for a different fork and no longer described the fingerprint.
+
+## What the traces showed
+
+- **The rationale was stale.** At the classification's birth (peach packet, `cc1996be`) the
+  first mismatch was frame 3721 and really was the DamageFlyRoll gate. `2c0c510e` (smoke-puff
+  model-start draw consumption in efSync_Spawn) closed that fork and re-recorded this replay's
+  fingerprint as today's `6a532077b54167b0` @4177 — the text was never re-owned.
+- **The current fork is not RNG.** A hosted RNG-draw trace (temporary env-gated logging in
+  `random.c`, callers resolved with addr2line) shows the fork frame consuming only the
+  Stadium fly-by `randi(200)`, the `ftCo_8009F834` efAsync jitter triple, and modeled effect
+  draws — no gameplay-gated draw at all. Both runs land the identical turnip hit on P1 Fox at
+  4177 (`speed_x_attack[0]` agrees to 1 ULP at 4188); the fork is the post-hit floor resolve:
+  retail freezes Fox at (25.0000, 1.2501) on ground 36, hosted at (24.4517, 0.0001) on
+  ground 34 — and no line in the frozen Stadium set passes through (25, 1.25).
+- **The recording's Stadium transforms.** The capture carries 13 `stadium_transformation`
+  events: type 6 phases at Slippi 3709/3710/3711/4013/4194/4315/4316 and type 5 (revert) at
+  5722..6328. The first mismatch (4177) sits between the phase-4 and phase-5 events, the
+  earliest recorded standing row off the frozen height set is 4187 (P1, ground 36,
+  y = 1.2501 — the transformed floor Fox lands on out of hitlag), and the recording stands
+  fighters on grounds 41..50 at heights the frozen line set does not contain, all inside the
+  4177..6680 mismatch window. The hosted owner deliberately disables the transformation
+  loader (`grStadium_801D1518`), so divergence at first transformed-terrain contact is the
+  designed behavior for an out-of-domain capture, not a defect.
+- **The capture is unique.** A corpus scan of every suite entry on stage 3 finds
+  HummingDismalCat is the only one recording transformation events (older captures predate
+  the event lane entirely; every one of those either passes exactly or carries an unrelated
+  classification).
+
+## Final boundary
+
+- The capture is outside the supported domain (RL 1.0 covers frozen Pokemon Stadium; later
+  suites event-verify frozen at admission and would have rejected it). Retired rather than
+  reclassified: removed from `replays/suites/peach.json` (20 -> 19; notes updated), its
+  classification (59 -> 58) and output lock (492 -> 491) deleted, the `.slpz` deleted, and
+  the two suite-count pins in `tests/` moved 492 -> 491. No gameplay code changed.
+
+## Evidence and acceptance
+
+- Native aggregate after retirement: **433 pass / 58 classified / 0 fail / 0 error** at
+  4,869,495 frames — exactly the previous 4,876,298 minus this replay's 6,803, with no other
+  outcome moved. peach suite native and PPC (`--timeout 180`, 8 workers): 9 pass /
+  10 classified / 0 fail on both backends.
+- Gates on this host: `source-check`, `format-check`, `native-smoke`, pytest 47 passed. The
+  temporary `random.c` trace instrumentation was reverted before any result was recorded.
+- Method note: no Dolphin probe was needed — the recording itself declares the
+  transformation. Validator mismatch frames are Slippi frame ids (the recorded P1 row at
+  Slippi 4177 is bit-identical to the reported expected row); the hosted trace stamp
+  `gm_8016AEDC()` remains Slippi id + 123.
+
+## Log
+
+- 2026-09-03 — `retained`: re-triage, corpus transformation scan
+  (`reports/triage/hdc_rng_native2.txt`, peppi lane dumps), suite/classification/lock
+  retirement, test-count pins, aggregate + PPC parity, gates. The sibling
+  `unmodeled-presentation-rng-stream-phase` entry (ness `2026-06`) is probe-backed and
+  untouched. Standing correctness lead from this pass: classification rationales are not
+  re-verified when re-records move a fingerprint — the remaining `dolphin-ulp-*` family
+  (34 entries) carries the same risk and deserves the same birth-commit-vs-current-fork
+  audit before any is trusted as evidence.
+
+# Correctness lead — the two Link open port defects (2026-08-30, landed)
+
+## Objective
+
+Close the two classifications carried as explicit open port defects:
+`link-boomerang-deflect-fork` (links `slippi-games-2025-05` @4185, 202 rows) and
+`thrown-release-pose-offset` (links `slippi-2025-08` @3503, 17 rows). Neither was what its
+ledger text said.
+
+## What the traces showed
+
+- **Boomerang:** there is no Yoshi's Story line at (-43.4, 10.7). The recording's item freezes
+  for ten frames with its timer held at 246 while P1 Marth goes 369 -> 370
+  (`ftMs_MS_SpecialLw` -> `SpecialLwHit`): the boomerang hit Marth's Counter. A hosted trace
+  proved the hit is registered (`ftColl_80077688` runs on the frame, `xDCE_flag.b4/b5` set,
+  `Item_80269DC8` dispatches the boomerang's `it_802A2320` mirror against `xC58`), and the
+  hosted post-mirror velocity (-1.711, -0.523) is exactly the recording's pre-mirror velocity
+  (-1.7866, -0.0937) reflected across n = (-0.1736, 0.9848); the recording's (-1.6468, 0.6991)
+  is the reflection across (+0.1736, 0.9848). `p_ftCommonData->x2D0` is 80, so the sign of
+  `xC58.x` is the whole defect. The DOL at 0x80077818..0x8007782C (`fcmpo pos->x, 0; cror
+  eq,gt,eq; bne -> fneg`) keeps +cos on the `pos->x >= 0` side; `refs/melee`'s
+  `ftColl_80077688` has the two arms swapped, so every projectile that hits a counter shield
+  was mirrored into the counter's side.
+- **Throw release:** P1 Young Link stands on a Fountain platform rising 0.1125/frame. The
+  release vec from `ftCo_800DDDE4` lands below the platform (y -2.12) and `mpColl_800471F8`
+  snaps the victim onto the line — hosted at the frame's new height (6.3376), retail at the
+  previous one (6.2251 = 8.048 - 1.823). Retail's platform update is `grIzumi_801CC358`,
+  registered by `grIzumi_801CBCE8` at priority 4 (after `Fighter_8006A360` at 1, before
+  `Fighter_procMap` at 6), and Slippi's `SendFountainInfo.asm` hooks 0x801CC998 inside it.
+  The hosted runtime published the recorded height in `apply_replay_stage_events` at frame
+  start and the priority-4 callback's replay branch was a no-op (`was_applied`), so every
+  mid-frame floor resolve in the fighter anim phase saw the platform one phase early.
+
+## Final boundary
+
+- `src/melee/ft/ftcoll.c::ftColl_80077688`: hosted branch with the DOL's arm order
+  (`canonical:counter-shield-item-deflect-normal-sign`, upstream-candidate).
+- `src/runtime/scalar.c::apply_replay_stage_events` no longer publishes Fountain heights;
+  `src/melee/gr/grizumi.c::grIzumi_801CC358`'s replay branch owns the publication at retail's
+  scheduler point; `msl_slippi_fod_platform_{was_applied,mark_applied}` and
+  `MslCoreSlippiState::fod_platform_applied_mask` are deleted
+  (`canonical:fountain-platform-replay-publication-phase`, hosted-replay-policy). Dream Land's
+  Whispy direction publication is untouched.
+
+## Evidence and acceptance
+
+- Native aggregate at this change: **429 pass / 59 classified / 0 fail / 0 error**
+  (4,876,298 frames). Four entries turned exact and were retired (63 -> 59):
+  `links/slippi-games-2025-05` 5,275 -> 5,375/5,375; `links/slippi-2025-08` 7,106 ->
+  7,123/7,123; `ganon/24891` (35-row FoD throw-release `dolphin-ulp-motion-profile`) 11,140/
+  11,140; `yoshi/slippi-2025-02` (`fod-release-floor-pick`, 358 rows) 12,828/12,828. No other
+  replay's outcome or lock moved; the four locks were re-recorded from the aggregate run.
+- The `fod-release-floor-pick` text had already named this seed ("same mp floor-line-pick seed
+  as the probed dk auto-dk-2025-04 and ganon FoD throw-release entries"); dk `auto-dk-2025-04`
+  is the Samus wall-hug ULP family, not a release resolve, and is unchanged.
+- Gates on this host: `source-check`, `format-check`, `native-smoke`, pytest; PPC parity on
+  the four retired replays recorded in the log below. Wasm/viewer unverified (no emcc).
+
+## Log
+
+- 2026-08-30 — `retained`: both fixes, four classifications retired, four locks re-recorded,
+  two ledger rows. Native aggregate after the lock re-record: 433 pass / 59 classified / 0
+  fail / 0 error. PPC (fresh `make ppc`, `--timeout 180`): all four retired replays PASS at
+  full length (links 7,123 and 5,375; ganon 11,140; yoshi 12,828). `source-check`,
+  `format-check`, `native-smoke`, pytest 47 passed. Trace recipe: temporary `fprintf` at the `ftcoll.c` item-vs-shield check
+  (`x221B_*`, `shield_hit` world position via `lb_8000B1CC`, `lbColl_80007BCC` result) and at
+  `ftColl_80077688`; at `Item_80269DC8` (`xDCE_flag.b4/b5`, `xC58`); at `ftCo_800DDDE4`
+  (thrower `cur_pos`/root translate, release vec, resolve output); and a same-file order trace
+  in `msl_ground_headless_epoch_proc`, `Fighter_8006A360`, `grIzumi_801CC358`, and
+  `Fighter_procMap` with `gm_8016AEDC()` as the frame stamp (Slippi id + 123).
+
+# Correctness lead — the classic UCF shield drop is two rollouts (2026-08-26, landed)
+
+## Objective
+
+Close the one open residual that carried a named gameplay mechanism:
+`held-down-shield-press-escape-decision` (marth `WingedGorgeousPanther` @9793, P3 Falco
+shielding off a held-down rim press on the frozen Stadium main floor where the hosted
+build spot-dodged). The ledgered suspect — the `x671` down-tilt timer arming a frame late —
+was wrong; the vanilla gate is exact.
+
+## What the retail probe showed
+
+Two engine-dump probes (`reports/triage/run_hookshot_probe.py`, out under
+`reports/triage/marth_escape_probe{,_b}/`) on frames 9787..9795 with PC hits at
+`Fighter_8006AD10`, `ft_8008A348`, `ftCo_Wait_IASA`, `ftCo_80099794`, `ftCo_80099894`,
+`ftCo_80091A4C`:
+
+- Retail's `x671` is 0/1/2/3 on 9790..9793 exactly as hosted (reset when `lstick.y`
+  crosses `-xC` at 9790); `held` carries L throughout (the trigger was held since the
+  tech, not pressed at 9793); `x670` is 6; `cstick` is 0.
+- At 9793 the PassiveStandF anim end runs `ft_8008A348` -> Wait, then `Wait_IASA` calls
+  `ftCo_80099794`, which **enters `ftCo_80099894`** (the vanilla gate passes: `-0.7125 <=
+  x314`, `3 < x318`) — and yet `ftCo_80091A4C` runs next and the frame ends in GuardOn.
+- `coll_data.floor.index` is 34 with `floor.flags` **0** (main floor), so the UCF 0.84
+  shield-drop code (`External/UCF 0.84/UCF/UCF Shield Drop.asm`: `floor.index != -1 &&
+  floor.flags & 0x100`, i.e. `mpColl_IsOnPlatform`) could not have suppressed it.
+- The replay's own embedded gecko list (event 0x3D via 0x10 splitters) carries a
+  304-byte code at `800998A4` that is `External/UCF 0.8/Logic/UCF SD.asm`: c-stick gate,
+  a float rim test (`((int(|v|*80 - 0x37270000) + 2) / 80)` per axis, squares summed
+  `>= 1.0` in single precision), `x670 > 3`, `lstick.y > -0.8`, **no platform test**;
+  its suppress path pops `ftCo_80099894`'s frame and returns to the caller's `li r3,0`,
+  which is why the spot-dodge check reports false and the Guard check follows.
+
+## Final boundary
+
+- **Owner:** `src/runtime/match.c::msl_ucf_suppress_spotdodge` selects between the two
+  codes on `ucf_shield_drop_084_enabled` (new `MslCoreMatchRules` field, wire byte 32,
+  `MslCoreMatchConfig` 53 -> 54 bytes, `MslCoreStreamJobHeader` 109 -> 110). On = the 0.84
+  platform-gated integer rim test (unchanged); off = the 0.8 float rim test everywhere.
+- **Plumbing:** `wire.h/.c`, `match.h/.c`, `scalar.c`, `api.c` (production = 0.84),
+  `tools/validation/native.c` (both entry points), `suite_io.py`, `validate_replay.py`,
+  the four C smokes/benches, `tools/viewer/schema.c` + regenerated
+  `schema.generated.js` + `sim.js`. Suite entries carry
+  `"ucf_shield_drop_084_enabled": false` per replay, defaulting true.
+- **Corpus profile:** a scan of every validation replay's embedded gecko list
+  (`reports/triage/gecko_scan.txt`, driver `reports/triage/gecko_scan.py` — the 0x800998A4
+  body is 200 bytes for 0.84 and 304 bytes for 0.8; only runtime scratch words, the
+  `backup` frame size and the branch-back differ within a version) finds **16 recordings
+  with the 0.8 code**, and each of those sixteen also matches none of the other 0.84
+  bundle files (their dashback/SDI codes are the older bundle too — an open lead if any of
+  them ever forks on a dashback/SDI decision). Flagged: falcon OddballCleanViper; icies
+  master-diamond, platinum-platinum; luigi slippi_01.07.22; marios 6082, platinum-platinum,
+  ranked-anonymized platinum-platinum, Slippi-20220321; marth BreakableMundaneElephant,
+  FemaleWorthyAlpaca, WingedGorgeousPanther; peach HeartyStiffMallard, ScaryFrankPorcupine;
+  pikachu diamond-platinum; puff master-diamond; samus diamond-platinum.
+- **Ledger:** `canonical:ucf-classic-shield-drop-version-flag` in
+  `src/upstream_delta_ledger.tsv`.
+
+## Evidence and acceptance
+
+- `WingedGorgeousPanther` 9,915 -> **10,625/10,625 exact**; `peach/ScaryFrankPorcupine`
+  (classified `dolphin-ulp-item-motion-profile` @25891, 38 rows) turned out to be the
+  same fork and is **26,844/26,844 exact**. Both classifications retired (65 -> 63) and
+  their locks re-recorded (`008c3a4a80f7a6dc` -> `a2f43edd9a4b6306`, `916b55fd67d0ab1a`
+  -> `ea018e8ffbc9f96e`); no other lock moved.
+- Native aggregate: **429 pass / 63 classified / 0 fail / 0 error** (4,876,298 frames).
+  Every other flagged replay reproduces its previous outcome, so the 0.8 predicate is
+  corpus-neutral except where it closes forks.
+- Gates on this host (gcc 15.2, recorded lock-clean): `source-check`, `format-check`,
+  `native-smoke`, `python-library`; the Wasm/viewer targets are unverified (no emcc) but
+  the schema regenerated cleanly and `sim.js` writes the new byte.
+- Trap noted while triaging: running `validate_replay` on a bare positional replay path
+  does not apply the suite's per-entry UCF profile, so `WingedGorgeousPanther` falsely
+  forks at 3864 (`ucf_cardinals_1_0_enabled` false in its suite entry). Use `--suite`.
+- `src/api.c` had set the production profile without `ucf_shield_drop_extended_enabled`
+  (it stayed 0 from the memset), so production RL ran the classic shield drop only; at the
+  user's direction the extended (counter-based) shield drop is now on in production too,
+  matching current Slippi.
+
+## Log
+
+- 2026-08-26 — `retained`: probes, corpus scan, flag, suite profiles, classification
+  retirement, lock re-record, ledger row. PPC parity (binary rebuilt for the 54-byte
+  config): marth 17 pass / 2 classified / 0 fail with WingedGorgeousPanther PASS;
+  ScaryFrankPorcupine PASS 26,844/26,844. The peach suite's other ten PPC "fails" are
+  classification entries that carry only a `native` snapshot; peach was never
+  PPC-recorded. (Corrected 2026-08-28: only eight of the ten PPC fingerprints equal
+  native, e.g. TameEmbellishedSparrow 65e7d85cca69a2b5; CandidThankfulCockroach and
+  CapitalPristineTarsier differ — see the 2026-08-28 entry.) pytest 47 passed.
+  Committed as `61a2d260`.
+- 2026-08-28 — `retained`: peach and marios PPC-recorded. `make ppc` on `5c0a91ac`, then
+  per-suite PPC with `VALIDATION_WORKERS=8 --timeout 180` (the auto 16-worker default trips
+  the 30s PPC timeout on 15k+ frame replays and reports them as `error`). peach PPC
+  9 pass / 1 classified / 10 unrecorded before; eight of the ten PPC fingerprints equal
+  native and are now `"ppc": "native"` aliases. Two differ and carry their own PPC snapshot:
+  CandidThankfulCockroach (native 17b7be538e5e236a / 62 rows -> PPC 6002eb36f1ec85ea /
+  120 rows) and CapitalPristineTarsier (851c665507f1483b / 60 -> b3f57dbd9b3539c0 / 117).
+  Both are the ledgered PPC-wider `dolphin-ulp-motion-profile` shape (cf. sheik
+  GlaringRosyAlpaca 38/117, WavyRundownAardvark 50/107): a ~120-row 1-ULP root-position
+  window on the airborne port-2 fighter (y ~127..160) that starts 1-3 frames earlier on
+  PPC; percent residuals and strict suffixes are identical across backends. marios PPC
+  44 pass / 6 unrecorded, all six fingerprints equal native -> aliases. After recording:
+  peach native and PPC 9 pass / 11 classified / 0 fail; marios native and PPC 44 pass /
+  6 classified / 0 fail. Still native-only: aggregate_recent (2), battlefield_recent (1),
+  pokemon_stadium_recent (1). Logs: `reports/triage/{peach,marios}-ppc-head-5c0a91ac.txt`.
+- 2026-08-26 — `retained` (`a3158608`, follow-up): the production profile now matches the
+  Slippi netplay injection list (`Output/InjectionLists/list_netplay.json`: the full UCF
+  0.84 bundle) — `src/api.c` turns on the extended shield drop, and the Python package's
+  `ucf_cardinals_1_0_enabled` default (`melee_sim/config.py`, `env_batch.py`) flips to
+  True so bots train under 1.0 cardinals as they would see online. Validation suites are
+  untouched (per-entry flags).
+
+# Structural packet — per-fighter sealed-arena reserves (`decomp-port-mem`, landed)
+
+## Objective
+
+Stop the RL fleet's post-seal arena aborts. Every runtime pool reserve that
+`msl_core_match_reset` buys before `msl_memory_finish_initialization` seals the Match
+arena was a flat match-wide constant sized against one port's worst case (or, for FObj,
+a `has_samus ? 512 : 256` branch). Four ports can each contribute the same article burst,
+so the fleet hit `HSD_ObjAllocAddFree` / `HSD_MemAlloc` "arena allocation failed" aborts
+mid-match on ordinary lineups: four Ness (FObj, PK Flash detonations), four Samus air
+grapple-catches (GObj -> class mem-piece -> AObj -> ItemLink in turn), four Pikachu
+(item pool at Thunder's four articles), Ness vs Ice Climbers on Yoshi's Story (item pool:
+seven-item PK Thunder + five Blizzard puffs + stage Shy Guys), a four-Ice-Climbers
+mirror (pose track arena at 1058 live tracks), and Peach vs Link on Dream Land (the
+192-byte JObj mem-piece class under a lazily loaded aerial hookshot). The packet is
+landed across commits `066cffdd`..`3cd7ead3` (2026-08-07..08-17); this section is its
+ledger, written after the fact on 2026-08-26.
+
+## Final boundary
+
+- **Owner:** the reserve block in `src/runtime/scalar.c::msl_core_match_reset` (the
+  `HSD_ObjAllocEnsureFree` calls, `msl_item_reserve_runtime_pools`,
+  `hsdPreallocateMemPieces`, and the new `hsdPreallocateMemPiecesForClass` in
+  `src/sysdolphin/baselib/class.c`), plus the per-player pose arenas in
+  `src/runtime/fighter_pose.h`. Every reserve is a per-fighter term summed over the
+  configured ports (bursts from different fighters overlap in time, so the operator is a
+  sum, never a maximum), plus a stage term where the stage itself spawns.
+- **Canonical state:** none added. The counts (`samus_count`, `ness_count`, `link_count`
+  for Link/Young Link, `sheik_count` for Sheik and transform-capable Zelda, `ics_count`,
+  `peach_count`, the accumulated `item_reserve`) are reset-time locals derived from
+  `match->config`; the pools themselves are the pre-existing HSD ObjAlloc/mem-piece owners.
+- **Consumers:** every sealed Match (native, PPC, Wasm share the reserve code on the
+  `MSL_CORE_NATIVE` path), savestate size, and the runtime census.
+- **Displaced:** the flat constants, the `has_samus` FObj branch, the flat 1024-track pose
+  arena, and sizing the item pool from `MSL_CORE_MAX_ITEMS` (the observation array's
+  width — `msl_core_match_write_items` publishes the first fifteen live items and stops —
+  not a gameplay limit; the pool is now independent of it).
+- **Deletion boundary:** no post-seal growth path, no fallback allocation, no lineup
+  special-casing beyond the per-fighter terms. Reserves are validated only by measured
+  high water against real capacity with a 20% headroom bar; no reserve is raised without
+  a scenario that reaches the burst and proves the articles were live.
+
+## The reserve terms (all `refs/melee`-owned pools, measured with the reserve raised)
+
+| Pool | Reserve | Measured worst (four-port unless noted) |
+|---|---|---|
+| AObj (`HSD_AObjGetAllocData`) | 128 + 64/Samus | 151 live, four-Samus air grapple-catch (5/46/91/151 for 0/1/2/4) |
+| FObj | 256 + 128/Ness + 256/Samus + 32/Link + 32/Peach | 359 four-Ness (~80 per PK Flash detonation); 362 four-Samus ground (452 air); 356..405 Ness x2 + Samus x2; 258 four-Link; 240 four-Peach |
+| IDEntry | 128 (flat) | peaked <= 78% roster-wide, left alone |
+| RObj | 16 + 8/Link | 16 of the former 16 for four Link (4 RObjs each vs 2 for every other fighter) |
+| GObj | 128 + 64/Samus + 32/Link + 32/Sheik(+Zelda) + 64/Ice Climbers | 170 four-Samus air; 184 four-Climbers Belay (aborted at HEAD before) |
+| GObjProc | 256 + 64/Ness | 365 live procs in a four-Ness chaos soak (aborted the flat 256); 267 for Ness x2 + Pikachu x2 |
+| Mtx | 256 + 32/Samus | 240 of 256 four-Samus chaos |
+| Vec, dynamic-bone | flat (128 / item-bound) | <= 78%, left alone |
+| ItemLink | 151 + 64/Samus + 24/Link + 32/Sheik(+Zelda) + 48/Ice Climbers | 150 of 151 four-Samus air (99%); 160 four-Climbers Belay |
+| Item pool | per fighter: 10 Ness/Ice Climbers, 8 Sheik/Zelda/Pikachu/Samus/Link/Young Link, 6 others; + 8 flat on Yoshi's Story | 16 four-Pikachu Thunder (structural at every cadence 20..120); 17 Ness vs Climbers on Yoshi's (7 + 5 + Shy Guy waves of 3..5) |
+| Class mem-pieces, generic | 128 flat (`MAXIMUM_RESERVE` 256 -> 512) | small classes' churn only |
+| JObj class (192 B) floor | 128 + 128/port (`hsdPreallocateMemPiecesForClass`, also forces the bucket to exist) | growth over seal: 98 Peach-Link (the RL crash, former flat 128), 124..146 four-Link/-Ness/-Climbers, 395 four-Samus (scripted air catch minimum 320) |
+| Pose joints | 256/player (pre-existing) | 1,016 four-Sheik (census) |
+| Pose tracks | 384/player (was flat 1024) | 1,058 four-Ice-Climbers (~265 per port across Popo and Nana); Zelda next at 446 |
+
+## Evidence and acceptance
+
+- `tests/melee_core/article_pool_smoke.c` (in `native-smoke`) drives thirteen scripted
+  scenarios — four-ness-dreamland, four-samus-air-fd, ness-samus-dreamland,
+  ness-link-dreamland, four-link-fd, four-pikachu-fd, four-ics-fd, ness-ics-yoshis, the
+  cold-tether set (four-link-zair-cold-fd, four-ylink-zair-cold-fd, four-sheik-chain-fd,
+  peach-link-zair-cold-dreamland, four-ics-belay-cold-fd) — each asserting the burst
+  actually happened (live detonations, beams, RObjs, pool-counted items, tethers) and
+  that every pool kept 20% headroom. The cold-tether scenarios matter because a
+  move-cycling driver warms the free lists with earlier spawns and never reaches the
+  seal-state lists an RL policy hits by jumping and pressing Z. Reverting each reserve
+  was checked separately: each reproduces its abort or fails the headroom bar.
+- `tests/melee_core/pool_chaos_soak.c` (built on demand, not in `native-smoke`): a
+  deterministic 60,000-frame pseudo-random soak that prints every pool's and class
+  bucket's high water; a fifteen-lineup audit shows no aborts and every pool under 80%
+  of capacity, and it is the instrument for any future reserve change.
+- Runtime census (`make runtime-census`, 20 characters x 6 stages x 2/4 players):
+  maximum arena use 973,328 -> 1,026,296 -> 1,132,368 -> 1,195,716 -> 1,311,096 of
+  3,145,728 across the series (worst config four Sheik on Yoshi's Story); relocation
+  records 5,371 of 16,384; pose joints 1,016 of 1,024. The ordinary two-player lock is
+  608,100 arena bytes / 868 allocations before and after gameplay, savestate 671,140
+  bytes (the sized-per-player track arena more than pays for the per-port item and
+  JObj terms at two ports; four-player matches pay the rest).
+- Gates at each commit: source-check (until the Link-era lock drift, fixed 2026-08-26),
+  native-smoke, ppc, python-library; the Wasm target was unverified on this host (no
+  emcc) — the change is plain C on the shared path. Replay locks and classified
+  fingerprints did not move (pool growth is layout-neutral for the corpus; the
+  `b1955a02` preload-shift precedent did not recur).
+
+## Log
+
+- 2026-08-07 — `retained` (`066cffdd`, `b7aefa05`): FObj per Ness (four-Ness aborted at
+  359 against 283), then the composition fixed from maximum to sum with Samus as another
+  per-fighter term; the `has_samus` branch is deleted.
+- 2026-08-07 — `retained` (`19c849be`, `0ff5bb19`): AObj/GObj/mem-piece/ItemLink per
+  Samus (four-Samus air grapple-catch aborted through four pools in turn); a twenty-
+  fighter four-port sweep of every remaining flat reserve found RObj at 16/16 (four Link)
+  and the item pool aborting at sixteen (four Pikachu); the other five flat reserves
+  peaked <= 78% and stay.
+- 2026-08-07 — `retained` (`65bf041c`): AGENTS.md roster brought to twenty and the
+  per-fighter-reserve rule recorded as a convention.
+- 2026-08-09 — `retained` (`a4eafdf2`, `de75ca49`): pose track arena 384/player (four
+  Ice Climbers asserted `allocate_tracks` at 1058 live); item pool moved from a flat
+  eight per port to measured per-fighter rates plus a Yoshi's Story Shy Guy term after
+  an RL abort in `itClimbersBlizzard_Spawn` (Ness vs Climbers, seventeen live items).
+- 2026-08-17 — `retained` (`3cd7ead3`): the 192-byte JObj mem-piece class gets a per-port
+  floor that also creates the bucket before the seal (an RL abort in
+  `ftCo_AirCatch_Anim -> it_link_get_joint -> HSD_JObjLoadJoint`, Peach vs Link, Dream
+  Land); GObjProc per Ness, GObj/ItemLink per Link/Sheik/Climbers, Mtx per Samus, FObj
+  per Link/Peach from the new chaos soak, which found three latent aborts beside the
+  reported one.
+- 2026-08-26 — `retained`: ledger written; `CURRENT_BASELINE.md`'s memory-contract table
+  refreshed from the census at this HEAD (it had carried the 2026-07-19 figures through
+  the whole series).
+- 2026-08-26 — `retained` (throughput/digest check of the packet): control `d59b65ba`
+  (pre-packet) versus candidate `3cd7ead3` (packet head, before the partner-arm gameplay
+  fix), same release profile, the retained 153-replay eight-character 256-batch workload,
+  three alternating samples each on CPU 0 of this host. Digests are identical on every
+  run (`474828382690a770`), so the reserves are gameplay-neutral. Median cycles/frame
+  129,981.2 control versus 132,630.9 candidate (+2.0%), with samples 126,658..154,144 and
+  128,807..136,931 — inside this host's run-to-run spread (a Ryzen 9 3950X shared with
+  other jobs, load about 3), so no material cost is claimed or excluded beyond that. The
+  absolute figures are not comparable to the retained 9950X3D medians; see
+  `CURRENT_BASELINE.md`.
+
+# Previous structural packet — Link and Young Link
+
+## Objective
+
+Add Link (internal kind FTKIND_LINK 6, public char id 6) and Young Link (FTKIND_CLINK 20,
+public char id 20) to the supported domain with a 60-replay suite (five per stage for each
+character; mirrors and Link-vs-Young-Link games cover both). Link is a full original: six
+chara TUs (ftLk_Init, the Hylian-shield/down-air-bounce ftLk_AttackAir, bow ftLk_SpecialN,
+boomerang ftLk_SpecialS, spin attack ftLk_SpecialHi, bomb pull ftLk_SpecialLw). Young Link
+is the Link clone: ftCl_Init delegates 19 of 21 motion rows to ftLk handlers and adds the
+milk taunt ftCl_AppealS; his OnLoad also sets can_walljump. Shared article TUs own both
+kind pairs: itlinkbomb (58/59), itlinkboomerang (60/61), itlinkhookshot (62/63, previously
+imported for the Samus/Sheik/Icies tether family and now given its missing manifest row),
+itlinkarrow (64/65), itlinkbow (76/77), and itclinkmilk (123, Young Link only).
+
+## Final boundary
+
+- **Owners:** the fourteen imported TUs byte-identical to the pinned decomp except the
+  ledgered deltas below; `it_803F3100`/`it_803F2F28` own the eleven new logic rows
+  (including retail's Link-vs-Young-Link hookshot second-slot asymmetry);
+  `MslDatLinkArticles` (shared by PlLk/PlCl) owns the seven-slot x48 list: five articles,
+  the milk slot (NULL in PlLk), and the sword HSD_Joint accessory.
+- **Data:** PlLk*/PlCl* (five costumes each, Nr/Re/Bu/Bk/Wh, plus AJ and DViWaitAJ) +
+  EfLkData.dat; manifest 173 -> 190 files. Anim count 314 for both; ftData_UnkIntPairs
+  {0,14}; both kinds map to efAsync bank 6.
+- **Effects:** EfLkData.dat is MODEL-ONLY (both leading effLinkDataTable words are
+  unrelocated NULLs, the EfDkData/EfNsData shape) and there is no EfClData.dat — the two
+  kinds share bank 6. The spin-attack efSync ids 0x4BB/0x4BC are pure efLib model creates
+  on bank-6 model ids 0x1770..0x1773; the item-side ids (0x448 arrow sparkle,
+  0x41C/0x3F1 hookshot) resolve into the already-loaded common bank 0, so no generator
+  RNG projection consumes bank-6 ids.
+- **Parts:** derived rows 46 live / 30 cold of 76 (Link) and 46 live / 34 cold of 80
+  (Young Link), with CODE_ANCHORED spin-attack joints (raw parts[24]/[26]), the
+  GetBoneIndex left thumbs (35/37 — bomb, boomerang, and milk spawn anchors), and the
+  sword accessory attach/part pairs (67+68 / 71+72). The accessory part must stay live so
+  retail's ftAnim_8006E7B8 tree/part pairing, which counts the attached accessory node,
+  stays aligned in the compact hosted tree. The hookshot's parts[139] chain-joint store
+  is a runtime-anchored article slot like Samus's zair beam tip and stays outside the
+  admission mask. The derive tool's Fighter_804D6540 parsing was corrected (4-byte
+  {part, attach, mode, depth} records; only Kirby/Link/CLink have entries, so no prior
+  mask is affected).
+
+## Hosted representation decisions (all ledgered)
+
+- **Hookshot attr scratch mirror** (`canonical:link-hookshot-attr-scratch-mirror`):
+  it_link_attr_math recomputes the x2C..x48 attribute lanes in place at every hookshot
+  spawn — retail treats the shared DAT blob as scratch. Each match owns one writable
+  mirror per kind in MslSourceMatchState, seeded from the article on first use, exactly
+  the samus_grapple precedent; all 14 fetch sites route through it.
+- **ftLk_DatAttrs pointer-width lanes** (`canonical:link-datattrs-pointer-width`):
+  x94/x9C/xA0 were UNK_T; ftCo_Attack100.c's ftCo_LinkCatchAttrs view types the same
+  lanes s32, and the widened pointers shifted every later lane (da->xBC read 10 instead
+  of the hookshot kind 62). Typed s32, matching the yoshi-datattrs-pointer-width
+  precedent.
+- **Sword accessory joint identity** (`canonical:sword-accessory-joint-identity`):
+  ftParts_800753D4's retail stack copy of the isolated accessory joint becomes a Match
+  arena copy at fighter construction so both loads share one relocatable HSD id.
+- **OnLoad ext-attr store guards** (`canonical:link-onload-attr-store-guard`): both
+  OnLoads re-derive attackairlw_hit_anim_frame_end into the sealed DAT page; the
+  idempotent re-store is skipped, the donkey-onload-attr-store-guard shape.
+- **Boomerang self-stores** (`canonical:link-boomerang-attr-self-store`): three retail
+  `attrs->xC = attrs->xC` self-stores skipped against the sealed arena.
+- **Article span-packing exemption** (native_dat.c): PlLk.dat packs an unreferenced
+  hookshot joint blob between the boomerang Article and the next relocation target;
+  Articles are now never span-packed (each is a single object referenced slot-by-slot).
+- **Archive cache capacity** 4096 -> 8192: every fighter animation figatree slice takes
+  an entry, so the census scales with summed anim counts; the 18-character domain peaked
+  just under 4096.
+- **ft_8008A348's kind switch unguarded**: the hosted branch had excluded the
+  Link/CLink Hylian-shield arm from the Wait-enter path back when the callees were
+  unsupported-fighter stubs; the SquatWait twin was already live.
+
+## Pre-existing gaps closed while admitting
+
+- `api.c::supported_character` was missing Ness (neither Ness commit updated it).
+- `Makefile` VALIDATION_CHARACTERS was missing Ness.
+- The viewer's `externalCharId` was missing Ness (8->11) and Yoshi (14->17), so both
+  rendered the wrong slippilab zip; Young Link needs 20->21 and Link is identity.
+- `itlinkhookshot.c` was compiled without a source_manifest row.
+
+## Suite state — GATE (54 pass + 6 classified / 0 fail, both backends)
+
+Staged 60 replays (screened from link_ylink_replays.zip: all singles, two human ports,
+supported opponents, six legal stages, populated raw analog pad lanes, zero SHA
+duplicates; all ten Stadium entries event-verified frozen — 0x41 declared, zero events).
+`replays/suites/links.json` IS in the aggregate (426 -> 486 replays; test counts bumped
+in test_aggregate_suite_coverage and test_melee_core_validation_runner), all 60 output
+locks recorded, and the six residuals classified with both-backend snapshots
+(native == ppc bit-for-bit on every one): redxlink_0310 and slippi-2025-08_0815 under
+`hitlag-accumulated-pad-edge` (the Ness partner-arm debt, now measured victim-side:
+the thrown victim's kb_applied is nonzero for dthrow item hits where retail's stays 0,
+so the victim drives ftCo_8008EC90's partner arm and the tech press during laser
+hitlag is swallowed), slippi-games-2025-05 under a new `link-boomerang-deflect-fork`
+id (hosted UnkMotion2_Coll env_flags stay 0 through retail's surface deflect; needs
+the Dolphin item-collision probe), and 18932 / slippi-2025-01 / slpfiles-2025-10_1020
+under `dolphin-ulp-motion-profile` (1-2 ULP self-healing seeds).
+
+Historical note — the dominant families as first triaged (all since closed):
+
+1. **Hookshot latch one frame late** (item.state 3-vs-1, a handful of rows per replay,
+   plus the action 361-vs-360 zair catch rows): the chain-link count from
+   it_link_attr_math's x2C derivation is suspected one off — the expression is a lerp
+   (`t*a + (1-t)*b`, a classic MWCC fmadds pair) feeding an s32 link-count compare.
+   The Link TU MWCC fused-op audit has NOT been done yet; the Ness packet's asm-vs-marker
+   method applies (refs/melee/config/GALE01/symbols.txt sizes + DOL disassembly).
+2. **Boomerang misc1 (xDD8) families** (hundreds of rows, e.g. 219-vs-132) and 1-2 ULP
+   pos_x rows — same fusion audit territory (deceleration/turn math).
+3. **Fighter-attack-vs-item capsule forks with identical exported geometry** — the
+   second confirmed class: in slpfiles-2025-03 (BF Young Link ditto) at frame 41 the
+   hosted sim lands a 7-damage fighter attack on an item (P1 hitlag 5, item.damage 7,
+   item timer frozen) that retail never lands, while every exported position matches
+   through frame 40 (the only live item is P2's arrow stuck at (42.65, 0) and P1 is
+   50+ units away at (-9.47, 32.5)) — so a hosted item HURT capsule must be sitting at
+   a phantom position. Item hurt capsules ride `article->x8_hurtbones` bone ids through
+   `item->xBBC_dynamicBoneTable->bones[]` (it_8027163C) and their world positions come
+   from item model sub-bone jobj matrices — the suspect is stale/unsolved item sub-bone
+   matrices for the newly admitted article models (the arrow's x8_hurtbones is 0x9dd8 in
+   PlLk/PlCl). The zair whip case is the mirror image (item-side hitbox vs fighter).
+   Next: dump the arrow's xACC_itemHurtbox capsule world positions at frames 39..42 in
+   the hosted run and find whose matrix feeds the phantom.
+4. Various replays still fail in the first ~1,500 frames — untriaged beyond the above.
+
+## Session goal and standing (2026-08-04, in progress)
+
+**Goal: 20/30 passing per character.** Current native: 11 pass / 49 fail (Link 6/31,
+Young Link 5/34 counting mirrors both ways). PPC oracle: 31 pass / 29 fail — the
+cross-partition is 11 both-pass / 20 native-only-fail (HOST-WIDTH class) / 29 both-fail
+(true logic). Work the width class down first (mechanical, ~+15 passes), then the logic
+class.
+
+Width-class leads (native-only fails), from the 20-replay first-mismatch census:
+- RESOLVED (was the top width family): `action 43` was ftCo_MS_LandingFallSpecial, not Turn — the spin-attack landing lag read via the Fighter-cast attr walk (facing_dir1 = ftLk_DatAttrs::x30); fixed and ledgered, 11 -> 31 passes.
+- (stale text below kept for provenance) `action_id expected=43 (Turn) actual=14/18/178` in ~10 replays — the hosted native
+  build ABORTS a Turn after one frame (43 -> Wait at e.g. slpfiles-2025-05_0518 frame
+  1646, entered from the bomb-pull end 357) because ftAnim_IsFramesRemaining goes
+  false; PPC running the identical hosted C keeps the Turn and passes, so an upstream
+  width-poisoned lane (anim rate or track state, likely set during the bomb-pull /
+  item-hold path) differs between the backends. Frames-limited runs (frames=1700) did
+  NOT reproduce the fork while full runs do, deterministically — the input-tape length
+  affects the divergence, which itself smells like reading past prepared state. Next:
+  frame-stamped dual-backend traces of the ChangeMotionState args (rate/start) for the
+  1645 Turn entry and of the bomb-pull end transition.
+- `pos_x` one-frame ±0.12..0.18 nudges in ~9 replays — looks like fighter-vs-item
+  jostle push. Both smell like more raw-offset or width-shifted reads; sweep remaining
+  `(u8*) fp +`/pad-overlay casts and item-side field views in ftCommon/it TUs.
+
+Logic-class leads (both-backend fails):
+- The grab/pummel mash divergence = the Ness packet's `hitlag-accumulated-pad-edge`
+  debt, now load-bearing (e.g. redxlink_0310 @301: retail Falco throw connects, hosted
+  victim escapes earlier). Progress on the deferred question: retail's pummeled victim
+  exits ftCo_Damage's top gate (`!fp->dmg.kb_applied` — a pummel applies no knockback),
+  so the capture-partner arm must run on the GRABBER's side (fp=grabber, other=victim),
+  clearing the VICTIM's x668 — matching the retail probe (victim x668=0, victim b5
+  clear, x183C_applied==0 skips the b5 block). The hosted build instead runs the arm
+  with fp=victim (its kb_applied is set where retail's is not) and clears the grabber.
+  Root-cause why hosted computes kb_applied for a pummeled held victim.
+- The hookshot latch one-frame-late family persists in some replays (item.state 3-vs-1,
+  361-vs-360): the probe table (reports/triage/link_hookshot_probe.md) shows retail
+  anchors + steps the head on the it_802A78B8 fire frame, steps one vel/frame, freezes
+  during owner hitlag, latches after the census; the launch-speed fix (tether mirror)
+  closed most of it — re-census which replays still carry it.
+- 1–2 ULP families: 18932 item.pos_x 2-ULP episode; redxlink_0221 percent 1-ULP at a
+  damage application (staling multiply chain is the suspect).
+
+**GOAL MET (2026-08-05): native and PPC both 54 pass + 6 classified / 0 fail — Link
+27/31 passing, Young Link 32/34 passing** (goal was 20/30 each). The three closing
+fixes: (1) `link-hookshot-chain-solver-gekko-rounding` — it_802A6474's four sum-of-
+squares fmadds plus the Gekko frsqrte sqrt (fused fnmsub Newton terms) replacing libc
+sqrtf across the hookshot TU, which the 32106 frame-1649 retail probe localized to the
+latched-hang chain-constraint (self_vel += cur_pos − pos_2 amplifies knife-edge ULPs);
+this flipped 20 replays including the whole offstage-fall family. (2)
+`thrown-item-damage-gekko-rounding` — it_8026B1D4's speed-scaled thrown-item damage
+(Gekko sqrt + fmadds fold), closing the three percent-ULP residuals. (3)
+`lbvector-cosangle-gekko-rounding` — retail-faithful CosAngle (behavior-neutral at the
+current corpus, gates the boomerang deflect branch). Full native aggregate green: 396
+pass + 90 classified / 0 fail across 4.81M frames; the two icies pool-residue analogs
+were re-recorded for the Link preload shift (b1955a02 precedent).
+
+(Stale text below kept for provenance.) Standing after the landing-lag fix: native 31 pass / 29 fail — Link 16/31, Young
+Link 16/34 (goal 20/30 each; need +4 per side from the 29 both-backend fails). The 29
+are almost all SMALL self-healing episodes now: three 1-row fails (redxlink_0221 percent
+1-ULP at a damage application — staling-multiply suspect; slippi-2025-01 pos_x 1 row;
+slippi-2025-08_0805 pos_y 1 row), then 2..31-row pos_y/speed_y episodes. The dominant
+recurring shape: a 1-ULP pos_y with a ~32-ULP speed_y_self in fighter state 361
+(ftLk_MS_AirCatchHit — the offstage zair catch fall, e.g. 32106 @1649, slpfiles-2025-10
+@1650): ftCo_AirCatchHit_Phys runs `self_vel = pos_delta` + shared ftCommon_Fall, so the
+seed is the catch-hit ENTRY velocity, fed by the hookshot chain geometry (the pin-walk
+normalize margins measured as razor-thin earlier, e.g. +2.4e-7 at one boundary). Range
+audits confirm ZERO fused ops in the whole ftLk/ftCl address ranges and none reachable
+in ftCo_AirCatch (the two fmadds nearby belong to ftCo_DamageBind's 800C4550). MEASURED (32106): bit-hex dual-backend traces of ftCo_AirCatchHit_Phys inputs
+(pos_delta, self_vel, cur_pos) are IDENTICAL between native and PPC for all 41
+state-361 frames — including frames after the 1649 pos_y[0] 1-ULP export mismatch that
+only native shows. Internal gameplay state never diverges (the wall-hug clamp
+re-derives pos each frame, so nothing feeds back), which means the divergence is
+confined to the exported coll-clamped position at the mismatch frames: either
+mpColl_800471F8's clamp output ULP-differs between x86 and qemu-PPC without ever
+persisting (suspect: helpers in runtime/math.o / MSL/trigf.o, the only -O2
+-ffp-contract=fast -mfma objects, reached by a new PS-wall path), or the export
+samples a lane (coll_data.cur_pos?) that differs from fp->cur_pos. Next: trace
+end-of-frame fp->cur_pos vs coll_data.cur_pos vs the exported row for P1 frames
+1645..1655 on both backends; then look at the mpColl wall projection expression.
+
+Fixed this session (all committed): tether launch reads through the hookshot scratch
+mirror (0 -> 11 passes; probe-verified retail derives the launch from the scaled x38
+lane), the arrow spread-table pointer-width NaN (phantom item hits), the Attack100 raw
+fp-offset overlays (fp+0x2340 mv lanes, fp+0x65C held inputs), the Hylian-shield arm
+unguarded in ft_8008A348, thumb/accessory parts admission, and the bomb misc1 mask.
+
+## Log
+
+- 2026-08-23 — `closed` (partner-arm inversion): retail probe on 53362 frames 1378..1410
+  (reports/triage/ness_partner_probe/README.md) showed retail ALSO runs ftCo_8008EC90 with
+  fp = the pummeled victim (kb_applied 41.09 — a pummel does carry knockback; the earlier
+  "bit 5 clear" reading was an MWCC MSB-first bitfield misread, 0x2219=0x07 has b5 SET), and
+  that the victim's own x668 goes 0x100 -> 0 between the arm and the next input update. The
+  DOL (0x8008F078..84) stores the zero to r29 = fp, not r27 = other_fp: the decomp line
+  `other_fp->input.x668 = other_fp->input.x66C = 0` is a decomp error. Fixed to `fp->...`
+  in ftCo_Damage.c. Effect: 53362 and redxlink_0310 become exact end-to-end (10,673 and
+  8,157 rows), locks re-recorded (native==ppc); the third `hitlag-accumulated-pad-edge`
+  entry (links slippi-2025-08, +0.1125 throw-release pos_y) was unaffected and is re-owned as
+  `thrown-release-pose-offset` (same fingerprint, text-only). Native aggregate 492 = 427 pass
+  / 65 classified / 0 fail; per-suite PPC ness 27/3/0 and links 55/5/0 (PPC needs
+  `--timeout 180` with 8 workers on this host — the default 30 s trips on the longest
+  replays). `make source-check` fails on the untouched HEAD too (refs/melee snapshot digest),
+  unrelated. pytest 47 passed.
+
+- 2026-08-05 — `closed` (goal met, suite gated): the retail probe on 32106 frames
+  1643..1655 (hookshot latched to the Stadium wall) proved every frame-1649 input
+  bit-shared and pinned the fork inside the chain-constraint step; the DOL showed the
+  two hosted mis-emulations (unfused length dot products, libc sqrtf vs the Gekko
+  frsqrte+fnmsub sequence) — fixing them took the suite 31 -> 51. The same class in
+  it_8026B1D4 (thrown-item speed damage, traced via Fighter_TakeDamage bit-hex: raw
+  dmg 0x40c820c3 vs retail 0x40c820c4) took it to 54. lbVector_CosAngle ported
+  (behavior-neutral). Six residuals classified (both backends bit-identical), 60 locks
+  recorded, links.json wired into the aggregate (486), test counts bumped, icies
+  pool-residue analogs re-recorded for the Link preload shift. Native aggregate: 396
+  pass + 90 classified / 0 fail. Open leads for a future pass: the capture/thrown
+  partner-arm inversion (now measured from BOTH faces — grabber-side mash debt and
+  victim-side kb_applied/tech-swallow; fix needs the full aggregate as its gate) and
+  the boomerang deflect-fork Dolphin item-collision probe.
+
+- 2026-08-04 — `checkpoint` (fused-op and mask batch): ported the audited MWCC fused-op
+  set for the Link item TUs — the hookshot's distance dot products (a fused TU-local twin
+  of it_802A3C98, whose out-of-line body must stay unfused for the cross-TU tether
+  callers), all eighteen chain position-update triples, the chain-count lerp
+  (GALE01 0x802A2680), the grip-scale double blend (0x802A2E28), the arrow's spread-angle
+  draw/charge lerps/polar lanes, and the bomb drag step (0x8029F63C); the ftLk/ftCl chara
+  TUs carry zero fused ops. Audit method: symbols.txt sizes + DOL disassembly via the
+  PPC toolchain objdump (scripted asm census; every hookshot sqrt expansion fuses except
+  the out-of-line it_802A3C98 body). Corrected the bomb misc1 mask to 0: xDDB is held-
+  phase pool residue (retail exports 0x5F pre-match heap bytes) and a constant 0x00 after
+  the thrown-transition sign write. Suite floor moved from 87 to ~1,130 matched frames;
+  still 0 pass / 60 fail / 0 error. Dominant remaining forks: the hookshot latch running
+  one frame late (item.state 3-vs-1 plus the action 361-vs-360 zair catch rows — the
+  lerp port did not close it, so the census is now RULED OUT — a spawn trace shows x2C = 15 airborne / 22 for the 0x168 zair, and hand-evaluating retail's float chain gives the identical counts; the remaining lead is a ONE-STEP HEAD LAG: in slpfiles-2026-03_0330 the recording's P1 Young Link zair (state 360) lands attack 1 on P2 at frame -6, and a hosted hitbox trace shows our whip capsule riding the chain head correctly (jobj = parts[139]) but reaching P2's x one frame later; the same lag explains the latch-one-frame-late family (item.state 3-vs-1) and the 361-vs-360 zair catch rows. The state timelines themselves align (12654's state lanes match through 2909), so the head appears to gain its first velocity step one frame earlier in retail — spawn-frame or transition-frame processing order. Needs the Dolphin engine-dump probe (drivers on newchar-puff: tools/dolphin/*) for retail's per-frame head/hitbox positions) and it_802A40D0's collision step) and
+  the boomerang flight/turn fork (xDD8 spin counters drift after the turn).
+
+- 2026-08-04 — `open`: TU import + full registry/admission wiring + data extraction +
+  suite staging landed; native-smoke, source-check, and the quick pytest set are green;
+  the qemu-ppc toolchain fallback was cherry-picked from experiment/decomp-port at the
+  user's direction. PPC parity, fusion audit, residual classification, aggregate wiring,
+  and lock recording all remain.
+
+# Previous structural packet — Ness
+
+## Objective
+
+Add Ness (internal kind FTKIND_NESS 8, public/CSS char id 8) to the supported domain
+with an 18-replay suite. Ness is a full original: eight chara TUs (ftNs_Init, the Yo-Yo
+smashes ftNs_AttackHi4/ftNs_AttackLw4, the baseball-bat ftNs_AttackS4, PK Flash
+ftNs_SpecialN, PK Fire ftNs_SpecialS, PK Thunder + PK Thunder 2 ftNs_SpecialHi, PSI
+Magnet ftNs_SpecialLw) and eight article TUs (itnesspkfire 66, itnesspkfirepillar 67,
+itnesspkflash 68, itnesspkthunderball 69, itnesspkthundertrail 70..73,
+itnesspkflashexplode 78, itnessbat 101, itnessyoyo 102). Ness is also the first
+admitted absorber, so `ftData_OnAbsorb` becomes a live table.
+
+## Final boundary
+
+- **Owners:** the sixteen imported TUs byte-identical to the pinned decomp except the
+  ledgered MWCC fusion set; `ftData_OnAbsorb` owns the PSI Magnet absorb callback;
+  `MslDatNessArticles` owns the eleven-slot article list.
+- **Data:** PlNs* (four costumes Nr/Ye/Bu/Gr + PlNsAJ + PlNsDViWaitAJ) + EfNsData.dat;
+  manifest 165 -> 173 files. Anim count 326, ftData_UnkIntPairs 14,
+  ftData_UnkBytePerCharacter 10.
+- **Effects:** EfNsData.dat is MODEL-ONLY — both leading `effNessDataTable` words are
+  unrelocated NULLs, the EfDkData.dat shape — so the hosted loader publishes an empty
+  command bank for bank 10 and no generator RNG projection consumes bank-10 ids. Every
+  Ness-reachable efSync id (0x4EE/0x4EF PK Thunder, 0x4F0 PSI Magnet) is a pure efLib
+  model create; 0x406 was already modelled by the Yoshi packet.
+- **Parts:** derived row 36 live / 27 cold of 63, with a new CODE_ANCHORED `ness: (61,)`
+  for the raw `parts[61]` Yo-Yo hitbox transform in ftNs_AttackHi4.
+
+## Exactness work shipped
+
+- **Pose program-node id widened past sixteen characters** (the packet's one hosted
+  representation change): `MslFighterPoseJoint.program_node_index` was an 18-bit field
+  with a 0x3FFFF sentinel. Ness is the character that pushes the preloaded pose-node
+  count to 265,533, past that ceiling, and every suite replay aborted on the
+  fighter_pose.c admission assertion. The id is now a full `uint32_t`, which lands in
+  the struct's existing 64-bit tail padding — the gate profile's `sizeof` is unchanged
+  at 56 and only the 32-bit (PPC/Wasm) size moves 44 -> 48.
+- **The Ness MWCC fused-op set: 42 sites across 12 TUs**, each carrying its GALE01
+  address. The audit method is asm-vs-marker per function using the decomp's exact
+  symbol sizes (`refs/melee/config/GALE01/symbols.txt`); remaining per-function gaps
+  are all static helpers inlined into several callers (one C marker, several asm
+  copies): `NessFloatMath_PKThunder2`, `ftNess_atan2`, `getAttrStuff`,
+  `itNesspkflash_SetScale`, `it_802BF4A0_adjust_tail`, `ftNs_AttackHi4_YoyoApplyDamage`.
+  The seed that motivated the sweep: **PK Thunder's turn-radius steps**
+  (GALE01 0x802ABE08 fmadds / 0x802ABE24 fnmsubs). The ball's heading walks 90 degrees
+  down to zero in fifteen 6-degree steps; only the fused rounding leaves retail's
+  2^-28 residue where the unfused form collapses to an exact zero, so every steered
+  PK Thunder diverged on its first horizontal frame. Porting those two sites alone took
+  the suite from 0/18 to 7/18; the full set reached 11/18.
+- **PK Flash's leading item lane is not gameplay state**: no owner writes
+  `itPKFlush_ItemVars.xDD4` — not the constructor `it_802AAA80`, not any motion
+  callback — so its sampled Slippi byte is fixed-pool residue and the projection mask
+  keeps only MISC1 (the charge scale at xDD8).
+
+## Suite state (container authoritative) — IN THE AGGREGATE
+
+Superseded by "Second import" below: the suite is now 30 replays and the aggregate is
+426 = 333/93/0, then by the linux-host certification section at the end: the aggregate is
+now 426 = 342/84/0. The original eighteen-replay state is kept here for provenance.
+
+18 replays across all six legal stages (three each) against Captain Falcon, Falco, Fox,
+Jigglypuff, Marth, Peach, Pikachu, Sheik, and a Ness mirror. All three Pokemon Stadium
+entries are event-verified frozen (each declares the 0x41 stadium_transformation
+command and records zero events over the full game); every capture carries populated
+raw analog pad lanes, so none is a 3.18-layout re-wrap. Zero replays were rejected.
+
+**ness suite: native 12 pass / 6 classified / 0 fail; PPC 15 pass / 3 classified /
+0 fail.** `ness.json` is wired into `melee_core_aggregate`, which is now
+**414 = 327 pass / 87 classified / 0 fail / 0 error**, with the eighteen output locks
+strictly additive (18 added, 0 changed) and the pre-Ness 396 byte-stable throughout.
+
+### The six classified residuals, each root-caused
+
+- `2026-06` (Dream Land Sheik/Ness) — **`unmodeled-presentation-rng-stream-phase`**.
+  Settled with an engine-dump probe capture of retail's own RNG stream. Retail's frame
+  3922 opens with a `randi` at LR 0x80211648, inside `grOldPupupu_802113E0`'s
+  rand_range blow timer, *before* `efAsync_Dispatch`'s 0x3EC rotation draw. The hosted
+  build deliberately replaces Dream Land's wind machine with the recorded Slippi
+  direction stream (ledger `canonical:slippi-stage-event-publication`) precisely
+  because the retail timers sample the mid-frame RNG after effect draws that do not
+  exist headlessly — so the replacement consumes no RNG. That one-draw phase shift
+  moves the following `it_2725_Logic109_DmgDealt` `HSD_Randi(3)` from the stream
+  position returning 0 (the Sheik needle survives into its bounce state) to the
+  neighbouring position returning 2 (destroyed). Every retail draw for the frame
+  reproduces exactly from the recorded frame seed, including the surviving needle's
+  `Randi(8)` = 5 bounce speed and its SetupBounce draws; the control frame 3919 is an
+  identical needle hit with no Whispy draw and matches the hosted sequence draw for
+  draw. Reinstating the retail machine is strictly worse — it forks fighter positions
+  through the wind push, which is why it was replaced.
+- `51444`, `2025-11`, `52757`, `53870` — **`unrecorded-item-pool-residue`**. The Ness
+  Yo-Yo's `itNessYoyo_ItemVars.x4` is written by exactly one owner, `it_802BFEC4`, and
+  only on the smash's final frame, so every frame the article is alive samples its
+  pool slot's previous occupant. Traced end to end: the hosted sim runs all of a
+  replay's Yo-Yo smashes on the same slot with retail's spawn ids and computes `x4`
+  correctly (0x3D95C61D, low byte 29 — one of the values retail exports). `51444`
+  additionally samples Mr. Saturn's `xDE4` y/z, which `itDosei_UnkMotion4`/`5` never
+  write; the bytes the hosted run reports there are the halves of a 64-bit host
+  pointer (the 0x00007FFF high word is plainly visible in the union). PPC, whose
+  layout matches retail, is bit-exact on the three Yo-Yo-only replays.
+- `2025-03` (Frozen Stadium Ness/Peach) — **`dolphin-ulp-motion-profile`**. One 1-ULP
+  seed at frame 1471 where `speed_x_attack` and `speed_y_attack` take the same value,
+  so the knockback angle is exactly 45 degrees and both lanes carry the single
+  `scaled_kb` factor rather than any trig difference. Self-heals into a 3,958-frame
+  exact suffix, same first row on both backends. The knockback formula owners
+  `ftColl_80079AB0/80079C70/80079EA8` already carry their complete fused-op sets.
+
+## Exactness fixes shipped while closing the residuals
+
+- **Shield-damage fusion.** `slippi-2025-02` diverged by 1 ULP on `shield_hp` for
+  2,033 rows. `Fighter_ProcessHit_8006D1EC` carries two unported MWCC fusions in the
+  shield-damage expression (GALE01 0x8006D2AC and 0x8006D2CC): the light-shield lerp
+  between `x2DC`/`x2E0`, and the `x284` scale over the `x288` floor; only the trailing
+  subtraction from `shield_health` stays a plain `fsubs`. Porting both made that
+  replay fully bit-exact, moved PPC from 14 to 15 passes, and left the 396-replay
+  aggregate **byte-stable with zero output drift**.
+- **Sakurai-angle ramp** (`ftCo_Damage_CalcAngle`, GALE01 0x8008D8AC) and
+  **`ftCo_CalcYScaledKnockback`** (0x800CF678): asm-verified fusions, identity at
+  current inputs, aggregate byte-stable.
+
+## Residual investigation — the `2026-06` "missing item" family is an RNG-draw gap
+
+Root-caused to a single missing RNG draw; the retail draw sequence is fully pinned.
+
+The diverging item is not a Ness article at all: it is a **Sheik thrown needle**
+(kind 79). Slippi restores the RNG seed every frame in this online capture (the
+recorded seed steps by exactly 0x10000 per frame), and `frame_pre_random_seed`
+is a compared lane that matches for the whole replay, so each frame's draw
+stream starts identically and the divergence is strictly intra-frame.
+
+At frame 3922 (seed 0x0FCDD4E3) the needle hits Ness and retail runs
+`it_2725_Logic109_DmgDealt`, whose `HSD_Randi(3)` decides whether the needle
+survives into state 4 or is destroyed. Walking the LCG forward from that seed
+pins retail's sequence exactly, confirmed by three independent observables in
+the replay's own item stream:
+
+- draw 2 `Randi(3)` = 0 -> the needle survives,
+- draw 4 `Randi(8)` = 5 -> `ABS(it_803F7020[5])` = 2.5 = retail's recorded vel_y,
+- draws 5..10 `itSeakNeedleThrown_SetupBounce` -> `it_803F7000[5]` = +1.0 =
+  retail's post-hitlag vel_x, and `it_803F7040[4]` = -0.2 = its recorded vel_y
+  step.
+
+Our frame 3922 makes five draws: `[0]` the 0x3EC hit effect's `HSD_Randf`,
+`[1]` the needle's `Randi(3)` (= 2, so we destroy it), and `[2..4]` the three
+`it_80278800_rand_vec` draws of the destruction effect that only happens
+*because* we destroyed it. So **we are exactly one draw short before the
+needle's `Randi(3)`** (retail has two consumers there, we have one), plus one
+more between `Randi(3)` and `Randi(8)` that we never reach.
+
+Ruled out along the way: the effect-generator RNG model is faithful — common
+model 8's recorded generator 267 has `kind = 0x400100`, so the `kind & 0x100`
+branch in `hsd_8039F05C` skips the draw in retail exactly as our predicate
+does, and generator 63 has `random < 0`. The control frame 3919 is a needle
+hit that both sims destroy with the identical five-draw sequence, so the
+needle path itself is right; only frame 3922 carries the extra retail consumer.
+Ness's `ftNs_Init_OnDamage` is not the source either: none of its four
+articles (yo-yo, PK Flash, PK Thunder, bat) exists at that frame.
+
+Next step is the Dolphin engine-dump RNG probe (`refs/README.md`) to name the
+missing consumer; everything else about the episode is settled.
+
+**Instrumentation trap (cost me two false conclusions):** the native backend
+runs `melee-core-native` as a `--server` subprocess whose `stderr` is
+`subprocess.PIPE` and never drained, so every temporary `fprintf` trace is
+silently swallowed and the traced code looks unreachable. Set `stderr=None` in
+`_NativeRunnerPool` while debugging. (`make validator` is separately required
+for `item_projection.h` changes.)
+
+## Residual investigation — the native-only Yo-Yo `misc1` family is pool residue
+
+The three native-only failures (`2025-11`, `52757`, `53870`) all diverge on one
+lane: `itNessYoyo_ItemVars.x4`, sampled as Slippi `misc1`. Traced end to end on
+`52757`:
+
+- `x4` is written by exactly one owner, `it_802BFEC4`, and only at the smash's
+  final frame (`yoyoCurrentFrame == x44_UPSMASH_YOYO_NUDGE_FRAME` = 49, which is
+  also the despawn frame). Nothing initializes it at spawn.
+- Our sim performs all three of the replay's Yo-Yo up-smashes, walks
+  `yoyoCurrentFrame` 3..49 each time, and computes `x4` correctly:
+  0x3D95C61D / 0x3D95C609 / 0x3D95C61D. The low byte 0x1D = 29 is exactly one of
+  the values retail exports for this lane, so the arithmetic owner is right.
+- The item pointer is the same pool slot for all three yo-yos, and the spawn ids
+  (51, 55, 72) match retail's.
+- Every export **during** a yo-yo's life reads `x4 == 0` in our sim, because the
+  single write lands on the last frame before the article despawns. Retail
+  exports a stale non-zero value there, i.e. the lane is read as item-pool
+  residue left by the slot's previous occupant.
+
+PPC reproduces retail exactly on all three replays; only 64-bit native differs,
+which is the signature of residue whose byte pattern depends on the preceding
+occupant's item-variable layout (pointer-widened on the host). This is the same
+mechanism as the existing `unrecorded-item-pool-residue` classification used for
+the Ice Climbers entries, and the natural disposition is to classify it with
+native and PPC snapshots rather than to "fix" it. Note `x4` is not purely an
+export lane -- `it_802BF800` reads it during the swing -- so retail genuinely
+consumes uninitialized memory here; in these three replays every fighter,
+physics, and other item lane stays exact.
+
+## Second import — twelve more captures, all admitted (suite 18 -> 30)
+
+A second Ness pool (`ness_replays_2.zip`) was screened and integrated. All twelve
+candidates passed admission: singles, two human ports, Ness present, all six legal
+stages, versions 3.18.0/3.19.0, populated raw analog pad lanes on every capture (no
+3.18-layout re-wraps), and both Pokemon Stadium entries event-verified frozen (0x41
+declared, zero events over the full game). No SHA overlapped the existing eighteen.
+
+**All twelve are in the gate.** The ness suite is **30 replays: 17 pass / 13 classified /
+0 fail** on native and **24 pass / 6 classified / 0 fail** on PPC, back to five replays on
+each of the six legal stages, and `melee_core_aggregate` is
+**426 = 333 pass / 93 classified / 0 fail / 0 error**. Every lock was added
+byte-additively; the only existing lock this work rewrote is `puff/specials`, whose
+classification the standings fix retires. Five of the twelve are bit-exact on first
+contact, six are new rows in two already-named families, and one (`53362`) is carried as
+explicit debt under a new id.
+
+### The six new residuals
+
+- `2025-07`, `2025-11_20251116`, `66686`, `auto-falco-2025-12` --
+  **`unrecorded-item-pool-residue`**, the established Yo-Yo `x4` lane. The diverging
+  article is item type 102 on every mismatch row and only `item.misc1` moves. **All
+  four are bit-exact on PPC**, which is the direct evidence that the lane is 64-bit
+  layout residue rather than a gameplay fork. (In `2025-11_20251116` the Yo-Yo is item
+  index 1 until a second article despawns at frame 8913 and index 0 afterwards, so both
+  reported lanes are the same article.)
+- `50321` -- same family, but this replay's first Yo-Yo spawns at frame 364, before any
+  other article has occupied the pool slot. The hosted pool is zero there, so `misc1`
+  reads 0 against the console's 82: the residue retail exports is pre-match heap content
+  no hosted run can re-derive. PPC narrows it to that first spawn alone (104 rows ending
+  at frame 467, leaving an 11,915-frame exact suffix) because its layout matches retail
+  for every later Yo-Yo, so this entry carries its own PPC snapshot.
+- `2025-02` -- **`dolphin-ulp-motion-profile`**. Peach's turnip (item type 99, id 132)
+  is dropped at frame 23119 with its release y one ULP high (0x42006f2d against
+  0x42006f2c). Nothing else diverges -- pos_x, both velocity lanes, timer, damage and
+  every fighter lane stay exact -- so the constant-gravity fall carries the offset
+  unchanged until the turnip crosses the blast zone and despawns at 23187, leaving a
+  140-frame exact suffix. **Both backends produce the identical snapshot** (same first
+  row, 69 rows, `f1639cfe9ff96f60`, same field digest), so it is a shared rounding step
+  against Dolphin, not a host FP profile or layout artifact.
+
+## RESOLVED — the grab-timer standings term (stock-mode scoring)
+
+`49422_Game_20250130T192133` is **fixed and back in the suite**, bit-exact over all
+12,422 frames on both backends. The chain, settled by retail probes:
+
+- Ness is held in `CaptureWaitHi`; our sim broke the grab (grabber `CatchWait` 216 ->
+  `CatchCut` 218, victim 224 -> `CaptureCut` 229) where retail held three more frames
+  and threw. `ftCo_CaptureWaitHi_Anim`'s gate is `grab_timer <= 0` against
+  `ftCo_804D90D0`, which the DOL confirms is exactly `0.0` with a real `<=`
+  (`fcmpo` + `cror eq,lt,eq`, GALE01 0x800DB968).
+- The seed value is
+  `pct*x368 + (x358*(x35C - handicap) + x354) + x360*(x364 - (Player_80033BB8 + 1))`.
+  Ness's percent is genuinely 0 at the grab and every capture runs handicap 9, so the
+  standings term is the only lever: rank 0 seeds 75, rank 1 seeds 60.
+- **Retail probe at 49422 frame 6118** (`ftCommon_InitGrab` entry, the
+  `stfs f1,0x1A4C(r3)` at GALE01 0x8007DBCC): retail seeds **75** and
+  `Player_80033BB8` returns **0**, where the hosted build computed 1.
+- **Retail probe at 53362 frame 1374**: retail seeds **60** and the rank is **1**,
+  matching the hosted build.
+
+**The rule is stock count, not KOs minus falls.** `fn_8016588C` dispatches on the match
+mode in `lbl_8046B6A0.x24C.x5`, and a probe of both queries reports **x5 = 1** -- the
+stock-versus arm, not the KO-minus-falls default the hosted projection had ported. Mode 1
+scores a live player by their remaining stocks and nothing else: GALE01 0x80165988 loads
+`MatchPlayerData::stocks` with `lbz` and sign-extends it straight into the result. Only a
+slot already out of stocks takes the second arm, where the score collapses to survival
+time minus 0xFFFFFF (0x8016599C..0x801659B4) so an eliminated player always ranks last.
+
+That explains both probes directly. At 49422 frame 6118 both players hold 2 stocks, so
+the standings tie and Ness is not the loser -- while KOs minus falls put him behind,
+because the Falcon's self-destruct denied him the KO credit the old expression scored by.
+At 53362 frame 1374 the stocks are 4 against 3 and the rank is 1, which both rules agree
+on. In matches without self-destructs the two formulas order players identically, which
+is why the corpus never caught this.
+
+**The block is refreshed live.** The same probe shows `gm_80166378` running at frame 6118
+inside that very query, so the scene-guarded cache is repopulated on demand -- the value
+retail served is the live one. An earlier freeze-at-first-query model was tried and
+rejected: it fixes 49422 by accident and regresses six pre-existing replays
+(`marth/WellWornSmallGoshawk`, `marth/VigorousRelievedLlama`, three `doubles_recent`,
+`icies/dl-marth-2025-04`).
+
+**The fix retires pre-existing debt.** `puff/specials.slpz` carried a
+`scene-standings-cache-gap` classification whose rationale reads "the minimal headless
+gm_8016C5C0 projection supplies a loser rank one above retail's scene-owned MatchEnd
+cache, shortening one Sing timer by exactly 15 frames" -- the same off-by-one reached
+through Sing instead of a grab. That replay is now bit-exact on both backends, its
+classification is deleted, and its output lock is the one lock this change rewrites.
+
+**Method note.** A first pass mis-attributed this to the self-destruct score rule
+(`xC = -2`) by reasoning backwards from two rank observations instead of reading the
+executed branch. Both models happen to produce identical output on the whole 425-replay
+corpus, so the corpus could not tell them apart; only probing `fn_8016588C` itself showed
+the default branch never executes. When a formula has a mode switch, probe which arm runs
+before fitting parameters to the result.
+
+**Traps worth remembering:** `docker cp` preserves the source mtime, so copying an edited
+file into the container can leave it *older* than the existing object file and `make` will
+not rebuild -- a "control test" run that way silently measures the previous binary, which
+briefly inverted a conclusion here. `touch` copied sources before `make`. `make native`
+also does not rebuild the PPC binary; `make ppc` is separate, and a stale
+`melee-core-ppc` reproduces the old behavior long after the native fix lands.
+
+## RESOLVED (2026-08-23) — hitlag-accumulated pad edges
+
+**Resolved:** the arm clears the damaged fighter's own x668/x66C (DOL r29 = fp); see the
+2026-08-23 log entry in the Link packet. The text below is kept for provenance.
+
+`53362_Game_20250504T004716` is **in the suite**, carried as
+`hitlag-accumulated-pad-edge` with native and PPC snapshots. It is a known hosted defect
+rather than a recording artifact, classified as explicit debt so the replay keeps its
+coverage and so the eventual fix announces itself by breaking the entry -- the same way
+`puff/specials`'s `scene-standings-cache-gap` surfaced the standings fix.
+
+- Retail and the hosted build agree exactly through frame 1387 (timer 47/46/45 at frames
+  1382/1383/1387). At 1387 the hosted `ftCommon_GrabMash` subtracts the 6-point mash and
+  retail subtracts nothing, so retail runs +6 from 1388 onward (44 against 38, and 6
+  against 0 at 1408). The hosted timer lands on exactly `0.0` at 1408 and trips
+  `ftCo_CaptureWaitHi_Anim`'s `grab_timer <= 0` gate one frame before the throw; the grab
+  breaks, `fn_800DAD18` stops re-anchoring the pair, and the match forks to the end.
+- Everything upstream is exact and retail-verified: seeded timer 60, standings rank 1, the
+  1-per-frame decrement and the 6-point mash quantum.
+- The trigger is `fp->input.x668`, the newly-pressed mask. The recording holds A from 1383
+  through 1387, so the press edge lands inside the pummel's four-frame hitlag
+  (1383..1386), during which the capture Anim -- and therefore `ftCommon_GrabMash` -- does
+  not run.
+- **Retail probe at `Fighter_Spaghetti_8006AD10`'s entry**: the held Ness carries
+  `fp+0x2219 = 0x07` (bit 5 clear) and `input.x668 = 0` on *every* frame of the hitlag.
+  The hosted build has `x2219_b5` set and `x668 = 0x100` across the same frames.
+- **The input update is not at fault.** Instrumenting it with a shared sequence counter
+  shows it overwriting `x668` to 0 exactly as it should on the first frame the flag
+  clears, and shows the capture Anim consuming the update that immediately precedes it.
+  The earlier reading of this residual -- "the priority-3 update failed to overwrite" --
+  was wrong; the flag and the stale press are established earlier, when the pummel lands.
+- **`ftCo_Damage.c`'s capture-partner arm is the site.** That arm always runs
+  `other_fp->input.x668 = other_fp->input.x66C = 0`, with a conditional
+  `other_fp->x2219_b5 = true` above it. Instrumenting it shows the hosted build reaching
+  it at frame 1383 with **`fp` = Ness** (the captured fighter, whose `victim_gobj` points
+  back at the grabber) and **`other_fp` = Captain Falcon**, so it clears the *grabber's*
+  pressed mask and sets the *grabber's* hitlag flag while the victim's own `x668` and flag
+  are left untouched -- inverted relative to the effect retail produces on the victim.
+  Which fighter drives that arm for a pummel on a held opponent is the next thing to
+  settle; the port's copy of the line is byte-identical to the decomp, so this is a
+  branch-selection question, not a missing statement.
+- Not patched under a single replay: `x668` feeds every `CheckInput` owner, so the fix
+  needs the full aggregate as its gate.
+
+## Follow-ups
+
+1. `2025-03`'s 1-ULP knockback seed is the one residual without a named mechanism; the
+   remaining lead is `kb_applied`'s own input chain (percent/staleness/weight), since
+   the formula owners and every fusion reachable from the angle path are already
+   complete. A retail probe on the `ftColl_80079AB0` inputs would settle it.
+2. The hitlag-accumulated pad-edge defect above. Retiring the
+   `hitlag-accumulated-pad-edge` classification is the acceptance test; the corpus-wide
+   risk is that `x668` feeds every `CheckInput` owner, so the full aggregate is the gate.
+3. Probe captures are now self-terminating (`MSL_PROBE_EXIT_FRAME`, slippi-dolphin
+   80e8cd15): a bounded window finishes in seconds instead of running to the external
+   alarm, so retail ground truth is cheap enough to reach for early rather than last.
+2. The Mr. Saturn `xDE4` lane in `51444` is a pre-existing gap the Ness suite merely
+   exposed (a Peach-pulled item), not a Ness owner; if `itDosei` states 4/5 are ever
+   given an explicit past-member carve-out, that classification can be narrowed.
+
+## Reclassified debt — marth WingedGorgeousPanther @9793
+
+**RESOLVED (2026-08-26): not the tilt timer — the recording ran the UCF 0.8 shield drop with no platform gate; see the top section. Kept for provenance.**
+
+`incomplete-nintendont-post-frame-stream` was a misread and is now
+`held-down-shield-press-escape-decision` (owner moved from the Nintendont
+recorder to `ftCo_Escape`). The recorder is live across the whole window: shield
+HP decays 60.00 -> 53.28 at 0.28/frame while the action id advances GuardOn ->
+Guard and instance ids increment, and `animation_index` UINT_MAX with
+`state_age` -1 is just this stream's Guard/Entry/Dead representation (41 runs on
+P3, 33 on P4, every earlier one inside the 9,915-row exact prefix). The real
+divergence is ours: PassiveStandF ends at 9793 and the player presses shield
+with the stick already held down-left (lstick -0.6875, -0.7125, past the down
+threshold since 9791); retail shields, we take `ftCo_80099794`'s spot-dodge gate
+(`lstick.y <= x314 && x671_timer_lstick_tilt_y < x318`) into Escape with 14
+intangible frames. Suspect the x671 down-tilt timer being armed a frame late, so
+a two-frame-old hold still reads as a fresh smash — a retail probe at 9793 would
+settle it. Gameplay resyncs bit-exactly by 9916; the rest of the 710-row tail is
+only the global attack-instance counters off by one. Not UCF: all 16 rollout-flag
+combinations reproduce fingerprint `3d95a3cb4754c703`, and
+`msl_ucf_suppress_spotdodge` needs `mpColl_IsOnPlatform` so it cannot fire on the
+main stage floor. The `expected` snapshot is untouched, so this is a text-only
+re-own: the replay still classifies at the same fingerprint and no suite count
+moves. Verified on the yoshi base it was recorded against (marth stage-3 native
+`pass=1 classified=2 fail=0`, msl-luigi); not re-run against this packet's build,
+which the edit cannot affect.
+
 # Previous structural packet — `decomp-port-arm64-ppc` merge polish
 
 ## Objective
@@ -5300,3 +6489,116 @@ The app's paired 1,280-env frozen-policy check captured 55 natural events with
 identical final trajectories, measuring +0.20% mean update time; timing noise
 precludes a strict sub-1% bound. See the indexed performance history below for
 the comparison contract, rejected intermediate overhead and warmup accounting.
+
+## Linux-host certification + the pool-residue lanes are retired (2026-08-04)
+
+Work moved to a native linux/amd64 host (Ryzen 9950X3D, Ubuntu 25.10). Certification per
+`agent_docs/ENVIRONMENT.md` surfaced that four ness identities and, run-to-run, even the
+same host's own fingerprints were unstable: the recorded snapshots hashed bytes that are
+halves of 64-bit host pointers, so they were only ever reproducible inside the recording
+container's memory layout. Measured directly: two back-to-back native runs of `50321`
+produced two different mismatch fingerprints from an identical mismatch shape, and a
+per-frame item-lane dump diffed across runs pinned every varying byte to one
+ASLR-randomized pointer byte (0x8C vs 0x84) read through the generic
+`item_var_source_byte` union path for articles whose native struct leads with widened
+pointers (bat, yo-yo slot residue, PK Fire/pillar/flash, Fox Illusion).
+
+Two projection-mask corrections retire the whole family, both inside the mask's existing
+taxonomy (source-proven non-gameplay lanes):
+
+- **Ness Yo-Yo misc1 (x4) is masked.** Its only owner, `it_802BFEC4`, writes it on the
+  despawn transition, so no live export ever samples an owner-written value — the same
+  never-written-at-sampling-time argument that already masks the PK Flash leading word.
+  The swing read (`it_802BF800`) consumes the same residue retail does; any gameplay
+  effect lands in directly compared lanes. misc0 (x0, the smash action id, written at
+  spawn) stays compared.
+- **Mr. Saturn misc2/3 are masked in every state.** Every `xDE4` write in `itdosei.c` is
+  `= ip->pos`, a copy of the directly compared position lanes, and the writing Anim
+  callbacks skip during item hitlag, so a state entered mid-hitlag (observed: state 11 at
+  `51444` 10756) samples stale bytes or pool residue.
+- **compare_row now requires both sides' masks to admit a misc lane** (generalizing the
+  extra-needle special case): inside a classified divergence the hosted slot can hold a
+  different article than the recording, and the bytes at an unowned offset are arena
+  placement, not gameplay. The slot disagreement still reports through item.type/state.
+
+Consequences, all gated: the nine `unrecorded-item-pool-residue` classifications (whole
+family) are deleted because their replays are now bit-exact on both backends;
+`2025-03`/`2026-06`/`53362` and peach `HeartyStiffMallard` re-recorded with **identical
+native and PPC snapshots** (the masked lanes were the entire backend delta in every fork
+capture); 13 output locks re-recorded (9 ness + 4 peach whose Saturn/kind-window bytes
+were canonicalized). Fingerprints are now process-location independent: three consecutive
+suite runs hash identically, and the aggregate reproduces bit-exactly under both gcc-15.2
+and the pinned gcc-13 (local dpkg unpack, `build/host-gcc13/`).
+
+Also fixed: `src/upstream.lock`'s tree digest was stale from the WIP import commit (its
+recorded value is not reproducible from its own pinned inputs under any sha tool/format
+variant; file_count was updated to 1155 but the digest was not). Re-recorded with
+`tools/build/source_sync.sh`'s canonical method; `make source-check` passes with 206
+local deltas.
+
+**Suite state (linux/amd64 host + gcc-13 cross-check authoritative): ness 30 = 26 pass /
+4 classified / 0 fail on native AND on PPC** (classified: `2025-02` + `2025-03`
+dolphin-ULP, `2026-06` presentation-RNG draw gap, `53362` hitlag pad-edge debt).
+Aggregate **426 = 342 pass / 84 classified / 0 fail / 0 error**, lock-clean, xpass-free.
+Host certification: source-check, native-smoke, aggregate, per-suite ness PPC
+(`--timeout 240`; qemu here needs ~100s on 17k-frame captures), pytest 45 passed /
+1 skipped (no local ISO at the tested path) — all green.
+
+## Icies misc-lane retirement + popo_replays import (2026-08-05)
+
+The Ice Climbers article lanes joined the projection mask's source-proven non-gameplay
+taxonomy, retiring the whole `unrecorded-item-pool-residue` family (24 replays) and the
+belay-string `unrecorded-item-pointer-identity` classification:
+
+- **Ice (106) keeps misc1 only.** x0 is the spawner GObj pointer written at spawn
+  (`it_802C1590`) — allocator identity; x4 is the live scale, spawn-written from
+  x60_scale and bounce-decayed (`itClimbersice_UnkMotion0_Anim`), so xDDB stays
+  compared; the declared struct ends at xC, leaving 0x17/0x1B past-member residue.
+- **Blizzard (107) keeps misc0 only.** x0 is the spawn-written scale
+  (`itClimbersBlizzard_Spawn`); the only other member is the flag0 bit in xDD8's
+  leading byte, so offset 7 samples an unwritten byte and 0x17/0x1B fall past the
+  declared members.
+- **Gum strings (113) is fully masked.** x0's only owner write is the constant 2.25f
+  (`it_802C3864`) whose sampled low byte is 0x00 and the spawn constructor
+  (`it_802C27D4`) leaves it unwritten — the Link-bomb direction-sign argument; x4/x8
+  are the string ItemLink chain, xC the owner GObj, x14 the tail joint, and the
+  struct ends there.
+
+`dl-fox-2025-05` was a two-residue entry; its wind-machine half survives alone under a
+new `dreamland-wind-rng-draw-gap` id (grOldPupupu_802113E0's idle-cycle rand_range
+pair is still not consumed by the hosted wind-direction mirror; 11 forked frames,
+5205-5215, identical native/PPC fingerprints so the PPC snapshot aliases native).
+
+The 2026-08 `popo_replays.zip` import added five screened singles to the icies suite
+(25 -> 30; Fountain, frozen Stadium, Dream Land, Battlefield, FD; opponents add
+Donkey Kong). The Stadium capture is 3.18.0, where is_frozen_ps is untrustworthy, and
+is event-verified frozen (0x41 declared and empty over the full game). The zip's sixth
+game (`23549`, Ice Climbers/Peach on Yoshi's) was initially rejected for a one-frame
+item_count divergence at 2076; it was triaged and admitted the next day (below).
+
+**Suite state: icies 30 = 29 pass / 1 classified / 0 fail on native AND on PPC**
+(classified: `dl-fox-2025-05` wind-RNG draw gap). Aggregate **491 = 425 pass / 66
+classified / 0 fail / 0 error**, lock-clean, xpass-free (30 icies output locks
+re-recorded/added; aggregate coverage tests bumped 486 -> 491). source-check,
+native-smoke, format-check, and pytest green (the parallel-oracle test only fails
+when run alongside a live aggregate run — worker OOM-kill, passes in isolation).
+
+## 23549 admitted under peach-parasol-landing-teardown-window (2026-08-05)
+
+The rejected sixth popo game is triaged and in the suite (31 replays). The frame-2076
+divergence is not an extra article: the hosted projection publishes Peach's closed
+parasol (spawn id 11, its frozen spawn-position row at 67.36/-11.93) exactly one item
+sample longer than the recording. The recorded episode ends at 2075 and the window is
+her landing out of FallSpecial (recorded post state 35 -> 14 across 2075 -> 2076),
+whose transition tears the article down (`ftPe_8011D518` / `it_802BDB94`); Slippi
+samples items from a player-plink GObj proc installed before fighter processing, so
+the teardown lands one sample apart between the recording schedule and the hosted
+publication boundary. Whether retail retires the article in the preceding item phase
+or the landing frame's fighter phase needs the Dolphin scenario probe. Native and PPC
+fingerprints are identical (`ed25d016f39d4dd5`), so the PPC snapshot aliases native.
+
+**Suite state: icies 31 = 29 pass / 2 classified / 0 fail on native AND on PPC**
+(classified: `dl-fox-2025-05` wind-RNG draw gap, `ys-peach-2025-02_23549` parasol
+teardown window). Aggregate **492 = 425 pass / 67 classified / 0 fail / 0 error**,
+lock-clean, xpass-free; the 23549 output lock is recorded and the aggregate coverage
+tests bumped 491 -> 492.

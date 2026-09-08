@@ -10,6 +10,9 @@ import {
   CHAR_SHEIK,
   CHAR_YOSHI,
   CHAR_BOWSER,
+  CHAR_NESS,
+  CHAR_LINK,
+  CHAR_YOUNG_LINK,
   STAGE_FINAL_DESTINATION,
   STAGE_FOUNTAIN_OF_DREAMS,
   STAGE_YOSHIS_STORY,
@@ -80,7 +83,7 @@ try {
 
   // Exercise the imported special callbacks and article creation through the
   // wasm32 function table, with the same sealed module allocation.
-  for (const character of [CHAR_YOSHI, CHAR_BOWSER]) {
+  for (const character of [CHAR_YOSHI, CHAR_BOWSER, CHAR_NESS, CHAR_LINK, CHAR_YOUNG_LINK]) {
     for (const [mainX, mainY] of [[0, 0], [1, 0], [0, 1], [0, -1]]) {
       reset({ p1Char: character, stageId: STAGE_FINAL_DESTINATION });
       let sawSpecial = false;
@@ -95,7 +98,8 @@ try {
       }
       assert(sawSpecial, `character ${character} special (${mainX}, ${mainY})`);
       if ((character === CHAR_YOSHI && mainY === 1) ||
-          (character === CHAR_BOWSER && mainX === 0 && mainY === 0)) {
+          ([CHAR_BOWSER, CHAR_NESS, CHAR_LINK, CHAR_YOUNG_LINK].includes(character) &&
+           mainX === 0 && mainY === 0)) {
         assert(sawArticle, `character ${character} special article`);
       }
       assert.equal(sim.module.HEAPU8.buffer.byteLength, heapSize);

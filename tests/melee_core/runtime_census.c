@@ -48,6 +48,7 @@ static void config_init(MslCoreMatchConfig* config, uint8_t stage, uint8_t chara
   config->initial_random_seed = 1;
   config->match_damage_ratio = 1.0F;
   config->num_players = player_count;
+  config->is_teams = player_count > 2;
   config->stock_count = 4;
   config->online_fnmsubs_zero = 1;
   config->brawl_offscreen_damage = 1;
@@ -55,8 +56,10 @@ static void config_init(MslCoreMatchConfig* config, uint8_t stage, uint8_t chara
   config->ucf_cardinals_1_0_enabled = 1;
   config->ucf_shield_sdi_enabled = 1;
   config->ucf_sdi_enabled = 1;
+  config->ucf_shield_drop_084_enabled = 1;
   for (player = 0; player < player_count; ++player) {
     config->players[player].char_id = character;
+    config->players[player].team_id = player == 1 || player == 2;
   }
 }
 
@@ -205,9 +208,10 @@ static void print_class_storage(const MslCoreMatch* match) {
 int main(int argc, char** argv) {
   static const uint8_t characters[] = {
       1, 22, 18, 2, 7, 19, 15, 9, 17, 0, 21, 13, 10, 12, 3, 25, 14, 5,
+      8, 6, 20,
   };
   static const uint8_t stages[] = {32, 31, 3, 2, 8, 28};
-  static const uint8_t player_counts[] = {2, 4};
+  static const uint8_t player_counts[] = {2, 3, 4};
   MslCoreGameData* game_data = NULL;
   MslCoreMatch* match = NULL;
   MslCoreMatchConfig config;

@@ -22,6 +22,10 @@ representation may justify revisiting the same broad subsystem.
 
 ## Files
 
+- [Accepted merge throughput comparison](HISTORY.md#prepost-merge-throughput--2026-09-08):
+  identical shared workload, three samples per build at resident 256/512;
+  corrected canonical-profile differences of -1.53%/-0.52%, with matching digests.
+
 - [Stationary root constraints and pose index capacity](HISTORY.md#stationary-fighter-roots-retain-constraint-invalidation--2026-09-07): Bowser capture dependency correction within the flat pose owner.
 
 - [Bowser acos estimate counterexample](HISTORY.md#bowser-disproves-the-x86-acos-estimate-equivalence--2026-09-07): expanded gameplay disproves the retained x86 seed substitution; canonical Gekko seed restored.
@@ -198,3 +202,9 @@ When a new result supersedes one of these conclusions, update the relevant attem
 index in the same change.
 
 - [Replay curriculum retired](HISTORY.md#replay-curriculum-retired--2026-09-07): negative training result; experiment stashed, general relocation fixes retained.
+
+- [Incoming decomp-port-dev reserve evidence](IMPORTED_DECOMP_RESERVES_2026-08-26.md):
+  preserves the branch's August memory census and shared-host throughput caveats
+  without restoring its obsolete root-level baseline document.
+- [Combined branch construction census](HISTORY.md#decomp-port-dev-integration--2026-09-08):
+  21 fighters, six stages, and singles/three-player teams/doubles.

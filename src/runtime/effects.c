@@ -181,7 +181,30 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     // Donkey Kong owns efAsync bank 8 (ftData_UnkBytePerCharacter maps
     // FTKIND_DONKEY to 8).
     msl_effect_load_bank(data, 8, "/EfDkData.dat", "effDonkeyDataTable");
+    // Yoshi owns efAsync bank 9 (ftData_UnkBytePerCharacter maps
+    // FTKIND_YOSHI to 9). Both Yoshi-reachable efSync generator ids
+    // (0x4CD/0x4CE -> 0x2328) resolve into this bank.
     msl_effect_load_bank(data, 9, "/EfYsData.dat", "effYoshiDataTable");
+    // Ness owns efAsync bank 10 (ftData_UnkBytePerCharacter maps FTKIND_NESS
+    // to 10). EfNsData.dat is MODEL-ONLY -- both leading effNessDataTable
+    // words are unrelocated NULLs, the same shape as EfDkData.dat -- so
+    // retail efAsync_LoadSync skips psInitDataBank and the hosted loader
+    // publishes an empty command bank. Every Ness-reachable efSync id
+    // (0x4EE/0x4EF from PK Thunder, 0x4F0 from PSI Magnet) is a pure efLib
+    // model create, so no generator RNG projection consumes bank-10 ids.
+    // refs/melee/src/melee/ef/efasync.c::efAsync_LoadSync
+    msl_effect_load_bank(data, 10, "/EfNsData.dat", "effNessDataTable");
+    // Link and Young Link share efAsync bank 6 (ftData_UnkBytePerCharacter
+    // maps FTKIND_LINK and FTKIND_CLINK to 6; there is no EfClData.dat).
+    // EfLkData.dat is MODEL-ONLY -- both leading effLinkDataTable words are
+    // unrelocated NULLs, the EfDkData.dat/EfNsData.dat shape -- so the hosted
+    // loader publishes an empty command bank. Every Link-reachable efSync id
+    // (0x4BB/0x4BC from the spin attack) is a pure efLib model create on
+    // bank-6 model ids 0x1770..0x1773, and the item-side ids (0x448 arrow
+    // sparkle, 0x41C/0x3F1 hookshot) resolve into the already-loaded common
+    // bank 0, so no generator RNG projection consumes bank-6 ids.
+    // refs/melee/src/melee/ef/efasync.c::{efAsync_DatEntries,efAsync_LoadSync}
+    msl_effect_load_bank(data, 6, "/EfLkData.dat", "effLinkDataTable");
     msl_effect_load_bank(data, 12, "/EfKpData.dat", "effKoopaDataTable");
     // Pikachu owns efAsync bank 7 (ftData_UnkBytePerCharacter maps
     // FTKIND_PIKACHU to 7; Pichu shares the bank in retail).
@@ -457,6 +480,7 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
             msl_effect_consume_generator_rng(0x5F);
             break;
         case 0x4C3: msl_effect_consume_generator_rng(0x24C); break;
+        case 0x4CD:
         case 0x4CE: msl_effect_consume_generator_rng(0x2328); break;
         case 0x4D1: msl_effect_consume_generator_rng(0x64); break;
         case 0x4D3:
@@ -527,6 +551,17 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
     // f-smash hits). refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch
     case 0x3FD:
         msl_effect_consume_common_model_start(3);
+        break;
+    // Yoshi ground-pound landing dust and Egg Roll wall bump: straight
+    // model creations (efLib_Create_Attach_Pos(5) and (4)) with no
+    // dispatcher randomness; their frame-zero DPtcl events still initialize
+    // RNG-bearing generators.
+    // refs/melee/src/melee/ef/efasync.c::efAsync_Dispatch
+    case 0x3FF:
+        msl_effect_consume_common_model_start(5);
+        break;
+    case 0x406:
+        msl_effect_consume_common_model_start(4);
         break;
     case 0x427: {
         int i;

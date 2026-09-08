@@ -493,8 +493,17 @@ static void* translate_target(MslNativeArchive* context,
         type->kind == MSL_DAT_STRUCT &&
         (strncmp(type->name, "HSD_", 4) == 0 ||
          strncmp(type->name, "_HSD_", 5) == 0);
-    if (!graph_node && type->source_size != 0 && span >= type->source_size &&
-        span % type->source_size == 0)
+    // An Article is always a single object referenced slot-by-slot from
+    // ftData.x48_items; no source consumer indexes an Article array through
+    // one pointer. PlLk.dat packs an unreferenced hookshot joint blob
+    // between its boomerang Article and the next relocation target, so the
+    // span heuristic would materialize that residue as a second Article and
+    // mistype the joints it points at.
+    // refs/melee/src/melee/it/types.h::Article
+    int single_object =
+        type->kind == MSL_DAT_STRUCT && strcmp(type->name, "Article") == 0;
+    if (!graph_node && !single_object && type->source_size != 0 &&
+        span >= type->source_size && span % type->source_size == 0)
     {
         count = span / type->source_size;
     }
@@ -934,6 +943,9 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataPikachu") == 0 ||
         strcmp(symbol, "ftDataYoshi") == 0 ||
         strcmp(symbol, "ftDataKoopa") == 0 ||
+        strcmp(symbol, "ftDataNess") == 0 ||
+        strcmp(symbol, "ftDataLink") == 0 ||
+        strcmp(symbol, "ftDataClink") == 0 ||
         strcmp(symbol, "ftDataMario") == 0 ||
         strcmp(symbol, "ftDataDrmario") == 0 ||
         strcmp(symbol, "ftDataMars") == 0 ||
@@ -1302,6 +1314,9 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_PIKACHU,
     MSL_FIGHTER_ARTICLES_YOSHI,
     MSL_FIGHTER_ARTICLES_KOOPA,
+    MSL_FIGHTER_ARTICLES_NESS,
+    MSL_FIGHTER_ARTICLES_LINK,
+    MSL_FIGHTER_ARTICLES_CLINK,
     MSL_FIGHTER_AUX_PURIN_PARTS,
 } MslFighterArticleProfile;
 
@@ -1313,7 +1328,7 @@ static ftData* translate_fighter_public(
     enum {
         FT_DATA_X48_ITEMS_SOURCE_OFFSET = 0x48,
         ARTICLE_SPECIAL_ATTRS_SOURCE_OFFSET = 0x04,
-        MAX_REACHED_ARTICLE_COUNT = 5,
+        MAX_REACHED_ARTICLE_COUNT = 11,
     };
     const MslDatType* article_list_type = NULL;
     const MslDatType* attr_types[MAX_REACHED_ARTICLE_COUNT] = { NULL };
@@ -1492,6 +1507,72 @@ static ftData* translate_fighter_public(
         attr_types[0] = msl_dat_root_itYoshiEggThrowAttributes;
         attr_types[1] = msl_dat_root_StarAttrs;
         break;
+    case MSL_FIGHTER_ARTICLES_NESS:
+        // PlNs.dat's x48_items carries the eleven articles ftNs_Init_OnLoad
+        // registers: [0] PK Fire, [1] PK Fire pillar, [2] PK Flash charge,
+        // [3] PK Thunder ball, [4..7] the four PK Thunder trail segments,
+        // [8] PK Flash explosion, [9] the baseball bat, and [10] the Yo-Yo.
+        // The trail segments and the bat read no special attributes; PK Fire
+        // shares the pillar's two-float attribute shape (it_802AA1D8 and the
+        // Logic23 spawn hooks read x0/x4 from its own article).
+        // refs/melee/src/melee/ft/chara/ftNess/ftNs_Init.c
+        // refs/melee/src/melee/it/items/{itnesspkfire.c,itnesspkfirepillar.c,
+        //   itnesspkflash.c,itnesspkflashexplode.c,itnesspkthunderball.c,
+        //   itnesspkthundertrail.c,itnessbat.c,itnessyoyo.c}
+        article_list_type = msl_dat_root_MslDatNessArticles;
+        article_count = 11;
+        for (i = 0; i < article_count; ++i) {
+            indices[i] = (uint8_t) i;
+        }
+        attr_types[0] = msl_dat_root_itNessPKFirepillarAttributes;
+        attr_types[1] = msl_dat_root_itNessPKFirepillarAttributes;
+        attr_types[2] = msl_dat_root_itFlashAttributes;
+        attr_types[3] = msl_dat_root_itPKThunderAttributes;
+        attr_types[8] = msl_dat_root_itFlashExplAttributes;
+        attr_types[10] = msl_dat_root_itYoyoAttributes;
+        break;
+    case MSL_FIGHTER_ARTICLES_LINK:
+        // PlLk.dat's seven-slot x48_items carries the five articles
+        // ftLk_Init_OnLoad registers: [0] bomb (kind 58), [1] boomerang
+        // (60), [2] hookshot (62), [3] arrow (64), and [4] bow (76). Slot 5
+        // is the milk-bottle slot only Young Link populates (NULL here) and
+        // slot 6 is the sword HSD_Joint accessory the list type translates
+        // structurally. The bow's ported logic reads no special attributes.
+        // refs/melee/src/melee/ft/chara/ftLink/ftLk_Init.c
+        // refs/melee/src/melee/it/items/{itlinkbomb.c,itlinkboomerang.c,
+        //   itlinkhookshot.c,itlinkarrow.c,itlinkbow.c}
+        article_list_type = msl_dat_root_MslDatLinkArticles;
+        article_count = 5;
+        indices[0] = 0;
+        indices[1] = 1;
+        indices[2] = 2;
+        indices[3] = 3;
+        indices[4] = 4;
+        attr_types[0] = msl_dat_root_itLinkBombAttributes;
+        attr_types[1] = msl_dat_root_itLinkBoomerangAttributes;
+        attr_types[2] = msl_dat_root_itLinkHookshotAttributes;
+        attr_types[3] = msl_dat_root_itLinkArrowAttributes;
+        break;
+    case MSL_FIGHTER_ARTICLES_CLINK:
+        // PlCl.dat shares Link's seven-slot layout and additionally
+        // populates slot 5 with the milk-bottle article ftCl_Init_OnLoad
+        // registers as kind 123; neither the bow nor the milk reads special
+        // attributes.
+        // refs/melee/src/melee/ft/chara/ftCLink/ftCl_Init.c
+        // refs/melee/src/melee/it/items/itclinkmilk.c
+        article_list_type = msl_dat_root_MslDatLinkArticles;
+        article_count = 6;
+        indices[0] = 0;
+        indices[1] = 1;
+        indices[2] = 2;
+        indices[3] = 3;
+        indices[4] = 4;
+        indices[5] = 5;
+        attr_types[0] = msl_dat_root_itLinkBombAttributes;
+        attr_types[1] = msl_dat_root_itLinkBoomerangAttributes;
+        attr_types[2] = msl_dat_root_itLinkHookshotAttributes;
+        attr_types[3] = msl_dat_root_itLinkArrowAttributes;
+        break;
     case MSL_FIGHTER_AUX_PURIN_PARTS:
         // x48_items is not an article table for Purin. Its second pointer owns
         // the costume FtPartsDesc consumed by ftPr_Init_8013C360.
@@ -1647,10 +1728,6 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftKoopaAttributes,
                                           316, MSL_FIGHTER_ARTICLES_KOOPA);
-    } else if (strcmp(symbol, "ftDataYoshi") == 0) {
-        result = translate_fighter_public(context, offset,
-                                          msl_dat_root_ftYoshiAttributes,
-                                          314, MSL_FIGHTER_ARTICLES_YOSHI);
     } else if (strcmp(symbol, "ftDataDonkey") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftDonkeyAttributes,
@@ -1666,6 +1743,25 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftPikachuAttributes,
                                           320, MSL_FIGHTER_ARTICLES_PIKACHU);
+    } else if (strcmp(symbol, "ftDataYoshi") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftYoshiAttributes,
+                                          314, MSL_FIGHTER_ARTICLES_YOSHI);
+    } else if (strcmp(symbol, "ftDataNess") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftNessAttributes, 326,
+                                          MSL_FIGHTER_ARTICLES_NESS);
+    } else if (strcmp(symbol, "ftDataLink") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftLk_DatAttrs, 314,
+                                          MSL_FIGHTER_ARTICLES_LINK);
+    } else if (strcmp(symbol, "ftDataClink") == 0) {
+        // Young Link's ext-attr blob is Link-shaped: ftCl_Init routes
+        // OnLoad/LoadSpecialAttrs through ftLk_Init_OnLoadForCLink and
+        // ftLk_Init_LoadSpecialAttrs, so translate with the Link layout.
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftLk_DatAttrs, 314,
+                                          MSL_FIGHTER_ARTICLES_CLINK);
     } else if (strcmp(symbol, "ftDataLuigi") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftLuigiAttributes, 312,

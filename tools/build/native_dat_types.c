@@ -18,10 +18,12 @@
 #include "ft/chara/ftPikachu/types.h"
 #include "ft/chara/ftPopo/types.h"
 #include "ft/chara/ftSamus/types.h"
+#include "ft/chara/ftYoshi/types.h"
+#include "ft/chara/ftNess/types.h"
+#include "ft/chara/ftLink/types.h"
 #include "ft/chara/ftPurin/types.h"
 #include "ft/chara/ftSeak/types.h"
 #include "ft/chara/ftZelda/types.h"
-#include "ft/chara/ftYoshi/types.h"
 #include "ft/chara/ftKoopa/types.h"
 #include "ft/fighter.h"
 #include "ft/types.h"
@@ -29,6 +31,9 @@
 #include "it/it_3F14.h"
 #include "it/itCharItems.h"
 #include "it/itCommonItems.h"
+#include "it/itPKFlash.h"
+#include "it/itPKThunder.h"
+#include "it/itYoyo.h"
 #include "it/items/itdosei.h"
 #include "it/items/ityoshistar.h"
 #include "it/items/itkoopaflame.h"
@@ -188,6 +193,26 @@ typedef struct MslDatYoshiArticles {
     HSD_Joint* capture_egg;
 } MslDatYoshiArticles;
 typedef Article* MslDatKoopaArticles[1];
+// PlNs.dat's ftData.x48_items owns the eleven articles ftNs_Init_OnLoad
+// registers as item kinds 66/67 (PK Fire bolt and pillar), 68 (PK Flash
+// charge), 69..73 (the PK Thunder ball and its four trail segments), 78 (PK
+// Flash explosion), 101 (baseball bat), and 102 (Yo-Yo). Every slot is a
+// plain Article graph.
+// refs/melee/src/melee/ft/chara/ftNess/ftNs_Init.c
+typedef Article* MslDatNessArticles[11];
+// PlLk.dat and PlCl.dat share one seven-slot x48_items layout: slots 0..4
+// are the bomb, boomerang, hookshot, arrow, and bow articles both OnLoads
+// register (item kinds 58..65 and 76/77); slot 5 is the milk-bottle article
+// only ftCl_Init_OnLoad registers as kind 123 (NULL in PlLk.dat); slot 6 is
+// the sword HSD_Joint accessory graph consumed by ftParts_800753D4.
+// refs/melee/src/melee/ft/chara/ftLink/ftLk_Init.c
+// refs/melee/src/melee/ft/chara/ftCLink/ftCl_Init.c
+// refs/melee/src/melee/it/items/{itlinkbomb.c,itlinkboomerang.c,
+//   itlinkhookshot.c,itlinkarrow.c,itlinkbow.c,itclinkmilk.c}
+typedef struct MslDatLinkArticles {
+    Article* articles[6];
+    HSD_Joint* sword_accessory;
+} MslDatLinkArticles;
 // ItCo.dat's public x4 table owns the 43 common-item Article graphs. Peach's
 // SpecialLw can reach BombHei, Dosei, and Sword even when stage items are off.
 // refs/melee/src/melee/it/iteffect.c::it_802787B4
@@ -291,6 +316,13 @@ void* msl_native_dat_type_roots[] = {
     (ftPikachuAttributes*) 0,
     (itPikachuthunderAttributes*) 0,
     (itPikachutJoltGroundAttributes*) 0,
+    (MslDatNessArticles*) 0,
+    (ftNessAttributes*) 0,
+    (itNessPKFirepillarAttributes*) 0,
+    (itFlashAttributes*) 0,
+    (itFlashExplAttributes*) 0,
+    (itPKThunderAttributes*) 0,
+    (itYoyoAttributes*) 0,
     (MslDatCommonItemArticles*) 0,
     (itBombHeiAttributes*) 0,
     (itDoseiAttributes*) 0,
@@ -324,4 +356,10 @@ void* msl_native_dat_type_roots[] = {
     (CrowdConfig*) 0,
     (struct Fighter_804D64FC_t*) 0,
     (struct Fighter_804D6534_t*) 0,
+    (MslDatLinkArticles*) 0,
+    (struct ftLk_DatAttrs*) 0,
+    (itLinkBombAttributes*) 0,
+    (itLinkBoomerangAttributes*) 0,
+    (itLinkHookshotAttributes*) 0,
+    (itLinkArrowAttributes*) 0,
 };

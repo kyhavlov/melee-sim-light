@@ -16,7 +16,15 @@ enum {
     MSL_FIGHTER_POSE_JOINTS_PER_PLAYER = 256,
     MSL_FIGHTER_POSE_JOINT_CAPACITY =
         MSL_FIGHTER_POSE_JOINTS_PER_PLAYER * 4,
-    MSL_FIGHTER_POSE_TRACK_CAPACITY = 1024,
+    // Live animation tracks are per-fighter state too: each Ice Climbers
+    // port keeps about 265 tracks attached across Popo and Nana, so four
+    // Ice Climbers ports hold 1058 live tracks (measured post-compaction)
+    // against the former flat 1024 and aborted in allocate_tracks. Zelda,
+    // the next-widest port at 446 across a four-port mirror, fits well
+    // inside the same per-player figure.
+    MSL_FIGHTER_POSE_TRACKS_PER_PLAYER = 384,
+    MSL_FIGHTER_POSE_TRACK_CAPACITY =
+        MSL_FIGHTER_POSE_TRACKS_PER_PLAYER * 4,
     MSL_FIGHTER_POSE_ECB_CAPACITY = 8,
     MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY = 32,
     MSL_FIGHTER_POSE_PROGRAM_NONE = 0x1FFF,
@@ -98,6 +106,7 @@ typedef struct MslFighterPose {
     uint16_t joint_count;
     uint16_t joint_capacity;
     uint16_t track_used;
+    uint16_t track_capacity;
     uint16_t ecb_count;
 } MslFighterPose;
 
@@ -147,6 +156,7 @@ uint16_t msl_fighter_pose_program_token(const FigaTree* tree);
 FigaTree* msl_fighter_pose_program_tree(uint16_t token);
 #endif
 void msl_fighter_pose_register_tree(HSD_JObj* root);
+void msl_fighter_pose_insert_joint(HSD_JObj* joint);
 #ifdef MSL_CORE_WASM
 void msl_fighter_pose_bind_part(HSD_JObj* joint, uint8_t part);
 #endif
@@ -174,6 +184,7 @@ bool msl_fighter_pose_tree_is_animating(HSD_JObj* root);
 bool msl_fighter_pose_tree_rewound(HSD_JObj* root);
 float msl_fighter_pose_tree_rate(HSD_JObj* root);
 float msl_fighter_pose_tree_frame(HSD_JObj* root);
+int msl_fighter_pose_tree_has_animation(HSD_JObj* root);
 float msl_fighter_pose_tree_end(HSD_JObj* root);
 bool msl_fighter_pose_owns_joint(const HSD_JObj* joint);
 bool msl_fighter_pose_path(const HSD_JObj* joint, HSD_JObj** path);

@@ -299,8 +299,19 @@ void lbVector_Mirror(Vec3* a, Vec3* unit_mirror_axis)
 /// a and b.
 float lbVector_CosAngle(Vec3* a, Vec3* b)
 {
+#ifdef MSL_CORE_HOSTED
+    // Retail (GALE01 0x8000DCCC..0x8000DD9C) computes both norms with the
+    // Gekko frsqrte Newton sequence (fused fnmsub terms) and fuses the dot
+    // product's x accumulation into one fmadds; callers branch on the exact
+    // quotient (e.g. the Link boomerang mirror-vs-turn deflection gate), so
+    // the correctly-rounded libc sqrtf shape forks knife-edge comparisons.
+    return __fmadds(a->x, b->x, a->y * b->y) /
+           (msl_gekko_sqrtf(a->x * a->x + a->y * a->y) *
+            msl_gekko_sqrtf(b->x * b->x + b->y * b->y));
+#else
     return (a->x * b->x + a->y * b->y) / (sqrtf(a->x * a->x + a->y * a->y) *
                                           sqrtf(b->x * b->x + b->y * b->y));
+#endif
 }
 
 /// 8000DDAC - linearly interpolates between a and b as f goes from 0 to 1,

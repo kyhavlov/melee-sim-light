@@ -74,6 +74,9 @@ enum {
     MSL_CORE_CHAR_POPO = 10,
     MSL_CORE_CHAR_PIKACHU = 12,
     MSL_CORE_CHAR_SAMUS = 13,
+    MSL_CORE_CHAR_NESS = 8,
+    MSL_CORE_CHAR_LINK = 6,
+    MSL_CORE_CHAR_YOUNG_LINK = 20,
     MSL_CORE_CHAR_JIGGLYPUFF = 15,
     MSL_CORE_CHAR_LUIGI = 17,
     MSL_CORE_CHAR_DRMARIO = 21,
@@ -267,6 +270,12 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_PEACH;
     case MSL_CORE_CHAR_SAMUS:
         return CKIND_SAMUS;
+    case MSL_CORE_CHAR_NESS:
+        return CKIND_NESS;
+    case MSL_CORE_CHAR_LINK:
+        return CKIND_LINK;
+    case MSL_CORE_CHAR_YOUNG_LINK:
+        return CKIND_CLINK;
     case MSL_CORE_CHAR_POPO:
         return CKIND_POPONANA;
     case MSL_CORE_CHAR_DONKEY:
@@ -618,6 +627,9 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CORE_CHAR_SHEIK &&
             config->players[i].char_id != MSL_CORE_CHAR_PEACH &&
             config->players[i].char_id != MSL_CORE_CHAR_SAMUS &&
+            config->players[i].char_id != MSL_CORE_CHAR_NESS &&
+            config->players[i].char_id != MSL_CORE_CHAR_LINK &&
+            config->players[i].char_id != MSL_CORE_CHAR_YOUNG_LINK &&
             config->players[i].char_id != MSL_CORE_CHAR_POPO &&
             config->players[i].char_id != MSL_CORE_CHAR_DONKEY &&
             config->players[i].char_id != MSL_CORE_CHAR_GANONDORF &&
@@ -633,7 +645,9 @@ static int validate_config(MslCoreMatchConfig* config)
                     "current core supports external char_id=0 Mario, char_id=1 Fox, "
                     "char_id=2 Captain Falcon, char_id=3 Donkey Kong, "
                     "char_id=7 Sheik, char_id=9 Peach, char_id=10 Ice Climbers, "
-                    "char_id=12 Pikachu, char_id=13 Samus, char_id=14 Yoshi, char_id=5 Bowser, "
+                    "char_id=12 Pikachu, char_id=13 Samus, "
+                    "char_id=6 Link, char_id=8 Ness, char_id=14 Yoshi, "
+                    "char_id=20 Young Link, char_id=5 Bowser, "
                     "char_id=15 Jigglypuff, char_id=17 Luigi, "
                     "char_id=18 Marth, "
                     "char_id=19 Zelda, char_id=21 Dr. Mario, char_id=22 Falco, "
@@ -686,6 +700,16 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
         (struct UnkCostumeList){ game_data->source.fighter.peach_costumes, 5 };
     game_data->source.fighter.costume_lists[FTKIND_SAMUS] =
         (struct UnkCostumeList){ game_data->source.fighter.samus_costumes,
+                                 5 };
+    game_data->source.fighter.costume_lists[FTKIND_YOSHI] =
+        (struct UnkCostumeList){ game_data->source.fighter.yoshi_costumes,
+                                 6 };
+    game_data->source.fighter.costume_lists[FTKIND_NESS] =
+        (struct UnkCostumeList){ game_data->source.fighter.ness_costumes, 4 };
+    game_data->source.fighter.costume_lists[FTKIND_LINK] =
+        (struct UnkCostumeList){ game_data->source.fighter.link_costumes, 5 };
+    game_data->source.fighter.costume_lists[FTKIND_CLINK] =
+        (struct UnkCostumeList){ game_data->source.fighter.clink_costumes,
                                  5 };
     game_data->source.fighter.costume_lists[FTKIND_POPO] =
         (struct UnkCostumeList){ game_data->source.fighter.popo_costumes, 4 };
@@ -884,8 +908,12 @@ static int match_construct(MslCoreMatch* match,
     UnkArchiveStruct* map_data;
     int i;
 #ifdef MSL_CORE_NATIVE
-    bool has_samus = false;
-    bool has_peach = false;
+    uint32_t samus_count = 0;
+    uint32_t ness_count = 0;
+    uint32_t link_count = 0;
+    uint32_t sheik_count = 0;
+    uint32_t ics_count = 0;
+    uint32_t peach_count = 0;
     u32 runtime_item_count;
 #endif
 
@@ -937,7 +965,8 @@ static int match_construct(MslCoreMatch* match,
                               match->config.ucf_cardinals_1_0_enabled,
                               match->config.ucf_shield_sdi_enabled,
                               match->config.ucf_sdi_enabled,
-                              match->config.ucf_shield_drop_extended_enabled);
+                              match->config.ucf_shield_drop_extended_enabled,
+                              match->config.ucf_shield_drop_084_enabled);
     msl_camera_state_init(&match->camera);
     msl_slippi_state_init(&match->slippi, match->config.stage_event_streams);
 
@@ -1139,11 +1168,30 @@ static int match_construct(MslCoreMatch* match,
         uint8_t encoded = match->config.players[i].facing_and_port;
 #ifdef MSL_CORE_NATIVE
         if (match->config.players[i].char_id == MSL_CORE_CHAR_SAMUS) {
-            has_samus = true;
+            samus_count += 1;
+        }
+        if (match->config.players[i].char_id == MSL_CORE_CHAR_NESS) {
+            ness_count += 1;
+        }
+        if (match->config.players[i].char_id == MSL_CORE_CHAR_LINK ||
+            match->config.players[i].char_id == MSL_CORE_CHAR_YOUNG_LINK)
+        {
+            link_count += 1;
+        }
+        // A Zelda port can transform mid-match, so it earns Sheik's chain
+        // reserve as well as Sheik's item rate below.
+        if (match->config.players[i].char_id == MSL_CORE_CHAR_SHEIK ||
+            match->config.players[i].char_id == MSL_CORE_CHAR_ZELDA)
+        {
+            sheik_count += 1;
+        }
+        if (match->config.players[i].char_id == MSL_CORE_CHAR_POPO) {
+            ics_count += 1;
         }
         if (match->config.players[i].char_id == MSL_CORE_CHAR_PEACH) {
-            has_peach = true;
+            peach_count += 1;
         }
+
 #endif
         float facing = (encoded >> 1) == 0 ? (i == 0 ? 1.0F : -1.0F)
                                            : ((encoded & 1) ? 1.0F : -1.0F);
@@ -1274,50 +1322,104 @@ static int match_construct(MslCoreMatch* match,
     // refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,id.c,mtx.c,robj.c}
     // tests/melee_core/runtime_census.c
     // refs/melee/src/melee/gr/grstory.c
-    HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(), 128);
-    // Samus's air grapple-catch replays the deploy animation across the
-    // doubled beam link chain (itsamusgrapple.c::it_802B743C via
-    // ftCo_AirCatch_Anim), and every link jobj takes one FObj per track, so
-    // the deepest supported air-catch crosses the former 256-slot reserve.
-    HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(), has_samus ? 512 : 256);
+    // Samus's grapple-catch loads one AObj per animated joint of the beam
+    // link chain alongside its FObj tracks, so this reserve is per-fighter
+    // too: four-Samus air grapple-catches measured 151 live AObjs (5 / 46 /
+    // 91 / 151 for zero, one, two, and four Samus) against the former
+    // 136-slot capacity.
+    HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(), 128 + 64 * samus_count);
+    // Article animation loads a whole joint graph in a single frame, so the
+    // FObj bound is the sum of the concurrent per-fighter bursts. Every port
+    // can contribute its own, and bursts from different fighters overlap, so
+    // neither a match-wide constant nor a per-fighter maximum bounds a mixed
+    // lineup. Ness x2 + Samus x2 measures 356 live FObjs from the in-tree
+    // scenario and 405 from a harder driver, against 359 for four-Ness and
+    // 362 for four-Samus; a maximum rule covered that case with only about a
+    // quarter of the pool spare, the thinnest margin in the tree.
+    // Ness's PK Flash detonation walks the explosion joint tree through
+    // itNessPKFlashExplode_UnkMotion0_Anim / Item_80268BE0 / HSD_JObjAddAnim
+    // and takes about 80 FObjs per simultaneous detonation.
+    // Samus's grapple deploy animation runs across the beam link chain
+    // (itsamusgrapple.c::it_802B743C via ftCo_AirCatch_Anim, doubled on the
+    // catch), and every link jobj takes one FObj per track: about 90 per
+    // simultaneous ground grapple, measured 92 / 182 / 362 live for one, two,
+    // and four Samus. The air grapple-catch that motivated the original flat
+    // 512 could not be measured -- four-Samus air exhausts the GObj and class
+    // mem-piece pools first -- so Samus keeps its established 256 per fighter
+    // rather than being reduced to Ness's measured rate.
+    // refs/melee/src/melee/it/items/{itnesspkflashexplode.c,itsamusgrapple.c}
+    // tests/melee_core/article_pool_smoke.c
+    // Chaos soaks measured two more lineups sitting close to the flat base:
+    // four Link peaked at 258 live FObjs and four Peach at 240 against the
+    // 283-slot capacity it bought them. Link and Young Link overlap bow,
+    // boomerang, bomb, and hookshot track loads; Peach overlaps turnip and
+    // parasol graphs; both earn explicit terms.
+    // tests/melee_core/pool_chaos_soak.c
+    HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(),
+                           256 + 128 * ness_count + 256 * samus_count +
+                               32 * link_count + 32 * peach_count);
     HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 128);
-    HSD_ObjAllocEnsureFree(HSD_RObjGetAllocData(), 16);
-    HSD_ObjAllocEnsureFree(&gobj_alloc_data, 128);
-    HSD_ObjAllocEnsureFree(&gobjproc_alloc_data, 256);
+    // Link and Young Link carry four RObjs each against two for every other
+    // supported fighter, so four Link ports land on exactly 16 live RObjs and
+    // filled the former flat 16-slot reserve to the last slot. Nothing is live
+    // at seal, so that reserve was the whole capacity and any additional
+    // consumer in the same match would have aborted.
+    // refs/melee/src/sysdolphin/baselib/robj.c
+    HSD_ObjAllocEnsureFree(HSD_RObjGetAllocData(), 16 + 8 * link_count);
+    // Each grapple beam link is its own GObj, so the same per-fighter bound
+    // applies: four-Samus air grapple-catches measured 170 live GObjs
+    // (21 / 60 / 106 / 170 for zero, one, two, and four Samus) against the
+    // former 142-slot capacity.
+    HSD_ObjAllocEnsureFree(&gobj_alloc_data,
+                           128 + 64 * samus_count + 32 * link_count +
+                               32 * sheik_count + 64 * ics_count);
+    // Every live item GObj schedules a proc, and Ness's steered PK Thunder
+    // plus PK Fire pillars keep the most item GObjs alive at once: an
+    // hour-long four-Ness chaos soak peaked at 365 live procs against the
+    // former flat 256, aborting in HSD_GObj_SetupProc. Two Ness beside two
+    // Pikachu measured 267, so one Ness already leaves the flat figure thin.
+    // tests/melee_core/pool_chaos_soak.c
+    HSD_ObjAllocEnsureFree(&gobjproc_alloc_data, 256 + 64 * ness_count);
     // The reached Peach article graph consumes twelve temporary matrix-pool
     // slots. The resulting fifteen-item bound rounds to the established
     // 256-slot small-object reserve.
     // refs/melee/src/sysdolphin/baselib/mtx.c::{HSD_MtxAlloc,HSD_MtxFree}
-    HSD_ObjAllocEnsureFree(HSD_MtxGetAllocData(), 256);
+    // Four-Samus chaos peaked at 240 live matrix-pool slots of the flat 256,
+    // six percent spare; every other lineup stays under 224. Give Samus the
+    // margin explicitly rather than leaving it to luck.
+    // tests/melee_core/pool_chaos_soak.c
+    HSD_ObjAllocEnsureFree(HSD_MtxGetAllocData(), 256 + 32 * samus_count);
     // Transient effect and collision paths can retain Vec nodes across many
     // frames; the source object is only twelve bytes, so keep the established
     // full-replay reserve without imposing that count on large pools.
     // refs/melee/src/sysdolphin/baselib/mtx.c::{HSD_VecAlloc,HSD_VecFree}
     HSD_ObjAllocEnsureFree(HSD_VecGetAllocData(), 128);
-    // Item and dynamic-bone objects use the source category limits, separate
-    // from the public observation slot count. Keep the source ItemLink ceiling for
-    // multi-fighter Sheik chains rather than deriving it from replay rows.
-    // refs/melee/src/melee/it/{item.c,items/itseakchain.c}
-    runtime_item_count = msl_item_reserve_runtime_pools(has_peach, 151);
+    // Retain dev's full source item reserve and the incoming per-tether link
+    // reserves. Shy Guys are a separate stage-owned producer; grStory_801E3418
+    // admits one wave of at most five while no prior wave remains alive.
+    runtime_item_count = msl_item_reserve_runtime_pools(
+        peach_count != 0,
+        match->config.stage_id == MSL_CORE_STAGE_YOSHIS_STORY ? 5u : 0u,
+        151 + 64 * samus_count + 24 * link_count + 32 * sheik_count +
+            48 * ics_count);
     // The compact construction graph no longer leaves renderer JObjs on the
     // class free list. Preserve runtime headroom for the reached source class
     // sizes: supported item/effect graphs can cross the former 64-piece JObj
     // reserve while the Match arena is sealed.
     // hsdPreallocateMemPieces skips every size class not reached by this
     // Match, so this does not restore the former all-class slab reserve.
-    // Samus's ground grapple-grab doubles the beam link count
-    // (itsamusgrapple.c::it_802B75FC), and each link loads a jobj graph, so
-    // the deepest supported spawn crosses the former 128-piece reserve.
-    // refs/melee/src/melee/it/items/{itpeachturnip.c,itsamusgrapple.c}
+    // Per-fighter scaling lives on the targeted JObj floor below; every
+    // measured class-piece burst -- Samus grapples, tether chains, item and
+    // explosion graphs -- lands in the JObj size class, so the generic
+    // minimum only has to cover the small classes' modest churn.
     // refs/melee/src/sysdolphin/baselib/{class.c,jobj.c}
-    hsdPreallocateMemPieces(has_samus ? 256 : 128);
-    if (has_peach) {
-        // Peach's turnip graph has 17 JObjs, the largest of her reached
-        // article graphs (PlPe.dat; itpeachturnip.c::it_802BD4AC -> Item_802680CC).
-        // Cover the source item limits plus the other runtime class consumers.
-        msl_class_reserve_pieces(sizeof(HSD_JObj),
-                                (has_samus ? 256 : 128) + 17 * runtime_item_count);
-    }
+    hsdPreallocateMemPieces(128);
+    // Tethers need a per-port JObj floor even if construction did not touch
+    // the class. Peach additionally covers her full item reserve: each
+    // PlPe.dat turnip graph has 17 joints (it_802BD4AC -> Item_802680CC).
+    msl_class_reserve_pieces(
+        sizeof(HSD_JObj), 128 + 128 * match->config.num_players +
+                              (peach_count != 0 ? 17 * runtime_item_count : 0));
 
     // This Match's source allocation pools are complete. Shared DAT graphs
     // are sealed once, after GameData has preloaded the supported domain;
@@ -1422,6 +1524,9 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         MSL_CORE_CHAR_GANONDORF,
         MSL_CHAR_YOSHI,
         MSL_CHAR_BOWSER,
+        MSL_CORE_CHAR_NESS,
+        MSL_CORE_CHAR_LINK,
+        MSL_CORE_CHAR_YOUNG_LINK,
     };
     size_t i;
 
@@ -1611,6 +1716,64 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
             memcpy(&word, &item->xDD4_itemVar.pikachujoltground.xDE8.y,
                    sizeof(word));
             return (uint8_t) word;
+        }
+    } else if (item->kind == It_Kind_Ness_PKThunder) {
+        // Retail layout: +0 HSD_GObj* xDD4[6] (the six trail articles),
+        // +0x18 Vec3 positions[16]. Offsets 3/7/0x17 sample trail pointer
+        // low bytes and 0x1B the first recorded position's x, all displaced
+        // by the six widened pointers.
+        // refs/melee/src/melee/it/itPKThunder.h::itPKThunder_ItemVars
+        if (source_offset == 3) {
+            return (uint8_t) (uintptr_t) item->xDD4_itemVar.pkthunder
+                .xDD4[0];
+        }
+        if (source_offset == 7) {
+            return (uint8_t) (uintptr_t) item->xDD4_itemVar.pkthunder
+                .xDD4[1];
+        }
+        if (source_offset == 0x17) {
+            return (uint8_t) (uintptr_t) item->xDD4_itemVar.pkthunder
+                .xDD4[5];
+        }
+        if (source_offset == 0x1B) {
+            memcpy(&word, &item->xDD4_itemVar.pkthunder.positions[0].x,
+                   sizeof(word));
+            return (uint8_t) word;
+        }
+    } else if (item->kind == It_Kind_Ness_PKThunder1 ||
+               item->kind == It_Kind_Ness_PKThunder2 ||
+               item->kind == It_Kind_Ness_PKThunder3 ||
+               item->kind == It_Kind_Ness_PKThunder4)
+    {
+        // Retail layout: +0 Item_GObj* x0 (the ball), +4 s32 x4, +8 s32 x8.
+        // Offset 3 samples the ball pointer's low byte and offset 7 the
+        // trail index displaced by that widened pointer; 0x17/0x1B sit past
+        // the declared members.
+        // refs/melee/src/melee/it/itCharItems.h::itNesspkthundertrail_ItemVars
+        if (source_offset == 3) {
+            return (uint8_t) (uintptr_t) item->xDD4_itemVar
+                .nesspkthundertrail.x0;
+        }
+        if (source_offset == 7) {
+            memcpy(&word, &item->xDD4_itemVar.nesspkthundertrail.x4,
+                   sizeof(word));
+            return (uint8_t) word;
+        }
+    } else if (item->kind == It_Kind_Ness_Bat) {
+        // Retail layout is a single owner HSD_GObj*; offset 3 samples its
+        // low byte and 7/0x17/0x1B sit past the declared member.
+        // refs/melee/src/melee/it/itCharItems.h::itNessbat_ItemVars
+        if (source_offset == 3) {
+            return (uint8_t) (uintptr_t) item->xDD4_itemVar.nessbat.x0;
+        }
+    } else if (item->kind == It_Kind_Ness_Yoyo) {
+        // Retail layout: +0 s32 x0, +4 f32 x4, +8/+C ItemLink*, +10
+        // HSD_GObj*, +14 pad, +18 HSD_JObj*. Offsets 3 and 7 reach the
+        // leading scalars through the generic path; 0x1B samples the string
+        // joint pointer's low byte, displaced by the three widened pointers.
+        // refs/melee/src/melee/it/itCharItems.h::itNessYoyo_ItemVars
+        if (source_offset == 0x1B) {
+            return (uint8_t) (uintptr_t) item->xDD4_itemVar.nessyoyo.x18;
         }
     } else if (item->kind == It_Kind_Pikachu_TJolt_Air) {
         // Retail layout: +0 HSD_GObj* xDD4 (owner), +4 Item_GObj* xDD8
@@ -1927,36 +2090,15 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
 static void apply_replay_stage_events(MslCoreMatch* match)
 {
     int i;
-    if (match->config.stage_id == MSL_CORE_STAGE_FOUNTAIN_OF_DREAMS &&
-        (match->config.stage_event_streams & 1) != 0)
-    {
-        for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
-            Ground* gp = &match->stage_ground[i];
-            f32 height;
-            bool changed;
-            if (!match->stage_ground_used[i] || gp->map_id != 4) {
-                continue;
-            }
-            // grIzumi creates the left/right collision actors in the reverse
-            // order of Slippi's 0=right, 1=left event protocol. Publish the
-            // event through the source xD0/JObj/mpLib owner before fighter
-            // collision runs, then the source callback observes the same
-            // retained height later in the scheduler.
-            // refs/slippi-ssbm-asm/Recording/Stages/SendFountainInfo.asm
-            // refs/melee/src/melee/gr/grizumi.c::{
-            //   grIzumi_801CC358,grIzumi_801CCBDC}
-            if (msl_slippi_fod_platform_height(1 - gp->gv.izumi3.xC8,
-                                               gp->gv.izumi3.xD0, &height,
-                                               &changed))
-            {
-                msl_grizumi_apply_replay_platform_height(gp->gobj, height,
-                                                          changed);
-                msl_slippi_fod_platform_mark_applied(
-                    1 - gp->gv.izumi3.xC8);
-            }
-        }
-    } else if (match->config.stage_id == MSL_CORE_STAGE_DREAM_LAND &&
-               (match->config.stage_event_streams & 2) != 0)
+    // Fountain of Dreams platform heights are not published here: Slippi
+    // records them from inside grIzumi_801CC358 (SendFountainInfo.asm at
+    // 0x801CC998), the priority-4 stage proc that runs after Fighter_8006A360
+    // and before Fighter_procMap, and the source callback's replay branch
+    // applies the recorded height at exactly that scheduler point. Publishing
+    // it at frame start let mid-frame floor resolves (ftCo_800DDDE4's throw
+    // release, grab releases) see the platform one phase early.
+    if (match->config.stage_id == MSL_CORE_STAGE_DREAM_LAND &&
+        (match->config.stage_event_streams & 2) != 0)
     {
         u8 direction;
         if (msl_slippi_dreamland_whispy_direction(&direction)) {

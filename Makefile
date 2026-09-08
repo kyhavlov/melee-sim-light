@@ -29,7 +29,10 @@ TOOLCHAIN_STAMP := $(BUILD_ROOT)/toolchain/ready.stamp
 # macOS, the container) runs; see tools/build/host_arch.sh.
 TOOLCHAIN_MULTIARCH := $(shell $(ROOT)/tools/build/host_arch.sh multiarch)
 TOOLCHAIN_LIBDIR := $(TOOLCHAIN_ROOT)/usr/lib/$(TOOLCHAIN_MULTIARCH)
-CC := $(TOOLCHAIN_ROOT)/usr/bin/powerpc-linux-gnu-gcc-13
+# ppc32_cc.sh execs the pinned compiler directly when the host can run it
+# and falls back to an ubuntu:24.04 container when it cannot (macOS, or
+# Linux with a glibc older than the noble toolchain packages need).
+CC := $(ROOT)/tools/build/ppc32_cc.sh
 QEMU := $(TOOLCHAIN_ROOT)/usr/bin/qemu-ppc-static
 SYSROOT := $(TOOLCHAIN_ROOT)
 QEMU_SYSROOT := $(TOOLCHAIN_ROOT)/usr/powerpc-linux-gnu
@@ -104,7 +107,7 @@ WASM_LINK_FLAGS ?= -sSTACK_SIZE=1048576
 MSL_DATA_DIR ?= $(ROOT)/data
 DATA ?= $(abspath $(MSL_DATA_DIR))/raw
 VALIDATION_SUITE ?= replays/suites/melee_core_aggregate.json
-VALIDATION_CHARACTERS ?= Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach,Luigi,Mario,Dr. Mario,Samus,Ice Climbers,Pikachu,Donkey Kong,Ganondorf,Yoshi,Bowser
+VALIDATION_CHARACTERS ?= Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach,Luigi,Mario,Dr. Mario,Samus,Ice Climbers,Pikachu,Donkey Kong,Ganondorf,Yoshi,Bowser,Ness,Link,Young Link
 VALIDATION_STAGES ?= 32,31,3,2,8,28
 VALIDATION_BACKEND ?= native
 VALIDATION_WORKERS ?= 0
@@ -211,6 +214,7 @@ NATIVE_SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/context_smoke.c \
 	$(ROOT)/tests/melee_core/data_load_smoke.c \
 	$(ROOT)/tests/melee_core/gameplay_parts_smoke.c \
+	$(ROOT)/tests/melee_core/article_pool_smoke.c \
 	$(ROOT)/tests/melee_core/map_collision_smoke.c \
 	$(ROOT)/tests/melee_core/model_animation_smoke.c \
 	$(ROOT)/tests/melee_core/scalar_api_smoke.c \
@@ -255,6 +259,7 @@ NATIVE_CONTEXT_SMOKE := $(NATIVE_BUILD)/context-smoke
 NATIVE_BATCH_API_SMOKE := $(NATIVE_BUILD)/batch-api-smoke
 NATIVE_PUBLIC_API_SMOKE := $(NATIVE_BUILD)/public-api-smoke
 NATIVE_GAMEPLAY_PARTS_SMOKE := $(NATIVE_BUILD)/gameplay-parts-smoke
+NATIVE_ARTICLE_POOL_SMOKE := $(NATIVE_BUILD)/article-pool-smoke
 NATIVE_WASM_PARITY := $(NATIVE_BUILD)/wasm-parity
 NATIVE_LIFECYCLE_BENCH := $(NATIVE_BUILD)/lifecycle-bench
 NATIVE_REPLAY_BENCH := $(NATIVE_BUILD)/replay-bench
@@ -485,7 +490,9 @@ $(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(CORE)/runtime/wire.h $(CORE)/ru
 
 toolchain: $(TOOLCHAIN_STAMP)
 
-$(TOOLCHAIN_STAMP): $(ROOT)/tools/build/setup_ppc32_toolchain.sh
+$(TOOLCHAIN_STAMP): $(ROOT)/tools/build/setup_ppc32_toolchain.sh \
+		$(ROOT)/tools/build/ppc32_toolchain_packages.tsv \
+		$(ROOT)/tools/build/host_arch.sh
 	@$(ROOT)/tools/build/setup_ppc32_toolchain.sh
 
 $(PPC_UPSTREAM_OBJS): $(PPC_OBJ_DIR)/gameplay/%.o: $(CORE)/%.c $(TOOLCHAIN_STAMP)
@@ -723,6 +730,8 @@ $(eval $(call link_native_smoke,$(NATIVE_CONTEXT_SMOKE),$(NATIVE_OBJ_DIR)/tests/
 $(eval $(call link_native_smoke,$(NATIVE_BATCH_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/batch_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_PUBLIC_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/public_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_GAMEPLAY_PARTS_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/gameplay_parts_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_ARTICLE_POOL_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/article_pool_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/pool-chaos-soak,$(NATIVE_OBJ_DIR)/tests/melee_core/pool_chaos_soak.o))
 $(eval $(call link_native_smoke,$(NATIVE_WASM_PARITY),$(NATIVE_OBJ_DIR)/tests/melee_core/wasm_parity.o))
 $(eval $(call link_native_smoke,$(NATIVE_LIFECYCLE_BENCH),$(NATIVE_OBJ_DIR)/tests/melee_core/lifecycle_bench.o))
 $(eval $(call link_native_smoke,$(NATIVE_REPLAY_BENCH),$(NATIVE_REPLAY_BENCH_OBJ)))
@@ -750,7 +759,7 @@ ppc-smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE)
 	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
 		"$(DATA)"
 
-native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_RUNTIME_CENSUS)
+native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_RUNTIME_CENSUS)
 	@$(TIMEOUT) 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
@@ -760,6 +769,7 @@ native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL
 	@$(TIMEOUT) 5s "$(NATIVE_BATCH_API_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_PUBLIC_API_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_GAMEPLAY_PARTS_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 10s "$(NATIVE_ARTICLE_POOL_SMOKE)" "$(DATA)" >/dev/null
 	@$(TIMEOUT) 5s "$(NATIVE_RUNTIME_CENSUS)" "$(DATA)" >/dev/null
 
 wasm-smoke: data-check $(WASM_MODULE) $(NATIVE_WASM_PARITY)

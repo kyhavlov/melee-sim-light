@@ -1036,6 +1036,7 @@ static void build_input(const ReplayView* replay, const FrameRows* rows, int64_t
 static int build_match_config(const ReplayView* replay, const FrameRows* rows,
                               int ucf_cardinals_1_0_enabled, int ucf_shield_sdi_enabled,
                               int ucf_sdi_enabled, int ucf_shield_drop_extended_enabled,
+                              int ucf_shield_drop_084_enabled,
                               MslCoreMatchConfig* config, char* error,
                               size_t error_size) {
   int64_t i;
@@ -1077,6 +1078,7 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
   config->ucf_shield_sdi_enabled = (uint8_t)ucf_shield_sdi_enabled;
   config->ucf_sdi_enabled = (uint8_t)ucf_sdi_enabled;
   config->ucf_shield_drop_extended_enabled = (uint8_t)ucf_shield_drop_extended_enabled;
+  config->ucf_shield_drop_084_enabled = (uint8_t)ucf_shield_drop_084_enabled;
   config->stage_event_streams = (replay->fod_platform_list != NULL ? 1U : 0U) |
                                 (replay->dreamland_whispy_list != NULL ? 2U : 0U);
   for (i = 0; i < replay->num_players; ++i) {
@@ -1084,14 +1086,15 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
     int64_t player_raw = rows->player_raw[i][0];
     uint8_t character = get_u8(&player->character, player_raw);
     uint8_t stocks = replay->start_stocks[i];
-    if (character != 1 && character != 2 && character != 3 && character != 7 && character != 9 &&
-        character != 10 && character != 12 && character != 13 && character != 15 &&
-        character != 17 && character != 18 && character != 19 && character != 21 &&
-        character != 22 && character != 25 && character != 14 && character != 5 && character != 0) {
+    if (character != 5 && character != 1 && character != 2 && character != 3 && character != 6 && character != 7 &&
+        character != 8 && character != 9 && character != 10 && character != 12 &&
+        character != 13 && character != 14 && character != 15 && character != 17 &&
+        character != 18 && character != 19 && character != 20 && character != 21 &&
+        character != 22 && character != 25 && character != 0) {
       snprintf(error, error_size,
-               "Melee core requires Mario, Fox, Captain Falcon, Donkey Kong, Ganondorf, Yoshi, Bowser, "
-               "Sheik, Peach, Ice Climbers, Pikachu, Samus, Jigglypuff, Luigi, Marth, Zelda, "
-               "Dr. Mario, or Falco players");
+               "Melee core requires Mario, Fox, Captain Falcon, Donkey Kong, Ganondorf, Bowser, "
+               "Link, Young Link, Sheik, Peach, Ice Climbers, Pikachu, Samus, Ness, Yoshi, "
+               "Jigglypuff, Luigi, Marth, Zelda, Dr. Mario, or Falco players");
       return -1;
     }
     // Ice Climbers leader post rows carry internal kind 10 (Popo) and the
@@ -1727,14 +1730,15 @@ static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t 
         if ((!replay->item.instance_id_present &&
              spec->offset == offsetof(MslCoreItem, instance_id)) ||
             !item_field_is_gameplay_state(&expected.items[slot], spec) ||
-            (!expected.items[slot].exists &&
-             actual->items[slot].type == MSL_CORE_ITEM_KIND_SHEIK_NEEDLE_THROWN &&
-             !item_field_is_gameplay_state(&actual->items[slot], spec))) {
-          // When a classified item-count divergence places a thrown needle
-          // against an empty expected slot, its xDD4/xDD8 bytes are still
-          // uninitialized fixed-pool residue rather than gameplay state.
-          // Compare all owned fields for the extra needle, but do not make
-          // the fingerprint depend on native arena placement.
+            !item_field_is_gameplay_state(&actual->items[slot], spec)) {
+          // A sampled misc byte is a meaningful comparison only when the
+          // article on each side owns the sampled offset. Inside a
+          // classified divergence the hosted slot can hold a different
+          // article (or a different state) than the recording; the bytes at
+          // an unowned offset are fixed-pool residue or widened-pointer
+          // halves, so comparing them would make the fingerprint depend on
+          // native arena placement. The slot disagreement itself is still
+          // reported through the item.type/item.state rows.
           // refs/melee/src/melee/it/{itCharItems.h,
           //   items/itseakneedlethrown.c::it_802AFD8C}
           continue;
@@ -2360,6 +2364,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "ucf_shield_sdi_enabled",
       "ucf_sdi_enabled",
       "ucf_shield_drop_extended_enabled",
+      "ucf_shield_drop_084_enabled",
       "runner_stdin",
       "runner_stdout",
       NULL,
@@ -2381,6 +2386,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int ucf_shield_sdi_enabled = 1;
   int ucf_sdi_enabled = 1;
   int ucf_shield_drop_extended_enabled = 1;
+  int ucf_shield_drop_084_enabled = 1;
   int runner_stdin = -1;
   int runner_stdout = -1;
   struct ArrowSchema* schema;
@@ -2401,10 +2407,11 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdppppppii:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppii:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
+          &ucf_shield_drop_084_enabled,
           &runner_stdin, &runner_stdout)) {
     return NULL;
   }
@@ -2451,7 +2458,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   if (load_replay(frames, &replay, error, sizeof(error)) != 0 ||
       build_finalized_rows(&replay, &rows, error, sizeof(error)) != 0 ||
       build_match_config(&replay, &rows, ucf_cardinals_1_0_enabled, ucf_shield_sdi_enabled,
-                         ucf_sdi_enabled, ucf_shield_drop_extended_enabled, &state.config,
+                         ucf_sdi_enabled, ucf_shield_drop_extended_enabled,
+                         ucf_shield_drop_084_enabled, &state.config,
                          error, sizeof(error)) != 0) {
     PyErr_SetString(PyExc_ValueError, error);
     goto done;
@@ -2534,6 +2542,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
       "ucf_shield_sdi_enabled",
       "ucf_sdi_enabled",
       "ucf_shield_drop_extended_enabled",
+      "ucf_shield_drop_084_enabled",
       NULL,
   };
   PyObject* frames_obj;
@@ -2545,6 +2554,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   int ucf_shield_sdi_enabled = 1;
   int ucf_sdi_enabled = 1;
   int ucf_shield_drop_extended_enabled = 1;
+  int ucf_shield_drop_084_enabled = 1;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -2558,10 +2568,11 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   PyObject* result = NULL;
   (void)self;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|pppp:write_benchmark_case", keywords,
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|ppppp:write_benchmark_case", keywords,
                                    &frames_obj, &start_obj, &metadata_obj, &output_path,
                                    &ucf_cardinals_1_0_enabled, &ucf_shield_sdi_enabled,
-                                   &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled)) {
+                                   &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
+                                   &ucf_shield_drop_084_enabled)) {
     return NULL;
   }
   memset(&replay, 0, sizeof(replay));
@@ -2591,7 +2602,8 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   if (load_replay(frames, &replay, error, sizeof(error)) != 0 ||
       build_finalized_rows(&replay, &rows, error, sizeof(error)) != 0 ||
       build_match_config(&replay, &rows, ucf_cardinals_1_0_enabled, ucf_shield_sdi_enabled,
-                         ucf_sdi_enabled, ucf_shield_drop_extended_enabled, &header.config,
+                         ucf_sdi_enabled, ucf_shield_drop_extended_enabled,
+                         ucf_shield_drop_084_enabled, &header.config,
                          error, sizeof(error)) != 0) {
     PyErr_SetString(PyExc_ValueError, error);
     goto done;

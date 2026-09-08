@@ -28,7 +28,6 @@ void msl_slippi_stage_events_begin(const MslCoreStageEvents* events)
         events->fod_platform_mask;
     msl_bound_slippi_state->fod_platform_changed_mask =
         events->fod_platform_mask;
-    msl_bound_slippi_state->fod_platform_applied_mask = 0;
     if ((events->fod_platform_mask & 1) != 0) {
         msl_bound_slippi_state->fod_platform_height[0] =
             events->fod_platform_height[0];
@@ -71,20 +70,7 @@ bool msl_slippi_fod_platform_height(u8 platform, f32 source_height,
     return true;
 }
 
-bool msl_slippi_fod_platform_was_applied(u8 platform)
-{
-    return platform < 2 &&
-           (msl_bound_slippi_state->fod_platform_applied_mask &
-            (u8) (1U << platform)) != 0;
-}
 
-void msl_slippi_fod_platform_mark_applied(u8 platform)
-{
-    if (platform < 2) {
-        msl_bound_slippi_state->fod_platform_applied_mask |=
-            (u8) (1U << platform);
-    }
-}
 
 bool msl_slippi_dreamland_whispy_direction(u8* direction)
 {

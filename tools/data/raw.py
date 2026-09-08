@@ -30,6 +30,9 @@ SUPPORTED_CHARACTERS = (
     "ganon",
     "yoshi",
     "bowser",
+    "ness",
+    "link",
+    "clink",
 )
 SUPPORTED_STAGES = ("grnla", "grnba", "griz", "grps", "grst", "grop")
 

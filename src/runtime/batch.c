@@ -60,6 +60,9 @@ static int supported_character(uint8_t char_id)
            char_id == MSL_CHARACTER_BOWSER ||
            char_id == MSL_CHARACTER_PIKACHU ||
            char_id == MSL_CHARACTER_SAMUS ||
+           char_id == MSL_CHARACTER_NESS ||
+           char_id == MSL_CHARACTER_LINK ||
+           char_id == MSL_CHARACTER_YOUNG_LINK ||
            char_id == MSL_CHARACTER_JIGGLYPUFF ||
            char_id == MSL_CHARACTER_LUIGI ||
            char_id == MSL_CHARACTER_MARIO ||

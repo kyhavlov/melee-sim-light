@@ -89,11 +89,14 @@ float ftCo_Damage_CalcAngle(Fighter* fp, float f)
     } else if (f < p_ftCommonData->x14C) {
         return 0;
     } else {
+        // GALE01 0x8008D8AC: MWCC contracts the Sakurai-angle ramp into
+        // fmadds; the trailing degree conversion stays a plain fmuls.
         float result =
-            deg_to_rad * (p_ftCommonData->x148 *
-                              ((f - p_ftCommonData->x14C) /
-                               (p_ftCommonData->x150 - p_ftCommonData->x14C)) +
-                          1);
+            deg_to_rad *
+            __fmadds(p_ftCommonData->x148,
+                     (f - p_ftCommonData->x14C) /
+                         (p_ftCommonData->x150 - p_ftCommonData->x14C),
+                     1);
         if (result > deg_to_rad * p_ftCommonData->x148) {
             result = deg_to_rad * p_ftCommonData->x148;
         }
@@ -901,7 +904,13 @@ void ftCo_8008EC90(Fighter_GObj* gobj)
                             other_fp->x2219_b5 = true;
                         }
                     }
-                    other_fp->input.x668 = other_fp->input.x66C = 0;
+                    // Retail DOL 0x8008F078..0x8008F084 clears the pressed and
+                    // released masks on r29 = fp (the damaged fighter, loaded
+                    // once in the prologue), not on r27 = other_fp as the
+                    // decomp reads. A held victim's press edge that lands in
+                    // pummel hitlag is therefore discarded, not accumulated
+                    // (53362 @1383: retail Ness x668 0x100 -> 0).
+                    fp->input.x668 = fp->input.x66C = 0;
                     inlineB2(gobj);
                     goto ret_A8C;
                 }

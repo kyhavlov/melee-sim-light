@@ -104,7 +104,7 @@ def test_melee_core_aggregate_filters_pending_characters_without_losing_inventor
     )
 
     assert suite.name == "melee_core_aggregate"
-    assert len(suite.replays) == 404
+    assert len(suite.replays) == 529
     assert len(cases) == 133
     assert all("Peach" not in case.characters for case in cases)
 
@@ -173,6 +173,8 @@ def test_parallel_runner_preserves_manifest_order_and_isolates_errors(
         return _result()
 
     class FakeRunnerPool:
+        discarded = False
+
         def __init__(self, _count: int) -> None:
             self.runner = object()
 
@@ -181,6 +183,9 @@ def test_parallel_runner_preserves_manifest_order_and_isolates_errors(
 
         def release(self, _runner) -> None:
             pass
+
+        def discard(self, _runner) -> None:
+            type(self).discarded = True
 
         def close(self) -> None:
             pass
@@ -207,6 +212,7 @@ def test_parallel_runner_preserves_manifest_order_and_isolates_errors(
     ]
     assert [outcome.error is None for outcome in outcomes] == [True, True, False]
     assert outcomes[2].error == "RuntimeError: unsupported owner"
+    assert FakeRunnerPool.discarded
 
 
 def test_parallel_worker_auto_count_is_bounded(monkeypatch) -> None:

@@ -39,7 +39,26 @@ replay back through a probe Dolphin and dump the engine state. On modern macOS/A
 match the Ishiiruka fork, plus an extended `MSL_PROBE_PC_TRACE` that dumps caller
 registers and script bytes at the range-start PC.
 
-macOS/ARM64 driver quirks: run `dolphin-emu-nogui` with `-p headless` (the default opens
-a window), set `CPUCore = 4` (ARM64 JIT), the null audio backend is named
-`No Audio Output` (not `NullSound`), and `Binaries/Contents/Resources/Sys` must exist
-(symlink to `Binaries/Sys`) or boot fails the Melee GameSettings check.
+Invocation is `-p headless -e SSBM.iso -u <userdir> -i <userdir>/Slippi/playback.txt`, with
+`engineDumpPath` in the playback JSON. Interpreter probes fire only inside
+`MSL_PROBE_INTERPRETER_FRAME_START/END`; the EXI device swaps the CPU to the interpreter for
+that window. Set `MSL_PROBE_EXIT_FRAME` to the last frame of interest and the capture
+terminates itself — a bounded few-frame window then finishes in seconds, so retail ground
+truth is worth reaching for early rather than last. Without it the process never exits and
+needs an external alarm wrapper. Flush probe output per line; a killed process loses buffered
+rows. Frame numbering: the probe counter at `0x804D6CF4`, the dump `frame_index`, and the
+validator frame agree; the sim's `match->frame_id` at `msl_core_match_step_prepare` is one
+behind the validator frame being produced. Anchor by values, not labels.
+
+The probe driver scripts (`tools/dolphin/*.py`, including the engine-dump reader) are not
+present on `decomp-port-*` branches; take them from a branch that has them, e.g.
+`git show newchar-puff:tools/dolphin/engine_dump_io.py`. Some carry stale flags — check the
+Dolphin invocation and the generated `Dolphin.ini` before trusting a run. Audio must be
+`Backend = No Audio Output` (`NullSound` is not a valid name in this fork and falls back to
+an audible default), and a fresh `--user-dir` yields an empty probe file on its first run;
+rerun against the warm user dir.
+
+macOS/ARM64 driver quirks — Linux hosts need none of these: set `CPUCore = 4` (ARM64 JIT),
+`Binaries/Contents/Resources/Sys` must exist (symlink to `Binaries/Sys`) or boot fails the
+Melee GameSettings check, and `[Core] GFXBackend = Null` avoids Metal, whose IOGPU shared
+memory leaks across repeatedly killed runs until Dolphin aborts at boot.

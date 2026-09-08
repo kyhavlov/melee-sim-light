@@ -1255,3 +1255,112 @@ The 900-frame limit leaves the bank empty in this short run; exact-restore tests
 and the preceding longer training run cover bank reuse. Evidence is under
 Slippi-AI `reports/triage/mixed_envs_20260907/random_percents/`. This behavior change
 was not treated as an equivalent-work throughput comparison.
+
+
+## decomp-port-dev integration — 2026-09-08
+
+Merged candidate: dev `152f703d` plus incoming `22136d7d`. Retain dev's compact
+pose, source-sized Item pool and full Peach turnip reserve. Import the incoming
+per-fighter AObj/FObj/GObj/ItemLink reserves and per-player pose-track capacity.
+The single `msl_class_reserve_pieces` helper supplies both the per-port JObj floor
+and Peach's full item-graph bound; the incoming capped class helper and empirical
+per-fighter Item-count switch are displaced. Source `grStory_801E3418` admits at
+most five Shy Guys in a wave, separately reserved on Yoshi's Story.
+
+Link/Young Link sword insertion now joins the existing flat pose preorder during
+OnLoad. It repairs shifted node pointers, parent spans and ECB indices, and binds
+the Wasm part id. Native article-pool smoke and cross-index Python restores cover
+this interaction; no hot-path traversal or duplicated part-flag state is restored.
+
+Fresh native `make runtime-census` sweeps all 21 fighters on six stages with
+2-player singles, 3-player teams and 4-player teams (378 configurations):
+
+| Measure | Combined candidate |
+|---|---:|
+| Maximum construction arena | 2,069,028 / 3,145,728 bytes |
+| Maximum-arena lineup | Four Peach, Yoshi's Story |
+| Maximum allocations / relocation records | 2,174 / 7,052 |
+| Maximum pose joints | 1,016 / 1,024 |
+| Two-Peach FD runtime allocation lock | 1,745,572 bytes, 1,276 allocations before and after |
+| Two-Peach FD saved state | 1,808,620 bytes |
+| Shared game-data arena used | 92,399,848 bytes |
+| Shared native DAT arena used | 118,277,920 bytes |
+| Native archive-cache entries | 4,480 / 8,192 |
+
+The 256-lane large-batch smoke and lifecycle benchmark pass. Their timing was
+collected concurrently with verification and is not a controlled performance
+comparison. No throughput equivalence or speedup is claimed. A fresh resident
+256/512 comparison follows below; it does not replace the longer contract in
+`BASELINE.md`.
+
+The combined debug/release gate passes 529 replays and 5,059,922 transitions
+(470 exact, 59 classified). Fresh extraction, source, native/Python, Wasm and
+production-viewer checks pass. Full integration details are in
+`../DECOMP_DEV_INTEGRATION.md`; the incoming branch's distinct historical evidence
+is preserved in `IMPORTED_DECOMP_RESERVES_2026-08-26.md`.
+
+## Pre/post merge throughput — 2026-09-08
+
+Compare frozen pre-merge dev `152f703d` with merge `b0601914`, using fresh
+strict native release GCC 13.3.0 builds on the same Linux amd64 Ryzen 9 9950X3D
+host, pinned to CPU 0 (V-cache CCD). No gameplay or benchmark code changed for
+this measurement. The experiment was recorded in `../ACTIVE_WORK.md` before
+execution. The user accepted the initial small differences; the corrected
+profile below remains within that range. No performance repair is requested.
+
+Use 403 shared recordings: the pre-merge 404-case suite minus retired unfrozen
+Stadium recording `HummingDismalCat.slpz`. Both builds consume the same selection
+and lane order. Compare all prepared tapes after normalizing the version 81/82
+header and removing the added UCF 0.84 configuration byte: input/configuration
+contents match across all 403 tapes, covering 3,685,488 available input frames.
+Each build loads its own extracted game-data profile.
+
+Run `make benchmark-native` sequentially in order pre/post/post/pre/pre/post for
+each size. Parameters are `BENCHMARK_CPU=0`, `BENCHMARK_MATCHES=N`,
+`BENCHMARK_RESIDENT_MATCHES=N`, `BENCHMARK_MATCH_FRAMES=262144`, and
+`BENCHMARK_WARMUP_TICKS=8`, with `VALIDATION_SUITE` pointing to the shared
+`reports/triage/decomp_merge_benchmark/common_suite.json`. Observation history is
+128; startup preroll is outside production timing. Each timed sample lasts
+roughly 2.1–2.2 seconds; this is a bounded throughput check, not a sustained RL
+training benchmark or replacement for `BASELINE.md`.
+
+| Resident lanes | Pre samples, match-frames/s | Post samples, match-frames/s | Pre median | Post median | Change |
+|---|---|---|---:|---:|---:|
+| 256 | 122297, 120895, 121806 | 119942, 120808, 119932 | 121806 | 119942 | -1.53% |
+| 512 | 126009, 125740, 125520 | 125141, 124991, 125084 | 125740 | 125084 | -0.52% |
+
+All six samples at 256 lanes have digest `f07121ff2d154a20` and 25 resets;
+all six at 512 have digest `4424fd866178964a` and 22 resets. The observed
+throughput differences remain small; three short samples do not
+establish a precise regression size or attribute cost to a runtime owner.
+The workload covers shared gameplay and does not measure the newly added
+Ness/Link/Young Link population. Expanded-domain correctness gates remain those
+recorded in `../DECOMP_DEV_INTEGRATION.md`.
+
+Forensic logs, tape comparison, runner and machine-readable samples are under
+`reports/triage/decomp_merge_benchmark/` (`{size}-{run}-{pre|post}.log`,
+`tape-equivalence.txt`, `run.py`, `samples.json`). The table above retains all
+throughput samples independently of that ignored scratch directory.
+
+### Temporary-profile correction
+
+The initial manifest was flattened with `dataclasses.asdict`, leaving absent
+per-replay settings as explicit nulls. `load_suite` interpreted optional UCF
+nulls as false and null `played_on` as the string `None`. The initial comparison
+therefore measured equivalent custom-profile work on both builds, not the
+intended canonical replay profile. This was found while preparing the classified
+replay audit. Omit absent keys, verify the intended suite defaults/entries, and
+repeat the same twelve-sample protocol; the corrected results are above.
+All 403 corrected tapes match after the documented wire-header normalization.
+
+For durable provenance, the superseded initial samples were:
+
+| Resident lanes | Pre samples, match-frames/s | Post samples, match-frames/s | Median change |
+|---|---|---|---:|
+| 256 | 120887, 120969, 119445 | 119855, 118761, 118970 | -1.59% |
+| 512 | 124036, 125024, 125507 | 123819, 122013, 124577 | -0.96% |
+
+Their digests were `d12cec3aa27c08da` (256) and `3b9cf47fe13ef1b3` (512),
+equal across builds. Initial raw artifacts are preserved under
+`reports/triage/decomp_merge_benchmark/initial-null-profile/`. These numbers are
+not the canonical-profile result and should not be cited as such.

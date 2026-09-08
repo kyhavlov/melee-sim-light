@@ -5,7 +5,7 @@
 Build a high-performance, batched, deterministic Melee simulator for RL. Supported fighters are
 Fox, Falco, Marth, Sheik, Zelda, Captain Falcon, Jigglypuff, Peach, Luigi, Mario, Dr. Mario,
 Samus, the Ice Climbers (Popo with the CPU-mimic Nana follower), Pikachu, Donkey Kong, and
-Ganondorf, Yoshi, and Bowser. RL 1.0 covers singles, three-player teams, and doubles on Final Destination, Battlefield, Fountain of
+Ganondorf, Yoshi, Bowser, Ness, Link, and Young Link. RL 1.0 covers singles, three-player teams, and doubles on Final Destination, Battlefield, Fountain of
 Dreams, frozen Pokemon Stadium, Yoshi's Story, and Dream Land N64. UCF is enabled by default.
 
 Correctness comes from gameplay-relevant source completion: port the relevant decomp call graphs,
@@ -47,6 +47,13 @@ implementation queue.
 - Stage geometry and fighter animation/move/hitbox/hurtbox data come from extracted game files.
 - A runtime artifact change updates extractor, deterministic layout, required loader, and fresh
   extraction smoke together.
+- Admitting a fighter updates the roster above, both `supported_character` gates (`src/api.c` and
+  `src/runtime/batch.c`), `VALIDATION_CHARACTERS`, and `tools/viewer/msltrace1.js::externalCharId`
+  together. Each of these has been missed separately.
+- Per-fighter runtime reserves are per-fighter bounds, not match-wide constants: size them by the
+  count of that fighter in the match, since four ports can each contribute the same worst case.
+  Follower fighters (Nana) and stage-owned spawners (Yoshi's Story's Shy Guys) contribute on top
+  of the ports.
 - Preserve upstream-shaped formatting. No root command may blanket-format imported gameplay.
 
 ## Routine workflow
@@ -61,6 +68,8 @@ implementation queue.
   authoritative only from linux/amd64 GNU-toolchain builds: CI, a native Linux host, or the Linux
   container on macOS. macOS-built binaries — arm64 or the Rosetta `HOST_TARGET_ARCH=x86_64`
   profile — have no recorded bit-exact equivalence and must not record suite results.
+  `agent_docs/ENVIRONMENT.md` covers host bring-up, the toolchain pins the gate depends on, and
+  the procedure that certifies a new host before it records identities.
 - Put forensic outputs under ignored `reports/triage/` and never hand-edit generated results.
 - New-core plans and evidence live only under `agent_docs/`.
 - A performance commit must include implementation, gates, and refreshed retained evidence in

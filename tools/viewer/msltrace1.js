@@ -118,6 +118,8 @@ export function externalCharId(internalCharId) {
   if (internalCharId === 1) return 2;
   if (internalCharId === 2) return 0;
   if (internalCharId === 7) return 19;
+  if (internalCharId === 8) return 11;
+  if (internalCharId === 20) return 21;
   if (internalCharId === 9) return 12;
   if (internalCharId === 17) return 7;
   if (internalCharId === 0) return 8;
@@ -128,9 +130,13 @@ export function externalCharId(internalCharId) {
   if (internalCharId === 12) return 13;
   if (internalCharId === 13) return 16;
   if (internalCharId === 14) return 17;
+  if (internalCharId === 16) return 10;
   if (internalCharId === 18) return 9;
   if (internalCharId === 19) return 18;
   if (internalCharId === 22) return 20;
+  if (internalCharId === 23) return 24;
+  if (internalCharId === 24) return 3;
+  if (internalCharId === 26) return 23;
   return internalCharId;
 }
 

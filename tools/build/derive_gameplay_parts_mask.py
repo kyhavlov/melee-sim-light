@@ -31,13 +31,16 @@ CHARACTERS = {
     'seak': (7, 'Sk', 'ftDataSeak'),
     'donkey': (3, 'Dk', 'ftDataDonkey'),
     'ganon': (25, 'Gn', 'ftDataGanon'),
-    'yoshi': (14, 'Ys', 'ftDataYoshi'),
     'koopa': (5, 'Kp', 'ftDataKoopa'),
     'peach': (9, 'Pe', 'ftDataPeach'),
     'popo': (10, 'Pp', 'ftDataPopo'),
     'nana': (11, 'Nn', 'ftDataNana'),
     'pikachu': (12, 'Pk', 'ftDataPikachu'),
     'samus': (13, 'Ss', 'ftDataSamus'),
+    'yoshi': (14, 'Ys', 'ftDataYoshi'),
+    'ness': (8, 'Ns', 'ftDataNess'),
+    'link': (6, 'Lk', 'ftDataLink'),
+    'clink': (20, 'Cl', 'ftDataClink'),
     'purin': (15, 'Pr', 'ftDataPurin'),
     'luigi': (17, 'Lg', 'ftDataLuigi'),
     'mars': (18, 'Ms', 'ftDataMars'),
@@ -48,9 +51,13 @@ CHARACTERS = {
 
 # Subaction counts per FighterKind (src/melee/ft/ftdata.c ftData_Table_Unk0).
 SUBACTION_COUNTS = {
-    0: 303, 1: 327, 2: 318, 3: 337, 7: 317, 9: 318, 10: 321, 11: 321,
-    12: 320, 13: 313, 15: 327, 17: 312, 18: 327, 19: 311, 21: 303, 22: 327,
-    25: 318, 14: 314, 5: 316,
+    0: 303, 1: 327, 2: 318, 3: 337, 6: 314, 7: 317, 8: 326, 9: 318, 10: 321,
+    11: 321,
+    12: 320, 13: 313, 14: 314, 15: 327, 17: 312, 18: 327, 19: 311, 20: 314,
+    21: 303,
+    22: 327,
+    25: 318,
+    5: 316,
 }
 
 # Words consumed per fighter subaction event with opcode >= 10, indexed by
@@ -86,6 +93,29 @@ CODE_ANCHORED = {
     #          ftPp_* handlers, so the anchor set is symmetric.
     'popo': (0, 2, 26, 29, 47),
     'nana': (0, 2, 26, 29, 47),
+    #   ness: ftNs_AttackHi4.c transforms the Yo-Yo hitbox position through
+    #          the raw parts[61] joint on every charge/release frame.
+    'ness': (61,),
+    #   link/clink: ftLk_SpecialHi.c anchors the spin-attack effect on the
+    #          raw parts[FtPart_L2ndNa=24] joint for Link and
+    #          parts[FtPart_L3rdNa=26] for Young Link; ftParts_800753D4
+    #          attaches the sword accessory under parts[67] (Link) and
+    #          parts[71] (Young Link) at OnLoad and binds the loaded JObj at
+    #          the accessory part itself -- 68 (Link) and 72 (Young Link),
+    #          the Fighter_804D6540 entry's x0 -- which must stay live so
+    #          the retail ftAnim_8006E7B8 tree/part pairing (which counts
+    #          the attached accessory node) stays aligned in the compact
+    #          hosted tree. itlinkhookshot.c's parts[139] chain-joint store
+    #          is a runtime-anchored article slot past the skeleton, like
+    #          Samus's zair beam tip, and stays outside the admission mask.
+    #          Both Links also spawn/attach every article through
+    #          ftParts_GetBoneIndex(FtPart_LThumbNb=31 / FtPart_RThumbNb=49):
+    #          the left thumb resolves to parts[35] (Link) / parts[37]
+    #          (Young Link) and anchors the bomb pull, boomerang throw, and
+    #          milk bottle; the right thumb resolves to parts[64]/[68],
+    #          already graph-admitted, and anchors the arrow/bow/hookshot.
+    'link': (24, 35, 67, 68),
+    'clink': (26, 37, 71, 72),
     #   pikachu: ftPk_SpecialLw.c thunder-loop efAsync anchors
     #          parts[FtPart_TopN=0] raw; every other part access resolves
     #          through ftParts_GetBoneIndex.
@@ -143,12 +173,17 @@ class CommonData:
         return j2p, p2j, n
 
     def exclusions(self, kind):
+        # Fighter_804D6540 (ftLoadCommonData pData[5]): accessory-model
+        # descriptors of four u8s {part, attach_part, mode, tree_depth};
+        # ftParts_8007506C matches entry->x0 against a part id. The listed
+        # accessory parts live outside the costume skeleton preorder.
+        # refs/melee/src/melee/ft/{fighter.h,ftparts.c::ftParts_8007506C}
         t = u32(self.data, self.excl_arr + kind * 4)
         if t == 0:
             return set()
         arr = u32(self.data, t)
         cnt = u32(self.data, t + 4)
-        return {u32(self.data, arr + i * 8) for i in range(cnt)}
+        return {self.data[arr + i * 4] for i in range(cnt)}
 
 
 def skeleton(path):

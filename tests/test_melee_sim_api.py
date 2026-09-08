@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 import melee_sim as msl
 from melee_sim import dtypes
@@ -69,14 +70,19 @@ def test_python_wire_layout_matches_public_c_api() -> None:
     assert np.all(players["main_stick_y"] == 0.5)
 
 
-def test_yoshi_bowser_articles_restore_at_another_batch_index(monkeypatch) -> None:
+@pytest.mark.parametrize("characters", [
+    (msl.Character.YOSHI, msl.Character.BOWSER),
+    (msl.Character.NESS, msl.Character.LINK),
+    (msl.Character.YOUNG_LINK, msl.Character.SAMUS),
+])
+def test_character_articles_restore_at_another_batch_index(monkeypatch, characters) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
     with msl.EnvBatch(batch_size=2, length=128, num_players=4) as env:
         for stage in msl.Stage:
             config = msl.MatchConfig(stage=stage, is_teams=True, players=tuple(
                 msl.PlayerConfig(character, team_id=team)
                 for character, team in zip(
-                    (msl.Character.YOSHI, msl.Character.BOWSER) * 2,
+                    characters * 2,
                     (0, 1, 1, 0))))
             env.configure_matches([config, config])
             env.reset_all()
@@ -152,6 +158,9 @@ def test_supported_character_and_stage_enums() -> None:
         10,
         12,
         13,
+        8,
+        6,
+        20,
         15,
         17,
         0,

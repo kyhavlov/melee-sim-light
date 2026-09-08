@@ -87,7 +87,11 @@ def test_native_validation_runs_current_oracle_replays_in_parallel() -> None:
     outcomes, wall_seconds = run_cases(
         load_native(),
         cases,
-        workers=len(cases),
+        # Each native server maps the full replay set, so cap the fan-out for
+        # the same reason the classified comparison below does: the preload
+        # now spans seventeen characters and one worker per case OOM-kills in
+        # the validation container.
+        workers=min(4, len(cases)),
         frames=256,
         start_frame=None,
         timeout=3.0,
@@ -120,6 +124,8 @@ def test_native_validation_compares_complete_classified_replays() -> None:
         "ganon.json",
         "yoshi.json",
         "bowser.json",
+        "ness.json",
+        "links.json",
     ):
         _suite, loaded_cases = load_suite_cases(
             ROOT / "replays/suites" / suite_name,

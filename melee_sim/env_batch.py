@@ -42,7 +42,7 @@ class EnvBatch:
         observation: str = "native",
         action_format: str = "controller",
         obs_dim: int = 0,
-        ucf_cardinals_1_0_enabled: bool = False,
+        ucf_cardinals_1_0_enabled: bool = True,
     ) -> None:
         self.batch_size = int(batch_size)
         self.length = int(length)

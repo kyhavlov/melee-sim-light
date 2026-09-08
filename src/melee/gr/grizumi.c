@@ -468,7 +468,6 @@ void grIzumi_801CC358(Ground_GObj* gobj)
 #ifdef MSL_CORE_HOSTED
     {
         extern bool msl_slippi_fod_platform_height(u8, f32, f32*, bool*);
-        extern bool msl_slippi_fod_platform_was_applied(u8);
         f32 replay_height;
         bool changed;
         u8 replay_platform = 1 - gp->gv.izumi3.xC8;
@@ -476,16 +475,18 @@ void grIzumi_801CC358(Ground_GObj* gobj)
                                            gp->gv.izumi3.xD0,
                                            &replay_height, &changed))
         {
-            // Slippi 3.18 records each source platform-height publication.
+            // Slippi 3.18 records each source platform-height publication
+            // from inside this callback (SendFountainInfo.asm at 0x801CC998).
             // During replay playback that stream directly owns the same
-            // grIzumi/JObj/mpLib state; frames without an event retain the
-            // previous publication.
+            // grIzumi/JObj/mpLib state at this priority-4 scheduler point,
+            // after Fighter_8006A360 and before Fighter_procMap, so mid-frame
+            // floor resolves in the fighter anim phase see the previous
+            // frame's platform like retail; frames without an event retain
+            // the previous publication.
             // refs/slippi-ssbm-asm/Recording/Stages/SendFountainInfo.asm
             // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
-            if (!msl_slippi_fod_platform_was_applied(replay_platform)) {
-                msl_grizumi_apply_replay_platform_height(gobj, replay_height,
-                                                          changed);
-            }
+            msl_grizumi_apply_replay_platform_height(gobj, replay_height,
+                                                      changed);
             return;
         }
     }

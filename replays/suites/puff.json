@@ -175,6 +175,7 @@
     },
     {
       "replay": "replays/validation/puff/master-diamond-d514ba67193e53290c8d1b83.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "played_on": "network",
       "ucf_cardinals_1_0_enabled": false,
       "ports": [

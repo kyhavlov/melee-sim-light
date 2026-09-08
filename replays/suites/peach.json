@@ -1,11 +1,12 @@
 {
   "name": "peach",
-  "notes": "Peach validation suite: 18 public SlippiLab singles (three per legal stage, frozen Pokemon Stadium only) plus two local demo fixtures. Opponents cover every currently supported fighter plus Peach dittos. peach_demo_1 covers Battlefield specials/items; peach_demo_2 supplies six grounded SpecialLw -> airborne SpecialAirLw floor-loss transitions on Yoshi's Story. The combined corpus reaches all eight float states, all three forward-smash variants, all 16 source-reachable serialized special/parasol states, successful grounded and aerial Toad counters, grounded and aerial Peach Bomber hit/miss paths, all eight recorded turnip face ids including dot-eyes and stitch-face, and down-B pulls of Bob-omb, Mr. Saturn, and Beam Sword. Source inspection finds no entry transition for the remaining SpecialSJump (356), SpecialHiEnd (362), or SpecialAirHiEnd (364) dormant state-table rows.",
+  "notes": "Peach validation suite: 17 public SlippiLab singles (three per legal stage, except two on Pokemon Stadium after HummingDismalCat was retired as an unfrozen transforming-Stadium capture) plus two local demo fixtures. Opponents cover every currently supported fighter plus Peach dittos. peach_demo_1 covers Battlefield specials/items; peach_demo_2 supplies six grounded SpecialLw -> airborne SpecialAirLw floor-loss transitions on Yoshi's Story. The combined corpus reaches all eight float states, all three forward-smash variants, all 16 source-reachable serialized special/parasol states, successful grounded and aerial Toad counters, grounded and aerial Peach Bomber hit/miss paths, all eight recorded turnip face ids including dot-eyes and stitch-face, and down-B pulls of Bob-omb, Mr. Saturn, and Beam Sword. Source inspection finds no entry transition for the remaining SpecialSJump (356), SpecialHiEnd (362), or SpecialAirHiEnd (364) dormant state-table rows.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
     {
       "replay": "replays/validation/peach/HeartyStiffMallard.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "ports": [1, 2],
       "stage_id": 2,
       "characters": {"1": "Peach", "2": "Peach"},
@@ -24,13 +25,8 @@
       "characters": {"2": "Peach", "4": "Marth"}
     },
     {
-      "replay": "replays/validation/peach/HummingDismalCat.slpz",
-      "ports": [1, 2],
-      "stage_id": 3,
-      "characters": {"1": "Fox", "2": "Peach"}
-    },
-    {
       "replay": "replays/validation/peach/ScaryFrankPorcupine.slpz",
+      "ucf_shield_drop_084_enabled": false,
       "ports": [1, 2],
       "stage_id": 3,
       "characters": {"1": "Zelda", "2": "Peach"},

@@ -37,6 +37,8 @@ static _Thread_local MslCoreMatchRules* msl_bound_match_rules;
 #define msl_ucf_sdi_enabled (msl_bound_match_rules->ucf_sdi_enabled)
 #define msl_ucf_shield_drop_extended_enabled \
     (msl_bound_match_rules->ucf_shield_drop_extended_enabled)
+#define msl_ucf_shield_drop_084_enabled \
+    (msl_bound_match_rules->ucf_shield_drop_084_enabled)
 #define msl_match_frame_count (msl_bound_match_rules->frame_count)
 #define msl_match_ended (msl_bound_match_rules->ended)
 #define msl_respawn_reservation_timer                                         \
@@ -100,7 +102,8 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
                                int ucf_cardinals_1_0_enabled,
                                int ucf_shield_sdi_enabled,
                                int ucf_sdi_enabled,
-                               int ucf_shield_drop_extended_enabled)
+                               int ucf_shield_drop_extended_enabled,
+                               int ucf_shield_drop_084_enabled)
 {
     memset(rules, 0, sizeof(*rules));
     msl_core_bind_match_rules(rules);
@@ -115,6 +118,7 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
     msl_ucf_sdi_enabled = ucf_sdi_enabled != 0;
     msl_ucf_shield_drop_extended_enabled =
         ucf_shield_drop_extended_enabled != 0;
+    msl_ucf_shield_drop_084_enabled = ucf_shield_drop_084_enabled != 0;
 }
 
 bool msl_core_uses_online_fnmsubs_zero(void)
@@ -374,12 +378,43 @@ bool msl_ucf_shield_sdi_check(const Fighter* fp)
            dx * dx > 62 * 62;
 }
 
+static float msl_ucf_08_rim_lane(float value)
+{
+    // refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF SD.asm::DoSomething.
+    // |v| * 80 - 0x37270000 (fmuls then fsubs, unfused), truncated, + 2, then
+    // divided back by 80 in single precision.
+    float scaled = msl_absf(value) * 80.0F;
+    int steps = (int) (scaled - 0x1.4EP-17F) + 2;
+    return (float) steps / 80.0F;
+}
+
 bool msl_ucf_suppress_spotdodge(const Fighter* fp)
 {
-    // Direct projection of refs/ucf/src/shielddrop/shielddrop.S. The common
-    // Escape owner calls this at both vanilla spot-dodge entry sites.
-    if (fp->input.cstick.y <= p_ftCommonData->x314 ||
-        fp->x670_timer_lstick_tilt_x < p_ftCommonData->x320 ||
+    // The common Escape owner calls this at both vanilla spot-dodge entry
+    // sites; the gecko hooks ftCo_80099894+0x10 and, when it suppresses,
+    // unwinds to the caller's `li r3, 0` so the check reports no dodge.
+    if (fp->input.cstick.y <= p_ftCommonData->x314) {
+        return false;
+    }
+    if (!msl_ucf_shield_drop_084_enabled) {
+        // refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF SD.asm: the float
+        // rim test, then the tilt timer, then the -0.8 floor; no platform
+        // check, and the timer bound is the literal 3 rather than x320.
+        // Retail-probe-verified on marth WingedGorgeousPanther frame 9793:
+        // Falco on the Stadium main floor (floor.flags 0) shields off a
+        // held-down rim press instead of spot-dodging.
+        float x = msl_ucf_08_rim_lane(fp->input.lstick.x);
+        float y = msl_ucf_08_rim_lane(fp->input.lstick.y);
+        if (x * x + y * y < 1.0F) {
+            return false;
+        }
+        return fp->x670_timer_lstick_tilt_x > 3 &&
+               -0.8F < fp->input.lstick.y;
+    }
+    // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF Shield Drop.asm
+    // (refs/ucf/src/shielddrop/shielddrop.S): coll_data.floor.index != -1
+    // and floor.flags & LINE_FLAG_PLATFORM, i.e. mpColl_IsOnPlatform.
+    if (fp->x670_timer_lstick_tilt_x < p_ftCommonData->x320 ||
         fp->input.lstick.y <= -0.8F ||
         !mpColl_IsOnPlatform((CollData*) &fp->coll_data))
     {
@@ -435,35 +470,37 @@ int gm_8016B1C4(void) { return 0; }
 bool gm_8016B1D8(void) { return false; }
 int gm_8016B204(void) { return 1; }
 float gm_8016B248(void) { return msl_damage_ratio; }
+
 static int msl_match_standings_score(int slot)
 {
-    int other;
-    int kos = 0;
-    int falls = Player_GetFalls(slot);
-    int self_destructs = (int) Player_GetSuicideCount(slot);
+    // fn_8016588C dispatches on the match mode in lbl_8046B6A0.x24C.x5, and a
+    // stock versus match runs mode 1, NOT the KO-minus-falls default branch.
+    // Mode 1 scores a live player by their remaining stock count and nothing
+    // else: GALE01 0x80165988 loads MatchPlayerData::stocks with `lbz` and
+    // sign-extends it straight into the result. Only a player already out of
+    // stocks takes the second arm, where the score collapses to their survival
+    // time minus 0xFFFFFF (0x8016599C..0x801659B4, an unsigned divide by 60)
+    // so an eliminated slot always ranks last.
+    //
+    // Retail-probe-verified twice, both at the gm_80166378 refresh that the
+    // grab's own standings query triggers, so this is the live value and not a
+    // cached one: at 49422 frame 6118 both players hold 2 stocks and retail's
+    // Player_80033BB8 answers 0 for the grabbed Ness even though he trails on
+    // KOs minus falls (1 KO / 2 falls against 2 KOs / 2 falls / 1 self-destruct
+    // -- the Falcon's self-destruct denies him the KO credit that the old
+    // expression scored by); at 53362 frame 1374 the stocks are 4 against 3 and
+    // retail answers 1. Both probes reported mode x5 = 1.
+    //
+    // The rank feeds ftCommon_InitGrab's x360*(x364 - (rank+1)) term, so
+    // scoring by KOs and falls shortened the grab timer by 15 whenever a
+    // self-destruct had skewed the two columns apart.
+    // refs/melee/src/melee/gm/gm_1601.c::{fn_8016588C,fn_80165AC0,gm_80166378}
+    int stocks = Player_GetStocks(slot);
 
-    for (other = 0; other < 4; ++other) {
-        int count;
-        if (Player_GetPlayerSlotType(other) == Gm_PKind_NA) {
-            continue;
-        }
-        count = Player_GetKOsByPlayerIndex(slot, other);
-        if (other == slot) {
-            self_destructs += count;
-            falls += count;
-        } else if (!msl_is_teams ||
-                   Player_GetTeam(other) != Player_GetTeam(slot)) {
-            kos += count;
-        } else {
-            self_destructs += count;
-            falls += count;
-        }
+    if (stocks != 0) {
+        return stocks;
     }
-
-    // Standard stock VS uses -1 for the self-destruct score rule.
-    // refs/melee/src/melee/gm/gm_1601.c::{fn_8016588C,gm_80165AC0,
-    //     fn_80165E7C,fn_80165FA4}
-    return kos - (falls - self_destructs) - self_destructs;
+    return (int) (Player_GetMatchFrameCount(slot) / 60u) - 0xFFFFFF;
 }
 
 int gm_8016C5C0(int slot)
