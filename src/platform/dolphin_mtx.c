@@ -479,12 +479,13 @@ void PSMTXMultVec(Mtx44 matrix, Vec* src, Vec* dst)
 void PSMTXMultVecSR(Mtx44 matrix, Vec* src, Vec* dst)
 {
     Vec value;
-    value.x = matrix[0][2] * src->z +
-              (matrix[0][0] * src->x + matrix[0][1] * src->y);
-    value.y = matrix[1][2] * src->z +
-              (matrix[1][0] * src->x + matrix[1][1] * src->y);
-    value.z = matrix[2][2] * src->z +
-              (matrix[2][0] * src->x + matrix[2][1] * src->y);
+    // SDK mtxvec.c: ps_mul and ps_sum0 round X/Y before the final ps_madd.
+    value.x = fmaf(matrix[0][2], src->z,
+                    matrix[0][0] * src->x + matrix[0][1] * src->y);
+    value.y = fmaf(matrix[1][2], src->z,
+                    matrix[1][0] * src->x + matrix[1][1] * src->y);
+    value.z = fmaf(matrix[2][2], src->z,
+                    matrix[2][0] * src->x + matrix[2][1] * src->y);
     *dst = value;
 }
 

@@ -817,8 +817,8 @@ static void msl_blend_quaternion_batch(Quaternion* first, Quaternion* second,
         cosom = __fmadds(
             first[i].w, second[i].w,
             __fmadds(first[i].z, second[i].z,
-                     __fmadds(first[i].y, second[i].y,
-                              first[i].x * second[i].x)));
+                     __fmadds(first[i].x, second[i].x,
+                              first[i].y * second[i].y)));
         if ((1.0F + cosom) > 1e-10F &&
             (1.0F - cosom) > 1e-10F)
         {

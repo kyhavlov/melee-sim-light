@@ -22,6 +22,10 @@ representation may justify revisiting the same broad subsystem.
 
 ## Files
 
+- [Classified replay closure](HISTORY.md#classified-replay-closure--2026-09-08):
+  23 additional native exact replays; final eight-pair medians +0.353%/-0.004%
+  at resident 256/512 against the frozen merge after exact camera compiler recovery.
+
 - [Accepted merge throughput comparison](HISTORY.md#prepost-merge-throughput--2026-09-08):
   identical shared workload, three samples per build at resident 256/512;
   corrected canonical-profile differences of -1.53%/-0.52%, with matching digests.

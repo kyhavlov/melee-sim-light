@@ -356,7 +356,8 @@ NATIVE_RELEASE_O0_OBJS := \
 NATIVE_RELEASE_O1_OBJS := \
 	$(NATIVE_OBJ_DIR)/gameplay/melee/mp/mpcoll.o
 NATIVE_RELEASE_O2_OBJS := \
-	$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lb_00B0.o
+	$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lb_00B0.o \
+	$(NATIVE_OBJ_DIR)/src/runtime/camera.o
 NATIVE_RELEASE_OPT_OBJS := \
 	$(NATIVE_OBJ_DIR)/gameplay/melee/ft/ftanim.o \
 	$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lbspdisplay.o \

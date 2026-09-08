@@ -1,3 +1,217 @@
+# Classified replay closure campaign — 2026-09-08
+
+- Pre-commit follow-up authorized: verify that this retained packet has no material
+  performance regression, then commit only this completed correctness work.
+  Repeat the frozen-merge comparison with ten adjacent pre/post pairs per size,
+  alternating pair order, the identical 403-case tapes and 262144 match-frames.
+  Retain every sample and quantify the paired ratio uncertainty before committing.
+
+- Authorized: pursue every proposed exception owner from the September 8 audit
+  until remaining work is not worthwhile; report the achieved exact count.
+  Baseline runtime 24643394: 529 replays, 470 exact, 59 classified. Preserve
+  the existing uncommitted audit report/worklog. No commit/push requested.
+- Final owners/state: existing mpColl line/ECB state; camera view/KO publication;
+  source pad/ASDI, parasol Item/GObj lifetime, grapple ItemLink state; and source
+  RNG-bearing effect/stage lifecycle. Consumers are gameplay, strict validation,
+  observations and arbitrary-index save/restore. Record any representation cut
+  before implementing it; no dual state, replay-row patches, or scoring relaxation.
+- Deletion boundary: replace only proven incorrect arithmetic/order/omissions
+  within their source owners; remove diagnostic instrumentation after each
+  finding. Retire classifications only on exact output with explained changes.
+- First packet W/C: preserve existing collision and camera representations.
+  Compare emitted PPC arithmetic and bounded retail/source inputs, then test
+  source-backed leaf fixes against the classified subset and nearby exact cases.
+  Log material attempts/results here and retained performance evidence under
+  performance/. Scratch: reports/triage/classified_closure_20260908/.
+- C experiment 1: GALE01 cobj roll2upvec 0x80368D00..D40 / DA4..DE4
+  uses frsqrte and three fused double Newton refinements. Hosted camera uses
+  hardware sqrtf instead. Replace these two radicand calls with the existing
+  msl_gekko_sqrtf owner and restore the source double near-vertical predicate;
+  test all classified cases before pursuing matrix or scheduling changes.
+- C experiment 1 result: all 59 snapshots/output locks unchanged. The sqrt
+  correction is source-backed but does not seed this corpus residual.
+- C experiment 2: C_MTXLookAt assembly 0x803427E8..2804, 2834..2850,
+  2880..289C uses three fmuls followed by two fadds per translation lane.
+  Hosted camera incorrectly fuses both additions. Restore the SDK's unfused
+  ordered expression; compare the entire classified subset before refreshing
+  any locks. This removes arithmetic work rather than adding camera state.
+- C experiment 2 result: seven camera cases improve; CornyDelayedOkapi and
+  GlaringRosyAlpaca become raw exact. Guanaco 54->3 rows, Aardvark 50->1,
+  Hornet 61->2 (one position plus magnifier), Cockroach 62->2 and Tarsier
+  60->2 (only magnifier). Old output locks intentionally remain until the
+  complete owner correction is verified.
+- Retail probe setup: compile a scratch copy of the existing Ishiiruka
+  interpreter with PC-scoped GPR/FPR and argument-memory logging; relink a
+  scratch archive/executable without modifying the shared reference checkout
+  or its binaries. Use it to arbitrate the remaining camera/wall/input writers.
+- W retail/native probe result (DK9560, 2119..2121): all 54 LeftWall
+  interpolation calls reproduce retail arithmetic for identical inputs. First
+  divergence at 2120 is the right-edge query X, before interpolation: retail
+  -53.1047554 versus native -53.1047592. Retail desired/current ECB right width
+  is 4.66883087 versus native 4.66882896; their vertical coordinates agree.
+  Follow ECB bone-origin construction/animation and interpolation, not a
+  blanket line-division/FMA replacement. Native diagnostic additions to
+  mplib/mpcoll are temporary and must be removed after this packet.
+
+- W experiment 2: ordinary ECB traversal reproduces the same residual. Retail
+  joint-chain tracing finds the first difference in an interpolated quaternion,
+  before matrix construction. HSD_QuatLib_8037EF28 0x8037EF6C..7C rounds
+  the Y dot product and fuses X; both hosted scalar and batch owners reversed
+  these. Correct both arithmetic copies, preserving the pose representation;
+  test the seed case and full classified subset. Remove all wall diagnostics.
+
+- W experiment 2 result: DK9560 becomes raw exact. Classified subset now
+  has 19 raw-exact recordings (17 quaternion closures plus two camera),
+  29 changed output identities and 30 unchanged classifications. Run the full
+  supported-domain gate before regenerating identities or further changes.
+
+- Full gate after quaternion correction: all original 470 exact recordings
+  retain exact output locks; only the same 29 classified identities change.
+  Provisional raw exact count is 489/529. No regressions or runtime errors.
+- C experiment 3: PSMTXMultVecSR uses rounded X/Y products and sum followed
+  by ps_madd for Z. Restore the missing final FMA in the existing SDK owner;
+  test the classified subset for the four remaining screen-KO position rows.
+
+- C experiment 3 result: no classified output identities change. Keep the
+  source-correct final FMA; it is not this residual's seed. Aardvark retail
+  C_MTXLookAt input differs upstream: eye X is 0x1.905f88p+4 versus hosted
+  0x1.905f8ap+4; the other eye/interest lanes match. The residual belongs to
+  camera tracking state rather than inverse multiplication. Removed temporary
+  camera trace. Return to the remaining camera target calculation after G/A/P.
+
+- G probe: compare retail and hosted it_802BA5DC input, link state, scaled
+  attributes and constraint output for auto-DK 8654. Determine whether the
+  discrepancy starts in the solver or is inherited from tether flight/RNG.
+  Temporary tracing is limited to this source boundary and will be removed.
+
+- G finding: auto-DK's 108 normalization calls have equal fighter anchor and
+  attributes but already-different rope state at 8654. Flight/attachment is
+  equal through 8644; first fork is the first random-gravity link at 8645.
+  Retail consumes grIzumi_801CC358 case-0 timer draw at 0x801CC3FC before
+  rope gravity; hosted stage-event early return omits it. This is a proven
+  Fountain timer/RNG omission, not grapple arithmetic or emulator rounding.
+- G/Fountain experiment: final owner is grIzumi_801CC358's existing xC4/xC6
+  temporal machine, with recorded height overriding its canonical xD0 only at
+  publication. Consumers remain JObj/mpLib and subsequent item RNG. Delete the
+  early-return temporal bypass and construction-only synthetic draw helper /
+  scalar-stage hook. No duplicate machine, timer cache, or new persistent state.
+  Run the classified subset then full gate to test event/state agreement.
+
+- G/Fountain result: auto-DK and the previously unexplained 1.5-unit needle
+  spawn/lifetime case marios/2026-07 both become raw exact. Full 529 gate
+  preserves all 470 original exact outputs/locks, changes only 31 classified
+  identities, and has no errors. Provisional raw exact count is 491/529.
+  The singular source machine and removal of the synthetic creation draw are
+  retained. All G probes removed before this gate; subsequent G work is bounded
+  to the two remaining Samus episodes.
+
+- Remaining G: fox-d18's release row was already fixed by quaternion
+  interpolation. Master-Samus's rope first diverges at 15113 after a retail
+  FD background angular-boundary RNG draw (grLast_8021ADD0 +0x230), before
+  the visible tail at 15146. Existing angular owner starts bit-exact and is
+  still exact at frame 8192; investigate later source timeline/RNG drift.
+- A source boundary: SendGamePreFrame records fp->input.cstick at 0x8006B0E0,
+  before UCF's cardinal injection at 0x8006B460. A normalized 79/80 cannot
+  distinguish raw 79 from a radial-clamped raw >=80 with a small perpendicular
+  component. The old captures lack raw C-stick; current ASDI consumes the
+  correct post-UCF field. Do not infer missing raw values from post positions.
+- P probe: trace parasol animation/teardown around icies23549's 2076
+  FallSpecial->Wait transition against retail; determine whether the item is
+  live at the recorder boundary or the fighter cleanup callback is missing.
+
+- P finding/experiment: retail calls it_802BDB94 from ft_8008A348 at
+  0x8008A3E0 during 2076 Wait entry; hosted never calls it. The hosted
+  #ifndef suppresses Peach's live-item teardown along with the source
+  DownSpot/hammer neutral checks. Restore this source block (all callees
+  already admitted), delete the duplicate hosted ground conversion, and test
+  both parasol cases plus the classified subset. Final state remains the
+  existing Fighter item references and Item/GObj lifecycle.
+
+- P result: icies23549 is raw exact. Hearty's first remaining fork moves
+  from 970 to 6482: UCF shield SDI wrongly moves a lightshielding Peach by
+  3.9105 units. Its April 2023 Slippi 3.14 embedded Gecko list has classic
+  shield drop at C20998A4 and no newer SDI (C208E54C), shield SDI
+  (C2093294), extended shield drop (C209A0B8), or pad-buffer/cardinal hook
+  (C206B460). The manifest already selected classic shield drop but left the
+  newer independent flags enabled. Disabling shield SDI alone makes all
+  15,634 frames exact; the complete recorded classic bundle does too. Set
+  the three absent capabilities false in peach.json, as done for other
+  recorded classic profiles. This is a configuration correction, not a
+  scoring/mask relaxation. Provisional count: 493/529.
+- G/FD bound: retail and hosted angular states match through 8192, but
+  retail never invokes grLast_8021ADD0 during 12288..12290 (engine dump
+  confirms playback reached that range), while hosted keeps integrating.
+  It resumes before the 15113 RNG fork. Correct closure needs source
+  background scene/actor activation lifetime, not another rope-math fix;
+  no unproved frame/timer patch retained. All temporary probes removed.
+
+- Final W pass: after quaternion correction, only Puff rollout, Smug's
+  isolated wall row and DK/FD 152714 remain among wall candidates. Compare
+  Puff's six retail ECB origins at 3630 to classify any remaining shared
+  bone/constraint seed before considering another scalar collision change.
+
+- Final W/Z probe result: Puff's residual starts in root yaw (retail
+  -0x1.921fb0p+0, hosted -0x1.921fb4p+0), then propagates through three
+  ECB bone origins; no new projection correction is justified. Falcon's
+  signed-zero exemplar is explicitly retail fnmsubs at 0x8006B9E4 producing
+  -0, matching hosted while the historical recording has +0. Keep strict
+  comparison and classify that capture execution-profile difference.
+- Closure checkpoint: full native gate preserves all 470 original locks,
+  with 23 former exceptions raw exact and 36 remaining. No further narrow
+  source-backed changes are established. Finish PPC/release, lifecycle and
+  bounded throughput verification, regenerate only validated identities,
+  and document remaining larger timeline/input/float work.
+
+- Complete: final native debug and strict release supported-domain gates both
+  report 493 PASS / 36 CLASSIFIED / 0 XPASS / 0 FAIL / 0 ERROR, over
+  5,059,922 transitions. Original 470 exact locks preserved; 32 changed native
+  identities are exclusively from the old classified set. Remaining mismatch
+  rows 6,804; fields 16,067. Runtime fixes close 22 and the recorded classic
+  Peach configuration closes one more.
+- PPC bounded cross-check: 21 of the old 59 become exact, 38 remain. Retire
+  21 records entirely and remove native snapshots from the two PPC-only camera
+  records (38 manifest records / 36 native exceptions). Refresh only measured
+  snapshots/locks through validation helpers; cached complete-run verification
+  gives native 23 PASS/36 CLASSIFIED and PPC 21 PASS/38 CLASSIFIED.
+- Final checks: source-check, native-smoke, Wasm/native state/viewer digest
+  parity, 256-match large-batch/lifecycle and save/restore smoke, 31 focused
+  manifest/runner tests, and format-check pass. First Wasm invocation lacked
+  emcc on PATH; load installed emsdk and rerun successfully. A final gate
+  invocation used an unsupported require-output-locks flag and exited before
+  execution; rerun with the normal gate's built-in lock enforcement passes.
+- Bounded frozen-merge throughput: 119424 -> 119336 FPS at 256 (-0.07%) and
+  124215 -> 124554 at 512 (+0.27%), three alternating samples, shared 403-case
+  tape workload, equal digests. Performance history/index updated.
+- Deliver CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md with all 59 outcomes,
+  provenance and remaining owner boundaries. All temporary production probes
+  removed; no commit or push. No further narrow established fix is worth
+  retaining from this investigation.
+
+# Classified replay feasibility audit — 2026-09-08
+
+- Authorized: catalog all 59 active classified replay exceptions against current
+  completed upstream; recommend source-backed closures and explain cost/limits.
+  Implementation is deferred except for clearly trivial findings. Do not relax
+  scoring, change output locks, or call a metadata cleanup a gameplay fix.
+- Baseline: amended merge adba7f4f, 529 replays / 470 exact / 59 classified.
+  Read-only upstream snapshot: 64fccd19a0e7c8d54a1da6c56235016b659c354f.
+  Preserve the existing refs/melee checkout and production source lock.
+- Compare source owners, retained probe evidence, snapshot shapes, and recent
+  upstream matching changes. Distinguish hosted native/PPC agreement from retail
+  arbitration, and source completion from absent replay capture information.
+- Deliver full inventory and ranked feasibility report under agent_docs/.
+  Scratch: reports/triage/classification_audit_20260908/.
+- Complete: CLASSIFIED_REPLAY_AUDIT_2026-09-08.md catalogs every active entry
+  and the separate unused legacy ledger. Fresh native 59/59 snapshots and
+  output locks reproduce across 672239 transitions. A diagnostic-only check
+  confirms three cases are purely signed zero (23840 transitions).
+- Main findings: retained retail probes contradict generic Dolphin labels for
+  wall/grapple; four supposed Dolphin motion entries are Nintendont screen KOs;
+  two 0.0375 hitlag-exit tails point to ASDI/input reconstruction; two needle
+  episodes include non-ULP spawn/lifetime decisions; old Peach tail includes a
+  real missed hit. Recommend W/C then bounded A/P/G and N/R investigation.
+  No runtime, scoring, classification, or output-lock changes made.
+
 # Pre/post merge throughput check — 2026-09-08
 
 - Measure frozen pre-merge 152f703d against merged b0601914. No gameplay changes.
@@ -6602,3 +6816,24 @@ fingerprints are identical (`ed25d016f39d4dd5`), so the PPC snapshot aliases nat
 teardown window). Aggregate **492 = 425 pass / 67 classified / 0 fail / 0 error**,
 lock-clean, xpass-free; the 23549 output lock is recorded and the aggregate coverage
 tests bumped 491 -> 492.
+
+- Pre-commit performance attribution: ten paired samples show -0.335% at
+  resident 256 (paired log-ratio 95% interval -0.606%..-0.065%) and +0.001%
+  at 512 (-0.558%..+0.563%). Diagnose the source Gekko camera square-root
+  restoration using an isolated object/executable, preserving production code.
+  This temporary arithmetic ablation is not a candidate correctness change.
+- Attribution result: isolated hardware-sqrt camera ablation is faster by a
+  median 0.55% in six 256-match pairs. Keep source Gekko arithmetic. Test only
+  runtime/camera.c at strict O2 to recover added instruction/control overhead;
+  canonical state, arithmetic and all other compiler profiles stay unchanged.
+  Prior rejected camera O2 record concerns melee/cm/camera.c (Camera_8002B3D4),
+  a different translation unit. Require full output-lock equivalence and paired
+  performance before retaining this compiler admission.
+
+- Pre-commit recovery retained: runtime/camera.c strict O2/native release ISA
+  preserves all 529 locks on the fresh root build. Final eight-pair comparisons
+  against frozen 24643394 have paired medians +0.353% (256) and -0.004% (512),
+  unchanged digests. Raw means and intervals, including timing outliers, are
+  retained in performance/HISTORY.md; no strict sub-percent latency bound claimed.
+  Commit only this completed correctness packet and its validation/performance
+  records before starting the newly authorized completion campaign.

@@ -57,6 +57,10 @@
         "native": {
           "frames": 9328,
           "actual_output_fingerprint": "d1eaf341f089213b"
+        },
+        "ppc": {
+          "frames": 9328,
+          "actual_output_fingerprint": "d1eaf341f089213b"
         }
       }
     },
@@ -91,6 +95,10 @@
       "replay": "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
       "expected": {
         "native": {
+          "frames": 11980,
+          "actual_output_fingerprint": "84d5c5b20ee51bd4"
+        },
+        "ppc": {
           "frames": 11980,
           "actual_output_fingerprint": "84d5c5b20ee51bd4"
         }
@@ -128,7 +136,11 @@
       "expected": {
         "native": {
           "frames": 12914,
-          "actual_output_fingerprint": "ea2db43d3fb15a8f"
+          "actual_output_fingerprint": "59592b1bedb51e58"
+        },
+        "ppc": {
+          "frames": 12914,
+          "actual_output_fingerprint": "5fe185596ab898ae"
         }
       }
     },
@@ -201,6 +213,10 @@
         "native": {
           "frames": 14105,
           "actual_output_fingerprint": "d9ab32ebd1fba152"
+        },
+        "ppc": {
+          "frames": 14105,
+          "actual_output_fingerprint": "d9ab32ebd1fba152"
         }
       }
     },
@@ -218,7 +234,11 @@
       "expected": {
         "native": {
           "frames": 11949,
-          "actual_output_fingerprint": "a2dd39f8b4e941fb"
+          "actual_output_fingerprint": "949c0e52bab7f89e"
+        },
+        "ppc": {
+          "frames": 11949,
+          "actual_output_fingerprint": "949c0e52bab7f89e"
         }
       }
     },
@@ -353,7 +373,11 @@
       "expected": {
         "native": {
           "frames": 12291,
-          "actual_output_fingerprint": "2f75c9c45f2f99c0"
+          "actual_output_fingerprint": "7fc45e5a26dbf3c8"
+        },
+        "ppc": {
+          "frames": 12291,
+          "actual_output_fingerprint": "7fc45e5a26dbf3c8"
         }
       }
     },
@@ -362,7 +386,11 @@
       "expected": {
         "native": {
           "frames": 7359,
-          "actual_output_fingerprint": "1328f6bc83a1023d"
+          "actual_output_fingerprint": "eafc481d69882a4c"
+        },
+        "ppc": {
+          "frames": 7359,
+          "actual_output_fingerprint": "eafc481d69882a4c"
         }
       }
     },
@@ -371,7 +399,11 @@
       "expected": {
         "native": {
           "frames": 13657,
-          "actual_output_fingerprint": "ff13a9b7ad00db75"
+          "actual_output_fingerprint": "77bc8518bddc5d1e"
+        },
+        "ppc": {
+          "frames": 13657,
+          "actual_output_fingerprint": "77bc8518bddc5d1e"
         }
       }
     },
@@ -407,7 +439,11 @@
       "expected": {
         "native": {
           "frames": 10171,
-          "actual_output_fingerprint": "0ededb77c1e02ff5"
+          "actual_output_fingerprint": "d824b9768d1bf97b"
+        },
+        "ppc": {
+          "frames": 10171,
+          "actual_output_fingerprint": "d824b9768d1bf97b"
         }
       }
     },
@@ -443,7 +479,11 @@
       "expected": {
         "native": {
           "frames": 8353,
-          "actual_output_fingerprint": "077defb6e074a8dd"
+          "actual_output_fingerprint": "84bec4d2ffc52433"
+        },
+        "ppc": {
+          "frames": 8353,
+          "actual_output_fingerprint": "84bec4d2ffc52433"
         }
       }
     },
@@ -488,7 +528,11 @@
       "expected": {
         "native": {
           "frames": 14522,
-          "actual_output_fingerprint": "f3296af1ee21aa46"
+          "actual_output_fingerprint": "c4180c870850d107"
+        },
+        "ppc": {
+          "frames": 14522,
+          "actual_output_fingerprint": "c4180c870850d107"
         }
       }
     },
@@ -496,6 +540,10 @@
       "replay": "replays/validation/dk/slippi-2025-04_Game_20250422T152714.slpz",
       "expected": {
         "native": {
+          "frames": 11734,
+          "actual_output_fingerprint": "80eea456fe36492a"
+        },
+        "ppc": {
           "frames": 11734,
           "actual_output_fingerprint": "80eea456fe36492a"
         }
@@ -586,6 +634,10 @@
       "replay": "replays/validation/doubles_recent/Game_20260509T152622.slpz",
       "expected": {
         "native": {
+          "frames": 9560,
+          "actual_output_fingerprint": "35aa6e0fd12fd373"
+        },
+        "ppc": {
           "frames": 9560,
           "actual_output_fingerprint": "35aa6e0fd12fd373"
         }
@@ -804,6 +856,10 @@
         "native": {
           "frames": 9958,
           "actual_output_fingerprint": "4ac753a2619ad64c"
+        },
+        "ppc": {
+          "frames": 9958,
+          "actual_output_fingerprint": "4ac753a2619ad64c"
         }
       }
     },
@@ -957,6 +1013,10 @@
         "native": {
           "frames": 7905,
           "actual_output_fingerprint": "26cb618c793e4ade"
+        },
+        "ppc": {
+          "frames": 7905,
+          "actual_output_fingerprint": "26cb618c793e4ade"
         }
       }
     },
@@ -974,7 +1034,11 @@
       "expected": {
         "native": {
           "frames": 7402,
-          "actual_output_fingerprint": "b80cb50ac70f0f3a"
+          "actual_output_fingerprint": "a2feacb2a0f34e00"
+        },
+        "ppc": {
+          "frames": 7402,
+          "actual_output_fingerprint": "a2feacb2a0f34e00"
         }
       }
     },
@@ -991,6 +1055,10 @@
       "replay": "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz",
       "expected": {
         "native": {
+          "frames": 11918,
+          "actual_output_fingerprint": "ab2d171134ce7c99"
+        },
+        "ppc": {
           "frames": 11918,
           "actual_output_fingerprint": "ab2d171134ce7c99"
         }
@@ -1018,6 +1086,10 @@
       "replay": "replays/validation/ganon/2025-03_Game_20250309T055449.slpz",
       "expected": {
         "native": {
+          "frames": 6202,
+          "actual_output_fingerprint": "c9cb0eb79ab582c2"
+        },
+        "ppc": {
           "frames": 6202,
           "actual_output_fingerprint": "c9cb0eb79ab582c2"
         }
@@ -1073,7 +1145,11 @@
       "expected": {
         "native": {
           "frames": 10877,
-          "actual_output_fingerprint": "0c5975c2faaeba03"
+          "actual_output_fingerprint": "9a012c4f35750aba"
+        },
+        "ppc": {
+          "frames": 10877,
+          "actual_output_fingerprint": "9a012c4f35750aba"
         }
       }
     },
@@ -1235,7 +1311,11 @@
       "expected": {
         "native": {
           "frames": 7734,
-          "actual_output_fingerprint": "00b16ddd2d39acd3"
+          "actual_output_fingerprint": "d5ce70bfd3b26f91"
+        },
+        "ppc": {
+          "frames": 7734,
+          "actual_output_fingerprint": "d5ce70bfd3b26f91"
         }
       }
     },
@@ -1262,7 +1342,11 @@
       "expected": {
         "native": {
           "frames": 10765,
-          "actual_output_fingerprint": "3c7fd7ec3069aed0"
+          "actual_output_fingerprint": "d834bca1551f937b"
+        },
+        "ppc": {
+          "frames": 10765,
+          "actual_output_fingerprint": "d834bca1551f937b"
         }
       }
     },
@@ -1369,6 +1453,10 @@
       "replay": "replays/validation/icies/dl-fox-2025-05_Game_20250504T134832.slpz",
       "expected": {
         "native": {
+          "frames": 11083,
+          "actual_output_fingerprint": "4144a27a7b67c26b"
+        },
+        "ppc": {
           "frames": 11083,
           "actual_output_fingerprint": "4144a27a7b67c26b"
         }
@@ -1559,7 +1647,11 @@
       "expected": {
         "native": {
           "frames": 12309,
-          "actual_output_fingerprint": "379c73aadc502a56"
+          "actual_output_fingerprint": "5c7ddb371f7bc8f4"
+        },
+        "ppc": {
+          "frames": 12309,
+          "actual_output_fingerprint": "5c7ddb371f7bc8f4"
         }
       }
     },
@@ -1594,6 +1686,10 @@
       "replay": "replays/validation/links/18932_Game_20250611T185955.slpz",
       "expected": {
         "native": {
+          "frames": 11714,
+          "actual_output_fingerprint": "52df484114e5f1b5"
+        },
+        "ppc": {
           "frames": 11714,
           "actual_output_fingerprint": "52df484114e5f1b5"
         }
@@ -1820,7 +1916,11 @@
       "expected": {
         "native": {
           "frames": 14195,
-          "actual_output_fingerprint": "4449760dd52db293"
+          "actual_output_fingerprint": "66148f21a62c6ada"
+        },
+        "ppc": {
+          "frames": 14195,
+          "actual_output_fingerprint": "66148f21a62c6ada"
         }
       }
     },
@@ -1999,6 +2099,10 @@
       "replay": "replays/validation/links/slpfiles-2025-10_Game_20251020T000422.slpz",
       "expected": {
         "native": {
+          "frames": 11200,
+          "actual_output_fingerprint": "c69993c483806857"
+        },
+        "ppc": {
           "frames": 11200,
           "actual_output_fingerprint": "c69993c483806857"
         }
@@ -2343,6 +2447,10 @@
         "native": {
           "frames": 9416,
           "actual_output_fingerprint": "0ffdd95d33950f67"
+        },
+        "ppc": {
+          "frames": 9416,
+          "actual_output_fingerprint": "0ffdd95d33950f67"
         }
       }
     },
@@ -2396,7 +2504,11 @@
       "expected": {
         "native": {
           "frames": 15813,
-          "actual_output_fingerprint": "6879984336f25a55"
+          "actual_output_fingerprint": "f58978d5dea9fd78"
+        },
+        "ppc": {
+          "frames": 15813,
+          "actual_output_fingerprint": "f58978d5dea9fd78"
         }
       }
     },
@@ -2432,7 +2544,11 @@
       "expected": {
         "native": {
           "frames": 10991,
-          "actual_output_fingerprint": "e00b121837c056cb"
+          "actual_output_fingerprint": "bcbd30a7add6abb7"
+        },
+        "ppc": {
+          "frames": 10991,
+          "actual_output_fingerprint": "bcbd30a7add6abb7"
         }
       }
     },
@@ -2459,7 +2575,11 @@
       "expected": {
         "native": {
           "frames": 6835,
-          "actual_output_fingerprint": "c99ed2d709beee2c"
+          "actual_output_fingerprint": "73651ada05c058ab"
+        },
+        "ppc": {
+          "frames": 6835,
+          "actual_output_fingerprint": "73651ada05c058ab"
         }
       }
     },
@@ -2469,6 +2589,10 @@
         "native": {
           "frames": 8941,
           "actual_output_fingerprint": "20f9a67c104190ee"
+        },
+        "ppc": {
+          "frames": 8941,
+          "actual_output_fingerprint": "20f9a67c104190ee"
         }
       }
     },
@@ -2476,6 +2600,10 @@
       "replay": "replays/validation/marios/64303_master-platinum-f57bf677ef721a6e844c0398.slpz",
       "expected": {
         "native": {
+          "frames": 10580,
+          "actual_output_fingerprint": "bf5e5008aa7dcea9"
+        },
+        "ppc": {
           "frames": 10580,
           "actual_output_fingerprint": "bf5e5008aa7dcea9"
         }
@@ -2774,7 +2902,11 @@
       "expected": {
         "native": {
           "frames": 8959,
-          "actual_output_fingerprint": "93a2cd1f50ba9c30"
+          "actual_output_fingerprint": "7414e5d2332982dd"
+        },
+        "ppc": {
+          "frames": 8959,
+          "actual_output_fingerprint": "7414e5d2332982dd"
         }
       }
     },
@@ -2882,7 +3014,11 @@
       "expected": {
         "native": {
           "frames": 10973,
-          "actual_output_fingerprint": "8f9cefb567cd0663"
+          "actual_output_fingerprint": "f1fcd2537924ae94"
+        },
+        "ppc": {
+          "frames": 10973,
+          "actual_output_fingerprint": "809901dcd779b7e3"
         }
       }
     },
@@ -2908,6 +3044,10 @@
       "replay": "replays/validation/marth/InternalPowerlessWallaby.slpz",
       "expected": {
         "native": {
+          "frames": 10165,
+          "actual_output_fingerprint": "63b2dbf63dfc353c"
+        },
+        "ppc": {
           "frames": 10165,
           "actual_output_fingerprint": "63b2dbf63dfc353c"
         }
@@ -3017,7 +3157,11 @@
       "expected": {
         "native": {
           "frames": 23450,
-          "actual_output_fingerprint": "923467cd55c1dda4"
+          "actual_output_fingerprint": "d1c286ca63c917d8"
+        },
+        "ppc": {
+          "frames": 23450,
+          "actual_output_fingerprint": "d1c286ca63c917d8"
         }
       }
     },
@@ -3106,6 +3250,10 @@
       "replay": "replays/validation/ness/2026-06_Game_20260616T195545.slpz",
       "expected": {
         "native": {
+          "frames": 14721,
+          "actual_output_fingerprint": "1ba2f27e6abad122"
+        },
+        "ppc": {
           "frames": 14721,
           "actual_output_fingerprint": "1ba2f27e6abad122"
         }
@@ -3287,7 +3435,11 @@
       "expected": {
         "native": {
           "frames": 14007,
-          "actual_output_fingerprint": "837838efd6c6eadb"
+          "actual_output_fingerprint": "b580a1081a3af657"
+        },
+        "ppc": {
+          "frames": 14007,
+          "actual_output_fingerprint": "04fb1b863b89fd24"
         }
       }
     },
@@ -3296,7 +3448,11 @@
       "expected": {
         "native": {
           "frames": 16491,
-          "actual_output_fingerprint": "3ed4393f03235b21"
+          "actual_output_fingerprint": "1eb19aa51b90056e"
+        },
+        "ppc": {
+          "frames": 16491,
+          "actual_output_fingerprint": "885bab888abce215"
         }
       }
     },
@@ -3305,7 +3461,11 @@
       "expected": {
         "native": {
           "frames": 12960,
-          "actual_output_fingerprint": "4e8e0297522530b0"
+          "actual_output_fingerprint": "a93b73b1b5ec8a4c"
+        },
+        "ppc": {
+          "frames": 12960,
+          "actual_output_fingerprint": "a93b73b1b5ec8a4c"
         }
       }
     },
@@ -3322,6 +3482,10 @@
       "replay": "replays/validation/peach/ExpertWorthlessFinch.slpz",
       "expected": {
         "native": {
+          "frames": 12032,
+          "actual_output_fingerprint": "ce0f6c8dfd333ba4"
+        },
+        "ppc": {
           "frames": 12032,
           "actual_output_fingerprint": "ce0f6c8dfd333ba4"
         }
@@ -3341,7 +3505,11 @@
       "expected": {
         "native": {
           "frames": 14098,
-          "actual_output_fingerprint": "145a5814102cadf2"
+          "actual_output_fingerprint": "e3e04befdd7eef9a"
+        },
+        "ppc": {
+          "frames": 14098,
+          "actual_output_fingerprint": "e3e04befdd7eef9a"
         }
       }
     },
@@ -3350,7 +3518,11 @@
       "expected": {
         "native": {
           "frames": 15634,
-          "actual_output_fingerprint": "ad63e690433c3b43"
+          "actual_output_fingerprint": "7f41b409c89018d4"
+        },
+        "ppc": {
+          "frames": 15634,
+          "actual_output_fingerprint": "7f41b409c89018d4"
         }
       }
     },
@@ -3358,6 +3530,10 @@
       "replay": "replays/validation/peach/HumiliatingCreamyReindeer.slpz",
       "expected": {
         "native": {
+          "frames": 16501,
+          "actual_output_fingerprint": "0366344fcca0fe88"
+        },
+        "ppc": {
           "frames": 16501,
           "actual_output_fingerprint": "0366344fcca0fe88"
         }
@@ -3404,7 +3580,11 @@
       "expected": {
         "native": {
           "frames": 12898,
-          "actual_output_fingerprint": "ab1c7b7e5961ed7d"
+          "actual_output_fingerprint": "9e9bd5b97db27e91"
+        },
+        "ppc": {
+          "frames": 12898,
+          "actual_output_fingerprint": "9e9bd5b97db27e91"
         }
       }
     },
@@ -3423,6 +3603,10 @@
         "native": {
           "frames": 14352,
           "actual_output_fingerprint": "df7f255689104c2a"
+        },
+        "ppc": {
+          "frames": 14352,
+          "actual_output_fingerprint": "df7f255689104c2a"
         }
       }
     },
@@ -3430,6 +3614,10 @@
       "replay": "replays/validation/peach/peach_demo_1.slpz",
       "expected": {
         "native": {
+          "frames": 6174,
+          "actual_output_fingerprint": "e6569cfb5aa4f677"
+        },
+        "ppc": {
           "frames": 6174,
           "actual_output_fingerprint": "e6569cfb5aa4f677"
         }
@@ -3576,6 +3764,10 @@
         "native": {
           "frames": 12233,
           "actual_output_fingerprint": "17cc04c621f9b2e0"
+        },
+        "ppc": {
+          "frames": 12233,
+          "actual_output_fingerprint": "17cc04c621f9b2e0"
         }
       }
     },
@@ -3656,7 +3848,11 @@
       "expected": {
         "native": {
           "frames": 8774,
-          "actual_output_fingerprint": "6f14051435595330"
+          "actual_output_fingerprint": "5bed64c19aba7f83"
+        },
+        "ppc": {
+          "frames": 8774,
+          "actual_output_fingerprint": "5bed64c19aba7f83"
         }
       }
     },
@@ -3674,7 +3870,11 @@
       "expected": {
         "native": {
           "frames": 13063,
-          "actual_output_fingerprint": "2b238ef2653c8a74"
+          "actual_output_fingerprint": "4a61be5082ba6202"
+        },
+        "ppc": {
+          "frames": 13063,
+          "actual_output_fingerprint": "9b95e38c6850b80a"
         }
       }
     },
@@ -3783,6 +3983,10 @@
         "native": {
           "frames": 10788,
           "actual_output_fingerprint": "49f3fb315e8dd96b"
+        },
+        "ppc": {
+          "frames": 10788,
+          "actual_output_fingerprint": "49f3fb315e8dd96b"
         }
       }
     },
@@ -3808,6 +4012,10 @@
       "replay": "replays/validation/puff/rollout_ends_ys.slpz",
       "expected": {
         "native": {
+          "frames": 5528,
+          "actual_output_fingerprint": "c83d204ffabb0b6c"
+        },
+        "ppc": {
           "frames": 5528,
           "actual_output_fingerprint": "c83d204ffabb0b6c"
         }
@@ -3917,7 +4125,11 @@
       "expected": {
         "native": {
           "frames": 14429,
-          "actual_output_fingerprint": "3c319cf1f3c697db"
+          "actual_output_fingerprint": "b4ed52576f5dd70a"
+        },
+        "ppc": {
+          "frames": 14429,
+          "actual_output_fingerprint": "b4ed52576f5dd70a"
         }
       }
     },
@@ -3952,6 +4164,10 @@
       "replay": "replays/validation/samus/master-samus-2026-03_Game_20260302T125058.slpz",
       "expected": {
         "native": {
+          "frames": 15403,
+          "actual_output_fingerprint": "1e0e42d87e455382"
+        },
+        "ppc": {
           "frames": 15403,
           "actual_output_fingerprint": "1e0e42d87e455382"
         }
@@ -4097,7 +4313,11 @@
       "expected": {
         "native": {
           "frames": 9014,
-          "actual_output_fingerprint": "45aba599244c7457"
+          "actual_output_fingerprint": "b0ff76e8ca355aae"
+        },
+        "ppc": {
+          "frames": 9014,
+          "actual_output_fingerprint": "2d44cadce1e11122"
         }
       }
     },
@@ -4205,7 +4425,11 @@
       "expected": {
         "native": {
           "frames": 10703,
-          "actual_output_fingerprint": "07966076643dbd2f"
+          "actual_output_fingerprint": "365d0647a9c5725b"
+        },
+        "ppc": {
+          "frames": 10703,
+          "actual_output_fingerprint": "bc4d0c8302e4810f"
         }
       }
     },
@@ -4224,6 +4448,10 @@
         "native": {
           "frames": 8725,
           "actual_output_fingerprint": "fc6da463eaa97b44"
+        },
+        "ppc": {
+          "frames": 8725,
+          "actual_output_fingerprint": "fc6da463eaa97b44"
         }
       }
     },
@@ -4231,6 +4459,10 @@
       "replay": "replays/validation/sheik/sheik_demo_game_2.slpz",
       "expected": {
         "native": {
+          "frames": 8434,
+          "actual_output_fingerprint": "35f3d00f153d87aa"
+        },
+        "ppc": {
           "frames": 8434,
           "actual_output_fingerprint": "35f3d00f153d87aa"
         }
@@ -4259,7 +4491,11 @@
       "expected": {
         "native": {
           "frames": 7969,
-          "actual_output_fingerprint": "31bd247b7b30db29"
+          "actual_output_fingerprint": "6d27119994a2339c"
+        },
+        "ppc": {
+          "frames": 7969,
+          "actual_output_fingerprint": "6d27119994a2339c"
         }
       }
     },

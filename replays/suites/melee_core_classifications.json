@@ -33,7 +33,8 @@
           "render_visibility_mismatch_count": 6,
           "first_render_visibility_mismatch_frame": 1465,
           "signed_zero_equal_count": 0
-        }
+        },
+        "ppc": "native"
       }
     },
     {
@@ -158,33 +159,50 @@
           "render_visibility_mismatch_count": 11,
           "first_render_visibility_mismatch_frame": 1545,
           "signed_zero_equal_count": 0
-        }
+        },
+        "ppc": "native"
       }
     },
     {
       "replay": "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz",
       "id": "offline-deadup-render-transform",
-      "owner": "ftDrawCommon DeadUp inverse-camera publication",
-      "rationale": "Offline DeadUpFall publishes cur_pos through the render camera's inverse transform. The bounded residual contains only P2 X/Y render positions and is followed by 5,758 exact transitions. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual.",
+      "owner": "Camera tracking and DeadUp view publication",
+      "rationale": "Native now has only three DeadUp position rows after the SDK translation arithmetic correction; the hosted PPC camera retains a larger backend-specific residual. The remaining eye/target state needs upstream tracking arbitration.",
       "sources": [
         "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18_inline2",
-        "refs/melee/src/melee/cm/camera.c::Camera_800311EC"
+        "refs/melee/src/melee/cm/camera.c::Camera_800311EC",
+        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 7028,
-          "first_mismatch_frame": 6906,
-          "first_render_visibility_mismatch_frame": null,
           "frames": 12914,
-          "last_mismatch_frame": 7033,
-          "matched_frames": 12860,
-          "mismatch_count": 69,
-          "mismatch_fields_digest": "577af4e7c865c3287a280fc1889e2eaba34495544b950966c8548d998ac4fd6e",
-          "mismatch_fingerprint": "14e29cd776c5affa",
-          "mismatched_frames": 54,
+          "matched_frames": 12911,
+          "mismatched_frames": 3,
+          "exact_prefix_frames": 7093,
+          "strict_suffix_frames": 5778,
+          "first_mismatch_frame": 6971,
+          "last_mismatch_frame": 7013,
+          "mismatch_count": 3,
+          "mismatch_fingerprint": "26ea2acfd33d9ed7",
           "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 5758
+          "mismatch_fields_digest": "bb75d3241d9bd61da9e93a2484bf0d04e8c75e9c28a56d151b5dc743417281ab"
+        },
+        "ppc": {
+          "frames": 12914,
+          "matched_frames": 12808,
+          "mismatched_frames": 106,
+          "exact_prefix_frames": 7028,
+          "strict_suffix_frames": 5758,
+          "first_mismatch_frame": 6906,
+          "last_mismatch_frame": 7033,
+          "mismatch_count": 161,
+          "mismatch_fingerprint": "ceda9374524ac05b",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "d0dcae0641cb8162daff01cb55169582523ec55735a8693cd67f400b9be3680a"
         }
       }
     },
@@ -277,29 +295,30 @@
     },
     {
       "replay": "replays/validation/falcon/falcon_demo.slpz",
-      "id": "dolphin-ulp-and-signed-zero-profile",
-      "owner": "fighter root-motion and signed-zero publication",
-      "rationale": "Correcting the decomp's left-wall candidate count removes the former stage-collision divergence. The remaining source-exact residual is thirteen isolated one-ULP X-position rows and thirty-seven signed-zero attack-velocity rows, followed by 2,189 exact transitions; PPC and native agree on the complete fingerprint while the replay records only an unspecified Dolphin execution profile. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
+      "id": "signed-zero-capture-profile",
+      "owner": "ftCommon knockback decay signed-zero publication",
+      "rationale": "Quaternion interpolation removed the four position rows. The remaining 37 rows are speed_y_attack signed zero. A retail interpreter probe at 0x8006B9E4 produces -0 exactly like hosted execution while this historical recording contains +0; comparison stays strict.",
       "sources": [
         "refs/melee/src/melee/mp/mpcoll.c::mpColl_80049EAC_LeftWall",
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "refs/melee/src/sysdolphin/baselib/jobj.c"
+        "refs/melee/src/sysdolphin/baselib/jobj.c",
+        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 622,
-          "first_mismatch_frame": 500,
-          "first_render_visibility_mismatch_frame": -122,
           "frames": 7402,
+          "matched_frames": 7365,
+          "mismatched_frames": 37,
+          "exact_prefix_frames": 2290,
+          "strict_suffix_frames": 2189,
+          "first_mismatch_frame": 2168,
           "last_mismatch_frame": 5090,
-          "matched_frames": 7361,
-          "mismatch_count": 41,
-          "mismatch_fields_digest": "fae05bebf123e17e15d1b0e18ac8f489e6bf669c6e1109f8ca7cf01f7cb37788",
-          "mismatch_fingerprint": "b7d965bc5cb88ce6",
-          "mismatched_frames": 41,
+          "mismatch_count": 37,
+          "mismatch_fingerprint": "ed67ee6f2de647f6",
           "render_visibility_mismatch_count": 8,
+          "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 2189
+          "mismatch_fields_digest": "58567cc34465f97cf63f65b8e9063801980692a69ec43d7c12886549373d502e"
         },
         "ppc": "native"
       }
@@ -357,90 +376,6 @@
           "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
           "mismatch_fields_digest": "d0a90003328866c2bba85878a57f06b2152814083d805d080e031e1edb5f0512"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/ganon/25827_Game_20250701T195419.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "offstage wall-hug clamp pos_x re-derivation",
-      "rationale": "The residual is a single self-healing 1-ULP pos_x row while Ganondorf pushes into Battlefield's side wall at x=72.843 (frame 3816); the wall-hug clamp re-derives pos_x from the wall line every frame and the known open X-at-Y interpolation seed flips the last bit. PPC and native agree bit-for-bit; same family as the dk 22123/9560 stage-edge entries.",
-      "sources": [
-        "refs/melee/src/melee/mp/mpcoll.c",
-        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E398"
-      ],
-      "expected": {
-        "native": {
-          "frames": 10877,
-          "matched_frames": 10876,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 3938,
-          "strict_suffix_frames": 6938,
-          "first_mismatch_frame": 3816,
-          "last_mismatch_frame": 3816,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "ede99a3c6221949c",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "e7f355b4cf1e82dc1d5462e364b3fd8394103ffcde7498f87812a8aba8bd4df1"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/ganon/medium-fox-2026-01_Game_20260122T160100.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "offstage wall-hug clamp pos_x re-derivation",
-      "rationale": "The residual is a bounded self-healing 4-row 1-ULP pos_x episode while Ganondorf hugs Yoshi's Story's side wall at x=57.265 (frames 3819-3822); the wall-hug clamp re-derives pos_x from the wall line every frame and the known open X-at-Y interpolation seed flips the last bit. PPC and native agree bit-for-bit; same family as the dk 22123/9560 stage-edge entries.",
-      "sources": [
-        "refs/melee/src/melee/mp/mpcoll.c",
-        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E398"
-      ],
-      "expected": {
-        "native": {
-          "frames": 7734,
-          "matched_frames": 7730,
-          "mismatched_frames": 4,
-          "exact_prefix_frames": 3941,
-          "strict_suffix_frames": 3789,
-          "first_mismatch_frame": 3819,
-          "last_mismatch_frame": 3822,
-          "mismatch_count": 4,
-          "mismatch_fingerprint": "65f7068c8d945693",
-          "render_visibility_mismatch_count": 4,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "3bef66b5e1cb4c85225cf746be9169d1d2c9393ef6af8e9e2e180d3e5d0c6e12"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/ganon/medium-sheik-2026-02_Game_20260218T175200.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "offstage wall-hug clamp pos_x re-derivation",
-      "rationale": "The residual is a single self-healing 1-ULP pos_x row while Ganondorf hugs Yoshi's Story's side wall at x=57.331 (frame 5451); the wall-hug clamp re-derives pos_x from the wall line every frame and the known open X-at-Y interpolation seed flips the last bit. PPC and native agree bit-for-bit; same family as the dk 22123/9560 stage-edge entries.",
-      "sources": [
-        "refs/melee/src/melee/mp/mpcoll.c",
-        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E398"
-      ],
-      "expected": {
-        "native": {
-          "frames": 10765,
-          "matched_frames": 10764,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 5573,
-          "strict_suffix_frames": 5191,
-          "first_mismatch_frame": 5451,
-          "last_mismatch_frame": 5451,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "6bd017b67de8fe04",
-          "render_visibility_mismatch_count": 3,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "2a089249884a7050c3712c87e2773cfb0ddf9d67c9c1fa0eb28355a4021d9c24"
         },
         "ppc": "native"
       }
@@ -548,102 +483,6 @@
       }
     },
     {
-      "replay": "replays/validation/icies/ys-peach-2025-02_23549_Game_20250221T133850.slpz",
-      "id": "peach-parasol-landing-teardown-window",
-      "owner": "ftPe parasol teardown against the Slippi item sample point at a FallSpecial landing",
-      "rationale": "One exported row (frame 2076): the hosted projection publishes Peach's closed parasol article (spawn id 11, its frozen spawn-position row at 67.36/-11.93) one item sample longer than the recording. The recorded episode's last row is 2075 and the window is exactly Peach's landing out of FallSpecial (recorded post state 35 -> 14 across 2075 -> 2076), whose transition tears the article down (ftPe_8011D598 -> it_802BDB94). Slippi samples items from a player-plink GObj proc installed before fighter processing (SendItemInfo), so the teardown lands one sample apart between the recording schedule and the hosted publication boundary; whether retail retires the article in the preceding item phase or in the landing frame's fighter phase needs the Dolphin scenario probe. Every fighter, follower, physics, and item gameplay lane is exact on both sides of the window (2,198-frame exact prefix, 10,110-frame strict suffix), and both backends produce identical fingerprints.",
-      "sources": [
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-        "refs/melee/src/melee/ft/chara/ftPeach/ftPe_SpecialHi.c::ftPe_8011D518",
-        "refs/melee/src/melee/it/items/itpeachparasol.c::it_802BDB94"
-      ],
-      "expected": {
-        "native": {
-          "frames": 12309,
-          "matched_frames": 12308,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 2198,
-          "strict_suffix_frames": 10110,
-          "first_mismatch_frame": 2076,
-          "last_mismatch_frame": 2076,
-          "mismatch_count": 11,
-          "mismatch_fingerprint": "ed25d016f39d4dd5",
-          "mismatch_fields": [
-            {
-              "field": "item_count",
-              "count": 1,
-              "first_frame": 2076,
-              "last_frame": 2076
-            },
-            {
-              "field": "item.exists[1]",
-              "count": 1,
-              "first_frame": 2076,
-              "last_frame": 2076
-            },
-            {
-              "field": "item.state[1]",
-              "count": 1,
-              "first_frame": 2076,
-              "last_frame": 2076
-            },
-            {
-              "field": "item.type[1]",
-              "count": 1,
-              "first_frame": 2076,
-              "last_frame": 2076
-            },
-            {
-              "field": "item.owner[1]",
-              "count": 1,
-              "first_frame": 2076,
-              "last_frame": 2076
-            },
-            {
-              "field": "item.instance_id[1]",
-              "count": 1,
-              "first_frame": 2076,
-              "last_frame": 2076
-            },
-            {
-              "field": "item.direction[1]",
-              "count": 1,
-              "first_frame": 2076,
-              "last_frame": 2076
-            },
-            {
-              "field": "item.pos_x[1]",
-              "count": 1,
-              "first_frame": 2076,
-              "last_frame": 2076
-            },
-            {
-              "field": "item.pos_y[1]",
-              "count": 1,
-              "first_frame": 2076,
-              "last_frame": 2076
-            },
-            {
-              "field": "item.timer[1]",
-              "count": 1,
-              "first_frame": 2076,
-              "last_frame": 2076
-            },
-            {
-              "field": "item.spawn_id[1]",
-              "count": 1,
-              "first_frame": 2076,
-              "last_frame": 2076
-            }
-          ],
-          "render_visibility_mismatch_count": 4,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/luigi/platinum-platinum-c20d9507b199f01838e901d0.slpz",
       "id": "dolphin-ulp-motion-profile",
       "owner": "collision pose float execution profile",
@@ -667,93 +506,6 @@
           "render_visibility_mismatch_count": 0,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 1040
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/marios/2026-07_Game_20260704T135409.slpz",
-      "id": "dolphin-ulp-item-motion-profile",
-      "owner": "item and fighter position float execution profile",
-      "rationale": "The residual mixes bounded item-position and fighter-position ULP intervals with needle pose bytes derived from them, reconverging to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing).",
-      "sources": [
-        "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-        "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
-        "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
-      ],
-      "expected": {
-        "native": {
-          "frames": 15813,
-          "matched_frames": 15678,
-          "mismatched_frames": 135,
-          "exact_prefix_frames": 2366,
-          "strict_suffix_frames": 13312,
-          "first_mismatch_frame": 2244,
-          "last_mismatch_frame": 2378,
-          "mismatch_count": 284,
-          "mismatch_fingerprint": "9c0524bc5e5d083d",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "d8ea98de2ec88d8b978a254f97f4d93d6a2272e6f085c8fbcc887f9a22ae8e1f"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/marios/34027_Game_20250422T224627.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "fighter position and velocity float execution profile",
-      "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
-      "sources": [
-        "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-        "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
-        "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
-      ],
-      "expected": {
-        "native": {
-          "frames": 10991,
-          "matched_frames": 10925,
-          "mismatched_frames": 66,
-          "exact_prefix_frames": 2867,
-          "strict_suffix_frames": 8047,
-          "first_mismatch_frame": 2745,
-          "last_mismatch_frame": 2821,
-          "mismatch_count": 66,
-          "mismatch_fingerprint": "5c502206f82381bb",
-          "render_visibility_mismatch_count": 3,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "0c9db191ec89c53374e607aa0d0ffbaa30a146b7836fdbc3ed7143c12c05c743"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/marios/4308_Game_20250404T231356.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "fighter position and velocity float execution profile",
-      "rationale": "The residual is bounded one-to-two-ULP position/velocity intervals that reconverge to an exact trailing suffix; the replay records Dolphin without its build or execution profile. Recorded after the hosted dynamics deltas (PSMTXQuat paired-single port, EntryStart scale-ramp fmadds, dynamics-force magnitude return, Battlefield/FD emitter scheduling, HSD_QuatLib_8037EF28 fmadds fusing) made the Fox-tail dynamics stream bit-exact through the bounded retail probe windows.",
-      "sources": [
-        "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
-        "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
-        "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 5210,
-          "first_mismatch_frame": 5088,
-          "first_render_visibility_mismatch_frame": null,
-          "frames": 6835,
-          "last_mismatch_frame": 5088,
-          "matched_frames": 6834,
-          "mismatch_count": 1,
-          "mismatch_fields_digest": "9be82e6be67cc69fe4ca9d01b95587fb59dfdf78fa175282627c6a7bb8877df2",
-          "mismatch_fingerprint": "d6a9f2ac8b835fd0",
-          "mismatched_frames": 1,
-          "render_visibility_mismatch_count": 0,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 1624
         },
         "ppc": "native"
       }
@@ -842,93 +594,47 @@
       }
     },
     {
-      "replay": "replays/validation/marios/medium-fox-2026-04_Game_20260413T180551.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "offstage wall-hug clamp pos_x re-derivation",
-      "rationale": "The complete residual is one 1-ULP pos_x row on Dr. Mario falling down Yoshi's Story's right side wall (frame 8813, x hugging 56.95 before snapping to the absolute wall clamp at 56.962 the next frame); no discrete state flips and the 23-frame suffix is exact. Same offstage wall-hug clamp mechanism as the retail-arbitrated 9560 entry. The original frame-910 dynamic-bone capsule-gate fork (mid-frame ftCo_8009CB40 anim-ownership reset forking a Fox tail-hurtbox grab/hit capsule check) was retired by the spline path-evaluator fusing (58f3f9e3), which aligned the animation-sampled bone poses feeding the capsule check; this replay re-recorded from 473 rows to one.",
-      "sources": [
-        "refs/melee/src/melee/mp/mpcoll.c",
-        "refs/melee/src/melee/mp/mplib.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 8959,
-          "matched_frames": 8958,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 8935,
-          "strict_suffix_frames": 23,
-          "first_mismatch_frame": 8813,
-          "last_mismatch_frame": 8813,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "ecc0f89a3377c6a8",
-          "render_visibility_mismatch_count": 4,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "c940c8411ba15d20498fc86bb0d0595ec8091932c129a9d00a6f919f17fc3d81"
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/marth/ExtraLargeScaryHornet.slpz",
-      "id": "mixed-unrecorded-render-rng-profile",
-      "owner": "DeadUp render publication, magnifier schedule, and presentation RNG phase",
-      "rationale": "Three already-bounded excluded-presentation families make up the complete residual: offline DeadUp render positions at frames 4832..4959, one magnifier damage tick at 7051, and a late DamageFlyRoll stream-phase action interval at 10766..10836. Native and PPC fingerprints are identical; no replay-local gameplay correction is applied. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. PPC snapshot re-recorded after the post-solve dynamics matrix refresh (the hosted CB40 anim-ownership toggle now samples solved-pose matrices, and the PPC backend shares the hosted runtime).",
+      "id": "mixed-camera-and-magnifier-profile",
+      "owner": "Camera tracking and magnifier render publication",
+      "rationale": "Native now has one DeadUp position row at 4950 and one magnifier damage row at 7051; no current DamageFlyRoll RNG mismatch remains. Hosted PPC retains additional camera position rows.",
       "sources": [
         "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18_inline2",
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
         "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
-        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24"
+        "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24",
+        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md"
       ],
       "expected": {
         "native": {
           "frames": 10973,
-          "matched_frames": 10912,
-          "mismatched_frames": 61,
+          "matched_frames": 10971,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 5072,
+          "strict_suffix_frames": 3799,
+          "first_mismatch_frame": 4950,
+          "last_mismatch_frame": 7051,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "70c7e34dd4ec3609",
+          "render_visibility_mismatch_count": 18,
+          "first_render_visibility_mismatch_frame": 2041,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "13b54d7720d7cf2f7876e86dd20655535d6931132a96ed0f6720de579db220de"
+        },
+        "ppc": {
+          "frames": 10973,
+          "matched_frames": 10846,
+          "mismatched_frames": 127,
           "exact_prefix_frames": 4954,
           "strict_suffix_frames": 3799,
           "first_mismatch_frame": 4832,
           "last_mismatch_frame": 7051,
-          "mismatch_count": 71,
-          "mismatch_fingerprint": "e41d9b16c270bf9d",
-          "mismatch_fields": [
-            {
-              "field": "pos_x[1]",
-              "count": 58,
-              "first_frame": 4832,
-              "last_frame": 4959
-            },
-            {
-              "field": "pos_y[1]",
-              "count": 12,
-              "first_frame": 4881,
-              "last_frame": 4959
-            },
-            {
-              "field": "percent[0]",
-              "count": 1,
-              "first_frame": 7051,
-              "last_frame": 7051
-            }
-          ],
+          "mismatch_count": 205,
+          "mismatch_fingerprint": "befc3cd77c66c737",
           "render_visibility_mismatch_count": 18,
           "first_render_visibility_mismatch_frame": 2041,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": {
-          "exact_prefix_frames": 4954,
-          "first_mismatch_frame": 4832,
-          "first_render_visibility_mismatch_frame": 2041,
-          "frames": 10973,
-          "last_mismatch_frame": 7051,
-          "matched_frames": 10846,
-          "mismatch_count": 209,
-          "mismatch_fields_digest": "fb39250f6cccc96e89b4b2245d814074119a96c60db45e3163493c7e8fadc96b",
-          "mismatch_fingerprint": "815eb662a5eb79a2",
-          "mismatched_frames": 127,
-          "render_visibility_mismatch_count": 18,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 3799
+          "mismatch_fields_digest": "a74c62f623b5068b4b52a450a50ea244e987eb0511d507881984fc83f8bf90ff"
         }
       }
     },
@@ -963,118 +669,121 @@
     },
     {
       "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
-      "id": "mixed-dolphin-ulp-render-profile",
-      "owner": "fighter position float profile and magnifier render schedule",
-      "rationale": "The complete residual is a bounded airborne-Jigglypuff root-position ULP window (80 pos_x/pos_y rows at 2821..2946) plus two 1% magnifier rows on Peach (6415 and 10445, both with Peach far offscreen right of Battlefield, each ticking one frame before the recording and resyncing at the recorded tick); the 3,439-frame suffix is strict and no item lane remains. State-aware validation still excludes Mr. Saturn's uninitialized held/thrown xDE4 bytes. The replay records neither the Dolphin float profile nor the VI/render boundary that publishes x221F_b0. The original thrown-item ULP families were absorbed by the item victim-bounce fmadds boundary (c47e87e3), the sincosf fidelity fix (c5464af0), the MWCC fusing sweep (597a7b7b), and the lbVector_Rotate fusing (50e8aadb). PPC snapshot recorded 2026-08-28 (melee-core-ppc at 5c0a91ac): the PPC backend reproduces the same residual families but widens the airborne Jigglypuff root-position ULP window to 2820..2947 (120 rows vs native's 62, first row one frame earlier); the percent residuals and the 3,439-transition strict suffix are identical on both backends.",
+      "id": "mixed-camera-and-magnifier-profile",
+      "owner": "Camera tracking and magnifier render publication",
+      "rationale": "Native screen-KO positions are now exact; only two magnifier percent rows remain. This is a Nintendont capture. Hosted PPC retains its separate camera position residual.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
-        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
+        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 2943,
-          "first_mismatch_frame": 2821,
-          "first_render_visibility_mismatch_frame": 1839,
           "frames": 14007,
+          "matched_frames": 14005,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 6537,
+          "strict_suffix_frames": 3439,
+          "first_mismatch_frame": 6415,
           "last_mismatch_frame": 10445,
-          "matched_frames": 13945,
-          "mismatch_count": 82,
-          "mismatch_fields_digest": "e335444a951f2bd3ae3574a2dcf7bbcfa6513ba0ae2abc202c63a995ce193d94",
-          "mismatch_fingerprint": "17b7be538e5e236a",
-          "mismatched_frames": 62,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "1a855469496b0860",
           "render_visibility_mismatch_count": 7,
+          "first_render_visibility_mismatch_frame": 1839,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 3439
+          "mismatch_fields_digest": "6e259d0d28dff320c155297f54977d00c51504fdaccfa6d4d7444cb1a12e5272"
         },
         "ppc": {
-          "exact_prefix_frames": 2942,
-          "first_mismatch_frame": 2820,
-          "first_render_visibility_mismatch_frame": 1839,
           "frames": 14007,
+          "matched_frames": 13890,
+          "mismatched_frames": 117,
+          "exact_prefix_frames": 2942,
+          "strict_suffix_frames": 3439,
+          "first_mismatch_frame": 2820,
           "last_mismatch_frame": 10445,
-          "matched_frames": 13887,
-          "mismatch_count": 187,
-          "mismatch_fields_digest": "acf89681fc6fe53ae83cb778e04b9b6d4a779b0b3a2e04701a40a7097fb6971e",
-          "mismatch_fingerprint": "6002eb36f1ec85ea",
-          "mismatched_frames": 120,
+          "mismatch_count": 176,
+          "mismatch_fingerprint": "cd045617f6814baf",
           "render_visibility_mismatch_count": 7,
+          "first_render_visibility_mismatch_frame": 1839,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 3439
+          "mismatch_fields_digest": "be62789da9b0eedcee1538221b0b8f710c7cfb18d8eeeadd9d7b41a6762b522c"
         }
       }
     },
     {
       "replay": "replays/validation/peach/CapitalPristineTarsier.slpz",
-      "id": "dolphin-ulp-fighter-and-item-profile",
-      "owner": "fighter root motion and thrown-item gravity float execution",
-      "rationale": "The complete residual contains bounded ULP-scale fighter root motion and thrown-item velocity/position intervals. Source discrete state remains aligned, and the exact fingerprint includes 158 strict trailing transitions. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. PPC snapshot recorded 2026-08-28 (melee-core-ppc at 5c0a91ac): the PPC backend reproduces the same residual families but widens the airborne Peach root-position ULP window to 3712..3839 (117 rows vs native's 60, first row three frames earlier); the percent residuals and the 158-transition strict suffix are identical on both backends.",
+      "id": "mixed-camera-and-magnifier-profile",
+      "owner": "Camera tracking and magnifier render publication",
+      "rationale": "Native screen-KO positions are now exact; only two magnifier percent rows remain. There is no current item mismatch, and this is a Nintendont capture. Hosted PPC retains its separate camera position residual.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
         "refs/melee/src/melee/it/item.c",
-        "refs/melee/src/sysdolphin/baselib/mtx.c"
+        "refs/melee/src/sysdolphin/baselib/mtx.c",
+        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 3837,
-          "first_mismatch_frame": 3715,
-          "first_render_visibility_mismatch_frame": 7181,
           "frames": 16491,
+          "matched_frames": 16489,
+          "mismatched_frames": 2,
+          "exact_prefix_frames": 16272,
+          "strict_suffix_frames": 158,
+          "first_mismatch_frame": 16150,
           "last_mismatch_frame": 16210,
-          "matched_frames": 16431,
-          "mismatch_count": 68,
-          "mismatch_fields_digest": "a735a3ac08323337ecb43d0bd7085dc43b795b6bbeed046881a9b93a9c7ebbe4",
-          "mismatch_fingerprint": "851c665507f1483b",
-          "mismatched_frames": 60,
+          "mismatch_count": 2,
+          "mismatch_fingerprint": "5646ef151024bc1b",
           "render_visibility_mismatch_count": 8,
+          "first_render_visibility_mismatch_frame": 7181,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 158
+          "mismatch_fields_digest": "6b176f904396f3abdfdc1f7d605a6cba7b152208b5fb7b7e2aaf035d1af506e9"
         },
         "ppc": {
-          "exact_prefix_frames": 3834,
-          "first_mismatch_frame": 3712,
-          "first_render_visibility_mismatch_frame": 7181,
           "frames": 16491,
+          "matched_frames": 16373,
+          "mismatched_frames": 118,
+          "exact_prefix_frames": 3834,
+          "strict_suffix_frames": 158,
+          "first_mismatch_frame": 3712,
           "last_mismatch_frame": 16210,
-          "matched_frames": 16374,
-          "mismatch_count": 180,
-          "mismatch_fields_digest": "5e1c15c99f6b336bd2f7a1d1852a5f56b5ac0b65016117f5231ed41313de90fd",
-          "mismatch_fingerprint": "b3f57dbd9b3539c0",
-          "mismatched_frames": 117,
+          "mismatch_count": 178,
+          "mismatch_fingerprint": "14bbad5eaedd89b3",
           "render_visibility_mismatch_count": 8,
+          "first_render_visibility_mismatch_frame": 7181,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 158
+          "mismatch_fields_digest": "1f2f1c5949a17032c45e1022f18aa298edf51b0e658e922069873428c9bb7087"
         }
       }
     },
     {
       "replay": "replays/validation/peach/DisgustingLivelyRaven.slpz",
-      "id": "mixed-dolphin-ulp-render-profile",
-      "owner": "thrown-item position float profile and magnifier render schedule",
-      "rationale": "The complete residual is one 1% magnifier row and a bounded thrown-item ULP tail: at frame 7474 the hosted magnifier ticks Peach (offscreen right of Yoshi's Story at (117, 16)) one frame before the recording, resyncing at the recorded tick, and frames 7740..7762 carry 23 ULP-scale item.pos_x rows from source item integration; the 5,075-frame suffix is strict. The replay records neither the Dolphin float profile nor the VI/render boundary that publishes x221F_b0. Re-recorded after the item victim-bounce fmadds boundary (c47e87e3), the MWCC fusing sweep (597a7b7b), and the dynamics-force restoration (e6e657a7) absorbed the original frame-6401 thrown-item families (378 rows to 24).",
+      "id": "vanilla-magnifier-render-schedule",
+      "owner": "ifMagnify/Fighter_8006A360 render-publication boundary",
+      "rationale": "Quaternion interpolation removed the position tail. Only one magnifier damage row at 7474 remains; the recording does not capture the VI/render publication boundary.",
       "sources": [
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
         "refs/melee/src/melee/it/item.c",
         "refs/melee/src/melee/it/items/itpeachturnip.c",
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
-        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998"
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
+        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md"
       ],
       "expected": {
         "native": {
-          "exact_prefix_frames": 7596,
-          "first_mismatch_frame": 7474,
-          "first_render_visibility_mismatch_frame": 505,
           "frames": 12960,
-          "last_mismatch_frame": 7762,
-          "matched_frames": 12936,
-          "mismatch_count": 24,
-          "mismatch_fields_digest": "cf55adfd74be12d2171d296eecaff6c5ea960a6829a06e3c4e781de92d142513",
-          "mismatch_fingerprint": "0b6e0f225f3612e6",
-          "mismatched_frames": 24,
+          "matched_frames": 12959,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 7596,
+          "strict_suffix_frames": 5363,
+          "first_mismatch_frame": 7474,
+          "last_mismatch_frame": 7474,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "11bd54984bb3d0c1",
           "render_visibility_mismatch_count": 11,
+          "first_render_visibility_mismatch_frame": 505,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 5075
+          "mismatch_fields_digest": "0c492f8b987869428e0af41ae03f87d68f648249df2f27becae2bff7d806a87c"
         },
         "ppc": "native"
       }
@@ -1110,96 +819,34 @@
     },
     {
       "replay": "replays/validation/peach/HappyGoLuckyScentedButterfly.slpz",
-      "id": "mixed-item-float-and-magnifier-profile",
-      "owner": "item float execution and magnifier render schedule",
-      "rationale": "The complete residual combines bounded item-position ULPs, one already-modeled 1% magnifier damage publication, and source-owned Sheik needle historical bytes plus their item-lifetime consequence. The exact fingerprint records the capture/runtime profile without changing Peach, camera damage, or needle gameplay. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor); the residual rows are only the remaining mechanism.",
+      "id": "vanilla-magnifier-render-schedule",
+      "owner": "ifMagnify/Fighter_8006A360 render-publication boundary",
+      "rationale": "Quaternion interpolation removed the item float tail. Four magnifier percent rows remain at 9664 and 13599..13719; the recording does not capture the VI/render publication boundary.",
       "sources": [
         "refs/melee/src/melee/it/item.c",
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
         "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
         "refs/melee/src/melee/it/items/itseakneedlethrown.c",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md"
       ],
       "expected": {
         "native": {
           "frames": 14098,
-          "matched_frames": 14078,
-          "mismatched_frames": 20,
-          "exact_prefix_frames": 5186,
+          "matched_frames": 14094,
+          "mismatched_frames": 4,
+          "exact_prefix_frames": 9786,
           "strict_suffix_frames": 256,
-          "first_mismatch_frame": 5064,
+          "first_mismatch_frame": 9664,
           "last_mismatch_frame": 13719,
-          "mismatch_count": 20,
-          "mismatch_fingerprint": "7c8b2ca0cee0bfea",
-          "mismatch_fields": [
-            {
-              "field": "item.pos_x[0]",
-              "count": 16,
-              "first_frame": 5064,
-              "last_frame": 5079
-            },
-            {
-              "field": "percent[0]",
-              "count": 1,
-              "first_frame": 9664,
-              "last_frame": 9664
-            },
-            {
-              "field": "percent[1]",
-              "count": 3,
-              "first_frame": 13599,
-              "last_frame": 13719
-            }
-          ],
+          "mismatch_count": 4,
+          "mismatch_fingerprint": "805247e7f607877a",
           "render_visibility_mismatch_count": 19,
           "first_render_visibility_mismatch_frame": 500,
-          "signed_zero_equal_count": 0
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "d2bc0581534a89a9b8a91c160585ca0cfb84e5a9c5f9e87c366b1001bb533e23"
         },
         "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/peach/HeartyStiffMallard.slpz",
-      "id": "legacy-fod-float-and-parasol-publication-profile",
-      "owner": "Dolphin float execution and Peach parasol item-scheduler publication",
-      "rationale": "After selecting this old capture's explicit pre-Cardinals input profile, the first residual is a one-ULP fighter position. The later Peach parasol boundary records destruction one post-frame row before the source item scheduler publishes it, shifting subsequent item-slot history. The exact complete fingerprint records those execution/publication boundaries without changing Peach gameplay or fitting a replay row. Re-recorded after the canonical:dashback-friction-fmadds hosted delta absorbed dash-back turn rounding on non-unity-friction ground. Re-recorded after the guard-slide/map-collision fmadds hosted deltas absorbed shield-slide rounding. Re-recorded after the item victim-bounce fmadds hosted delta absorbed bounced-projectile launch rounding. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds.",
-      "sources": [
-        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "refs/melee/src/melee/it/items/itpeachparasol.c",
-        "refs/melee/src/melee/it/item.c::Item_8026A8EC",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 907,
-          "first_mismatch_frame": 785,
-          "first_render_visibility_mismatch_frame": 6678,
-          "frames": 15634,
-          "last_mismatch_frame": 15511,
-          "matched_frames": 6600,
-          "mismatch_count": 336847,
-          "mismatch_fields_digest": "63fae70e4ee11acb7f0bc44560f51c4c59e9449e5e7029a2a1e6447345e17000",
-          "mismatch_fingerprint": "481cac23f67368e9",
-          "mismatched_frames": 9034,
-          "render_visibility_mismatch_count": 12589,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 0
-        },
-        "ppc": {
-          "exact_prefix_frames": 907,
-          "first_mismatch_frame": 785,
-          "first_render_visibility_mismatch_frame": 6678,
-          "frames": 15634,
-          "last_mismatch_frame": 15511,
-          "matched_frames": 6600,
-          "mismatch_count": 336847,
-          "mismatch_fields_digest": "63fae70e4ee11acb7f0bc44560f51c4c59e9449e5e7029a2a1e6447345e17000",
-          "mismatch_fingerprint": "481cac23f67368e9",
-          "mismatched_frames": 9034,
-          "render_visibility_mismatch_count": 12589,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 0
-        }
       }
     },
     {
@@ -1234,30 +881,31 @@
     },
     {
       "replay": "replays/validation/peach/SmugConfusedTermite.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "fighter and item position float execution",
-      "rationale": "Correcting the shared 32-bit item-throw motion-var layout removed the wrong shield-throw action and 12,584 downstream mismatch rows. The complete remainder is 16 isolated ULP-scale rows -- 15 item.pos_y rows at 3595..3609 and one self-healing pos_x row at 10422 against Yoshi's Story's right edge -- with 2,353 strict trailing transitions. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the dynamics-force restoration (lb_800103B8 magnitude return, lb_800115F4 emitter scheduling on Battlefield/FD), the PSMTXQuat paired-single port, the HSD_QuatLib_8037EF28 fmadds fusing, and the EntryStart scale-ramp fmadds. The earlier frame-2892 family was retired by the spline path-evaluator fusing (58f3f9e3).",
+      "id": "unresolved-wall-pose-ulp",
+      "owner": "Fighter pose/ECB at Yoshi wall contact",
+      "rationale": "Quaternion interpolation removed all 15 item-Y rows. One fighter wall X row at 10422 remains; no further source-backed arithmetic correction has been established.",
       "sources": [
         "refs/melee/src/melee/ft/chara/ftCommon/types.h::ftCommon_MotionVars",
         "refs/melee/src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c::ftCo_8009515C",
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "refs/melee/src/melee/it/item.c"
+        "refs/melee/src/melee/it/item.c",
+        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md"
       ],
       "expected": {
         "native": {
           "frames": 12898,
-          "matched_frames": 12882,
-          "mismatched_frames": 16,
-          "exact_prefix_frames": 3717,
+          "matched_frames": 12897,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 10544,
           "strict_suffix_frames": 2353,
-          "first_mismatch_frame": 3595,
+          "first_mismatch_frame": 10422,
           "last_mismatch_frame": 10422,
-          "mismatch_count": 16,
-          "mismatch_fingerprint": "9fb1def0a672d375",
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "95bdee9a75d70a78",
           "render_visibility_mismatch_count": 9,
           "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "97db1d02e6ec71be19b5202b390f5d50d68531eb536f8a1c3fa4b0692f939a99"
+          "mismatch_fields_digest": "8dae7b6f50b2cca20df974b959e56c5de8acf6eccf26a25fe88a99c3fa9ffe85"
         },
         "ppc": "native"
       }
@@ -1322,28 +970,29 @@
     },
     {
       "replay": "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz",
-      "id": "offline-deadup-render-transform",
-      "owner": "ftDrawCommon DeadUp inverse-camera publication",
-      "rationale": "Offline DeadUpFall publishes cur_pos through the render camera's inverse transform. The bounded residual contains only P2 X/Y render positions and is followed by 10,988 exact transitions. Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual.",
+      "id": "ppc-deadup-render-transform",
+      "owner": "Hosted PPC camera tracking/DeadUp publication",
+      "rationale": "Native debug and release now match every recorded transition after correcting SDK view translation arithmetic. Only hosted PPC retains a camera position residual; this entry does not classify native output.",
       "sources": [
         "refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18_inline2",
-        "refs/melee/src/melee/cm/camera.c::Camera_800311EC"
+        "refs/melee/src/melee/cm/camera.c::Camera_800311EC",
+        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md"
       ],
       "expected": {
-        "native": {
-          "exact_prefix_frames": 1948,
-          "first_mismatch_frame": 1826,
-          "first_render_visibility_mismatch_frame": null,
+        "ppc": {
           "frames": 13063,
+          "matched_frames": 12938,
+          "mismatched_frames": 125,
+          "exact_prefix_frames": 1947,
+          "strict_suffix_frames": 10988,
+          "first_mismatch_frame": 1825,
           "last_mismatch_frame": 1952,
-          "matched_frames": 13005,
-          "mismatch_count": 77,
-          "mismatch_fields_digest": "04773e6c1c928b9bc9f2d3e5d67efda60d6cbaaf578b091a51ec4e79626aa4bb",
-          "mismatch_fingerprint": "b711ebafa6e268ea",
-          "mismatched_frames": 58,
+          "mismatch_count": 196,
+          "mismatch_fingerprint": "c9e3ccdf60fff4f6",
           "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 10988
+          "mismatch_fields_digest": "6aa1c1fd432fb4f3893a61c47e440419cf8108a99b28f0ebad68d80aa9580a81"
         }
       }
     },
@@ -1406,54 +1055,6 @@
       }
     },
     {
-      "replay": "replays/validation/samus/fox-d18-2026-04_Game_20260419T223341.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "Samus zair hang-release pos_y re-derivation",
-      "rationale": "The complete residual is one 1-ULP pos_y row on Samus the frame after a zair wall-hang release below Battlefield's right ledge (frame 7389); the hidden grapple-chain integration seeds the release position (the master-samus mechanism), the 7,511-frame prefix and 5,151-frame strict suffix are exact, and native and PPC record the identical fingerprint. The frame-903 45-degree contact flip was retired by the subaction-hitbox part admission (73ecdd51), and the frame-9075 damage-state selection family (action 88 vs 91, seeded by ULP-scale knockback inputs) by the smoke-puff model-start draw consumption (2c0c510e); this replay re-recorded from 223 rows to one.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itsamusgrapple.c::it_802BA5DC"
-      ],
-      "expected": {
-        "native": {
-          "frames": 14429,
-          "matched_frames": 14428,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 7511,
-          "strict_suffix_frames": 6917,
-          "first_mismatch_frame": 7389,
-          "last_mismatch_frame": 7389,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "c5bc268949e4103f",
-          "mismatch_fields": [
-            {
-              "field": "pos_y[1]",
-              "count": 1,
-              "first_frame": 7389,
-              "last_frame": 7389
-            }
-          ],
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": {
-          "frames": 14429,
-          "matched_frames": 14428,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 7511,
-          "strict_suffix_frames": 6917,
-          "first_mismatch_frame": 7389,
-          "last_mismatch_frame": 7389,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "c5bc268949e4103f",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "cc49bf9c0bb2729e936994c39054fae429a29257ee3909606fd41dcd9f2cfb4a"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/samus/master-samus-2026-03_Game_20260302T125058.slpz",
       "id": "dolphin-ulp-motion-profile",
       "owner": "Samus movement lanes against the Dolphin single-precision motion profile",
@@ -1483,89 +1084,76 @@
     },
     {
       "replay": "replays/validation/sheik/GlaringRosyAlpaca.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "fighter position and velocity float execution profile",
-      "rationale": "The bounded residual is ULP-scale Sheik root motion (pos_x/pos_y rows at 3427..3541) followed by an exact suffix; no needle lane remains, and the replay records Dolphin but not its build or float/JIT execution profile. Native and PPC record separate fingerprints of the same family (the PPC window opens at 3419, wider at 177 rows). Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor). PPC snapshot re-recorded after the post-solve dynamics matrix refresh (the hosted CB40 anim-ownership toggle now samples solved-pose matrices, and the PPC backend shares the hosted runtime).",
+      "id": "ppc-deadup-render-transform",
+      "owner": "Hosted PPC camera tracking/DeadUp publication",
+      "rationale": "Native debug and release now match every recorded transition after correcting SDK view translation arithmetic. Only hosted PPC retains a camera position residual; this entry does not classify native output.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
         "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo",
+        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md"
       ],
       "expected": {
-        "native": {
-          "frames": 9014,
-          "matched_frames": 8976,
-          "mismatched_frames": 38,
-          "exact_prefix_frames": 3549,
-          "strict_suffix_frames": 5350,
-          "first_mismatch_frame": 3427,
-          "last_mismatch_frame": 3541,
-          "mismatch_count": 47,
-          "mismatch_fingerprint": "7bd4554d2b645a29",
-          "render_visibility_mismatch_count": 1,
-          "first_render_visibility_mismatch_frame": 8834,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "17654e1b85aa2a71072480a1ac309f4d09b5d48722e287ec96241c5a3d3cae8c"
-        },
         "ppc": {
-          "exact_prefix_frames": 3541,
-          "first_mismatch_frame": 3419,
-          "first_render_visibility_mismatch_frame": 8834,
           "frames": 9014,
+          "matched_frames": 8896,
+          "mismatched_frames": 118,
+          "exact_prefix_frames": 3541,
+          "strict_suffix_frames": 5347,
+          "first_mismatch_frame": 3419,
           "last_mismatch_frame": 3544,
-          "matched_frames": 8897,
-          "mismatch_count": 177,
-          "mismatch_fields_digest": "f67626534b1f1186c0c628cfccc47f1781d2b17b99541bbfbcb938c46d6f6c2a",
-          "mismatch_fingerprint": "b471707b159b7be9",
-          "mismatched_frames": 117,
+          "mismatch_count": 182,
+          "mismatch_fingerprint": "b5f64ceb627e0bbe",
           "render_visibility_mismatch_count": 1,
+          "first_render_visibility_mismatch_frame": 8834,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 5347
+          "mismatch_fields_digest": "3beac096071c2432e97acfb5ded90bedd2ab825f1fd5a30c8a576376820f8f24"
         }
       }
     },
     {
       "replay": "replays/validation/sheik/WavyRundownAardvark.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "fighter position and velocity float execution profile",
-      "rationale": "The bounded residual is ULP-scale Sheik root motion (pos_x/pos_y rows at 967..1091) followed by an exact suffix; no needle lane remains, and the replay records Dolphin but not its build or float/JIT execution profile. Native and PPC record separate fingerprints of the same family (the PPC window opens at 964, wider at 153 rows). Re-recorded on the macOS-native merge after the sincosf fidelity fix shortened the residual. Re-recorded after the GALE01-verified MWCC fusing sweep of lbcollision/lbvector/lbspdisplay/quatlib/HSD_MtxInverse and the fused-fnmsub Gekko sqrtf Newton steps shifted the residual. Re-recorded after the GALE01-verified lbVector_Rotate axis-rotation fusing (0x8000DC08..0x8000DC58) shifted the residual. The thrown-needle pose component of this tail was resolved by 31f1c435 (fused trail anchor). PPC snapshot re-recorded after the post-solve dynamics matrix refresh (the hosted CB40 anim-ownership toggle now samples solved-pose matrices, and the PPC backend shares the hosted runtime).",
+      "id": "offline-deadup-render-transform",
+      "owner": "Camera tracking before C_MTXLookAt",
+      "rationale": "Native now has one screen-KO X row at 1054. Retail tracing finds the camera eye X already differs by one ULP before C_MTXLookAt; the other eye/interest lanes match. The Nintendont capture is not evidence of a Dolphin execution profile. Hosted PPC retains a larger camera residual.",
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
         "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo"
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo",
+        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md"
       ],
       "expected": {
         "native": {
           "frames": 10703,
-          "matched_frames": 10653,
-          "mismatched_frames": 50,
-          "exact_prefix_frames": 1089,
-          "strict_suffix_frames": 9489,
-          "first_mismatch_frame": 967,
-          "last_mismatch_frame": 1091,
-          "mismatch_count": 56,
-          "mismatch_fingerprint": "33898c3fcea7e99b",
+          "matched_frames": 10702,
+          "mismatched_frames": 1,
+          "exact_prefix_frames": 1176,
+          "strict_suffix_frames": 9526,
+          "first_mismatch_frame": 1054,
+          "last_mismatch_frame": 1054,
+          "mismatch_count": 1,
+          "mismatch_fingerprint": "fa2de4cfdc218a58",
           "render_visibility_mismatch_count": 3,
           "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "f04dcc78e073789222d5165bccce42864ff94f4e5b5c0f371c3bde9f55e73e99"
+          "mismatch_fields_digest": "bf8d31f08c691522e425b4587e659c2f59b74c2c1f96f8e3561743842d495a1a"
         },
         "ppc": {
-          "exact_prefix_frames": 1086,
-          "first_mismatch_frame": 964,
-          "first_render_visibility_mismatch_frame": -122,
           "frames": 10703,
+          "matched_frames": 10603,
+          "mismatched_frames": 100,
+          "exact_prefix_frames": 1086,
+          "strict_suffix_frames": 9489,
+          "first_mismatch_frame": 964,
           "last_mismatch_frame": 1091,
-          "matched_frames": 10596,
-          "mismatch_count": 153,
-          "mismatch_fields_digest": "df33274a4fd2c975b1b97651e02af213aaebcdd32fb334b38163c11fa7896ce7",
-          "mismatch_fingerprint": "2de10c17a10bbf38",
-          "mismatched_frames": 107,
+          "mismatch_count": 147,
+          "mismatch_fingerprint": "1ec7ff84de7e9173",
           "render_visibility_mismatch_count": 3,
+          "first_render_visibility_mismatch_frame": -122,
           "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 9489
+          "mismatch_fields_digest": "08df1ed3bef4531f08be23d741f5c4bcb61822d9d2470f00db4dfaeb75d78213"
         }
       }
     },
@@ -1812,237 +1400,6 @@
           "first_render_visibility_mismatch_frame": null,
           "signed_zero_equal_count": 0
         },
-        "ppc": {
-          "frames": 12233,
-          "matched_frames": 9734,
-          "mismatched_frames": 2499,
-          "exact_prefix_frames": 98,
-          "strict_suffix_frames": 22,
-          "first_mismatch_frame": -24,
-          "last_mismatch_frame": 12088,
-          "mismatch_count": 4802,
-          "mismatch_fingerprint": "040cf4c553e20933",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "a7a4905527b3bdbde5384cbb73ca02a9488c8669ee402ba28887fe559108237a"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/pikachu/slippi-2025-11_Game_20251114T162828.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "fighter wall push-out float execution profile",
-      "rationale": "PPC and native source runtimes agree bit-for-bit. The residual is one isolated 1-ULP pos_x row on a fast-falling Falco riding the Yoshi's Story right underside wall, where the position re-derives from the wall line each frame and reconverges immediately; the replay records Dolphin but not its build or execution profile. The fingerprint ends in 3,711 strict trailing transitions.",
-      "sources": [
-        "refs/melee/src/melee/mp/mpcoll.c",
-        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate"
-      ],
-      "expected": {
-        "native": {
-          "frames": 8774,
-          "matched_frames": 8773,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 5062,
-          "strict_suffix_frames": 3711,
-          "first_mismatch_frame": 4940,
-          "last_mismatch_frame": 4940,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "72651ec5c1e33764",
-          "mismatch_fields": [
-            {
-              "field": "pos_x[1]",
-              "count": 1,
-              "first_frame": 4940,
-              "last_frame": 4940
-            }
-          ],
-          "render_visibility_mismatch_count": 4,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": {
-          "frames": 8774,
-          "matched_frames": 8773,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 5062,
-          "strict_suffix_frames": 3711,
-          "first_mismatch_frame": 4940,
-          "last_mismatch_frame": 4940,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "72651ec5c1e33764",
-          "render_visibility_mismatch_count": 4,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "4d62fa06372e9aa85284779eece0c8c5dccdf93266cd890116fd7b6a5c427216"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/dk/auto-dk-2025-04_Game_20250408T015844.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "Samus grapple-swing rope integration and the offstage wall-hug clamp",
-      "rationale": "The residual is one bounded 150-row P2 pos/self-speed episode while Samus swings on the grapple rope under Fountain's side wall, healing at the ledge-grab snap; there are no discrete state flips. PPC and native source runtimes agree bit-for-bit, and engine-dump retail playback of this recording reproduces the recorded bits through the fork window, so the seed is the hidden grapple-chain integration ULP documented on the master-samus entry.",
-      "sources": [
-        "refs/melee/src/melee/it/items/itsamusgrapple.c::it_802BA5DC",
-        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall"
-      ],
-      "expected": {
-        "native": {
-          "frames": 13657,
-          "matched_frames": 13507,
-          "mismatched_frames": 150,
-          "exact_prefix_frames": 8776,
-          "strict_suffix_frames": 4731,
-          "first_mismatch_frame": 8654,
-          "last_mismatch_frame": 8803,
-          "mismatch_count": 309,
-          "mismatch_fingerprint": "874a5e9d0ba6f55d",
-          "render_visibility_mismatch_count": 9,
-          "first_render_visibility_mismatch_frame": 6354,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "350aef6aeb777b1f114d03a7cddaecd8bf5397590e8bd08051387aabca66cb67"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/dk/9560_Game_20250405T084316.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "airborne wall-hug pos_x re-derivation lanes",
-      "rationale": "The complete residual is a three-row 1-ULP pos_x episode while DK falls in hitstun pinned against Yoshi's left side wall (the wall-hug clamp re-derives pos_x from the wall line each frame; all published velocity lanes stay exact), ending at the bottom-blast respawn snap. PPC and native source runtimes agree bit-for-bit, and engine-dump retail playback of this recording reproduces the recorded bits through the fork window; the clamp's remaining rounding seed is a documented open lever.",
-      "sources": [
-        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall",
-        "refs/melee/src/melee/mp/mpcoll.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 7359,
-          "matched_frames": 7356,
-          "mismatched_frames": 3,
-          "exact_prefix_frames": 2242,
-          "strict_suffix_frames": 5114,
-          "first_mismatch_frame": 2120,
-          "last_mismatch_frame": 2122,
-          "mismatch_count": 3,
-          "mismatch_fingerprint": "e0598ae666db839d",
-          "render_visibility_mismatch_count": 3,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "d2343abbd7d7f9ed3c10f7a89731ad656779cd5c585f46f3b4edf1312f4124ba"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/dk/22123_Game_20250505T215606.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "airborne wall-hug pos_x re-derivation lanes",
-      "rationale": "The complete residual is a two-row 1-ULP pos_x episode while DK falls hugging Dream Land's left edge wall, self-healing at the next absolute snap; no discrete state flips and all velocity lanes stay exact. PPC and native source runtimes agree bit-for-bit; same wall-hug clamp mechanism as the retail-arbitrated 9560 entry.",
-      "sources": [
-        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall",
-        "refs/melee/src/melee/mp/mpcoll.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 12291,
-          "matched_frames": 12289,
-          "mismatched_frames": 2,
-          "exact_prefix_frames": 8019,
-          "strict_suffix_frames": 4267,
-          "first_mismatch_frame": 7897,
-          "last_mismatch_frame": 7901,
-          "mismatch_count": 2,
-          "mismatch_fingerprint": "76d24b524348c9b9",
-          "render_visibility_mismatch_count": 0,
-          "first_render_visibility_mismatch_frame": null,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "4ca54b1cbabe672e69b58de9cae7f296306d7741afda26a00677a15b3179f9d8"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/dk/basic-dk-2025-04_Game_20250427T125907.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "airborne wall-hug pos_x re-derivation lanes",
-      "rationale": "The complete residual is a six-row 1-ULP pos_x episode while DK falls hugging Yoshi's right side wall, self-healing at the next absolute snap; no discrete state flips and all velocity lanes stay exact. PPC and native source runtimes agree bit-for-bit; same wall-hug clamp mechanism as the retail-arbitrated 9560 entry.",
-      "sources": [
-        "refs/melee/src/melee/mp/mplib.c::mpLib_800511A4_RightWall",
-        "refs/melee/src/melee/mp/mpcoll.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 10171,
-          "matched_frames": 10165,
-          "mismatched_frames": 6,
-          "exact_prefix_frames": 7387,
-          "strict_suffix_frames": 2778,
-          "first_mismatch_frame": 7265,
-          "last_mismatch_frame": 7270,
-          "mismatch_count": 6,
-          "mismatch_fingerprint": "8ccb8c481c165fc8",
-          "render_visibility_mismatch_count": 46,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "0a07b9cf10147fe40390a73c30d93ee8d1825e671dad6e533849968e9c99e378"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/dk/medium-marth-2025-09_Game_20250912T002037.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "airborne wall-hug pos_x re-derivation lanes",
-      "rationale": "The complete residual is a two-row 1-ULP pos_x episode while DK falls in hitstun hugging Yoshi's right side wall, self-healing at the next absolute snap; no discrete state flips and all velocity lanes stay exact. PPC and native source runtimes agree bit-for-bit; same wall-hug clamp mechanism as the retail-arbitrated 9560 entry.",
-      "sources": [
-        "refs/melee/src/melee/mp/mplib.c::mpLib_800511A4_RightWall",
-        "refs/melee/src/melee/mp/mpcoll.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 8353,
-          "matched_frames": 8351,
-          "mismatched_frames": 2,
-          "exact_prefix_frames": 7182,
-          "strict_suffix_frames": 1169,
-          "first_mismatch_frame": 7060,
-          "last_mismatch_frame": 7061,
-          "mismatch_count": 2,
-          "mismatch_fingerprint": "4e90c30cb3c91ca6",
-          "render_visibility_mismatch_count": 3,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "4c37894b15766c6244085ec04712e373a416776e3526e1488d819f3045ff1345"
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/dk/slippi-2025-04_Game_20250422T141746.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "airborne wall-hug pos_x re-derivation lanes",
-      "rationale": "The complete residual is one 1-ULP pos_x row on the last fall frame before DK's cliff catch at Dream Land's right edge wall, healed by the cliff-catch absolute snap; no discrete state flips. PPC and native source runtimes agree bit-for-bit; same wall-hug clamp mechanism as the retail-arbitrated 9560 entry.",
-      "sources": [
-        "refs/melee/src/melee/mp/mplib.c::mpLib_800511A4_RightWall",
-        "refs/melee/src/melee/ft/ftcliffcommon.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 14522,
-          "matched_frames": 14521,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 9733,
-          "strict_suffix_frames": 4788,
-          "first_mismatch_frame": 9611,
-          "last_mismatch_frame": 9611,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "77c738dff3327f97",
-          "render_visibility_mismatch_count": 25,
-          "first_render_visibility_mismatch_frame": 459,
-          "signed_zero_equal_count": 0,
-          "mismatch_fields_digest": "297f426a21df156c49c456694a4ab2b3a7a2218362edc2bf65f2b61fa0306067"
-        },
         "ppc": "native"
       }
     },
@@ -2101,48 +1458,6 @@
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 10525
         },
-        "ppc": {
-          "exact_prefix_frames": 4044,
-          "first_mismatch_frame": 3922,
-          "first_render_visibility_mismatch_frame": 3342,
-          "frames": 14721,
-          "last_mismatch_frame": 4073,
-          "matched_frames": 14569,
-          "mismatch_count": 1731,
-          "mismatch_fields_digest": "6f9738d5af7014509e1c76b5fd0a0d51cd372809af240345b7f1e9259c6577a7",
-          "mismatch_fingerprint": "39dbb255aa456a2a",
-          "mismatched_frames": 152,
-          "render_visibility_mismatch_count": 2,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 10525
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/ness/2025-02_Game_20250223T112902.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "Peach turnip release position feeding the item fall integrator",
-      "rationale": "One 1-ULP seed on a single item lane. Peach's turnip (item type 99, id 132) is dropped out of the carry state at frame 23119 and its release y is set one ULP high -- 32.1085701 (0x42006f2d) against 32.1085663 (0x42006f2c). Nothing else diverges: pos_x, both velocity lanes, the timer, damage and every fighter lane stay exact, so the offset is carried unchanged by the constant-gravity fall (vel_y ramps -0.204 per frame to the -1.836 terminal) until the turnip crosses the blast zone and despawns at frame 23187, which ends the episode and leaves a 140-frame exact suffix. Both backends produce the identical snapshot -- same first row, same 69 rows, same f1639cfe9ff96f60 fingerprint and same field digest -- so this is a shared rounding step against Dolphin rather than a host floating-point profile difference or a 64-bit layout artifact.",
-      "sources": [
-        "refs/melee/src/melee/it/item.c",
-        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 23241,
-          "first_mismatch_frame": 23119,
-          "first_render_visibility_mismatch_frame": null,
-          "frames": 23450,
-          "last_mismatch_frame": 23187,
-          "matched_frames": 23381,
-          "mismatch_count": 69,
-          "mismatch_fields_digest": "e8b7c055f39ed30558929676c755a853c5504fc5f64412f9ad08dbc90523d616",
-          "mismatch_fingerprint": "f1639cfe9ff96f60",
-          "mismatched_frames": 69,
-          "render_visibility_mismatch_count": 0,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 140
-        },
         "ppc": "native"
       }
     },
@@ -2176,34 +1491,6 @@
       }
     },
     {
-      "replay": "replays/validation/links/slippi-2025-01_Game_20250129T125630.slpz",
-      "id": "dolphin-ulp-motion-profile",
-      "owner": "fighter position across a knife-edge Stadium contact",
-      "rationale": "A single pos_x row at frame 9958, 1 ULP low (0xc2be3884 vs 0xc2be3885), reconverging immediately into a 4,114-frame exact suffix. Native and PPC agree bit-for-bit; all discrete lanes, damage, and inputs are exact through the seed frame. Same position-only knife-edge profile as the established dolphin-ulp-motion-profile entries: the collision arithmetic owners are asm-verified faithful (canonical:mp-ecb-wall-fmadds) and the residual enters at sub-tolerance scale from the bone-pose-derived ECB edge.",
-      "sources": [
-        "refs/melee/src/melee/mp/mpcoll.c",
-        "src/upstream_delta_ledger.tsv::canonical:mp-ecb-wall-fmadds"
-      ],
-      "expected": {
-        "native": {
-          "exact_prefix_frames": 10080,
-          "first_mismatch_frame": 9958,
-          "first_render_visibility_mismatch_frame": 659,
-          "frames": 14195,
-          "last_mismatch_frame": 9958,
-          "matched_frames": 14194,
-          "mismatch_count": 1,
-          "mismatch_fields_digest": "4fced41418a9017f2b9e0b606f0a3f332cce85b5c3dae6b06e97996ced692cc3",
-          "mismatch_fingerprint": "2c7c237763cbb6af",
-          "mismatched_frames": 1,
-          "render_visibility_mismatch_count": 12,
-          "signed_zero_equal_count": 0,
-          "strict_suffix_frames": 4114
-        },
-        "ppc": "native"
-      }
-    },
-    {
       "replay": "replays/validation/links/slpfiles-2025-10_Game_20251020T000422.slpz",
       "id": "dolphin-ulp-motion-profile",
       "owner": "self-velocity friction lane across a knife-edge Fountain slope contact",
@@ -2227,76 +1514,6 @@
           "render_visibility_mismatch_count": 0,
           "signed_zero_equal_count": 0,
           "strict_suffix_frames": 3714
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/yoshi/ClumsyImaginaryOkapi.slpz",
-      "id": "dolphin-ulp-wall-clamp",
-      "owner": "mpColl wall-contact pos_x re-derivation",
-      "rationale": "One wall-contact position differs by one ULP at frame 7770, with native and PPC agreeing on the same bounded source re-derivation and every other gameplay field exact. This retains the original Dolphin wall-clamp execution-profile residual. The merged costume-matanim publication owner resolves the former 42 GuardHold animation-frame rows; no tolerance is widened.",
-      "sources": [
-        "refs/melee/src/melee/mp/mpcoll.c::mpColl_8004D024",
-        "refs/melee/src/melee/mp/mplib.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 7969,
-          "matched_frames": 7968,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 7892,
-          "strict_suffix_frames": 76,
-          "first_mismatch_frame": 7770,
-          "last_mismatch_frame": 7770,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "58d1664fe7e745d6",
-          "mismatch_fields": [
-            {
-              "field": "pos_x[0]",
-              "count": 1,
-              "first_frame": 7770,
-              "last_frame": 7770
-            }
-          ],
-          "render_visibility_mismatch_count": 2,
-          "first_render_visibility_mismatch_frame": 3192,
-          "signed_zero_equal_count": 0
-        },
-        "ppc": "native"
-      }
-    },
-    {
-      "replay": "replays/validation/bowser/SophisticatedGiganticHeron.slpz",
-      "id": "yoshi-bowser-source-proven-residual",
-      "owner": "offstage wall-hug clamp pos_x re-derivation",
-      "rationale": "One wall-contact position differs by one ULP, with native and PPC agreeing on the same bounded source re-derivation and every other gameplay field exact. This is the existing Dolphin wall-clamp execution-profile family, with the exact new row separately locked.",
-      "sources": [
-        "refs/melee/src/melee/mp/mpcoll.c::mpColl_8004D024",
-        "refs/melee/src/melee/mp/mplib.c"
-      ],
-      "expected": {
-        "native": {
-          "frames": 11949,
-          "matched_frames": 11948,
-          "mismatched_frames": 1,
-          "exact_prefix_frames": 4728,
-          "strict_suffix_frames": 7220,
-          "first_mismatch_frame": 4606,
-          "last_mismatch_frame": 4606,
-          "mismatch_count": 1,
-          "mismatch_fingerprint": "76205c4cd15acdf6",
-          "mismatch_fields": [
-            {
-              "field": "pos_x[1]",
-              "count": 1,
-              "first_frame": 4606,
-              "last_frame": 4606
-            }
-          ],
-          "render_visibility_mismatch_count": 3,
-          "first_render_visibility_mismatch_frame": -122,
-          "signed_zero_equal_count": 0
         },
         "ppc": "native"
       }

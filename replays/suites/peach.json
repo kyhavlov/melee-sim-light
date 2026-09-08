@@ -6,6 +6,9 @@
   "replays": [
     {
       "replay": "replays/validation/peach/HeartyStiffMallard.slpz",
+      "ucf_shield_sdi_enabled": false,
+      "ucf_sdi_enabled": false,
+      "ucf_shield_drop_extended_enabled": false,
       "ucf_shield_drop_084_enabled": false,
       "ports": [1, 2],
       "stage_id": 2,

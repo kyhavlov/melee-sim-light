@@ -60,8 +60,7 @@ bool ft_8008A244(Fighter_GObj* gobj)
 void ft_8008A2BC(HSD_GObj* gobj)
 {
 #ifdef MSL_CORE_HOSTED
-    // the current core only constructs Fox; the boss-specific neutral entries are not
-    // part of this registry projection.
+    // Boss-specific neutral entries are outside the supported roster.
     ft_8008A348(gobj, 0);
 #else
     if (ftLib_800872A4(gobj) == FTKIND_MASTERH) {
@@ -83,7 +82,6 @@ void ft_8008A324(HSD_GObj* gobj)
 void ft_8008A348(Fighter_GObj* gobj, float anim_blend)
 {
     Fighter* fp = GET_FIGHTER(gobj);
-#ifndef MSL_CORE_HOSTED
     if (fp->x2224_b2) {
         ftCo_DownSpot_Enter(gobj);
         return;
@@ -102,11 +100,6 @@ void ft_8008A348(Fighter_GObj* gobj, float anim_blend)
             it_802BDB94(fp->item_gobj);
         }
     }
-#else
-    if (fp->ground_or_air == GA_Air) {
-        ftCommon_8007D7FC(fp);
-    }
-#endif
     Fighter_ChangeMotionState(gobj, ftCo_MS_Wait, Ft_MF_None, 0.0f, 1.0f,
                               anim_blend, NULL);
     if (ftCo_8008A698(fp) && ftData_80085FD4(fp, ftCo_MS_DeadUpFall)->x8 != 0)

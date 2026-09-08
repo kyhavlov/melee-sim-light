@@ -186,11 +186,12 @@ s32 HSD_QuatLib_8037EF28(Quaternion* p, Quaternion* q, Quaternion* out, f32 t)
     f32 sq;
 
     // GALE01 0x8037EF6C-0x8037EF94: the dot product accumulates through
-    // fmadds, and every output lane below is one fmadds over a pre-rounded
+    // fmadds from the rounded Y product (X fuses), and every output lane
+    // below is one fmadds over a pre-rounded
     // fmuls (0x8037EFFC-0x8037F03C and the sibling branches).
     cosom = __fmadds(p->w, q->w,
                      __fmadds(p->z, q->z,
-                              __fmadds(p->y, q->y, p->x * q->x)));
+                              __fmadds(p->x, q->x, p->y * q->y)));
 
     if ((1.0F + cosom) > 1e-10F) {
         if ((1.0F - cosom) > 1e-10F) {

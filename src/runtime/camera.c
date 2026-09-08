@@ -1,4 +1,5 @@
 #include "cm/camera.h"
+#include "MSL/math_ppc.h"
 
 #include "match.h"
 
@@ -287,15 +288,17 @@ static void headless_camera_build_view(Mtx view, Vec3* eye, float* fov,
     camera_forward.y = interest.y - eye->y;
     camera_forward.z = interest.z - eye->z;
     PSVECNormalize(&camera_forward, &camera_forward);
-    if (1.0F - fabsf(camera_forward.y) < 0.0001F) {
-        camera_up.x = sqrtf(camera_forward.y * camera_forward.y +
+    // GALE01 roll2upvec 0x80368CD8 uses a double predicate; its sqrtf
+    // expansions at 0x80368D00/DA4 use the Gekko Newton sequence.
+    if (1.0 - fabsf(camera_forward.y) < 0.0001) {
+        camera_up.x = msl_gekko_sqrtf(camera_forward.y * camera_forward.y +
                             camera_forward.z * camera_forward.z);
         camera_up.y = camera_forward.y *
                       (-camera_forward.x / camera_up.x);
         camera_up.z = camera_forward.z *
                       (-camera_forward.x / camera_up.x);
     } else {
-        camera_up.y = sqrtf(camera_forward.x * camera_forward.x +
+        camera_up.y = msl_gekko_sqrtf(camera_forward.x * camera_forward.x +
                             camera_forward.z * camera_forward.z);
         camera_up.x = camera_forward.x *
                       (-camera_forward.y / camera_up.y);
@@ -324,19 +327,20 @@ static void headless_camera_build_view(Mtx view, Vec3* eye, float* fov,
     view[0][0] = right.x;
     view[0][1] = right.y;
     view[0][2] = right.z;
-    view[0][3] =
-        -fmaf(eye->z, right.z,
-              fmaf(eye->x, right.x, eye->y * right.y));
+    // GALE01 C_MTXLookAt 0x803427E8..2804 (and the next two rows)
+    // rounds all three products before either addition.
+    view[0][3] = -(eye->z * right.z +
+                     (eye->x * right.x + eye->y * right.y));
     view[1][0] = up.x;
     view[1][1] = up.y;
     view[1][2] = up.z;
-    view[1][3] =
-        -fmaf(eye->z, up.z, fmaf(eye->x, up.x, eye->y * up.y));
+    view[1][3] = -(eye->z * up.z +
+                     (eye->x * up.x + eye->y * up.y));
     view[2][0] = look.x;
     view[2][1] = look.y;
     view[2][2] = look.z;
-    view[2][3] =
-        -fmaf(eye->z, look.z, fmaf(eye->x, look.x, eye->y * look.y));
+    view[2][3] = -(eye->z * look.z +
+                     (eye->x * look.x + eye->y * look.y));
 }
 
 static bool headless_camera_point_on_screen(const Mtx view, float fov,

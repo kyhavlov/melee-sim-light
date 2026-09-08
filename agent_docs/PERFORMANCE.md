@@ -5,7 +5,16 @@ The current production comparison contract and exact raw evidence are in
 [`performance/RETAINED.md`](performance/RETAINED.md), and rejected or superseded experiments are
 searchable from [`performance/README.md`](performance/README.md).
 
-The current candidate is based on `02cfe013`; its release benchmark SHA-256 is
+The September 8 classified-replay closure reaches 493 exact / 36 classified
+replays on both native debug and release (529 total; zero failures). Against frozen
+merge `24643394`, eight-pair median throughput changes +0.353% at resident 256 and
+-0.004% at 512 after exact camera compiler recovery; noisy samples remain in the
+retained evidence. Source/native smoke, Wasm parity,
+large-batch lifecycle, and focused validation tests pass. See the
+[retained comparison](performance/HISTORY.md#classified-replay-closure--2026-09-08)
+and [closure report](CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md).
+
+The earlier throughput checkpoint was based on `02cfe013`; its release benchmark SHA-256 is
 `45b02500e300c850250385bf9c0dd6e34edd0bcb808f6019b47eebc81ede3318`. Three alternating
 262,144-frame comparisons against that frozen parent improve median paired throughput by 9.80% at
 resident 256 and 8.23% at resident 512 with unchanged digests. Observed candidate medians are

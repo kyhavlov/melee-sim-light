@@ -5,6 +5,77 @@ line. The current benchmark contract, concise retained summary, imported branch 
 architectural attempt records are indexed in [`README.md`](README.md). Forensic artifacts remain
 under ignored `reports/triage/`.
 
+## Classified replay closure — 2026-09-08
+
+Correctness packet against frozen merge `24643394`: source quaternion dot-product
+order, SDK camera arithmetic, Fountain's existing timer/RNG machine before recorded
+height publication, and source Wait-entry parasol cleanup. Also correct the old
+Peach capture's UCF profile. No new state or production allocation. Search/review
+covered quaternion, camera and stage owners in this history and the retained index;
+this is source recovery, not a renewed transform/pose architecture experiment.
+
+Controlled GNU/Linux x86-64 GCC 13.3 strict release, 9950X3D CPU 0, the same 403
+ordinary-input recordings as the preceding merge comparison, resident 256/512,
+262,144 match-frames, eight warmup ticks, 128 history. Prepare one input manifest
+with the corrected classic Peach flags for both binaries, then run three alternating
+samples per binary/size. Baseline executables were frozen before the first edit;
+candidate is built with the root `native-release-benchmark` target. Each run uses
+identical decoded tapes and lane order; PPC checks finished before timing began.
+
+| Resident matches | Baseline samples, FPS | Candidate samples, FPS | Baseline median | Candidate median | Change |
+| ---: | --- | --- | ---: | ---: | ---: |
+| 256 | 120572, 118104, 119424 | 119336, 119790, 119077 | 119424 | 119336 | -0.07% |
+| 512 | 124492, 123893, 124215 | 123816, 125084, 124554 | 124215 | 124554 | +0.27% |
+
+All six samples at each size share the same digest: `f07121ff2d154a20` (256),
+`4424fd866178964a` (512). This bounded throughput workload does not reach the
+corrected validation episodes; matching benchmark digests do not replace the replay
+gates. Differences are within these samples' run-to-run spread; no throughput gain
+is claimed. The 256-match lifecycle smoke reports 0.58 GiB reset RSS, 0.61 GiB with
+observation ring and 0.04 GiB after destruction. Native/Wasm parity passes.
+
+Validation: full 529 native debug and release gates preserve the 470 original exact
+locks and reach 493 exact / 36 classified. The former 59-exception PPC subset has
+21 exact / 38 classified; two camera entries remain PPC-only. See the
+[closure report](../CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md) for source evidence,
+remaining boundaries and final gate scope. Forensics:
+`reports/triage/classified_closure_20260908/benchmark-{samples.json,*.log}`.
+
+### Pre-commit verification and camera compiler recovery
+
+Ten additional adjacent pre/post pairs (alternating order, same workload) detected
+a small cost in the original packet: geometric paired throughput -0.335% at 256
+(approximate t interval -0.606%..-0.065%) and +0.001% at 512
+(-0.558%..+0.563%). A diagnostic-only hardware-sqrt ablation of the new runtime
+camera helper recovers a median 0.55% at 256. The source Gekko arithmetic remains;
+that ablation is discarded. Linux perf counters were unavailable under the host's
+existing perf permissions, so this attribution uses isolated object relinking.
+
+Retain strict O2/native ISA for **runtime/camera.c** in native release (and the
+corresponding release Python object). This is a different owner from the rejected
+August 2 **melee/cm/camera.c** admission. The isolated O2 object preserves all 529
+replay output locks; six adjacent pairs versus the unoptimized correction give
+median paired recovery +0.586% at 256 and +0.270% at 512. A fresh full root release
+build with the final profile again passes 493 exact / 36 classified / zero failure.
+Debug, PPC and Wasm arithmetic/profiles are unchanged by this compiler admission.
+
+Final direct frozen-merge comparison, eight adjacent pairs per size:
+
+| Resident | Baseline FPS samples | Final FPS samples | Median FPS, baseline → final | Paired median change |
+| ---: | --- | --- | --- | ---: |
+| 256 | 117252, 118397, 119480, 118455, 118834, 115236, 119000, 119508 | 119651, 120156, 118052, 109695, 119372, 119597, 119301, 119810 | 118644.5 → 119484.5 | +0.353% |
+| 512 | 124351, 123970, 123259, 123361, 124479, 123873, 122855, 122031 | 124501, 124777, 123203, 123277, 123131, 124094, 121948, 122077 | 123617.0 → 123240.0 | -0.004% |
+
+All digests still match the frozen merge. The final paired medians show no material
+throughput regression. Keep all samples: the 256 run contains a 109695-FPS
+candidate outlier and a 115236-FPS baseline outlier, so this is not proof of a
+strict sub-percent bound on host timing. Geometric paired changes are -0.089%
+(approximate t interval -2.887%..+2.790%) and -0.120% (-0.575%..+0.338%). No speedup
+claim or removal of outliers is used for acceptance. Scratch samples/summaries are
+`confirm-*`, `ablation-*`, `camera-o2-*`, and `final-perf-*` under the same triage
+root. Implementation, full output-lock gates and these retained samples accompany
+the authorized correctness checkpoint commit.
+
 ## Bowser disproves the x86 acos estimate equivalence — 2026-09-07
 
 The Yoshi/Bowser support packet starts from `3a71888c`. Adding the matched
