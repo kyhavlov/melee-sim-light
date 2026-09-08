@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
+from tools.validation import validate_replay
 from tools.validation.validate_replay import (
     DEFAULT_CHARACTERS,
     DEFAULT_CLASSIFICATIONS,
@@ -72,6 +74,43 @@ def test_validation_streams_starter_replay_from_arrow(backend: str) -> None:
     assert result["mismatch_fingerprint"] is None
     assert result["mismatch_fields"] == []
     assert result["details"] == []
+
+
+def test_native_validation_replaces_interrupted_server(monkeypatch) -> None:
+    if not all(path.is_file() for path in (STARTER_REPLAY, NATIVE, NATIVE_BINARY)):
+        pytest.skip("native core validation artifacts are unavailable")
+
+    runners = []
+
+    def interrupt_first_job(native, replay, **kwargs):
+        runner = kwargs["runner"]
+        runners.append(runner)
+        if len(runners) == 1:
+            # Leave an incomplete header in the pipe, as a write timeout can.
+            # Inject the interruption so the test doesn't depend on CPU speed.
+            os.write(runner.stdin_fd, b"\x00")
+            raise TimeoutError("interrupted job header")
+        return validate_one(native, replay, **kwargs)
+
+    monkeypatch.setattr(validate_replay, "validate_one", interrupt_first_job)
+    case = ReplayCase(STARTER_REPLAY, str(STARTER_REPLAY))
+    outcomes, _ = run_cases(
+        load_native(),
+        [case, case],
+        workers=1,
+        frames=16,
+        start_frame=None,
+        timeout=30.0,
+        backend="native",
+        signed_zero_equal=False,
+    )
+
+    assert outcomes[0].error == "TimeoutError: interrupted job header"
+    assert outcomes[1].error is None
+    assert outcomes[1].result["pass"] is True
+    assert outcomes[1].result["frames"] == 16
+    assert runners[0].process.pid != runners[1].process.pid
+    assert all(runner.process.poll() is not None for runner in runners)
 
 
 def test_native_validation_runs_current_oracle_replays_in_parallel() -> None:

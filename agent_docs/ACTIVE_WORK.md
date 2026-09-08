@@ -1,3 +1,45 @@
+# CI and collaborator PR cleanup — 2026-09-08
+
+- Scope: investigate the prior main CI failure locally, verify/integrate open
+  collaborator PRs #17–21, close fully addressed PRs, then update dev/main.
+- Status: CI recovery and PR review complete; publish the regression test and
+  retained audit together on dev/main.
+- Previous run 34246202940 at 152f703d failed with an empty server job during
+  the aggregate gate, which used an eight-second timeout. Integrated commit 5d596be7
+  already retires interrupted pooled runners and gives hosted CI 30 seconds.
+- Local experiment: interrupt a real native server after one header byte, then
+  validate a short replay through the same pool. Require one error, a successful
+  next replay on a replacement process, and both processes reaped. Challenge the
+  test against the previous runner lifecycle before running the CI commands.
+- Review and reproduction artifacts: reports/triage/ci_pr_cleanup_20260908/.
+- Result: the injected interrupted header fails under 152f703d's runner
+  lifecycle with a downstream protocol error during pool teardown; the current
+  lifecycle reports only the interrupted case and completes the next 16 frames
+  exactly on a new process. Both processes are reaped. No production fix beyond
+  the already integrated 5d596be7 is needed for the reported failure.
+- Local CI commands: the four-worker, 30-second full aggregate passes 503 exact /
+  26 classified / zero fail/error over 5,059,922 transitions in 26.783 seconds.
+  The workflow's pytest selection passes 57 tests, with its two calibrated
+  throughput tests deselected. Fresh source-check and native-smoke pass, including
+  the eight article-pool scenarios. GitHub run 34286490957 on published main
+  260d9746 completes successfully, including its aggregate gate and pytest.
+- PR audit: every commit in each of #17–21 is an ancestor of integration merge
+  24643394, already published on dev/main at 260d9746. Checked later changes and
+  retained consumers/tests; no omitted implementation remains. All five PRs are
+  closed as integrated with individual verification notes:
+  - #17 / 14de69d3: hosted CI deselections retained; aggregate coverage remains.
+  - #18 / 3d075ac1: Ness source/admission/articles and 30 recordings retained;
+    current suite is 30/30 exact.
+  - #19 / d59b65ba: six added Ice Climbers captures and projection work retained;
+    current suite is 31/31 exact after subsequent corrections.
+  - #20 / 23553b91: Link/Young Link source/admission/articles/viewer and 60
+    recordings retained; 59 exact / one justified historical boomerang capture.
+    The included toolchain and pooled-runner fixes are retained as well.
+  - #21 / 3cd7ead3: additive fighter reserves, per-port tracks and JObj floors,
+    article stress scenarios and toolchain fallback retained. The final source
+    item-pool owner supersedes the temporary per-fighter item estimate and
+    separately reserves stage-owned Shy Guys; observation width is not a limit.
+
 # Correctness completion campaign — 2026-09-08
 
 - Status: complete for the current supported roster and corpus. Native debug and
