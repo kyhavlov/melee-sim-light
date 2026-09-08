@@ -8,11 +8,6 @@ built on the [SSBM Decompilation](https://github.com/doldecomp/melee) project.
 The simulator core is C. The public Python package is `melee_sim`, with a thin
 NumPy API over native batch execution.
 
-The supported roster includes Yoshi and Bowser, with all specials and character articles,
-across the six supported stages in singles, three-player teams, and doubles.
-[Port and replay evidence](agent_docs/YOSHI_BOWSER_SUPPORT.md) records the source provenance
-and remaining exact classifications.
-
 ## Quick Start
 
 Prerequisites:
