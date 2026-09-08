@@ -46,7 +46,9 @@ grMaterial_801C8D44(int, int, Ground*, Vec3*, int,
 /* 1C9490 */ void grMaterial_801C9490(Item_GObj* gobj, CommandInfo* cmd);
 /* 1C94D8 */ void grMaterial_801C94D8(void*);
 /* 1C95C4 */ void grMaterial_801C95C4(HSD_GObj*);
-/* 1C9604 */ void grMaterial_801C9604(HSD_GObj* bg, int, bool);
+union ColorOverlay_x8_t;
+
+/* 1C9604 */ void grMaterial_801C9604(HSD_GObj* bg, union ColorOverlay_x8_t*, bool);
 /* 1C9664 */ void fn_801C9664(Item_GObj* gobj, CommandInfo* cmd, int arg2);
 /* 1C9698 */ void grMaterial_801C9698(HSD_GObj*);
 

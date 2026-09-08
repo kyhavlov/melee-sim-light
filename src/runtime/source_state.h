@@ -146,6 +146,7 @@ enum {
 };
 
 typedef struct MslGroundState {
+    UnkStage6B0 params;
     u8* map_flags;
     s16 map_epoch;
     grDynamicAttr_UnkStruct dynamic_pool[4];

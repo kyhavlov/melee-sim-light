@@ -1,4 +1,6 @@
 #include "runtime/match.h"
+#include "runtime/context.h"
+#include "runtime/scalar.h"
 
 #include "ft/fighter.h"
 #include "ft/ftdevice.h"
@@ -119,6 +121,11 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
     msl_ucf_shield_drop_extended_enabled =
         ucf_shield_drop_extended_enabled != 0;
     msl_ucf_shield_drop_084_enabled = ucf_shield_drop_084_enabled != 0;
+}
+
+bool msl_whispy_ignores_dead_fighters(void)
+{
+    return msl_core_active_match()->config.whispy_dead_fighter_fix != 0;
 }
 
 bool msl_core_uses_online_fnmsubs_zero(void)

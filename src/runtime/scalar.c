@@ -29,7 +29,6 @@
 #include "platform/slippi.h"
 #include "runtime/context.h"
 #include "runtime/effects.h"
-#include "runtime/final_destination.h"
 #include "runtime/match.h"
 #include "runtime/subsystem_profile.h"
 #include "runtime/wire.h"
@@ -89,6 +88,7 @@ enum {
 extern void Camera_8002B3D4(void* arg0);
 extern StageData grIz_803E0E5C;
 extern StageData grNBa_803E7E38;
+extern StageData grNLa_803E7F90;
 extern StageData grOp_803E6748;
 extern StageData grPs_803E1334;
 extern StageData grSt_803E274C;
@@ -183,7 +183,7 @@ static const MslCoreStageSpec stage_specs[] = {
       BATTLE,
       "/GrNBa.dat",
       &grNBa_803E7E38,
-      1U << 3,
+      (1U << 1) | (1U << 2) | (1U << 3) | (1U << 4),
       // Map 6's per-frame proc (grBattle_8021A174) is not render-only: it
       // advances the shared dynamics-force emitters (lb_800115F4) that gate
       // fighter tail gusts. Keep it scheduled.
@@ -195,23 +195,14 @@ static const MslCoreStageSpec stage_specs[] = {
     { MSL_CORE_STAGE_FINAL_DESTINATION,
       LAST,
       "/GrNLa.dat",
-      NULL,
-      0,
+      &grNLa_803E7F90,
+      (1U << 3) | (1U << 4) | (1U << 5) | (1U << 6) |
+          (1U << 7) | (1U << 8) | (1U << 9),
       0,
       { { -60.0F, 10.0F, 0.0F }, { 60.0F, 10.0F, 0.0F },
         { -20.0F, 10.0F, 0.0F }, { 20.0F, 10.0F, 0.0F } },
       { { -60.0F, 10.0F, 0.0F }, { -20.0F, 10.0F, 0.0F },
         { 60.0F, 10.0F, 0.0F }, { 20.0F, 10.0F, 0.0F } } },
-};
-
-// grlast.c::grNLa_803E7F90 carries one collision-joint remap outside the DAT.
-// Keep that exact gameplay metadata available to shared Ground helpers while
-// retaining the already-validated manual FD object construction path.
-static S16Vec3 fd_stage_collision_remap = { 0, 3, 0 };
-static StageData fd_stage_data = {
-    .internal_stage_id = LAST,
-    .x2C = &fd_stage_collision_remap,
-    .x30 = 1,
 };
 
 static _Thread_local MslCoreMatch* bound_stage_match;
@@ -905,7 +896,6 @@ static int match_construct(MslCoreMatch* match,
                            const MslCoreInput* previous_input)
 {
     const MslCoreStageSpec* spec;
-    UnkArchiveStruct* map_data;
     int i;
 #ifdef MSL_CORE_NATIVE
     uint32_t samus_count = 0;
@@ -937,7 +927,7 @@ static int match_construct(MslCoreMatch* match,
     }
 #endif
     spec = stage_spec(match->config.stage_id);
-    match->stage_data = spec->source != NULL ? spec->source : &fd_stage_data;
+    match->stage_data = spec->source;
     bind_stage_match(match);
     match->frame_id = match->config.frame_id;
     for (i = 0; i < match->config.num_players; ++i) {
@@ -985,9 +975,8 @@ static int match_construct(MslCoreMatch* match,
         HSD_GObj_SetupProc(camera_gobj, (void (*)(HSD_GObj*)) Camera_8002B3D4,
                            0x12);
     }
-    // Source stage-data bootstrap. The established FD projection stays intact;
-    // Battlefield and Stadium enter through their imported StageData owners,
-    // with only Ground storage redirected into this Match.
+    // All supported stages enter through their source StageData owners,
+    // with Ground storage redirected into this Match.
     // refs/melee/src/melee/gr/ground.c::{Ground_801C0754,Ground_801C0800}
     // refs/melee/src/melee/gm/gm_16AE.c::fn_8016E730
     Ground_801C0378(0x40);
@@ -1002,10 +991,8 @@ static int match_construct(MslCoreMatch* match,
     // Stage_802251E8 keeps the external stage-list id separately from the
     // internal stage kind; grGroundParam is keyed by that external list id.
     Ground_801C28CC(&stage_info.xA0, spec->external_id);
-    if (spec->source != NULL) {
-        stage_info.x178 = spec->source->callback5;
-        stage_info.x17C = spec->source->callback6;
-    }
+    stage_info.x178 = spec->source->callback5;
+    stage_info.x17C = spec->source->callback6;
 
     Ground_801C38D0(stage_info.param->x8, stage_info.param->x14,
                     stage_info.param->x1C, stage_info.param->x18);
@@ -1049,86 +1036,12 @@ static int match_construct(MslCoreMatch* match,
     // Playback/Core/RestoreGameInfo.asm,Online/Core/InitOnlinePlay.asm}
     seed = match->config.initial_random_seed;
     seed_ptr = &seed;
-    if (spec->source != NULL) {
-        // Fog/light/trophy-display setup in Ground_801C0800 is renderer-owned.
-        // OnLoad is empty for both supported stage owners but remains invoked
-        // to preserve the source lifecycle seam.
-        spec->source->OnInit();
-        spec->source->OnLoad();
-        // Only source owners that publish dynamic gameplay state retain their
-        // per-frame model/collision schedule. The masks are the construction-
-        // time audit of the supported stage callbacks; no stage-id branch is
-        // added to the frame path.
-        // refs/melee/src/melee/gr/{grbattle.c,grizumi.c,groldpupupu.c,
-        //   grpstadium.c,grstory.c}
-        // data/stages/{battlefield,fountain_of_dreams,dream_land_n64,
-        //   pokemon_stadium,yoshis_story}.json
-        configure_headless_ground_schedule(match, spec);
-    } else {
-        map_data = grDatFiles_801C6324();
-        if (map_data == NULL || map_data->unk4 == NULL) {
-            fprintf(stderr, "Final Destination map data is missing\n");
-            return -1;
-        }
-        if (map_data->unk4->unkC != MSL_CORE_STAGE_GROUND_CAPACITY) {
-            fprintf(stderr, "unexpected Final Destination map GObj count %d\n",
-                    map_data->unk4->unkC);
-            return -1;
-        }
-        for (i = 0; i < map_data->unk4->unkC; ++i) {
-            HSD_GObj* gobj;
-            HSD_JObj* root;
-            Ground* gp = &match->stage_ground[i];
-            map_data = grDatFiles_801C6330(i);
-            if (map_data == NULL || map_data->unk4 == NULL ||
-                i >= map_data->unk4->unkC ||
-                map_data->unk4->unk8[i].unk0 == NULL)
-            {
-                fprintf(stderr, "Final Destination map joint %d is missing\n",
-                        i);
-                return -1;
-            }
-            root = HSD_JObjLoadJoint(map_data->unk4->unk8[i].unk0);
-            if (root == NULL) {
-                fprintf(stderr,
-                        "failed to load Final Destination map joint %d\n", i);
-                return -1;
-            }
-            Ground_801C34AC(i, root, map_data->unk4->unk8[i].unk0);
-            gobj = GObj_Create(HSD_GOBJ_CLASS_STAGE, 5, 0);
-            if (gobj == NULL) {
-                fprintf(stderr,
-                        "failed to create Final Destination map GObj %d\n", i);
-                return -1;
-            }
-            gp->map_id = i;
-            gp->gobj = gobj;
-            gp->x10_flags.b2 = true;
-            memset(gp->x20, 0xFF, sizeof(gp->x20));
-            GObj_InitUserData(gobj, 3, NULL, gp);
-            HSD_GObjObject_80390A70(gobj, HSD_GObj_804D7849, root);
-            if (i == 0) {
-                HSD_GObj_SetupProc(gobj, msl_ground_headless_epoch_proc,
-                                   1);
-            }
-            if (i == 3) {
-                // grlast.c::grLast_8021AAB0 (map 3's priority-4 proc) ends by
-                // advancing the shared dynamics-force emitters. The rest of
-                // that proc is renderer-owned, but the emitter tick gates
-                // fighter tail gusts (Fox Shine etc.) read by lb_8001044C.
-                HSD_GObj_SetupProc(gobj, msl_fd_force_emitter_proc, 4);
-            }
-            if (i == 7) {
-                msl_fd_background_init(gobj);
-            }
-            match->stage_ground_used[i] = 1;
-        }
-        // grlast.c::grLast_OnInit gameplay-visible stage publication.
-        stage_info.unk8C.b4 = true;
-        stage_info.unk8C.b5 = true;
-        Ground_801C39C0();
-        Ground_801C3BB4();
-    }
+    // Source callbacks retain stage actor, animation and RNG lifetimes.
+    // Geometry-only maps use the audited collision epoch publication.
+    Ground_801C1E94();
+    spec->source->OnInit();
+    spec->source->OnLoad();
+    configure_headless_ground_schedule(match, spec);
     // refs/melee/src/melee/gm/gm_16AE.c::fn_8016DCC0 and fn_8016E730.
     // Keep the source owners intact: Player_InitAllPlayers also initializes
     // each slot's statistics state, and Player_80036DD8 loads the common
@@ -2063,38 +1976,6 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
     (void) msl_core_write_items_into_zeroed(match, compare->items);
 }
 
-static void apply_replay_stage_events(MslCoreMatch* match)
-{
-    int i;
-    // Fountain of Dreams platform heights are not published here: Slippi
-    // records them from inside grIzumi_801CC358 (SendFountainInfo.asm at
-    // 0x801CC998), the priority-4 stage proc that runs after Fighter_8006A360
-    // and before Fighter_procMap, and the source callback's replay branch
-    // applies the recorded height at exactly that scheduler point. Publishing
-    // it at frame start let mid-frame floor resolves (ftCo_800DDDE4's throw
-    // release, grab releases) see the platform one phase early.
-    if (match->config.stage_id == MSL_CORE_STAGE_DREAM_LAND &&
-        (match->config.stage_event_streams & 2) != 0)
-    {
-        u8 direction;
-        if (msl_slippi_dreamland_whispy_direction(&direction)) {
-            for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
-                Ground* gp = &match->stage_ground[i];
-                if (match->stage_ground_used[i] && gp->map_id == 7) {
-                    // The replay event is emitted when source xDC changes.
-                    // Make it visible before the fighter/device pass even
-                    // though Whispy's own stage process runs later.
-                    // refs/melee/src/melee/gr/groldpupupu.c::{
-                    //   grOldPupupu_8021119C,grOldPupupu_802113E0,
-                    //   fn_802112F4}
-                    gp->gv.oldpupupu.xDC = direction;
-                    break;
-                }
-            }
-        }
-    }
-}
-
 static void publish_render_matrices_pass(HSD_JObj* jobj, u32 trsp_mask)
 {
     HSD_JObj* child;
@@ -2187,7 +2068,6 @@ int msl_core_match_step_prepare(MslCoreMatch* match,
     }
     bind_step_owners(match);
     msl_slippi_stage_events_begin(stage_events);
-    apply_replay_stage_events(match);
 
     // Slippi's pre-frame row owns the RNG value used by replay playback.
     // Restore it once here, then let all source gameplay consumers advance the
@@ -2206,7 +2086,11 @@ int msl_core_match_step_prepare(MslCoreMatch* match,
     // refs/melee/src/melee/{gm/gm_16AE.c,if/ifstatus.c,if/if_2F72.c}
     // SSBM.iso::IfAll.dat::ScInfCnt_scene_models[3]
     if (match->frame_id == -40) {
+        StructPairWithStageID stage_pair = {
+            match->stage_data->internal_stage_id, match->config.stage_id
+        };
         ftLib_800868A4();
+        Ground_801C0FB8(&stage_pair);
     }
 
     for (i = 0; i < match->config.num_players; ++i) {

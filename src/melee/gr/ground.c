@@ -1,5 +1,9 @@
 #include "ground.h"
 
+#ifdef MSL_CORE_NATIVE
+#include "platform/memory.h"
+#endif
+
 #include "grcorneria.h"
 #include "grdatfiles.h"
 #include "grdisplay.h"
@@ -81,7 +85,6 @@
 /* 1C1CD0 */ static void Ground_801C1CD0(HSD_GObj*);
 /* 1C1D38 */ static void Ground_801C1D38(HSD_GObj*);
 /* 1C1E2C */ static void Ground_801C1E2C(HSD_GObj* gobj, int code);
-/* 1C1E94 */ static void Ground_801C1E94(void);
 /* 1C20E0 */ LightList** Ground_801C20E0(UnkArchiveStruct*, LightList**);
 /* 1C24F8 */ static bool Ground_801C24F8(s32, u32, s32*);
 /* 1C28CC */ void Ground_801C28CC(void*, s32);
@@ -672,6 +675,8 @@ void Ground_801C0C2C(HSD_GObj* arg0)
             }
         }
     }
+#ifndef MSL_CORE_HOSTED
+    // Bob-omb rain is a separate versus rule outside the supported domain.
     if (gm_8016B238()) {
         int current_frame = gm_8016AEDC();
         if (current_frame > 0x4B0 && current_frame - stage_info.x9C > 0x1E) {
@@ -683,6 +688,7 @@ void Ground_801C0C2C(HSD_GObj* arg0)
             }
         }
     }
+#endif
 }
 
 void Ground_801C0F78(StructPairWithStageID* pair)
@@ -692,16 +698,12 @@ void Ground_801C0F78(StructPairWithStageID* pair)
 
 void Ground_801C0FB8(StructPairWithStageID* pair)
 {
-    struct {
-        void* unk0;
-        s32 unk4;
-        void (*unk8)(s32);
-    }* cur;
-    void* next;
+    MslGroundStartCallback* cur;
+    MslGroundStartCallback* next;
     MSL_CORE_STAGE_DATA(pair->stage_id)->OnStart();
     for (cur = stage_info.x6A4; cur != NULL; cur = next) {
-        next = cur->unk0;
-        cur->unk8(cur->unk4);
+        next = cur->next;
+        cur->callback(cur->gobj);
         HSD_Free(cur);
     }
     stage_info.x6A4 = NULL;
@@ -716,17 +718,18 @@ void Ground_DemoInit(StructPairWithStageID* pair, s32 arg1)
 
 void Ground_801C10B8(HSD_GObj* arg0, HSD_GObjEvent arg1)
 {
-    struct {
-        void* unk0;
-        HSD_GObj* unk4;
-        HSD_GObjEvent unk8;
-    }* temp_r3;
-    temp_r3 = HSD_MemAlloc(0xC);
-    if (temp_r3 != NULL) {
-        temp_r3->unk0 = stage_info.x6A4;
-        temp_r3->unk4 = arg0;
-        temp_r3->unk8 = arg1;
-        stage_info.x6A4 = temp_r3;
+    MslGroundStartCallback* node;
+#ifdef MSL_CORE_NATIVE
+    node = HSD_MemAllocReloc(sizeof(*node), MSL_RELOC_GROUND_START_CALLBACK,
+                             1, sizeof(*node), 0);
+#else
+    node = HSD_MemAlloc(sizeof(*node));
+#endif
+    if (node != NULL) {
+        node->next = stage_info.x6A4;
+        node->gobj = arg0;
+        node->callback = arg1;
+        stage_info.x6A4 = node;
     } else {
         OSReport("%s:%d: assert\n", __FILE__, 1119);
         OSPanic(__FILE__, 1120, "");
@@ -886,9 +889,7 @@ Ground_GObj* Ground_GetStageGObj(int map_id)
         }
     }
 
-#ifndef MSL_CORE_HOSTED
     grMaterial_801C95C4(gobj);
-#endif
     archive = grDatFiles_801C6324();
     HSD_ASSERT(1358, archive);
 
@@ -910,9 +911,8 @@ Ground_GObj* Ground_GetStageGObj(int map_id)
             return NULL;
         }
 #ifndef MSL_CORE_HOSTED
-        if (MSL_CORE_STAGE_DATA(stageinfo->internal_stage_id)
-                    ->callbacks[map_id]
-                    .flags_b2 == 1 &&
+        if ((MSL_CORE_STAGE_DATA(stageinfo->internal_stage_id)
+                    ->callbacks[map_id].flags & 0x20000000) &&
             archive->unk4->unk8[map_id].x10 != NULL)
         {
             HSD_GObj* temp_r23_2 = GObj_Create(17, 19, 0);
@@ -1015,9 +1015,7 @@ static void Ground_801C1CD0(HSD_GObj* gobj)
     HSD_JObj* jobj = gobj->hsd_obj;
     Ground* gp = gobj->user_data;
     HSD_JObjAnimAll(jobj);
-#ifndef MSL_CORE_HOSTED
     grMaterial_801C9698(gobj);
-#endif
     mpColl_804D64AC += 1;
     if (gp->x8_callback != NULL) {
         gp->x8_callback(gobj);
@@ -1036,6 +1034,7 @@ static void Ground_801C1D38(HSD_GObj* gobj)
 void msl_ground_headless_epoch_proc(HSD_GObj* gobj)
 {
     Ground* gp = gobj->user_data;
+    grMaterial_801C9698(gobj);
     mpColl_804D64AC += 1;
     if (gp->x8_callback != NULL) {
         gp->x8_callback(gobj);
@@ -1173,7 +1172,7 @@ inline HSD_FogDesc* foo(void)
     grDatFiles_801C6324();
     for (i = 0; i < temp_r30; i++) {
         phi_r29 = &temp_r29[i];
-        if (phi_r29->flags_b1 == 1) {
+        if (phi_r29->flags & 0x40000000) {
             return grDatFiles_801C6330(i)->unk4->unk8[i].x1C;
         }
     }
@@ -1195,7 +1194,9 @@ void Ground_801C1E94(void)
         temp_r30_2 = GObj_Create(0xA, 0xB, 0);
         temp_r29_2 = HSD_FogLoadDesc(phi_r0);
         HSD_GObjObject_80390A70(temp_r30_2, HSD_GObj_804D7848, temp_r29_2);
+#ifndef MSL_CORE_HOSTED
         GObj_SetupGXLink(temp_r30_2, Ground_801C1E2C, 0, 0);
+#endif
         temp_r3 = stageinfo->param;
         if (temp_r3 != NULL) {
             phi_f1 = temp_r3->x0;
@@ -2694,7 +2695,7 @@ static LightList** Ground_801C466C_inline(void)
     grDatFiles_801C6324();
 
     for (i = 0; i < temp_r28; i++) {
-        if (var_r26->flags_b0 == 1) {
+        if (var_r26->flags & 0x80000000) {
             UnkArchiveStruct* archive = grDatFiles_801C6330(i);
             return Ground_801C20E0(archive, archive->unk4->unk8[i].x18);
         }

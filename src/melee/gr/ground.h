@@ -40,6 +40,7 @@
 /* 1C0754 */ void Ground_801C0754(StructPairWithStageID* pair);
 /* 1C0800 */ void Ground_801C0800(StructPairWithStageID* pair);
 /* 1C0F78 */ void Ground_801C0F78(StructPairWithStageID* pair);
+/* 1C1E94 */ void Ground_801C1E94(void);
 /* 1C0FB8 */ void Ground_801C0FB8(StructPairWithStageID* pair);
 /* 1C1074 */ void Ground_DemoInit(StructPairWithStageID* pair, s32);
 /* 1C10B8 */ void Ground_801C10B8(HSD_GObj*, HSD_GObjEvent);

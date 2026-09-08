@@ -1,4 +1,5 @@
 #include "ftlib.h"
+#include "runtime/match.h"
 
 #include "cm/camera.h"
 #include "ef/efasync.h"
@@ -255,6 +256,13 @@ float ftLib_800864A8(Vec3* v, HSD_GObj* gobj)
             }
 
             ftLib_800866DC(cur, &vec);
+#ifdef MSL_CORE_HOSTED
+            // Slippi WhispyBlowDirFix.asm at 0x8008653C: camera-dependent
+            // death bones contribute no vote, before the tie RNG decision.
+            if (msl_whispy_ignores_dead_fighters() && cur_fp->motion_id <= 0xB) {
+                continue;
+            }
+#endif
             result += sgn(vec.x - v->x);
         }
     }

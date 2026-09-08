@@ -138,19 +138,7 @@ typedef struct StageCallbacks {
     /*  +4 */ bool (*callback1)(Ground_GObj*);
     /*  +8 */ void (*callback2)(Ground_GObj*);
     /*  +C */ void (*callback3)(Ground_GObj*);
-    /* +10 */ union {
-        /* +10 */ u32 flags;
-        struct {
-            /* +10:0 */ u8 flags_b0 : 1;
-            /* +10:1 */ u8 flags_b1 : 1;
-            /* +10:2 */ u8 flags_b2 : 1;
-            /* +10:3 */ u8 flags_b3 : 1;
-            /* +10:4 */ u8 flags_b4 : 1;
-            /* +10:5 */ u8 flags_b5 : 1;
-            /* +10:6 */ u8 flags_b6 : 1;
-            /* +10:7 */ u8 flags_b7 : 1;
-        };
-    };
+    /* +10 */ u32 flags;
 } StageCallbacks;
 
 typedef struct StageData {
@@ -168,6 +156,12 @@ typedef struct StageData {
     S16Vec3* x2C;
     size_t x30; // size of x2C array
 } StageData;
+
+typedef struct MslGroundStartCallback {
+    struct MslGroundStartCallback* next;
+    HSD_GObj* gobj;
+    HSD_GObjEvent callback;
+} MslGroundStartCallback;
 
 typedef struct StructPairWithStageID {
     s32 stage_id;
@@ -1653,16 +1647,7 @@ struct Ground {
     HSD_GObj* x18;          // 0x18
     HSD_GObjEvent x1C_callback;
     int x20[8];
-    Vec3 self_vel;
-    Vec3 cur_pos;
-    int x58;
-    int x5C;
-    int x60;
-    int x64;
-    int x68;
-    GXColor x6C;
-    int x70;
-    char pad_74[0xC0 - 0x74];
+    ColorOverlay color_overlay; // 0x40
     f32 xC0;
 
     union {

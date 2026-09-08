@@ -75,9 +75,10 @@ typedef struct Fighter_804D6540_t* MslDatFighter6540Pointer;
 // Anonymous yakumono_param owners in the two imported stage translation units.
 // refs/melee/src/melee/gr/{grbattle.c,grpstadium.c}
 typedef struct MslDatBattlefieldParams {
-    int unk0;
-    int unk4;
+    union ColorOverlay_x8_t* unk0;
+    union ColorOverlay_x8_t* unk4;
 } MslDatBattlefieldParams;
+typedef union ColorOverlay_x8_t* MslDatFinalDestinationParams[4];
 typedef struct MslDatPokemonStadiumParams {
     int x0;
     int x4;
@@ -260,7 +261,9 @@ void* msl_native_dat_type_roots[] = {
     (DynamicModelDesc*) 0,
     (HSD_Joint*) 0,
     (HSD_Spline*) 0,
+    (HSD_AnimJoint*) 0,
     (HSD_MatAnimJoint*) 0,
+    (HSD_ShapeAnimJoint*) 0,
     (EF_EffectDesc*) 0,
     (ftData*) 0,
     (FigaTree*) 0,
@@ -279,6 +282,7 @@ void* msl_native_dat_type_roots[] = {
     (MslDatFighterPartsPointer*) 0,
     (MslDatFighter6540Pointer*) 0,
     (MslDatBattlefieldParams*) 0,
+    (MslDatFinalDestinationParams*) 0,
     (MslDatPokemonStadiumParams*) 0,
     (MslDatFountainParams*) 0,
     (MslDatYoshisStoryParams*) 0,

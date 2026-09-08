@@ -67,8 +67,8 @@ static DynamicsDesc* grBattle_OnTouchLine(enum_t);
 static bool grBattle_OnCheckShadowRender(Vec3*, int, HSD_JObj*);
 
 typedef struct BattlefieldParams {
-    int unk0;
-    int unk4;
+    union ColorOverlay_x8_t* unk0;
+    union ColorOverlay_x8_t* unk4;
 } BattlefieldParams;
 #ifdef MSL_CORE_HOSTED
 #define grNBa_804D6ACC                                                        \
@@ -430,15 +430,11 @@ static void grBattle_8021A3BC(Ground_GObj* gobj)
 
             bg_gobj = Ground_801C2BA4(gp->u.battle.prev_bg);
             HSD_ASSERT(535, bg_gobj);
-#ifndef MSL_CORE_HOSTED
             grMaterial_801C9604(bg_gobj, grNBa_804D6ACC->unk4, 0);
-#endif
 
             bg_gobj = grBattle_80219D84(gp->u.battle.curr_bg);
             HSD_ASSERT(539, bg_gobj);
-#ifndef MSL_CORE_HOSTED
             grMaterial_801C9604(bg_gobj, grNBa_804D6ACC->unk0, 0);
-#endif
 
             gp->u.battle.bg_state = BG_Done;
         }

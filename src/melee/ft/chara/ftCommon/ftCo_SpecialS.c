@@ -48,7 +48,8 @@ static void doEnter(Fighter_GObj* gobj)
 {
     u8 _[8] = { 0 };
     Fighter* fp = gobj->user_data;
-    fp->gr_vel += -(fp->gr_vel * (1 - fp->co_attrs.xB8)) *
-                  ft_GetGroundFrictionMultiplier(fp);
+    // GALE01 0x8009661C..24 rounds the negative product, then uses fmadds.
+    fp->gr_vel = __fmadds(-(fp->gr_vel * (1 - fp->co_attrs.xB8)),
+                          ft_GetGroundFrictionMultiplier(fp), fp->gr_vel);
     ftData_SpecialS[fp->kind](gobj);
 }

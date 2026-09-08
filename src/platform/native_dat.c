@@ -510,6 +510,99 @@ static void* translate_target(MslNativeArchive* context,
     return translate_target_count(context, source_offset, type, count);
 }
 
+static void translate_stage_animation_array(MslNativeArchive* context,
+                                             uint32_t offset,
+                                             const MslDatType* type)
+{
+    uint32_t count = 1;
+    uint32_t i;
+    uint8_t* result;
+
+    if (find_memo(context, offset) != NULL) {
+        return;
+    }
+    // Stage animation descriptors are packed node arrays: grAnime_801C7C1C
+    // indexes by part before following child/next links. The linked extent
+    // supplies the array bound; the three source node types start with those
+    // two pointers. GALE01 0x801C7CB8/7D04/7D4C.
+    for (i = 0; i < count; ++i) {
+        uint32_t source = offset + i * type->source_size;
+        uint32_t field;
+        if (source > context->data_size ||
+            type->source_size > context->data_size - source)
+        {
+            fprintf(stderr, "stage animation array exceeds its archive\n");
+            abort();
+        }
+        for (field = 0; field < 8; field += 4) {
+            uint32_t target = raw_pointer(context, source + field);
+            if (target != UINT32_MAX) {
+                uint32_t extent;
+                if (target < offset ||
+                    (target - offset) % type->source_size != 0)
+                {
+                    fprintf(stderr, "stage animation array is not packed\n");
+                    abort();
+                }
+                extent = (target - offset) / type->source_size + 1;
+                if (extent > count) {
+                    count = extent;
+                }
+            }
+        }
+    }
+    result = native_alloc((size_t) count * type->native_size);
+    // Register the whole address range first: graph edges and direct part
+    // indexing must resolve to the same interior nodes.
+    for (i = 0; i < count; ++i) {
+        add_memo(context, offset + i * type->source_size, type,
+                  result + (size_t) i * type->native_size);
+    }
+    for (i = 0; i < count; ++i) {
+        translate_value(context, type, offset + i * type->source_size,
+                        result + (size_t) i * type->native_size);
+    }
+}
+
+static void translate_stage_animation_tables(MslNativeArchive* context,
+                                              uint32_t map_head)
+{
+    const MslDatType* types[] = { msl_dat_root_HSD_AnimJoint,
+                                 msl_dat_root_HSD_MatAnimJoint,
+                                 msl_dat_root_HSD_ShapeAnimJoint };
+    uint32_t maps = raw_pointer(context, map_head + 8);
+    uint32_t count = read_be32(context->data + map_head + 12);
+    uint32_t i;
+    uint32_t kind;
+
+    // UnkStageDat.unk8/unkC and UnkStageDat_x8_t's three animation tables.
+    if (maps == UINT32_MAX || maps > context->data_size ||
+        count > (context->data_size - maps) / 0x34)
+    {
+        fprintf(stderr, "stage map animation table is outside its archive\n");
+        abort();
+    }
+    for (i = 0; i < count; ++i) {
+        for (kind = 0; kind < 3; ++kind) {
+            uint32_t table = raw_pointer(context, maps + i * 0x34 +
+                                                       4 + kind * 4);
+            uint32_t end;
+            uint32_t cursor;
+            if (table == UINT32_MAX) {
+                continue;
+            }
+            end = next_boundary(context, table);
+            for (cursor = table; cursor + 4 <= end; cursor += 4) {
+                uint32_t animation = raw_pointer(context, cursor);
+                if (animation != UINT32_MAX) {
+                    translate_stage_animation_array(context, animation,
+                                                       types[kind]);
+                }
+            }
+        }
+    }
+}
+
 static uint64_t read_unsigned(const uint8_t* source, uint32_t size)
 {
     switch (size) {
@@ -992,9 +1085,7 @@ static void* translate_stage_params(MslNativeArchive* context,
     } else if (stage_info.internal_stage_id == OLDPUPUPU) {
         type = msl_dat_root_MslDatDreamLandParams;
     } else if (stage_info.internal_stage_id == LAST) {
-        // The validated manual FD owner does not consume this presentation
-        // parameter, matching the prior untranslated public projection.
-        return NULL;
+        type = msl_dat_root_MslDatFinalDestinationParams;
     } else {
         fprintf(stderr,
                 "native DAT yakumono_param has unsupported internal stage %d\n",
@@ -1798,6 +1889,9 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftFox_DatAttrs, 327,
                                           MSL_FIGHTER_ARTICLES_FALCO);
+    } else if (strcmp(symbol, "map_head") == 0) {
+        translate_stage_animation_tables(context, offset);
+        result = translate_target_count(context, offset, type, 1);
     } else if (strcmp(symbol, "yakumono_param") == 0) {
         result = translate_stage_params(context, offset);
     } else if (strcmp(symbol, "itemdata") == 0) {

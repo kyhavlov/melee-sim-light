@@ -124,6 +124,8 @@ typedef struct MslCoreMatchConfig {
     // direction events. A present stream is authoritative even on frames with
     // no event, where the last published value remains active.
     uint8_t stage_event_streams;
+    // Online/Core/WhispyBlowDirFix excludes death animations from the vote.
+    uint8_t whispy_dead_fighter_fix;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
 
@@ -332,9 +334,9 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size")
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 16, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 72, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 58,
+_Static_assert(sizeof(MslCoreMatchConfig) == 59,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 114,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 115,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");

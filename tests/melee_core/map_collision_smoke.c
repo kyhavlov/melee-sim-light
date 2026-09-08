@@ -83,6 +83,54 @@ int main(int argc, char** argv)
                "normal=(%.3f,%.3f)\n",
                line_id, contact.x, contact.y, normal.x, normal.y);
     }
+#ifdef MSL_CORE_NATIVE
+    // A bound collision transform need not move. Its stationary walls can
+    // reject a distant ECB; moving and degenerate walls must remain admitted.
+    {
+        CollJoint* joint = mpGetGroundCollJoint();
+        CollLine* line = &mpGetGroundCollLine()[joint->inner->left_wall_start];
+        CollVtx* vertices = mpGetGroundCollVtx();
+        CollVtx* v0 = &vertices[line->x0->v0_idx];
+        CollVtx* v1 = &vertices[line->x0->v1_idx];
+        CollVtx saved;
+        if (joint->inner->left_wall_count == 0) return 1;
+        for (i = 0; i < coll_data->vert_count; ++i) {
+            vertices[i].x10 = vertices[i].pos.x;
+            vertices[i].x14 = vertices[i].pos.y;
+        }
+        joint->flags |= CollJoint_B8;
+        if (mpLib_LineBroadphase(-0.0F, 20, 0.0F, 30,
+                                 CollLine_LeftWall, -1, -1) ||
+            !mpLib_LineBroadphase(fminf(v0->pos.x, v1->pos.x) - 1,
+                                  fminf(v0->pos.y, v1->pos.y) - 1,
+                                  fmaxf(v0->pos.x, v1->pos.x) + 1,
+                                  fmaxf(v0->pos.y, v1->pos.y) + 1,
+                                  CollLine_LeftWall, -1, -1))
+        {
+            fprintf(stderr, "stationary transformed-wall broad phase failed\n");
+            return 1;
+        }
+        v0->x10 += 1;
+        if (!mpLib_LineBroadphase(-1, 20, 1, 30,
+                                  CollLine_LeftWall, -1, -1))
+        {
+            fprintf(stderr, "moving wall was incorrectly rejected\n");
+            return 1;
+        }
+        v0->x10 = v0->pos.x;
+        saved = *v1;
+        v1->pos = v0->pos;
+        v1->x10 = v0->x10;
+        v1->x14 = v0->x14;
+        if (!mpLib_LineBroadphase(-1, 20, 1, 30,
+                                  CollLine_LeftWall, -1, -1))
+        {
+            fprintf(stderr, "degenerate wall was incorrectly rejected\n");
+            return 1;
+        }
+        *v1 = saved;
+    }
+#endif
     msl_smoke_context_destroy(&context);
     return 0;
 }

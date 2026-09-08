@@ -26,6 +26,10 @@ Use this skill when float drift is a first-class target. The goal is to identify
    - collision projection,
    - percent/shield/item numeric state.
 3. Compare likely source writers in decomp; use PPC asm when ULP/order exactness matters.
+   When probing replay playback, compare the causal writer before resynchronization:
+   `refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm` can overwrite position,
+   facing, action state and RNG from the recording. Later playback agreement is
+   not independent proof of the arithmetic that originally produced those values.
 4. Check for:
    - fused expressions where vanilla stores intermediate f32,
    - different add/multiply order,

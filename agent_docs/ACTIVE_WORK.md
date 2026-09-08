@@ -1,3 +1,190 @@
+# Correctness completion campaign — 2026-09-08
+
+- Status: complete for the current supported roster and corpus. Native debug and
+  strict release pass 503 exact / 26 justified classifications / zero failures or
+  errors across 5,059,922 transitions. All independently fixable mixed fields are
+  closed; the remaining cases require missing capture/execution information.
+- Final gates: source/native, full replay locks, 38-case PPC arbitration, 47 API/
+  tooling tests, Wasm/live/production viewer, sealed allocation and arbitrary-index
+  copy/save/restore pass. The checkpoint-profile worktree and all runtime probes
+  are removed. The user authorized committing the completed campaign after
+  reviewing the correctness result and retained performance cost.
+- Final performance: exact stationary-query optimizations recover roughly half
+  the source-lifecycle cost. Eight paired samples per size retain a real
+  3.74%/4.29% throughput cost versus 5f097b2a at resident 256/512. Report this
+  explicitly; do not call the new packet performance-neutral. See the completion
+  report and performance/HISTORY.md for all evidence and the earlier checkpoint's
+  separate neutral comparison.
+
+- Authorized scope: after performance verification and checkpoint commit
+  `5f097b2a`, eliminate every remaining implementable exception and polish the
+  current supported roster/replay domain. Only missing capture information or
+  contradictory retail execution evidence can justify a durable exception;
+  effort or an incomplete source investigation is not a stopping criterion.
+  Commit the completed campaign with its generated expectations and retained
+  evidence together, then verify a clean working tree.
+- Completion evidence: source-owner coverage, every remaining mixed exception
+  inspected for independently fixable fields, full native/release output locks,
+  PPC arbitration where relevant, Wasm/viewer parity, arbitrary-index reset/copy/
+  save-restore and sealed allocation checks, and retained performance evidence.
+  Preserve strict comparison, all 529 replays, recorded inputs and source data.
+- First structural packet: FD and shared stage material lifecycle.
+  Final owners are imported grLast callbacks, existing grBattle callbacks,
+  Ground/ColorOverlay and HSD animation. Canonical mutable state is
+  Ground.u.map/last, Ground.color_overlay, and their existing GObj/JObj/AObj
+  lifetimes. Immutable command/animation data comes from the stage DAT archives.
+  Consumers are stage scheduling, RNG before item callbacks, collision publication,
+  observations and Match save/restore. No parallel controller/timer mirror.
+- Deletion boundary: remove runtime/final_destination.c/.h and scalar.c's manual
+  FD construction/metadata fallback. All supported stages construct through
+  StageData. Replace Ground's incorrectly typed +0x40 bytes with the completed
+  upstream ColorOverlay member; delete offset-cast access and suppressed timer
+  lifecycle. Correct command-pointer typing/loading for FD and Battlefield.
+  Retain source actor creation/destruction and animation completion conditions.
+- Source evidence: grLast_8021AAB0/B2E8/B5C4/B920 creates map 7 in cases 1/17 and
+  destroys it in case 14. The perpetual hosted angular proc therefore consumes
+  RNG while retail has no actor (confirmed absence at 12288..12290). Finished
+  upstream 64fccd19 identifies Ground.color_overlay; the pinned import remains
+  91b9789f and selective completed-source type recovery is recorded explicitly.
+- Experiment: implement this final representation, smoke stage construction and
+  the traced Samus case, compare retained source state to retail through the
+  actor lifecycle, then challenge with remaining cases and the full gate.
+  A red intermediate cut is not justification to restore the bypass.
+- Scratch: reports/triage/correctness_done_20260908/. Frozen checkpoint native
+  debug/release and benchmark executables are saved there before changes.
+
+- First stage gate: 488 pass / 34 classified / 7 fail. Six failures are output
+  lock drift (including unchanged PositiveRevolvingHyena classification), and
+  one new strict failure is plat-samus FD at 12806..12957. Master-samus FD is
+  newly exact. Probe the complete FD controller state/color timer at the new
+  RNG boundary against retail before refreshing any locks. Early Falco laser
+  residual was rechecked against the frozen checkpoint and is unchanged.
+
+- FD regression trace: controller state/timer match retail (state 15, timer
+  1776 at 12806), but hosted fog color is absent. StageCallbacks flags are
+  initialized as PPC u32 constants and incorrectly read through native byte
+  bitfields. Final representation is the existing numeric flags word with
+  explicit source masks at all three consumers; delete its bitfield overlay.
+  This restores authored fog loading and color rejection-loop RNG ownership.
+
+- Flags correction result: complete plat-samus FD is exact again; native
+  controller/color/timer values match retail at all 21 sampled frames
+  12790..12810. Remove temporary diagnostics and validate the stage packet,
+  including newly reachable fog relocation and intro callback lifecycle.
+
+- Dream Land structural packet: final owner is grOldPupupu_802113E0's
+  existing idle/blink/turn/blow FSM and HSD animation cursor. Canonical xD0
+  remains its source timer; xDC remains the published wind direction. Consumers
+  are source RNG, force emitters and fighter/device physics. Delete the replay
+  early-return FSM bypass, synthetic emitter counter and scalar pre-frame xDC
+  publication. Run the source machine, then publish the recorded xDC at the
+  recording hook's function epilogue (SendDreamlandInfo.asm, 0x80211BF8), before
+  fighter priority-4 physics. Preserve all recorded inputs and exact scoring.
+  Compare every Dream Land replay and inspect any remaining temporal divergence
+  against retail before changing other owners.
+
+- Dream Land initial source cut: blizzard dl-fox-2025-05 (11 rows) and Ness
+  20260616 (152 rows) become exact; all other prior Dream Land exceptions are
+  unchanged. Puff Game_20260602T221603 newly forks at 5509. At 5495 retail is
+  blowing (xC8=2, xD0=137, xD8=0), while native is idle (xC8=0, xD0=710,
+  xD8=1). Recorded xDC agrees, but source force-emitter phase does not.
+  Trace the FSM from construction to its first divergence; do not reintroduce
+  the synthetic counter or accept the new hit divergence.
+
+- First Dream Land causal fork is Slippi's WhispyBlowDirFix.asm at 8008653C:
+  retail ignores the screen-KO fighter (motion_id <= 0xB); native counts its
+  camera-dependent bone, creates a tie and draws RNG at 3327. Earlier FSM
+  state is exact. Add an explicit immutable whispy_dead_fighter_fix capability
+  to the private match config, consumed directly by the ftLib direction-vote
+  rule (no second mutable rule copy). Native replay setup derives it from the
+  captured Slippi execution profile, verified against embedded hook lists;
+  public RL/viewer construction enables the current Slippi patch. Update wire
+  sizes, native config producer, viewer schema and construction fixtures.
+  Remove the temporary ftLib/Whispy probes after verification.
+
+- Dream Land final result: all 85 replays preserve strict behavior except the
+  two intended improvements to exact (11 blizzard rows and 152 needle rows).
+  Puff Game_20260602T221603 is exact again. Embedded gecko scan proves the
+  Whispy hook in all 78 Dolphin/mainline captures, absent in all 7 Nintendont
+  captures, agreeing with the explicit native profile mapping. Private wire
+  config grows 58->59 bytes; benchmark wire/cache format advances to v2 and
+  viewer offsets are regenerated. No published API struct changes.
+- FD fresh extraction and native smoke pass. The full 17-phase lifecycle
+  smoke covers source actor loss/recreation, fog and command pointers,
+  intro callbacks, copy/save/restore and sealed allocation counts. Expanded
+  context smoke includes FD and Battlefield shared-data/global immutability.
+
+- Camera continuation: retain the existing source transform/target and CObj
+  representation. Probe Camera_80029C88 inputs against retail around the
+  remaining Aardvark frame-1054 eye-X residual to locate the first target or
+  tracking arithmetic difference. No camera schedule or scoring change is
+  justified by the downstream screen-KO residual alone.
+
+- Camera trace result: all 14 transform fields entering Camera_80029C88
+  match retail on both camera copies for all 20 frames 1035..1054. The eye-X
+  difference therefore enters through camera translation, not target tracking.
+  GALE01 8002A230/8002A234 fuse Camera_8002A0C0's two depth-factor lerps;
+  hosted source currently rounds multiplication separately. Restore those two
+  fmas and challenge all remaining exceptions before retaining the change.
+
+- Camera-pan result: Guanaco 3->0, Aardvark 1->0 and Hornet 2->1 (only
+  its magnifier row remains). Every other remaining replay output is unchanged.
+  This closes all native screen-KO position residuals in the inventory. Retain
+  the two asm-backed fmas; cross-check hosted PPC and the full gate later.
+
+- Puff yaw owner correction: rollout_ends_ys frame 3630 is motion 342,
+  JumpAerialF2, not a Rollout callback. Its root yaw comes from the shared
+  ft_800CB6EC aerial-turn helper. GALE01 800CB76C fuses the negative yaw
+  increment with the previous rotation (fnmsubs); hosted HSD_JObjAddRotationY
+  rounds the increment separately. Restore that exact inline operation and
+  dirty-matrix semantics, then compare all remaining replays and nearby
+  aerial-turn owners. No new state or collision correction is needed.
+
+- Aerial-yaw result: rollout_ends_ys 2->0, SmugConfusedTermite 1->0,
+  and dk/slippi-2025-04_Game_20250422T152714 1->0. All other remaining output
+  locks are unchanged. Combined campaign count is 501 native exact / 28
+  remaining exceptions before the next full gate.
+
+- Remaining friction packet: ElatedWearyTermite 2705 (Fox Walk->SpecialS)
+  and links/000422 7362 (Young Link Walk->SpecialS) both enter
+  ft_80084F3C on Fountain's slope. Probe the shared friction inputs and
+  subsequent velocity projection against retail; preserve canonical gr_vel,
+  acceleration and floor-normal state. Separately, the remaining Luigi pose
+  and Link boomerang floats still need their first writer identified.
+
+- Friction trace: Fox's friction and self velocity inputs agree, but gr_vel
+  is already different entering ftCommon_ApplyFrictionGround (-0x1.7e2130p-4
+  retail vs -0x1.7e212ap-4 native). The shared side-special entry owns the
+  seed: ftCo_SpecialS.c::doEnter applies the xB8 momentum adjustment with
+  fmadds at 80096624 after a separately rounded negative product. Restore
+  that fused addition and compare the two slope cases and all remaining rows.
+
+- Side-special result: ElatedWearyTermite 1->0 and links/000422 2->0;
+  all other remaining outputs unchanged. Combined native count 503 exact / 26
+  remaining. Run the complete supported-domain gate as a checkpoint before
+  further leaf investigation. Hosted PPC still has its separate camera rows;
+  native camera position rows are all exact, so compare backend view inputs
+  and operations directly rather than classifying the reference discrepancy.
+
+- Full checkpoint: all 529 native replays retain or improve strict results,
+  with 503 exact and 26 remaining exceptions; no new strict mismatch. The
+  runner reports 83 failures because old direct-output locks are deliberately
+  retained: 79 rows are raw exact, and the other four are unchanged/improved
+  classifications. Preserve these until their complete output deltas are
+  inspected and final native/release identities can be regenerated.
+- PPC camera investigation: compare eye/interest, basis vectors and view
+  matrix for the same Aardvark frame with native and retail. The reference
+  still has ~100 screen-KO rows despite the native camera being exact; do not
+  treat agreement between hosted backends as necessary evidence of retail.
+
+- PPC camera cause found: at Aardvark 1054 eye coordinates match native,
+  but interest X is 0x1.51c460p+4 vs native 0x1.51c464p+4. PPC trigf.o
+  disassembly proves tanf contains R_PPC_REL24 sincosf: GCC O2 combined
+  sin__Ff/cos__Ff and bypassed the game polynomials through libc. Native
+  already forbids these builtins. Apply the same sinf/cosf restrictions to
+  optimized PPC and Wasm math objects, remove temporary camera diagnostics,
+  and re-run the PPC exception inventory. Preserve the source math owner.
+
 # Classified replay closure campaign — 2026-09-08
 
 - Pre-commit follow-up authorized: verify that this retained packet has no material
@@ -6837,3 +7024,148 @@ tests bumped 491 -> 492.
   retained in performance/HISTORY.md; no strict sub-percent latency bound claimed.
   Commit only this completed correctness packet and its validation/performance
   records before starting the newly authorized completion campaign.
+- Lifecycle dependencies found before execution: FD also reads fog/background
+  color when choosing later RNG colors, and its start callback unpauses the
+  scene controller. Restore source fog construction and stage OnStart dispatch.
+  Keep fog as the source HSD_Fog object with typed relocation; fix the source
+  callback queue's three-pointer allocation/signature for native width and drain
+  it at startup. Ground parameters contain writable palette fields: initialize
+  one Match-owned parameter value from the immutable DAT template, then make
+  stage_info.param point only to that value. Delete direct mutable use of shared
+  DAT parameters. These are parts of the same source lifecycle, not new mirrors.
+- Native data representation finding: grAnime_801C7C1C indexes packed stage
+  animation nodes (GALE01 0x801C7CB8 stride 0x14; material/shape stride 0xC).
+  Generic HSD graph translation allocated only one node, so FD part-2 indexing
+  entered unrelated data. All 166 authored stage animation arrays across the
+  six raw archives are connected contiguous node arrays with no overlapping
+  ranges (stage-anim-layout.json). Final owner: initialization-only map_head
+  translation allocates each packed array once and registers every interior
+  node before translating links. Consumers retain source pointer indexing and
+  traversal; delete per-node allocation for these arrays, with no runtime fixup
+  or second representation. Other HSD graphs keep their existing owner.
+- First FD result: master-samus-2026-03 is raw exact (135 mismatching
+  transitions -> 0) with the full source scene/actor lifecycle and contiguous
+  animation arrays. No rope solver changes or new replay inputs. Next challenge
+  shared Ground/material changes against the remaining suite and original exact
+  cases before updating any identities.
+- Startup phase correction: retail controller probes at -123..-121 keep the
+  paused bit set and timer zero. Ground OnStart is part of fn_8016B7F8, alongside
+  the already-modeled ftLib_800868A4 ready transition before raw frame -39; it
+  must not run in construction. Move it to that existing phase boundary. The
+  pending callback queue now survives public save/restore during intro, so its
+  canonical three-pointer node needs a typed relocation entry. The earlier
+  Samus raw-exact observation is provisional until this phase is corrected.
+
+- PPC math arbitration: all seven remaining camera cases are now exact on the
+  reference backend after disabling sinf/cosf builtin substitution in the PPC
+  MSL owners. Object disassembly previously called libc sincosf from tanf; now
+  it calls the source MSL sinf/cosf. Native and PPC remaining mismatch families
+  agree. Apply the same builtin policy to Wasm.
+- Next bounded probes compare Link boomerang throw attachment/world-position
+  at 6873 and the Luigi/Falco pose/collision families against retail execution.
+  Keep existing JObj matrices, item position and fighter ECB as canonical state;
+  diagnostic hooks are temporary and removed before validation.
+
+- Remaining mixed probes: Link throw output is retail/native c13bbd02 against
+  recorded c13bbd00. Luigi replay families at 2739/3644/8142/8204 likewise match
+  retail instead of recorded bits. Falco 990 still forks before physics; trace
+  that separately. Doubles 5423 forks during DI magnitude: ftCo_8008E5A4 still
+  uses libc sqrtf where GALE01 8008E670..6B8 executes frsqrte plus three double
+  Newton steps. Replace this one source-owned sqrt with msl_gekko_sqrtf, then
+  challenge all remaining cases. No new representation or input inference.
+
+- DI sqrt experiment did not change this case. The causal doubles input is
+  earlier signed zero: retail DI sees kb_y=+0, hosted sees -0, selecting opposite
+  atan2 pi branches and generating the later numeric tail. Probe equal +0 input
+  at this leaf temporarily, then remove the diagnostic mutation.
+- Falco 990 damage-entry position matches retail (3ff857b8); recording PreFrame
+  position is 3ff857b5. Playback resynchronizes to that recorded pre-position
+  before physics. Thus comparing only the later playback output gave a false
+  source-defect signal. Retain before-resync source probe plus recorded pre bits.
+
+- Equal-input DI test removes every doubles nonzero numeric mismatch: 380->322
+  rows, with only signed-zero fields remaining. All 83 numeric field differences
+  are downstream of the historical zero-sign input. Removed that diagnostic
+  mutation and the non-causal sqrt candidate; no gameplay fitting retained.
+  All source/runtime diagnostic prints are removed. Current closure remains
+  503 exact/26 exceptions, with the mixed cases fully separated by causal owner.
+
+- Final verification/performance packet: rebuild strict release and compare
+  all full native output bytes before refreshing identities. Preserve the 403
+  checkpoint benchmark tapes/manifest; prepare v2 tapes separately, then verify
+  identical inputs and settings after removing only the new Whispy capability
+  and version byte changes. Time adjacent alternating checkpoint/candidate runs
+  on CPU 0 at resident 256/512, 262144 match-frames, 8 warmup ticks, 128 history.
+  Finish all builds and gates before controlled timing; retain every sample.
+
+- Controlled stage-completion performance result: eight alternating pairs at
+  each resident size show 120656.5->110555 FPS (-8.37%) at 256 and
+  125211->114350.5 FPS (-8.67%) at 512, with unchanged digests. This is a real
+  cost and remains open. Profile callback owners before changing the completed
+  representation. Keep source stage FSMs, actor lifetime, animation completion,
+  color state and collision epochs; do not restore displaced controllers.
+  Review found the previous epoch suppression failed 90 replays and the earlier
+  Dream Land response cut already has a narrower accepted handshake boundary.
+
+- Current subsystem profile puts Ground_801C1CD0 at 2.83% and the headless
+  epoch proc at 0.50% of the instrumented contract, insufficient by themselves
+  to explain the 8.7% regression. Build an isolated checkpoint profile for
+  owner-by-owner attribution on identical tapes; do not infer an animation cut
+  from the total timing alone. Profiling is diagnostic, not throughput evidence.
+
+- Profile attribution: source FD now binds its collision JObj and publishes
+  CollJoint_B8 through Ground_801C2ED0/2FE0. Its stationary lines consequently
+  enter mpRemap2d; the old manual constructor never bound this source transform.
+  Fighter collision grows 356M->459M cycles while Ground grows 38M->88M.
+  First performance candidate keeps that complete binding/epoch/flag state and
+  specializes mpRemap2d itself: within the nondegenerate finite branch, equal
+  old/new endpoints and finite nonzero query coordinates imply all displacement
+  terms are zero, so both source f64 FMAs return the original query exactly.
+  Zero coordinates and degenerate/moving lines retain source evaluation. Final
+  owner is mpRemap2d; no cache, mirrored state, stage-id guard or altered epoch.
+
+- Stationary-remap candidate preserves all 529 full release output locks, but
+  two reverse-order pairs recover only 0.46%/0.57% at 256/512. The larger
+  collision cost remains. Use a bounded production-only gprof sampling binary
+  (root build flags/objects, cold benchmark moncontrol hooks) for both arms to
+  locate the remaining leaf cost; no sampling hooks enter production source.
+
+- Stationary-remap equivalence challenge: compare the original and candidate
+  source leaf on deterministic arbitrary binary32 endpoints/query points,
+  stationary and moving lines, degenerate lengths, signed zero and infinities.
+  Compare raw output words and retain the complete corpus seed/count/result;
+  do not use this as a substitute for the full current replay locks.
+
+- Remaining collision cause is the retained wall-pass broad phase:
+  mpLib_LineRangeIntersects unconditionally admits every CollJoint_B8/B9/B10
+  joint. Source FD binding now sets B8 even when its endpoints do not move,
+  disabling the previously retained 8–9% wall-query reduction. Extend that
+  existing predicate to stationary nondegenerate transformed lines, measured
+  from canonical current/previous vertices. Their source mpRemap2d displacement
+  is numerically zero (zero signs cannot affect AABB comparisons). Moving or
+  degenerate lines still admit the source narrow phase. No new index, state,
+  flag clearing or altered stage binding; this differs from rejected spatial
+  indices and epoch suppression. Gate all current outputs before timing.
+
+- Stationary transformed-wall admission preserves every full output lock and
+  recovers 4.31%/3.83% versus the completed-stage control in reverse-order screens.
+  Add source-geometry tests for distant/overlapping, moving and degenerate
+  transformed walls. Remaining cost is smaller but still real. Last bounded
+  compiler candidate: strict O3/native ISA for grLast, Ground, grMaterial and
+  HSD AObj clock dispatch, replacing their O1 profile only. Canonical state,
+  consumers and source operation order are unchanged; no floating-point
+  contraction or state/dispatch mechanism is added. Reject if either full
+  output identity or repeatable timing fails.
+
+- Remap leaf differential challenge: 4,000,000 finite-input cases, 2,041,343
+  stationary-path admissions, all raw outputs equal; digest 35b808398d47909a.
+  An earlier arbitrary-bit run encountered a differing NaN payload in the
+  unchanged fallback path due to compiler operand selection. Those invalid
+  gameplay inputs are not the finite-domain identity claim; no production
+  NaN or signed-zero comparison policy was changed.
+
+- Strict stage/AObj O3 compiler screen is exact but rejected: -0.56% at 256
+  and -1.01% at 512 versus the retained wall candidate. No compiler admission
+  enters Makefile. Retain only the stationary query optimizations; repeat final
+  native/release/PPC/Wasm gates and direct checkpoint timing. Final source
+  lifecycle cost must be reported rather than described as noise.

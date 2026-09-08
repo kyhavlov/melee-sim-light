@@ -327,6 +327,12 @@ void grZakoGenerator_801CADE0(void)
 
 HSD_GObj* grZakoGenerator_801CAE04(grZakoGenerator_SpawnDesc* arg0)
 {
+#ifdef MSL_CORE_HOSTED
+    // Every supported StageData.OnStart passes NULL; no supported owner
+    // queues the trophy sentinel. That controller has no spawn/RNG work.
+    HSD_ASSERT(0x166, arg0 == NULL);
+    return NULL;
+#else
     HSD_GObj* gobj;
     grZakoGenerator_Data* data = grZakoGenerator_801CA67C();
     gobj = GObj_Create(2, 4, 0);
@@ -341,6 +347,7 @@ HSD_GObj* grZakoGenerator_801CAE04(grZakoGenerator_SpawnDesc* arg0)
     lbl_8049F030.x0 = arg0;
     lbl_8049F030.x4 = data;
     return gobj;
+#endif
 }
 
 void grZakoGenerator_801CAEB0(int arg0, int arg1)

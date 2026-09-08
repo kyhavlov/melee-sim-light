@@ -27,6 +27,7 @@
 #include <baselib/jobj.h>
 #include <baselib/random.h>
 #ifdef MSL_CORE_HOSTED
+#include <platform/slippi.h>
 #include <runtime/context.h>
 #include <runtime/source_state.h>
 #endif
@@ -551,60 +552,6 @@ void grOldPupupu_802113E0(Ground_GObj* gobj)
     Ground* gp = gobj->user_data;
     PAD_STACK(176);
 
-#ifdef MSL_CORE_HOSTED
-    {
-        extern bool msl_slippi_dreamland_whispy_direction(u8*);
-        u8 replay_direction;
-        if (msl_slippi_dreamland_whispy_direction(&replay_direction)) {
-            // Slippi 3.18 records every change of the gameplay-bearing xDC
-            // wind direction. Replay playback publishes that value through
-            // the original grOldPupupu callback registered by 8021119C.
-            //
-            // The retail machine cannot run live here: its rand_range blow
-            // timers sample the mid-frame RNG stream after retail's effect
-            // draws (absent in the headless build), so its phase drifts and
-            // the fn_802112F4 wind push (a device callback reading xDC after
-            // this priority-4 proc) forks fighter positions by the 0.10 wind
-            // speed. Instead mirror the machine's one remaining gameplay
-            // side effect — the blow loop's wind force emitters that drive
-            // fighter tail/body dynamics chains — deterministically from the
-            // recorded direction stream: retail records xDC nonzero exactly
-            // while its xD0 blow counter sits in (0x2D, 0x140), entering at
-            // 0x2E, and spawns one emitter whenever xD0 % 10 == 0.
-            // refs/melee/src/melee/gr/groldpupupu.c::{
-            //   grOldPupupu_8021119C,grOldPupupu_802113E0,fn_802112F4}
-            if (replay_direction != 0) {
-                // The pre-frame replay pass already wrote xDC, so blow onset
-                // is tracked with this proc's own xD0 convention (0 = idle;
-                // the machine is otherwise dormant on this path).
-                if (gp->gv.oldpupupu.xD0 < 0x2E) {
-                    gp->gv.oldpupupu.xD0 = 0x2E;
-                } else {
-                    gp->gv.oldpupupu.xD0 += 1;
-                }
-                if (gp->gv.oldpupupu.xD0 < 0x140 &&
-                    (gp->gv.oldpupupu.xD0 % 10) == 0)
-                {
-                    if (replay_direction == 1) {
-                        lb_80011A50(&grOp_803E67E4[0], 0xF, 0.5F, 0.0F, 0.0F,
-                                    grOp_804D6A98->x20, grOp_804D6A98->x24,
-                                    grOp_804D6A98->x1C, grOp_804D6A98->x28);
-                    } else {
-                        lb_80011A50(&grOp_803E67E4[1], 0xF, 0.5F, 0.0F, 0.0F,
-                                    grOp_804D6A98->x14, grOp_804D6A98->x24,
-                                    grOp_804D6A98->x18, grOp_804D6A98->x28);
-                    }
-                }
-            }
-            if (replay_direction == 0) {
-                gp->gv.oldpupupu.xD0 = 0;
-            }
-            gp->gv.oldpupupu.xDC = replay_direction;
-            return;
-        }
-    }
-#endif
-
     if (grOp_804D6A9C == 0) {
         gp->gv.oldpupupu.xE0 += 1;
         gp->gv.oldpupupu.xDC = 0;
@@ -653,7 +600,7 @@ void grOldPupupu_802113E0(Ground_GObj* gobj)
                     other_gp->gv.oldpupupu.xCC = 0;
                     other_gp->gv.oldpupupu.xD4 = gp->gv.oldpupupu.xD8;
                     other_gp->gv.oldpupupu.xD0 = 1;
-                    return;
+                    goto publish_direction;
                 }
 
                 {
@@ -671,7 +618,7 @@ void grOldPupupu_802113E0(Ground_GObj* gobj)
                     other_gp->gv.oldpupupu.xCC = 0;
                     other_gp->gv.oldpupupu.xD4 = gp->gv.oldpupupu.xD8;
                     other_gp->gv.oldpupupu.xD0 = 1;
-                    return;
+                    goto publish_direction;
                 }
             }
             break;
@@ -748,7 +695,7 @@ void grOldPupupu_802113E0(Ground_GObj* gobj)
                 other_gp->gv.oldpupupu.xCC = 0;
                 other_gp->gv.oldpupupu.xD4 = gp->gv.oldpupupu.xD8;
                 other_gp->gv.oldpupupu.xD0 = 1;
-                return;
+                goto publish_direction;
             }
             break;
 
@@ -794,7 +741,7 @@ void grOldPupupu_802113E0(Ground_GObj* gobj)
                                         grOp_804D6A98->x24, grOp_804D6A98->x18,
                                         grOp_804D6A98->x28);
                         }
-                        return;
+                        goto publish_direction;
                     }
                 }
             } else {
@@ -816,6 +763,19 @@ void grOldPupupu_802113E0(Ground_GObj* gobj)
             break;
         }
     }
+publish_direction:
+#ifdef MSL_CORE_HOSTED
+    {
+        u8 direction;
+        // SendDreamlandInfo.asm records xDC at the callback epilogue,
+        // 0x80211BF8, before fighter priority-4 physics consumes the wind.
+        // Keep the source timer/animation/RNG machine running in playback.
+        if (msl_slippi_dreamland_whispy_direction(&direction)) {
+            gp->gv.oldpupupu.xDC = direction;
+        }
+    }
+#endif
+    return;
 }
 
 void grOldPupupu_80211C0C(Ground_GObj* arg) {}

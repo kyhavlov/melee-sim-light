@@ -234,7 +234,7 @@ static int color_return_slots_registered(void)
 int main(int argc, char** argv)
 {
     enum {
-        MATCH_COUNT = 4,
+        MATCH_COUNT = 6,
         FRAME_COUNT = 180
     };
     MslCoreGameData game_data;
@@ -275,6 +275,8 @@ int main(int argc, char** argv)
     config_init(&configs[1], 2, 1, 2);
     config_init(&configs[2], 28, 15, 3);
     config_init(&configs[3], 28, 22, 1);
+    config_init(&configs[4], 32, 1, 4);
+    config_init(&configs[5], 31, 22, 4);
     inputs[0].p[0].main_x = 80;
     inputs[1].p[0].main_x = -80;
     inputs[2].p[0].main_x = 40;

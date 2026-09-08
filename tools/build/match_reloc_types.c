@@ -1,3 +1,4 @@
+#include <baselib/fog.h>
 #include "runtime/scalar.h"
 #include "runtime/fighter_pose.h"
 

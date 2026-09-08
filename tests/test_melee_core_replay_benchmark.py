@@ -41,8 +41,8 @@ def test_native_preprocessor_writes_packed_benchmark_case(tmp_path: Path) -> Non
     magic, version, header_size, input_size, stored_frames = struct.unpack(
         "<8sIIII", output.read_bytes()[:24]
     )
-    assert magic == b"MSLRPB01"
-    assert version == 1
+    assert magic == b"MSLRPB02"
+    assert version == 2
     assert input_size == 52
     assert stored_frames == frame_count
     assert output.stat().st_size == header_size + input_size * frame_count

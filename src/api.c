@@ -95,6 +95,7 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
   target->online_fnmsubs_zero = 1;
   target->brawl_offscreen_damage = 1;
   target->freeze_dead_up_fall_physics = 1;
+  target->whispy_dead_fighter_fix = 1;
   target->ucf_cardinals_1_0_enabled = source->ucf_cardinals;
   target->ucf_shield_sdi_enabled = 1;
   target->ucf_sdi_enabled = 1;

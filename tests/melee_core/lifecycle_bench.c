@@ -32,6 +32,7 @@ static void config_init(MslCoreMatchConfig* config)
     config->online_fnmsubs_zero = 1;
     config->brawl_offscreen_damage = 1;
     config->freeze_dead_up_fall_physics = 1;
+    config->whispy_dead_fighter_fix = 1;
     config->ucf_cardinals_1_0_enabled = 1;
     config->ucf_shield_sdi_enabled = 1;
     config->ucf_sdi_enabled = 1;

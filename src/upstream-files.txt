@@ -833,6 +833,8 @@ src/melee/gr/grinishie1.h
 src/melee/gr/grizumi.c
 src/melee/gr/grizumi.h
 src/melee/gr/grkongo.h
+src/melee/gr/grlast.c
+src/melee/gr/grlast.h
 src/melee/gr/grlib.c
 src/melee/gr/grlib.h
 src/melee/gr/grmaterial.c
@@ -1116,6 +1118,7 @@ src/sysdolphin/baselib/dobj.c
 src/sysdolphin/baselib/dobj.h
 src/sysdolphin/baselib/fobj.c
 src/sysdolphin/baselib/fobj.h
+src/sysdolphin/baselib/fog.c
 src/sysdolphin/baselib/fog.h
 src/sysdolphin/baselib/forward.h
 src/sysdolphin/baselib/gobj.c

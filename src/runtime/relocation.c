@@ -301,6 +301,10 @@ void msl_reloc_register_hsd_class(void* address, HSD_ClassInfo* info)
             type = MSL_RELOC_HSD_POBJ;
         } else if (strcmp(name, "hsd_lobj") == 0) {
             type = MSL_RELOC_HSD_LOBJ;
+        } else if (strcmp(name, "hsd_fog") == 0) {
+            type = MSL_RELOC_HSD_FOG;
+        } else if (strcmp(name, "hsd_fogadj") == 0) {
+            type = MSL_RELOC_HSD_FOG_ADJ;
         } else {
             continue;
         }

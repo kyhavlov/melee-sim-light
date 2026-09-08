@@ -903,10 +903,13 @@ void Camera_8002A0C0(CameraBounds* bounds, CameraTransformState* state)
             (bounds->z_pos - Stage_GetCamZoomRate()) / depth_factor_x;
     }
 
-    depth_factor_y =
-        (depth_ratio * (cm_803BCCA0.x5C - cm_803BCCA0.x54)) + cm_803BCCA0.x54;
-    depth_factor_x =
-        (depth_ratio * (cm_803BCCA0.x60 - cm_803BCCA0.x58)) + cm_803BCCA0.x58;
+    // GALE01 0x8002A230/234 fuse both depth-dependent camera-pan factors.
+    depth_factor_y = __fmadds(depth_ratio,
+                              cm_803BCCA0.x5C - cm_803BCCA0.x54,
+                              cm_803BCCA0.x54);
+    depth_factor_x = __fmadds(depth_ratio,
+                              cm_803BCCA0.x60 - cm_803BCCA0.x58,
+                              cm_803BCCA0.x58);
     Camera_80030DE4(depth_factor_x * (input_x * viewport_x_scale),
                     depth_factor_y * (input_y * viewport_y_scale));
     cm_80452C68.xA4 = 0.0f;

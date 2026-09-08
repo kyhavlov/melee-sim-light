@@ -11,6 +11,16 @@ directly comparable when the benchmark contract changed; their marginal A/B resu
 
 ## Retained history
 
+### Stationary transformed-stage queries
+
+- Correctness-completion packet (uncommitted): preserve source collision bindings,
+  flags and epochs, but allow unchanged nondegenerate transformed walls through
+  the existing conservative AABB rejection. Specialize the stationary remap leaf
+  while preserving zero-sign arithmetic. All 529 output locks stay unchanged;
+  reverse-order screens recover 4.31%/3.83% versus the completed-stage control.
+  The full source packet remains slower than its prior checkpoint; see
+  [the final comparison](HISTORY.md#correctness-completion--2026-09-08).
+
 ### Compact resident match substrate
 
 - `01c30553` **Compact melee core match storage** — moved relocation/allocation metadata out of

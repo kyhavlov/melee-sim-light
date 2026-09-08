@@ -45,6 +45,7 @@ int main(void)
     FIELD(MslCoreMatchConfig, ucf_shield_drop_084_enabled,
           "ucfShieldDrop084Enabled");
     FIELD(MslCoreMatchConfig, stage_event_streams, "stageEventStreams");
+    FIELD(MslCoreMatchConfig, whispy_dead_fighter_fix, "whispyDeadFighterFix");
     FIELD(MslCoreMatchConfig, players, "players");
     puts("});");
 

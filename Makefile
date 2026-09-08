@@ -259,6 +259,7 @@ NATIVE_CONTEXT_SMOKE := $(NATIVE_BUILD)/context-smoke
 NATIVE_BATCH_API_SMOKE := $(NATIVE_BUILD)/batch-api-smoke
 NATIVE_PUBLIC_API_SMOKE := $(NATIVE_BUILD)/public-api-smoke
 NATIVE_GAMEPLAY_PARTS_SMOKE := $(NATIVE_BUILD)/gameplay-parts-smoke
+NATIVE_STAGE_LIFECYCLE_SMOKE := $(NATIVE_BUILD)/stage-lifecycle-smoke
 NATIVE_ARTICLE_POOL_SMOKE := $(NATIVE_BUILD)/article-pool-smoke
 NATIVE_WASM_PARITY := $(NATIVE_BUILD)/wasm-parity
 NATIVE_LIFECYCLE_BENCH := $(NATIVE_BUILD)/lifecycle-bench
@@ -315,8 +316,8 @@ LDLIBS := -lm
 # range-reduction and polynomial expressions to fmadds/fnmsubs (DOL
 # 0x80326240). Preserve those operation boundaries without enabling
 # contraction indiscriminately in the hosted core.
-$(PPC_OBJ_DIR)/gameplay/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
-$(PPC_OBJ_DIR)/src/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
+$(PPC_OBJ_DIR)/gameplay/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf
+$(PPC_OBJ_DIR)/src/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf
 $(NATIVE_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
 $(NATIVE_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
 $(NATIVE_OBJ_DIR)/src/runtime/savestate.o: NATIVE_CPPFLAGS += -D_GNU_SOURCE
@@ -339,8 +340,8 @@ endif
 ifeq ($(NATIVE_CALLGRIND),1)
 $(NATIVE_REPLAY_BENCH_OBJ): NATIVE_CPPFLAGS += -DMSL_CORE_CALLGRIND
 endif
-$(WASM_OBJ_DIR)/gameplay/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast
-$(WASM_OBJ_DIR)/src/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast
+$(WASM_OBJ_DIR)/gameplay/MSL/trigf.o: CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf
+$(WASM_OBJ_DIR)/src/runtime/math.o: CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf
 $(PYTHON_OBJ_DIR)/gameplay/MSL/trigf.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
 $(PYTHON_OBJ_DIR)/src/runtime/math.o: override NATIVE_CFLAGS += -O2 -ffp-contract=fast -fno-builtin-sinf -fno-builtin-cosf $(FMA_FLAGS)
 
@@ -731,6 +732,7 @@ $(eval $(call link_native_smoke,$(NATIVE_CONTEXT_SMOKE),$(NATIVE_OBJ_DIR)/tests/
 $(eval $(call link_native_smoke,$(NATIVE_BATCH_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/batch_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_PUBLIC_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/public_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_GAMEPLAY_PARTS_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/gameplay_parts_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_STAGE_LIFECYCLE_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/stage_lifecycle_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_ARTICLE_POOL_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/article_pool_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_BUILD)/pool-chaos-soak,$(NATIVE_OBJ_DIR)/tests/melee_core/pool_chaos_soak.o))
 $(eval $(call link_native_smoke,$(NATIVE_WASM_PARITY),$(NATIVE_OBJ_DIR)/tests/melee_core/wasm_parity.o))
@@ -760,7 +762,7 @@ ppc-smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE)
 	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
 		"$(DATA)"
 
-native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_RUNTIME_CENSUS)
+native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_STAGE_LIFECYCLE_SMOKE) $(NATIVE_RUNTIME_CENSUS)
 	@$(TIMEOUT) 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
@@ -770,6 +772,7 @@ native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL
 	@$(TIMEOUT) 5s "$(NATIVE_BATCH_API_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_PUBLIC_API_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_GAMEPLAY_PARTS_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 5s "$(NATIVE_STAGE_LIFECYCLE_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 10s "$(NATIVE_ARTICLE_POOL_SMOKE)" "$(DATA)" >/dev/null
 	@$(TIMEOUT) 5s "$(NATIVE_RUNTIME_CENSUS)" "$(DATA)" >/dev/null
 

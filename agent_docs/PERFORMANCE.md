@@ -5,7 +5,17 @@ The current production comparison contract and exact raw evidence are in
 [`performance/RETAINED.md`](performance/RETAINED.md), and rejected or superseded experiments are
 searchable from [`performance/README.md`](performance/README.md).
 
-The September 8 classified-replay closure reaches 493 exact / 36 classified
+The September 8 completion campaign reaches **503 exact / 26 classified** on
+native debug and strict release (529 total, zero failures/errors). Completing the
+previously skipped stage lifecycles initially cost 8–9% throughput. Exact
+stationary transformed-line query optimizations recover roughly half; final
+median throughput remains **3.74%/4.29% lower** at resident 256/512 than
+`5f097b2a`. This cost is measured and retained for correctness. Full source,
+replay, lifecycle, PPC exception audit, Wasm/viewer and focused API checks pass.
+See the [completion evidence](CORRECTNESS_COMPLETION_2026-09-08.md) and
+[all performance samples](performance/HISTORY.md#correctness-completion--2026-09-08).
+
+The prior September 8 classified-replay closure reaches 493 exact / 36 classified
 replays on both native debug and release (529 total; zero failures). Against frozen
 merge `24643394`, eight-pair median throughput changes +0.353% at resident 256 and
 -0.004% at 512 after exact camera compiler recovery; noisy samples remain in the

@@ -139,6 +139,7 @@ export class MslWasmSim {
     this.io.setUint8(base + matchConfigOffsets.onlineFnmsubsZero, 1);
     this.io.setUint8(base + matchConfigOffsets.brawlOffscreenDamage, 1);
     this.io.setUint8(base + matchConfigOffsets.freezeDeadUpFallPhysics, 1);
+    this.io.setUint8(base + matchConfigOffsets.whispyDeadFighterFix, 1);
     this.io.setUint8(base + matchConfigOffsets.ucfCardinals10Enabled, 1);
     this.io.setUint8(base + matchConfigOffsets.ucfShieldSdiEnabled, 1);
     this.io.setUint8(base + matchConfigOffsets.ucfSdiEnabled, 1);

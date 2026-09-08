@@ -21,7 +21,7 @@ from tools.validation.validate_replay import (
 from tools.validation.slpz import replay_path_for_peppi
 
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 DEFAULT_SUITE = ROOT / "replays/suites/melee_core_aggregate.json"
 DEFAULT_OUTPUT = ROOT / "build/melee_core/benchmark/cases.tsv"
 
@@ -38,6 +38,8 @@ def _cache_key(case: ReplayCase) -> str:
             str(case.ucf_cardinals_1_0_enabled),
             str(case.ucf_shield_sdi_enabled),
             str(case.ucf_sdi_enabled),
+            str(case.ucf_shield_drop_extended_enabled),
+            str(case.ucf_shield_drop_084_enabled),
             str(case.played_on),
         )
     )
@@ -52,7 +54,7 @@ def _cached_frame_count(path: Path) -> int | None:
     except (OSError, struct.error):
         return None
     if (
-        magic != b"MSLRPB01"
+        magic != b"MSLRPB02"
         or version != FORMAT_VERSION
         or header_size < 24
         or input_size != 52
@@ -109,7 +111,7 @@ def prepare(args: argparse.Namespace) -> None:
     temporary_manifest = output.with_suffix(f".tmp.{os.getpid()}")
     try:
         temporary_manifest.write_text(
-            "# MSL replay benchmark cases v1\n" + "".join(rows)
+            "# MSL replay benchmark cases v2\n" + "".join(rows)
         )
         os.replace(temporary_manifest, output)
     finally:

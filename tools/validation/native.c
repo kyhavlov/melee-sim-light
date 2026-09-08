@@ -155,6 +155,7 @@ typedef struct ReplayView {
   uint8_t online_fnmsubs_zero;
   uint8_t brawl_offscreen_damage;
   uint8_t freeze_dead_up_fall_physics;
+  uint8_t whispy_dead_fighter_fix;
   float damage_ratio;
 } ReplayView;
 
@@ -380,6 +381,7 @@ static int parse_start(PyObject* start, ReplayView* replay) {
   replay->online_fnmsubs_zero = PyLong_AsLong(value) == 8;
   replay->brawl_offscreen_damage = replay->online_fnmsubs_zero;
   replay->freeze_dead_up_fall_physics = replay->online_fnmsubs_zero;
+  replay->whispy_dead_fighter_fix = replay->online_fnmsubs_zero;
   if (PyErr_Occurred()) {
     return -1;
   }
@@ -498,7 +500,7 @@ static int parse_metadata(PyObject* metadata, ReplayView* replay) {
   // `playedOn` is the Slippi metadata field that owns the execution
   // environment. Slippi's Dolphin configuration uses the netplay code set for
   // netplay or other Dolphin play, including the BrawlOffscreenDamage and
-  // FreezeDeadUpFallPhysics call-site patches. The offline mainline-Dolphin
+  // FreezeDeadUpFallPhysics and WhispyBlowDirFix call-site patches. The offline mainline-Dolphin
   // case was independently established by bounded code probes and exact
   // replay behavior. Keep those capabilities independent of the online
   // capture's fnmsubs zero-sign behavior: offline mainline Dolphin retains
@@ -509,6 +511,7 @@ static int parse_metadata(PyObject* metadata, ReplayView* replay) {
       strcmp(played_on, "network") == 0) {
     replay->brawl_offscreen_damage = 1;
     replay->freeze_dead_up_fall_physics = 1;
+    replay->whispy_dead_fighter_fix = 1;
   }
   // Mainline Slippi Dolphin's JIT implements nmsub with the retail PPC
   // exact-zero sign, so scene-8 captures played on it need the retail
@@ -1074,6 +1077,7 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
   config->online_fnmsubs_zero = replay->online_fnmsubs_zero;
   config->brawl_offscreen_damage = replay->brawl_offscreen_damage;
   config->freeze_dead_up_fall_physics = replay->freeze_dead_up_fall_physics;
+  config->whispy_dead_fighter_fix = replay->whispy_dead_fighter_fix;
   config->ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
   config->ucf_shield_sdi_enabled = (uint8_t)ucf_shield_sdi_enabled;
   config->ucf_sdi_enabled = (uint8_t)ucf_sdi_enabled;

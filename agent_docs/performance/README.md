@@ -22,6 +22,10 @@ representation may justify revisiting the same broad subsystem.
 
 ## Files
 
+- [Correctness completion](HISTORY.md#correctness-completion--2026-09-08):
+  completed stage lifecycles, exact stationary-query recovery, and final measured
+  cost of 3.74%/4.29% at resident 256/512 versus the correctness checkpoint.
+
 - [Classified replay closure](HISTORY.md#classified-replay-closure--2026-09-08):
   23 additional native exact replays; final eight-pair medians +0.353%/-0.004%
   at resident 256/512 against the frozen merge after exact camera compiler recovery.

@@ -213,6 +213,7 @@ src/melee/gr/granime.c	src/melee/gr/granime.c	NonMatching	0039-hosted-stage-anim
 src/melee/gr/grbattle.c	src/melee/gr/grbattle.c	Matching	0038-stage-headless-ownership.patch	compiled directly from canonical source by Makefile; renderer/item-generator setup excluded by historical patch 0038-stage-headless-ownership.patch
 src/melee/gr/grdatfiles.c	src/melee/gr/grdatfiles.c	Matching	none	compiled directly from canonical source by Makefile
 src/melee/gr/grdynamicattr.c	src/melee/gr/grdynamicattr.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/gr/grlast.c	src/melee/gr/grlast.c	Matching	stage-lifecycle-completion	compiled source Final Destination actor controller; canonical stage command pointers and retail angular FMA boundaries retained
 src/melee/gr/grlib.c	src/melee/gr/grlib.c	Matching	0040-stage-presentation-particles.patch	compiled directly from canonical source by Makefile; particle-generator presentation and unsupported-stage branches excluded by historical patch 0040-stage-presentation-particles.patch
 src/melee/gr/grmaterial.c	src/melee/gr/grmaterial.c	NonMatching	none	compiled directly from canonical source by Makefile
 src/melee/gr/ground.c	src/melee/gr/ground.c	NonMatching	0001-hosted-c-compatibility.patch,0037-falco-battlefield-stadium.patch,0038-stage-headless-ownership.patch	compiled directly from canonical source by Makefile; adapted by historical patch 0001-hosted-c-compatibility.patch, historical patch 0037-falco-battlefield-stadium.patch, and historical patch 0038-stage-headless-ownership.patch
@@ -361,6 +362,7 @@ src/sysdolphin/baselib/aobj.c	src/sysdolphin/baselib/aobj.c	Matching	0001-hosted
 src/sysdolphin/baselib/archive.c	src/sysdolphin/baselib/archive.c	Matching	0001-hosted-c-compatibility.patch	compiled directly from canonical source by Makefile; adapted by historical patch 0001-hosted-c-compatibility.patch
 src/sysdolphin/baselib/class.c	src/sysdolphin/baselib/class.c	Matching	none	compiled directly from canonical source by Makefile
 src/sysdolphin/baselib/dobj.c	src/sysdolphin/baselib/dobj.c	Matching	none	compiled directly from canonical source by Makefile
+src/sysdolphin/baselib/fog.c	src/sysdolphin/baselib/fog.c	Matching	none	compiled source fog object lifecycle; stage background color is gameplay-visible through FD RNG
 src/sysdolphin/baselib/fobj.c	src/sysdolphin/baselib/fobj.c	Matching	0003-ppc-source-exactness.patch	compiled directly from canonical source by Makefile; adapted by historical patch 0003-ppc-source-exactness.patch
 src/sysdolphin/baselib/gobj.c	src/sysdolphin/baselib/gobj.c	Matching	none	compiled directly from canonical source by Makefile
 src/sysdolphin/baselib/gobjgxlink.c	src/sysdolphin/baselib/gobjgxlink.c	Matching	none	compiled directly from canonical source by Makefile

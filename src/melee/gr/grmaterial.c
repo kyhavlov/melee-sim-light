@@ -32,7 +32,7 @@
 
 static inline ColorOverlay* grMaterial_GetOverlay(Ground* gp)
 {
-    return (ColorOverlay*) ((u8*) gp + 0x40);
+    return &gp->color_overlay;
 }
 
 struct grMaterial_MObjInfo {
@@ -350,7 +350,7 @@ static void fn_801C8EF8(HSD_MObj* mobj, u32 rendermode)
             sp_cnst.comp = reg1_lt4 = 1;
             sp_cnst.ctype = temp = 0;
             sp_cnst.reg = (u8) reg1;
-            sp_cnst.val = &gp->x6C;
+            sp_cnst.val = &gp->color_overlay.x2C_hex;
             HSD_TExpSetReg((HSD_TExp*) &sp_cnst);
             if (reg1 < 4) {
                 !reg1;
@@ -370,9 +370,9 @@ static void fn_801C8EF8(HSD_MObj* mobj, u32 rendermode)
             sp_cnst.comp = reg1_lt4_for_kcsel = 1;
             sp_cnst.ctype = temp = 0;
             sp_cnst.reg = (u8) reg2;
-            sp114.r = gp->x6C.a;
-            sp114.g = gp->x6C.a;
-            sp114.b = gp->x6C.a;
+            sp114.r = gp->color_overlay.x2C_hex.a;
+            sp114.g = gp->color_overlay.x2C_hex.a;
+            sp114.b = gp->color_overlay.x2C_hex.a;
             sp_cnst.val = &sp114;
             HSD_TExpSetReg((HSD_TExp*) &sp_cnst);
             sp_tevdesc.u.tevconf.clr_b = lb_8000CC8C(reg1);
@@ -554,12 +554,13 @@ inline Ground* grMaterial_801C9604_inline(HSD_GObj* arg0)
     return arg0->user_data;
 }
 
-void grMaterial_801C9604(HSD_GObj* gobj, int arg1, bool arg2)
+void grMaterial_801C9604(HSD_GObj* gobj, union ColorOverlay_x8_t* arg1,
+                           bool arg2)
 {
     Ground* gp = grMaterial_801C9604_inline(gobj);
     ColorOverlay* co = grMaterial_GetOverlay(gp);
     co->x4_pri = arg2;
-    co->x8_ptr1 = (union ColorOverlay_x8_t*) arg1;
+    co->x8_ptr1 = arg1;
     co->x0_timer = 0;
     co->xC_loop = 0;
     co->x7C_color_enable = co->x7C_flag2 = 0;

@@ -51,6 +51,7 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
                                int ucf_sdi_enabled,
                                int ucf_shield_drop_extended_enabled,
                                int ucf_shield_drop_084_enabled);
+bool msl_whispy_ignores_dead_fighters(void);
 bool msl_core_uses_online_fnmsubs_zero(void);
 bool msl_core_has_brawl_offscreen_damage(void);
 bool msl_core_freezes_dead_up_fall_physics(void);

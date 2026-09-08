@@ -5,6 +5,121 @@ line. The current benchmark contract, concise retained summary, imported branch 
 architectural attempt records are indexed in [`README.md`](README.md). Forensic artifacts remain
 under ignored `reports/triage/`.
 
+## Correctness completion — 2026-09-08
+
+Checkpoint is `5f097b2a`, committed after the preceding correctness/performance
+verification. The new packet completes FD actors, fog and color lifetimes, Dream
+Land temporal state and Slippi direction voting, plus camera-pan, aerial-yaw and
+side-special momentum arithmetic. Both benchmark arms use the same 403 recordings
+and 3,685,488 input frames from the canonical suite. Candidate wire v2 adds one
+Whispy capability byte; checkpoint v1 tapes remove only that byte and normalize
+the version/header size. Every other config/input byte matches the frozen tapes.
+
+GNU/Linux amd64 GCC 13.3 strict release, 9950X3D CPU 0, resident 256/512,
+262,144 match-frames, eight warmup ticks and 128 observation history. Eight
+adjacent alternating pairs per size, with all samples retained:
+
+| Resident | Checkpoint FPS | Initial candidate FPS | Median change |
+| ---: | --- | --- | ---: |
+| 256 | 118924, 120063, 120297, 121122, 121159, 121016, 121140, 120180 | 108754, 108749, 110536, 110706, 110511, 110633, 110574, 110673 | -8.37% |
+| 512 | 124772, 125574, 125668, 124652, 125100, 125243, 125379, 125179 | 114644, 114257, 114449, 114468, 114125, 114099, 114444, 113867 | -8.67% |
+
+Digests remain `f07121ff2d154a20` (256, 25 resets) and `4424fd866178964a`
+(512, 22 resets). The 8–9% throughput cost is real and is not accepted as
+timing noise. Current callback profiling attributes only 2.83% to full Ground
+animation and 0.50% to the headless epoch proc, so a checkpoint profile is
+required before selecting an optimization. Source lifecycle ownership remains
+the final representation; no displaced controller is restored.
+
+Scratch evidence: `reports/triage/correctness_done_20260908/` contains
+`performance-samples.json`, all 32 `performance-*.log` samples, tape equivalence,
+the frozen binaries and source/checkpoint profiles. The recovery and final result are recorded below.
+
+### Retained stationary transformed-line queries
+
+Source FD now binds the actual collision JObj and publishes `CollJoint_B8` even
+while the endpoints stay fixed. The old manual constructor did not bind that
+transform. This disabled the previously retained wall-pass AABB rejection, which
+conservatively admitted every transformed joint. Profiled collision cost rose
+356M→459M cycles on the 65,536-frame workload, versus 38M→88M for Ground animation.
+
+Keep the completed binding, flags and epoch semantics. Extend the existing wall/
+ceiling predicate to unchanged nondegenerate endpoints; their remap displacement
+is zero. Moving and degenerate lines retain the exact source queries. The remap
+leaf also skips zero-displacement arithmetic for finite nonzero query coordinates;
+zero coordinates retain source evaluation to preserve cancellation signs. No
+cache, spatial index, stage-id branch or mirrored state is added.
+
+Every one of the 529 full replay output fingerprints is unchanged. The source
+geometry smoke checks distant/overlapping stationary transformed walls and keeps
+moving/degenerate walls admitted. A four-million finite-input differential corpus
+has 2,041,343 fast-path admissions and equal raw output words throughout (seed
+`8e53a49b`, digest `35b808398d47909a`). A preceding arbitrary-bit probe exposed
+compiler-dependent NaN payload selection in the unchanged fallback; NaN gameplay
+inputs are outside the finite-domain identity claim, and no scoring policy changes.
+
+The isolated remap leaf screen recovers 0.46%/0.57% at 256/512. Adding stationary
+wall admission gives these combined reverse-order screens against the complete
+source-stage control:
+
+| Resident | Complete-stage FPS | Query-optimized FPS | Median change |
+| ---: | --- | --- | ---: |
+| 256 | 111847, 112071 | 116873, 116704 | +4.31% |
+| 512 | 116291, 116409 | 120885, 120734 | +3.83% |
+
+Both digests and reset counts are unchanged. This recovers part of the initial
+cost, not a throughput gain over the committed checkpoint.
+
+### Rejected stage/AObj compiler admission
+
+Strict O3/native ISA for grLast, Ground, grMaterial and HSD AObj clock dispatch
+preserves all 529 output locks, but loses versus the query-optimized control:
+
+| Resident | Control FPS | O3 candidate FPS | Median change |
+| ---: | --- | --- | ---: |
+| 256 | 117086, 115931 | 115766, 115936 | -0.56% |
+| 512 | 120515, 121021 | 119681, 119421 | -1.01% |
+
+No compiler admission is retained. Revisit requires a separately attributed hot
+owner or materially different generated code; the broad stronger profile costs
+more than it saves. Scratch-only objects and sampling binaries are not production
+paths. The final checkpoint comparison follows.
+
+### Final checkpoint comparison
+
+All builds, replay gates, PPC arbitration and viewer/API checks finished before
+this final sequence. Eight adjacent alternating pairs per size, same CPU 0 and
+the same tape/config equivalence contract:
+
+| Resident | Checkpoint FPS samples | Final FPS samples | Median FPS, checkpoint → final | Paired median change |
+| ---: | --- | --- | --- | ---: |
+| 256 | 120971, 120581, 121422, 120919, 121264, 121541, 121251, 120999 | 116499, 116523, 116294, 116117, 116715, 116672, 116707, 116865 | 121125 → 116598 | -3.75% |
+| 512 | 126100, 126138, 126104, 125721, 125960, 126172, 125429, 125880 | 120699, 120560, 120435, 120945, 120367, 120679, 120147, 120676 | 126030 → 120618 | -4.32% |
+
+The final complete lifecycle implementation remains **3.74%/4.29% slower by
+median FPS** at resident 256/512 than `5f097b2a`. Every adjacent pair is slower;
+this is a retained correctness cost, not measurement noise or a performance-neutral
+claim. The earlier committed checkpoint remains covered by its separate neutral
+comparison below. The stationary-query changes recover roughly half of this
+campaign’s original 8–9% cost while keeping the completed source representation.
+
+All 16 samples per size keep the same digest and reset count. Debug/release
+each pass 503 exact / 26 classified / zero fail/error across 5,059,922 transitions.
+The 38-case PPC audit passes 12 exact / 26 classified with identical snapshots.
+Source/native, transformed-line edge tests, sealed stage lifecycle/copy/restore,
+Wasm/viewer and 47 focused Python tests pass. No stronger compiler profile or
+diagnostic mutation remains.
+
+Binary SHA-256:
+
+- Checkpoint release benchmark: `3ab204f344363aedd37cf57ba7a1bf21c48606cd73785a30f5284f102107f757`.
+- Final release benchmark: `afca8a434f5b59b4eda088f27be14019bbd0f337d78d1f0ecec2b141c7ec3712`.
+- Final strict release runtime: `ec0411e487b577ba0c6baf3a5233245c718e3494a7635f39aa998b0459984d5a`.
+
+Final raw samples and complete logs are `final-throughput-*` in the campaign
+triage directory. This bounded 403-case throughput check is not a replacement
+for the longer `BASELINE.md` workload contract.
+
 ## Classified replay closure — 2026-09-08
 
 Correctness packet against frozen merge `24643394`: source quaternion dot-product

@@ -1,5 +1,9 @@
 # Classified replay closure — 2026-09-08
 
+This is the checkpoint report for `5f097b2a`. The subsequent
+[correctness completion campaign](CORRECTNESS_COMPLETION_2026-09-08.md) supersedes
+its remaining-owner list and native/PPC counts.
+
 The native GNU/Linux supported-domain suite is **493 exact / 36 classified / 0
 fail / 0 error**, across 529 replays and 5,059,922 transitions. This is **23 more
 exact replays** than the 470/59 baseline at `24643394`. Native debug and strict

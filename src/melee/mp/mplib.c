@@ -1163,6 +1163,19 @@ static void mpRemap2d(float* x_out, float* y_out, float ax0, float ay0,
     f29 = py - ay0;
     dist2 = (dy * dy) + (dx * dx);
     if (ABS(dist2) > 0.0001) {
+#ifdef MSL_CORE_HOSTED
+        // Stationary nondegenerate lines have zero endpoint displacement.
+        // Both source f64 FMAs return finite nonzero p unchanged. Keep zero
+        // coordinates on the source path to preserve cancellation signs.
+        if (ax0 == bx0 && ay0 == by0 && ax1 == bx1 && ay1 == by1 &&
+            px != 0.0F && py != 0.0F && isfinite(px) && isfinite(py) &&
+            isfinite(f30) && isfinite(f29) && isfinite(dist2))
+        {
+            *x_out = px;
+            *y_out = py;
+            return;
+        }
+#endif
         // how far along line a is point p
         double t = (dy * f29 + dx * f30) / dist2;
         if (t > 1.0) {
@@ -6114,8 +6127,8 @@ bool mpCheckedBounding(void)
 #ifdef MSL_CORE_NATIVE
 // A fighter wall pass tests several source-owned ECB segments and swept quads
 // against the same line ranges. Reject only when the complete current/previous
-// ECB bounds cannot overlap any eligible static wall. Remapped joints retain
-// the exact source path because their query is transformed into current space.
+// ECB bounds cannot overlap any eligible wall. Moving remapped lines retain
+// the source path because their query is transformed into current space.
 static bool mpLib_LineRangeIntersects(CollJoint* joint, int start, int count,
                                       float left, float bottom, float right,
                                       float top, u32 kind)
@@ -6137,13 +6150,23 @@ static bool mpLib_LineRangeIntersects(CollJoint* joint, int start, int count,
         {
             continue;
         }
-        if (remapped) {
-            return true;
-        }
-
         map_line = line->x0;
         v0 = &vertices[map_line->v0_idx];
         v1 = &vertices[map_line->v1_idx];
+        if (remapped) {
+            float dx = v1->x10 - v0->x10;
+            float dy = v1->x14 - v0->x14;
+            double length2 = (double) dy * dy + (double) dx * dx;
+            // mpRemap2d adds only zero displacements when the endpoints are
+            // stationary. Its short-line branch is different, so retain the
+            // narrow phase for degenerate lines as well as moving ones.
+            if (v0->pos.x != v0->x10 || v0->pos.y != v0->x14 ||
+                v1->pos.x != v1->x10 || v1->pos.y != v1->x14 ||
+                !(length2 > 0.0001) || !isfinite(length2))
+            {
+                return true;
+            }
+        }
         if (!((v0->pos.x < left && v1->pos.x < left) ||
               (v0->pos.x > right && v1->pos.x > right) ||
               (v0->pos.y < bottom && v1->pos.y < bottom) ||

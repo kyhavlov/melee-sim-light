@@ -103,6 +103,14 @@ void grDatFiles_801C6038(void* arg0, s32 arg1, s32 arg2)
         }
         temp_r3->unk0 = (void*) -1;
     }
+#ifdef MSL_CORE_HOSTED
+    if (arg1 == 0 && stage_info.param != NULL) {
+        // Source palette writers mutate grGroundParam. The DAT is shared;
+        // this Match owns the sole writable parameter instance.
+        msl_core_ground_state()->params = *stage_info.param;
+        stage_info.param = &msl_core_ground_state()->params;
+    }
+#endif
 }
 
 static void grDatFiles_801C6228(UnkStageDat* arg0)

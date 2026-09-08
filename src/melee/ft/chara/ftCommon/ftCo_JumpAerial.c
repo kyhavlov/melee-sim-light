@@ -38,8 +38,16 @@ void ft_800CB6EC(Fighter* fp, s32 arg1)
 {
     if (fp->mv.co.jumpaerial.x0 != 0) {
         fp->mv.co.jumpaerial.x0 -= 1;
-        HSD_JObjAddRotationY(fp->parts->joint,
-                             -(deg_to_rad * (180.0F / arg1)));
+        {
+            HSD_JObj* joint = fp->parts->joint;
+            HSD_ASSERT(1041, joint);
+            // GALE01 0x800CB76C fuses the yaw step into the old rotation.
+            joint->rotate.y = __fnmsubs(deg_to_rad, 180.0F / arg1,
+                                        joint->rotate.y);
+            if (!(joint->flags & JOBJ_MTX_INDEP_SRT)) {
+                HSD_JObjSetMtxDirty(joint);
+            }
+        }
         if (fp->mv.co.jumpaerial.x0 == (arg1 / 2)) {
             fp->facing_dir = -fp->facing_dir;
         }
