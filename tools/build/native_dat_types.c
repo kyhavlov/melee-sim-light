@@ -19,6 +19,9 @@
 #include "ft/chara/ftPopo/types.h"
 #include "ft/chara/ftSamus/types.h"
 #include "ft/chara/ftYoshi/types.h"
+#include "ft/chara/ftGameWatch/types.h"
+#include "ft/dobjlist.h"
+#include "ft/chara/ftMewtwo/types.h"
 #include "ft/chara/ftNess/types.h"
 #include "ft/chara/ftLink/types.h"
 #include "ft/chara/ftPurin/types.h"
@@ -201,6 +204,20 @@ typedef Article* MslDatKoopaArticles[1];
 // plain Article graph.
 // refs/melee/src/melee/ft/chara/ftNess/ftNs_Init.c
 typedef Article* MslDatNessArticles[11];
+
+// ftMt_Init_OnLoad registers Disable and Shadow Ball in this order.
+typedef Article* MslDatMewtwoArticles[2];
+// ftGw_Init_OnLoad: ten articles, then the fighter visibility lookup.
+typedef struct MslDatGameWatchArticles {
+    Article* articles[10];
+    FtPartsVisLookup* visibility;
+} MslDatGameWatchArticles;
+// ftGw_SpecialN_CreateSausage selects exactly indices 0..4.
+typedef struct MslDatGameWatchChefAttrs {
+    void* x0;
+    float x4, x8, xC;
+    itGamewatchchefAttrEntry entries[5];
+} MslDatGameWatchChefAttrs;
 // PlLk.dat and PlCl.dat share one seven-slot x48_items layout: slots 0..4
 // are the bomb, boomerang, hookshot, arrow, and bow articles both OnLoads
 // register (item kinds 58..65 and 76/77); slot 5 is the milk-bottle article
@@ -320,6 +337,14 @@ void* msl_native_dat_type_roots[] = {
     (ftPikachuAttributes*) 0,
     (itPikachuthunderAttributes*) 0,
     (itPikachutJoltGroundAttributes*) 0,
+    (MslDatGameWatchArticles*) 0,
+    (ftGameWatchAttributes*) 0,
+    (MslDatGameWatchChefAttrs*) 0,
+    (itGamewatchparachuteAttributes*) 0,
+    (MslDatMewtwoArticles*) 0,
+    (ftMewtwoAttributes*) 0,
+    (itMDisableAttributes*) 0,
+    (itMewtwoShadowball_DatAttrs*) 0,
     (MslDatNessArticles*) 0,
     (ftNessAttributes*) 0,
     (itNessPKFirepillarAttributes*) 0,

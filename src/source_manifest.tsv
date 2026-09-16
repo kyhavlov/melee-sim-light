@@ -421,3 +421,31 @@ src/melee/it/items/itlinkboomerang.c	src/melee/it/items/itlinkboomerang.c	Matchi
 src/melee/it/items/itlinkbow.c	src/melee/it/items/itlinkbow.c	Matching	links-source-packet	compiled canonical Link and Young Link bow article owner
 src/melee/it/items/itclinkmilk.c	src/melee/it/items/itclinkmilk.c	Matching	links-source-packet	compiled canonical Young Link milk-bottle article owner
 src/melee/it/items/itlinkhookshot.c	src/melee/it/items/itlinkhookshot.c	NonMatching	links-source-packet	compiled canonical hookshot article owner, previously imported for the Samus/Sheik/Ice Climbers tether family without a manifest row
+src/melee/ft/chara/ftMewtwo/ftMt_Init.c	src/melee/ft/chara/ftMewtwo/ftMt_Init.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
+src/melee/ft/chara/ftMewtwo/ftMt_SpecialHi.c	src/melee/ft/chara/ftMewtwo/ftMt_SpecialHi.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
+src/melee/ft/chara/ftMewtwo/ftMt_SpecialLw.c	src/melee/ft/chara/ftMewtwo/ftMt_SpecialLw.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
+src/melee/ft/chara/ftMewtwo/ftMt_SpecialN.c	src/melee/ft/chara/ftMewtwo/ftMt_SpecialN.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
+src/melee/ft/chara/ftMewtwo/ftMt_SpecialS.c	src/melee/ft/chara/ftMewtwo/ftMt_SpecialS.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
+src/melee/it/items/itmewtwodisable.c	src/melee/it/items/itmewtwodisable.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
+src/melee/it/items/itmewtwoshadowball.c	src/melee/it/items/itmewtwoshadowball.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
+src/melee/ft/chara/ftGameWatch/ftGw_Attack100.c	src/melee/ft/chara/ftGameWatch/ftGw_Attack100.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ft/chara/ftGameWatch/ftGw_Attack11.c	src/melee/ft/chara/ftGameWatch/ftGw_Attack11.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ft/chara/ftGameWatch/ftGw_AttackAir.c	src/melee/ft/chara/ftGameWatch/ftGw_AttackAir.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ft/chara/ftGameWatch/ftGw_AttackLw3.c	src/melee/ft/chara/ftGameWatch/ftGw_AttackLw3.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ft/chara/ftGameWatch/ftGw_AttackS4.c	src/melee/ft/chara/ftGameWatch/ftGw_AttackS4.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ft/chara/ftGameWatch/ftGw_Init.c	src/melee/ft/chara/ftGameWatch/ftGw_Init.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ft/chara/ftGameWatch/ftGw_SpecialHi.c	src/melee/ft/chara/ftGameWatch/ftGw_SpecialHi.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ft/chara/ftGameWatch/ftGw_SpecialLw.c	src/melee/ft/chara/ftGameWatch/ftGw_SpecialLw.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ft/chara/ftGameWatch/ftGw_SpecialN.c	src/melee/ft/chara/ftGameWatch/ftGw_SpecialN.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ft/chara/ftGameWatch/ftGw_SpecialS.c	src/melee/ft/chara/ftGameWatch/ftGw_SpecialS.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/it/items/itgamewatchbreath.c	src/melee/it/items/itgamewatchbreath.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/it/items/itgamewatchchef.c	src/melee/it/items/itgamewatchchef.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/it/items/itgamewatchfire.c	src/melee/it/items/itgamewatchfire.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/it/items/itgamewatchgreenhouse.c	src/melee/it/items/itgamewatchgreenhouse.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/it/items/itgamewatchjudge.c	src/melee/it/items/itgamewatchjudge.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/it/items/itgamewatchmanhole.c	src/melee/it/items/itgamewatchmanhole.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/it/items/itgamewatchpanic.c	src/melee/it/items/itgamewatchpanic.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/it/items/itgamewatchparachute.c	src/melee/it/items/itgamewatchparachute.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/it/items/itgamewatchrescue.c	src/melee/it/items/itgamewatchrescue.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/it/items/itgamewatchturtle.c	src/melee/it/items/itgamewatchturtle.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/it/itmaterial.c	src/melee/it/itmaterial.c	Matching	none	compiled directly from canonical source by Makefile

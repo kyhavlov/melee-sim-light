@@ -1,0 +1,206 @@
+{
+  "name": "gamewatch",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "notes": "Source and recording provenance: agent_docs/GAMEWATCH_VALIDATION.json. Legacy Dolphin arithmetic profiles are inferred; scripted captures use known AccurateNmsub=true build.",
+  "replays": [
+    {
+      "replay": "replays/validation/gamewatch/Game_20260707T202855.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Game & Watch"
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260707T203523.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Game & Watch"
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260902T194448.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Game & Watch",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260707T204121.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Game & Watch"
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260824T233753.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Mario",
+        "2": "Game & Watch"
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260707T202455.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Game & Watch"
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260904T145751.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Game & Watch",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260707T142746.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Game & Watch"
+      },
+      "fnmsubs_profile": "dolphin-legacy"
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260707T172242.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Game & Watch"
+      },
+      "fnmsubs_profile": "dolphin-legacy"
+    },
+    {
+      "replay": "replays/validation/gamewatch/gnw_neutral_dense.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Game & Watch",
+        "2": "Mewtwo"
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/bucket.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Game & Watch",
+        "2": "Falco"
+      },
+      "fnmsubs_profile": "retail"
+    },
+    {
+      "replay": "replays/validation/gamewatch/bucket_control.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Game & Watch",
+        "2": "Falco"
+      },
+      "fnmsubs_profile": "retail"
+    },
+    {
+      "replay": "replays/validation/gamewatch/bucket_missile.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Game & Watch",
+        "2": "Samus"
+      },
+      "fnmsubs_profile": "retail"
+    },
+    {
+      "replay": "replays/validation/gamewatch/judge_chef.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Game & Watch",
+        "2": "Falco"
+      },
+      "fnmsubs_profile": "retail"
+    },
+    {
+      "replay": "replays/validation/gamewatch_mewtwo/Game_20260915T182110.slpz",
+      "ports": [
+        2,
+        3
+      ],
+      "stage_id": 32,
+      "characters": {
+        "2": "Mewtwo",
+        "3": "Game & Watch"
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch_mewtwo/Game_20260915T182345.slpz",
+      "ports": [
+        2,
+        3
+      ],
+      "stage_id": 32,
+      "characters": {
+        "2": "Game & Watch",
+        "3": "Mewtwo"
+      }
+    }
+  ]
+}

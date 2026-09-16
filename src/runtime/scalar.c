@@ -73,6 +73,8 @@ enum {
     MSL_CORE_CHAR_POPO = 10,
     MSL_CORE_CHAR_PIKACHU = 12,
     MSL_CORE_CHAR_SAMUS = 13,
+    MSL_CHAR_GAMEWATCH = 24,
+    MSL_CHAR_MEWTWO = 16,
     MSL_CORE_CHAR_NESS = 8,
     MSL_CORE_CHAR_LINK = 6,
     MSL_CORE_CHAR_YOUNG_LINK = 20,
@@ -261,6 +263,10 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_PEACH;
     case MSL_CORE_CHAR_SAMUS:
         return CKIND_SAMUS;
+    case MSL_CHAR_GAMEWATCH:
+        return CKIND_GAMEWATCH;
+    case MSL_CHAR_MEWTWO:
+        return CKIND_MEWTWO;
     case MSL_CORE_CHAR_NESS:
         return CKIND_NESS;
     case MSL_CORE_CHAR_LINK:
@@ -618,6 +624,8 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CORE_CHAR_SHEIK &&
             config->players[i].char_id != MSL_CORE_CHAR_PEACH &&
             config->players[i].char_id != MSL_CORE_CHAR_SAMUS &&
+            config->players[i].char_id != MSL_CHAR_GAMEWATCH &&
+            config->players[i].char_id != MSL_CHAR_MEWTWO &&
             config->players[i].char_id != MSL_CORE_CHAR_NESS &&
             config->players[i].char_id != MSL_CORE_CHAR_LINK &&
             config->players[i].char_id != MSL_CORE_CHAR_YOUNG_LINK &&
@@ -638,11 +646,19 @@ static int validate_config(MslCoreMatchConfig* config)
                     "char_id=7 Sheik, char_id=9 Peach, char_id=10 Ice Climbers, "
                     "char_id=12 Pikachu, char_id=13 Samus, "
                     "char_id=6 Link, char_id=8 Ness, char_id=14 Yoshi, "
+                    "char_id=16 Mewtwo, "
                     "char_id=20 Young Link, char_id=5 Bowser, "
                     "char_id=15 Jigglypuff, char_id=17 Luigi, "
                     "char_id=18 Marth, "
                     "char_id=19 Zelda, char_id=21 Dr. Mario, char_id=22 Falco, "
                     "and char_id=25 Ganondorf only\n");
+            return -1;
+        }
+        if (config->players[i].cpu_level > 9 ||
+            (config->players[i].cpu_level != 0 &&
+             config->players[i].char_id == MSL_CORE_CHAR_POPO))
+        {
+            fprintf(stderr, "CPU level must be 1..9; CPU Ice Climbers are unsupported\n");
             return -1;
         }
         if (config->players[i].handicap == 0) {
@@ -695,6 +711,10 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
     game_data->source.fighter.costume_lists[FTKIND_YOSHI] =
         (struct UnkCostumeList){ game_data->source.fighter.yoshi_costumes,
                                  6 };
+    game_data->source.fighter.costume_lists[FTKIND_GAMEWATCH] =
+        (struct UnkCostumeList){ game_data->source.fighter.gamewatch_costumes, 4 };
+    game_data->source.fighter.costume_lists[FTKIND_MEWTWO] =
+        (struct UnkCostumeList){ game_data->source.fighter.mewtwo_costumes, 4 };
     game_data->source.fighter.costume_lists[FTKIND_NESS] =
         (struct UnkCostumeList){ game_data->source.fighter.ness_costumes, 4 };
     game_data->source.fighter.costume_lists[FTKIND_LINK] =
@@ -900,6 +920,7 @@ static int match_construct(MslCoreMatch* match,
 #ifdef MSL_CORE_NATIVE
     uint32_t samus_count = 0;
     uint32_t ness_count = 0;
+    uint32_t mewtwo_count = 0;
     uint32_t link_count = 0;
     uint32_t sheik_count = 0;
     uint32_t ics_count = 0;
@@ -1059,6 +1080,9 @@ static int match_construct(MslCoreMatch* match,
         if (match->config.players[i].char_id == MSL_CORE_CHAR_SAMUS) {
             samus_count += 1;
         }
+        if (match->config.players[i].char_id == MSL_CHAR_MEWTWO) {
+            mewtwo_count += 1;
+        }
         if (match->config.players[i].char_id == MSL_CORE_CHAR_NESS) {
             ness_count += 1;
         }
@@ -1086,7 +1110,10 @@ static int match_construct(MslCoreMatch* match,
                                            : ((encoded & 1) ? 1.0F : -1.0F);
         Player_SetPlayerCharacter(
             slot, source_character_kind(match->config.players[i].char_id));
-        Player_SetSlottype(slot, Gm_PKind_Human);
+        Player_SetSlottype(slot, match->config.players[i].cpu_level != 0
+                                    ? Gm_PKind_Cpu : Gm_PKind_Human);
+        Player_SetPlayerAndEntityCpuLevel(slot,
+                                         match->config.players[i].cpu_level);
         Player_SetTeam(slot, match->config.players[i].team_id);
         Player_SetStocks(slot, match->config.stock_count);
         // Player_SetHUDDamage initializes both player entities; Fighter_Create
@@ -1216,7 +1243,8 @@ static int match_construct(MslCoreMatch* match,
     // too: four-Samus air grapple-catches measured 151 live AObjs (5 / 46 /
     // 91 / 151 for zero, one, two, and four Samus) against the former
     // 136-slot capacity.
-    HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(), 128 + 64 * samus_count);
+    HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(),
+                           128 + 64 * samus_count + 64 * mewtwo_count);
     // Article animation loads a whole joint graph in a single frame, so the
     // FObj bound is the sum of the concurrent per-fighter bursts. Every port
     // can contribute its own, and bursts from different fighters overlap, so
@@ -1244,9 +1272,13 @@ static int match_construct(MslCoreMatch* match,
     // boomerang, bomb, and hookshot track loads; Peach overlaps turnip and
     // parasol graphs; both earn explicit terms.
     // tests/melee_core/pool_chaos_soak.c
+    // Five forward-throw Shadow Ball graphs use 185 tracks per Mewtwo.
+    // Reserve that burst per fighter; the 20-shot stress leaves at least 20%
+    // headroom. it_802C519C -> Item_80268E5C; mewtwo_smoke.c.
     HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(),
                            256 + 128 * ness_count + 256 * samus_count +
-                               32 * link_count + 32 * peach_count);
+                               32 * link_count + 32 * peach_count +
+                               192 * mewtwo_count);
     HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 128);
     // Link and Young Link carry four RObjs each against two for every other
     // supported fighter, so four Link ports land on exactly 16 live RObjs and
@@ -1413,6 +1445,8 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         MSL_CORE_CHAR_GANONDORF,
         MSL_CHAR_YOSHI,
         MSL_CHAR_BOWSER,
+        MSL_CHAR_GAMEWATCH,
+        MSL_CHAR_MEWTWO,
         MSL_CORE_CHAR_NESS,
         MSL_CORE_CHAR_LINK,
         MSL_CORE_CHAR_YOUNG_LINK,
@@ -1510,6 +1544,9 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
         // Reused native union storage can contain widened host pointers.
         // Keep these unowned source bytes deterministic, as for Blizzard.
         return 0;
+    }
+    if (item->kind == It_Kind_GameWatch_Chef && source_offset == 7) {
+        return (uint8_t) item->xDD4_itemVar.gamewatchchef.x4;
     }
     if (item->kind == It_Kind_IceClimber_Ice) {
         if (source_offset == 7) {

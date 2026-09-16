@@ -45,6 +45,8 @@ def test_live_viewer_supported_domain_and_assets() -> None:
     manifest = (ROOT / "tools/viewer/assets/character_zips.tsv").read_text()
     expected = {
         1: "Fox",
+        16: "Mewtwo",
+        24: "Mr. Game & Watch",
         2: "Captain Falcon",
         7: "Sheik",
         9: "Peach",

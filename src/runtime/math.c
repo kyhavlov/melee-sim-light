@@ -50,11 +50,9 @@ float msl_dolphin_fnmsubs(float a, float b, float c)
 {
     float result = __fnmsubs(a, b, c);
 
-    // The tracked Slippi online captures use Dolphin's equivalent c - a*b
-    // exact-zero sign, while both offline profiles retain the retail PPC
-    // instruction's sign. Keep this capture/runtime capability independent of
-    // BrawlOffscreenDamage: the offline mainline-Dolphin profile has that
-    // patch but retains retail fnmsubs zero signs.
+    // Legacy Dolphin JIT captures can use fused c - a*b, including offline
+    // games. This recording capability is independent of scene, CPU slots,
+    // and BrawlOffscreenDamage; retail/corrected JIT uses negate-after-subtract.
     if (!msl_core_uses_online_fnmsubs_zero()) {
         return result;
     }

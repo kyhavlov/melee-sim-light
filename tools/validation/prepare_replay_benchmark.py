@@ -21,7 +21,7 @@ from tools.validation.validate_replay import (
 from tools.validation.slpz import replay_path_for_peppi
 
 
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 DEFAULT_SUITE = ROOT / "replays/suites/melee_core_aggregate.json"
 DEFAULT_OUTPUT = ROOT / "build/melee_core/benchmark/cases.tsv"
 
@@ -43,6 +43,8 @@ def _cache_key(case: ReplayCase) -> str:
             str(case.played_on),
         )
     )
+    if case.fnmsubs_profile is not None:
+        identity += "\0fnmsubs=" + case.fnmsubs_profile
     return hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 
@@ -54,7 +56,7 @@ def _cached_frame_count(path: Path) -> int | None:
     except (OSError, struct.error):
         return None
     if (
-        magic != b"MSLRPB02"
+        magic != b"MSLRPB03"
         or version != FORMAT_VERSION
         or header_size < 24
         or input_size != 52
@@ -98,6 +100,7 @@ def prepare(args: argparse.Namespace) -> None:
                         ucf_cardinals_1_0_enabled=case.ucf_cardinals_1_0_enabled,
                         ucf_shield_sdi_enabled=case.ucf_shield_sdi_enabled,
                         ucf_sdi_enabled=case.ucf_sdi_enabled,
+                        fnmsubs_profile=case.fnmsubs_profile,
                     )
                 os.replace(temporary, case_path)
             finally:

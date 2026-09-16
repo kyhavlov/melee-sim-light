@@ -2146,6 +2146,12 @@ void Fighter_Spaghetti_8006AD10(Fighter_GObj* gobj)
                 }
             }
 
+#ifdef MSL_CORE_HOSTED
+            {
+                extern void msl_slippi_apply_cpu_input(Fighter*);
+                msl_slippi_apply_cpu_input(fp);
+            }
+#endif
             Fighter_Spaghetti_8006AD10_Inner1(fp);
 
             // Fighter_ClampSpecificValue

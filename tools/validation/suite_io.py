@@ -19,6 +19,7 @@ class SuiteReplay:
     ucf_shield_drop_extended_enabled: bool | None = None
     ucf_shield_drop_084_enabled: bool | None = None
     played_on: str | None = None
+    fnmsubs_profile: str | None = None
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,9 @@ def _load_suite(path: Path, stack: tuple[Path, ...]) -> ReplaySuite:
             )
     for r in data.get("replays", []):
         replay = str(r["replay"])
+        fnmsubs_profile = r.get("fnmsubs_profile")
+        if fnmsubs_profile not in (None, "retail", "dolphin-legacy"):
+            raise ValueError(f"invalid fnmsubs_profile for {replay}: {fnmsubs_profile!r}")
         ports = tuple(int(x) for x in r.get("ports", []))
         if not ports:
             raise ValueError(f"Suite replay missing ports: {replay}")
@@ -171,6 +175,7 @@ def _load_suite(path: Path, stack: tuple[Path, ...]) -> ReplaySuite:
                     else None
                 ),
                 played_on=(str(r["played_on"]) if "played_on" in r else None),
+                fnmsubs_profile=fnmsubs_profile,
             )
         )
     replay_path_counts = Counter(replay.replay for replay in replays)

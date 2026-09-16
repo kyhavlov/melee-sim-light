@@ -70,6 +70,18 @@ enum {
     MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE = 108,
     MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE = 109,
     MSL_CORE_ITEM_KIND_PEACH_TOAD_SPORE = 111,
+    MSL_ITEM_KIND_GAMEWATCH_GREENHOUSE = 114,
+    MSL_ITEM_KIND_GAMEWATCH_MANHOLE = 115,
+    MSL_ITEM_KIND_GAMEWATCH_FIRE = 116,
+    MSL_ITEM_KIND_GAMEWATCH_PARACHUTE = 117,
+    MSL_ITEM_KIND_GAMEWATCH_TURTLE = 118,
+    MSL_ITEM_KIND_GAMEWATCH_BREATH = 119,
+    MSL_ITEM_KIND_GAMEWATCH_JUDGE = 120,
+    MSL_ITEM_KIND_GAMEWATCH_PANIC = 121,
+    MSL_ITEM_KIND_GAMEWATCH_CHEF = 122,
+    MSL_ITEM_KIND_GAMEWATCH_RESCUE = 124,
+    MSL_ITEM_KIND_MEWTWO_DISABLE = 110,
+    MSL_ITEM_KIND_MEWTWO_SHADOW_BALL = 112,
 };
 
 // SendItemInfo samples four fixed bytes from every article's xDD4 union even
@@ -84,6 +96,38 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
                                                        uint8_t state)
 {
     switch (kind) {
+    case MSL_ITEM_KIND_GAMEWATCH_GREENHOUSE:
+    case MSL_ITEM_KIND_GAMEWATCH_MANHOLE:
+    case MSL_ITEM_KIND_GAMEWATCH_FIRE:
+    case MSL_ITEM_KIND_GAMEWATCH_PARACHUTE:
+    case MSL_ITEM_KIND_GAMEWATCH_TURTLE:
+    case MSL_ITEM_KIND_GAMEWATCH_BREATH:
+    case MSL_ITEM_KIND_GAMEWATCH_JUDGE:
+    case MSL_ITEM_KIND_GAMEWATCH_PANIC:
+    case MSL_ITEM_KIND_GAMEWATCH_RESCUE:
+        // it_8027CE64 owns the leading attribute pointer; Rescue adds an
+        // owner pointer. Remaining sampled lanes are outside these payloads.
+        return 0;
+    case MSL_ITEM_KIND_GAMEWATCH_CHEF:
+        // x0 is the shared attribute pointer; x4 is the trajectory index.
+        return MSL_CORE_ITEM_MISC1;
+    case MSL_ITEM_KIND_MEWTWO_DISABLE:
+        // itMDisable_ItemVars contains only the owner pointer. The remaining
+        // Slippi samples are outside that source payload.
+        return 0;
+    case MSL_ITEM_KIND_MEWTWO_SHADOW_BALL:
+        // it_802C519C initializes x0 only for the forward-throw shot (state 9).
+        // The held ball's launch angle x4.x is first written at release by
+        // it_802C53F0; x14 and x18 track its mode and charge.
+        // refs/melee/src/melee/it/items/itmewtwoshadowball.c
+        if (state == 9) {
+            return MSL_CORE_ITEM_MISC_ALL;
+        }
+        if (state == 0) {
+            return MSL_CORE_ITEM_MISC2 | MSL_CORE_ITEM_MISC3;
+        }
+        return MSL_CORE_ITEM_MISC1 | MSL_CORE_ITEM_MISC2 |
+               MSL_CORE_ITEM_MISC3;
     case MSL_CORE_ITEM_KIND_MR_SATURN:
         // Every xDE4 write in itdosei.c is `= ip->pos`, a copy of the
         // directly compared item position lanes, and the writing Anim

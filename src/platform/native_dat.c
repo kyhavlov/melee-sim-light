@@ -11,6 +11,7 @@
 #include <baselib/psstructs.h>
 #include <baselib/quatlib.h>
 #include <melee/ft/types.h>
+#include <melee/ft/chara/ftGameWatch/forward.h>
 #include <melee/gr/ground.h>
 #include <melee/it/it_3F14.h>
 #include <melee/it/types.h>
@@ -1405,6 +1406,8 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_PIKACHU,
     MSL_FIGHTER_ARTICLES_YOSHI,
     MSL_FIGHTER_ARTICLES_KOOPA,
+    MSL_FIGHTER_ARTICLES_GAMEWATCH,
+    MSL_FIGHTER_ARTICLES_MEWTWO,
     MSL_FIGHTER_ARTICLES_NESS,
     MSL_FIGHTER_ARTICLES_LINK,
     MSL_FIGHTER_ARTICLES_CLINK,
@@ -1597,6 +1600,26 @@ static ftData* translate_fighter_public(
         indices[2] = 2;
         attr_types[0] = msl_dat_root_itYoshiEggThrowAttributes;
         attr_types[1] = msl_dat_root_StarAttrs;
+        break;
+    case MSL_FIGHTER_ARTICLES_GAMEWATCH:
+        // ftGw_Init_OnLoad and itgamewatch*: one-pointer attributes except
+        // Chef's five-entry trajectory table. Slot 10 is not an Article.
+        article_list_type = msl_dat_root_MslDatGameWatchArticles;
+        article_count = 10;
+        for (i = 0; i < article_count; ++i) {
+            indices[i] = (uint8_t) i;
+            attr_types[i] = msl_dat_root_itGamewatchparachuteAttributes;
+        }
+        attr_types[8] = msl_dat_root_MslDatGameWatchChefAttrs;
+        break;
+    case MSL_FIGHTER_ARTICLES_MEWTWO:
+        // ftMt_Init_OnLoad: Disable, Shadow Ball.
+        article_list_type = msl_dat_root_MslDatMewtwoArticles;
+        article_count = 2;
+        indices[0] = 0;
+        indices[1] = 1;
+        attr_types[0] = msl_dat_root_itMDisableAttributes;
+        attr_types[1] = msl_dat_root_itMewtwoShadowball_DatAttrs;
         break;
     case MSL_FIGHTER_ARTICLES_NESS:
         // PlNs.dat's x48_items carries the eleven articles ftNs_Init_OnLoad
@@ -1838,6 +1861,15 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftYoshiAttributes,
                                           314, MSL_FIGHTER_ARTICLES_YOSHI);
+    } else if (strcmp(symbol, "ftDataGamewatch") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftGameWatchAttributes,
+                                          ftGw_SM_Count,
+                                          MSL_FIGHTER_ARTICLES_GAMEWATCH);
+    } else if (strcmp(symbol, "ftDataMewtwo") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftMewtwoAttributes,
+                                          314, MSL_FIGHTER_ARTICLES_MEWTWO);
     } else if (strcmp(symbol, "ftDataNess") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftNessAttributes, 326,

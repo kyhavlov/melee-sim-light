@@ -53,7 +53,9 @@ static int supported_stage(uint32_t stage) {
 
 static int supported_character(uint8_t character) {
   return character == MSL_CHARACTER_MARIO || character == MSL_CHARACTER_DRMARIO ||
-         character == MSL_CHARACTER_FOX || character == MSL_CHARACTER_CAPTAIN_FALCON ||
+         character == MSL_CHARACTER_FOX ||
+         character == MSL_CHARACTER_MEWTWO || character == MSL_CHARACTER_GAMEWATCH ||
+         character == MSL_CHARACTER_CAPTAIN_FALCON ||
          character == MSL_CHARACTER_SHEIK || character == MSL_CHARACTER_PEACH ||
          character == MSL_CHARACTER_ICE_CLIMBERS ||
          character == MSL_CHARACTER_DONKEY_KONG ||

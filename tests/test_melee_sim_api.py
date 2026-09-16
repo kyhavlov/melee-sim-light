@@ -74,6 +74,7 @@ def test_python_wire_layout_matches_public_c_api() -> None:
     (msl.Character.YOSHI, msl.Character.BOWSER),
     (msl.Character.NESS, msl.Character.LINK),
     (msl.Character.YOUNG_LINK, msl.Character.SAMUS),
+    (msl.Character.GAMEWATCH, msl.Character.MEWTWO),
 ])
 def test_character_articles_restore_at_another_batch_index(monkeypatch, characters) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
@@ -148,6 +149,8 @@ def test_doubles_continues_until_entire_team_is_eliminated(monkeypatch) -> None:
 def test_supported_character_and_stage_enums() -> None:
     assert [int(character) for character in msl.Character] == [
         1,
+        16,
+        24,
         2,
         3,
         25,

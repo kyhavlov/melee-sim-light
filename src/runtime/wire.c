@@ -65,4 +65,17 @@ void msl_core_decode_stage_events(MslCoreStageEvents* events,
         wire[offsetof(MslCoreStageEvents, dreamland_whispy_direction)];
     events->fighter_pre_random_seed_valid =
         wire[offsetof(MslCoreStageEvents, fighter_pre_random_seed_valid)];
+    for (int i = 0; i < MSL_CORE_MAX_PLAYERS; ++i) {
+        const uint8_t* p = wire + offsetof(MslCoreStageEvents, cpu_inputs) +
+                           i * sizeof(MslReplayCpuInput);
+        MslReplayCpuInput* dst = &events->cpu_inputs[i];
+        dst->main_x = msl_core_get_lef32(p + offsetof(MslReplayCpuInput, main_x));
+        dst->main_y = msl_core_get_lef32(p + offsetof(MslReplayCpuInput, main_y));
+        dst->c_x = msl_core_get_lef32(p + offsetof(MslReplayCpuInput, c_x));
+        dst->c_y = msl_core_get_lef32(p + offsetof(MslReplayCpuInput, c_y));
+        dst->trigger = msl_core_get_lef32(p + offsetof(MslReplayCpuInput, trigger));
+        dst->buttons = msl_core_get_le32(p + offsetof(MslReplayCpuInput, buttons));
+        dst->random_seed = msl_core_get_le32(p + offsetof(MslReplayCpuInput, random_seed));
+        dst->valid = p[offsetof(MslReplayCpuInput, valid)];
+    }
 }

@@ -19,6 +19,9 @@
     "yoshi.json",
     "bowser.json",
     "ness.json",
-    "links.json"
+    "links.json",
+    "gamewatch.json",
+    "mewtwo_fnmsubs.json",
+    "mewtwo_targeted.json"
   ]
 }

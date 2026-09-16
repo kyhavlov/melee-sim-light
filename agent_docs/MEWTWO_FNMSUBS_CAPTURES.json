@@ -1,0 +1,16 @@
+[
+  {
+    "source": "/home/blewf/Slippi/Game_20260702T170056.slp",
+    "replay": "replays/validation/mewtwo_fnmsubs/Game_20260702T170056.slpz",
+    "sha256_slp": "2c71d691818124da7fb46e6f766b28d6d9a7e8fb5978a6a01226cab693d4d311",
+    "fnmsubs_profile": "dolphin-legacy",
+    "profile_evidence": "First writer operands at retail 0x8006B9E4 and strict full-game arithmetic-profile differential; historical build unknown."
+  },
+  {
+    "source": "/home/blewf/git/exphil/test/fixtures/replays/mewtwo_shfair_only.slp",
+    "replay": "replays/validation/mewtwo_fnmsubs/mewtwo_shfair_only.slpz",
+    "sha256_slp": "46e643c5dd64d9c028d0ba9f998b3d34afa301defd02e97a2c1d556d35657e22",
+    "fnmsubs_profile": "dolphin-legacy",
+    "profile_evidence": "First writer operands at retail 0x8006B9E4 and strict full-game arithmetic-profile differential; historical build unknown."
+  }
+]

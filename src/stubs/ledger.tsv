@@ -70,10 +70,6 @@ lbRefract_80022BD0	renderer/light exclusion	unreachable	named abort	headless boo
 ftCh_Init_80156014	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftDk_MS_349_800E06D8	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftDr_Init_80149910	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftGw_Attack11_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftGw_AttackAirN_DecideAction	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftGw_AttackLw3_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftGw_AttackS4_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialNFx_800FDC00	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialNFx_800FDC70	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialNFx_800FDD14	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
@@ -163,7 +159,6 @@ ftCo_ThrownCrazyHand_Coll	outside-domain common MotionState/item branch	unreacha
 ftCo_ThrownCrazyHand_IASA	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftCo_ThrownCrazyHand_Phys	outside-domain common MotionState/item branch	unreachable	named abort	held items, boss captures, or non-Fox kind dispatch cannot enter this callback
 ftDk_MS_341_800DF980	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
-ftGw_Attack100Start_Enter	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialN_800EEEC4	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialN_800F190C	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
 ftKb_SpecialN_800F5874	unsupported-fighter branch	unreachable	named abort	Fox kind dispatch cannot select this fighter-specific owner
@@ -287,3 +282,9 @@ grVenom_80206D10	source-gated outside-domain stage predicate	reachable every CPU
 ftCo_803C6594	undecompiled .data projection	reachable from ftCo_800A1CC4	all-NULL rows; source-exact for supported stages	data/raw/main.dol::0x803C6594 decode: only GREATBAY/SHRINE rows non-NULL, both outside the supported stage domain
 ftKb_SpecialNKp_800FA83C	unsupported Kirby copied-flame branch	unreachable	named abort	refs/melee/src/melee/it/items/itkoopaflame.c::itKoopaFlame_Spawn reaches this only for It_Kind_Kirby_KoopaFlame; supported Bowser spawns It_Kind_Koopa_Flame
 ftKb_SpecialNKp_800FA878	unsupported Kirby copied-flame branch	unreachable	named abort	refs/melee/src/melee/it/items/itkoopaflame.c::itKoopaFlame_Spawn reaches this only for It_Kind_Kirby_KoopaFlame; supported Bowser spawns It_Kind_Koopa_Flame
+ftKb_SpecialNMt_80106F44	unsupported-fighter branch	unreachable	named abort	Shadow Ball dispatch reaches this only for It_Kind_Kirby_MewtwoShadowBall; Kirby is not admitted
+ftKb_SpecialNMt_80106F9C	unsupported-fighter branch	unreachable	named abort	Shadow Ball dispatch reaches this only for It_Kind_Kirby_MewtwoShadowBall; Kirby is not admitted
+ftKb_SpecialNMt_80106FEC	unsupported-fighter branch	unreachable	named abort	Shadow Ball dispatch reaches this only for It_Kind_Kirby_MewtwoShadowBall; Kirby is not admitted
+ftKb_SpecialNMt_80107040	unsupported-fighter branch	unreachable	named abort	Shadow Ball dispatch reaches this only for It_Kind_Kirby_MewtwoShadowBall; Kirby is not admitted
+ftKb_Init_800EEB00	unsupported-fighter branch	unreachable	named abort	Kirby copy-color branch is unreachable for Game & Watch
+ftKb_Init_800EEB1C	unsupported-fighter branch	unreachable	named abort	Kirby copy-color branch is unreachable for Game & Watch

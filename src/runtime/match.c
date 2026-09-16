@@ -729,11 +729,6 @@ void ftKb_SpecialN_800F5BA4(Fighter* fp) { (void) fp; }
 // common damage/throw path (ftkirbyspecialn.c::ftKb_SpecialN_800F5C34).
 void ftKb_SpecialN_800F5C34(Fighter* fp) { (void) fp; }
 
-// refs/melee/src/melee/ft/chara/ftMewtwo/ftMt_SpecialN.c. Forward throw
-// calls this common hook unconditionally; its complete body is guarded by
-// FTKIND_MEWTWO and therefore has no Fox-domain behavior.
-void ftMt_SpecialN_Shoot(Fighter_GObj* gobj) { (void) gobj; }
-
 // GALE01 versus replays use the US language setting. These are the direct
 // fixed-domain projections of refs/melee/src/melee/lb/lblanguage.c; retaining
 // the memory-card/menu-owned gmMainLib aggregate would add no gameplay state.
