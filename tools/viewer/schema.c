@@ -109,6 +109,7 @@ int main(void)
     FIELD(MslCoreViewerPlayer, state_flags, "stateFlags");
     FIELD(MslCoreViewerPlayer, last_hit_element, "lastHitElement");
     FIELD(MslCoreViewerPlayer, shield_strength, "shieldStrength");
+    FIELD(MslCoreViewerPlayer, bucket_fill, "bucketFill");
     FIELD(MslCoreViewerPlayer, action_id, "actionId");
     FIELD(MslCoreViewerPlayer, action_frame, "actionFrame");
     FIELD(MslCoreViewerPlayer, hitlag, "hitlag");

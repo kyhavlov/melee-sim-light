@@ -116,7 +116,7 @@ Frame rows are the primary trace data. Player rows are ordered to match
 `match.players`.
 
 ```json
-{"encoding":"sparse-delta-v1","keyframeInterval":60,"fields":["frame","randomSeed","players"],"playerFields":["charId","actionId","actionFrame","x","y","facing","grounded","percent","shield","stocks","jumps","hitlag","hitstun","hurtbox","reflect","fastfall","shielding","inHitstun","powershield","dead","element","shieldStrength"],"rows":[[0,0,12345,[[1,14,0,-30,0,1,1,0,60,4,2,0,0,0,0,0,0,0,0,0,0,null],[22,14,0,30,0,-1,1,0,60,4,2,0,0,0,0,0,0,0,0,0,0,null]]],[1,1,null,[[[2,1]],[[2,1]]]]]}
+{"encoding":"sparse-delta-v1","keyframeInterval":60,"fields":["frame","randomSeed","players"],"playerFields":["charId","actionId","actionFrame","x","y","facing","grounded","percent","shield","stocks","jumps","hitlag","hitstun","hurtbox","reflect","fastfall","shielding","inHitstun","powershield","dead","element","shieldStrength","bucketFill"],"rows":[[0,0,12345,[[1,14,0,-30,0,1,1,0,60,4,2,0,0,0,0,0,0,0,0,0,0,null,0],[22,14,0,30,0,-1,1,0,60,4,2,0,0,0,0,0,0,0,0,0,0,null,0]]],[1,1,null,[[[2,1]],[[2,1]]]]]}
 ```
 
 - `encoding`: exactly `"sparse-delta-v1"`.
@@ -160,7 +160,7 @@ Additional player columns may be appended by adding names to `playerFields`.
 `element` (appended 2026-09-15) is the HitElement of the last hit taken, for
 status-effect overlays; readers treat a missing column as `0`. `shieldStrength`
 is the source light-shield amount 0..1 (1 = hard shield) or `null` without a
-bubble.
+bubble. `bucketFill` is Game & Watch's Oil Panic fill 0..3 (0 for others).
 Readers must use the field list instead of hard-coded positions outside the v1
 required fields.
 

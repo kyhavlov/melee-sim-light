@@ -273,7 +273,9 @@ typedef struct MslCoreViewerPlayer {
     // source's trigger-derived shield strength, 255 = hard (digital) shield,
     // lower = lighter. 0 when no bubble.
     uint8_t shield_strength;
-    uint8_t _pad0[1];
+    // Game & Watch Oil Panic fill (ftGw_Panic_Empty..Full = 0..3); 0 for
+    // every other fighter.
+    uint8_t bucket_fill;
     uint16_t action_id;
     int16_t action_frame;
     uint16_t hitlag;

@@ -227,6 +227,7 @@ function playerStateFromBase(state, base, frameNumber, idx, isNana) {
         hitlagRemaining: u16(state, base + viewerPlayerOffsets.hitlag),
         hitboxes: playerHitboxes(state, base),
         lastHitElement: u8(state, base + viewerPlayerOffsets.lastHitElement),
+        bucketFill: u8(state, base + viewerPlayerOffsets.bucketFill),
         shieldStrength: hasShieldBubble
           ? u8(state, base + viewerPlayerOffsets.shieldStrength) / 255
           : undefined,

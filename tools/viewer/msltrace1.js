@@ -29,6 +29,7 @@ const PLAYER_FIELDS = [
   "dead",
   "element",
   "shieldStrength",
+  "bucketFill",
 ];
 const ITEM_FIELDS = [
   "alive",
@@ -385,6 +386,7 @@ function viewerPlayer(frameNumber, playerIndex, row, playerLookup, inputs) {
         playerLookup.shieldStrength !== undefined && row[playerLookup.shieldStrength] !== null
           ? Number(row[playerLookup.shieldStrength])
           : undefined,
+      bucketFill: Number(row[playerLookup.bucketFill] || 0),
       isReflectActive: Boolean(row[playerLookup.reflect]),
       isFastfalling: Boolean(row[playerLookup.fastfall]),
       isShieldActive: Boolean(row[playerLookup.shielding]),
@@ -503,6 +505,7 @@ function playerRowFromViewer(player) {
     state.isDead ? 1 : 0,
     Number(state.lastHitElement || 0),
     state.shieldStrength === undefined ? null : roundNumber(Number(state.shieldStrength)),
+    Number(state.bucketFill || 0),
   ];
 }
 

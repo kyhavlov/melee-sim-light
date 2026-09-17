@@ -302,6 +302,8 @@ export interface PlayerState {
   readonly lastHitElement?: number;
   /** Source shield strength 0..1 (1 = hard shield, lower = light shield); sim viewer lane. */
   readonly shieldStrength?: number;
+  /** Game & Watch Oil Panic fill 0..3 (sim viewer lane). */
+  readonly bucketFill?: number;
   readonly isReflectActive: boolean;
   readonly isFastfalling: boolean;
   readonly isShieldActive: boolean;

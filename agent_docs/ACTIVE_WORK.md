@@ -7633,3 +7633,6 @@ tests bumped 491 -> 492.
 - Tether tip now the physics-driven `x0` link (fixes the hang drawing to the
   hand end); shield strength lane from `lightshield_amount`; Fire Fox flames
   removed in favour of the hitbox overlay.
+- Oil Panic: bucket fill lane and digit overlay; splash follows the release
+  hitbox (probed natively with absorbed Fox lasers) and verified in the
+  viewer through a wasm-driven replay.

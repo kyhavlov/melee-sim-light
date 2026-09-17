@@ -161,6 +161,18 @@ KirbyYoshiEgg 332) hide their silhouette and get an egg overlay; Ness's PSI
 Magnet (367..370) draws a field in front of him; the bat and yoyo are not
 drawn.
 
+## Oil Panic (2026-09-16)
+
+`MslCoreViewerPlayer.bucket_fill` carries `fv.gw.x2238_panicCharge` (0..3);
+the viewer shows the digit by the bucket during SpecialLw/Catch/Shoot and the
+aerial variants (375..380). The release's damage is a fighter hitbox that
+sweeps outward (native probe, three Fox lasers absorbed then released: (12, 8)
+r 2.7 for frames 1-9, (20, 9) r 3.9 to frame 21, (32, 7) r 6.6 after, 18%);
+the oil item (121) is only the visual and has no hitbox of its own, so the
+splash blobs pour from the bucket to the live hitbox and settle into a puddle
+once it ends. Verified by replaying a wasm-driven sequence in the viewer
+(`replayDataToMslTrace` path) and screenshotting fill 1/2/3 and the release.
+
 ## Player overlays
 
 `Player.tsx` adds two overlays keyed on motion state: drifting "z" glyphs for

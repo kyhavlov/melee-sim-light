@@ -571,25 +571,53 @@ function GameWatchJudge(props: { item: ItemUpdate }) {
 }
 
 function GameWatchPanic(props: { item: ItemUpdate }) {
-  // Down special release: the stored oil splashes forward from the bucket.
+  // Down special release: the oil item (121) is the visual; the damage is a
+  // fighter hitbox that sweeps outward over the release (native probe:
+  // (12, 8) r 2.7 for frames 1-9, (20, 9) r 3.9 to frame 21, (32, 7) r 6.6
+  // after, 18%). Pour the splash along the bucket-to-hitbox line while the
+  // hitbox is live, then leave a settling puddle in front.
   const anchor = useAnchor(props.item);
-  const drops = [
-    [4, 8, 4.5],
-    [9, 6.5, 3.2],
-    [13, 4.5, 2.2],
-    [16, 2.5, 1.4],
-  ];
+  const hitboxes = ownerHitboxes(anchor);
+  const bucketX = createMemo(() => anchor.x() + anchor.facing() * 4);
+  const bucketY = createMemo(() => anchor.y() + 9);
+  const front = createMemo(() => {
+    const boxes = hitboxes();
+    if (boxes.length === 0) return undefined;
+    let best = boxes[0];
+    for (const box of boxes) if (box.radius > best.radius) best = box;
+    return best;
+  });
+  const trail = createMemo(() => {
+    const head = front();
+    if (!head) return [] as { x: number; y: number; r: number }[];
+    const out = [{ x: head.x, y: head.y, r: head.radius * 1.05 }];
+    for (const t of [0.7, 0.4]) {
+      out.push({
+        x: bucketX() + (head.x - bucketX()) * t,
+        y: bucketY() + (head.y - bucketY()) * t + 1.5 * (1 - t),
+        r: Math.max(1.2, head.radius * (0.35 + 0.35 * t)),
+      });
+    }
+    return out;
+  });
   return (
     <g fill="#1e293b" fill-opacity={0.75}>
-      <For each={drops}>
-        {([dx, dy, r]) => (
-          <circle
-            cx={anchor.x() + anchor.facing() * dx}
-            cy={anchor.y() + dy}
-            r={r}
+      <Show
+        when={front() !== undefined}
+        fallback={
+          <ellipse
+            cx={anchor.x() + anchor.facing() * 9}
+            cy={anchor.y() + 0.8}
+            rx={7}
+            ry={1.1}
+            fill-opacity={0.5}
           />
-        )}
-      </For>
+        }
+      >
+        <For each={trail()}>
+          {(blob) => <circle cx={blob.x} cy={blob.y} r={blob.r} />}
+        </For>
+      </Show>
     </g>
   );
 }

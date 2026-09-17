@@ -27,6 +27,7 @@ export function Players() {
             <Frozen renderData={renderData} />
             <HitElementEffect renderData={renderData} />
             <YoshiEggShell renderData={renderData} />
+            <BucketFill renderData={renderData} />
             <PsiMagnet renderData={renderData} />
           </>
         )}
@@ -313,6 +314,49 @@ function HitElementEffect(props: { renderData: RenderData }) {
           </For>
         </Match>
       </Switch>
+    </Show>
+  );
+}
+
+// Game & Watch Oil Panic: SpecialLw/Catch/Shoot and the aerial variants
+// (375..380). Show the bucket's fill (1..3 absorbed projectiles) as a digit
+// by the bucket while it is out, like the Judge number.
+const GAMEWATCH_BUCKET_ACTION_IDS = [375, 376, 377, 378, 379, 380];
+
+function BucketFill(props: { renderData: RenderData }) {
+  const characterName = createMemo(
+    () =>
+      characterNameByExternalId[
+        props.renderData.playerSettings.externalCharacterId
+      ]
+  );
+  const fill = createMemo(() => props.renderData.playerState.bucketFill ?? 0);
+  const active = createMemo(
+    () =>
+      characterName() === "Mr. Game & Watch" &&
+      fill() > 0 &&
+      GAMEWATCH_BUCKET_ACTION_IDS.includes(
+        props.renderData.playerState.actionStateId
+      )
+  );
+  const x = createMemo(
+    () =>
+      props.renderData.playerState.xPosition +
+      props.renderData.playerState.facingDirection * 6
+  );
+  const y = createMemo(() => props.renderData.playerState.yPosition + 13);
+  return (
+    <Show when={active()}>
+      <rect x={x() - 2.6} y={y()} width={5.2} height={5.8} rx={0.7} fill="white" stroke="black" stroke-width={0.45} />
+      <text
+        x={x()}
+        y={-(y() + 1.3)}
+        transform="scale(1 -1)"
+        text-anchor="middle"
+        style={{ font: "bold 5px sans-serif" }}
+        fill={fill() >= 3 ? "#dc2626" : "black"}
+        textContent={String(fill())}
+      />
     </Show>
   );
 }

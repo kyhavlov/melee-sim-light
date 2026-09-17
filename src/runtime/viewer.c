@@ -2,6 +2,8 @@
 
 #include "cm/camera.h"
 #include "ft/chara/ftCommon/forward.h"
+#include "ft/chara/ftGameWatch/forward.h"
+#include "ft/chara/ftGameWatch/types.h"
 #include "ft/fighter.h"
 #include "ft/types.h"
 #include "gr/types.h"
@@ -214,6 +216,11 @@ static void write_player(const MslCoreCompare* compare, int index,
     COPY_U8(last_hit_by);
     out[offsetof(MslCoreViewerPlayer, last_hit_element)] =
         (uint8_t) fp->dmg.x1860_element;
+    if (fp->kind == FTKIND_GAMEWATCH) {
+        int fill = fp->fv.gw.x2238_panicCharge;
+        out[offsetof(MslCoreViewerPlayer, bucket_fill)] =
+            (uint8_t) (fill < 0 ? 0 : fill > 3 ? 3 : fill);
+    }
     memcpy(out + offsetof(MslCoreViewerPlayer, state_flags),
            (const uint8_t*) compare + offsetof(MslCoreCompare, state_flags) +
                (size_t) index * MSL_CORE_STATE_FLAGS_BYTES,
@@ -282,6 +289,11 @@ static void write_follower(const MslCoreCompare* compare, int index,
     COPY_U8(last_hit_by);
     out[offsetof(MslCoreViewerPlayer, last_hit_element)] =
         (uint8_t) fp->dmg.x1860_element;
+    if (fp->kind == FTKIND_GAMEWATCH) {
+        int fill = fp->fv.gw.x2238_panicCharge;
+        out[offsetof(MslCoreViewerPlayer, bucket_fill)] =
+            (uint8_t) (fill < 0 ? 0 : fill > 3 ? 3 : fill);
+    }
     memcpy(out + offsetof(MslCoreViewerPlayer, state_flags),
            (const uint8_t*) compare +
                offsetof(MslCoreCompare, follower_state_flags) +
