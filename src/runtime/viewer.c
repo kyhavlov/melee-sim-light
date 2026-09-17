@@ -5,6 +5,11 @@
 #include "ft/fighter.h"
 #include "ft/types.h"
 #include "gr/types.h"
+#include "it/forward.h"
+#include "it/inlines.h"
+#include "it/itCharItems.h"
+#include "it/types.h"
+#include "lb/lb_00B0.h"
 #include "lb/types.h"
 #include "runtime/context.h"
 #include "runtime/observation.h"
@@ -65,10 +70,24 @@ static float joint_uniform_scale(HSD_JObj* joint)
         return 0.0F;
     }
     matrix = HSD_JObjGetMtxPtr(joint);
-    x = matrix[0][0];
-    y = matrix[1][0];
-    z = matrix[2][0];
-    return sqrtf(x * x + y * y + z * z);
+    // Column norms are the per-axis scales. Take the largest: Game & Watch's
+    // skeleton is flattened along one axis (about 0.03), so the first column
+    // alone reported a 0.06-unit shield for him.
+    {
+        float best = 0.0F;
+        int column;
+        for (column = 0; column < 3; ++column) {
+            float norm;
+            x = matrix[0][column];
+            y = matrix[1][column];
+            z = matrix[2][column];
+            norm = sqrtf(x * x + y * y + z * z);
+            if (norm > best) {
+                best = norm;
+            }
+        }
+        return best;
+    }
 }
 
 static void write_hitboxes(const Fighter* fp, uint8_t* player_out)
@@ -110,19 +129,36 @@ static void write_shield(const Fighter* fp, uint8_t* player_out)
     if (!fp->x221B_b0 || shield->bone == NULL) {
         return;
     }
-    // The common Guard descriptor's bone is a detached shield JObj. Its
-    // translation and HitResult::pos are not a stable world-space render
-    // center: ftCo_800921DC zeros the former and lbColl_80007BCC fills the
-    // latter lazily during collision queries. Mark the center unavailable so
-    // the 2D viewer uses its established per-character model offset.
+    // Publish the collision center the source itself uses: the shield bone's
+    // world transform applied to the descriptor offset, exactly as
+    // lbColl_80007BCC fills HitResult::pos lazily during collision queries.
+    // ftCo_800921DC zeros the bone's local translation at guard start and the
+    // guard tilt animation then moves it, so the world matrix at end of frame
+    // is the rendered/colliding center.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     //   ftCo_80091BC4,ftCo_80091E78,ftCo_800921DC}
     // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
-    put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_x), NAN);
-    put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_y), NAN);
-    put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_z), NAN);
+    {
+        Vec3 offset = shield->offset;
+        Vec3 center;
+        lb_8000B1CC(shield->bone, &offset, &center);
+        put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_x), center.x);
+        put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_y), center.y);
+        put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_z), center.z);
+    }
     put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_radius),
             shield->size * joint_uniform_scale(shield->bone));
+
+    {
+        float strength = fp->lightshield_amount;
+        if (strength < 0.0F) {
+            strength = 0.0F;
+        } else if (strength > 1.0F) {
+            strength = 1.0F;
+        }
+        player_out[offsetof(MslCoreViewerPlayer, shield_strength)] =
+            (uint8_t) (strength * 255.0F + 0.5F);
+    }
 
     if (fp->motion_id < ftCo_MS_GuardOn ||
         fp->motion_id > ftCo_MS_GuardReflect)
@@ -176,6 +212,8 @@ static void write_player(const MslCoreCompare* compare, int index,
     COPY_U8(last_attack_landed);
     COPY_U8(combo_count);
     COPY_U8(last_hit_by);
+    out[offsetof(MslCoreViewerPlayer, last_hit_element)] =
+        (uint8_t) fp->dmg.x1860_element;
     memcpy(out + offsetof(MslCoreViewerPlayer, state_flags),
            (const uint8_t*) compare + offsetof(MslCoreCompare, state_flags) +
                (size_t) index * MSL_CORE_STATE_FLAGS_BYTES,
@@ -242,6 +280,8 @@ static void write_follower(const MslCoreCompare* compare, int index,
     COPY_U8(last_attack_landed);
     COPY_U8(combo_count);
     COPY_U8(last_hit_by);
+    out[offsetof(MslCoreViewerPlayer, last_hit_element)] =
+        (uint8_t) fp->dmg.x1860_element;
     memcpy(out + offsetof(MslCoreViewerPlayer, state_flags),
            (const uint8_t*) compare +
                offsetof(MslCoreCompare, follower_state_flags) +
@@ -321,6 +361,95 @@ static void write_stage(const MslCoreMatch* match, uint8_t* out)
     }
 }
 
+static void write_item_visuals(const MslCoreMatch* match, uint8_t* out)
+{
+    Item_GObj* gobj = (Item_GObj*) match->gobj.entities->items;
+    int slot = 0;
+
+    // Same list order as msl_core_write_items_into_zeroed so slot i here
+    // describes items[i].
+    while (gobj != NULL && slot < MSL_CORE_MAX_ITEMS) {
+        const Item* ip = GET_ITEM(gobj);
+        HSD_JObj* joint = GET_JOBJ(gobj);
+        uint8_t* visual = out + (size_t) slot * sizeof(MslCoreViewerItemVisual);
+
+        if (ip != NULL &&
+            (ip->kind == It_Kind_Mewtwo_ShadowBall ||
+             ip->kind == It_Kind_Samus_Charge) &&
+            joint != NULL)
+        {
+            // itMewtwoshadowball_UnkMotion0_Anim and
+            // itSamuschargeshot_UnkMotion0_Anim scale the grandchild joint
+            // with the charge; Mewtwo's animation also carries the orbit.
+            HSD_JObj* child = HSD_JObjGetChild(joint);
+            if (child != NULL) {
+                HSD_JObj* grandchild = HSD_JObjGetChild(child);
+                joint = grandchild != NULL ? grandchild : child;
+            }
+        }
+        if (joint != NULL) {
+            MtxPtr matrix = HSD_JObjGetMtxPtr(joint);
+            if (matrix != NULL) {
+                put_f32(visual, offsetof(MslCoreViewerItemVisual, x),
+                        matrix[0][3]);
+                put_f32(visual, offsetof(MslCoreViewerItemVisual, y),
+                        matrix[1][3]);
+                put_f32(visual, offsetof(MslCoreViewerItemVisual, z),
+                        matrix[2][3]);
+                put_f32(visual, offsetof(MslCoreViewerItemVisual, scale),
+                        joint_uniform_scale(joint));
+                visual[offsetof(MslCoreViewerItemVisual, valid)] = 1;
+            }
+        }
+        if (ip != NULL) {
+            // The chain's x0 link is the one the item physics drives and
+            // collides with walls/ledges (it_802A5AE0 / it_802B... take it as
+            // link_0), so it is the hook or beam tip and the hang anchor. x4
+            // is the hand end. The item position itself is frozen at spawn.
+            const ItemLink* tip = NULL;
+            if (ip->kind == It_Kind_Samus_GBeam) {
+                tip = ip->xDD4_itemVar.samusgrapple.x0;
+            } else if (ip->kind == It_Kind_Link_HShot ||
+                       ip->kind == It_Kind_CLink_HShot)
+            {
+                tip = ip->xDD4_itemVar.linkhookshot.x0;
+            }
+            if (tip != NULL) {
+                // Links are zeroed until the chain's first physics pass, so
+                // an exact origin means "not placed yet".
+                if (tip->pos.x != 0.0F || tip->pos.y != 0.0F ||
+                    tip->pos.z != 0.0F)
+                {
+                    put_f32(visual, offsetof(MslCoreViewerItemVisual, tip_x),
+                            tip->pos.x);
+                    put_f32(visual, offsetof(MslCoreViewerItemVisual, tip_y),
+                            tip->pos.y);
+                    visual[offsetof(MslCoreViewerItemVisual, tip_valid)] = 1;
+                }
+            }
+        }
+        if (ip != NULL) {
+            int h;
+            for (h = 0; h < 4; ++h) {
+                const HitCapsule* hit = &ip->x5D4_hitboxes[h].hit;
+                if (hit->state == HitCapsule_Disabled) {
+                    continue;
+                }
+                put_f32(visual, offsetof(MslCoreViewerItemVisual, hitbox_x),
+                        hit->x4C.x);
+                put_f32(visual, offsetof(MslCoreViewerItemVisual, hitbox_y),
+                        hit->x4C.y);
+                put_f32(visual,
+                        offsetof(MslCoreViewerItemVisual, hitbox_radius),
+                        hit->scale);
+                break;
+            }
+        }
+        slot += 1;
+        gobj = (Item_GObj*) gobj->next;
+    }
+}
+
 void msl_core_match_write_viewer(const MslCoreMatch* match,
                                  MslCoreViewerState* output)
 {
@@ -367,6 +496,7 @@ void msl_core_match_write_viewer(const MslCoreMatch* match,
     memcpy(out + offsetof(MslCoreViewerState, items), compare->items,
            sizeof(compare->items));
     msl_core_canonicalize_production_items(output->items);
+    write_item_visuals(match, out + offsetof(MslCoreViewerState, item_visuals));
     write_stage(match, out + offsetof(MslCoreViewerState, stage));
     msl_camera_get_render_transform(&eye, &interest, &fov);
     put_f32(out,

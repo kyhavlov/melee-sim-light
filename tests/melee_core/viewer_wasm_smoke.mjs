@@ -157,8 +157,14 @@ try {
     }
   }
   assert(sawShield, "live viewer never observed a source shield bubble");
-  assert.equal(neutralShield.shieldX, undefined);
-  assert.equal(neutralShield.shieldY, undefined);
+  // The projection publishes the source collision center (shield bone world
+  // transform + descriptor offset): near the fighter, above the feet.
+  assert(Number.isFinite(neutralShield.shieldX) && Number.isFinite(neutralShield.shieldY),
+    "live viewer shield projection did not expose the shield center");
+  assert(Math.abs(neutralShield.shieldX - neutralShield.xPosition) < 10 &&
+    neutralShield.shieldY > neutralShield.yPosition &&
+    neutralShield.shieldY < neutralShield.yPosition + 30,
+    "live viewer shield center is not near the fighter");
   let tiltedShield = neutralShield;
   for (let index = 0; index < 20; index += 1) {
     const pads = controllers({

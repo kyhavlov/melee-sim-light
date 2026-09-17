@@ -19,6 +19,7 @@ int main(void)
     VALUE("VIEWER_PLAYER_SIZE", sizeof(MslCoreViewerPlayer));
     VALUE("VIEWER_HITBOX_SIZE", sizeof(MslCoreViewerHitbox));
     VALUE("ITEM_SIZE", sizeof(MslCoreItem));
+    VALUE("VIEWER_ITEM_VISUAL_SIZE", sizeof(MslCoreViewerItemVisual));
     puts("");
 
     puts("export const matchConfigOffsets = Object.freeze({");
@@ -85,6 +86,7 @@ int main(void)
     FIELD(MslCoreViewerState, stock_count, "stockCount");
     FIELD(MslCoreViewerState, players, "players");
     FIELD(MslCoreViewerState, items, "items");
+    FIELD(MslCoreViewerState, item_visuals, "itemVisuals");
     FIELD(MslCoreViewerState, stage, "stage");
     FIELD(MslCoreViewerState, camera, "camera");
     FIELD(MslCoreViewerState, follower_present, "followerPresent");
@@ -105,6 +107,8 @@ int main(void)
     FIELD(MslCoreViewerPlayer, combo_count, "comboCount");
     FIELD(MslCoreViewerPlayer, last_hit_by, "lastHitBy");
     FIELD(MslCoreViewerPlayer, state_flags, "stateFlags");
+    FIELD(MslCoreViewerPlayer, last_hit_element, "lastHitElement");
+    FIELD(MslCoreViewerPlayer, shield_strength, "shieldStrength");
     FIELD(MslCoreViewerPlayer, action_id, "actionId");
     FIELD(MslCoreViewerPlayer, action_frame, "actionFrame");
     FIELD(MslCoreViewerPlayer, hitlag, "hitlag");
@@ -159,6 +163,20 @@ int main(void)
     FIELD(MslCoreItem, misc1, "misc1");
     FIELD(MslCoreItem, misc2, "misc2");
     FIELD(MslCoreItem, misc3, "misc3");
+    puts("});");
+
+    puts("export const viewerItemVisualOffsets = Object.freeze({");
+    FIELD(MslCoreViewerItemVisual, x, "x");
+    FIELD(MslCoreViewerItemVisual, y, "y");
+    FIELD(MslCoreViewerItemVisual, z, "z");
+    FIELD(MslCoreViewerItemVisual, scale, "scale");
+    FIELD(MslCoreViewerItemVisual, hitbox_x, "hitboxX");
+    FIELD(MslCoreViewerItemVisual, hitbox_y, "hitboxY");
+    FIELD(MslCoreViewerItemVisual, hitbox_radius, "hitboxRadius");
+    FIELD(MslCoreViewerItemVisual, tip_x, "tipX");
+    FIELD(MslCoreViewerItemVisual, tip_y, "tipY");
+    FIELD(MslCoreViewerItemVisual, tip_valid, "tipValid");
+    FIELD(MslCoreViewerItemVisual, valid, "valid");
     puts("});");
 
     puts("export const viewerStageOffsets = Object.freeze({");

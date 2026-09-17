@@ -7594,3 +7594,42 @@ tests bumped 491 -> 492.
   passes. GameWatch PPC16/16 exact over197,803 transitions. Production viewer
   built and served locally at127.0.0.1:8001 for the user's manual testing.
   GameCube bridge starts with the server. No commit/push/PR created.
+
+### Viewer article renderers — 2026-09-15
+
+- Owner: `Item.tsx` item switch and `Player.tsx` overlays; wire lanes are
+  unchanged. Added renderers for Mewtwo Disable/Shadow Ball, all ten Game &
+  Watch articles, Din's Fire ember/burst, Peach turnip faces and rare pulls;
+  Judge number from the owner's motion state; sleep and misfire overlays.
+- Exposed misc3 through the live adapter and MSLTRACE1 (`misc3` field,
+  readers default missing fields to 0) and corrected misc2/misc3 to Slippi's
+  launched flag / charge level, fixing Samus's charge-shot radius.
+- Evidence: headless Chrome captures of each move (session scratch, not
+  retained); `make viewer-smoke` and the schema test pass.
+  Remaining silhouette gaps are recorded in VIEWER_ARTICLES.md.
+- Second batch: item renderers for Mario/Doc, Ice Climbers, Bowser, Pikachu,
+  Ness, Link/Young Link/Samus tethers, Sheik, Yoshi, Peach parasol; fallback
+  silhouettes for victim-side capture/throw/bury/frozen/asleep states; hitbox
+  overlay with an off-by-default toggle (H key, live-page checkbox); buried,
+  frozen, Fire Fox and element status overlays. Fixed a frame-loop freeze on
+  Sheik's Vanish hold (undefined action name reached `.includes`).
+- Viewer-only wire change (no public/observation lanes): `MslCoreViewerState`
+  gains `item_visuals[15]` (rendered joint world position + scale; Shadow Ball
+  uses the animated grandchild joint) and `MslCoreViewerPlayer.last_hit_element`
+  in former padding. Size 2332 -> 2632; schema regenerated; native-smoke,
+  viewer-smoke and the Python API tests pass; the wasm viewer digest changes,
+  the state digest does not.
+- Third pass: item hit capsules added to `item_visuals` (size 32, state
+  2812), Samus charge growth from the joint scale, closed parasol, Yoshi
+  stars, Ness yoyo removed, `<name>1` animation fallback (Ness/Puff crouch),
+  Game & Watch shield radius fallback. Fox Illusion hit capsule and the G&W
+  shield-bone scale remain open in VIEWER_ARTICLES.md.
+- Fourth pass: shield center published from the source collision call and
+  max-column joint scale (fixes Game & Watch and Ness shield placement), light
+  shield styling, parasol open/closed corrected, Yoshi egg overlay, PSI
+  Magnet, tether-hang line to the stage ledge, bat removed.
+- Tether tip published from the item link chain (`item_visuals` size 40,
+  viewer state 2932); ledge table removed from the renderer.
+- Tether tip now the physics-driven `x0` link (fixes the hang drawing to the
+  hand end); shield strength lane from `lightshield_amount`; Fire Fox flames
+  removed in favour of the hitbox overlay.
