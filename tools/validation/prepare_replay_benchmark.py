@@ -43,6 +43,8 @@ def _cache_key(case: ReplayCase) -> str:
             str(case.played_on),
         )
     )
+    if case.fnmsubs_profile is not None:
+        identity += "\0fnmsubs=" + case.fnmsubs_profile
     return hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 
@@ -103,6 +105,7 @@ def prepare(args: argparse.Namespace) -> None:
                         ucf_cardinals_1_0_enabled=case.ucf_cardinals_1_0_enabled,
                         ucf_shield_sdi_enabled=case.ucf_shield_sdi_enabled,
                         ucf_sdi_enabled=case.ucf_sdi_enabled,
+                        fnmsubs_profile=case.fnmsubs_profile,
                     )
                 os.replace(temporary, case_path)
             finally:

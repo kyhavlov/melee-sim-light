@@ -1,0 +1,32 @@
+[
+  {
+    "source": "/home/blewf/Slippi/Game_20260702T170056.slp",
+    "replay": "replays/validation/legacy_arithmetic/mewtwo_fox_20260702T170056.slpz",
+    "sha256_slp": "2c71d691818124da7fb46e6f766b28d6d9a7e8fb5978a6a01226cab693d4d311",
+    "fnmsubs_profile": "dolphin-legacy",
+    "profile_evidence": "First writer operands at retail 0x8006B9E4 and strict full-game arithmetic-profile differential; historical build unknown."
+  },
+  {
+    "source": "/home/blewf/git/exphil/test/fixtures/replays/mewtwo_shfair_only.slp",
+    "replay": "replays/validation/legacy_arithmetic/mewtwo_fox_shfair_only.slpz",
+    "sha256_slp": "46e643c5dd64d9c028d0ba9f998b3d34afa301defd02e97a2c1d556d35657e22",
+    "fnmsubs_profile": "dolphin-legacy",
+    "profile_evidence": "First writer operands at retail 0x8006B9E4 and strict full-game arithmetic-profile differential; historical build unknown."
+  },
+  {
+    "source": "/home/blewf/Slippi/Game_20260707T142746.slp",
+    "replay": "replays/validation/legacy_arithmetic/gamewatch_fox_20260707T142746.slpz",
+    "sha256_slp": "f88b682fb7c829c799fe5b42ac8d9b45dfc7f0846ee2182556feef151b3954bf",
+    "sha256_slpz": "59d9a35034b73faf7e97b166038259a7d081eda3f227159132847b7166b7b56d",
+    "fnmsubs_profile": "dolphin-legacy",
+    "profile_evidence": "Strict full-game arithmetic-profile differential (same July recorder as the Mewtwo games); historical build unknown."
+  },
+  {
+    "source": "/home/blewf/Slippi/Game_20260707T172242.slp",
+    "replay": "replays/validation/legacy_arithmetic/gamewatch_fox_20260707T172242.slpz",
+    "sha256_slp": "4b510813e7645d448b3430e7327ec30e6f851ca9e3e061e970be0731922f7b98",
+    "sha256_slpz": "b34b0213d75b8dfedde35a1ddcca5e248b16e2af77a3a941b5f468c439d12c11",
+    "fnmsubs_profile": "dolphin-legacy",
+    "profile_evidence": "Strict full-game arithmetic-profile differential (same July recorder as the Mewtwo games); historical build unknown."
+  }
+]

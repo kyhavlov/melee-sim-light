@@ -1,0 +1,60 @@
+{
+  "name": "legacy_arithmetic",
+  "notes": "Recordings whose arithmetic is inferred as the legacy Dolphin JIT fused c - a*b exact-zero sign rather than retail negate-after-subtract; each declares fnmsubs_profile dolphin-legacy. See agent_docs/ARITHMETIC_PROFILES.md. Requires Mewtwo and Mr. Game & Watch admission; joins the aggregate once both are supported.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/legacy_arithmetic/mewtwo_fox_20260702T170056.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Mewtwo",
+        "2": "Fox"
+      },
+      "fnmsubs_profile": "dolphin-legacy"
+    },
+    {
+      "replay": "replays/validation/legacy_arithmetic/mewtwo_fox_shfair_only.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Mewtwo",
+        "2": "Fox"
+      },
+      "fnmsubs_profile": "dolphin-legacy"
+    },
+    {
+      "replay": "replays/validation/legacy_arithmetic/gamewatch_fox_20260707T142746.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Game & Watch"
+      },
+      "fnmsubs_profile": "dolphin-legacy"
+    },
+    {
+      "replay": "replays/validation/legacy_arithmetic/gamewatch_fox_20260707T172242.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Game & Watch"
+      },
+      "fnmsubs_profile": "dolphin-legacy"
+    }
+  ]
+}
