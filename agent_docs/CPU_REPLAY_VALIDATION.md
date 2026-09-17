@@ -15,7 +15,12 @@ CPU input floats must not be quantized onto the human controller's 1/80 grid.
 
 - This validates recorded CPU inputs; it does not admit autonomous CPU control
   through the public RL API.
-- CPU Ice Climbers are rejected until their follower behavior is validated.
+- CPU Ice Climbers are admitted: Nana is always a follower entity whose inputs
+  come from the source follower AI whether Popo is human or CPU
+  (`Player_8003248C` returns the CPU kind for any follower), so a CPU Popo only
+  changes where Popo's own inputs come from. The recorded-input hook skips
+  followers; the validator compares Nana's post lanes as it does for human
+  Ice Climbers. Proven by the retained fixture below.
 - Controller-only benchmark tapes reject CPU recordings, since they cannot
   represent the processed input stream. Their config layout revision is v3.
 - Strict bitwise comparison and existing classifications are unchanged.
@@ -40,6 +45,23 @@ field is knockback Y; first mismatch details show the historical +0/-0 arithmeti
 difference. These are diagnostic runs, not 12 exact passes. See the separate
 signed-zero handoff before assigning execution profiles.
 
+## Retained CPU Ice Climbers fixture
+
+`replays/validation/cpu_inputs/cpu_ice_climbers_l5.slpz` is a lossless
+compressed copy of a headless Slippi Dolphin game recorded on 2026-09-17 with
+`tools/validation/record_cpu_ice_climbers.exs` through the ExPhil bridge:
+P1 human Fox on a scripted controller (lasers, dashes, shields, then a walk-off
+until the match ends), P2 level-5 CPU Ice Climbers chosen by the game, Final
+Destination, `AccurateNmsub=true`, Dolphin binary SHA-256
+`b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c` (the same
+build as the Game & Watch and Mewtwo scripted captures). Original `.slp`
+SHA-256: `e3001303503bf6f177a5fcd80558b4a7d393c5173c272cd4c1dd63f4dd0504f3`.
+The CPU took three Fox stocks before the walk-off.
+
+All 3,815 transitions compare exactly, including Nana's follower post lanes,
+with no signed-zero rows. It is the single entry of `replays/suites/cpu_inputs.json`,
+included in the aggregate suite with a native output lock (530 cases).
+
 ## Checks
 
 - `make source-check native-smoke viewer-schema-check`
@@ -51,7 +73,8 @@ signed-zero handoff before assigning execution profiles.
 The CPU smoke exercises physical P2/P3 ownership, exact negative-zero/subnormal
 and off-grid float transport, follower exclusion, pending-input copy/save/restore,
 and reset to human control. Existing supported-domain output locks remain
-unchanged: 503 exact / 26 existing classified / zero failures or errors.
+unchanged: 503 exact / 26 existing classified / zero failures or errors, plus
+the new CPU Ice Climbers lock.
 PPC replay validation is not established on this host; its pytest case skips
 because the artifacts are unavailable. Ignored logs are under
 `reports/triage/gamewatch_mewtwo/cpu-*`.

@@ -11,6 +11,7 @@ from tools.validation.slpz import replay_path_for_peppi
 
 ROOT = Path(__file__).resolve().parents[1]
 REPLAY = ROOT / "replays/validation/cpu_inputs/exphil_peach_r1.slpz"
+ICE_CLIMBERS_REPLAY = ROOT / "replays/validation/cpu_inputs/cpu_ice_climbers_l5.slpz"
 
 
 @pytest.fixture
@@ -66,3 +67,21 @@ def test_cpu_replay_is_not_exported_as_physical_controller_tape(cpu_game, tmp_pa
             cpu_game.frames, cpu_game.start, cpu_game.metadata, str(output)
         )
     assert not output.exists()
+
+
+def test_cpu_ice_climbers_replay_is_bit_exact_with_follower():
+    if not all(p.is_file() for p in (ICE_CLIMBERS_REPLAY, validate_replay.NATIVE,
+                                    validate_replay.NATIVE_BINARY)):
+        pytest.skip("native CPU replay validation artifacts are unavailable")
+    with replay_path_for_peppi(ICE_CLIMBERS_REPLAY) as path:
+        game = _read_slippi(str(path), False)
+    assert [p["type"] for p in game.start["players"]] == ["Human", "Cpu"]
+    assert game.start["players"][1]["cpu_level"] == 5
+    # Nana is a recorded follower entity; the validator compares her post
+    # lanes while the source follower AI drives her inputs.
+    assert "follower" in game.frames.field("ports").field("P2").type.names
+    result = run_game(game, game.start)
+    assert result["pass"] is True
+    assert result["frames"] == 3815
+    assert result["mismatch_count"] == 0
+    assert result["signed_zero_equal_count"] == 0

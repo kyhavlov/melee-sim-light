@@ -21,6 +21,7 @@
     "ness.json",
     "links.json",
     "mewtwo_targeted.json",
-    "gamewatch.json"
+    "gamewatch.json",
+    "cpu_inputs.json"
   ]
 }

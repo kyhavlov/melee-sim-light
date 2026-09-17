@@ -655,11 +655,8 @@ static int validate_config(MslCoreMatchConfig* config)
                     "and char_id=25 Ganondorf only\n");
             return -1;
         }
-        if (config->players[i].cpu_level > 9 ||
-            (config->players[i].cpu_level != 0 &&
-             config->players[i].char_id == MSL_CORE_CHAR_POPO))
-        {
-            fprintf(stderr, "CPU level must be 1..9; CPU Ice Climbers are unsupported\n");
+        if (config->players[i].cpu_level > 9) {
+            fprintf(stderr, "CPU level must be 1..9\n");
             return -1;
         }
         if (config->players[i].handicap == 0) {

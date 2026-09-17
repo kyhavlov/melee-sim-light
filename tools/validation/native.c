@@ -1108,10 +1108,6 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
     int64_t player_raw = rows->player_raw[i][0];
     uint8_t character = get_u8(&player->character, player_raw);
     config->players[i].cpu_level = replay->cpu_level[i];
-    if (character == 10 && replay->cpu_level[i]) {
-      snprintf(error, error_size, "CPU Ice Climbers replay validation is not supported");
-      return -1;
-    }
     uint8_t stocks = replay->start_stocks[i];
     if (character != 5 && character != 1 && character != 2 && character != 3 && character != 6 && character != 7 &&
         character != 8 && character != 9 && character != 10 && character != 12 &&
