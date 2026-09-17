@@ -655,6 +655,13 @@ static int validate_config(MslCoreMatchConfig* config)
                     "and char_id=25 Ganondorf only\n");
             return -1;
         }
+        if (config->players[i].cpu_level > 9 ||
+            (config->players[i].cpu_level != 0 &&
+             config->players[i].char_id == MSL_CORE_CHAR_POPO))
+        {
+            fprintf(stderr, "CPU level must be 1..9; CPU Ice Climbers are unsupported\n");
+            return -1;
+        }
         if (config->players[i].handicap == 0) {
             config->players[i].handicap = 9;
         } else if (config->players[i].handicap > 9) {
@@ -1104,7 +1111,10 @@ static int match_construct(MslCoreMatch* match,
                                            : ((encoded & 1) ? 1.0F : -1.0F);
         Player_SetPlayerCharacter(
             slot, source_character_kind(match->config.players[i].char_id));
-        Player_SetSlottype(slot, Gm_PKind_Human);
+        Player_SetSlottype(slot, match->config.players[i].cpu_level != 0
+                                    ? Gm_PKind_Cpu : Gm_PKind_Human);
+        Player_SetPlayerAndEntityCpuLevel(slot,
+                                         match->config.players[i].cpu_level);
         Player_SetTeam(slot, match->config.players[i].team_id);
         Player_SetStocks(slot, match->config.stock_count);
         // Player_SetHUDDamage initializes both player entities; Fighter_Create

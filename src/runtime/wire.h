@@ -43,6 +43,15 @@ typedef struct MslCoreInput {
     MslCoreInputPlayer p[MSL_CORE_MAX_PLAYERS];
 } MslCoreInput;
 
+// Slippi Playback/Core/RestoreGameFrame.asm publishes these processed values
+// at 0x8006B0DC, independently of physical controller bytes.
+typedef struct MslReplayCpuInput {
+    float main_x, main_y, c_x, c_y, trigger;
+    uint32_t buttons;
+    uint32_t random_seed;
+    uint8_t valid;
+} MslReplayCpuInput;
+
 typedef struct MslCoreStageEvents {
     float fod_platform_height[2];
     // Slippi records the global RNG both at the frame-start scheduler boundary
@@ -54,6 +63,7 @@ typedef struct MslCoreStageEvents {
     uint8_t dreamland_whispy_valid;
     uint8_t dreamland_whispy_direction;
     uint8_t fighter_pre_random_seed_valid;
+    MslReplayCpuInput cpu_inputs[MSL_CORE_MAX_PLAYERS];
 } MslCoreStageEvents;
 
 typedef struct MslCoreStreamFrame {
@@ -71,6 +81,7 @@ typedef struct MslCoreMatchPlayerConfig {
     uint8_t costume_id;
     uint8_t handicap;
     uint8_t start_percent;
+    uint8_t cpu_level; // Zero selects a controller; 1..9 retain a CPU slot.
 } MslCoreMatchPlayerConfig;
 
 typedef struct MslCoreMatchConfig {
@@ -332,11 +343,11 @@ typedef struct MslCoreViewerState {
 
 _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size");
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
-_Static_assert(sizeof(MslCoreStageEvents) == 16, "stage events wire size");
-_Static_assert(sizeof(MslCoreStreamFrame) == 72, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 59,
+_Static_assert(sizeof(MslCoreStageEvents) == 132, "stage events wire size");
+_Static_assert(sizeof(MslCoreStreamFrame) == 188, "stream frame wire size");
+_Static_assert(sizeof(MslCoreMatchConfig) == 63,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 115,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 119,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");

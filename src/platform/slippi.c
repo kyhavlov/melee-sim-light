@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <baselib/random.h>
+#include <ft/types.h>
 
 static _Thread_local MslCoreSlippiState* msl_bound_slippi_state;
 
@@ -44,6 +45,8 @@ void msl_slippi_stage_events_begin(const MslCoreStageEvents* events)
         events->fighter_pre_random_seed_valid;
     msl_bound_slippi_state->fighter_pre_random_seed =
         events->fighter_pre_random_seed;
+    memcpy(msl_bound_slippi_state->cpu_inputs, events->cpu_inputs,
+           sizeof(events->cpu_inputs));
 }
 
 bool msl_slippi_fod_platform_height(u8 platform, f32 source_height,
@@ -94,6 +97,27 @@ void msl_slippi_apply_fighter_pre_random_seed(void)
         *seed_ptr = msl_bound_slippi_state->fighter_pre_random_seed;
         msl_bound_slippi_state->fighter_pre_random_seed_pending = 0;
     }
+}
+
+void msl_slippi_apply_cpu_input(struct Fighter* fp)
+{
+    MslReplayCpuInput* input;
+    if (fp->x221F_b4 || fp->player_id >= MSL_CORE_MAX_PLAYERS) {
+        return;
+    }
+    input = &msl_bound_slippi_state->cpu_inputs[fp->player_id];
+    if (!input->valid) {
+        return;
+    }
+    // Playback/Core/RestoreGameFrame.asm, before input edges and timers.
+    fp->input.lstick.x = input->main_x;
+    fp->input.lstick.y = input->main_y;
+    fp->input.cstick.x = input->c_x;
+    fp->input.cstick.y = input->c_y;
+    fp->input.x650 = input->trigger;
+    fp->input.held_inputs = input->buttons;
+    *seed_ptr = input->random_seed;
+    input->valid = 0;
 }
 
 static MslCoreSlippiFighterState* find_state(const struct Fighter* fp,
