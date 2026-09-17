@@ -1,7 +1,8 @@
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, For, Match, Show, Switch } from "solid-js";
 import { characterNameByExternalId } from "~/common/ids";
 import { RenderData } from "~/common/types";
 import { access } from "~/state/accessor";
+import { showHitboxes } from "~/state/displayStore";
 import { getPlayerOnFrame, getStartOfAction } from "~/viewer/viewerUtil";
 
 export function Players() {
@@ -19,6 +20,14 @@ export function Players() {
             />
             <Shield renderData={renderData} />
             <Shine renderData={renderData} />
+            <Hitboxes renderData={renderData} />
+            <SleepBubbles renderData={renderData} />
+            <Misfire renderData={renderData} />
+            <Buried renderData={renderData} />
+            <Frozen renderData={renderData} />
+            <HitElementEffect renderData={renderData} />
+            <YoshiEggShell renderData={renderData} />
+            <PsiMagnet renderData={renderData} />
           </>
         )}
       </For>
@@ -47,6 +56,13 @@ function Shield(props: { renderData: RenderData }) {
       ? 1
       : props.renderData.playerInputs.processed.anyTrigger
   );
+  // Source light-shield amount when the sim publishes it, else the trigger
+  // analog (the same quantity before the source's 0.3 dead zone).
+  const shieldStrength = createMemo(() => {
+    const source = props.renderData.playerState.shieldStrength;
+    if (typeof source === "number" && Number.isFinite(source)) return source;
+    return Math.max(0, Math.min(1, (triggerStrength() - 0.3) / 0.7));
+  });
   // Formulas from https://www.ssbwiki.com/Shield#Shield_statistics
   const triggerStrengthMultiplier = createMemo(
     () => 1 - (0.5 * (triggerStrength() - 0.3)) / 0.7
@@ -94,7 +110,13 @@ function Shield(props: { renderData: RenderData }) {
           cy={shieldY()}
           r={shieldRadius()}
           fill={props.renderData.innerColor}
-          opacity={0.6}
+          // Shield strength from the source (1 = hard/digital shield,
+          // lower = lighter analog shield, which is larger but weaker):
+          // fade continuously and add a dashed rim below full strength.
+          opacity={0.25 + 0.35 * shieldStrength()}
+          stroke={props.renderData.outerColor}
+          stroke-width={shieldStrength() < 0.99 ? 0.6 : 0}
+          stroke-dasharray={shieldStrength() < 0.99 ? "1.5 1" : undefined}
         />
       </Show>
     </>
@@ -128,6 +150,366 @@ function Shine(props: { renderData: RenderData }) {
         />
       </Show>
     </>
+  );
+}
+
+// Active fighter hitboxes from the wire (up to four per fighter, world
+// space, radius already scaled). Drawn translucent so attacks whose visuals
+// live in effects rather than the silhouette (Samus's forward air, Ness's
+// PSI aerials and dash attack, Sheik's up special burst) still show where
+// they hit.
+function Hitboxes(props: { renderData: RenderData }) {
+  const hitboxes = createMemo(() =>
+    showHitboxes() ? props.renderData.playerState.hitboxes ?? [] : []
+  );
+  return (
+    <For each={hitboxes()}>
+      {(hitbox) => (
+        <circle
+          cx={hitbox.x}
+          cy={hitbox.y}
+          r={hitbox.radius}
+          fill="#ef4444"
+          fill-opacity={0.22}
+          stroke="#b91c1c"
+          stroke-opacity={0.6}
+          stroke-width={0.4}
+        />
+      )}
+    </For>
+  );
+}
+
+// Buried by Donkey Kong's down special: Bury (294), BuryWait (295),
+// BuryJump (296). The silhouette falls back to a tumble pose; cover the lower
+// half with a mound so the fighter reads as stuck in the ground.
+const BURY_ACTION_IDS = [294, 295];
+
+function Buried(props: { renderData: RenderData }) {
+  const buried = createMemo(() =>
+    BURY_ACTION_IDS.includes(props.renderData.playerState.actionStateId)
+  );
+  const x = createMemo(() => props.renderData.playerState.xPosition);
+  const y = createMemo(() => props.renderData.playerState.yPosition);
+  const height = createMemo(
+    () => props.renderData.characterData.shieldOffset[1] * 1.3
+  );
+  return (
+    <Show when={buried()}>
+      <ellipse
+        cx={x()}
+        cy={y() + height() * 0.15}
+        rx={8}
+        ry={2.4}
+        fill="#78350f"
+        stroke="#451a03"
+        stroke-width={0.5}
+      />
+      <path
+        d={`M ${x() - 7.5} ${y() + height() * 0.15} Q ${x() - 4} ${y() + height() * 0.15 + 4} ${x() - 1} ${y() + height() * 0.15 + 1.5} T ${x() + 4} ${y() + height() * 0.15 + 3.5} T ${x() + 7.5} ${y() + height() * 0.15}`}
+        fill="#92400e"
+        stroke="#451a03"
+        stroke-width={0.5}
+      />
+    </Show>
+  );
+}
+
+// Frozen by an ice attack: DamageIce (325) and DamageIceJump (326).
+const FROZEN_ACTION_IDS = [325, 326];
+
+function Frozen(props: { renderData: RenderData }) {
+  const frozen = createMemo(() =>
+    FROZEN_ACTION_IDS.includes(props.renderData.playerState.actionStateId)
+  );
+  const x = createMemo(() => props.renderData.playerState.xPosition);
+  const y = createMemo(() => props.renderData.playerState.yPosition);
+  const height = createMemo(
+    () => props.renderData.characterData.shieldOffset[1] * 2.2
+  );
+  return (
+    <Show when={frozen()}>
+      <rect
+        x={x() - height() * 0.35}
+        y={y() - 1}
+        width={height() * 0.7}
+        height={height()}
+        rx={1.5}
+        fill="#bae6fd"
+        fill-opacity={0.55}
+        stroke="#0284c7"
+        stroke-width={0.6}
+      />
+    </Show>
+  );
+}
+
+// Fox and Falco's Fire Fox / Fire Bird are not drawn as flames; the charge
+// and travel hits are fighter hitboxes and show through the hitbox overlay.
+
+// Element of the last hit taken (HitElement in refs/melee lb/forward.h):
+// 1 fire, 2 electric, 13 dark. Shown while the hit is still in effect, i.e.
+// during hitlag (electric paralysis) or hitstun (burning / dark flames).
+const HIT_ELEMENT_FIRE = 1;
+const HIT_ELEMENT_ELECTRIC = 2;
+const HIT_ELEMENT_DARK = 13;
+
+function HitElementEffect(props: { renderData: RenderData }) {
+  const state = () => props.renderData.playerState;
+  const element = createMemo(() => state().lastHitElement ?? 0);
+  const active = createMemo(
+    () =>
+      (state().hitlagRemaining > 0 || state().hitstunRemaining > 0) &&
+      (element() === HIT_ELEMENT_FIRE ||
+        element() === HIT_ELEMENT_ELECTRIC ||
+        element() === HIT_ELEMENT_DARK)
+  );
+  const x = createMemo(() => state().xPosition);
+  const y = createMemo(
+    () => state().yPosition + props.renderData.characterData.shieldOffset[1]
+  );
+  const size = createMemo(
+    () => props.renderData.characterData.shieldOffset[1] * 1.1
+  );
+  const frame = createMemo(() => state().frameNumber);
+  const tongues = [0, 60, 120, 180, 240, 300];
+  return (
+    <Show when={active()}>
+      <Switch>
+        <Match when={element() === HIT_ELEMENT_ELECTRIC}>
+          <For each={tongues}>
+            {(deg) => {
+              const angle = createMemo(() => ((deg + frame() * 47) * Math.PI) / 180);
+              const reach = createMemo(() => size() * (0.9 + ((frame() + deg) % 3) * 0.15));
+              return (
+                <line
+                  x1={x() + Math.cos(angle()) * size() * 0.4}
+                  y1={y() + Math.sin(angle()) * size() * 0.4}
+                  x2={x() + Math.cos(angle() + 0.5) * reach()}
+                  y2={y() + Math.sin(angle() + 0.5) * reach()}
+                  stroke="#facc15"
+                  stroke-width={0.7}
+                  stroke-linecap="round"
+                />
+              );
+            }}
+          </For>
+        </Match>
+        <Match when={true}>
+          <For each={tongues}>
+            {(deg) => {
+              const angle = createMemo(() => ((deg + frame() * 23) * Math.PI) / 180);
+              const flicker = createMemo(() => 0.7 + ((frame() + deg) % 4) * 0.12);
+              return (
+                <circle
+                  cx={x() + Math.cos(angle()) * size() * 0.55}
+                  cy={y() + Math.sin(angle()) * size() * 0.7 + size() * 0.2 * flicker()}
+                  r={size() * 0.32 * flicker()}
+                  fill={element() === HIT_ELEMENT_DARK ? "#7e22ce" : "#f97316"}
+                  fill-opacity={0.55}
+                />
+              );
+            }}
+          </For>
+        </Match>
+      </Switch>
+    </Show>
+  );
+}
+
+// Swallowed by Yoshi: YoshiEgg (277) and KirbyYoshiEgg (332 in the common
+// table). The silhouette is hidden and an egg drawn at the victim's position.
+const YOSHI_EGG_ACTION_IDS = [277, 332];
+
+function YoshiEggShell(props: { renderData: RenderData }) {
+  const egged = createMemo(() =>
+    YOSHI_EGG_ACTION_IDS.includes(props.renderData.playerState.actionStateId)
+  );
+  const x = createMemo(() => props.renderData.playerState.xPosition);
+  const y = createMemo(() => props.renderData.playerState.yPosition);
+  const size = createMemo(
+    () => props.renderData.characterData.shieldOffset[1] * 0.9
+  );
+  return (
+    <Show when={egged()}>
+      <ellipse
+        cx={x()}
+        cy={y() + size()}
+        rx={size() * 0.8}
+        ry={size()}
+        fill="#f8fafc"
+        stroke="#16a34a"
+        stroke-width={0.8}
+      />
+      <circle cx={x() - size() * 0.3} cy={y() + size() * 1.3} r={size() * 0.14} fill="#16a34a" />
+      <circle cx={x() + size() * 0.35} cy={y() + size() * 0.7} r={size() * 0.14} fill="#16a34a" />
+      <circle cx={x() + size() * 0.1} cy={y() + size() * 1.6} r={size() * 0.1} fill="#16a34a" />
+    </Show>
+  );
+}
+
+// Ness's PSI Magnet: SpecialLwStart/Hold/Hit/End (367..370). The absorb
+// field is an effect, not an item.
+const NESS_PSI_MAGNET_ACTION_IDS = [367, 368, 369, 370];
+
+function PsiMagnet(props: { renderData: RenderData }) {
+  const characterName = createMemo(
+    () =>
+      characterNameByExternalId[
+        props.renderData.playerSettings.externalCharacterId
+      ]
+  );
+  const active = createMemo(
+    () =>
+      characterName() === "Ness" &&
+      NESS_PSI_MAGNET_ACTION_IDS.includes(
+        props.renderData.playerState.actionStateId
+      )
+  );
+  const x = createMemo(
+    () =>
+      props.renderData.playerState.xPosition +
+      props.renderData.playerState.facingDirection * 6
+  );
+  const y = createMemo(() => props.renderData.playerState.yPosition + 7);
+  const pulse = createMemo(
+    () => 1 + ((props.renderData.playerState.frameNumber % 8) / 8) * 0.12
+  );
+  return (
+    <Show when={active()}>
+      <circle cx={x()} cy={y()} r={7 * pulse()} fill="#38bdf8" fill-opacity={0.3} stroke="#0284c7" stroke-width={0.5} />
+      <circle cx={x()} cy={y()} r={3.5 * pulse()} fill="#e0f2fe" fill-opacity={0.6} />
+    </Show>
+  );
+}
+
+// Sing victims: DamageSong (297) and DamageSongWait (298); DamageSongRv (299)
+// is the wake-up. Jigglypuff's Rest is SpecialLwL/R (369, 371) and the aerial
+// variants (370, 372); she sleeps through it too.
+const SLEEP_ACTION_IDS = [297, 298];
+const JIGGLYPUFF_REST_ACTION_IDS = [369, 370, 371, 372];
+
+function SleepBubbles(props: { renderData: RenderData }) {
+  const characterName = createMemo(
+    () =>
+      characterNameByExternalId[
+        props.renderData.playerSettings.externalCharacterId
+      ]
+  );
+  const asleep = createMemo(() => {
+    const action = props.renderData.playerState.actionStateId;
+    if (SLEEP_ACTION_IDS.includes(action)) return true;
+    return (
+      characterName() === "Jigglypuff" &&
+      JIGGLYPUFF_REST_ACTION_IDS.includes(action)
+    );
+  });
+  const headX = createMemo(
+    () =>
+      props.renderData.playerState.xPosition +
+      props.renderData.playerState.facingDirection *
+        props.renderData.characterData.shieldOffset[0]
+  );
+  const headY = createMemo(
+    () =>
+      props.renderData.playerState.yPosition +
+      props.renderData.characterData.shieldOffset[1] * 1.6
+  );
+  // Three z's drift up and away on a 45-frame cycle.
+  const phase = createMemo(
+    () => (props.renderData.playerState.frameNumber % 45) / 45
+  );
+  const zs = [0, 1, 2];
+  return (
+    <Show when={asleep()}>
+      <For each={zs}>
+        {(index) => {
+          const t = createMemo(() => (phase() + index / 3) % 1);
+          return (
+            <text
+              x={headX() + props.renderData.playerState.facingDirection * (3 + t() * 6)}
+              y={-(headY() + t() * 10)}
+              transform="scale(1 -1)"
+              style={{ font: `bold ${3 + index * 1.2}px sans-serif` }}
+              fill={props.renderData.innerColor}
+              stroke="black"
+              stroke-width={0.25}
+              opacity={1 - t()}
+              textContent="z"
+            />
+          );
+        }}
+      </For>
+    </Show>
+  );
+}
+
+// Luigi's Green Missile misfire: SpecialSMisfire (348) and
+// SpecialAirSMisfire (354). The zip has no separate silhouette for these
+// states, so mark the launch with a burst trailing behind him.
+const LUIGI_MISFIRE_ACTION_IDS = [348, 354];
+
+function Misfire(props: { renderData: RenderData }) {
+  const characterName = createMemo(
+    () =>
+      characterNameByExternalId[
+        props.renderData.playerSettings.externalCharacterId
+      ]
+  );
+  const misfiring = createMemo(
+    () =>
+      characterName() === "Luigi" &&
+      LUIGI_MISFIRE_ACTION_IDS.includes(
+        props.renderData.playerState.actionStateId
+      )
+  );
+  const tailX = createMemo(
+    () =>
+      props.renderData.playerState.xPosition -
+      props.renderData.playerState.facingDirection * 6
+  );
+  const tailY = createMemo(
+    () =>
+      props.renderData.playerState.yPosition +
+      props.renderData.characterData.shieldOffset[1] * 0.6
+  );
+  const flicker = createMemo(
+    () => 1 + (props.renderData.playerState.frameNumber % 2) * 0.3
+  );
+  const sparks = [
+    [-3, 3],
+    [-5, -2],
+    [-8, 1],
+    [-6, 5],
+    [-9, -4],
+  ];
+  return (
+    <Show when={misfiring()}>
+      <circle
+        cx={tailX()}
+        cy={tailY()}
+        r={5 * flicker()}
+        fill="#f97316"
+        fill-opacity={0.6}
+      />
+      <circle
+        cx={tailX()}
+        cy={tailY()}
+        r={2.5 * flicker()}
+        fill="#fde047"
+        fill-opacity={0.9}
+      />
+      <For each={sparks}>
+        {([dx, dy]) => (
+          <circle
+            cx={tailX() + props.renderData.playerState.facingDirection * dx * flicker()}
+            cy={tailY() + dy}
+            r={0.9}
+            fill="#ef4444"
+          />
+        )}
+      </For>
+    </Show>
   );
 }
 

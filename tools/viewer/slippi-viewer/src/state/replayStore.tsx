@@ -268,6 +268,48 @@ createEffect(() => {
   );
 });
 
+const FALLBACK_ANIMATION_NAMES: [RegExp, string[]][] = [
+  // Held by a grab, Koopa Klaw, Kirby, Falcon's side special, or carried by
+  // Donkey Kong; the sim moves the victim with the holder.
+  // Inside Yoshi's egg the fighter is hidden; Player.tsx draws the egg.
+  [/^(YoshiEgg|KirbyYoshiEgg)$/, []],
+  [/^(CaptureWait|CaptureDamage|CaptureKoopa|CaptureKirby|CaptureCaptain|Shouldered|CaptureYoshi|CaptureKirbyYoshi)/, ["CaptureWaitHi", "CaptureWaitLw", "DamageFlyN"]],
+  // Thrown: the victim is still posed in the throw until release.
+  [/^(Thrown|CaptureMewtwo|ThrownMewtwo)/, ["CaptureWaitHi", "DamageFlyN"]],
+  [/^Bury/, ["DamageFlyN", "Wait1"]],
+  [/^DamageIce/, ["DamageFlyN", "DamageFlyTop"]],
+  [/^DamageSong/, ["DownWaitU", "DownWaitD", "Wait1"]],
+  [/^DamageBind/, ["FuraFura", "DamageN2", "Wait1"]],
+  [/^(ShieldBreakFly|FlyReflect)/, ["DamageFlyN"]],
+  [/^DownReflect/, ["DownBoundU", "DamageFlyN"]],
+  [/^RunDirect/, ["Run", "Dash"]],
+  [/^LiftWait/, ["Wait1"]],
+  [/^LiftWalk/, ["WalkMiddle", "Wait1"]],
+  [/^LiftTurn/, ["Turn", "Wait1"]],
+  [/^ItemParasol(Open|Fall|FallSpecial|DamageFall)/, ["Fall", "FallSpecial"]],
+  [/^AttackS4(Hi|Lw)/, ["AttackS4S"]],
+  [/^BarrelWait/, ["Wait1"]],
+];
+
+function fallbackAnimationName(
+  actionName: string,
+  animations: CharacterAnimations
+): string {
+  // Some zips number an animation the ids table names plainly (Ness and
+  // Jigglypuff SquatWait1, Jigglypuff JumpAerialF1).
+  if (actionName && animations[`${actionName}1`] !== undefined) {
+    return `${actionName}1`;
+  }
+  for (const [pattern, candidates] of FALLBACK_ANIMATION_NAMES) {
+    if (!pattern.test(actionName)) continue;
+    if (candidates.length === 0) return "";
+    for (const candidate of candidates) {
+      if (animations[candidate] !== undefined) return candidate;
+    }
+  }
+  return actionName;
+}
+
 function computeRenderData(
   replayState: ReplayStore,
   playerUpdate: PlayerUpdate,
@@ -291,15 +333,24 @@ function computeRenderData(
       startOfActionFrame,
     ) as PlayerUpdateWithNana
   )[isNana ? "nanaState" : "state"];
-  const actionName = actionNameById[playerState.actionStateId];
+  // Character-specific motion states past the common table have no entry in
+  // actionNameById; keep the name a string so downstream .includes() checks
+  // (Shine, Fire Fox) cannot throw and freeze the frame loop, which is what
+  // happened during Sheik's Vanish hold (356/359 are not in her specials map).
+  const actionName = actionNameById[playerState.actionStateId] ?? "";
   const characterData = actionMapByInternalId[playerState.internalCharacterId];
-  const animationName =
+  const mappedAnimationName =
     characterData.animationMap.get(actionName) ??
     characterData.specialsMap.get(playerState.actionStateId) ??
-    actionName ??
-    // Action ids past the shared table with no per-character entry (Kirby's
-    // copy specials) draw nothing instead of throwing inside the render loop.
-    "";
+    actionName ?? "";
+  // The slippilab zips lack the victim-side capture/throw animations and a
+  // few others, and the per-character maps leave them blank, which made held,
+  // thrown, buried, frozen and asleep fighters vanish. Substitute a silhouette
+  // with a similar pose so the fighter stays visible at its real position.
+  const animationName =
+    mappedAnimationName && animations[mappedAnimationName] !== undefined
+      ? mappedAnimationName
+      : fallbackAnimationName(actionName, animations);
   const animationFrames = animations[animationName];
   // RebirthWait calls the common wait-animation callback, which can restart/select a wait anim
   // after the AObj ends while the action-state timer continues.
