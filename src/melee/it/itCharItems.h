@@ -847,7 +847,7 @@ typedef struct itUnk4_ItemVars {
 } itUnk4_ItemVars;
 
 typedef struct itGamewatchchef_ItemVars {
-    /* +0 ip+DD4 */ s32 x0;
+    /* +0 ip+DD4 */ void* x0;
     /* +4 ip+DD8 */ s32 x4;
 } itGamewatchchef_ItemVars;
 

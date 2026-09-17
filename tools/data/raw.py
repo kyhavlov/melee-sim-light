@@ -31,6 +31,7 @@ SUPPORTED_CHARACTERS = (
     "yoshi",
     "bowser",
     "mewtwo",
+    "gamewatch",
     "ness",
     "link",
     "clink",

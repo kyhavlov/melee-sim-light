@@ -51,6 +51,7 @@ static int supported_character(uint8_t char_id)
 {
     return char_id == MSL_CHARACTER_FOX ||
            char_id == MSL_CHARACTER_MEWTWO ||
+           char_id == MSL_CHARACTER_GAMEWATCH ||
            char_id == MSL_CHARACTER_CAPTAIN_FALCON ||
            char_id == MSL_CHARACTER_SHEIK ||
            char_id == MSL_CHARACTER_PEACH ||

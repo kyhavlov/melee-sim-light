@@ -74,6 +74,7 @@ enum {
     MSL_CORE_CHAR_PIKACHU = 12,
     MSL_CORE_CHAR_SAMUS = 13,
     MSL_CHAR_MEWTWO = 16,
+    MSL_CHAR_GAMEWATCH = 24,
     MSL_CORE_CHAR_NESS = 8,
     MSL_CORE_CHAR_LINK = 6,
     MSL_CORE_CHAR_YOUNG_LINK = 20,
@@ -264,6 +265,8 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_SAMUS;
     case MSL_CHAR_MEWTWO:
         return CKIND_MEWTWO;
+    case MSL_CHAR_GAMEWATCH:
+        return CKIND_GAMEWATCH;
     case MSL_CORE_CHAR_NESS:
         return CKIND_NESS;
     case MSL_CORE_CHAR_LINK:
@@ -622,6 +625,7 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CORE_CHAR_PEACH &&
             config->players[i].char_id != MSL_CORE_CHAR_SAMUS &&
             config->players[i].char_id != MSL_CHAR_MEWTWO &&
+            config->players[i].char_id != MSL_CHAR_GAMEWATCH &&
             config->players[i].char_id != MSL_CORE_CHAR_NESS &&
             config->players[i].char_id != MSL_CORE_CHAR_LINK &&
             config->players[i].char_id != MSL_CORE_CHAR_YOUNG_LINK &&
@@ -702,6 +706,8 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
                                  6 };
     game_data->source.fighter.costume_lists[FTKIND_MEWTWO] =
         (struct UnkCostumeList){ game_data->source.fighter.mewtwo_costumes, 4 };
+    game_data->source.fighter.costume_lists[FTKIND_GAMEWATCH] =
+        (struct UnkCostumeList){ game_data->source.fighter.gamewatch_costumes, 4 };
     game_data->source.fighter.costume_lists[FTKIND_NESS] =
         (struct UnkCostumeList){ game_data->source.fighter.ness_costumes, 4 };
     game_data->source.fighter.costume_lists[FTKIND_LINK] =
@@ -1430,6 +1436,7 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         MSL_CHAR_YOSHI,
         MSL_CHAR_BOWSER,
         MSL_CHAR_MEWTWO,
+        MSL_CHAR_GAMEWATCH,
         MSL_CORE_CHAR_NESS,
         MSL_CORE_CHAR_LINK,
         MSL_CORE_CHAR_YOUNG_LINK,
@@ -1527,6 +1534,9 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
         // Reused native union storage can contain widened host pointers.
         // Keep these unowned source bytes deterministic, as for Blizzard.
         return 0;
+    }
+    if (item->kind == It_Kind_GameWatch_Chef && source_offset == 7) {
+        return (uint8_t) item->xDD4_itemVar.gamewatchchef.x4;
     }
     if (item->kind == It_Kind_IceClimber_Ice) {
         if (source_offset == 7) {

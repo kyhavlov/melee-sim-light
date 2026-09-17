@@ -39,6 +39,7 @@ CHARACTERS = {
     'samus': (13, 'Ss', 'ftDataSamus'),
     'yoshi': (14, 'Ys', 'ftDataYoshi'),
     'mewtwo': (16, 'Mt', 'ftDataMewtwo'),
+    'gamewatch': (24, 'Gw', 'ftDataGamewatch'),
     'ness': (8, 'Ns', 'ftDataNess'),
     'link': (6, 'Lk', 'ftDataLink'),
     'clink': (20, 'Cl', 'ftDataClink'),
@@ -57,6 +58,7 @@ SUBACTION_COUNTS = {
     12: 320, 13: 313, 14: 314, 15: 327, 16: 314, 17: 312, 18: 327, 19: 311, 20: 314,
     21: 303,
     22: 327,
+    24: 323,
     25: 318,
     5: 316,
 }
@@ -99,6 +101,8 @@ CODE_ANCHORED = {
     'ness': (61,),
     # ftMt_SpecialN/Lw read these raw shoulder/hand/Disable anchors.
     'mewtwo': (27, 32, 35),
+    # ftGw Attack11/Lw3/S4, AttackAir and SpecialHi/Lw article anchors.
+    'gamewatch': (0, 1, 17, 21, 32),
     #   link/clink: ftLk_SpecialHi.c anchors the spin-attack effect on the
     #          raw parts[FtPart_L2ndNa=24] joint for Link and
     #          parts[FtPart_L3rdNa=26] for Young Link; ftParts_800753D4

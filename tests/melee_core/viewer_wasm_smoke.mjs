@@ -5,6 +5,7 @@ import {
   BUTTONS,
   CHAR_FOX,
   CHAR_MEWTWO,
+  CHAR_GAMEWATCH,
   CHAR_FALCO,
   CHAR_JIGGLYPUFF,
   CHAR_PEACH,
@@ -84,7 +85,7 @@ try {
 
   // Exercise the imported special callbacks and article creation through the
   // wasm32 function table, with the same sealed module allocation.
-  for (const character of [CHAR_YOSHI, CHAR_BOWSER, CHAR_NESS, CHAR_LINK, CHAR_YOUNG_LINK, CHAR_MEWTWO]) {
+  for (const character of [CHAR_YOSHI, CHAR_BOWSER, CHAR_NESS, CHAR_LINK, CHAR_YOUNG_LINK, CHAR_MEWTWO, CHAR_GAMEWATCH]) {
     for (const [mainX, mainY] of [[0, 0], [1, 0], [0, 1], [0, -1]]) {
       reset({ p1Char: character, stageId: STAGE_FINAL_DESTINATION });
       let sawSpecial = false;
@@ -99,7 +100,7 @@ try {
       }
       assert(sawSpecial, `character ${character} special (${mainX}, ${mainY})`);
       if ((character === CHAR_YOSHI && mainY === 1) ||
-          ([CHAR_BOWSER, CHAR_NESS, CHAR_LINK, CHAR_YOUNG_LINK, CHAR_MEWTWO].includes(character) &&
+          ([CHAR_BOWSER, CHAR_NESS, CHAR_LINK, CHAR_YOUNG_LINK, CHAR_MEWTWO, CHAR_GAMEWATCH].includes(character) &&
            mainX === 0 && mainY === 0)) {
         assert(sawArticle, `character ${character} special article`);
       }

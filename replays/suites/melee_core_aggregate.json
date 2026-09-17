@@ -20,6 +20,7 @@
     "bowser.json",
     "ness.json",
     "links.json",
-    "mewtwo_targeted.json"
+    "mewtwo_targeted.json",
+    "gamewatch.json"
   ]
 }

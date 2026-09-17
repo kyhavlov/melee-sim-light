@@ -7304,3 +7304,41 @@ tests bumped 491 -> 492.
   catch either incorrect digest. #25 already carries the stage-lifecycle
   dependency fix; retain a single entry when integrating. Other PR worktrees
   and remote branches remain unchanged.
+
+# Mr. Game & Watch admission — 2026-09-15
+
+- Scope: import the ten matching ftGameWatch fighter sources and ten
+  itgamewatch article owners plus itmaterial from the pinned decomp,
+  displacing the five attack-entry abort stubs and their ledger rows. Canonical
+  state stays in Fighter.fv/mv.gw and Item source unions. Wire the fighter
+  registry, callback tables, four costume colors, article registry (ten
+  articles followed by the FtPartsVisLookup at x48_items slot 10), Chef's five
+  inline trajectory entries, extraction and native DAT translation, and the
+  gameplay skeleton mask (37 live of 53 parts).
+- Chef's leading attribute pointer x0 overlays the shared attribute pointer
+  and x4 owns its trajectory index. Canonical fix: type x0 as a pointer so
+  native widening preserves x4; retail offsets are unchanged. Replay projection
+  keeps Chef's numeric x4 and excludes pointer/residue samples for the other
+  nine articles, following their source union ownership. No classifier or
+  tolerance changes.
+- Smoke coverage (`make gamewatch-smoke`, part of native-smoke): Judge history
+  and all nine hit/miss outcomes, grounded and airborne; five Chef
+  trajectories; three laser absorptions to 9 stored damage and full release,
+  with inactive-bucket laser and active-bucket missile controls; interrupted
+  neutral/back/up-air accessory cleanup; four-fighter copy/save/restore with
+  20 Chef and 4 Rescue articles and live items beyond the 15-entry exported
+  window. All measured pools keep 20% headroom; no reserve increase. Public
+  Python cross-batch restore covers a four-player GW/Fox match on all stages.
+- Admission: `MSL_CHARACTER_GAMEWATCH` / `Character.GAMEWATCH`, both support
+  gates, validator kind 24, Makefile and CLI validation defaults, viewer
+  selector and slippilab asset row, AGENTS/README.
+- Replay evidence: eleven recordings in `replays/suites/gamewatch.json`,
+  seven corpus games and four scripted headless-Dolphin captures (all nine
+  Judge outcomes with Chef, three laser absorptions followed by oil release,
+  inactive-bucket laser hits, active-bucket missile hits), locked in the
+  aggregate at 540 cases with zero classifications. Coverage tests require
+  actual absorption responses and projectile termination. Provenance in
+  GAMEWATCH_SUPPORT.md and GAMEWATCH_VALIDATION.json.
+- Deferred to separate packets: two July games that need the explicit
+  legacy-Dolphin arithmetic profile lane, three Game & Watch versus Mewtwo
+  games (need Mewtwo), and the viewer's re-baked Game & Watch silhouettes.

@@ -47,6 +47,7 @@ PLAYER_PREFIXES = (
     "PlYs",
     "PlKp",
     "PlMt",
+    "PlGw",
     "PlNs",
     "PlLk",
     "PlCl",
