@@ -4,8 +4,14 @@ alias ExPhil.Bridge.MeleePort
 # Records a human Fox (scripted controller on port 1) against a game-driven
 # CPU Ice Climbers on port 2. Run from an ExPhil checkout with its compiled
 # bridge on the Elixir code path.
-[directory, dolphin, iso | rest] = System.argv()
+[scenario, directory, dolphin, iso | rest] = System.argv()
 level = case rest do [l | _] -> String.to_integer(l); [] -> 5 end
+
+# "laser": Fox lasers and dashes on Final Destination, then walks off.
+# "desync": Fox chases and attacks on Battlefield to split Popo from Nana,
+# then walks off.
+scenarios = ["laser", "desync"]
+unless scenario in scenarios, do: raise("Unknown recording scenario: #{scenario}")
 
 if Path.wildcard(Path.join(directory, "*.slp")) != [],
   do: raise("Output directory already contains recordings")
@@ -18,7 +24,7 @@ config = %{
   iso_path: Path.expand(iso),
   character: :fox,
   dummy_character: :popo,
-  stage: :final_destination,
+  stage: if(scenario == "desync", do: :battlefield, else: :final_destination),
   controller_port: 1,
   opponent_port: 2,
   dummy_mode: "cpu",
@@ -28,7 +34,7 @@ config = %{
   no_audio: true,
   emulation_speed: 0.0,
   accurate_nmsub: true,
-  slippi_port: 51980,
+  slippi_port: 51980 + Enum.find_index(scenarios, &(&1 == scenario)),
   replay_dir: directory
 }
 
@@ -50,11 +56,28 @@ try do
                  Map.take(gs.players[2], [:x, :y, :action, :percent, :stock])}
               )
 
-          # Lasers, a few dashes and shields to draw the CPU in, then walk off
-          # until the match ends.
+          me = gs.players[1]
+          them = gs.players[2]
+          dx = them.x - me.x
+          toward = if dx > 0, do: 1.0, else: 0.0
+
+          # laser: lasers, a few dashes and shields to draw the CPU in.
+          # desync: chase the leader; up close alternate aerials, up-smash
+          # and grabs so hits and throws separate the climbers. Both walk
+          # off until the match ends.
           p1 =
             cond do
-              f >= 3600 -> input.(0.0, 0.5, %{})
+              scenario == "laser" and f >= 3600 -> input.(0.0, 0.5, %{})
+              scenario == "desync" and f >= 6000 -> input.(0.0, 0.5, %{})
+              scenario == "desync" and abs(dx) > 18 and rem(f, 2) == 0 -> input.(toward, 0.5, %{})
+              scenario == "desync" and abs(dx) > 18 -> neutral
+              scenario == "desync" and rem(f, 40) < 4 -> input.(0.5, 1.0, %{x: true})
+              scenario == "desync" and rem(f, 40) in 6..9 -> input.(toward, 0.5, %{a: true})
+              scenario == "desync" and rem(f, 40) in 16..18 -> input.(0.5, 0.5, %{z: true})
+              scenario == "desync" and rem(f, 40) in 22..23 -> input.(0.5, 1.0, %{})
+              scenario == "desync" and rem(f, 40) in 28..31 -> %{neutral | c_stick: %{x: 0.5, y: 1.0}}
+              scenario == "desync" and rem(f, 40) in 34..36 -> input.(0.5, 0.0, %{b: true})
+              scenario == "desync" -> neutral
               f >= 60 and rem(f, 90) == 0 -> input.(0.5, 0.5, %{b: true})
               f >= 60 and rem(f, 90) == 30 -> input.(1.0, 0.5, %{})
               f >= 60 and rem(f, 90) == 45 -> input.(0.0, 0.5, %{})
@@ -87,7 +110,7 @@ try do
     end)
 
   unless result == :complete, do: raise("Recording did not finish: #{inspect(result)}")
-  IO.puts("Completed CPU Ice Climbers level #{level}: #{directory}")
+  IO.puts("Completed CPU Ice Climbers #{scenario} level #{level}: #{directory}")
 after
   MeleePort.stop(bridge)
 end

@@ -1,6 +1,6 @@
 {
   "name": "cpu_inputs",
-  "notes": "Recorded CPU player validation: human Fox on port 1 (scripted controller) against a game-driven level-5 CPU Ice Climbers on port 2, Final Destination, headless Slippi Dolphin with AccurateNmsub=true (binary sha256 b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c). The CPU's recorded processed inputs and pre-frame RNG replay through the Slippi playback boundary; Nana runs the source follower AI. See agent_docs/CPU_REPLAY_VALIDATION.md.",
+  "notes": "Recorded CPU player validation: human Fox on port 1 (scripted controller) against a game-driven level-5 CPU Ice Climbers on port 2, headless Slippi Dolphin with AccurateNmsub=true (binary sha256 b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c). laser: Final Destination, Fox lasers and dashes. desync: Battlefield, Fox chases with aerials, up-smashes, grabs and shines; Popo and Nana separate by up to 64 units across nine stretches and spend hundreds of frames on different platforms, exercising the follower AI's desynced branches. The CPU's recorded processed inputs and pre-frame RNG replay through the Slippi playback boundary; Nana runs the source follower AI. See agent_docs/CPU_REPLAY_VALIDATION.md.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -11,6 +11,18 @@
         2
       ],
       "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Ice Climbers"
+      }
+    },
+    {
+      "replay": "replays/validation/cpu_inputs/cpu_ice_climbers_l5_desync.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
       "characters": {
         "1": "Fox",
         "2": "Ice Climbers"

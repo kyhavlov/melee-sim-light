@@ -45,22 +45,37 @@ field is knockback Y; first mismatch details show the historical +0/-0 arithmeti
 difference. These are diagnostic runs, not 12 exact passes. See the separate
 signed-zero handoff before assigning execution profiles.
 
-## Retained CPU Ice Climbers fixture
+## Retained CPU Ice Climbers fixtures
 
-`replays/validation/cpu_inputs/cpu_ice_climbers_l5.slpz` is a lossless
-compressed copy of a headless Slippi Dolphin game recorded on 2026-09-17 with
-`tools/validation/record_cpu_ice_climbers.exs` through the ExPhil bridge:
-P1 human Fox on a scripted controller (lasers, dashes, shields, then a walk-off
-until the match ends), P2 level-5 CPU Ice Climbers chosen by the game, Final
-Destination, `AccurateNmsub=true`, Dolphin binary SHA-256
+Both are lossless compressed copies of headless Slippi Dolphin games recorded
+on 2026-09-17 with `tools/validation/record_cpu_ice_climbers.exs` through the
+ExPhil bridge: P1 human Fox on a scripted controller, P2 level-5 CPU Ice
+Climbers chosen by the game, `AccurateNmsub=true`, Dolphin binary SHA-256
 `b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c` (the same
-build as the Game & Watch and Mewtwo scripted captures). Original `.slp`
-SHA-256: `e3001303503bf6f177a5fcd80558b4a7d393c5173c272cd4c1dd63f4dd0504f3`.
-The CPU took three Fox stocks before the walk-off.
+build as the Game & Watch and Mewtwo scripted captures). Each game ends with
+Fox walking off until the match completes.
 
-All 3,815 transitions compare exactly, including Nana's follower post lanes,
-with no signed-zero rows. It is the single entry of `replays/suites/cpu_inputs.json`,
-included in the aggregate suite with a native output lock (530 cases).
+- `replays/validation/cpu_inputs/cpu_ice_climbers_l5.slpz` (`laser` scenario,
+  Final Destination): Fox lasers, dashes and shields; the CPU takes three Fox
+  stocks. Original `.slp` SHA-256
+  `e3001303503bf6f177a5fcd80558b4a7d393c5173c272cd4c1dd63f4dd0504f3`.
+  All 3,815 transitions compare exactly. Popo and Nana stay within 14 units
+  of each other, so this game covers the synced follower path only.
+- `replays/validation/cpu_inputs/cpu_ice_climbers_l5_desync.slpz` (`desync`
+  scenario, Battlefield): Fox chases with aerials, up-smashes, grabs and
+  shines. Original `.slp` SHA-256
+  `8c6ec0fb14c8ebdbb4d1792be3a4b93c8c15b9c20c8fe34ea6be27801c699e50`.
+  All 5,892 transitions compare exactly. The climbers separate by up to 64
+  units across nine stretches (291 frames more than 40 apart), Nana is on a
+  platform above Popo for 819 frames and Popo above Nana for 1,373, so the
+  follower AI's desynced branches run under a CPU Popo. Nana never dies
+  alone in this game, so a solo Nana death and respawn wait remain uncovered
+  by recording, though they use the same source paths as human Ice Climbers.
+
+Both compare Nana's follower post lanes with no signed-zero rows. They form
+`replays/suites/cpu_inputs.json`, included in the aggregate suite with native
+output locks (531 cases). A coverage test asserts the desync fixture actually
+separates the climbers.
 
 ## Checks
 

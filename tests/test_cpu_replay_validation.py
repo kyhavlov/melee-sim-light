@@ -12,6 +12,7 @@ from tools.validation.slpz import replay_path_for_peppi
 ROOT = Path(__file__).resolve().parents[1]
 REPLAY = ROOT / "replays/validation/cpu_inputs/exphil_peach_r1.slpz"
 ICE_CLIMBERS_REPLAY = ROOT / "replays/validation/cpu_inputs/cpu_ice_climbers_l5.slpz"
+ICE_CLIMBERS_DESYNC_REPLAY = ROOT / "replays/validation/cpu_inputs/cpu_ice_climbers_l5_desync.slpz"
 
 
 @pytest.fixture
@@ -22,7 +23,7 @@ def cpu_game():
         return _read_slippi(str(path), False)
 
 
-def run_game(game, start):
+def run_game(game, start, frames_limit=5000):
     return validate_replay.load_native().validate_replay(
         game.frames,
         start,
@@ -32,7 +33,7 @@ def run_game(game, start):
         binary=str(validate_replay.NATIVE_BINARY),
         data_dir=str(validate_replay.game_data_dir()),
         native=True,
-        frames_limit=5000,
+        frames_limit=frames_limit,
         timeout=20.0,
     )
 
@@ -69,19 +70,44 @@ def test_cpu_replay_is_not_exported_as_physical_controller_tape(cpu_game, tmp_pa
     assert not output.exists()
 
 
-def test_cpu_ice_climbers_replay_is_bit_exact_with_follower():
-    if not all(p.is_file() for p in (ICE_CLIMBERS_REPLAY, validate_replay.NATIVE,
-                                    validate_replay.NATIVE_BINARY)):
+def _read(path):
+    if not all(p.is_file() for p in (path, validate_replay.NATIVE, validate_replay.NATIVE_BINARY)):
         pytest.skip("native CPU replay validation artifacts are unavailable")
-    with replay_path_for_peppi(ICE_CLIMBERS_REPLAY) as path:
-        game = _read_slippi(str(path), False)
+    with replay_path_for_peppi(path) as slp:
+        return _read_slippi(str(slp), False)
+
+
+@pytest.mark.parametrize("path,frames", [
+    (ICE_CLIMBERS_REPLAY, 3815),
+    (ICE_CLIMBERS_DESYNC_REPLAY, 5892),
+])
+def test_cpu_ice_climbers_replay_is_bit_exact_with_follower(path, frames):
+    game = _read(path)
     assert [p["type"] for p in game.start["players"]] == ["Human", "Cpu"]
     assert game.start["players"][1]["cpu_level"] == 5
     # Nana is a recorded follower entity; the validator compares her post
     # lanes while the source follower AI drives her inputs.
     assert "follower" in game.frames.field("ports").field("P2").type.names
-    result = run_game(game, game.start)
+    result = run_game(game, game.start, frames_limit=frames)
     assert result["pass"] is True
-    assert result["frames"] == 3815
+    assert result["frames"] == frames
     assert result["mismatch_count"] == 0
     assert result["signed_zero_equal_count"] == 0
+
+
+def test_cpu_ice_climbers_desync_fixture_actually_separates_the_climbers():
+    game = _read(ICE_CLIMBERS_DESYNC_REPLAY)
+    port = game.frames.field("ports").field("P2")
+    leader = port.field("leader").field("post")
+    follower = port.field("follower").field("post")
+    lx = leader.field("position").field("x").to_pylist()
+    ly = leader.field("position").field("y").to_pylist()
+    fx = follower.field("position").field("x").to_pylist()
+    fy = follower.field("position").field("y").to_pylist()
+    apart = [abs(a - b) for a, b in zip(lx, fx) if b is not None]
+    assert max(apart) > 60
+    assert sum(d > 40 for d in apart) > 250
+    # Separate platforms: Nana above Popo and Popo above Nana, both for
+    # hundreds of frames, so the follower AI's desynced branches run.
+    assert sum(1 for a, b in zip(ly, fy) if b is not None and b - a > 15) > 500
+    assert sum(1 for a, b in zip(ly, fy) if b is not None and a - b > 15) > 500
