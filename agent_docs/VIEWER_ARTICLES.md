@@ -180,6 +180,36 @@ DamageSong/DamageSongWait (297/298) and Jigglypuff's Rest (369..372), and a
 burst behind Luigi during SpecialSMisfire/SpecialAirSMisfire (348/354), which
 share the SpecialS silhouette with the ordinary launch.
 
+## Silhouette bake (2026-09-16)
+
+`tools/viewer/bake` replaces the slippilab Maya pipeline for Game & Watch.
+Findings that the bake depends on:
+
+- slippilab's contract (`@slippilab/create-animations`): Maya orthographic side
+  camera on the -X side, 100 units wide at 1000 px, TransN translation locked
+  to 0, frames 0..200, potrace, svgo; the viewer applies `scale(.1 -.1)
+  translate(-500 -500)` so path units are 0.1 world units with the root at
+  (500, 500). Screen X is model Z (checked against the sim's hitbox bone
+  positions: AttackHi4 bone 20 and AttackS3 bone 17 match to 0.2 units).
+- HSD envelopes: a single-joint envelope stores joint-local vertices and uses
+  the joint matrix directly; multi-joint envelopes store bind-space vertices
+  and blend world * inverse-bind. Getting this wrong makes every animated
+  pose a wedge while the bind pose still looks right.
+- Model-part visibility: groups 0..3 from ftData x8 (group 2 is the metal
+  model's separate list) plus, for Game & Watch, the outline copies in
+  `x48_items[10]` (fp->x5AC.xC[4]); the normal draw shows group 0's selected
+  states and hides everything else listed. Selections come from ftGw_Init
+  defaults restored on every motion state change and the subaction script's
+  opcode 31/32/33 events, stepped with lbcommand.c timer semantics. Oil
+  Panic's bucket (model 5 state 2) is set in code, so it is a bake override.
+- Game & Watch's animations are genuinely stepped (Wait1 has two distinct
+  frames, most attacks three to five), matching the slippilab counts.
+- Fire Fox / fsmash torch / Judge hammer etc. that are items stay items.
+
+The baked zip lives at `tools/viewer/assets/baked/mrGameAndWatch.zip`
+(`baked:` manifest rows are copied by `fetch_assets.sh`); `make
+viewer-bake-gamewatch` regenerates it in about two minutes.
+
 ## Known gaps (not items)
 
 - Fox's and Falco's side special hit lands in the sim (7% on a passive Fox)
@@ -193,15 +223,13 @@ share the SpecialS silhouette with the ordinary launch.
 
 - Ganondorf's and Marth's airborne capes and the sliver by Donkey Kong's mouth
   in his idle are baked into the slippilab silhouettes.
-- Game & Watch's back-air turtle, up-air puffs and Judge hammer are no longer
-  drawn; their hits are on the fighter and show through the hitbox overlay.
+- Game & Watch's neutral-air parachute, back-air turtle, up-air puffs and
+  Judge hammer are no longer drawn; their hits are on the fighter and show through the hitbox overlay.
   The Judge number remains.
 
-- Game & Watch's forward tilt chair, forward air box, down air key, up tilt
-  flag, down smash hammers, dash attack helmet and the Oil Panic bucket are
-  mesh visibility toggles on the fighter model, not articles. The slippilab
-  bake hid them, so they need a silhouette re-bake with per-move part
-  visibility.
+- Game & Watch's mesh accessories are now baked in (see above). Other
+  fighters still use the slippilab zips; the bake needs per-character init
+  defaults and any code-driven part states before it can replace them.
 - Mewtwo's Confusion spawns no item; its silhouette exists and animates.
 - Peach's idle silhouettes (Wait1..4) contain a baked cone above her head on
   the arm-raise frames. This is in the asset, not the renderer.

@@ -900,3 +900,13 @@ fnmsubs-smoke: $(NATIVE_BUILD)/fnmsubs-smoke
 .PHONY: gamewatch-smoke
 gamewatch-smoke: $(NATIVE_BUILD)/gamewatch-moves-smoke
 	@$(TIMEOUT) 10s "$(NATIVE_BUILD)/gamewatch-moves-smoke" "$(DATA)"
+
+# Re-bake a fighter's viewer silhouettes from the extracted DATs (needs
+# potrace and a C compiler; see tools/viewer/bake). Update the sha256 in
+# tools/viewer/assets/character_zips.tsv after regenerating.
+.PHONY: viewer-bake-gamewatch
+viewer-bake-gamewatch: data-check
+	@cd "$(ROOT)/tools/viewer" && MSL_BAKE_BUILD="$(BUILD_ROOT)/bake" CC="$(HOST_CC)" \
+		"$(PY)" -m bake.bake --character gamewatch --data "$(DATA)" \
+		--out "$(ROOT)/tools/viewer/assets/baked/mrGameAndWatch.zip"
+	@sha256sum "$(ROOT)/tools/viewer/assets/baked/mrGameAndWatch.zip"

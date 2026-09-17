@@ -7636,3 +7636,7 @@ tests bumped 491 -> 492.
 - Oil Panic: bucket fill lane and digit overlay; splash follows the release
   hitbox (probed natively with absorbed Fox lasers) and verified in the
   viewer through a wasm-driven replay.
+- Silhouette bake for Game & Watch: `tools/viewer/bake` (DAT model/anim
+  decode, HSD FObj port, script visibility simulation, C rasterizer, potrace)
+  produces `tools/viewer/assets/baked/mrGameAndWatch.zip`; manifest rows can
+  be `baked:` paths. Verified against the slippilab frames and live captures.

@@ -63,3 +63,16 @@ make viewer OPEN=0
 with sparse-delta frame, input, and item streams. Live viewer export,
 and downstream users should write this format rather than the renderer's
 internal replay shape.
+
+## Baked silhouettes
+
+`tools/viewer/bake` re-renders a fighter's animations directly from the
+extracted DATs into the same zip format as the slippilab assets (orthographic
+side view, 100 units across 1000 px, root at the image centre, frames 0..200,
+potrace outlines), applying the fighter's model-part visibility per subaction
+frame so accessory meshes (Game & Watch's chair, key, box, flag, hammers,
+bucket) appear. Rows in `assets/character_zips.tsv` whose url is
+`baked:<repo path>` are copied from the repository instead of downloaded.
+Regenerate with `make viewer-bake-gamewatch` (needs `potrace` and a C
+compiler; NixOS: `nix-shell -p gcc gnumake potrace`) and update the row's
+sha256. `agent_docs/VIEWER_ARTICLES.md` records the format findings.

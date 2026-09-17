@@ -47,7 +47,6 @@ const ITEM_MEWTWO_SHADOW_BALL = 112;
 const ITEM_GAMEWATCH_GREENHOUSE = 114;
 const ITEM_GAMEWATCH_MANHOLE = 115;
 const ITEM_GAMEWATCH_FIRE = 116;
-const ITEM_GAMEWATCH_PARACHUTE = 117;
 const ITEM_GAMEWATCH_JUDGE = 120;
 const ITEM_GAMEWATCH_PANIC = 121;
 const ITEM_GAMEWATCH_CHEF = 122;
@@ -218,9 +217,6 @@ export function Item(props: { item: ItemUpdate }) {
       </Match>
       <Match when={props.item.typeId === ITEM_GAMEWATCH_FIRE}>
         <GameWatchFire item={props.item} />
-      </Match>
-      <Match when={props.item.typeId === ITEM_GAMEWATCH_PARACHUTE}>
-        <GameWatchParachute item={props.item} />
       </Match>
       <Match when={props.item.typeId === ITEM_GAMEWATCH_JUDGE}>
         <GameWatchJudge item={props.item} />
@@ -483,44 +479,8 @@ function GameWatchFire(props: { item: ItemUpdate }) {
   );
 }
 
-function GameWatchParachute(props: { item: ItemUpdate }) {
-  // Neutral air: canopy above the body, attached to TransN. State 1 marks
-  // the canopy folding after landing.
-  const anchor = useAnchor(props.item);
-  const top = createMemo(() => anchor.y() + 15);
-  const half = 6;
-  return (
-    <g opacity={props.item.state === 1 ? 0.5 : 1}>
-      <path
-        d={`M ${anchor.x() - half} ${top()} A ${half} ${half} 0 0 0 ${
-          anchor.x() + half
-        } ${top()} Z`}
-        fill="#f43f5e"
-        fill-opacity={0.7}
-        stroke="#881337"
-        stroke-width={0.5}
-      />
-      <line
-        x1={anchor.x() - half}
-        y1={top()}
-        x2={anchor.x()}
-        y2={anchor.y() + 8}
-        stroke="#374151"
-        stroke-width={0.4}
-      />
-      <line
-        x1={anchor.x() + half}
-        y1={top()}
-        x2={anchor.x()}
-        y2={anchor.y() + 8}
-        stroke="#374151"
-        stroke-width={0.4}
-      />
-    </g>
-  );
-}
-
-// Game & Watch's back-air turtle (118) and up-air puffs (119) are not drawn:
+// Game & Watch's neutral-air parachute (117), back-air turtle (118) and
+// up-air puffs (119) are not drawn:
 // their hitboxes are on the fighter and the hitbox overlay shows the hits.
 
 function GameWatchJudge(props: { item: ItemUpdate }) {
