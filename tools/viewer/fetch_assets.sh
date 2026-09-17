@@ -36,6 +36,20 @@ while IFS=$'\t' read -r filename expected_sha url; do
     continue
   fi
 
+  # Repository-baked silhouettes (tools/viewer/bake) live in-tree and are
+  # copied straight from the manifest's baked: path.
+  if [[ "$url" == baked:* ]]; then
+    baked_src="$ROOT/${url#baked:}"
+    if ! valid_cached_asset "$baked_src" "$expected_sha"; then
+      echo "error: baked viewer asset missing or checksum mismatch: $baked_src" >&2
+      exit 1
+    fi
+    echo "viewer asset from repository bake: $filename"
+    cp "$baked_src" "$out.tmp.$$"
+    mv "$out.tmp.$$" "$out"
+    continue
+  fi
+
   local_src="$LOCAL_ZIPS_DIR/$filename"
   if valid_cached_asset "$local_src" "$expected_sha"; then
     echo "viewer asset from refs/slippilab checkout: $filename"
