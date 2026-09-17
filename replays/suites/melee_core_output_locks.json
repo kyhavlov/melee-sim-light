@@ -3144,6 +3144,69 @@
       }
     },
     {
+      "replay": "replays/validation/mewtwo_interactions/absorb.slpz",
+      "expected": {
+        "native": {
+          "frames": 2539,
+          "actual_output_fingerprint": "fa0af378fcec173f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/absorb_control.slpz",
+      "expected": {
+        "native": {
+          "frames": 2547,
+          "actual_output_fingerprint": "04cbb3ccc0b496d2"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/missile.slpz",
+      "expected": {
+        "native": {
+          "frames": 2133,
+          "actual_output_fingerprint": "a5f42598bee4e73e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/missile_control.slpz",
+      "expected": {
+        "native": {
+          "frames": 1895,
+          "actual_output_fingerprint": "7ca2ee8001a35e7c"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/missile_early.slpz",
+      "expected": {
+        "native": {
+          "frames": 1901,
+          "actual_output_fingerprint": "2dd42a9015706a5e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/reflect.slpz",
+      "expected": {
+        "native": {
+          "frames": 2171,
+          "actual_output_fingerprint": "6631b062ab296b58"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/reflect_control.slpz",
+      "expected": {
+        "native": {
+          "frames": 2103,
+          "actual_output_fingerprint": "c0daf2d73dd176d8"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/ness/2025-01_Game_20250131T175344.slpz",
       "expected": {
         "native": {

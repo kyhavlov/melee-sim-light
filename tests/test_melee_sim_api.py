@@ -74,6 +74,7 @@ def test_python_wire_layout_matches_public_c_api() -> None:
     (msl.Character.YOSHI, msl.Character.BOWSER),
     (msl.Character.NESS, msl.Character.LINK),
     (msl.Character.YOUNG_LINK, msl.Character.SAMUS),
+    (msl.Character.MEWTWO, msl.Character.FOX),
 ])
 def test_character_articles_restore_at_another_batch_index(monkeypatch, characters) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
@@ -114,6 +115,78 @@ def test_character_articles_restore_at_another_batch_index(monkeypatch, characte
             assert env.current_frame[1].tobytes() == expected
 
 
+ITEM_MEWTWO_SHADOW_BALL = 112
+
+
+def test_mewtwo_held_shadow_ball_restores_at_another_batch_index(monkeypatch) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=2, length=128) as env:
+        config = msl.MatchConfig(
+            stage=msl.Stage.FINAL_DESTINATION,
+            players=(msl.PlayerConfig(msl.Character.MEWTWO),
+                     msl.PlayerConfig(msl.Character.FOX)))
+        env.configure_matches([config, config])
+        env.reset_all()
+
+        def step(b=False):
+            if env.t == env.length:
+                env.reset_cursor()
+            actions = env.controller_action_view[env.t]["players"]
+            actions["buttons"] = 0
+            actions["main_stick_x"] = 0.5
+            actions["main_stick_y"] = 0.5
+            actions["buttons"]["B"] = b
+            env.step()
+
+        def held_ball(index):
+            items = env.current_frame[index]["items"]
+            ball = items[(items["exists"] != 0) & (items["type"] == ITEM_MEWTWO_SHADOW_BALL)]
+            return ball[ball["state"] == 0]
+
+        def thrown_ball(index):
+            items = env.current_frame[index]["items"]
+            ball = items[(items["exists"] != 0) & (items["type"] == ITEM_MEWTWO_SHADOW_BALL)]
+            return ball[(ball["state"] >= 1) & (ball["state"] <= 8)]
+
+        for _ in range(150):
+            step()
+        # Tap B to start charging; Mewtwo keeps charging until B is tapped again.
+        step(b=True)
+        for _ in range(40):
+            step()
+        assert len(held_ball(0)) == 1
+        saved = env.save(0)
+
+        def fox_percent(index):
+            slots = env.current_frame[index]["slots"]
+            return float(slots["percent"][slots["source_player"] == 1][0])
+
+        def fire_and_observe(index):
+            step(b=True)
+            thrown = False
+            for _ in range(90):
+                step()
+                thrown |= len(thrown_ball(index)) == 1
+            assert thrown
+            return fox_percent(index)
+
+        for _ in range(64):
+            step()
+        expected = env.current_frame[0].tobytes()
+        expected_percent = fire_and_observe(0)
+        assert expected_percent > 0
+        expected_after_throw = env.current_frame[0].tobytes()
+
+        env.restore(1, saved)
+        for i in range(64):
+            step()
+            if i == 0:
+                assert len(held_ball(1)) == 1
+        assert env.current_frame[1].tobytes() == expected
+        assert fire_and_observe(1) == expected_percent
+        assert env.current_frame[1].tobytes() == expected_after_throw
+
+
 def test_doubles_continues_until_entire_team_is_eliminated(monkeypatch) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
     with msl.EnvBatch(batch_size=1, length=128, num_players=4) as env:
@@ -148,6 +221,7 @@ def test_doubles_continues_until_entire_team_is_eliminated(monkeypatch) -> None:
 def test_supported_character_and_stage_enums() -> None:
     assert [int(character) for character in msl.Character] == [
         1,
+        16,
         2,
         3,
         25,

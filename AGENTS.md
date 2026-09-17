@@ -5,7 +5,8 @@
 Build a high-performance, batched, deterministic Melee simulator for RL. Supported fighters are
 Fox, Falco, Marth, Sheik, Zelda, Captain Falcon, Jigglypuff, Peach, Luigi, Mario, Dr. Mario,
 Samus, the Ice Climbers (Popo with the CPU-mimic Nana follower), Pikachu, Donkey Kong, and
-Ganondorf, Yoshi, Bowser, Ness, Link, and Young Link. RL 1.0 covers singles, three-player teams, and doubles on Final Destination, Battlefield, Fountain of
+Ganondorf, Yoshi, Bowser, Ness, Link, Young Link, and Mewtwo. RL 1.0 covers
+singles, three-player teams, and doubles on Final Destination, Battlefield, Fountain of
 Dreams, frozen Pokemon Stadium, Yoshi's Story, and Dream Land N64. UCF is enabled by default.
 
 Correctness comes from gameplay-relevant source completion: port the relevant decomp call graphs,

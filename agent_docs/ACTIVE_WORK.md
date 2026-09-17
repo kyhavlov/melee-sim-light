@@ -7211,3 +7211,43 @@ tests bumped 491 -> 492.
   enters Makefile. Retain only the stationary query optimizations; repeat final
   native/release/PPC/Wasm gates and direct checkpoint timing. Final source
   lifecycle cost must be reported rather than described as noise.
+
+# Mewtwo admission — 2026-09-15
+
+- Scope: import the five matching ftMewtwo fighter sources, both matching
+  article sources (Shadow Ball, Disable) and the shared Kirby declaration
+  dependency from the pinned decomp; delete the forward-throw Shadow Ball
+  no-op; add source registry entries, costume ownership, DAT attribute and
+  article translation, effect-bank 13 loading, gameplay-parts mask (46 live of
+  68 parts) and the extended 205-file extraction profile (PlMt, PlMtAJ,
+  EfMtData). Public admission: `MSL_CHARACTER_MEWTWO` / `Character.MEWTWO`,
+  batch/scalar config validation, validator admission of internal kind 16,
+  live-viewer character table and asset row.
+- Projection boundary: Shadow Ball state 9 (forward-throw shot) publishes all
+  four Slippi misc lanes; the held ball (state 0) and thrown states publish
+  only the lanes the source writes; Disable publishes none, since its item
+  union holds only the owner pointer. No classifier or tolerance changes.
+- Pool sizing: five forward-throw Shadow Ball graphs use 185 tracks per Mewtwo,
+  so the per-fighter FObj reserve is additive 192 tracks and AObj 64. The
+  20-shot factory stress peaks at 797/1081 FObjs with the retained >=20%
+  spare-capacity assertion. Development evidence stays under ignored
+  `reports/triage/gamewatch_mewtwo`.
+- Smoke coverage (`make mewtwo-smoke`, part of native-smoke): two/four-port
+  charge/release ownership and forward-throw factory stress; Confusion
+  grab/reflect/interrupt/air boost; Disable facing/air/interrupt/death,
+  versus shield and versus Reflector; Teleport ground/air in six directions;
+  Shadow Ball charge/cancel/interrupt/copy-restore, versus shield, Reflector
+  and stage wall; charge across a real stock loss; four simultaneous specials.
+  Python: held Shadow Ball save/restore into another batch index, then fire.
+- Replay evidence: seven controller-scripted headless Dolphin interaction
+  recordings (two human ports, AccurateNmsub=true, FD) pass strict native
+  comparison: Falco laser and Samus missile reflection with inactive/early
+  controls, Ness partial/full Shadow Ball absorption with inactive control;
+  15,289 transitions, locked in the aggregate (536 cases, 26 existing
+  classified, zero failures). Coverage tests assert actual reversal, owner
+  retention and SpecialLwHit absorption. See MEWTWO_TARGETED_REPLAYS.md and
+  MEWTWO_MOVE_TESTS.md.
+- Deferred to separate packets: three human-versus-CPU Teleport games and the
+  Erickfm diagnostics (need recorded-CPU-input validation), the two July
+  legacy-Dolphin captures (need the recording-arithmetic profile lane), and
+  Game & Watch. None of these change Mewtwo gameplay.

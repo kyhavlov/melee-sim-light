@@ -205,6 +205,7 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     // bank 0, so no generator RNG projection consumes bank-6 ids.
     // refs/melee/src/melee/ef/efasync.c::{efAsync_DatEntries,efAsync_LoadSync}
     msl_effect_load_bank(data, 6, "/EfLkData.dat", "effLinkDataTable");
+    msl_effect_load_bank(data, 13, "/EfMtData.dat", "effMewtwoDataTable");
     msl_effect_load_bank(data, 12, "/EfKpData.dat", "effKoopaDataTable");
     // Pikachu owns efAsync bank 7 (ftData_UnkBytePerCharacter maps
     // FTKIND_PIKACHU to 7; Pichu shares the bank in retail).

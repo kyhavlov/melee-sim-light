@@ -38,6 +38,7 @@ CHARACTERS = {
     'pikachu': (12, 'Pk', 'ftDataPikachu'),
     'samus': (13, 'Ss', 'ftDataSamus'),
     'yoshi': (14, 'Ys', 'ftDataYoshi'),
+    'mewtwo': (16, 'Mt', 'ftDataMewtwo'),
     'ness': (8, 'Ns', 'ftDataNess'),
     'link': (6, 'Lk', 'ftDataLink'),
     'clink': (20, 'Cl', 'ftDataClink'),
@@ -52,10 +53,11 @@ CHARACTERS = {
 # Subaction counts per FighterKind (src/melee/ft/ftdata.c ftData_Table_Unk0).
 SUBACTION_COUNTS = {
     0: 303, 1: 327, 2: 318, 3: 337, 6: 314, 7: 317, 8: 326, 9: 318, 10: 321,
-    11: 321,
+    11: 321, 16: 314,
     12: 320, 13: 313, 14: 314, 15: 327, 17: 312, 18: 327, 19: 311, 20: 314,
     21: 303,
     22: 327,
+    24: 323,
     25: 318,
     5: 316,
 }
@@ -96,6 +98,8 @@ CODE_ANCHORED = {
     #   ness: ftNs_AttackHi4.c transforms the Yo-Yo hitbox position through
     #          the raw parts[61] joint on every charge/release frame.
     'ness': (61,),
+    # ftMt_SpecialN/Lw read these raw shoulder/hand/Disable anchors.
+    'mewtwo': (27, 32, 35),
     #   link/clink: ftLk_SpecialHi.c anchors the spin-attack effect on the
     #          raw parts[FtPart_L2ndNa=24] joint for Link and
     #          parts[FtPart_L3rdNa=26] for Young Link; ftParts_800753D4
