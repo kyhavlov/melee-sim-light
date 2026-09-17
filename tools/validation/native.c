@@ -64,6 +64,8 @@ typedef struct Primitive {
 typedef struct ReplayPlayer {
   Primitive random_seed;
   Primitive buttons;
+  Primitive processed_buttons;
+  Primitive processed_trigger;
   Primitive main_x;
   Primitive main_y;
   Primitive nml_main_x;
@@ -147,6 +149,7 @@ typedef struct ReplayView {
   uint8_t start_stocks[MSL_CORE_MAX_PLAYERS];
   uint8_t costume_id[MSL_CORE_MAX_PLAYERS];
   uint8_t handicap[MSL_CORE_MAX_PLAYERS];
+  uint8_t cpu_level[MSL_CORE_MAX_PLAYERS];
   int num_players;
   uint32_t stage_id;
   uint32_t initial_random_seed;
@@ -411,7 +414,8 @@ static int parse_start(PyObject* start, ReplayView* replay) {
     }
     type = PyDict_GetItemString(player, "type");
     if (type == NULL || !PyUnicode_Check(type) ||
-        PyUnicode_CompareWithASCIIString(type, "Human") != 0) {
+        (PyUnicode_CompareWithASCIIString(type, "Human") != 0 &&
+         PyUnicode_CompareWithASCIIString(type, "Cpu") != 0)) {
       continue;
     }
     port = parse_port(PyDict_GetItemString(player, "port"));
@@ -419,13 +423,22 @@ static int parse_start(PyObject* start, ReplayView* replay) {
     handicap_obj = PyDict_GetItemString(player, "handicap");
     if (port < 1 || stocks_obj == NULL || !PyLong_Check(stocks_obj) || handicap_obj == NULL ||
         !PyLong_Check(handicap_obj)) {
-      PyErr_SetString(PyExc_ValueError, "human replay player metadata is incomplete");
+      PyErr_SetString(PyExc_ValueError, "replay player metadata is incomplete");
       return -1;
     }
     slot = replay->num_players++;
     if (slot >= MSL_CORE_MAX_PLAYERS) {
-      PyErr_SetString(PyExc_ValueError, "replay has more than four human players");
+      PyErr_SetString(PyExc_ValueError, "replay has more than four players");
       return -1;
+    }
+    if (PyUnicode_CompareWithASCIIString(type, "Cpu") == 0) {
+      PyObject* level = PyDict_GetItemString(player, "cpu_level");
+      long cpu_level = level != NULL && PyLong_Check(level) ? PyLong_AsLong(level) : 0;
+      if (cpu_level < 1 || cpu_level > 9) {
+        PyErr_SetString(PyExc_ValueError, "CPU replay player requires a level in 1..9");
+        return -1;
+      }
+      replay->cpu_level[slot] = (uint8_t)cpu_level;
     }
     replay->port_1based[slot] = port;
     replay->start_stocks[slot] = (uint8_t)PyLong_AsUnsignedLong(stocks_obj);
@@ -445,7 +458,7 @@ static int parse_start(PyObject* start, ReplayView* replay) {
     }
   }
   if (replay->num_players != 2 && replay->num_players != 4) {
-    PyErr_Format(PyExc_ValueError, "expected two or four human players, got %d",
+    PyErr_Format(PyExc_ValueError, "expected two or four players, got %d",
                  replay->num_players);
     return -1;
   }
@@ -463,16 +476,19 @@ static int parse_start(PyObject* start, ReplayView* replay) {
         uint8_t team = replay->team_id[i];
         uint8_t costume = replay->costume_id[i];
         uint8_t handicap = replay->handicap[i];
+        uint8_t cpu_level = replay->cpu_level[i];
         replay->port_1based[i] = replay->port_1based[j];
         replay->start_stocks[i] = replay->start_stocks[j];
         replay->team_id[i] = replay->team_id[j];
         replay->costume_id[i] = replay->costume_id[j];
         replay->handicap[i] = replay->handicap[j];
+        replay->cpu_level[i] = replay->cpu_level[j];
         replay->port_1based[j] = port;
         replay->start_stocks[j] = stocks;
         replay->team_id[j] = team;
         replay->costume_id[j] = costume;
         replay->handicap[j] = handicap;
+        replay->cpu_level[j] = cpu_level;
       }
     }
   }
@@ -513,14 +529,26 @@ static int parse_metadata(PyObject* metadata, ReplayView* replay) {
     replay->freeze_dead_up_fall_physics = 1;
     replay->whispy_dead_fighter_fix = 1;
   }
-  // Mainline Slippi Dolphin's JIT implements nmsub with the retail PPC
-  // exact-zero sign, so scene-8 captures played on it need the retail
-  // fnmsubs zero. playedOn is the discriminator, not the protocol version:
-  // 3.19 "dolphin" corpus captures require the fused c - a*b zero while
-  // 3.18/3.19 "mainline dolphin" captures require the retail sign (verified
-  // by complete Fox/Falco aggregate streams against complete Luigi streams).
+  // Preserve the established corpus default. Metadata does not identify
+  // every historical JIT's arithmetic; an explicit recording profile below
+  // can select the existing capability independently of playedOn/scene.
   if (strcmp(played_on, "mainline dolphin") == 0) {
     replay->online_fnmsubs_zero = 0;
+  }
+  return 0;
+}
+
+static int msl_set_fnmsubs_profile(ReplayView* replay, const char* profile) {
+  if (profile == NULL) {
+    return 0;
+  }
+  if (strcmp(profile, "retail") == 0) {
+    replay->online_fnmsubs_zero = 0;
+  } else if (strcmp(profile, "dolphin-legacy") == 0) {
+    replay->online_fnmsubs_zero = 1;
+  } else {
+    PyErr_SetString(PyExc_ValueError, "invalid fnmsubs_profile");
+    return -1;
   }
   return 0;
 }
@@ -630,6 +658,8 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player,
   }
   FIELD(pre, "random_seed", "I", player->random_seed);
   FIELD(pre, "buttons_physical", "S", player->buttons);
+  FIELD(pre, "buttons", "I", player->processed_buttons);
+  FIELD(pre, "triggers", "f", player->processed_trigger);
   FIELD(pre, "raw_analog_x", "c", player->main_x);
   {
     int present = node_child_optional(pre, "raw_analog_y", &raw_main_y, error, error_size);
@@ -1089,16 +1119,21 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
     const ReplayPlayer* player = &replay->players[i];
     int64_t player_raw = rows->player_raw[i][0];
     uint8_t character = get_u8(&player->character, player_raw);
+    config->players[i].cpu_level = replay->cpu_level[i];
+    if (character == 10 && replay->cpu_level[i]) {
+      snprintf(error, error_size, "CPU Ice Climbers replay validation is not supported");
+      return -1;
+    }
     uint8_t stocks = replay->start_stocks[i];
     if (character != 5 && character != 1 && character != 2 && character != 3 && character != 6 && character != 7 &&
         character != 8 && character != 9 && character != 10 && character != 12 &&
-        character != 13 && character != 14 && character != 15 && character != 17 &&
+        character != 13 && character != 14 && character != 15 && character != 16 && character != 17 &&
         character != 18 && character != 19 && character != 20 && character != 21 &&
-        character != 22 && character != 25 && character != 0) {
+        character != 22 && character != 24 && character != 25 && character != 0) {
       snprintf(error, error_size,
                "Melee core requires Mario, Fox, Captain Falcon, Donkey Kong, Ganondorf, Bowser, "
                "Link, Young Link, Sheik, Peach, Ice Climbers, Pikachu, Samus, Ness, Yoshi, "
-               "Jigglypuff, Luigi, Marth, Zelda, Dr. Mario, or Falco players");
+               "Jigglypuff, Mewtwo, Luigi, Marth, Zelda, Dr. Mario, or Falco players");
       return -1;
     }
     // Ice Climbers leader post rows carry internal kind 10 (Popo) and the
@@ -1798,6 +1833,24 @@ static void refill_write_buffer(StreamState* state) {
                 state->rows->player_raw[seed_player][logical_pos]);
     frame.stage_events.fighter_pre_random_seed_valid = 1;
     build_input(state->replay, state->rows, logical_pos, &frame.input);
+    for (int player = 0; player < state->replay->num_players; ++player) {
+      const ReplayPlayer* src = &state->replay->players[player];
+      int64_t row = state->rows->player_raw[player][logical_pos];
+      MslReplayCpuInput* dst =
+          &frame.stage_events.cpu_inputs[state->replay->port_1based[player] - 1];
+      if (!state->replay->cpu_level[player] ||
+          !state->rows->player_present[player][logical_pos]) {
+        continue;
+      }
+      dst->main_x = get_f32(&src->nml_main_x, row);
+      dst->main_y = get_f32(&src->nml_main_y, row);
+      dst->c_x = get_f32(&src->nml_c_x, row);
+      dst->c_y = get_f32(&src->nml_c_y, row);
+      dst->trigger = get_f32(&src->processed_trigger, row);
+      dst->buttons = get_u32(&src->processed_buttons, row);
+      dst->random_seed = get_u32(&src->random_seed, row);
+      dst->valid = 1;
+    }
     if (state->replay->fod_platform_list != NULL) {
       int64_t start = list_range_start(state->replay->fod_platform_list, raw);
       int64_t count = list_count(state->replay->fod_platform_list, raw);
@@ -2371,6 +2424,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "ucf_shield_drop_084_enabled",
       "runner_stdin",
       "runner_stdout",
+      "fnmsubs_profile",
       NULL,
   };
   PyObject* frames_obj;
@@ -2393,6 +2447,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int ucf_shield_drop_084_enabled = 1;
   int runner_stdin = -1;
   int runner_stdout = -1;
+  const char* fnmsubs_profile = NULL;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -2411,12 +2466,12 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppii:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiiz:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
           &ucf_shield_drop_084_enabled,
-          &runner_stdin, &runner_stdout)) {
+          &runner_stdin, &runner_stdout, &fnmsubs_profile)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -2437,6 +2492,10 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   state.result.mismatch_fingerprint = UINT64_C(14695981039346656037);
   state.result.actual_output_fingerprint = UINT64_C(14695981039346656037);
   if (parse_start(start_obj, &replay) != 0 || parse_metadata(metadata_obj, &replay) != 0) {
+    goto done;
+  }
+
+  if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;
   }
 
@@ -2547,6 +2606,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
       "ucf_sdi_enabled",
       "ucf_shield_drop_extended_enabled",
       "ucf_shield_drop_084_enabled",
+      "fnmsubs_profile",
       NULL,
   };
   PyObject* frames_obj;
@@ -2554,6 +2614,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   PyObject* metadata_obj;
   PyObject* arrow_pair = NULL;
   const char* output_path;
+  const char* fnmsubs_profile = NULL;
   int ucf_cardinals_1_0_enabled = 1;
   int ucf_shield_sdi_enabled = 1;
   int ucf_sdi_enabled = 1;
@@ -2572,17 +2633,27 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   PyObject* result = NULL;
   (void)self;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|ppppp:write_benchmark_case", keywords,
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|pppppz:write_benchmark_case", keywords,
                                    &frames_obj, &start_obj, &metadata_obj, &output_path,
                                    &ucf_cardinals_1_0_enabled, &ucf_shield_sdi_enabled,
                                    &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
-                                   &ucf_shield_drop_084_enabled)) {
+                                   &ucf_shield_drop_084_enabled, &fnmsubs_profile)) {
     return NULL;
   }
   memset(&replay, 0, sizeof(replay));
   memset(&rows, 0, sizeof(rows));
   if (parse_start(start_obj, &replay) != 0 || parse_metadata(metadata_obj, &replay) != 0) {
     goto done;
+  }
+  if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
+    goto done;
+  }
+  for (i = 0; i < replay.num_players; ++i) {
+    if (replay.cpu_level[i]) {
+      PyErr_SetString(PyExc_ValueError,
+                      "CPU replay inputs cannot be represented in a controller-only benchmark tape");
+      goto done;
+    }
   }
   arrow_pair = PyObject_CallMethod(frames_obj, "__arrow_c_array__", NULL);
   if (arrow_pair == NULL) {

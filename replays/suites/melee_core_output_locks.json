@@ -3144,6 +3144,114 @@
       }
     },
     {
+      "replay": "replays/validation/mewtwo_fnmsubs/Game_20260702T170056.slpz",
+      "expected": {
+        "native": {
+          "frames": 5960,
+          "actual_output_fingerprint": "8328ab10a75d1373"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_fnmsubs/mewtwo_shfair_only.slpz",
+      "expected": {
+        "native": {
+          "frames": 8060,
+          "actual_output_fingerprint": "f18497c3539a472d"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/absorb.slpz",
+      "expected": {
+        "native": {
+          "frames": 2539,
+          "actual_output_fingerprint": "fa0af378fcec173f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/absorb_control.slpz",
+      "expected": {
+        "native": {
+          "frames": 2547,
+          "actual_output_fingerprint": "04cbb3ccc0b496d2"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/missile.slpz",
+      "expected": {
+        "native": {
+          "frames": 2133,
+          "actual_output_fingerprint": "a5f42598bee4e73e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/missile_control.slpz",
+      "expected": {
+        "native": {
+          "frames": 1895,
+          "actual_output_fingerprint": "7ca2ee8001a35e7c"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/missile_early.slpz",
+      "expected": {
+        "native": {
+          "frames": 1901,
+          "actual_output_fingerprint": "2dd42a9015706a5e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/reflect.slpz",
+      "expected": {
+        "native": {
+          "frames": 2171,
+          "actual_output_fingerprint": "6631b062ab296b58"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/reflect_control.slpz",
+      "expected": {
+        "native": {
+          "frames": 2103,
+          "actual_output_fingerprint": "c0daf2d73dd176d8"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_teleport/Game_20260915T192036.slpz",
+      "expected": {
+        "native": {
+          "frames": 11710,
+          "actual_output_fingerprint": "d361013066e1a83a"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_teleport/Game_20260915T192357.slpz",
+      "expected": {
+        "native": {
+          "frames": 2701,
+          "actual_output_fingerprint": "eba1174fe7f9fb0b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_teleport/Game_20260915T192506.slpz",
+      "expected": {
+        "native": {
+          "frames": 9034,
+          "actual_output_fingerprint": "6e2a41d9916d8af8"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/ness/2025-01_Game_20250131T175344.slpz",
       "expected": {
         "native": {

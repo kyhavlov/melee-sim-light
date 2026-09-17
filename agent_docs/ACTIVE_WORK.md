@@ -7211,3 +7211,308 @@ tests bumped 491 -> 492.
   enters Makefile. Retain only the stationary query optimizations; repeat final
   native/release/PPC/Wasm gates and direct checkpoint timing. Final source
   lifecycle cost must be reported rather than described as noise.
+
+# Game & Watch and Mewtwo admission — 2026-09-15
+
+- Authorized scope: implement both fighters on local branch
+  `feat/gamewatch-mewtwo`, with tests and replay validation before PR review.
+  No commit, push, fork, or PR is authorized for this packet.
+- Initial inspection: clean main; both fighter directories contain declarations
+  only. Game & Watch common attack entry points abort; Mewtwo forward throw's
+  Shadow Ball hook is a no-op. Neither fighter is publicly admitted.
+- Final owners: pinned upstream ftGameWatch/ftMewtwo MotionState callbacks and
+  their source item/article owners; common capture, reflection, absorption and
+  item scheduling retain their existing ownership. Canonical mutable state is
+  Fighter's source fighter/state unions and Item's source state, within each
+  match arena. Immutable attributes, animation and article data come from DATs.
+- Consumers: source fighter/item scheduler, native DAT relocation, runtime pool
+  sizing, batch reset/copy/save/restore, public observations and replay/viewer
+  projection. Do not add mirrored timers, synthetic move dispatch or replay-fit
+  constants.
+- Deletion boundary: remove each displaced unsupported-fighter abort/no-op when
+  its complete source owner is imported. Update source inventory/provenance
+  with imports. Admit each completed fighter through every gate and viewer
+  mapping together; no public admission before its dependency closure is usable.
+- Sequence: establish local build/data baseline, complete Mewtwo's smaller
+  callback/article closure, then Game & Watch; challenge each with targeted
+  mechanics and full-game recordings, followed by shared regression gates.
+- Environment experiment: fetch the exact decomp pin, provision an ephemeral
+  Nix compiler/Python environment, and extract the existing local Melee ISO.
+  This checkout initially has no .venv, data/raw, or native build. Host gate
+  certification is outstanding; do not refresh committed replay identities.
+- Coverage required: Shadow Ball charge/cancel/fire/reflection/absorption,
+  forward-throw projectiles, Confusion captures/reflects, Teleport transitions,
+  Disable hit conditions; Judge outcomes/history, Chef RNG, Oil Panic storage
+  and release, projectile eligibility, and attack-article interruption/death.
+  Include four-same-fighter reserve stress and arbitrary-index copy/restore.
+- Bring-up result: local ISO extraction and initial source integrity pass.
+  Nix supplies GCC/Python/make/dpkg without host-wide installation. The pinned
+  PPC compiler download is still running, so no native runtime result exists.
+  Existing ~/git/melee (f49c14fdb) has GALE01 assembly/main.elf; imports continue
+  to use the sim's exact 91b9789f pin. The user's historical gnw_vs_mewtwo file
+  is a DTM recording, not a validator-ready Slippi replay.
+- Mewtwo first cut: import five matching fighter sources, both matching article
+  sources and their declarations, and the shared Kirby declaration dependency.
+  Delete the forward-throw no-op; Kirby-only article dispatch retains explicit
+  unsupported-branch aborts. Add source registry entries, costume ownership,
+  DAT attribute/article translation and effect-bank loading. Private scalar
+  construction is enabled for smoke development; public API admission awaits
+  gameplay validation. All seven translation units compile individually.
+- Fresh extraction experiment: extended Mewtwo profile contains 205 DAT files
+  plus main.dol; raw manifest validation passes. Source-check passes after
+  extending the pinned inventory/digest. Gameplay mask derives 46 live of 68
+  parts, including the source SpecialN/Lw raw anchors 27, 32 and 35. Runtime
+  construction, articles, effects, pool bounds and replay exactness remain open.
+- Development-build experiment: while the pinned PPC package download retries
+  a Launchpad HTTP 502, build a separate native-dev tree with the existing
+  Clang PPC layout-generation fallback and GCC gameplay compilation. Use it
+  only for debugging construction/smoke failures; do not record replay locks
+  or claim host certification from this build. Run the new two/four-Mewtwo
+  charge/release ownership smoke, then repeat with the pinned toolchain.
+- Local replay scan found 268 long Mewtwo and 47 long Game & Watch candidates
+  on supported stages. Initial scratch Mewtwo selection has ten completed
+  games across FD/Battlefield/Fountain/Yoshi's/Dream Land, including bot
+  evaluations and a mirror. File lists and provenance remain under ignored
+  reports/triage/gamewatch_mewtwo; no replay bytes or suite identities have
+  been published or added to the authoritative corpus.
+- Native-dev result: the Mewtwo two/four-port charge/release smoke passes;
+  first 1,000 transitions of Game_20260715T174042 (Samus/Mewtwo on Yoshi's)
+  compare exactly. The validator had its own admission check; its private
+  input boundary now accepts internal kind 16. This is development evidence,
+  not an authoritative suite identity.
+- Next experiment: diagnose all ten complete scratch-selected Mewtwo games
+  with four native-dev runners, preserve raw mismatch reports, and identify
+  first source writers. Do not alter classifiers/output locks to hide gaps.
+- Ten-game development challenge: six raw mismatches and four runner exits.
+  Five mismatch sets contain only Shadow Ball/Disable metadata lanes; the
+  other is a Fox attack-velocity signed zero. Source item union lifetimes
+  justify excluding Disable's pointer/residue lanes and Shadow Ball's
+  uninitialized held angle / non-throw x0, using the existing gameplay-misc
+  projection boundary. Forward-throw state 9 retains all four numeric lanes.
+  No classifications or tolerance changes. Runner exits still need a stack.
+- Pinned native build and Mewtwo smoke now pass after toolchain download and
+  rebuilding the type object made stale by edits during initial bring-up.
+  Full host certification and existing-roster regression gates remain open.
+- Existing-roster challenge: native smoke and all committed aggregate output
+  locks pass with no regression. Full host certification still needs PPC.
+- Expanded Mewtwo smoke experiment: construct five forward-throw projectiles
+  per port for four Mewtwos, then advance their lifecycles with sealed pools.
+  This catches the read-only attribute regression and overlapping article
+  graph demand. First run exhausts HSD_FObj through Item_80268BE0 ->
+  HSD_JObjAddAnim. Add an additive 128-track reserve per Mewtwo, then repeat;
+  do not weaken sealed allocation checks or use one flat match-wide reserve.
+- Expanded Mewtwo smoke result: the subsequent AObj exhaustion also required
+  an additive reserve (64 per Mewtwo, alongside 128 FObj tracks per Mewtwo).
+  `make mewtwo-smoke` now passes, including four-port charge/release and
+  overlapping forward-throw projectiles. These reserves still need review
+  against the full supported article/effect concurrency before admission.
+- Capture provenance clarification: the user identifies the early July
+  recordings, including `mewtwo_shfair_only.slp`, as Mainline Slippi Dolphin
+  started through Slippi Launcher. Exact historical executable/settings are
+  not established. Local launcher directories contain multiple engine
+  channels; their current contents do not prove the July recording build.
+  Retain the signed-zero mismatch as an open investigation, without changing
+  the replay profile, tolerances, or classifications on this evidence alone.
+- Reviewed `HANDOFF_SIGNED_ZERO_EXPHIL_2026-09-15.md` and its local ExPhil
+  diagnosis/results. The retained JSON confirms interpreter 1/1, corrected
+  JIT 6/6, non-FMA 1/1, and source-profile-matched 13/13 exact prefix audits.
+  The unconditional correction passed only 6/13. This independently locates
+  that September Fox game's discrepancy at airborne knockback `fnmsubs`
+  (0x8006B9E4, fighter +0x90), the same common arithmetic owner used here.
+  It does not establish the first differing writer or execution profile of
+  our July Mewtwo fixtures: their observed expected +0 / simulated -0 is
+  opposite the September source's expected -0 / old-JIT +0. Preserve the
+  user's Mainline/Launcher provenance and investigate those July inputs and
+  writer directly. No runtime, comparator, or classification change follows
+  from this handoff; external prefix evidence is not a simulator gate result.
+
+### Recorded CPU controller validation — 2026-09-15
+
+- Final owners: player configuration retains CPU slot type/level; Slippi frame
+  transport owns recorded CPU processed inputs; Fighter input publication at
+  0x8006B0DC consumes those inputs before edge/timer updates. Preserve the
+  original AI callbacks and CPU-specific UCF/gameplay gates. No CPU-to-human
+  substitution, position/action resynchronization, or float quantization.
+- Canonical pending replay inputs live in the match-owned Slippi state and
+  travel in frame events, separate from ordinary controller bytes. Consumers
+  receive exact f32 sticks/trigger and processed buttons. Human and Nana input
+  paths stay source-owned. The deletion boundary is the validator's Human-only
+  admission restriction; this does not add autonomous CPU support to the API.
+- Experiment: first run existing supported-character CPU captures from ExPhil
+  with strict comparison, plus the ordinary human regression fixture. Inspect
+  the first writer on failures. Game & Watch captures cannot pass before its
+  gameplay integration. No replay identities or tolerances change.
+- CPU input experiment result: all 12 ExPhil source games complete (67,867
+  transitions), with mismatches confined to knockback-Y fields and first
+  differences showing expected +0 versus actual -0. No classifications or
+  arithmetic profiles were changed. The retained Peach fixture has a strict
+  5,000-transition exact prefix; its later signed-zero failure remains visible.
+- Focused validation/storage/benchmark tests: 25 passed, one PPC test skipped
+  because PPC artifacts are unavailable. CPU smoke verifies exact float bits,
+  processed buttons/RNG, physical P2/P3 mapping, follower exclusion, pending
+  input copy/save/restore, and reset. Native smoke and Mewtwo smoke pass.
+- The first native smoke exposed a stale stage-lifecycle object: its source
+  was absent from NATIVE_SMOKE_SRCS, so header dependency files were not loaded.
+  Added it and both new smoke sources to that list; the rebuilt test passes.
+  Updated the internal viewer schema and bumped controller benchmark tapes to
+  v3 for the larger player config; CPU benchmark export explicitly rejects
+  the unrepresentable processed-input stream.
+- Existing supported-domain challenge remains 503 exact / 26 existing
+  classified / zero fail or error (5,059,922 transitions). No output locks were
+  updated. Both new Game & Watch/Mewtwo captures now pass CPU metadata parsing
+  and stop at the unsupported Game & Watch fighter check. CPU Ice Climbers
+  remain explicitly unsupported pending follower validation. See
+  CPU_REPLAY_VALIDATION.md for fixture provenance and reproducible checks.
+
+### Targeted Mewtwo move tests — 2026-09-15
+
+- Source owners under challenge: ftMt_SpecialS plus Capture/ThrownMewtwo and
+  ftColl reflection ownership; ftMt_SpecialLw plus DamageBind and Disable item;
+  ftMt_SpecialHi state/collision callbacks; ftMt_SpecialN and item/lifecycle
+  callbacks. Tests use extracted move scripts and real scheduler/contact work.
+- Experiment: deterministic local setups exercise Confusion reflection versus
+  inactive reflection, grab range and shield interaction, grounded/airborne
+  Disable and facing controls, Teleport phase/direction transitions, Shadow
+  Ball cancel/interruption/death, and overlapping four-port specials. Keep
+  all setup constants confined to tests; no replay-fit gameplay changes.
+- Existing replay evidence reviewed: 10/12 diagnostic Mewtwo games exact;
+  remaining files have 20 and 50 knockback-Y signed-zero rows respectively,
+  on Fox. These are retained failures, not yet classifications or move bugs.
+- Initial targeted outcomes: all contact, interruption, charge, teleport and
+  copy/restore cases pass without gameplay fixes. Test setup corrected for
+  Fox's faster fall into the aerial contact window. Source full-charge entry
+  clears take_dmg/death2 callbacks, so interruption tests invoke common damage
+  and actual death entry, allowing item cleanup and death3 to run normally.
+- Capacity experiment: 20 forward-throw article factories peak at 797/825
+  FObjs and 186/410 AObjs. Two/four charge-release peak at 131/569 and 205/825
+  FObjs. Four simultaneous Confusion/Disable/Teleport peak at 57/825. Add the
+  existing article smoke's 20% spare-capacity requirement, demonstrate its
+  failure for the 20-shot stress case, then increase Mewtwo's additive FObj
+  reserve from 128 to 192 per fighter. Each five-shot group contributes 185
+  live tracks (37 per loaded Shadow Ball graph); it must not borrow most of
+  another owner's common reserve. This stress is a conservative article burst,
+  not a claim that four simultaneous grabs are possible with four fighters.
+- Final targeted tests: 33 move cases plus two/four charge-release and 20-shot
+  factory stress pass. Mewtwo smoke now runs under native-smoke. No gameplay
+  callback changes were needed. Production change is the additive per-Mewtwo
+  animation-track reserve (192 instead of 128); peak now 797/1081, with a
+  retained >=20% spare-capacity assertion. Native smoke and source-check pass.
+- All 12 Mewtwo diagnostic replays rerun: 10 exact, two signed-zero failures,
+  zero errors, 123,473 transitions. Both mismatch fingerprints are unchanged.
+  MEWTWO_MOVE_TESTS.md records coverage, remaining challenges, memory usage,
+  and the limits of this evidence. The 64-byte native FObj slot means +4 KiB
+  track storage per Mewtwo, plus bookkeeping; no throughput benchmark was run.
+
+### Mewtwo replay zero-sign reproducer — 2026-09-15
+
+- Experiment: trace airborne knockback decay operands at the earliest Fox
+  Y-velocity mismatch in both July recordings (4041 and 1000). Compare retail
+  negate-after-fused-subtract with historical Dolphin reverse subtraction.
+  Preserve strict comparison and existing capability ownership; no replay-keyed
+  gameplay branches or global zero normalization. Test both full recordings
+  with the existing capability before deciding on execution-profile plumbing.
+- Trace outcome: both first Y writers use a=0x3d50e560, b=+0, c=+0
+  at fighter.c airborne decay (retail 0x8006B9E4). Match frame_id is the
+  preceding frame: 999/4040 writes output 1000/4041. The existing native
+  retail arithmetic correctly produces -0; legacy Dolphin produces +0.
+- Representation: expose an explicit validator-only fnmsubs_profile selector
+  (retail or dolphin-legacy), mapping directly to the existing match config
+  online_fnmsubs_zero capability. Consumers are native/PPC validation jobs
+  and suite entries. Omission preserves metadata defaults. No additional
+  runtime state, wire fields, automatic retry, or displaced gameplay logic.
+  Record profile in results; do not infer a specific historical build.
+- Arithmetic experiment outcome: setting the existing match capability makes
+  both full captures exact (14,020 transitions), explaining all 70 rows. Initial
+  GDB argument-register mutation did not change the optimized initialization;
+  setting the canonical bound rules field confirmed the profile differential.
+  Explicit validator/profile plumbing then reproduced both exact results without
+  debugger intervention. Retail/default negative controls retain their failures.
+- Added twelve two-profile arithmetic cases and lossless full-replay fixtures;
+  tests alternate profiles on one runner, reject invalid profiles, and verify
+  benchmark config/cache propagation. No runtime layout or arithmetic changed.
+- Final focused tests: 30 passed, one unavailable PPC-artifact skip. An earlier
+  CPU test launch overlapped native relinking (posix_spawn permission denied);
+  rerunning after build completion passed. Native-smoke/source-check pass.
+- All twelve Mewtwo diagnostic games now exact: 123,473 transitions, two explicit
+  legacy profiles and ten unchanged metadata defaults. Supported-domain gate:
+  503 exact / 26 existing classified / zero failures or errors, 5,059,922
+  transitions. No classification/output locks changed. Historical build remains
+  unknown; the profile assignment is a source-backed arithmetic inference.
+
+### Erickfm Mewtwo corpus expansion — 2026-09-15
+
+- User identified additional recordings under /data. Inspect filename-selected
+  Mewtwo candidates from huggingface and erickfm_ranked; deduplicate by original
+  replay SHA-256 and check actual start metadata. Select full games across
+  supported opponents and stages before validation, retaining failures as well
+  as passes. Preserve source bytes and provenance; use metadata arithmetic
+  defaults without automatic profile retries. This packet adds validation
+  evidence, not gameplay or public admission.
+- Scan outcome: 7,911 FOX and 93,438 partner files inspected by fixed
+  game-start header, then Mewtwo candidates verified with Peppi. Named old
+  fixtures fail required scene/animation fields. One ranked v3.14 Mewtwo/Fox
+  recording has all frame fields but stripped metadata. Diagnostic network
+  playedOn assumption is supported by scene major 8, not original provenance.
+  Default cardinal profile first diverges at -39 in Fox self-speed (-.295
+  recorded vs -.3 simulated). Test the existing pre-cardinal UCF profile
+  explicitly; retain both outcomes rather than modify inputs or gameplay.
+- Final corpus outcome: 74 unique Mewtwo recordings; actual strict probes
+  reject 68 for missing scene major and five for missing animation_index.
+  One v3.14 ranked game retained losslessly under mewtwo_erickfm, outside
+  passing/aggregate suites. Diagnostic pre-cardinal profile extends its exact
+  prefix to 477 transitions, but Fox action first differs at 355 (178 vs 235),
+  leaving 8,981 mismatching rows of 9,458. This is an unresolved additional
+  diagnostic, not a newly validated game or established Mewtwo bug.
+- No missing fields synthesized, no classifications/defaults/gameplay changed.
+  MEWTWO_ERICKFM_INVENTORY.json retains sources, hashes and exclusions;
+  MEWTWO_RECORDING_PLAN.md records evidence and a targeted recording checklist.
+
+### New Mewtwo recordings and Dolphin interaction fixtures — 2026-09-15
+
+- Three new human Mewtwo / CPU Marth Battlefield games retained losslessly;
+  all pass strict native comparison (23,445 transitions). Count special-state
+  entries and ledge transitions without claiming state counts prove contacts.
+- User delegates reflection and Shadow Ball absorption captures. Use the existing
+  ExPhil/libmelee_ex bridge and isolated headless Dolphin sessions, scripted
+  controller inputs only, both human slots. No playback/state restoration or
+  game-memory mutation. Record known executable hash/settings and confirm
+  actual item reversal/absorption against nearby inactive controls before
+  retaining strict replay results. Production gameplay remains untouched.
+- Headless recording outcome: first LRAS attempt paused the game and failed
+  to finalize; discard incomplete scratch captures. Use poll:true and controller
+  walk-off stock exhaustion. Retained recorder uses isolated homes/ports and
+  explicit AccurateNmsub=true; executable hash/build manifest retained.
+- Seven scripted Dolphin games now exact: Falco laser reflection/inactive control,
+  Ness partial/full Shadow Ball absorption/inactive control, and Samus missile
+  reflection/inactive/too-early controls. Missile delay40 was a real timing miss;
+  delay65 gives four reversals with no Mewtwo damage. Preserve both recordings.
+  Ness partial shot heals 8 -> 0 without stock loss; both partial/full articles
+  terminate into SpecialLwHit, asserted by coverage tests.
+- Combined targeted suite: ten exact recordings, 38,734 transitions, no errors or
+  classifications. Coverage/storage pytest: 12 passed. Human games contain 92
+  Teleport starts, 27 Confusion entries, seven direct Teleport-to-ledge catches.
+  No gameplay/comparison/default changes; old Erickfm diagnostic still unresolved.
+  Recorder, source hashes, and remaining limits documented in MEWTWO_TARGETED_REPLAYS.md.
+- Supported-domain regression gate after fixture integration: 503 exact,
+  26 existing classified, zero failures/errors across 5,059,922 transitions.
+  git diff --check and LFS attribute checks pass; no commit or PR created.
+
+### Erickfm Fox shield/dodge diagnostic — 2026-09-15
+
+- First mismatch frame355: recorded Fox remains GuardOn; native enters EscapeN.
+  Frame352 already enters shield. Main stick rotates from right to down-right,
+  reaching (0.7,-0.7); C-stick stays neutral, L held. Source owner is
+  ftCo_8009980C -> msl_ucf_suppress_spotdodge -> ftCo_80099894.
+- Existing UCF0.8 branch suppresses held rim spot dodges on solid floors, whereas
+  0.84 requires a platform. Experiment: retain pre-cardinal assumption and
+  disable only existing 0.84 shield-drop option; inspect full replay and trace
+  entry state. This is diagnostic profile evidence, not inferred provenance or
+  permission to change defaults or mark the replay passing automatically.
+- Outcome: disabling existing 0.84 shield-drop capability resolves all9,458
+  transitions exactly. GDB confirms GuardOn IASA, stick(0.7,-0.7), neutral
+  C-stick, tilt timers14/2, floor3 flags18 (solid). No gameplay change needed.
+  Regression tests:2 passed, including old/new/old profile alternation on one
+  runner and original frame355 failure control. Historical profile remains
+  inferred; aggregate suite and global defaults unchanged. Durable explanation
+  in FOX_UCF_SHIELD_REPRODUCER.md; inventory/recording plan updated.
+

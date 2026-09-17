@@ -287,3 +287,7 @@ grVenom_80206D10	source-gated outside-domain stage predicate	reachable every CPU
 ftCo_803C6594	undecompiled .data projection	reachable from ftCo_800A1CC4	all-NULL rows; source-exact for supported stages	data/raw/main.dol::0x803C6594 decode: only GREATBAY/SHRINE rows non-NULL, both outside the supported stage domain
 ftKb_SpecialNKp_800FA83C	unsupported Kirby copied-flame branch	unreachable	named abort	refs/melee/src/melee/it/items/itkoopaflame.c::itKoopaFlame_Spawn reaches this only for It_Kind_Kirby_KoopaFlame; supported Bowser spawns It_Kind_Koopa_Flame
 ftKb_SpecialNKp_800FA878	unsupported Kirby copied-flame branch	unreachable	named abort	refs/melee/src/melee/it/items/itkoopaflame.c::itKoopaFlame_Spawn reaches this only for It_Kind_Kirby_KoopaFlame; supported Bowser spawns It_Kind_Koopa_Flame
+ftKb_SpecialNMt_80106F44	unsupported-fighter branch	unreachable	named abort	Shadow Ball dispatch reaches this only for It_Kind_Kirby_MewtwoShadowBall; Kirby is not admitted
+ftKb_SpecialNMt_80106F9C	unsupported-fighter branch	unreachable	named abort	Shadow Ball dispatch reaches this only for It_Kind_Kirby_MewtwoShadowBall; Kirby is not admitted
+ftKb_SpecialNMt_80106FEC	unsupported-fighter branch	unreachable	named abort	Shadow Ball dispatch reaches this only for It_Kind_Kirby_MewtwoShadowBall; Kirby is not admitted
+ftKb_SpecialNMt_80107040	unsupported-fighter branch	unreachable	named abort	Shadow Ball dispatch reaches this only for It_Kind_Kirby_MewtwoShadowBall; Kirby is not admitted

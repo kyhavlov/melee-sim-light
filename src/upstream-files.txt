@@ -442,6 +442,7 @@ src/melee/ft/chara/ftKirby/ftkirbycaptureyoshi.h
 src/melee/ft/chara/ftKirby/ftkirbyspecialdonkey.h
 src/melee/ft/chara/ftKirby/ftkirbyspecialhi.h
 src/melee/ft/chara/ftKirby/ftkirbyspecialiceclimber.h
+src/melee/ft/chara/ftKirby/ftkirbyspecialmewtwo.h
 src/melee/ft/chara/ftKirby/ftkirbyspecialpeach.c
 src/melee/ft/chara/ftKirby/ftkirbyspecialpeach.h
 src/melee/ft/chara/ftKirby/ftkirbyyoshiegg.h
@@ -522,10 +523,15 @@ src/melee/ft/chara/ftMasterHand/ftMh_Wait1_0.h
 src/melee/ft/chara/ftMasterHand/ftMh_Wait1_2.h
 src/melee/ft/chara/ftMasterHand/types.h
 src/melee/ft/chara/ftMewtwo/forward.h
+src/melee/ft/chara/ftMewtwo/ftMt_Init.c
 src/melee/ft/chara/ftMewtwo/ftMt_Init.h
+src/melee/ft/chara/ftMewtwo/ftMt_SpecialHi.c
 src/melee/ft/chara/ftMewtwo/ftMt_SpecialHi.h
+src/melee/ft/chara/ftMewtwo/ftMt_SpecialLw.c
 src/melee/ft/chara/ftMewtwo/ftMt_SpecialLw.h
+src/melee/ft/chara/ftMewtwo/ftMt_SpecialN.c
 src/melee/ft/chara/ftMewtwo/ftMt_SpecialN.h
+src/melee/ft/chara/ftMewtwo/ftMt_SpecialS.c
 src/melee/ft/chara/ftMewtwo/ftMt_SpecialS.h
 src/melee/ft/chara/ftMewtwo/types.h
 src/melee/ft/chara/ftNana/ftNn_Init.c
@@ -952,6 +958,10 @@ src/melee/it/items/itmariocape.h
 src/melee/it/items/itmariofireball.c
 src/melee/it/items/itmariofireball.h
 src/melee/it/items/itmarumine.h
+src/melee/it/items/itmewtwodisable.c
+src/melee/it/items/itmewtwodisable.h
+src/melee/it/items/itmewtwoshadowball.c
+src/melee/it/items/itmewtwoshadowball.h
 src/melee/it/items/itmsbomb.h
 src/melee/it/items/itnessbat.c
 src/melee/it/items/itnessbat.h

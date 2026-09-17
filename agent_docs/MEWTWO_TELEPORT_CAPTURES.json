@@ -1,0 +1,171 @@
+[
+  {
+    "source": "/home/blewf/Slippi/2026-09-Mainline/Game_20260915T192036.slp",
+    "replay": "replays/validation/mewtwo_teleport/Game_20260915T192036.slpz",
+    "sha256_slp": "4ad769398373631dd7078e986975090912d92fd8b352ab603b345252afc351f9",
+    "stage": 31,
+    "players": [
+      {
+        "port": "P2",
+        "character": 10,
+        "type": "Human",
+        "cpu_level": null
+      },
+      {
+        "port": "P3",
+        "character": 9,
+        "type": "Cpu",
+        "cpu_level": 5
+      }
+    ],
+    "metadata": {
+      "startAt": "2026-09-16T00:20:36Z",
+      "lastFrame": 11587,
+      "players": {
+        "2": {
+          "names": {},
+          "characters": {
+            "18": 11711
+          }
+        },
+        "1": {
+          "names": {},
+          "characters": {
+            "16": 11711
+          }
+        }
+      },
+      "playedOn": "mainline dolphin"
+    },
+    "state_entries": {
+      "252": 25,
+      "253": 25,
+      "346": 1,
+      "352": 1,
+      "353": 11,
+      "354": 6,
+      "355": 5,
+      "356": 55,
+      "357": 63,
+      "358": 47,
+      "360": 1
+    },
+    "validation": {
+      "backend": "native",
+      "result": "exact",
+      "compared_transitions": 11710
+    }
+  },
+  {
+    "source": "/home/blewf/Slippi/2026-09-Mainline/Game_20260915T192357.slp",
+    "replay": "replays/validation/mewtwo_teleport/Game_20260915T192357.slpz",
+    "sha256_slp": "60a36571ffd2e2a74b6509c25a9e7fd9bd1e86cf97e247eff3f5fe3504bb93e4",
+    "stage": 31,
+    "players": [
+      {
+        "port": "P2",
+        "character": 10,
+        "type": "Human",
+        "cpu_level": null
+      },
+      {
+        "port": "P3",
+        "character": 9,
+        "type": "Cpu",
+        "cpu_level": 5
+      }
+    ],
+    "metadata": {
+      "startAt": "2026-09-16T00:23:57Z",
+      "lastFrame": 2578,
+      "players": {
+        "2": {
+          "names": {},
+          "characters": {
+            "18": 2702
+          }
+        },
+        "1": {
+          "names": {},
+          "characters": {
+            "16": 2702
+          }
+        }
+      },
+      "playedOn": "mainline dolphin"
+    },
+    "state_entries": {
+      "252": 10,
+      "253": 10,
+      "346": 1,
+      "347": 1,
+      "349": 1,
+      "351": 1,
+      "352": 7,
+      "356": 9,
+      "357": 8,
+      "358": 9
+    },
+    "validation": {
+      "backend": "native",
+      "result": "exact",
+      "compared_transitions": 2701
+    }
+  },
+  {
+    "source": "/home/blewf/Slippi/2026-09-Mainline/Game_20260915T192506.slp",
+    "replay": "replays/validation/mewtwo_teleport/Game_20260915T192506.slpz",
+    "sha256_slp": "cd33cfbf59bed4c7e139672153a7c39b4f72416a1000ce368689c236e1ee960b",
+    "stage": 31,
+    "players": [
+      {
+        "port": "P2",
+        "character": 10,
+        "type": "Human",
+        "cpu_level": null
+      },
+      {
+        "port": "P3",
+        "character": 9,
+        "type": "Cpu",
+        "cpu_level": 5
+      }
+    ],
+    "metadata": {
+      "startAt": "2026-09-16T00:25:06Z",
+      "lastFrame": 8911,
+      "players": {
+        "2": {
+          "names": {},
+          "characters": {
+            "18": 9035
+          }
+        },
+        "1": {
+          "names": {},
+          "characters": {
+            "16": 9035
+          }
+        }
+      },
+      "playedOn": "mainline dolphin"
+    },
+    "state_entries": {
+      "252": 11,
+      "253": 11,
+      "351": 7,
+      "352": 11,
+      "353": 1,
+      "356": 16,
+      "357": 16,
+      "358": 16,
+      "359": 7,
+      "360": 10
+    },
+    "validation": {
+      "backend": "native",
+      "result": "exact",
+      "compared_transitions": 9034
+    }
+  }
+]

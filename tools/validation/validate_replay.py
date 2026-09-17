@@ -11,7 +11,7 @@ import re
 import subprocess
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 from types import ModuleType
@@ -37,7 +37,7 @@ NATIVE_BINARY = Path(
 TOOLCHAIN = BUILD / "toolchain" / "root"
 QEMU = TOOLCHAIN / "usr" / "bin" / "qemu-ppc-static"
 SYSROOT = TOOLCHAIN / "usr" / "powerpc-linux-gnu"
-DEFAULT_CHARACTERS = "Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach,Luigi,Mario,Dr. Mario,Samus,Ice Climbers,Pikachu,Donkey Kong,Ganondorf,Yoshi,Bowser,Ness,Link,Young Link"
+DEFAULT_CHARACTERS = "Mewtwo,Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach,Luigi,Mario,Dr. Mario,Samus,Ice Climbers,Pikachu,Donkey Kong,Ganondorf,Yoshi,Bowser,Ness,Link,Young Link"
 DEFAULT_STAGES = "32,31,3,2,8,28"
 MAX_AUTO_WORKERS = 16
 DEFAULT_CLASSIFICATIONS = ROOT / "replays/suites/melee_core_classifications.json"
@@ -66,6 +66,7 @@ class ReplayCase:
     ucf_shield_drop_extended_enabled: bool = True
     ucf_shield_drop_084_enabled: bool = True
     played_on: str | None = None
+    fnmsubs_profile: str | None = None
 
 
 @dataclass(frozen=True)
@@ -424,6 +425,7 @@ def validate_one(
     ucf_shield_drop_extended_enabled: bool = True,
     ucf_shield_drop_084_enabled: bool = True,
     played_on: str | None = None,
+    fnmsubs_profile: str | None = None,
     runner: _NativeRunner | None = None,
 ) -> dict[str, object]:
     # Python owns only the replay-loading boundary. The native extension consumes
@@ -448,6 +450,7 @@ def validate_one(
             frames_limit=frames,
             timeout=timeout,
             signed_zero_equal=signed_zero_equal,
+            fnmsubs_profile=fnmsubs_profile,
             native=backend == "native",
             ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
             ucf_shield_sdi_enabled=ucf_shield_sdi_enabled,
@@ -457,6 +460,7 @@ def validate_one(
             runner_stdin=runner.stdin_fd if runner is not None else -1,
             runner_stdout=runner.stdout_fd if runner is not None else -1,
         )
+    result["fnmsubs_profile"] = fnmsubs_profile or "metadata"
     result["end_to_end_seconds"] = time.perf_counter() - started
     return result
 
@@ -561,6 +565,7 @@ def load_suite_cases(
                     )
                 ),
                 played_on=entry.played_on,
+                fnmsubs_profile=entry.fnmsubs_profile,
             )
         )
     if not cases:
@@ -625,6 +630,7 @@ def _validate_case(
                 ),
                 ucf_shield_drop_084_enabled=case.ucf_shield_drop_084_enabled,
                 played_on=case.played_on,
+                fnmsubs_profile=case.fnmsubs_profile,
                 runner=runner,
             )
         except Exception:
@@ -688,12 +694,13 @@ def run_cases(
 
 
 def _case_scope(case: ReplayCase) -> str:
+    profile = f"fnmsubs={case.fnmsubs_profile}" if case.fnmsubs_profile else ""
     if case.stage_id is None:
-        return ""
+        return profile
     stage = STAGE_NAMES.get(case.stage_id, f"stage {case.stage_id}")
     players = "/".join(case.characters)
     ports = "/".join(f"P{port}" for port in case.ports)
-    return f"{stage} {players} {ports}"
+    return f"{stage} {players} {ports} {profile}".rstrip()
 
 
 def _result_status(
@@ -924,6 +931,10 @@ def main() -> int:
         default=None,
         help="Per-replay timeout; defaults to 8s native and 30s PPC.",
     )
+    parser.add_argument(
+        "--fnmsubs-profile", choices=("retail", "dolphin-legacy"),
+        help="Explicit recording arithmetic profile; omission uses replay metadata defaults.",
+    )
     parser.add_argument("--backend", choices=("ppc", "native", "both"), default="native")
     parser.add_argument(
         "--timing", action="store_true", help="Print per-replay runner timing."
@@ -1004,6 +1015,8 @@ def main() -> int:
         else:
             stages = frozenset()
             cases = _manual_cases(args.replay)
+        if args.fnmsubs_profile is not None:
+            cases = [replace(case, fnmsubs_profile=args.fnmsubs_profile) for case in cases]
         workers = _resolve_worker_count(args.workers, len(cases))
 
         if not args.no_build:

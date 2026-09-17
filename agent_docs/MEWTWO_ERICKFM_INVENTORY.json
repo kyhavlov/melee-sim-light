@@ -1,0 +1,1869 @@
+{
+  "scan_roots": [
+    "/data/exphil/replays/huggingface",
+    "/data/exphil/replays/erickfm_ranked/FOX/extracted",
+    "/data/exphil/replays/erickfm_ranked/partners"
+  ],
+  "note": "Filename-selected Hugging Face candidates plus full FOX/partners game-start scan, Peppi metadata verification, deduplicated by source SHA-256. No web downloads. Older incompatible recordings remain in their source corpus.",
+  "recordings": [
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/FOX/extracted/master-master-5de7543e8002c09425f1f2d4.slp",
+      "sha256_slp": "fb44c7a8e97c422c4b6ae91b89d7abd8f7ce5fb06a4d307824375e5f0f140439",
+      "version": [
+        3,
+        14,
+        0
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 2,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "replay": "replays/validation/mewtwo_erickfm/master-master-5de7543e8002c09425f1f2d4.slpz",
+      "status": "exact_with_inferred_profile",
+      "reason": "All 9,458 transitions exact under explicit network, pre-cardinal, UCF0.8 shield-drop assumptions. Original build provenance remains unavailable; see FOX_UCF_SHIELD_REPRODUCER.md.",
+      "diagnostic_profile": {
+        "played_on": "network",
+        "ucf_cardinals_1_0_enabled": false,
+        "ucf_shield_drop_084_enabled": false
+      },
+      "transitions": 9458,
+      "first_mismatch_frame": null,
+      "mismatched_frames": 0
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/15_58_02 Mewtwo + Falco (YI).slp",
+      "sha256_slp": "ae67b6078b2b565730ab95e3e0f6d8aa677995cb9ba4170986418d514da5fcb1",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/16_18_04 Mewtwo + Falco (BF).slp",
+      "sha256_slp": "cfe7b76ce05a2a5514e034644a160acbbc0a2ee8e96c5b49b6ce6eaa78add3de",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/16_21_55 Mewtwo + Falco (BF).slp",
+      "sha256_slp": "34a1004c663551b7ecf7d7acb0f3c1000fb8cf522c19ee948a5f8d8172b1b43b",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/16_42_38 Falco + Mewtwo (FD).slp",
+      "sha256_slp": "53efd56c2aa0d2dcd8759a8cd66ec8f29c7006515f315a7613ce70b079116017",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 32,
+      "players": [
+        {
+          "port": "P1",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/17_12_49 Falco + Mewtwo (BF).slp",
+      "sha256_slp": "f655cf5e651870bff8304c88dd82baa106ef339e0794344ab1e09b9c7b148478",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/17_48_58 Mewtwo + Falco (YI).slp",
+      "sha256_slp": "a9dc5bb223621f234f5e1c22d8c31fde9ce2d5dbd34af3eab5798a7661885fef",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/18_18_08 [ALLY] Mewtwo + [OASI] Falco (YS).slp",
+      "sha256_slp": "4c2915c1f9c2624af2f74ab8036400adba8b6c60ab8456b89afbf18eec7be765",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/18_21_21 [ALLY] Mewtwo + [OASI] Falco (DL).slp",
+      "sha256_slp": "ea60b558131f2f8dbf97c278bb2f65599da8477a1a9b37360c499fc784d5aec9",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 28,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/18_47_38 Mewtwo + Falco (BF).slp",
+      "sha256_slp": "123142e04906678d253778daa3405f6bc8f83138aafe8aae8e5690d1483231ef",
+      "version": [
+        3,
+        9,
+        0
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Cpu"
+        },
+        {
+          "port": "P3",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "NoContest",
+      "status": "unavailable_fields",
+      "reason": "replay Arrow field is missing: animation_index"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/18_54_33 Falco + Mewtwo (BF).slp",
+      "sha256_slp": "e958aace1861ae6294551ed8d8c5579b2170203cbb0c270a83315c32b482d36f",
+      "version": [
+        3,
+        9,
+        0
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Cpu"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay Arrow field is missing: animation_index"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/18_56_28 Falco + Mewtwo (BF).slp",
+      "sha256_slp": "9106f5fc19d076d1047efdcbb3c319ff2b5567511c38272d9577b5ecaa1c3da6",
+      "version": [
+        3,
+        9,
+        0
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Cpu"
+        }
+      ],
+      "end_method": "NoContest",
+      "status": "unavailable_fields",
+      "reason": "replay Arrow field is missing: animation_index"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/19_38_40 Mewtwo + Falco (FoD).slp",
+      "sha256_slp": "86c84827ce563621667a4879e445153b455f96162706f5331148d7e6d42812c1",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 2,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/19_41_22 Mewtwo + Falco (PS).slp",
+      "sha256_slp": "63fd5fbfb3e2f4f9efb9693605dbe8fd8e21507cdf88b9fe26a283a32aa0c7c6",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 3,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/19_54_04 Falco + Mewtwo (BF).slp",
+      "sha256_slp": "6018311eac541c45458d6d4ae3e2b21edcc8f2b150a8744f5a3801264a81e942",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_00/19_57_40 Falco + Mewtwo (YS).slp",
+      "sha256_slp": "637d59322bd8a6e38b91295b3f208fc4c3f33f88e8e886b1818d7f500ac273dd",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P1",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_01/20200129 - HNC 18 - PM 0740 - Mewtwo (Default) vs Falco (Default) - Fountain of Dreams.slp",
+      "sha256_slp": "aa491e93f35e0d363bb63472f3dea2631fdc90cf86c69fe422eb406494bea790",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 2,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_01/20200219 - HNC 6 - PM 0803 - Falco (Red) vs Mewtwo (Default) - Pokemon Stadium.slp",
+      "sha256_slp": "0c94ce080785afeff6e683da749dbbf4d9336cdebeeeddda0fdba8cd2d156b0b",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 3,
+      "players": [
+        {
+          "port": "P1",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_01/20200219 - HNC 6 - PM 0806 - Falco (Red) vs Mewtwo (Default) - Final Destination.slp",
+      "sha256_slp": "5260e56a938adf7153d8396310384a40e7845e72e5625dec19b0f6bc7eb551f6",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 32,
+      "players": [
+        {
+          "port": "P1",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_01/20200219 - HNC 6 - PM 0811 - Falco (Red) vs Mewtwo (Default) - Yoshi_s Story.slp",
+      "sha256_slp": "493afff7519020ee1f596c5e306b9d2671244a81c7a98611f6c3ee4b8b3cbe09",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P1",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_01/20_12_12 Mewtwo + Falco (BF).slp",
+      "sha256_slp": "fcc1c76cfef9236c853e89cd302d4c451b93df10d859a91b795bb9e54e04c9bf",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_01/20_32_09 Mewtwo + Falco (FD).slp",
+      "sha256_slp": "bd371fab18f9253ef9768e73717b4cdcc2e0d727d07be7f8ec8256301a165254",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 32,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_01/22_33_15 Falco + Mewtwo (YI).slp",
+      "sha256_slp": "dab2ccbab2c0a9113635037231e6890726db56b78c0f2c6abec3c58e767ddbad",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P2",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_01/Falco vs Mewtwo [FoD] Game_20200222T200848.slp",
+      "sha256_slp": "60e5d7ecb977d4fb7b8da71a93a7af1bcd77b82a849a0546e0114ed3507ecaec",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 2,
+      "players": [
+        {
+          "port": "P1",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_02/Game_20190406T124947.slp",
+      "sha256_slp": "7d8fe40738aea00dd965fd089d9af5b21d095f12fec059d917f134a008392277",
+      "version": [
+        1,
+        7,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Resolved",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_02/Game_20190420T162220.slp",
+      "sha256_slp": "7243c2050174f5606bc3e23a998fcd0159548a5aa19d1f940988540ad5da0c84",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P2",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_03/Game_20190706T162928.slp",
+      "sha256_slp": "a19703696998315fd33bfe9ff4e1d1681ca68a6065216ca391e74ace2350d938",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_03/Game_20190706T163912.slp",
+      "sha256_slp": "d7d5be1166be78ea751c589e1ab08071ab399fefbef6e0610f496d54a169cd7c",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_03/Game_20190706T164607.slp",
+      "sha256_slp": "7afe006ed3a2bd860a19a56d29f8d5da8a7a7b0872fd0ec2cf9478bd39258308",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_03/Game_20190706T164857.slp",
+      "sha256_slp": "46f6ece155a2fbcf7cacffd7190db5c1fe2edbe3e7f23b98abeb93b368b93f75",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 2,
+      "players": [
+        {
+          "port": "P3",
+          "character": 20,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_03/Game_20190706T165655.slp",
+      "sha256_slp": "c985d661956908669b49572ff38c621829efa508e076209abe87a6c715444906",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/FALCO/batch_03/Game_20190706T170750.slp",
+      "sha256_slp": "20bceeba1293d0d3ab96f5692de96515a1b7139cf5add2e991e2c211993e65b4",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 28,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 20,
+          "type": "Human"
+        }
+      ],
+      "end_method": "NoContest",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/Game_20190706T173923.slp",
+      "sha256_slp": "0a9cc3a540baff0342046ad380a65419ee38579d2898eb39a56c59d1ecc4d1f6",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P1",
+          "character": 9,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/Game_20190706T174411.slp",
+      "sha256_slp": "d29e92f84297901c67ce6142913e2c02a62f96ca755956c3aa10f64f8ca90786",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 3,
+      "players": [
+        {
+          "port": "P1",
+          "character": 9,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_00/17_16_38 Marth + Mewtwo (BF).slp",
+      "sha256_slp": "02e930f3475f064f1443f24a9dc387eb1036ff6fdfe51ebc794f12b5d82e4090",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 9,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_00/19_48_06 Mewtwo + Marth (FD).slp",
+      "sha256_slp": "1d7941bfc1158adacd946a96b83e64ea5a6e9c92b18cce0eda2bb0b8711eb81e",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 32,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 9,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_00/20200101 - HNC 14 - PM 1032 - Mewtwo (Blue) vs Marth (Default) - Dream Land N64.slp",
+      "sha256_slp": "fcef74d4084865459ca0eda881ee519b7277e2094364f81eaf4be06ddbb3207f",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 28,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 9,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_00/20200212 - HNC 12 - PM 0926 - Mewtwo (Blue) vs Marth (Black) - Fountain of Dreams.slp",
+      "sha256_slp": "047926d4c8fc8fe8a0edde3f6ba6e6c97e4c33cc533cb16c1730664b631c043d",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 2,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 9,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_01/20200212 - HNC 20 - PM 1001 - Marth (Default) vs Mewtwo (Default) - Pokemon Stadium.slp",
+      "sha256_slp": "f62374826f188cb52a44f7d0a5898c487275298efa25e2450e9b35a25e36b19d",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 3,
+      "players": [
+        {
+          "port": "P2",
+          "character": 9,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_01/20200212 - HNC 20 - PM 1005 - Marth (Default) vs Mewtwo (Default) - Yoshi_s Story.slp",
+      "sha256_slp": "7e478c33f70c77faff316a9b2b595eb12626c517e6ea6a013ffb4ee4ba32c634",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P2",
+          "character": 9,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_01/20200219 - HNC 6 - PM 0819 - Marth (Default) vs Mewtwo (Default) - Yoshi_s Story.slp",
+      "sha256_slp": "1f570cc214bcaf67e4b7e43a22b11a81644a0296409abf752e11c39689ed7e5c",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P1",
+          "character": 9,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_01/20200219 - HNC 6 - PM 0825 - Marth (Default) vs Mewtwo (Default) - Battlefield.slp",
+      "sha256_slp": "105b9b05bbe864609e33a696c272e5b16a8839eb8268d0a7cc1e329d95e8ebf5",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 9,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_01/20_17_19 Marth + Mewtwo (DL).slp",
+      "sha256_slp": "41f17815878f6974b15e6165dc74e220f2daebc3db6f3679d4fbefe55ebe1c55",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 28,
+      "players": [
+        {
+          "port": "P1",
+          "character": 9,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_01/20_20_14 Marth + Mewtwo (PS).slp",
+      "sha256_slp": "8621b66463a749028fa0f6ffe9571822a3986c2a3bdd693c551a1c5783139e13",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 3,
+      "players": [
+        {
+          "port": "P1",
+          "character": 9,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_01/21_04_38 Mewtwo + Marth (YI).slp",
+      "sha256_slp": "547f90ca40f3e3400ff87b2ea22045607bded312df8a0183ac43e5a13389352f",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 9,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_01/22_18_22 [INFP] Mewtwo + [SUR] Marth (FoD).slp",
+      "sha256_slp": "d240617b68c41159d256062f6b9c61c97f80f3f45b2705717e5e5dd592c01bd6",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 2,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 9,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_01/22_35_31 [JOJO] Marth + Mewtwo (FD).slp",
+      "sha256_slp": "d08c7651549a545c528d8390236c603904c28212b56a9dbc214b3bc77f3276c7",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 32,
+      "players": [
+        {
+          "port": "P2",
+          "character": 9,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_01/Game_20190309T023738.slp",
+      "sha256_slp": "d2a589479d9b1d5ffc4a75df89e5a318b255a5c8ecc759f32c467535c674d94b",
+      "version": [
+        1,
+        7,
+        1
+      ],
+      "stage": 32,
+      "players": [
+        {
+          "port": "P1",
+          "character": 9,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Resolved",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/MARTH/batch_02/Game_20190420T220655.slp",
+      "sha256_slp": "2c03cf6ca14992152abef6205faaf5cac054b51811f355870a1f945c3774bb5c",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 32,
+      "players": [
+        {
+          "port": "P1",
+          "character": 9,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_00/16_08_50 Sheik + Mewtwo (FoD).slp",
+      "sha256_slp": "bcf3a94a01dca54351627a65ccb944c035972ae799c1c6d0aa83687324204c91",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 2,
+      "players": [
+        {
+          "port": "P2",
+          "character": 19,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_00/18_00_45 Mewtwo + Sheik (BF).slp",
+      "sha256_slp": "8923e3eebe811e937e7b1e91ae0e7b0c08fa9f165d2df519ef39f03575af24b4",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 19,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_00/18_04_21 Mewtwo + Zelda (BF).slp",
+      "sha256_slp": "4ac0dcadc9c4cc4472eae0dd1eb172f3e060434afc925358aacd26d8e59d210d",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 18,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_00/19_12_27 Mewtwo + Zelda (DL).slp",
+      "sha256_slp": "ab3d97cfdf46e5cf303d0335a02505923ea5f98c252c17a63e316dee57c3051c",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 28,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 18,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_00/19_13_52 Mewtwo + Sheik (FoD).slp",
+      "sha256_slp": "aa62b9bded84dfd0be7530f3a8d7b0862c25fee9ff7ed0d298b1a4d60e1d0681",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 2,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 19,
+          "type": "Human"
+        }
+      ],
+      "end_method": "NoContest",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_00/20_11_56 Mewtwo + [WART] Sheik (BF).slp",
+      "sha256_slp": "7849b81f3202552256cfbe0c8c8a8117188afd8a32677481b1b7d570dff98100",
+      "version": [
+        3,
+        9,
+        0
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 19,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay Arrow field is missing: animation_index"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_00/21_14_54 [INFP] Mewtwo + Zelda (FD).slp",
+      "sha256_slp": "e1049cfcda6740669de3ae9b55823d4ba7938ef34f45dc76c79e5c1090c110da",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 32,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 18,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_00/22_21_47 Zelda + Mewtwo (YI).slp",
+      "sha256_slp": "eb0c7dca2a48d02061e0c033579b118ee6a78374c4543646f3c8546436748da1",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P1",
+          "character": 18,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_01/Game_20190629T191156.slp",
+      "sha256_slp": "2ab2414625ee2c7125d5e15482668ab0bcb21d681ac5c58d1b0678c6431df98a",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 19,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_01/Game_20190629T192343.slp",
+      "sha256_slp": "1944469fd02ac35bbabdc23c000d326ead67ec84eddf82c11d634166eb6ec12f",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 19,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_01/Game_20190629T192808.slp",
+      "sha256_slp": "698b8a1f150dc13a9d66a194934fca0bcf2b7b3d92564e998e1073df536848e4",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 19,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_01/Game_20190824T153215.slp",
+      "sha256_slp": "a79218343eb560e87a7aa0dc65b035e5081b71a6edf223e3a3e8187f29e84cb3",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 32,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 19,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_01/Game_20190824T153601.slp",
+      "sha256_slp": "01365a4873c98677abd866d8d0a579052ade15e0449d16e246bdfe7822e39389",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P1",
+          "character": 19,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_01/Game_20190824T153943.slp",
+      "sha256_slp": "ae8fcb38d7fff66c6b9cd5eee94894bdf8c636c46f6bdd3d944df6c4c99a2ec4",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 2,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 19,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/erickfm_ranked/partners/ZELDA_SHEIK/batch_01/Game_20190824T154447.slp",
+      "sha256_slp": "5156b92ed369a2e3a6a99d9c97b9a0dbfdc522cc6637abd14c155c47f4dda67b",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 19,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/huggingface/12_01_20 Mewtwo + Roy (DL).slp",
+      "sha256_slp": "5b541aad1d8a6551afe13b2e050f432d28d77b8da213ade45748a9aaa7fba6ea",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 28,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 23,
+          "type": "Human"
+        }
+      ],
+      "end_method": "NoContest",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/huggingface/12_28_08 Mewtwo + Captain Falcon (BF).slp",
+      "sha256_slp": "d2dfcc47cb48d553d6d63b3f3b5a09a3d5084d8d5b7227b3f8c1950b7fffa5c0",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 0,
+          "type": "Human"
+        }
+      ],
+      "end_method": "NoContest",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/huggingface/18_04_39 Mewtwo + Donkey Kong (FD).slp",
+      "sha256_slp": "c0adabc65a1c60c0569c5e5ab2f44095c6cd741072684cf0cbe80bfbc3ef54e2",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 32,
+      "players": [
+        {
+          "port": "P1",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 1,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/huggingface/18_47_14 Fox + Mewtwo (BF).slp",
+      "sha256_slp": "e8924c4f2d74aaeb88da7c4cb1a69e6eb147dcaa0ece9c450bc4f390314fa100",
+      "version": [
+        3,
+        9,
+        0
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P1",
+          "character": 2,
+          "type": "Human"
+        },
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Cpu"
+        }
+      ],
+      "end_method": "NoContest",
+      "status": "unavailable_fields",
+      "reason": "replay Arrow field is missing: animation_index"
+    },
+    {
+      "source": "/data/exphil/replays/huggingface/20200304 - HNC 5 - PM 0806 - Mewtwo (Default) vs Captain Falcon (Black) - Pokemon Stadium.slp",
+      "sha256_slp": "1092a96fe38653995a6141067df521c34847b587efcefdbeb391bcfcfb951f0d",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 3,
+      "players": [
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 0,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/huggingface/20_41_05 [INFP] Mewtwo + [314] Dr. Mario (DL).slp",
+      "sha256_slp": "da77a75d0b45fed5435b5184295c3b8b6092bc278ac9885fc0f666fd3c34f7fd",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 28,
+      "players": [
+        {
+          "port": "P2",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 22,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/huggingface/21_51_16 [C2] Fox + Mewtwo (BF).slp",
+      "sha256_slp": "9113327d1073b15584963319e8dee9a789af3f4c0aeba9bf49209fc9d2a890b7",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P2",
+          "character": 2,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/huggingface/21_54_22 [C2] Fox + Mewtwo (YI).slp",
+      "sha256_slp": "ad957dcfcabe3647c2f61fe4d4eab9686ed4340ec90cdacd5db413a3d95210ce",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P2",
+          "character": 2,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/huggingface/21_58_58 [C2] Ness + [MEOW] Mewtwo (YI).slp",
+      "sha256_slp": "9c616cf3ec5235b9b9b6f1f23d3745cb651a61a4c69398fe575c26b0aa1eb432",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 8,
+      "players": [
+        {
+          "port": "P1",
+          "character": 11,
+          "type": "Human"
+        },
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    },
+    {
+      "source": "/data/exphil/replays/huggingface/22_36_37 [MEOW] Mewtwo + Fox (BF).slp",
+      "sha256_slp": "85c24065a3a2ece7dc82de368bc35a313ea63d20d016763d1c54ab5017cc0cb7",
+      "version": [
+        2,
+        0,
+        1
+      ],
+      "stage": 31,
+      "players": [
+        {
+          "port": "P3",
+          "character": 10,
+          "type": "Human"
+        },
+        {
+          "port": "P4",
+          "character": 2,
+          "type": "Human"
+        }
+      ],
+      "end_method": "Game",
+      "status": "unavailable_fields",
+      "reason": "replay start scene major is missing"
+    }
+  ]
+}
