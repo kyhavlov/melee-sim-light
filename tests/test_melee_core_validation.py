@@ -167,6 +167,7 @@ def test_native_validation_compares_complete_classified_replays() -> None:
         "links.json",
         "mewtwo_targeted.json",
         "gamewatch.json",
+        "cpu_inputs.json",
     ):
         _suite, loaded_cases = load_suite_cases(
             ROOT / "replays/suites" / suite_name,

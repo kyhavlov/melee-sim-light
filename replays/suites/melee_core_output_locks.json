@@ -360,6 +360,24 @@
       }
     },
     {
+      "replay": "replays/validation/cpu_inputs/cpu_ice_climbers_l5.slpz",
+      "expected": {
+        "native": {
+          "frames": 3815,
+          "actual_output_fingerprint": "b71871f4536c61ba"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/cpu_inputs/cpu_ice_climbers_l5_desync.slpz",
+      "expected": {
+        "native": {
+          "frames": 5892,
+          "actual_output_fingerprint": "733b023bcd3dab71"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/dk/2025-10_Game_20251006T201136.slpz",
       "expected": {
         "native": {

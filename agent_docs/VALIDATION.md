@@ -33,6 +33,8 @@ Instruction-level adaptations are recorded in `src/upstream_delta_ledger.tsv`.
   absorption captures, controls, Dolphin build/settings and hashes.
 - [Game & Watch](validation/gamewatch_provenance.json): corpus and scripted
   Judge/Chef/bucket captures, Dolphin build/settings and hashes.
+- [CPU inputs](validation/cpu_provenance.json): synced/separated Ice Climbers
+  captures and the diagnostic Peach recording.
 
 The interaction coverage tests inspect what a recording actually contains.
 Callback smokes exercise source paths with extracted data; they are not
@@ -52,3 +54,26 @@ and original/compressed hashes. Use ordinary controller inputs and finalized
 games; do not inject positions, actions, damage or savestates into capture fixtures.
 Store new validation replays as `.slpz`; direct tooling also accepts `.slp`.
 Forensic outputs and incomplete recordings belong under ignored `reports/triage/`.
+
+## Recorded CPU inputs
+
+CPU replay ports require a level in 1..9. Source player slots and AI callbacks
+remain active. Exact processed sticks, trigger and buttons enter at Slippi's
+`Playback/Core/RestoreGameFrame.asm` boundary (GALE01 `0x8006B0DC`), after AI
+sampling and before input edges/timers. Physical controller bytes remain separate.
+Validation also supplies `Recording/SendGamePreFrame.asm`'s RNG observation;
+Slippi playback itself restores RNG there only when resync is enabled.
+This lane never restores position, action, damage or velocity and does not expose
+autonomous CPU control through the public RL API.
+
+Nana keeps source follower AI inputs for human and CPU Popo alike; the recorded
+input hook skips followers. The Ice Climbers suite covers synced and separated
+followers, but neither recording contains a solo Nana death/respawn wait.
+The Peach fixture tests a 5,000-transition prefix only: its full recording has
+18 strict knockback-Y zero-sign differences at frames 5109–5126 and is excluded
+from the aggregate. Comparison rules are unchanged.
+
+Controller-only benchmark tapes cannot represent CPU processed inputs. Direct
+export rejects them; `make benchmark-prepare` reports CPU exclusions and retains
+all selected human recordings. A CPU-only suite is an error. Tape format v3
+includes the private CPU-level config byte; rebuild native/Wasm stream consumers.

@@ -21,6 +21,7 @@ Use this skill to reason about *when* vanilla writes a state field. The output s
   - post-collision bookkeeping and publication to replay/API state.
 - A one-frame error is usually a phase-boundary issue until disproven.
 - One-step exactness from a replay seed does not prove rollout causality; rolled-out pre-state and phase history still matter.
+- Slippi's `Playback/Core/RestoreGameFrame.asm` hooks GALE01 `0x8006B0DC`: processed inputs are restored after AI/controller sampling and before input edges/timers. Without resync, followers retain game-calculated inputs; RNG restoration is separately gated by resync. Do not conflate these paths with a validator's recorded-RNG policy.
 
 ## Investigation Procedure
 1. Write the observed mismatch in phase terms: field, actor, frame/record, vanilla value, sim value, and whether the sim is early or late.

@@ -1,0 +1,32 @@
+{
+  "name": "cpu_inputs",
+  "notes": "Human Fox versus level-5 CPU Ice Climbers: synced followers on Final Destination and separated followers on Battlefield. Recorded CPU inputs enter the source input callback; Nana retains source AI ownership. Capture hashes and settings: agent_docs/validation/cpu_provenance.json. Validation boundaries: agent_docs/VALIDATION.md.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/cpu_inputs/cpu_ice_climbers_l5.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Ice Climbers"
+      }
+    },
+    {
+      "replay": "replays/validation/cpu_inputs/cpu_ice_climbers_l5_desync.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Fox",
+        "2": "Ice Climbers"
+      }
+    }
+  ]
+}
