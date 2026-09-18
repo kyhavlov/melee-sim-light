@@ -109,7 +109,7 @@ and must match anywhere. A performance commit made on a new host refreshes prove
 
 These exist for the macOS development host and are dead weight on Linux; they explain the `Darwin`
 branches in the `Makefile` and the container recipes in the
-[historical work log](README.md#historical-work-log).
+[historical work log](https://github.com/kyhavlov/melee-sim-light/blob/5018738c8b2da68330823bb20fee37a5044841cd/agent_docs/ACTIVE_WORK.md).
 
 - Neither macOS build profile is gate-grade: arm64-native drifts on signed zero/ULP, and the
   Rosetta `HOST_TARGET_ARCH=x86_64` profile has no recorded digest equivalence (Apple clang

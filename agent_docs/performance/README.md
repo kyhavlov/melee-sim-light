@@ -42,8 +42,6 @@ representation may justify revisiting the same broad subsystem.
 - [`TARGET_ARCHITECTURE.md`](TARGET_ARCHITECTURE.md): final canonical batch-native state,
   execution shape, hosted-runtime deletion boundary, throughput case, and cutover discipline for
   the 500k campaign.
-- [`../PERFORMANCE.md`](../PERFORMANCE.md): concise current checkpoint result and gate status
-  required by the repository performance-commit contract.
 - [`BASELINE.md`](BASELINE.md): current production benchmark contract, binary provenance, digests,
   correctness gates, memory contract, and owner-selection profile.
 - [`RETAINED.md`](RETAINED.md): concise commit-oriented ledger of performance work still present in

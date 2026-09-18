@@ -2,7 +2,7 @@
   "name": "gamewatch",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
-  "notes": "Source and recording provenance: agent_docs/GAMEWATCH_VALIDATION.json. Scripted captures use a known AccurateNmsub=true build, matching the validator's metadata arithmetic default.",
+  "notes": "Source and recording provenance: agent_docs/validation/gamewatch_provenance.json. Scripted captures use a known AccurateNmsub=true build, matching the validator's metadata arithmetic default.",
   "replays": [
     {
       "replay": "replays/validation/gamewatch/Game_20260707T202855.slpz",

@@ -152,7 +152,7 @@ observation ring and 0.04 GiB after destruction. Native/Wasm parity passes.
 Validation: full 529 native debug and release gates preserve the 470 original exact
 locks and reach 493 exact / 36 classified. The former 59-exception PPC subset has
 21 exact / 38 classified; two camera entries remain PPC-only. See the
-[closure report](../CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md) for source evidence,
+[closure report](https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md) for source evidence,
 remaining boundaries and final gate scope. Forensics:
 `reports/triage/classified_closure_20260908/benchmark-{samples.json,*.log}`.
 
@@ -250,7 +250,7 @@ transitions. The 38 added replays contribute 190,427 transitions; all 20 real
 microreplays are exact on both native and PPC. The charged-smash source fix
 retires the old doubles damage classification and refreshes only that prior
 output lock; the other 365 old locks are unchanged. See
-`../YOSHI_BOWSER_SUPPORT.md` for the complete port and evidence limits.
+[historical report](https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/YOSHI_BOWSER_SUPPORT.md) for the complete port and evidence limits.
 The character-only commit tree also passes source/native lifecycle, focused
 Python and both full debug/release gates in an isolated checkout without the
 concurrent reward additions; all 404 retained outputs remain unchanged.
@@ -1482,7 +1482,7 @@ comparison. No throughput equivalence or speedup is claimed. A fresh resident
 The combined debug/release gate passes 529 replays and 5,059,922 transitions
 (470 exact, 59 classified). Fresh extraction, source, native/Python, Wasm and
 production-viewer checks pass. Full integration details are in
-`../DECOMP_DEV_INTEGRATION.md`; the incoming branch's distinct historical evidence
+[historical report](https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/DECOMP_DEV_INTEGRATION.md); the incoming branch's distinct historical evidence
 is preserved in `IMPORTED_DECOMP_RESERVES_2026-08-26.md`.
 
 ## Pre/post merge throughput — 2026-09-08
@@ -1521,7 +1521,7 @@ throughput differences remain small; three short samples do not
 establish a precise regression size or attribute cost to a runtime owner.
 The workload covers shared gameplay and does not measure the newly added
 Ness/Link/Young Link population. Expanded-domain correctness gates remain those
-recorded in `../DECOMP_DEV_INTEGRATION.md`.
+recorded in [historical report](https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/DECOMP_DEV_INTEGRATION.md).
 
 Forensic logs, tape comparison, runner and machine-readable samples are under
 `reports/triage/decomp_merge_benchmark/` (`{size}-{run}-{pre|post}.log`,

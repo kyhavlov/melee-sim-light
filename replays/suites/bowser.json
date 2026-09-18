@@ -1,6 +1,6 @@
 {
   "name": "bowser",
-  "notes": "Bowser source-completion challenge: original SlippiLab full games plus controller-driven special-move microreplays. Every recording starts normally at -123 and contains a game end. Stadium recordings use frozen Stadium and have no transformation events. See agent_docs/YOSHI_BOWSER_SUPPORT.md for provenance, branch coverage, and exact residual ownership.",
+  "notes": "Bowser source-completion challenge: original SlippiLab full games plus controller-driven special-move microreplays. Every recording starts normally at -123 and contains a game end. Stadium recordings use frozen Stadium and have no transformation events. See agent_docs/validation/yoshi_bowser_provenance.json for capture provenance and melee_core_classifications.json for residual ownership.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [

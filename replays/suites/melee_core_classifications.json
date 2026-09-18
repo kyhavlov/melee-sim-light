@@ -10,7 +10,7 @@
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
         "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
         "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -40,7 +40,7 @@
         "refs/melee/src/sysdolphin/baselib/mtx.c::PSMTXMultVec",
         "refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced",
         "refs/melee/src/melee/lb/lbvector.c::lbVector_Mirror",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -69,7 +69,7 @@
       "sources": [
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -99,7 +99,7 @@
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
         "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
         "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -130,7 +130,7 @@
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
         "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -160,8 +160,8 @@
         "refs/melee/src/melee/mp/mpcoll.c::mpColl_80049EAC_LeftWall",
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/sysdolphin/baselib/jobj.c",
-        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -191,7 +191,7 @@
         "refs/slippi-ssbm-asm/Recording/GetLCancelStatus/GetLCancelStatus.asm",
         "refs/slippi-ssbm-asm/Recording/GetLCancelStatus/ResetLCancelStatus.asm",
         "src/platform/slippi.c::msl_slippi_lcancel_get",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -220,7 +220,7 @@
       "sources": [
         "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
         "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -250,7 +250,7 @@
         "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
         "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
         "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -280,7 +280,7 @@
         "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
         "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
         "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -311,8 +311,8 @@
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
         "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
         "refs/melee/src/sysdolphin/baselib/particle.c::hsd_8039EE24",
-        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -342,7 +342,7 @@
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
         "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
         "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -372,8 +372,8 @@
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
         "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
-        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -404,8 +404,8 @@
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
         "refs/melee/src/melee/it/item.c",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
-        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -437,8 +437,8 @@
         "refs/melee/src/melee/it/items/itpeachturnip.c",
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
         "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
-        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -468,7 +468,7 @@
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
         "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
         "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -500,8 +500,8 @@
         "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
         "refs/melee/src/melee/it/items/itseakneedlethrown.c",
         "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-        "agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -532,7 +532,7 @@
         "refs/melee/src/melee/it/item.c",
         "refs/melee/src/melee/mp/mpcoll.c",
         "refs/melee/src/sysdolphin/baselib/mtx.c",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -562,7 +562,7 @@
         "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
         "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
         "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -592,7 +592,7 @@
         "refs/melee/src/melee/it/it_2725.c::it_80272860",
         "refs/melee/src/melee/it/items/itpeachturnip.c",
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -622,7 +622,7 @@
         "refs/melee/src/melee/gr/grizumi.c::grIzumi_801CBE64",
         "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         "refs/melee/src/melee/mp/mpcoll.c",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -653,7 +653,7 @@
         "refs/melee/src/sysdolphin/baselib/mtx.c",
         "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
         "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -684,7 +684,7 @@
         "refs/melee/src/melee/it/items/itseakchain.c::it_802BC080",
         "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo",
         "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -714,7 +714,7 @@
         "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint",
         "refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C504",
         "refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -744,7 +744,7 @@
         "refs/melee/src/melee/it/items/itlinkboomerang.c",
         "refs/melee/src/melee/it/items/itlinkarrow.c",
         "src/upstream_delta_ledger.tsv::canonical:link-hookshot-chain-solver-gekko-rounding",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {
@@ -774,7 +774,7 @@
         "src/melee/it/items/itseakchain.c::itSeakChain_Spawn",
         "src/melee/it/items/itseakchain.c::it_802BC080",
         "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
-        "agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "expected": {
         "native": {

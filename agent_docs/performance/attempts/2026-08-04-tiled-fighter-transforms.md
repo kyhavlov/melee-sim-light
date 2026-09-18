@@ -85,7 +85,7 @@ removal:
   packet, so cleanup preserves it rather than restoring separate `FighterBone`
   reads;
 - all other independently measured arithmetic and source-owner cuts recorded in
-  the [historical work log](../../README.md#historical-work-log).
+  the [historical work log](https://github.com/kyhavlov/melee-sim-light/blob/5018738c8b2da68330823bb20fee37a5044841cd/agent_docs/ACTIVE_WORK.md).
 
 Frozen pre-tile binaries also confirm that the direct output publication and
 general native `PSMTXConcat` vector owner predate this packet. They remain part

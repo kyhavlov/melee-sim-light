@@ -1,6 +1,6 @@
 {
   "name": "mewtwo_targeted",
-  "notes": "Private targeted Mewtwo fixtures: seven controller-scripted Dolphin interactions. See agent_docs/MEWTWO_TARGETED_REPLAYS.md.",
+  "notes": "Private targeted Mewtwo fixtures: seven controller-scripted Dolphin interactions. See agent_docs/validation/mewtwo_provenance.json.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
