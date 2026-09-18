@@ -7251,3 +7251,56 @@ tests bumped 491 -> 492.
   Erickfm diagnostics (need recorded-CPU-input validation), the two July
   legacy-Dolphin captures (need the recording-arithmetic profile lane), and
   Game & Watch. None of these change Mewtwo gameplay.
+
+## PR #23 review — 2026-09-17
+
+- Review baseline: `288940b2`; original experiment work is preserved in the
+  `pre-mewtwo-pr-23-review-2026-09-17` stash. Check imported source identity,
+  admission wiring, article storage and restore, fresh extraction, native
+  smoke/Python tests, targeted replays and the aggregate locks before merge.
+- Initial findings: `make source-check` fails against the pinned upstream
+  checkout because the new snapshot digest is incorrect (the main-branch
+  digest still reproduces). The Mewtwo imports match the pinned source except
+  for the documented Shadow Ball attribute self-assignment removal. Regenerate
+  the lock from the archived inventory; remove the unrelated Game & Watch
+  subaction-count entry and stale combined-admission documentation.
+- The existing local extraction predates Mewtwo. Refresh from the retail ISO
+  before running runtime gates; retain review logs under
+  `reports/triage/mewtwo_pr23_review/`.
+- Fresh extraction, source verification, the seven native targeted replays
+  (15,289 transitions), and all Mewtwo move/storage smokes pass. The broader
+  native smoke run aborts on a stale `stage_lifecycle_smoke.o`: its generated
+  header dependencies are omitted from `DEPS`, so the enlarged game-data
+  structure writes past the old test stack allocation. Add the test to
+  `NATIVE_SMOKE_SRCS`, then rerun native smoke and the aggregate, Python, PPC
+  targeted and viewer/Wasm gates. No gameplay changes are proposed.
+- Final review checks pass on Linux x86_64 / GCC 13.3.0: `make source-check`,
+  fresh ISO extraction (205 DAT files plus main.dol, hashes verified),
+  `make native validator python-library native-smoke -j8`, and `pytest -q`
+  (69 passed). The gameplay-parts generator reproduces both the audited
+  Luigi row and Mewtwo's 46-part row.
+- `make validation-suite VALIDATION_ARGS=--no-build` preserves all 536 locks:
+  510 pass / 26 classified / 0 fail / 0 error over 5,075,211 transitions.
+  After `make ppc -j8`, the Mewtwo targeted suite passes all seven recordings
+  on PPC too (15,289 transitions). `make viewer-smoke -j8` passes native/Wasm
+  parity, the 22-character / six-stage Wasm smoke, and live Chrome smoke.
+- Retain the regenerated source lock, smoke build dependency, removal of the
+  unrelated Game & Watch table entry, and corrected source/validation notes.
+  No runtime gameplay, comparison policy, or existing output lock changes.
+  Review completed before publication; the user subsequently authorized
+  committing/pushing this cleanup and merging PR #23.
+- Follow-up non-draft PR dependency review: #23 (`288940b2`), #24
+  (`bda971d6`) and #25 (`a259d9c0`) all branch from `b7a9ed1c`; none requires
+  another. Read-only pairwise merge analysis finds 41 conflicting files
+  between the roster PRs and seven between CPU validation and either roster
+  PR. Combine all admissions/suites and regenerate the upstream inventory
+  digest and extraction counts during integration. The three additions total
+  20 distinct replay locks (549 with the existing 529); each PR preserves
+  all existing locks. These are integration expectations, not a combined
+  runtime gate result.
+- #24 also has an incorrect upstream digest: its pinned 1217-file archive
+  hashes to `99802ad29f97e64353fc04877ec601a39a80db9a49facb7011b5fe7aef7e6623`.
+  CI does not fetch `refs/melee`, so its inventory-only source check cannot
+  catch either incorrect digest. #25 already carries the stage-lifecycle
+  dependency fix; retain a single entry when integrating. Other PR worktrees
+  and remote branches remain unchanged.

@@ -217,6 +217,7 @@ NATIVE_SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/data_load_smoke.c \
 	$(ROOT)/tests/melee_core/gameplay_parts_smoke.c \
 	$(ROOT)/tests/melee_core/article_pool_smoke.c \
+	$(ROOT)/tests/melee_core/stage_lifecycle_smoke.c \
 	$(ROOT)/tests/melee_core/map_collision_smoke.c \
 	$(ROOT)/tests/melee_core/model_animation_smoke.c \
 	$(ROOT)/tests/melee_core/scalar_api_smoke.c \

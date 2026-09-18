@@ -1,6 +1,6 @@
 # Targeted Mewtwo tests — 2026-09-15
 
-`make mewtwo-smoke` runs 33 targeted move scenarios and three charge/projectile
+`make mewtwo-smoke` runs 39 targeted move scenarios and three charge/projectile
 stress scenarios. It is also a prerequisite of `make native-smoke`.
 
 These C tests combine focused source-callback checks with scheduled contact and
@@ -64,7 +64,7 @@ benchmark was performed, so cache and batch-throughput effects remain unmeasured
   Teleport games and two legacy-Dolphin arithmetic captures) pass only with the
   recorded-CPU-input and recording-arithmetic validation lanes and ship there.
 
-No comparison tolerances, classifications, or replay locks changed. Native
+No comparison tolerances, classifications, or existing replay locks changed. Native
 results do not establish PPC/Wasm equivalence. Independent targeted Dolphin
 captures now cover Falco laser/Samus missile reflection and partial/full Shadow
 Ball absorption; see
@@ -75,12 +75,14 @@ that evidence.
 Ignored evidence: `reports/triage/gamewatch_mewtwo/mewtwo-{moves,headroom-before,
 targeted-regression,targeted-replays}.log`.
 
-## Local admission follow-up
+## PR admission scope
 
-Mewtwo and Game & Watch are now locally admitted together. Native/optimized
-aggregate gates pass531 exact +26 existing classified cases with no failures;
-28 new locks were generated after the ENVIRONMENT.md host certification steps.
-WASM specials, live Chrome viewer, public C/Python admission and four-player
-cross-batch restore on all six stages pass. The Game & Watch PPC suite includes
-two exact Mewtwo/GW full games. Earlier limits above describe that earlier
-checkpoint, not the current admission state. No commit or PR created.
+This PR admits Mewtwo only. The aggregate adds seven interaction recordings
+and their output locks to the existing 529 cases. Evidence from the earlier
+combined Mewtwo/Game & Watch development branch does not establish this PR's
+PPC, optimized-build, or all-stage restore coverage.
+
+Review verification on 2026-09-17 independently passed the seven Mewtwo
+recordings on native and PPC, the 536-case native aggregate, `native-smoke`,
+`viewer-smoke` (including Wasm), and all 69 Python tests. Details and review
+fixes are recorded in `ACTIVE_WORK.md` under "PR #23 review".

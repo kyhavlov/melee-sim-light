@@ -421,10 +421,10 @@ src/melee/it/items/itlinkboomerang.c	src/melee/it/items/itlinkboomerang.c	Matchi
 src/melee/it/items/itlinkbow.c	src/melee/it/items/itlinkbow.c	Matching	links-source-packet	compiled canonical Link and Young Link bow article owner
 src/melee/it/items/itclinkmilk.c	src/melee/it/items/itclinkmilk.c	Matching	links-source-packet	compiled canonical Young Link milk-bottle article owner
 src/melee/it/items/itlinkhookshot.c	src/melee/it/items/itlinkhookshot.c	NonMatching	links-source-packet	compiled canonical hookshot article owner, previously imported for the Samus/Sheik/Ice Climbers tether family without a manifest row
-src/melee/ft/chara/ftMewtwo/ftMt_Init.c	src/melee/ft/chara/ftMewtwo/ftMt_Init.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
-src/melee/ft/chara/ftMewtwo/ftMt_SpecialHi.c	src/melee/ft/chara/ftMewtwo/ftMt_SpecialHi.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
-src/melee/ft/chara/ftMewtwo/ftMt_SpecialLw.c	src/melee/ft/chara/ftMewtwo/ftMt_SpecialLw.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
-src/melee/ft/chara/ftMewtwo/ftMt_SpecialN.c	src/melee/ft/chara/ftMewtwo/ftMt_SpecialN.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
-src/melee/ft/chara/ftMewtwo/ftMt_SpecialS.c	src/melee/ft/chara/ftMewtwo/ftMt_SpecialS.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
-src/melee/it/items/itmewtwodisable.c	src/melee/it/items/itmewtwodisable.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
-src/melee/it/items/itmewtwoshadowball.c	src/melee/it/items/itmewtwoshadowball.c	Matching	mewtwo-source-packet	pinned Mewtwo fighter/article owner; validation pending
+src/melee/ft/chara/ftMewtwo/ftMt_Init.c	src/melee/ft/chara/ftMewtwo/ftMt_Init.c	Matching	mewtwo-source-packet	compiled canonical Mewtwo initialization and fighter registry
+src/melee/ft/chara/ftMewtwo/ftMt_SpecialHi.c	src/melee/ft/chara/ftMewtwo/ftMt_SpecialHi.c	Matching	mewtwo-source-packet	compiled canonical Mewtwo Teleport callbacks
+src/melee/ft/chara/ftMewtwo/ftMt_SpecialLw.c	src/melee/ft/chara/ftMewtwo/ftMt_SpecialLw.c	Matching	mewtwo-source-packet	compiled canonical Mewtwo Disable callbacks
+src/melee/ft/chara/ftMewtwo/ftMt_SpecialN.c	src/melee/ft/chara/ftMewtwo/ftMt_SpecialN.c	Matching	mewtwo-source-packet	compiled canonical Mewtwo Shadow Ball callbacks and forward-throw shot
+src/melee/ft/chara/ftMewtwo/ftMt_SpecialS.c	src/melee/ft/chara/ftMewtwo/ftMt_SpecialS.c	Matching	mewtwo-source-packet	compiled canonical Mewtwo Confusion callbacks
+src/melee/it/items/itmewtwodisable.c	src/melee/it/items/itmewtwodisable.c	Matching	mewtwo-source-packet	compiled canonical Mewtwo Disable article owner
+src/melee/it/items/itmewtwoshadowball.c	src/melee/it/items/itmewtwoshadowball.c	Matching	mewtwo-source-packet	compiled canonical Mewtwo Shadow Ball article owner

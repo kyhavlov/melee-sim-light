@@ -35,7 +35,8 @@ The installed Dolphin executable's SHA-256 is
 validator's metadata default for these captures. Its build manifest and
 per-replay hashes are retained
 in [MEWTWO_INTERACTION_CAPTURES.json](MEWTWO_INTERACTION_CAPTURES.json).
-No tolerances, classifications, or output locks changed.
+No tolerances, classifications, or existing output locks changed. Seven new
+output locks cover these recordings.
 
 ## Reproduction and checks
 
@@ -47,8 +48,8 @@ No tolerances, classifications, or output locks changed.
   tests/test_slpz_replay_storage.py
 ```
 
-The supported-domain gate remains 503 exact / 26 existing classified / zero
-failures or errors across 5,059,922 transitions.
+The seven recordings extend the supported-domain gate from 529 to 536 cases:
+510 exact / 26 existing classified / zero failures or errors.
 
 The coverage/storage tests pass (12 tests). They verify positive interactions
 and their inactive/early controls; full simulated output is checked separately
