@@ -203,6 +203,7 @@ int main(int argc, char** argv)
     { FTKIND_KOOPA, 5, "Bowser" },
     { FTKIND_PIKACHU, 12, "Pikachu" },
     { FTKIND_YOSHI, 14, "Yoshi" },
+    { FTKIND_MEWTWO, 16, "Mewtwo" },
     { FTKIND_NESS, 8, "Ness" },
     { FTKIND_LINK, 6, "Link" },
     { FTKIND_CLINK, 20, "Young Link" },

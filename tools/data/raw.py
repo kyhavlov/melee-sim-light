@@ -30,6 +30,7 @@ SUPPORTED_CHARACTERS = (
     "ganon",
     "yoshi",
     "bowser",
+    "mewtwo",
     "ness",
     "link",
     "clink",

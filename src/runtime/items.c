@@ -32,6 +32,8 @@
 #include "it/items/itpeachtoadspore.h"
 #include "it/items/itpeachturnip.h"
 #include "it/items/itseakchain.h"
+#include "it/items/itmewtwodisable.h"
+#include "it/items/itmewtwoshadowball.h"
 #include "it/items/itnessbat.h"
 #include "it/items/itnesspkfire.h"
 #include "it/items/itnesspkfirepillar.h"
@@ -158,6 +160,40 @@ struct sdata_ItemGXLink it_803F2F28[118] = {
 };
 
 struct ItemLogicTable it_803F3100[118] = {
+    [It_Kind_Mewtwo_Disable - It_Kind_Kuriboh] = {
+        it_803F7750,
+        NULL,
+        itMewtwoDisable_Logic67_Destroyed,
+        NULL,
+        NULL,
+        NULL,
+        itMewtwoDisable_Logic67_DmgDealt,
+        NULL,
+        NULL,
+        itMewtwoDisable_Logic67_Reflected,
+        itMewtwoDisable_Logic67_Clanked,
+        itMewtwoDisable_Logic67_Absorbed,
+        itMewtwoDisable_Logic67_ShieldBounced,
+        itMewtwoDisable_Logic67_HitShield,
+        itMewtwoDisable_Logic67_EvtUnk,
+    },
+    [It_Kind_Mewtwo_ShadowBall - It_Kind_Kuriboh] = {
+        it_803F7760,
+        NULL,
+        it_2725_Logic101_Destroyed,
+        it_2725_Logic101_PickedUp,
+        NULL,
+        NULL,
+        itMewtwoShadowball_Logic101_DmgDealt,
+        NULL,
+        NULL,
+        it_2725_Logic101_Reflected,
+        itMewtwoShadowball_Logic101_Clanked,
+        itMewtwoShadowball_Logic101_Absorbed,
+        it_2725_Logic101_ShieldBounced,
+        itMewtwoShadowball_Logic101_HitShield,
+        itMewtwoShadowball_Logic101_EvtUnk,
+    },
     [It_Kind_Koopa_Flame - It_Kind_Kuriboh] = {
         ItemStateTable_KoopaFlame,
         NULL,

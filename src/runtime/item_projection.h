@@ -70,6 +70,8 @@ enum {
     MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE = 108,
     MSL_CORE_ITEM_KIND_ZELDA_DIN_FIRE_EXPLODE = 109,
     MSL_CORE_ITEM_KIND_PEACH_TOAD_SPORE = 111,
+    MSL_ITEM_KIND_MEWTWO_DISABLE = 110,
+    MSL_ITEM_KIND_MEWTWO_SHADOW_BALL = 112,
 };
 
 // SendItemInfo samples four fixed bytes from every article's xDD4 union even
@@ -84,6 +86,23 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
                                                        uint8_t state)
 {
     switch (kind) {
+    case MSL_ITEM_KIND_MEWTWO_DISABLE:
+        // itMDisable_ItemVars contains only the owner pointer. The remaining
+        // Slippi samples are outside that source payload.
+        return 0;
+    case MSL_ITEM_KIND_MEWTWO_SHADOW_BALL:
+        // it_802C519C initializes x0 only for the forward-throw shot (state 9).
+        // The held ball's launch angle x4.x is first written at release by
+        // it_802C53F0; x14 and x18 track its mode and charge.
+        // refs/melee/src/melee/it/items/itmewtwoshadowball.c
+        if (state == 9) {
+            return MSL_CORE_ITEM_MISC_ALL;
+        }
+        if (state == 0) {
+            return MSL_CORE_ITEM_MISC2 | MSL_CORE_ITEM_MISC3;
+        }
+        return MSL_CORE_ITEM_MISC1 | MSL_CORE_ITEM_MISC2 |
+               MSL_CORE_ITEM_MISC3;
     case MSL_CORE_ITEM_KIND_MR_SATURN:
         // Every xDE4 write in itdosei.c is `= ip->pos`, a copy of the
         // directly compared item position lanes, and the writing Anim

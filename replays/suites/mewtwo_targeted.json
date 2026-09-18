@@ -1,0 +1,92 @@
+{
+  "name": "mewtwo_targeted",
+  "notes": "Private targeted Mewtwo fixtures: seven controller-scripted Dolphin interactions. See agent_docs/MEWTWO_TARGETED_REPLAYS.md.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/mewtwo_interactions/reflect.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Mewtwo",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/reflect_control.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Mewtwo",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/absorb.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Mewtwo",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/absorb_control.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Mewtwo",
+        "2": "Ness"
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/missile.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Mewtwo",
+        "2": "Samus"
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/missile_control.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Mewtwo",
+        "2": "Samus"
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo_interactions/missile_early.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Mewtwo",
+        "2": "Samus"
+      }
+    }
+  ]
+}

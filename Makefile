@@ -107,7 +107,7 @@ WASM_LINK_FLAGS ?= -sSTACK_SIZE=1048576
 MSL_DATA_DIR ?= $(ROOT)/data
 DATA ?= $(abspath $(MSL_DATA_DIR))/raw
 VALIDATION_SUITE ?= replays/suites/melee_core_aggregate.json
-VALIDATION_CHARACTERS ?= Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach,Luigi,Mario,Dr. Mario,Samus,Ice Climbers,Pikachu,Donkey Kong,Ganondorf,Yoshi,Bowser,Ness,Link,Young Link
+VALIDATION_CHARACTERS ?= Mewtwo,Fox,Falco,Marth,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach,Luigi,Mario,Dr. Mario,Samus,Ice Climbers,Pikachu,Donkey Kong,Ganondorf,Yoshi,Bowser,Ness,Link,Young Link
 VALIDATION_STAGES ?= 32,31,3,2,8,28
 VALIDATION_BACKEND ?= native
 VALIDATION_WORKERS ?= 0
@@ -209,12 +209,15 @@ SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/scalar_api_smoke.c \
 	$(ROOT)/tests/melee_core/scheduler_smoke.c
 NATIVE_SMOKE_SRCS := \
+	$(ROOT)/tests/melee_core/mewtwo_moves_smoke.c \
+	$(ROOT)/tests/melee_core/mewtwo_smoke.c \
 	$(ROOT)/tests/melee_core/batch_api_smoke.c \
 	$(ROOT)/tests/melee_core/public_api_smoke.c \
 	$(ROOT)/tests/melee_core/context_smoke.c \
 	$(ROOT)/tests/melee_core/data_load_smoke.c \
 	$(ROOT)/tests/melee_core/gameplay_parts_smoke.c \
 	$(ROOT)/tests/melee_core/article_pool_smoke.c \
+	$(ROOT)/tests/melee_core/stage_lifecycle_smoke.c \
 	$(ROOT)/tests/melee_core/map_collision_smoke.c \
 	$(ROOT)/tests/melee_core/model_animation_smoke.c \
 	$(ROOT)/tests/melee_core/scalar_api_smoke.c \
@@ -734,6 +737,8 @@ $(eval $(call link_native_smoke,$(NATIVE_PUBLIC_API_SMOKE),$(NATIVE_OBJ_DIR)/tes
 $(eval $(call link_native_smoke,$(NATIVE_GAMEPLAY_PARTS_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/gameplay_parts_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_STAGE_LIFECYCLE_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/stage_lifecycle_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_ARTICLE_POOL_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/article_pool_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/mewtwo-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/mewtwo_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/mewtwo-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/mewtwo_moves_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_BUILD)/pool-chaos-soak,$(NATIVE_OBJ_DIR)/tests/melee_core/pool_chaos_soak.o))
 $(eval $(call link_native_smoke,$(NATIVE_WASM_PARITY),$(NATIVE_OBJ_DIR)/tests/melee_core/wasm_parity.o))
 $(eval $(call link_native_smoke,$(NATIVE_LIFECYCLE_BENCH),$(NATIVE_OBJ_DIR)/tests/melee_core/lifecycle_bench.o))
@@ -762,7 +767,7 @@ ppc-smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE)
 	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
 		"$(DATA)"
 
-native-smoke: data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_STAGE_LIFECYCLE_SMOKE) $(NATIVE_RUNTIME_CENSUS)
+native-smoke: mewtwo-smoke data-check $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_STAGE_LIFECYCLE_SMOKE) $(NATIVE_RUNTIME_CENSUS)
 	@$(TIMEOUT) 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
@@ -875,3 +880,8 @@ clean:
 		"$(BUILD_ROOT)/benchmark"
 
 -include $(DEPS)
+
+.PHONY: mewtwo-smoke
+mewtwo-smoke: data-check $(NATIVE_BUILD)/mewtwo-smoke $(NATIVE_BUILD)/mewtwo-moves-smoke
+	@$(TIMEOUT) 10s "$(NATIVE_BUILD)/mewtwo-smoke" "$(DATA)"
+	@$(TIMEOUT) 10s "$(NATIVE_BUILD)/mewtwo-moves-smoke" "$(DATA)"
