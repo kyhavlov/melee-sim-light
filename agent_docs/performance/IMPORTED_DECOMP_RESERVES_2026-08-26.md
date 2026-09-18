@@ -27,7 +27,8 @@ against the 102,667 FPS above, but a same-host comparison to the 07-19 commit wa
 The compact pose and stage-line owners are initialized before gameplay and participate in typed
 relocation, arbitrary-index copy, and save/restore. Refreshed 2026-08-26 at `c86bc762` from
 `make runtime-census` (20 characters x 6 stages x 2/4 players) after the per-fighter reserve
-packet (`agent_docs/ACTIVE_WORK.md`, "per-fighter sealed-arena reserves"): every pool reserve is
+packet ([historical work log](../README.md#historical-work-log),
+"per-fighter sealed-arena reserves"): every pool reserve is
 now a sum of per-fighter terms plus a Yoshi's Story item term, the pose arenas are 256 joints and
 384 tracks per player, and the 192-byte JObj mem-piece class has a 128 + 128/port floor. The
 ordinary two-player allocation lock is exactly 608,100 arena bytes and 868 allocations before and

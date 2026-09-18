@@ -1083,6 +1083,105 @@
       }
     },
     {
+      "replay": "replays/validation/gamewatch/Game_20260707T202455.slpz",
+      "expected": {
+        "native": {
+          "frames": 14058,
+          "actual_output_fingerprint": "fcb5b7d438cac362"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260707T202855.slpz",
+      "expected": {
+        "native": {
+          "frames": 23010,
+          "actual_output_fingerprint": "3a0e80ade4d34452"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260707T203523.slpz",
+      "expected": {
+        "native": {
+          "frames": 21121,
+          "actual_output_fingerprint": "058075c7b8ca3920"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260707T204121.slpz",
+      "expected": {
+        "native": {
+          "frames": 15465,
+          "actual_output_fingerprint": "b6ffca0bd204cdf8"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260824T233753.slpz",
+      "expected": {
+        "native": {
+          "frames": 15368,
+          "actual_output_fingerprint": "5e11a3a99f17e9a4"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260902T194448.slpz",
+      "expected": {
+        "native": {
+          "frames": 15813,
+          "actual_output_fingerprint": "cc1b24b29d979222"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260904T145751.slpz",
+      "expected": {
+        "native": {
+          "frames": 13082,
+          "actual_output_fingerprint": "f8a9348b331d8887"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/bucket.slpz",
+      "expected": {
+        "native": {
+          "frames": 2988,
+          "actual_output_fingerprint": "02b91ee8e4e382a5"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/bucket_control.slpz",
+      "expected": {
+        "native": {
+          "frames": 2980,
+          "actual_output_fingerprint": "0b6f912aec175b24"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/bucket_missile.slpz",
+      "expected": {
+        "native": {
+          "frames": 2975,
+          "actual_output_fingerprint": "bc69232608685f1e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/judge_chef.slpz",
+      "expected": {
+        "native": {
+          "frames": 2988,
+          "actual_output_fingerprint": "6a400c8d077cc38b"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/ganon/2025-03_Game_20250309T055449.slpz",
       "expected": {
         "native": {

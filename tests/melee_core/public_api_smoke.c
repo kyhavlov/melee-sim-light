@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
   configs[0].viewpoint_player = 1;
   configs[1].stage = MSL_STAGE_BATTLEFIELD;
   configs[1].players[0].character = MSL_CHARACTER_MEWTWO;
-  configs[1].players[1].character = MSL_CHARACTER_PEACH;
+  configs[1].players[1].character = MSL_CHARACTER_GAMEWATCH;
   configs[1].max_frame = 120;
 
   if (strcmp(msl_result_string(MSL_INVALID_ARGUMENT), "invalid argument") != 0 ||
@@ -44,7 +44,8 @@ int main(int argc, char** argv) {
       observations[0].viewpoint_player != 1 ||
       observations[0].slots[0].char_id != MSL_CHARACTER_FALCO ||
       observations[1].stage_id != MSL_STAGE_BATTLEFIELD ||
-      observations[1].slots[0].char_id != MSL_CHARACTER_MEWTWO) {
+      observations[1].slots[0].char_id != MSL_CHARACTER_MEWTWO ||
+      observations[1].slots[1].char_id != MSL_CHARACTER_GAMEWATCH) {
     goto done;
   }
 

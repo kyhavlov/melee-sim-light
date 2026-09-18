@@ -46,6 +46,7 @@ def test_live_viewer_supported_domain_and_assets() -> None:
     expected = {
         1: "Fox",
         16: "Mewtwo",
+        24: "Mr. Game & Watch",
         2: "Captain Falcon",
         7: "Sheik",
         9: "Peach",

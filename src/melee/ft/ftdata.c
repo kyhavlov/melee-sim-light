@@ -159,6 +159,7 @@ extern int ft_8045996C[FTKIND_MAX];
 static const ftData_UnkCountStruct
     hosted_animation_data_template[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = { 0, 314 },
+    [FTKIND_GAMEWATCH] = { 0, 323 },
     [FTKIND_KOOPA] = { 0, 316 },
     [FTKIND_YOSHI] = { 0, 314 },
         [FTKIND_FOX] = { 0, 327 },   [FTKIND_CAPTAIN] = { 0, 318 },
@@ -186,6 +187,7 @@ Event ftData_Table_Unk1[FTKIND_MAX] = {
 };
 HSD_GObjEvent ftData_OnLoad[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_OnLoad,
+    [FTKIND_GAMEWATCH] = ftGw_Init_OnLoad,
     [FTKIND_KOOPA] = ftKp_Init_OnLoad,
     [FTKIND_YOSHI] = ftYs_Init_OnLoad,
     [FTKIND_FOX] = ftFx_Init_OnLoad,
@@ -211,6 +213,7 @@ HSD_GObjEvent ftData_OnLoad[FTKIND_MAX] = {
 };
 HSD_GObjEvent ftData_OnDeath[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_OnDeath,
+    [FTKIND_GAMEWATCH] = ftGw_Init_OnDeath,
     [FTKIND_KOOPA] = ftKp_Init_OnDeath,
     [FTKIND_YOSHI] = ftYs_Init_OnDeath,
     [FTKIND_FOX] = ftFx_Init_OnDeath,
@@ -239,6 +242,7 @@ HSD_GObjEvent ftData_OnUserDataRemove[FTKIND_MAX] = {
 };
 MotionState* ftData_CharacterStateTables[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_MotionStateTable,
+    [FTKIND_GAMEWATCH] = ftGw_Init_MotionStateTable,
     [FTKIND_KOOPA] = ftKp_Init_MotionStateTable,
     [FTKIND_YOSHI] = ftYs_Init_MotionStateTable,
     [FTKIND_FOX] = ftFx_Init_MotionStateTable,
@@ -273,6 +277,7 @@ MotionState* ftData_UnkMotionStates0[FTKIND_MAX] = {
 // every other fighter implementation.
 HSD_GObjEvent ftData_SpecialS[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_SpecialS_Enter,
+    [FTKIND_GAMEWATCH] = ftGw_SpecialS_Enter,
     [FTKIND_KOOPA] = ftKp_SpecialS_Enter,
     [FTKIND_YOSHI] = ftYs_SpecialS_Enter,
     [FTKIND_FOX] = ftFx_SpecialSStart_Enter,
@@ -297,6 +302,7 @@ HSD_GObjEvent ftData_SpecialS[FTKIND_MAX] = {
 };
 HSD_GObjEvent ftData_SpecialAirHi[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_SpecialAirHiStart_Enter,
+    [FTKIND_GAMEWATCH] = ftGw_SpecialAirHi_Enter,
     [FTKIND_KOOPA] = ftKp_SpecialAirHi_Enter,
     [FTKIND_YOSHI] = ftYs_SpecialAirHi_Enter,
     [FTKIND_FOX] = ftFx_SpecialAirHiStart_Enter,
@@ -321,6 +327,7 @@ HSD_GObjEvent ftData_SpecialAirHi[FTKIND_MAX] = {
 };
 HSD_GObjEvent ftData_SpecialAirLw[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_SpecialAirLw_Enter,
+    [FTKIND_GAMEWATCH] = ftGw_SpecialAirLw_Enter,
     [FTKIND_KOOPA] = ftKp_SpecialAirLw_Enter,
     [FTKIND_YOSHI] = ftYs_SpecialAirLw_Enter,
     [FTKIND_FOX] = ftFx_SpecialAirLw_Enter,
@@ -345,6 +352,7 @@ HSD_GObjEvent ftData_SpecialAirLw[FTKIND_MAX] = {
 };
 HSD_GObjEvent ftData_SpecialAirS[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_SpecialAirS_Enter,
+    [FTKIND_GAMEWATCH] = ftGw_SpecialAirS_Enter,
     [FTKIND_KOOPA] = ftKp_SpecialAirS_Enter,
     [FTKIND_YOSHI] = ftYs_SpecialAirS_Enter,
     [FTKIND_FOX] = ftFx_SpecialAirSStart_Enter,
@@ -369,6 +377,7 @@ HSD_GObjEvent ftData_SpecialAirS[FTKIND_MAX] = {
 };
 HSD_GObjEvent ftData_SpecialAirN[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_SpecialAirN_Enter,
+    [FTKIND_GAMEWATCH] = ftGw_SpecialAirN_Enter,
     [FTKIND_KOOPA] = ftKp_SpecialAirN_Enter,
     [FTKIND_YOSHI] = ftYs_SpecialAirN_Enter,
     [FTKIND_FOX] = ftFx_SpecialAirN_Enter,
@@ -394,6 +403,7 @@ HSD_GObjEvent ftData_SpecialAirN[FTKIND_MAX] = {
 };
 HSD_GObjEvent ftData_SpecialN[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_SpecialN_Enter,
+    [FTKIND_GAMEWATCH] = ftGw_SpecialN_Enter,
     [FTKIND_KOOPA] = ftKp_SpecialN_Enter,
     [FTKIND_YOSHI] = ftYs_SpecialN_Enter,
     [FTKIND_FOX] = ftFx_SpecialN_Enter,
@@ -419,6 +429,7 @@ HSD_GObjEvent ftData_SpecialN[FTKIND_MAX] = {
 };
 HSD_GObjEvent ftData_SpecialLw[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_SpecialLw_Enter,
+    [FTKIND_GAMEWATCH] = ftGw_SpecialLw_Enter,
     [FTKIND_KOOPA] = ftKp_SpecialLw_Enter,
     [FTKIND_YOSHI] = ftYs_SpecialLw_Enter,
     [FTKIND_FOX] = ftFx_SpecialLw_Enter,
@@ -444,6 +455,7 @@ HSD_GObjEvent ftData_SpecialLw[FTKIND_MAX] = {
 };
 HSD_GObjEvent ftData_SpecialHi[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_SpecialHiStart_Enter,
+    [FTKIND_GAMEWATCH] = ftGw_SpecialHi_Enter,
     [FTKIND_KOOPA] = ftKp_SpecialHi_Enter,
     [FTKIND_YOSHI] = ftYs_SpecialHi_Enter,
     [FTKIND_FOX] = ftFx_SpecialHi_Enter,
@@ -467,10 +479,12 @@ HSD_GObjEvent ftData_SpecialHi[FTKIND_MAX] = {
     [FTKIND_FALCO] = ftFx_SpecialHi_Enter,
 };
 HSD_GObjEvent ftData_OnAbsorb[FTKIND_MAX] = {
+    [FTKIND_GAMEWATCH] = ftGw_Init_OnAbsorb,
     [FTKIND_NESS] = ftNs_Init_OnAbsorb,
 };
 Fighter_ItemEvent ftData_OnItemPickupExt[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_OnItemPickup,
+    [FTKIND_GAMEWATCH] = ftGw_Init_OnItemPickup,
     [FTKIND_KOOPA] = ftKp_Init_OnItemPickup,
     [FTKIND_YOSHI] = ftYs_Init_OnItemPickup,
     [FTKIND_FOX] = ftFx_Init_OnItemPickup,
@@ -497,6 +511,7 @@ Fighter_ItemEvent ftData_OnItemPickupExt[FTKIND_MAX] = {
 };
 HSD_GObjEvent ftData_OnItemInvisible[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_OnItemInvisible,
+    [FTKIND_GAMEWATCH] = ftGw_Init_OnItemInvisible,
     [FTKIND_KOOPA] = ftKp_Init_OnItemInvisible,
     [FTKIND_YOSHI] = ftYs_Init_OnItemInvisible,
     [FTKIND_FOX] = ftFx_Init_OnItemInvisible,
@@ -522,6 +537,7 @@ HSD_GObjEvent ftData_OnItemInvisible[FTKIND_MAX] = {
 };
 HSD_GObjEvent ftData_OnItemVisible[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_OnItemVisible,
+    [FTKIND_GAMEWATCH] = ftGw_Init_OnItemVisible,
     [FTKIND_KOOPA] = ftKp_Init_OnItemVisible,
     [FTKIND_YOSHI] = ftYs_Init_OnItemVisible,
     [FTKIND_FOX] = ftFx_Init_OnItemVisible,
@@ -547,6 +563,7 @@ HSD_GObjEvent ftData_OnItemVisible[FTKIND_MAX] = {
 };
 Fighter_ItemEvent ftData_OnItemDropExt[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_OnItemDrop,
+    [FTKIND_GAMEWATCH] = ftGw_Init_OnItemDrop,
     [FTKIND_KOOPA] = ftKp_Init_OnItemDrop,
     [FTKIND_YOSHI] = ftYs_Init_OnItemDrop,
     [FTKIND_FOX] = ftFx_Init_OnItemDrop,
@@ -573,6 +590,7 @@ Fighter_ItemEvent ftData_OnItemDropExt[FTKIND_MAX] = {
 };
 Fighter_ItemEvent ftData_OnItemPickup[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_OnItemPickup,
+    [FTKIND_GAMEWATCH] = ftGw_Init_OnItemPickup,
     [FTKIND_KOOPA] = ftKp_Init_OnItemPickup,
     [FTKIND_YOSHI] = ftYs_Init_OnItemPickup,
     [FTKIND_FOX] = ftFx_Init_OnItemPickup,
@@ -597,6 +615,7 @@ Fighter_ItemEvent ftData_OnItemPickup[FTKIND_MAX] = {
 };
 Fighter_ItemEvent ftData_OnItemDrop[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_OnItemDrop,
+    [FTKIND_GAMEWATCH] = ftGw_Init_OnItemDrop,
     [FTKIND_KOOPA] = ftKp_Init_OnItemDrop,
     [FTKIND_YOSHI] = ftYs_Init_OnItemDrop,
     [FTKIND_FOX] = ftFx_Init_OnItemDrop,
@@ -676,12 +695,14 @@ HSD_GObjEvent ftData_UnkMotionStates3[FTKIND_MAX] = {
 };
 HSD_GObjEvent ftData_UnkMotionStates4[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_UnkMotionStates4,
+    [FTKIND_GAMEWATCH] = ftGw_Init_UnkMotionStates4,
     [FTKIND_DONKEY] = ftDk_Init_UnkMotionStates4,
     [FTKIND_SEAK] = ftSk_Init_UnkMotionStates4,
     [FTKIND_SAMUS] = ftSs_Init_UnkMotionStates4,
 };
 HSD_GObjEvent ftKindCalcIndiviParamTable[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_LoadSpecialAttrs,
+    [FTKIND_GAMEWATCH] = ftGw_Init_LoadSpecialAttrs,
     [FTKIND_KOOPA] = ftKp_Init_LoadSpecialAttrs,
     [FTKIND_YOSHI] = ftYs_Init_LoadSpecialAttrs,
     [FTKIND_FOX] = ftFx_Init_LoadSpecialAttrs,
@@ -712,6 +733,7 @@ struct StringPair {
 };
 struct StringPair ftData_803C1F40[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = { ftMt_Init_DatFilename, ftMt_Init_DataName },
+    [FTKIND_GAMEWATCH] = { ftGw_Init_DatFilename, ftGw_Init_DataName },
     [FTKIND_KOOPA] = { ftKp_Init_DatFilename, ftKp_Init_DataName },
     [FTKIND_YOSHI] = { ftYs_Init_DatFilename, ftYs_Init_DataName },
     [FTKIND_FOX] = { ftFx_Init_DatFilename, ftFx_Init_DataName },
@@ -753,6 +775,7 @@ struct {
 } ftData_UnkCallbackPairs0[FTKIND_MAX];
 Fighter_CostumeStrings* ftData_803C2360[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_CostumeStrings,
+    [FTKIND_GAMEWATCH] = ftGw_Init_CostumeStrings,
     [FTKIND_KOOPA] = ftKp_Init_CostumeStrings,
     [FTKIND_YOSHI] = ftYs_Init_CostumeStrings,
     [FTKIND_FOX] = ftFx_Init_CostumeStrings,
@@ -778,6 +801,7 @@ Fighter_CostumeStrings* ftData_803C2360[FTKIND_MAX] = {
 };
 char* ftData_803C23E4[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = ftMt_Init_AnimDatFilename,
+    [FTKIND_GAMEWATCH] = ftGw_Init_AnimDatFilename,
     [FTKIND_KOOPA] = ftKp_Init_AnimDatFilename,
     [FTKIND_YOSHI] = ftYs_Init_AnimDatFilename,
     [FTKIND_FOX] = ftFx_Init_AnimDatFilename,
@@ -803,6 +827,7 @@ char* ftData_803C23E4[FTKIND_MAX] = {
 };
 Fighter_DemoStrings* ftData_803C2468[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = &ftMt_Init_DemoMotionFilenames,
+    [FTKIND_GAMEWATCH] = &ftGw_Init_DemoMotionFilenames,
     [FTKIND_KOOPA] = &ftKp_Init_DemoMotionFilenames,
     [FTKIND_YOSHI] = &ftYs_Init_DemoMotionFilenames,
     [FTKIND_FOX] = &ftFx_Init_DemoMotionFilenames,
@@ -836,6 +861,7 @@ Fighter_UnkPtrEvent ftData_UnkDemoCallbacks0[FTKIND_MAX] = {
 };
 ftData_UnkCountStruct ftData_UnkIntPairs[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = { 0, 14 },
+    [FTKIND_GAMEWATCH] = { 0, 14 },
     [FTKIND_KOOPA] = { 0, 14 },
     [FTKIND_YOSHI] = { 0, 14 },
     [FTKIND_FOX] = { 0, 14 },
@@ -861,6 +887,7 @@ ftData_UnkCountStruct ftData_UnkIntPairs[FTKIND_MAX] = {
 };
 u8 ftData_UnkBytePerCharacter[FTKIND_MAX] = {
     [FTKIND_MEWTWO] = 13,
+    [FTKIND_GAMEWATCH] = -1,
     [FTKIND_KOOPA] = 12,
     [FTKIND_YOSHI] = 9,
     [FTKIND_FOX] = 3,

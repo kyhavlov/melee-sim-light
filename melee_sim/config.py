@@ -7,6 +7,7 @@ from enum import IntEnum
 class Character(IntEnum):
     FOX = 1
     MEWTWO = 16
+    GAMEWATCH = 24
     FALCON = 2
     DONKEY_KONG = 3
     GANONDORF = 25

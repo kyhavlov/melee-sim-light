@@ -324,6 +324,8 @@ UnkCostumeStruct* msl_core_fighter_costumes(FighterKind kind)
         return data->fighter.samus_costumes;
     case FTKIND_MEWTWO:
         return data->fighter.mewtwo_costumes;
+    case FTKIND_GAMEWATCH:
+        return data->fighter.gamewatch_costumes;
     case FTKIND_NESS:
         return data->fighter.ness_costumes;
     case FTKIND_LINK:

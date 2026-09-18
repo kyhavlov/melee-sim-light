@@ -84,5 +84,12 @@ PPC, optimized-build, or all-stage restore coverage.
 
 Review verification on 2026-09-17 independently passed the seven Mewtwo
 recordings on native and PPC, the 536-case native aggregate, `native-smoke`,
-`viewer-smoke` (including Wasm), and all 69 Python tests. Details and review
-fixes are recorded in `ACTIVE_WORK.md` under "PR #23 review".
+`viewer-smoke` (including Wasm), and all 69 Python tests. Review fixes regenerated
+the incorrect upstream snapshot digest, tracked the stage-lifecycle smoke's
+header dependencies, and removed stale combined-admission metadata.
+The source imports match the pin except for the ledgered attribute
+self-assignment removal; gameplay and existing output locks are unchanged.
+
+The cleanup was pushed as `5018738c`; CI passed and PR #23 merged at `de64f76a`
+on 2026-09-17. The [historical work log](README.md#historical-work-log) retains
+the full review and pre-merge integration analysis.

@@ -5,7 +5,7 @@
 Build a high-performance, batched, deterministic Melee simulator for RL. Supported fighters are
 Fox, Falco, Marth, Sheik, Zelda, Captain Falcon, Jigglypuff, Peach, Luigi, Mario, Dr. Mario,
 Samus, the Ice Climbers (Popo with the CPU-mimic Nana follower), Pikachu, Donkey Kong, and
-Ganondorf, Yoshi, Bowser, Ness, Link, Young Link, and Mewtwo. RL 1.0 covers
+Ganondorf, Yoshi, Bowser, Ness, Link, Young Link, Mewtwo, and Mr. Game & Watch. RL 1.0 covers
 singles, three-player teams, and doubles on Final Destination, Battlefield, Fountain of
 Dreams, frozen Pokemon Stadium, Yoshi's Story, and Dream Land N64. UCF is enabled by default.
 
@@ -19,6 +19,9 @@ implementation queue.
 1. Before a multi-owner or representation packet, record its final owner, canonical state,
    consumers, displaced code/state, and deletion boundary in
    `agent_docs/ACTIVE_WORK.md`.
+   Keep that file limited to open work, current status, and next steps (target under 100 lines).
+   Put detailed experiments in the owning report. On completion, move durable findings to the
+   appropriate reference doc and remove the active entry; do not accumulate completed worklogs.
 2. Do not add synchronized dual state, setter hooks, compatibility flags, fallback dispatch, or a
    production bridge for an incomplete cutover.
 3. Establish the approved final representation and deletion boundary first, then recover
