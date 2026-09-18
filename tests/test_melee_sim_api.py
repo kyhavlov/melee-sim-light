@@ -76,6 +76,7 @@ def test_python_wire_layout_matches_public_c_api() -> None:
     (msl.Character.YOUNG_LINK, msl.Character.SAMUS),
     (msl.Character.MEWTWO, msl.Character.FOX),
     (msl.Character.GAMEWATCH, msl.Character.FOX),
+    (msl.Character.GAMEWATCH, msl.Character.MEWTWO),
 ])
 def test_character_articles_restore_at_another_batch_index(monkeypatch, characters) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))

@@ -1,6 +1,6 @@
 # Game & Watch integration
 
-Implemented and locally admitted, 2026-09-15.
+PR #24, rebased locally onto the merged Mewtwo admission (`de64f76a`).
 
 ## Implemented
 
@@ -20,25 +20,27 @@ Implemented and locally admitted, 2026-09-15.
 ## Validation
 
 - `make gamewatch-smoke`: Judge history and all nine ground hit/miss outcomes,
-  aerial miss paths and interrupted neutral/back/up-air accessory cleanup, Chef trajectory history covering all five trajectories,
+  all nine aerial miss paths, interrupted neutral/back/up-air accessory cleanup,
+  and Chef trajectory history covering all five trajectories;
   laser absorption versus inactive-bucket and missile controls, accumulated
   bucket damage and full release.
 - Four Game & Watches: Judge, Chef, Fire Rescue, bucket release, neutral-air,
-  partial bucket state, and20 Chef projectiles plus4 Rescue articles. Copy and
-  restore into separate arenas reproduce140-frame continuations, RNG, persistent
+  partial bucket state, and 20 Chef projectiles plus 4 Rescue articles. Copy and
+  restore into separate arenas reproduce 140-frame continuations, RNG, persistent
   histories/bucket state and every live item's position/trajectory, including
-  items beyond the15-entry exported item window. Sealed arena checks pass.
-- Existing reserves suffice. Largest tested FObj peak is213/313 during four
-  simultaneous oil releases; the24-article case peaks at77/313 FObj and38/154
-  AObj. All tested scenarios retain at least20% headroom; no reserve increase.
-- Public Python cross-batch restore covers a four-player GW/Fox match on
-  all six supported stages. Native smoke and browser/WASM special tests pass.
+  items beyond the 15-entry exported item window. Sealed arena checks pass.
+- Existing reserves suffice. Largest tested FObj peak is 213/313 during four
+  simultaneous oil releases; the 24-article case peaks at 77/313 FObj and 38/154
+  AObj. All tested scenarios retain at least 20% headroom; no reserve increase.
+- Public Python cross-batch restore exercises four-player GW/Fox and GW/Mewtwo
+  matches on all six supported stages. C API smoke admits Mewtwo and Game & Watch
+  together; the Wasm special-move smoke retains both fighters.
 - `replays/suites/gamewatch.json`: 11 full recordings, zero classifications
-  on native. Seven corpus games and four scripted Dolphin recordings. Five
-  further recordings from the same effort ship separately: two July games
-  need the explicit legacy-Dolphin arithmetic profile lane, and three are
-  Game & Watch versus Mewtwo. An initial candidate contained unsupported Roy
-  and was excluded; it was not a gameplay validation failure.
+  on the original native branch. Seven corpus games and four scripted Dolphin
+  recordings. Two further July games need the separate legacy-Dolphin arithmetic
+  profile lane. The author also reported three Game & Watch/Mewtwo recordings;
+  their admission dependency is resolved, but those fixtures were not included
+  in this PR. An initial candidate contained unsupported Roy and was excluded.
 - Scripted recordings cover all nine Judge outcomes and Chef articles, three
   laser absorptions followed by oil release, inactive-bucket laser hits and
   active-bucket missile hits. Coverage assertions pass in
@@ -46,22 +48,49 @@ Implemented and locally admitted, 2026-09-15.
   Dolphin build/settings are in `GAMEWATCH_VALIDATION.json`.
 - Public admission updates C/Python enums, both admission gates, CLI/Makefile
   validation defaults, viewer selector/assets, AGENTS/README and aggregate.
-  `externalCharId` already contained correct16->10 and24->3 mappings.
-- Native supported-domain gate: 514 exact, 26 existing classified, zero
-  failures/errors across 540 cases. Existing locks are preserved; 11 new
-  native locks were generated after host certification.
+  `externalCharId` already contained correct 16->10 and 24->3 mappings.
+- The original branch reported 514 exact / 26 classified across 540 cases.
+  Integration with Mewtwo retains both suites and all existing locks, yielding
+  547 cases. Current review gates are recorded below after execution.
 
 The corpus and targeted tests establish the tested behavior; they do not exhaust
 all possible projectile pairings or RNG sequences. Additional failures should be
 investigated by source owner, without replay-specific exceptions.
 
-The production viewer build and live Chrome smoke passed. To launch on this
-NixOS host after building:
+The current slippilab Game & Watch bake omits some accessory meshes. Re-baking
+those viewer silhouettes is separate presentation work; this PR ports the source
+articles used by gameplay. Launch instructions are in the repository README.
 
-```sh
-cd /home/blewf/git/melee-sim-light
-nix-shell -p gcc gnumake nodejs pkg-config libusb1 --run 'make viewer'
-```
+## Integration review — 2026-09-17
 
-Live mode: `http://127.0.0.1:8001/tools/viewer/live/`. Keyboard controls are
-listed in the UI; the local server also starts the GameCube USB-adapter bridge.
+- All 31 newly imported files match pinned upstream `91b9789f` verbatim. The
+  Chef pointer correction is the sole new upstream delta and is ledgered.
+- The original source lock was incorrect despite green CI: the upstream checkout
+  was absent there, so only inventory was checked. Regenerated the combined
+  1227-file lock; full local source verification passes.
+- Resolved both fighters' registry, loader, public API, viewer and suite entries.
+  The combined extraction has 209 DAT files plus main.dol. Preserve the landed
+  stage-lifecycle build dependency and all Mewtwo tests.
+- Added mixed GW/Mewtwo cross-batch restore coverage and corrected the supported
+  character diagnostic. No gameplay or comparison-policy changes are proposed.
+- Gates on Linux x86_64 / GCC 13.3.0:
+
+  | Check | Result |
+  | --- | --- |
+  | Fresh extraction | 209 DAT files plus main.dol; all hashes verified |
+  | `make source-check` | 1227 pinned upstream files verified |
+  | `make native validator python-library native-smoke -j8` | Pass, including both fighter smokes and the shared lifecycle/pool checks |
+  | Gameplay-parts derivation | Luigi anchor, Mewtwo and Game & Watch rows match |
+  | `make validation-suite VALIDATION_ARGS=--no-build` | 521 exact / 26 existing classified / 0 fail / 0 error; 5,205,059 transitions |
+  | Game & Watch on native/PPC | All 11 recordings exact; 129,848 transitions each |
+  | `pytest -q` | 76 passed, including mixed-fighter restore on all six stages |
+  | `make viewer-smoke -j8` | Native/Wasm parity, 23-character / six-stage smoke and live Chrome pass |
+
+- The initial concurrent PPC run passed ten recordings; the 23,010-frame
+  `Game_20260707T202855` hit its 30-second execution budget. An isolated rerun
+  with a 60-second budget passed all frames in 26.8 seconds with unchanged
+  comparison and UCF settings. No validation tolerance or lock was changed.
+- All 536 merged-main output locks remain unchanged; Game & Watch adds 11.
+  Scratch evidence: `reports/triage/gamewatch_pr24_review/`.
+- Review conclusion: no remaining merge blocker found. The user approved
+  publishing the rebase and cleanup, followed by merging after fresh CI.

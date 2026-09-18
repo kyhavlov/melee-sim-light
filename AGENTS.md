@@ -19,6 +19,9 @@ implementation queue.
 1. Before a multi-owner or representation packet, record its final owner, canonical state,
    consumers, displaced code/state, and deletion boundary in
    `agent_docs/ACTIVE_WORK.md`.
+   Keep that file limited to open work, current status, and next steps (target under 100 lines).
+   Put detailed experiments in the owning report. On completion, move durable findings to the
+   appropriate reference doc and remove the active entry; do not accumulate completed worklogs.
 2. Do not add synchronized dual state, setter hooks, compatibility flags, fallback dispatch, or a
    production bridge for an incomplete cutover.
 3. Establish the approved final representation and deletion boundary first, then recover

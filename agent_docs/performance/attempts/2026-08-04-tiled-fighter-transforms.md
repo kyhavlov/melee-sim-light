@@ -85,7 +85,7 @@ removal:
   packet, so cleanup preserves it rather than restoring separate `FighterBone`
   reads;
 - all other independently measured arithmetic and source-owner cuts recorded in
-  `ACTIVE_WORK.md`.
+  the [historical work log](../../README.md#historical-work-log).
 
 Frozen pre-tile binaries also confirm that the direct output publication and
 general native `PSMTXConcat` vector owner predate this packet. They remain part

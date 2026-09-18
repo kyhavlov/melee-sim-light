@@ -96,7 +96,7 @@ and the additional candidates in the inventory before retiring classifications.
 
 Sources: `src/melee/mp/{mplib.c,mpcoll.c}`, matching
 `refs/melee/build/GALE01/asm/melee/mp/mplib.s`, and the July 30 “Session 2” retail
-arbitration record in `agent_docs/ACTIVE_WORK.md`.
+arbitration record in the [historical work log](README.md#historical-work-log).
 
 ### C: four “Dolphin/root motion” descriptions are actually screen KO on console
 

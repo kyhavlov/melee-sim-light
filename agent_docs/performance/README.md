@@ -79,6 +79,11 @@ representation may justify revisiting the same broad subsystem.
   `PERFORMANCE.md` are now `BASELINE.md`, `RETAINED.md`, and `HISTORY.md` here.
 - Completed performance packets formerly mixed into `agent_docs/ACTIVE_WORK.md` are preserved in
   `PACKETS_2026-08-02.md`; `ACTIVE_WORK.md` no longer carries those closed packet logs.
+- The remaining mixed log through September 17 is preserved in
+  [commit 5018738c](https://github.com/kyhavlov/melee-sim-light/blob/5018738c8b2da68330823bb20fee37a5044841cd/agent_docs/ACTIVE_WORK.md).
+  Use it for historical detail missing from the indexed records here; its old
+  "active" labels do not describe current work. The live work page contains only
+  open scope and next steps.
 - The unique cumulative journal and stale active experiment log from
   `/mnt/nvme0/projects/melee-sim-light-decompport` are preserved in the July 23 and July 24
   journals.

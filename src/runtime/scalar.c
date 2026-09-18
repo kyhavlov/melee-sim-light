@@ -651,6 +651,7 @@ static int validate_config(MslCoreMatchConfig* config)
                     "char_id=15 Jigglypuff, char_id=17 Luigi, "
                     "char_id=18 Marth, "
                     "char_id=19 Zelda, char_id=21 Dr. Mario, char_id=22 Falco, "
+                    "char_id=24 Game & Watch, "
                     "and char_id=25 Ganondorf only\n");
             return -1;
         }
@@ -1520,7 +1521,7 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
     unsigned int shift = (unsigned int) (3 - (source_offset & 3)) * 8;
 
     // Preserve source offsets after native pointer widening. These generic
-    // Slippi lanes land after pointers in the Chain and Din's Fire structs,
+    // Slippi lanes land after pointers in the Chain, Din's Fire and Chef structs,
     // so indexing the native union by the retail byte offset would sample a
     // different member. The selected source bytes are the low bytes of the
     // named 32-bit gameplay scalars.

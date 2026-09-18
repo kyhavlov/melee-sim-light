@@ -4,7 +4,6 @@ Yoshi and Bowser are admitted throughout the C and Python APIs, native and Wasm
 runtime, six-stage singles/three-player teams/doubles domain, and live viewer.
 The packet imports their complete matching character callback and article owners.
 It starts from `3a71888c` and preserves the unrelated stage-spawn JSON deletion.
-The concurrent reward packet is coordinated separately in `ACTIVE_WORK.md`.
 
 A viewer follow-up corrected Yoshi's model identity: internal 14 must map to
 Slippi external 17; passing 14 through selected the Ice Climbers archive. Live

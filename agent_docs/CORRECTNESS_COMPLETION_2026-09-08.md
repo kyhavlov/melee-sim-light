@@ -49,8 +49,9 @@ rule. The private config grows 58 to 59 bytes; decoder, producers, generated
 viewer schema and benchmark v2/cache identity change together. Public API
 structures do not change.
 
-The final-representation ledger and instruction addresses are in
-`ACTIVE_WORK.md` and `src/upstream_delta_ledger.tsv`. Fresh stage extraction and
+The final-representation ledger is preserved in the
+[historical work log](README.md#historical-work-log); instruction addresses remain
+in `src/upstream_delta_ledger.tsv`. Fresh stage extraction and
 native loading pass. There are no duplicate controllers, replay-position
 corrections, synthetic counters or diagnostic hooks in production.
 

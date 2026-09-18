@@ -69,9 +69,9 @@ make validator
      --suite replays/suites/melee_core_aggregate.json --backend native --no-build \
      --workers N --output-locks replays/suites/melee_core_output_locks.json
    ```
-   It must reproduce the aggregate identity recorded in `agent_docs/ACTIVE_WORK.md` under
-   "Suite state" — `426 = 342 pass / 84 classified / 0 fail / 0 error` at the time of writing —
-   with zero lock failures.
+   It must reproduce the current committed aggregate's output locks and classification
+   expectations with zero failures or errors. Suite manifests and generated locks are the
+   authority; do not use a historical work-log count as the expected roster or case total.
 4. `make ppc` then one per-suite PPC run (`VALIDATION_SUITE=replays/suites/<char>.json
    VALIDATION_BACKEND=ppc`). Per-suite PPC is the gate; aggregate-PPC lock-fails by design.
 5. `pytest tests`. Two tests assert wall-clock and per-case timeout budgets calibrated for the
@@ -98,17 +98,18 @@ output locks from it.
 
 ## Benchmarks are host-pinned
 
-`agent_docs/CURRENT_BASELINE.md` records its provenance host (AMD Ryzen 9 9950X3D, CPU 0 V-Cache
+[`performance/BASELINE.md`](performance/BASELINE.md) records its provenance host (AMD Ryzen 9 9950X3D, CPU 0 V-Cache
 CCD, Linux 6.17 x86-64, GCC 13.3.0) and the pinned `benchmark-9950x3d-*` targets. Absolute FPS from
 a different host is not comparable to the retained ledger; only same-host A/B pairs are. The
 benchmark **digests** (`8ef126a41244d514` at 256, `6f91f23e3553a090` at 512) are host-independent
 and must match anywhere. A performance commit made on a new host refreshes provenance in
-`CURRENT_BASELINE.md` before its numbers enter `RETAINED_PERFORMANCE.md`.
+`performance/BASELINE.md` before its numbers enter `performance/RETAINED.md`.
 
 ## macOS-only machinery (does not transfer)
 
 These exist for the macOS development host and are dead weight on Linux; they explain the `Darwin`
-branches in the `Makefile` and the container recipes in older `ACTIVE_WORK.md` entries.
+branches in the `Makefile` and the container recipes in the
+[historical work log](README.md#historical-work-log).
 
 - Neither macOS build profile is gate-grade: arm64-native drifts on signed zero/ULP, and the
   Rosetta `HOST_TARGET_ARCH=x86_64` profile has no recorded digest equivalence (Apple clang
