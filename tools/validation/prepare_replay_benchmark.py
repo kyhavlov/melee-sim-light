@@ -78,6 +78,7 @@ def prepare(args: argparse.Namespace) -> None:
     total_frames = 0
     built = 0
     reused = 0
+    skipped_cpu = 0
     for case in cases:
         case_path = case_dir / f"{_cache_key(case)}.mslrpb"
         frame_count = None if args.force else _cached_frame_count(case_path)
@@ -86,6 +87,10 @@ def prepare(args: argparse.Namespace) -> None:
             try:
                 with replay_path_for_peppi(case.replay) as peppi_path:
                     game = _read_slippi(str(peppi_path), False)
+                    if any(player["type"] == "Cpu" for player in game.start["players"]):
+                        print(f"skipping CPU recording (controller-only benchmark): {case.display_path}")
+                        skipped_cpu += 1
+                        continue
                     metadata = game.metadata
                     if case.played_on is not None:
                         metadata = dict(metadata)
@@ -108,17 +113,19 @@ def prepare(args: argparse.Namespace) -> None:
         total_frames += frame_count
         rows.append(f"{case_path}\t{case.display_path}\n")
 
+    if not rows:
+        raise ValueError("benchmark suite has no controller-only replays")
     temporary_manifest = output.with_suffix(f".tmp.{os.getpid()}")
     try:
         temporary_manifest.write_text(
-            "# MSL replay benchmark cases v2\n" + "".join(rows)
+            f"# MSL replay benchmark cases v{FORMAT_VERSION}\n" + "".join(rows)
         )
         os.replace(temporary_manifest, output)
     finally:
         temporary_manifest.unlink(missing_ok=True)
     print(
-        f"benchmark cases: selected={len(cases)} frames={total_frames:,} "
-        f"built={built} reused={reused} manifest={output.relative_to(ROOT)}"
+        f"benchmark cases: selected={len(rows)} skipped_cpu={skipped_cpu} frames={total_frames:,} "
+        f"built={built} reused={reused} manifest={output}"
     )
 
 

@@ -24,8 +24,6 @@ typedef struct MslCoreSlippiState {
     MslReplayCpuInput cpu_inputs[MSL_CORE_MAX_PLAYERS];
 } MslCoreSlippiState;
 
-struct MslCoreStageEvents;
-
 void msl_slippi_state_init(MslCoreSlippiState* state, u8 stage_event_streams);
 void msl_slippi_state_bind(MslCoreSlippiState* state);
 void msl_slippi_stage_events_begin(const struct MslCoreStageEvents* events);

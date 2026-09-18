@@ -43,8 +43,9 @@ typedef struct MslCoreInput {
     MslCoreInputPlayer p[MSL_CORE_MAX_PLAYERS];
 } MslCoreInput;
 
-// Slippi Playback/Core/RestoreGameFrame.asm publishes these processed values
-// at 0x8006B0DC, independently of physical controller bytes.
+// Slippi Playback/Core/RestoreGameFrame.asm publishes processed inputs at
+// 0x8006B0DC, independently of physical controller bytes. Validation also
+// carries the RNG observation from Recording/SendGamePreFrame.asm.
 typedef struct MslReplayCpuInput {
     float main_x, main_y, c_x, c_y, trigger;
     uint32_t buttons;

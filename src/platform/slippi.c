@@ -116,6 +116,8 @@ void msl_slippi_apply_cpu_input(struct Fighter* fp)
     fp->input.cstick.y = input->c_y;
     fp->input.x650 = input->trigger;
     fp->input.held_inputs = input->buttons;
+    // Validation also supplies SendGamePreFrame's RNG observation here.
+    // Slippi playback itself only restores RNG when resync is enabled.
     *seed_ptr = input->random_seed;
     input->valid = 0;
 }

@@ -1,0 +1,79 @@
+{
+  "recordings": [
+    {
+      "replay": "replays/validation/cpu_inputs/cpu_ice_climbers_l5.slpz",
+      "sha256_slp": "e3001303503bf6f177a5fcd80558b4a7d393c5173c272cd4c1dd63f4dd0504f3",
+      "sha256_slpz": "e997dca968bf2d0e8bd918a8c7244aa468c3da38ea8d02939b18acbb0a8a2fc2",
+      "start_at": "2026-09-17T06:43:46Z",
+      "players": [
+        {
+          "port": "P1",
+          "character": 2,
+          "type": "Human",
+          "cpu_level": null
+        },
+        {
+          "port": "P2",
+          "character": 14,
+          "type": "Cpu",
+          "cpu_level": 5
+        }
+      ],
+      "recorder": "tools/validation/record_cpu_ice_climbers.exs",
+      "scenario": "laser",
+      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
+      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
+      "accurate_nmsub": true,
+      "headless": true,
+      "state_injection": false
+    },
+    {
+      "replay": "replays/validation/cpu_inputs/cpu_ice_climbers_l5_desync.slpz",
+      "sha256_slp": "8c6ec0fb14c8ebdbb4d1792be3a4b93c8c15b9c20c8fe34ea6be27801c699e50",
+      "sha256_slpz": "9a63ea0213ac8a1b884e347b452d3520c9df5a34dd7ddb07ee5c270d49a1180c",
+      "start_at": "2026-09-17T06:50:29Z",
+      "players": [
+        {
+          "port": "P1",
+          "character": 2,
+          "type": "Human",
+          "cpu_level": null
+        },
+        {
+          "port": "P2",
+          "character": 14,
+          "type": "Cpu",
+          "cpu_level": 5
+        }
+      ],
+      "recorder": "tools/validation/record_cpu_ice_climbers.exs",
+      "scenario": "desync",
+      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
+      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
+      "accurate_nmsub": true,
+      "headless": true,
+      "state_injection": false
+    },
+    {
+      "replay": "replays/validation/cpu_inputs/exphil_peach_r1.slpz",
+      "sha256_slp": "ac0f1f1b59f2adefaaf31858d47224aa355ef57894f35fe846e1f885b5cf2b78",
+      "sha256_slpz": "f582573f8dae340c17542de7b78eaf009c10e8fa525a570d9826f9aa21232f17",
+      "start_at": "2026-09-14T20:33:03Z",
+      "players": [
+        {
+          "port": "P1",
+          "character": 2,
+          "type": "Human",
+          "cpu_level": null
+        },
+        {
+          "port": "P2",
+          "character": 12,
+          "type": "Cpu",
+          "cpu_level": 1
+        }
+      ],
+      "source": "../exphil/eval_runs/0914_coverage_round/rollouts/peach/r1.slp"
+    }
+  ]
+}
