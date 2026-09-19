@@ -296,6 +296,21 @@
       "scene_major": 8,
       "slippi_version": "3.19.0",
       "frames": 6691
+    },
+    {
+      "source": "~/Slippi/2026-09-Mainline/Game_20260919T171221.slp",
+      "replay": "replays/validation/roy/mainline_fox_cpu_20260919T171221.slpz",
+      "sha256_slp": "ab758082b01477f9aa9ae8367dcac9714c916ccfda985051e793630d7512c4d4",
+      "sha256_slpz": "dc87506d3c86608112e5a994c8e8cbc20d857dca3b96ef3e129809c7936a5324",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 2,
+      "slippi_version": "3.19.1",
+      "frames": 16365,
+      "cpu_players": {
+        "1": "Fox level 3"
+      },
+      "notes": "Recorded by the user through the Slippi Launcher on 2026-09-19 versus a level-3 CPU Fox: full-charge Flare Blade with recoil, aerial and grounded Counter hits, all Double-Edge Dance stages, Blazer."
     }
   ]
 }

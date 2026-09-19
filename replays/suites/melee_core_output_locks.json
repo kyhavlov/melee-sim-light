@@ -4463,6 +4463,15 @@
       }
     },
     {
+      "replay": "replays/validation/roy/mainline_fox_cpu_20260919T171221.slpz",
+      "expected": {
+        "native": {
+          "frames": 16364,
+          "actual_output_fingerprint": "c48c809ab1c7a6b0"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/roy/mainline_ice_climbers_20260916T113946.slpz",
       "expected": {
         "native": {

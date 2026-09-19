@@ -1,6 +1,6 @@
 {
   "name": "roy",
-  "notes": "Roy validation suite: 27 two-player games across all six legal stages against Fox, Donkey Kong, Ice Climbers, Luigi, Sheik, Falco, Link, Zelda and a Roy mirror. Twelve are 2026 Mainline Slippi Dolphin recordings, seven are Wii console captures from D20 Melee and Yeti Weekly (Slippi Nintendont, offline VS scene), one is a console capture mirrored over the network (playedOn network, vanilla magnifier rule), and seven are 2023-2026 Dolphin games. Pokemon Stadium entries record zero transformation events. Provenance: agent_docs/validation/roy_provenance.json.",
+  "notes": "Roy validation suite: 28 two-player games across all six legal stages against Fox, Donkey Kong, Ice Climbers, Luigi, Sheik, Falco, Link, Zelda and a Roy mirror. Thirteen are 2026 Mainline Slippi Dolphin recordings (one against a level-3 CPU Fox through the recorded-input lane, exercising a full Flare Blade, aerial and grounded Counter hits, every Double-Edge Dance stage and Blazer), seven are Wii console captures from D20 Melee and Yeti Weekly (Slippi Nintendont, offline VS scene), one is a console capture mirrored over the network (playedOn network, vanilla magnifier rule), and seven are 2023-2026 Dolphin games. Pokemon Stadium entries record zero transformation events. Provenance: agent_docs/validation/roy_provenance.json.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -326,6 +326,18 @@
       "characters": {
         "1": "Roy",
         "2": "Zelda"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_cpu_20260919T171221.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Fox",
+        "2": "Roy"
       }
     }
   ]
