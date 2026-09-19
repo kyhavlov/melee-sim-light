@@ -521,10 +521,14 @@ static int parse_metadata(PyObject* metadata, ReplayView* replay) {
   // replay behavior. Keep those capabilities independent of the online
   // capture's fnmsubs zero-sign behavior: offline mainline Dolphin retains
   // retail zero signs.
+  // "network" is a Wii console mirrored to the launcher over the network
+  // (Slippi Nintendont with a consoleNick), not Dolphin netplay: it runs the
+  // recording codes only, so the vanilla magnifier rule applies exactly as
+  // for "nintendont". Verified by a full console Donkey Kong/Roy game whose offscreen
+  // 1% tick lands only under the vanilla rule (replays/validation/roy).
   // refs/slippi-ssbm-asm/README.md::Output/Netplay
   // refs/slippi-ssbm-asm/Online/Core/BrawlOffscreenDamage.asm
-  if (strcmp(played_on, "dolphin") == 0 || strcmp(played_on, "mainline dolphin") == 0 ||
-      strcmp(played_on, "network") == 0) {
+  if (strcmp(played_on, "dolphin") == 0 || strcmp(played_on, "mainline dolphin") == 0) {
     replay->brawl_offscreen_damage = 1;
     replay->freeze_dead_up_fall_physics = 1;
     replay->whispy_dead_fighter_fix = 1;
