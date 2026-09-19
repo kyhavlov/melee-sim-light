@@ -3849,6 +3849,132 @@
       }
     },
     {
+      "replay": "replays/validation/pichu/d20-38_ice_climbers_001B7ABDD8A0_20260324T121546.slpz",
+      "expected": {
+        "native": {
+          "frames": 17787,
+          "actual_output_fingerprint": "418cca39e91dc4f3"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/d20-38_mewtwo_001B7ABDD8A0_20260324T121206.slpz",
+      "expected": {
+        "native": {
+          "frames": 12245,
+          "actual_output_fingerprint": "835942be12d5e961"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/greg_ice_climbers_20251028T201015.slpz",
+      "expected": {
+        "native": {
+          "frames": 12057,
+          "actual_output_fingerprint": "5273e802d032f446"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/greg_zelda_20240826T200909.slpz",
+      "expected": {
+        "native": {
+          "frames": 6141,
+          "actual_output_fingerprint": "14a6a8bc00dfe87f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/greg_zelda_20240924T223949.slpz",
+      "expected": {
+        "native": {
+          "frames": 8733,
+          "actual_output_fingerprint": "6db6e4fc72b19f23"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/greg_zelda_20250323T145000.slpz",
+      "expected": {
+        "native": {
+          "frames": 145,
+          "actual_output_fingerprint": "fa1f4a90f1d7d635"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/greg_zelda_20250603T232416.slpz",
+      "expected": {
+        "native": {
+          "frames": 11461,
+          "actual_output_fingerprint": "d639e3787bbec5b4"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/greg_zelda_20250928T001223.slpz",
+      "expected": {
+        "native": {
+          "frames": 9420,
+          "actual_output_fingerprint": "1370b46d86fa95df"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/yeti-469_game_and_watch_CC9E001024A5_20260226T095048.slpz",
+      "expected": {
+        "native": {
+          "frames": 8212,
+          "actual_output_fingerprint": "c4c36bdf512e497b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/yeti-469_game_and_watch_CC9E001024A5_20260226T095337.slpz",
+      "expected": {
+        "native": {
+          "frames": 10042,
+          "actual_output_fingerprint": "308d844fe2c55a59"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/yeti-471_falco_CC9E001024A5_20260312T074722.slpz",
+      "expected": {
+        "native": {
+          "frames": 9457,
+          "actual_output_fingerprint": "ac4267654bad959d"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/yeti-472_captain_falcon_CC9E001024A5_20260319T083212.slpz",
+      "expected": {
+        "native": {
+          "frames": 11761,
+          "actual_output_fingerprint": "7efb7fdb9588c12d"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/yeti-472_ganondorf_CC9E001024A5_20260319T081326.slpz",
+      "expected": {
+        "native": {
+          "frames": 9327,
+          "actual_output_fingerprint": "69be96ea9b70767f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/yeti-473_fox_CC9E001024A5_20260326T083655.slpz",
+      "expected": {
+        "native": {
+          "frames": 11899,
+          "actual_output_fingerprint": "57cc8a4c7a369f6a"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/pikachu/38531_Game_20250316T012548.slpz",
       "expected": {
         "native": {

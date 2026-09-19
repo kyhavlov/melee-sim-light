@@ -794,6 +794,66 @@
         },
         "ppc": "native"
       }
+    },
+    {
+      "replay": "replays/validation/pichu/d20-38_ice_climbers_001B7ABDD8A0_20260324T121546.slpz",
+      "id": "missing-raw-cstick-asdi",
+      "owner": "ASDI input before UCF cardinal injection",
+      "rationale": "The 0.0375 Y offset on Pichu begins at hitlag exit 4003 with the C-stick held straight up at the normalized 79/80. This Slippi 3.15 console capture records the pre-injection normalized C-stick only, so raw 79 cannot be told from a radially clamped value of at least 80 that UCF cardinals would snap to 1.0; the console applied the full 3.0 ASDI and the sim 2.9625. Source ASDI and cardinal injection are retained; reconstructing the input from the recorded position is excluded.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag",
+        "src/runtime/match.c::msl_ucf_apply_cardinal",
+        "refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ],
+      "expected": {
+        "native": {
+          "frames": 17787,
+          "matched_frames": 14466,
+          "mismatched_frames": 3321,
+          "exact_prefix_frames": 4125,
+          "strict_suffix_frames": 0,
+          "first_mismatch_frame": 4003,
+          "last_mismatch_frame": 17664,
+          "mismatch_count": 57690,
+          "mismatch_fingerprint": "60f26c5802f6ad04",
+          "render_visibility_mismatch_count": 1245,
+          "first_render_visibility_mismatch_frame": 15140,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "d21157d51500991b0c9fe5f2fe20b1b8a50f49ae2e08c810eca341bc7769dad2"
+        },
+        "ppc": "native"
+      }
+    },
+    {
+      "replay": "replays/validation/pichu/d20-38_mewtwo_001B7ABDD8A0_20260324T121206.slpz",
+      "id": "missing-raw-cstick-asdi",
+      "owner": "ASDI input before UCF cardinal injection",
+      "rationale": "The 0.0375 Y offset on Pichu begins at hitlag exit 3981 with the C-stick held straight up at the normalized 79/80. This Slippi 3.15 console capture records the pre-injection normalized C-stick only, so raw 79 cannot be told from a radially clamped value of at least 80 that UCF cardinals would snap to 1.0; the console applied the full 3.0 ASDI and the sim 2.9625. Source ASDI and cardinal injection are retained; reconstructing the input from the recorded position is excluded.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag",
+        "src/runtime/match.c::msl_ucf_apply_cardinal",
+        "refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ],
+      "expected": {
+        "native": {
+          "frames": 12245,
+          "matched_frames": 12041,
+          "mismatched_frames": 204,
+          "exact_prefix_frames": 4103,
+          "strict_suffix_frames": 7399,
+          "first_mismatch_frame": 3981,
+          "last_mismatch_frame": 4723,
+          "mismatch_count": 204,
+          "mismatch_fingerprint": "5bd6712e68f3a9d1",
+          "render_visibility_mismatch_count": 2,
+          "first_render_visibility_mismatch_frame": -122,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "1975a748da881b7719adc3f415c0f1cb0c0390fa95215c49990dca9c758f8cb8"
+        },
+        "ppc": "native"
+      }
     }
   ]
 }

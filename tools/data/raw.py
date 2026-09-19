@@ -27,6 +27,7 @@ SUPPORTED_CHARACTERS = (
     "popo",
     "nana",
     "pikachu",
+    "pichu",
     "donkey",
     "ganon",
     "yoshi",

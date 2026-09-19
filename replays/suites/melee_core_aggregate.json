@@ -24,6 +24,7 @@
     "gamewatch.json",
     "cpu_inputs.json",
     "legacy_arithmetic.json",
-    "roy.json"
+    "roy.json",
+    "pichu.json"
   ]
 }

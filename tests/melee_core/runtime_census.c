@@ -239,7 +239,7 @@ static void print_class_storage(const MslCoreMatch* match) {
 int main(int argc, char** argv) {
   static const uint8_t characters[] = {
       1, 22, 18, 2, 7, 19, 15, 9, 17, 0, 21, 13, 10, 12, 3, 25, 14, 5,
-      8, 6, 20, 16, 24, 26,
+      8, 6, 20, 16, 24, 26, 23,
   };
   static const uint8_t stages[] = {32, 31, 3, 2, 8, 28};
   static const uint8_t player_counts[] = {2, 3, 4};
