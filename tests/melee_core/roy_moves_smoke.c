@@ -13,6 +13,8 @@
 #include "ftMars/ftMs_SpecialLw.h"
 #include "ftMars/ftMs_SpecialN.h"
 #include "ftMars/ftMs_SpecialS.h"
+#include "ftPeach/forward.h"
+#include "ftPeach/ftPe_SpecialS.h"
 #include <baselib/aobj.h>
 #include <baselib/fobj.h>
 #include <baselib/objalloc.h>
@@ -203,6 +205,137 @@ static int msl_test_dance(void)
     return 0;
 }
 
+// Aerial Counter: the airborne hit state carries the same FTKIND_EMBLEM
+// scaling branch as the grounded one. Fox's up tilt reaches a low-hovering
+// swordsman; Roy reflects 1.5x of it, Marth deals his fixed value.
+static int msl_test_air_counter(unsigned kind, float* fox_damage)
+{
+    MslCoreInput input = { 0 };
+    int hit = 0;
+    MSL_TEST_CHECK(msl_test_setup(2, kind, 1) == 0);
+    msl_test_place(0, 6, 14, -1);
+    msl_test_place(1, 0, 0, 1);
+    MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+    ftMs_SpecialAirLw_Enter(msl_test_match.fighters[0]);
+    for (unsigned i = 0; i < 4; ++i) MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+    MSL_TEST_CHECK(msl_test_fighter(0)->motion_id == ftMs_MS_SpecialAirLw);
+    input.p[1].buttons = PAD_BUTTON_A;
+    input.p[1].main_y = 80;
+    MSL_TEST_CHECK(msl_test_step(&input) == 0);
+    for (unsigned i = 0; i < 60; ++i) {
+        MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+        if (msl_test_fighter(0)->motion_id == ftMs_MS_SpecialAirLwHit) hit = 1;
+    }
+    *fox_damage = msl_test_fighter(1)->dmg.x1830_percent;
+    fprintf(stderr, "air counter kind=%u hit=%d fox=%g self=%g\n", kind, hit, *fox_damage,
+            msl_test_fighter(0)->dmg.x1830_percent);
+    MSL_TEST_CHECK(hit);
+    // Fox's up smash is 18%: Roy reflects 27%, Marth deals his fixed 7%.
+    MSL_TEST_CHECK(*fox_damage == (kind == 26 ? 27 : 7));
+    MSL_TEST_CHECK(msl_test_fighter(0)->dmg.x1830_percent == 0);
+    return 0;
+}
+
+// Double-Edge Dance, all four stages: the stick's vertical position when
+// each follow-up is confirmed selects the high, neutral or low variant
+// (ftMs_SpecialS_80137A9C / 80137E0C / the fourth-hit selector).
+static int msl_test_dance_chain(int stick_y, int s2, int s3, int s4, float expected_damage)
+{
+    MslCoreInput input = { 0 };
+    int seen[4] = { 0 };
+    float fox_damage;
+    MSL_TEST_CHECK(msl_test_setup(2, 26, 1) == 0);
+    msl_test_place(0, 0, 0, 1);
+    msl_test_place(1, 10, 0, -1);
+    MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+    ftMs_SpecialS_Enter(msl_test_match.fighters[0]);
+    input.p[0].main_x = 80;
+    input.p[0].main_y = (int8_t) stick_y;
+    for (unsigned i = 0; i < 140; ++i) {
+        Fighter* fp = msl_test_fighter(0);
+        int m = fp->motion_id;
+        // A press before the follow-up window opens sets cmd_vars[1] and
+        // disqualifies that stage, so press only inside an open window.
+        input.p[0].buttons = (fp->cmd_vars[0] != 0 && fp->cmd_vars[1] == 0) ? PAD_BUTTON_B : 0;
+        MSL_TEST_CHECK(msl_test_step(&input) == 0);
+        if (m == ftMs_MS_SpecialS1) seen[0] = 1;
+        if (m == s2) seen[1] = 1;
+        if (m == s3) seen[2] = 1;
+        if (m == s4) seen[3] = 1;
+    }
+    fox_damage = msl_test_fighter(1)->dmg.x1830_percent;
+    fprintf(stderr, "dance chain stick_y=%d seen=%d%d%d%d fox=%g\n", stick_y, seen[0], seen[1],
+            seen[2], seen[3], fox_damage);
+    MSL_TEST_CHECK(seen[0] && seen[1] && seen[2] && seen[3]);
+    // PlFe.dat authors the per-variant payloads; staleness scaling makes the
+    // totals fractional, so compare to the locked value within float noise.
+    MSL_TEST_CHECK(fox_damage > expected_damage - 0.01f && fox_damage < expected_damage + 0.01f);
+    return 0;
+}
+
+// Aerial Double-Edge Dance lifts Roy once per airtime (fv.ms.x222C); the
+// common landing owner resets that flag for FTKIND_EMBLEM as for Marth.
+static int msl_test_air_dance_landing_reset(void)
+{
+    Fighter* fp;
+    MSL_TEST_CHECK(msl_test_setup(2, 26, 26) == 0);
+    msl_test_place(0, 0, 120, 1);
+    msl_test_place(1, 60, 0, -1);
+    MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+    fp = msl_test_fighter(0);
+    MSL_TEST_CHECK(fp->fv.ms.x222C == 0);
+    ftMs_SpecialAirS_Enter(msl_test_match.fighters[0]);
+    fprintf(stderr, "air dance first: flag=%u vel_y=%g\n", fp->fv.ms.x222C, fp->self_vel.y);
+    MSL_TEST_CHECK(fp->fv.ms.x222C == 1 && fp->self_vel.y > 0);
+    for (unsigned i = 0; i < 40; ++i) MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+    MSL_TEST_CHECK(fp->ground_or_air == GA_Air);
+    ftMs_SpecialAirS_Enter(msl_test_match.fighters[0]);
+    fprintf(stderr, "air dance second (same airtime): flag=%u vel_y=%g\n", fp->fv.ms.x222C,
+            fp->self_vel.y);
+    MSL_TEST_CHECK(fp->fv.ms.x222C == 1 && fp->self_vel.y == 0);
+    for (unsigned i = 0; i < 200; ++i) {
+        MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+        if (fp->ground_or_air == GA_Ground && fp->motion_id == ftCo_MS_Wait) break;
+    }
+    fprintf(stderr, "air dance landed: motion=%d flag=%u\n", fp->motion_id, fp->fv.ms.x222C);
+    MSL_TEST_CHECK(fp->ground_or_air == GA_Ground);
+    MSL_TEST_CHECK(fp->fv.ms.x222C == 0);
+    return 0;
+}
+
+// Peach's aerial side special into a live Counter: Roy reflects 1.5x of the
+// 16% kick while ftPe_SpecialS's doAirEnd0 ends Peach's special with the
+// smash-end variant. doAirEnd0's Marth/Roy case additionally reads
+// x221C_b5, which ftcoll sets only for an inert-element contact with the
+// Counter bubble; Peach's own scripts author no inert hitbox, so that
+// sub-branch is not reachable from this matchup.
+static int msl_test_peach_bomber_vs_counter(void)
+{
+    Fighter* roy;
+    Fighter* peach;
+    int end1 = 0, roy_hit = 0;
+    MSL_TEST_CHECK(msl_test_setup(2, 26, 9) == 0);
+    msl_test_place(0, 0, 0, 1);
+    msl_test_place(1, 22, 12, -1);
+    MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+    roy = msl_test_fighter(0);
+    peach = msl_test_fighter(1);
+    // Peach's start-up is about 30 frames; raise the Counter late enough
+    // that its bubble is live when the flying kick arrives.
+    ftPe_SpecialAirS_Enter(msl_test_match.fighters[1]);
+    for (unsigned i = 0; i < 90; ++i) {
+        if (i == 26) ftMs_SpecialLw_Enter(msl_test_match.fighters[0]);
+        MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+        if (peach->motion_id == ftPe_MS_SpecialAirSEnd_1) end1 = 1;
+        if (roy->motion_id == ftMs_MS_SpecialLwHit) roy_hit = 1;
+    }
+    fprintf(stderr, "peach bomber vs counter: end1=%d roy_hit=%d roy=%g peach=%g\n", end1, roy_hit,
+            roy->dmg.x1830_percent, peach->dmg.x1830_percent);
+    MSL_TEST_CHECK(end1 && roy_hit);
+    MSL_TEST_CHECK(peach->dmg.x1830_percent == 24 && roy->dmg.x1830_percent == 0);
+    return 0;
+}
+
 // Four Roys charging and countering at once keep the sealed pools inside the
 // existing reserves with the article smoke's 20% headroom rule.
 static int msl_test_four_roys(void)
@@ -228,11 +361,20 @@ int main(int argc, char** argv)
 {
     float roy_counter, marth_counter;
     if (argc != 2 || msl_core_game_data_init(&msl_test_game_data, argv[1])) return 1;
+    float roy_air, marth_air;
     int result = msl_test_counter(26, &roy_counter) || msl_test_counter(18, &marth_counter) ||
+                 msl_test_air_counter(26, &roy_air) || msl_test_air_counter(18, &marth_air) ||
                  msl_test_flare_blade(26, 1) || msl_test_flare_blade(26, 0) ||
                  msl_test_flare_blade(18, 1) || msl_test_blazer() || msl_test_dance() ||
+                 msl_test_dance_chain(80, ftMs_MS_SpecialS2Hi, ftMs_MS_SpecialS3Hi,
+                                      ftMs_MS_SpecialS4Hi, 28.64f) ||
+                 msl_test_dance_chain(0, ftMs_MS_SpecialS2Lw, ftMs_MS_SpecialS3S,
+                                      ftMs_MS_SpecialS4S, 18.76f) ||
+                 msl_test_dance_chain(-80, ftMs_MS_SpecialS2Lw, ftMs_MS_SpecialS3Lw,
+                                      ftMs_MS_SpecialS4Lw, 23.59f) ||
+                 msl_test_air_dance_landing_reset() || msl_test_peach_bomber_vs_counter() ||
                  msl_test_four_roys();
-    if (result == 0 && roy_counter == marth_counter) {
+    if (result == 0 && (roy_counter == marth_counter || roy_air == marth_air)) {
         fprintf(stderr, "Roy and Marth counters returned identical damage\n");
         result = -1;
     }
