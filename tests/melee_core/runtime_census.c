@@ -13,6 +13,8 @@
 #include <dolphin/pad.h>
 #include <baselib/class.h>
 #include <baselib/gobjproc.h>
+#include <baselib/jobj.h>
+#include <baselib/mtx.h>
 #include <baselib/objalloc.h>
 
 static const char* const relocation_type_names[] = {
@@ -67,6 +69,34 @@ static void config_init(MslCoreMatchConfig* config, uint8_t stage, uint8_t chara
 static int step(MslCoreMatch* match, const MslCoreInput* input) {
   MslCoreStageEvents events = {0};
   return msl_core_match_step(match, input, match->random_seed, &events);
+}
+
+static int materialize_fighter_scales(MslCoreMatch* match) {
+  size_t used = match->memory.used;
+  size_t allocations = match->memory.allocation_count;
+  uint16_t i;
+  HSD_ObjAllocData* vectors = HSD_ObjAllocResolve(HSD_VecGetAllocData());
+
+  // Exercise the maximum simultaneous demand, independent of which animation
+  // happens to reach each joint. Non-classical scale always owns one Vec;
+  // classical scale can only inherit one or release it. The next case resets
+  // the match, so these test-only flag changes cannot affect gameplay checks.
+  for (i = 0; i < match->fighter_pose.joint_count; ++i) {
+    HSD_JObj* joint = match->fighter_pose.joints[i].joint;
+    joint->flags &= ~JOBJ_CLASSICAL_SCALE;
+    HSD_JObjMakeMatrix(joint);
+    if (joint->scl == NULL) {
+      return -1;
+    }
+  }
+  if (vectors->free < 128 || match->memory.used != used ||
+      match->memory.allocation_count != allocations) {
+    fprintf(stderr, "fighter scale reserve exhausted: stage=%u character=%u players=%u\n",
+            match->config.stage_id, match->config.players[0].char_id,
+            match->config.num_players);
+    return -1;
+  }
+  return 0;
 }
 
 static const char* symbol_name(const void* address, char* fallback, size_t fallback_size) {
@@ -209,7 +239,7 @@ static void print_class_storage(const MslCoreMatch* match) {
 int main(int argc, char** argv) {
   static const uint8_t characters[] = {
       1, 22, 18, 2, 7, 19, 15, 9, 17, 0, 21, 13, 10, 12, 3, 25, 14, 5,
-      8, 6, 20,
+      8, 6, 20, 16, 24,
   };
   static const uint8_t stages[] = {32, 31, 3, 2, 8, 28};
   static const uint8_t player_counts[] = {2, 3, 4};
@@ -273,6 +303,9 @@ int main(int argc, char** argv) {
         }
         if (match->fighter_pose.track_used > max_pose_tracks) {
           max_pose_tracks = match->fighter_pose.track_used;
+        }
+        if (materialize_fighter_scales(match) != 0) {
+          goto done;
         }
       }
     }

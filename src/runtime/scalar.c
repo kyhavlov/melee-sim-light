@@ -1308,11 +1308,13 @@ static int match_construct(MslCoreMatch* match,
     // margin explicitly rather than leaving it to luck.
     // tests/melee_core/pool_chaos_soak.c
     HSD_ObjAllocEnsureFree(HSD_MtxGetAllocData(), 256 + 32 * samus_count);
-    // Transient effect and collision paths can retain Vec nodes across many
-    // frames; the source object is only twelve bytes, so keep the established
-    // full-replay reserve without imposing that count on large pools.
+    // Matrix setup lazily allocates at most one scale Vec per fighter joint.
+    // Reserve the complete constructed pose, including followers and dormant
+    // transformation halves, plus the existing item/effect headroom.
+    // refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjMakeMatrix
     // refs/melee/src/sysdolphin/baselib/mtx.c::{HSD_VecAlloc,HSD_VecFree}
-    HSD_ObjAllocEnsureFree(HSD_VecGetAllocData(), 128);
+    HSD_ObjAllocEnsureFree(HSD_VecGetAllocData(),
+                           match->fighter_pose.joint_count + 128);
     // Retain dev's full source item reserve and the incoming per-tether link
     // reserves. Shy Guys are a separate stage-owned producer; grStory_801E3418
     // admits one wave of at most five while no prior wave remains alive.
