@@ -82,6 +82,7 @@ enum {
     MSL_CORE_CHAR_LUIGI = 17,
     MSL_CORE_CHAR_DRMARIO = 21,
     MSL_CORE_CHAR_MARTH = 18,
+    MSL_CORE_CHAR_ROY = 26,
     MSL_CORE_CHAR_ZELDA = 19,
     MSL_CORE_CHAR_FALCO = 22,
     MSL_CORE_STICK_SCALE = 80,
@@ -295,6 +296,8 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_DRMARIO;
     case MSL_CORE_CHAR_MARTH:
         return CKIND_MARS;
+    case MSL_CORE_CHAR_ROY:
+        return CKIND_EMBLEM;
     case MSL_CORE_CHAR_ZELDA:
         return CKIND_ZELDA;
     case MSL_CORE_CHAR_FALCO:
@@ -638,6 +641,7 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CORE_CHAR_JIGGLYPUFF &&
             config->players[i].char_id != MSL_CORE_CHAR_LUIGI &&
             config->players[i].char_id != MSL_CORE_CHAR_MARTH &&
+            config->players[i].char_id != MSL_CORE_CHAR_ROY &&
             config->players[i].char_id != MSL_CORE_CHAR_ZELDA &&
             config->players[i].char_id != MSL_CORE_CHAR_FALCO) {
             fprintf(stderr,
@@ -649,7 +653,7 @@ static int validate_config(MslCoreMatchConfig* config)
                     "char_id=16 Mewtwo, "
                     "char_id=20 Young Link, char_id=5 Bowser, "
                     "char_id=15 Jigglypuff, char_id=17 Luigi, "
-                    "char_id=18 Marth, "
+                    "char_id=18 Marth, char_id=26 Roy, "
                     "char_id=19 Zelda, char_id=21 Dr. Mario, char_id=22 Falco, "
                     "char_id=24 Game & Watch, "
                     "and char_id=25 Ganondorf only\n");
@@ -750,6 +754,8 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
                                  5 };
     game_data->source.fighter.costume_lists[FTKIND_MARS] =
         (struct UnkCostumeList){ game_data->source.fighter.marth_costumes, 5 };
+    game_data->source.fighter.costume_lists[FTKIND_EMBLEM] =
+        (struct UnkCostumeList){ game_data->source.fighter.roy_costumes, 5 };
     game_data->source.fighter.costume_lists[FTKIND_ZELDA] =
         (struct UnkCostumeList){ game_data->source.fighter.zelda_costumes, 5 };
     game_data->source.fighter.costume_lists[FTKIND_FALCO] =
@@ -1457,6 +1463,7 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
     static const uint8_t characters[] = {
         MSL_CORE_CHAR_FOX,        MSL_CORE_CHAR_FALCO,
         MSL_CORE_CHAR_MARTH,      MSL_CORE_CHAR_CAPTAIN_FALCON,
+        MSL_CORE_CHAR_ROY,
         MSL_CORE_CHAR_SHEIK,      MSL_CORE_CHAR_ZELDA,
         MSL_CORE_CHAR_JIGGLYPUFF, MSL_CORE_CHAR_PEACH,
         MSL_CORE_CHAR_LUIGI,

@@ -354,6 +354,8 @@ UnkCostumeStruct* msl_core_fighter_costumes(FighterKind kind)
         return data->fighter.drmario_costumes;
     case FTKIND_MARS:
         return data->fighter.marth_costumes;
+    case FTKIND_EMBLEM:
+        return data->fighter.roy_costumes;
     case FTKIND_ZELDA:
         return data->fighter.zelda_costumes;
     case FTKIND_FALCO:

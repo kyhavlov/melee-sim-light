@@ -403,6 +403,7 @@ src/melee/ft/chara/ftDrMario/ftDr_AppealS.h
 src/melee/ft/chara/ftDrMario/ftDr_Init.c
 src/melee/ft/chara/ftDrMario/ftDr_Init.h
 src/melee/ft/chara/ftDrMario/types.h
+src/melee/ft/chara/ftEmblem/ftFe_Init.c
 src/melee/ft/chara/ftEmblem/ftFe_Init.h
 src/melee/ft/chara/ftFalco/ftFc_Init.c
 src/melee/ft/chara/ftFalco/ftFc_Init.h

@@ -26,6 +26,7 @@ class Character(IntEnum):
     MARIO = 0
     DRMARIO = 21
     MARTH = 18
+    ROY = 26
     ZELDA = 19
     FALCO = 22
 

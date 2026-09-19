@@ -1,0 +1,301 @@
+{
+  "recordings": [
+    {
+      "source": "~/Slippi/2026-08-Mainline/Game_20260801T155509.slp",
+      "replay": "replays/validation/roy/mainline_fox_20260801T155509.slpz",
+      "sha256_slp": "2e9cd959e4769d7e600340cf769425ba75430c4fb39f2da3ddc150da9a503e7d",
+      "sha256_slpz": "48e1bcb3cc97e50ec96b7b27cd82b9227d8179e640ce8f5fbef1f3df8c42398a",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.1",
+      "frames": 11939
+    },
+    {
+      "source": "~/Slippi/2026-08-Mainline/Game_20260801T155840.slp",
+      "replay": "replays/validation/roy/mainline_fox_20260801T155840.slpz",
+      "sha256_slp": "72addac94ee839f834cefc2fa89da4a658b031b9ba20c1c13cade51f8597f9d3",
+      "sha256_slpz": "bd2d9576d7f57d8a011bd38a1d2d2c1c2bfd799cf363587d4cf153375a7da25a",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.1",
+      "frames": 14449
+    },
+    {
+      "source": "~/Slippi/2026-08-Mainline/Game_20260809T113747.slp",
+      "replay": "replays/validation/roy/mainline_fox_20260809T113747.slpz",
+      "sha256_slp": "bce69156b9d9dcb3b24d28d574f6ce0d07af2a91ae783da547fc95d3fbb6c5ba",
+      "sha256_slpz": "03fd30f271cb59e7995f31f2613c6b9405fd21df630523b5eefb316552806ef7",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.1",
+      "frames": 10788
+    },
+    {
+      "source": "~/Slippi/2026-08-Mainline/Game_20260809T114057.slp",
+      "replay": "replays/validation/roy/mainline_fox_20260809T114057.slpz",
+      "sha256_slp": "d58db5d2bf361f2a13948f6cc7c005d55c4e36be5d5b6677ff8776f6f2205695",
+      "sha256_slpz": "054396b11a23a7d2c3a39c536fca10f5b204d7f90cb6da07d991d173f30d138f",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.1",
+      "frames": 8269
+    },
+    {
+      "source": "~/Slippi/2026-08-Mainline/Game_20260828T160938.slp",
+      "replay": "replays/validation/roy/mainline_fox_20260828T160938.slpz",
+      "sha256_slp": "c237716ef4441223740b77f746fc5dcd496dd44d1a57b4eb7b24685665e275e2",
+      "sha256_slpz": "5c8bfa613a5296532717c6bfae0108eb40ebd1551540c67f97bc4360bc05e260",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.1",
+      "frames": 9944
+    },
+    {
+      "source": "~/Slippi/2026-08-Mainline/Game_20260828T161240.slp",
+      "replay": "replays/validation/roy/mainline_fox_20260828T161240.slpz",
+      "sha256_slp": "39c8c808a022afd75ae1bb96d6b5bece8993664e1adb311f9322483fae30c2c4",
+      "sha256_slpz": "4152c3154188e70053a0cb3d8d7ef70a5c8e9873f2109b7f2d2a4895c150886d",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.1",
+      "frames": 6826
+    },
+    {
+      "source": "~/Slippi/2026-09-Mainline/Game_20260916T113946.slp",
+      "replay": "replays/validation/roy/mainline_ice_climbers_20260916T113946.slpz",
+      "sha256_slp": "d677bf2a94db203eb1008fa1e65ed9bc501b0f958516d935c08d67edb1f4a0fc",
+      "sha256_slpz": "e938689fef3c2dd2a6266f58387266d9b37d093cb5d1f3195ccbf4cd920b05c4",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.1",
+      "frames": 9317
+    },
+    {
+      "source": "~/Slippi/2026-09-Mainline/Game_20260916T132440.slp",
+      "replay": "replays/validation/roy/mainline_fox_20260916T132440.slpz",
+      "sha256_slp": "5ccfda135aff475ede38701e8a9df8a8e5b8970c98295885afabd799e755f26a",
+      "sha256_slpz": "dce362ba22fa5accaca82d867d335ae63bc16f216e720e158d1240a9cc4ad3ca",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.1",
+      "frames": 11051
+    },
+    {
+      "source": "~/Slippi/2026-09-Mainline/Game_20260916T132759.slp",
+      "replay": "replays/validation/roy/mainline_fox_20260916T132759.slpz",
+      "sha256_slp": "035f534856795e4d525c9465c8e68c214d7b06ab2e060ec991803452ab2167fe",
+      "sha256_slpz": "6991f86a26683bc92f8b7230139464412c36b648a4440870a94dcb0f8c2cdf30",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.1",
+      "frames": 9067
+    },
+    {
+      "source": "~/Slippi/2026-09-Mainline/Game_20260916T182706.slp",
+      "replay": "replays/validation/roy/mainline_fox_20260916T182706.slpz",
+      "sha256_slp": "b1f8c2a31f776c557de9fcc416d8c2c7b6d90535e7a7d3cbd55490d8d5d51f55",
+      "sha256_slpz": "350816cd7ba884faad291dcdb509238bdce008340b1e2714c9f6428db028e192",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.1",
+      "frames": 10029
+    },
+    {
+      "source": "~/Slippi/2026-09-Mainline/Game_20260916T183009.slp",
+      "replay": "replays/validation/roy/mainline_fox_20260916T183009.slpz",
+      "sha256_slp": "7b1ccdfeeefe404d1b4aafa5c4c672539cd1e6805a86cd6f27a7aa8799da2826",
+      "sha256_slpz": "51dfa3a3ef8dd2c4e0e95ac7ae663afd3ca9f9bbc587600f306e259e33efff71",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.1",
+      "frames": 11424
+    },
+    {
+      "source": "~/Slippi/2026-09-Mainline/Game_20260916T183336.slp",
+      "replay": "replays/validation/roy/mainline_fox_20260916T183336.slpz",
+      "sha256_slp": "2c2b9bbd3f1035baf7dccf44ce65955cc5215ca2db6bfbf3b65b26a76f725235",
+      "sha256_slpz": "afb0ff193d408d55645721dc4911ef6503c0ec0be9a56496821deb92efc1de9d",
+      "played_on": "mainline dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.1",
+      "frames": 7123
+    },
+    {
+      "source": "~/git/exphil/replays/d20/extracted/D20 Melee #36/Yashichi/Game_CC9E0000F940_20260224T234600.slp",
+      "replay": "replays/validation/roy/d20-36_roy_CC9E0000F940_20260224T234600.slpz",
+      "sha256_slp": "69cd4206ebb167afd5b7972eb06873788e0a180e5c01bbcafcaed3421f3de4c1",
+      "sha256_slpz": "39b26e8a271927bf144e826149f816a59648ef9adb949e7134d258261018998d",
+      "played_on": "nintendont",
+      "console_nick": "Station 14",
+      "scene_major": 2,
+      "slippi_version": "3.17.0",
+      "frames": 11072
+    },
+    {
+      "source": "~/git/exphil/replays/d20/extracted/D20 Melee #36/Yashichi/Game_CC9E0000F940_20260224T234936.slp",
+      "replay": "replays/validation/roy/d20-36_roy_CC9E0000F940_20260224T234936.slpz",
+      "sha256_slp": "b2d79fbc98df37d7bf3248321ec5302f16758d720ef27ecdfe11d93efac68dfa",
+      "sha256_slpz": "b9fda0947319488a90557ec6d461e1563c7986212670b243a9766598e8a909f7",
+      "played_on": "nintendont",
+      "console_nick": "Station 14",
+      "scene_major": 2,
+      "slippi_version": "3.17.0",
+      "frames": 13744
+    },
+    {
+      "source": "~/git/exphil/replays/d20/extracted/D20 Melee #36/Yashichi/Game_CC9E0000F940_20260224T235350.slp",
+      "replay": "replays/validation/roy/d20-36_luigi_CC9E0000F940_20260224T235350.slpz",
+      "sha256_slp": "9fc5574749a6c54ef6679a43fd57d7f2009137b70d461d238fca229396709969",
+      "sha256_slpz": "3ef1bd899ee98a6a23668bcdc6479de81e17994dede59bfe3f02421e6ccd2eb1",
+      "played_on": "nintendont",
+      "console_nick": "Station 14",
+      "scene_major": 2,
+      "slippi_version": "3.17.0",
+      "frames": 16705
+    },
+    {
+      "source": "~/git/exphil/replays/d20/extracted/D20 Melee #36/Yashichi/Game_CC9E0000F940_20260224T235844.slp",
+      "replay": "replays/validation/roy/d20-36_luigi_CC9E0000F940_20260224T235844.slpz",
+      "sha256_slp": "d9a7c81ca9f02cbf88e82480b91dc42b689c9a6ca15995e00bad4a647ae780c7",
+      "sha256_slpz": "5f2e8588d4f9fcc3dad4bc8eaa3fd30bbadda2ad0833f0dd3f6bcdc889a0fc5a",
+      "played_on": "nintendont",
+      "console_nick": "Station 14",
+      "scene_major": 2,
+      "slippi_version": "3.17.0",
+      "frames": 8653
+    },
+    {
+      "source": "~/git/exphil/replays_root/yeti/raw/Yeti Weekly #472/Schlag/Game_CC9E001024A5_20260319T075905.slp",
+      "replay": "replays/validation/roy/yeti-472_sheik_CC9E001024A5_20260319T075905.slpz",
+      "sha256_slp": "0aeaef5bde7997b1b0df91fe64c8c12ba2b4bc66fee0598836d6ed711e9b8362",
+      "sha256_slpz": "d3a42c66d1c8593788353102245d0c46888e225261df01dc3a5d1ddc894062bb",
+      "played_on": "nintendont",
+      "console_nick": "wii",
+      "scene_major": 2,
+      "slippi_version": "3.17.0",
+      "frames": 10764
+    },
+    {
+      "source": "~/git/exphil/replays_root/yeti/raw/Yeti Weekly #472/Schlag/Game_CC9E001024A5_20260319T073154.slp",
+      "replay": "replays/validation/roy/yeti-472_falco_CC9E001024A5_20260319T073154.slpz",
+      "sha256_slp": "7cfcc072feeb2dd3cf7073a954ca32b05d474124fbf1239ae8f242124f7d349c",
+      "sha256_slpz": "1bb0c0ee2c48cd6a14d597989c963d8ab6cf40d527df0a477f5f9e29abd4e870",
+      "played_on": "nintendont",
+      "console_nick": "wii",
+      "scene_major": 2,
+      "slippi_version": "3.17.0",
+      "frames": 9630
+    },
+    {
+      "source": "~/git/exphil/replays_root/yeti/raw/Yeti Weekly #473/Schlag/Game_CC9E001024A5_20260326T081109.slp",
+      "replay": "replays/validation/roy/yeti-473_luigi_CC9E001024A5_20260326T081109.slpz",
+      "sha256_slp": "1e3ebb1fef8d79ffef3e6caaa2899b81e2df9c066e60ce15dda2030f8e183455",
+      "sha256_slpz": "64c3f6821341c25f75cbbecdd612d02b2deb6b28719439861f528b38f7e2f2c0",
+      "played_on": "nintendont",
+      "console_nick": "wii",
+      "scene_major": 2,
+      "slippi_version": "3.17.0",
+      "frames": 12079
+    },
+    {
+      "source": "~/git/exphil/replays/d20/extracted/D20 Melee #33/D20_33_Stream/D20_33_Stream/Game_20260113T183707.slp",
+      "replay": "replays/validation/roy/d20-33-network_donkey_kong_20260113T183707.slpz",
+      "sha256_slp": "5da51d523698a1cdadcfa3d897759a165ec7e984e4038bedd61ad9f8b8f9a4b4",
+      "sha256_slpz": "fb049befd0eef81dee37547244f8a9e3fee3b003e71435f418cab6eec6c6930e",
+      "played_on": "network",
+      "console_nick": "YASHICHI_8",
+      "scene_major": 2,
+      "slippi_version": "3.17.0",
+      "frames": 6411
+    },
+    {
+      "source": "~/git/exphil/replays/greg/link/Game_20230708T234539.slp",
+      "replay": "replays/validation/roy/greg_link_20230708T234539.slpz",
+      "sha256_slp": "e71a3a460fd2ee57428fc00c9faa6249a237505b97d1d274826221661c99e1a5",
+      "sha256_slpz": "561bdf4d7242f051fcf0c5af185b4096e7adedd5aba7a0c30c25ce1a72bce1aa",
+      "played_on": "dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.15.0",
+      "frames": 14323
+    },
+    {
+      "source": "~/git/exphil/replays/greg/ice_climbers/Game_20250512T211155.slp",
+      "replay": "replays/validation/roy/greg_ice_climbers_20250512T211155.slpz",
+      "sha256_slp": "fcb553d39e9c902ee99e8ab2121891f18f4ff6dbf935e873028a24b82940f9d5",
+      "sha256_slpz": "76237c48e02bcce3464776ea3d4763625a12df2ab0b7c2b7c94805352375d584",
+      "played_on": "dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.18.0",
+      "frames": 13605
+    },
+    {
+      "source": "~/git/exphil/replays/greg/zelda/Game_20250331T223833.slp",
+      "replay": "replays/validation/roy/greg_zelda_20250331T223833.slpz",
+      "sha256_slp": "6a2333022b365f51c10c0020803ca227f2e0ee8fefe17990fb8f48a7b22dfe72",
+      "sha256_slpz": "811b1279b0ec24b5e448cb570c0f4be2ce539857690018d8274399277700fa45",
+      "played_on": "dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.18.0",
+      "frames": 9336
+    },
+    {
+      "source": "~/git/exphil/replays/greg/zelda/Game_20250106T144302.slp",
+      "replay": "replays/validation/roy/greg_zelda_20250106T144302.slpz",
+      "sha256_slp": "68e781e7198e162cfff66f1be0b30d27b43c5c65591414816341d86a501b341c",
+      "sha256_slpz": "2ab8cd76ea7f3df3b5a0ff8d025064b264f2e08ed65d460de6d71384f34f5351",
+      "played_on": "dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.17.0",
+      "frames": 8922
+    },
+    {
+      "source": "~/git/exphil/replays/greg/zelda/Game_20250927T183931.slp",
+      "replay": "replays/validation/roy/greg_zelda_20250927T183931.slpz",
+      "sha256_slp": "be3a562b8aa929e4f1a009f8ee4ad7e2c6b3c5bf5c39bf9377e07601393c8e8f",
+      "sha256_slpz": "2aa92aa677468c29ae59b4c7881dc6fe6ff902e23b7e8baabffafe40552b848a",
+      "played_on": "dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.0",
+      "frames": 11679
+    },
+    {
+      "source": "~/git/exphil/replays/greg/zelda/Game_20260109T190519.slp",
+      "replay": "replays/validation/roy/greg_zelda_20260109T190519.slpz",
+      "sha256_slp": "01cf92d70157e911ae465f764d333f7dc4a9047c73914e1e5584a58fd807cf4e",
+      "sha256_slpz": "dcf4976207c5527e1ed1e7161399bccdab300a81243d2f2314665a1788b22ff3",
+      "played_on": "dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.0",
+      "frames": 13699
+    },
+    {
+      "source": "~/git/exphil/replays/greg/zelda/Game_20250927T181825.slp",
+      "replay": "replays/validation/roy/greg_zelda_20250927T181825.slpz",
+      "sha256_slp": "9b4b356c743005907b0d311b8ad5e22d0e8517842e7e2303bb868ad82529b0ea",
+      "sha256_slpz": "9a4c3bf7b35687152bc1aa7e2e063cd7e1fb9dc36f2090837d64efe0e5fb2b6a",
+      "played_on": "dolphin",
+      "console_nick": null,
+      "scene_major": 8,
+      "slippi_version": "3.19.0",
+      "frames": 6691
+    }
+  ]
+}

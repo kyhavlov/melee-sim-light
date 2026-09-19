@@ -1043,6 +1043,7 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataMario") == 0 ||
         strcmp(symbol, "ftDataDrmario") == 0 ||
         strcmp(symbol, "ftDataMars") == 0 ||
+        strcmp(symbol, "ftDataEmblem") == 0 ||
         strcmp(symbol, "ftDataPeach") == 0 ||
         strcmp(symbol, "ftDataZelda") == 0 ||
         strcmp(symbol, "ftDataFalco") == 0)
@@ -1902,6 +1903,12 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
                                           msl_dat_root_ftMario_DatAttrs, 303,
                                           MSL_FIGHTER_ARTICLES_MARIOD);
     } else if (strcmp(symbol, "ftDataMars") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_MarsAttributes, 327,
+                                          MSL_FIGHTER_ARTICLES_NONE);
+    } else if (strcmp(symbol, "ftDataEmblem") == 0) {
+        // ftFe_Init_OnLoad -> ftMs_Init_OnLoadForRoy: Roy shares Marth's
+        // attribute layout and has no articles.
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_MarsAttributes, 327,
                                           MSL_FIGHTER_ARTICLES_NONE);

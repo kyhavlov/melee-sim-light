@@ -1,0 +1,332 @@
+{
+  "name": "roy",
+  "notes": "Roy validation suite: 27 two-player games across all six legal stages against Fox, Donkey Kong, Ice Climbers, Luigi, Sheik, Falco, Link, Zelda and a Roy mirror. Twelve are 2026 Mainline Slippi Dolphin recordings, seven are Wii console captures from D20 Melee and Yeti Weekly (Slippi Nintendont, offline VS scene), one is a console capture mirrored over the network (playedOn network, vanilla magnifier rule), and seven are 2023-2026 Dolphin games. Pokemon Stadium entries record zero transformation events. Provenance: agent_docs/validation/roy_provenance.json.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260801T155509.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Roy",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260801T155840.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Roy",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260809T113747.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Roy",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260809T114057.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Roy",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260828T160938.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Roy",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260828T161240.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Roy",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_ice_climbers_20260916T113946.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Roy",
+        "2": "Ice Climbers"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260916T132440.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Roy",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260916T132759.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Roy",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260916T182706.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Roy",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260916T183009.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Roy",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260916T183336.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Roy",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/d20-36_roy_CC9E0000F940_20260224T234600.slpz",
+      "ports": [
+        1,
+        4
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Roy",
+        "4": "Roy"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/d20-36_roy_CC9E0000F940_20260224T234936.slpz",
+      "ports": [
+        1,
+        4
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Roy",
+        "4": "Roy"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/d20-36_luigi_CC9E0000F940_20260224T235350.slpz",
+      "ports": [
+        1,
+        4
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Roy",
+        "4": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/d20-36_luigi_CC9E0000F940_20260224T235844.slpz",
+      "ports": [
+        1,
+        4
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Roy",
+        "4": "Luigi"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/yeti-472_sheik_CC9E001024A5_20260319T075905.slpz",
+      "ports": [
+        2,
+        4
+      ],
+      "stage_id": 2,
+      "characters": {
+        "2": "Roy",
+        "4": "Sheik"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/yeti-472_falco_CC9E001024A5_20260319T073154.slpz",
+      "ports": [
+        2,
+        3
+      ],
+      "stage_id": 3,
+      "characters": {
+        "2": "Roy",
+        "3": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/yeti-473_luigi_CC9E001024A5_20260326T081109.slpz",
+      "ports": [
+        2,
+        3
+      ],
+      "stage_id": 8,
+      "characters": {
+        "2": "Luigi",
+        "3": "Roy"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/d20-33-network_donkey_kong_20260113T183707.slpz",
+      "ports": [
+        2,
+        3
+      ],
+      "stage_id": 3,
+      "characters": {
+        "2": "Donkey Kong",
+        "3": "Roy"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_link_20230708T234539.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Roy",
+        "2": "Link"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_ice_climbers_20250512T211155.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Ice Climbers",
+        "2": "Roy"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_zelda_20250331T223833.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Roy",
+        "2": "Zelda"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_zelda_20250106T144302.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Zelda",
+        "2": "Roy"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_zelda_20250927T183931.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Roy",
+        "2": "Zelda"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_zelda_20260109T190519.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Roy",
+        "2": "Zelda"
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_zelda_20250927T181825.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Roy",
+        "2": "Zelda"
+      }
+    }
+  ]
+}

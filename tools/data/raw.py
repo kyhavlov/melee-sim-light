@@ -14,6 +14,7 @@ SUPPORTED_CHARACTERS = (
     "fox",
     "falco",
     "marth",
+    "roy",
     "falcon",
     "sheik",
     "zelda",

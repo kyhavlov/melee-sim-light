@@ -46,6 +46,7 @@ CHARACTERS = {
     'purin': (15, 'Pr', 'ftDataPurin'),
     'luigi': (17, 'Lg', 'ftDataLuigi'),
     'mars': (18, 'Ms', 'ftDataMars'),
+    'emblem': (26, 'Fe', 'ftDataEmblem'),
     'zelda': (19, 'Zd', 'ftDataZelda'),
     'drmario': (21, 'Dr', 'ftDataDrmario'),
     'falco': (22, 'Fc', 'ftDataFalco'),
@@ -59,6 +60,7 @@ SUBACTION_COUNTS = {
     21: 303,
     22: 327,
     24: 323,
+    26: 327,
     25: 318,
     5: 316,
 }
