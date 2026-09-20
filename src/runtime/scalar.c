@@ -949,37 +949,31 @@ static int match_construct(MslCoreMatch* match,
     match->stage_data = spec->source;
     bind_stage_match(match);
 #ifndef MSL_CORE_NATIVE
-    // Retail's match load (ftLib_80087508) brings in each present kind's
-    // fighter archive and costume model before Fighter_Create. Those loaders
-    // cache their results in GameData-owned tables (gFtDataList,
-    // CostumeListsForeachCharacter) and skip the load when the entry is set,
-    // but reached lazily from Fighter_Create they allocate from the Match
-    // arena. msl_core_match_reset recycles that arena, so the second
-    // construction dereferenced stale cached pointers (the PPC scalar-api
-    // smoke walked a Fox costume's DObj chain into recycled pool memory and
-    // segfaulted). The oracle never seals its GameData arena, so run these
-    // two loads there once; Fighter_Create then finds the entries cached.
-    // The animation bank (ftData_80085A14) stays with Fighter_Create: it is
-    // bound per Match. Native preloads the same data at GameData init.
+    // Retail's match load (ftLib_80087508 -> ftData_80085820) brings in each
+    // present kind's costume model before Fighter_Create. The loader caches
+    // the model in the GameData-owned costume table and skips the load when
+    // the entry is set, but reached lazily from Fighter_Create it allocates
+    // from the Match arena. msl_core_match_reset recycles that arena, so the
+    // second construction dereferenced the stale cached model (the PPC
+    // scalar-api smoke walked a Fox costume's DObj chain into recycled pool
+    // memory and segfaulted). The oracle never seals its GameData arena, so
+    // load the costume models there once; Fighter_Create then finds them
+    // cached. The fighter archive list and animation bank are per Match and
+    // reload after every reset. Native translates the costumes at GameData
+    // init.
     // refs/melee/src/melee/ft/ftlib.c::ftLib_80087508
-    // refs/melee/src/melee/ft/ftdata.c::{ftData_8008572C,ftData_80085820}
+    // refs/melee/src/melee/ft/ftdata.c::ftData_80085820
     msl_core_bind_game_data((MslCoreGameData*) game_data);
     for (i = 0; i < match->config.num_players; ++i) {
         FighterKind kind = (FighterKind) match->config.players[i].char_id;
         int costume_id = match->config.players[i].costume_id;
-        int extra = -1;
-        if (kind == FTKIND_POPO) {
-            extra = FTKIND_NANA;
-        } else if (kind == FTKIND_ZELDA) {
-            extra = FTKIND_SEAK;
-        } else if (kind == FTKIND_SEAK) {
-            extra = FTKIND_ZELDA;
-        }
-        ftData_8008572C(kind);
         ftData_80085820(kind, costume_id);
-        if (extra >= 0) {
-            ftData_8008572C((FighterKind) extra);
-            ftData_80085820((FighterKind) extra, costume_id);
+        if (kind == FTKIND_POPO) {
+            ftData_80085820(FTKIND_NANA, costume_id);
+        } else if (kind == FTKIND_ZELDA) {
+            ftData_80085820(FTKIND_SEAK, costume_id);
+        } else if (kind == FTKIND_SEAK) {
+            ftData_80085820(FTKIND_ZELDA, costume_id);
         }
     }
     msl_core_bind_match(match);
