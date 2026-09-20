@@ -25,12 +25,15 @@ const ITEM_NESS_PKTHUNDER_TRAIL_FIRST = 70;
 const ITEM_NESS_PKTHUNDER_TRAIL_LAST = 73;
 const ITEM_NESS_PKFLASH_EXPLODE = 78;
 const ITEM_PIKACHU_THUNDER = 81;
+const ITEM_PICHU_THUNDER = 82;
 const ITEM_MARIO_CAPE = 83;
 const ITEM_DRMARIO_SHEET = 84;
 const ITEM_SHEIK_VANISH = 85;
 const ITEM_YOSHI_EGG_LAY = 87;
 const ITEM_PIKACHU_TJOLT_GROUND = 89;
 const ITEM_PIKACHU_TJOLT_AIR = 90;
+const ITEM_PICHU_TJOLT_GROUND = 91;
+const ITEM_PICHU_TJOLT_AIR = 92;
 const ITEM_SAMUS_GRAPPLE = 96;
 const ITEM_BOWSER_FLAME = 100;
 const ITEM_PEACH_PARASOL = 103;
@@ -159,13 +162,20 @@ export function Item(props: { item: ItemUpdate }) {
       >
         <NessPkThunder item={props.item} />
       </Match>
-      <Match when={props.item.typeId === ITEM_PIKACHU_THUNDER}>
+      <Match
+        when={
+          props.item.typeId === ITEM_PIKACHU_THUNDER ||
+          props.item.typeId === ITEM_PICHU_THUNDER
+        }
+      >
         <PikachuThunder item={props.item} />
       </Match>
       <Match
         when={
           props.item.typeId === ITEM_PIKACHU_TJOLT_GROUND ||
-          props.item.typeId === ITEM_PIKACHU_TJOLT_AIR
+          props.item.typeId === ITEM_PIKACHU_TJOLT_AIR ||
+          props.item.typeId === ITEM_PICHU_TJOLT_GROUND ||
+          props.item.typeId === ITEM_PICHU_TJOLT_AIR
         }
       >
         <PikachuThunderJolt item={props.item} />
@@ -1065,34 +1075,45 @@ function NessPkThunder(props: { item: ItemUpdate }) {
 // hitboxes and show through the hitbox overlay.
 
 function PikachuThunder(props: { item: ItemUpdate }) {
-  // The bolt spawns 150 units above Pikachu and descends; draw a jagged
-  // column above the item position.
+  // The bolt spawns 150 units above the mouse and descends; draw a jagged
+  // column above the item position. Pichu's bolt (item kind 82) shares the
+  // logic and gets a slimmer column.
+  const pichu = createMemo(() => props.item.typeId === ITEM_PICHU_THUNDER);
   const x = createMemo(() => props.item.xPosition);
   const y = createMemo(() => props.item.yPosition);
   const points = createMemo(() => {
     const out: string[] = [];
+    const amplitude = pichu() ? 1.8 : 2.5;
     for (let i = 0; i <= 8; i += 1) {
-      const wobble = i % 2 === 0 ? -2.5 : 2.5;
+      const wobble = i % 2 === 0 ? -amplitude : amplitude;
       out.push(`${x() + (i === 8 ? 0 : wobble)},${y() + i * 5}`);
     }
     return out.join(" ");
   });
   return (
     <>
-      <polyline points={points()} fill="none" stroke="#facc15" stroke-width={1.6} stroke-linejoin="round" />
-      <polyline points={points()} fill="none" stroke="#fef9c3" stroke-width={0.6} stroke-linejoin="round" />
+      <polyline points={points()} fill="none" stroke="#facc15" stroke-width={pichu() ? 1.2 : 1.6} stroke-linejoin="round" />
+      <polyline points={points()} fill="none" stroke="#fef9c3" stroke-width={pichu() ? 0.45 : 0.6} stroke-linejoin="round" />
     </>
   );
 }
 
 function PikachuThunderJolt(props: { item: ItemUpdate }) {
+  // Pichu's jolts (item kinds 91/92) share Pikachu's logic; draw them a
+  // touch smaller.
+  const s = createMemo(() =>
+    props.item.typeId === ITEM_PICHU_TJOLT_GROUND ||
+    props.item.typeId === ITEM_PICHU_TJOLT_AIR
+      ? 0.8
+      : 1
+  );
   const spin = createMemo(() => (props.item.frameNumber * 45) % 360);
   const x = createMemo(() => props.item.xPosition);
   const y = createMemo(() => props.item.yPosition);
   return (
     <g transform={`rotate(${spin()} ${x()} ${y()})`}>
       <polygon
-        points={`${x() - 2.2},${y()} ${x() - 0.4},${y() + 0.8} ${x()},${y() + 2.2} ${x() + 0.4},${y() + 0.8} ${x() + 2.2},${y()} ${x() + 0.4},${y() - 0.8} ${x()},${y() - 2.2} ${x() - 0.4},${y() - 0.8}`}
+        points={`${x() - 2.2 * s()},${y()} ${x() - 0.4 * s()},${y() + 0.8 * s()} ${x()},${y() + 2.2 * s()} ${x() + 0.4 * s()},${y() + 0.8 * s()} ${x() + 2.2 * s()},${y()} ${x() + 0.4 * s()},${y() - 0.8 * s()} ${x()},${y() - 2.2 * s()} ${x() - 0.4 * s()},${y() - 0.8 * s()}`}
         fill="#facc15"
         stroke="#a16207"
         stroke-width={0.3}
