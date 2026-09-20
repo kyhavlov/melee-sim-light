@@ -91,13 +91,16 @@ The unrelated `experiment/million-fps-proof` changes remain in stash
   stay cold, outside the shared pose array; `msl_fighter_pose_erase_joint`
   unregisters an accessory before `HSD_JObjRemove`; the two copy-star item
   kinds 52/53 carry logic rows and the hat-drop star's itUnkAttributes; the
-  Kirby efAlt effect ids draw their generator gates. The first CI run of the
-  suite drifted on the render-visibility lane only: ftCo_CaptureKirby scaled
-  the victim's root joint through the decomp's `mv.co.guard.x2C` alias, which
-  shares fp+0x236C with `capturekirby.scale.x` in retail but lands on a
-  pointer in the hosted 64-bit union, so the x scale was address-dependent
-  and the camera subject went off-screen on machines where the bits were
-  large; it now reads the capturekirby field. Excluded with reasons in
+  Kirby efAlt effect ids draw their generator gates. The first CI runs of the
+  suite drifted on the render-visibility lane only, from two hosted-build
+  defects in ftCo_CaptureKirby's victim shrink: it scaled the root joint
+  through the decomp's `mv.co.guard.x2C` alias, which shares fp+0x236C with
+  `capturekirby.scale.x` in retail but lands on a pointer in the hosted
+  64-bit union, and it called `sqrtf__Ff` without a declaration, so the
+  distance came back from the integer register and differed by compiler.
+  Both reads are fixed, the seven other implicit declarations in the native
+  tree gained their headers, and `-Werror=implicit-function-declaration`
+  now guards every hosted build. Excluded with reasons in
   `agent_docs/validation/kirby_provenance.json`: a live-transformation
   Stadium recording, a pre-cardinal-patch Dolphin walk (raw (95,-1) not
   snapped by the console), a Final Cutter init_pos.y low-byte lane on FD, the

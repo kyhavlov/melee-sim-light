@@ -303,8 +303,12 @@ CFLAGS := \
 	-fdata-sections -w
 # GCC 14+ and Clang promote these legacy-C constructs to errors even when
 # diagnostics are otherwise suppressed. Wasm clang requires the same set.
+# Implicit function declarations stay hard errors on every compiler: an
+# implicitly declared float-returning function (sqrtf__Ff in
+# ftCo_CaptureKirby) is read back from the integer register and produced
+# compiler-dependent garbage.
 HOSTED_LEGACY_CFLAGS := \
-	-Wno-implicit-function-declaration -Wno-int-conversion \
+	-Werror=implicit-function-declaration -Wno-int-conversion \
 	-Wno-incompatible-pointer-types
 NATIVE_CFLAGS = $(CFLAGS) $(HOST_ARCH_FLAGS) -fno-pie \
 	$(HOSTED_LEGACY_CFLAGS)

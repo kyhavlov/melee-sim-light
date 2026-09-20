@@ -14,6 +14,7 @@
 #include "ftCommon/types.h"
 
 #include <math.h>
+#include <MetroTRK/intrinsics.h>
 
 float ftCo_800BD19C(Fighter_GObj* gobj, Vec3* pos)
 {

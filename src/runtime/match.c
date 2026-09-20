@@ -16,6 +16,7 @@
 #include <string.h>
 #include <dolphin/mtx.h>
 #include <MetroTRK/intrinsics.h>
+#include <melee/ft/chara/ftCommon/ftCo_0A01.h>
 
 // Source callbacks do not carry a match argument. Bind them to the scalar
 // match selected by the private runtime API while keeping their mutable rule
@@ -598,7 +599,7 @@ int gm_8016C75C(HSD_GObj* arg0)
 // The hosted bootstrap constructs the ordinary versus scene, so the scene
 // router always reports the standard VS major mode.
 // refs/melee/src/melee/gm/gm_1A3F.c::gm_801A4310
-u8 gm_801A4310(void) { return GM_VS; }
+u8 gm_GetCurrentGameMode(void) { return GM_VS; }
 
 // refs/melee/src/melee/gm/gm_16AE.c::gm_8016B14C reports the singles rule.
 bool gm_8016B14C(void) { return !msl_is_teams; }
