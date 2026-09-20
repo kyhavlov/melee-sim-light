@@ -130,7 +130,8 @@ int main(int argc, char** argv)
         goto done;
     }
     memcpy(bad_configs, configs, sizeof(configs));
-    bad_configs[0].players[0].char_id = 23;
+    // 33 is outside every fighter kind, so it stays invalid as the roster grows.
+    bad_configs[0].players[0].char_id = 33;
     if (msl_core_batch_reset_matches(batch, bad_configs,
                                      sizeof(bad_configs[0]), mask0,
                                      sizeof(mask0[0])) !=
