@@ -13,7 +13,11 @@ import { access } from "~/state/accessor";
 // Note: Most items coordinates and sizes are divided by 256 to convert them
 // from hitboxspace to worldspace.
 export function Item(props: { item: ItemUpdate }) {
-  const itemName = createMemo(() => itemNamesById[props.item.typeId]);
+  // Kirby's copied projectiles are their own item kinds ("Kirby copy Fox's
+  // Laser (B)") but draw like the originals.
+  const itemName = createMemo(() =>
+    itemNamesById[props.item.typeId]?.replace(/^Kirby copy /, "").replace(/ \(B\)$/, "")
+  );
   return (
     <Switch>
       <Match when={itemName() === "Needle(thrown)"}>
@@ -48,6 +52,13 @@ export function Item(props: { item: ItemUpdate }) {
       </Match>
       <Match when={itemName() === "Samus's chargeshot"}>
         <SamusChargeshot item={props.item} />
+      </Match>
+      <Match
+        when={
+          itemName() === "Kirby's Copy Star" || itemName() === "Kirby's Spit Star"
+        }
+      >
+        <KirbyStar item={props.item} />
       </Match>
       <Match when={itemName() === "Shyguy (Heiho)"}>
         <FlyGuy item={props.item} />
@@ -348,6 +359,31 @@ function FalcoLaser(props: { item: ItemUpdate }) {
       </For>
     </>
   );
+}
+
+// The hat-drop star (0x34) and the spit star (0x35): a spinning five-point
+// star at the item position, sized by the item's role.
+function KirbyStar(props: { item: ItemUpdate }) {
+  const radius = createMemo(() =>
+    itemNamesById[props.item.typeId] === "Kirby's Spit Star" ? 4 : 2.5
+  );
+  const points = createMemo(() => {
+    const spin = (props.item.frameNumber * 12) % 360;
+    const outer = radius();
+    const inner = outer * 0.45;
+    const pts: string[] = [];
+    for (let i = 0; i < 10; i += 1) {
+      const r = i % 2 === 0 ? outer : inner;
+      const angle = ((spin + i * 36) * Math.PI) / 180;
+      pts.push(
+        `${props.item.xPosition + r * Math.cos(angle)},${
+          props.item.yPosition + r * Math.sin(angle)
+        }`
+      );
+    }
+    return pts.join(" ");
+  });
+  return <polygon points={points()} fill="gold" stroke="black" stroke-width={0.3} />;
 }
 
 function FlyGuy(props: { item: ItemUpdate }) {

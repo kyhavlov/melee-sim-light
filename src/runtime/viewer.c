@@ -180,6 +180,8 @@ static void write_player(const MslCoreCompare* compare, int index,
            (const uint8_t*) compare + offsetof(MslCoreCompare, state_flags) +
                (size_t) index * MSL_CORE_STATE_FLAGS_BYTES,
            MSL_CORE_STATE_FLAGS_BYTES);
+    out[offsetof(MslCoreViewerPlayer, kirby_hat)] =
+        fp->kind == FTKIND_KIRBY ? (uint8_t) fp->fv.kb.hat.kind : 0xFF;
     COPY_U16(action_id);
     COPY_U16(action_frame);
     COPY_U16(hitlag);

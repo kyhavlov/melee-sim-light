@@ -12,6 +12,11 @@ import {
   viewerStageOffsets,
 } from "./schema.js";
 
+// 4 (Kirby) is the bare head and 0xFF marks a fighter that is not Kirby.
+function kirbyHatKind(value) {
+  return value === 0xff || value === 4 ? undefined : value;
+}
+
 const HURTBOX_STATES = ["vulnerable", "invulnerable", "intangible"];
 
 function u8(view, offset) {
@@ -213,6 +218,7 @@ function playerStateFromBase(state, base, frameNumber, idx, isNana) {
         lCancelStatus: null,
         hurtboxCollisionState: HURTBOX_STATES[hurtboxState] ?? "vulnerable",
         animationIndex: u32(state, base + viewerPlayerOffsets.animationIndex),
+        kirbyHatKind: kirbyHatKind(u8(state, base + viewerPlayerOffsets.kirbyHat)),
         selfInducedAirXSpeed: f32(state, base + viewerPlayerOffsets.speedAirXSelf),
         selfInducedAirYSpeed: f32(state, base + viewerPlayerOffsets.speedYSelf),
         attackBasedXSpeed: f32(state, base + viewerPlayerOffsets.speedXAttack),
