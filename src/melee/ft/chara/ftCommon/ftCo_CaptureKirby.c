@@ -93,7 +93,12 @@ static inline void inlineB0(Fighter_GObj* gobj, Vec3* pos)
         f *= dist;
         scale_pad.scale.x = scale_pad.scale.y = scale_pad.scale.z =
             (1.0f - dist) + f;
-        scale_pad.scale.x = scale_pad.scale.x * fp->mv.co.guard.x2C;
+        // GALE01 0x800BD2xx multiplies by fp+0x236C, which the decomp names
+        // through the guard union member. mv.co.guard.x2C and
+        // mv.co.capturekirby.scale.x share that retail offset, but the hosted
+        // guard layout widens UNK_T x28 to a pointer and moves x2C off the
+        // scale. Read the field this state actually owns.
+        scale_pad.scale.x = scale_pad.scale.x * fp->mv.co.capturekirby.scale.x;
         scale_pad.scale.y *= fp->mv.co.capturekirby.scale.y;
         scale_pad.scale.z *= fp->mv.co.capturekirby.scale.z;
         HSD_JObjSetScale(jobj, &scale_pad.scale);
