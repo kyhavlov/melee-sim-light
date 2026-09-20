@@ -214,6 +214,25 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     // both kinds to 14).
     msl_effect_load_bank(data, 14, "/EfIcData.dat", "effIceclimberDataTable");
     msl_effect_load_bank(data, 18, "/EfLgData.dat", "effLuigiDataTable");
+    // Kirby owns efAsync bank 5, and each copy ability loads its own bank
+    // through ftKb_SpecialN_800EED50 (ftKb_Init_803CB46C maps fighter kinds
+    // to banks 20..48; the kinds whose table entry is NULL load nothing).
+    // refs/melee/src/melee/ef/efasync.c::efAsync_DatEntries
+    // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_Init_803CB46C
+    msl_effect_load_bank(data, 5, "/EfKbData.dat", "effKirbyDataTable");
+    msl_effect_load_bank(data, 20, "/EfKbMs.dat", "effKirbyMarsDataTable");
+    msl_effect_load_bank(data, 21, "/EfKbZd.dat", "effKirbyZeldaDataTable");
+    msl_effect_load_bank(data, 32, "/EfKbMr.dat", "effKirbyMarioDataTable");
+    msl_effect_load_bank(data, 33, "/EfKbFx.dat", "effKirbyFoxDataTable");
+    msl_effect_load_bank(data, 34, "/EfKbSs.dat", "effKirbySamusDataTable");
+    msl_effect_load_bank(data, 36, "/EfKbPk.dat", "effKirbyPikachuDataTable");
+    msl_effect_load_bank(data, 37, "/EfKbLg.dat", "effKirbyLuigiDataTable");
+    msl_effect_load_bank(data, 38, "/EfKbCa.dat", "effKirbyCaptainDataTable");
+    msl_effect_load_bank(data, 39, "/EfKbDk.dat", "effKirbyDonkeyDataTable");
+    msl_effect_load_bank(data, 41, "/EfKbKp.dat", "effKirbyKoopaDataTable");
+    msl_effect_load_bank(data, 46, "/EfKbIc.dat", "effKirbyIceDataTable");
+    msl_effect_load_bank(data, 47, "/EfKbGn.dat", "effKirbyGanonDataTable");
+    msl_effect_load_bank(data, 48, "/EfKbFe.dat", "effKirbyEmblemDataTable");
     // efLib_Create queues each common model's frame-zero animation, and both
     // efAsync_Dispatch and efSync_Spawn drain that queue before returning.
     // Record its data-defined DPtcl generator events once while allocation is
@@ -474,6 +493,32 @@ void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
         case 0x47D: msl_effect_consume_generator_rng(0x3F0); break;
         case 0x47E: msl_effect_consume_generator_rng(0x3F1); break;
         case 0x4A0: msl_effect_consume_generator_rng(0x7D02); break;
+        // Kirby efAlt cases (bank 5 and the copy banks): generator-backed
+        // spawns draw their dispatcher gate; the model creations (0x494..
+        // 0x499, 0x49D, 0x4A4, 0x4A9..0x4AC, 0x4B3..0x4B9) consume nothing.
+        // 0x49A inhale wind, 0x49B/0x49C Stone transform and impact, 0x49E
+        // spit star, 0x49F Mario copy fireball, 0x4A1..0x4A3 Samus copy
+        // charge, 0x4A5..0x4A8 Bowser copy breath, 0x4AD Pikachu copy jolt,
+        // 0x4AE..0x4B0 Ice Climbers copy shot, 0x4B1/0x4B2 Luigi copy
+        // fireball. refs/melee/src/melee/ef/efalt.c::efAlt_Spawn
+        case 0x49A: msl_effect_consume_generator_rng(0x138B); break;
+        case 0x49B: msl_effect_consume_generator_rng(0x138F); break;
+        case 0x49C: msl_effect_consume_generator_rng(0x1395); break;
+        case 0x49E: msl_effect_consume_generator_rng(0x206); break;
+        case 0x49F: msl_effect_consume_generator_rng(0x7D00); break;
+        case 0x4A1: msl_effect_consume_generator_rng(0x84D4); break;
+        case 0x4A2: msl_effect_consume_generator_rng(0x84D2); break;
+        case 0x4A3: msl_effect_consume_generator_rng(0x84D3); break;
+        case 0x4A5: msl_effect_consume_generator_rng(0xA028); break;
+        case 0x4A6: msl_effect_consume_generator_rng(0xA029); break;
+        case 0x4A7: msl_effect_consume_generator_rng(0xA02A); break;
+        case 0x4A8: msl_effect_consume_generator_rng(0xA02B); break;
+        case 0x4AD: msl_effect_consume_generator_rng(0x8CA0); break;
+        case 0x4AE: msl_effect_consume_generator_rng(0xB3B0); break;
+        case 0x4AF: msl_effect_consume_generator_rng(0xB3B1); break;
+        case 0x4B0: msl_effect_consume_generator_rng(0xB3B6); break;
+        case 0x4B1: msl_effect_consume_generator_rng(0x9088); break;
+        case 0x4B2: msl_effect_consume_generator_rng(0x908A); break;
         case 0x4BD: msl_effect_consume_generator_rng(0x1B58); break;
         case 0x4BE: msl_effect_consume_generator_rng(0x1B5C); break;
         case 0x4BF:

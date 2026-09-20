@@ -18,6 +18,7 @@ class Character(IntEnum):
     ICE_CLIMBERS = 10
     PIKACHU = 12
     PICHU = 23
+    KIRBY = 4
     SAMUS = 13
     NESS = 8
     LINK = 6

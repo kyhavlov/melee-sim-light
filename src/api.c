@@ -65,6 +65,7 @@ static int supported_character(uint8_t character) {
          character == MSL_CHARACTER_BOWSER ||
          character == MSL_CHARACTER_PIKACHU ||
          character == MSL_CHARACTER_PICHU ||
+         character == MSL_CHARACTER_KIRBY ||
          character == MSL_CHARACTER_SAMUS ||
          character == MSL_CHARACTER_NESS ||
          character == MSL_CHARACTER_LINK ||

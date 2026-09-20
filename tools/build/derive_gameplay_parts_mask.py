@@ -37,6 +37,7 @@ CHARACTERS = {
     'nana': (11, 'Nn', 'ftDataNana'),
     'pikachu': (12, 'Pk', 'ftDataPikachu'),
     'pichu': (23, 'Pc', 'ftDataPichu'),
+    'kirby': (4, 'Kb', 'ftDataKirby'),
     'samus': (13, 'Ss', 'ftDataSamus'),
     'yoshi': (14, 'Ys', 'ftDataYoshi'),
     'mewtwo': (16, 'Mt', 'ftDataMewtwo'),
@@ -63,6 +64,7 @@ SUBACTION_COUNTS = {
     24: 323,
     26: 327,
     23: 320,
+    4: 479,
     25: 318,
     5: 316,
 }
@@ -88,6 +90,11 @@ NCANON = 54  # FtPart_TopN .. FtPart_TransN2
 #          anchor parts[FtPart_ThrowN=51], ftSs_SpecialN.c missile spawn
 #          parts[FtPart_56=56].
 CODE_ANCHORED = {
+    # Kirby: the Bowser copy's Fire Breath spawns at raw mouth part 12
+    # (ftkirbyspecialkoopa.c::lb_8000B1CC(fp->parts[12].joint, ...)); the
+    # Fox/Link copies and inhale effects read parts 39/44, which the
+    # skeleton walk already keeps live.
+    'kirby': (12,),
     # Koopa: ftKp_SpecialN spawns Flame at raw mouth part 48.
     'koopa': (48,),
     'samus': (50, 51, 56),
@@ -261,6 +268,28 @@ def ftdata_parts(path, root_name):
     return bones, dyn
 
 
+def ecb_parts(path, root_name):
+    """Parts named by ftData.x44, the ECB bone table.
+
+    mpColl_LoadECB_JObj transforms these joints every frame through the
+    fighter pose's ECB bindings; a cold ECB bone has no binding and trips
+    fighter_pose.c's origin lookup (Kirby's table names part 56, which no
+    hitbox or dynamics anchor reaches).
+    refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+    """
+    data, roots, relocs = load_dat(path)
+    ft = roots[root_name]
+    if ft + 0x44 not in relocs:
+        return set()
+    table = u32(data, ft + 0x44)
+    parts = set()
+    for i in range(5):
+        part = (data[table + 2 * i] << 8) | data[table + 2 * i + 1]
+        if part != FTPART_INVALID and part != 0xFFFF:
+            parts.add(part)
+    return parts
+
+
 def subaction_hitbox_parts(path, root_name, count, p2j, parts_num):
     """Part indices carrying Create Hitbox capsules in any subaction script.
 
@@ -328,6 +357,7 @@ def derive(name, common, canon):
             mask.add(j)
 
     bones, dyn = ftdata_parts(f'data/raw/Pl{prefix}.dat', root)
+    bones |= ecb_parts(f'data/raw/Pl{prefix}.dat', root)
     bones |= subaction_hitbox_parts(f'data/raw/Pl{prefix}.dat', root,
                                     SUBACTION_COUNTS[kind], p2j, parts_num)
     order, parents = skeleton(f'data/raw/Pl{prefix}Nr.dat')

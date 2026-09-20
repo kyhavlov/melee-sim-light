@@ -1773,6 +1773,393 @@
       }
     },
     {
+      "replay": "replays/validation/kirby/d20-1_falco_00191DDFD11F_20240917T183608.slpz",
+      "expected": {
+        "native": {
+          "frames": 8299,
+          "actual_output_fingerprint": "47db77c619698dfa"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/d20-1_falco_00191DDFD11F_20240917T183839.slpz",
+      "expected": {
+        "native": {
+          "frames": 11346,
+          "actual_output_fingerprint": "effe827ca91b37c6"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T104926.slpz",
+      "expected": {
+        "native": {
+          "frames": 7302,
+          "actual_output_fingerprint": "8d08c08800016148"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T105148.slpz",
+      "expected": {
+        "native": {
+          "frames": 8423,
+          "actual_output_fingerprint": "f8a81a6fd49f3d44"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T105436.slpz",
+      "expected": {
+        "native": {
+          "frames": 9681,
+          "actual_output_fingerprint": "a233cda773729aa3"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/d20-3_captain_falcon_A45C27B56C27_20241016T024203.slpz",
+      "expected": {
+        "native": {
+          "frames": 9736,
+          "actual_output_fingerprint": "5466e95f4e26cee8"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/d20-3_falco_A45C27B56C27_20241016T025123.slpz",
+      "expected": {
+        "native": {
+          "frames": 7961,
+          "actual_output_fingerprint": "9bea2dd017ace6ac"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/d20-3_marth_A45C27B56C27_20241016T024513.slpz",
+      "expected": {
+        "native": {
+          "frames": 8282,
+          "actual_output_fingerprint": "69849e63223ace9b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/d20-3_peach_A45C27B56C27_20241016T025418.slpz",
+      "expected": {
+        "native": {
+          "frames": 7609,
+          "actual_output_fingerprint": "7ea9218c6c3daa50"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_game_and_watch_20231218T204918.slpz",
+      "expected": {
+        "native": {
+          "frames": 9811,
+          "actual_output_fingerprint": "9f157c093325211c"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20240313T140759.slpz",
+      "expected": {
+        "native": {
+          "frames": 14774,
+          "actual_output_fingerprint": "bfb1d39daa870a8d"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20240425T135022.slpz",
+      "expected": {
+        "native": {
+          "frames": 3371,
+          "actual_output_fingerprint": "e32a14ea057ce31e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20240826T194503.slpz",
+      "expected": {
+        "native": {
+          "frames": 12313,
+          "actual_output_fingerprint": "ac23f32000514aa5"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20240826T194839.slpz",
+      "expected": {
+        "native": {
+          "frames": 8288,
+          "actual_output_fingerprint": "f5ed35d465dfd8a2"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20240826T195103.slpz",
+      "expected": {
+        "native": {
+          "frames": 12560,
+          "actual_output_fingerprint": "8255e92d5940a7b9"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20240906T223350.slpz",
+      "expected": {
+        "native": {
+          "frames": 9452,
+          "actual_output_fingerprint": "eb657ee5067a7ed2"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20240924T224955.slpz",
+      "expected": {
+        "native": {
+          "frames": 12219,
+          "actual_output_fingerprint": "ae257c921a29c7de"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20250619T225223.slpz",
+      "expected": {
+        "native": {
+          "frames": 9067,
+          "actual_output_fingerprint": "e5ddf28d53e3900c"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20250619T225500.slpz",
+      "expected": {
+        "native": {
+          "frames": 8512,
+          "actual_output_fingerprint": "4fb8416b41566006"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20250619T225728.slpz",
+      "expected": {
+        "native": {
+          "frames": 14040,
+          "actual_output_fingerprint": "c92873a5e351b06f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20250619T230128.slpz",
+      "expected": {
+        "native": {
+          "frames": 12829,
+          "actual_output_fingerprint": "8e0902da7aecb87a"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20250628T210431.slpz",
+      "expected": {
+        "native": {
+          "frames": 8854,
+          "actual_output_fingerprint": "a273bcc1eda06333"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20260104T202356.slpz",
+      "expected": {
+        "native": {
+          "frames": 14192,
+          "actual_output_fingerprint": "829d9068038ba18f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/mainline_bowser_cpu_20260919T194326.slpz",
+      "expected": {
+        "native": {
+          "frames": 11685,
+          "actual_output_fingerprint": "f17de3f3bb219a03"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/mainline_game_and_watch_20260917T163007.slpz",
+      "expected": {
+        "native": {
+          "frames": 123,
+          "actual_output_fingerprint": "99284cd0f5bc4325"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/mainline_ice_climbers_20260917T162307.slpz",
+      "expected": {
+        "native": {
+          "frames": 11764,
+          "actual_output_fingerprint": "3c74b556346ce6f2"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_dk_20260920T123401.slpz",
+      "expected": {
+        "native": {
+          "frames": 4244,
+          "actual_output_fingerprint": "30e8aee65275f85f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_doc_20260920T123540.slpz",
+      "expected": {
+        "native": {
+          "frames": 4005,
+          "actual_output_fingerprint": "a9d6b33c03e3a711"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_fox_20260920T123441.slpz",
+      "expected": {
+        "native": {
+          "frames": 4348,
+          "actual_output_fingerprint": "21f5c03f11c3ae8f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_ganondorf_20260920T123431.slpz",
+      "expected": {
+        "native": {
+          "frames": 3839,
+          "actual_output_fingerprint": "a0fc3ef05f7a126a"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_jigglypuff_20260920T123343.slpz",
+      "expected": {
+        "native": {
+          "frames": 3085,
+          "actual_output_fingerprint": "b2de428f026bb381"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_kirby_20260920T123452.slpz",
+      "expected": {
+        "native": {
+          "frames": 4230,
+          "actual_output_fingerprint": "cfc9a2b9c4de002f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_link_20260920T123550.slpz",
+      "expected": {
+        "native": {
+          "frames": 4311,
+          "actual_output_fingerprint": "aef0087a5a584b87"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_luigi_20260920T123530.slpz",
+      "expected": {
+        "native": {
+          "frames": 4245,
+          "actual_output_fingerprint": "bbb1d62cca7bf69e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_mario_20260920T122800.slpz",
+      "expected": {
+        "native": {
+          "frames": 4159,
+          "actual_output_fingerprint": "5464c3640bad55df"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_mewtwo_20260920T123352.slpz",
+      "expected": {
+        "native": {
+          "frames": 4116,
+          "actual_output_fingerprint": "0249214263bf8b3f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_moves_20260920T123502.slpz",
+      "expected": {
+        "native": {
+          "frames": 6467,
+          "actual_output_fingerprint": "98a2b366ddcf09ab"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_ness_20260920T123607.slpz",
+      "expected": {
+        "native": {
+          "frames": 4210,
+          "actual_output_fingerprint": "309ac4f27dab73a7"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_pikachu_20260920T123323.slpz",
+      "expected": {
+        "native": {
+          "frames": 4338,
+          "actual_output_fingerprint": "f3bbe2cbc2f21fa5"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_samus_20260920T123226.slpz",
+      "expected": {
+        "native": {
+          "frames": 3983,
+          "actual_output_fingerprint": "1883619bf417da11"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_sheik_20260920T123236.slpz",
+      "expected": {
+        "native": {
+          "frames": 3992,
+          "actual_output_fingerprint": "a1ef1490fd3d3b64"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_ylink_20260920T123216.slpz",
+      "expected": {
+        "native": {
+          "frames": 4814,
+          "actual_output_fingerprint": "974e65b59e919f21"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/kirby/scripted_yoshi_20260920T123411.slpz",
+      "expected": {
+        "native": {
+          "frames": 3822,
+          "actual_output_fingerprint": "ef8e0dcf08a3970f"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/legacy_arithmetic/gamewatch_fox_20260707T142746.slpz",
       "expected": {
         "native": {

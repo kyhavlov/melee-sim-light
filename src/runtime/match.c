@@ -49,18 +49,6 @@ static _Thread_local MslCoreMatchRules* msl_bound_match_rules;
     (msl_bound_match_rules->respawn_reservation_character)
 #define msl_ucf_pad (msl_bound_match_rules->ucf_pad)
 
-void ftKb_SpecialN_800F1F1C(Fighter_GObj* gobj, Vec3* pos)
-{
-    (void) gobj;
-    (void) pos;
-    // The shared wall/ceiling-reflect owners call this hook without a kind
-    // switch. Its source body spawns Kirby's copied-neutral-special effect
-    // only when kind == FTKIND_KIRBY, so the Fox projection is an
-    // exact no-op rather than an unresolved abort.
-    // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::
-    //     ftKb_SpecialN_800F1F1C
-}
-
 static float msl_absf(float value)
 {
     return value < 0.0F ? -value : value;
@@ -719,15 +707,6 @@ bool msl_core_match_is_over(void) { return msl_match_ended; }
 // refs/melee/src/melee/if/ifstatus.c::{ifStatus_802F6508,ifStatus_802F6E1C}
 void ifStatus_802F6508(int slot) { (void) slot; }
 void ifStatus_802F6E1C(int slot) { (void) slot; }
-
-// refs/melee/src/melee/ft/chara/ftKirby/ftkirbyspecialn.c. ProcessHit calls
-// this for every fighter, but its only behavior (and RNG consumption) is
-// guarded by FTKIND_KIRBY. The declared Fox/FD domain contains Fox only.
-void ftKb_SpecialN_800F5BA4(Fighter* fp) { (void) fp; }
-
-// Same Kirby-only copy-ability loss gate as 800F5BA4, used by a second
-// common damage/throw path (ftkirbyspecialn.c::ftKb_SpecialN_800F5C34).
-void ftKb_SpecialN_800F5C34(Fighter* fp) { (void) fp; }
 
 // GALE01 versus replays use the US language setting. These are the direct
 // fixed-domain projections of refs/melee/src/melee/lb/lblanguage.c; retaining

@@ -161,6 +161,8 @@ void msl_fighter_pose_insert_joint(HSD_JObj* joint);
 void msl_fighter_pose_bind_part(HSD_JObj* joint, uint8_t part);
 #endif
 void msl_fighter_pose_remove_tree(HSD_JObj* root);
+// Unregister one inserted accessory joint before HSD_JObjRemove unlinks it.
+void msl_fighter_pose_erase_joint(HSD_JObj* joint);
 void msl_fighter_pose_attach_figa(HSD_JObj* joint, FigaTree* tree,
                                   FigaTrack* tracks, int track_count,
                                   bool filtered);

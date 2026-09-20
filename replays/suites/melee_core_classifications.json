@@ -854,6 +854,35 @@
         },
         "ppc": "native"
       }
+    },
+    {
+      "replay": "replays/validation/kirby/d20-1_falco_00191DDFD11F_20240917T183839.slpz",
+      "id": "missing-raw-cstick-asdi",
+      "owner": "ASDI input before UCF cardinal injection",
+      "rationale": "The 0.0375 Y offset on Falco begins at hitlag exit 6358 (hit by Kirby's copied Falco laser two frames earlier). This Slippi 3.15 console capture records the pre-injection normalized C-stick only, so raw 79 cannot be told from a radially clamped value of at least 80 that UCF cardinals would snap to 1.0; the console applied the full ASDI and the sim the 79/80 fraction. Later fighter rows inherit the displaced start. Source ASDI and cardinal injection are retained; reconstructing the input from the recorded position is excluded.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag",
+        "src/runtime/match.c::msl_ucf_apply_cardinal",
+        "refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm"
+      ],
+      "expected": {
+        "native": {
+          "frames": 11346,
+          "matched_frames": 11312,
+          "mismatched_frames": 34,
+          "exact_prefix_frames": 6480,
+          "strict_suffix_frames": 4832,
+          "first_mismatch_frame": 6358,
+          "last_mismatch_frame": 6391,
+          "mismatch_count": 34,
+          "mismatch_fingerprint": "2c38147174b8a6e3",
+          "render_visibility_mismatch_count": 0,
+          "first_render_visibility_mismatch_frame": null,
+          "signed_zero_equal_count": 0,
+          "mismatch_fields_digest": "731645cadf8f2daa48308a11d12ce56fc6f1c6683b6e5efaff106946b4e3da0f"
+        },
+        "ppc": "native"
+      }
     }
   ]
 }

@@ -28,6 +28,7 @@ SUPPORTED_CHARACTERS = (
     "nana",
     "pikachu",
     "pichu",
+    "kirby",
     "donkey",
     "ganon",
     "yoshi",

@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include <baselib/jobj.h>
 #include <baselib/id.h>
@@ -436,12 +437,17 @@ static void* translate_target_count(MslNativeArchive* context,
             abort();
         }
         span = next_boundary(context, source_offset) - source_offset;
-        if (span == 0 || span % element->source_size != 0) {
+        if (span < element->source_size) {
             fprintf(stderr,
                     "native DAT ItemStateArray has invalid %u-byte extent\n",
                     span);
             abort();
         }
+        // The extent runs to the next referenced offset. PlKb.dat packs an
+        // unreferenced 8-byte pair between the one-entry state table of
+        // Kirby's Vanish article (x48_items[0]) and the article itself, so
+        // the extent is 24 bytes for a 16-byte element; the tail past the
+        // last whole element belongs to no state and is dropped.
         count = span / element->source_size;
         result = native_alloc((size_t) count * element->native_size);
         add_memo(context, source_offset, type, result);
@@ -1010,11 +1016,121 @@ int msl_native_archive_parse(HSD_Archive* archive, uint8_t* source,
     return 0;
 }
 
+// Special attributes of the articles stored in Kirby's copy roots. The
+// copied projectiles run the original fighters' item logic, which reads the
+// same attribute blocks the fighter profiles above attach; Article.x4 is
+// void in the decomp, so attach them here by hat slot.
+// refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_SpecialN_800F16D0
+static const struct {
+    const char* symbol;
+    uint8_t slot;
+    const MslDatType* const* type;
+} kirby_copy_article_attrs[] = {
+    { "ftDataKirbyCopyMario", 0, &msl_dat_root_itUnkAttributes },
+    { "ftDataKirbyCopyLuigi", 0, &msl_dat_root_itUnkAttributes },
+    { "ftDataKirbyCopyDrmario", 0, &msl_dat_root_itUnkAttributes },
+    { "ftDataKirbyCopyPopo", 0, &msl_dat_root_itClimbersIceAttributes },
+    { "ftDataKirbyCopyPeach", 1, &msl_dat_root_itPeachToadSporeAttributes },
+    { "ftDataKirbyCopyFox", 0, &msl_dat_root_FoxLaserAttr },
+    { "ftDataKirbyCopyFox", 1, &msl_dat_root_FoxBlasterAttr },
+    { "ftDataKirbyCopyFalco", 3, &msl_dat_root_FoxLaserAttr },
+    { "ftDataKirbyCopyFalco", 4, &msl_dat_root_FoxBlasterAttr },
+    { "ftDataKirbyCopyLink", 0, &msl_dat_root_itLinkArrowAttributes },
+    { "ftDataKirbyCopyClink", 0, &msl_dat_root_itLinkArrowAttributes },
+    { "ftDataKirbyCopyMewtwo", 3, &msl_dat_root_itMewtwoShadowball_DatAttrs },
+    { "ftDataKirbyCopyNess", 0, &msl_dat_root_itFlashAttributes },
+    { "ftDataKirbyCopyNess", 1, &msl_dat_root_itFlashExplAttributes },
+    { "ftDataKirbyCopyPikachu", 0, &msl_dat_root_itPikachutJoltGroundAttributes },
+    { "ftDataKirbyCopyPichu", 0, &msl_dat_root_itPikachutJoltGroundAttributes },
+    { "ftDataKirbyCopySamus", 0, &msl_dat_root_itSamusChargeShot_Attributes },
+    { "ftDataKirbyCopyKoopa", 0, &msl_dat_root_itKoopaFlame_Attributes },
+    { "ftDataKirbyCopySeak", 0, &msl_dat_root_itSeakNeedleThrownAttributes },
+    { "ftDataKirbyCopyGamewatch", 5, &msl_dat_root_MslDatGameWatchChefAttrs },
+};
+
+static void translate_kirby_copy_article_attrs(MslNativeArchive* context,
+                                               const char* symbol,
+                                               uint32_t root, void* native)
+{
+    enum { HAT_SLOTS_SOURCE_OFFSET = 0x0C, ARTICLE_ATTRS_SOURCE_OFFSET = 0x04 };
+    Article** slots = (Article**) ((uint8_t*) native +
+                                   offsetof(struct KirbyHatStruct, hat_dynamics));
+    size_t i;
+    for (i = 0; i < sizeof(kirby_copy_article_attrs) /
+                        sizeof(kirby_copy_article_attrs[0]);
+         ++i)
+    {
+        uint32_t slot = kirby_copy_article_attrs[i].slot;
+        uint32_t article;
+        uint32_t attrs;
+        if (strcmp(kirby_copy_article_attrs[i].symbol, symbol) != 0) {
+            continue;
+        }
+        article = raw_pointer(context, root + HAT_SLOTS_SOURCE_OFFSET + slot * 4);
+        if (article == UINT32_MAX || slots[slot] == NULL) {
+            continue;
+        }
+        attrs = raw_pointer(context, article + ARTICLE_ATTRS_SOURCE_OFFSET);
+        if (attrs != UINT32_MAX) {
+            slots[slot]->x4_specialAttributes = translate_target_count(
+                context, attrs, *kirby_copy_article_attrs[i].type, 1);
+        }
+    }
+}
+
+static const MslDatType* kirby_copy_root_type(const char* symbol)
+{
+    static const struct {
+        const char* name;
+        const MslDatType* const* type;
+    } roots[] = {
+        { "ftDataKirbyCopyMario", &msl_dat_root_MslDatKirbyHatMario },
+        { "ftDataKirbyCopyFox", &msl_dat_root_MslDatKirbyHatFox },
+        { "ftDataKirbyCopyCaptain", &msl_dat_root_MslDatKirbyHatCaptain },
+        { "ftDataKirbyCopyKoopa", &msl_dat_root_MslDatKirbyHatKoopa },
+        { "ftDataKirbyCopyLink", &msl_dat_root_MslDatKirbyHatLink },
+        { "ftDataKirbyCopySeak", &msl_dat_root_MslDatKirbyHatSeak },
+        { "ftDataKirbyCopyNess", &msl_dat_root_MslDatKirbyHatNess },
+        { "ftDataKirbyCopyPeach", &msl_dat_root_MslDatKirbyHatPeach },
+        { "ftDataKirbyCopyPopo", &msl_dat_root_MslDatKirbyHatPopo },
+        { "ftDataKirbyCopyPikachu", &msl_dat_root_MslDatKirbyHatPikachu },
+        { "ftDataKirbyCopySamus", &msl_dat_root_MslDatKirbyHatSamus },
+        { "ftDataKirbyCopyYoshi", &msl_dat_root_MslDatKirbyHatYoshi },
+        { "ftDataKirbyCopyLuigi", &msl_dat_root_MslDatKirbyHatLuigi },
+        { "ftDataKirbyCopyMars", &msl_dat_root_MslDatKirbyHatMars },
+        { "ftDataKirbyCopyZelda", &msl_dat_root_MslDatKirbyHatZelda },
+        { "ftDataKirbyCopyClink", &msl_dat_root_MslDatKirbyHatClink },
+        { "ftDataKirbyCopyDrmario", &msl_dat_root_MslDatKirbyHatDrmario },
+        { "ftDataKirbyCopyPichu", &msl_dat_root_MslDatKirbyHatPichu },
+        { "ftDataKirbyCopyGanon", &msl_dat_root_MslDatKirbyHatGanon },
+        { "ftDataKirbyCopyEmblem", &msl_dat_root_MslDatKirbyHatEmblem },
+        { "ftDataKirbyCopyDonkey", &msl_dat_root_MslDatKirbyHatDonkey },
+        { "ftDataKirbyCopyPurin", &msl_dat_root_MslDatKirbyHatPurin },
+        { "ftDataKirbyCopyMewtwo", &msl_dat_root_MslDatKirbyHatMewtwo },
+        { "ftDataKirbyCopyFalco", &msl_dat_root_MslDatKirbyHatFalco },
+        { "ftDataKirbyCopyGamewatch", &msl_dat_root_MslDatKirbyHatGamewatch },
+    };
+    size_t i;
+    for (i = 0; i < sizeof(roots) / sizeof(roots[0]); ++i) {
+        if (strcmp(symbol, roots[i].name) == 0) {
+            return *roots[i].type;
+        }
+    }
+    return NULL;
+}
+
 static const MslDatType* public_type(const char* symbol)
 {
     size_t length = strlen(symbol);
     if (strcmp(symbol, "map_head") == 0) {
         return msl_dat_root_UnkStageDat;
+    }
+    if (strncmp(symbol, "ftDataKirbyCopy", 15) == 0) {
+        // Each copy archive's root is stored straight into ft_80459B88 and
+        // read as a KirbyHatStruct; the per-hat views in native_dat_types.c
+        // type its slots.
+        // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_Init_803CA9D0
+        return kirby_copy_root_type(symbol);
     }
     if (strcmp(symbol, "coll_data") == 0) {
         return msl_dat_root_MapCollData;
@@ -1036,6 +1152,7 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataGanon") == 0 ||
         strcmp(symbol, "ftDataPikachu") == 0 ||
         strcmp(symbol, "ftDataPichu") == 0 ||
+        strcmp(symbol, "ftDataKirby") == 0 ||
         strcmp(symbol, "ftDataYoshi") == 0 ||
         strcmp(symbol, "ftDataKoopa") == 0 ||
         strcmp(symbol, "ftDataNess") == 0 ||
@@ -1406,6 +1523,7 @@ typedef enum MslFighterArticleProfile {
     MSL_FIGHTER_ARTICLES_SAMUS,
     MSL_FIGHTER_ARTICLES_ICECLIMBER,
     MSL_FIGHTER_ARTICLES_PIKACHU,
+    MSL_FIGHTER_ARTICLES_KIRBY,
     MSL_FIGHTER_ARTICLES_YOSHI,
     MSL_FIGHTER_ARTICLES_KOOPA,
     MSL_FIGHTER_ARTICLES_MEWTWO,
@@ -1584,6 +1702,25 @@ static ftData* translate_fighter_public(
         indices[2] = 2;
         attr_types[0] = msl_dat_root_itPikachuthunderAttributes;
         attr_types[1] = msl_dat_root_itPikachutJoltGroundAttributes;
+        break;
+    case MSL_FIGHTER_ARTICLES_KIRBY:
+        // ftKb_Init_OnLoad registers four articles under item kinds 50..53:
+        // the Final Cutter beam, the hammer, and the two copy-star slots
+        // (It_Kind_Unk1/Unk2). The beam carries itKirbyCutterBeamAttributes
+        // (speed, lifetime); the hat-drop star (kind 52, it_2ADA.c) reads
+        // the shared five-float itUnkAttributes block for its spin speed;
+        // the hammer and the second star slot (it_2F28.c) read none.
+        // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_Init_OnLoad
+        // refs/melee/src/melee/it/items/itkirbycutterbeam.c::it_8029BB90
+        // refs/melee/src/melee/it/items/it_2ADA.c::it_802ADA1C
+        article_list_type = msl_dat_root_MslDatKirbyArticles;
+        article_count = 4;
+        indices[0] = 0;
+        indices[1] = 1;
+        indices[2] = 2;
+        indices[3] = 3;
+        attr_types[0] = msl_dat_root_itKirbyCutterBeamAttributes;
+        attr_types[2] = msl_dat_root_itUnkAttributes;
         break;
     case MSL_FIGHTER_ARTICLES_KOOPA:
         // ftKp_Init_OnLoad registers the single Flame article.
@@ -1867,6 +2004,18 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftPikachuAttributes,
                                           320, MSL_FIGHTER_ARTICLES_PIKACHU);
+    } else if (strcmp(symbol, "ftDataKirby") == 0) {
+        // ftKb_Init_OnLoad pushes the single 0x424-byte ftKb_DatAttrs block
+        // that holds every copy ability's tuning.
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftKb_DatAttrs, 479,
+                                          MSL_FIGHTER_ARTICLES_KIRBY);
+    } else if (strncmp(symbol, "ftDataKirbyCopy", 15) == 0) {
+        result = translate_target_count(context, offset,
+                                        kirby_copy_root_type(symbol), 1);
+        if (result != NULL) {
+            translate_kirby_copy_article_attrs(context, symbol, offset, result);
+        }
     } else if (strcmp(symbol, "ftDataYoshi") == 0) {
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftYoshiAttributes,

@@ -452,3 +452,33 @@ src/melee/it/items/itgamewatchparachute.c	src/melee/it/items/itgamewatchparachut
 src/melee/it/items/itgamewatchrescue.c	src/melee/it/items/itgamewatchrescue.c	Matching	none	compiled directly from canonical source by Makefile
 src/melee/it/items/itgamewatchturtle.c	src/melee/it/items/itgamewatchturtle.c	Matching	none	compiled directly from canonical source by Makefile
 src/melee/it/itmaterial.c	src/melee/it/itmaterial.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ft/chara/ftKirby/ftkirby.c	src/melee/ft/chara/ftKirby/ftkirby.c	Matching	kirby-source-packet	compiled canonical Kirby lifecycle, inhale/copy registry, hat loading and data-owner callbacks
+src/melee/ft/chara/ftKirby/ftkirbyattackdash.c	src/melee/ft/chara/ftKirby/ftkirbyattackdash.c	Matching	kirby-source-packet	compiled canonical Kirby owner (attackdash)
+src/melee/ft/chara/ftKirby/ftkirbycaptureyoshi.c	src/melee/ft/chara/ftKirby/ftkirbycaptureyoshi.c	Matching	kirby-source-packet	compiled canonical Kirby owner (captureyoshi)
+src/melee/ft/chara/ftKirby/ftkirbyspecialdonkey.c	src/melee/ft/chara/ftKirby/ftkirbyspecialdonkey.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (donkey)
+src/melee/ft/chara/ftKirby/ftkirbyspecialfox.c	src/melee/ft/chara/ftKirby/ftkirbyspecialfox.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (fox)
+src/melee/ft/chara/ftKirby/ftkirbyspecialgamewatch.c	src/melee/ft/chara/ftKirby/ftkirbyspecialgamewatch.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (gamewatch)
+src/melee/ft/chara/ftKirby/ftkirbyspecialhi.c	src/melee/ft/chara/ftKirby/ftkirbyspecialhi.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (hi)
+src/melee/ft/chara/ftKirby/ftkirbyspecialiceclimber.c	src/melee/ft/chara/ftKirby/ftkirbyspecialiceclimber.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (iceclimber)
+src/melee/ft/chara/ftKirby/ftkirbyspecialkoopa.c	src/melee/ft/chara/ftKirby/ftkirbyspecialkoopa.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (koopa)
+src/melee/ft/chara/ftKirby/ftkirbyspeciallink.c	src/melee/ft/chara/ftKirby/ftkirbyspeciallink.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (link)
+src/melee/ft/chara/ftKirby/ftkirbyspecialmars.c	src/melee/ft/chara/ftKirby/ftkirbyspecialmars.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (mars)
+src/melee/ft/chara/ftKirby/ftkirbyspecialmewtwo.c	src/melee/ft/chara/ftKirby/ftkirbyspecialmewtwo.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (mewtwo)
+src/melee/ft/chara/ftKirby/ftkirbyspecialn.c	src/melee/ft/chara/ftKirby/ftkirbyspecialn.c	Matching	kirby-source-packet	compiled canonical Kirby inhale, swallow, spit and copy-ability dispatch
+src/melee/ft/chara/ftKirby/ftkirbyspecialness.c	src/melee/ft/chara/ftKirby/ftkirbyspecialness.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (ness)
+src/melee/ft/chara/ftKirby/ftkirbyspecialpikachu.c	src/melee/ft/chara/ftKirby/ftkirbyspecialpikachu.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (pikachu)
+src/melee/ft/chara/ftKirby/ftkirbyspecialpurin.c	src/melee/ft/chara/ftKirby/ftkirbyspecialpurin.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (purin)
+src/melee/ft/chara/ftKirby/ftkirbyspecialsamus.c	src/melee/ft/chara/ftKirby/ftkirbyspecialsamus.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (samus)
+src/melee/ft/chara/ftKirby/ftkirbyspecialseak.c	src/melee/ft/chara/ftKirby/ftkirbyspecialseak.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (seak)
+src/melee/ft/chara/ftKirby/ftkirbyspecialyoshi.c	src/melee/ft/chara/ftKirby/ftkirbyspecialyoshi.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (yoshi)
+src/melee/ft/chara/ftKirby/ftkirbyspecialzelda.c	src/melee/ft/chara/ftKirby/ftkirbyspecialzelda.c	Matching	kirby-source-packet	compiled canonical Kirby copy ability (zelda)
+src/melee/ft/chara/ftKirby/ftkirbyyoshiegg.c	src/melee/ft/chara/ftKirby/ftkirbyyoshiegg.c	Matching	kirby-source-packet	compiled canonical Kirby owner (yoshiegg)
+src/melee/ft/ftCo_800C7220.c	src/melee/ft/ftCo_800C7220.c	Matching	kirby-source-packet	compiled canonical common state owner reached by Kirby's registry
+src/melee/ft/ftCo_800C739C.c	src/melee/ft/ftCo_800C739C.c	Matching	kirby-source-packet	compiled canonical common state owner reached by Kirby's registry
+src/melee/it/items/it_2ADA.c	src/melee/it/items/it_2ADA.c	Matching	kirby-source-packet	compiled canonical Kirby item helpers shared by the hammer and cutter owners
+src/melee/it/items/it_2F28.c	src/melee/it/items/it_2F28.c	Matching	kirby-source-packet	compiled canonical Kirby inhale item helper
+src/melee/it/items/itkirby_2F23.c	src/melee/it/items/itkirby_2F23.c	Matching	kirby-source-packet	compiled canonical Kirby item owner (_2F23)
+src/melee/it/items/itkirbycutterbeam.c	src/melee/it/items/itkirbycutterbeam.c	Matching	kirby-source-packet	compiled canonical Kirby item owner (cutterbeam)
+src/melee/it/items/itkirbygamewatchchefpan.c	src/melee/it/items/itkirbygamewatchchefpan.c	Matching	kirby-source-packet	compiled canonical Kirby item owner (gamewatchchefpan)
+src/melee/it/items/itkirbyhammer.c	src/melee/it/items/itkirbyhammer.c	Matching	kirby-source-packet	compiled canonical Kirby item owner (hammer)
+src/melee/it/items/itkirbyyoshispecialn.c	src/melee/it/items/itkirbyyoshispecialn.c	Matching	kirby-source-packet	compiled canonical Kirby item owner (yoshispecialn)

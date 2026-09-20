@@ -58,6 +58,7 @@ def test_live_viewer_supported_domain_and_assets() -> None:
         5: "Bowser",
         12: "Pikachu",
         23: "Pichu",
+        4: "Kirby",
         13: "Samus",
         8: "Ness",
         6: "Link",
