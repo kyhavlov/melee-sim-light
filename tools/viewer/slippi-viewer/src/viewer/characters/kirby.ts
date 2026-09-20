@@ -183,7 +183,8 @@ export const kirby: Character = {
     [398, "SpecialAirLw2"],
     // 399 - 543 are the copy-ability neutral specials, in ftKb_MotionState
     // order. Names map to the Slippi Lab kirby.zip where it ships the hat
-    // animation; the rest render nothing rather than crash the frame.
+    // animation; the rest fall back to the plain inhale pose so Kirby stays
+    // visible.
     [399, "MrSpecialN"],
     [400, "MrSpecialAirN"],
     [401, "LkSpecialNStart"],
@@ -199,13 +200,13 @@ export const kirby: Character = {
     [411, "SsSpecialAirNStart"],
     [412, "SsSpecialAirN"],
     [413, "YsSpecialN1"],
-    [414, ""], // YsSpecialNCapture1_0
-    [415, ""], // YsSpecialNCapture1_1
-    [416, ""], // YsSpecialNCapture2_0
-    [417, ""], // YsSpecialNCapture2_1
-    [418, ""], // YsSpecialAirNCapture2
-    [419, ""], // YsSpecialAirNCapture1_0
-    [420, ""], // YsSpecialAirNCapture1_1
+    [414, "SpecialN"], // YsSpecialNCapture1_0 (no asset)
+    [415, "SpecialN"], // YsSpecialNCapture1_1 (no asset)
+    [416, "SpecialN"], // YsSpecialNCapture2_0 (no asset)
+    [417, "SpecialN"], // YsSpecialNCapture2_1 (no asset)
+    [418, "SpecialN"], // YsSpecialAirNCapture2 (no asset)
+    [419, "SpecialN"], // YsSpecialAirNCapture1_0 (no asset)
+    [420, "SpecialN"], // YsSpecialAirNCapture1_1 (no asset)
     [421, "YsSpecialAirN2"], // YsSpecialAirN2_0
     [422, "YsSpecialAirN2"], // YsSpecialAirN2_1
     [423, "FxSpecialNStart"],
@@ -244,12 +245,12 @@ export const kirby: Character = {
     [456, "DkSpecialNLoop"],
     [457, "DkSpecialNCansel"], // DkSpecialNCancel
     [458, "DkSpecialN"],
-    [459, ""], // DkSpecialNFull
+    [459, "SpecialN"], // DkSpecialNFull (no asset)
     [460, "DkSpecialAirNStart"],
     [461, "DkSpecialAirNLoop"],
     [462, "DkSpecialAirNCancel"],
     [463, "DkSpecialAirN"],
-    [464, ""], // DkSpecialAirNFull
+    [464, "SpecialN"], // DkSpecialAirNFull (no asset)
     [465, "ZdSpecialN"],
     [466, "ZdSpecialAirN"],
     [467, "SkSpecialNStart"],
@@ -260,23 +261,23 @@ export const kirby: Character = {
     [472, "SkSpecialAirNLoop"],
     [473, "SkSpecialAirNCancel"],
     [474, "SkSpecialAirNEnd"],
-    [475, ""], // PrSpecialNStartR
-    [476, ""], // PrSpecialNStartL
-    [477, ""], // PrSpecialNLoop
-    [478, ""], // PrSpecialNFull
-    [479, ""], // PrSpecialN1
-    [480, ""], // PrSpecialNTurn
-    [481, ""], // PrSpecialNEndR
-    [482, ""], // PrSpecialNEndL
-    [483, ""], // PrSpecialAirNStartR
-    [484, ""], // PrSpecialAirNStartL
-    [485, ""], // PrSpecialAirNLoop
-    [486, ""], // PrSpecialAirNFull
-    [487, ""], // PrSpecialAirN
-    [488, ""], // PrSpecialN0
-    [489, ""], // PrSpecialAirNEndR0
-    [490, ""], // PrSpecialAirNEndR1
-    [491, ""], // PrSpecialNHit
+    [475, "SpecialN"], // PrSpecialNStartR (no asset)
+    [476, "SpecialN"], // PrSpecialNStartL (no asset)
+    [477, "SpecialN"], // PrSpecialNLoop (no asset)
+    [478, "SpecialN"], // PrSpecialNFull (no asset)
+    [479, "SpecialN"], // PrSpecialN1 (no asset)
+    [480, "SpecialN"], // PrSpecialNTurn (no asset)
+    [481, "SpecialN"], // PrSpecialNEndR (no asset)
+    [482, "SpecialN"], // PrSpecialNEndL (no asset)
+    [483, "SpecialN"], // PrSpecialAirNStartR (no asset)
+    [484, "SpecialN"], // PrSpecialAirNStartL (no asset)
+    [485, "SpecialN"], // PrSpecialAirNLoop (no asset)
+    [486, "SpecialN"], // PrSpecialAirNFull (no asset)
+    [487, "SpecialN"], // PrSpecialAirN (no asset)
+    [488, "SpecialN"], // PrSpecialN0 (no asset)
+    [489, "SpecialN"], // PrSpecialAirNEndR0 (no asset)
+    [490, "SpecialN"], // PrSpecialAirNEndR1 (no asset)
+    [491, "SpecialN"], // PrSpecialNHit (no asset)
     [492, "MsSpecialNStart"],
     [493, "MsSpecialNLoop"],
     [494, "MsSpecialNEnd"], // MsSpecialNEnd0
@@ -285,49 +286,49 @@ export const kirby: Character = {
     [497, "MsSpecialAirNLoop"],
     [498, "MsSpecialAirNEnd"], // MsSpecialAirNEnd0
     [499, "MsSpecialAirNEnd"], // MsSpecialAirNEnd1
-    [500, ""], // MtSpecialNStart
-    [501, ""], // MtSpecialNLoop
-    [502, ""], // MtSpecialNLoopFull
-    [503, ""], // MtSpecialNCancel
-    [504, ""], // MtSpecialNEnd
-    [505, ""], // MtSpecialAirNStart
-    [506, ""], // MtSpecialAirNLoop
-    [507, ""], // MtSpecialAirNLoopFull
-    [508, ""], // MtSpecialAirNCancel
-    [509, ""], // MtSpecialAirNEnd
+    [500, "SpecialN"], // MtSpecialNStart (no asset)
+    [501, "SpecialN"], // MtSpecialNLoop (no asset)
+    [502, "SpecialN"], // MtSpecialNLoopFull (no asset)
+    [503, "SpecialN"], // MtSpecialNCancel (no asset)
+    [504, "SpecialN"], // MtSpecialNEnd (no asset)
+    [505, "SpecialN"], // MtSpecialAirNStart (no asset)
+    [506, "SpecialN"], // MtSpecialAirNLoop (no asset)
+    [507, "SpecialN"], // MtSpecialAirNLoopFull (no asset)
+    [508, "SpecialN"], // MtSpecialAirNCancel (no asset)
+    [509, "SpecialN"], // MtSpecialAirNEnd (no asset)
     [510, "GwSpecialN"],
     [511, "GwSpecialAirN"],
-    [512, ""], // DrSpecialN
-    [513, ""], // DrSpecialAirN
-    [514, ""], // ClSpecialNStart
-    [515, ""], // ClSpecialNLoop
-    [516, ""], // ClSpecialNEnd
-    [517, ""], // ClSpecialAirNStart
-    [518, ""], // ClSpecialAirNLoop
-    [519, ""], // ClSpecialAirNEnd
+    [512, "SpecialN"], // DrSpecialN (no asset)
+    [513, "SpecialN"], // DrSpecialAirN (no asset)
+    [514, "SpecialN"], // ClSpecialNStart (no asset)
+    [515, "SpecialN"], // ClSpecialNLoop (no asset)
+    [516, "SpecialN"], // ClSpecialNEnd (no asset)
+    [517, "SpecialN"], // ClSpecialAirNStart (no asset)
+    [518, "SpecialN"], // ClSpecialAirNLoop (no asset)
+    [519, "SpecialN"], // ClSpecialAirNEnd (no asset)
     [520, "FcSpecialNStart"],
     [521, "FcSpecialNLoop"],
     [522, "FcSpecialNEnd"],
     [523, "FcSpecialAirNStart"],
     [524, "FcSpecialAirNLoop"],
     [525, "FcSpecialAirNEnd"],
-    [526, ""], // PcSpecialN
-    [527, ""], // PcSpecialAirN
+    [526, "SpecialN"], // PcSpecialN (no asset)
+    [527, "SpecialN"], // PcSpecialAirN (no asset)
     [528, "GnSpecialN"],
     [529, "GnSpecialAirN"],
-    [530, ""], // FeSpecialNStart
-    [531, ""], // FeSpecialNLoop
-    [532, ""], // FeSpecialNEnd0
-    [533, ""], // FeSpecialNEnd1
-    [534, ""], // FeSpecialAirNStart
-    [535, ""], // FeSpecialAirNLoop
-    [536, ""], // FeSpecialAirNEnd0
-    [537, ""], // FeSpecialAirNEnd1
-    [538, ""], // GkSpecialNStart
-    [539, ""], // GkSpecialN
-    [540, ""], // GkSpecialNEnd
-    [541, ""], // GkSpecialAirNStart
-    [542, ""], // GkSpecialAirN
-    [543, ""], // GkSpecialAirNEnd
+    [530, "SpecialN"], // FeSpecialNStart (no asset)
+    [531, "SpecialN"], // FeSpecialNLoop (no asset)
+    [532, "SpecialN"], // FeSpecialNEnd0 (no asset)
+    [533, "SpecialN"], // FeSpecialNEnd1 (no asset)
+    [534, "SpecialN"], // FeSpecialAirNStart (no asset)
+    [535, "SpecialN"], // FeSpecialAirNLoop (no asset)
+    [536, "SpecialN"], // FeSpecialAirNEnd0 (no asset)
+    [537, "SpecialN"], // FeSpecialAirNEnd1 (no asset)
+    [538, "SpecialN"], // GkSpecialNStart (no asset)
+    [539, "SpecialN"], // GkSpecialN (no asset)
+    [540, "SpecialN"], // GkSpecialNEnd (no asset)
+    [541, "SpecialN"], // GkSpecialAirNStart (no asset)
+    [542, "SpecialN"], // GkSpecialAirN (no asset)
+    [543, "SpecialN"], // GkSpecialAirNEnd (no asset)
   ]),
 };
