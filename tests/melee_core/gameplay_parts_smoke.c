@@ -208,7 +208,8 @@ int main(int argc, char** argv)
     { FTKIND_NESS, 8, "Ness" },
     { FTKIND_LINK, 6, "Link" },
     { FTKIND_CLINK, 20, "Young Link" },
-        { FTKIND_MARS, 18, "Marth" },   { FTKIND_ZELDA, 19, "Zelda" },
+        { FTKIND_MARS, 18, "Marth" },   { FTKIND_EMBLEM, 26, "Roy" },
+        { FTKIND_ZELDA, 19, "Zelda" },
         { FTKIND_FALCO, 22, "Falco" },
     };
     MslCoreInput previous_input = { 0 };

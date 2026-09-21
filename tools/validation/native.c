@@ -521,10 +521,13 @@ static int parse_metadata(PyObject* metadata, ReplayView* replay) {
   // replay behavior. Keep those capabilities independent of the online
   // capture's fnmsubs zero-sign behavior: offline mainline Dolphin retains
   // retail zero signs.
+  // Slippi Launcher's src/console/mirror_manager.ts uses SlpFileWriter for
+  // console streams; slippi-js src/node/utils/slpFile.ts writes "network".
+  // That transport tag does not establish Dolphin gameplay patches. Keep
+  // parse_start's scene defaults unless the platform below establishes them.
   // refs/slippi-ssbm-asm/README.md::Output/Netplay
   // refs/slippi-ssbm-asm/Online/Core/BrawlOffscreenDamage.asm
-  if (strcmp(played_on, "dolphin") == 0 || strcmp(played_on, "mainline dolphin") == 0 ||
-      strcmp(played_on, "network") == 0) {
+  if (strcmp(played_on, "dolphin") == 0 || strcmp(played_on, "mainline dolphin") == 0) {
     replay->brawl_offscreen_damage = 1;
     replay->freeze_dead_up_fall_physics = 1;
     replay->whispy_dead_fighter_fix = 1;
@@ -1127,11 +1130,12 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
         character != 13 && character != 14 && character != 15 && character != 16 && character != 17 &&
         character != 24 &&
         character != 18 && character != 19 && character != 20 && character != 21 &&
+        character != 26 &&
         character != 22 && character != 25 && character != 0) {
       snprintf(error, error_size,
                "Melee core requires Mario, Fox, Captain Falcon, Donkey Kong, Ganondorf, Bowser, "
                "Link, Young Link, Sheik, Peach, Ice Climbers, Pikachu, Samus, Ness, Yoshi, "
-               "Jigglypuff, Mewtwo, Game & Watch, Luigi, Marth, Zelda, Dr. Mario, or Falco players");
+               "Jigglypuff, Mewtwo, Game & Watch, Luigi, Marth, Roy, Zelda, Dr. Mario, or Falco players");
       return -1;
     }
     // Ice Climbers leader post rows carry internal kind 10 (Popo) and the

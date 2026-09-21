@@ -135,6 +135,7 @@ src/melee/ft/chara/ftCommon/ftCo_Walk.c	src/melee/ft/chara/ftCommon/ftCo_Walk.c	
 src/melee/ft/chara/ftCommon/ftCo_WarpStar.c	src/melee/ft/chara/ftCommon/ftCo_WarpStar.c	Matching	none	compiled directly from canonical source by Makefile
 src/melee/ft/chara/ftCommon/ftCo_YoshiEgg.c	src/melee/ft/chara/ftCommon/ftCo_YoshiEgg.c	Matching	none	compiled directly from canonical source by Makefile
 src/melee/ft/chara/ftCommon/ftpickupitem.c	src/melee/ft/chara/ftCommon/ftpickupitem.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ft/chara/ftEmblem/ftFe_Init.c	src/melee/ft/chara/ftEmblem/ftFe_Init.c	Matching	roy-source-packet	compiled canonical Roy lifecycle, state registry (Marth special owners) and data-owner callbacks
 src/melee/ft/chara/ftFalco/ftFc_Init.c	src/melee/ft/chara/ftFalco/ftFc_Init.c	Matching	none	compiled directly from canonical source by Makefile
 src/melee/ft/chara/ftFox/ftFx_AppealS.c	src/melee/ft/chara/ftFox/ftFx_AppealS.c	Matching	none	compiled directly from canonical source by Makefile
 src/melee/ft/chara/ftFox/ftFx_Init.c	src/melee/ft/chara/ftFox/ftFx_Init.c	Matching	none	compiled directly from canonical source by Makefile

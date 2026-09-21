@@ -8,8 +8,8 @@ built on the [SSBM Decompilation](https://github.com/doldecomp/melee) project.
 The simulator core is C. The public Python package is `melee_sim`, with a thin
 NumPy API over native batch execution.
 
-Currently supports all competitive stages, and all characters except for Kirby,
-Pichu, and Roy.
+Currently supports all competitive stages, and all characters except for Kirby
+and Pichu.
 
 Gameplay should be 1:1 parity with vanilla Melee/Slippi, with the following remaining exception:
 

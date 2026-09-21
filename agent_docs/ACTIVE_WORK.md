@@ -6,15 +6,15 @@ Order: #30 PPC reset ownership, #26 arithmetic profiles, #27 Roy, #28 Pichu,
 #29 Kirby. Review and merge one at a time, then perform the approved replay
 admission cleanup locally without committing or pushing that final packet.
 
-Completed: #30 merged as `59251229` after local PPC/native reset checks and CI.
+Completed: #30 `59251229`, #26 `9ce438d3`, each after local checks and fresh CI.
 
-Current owner: replay capture configuration. Explicit `fnmsubs_profile` maps
-onto the existing Match capability before initialization; suite loading,
-validation and benchmark export consume it. Runtime math/state and comparison
-stay unchanged. Remove obsolete fighter-admission skips and temporary arithmetic
-reports after preserving evidence in the validation guide/provenance record.
-Review also found two UCF shield-drop flags omitted at benchmark export; forward
-the existing canonical suite fields and verify the serialized configuration.
+Current owner: Roy admission through upstream `ftFe_Init` and shared `ftMs_*`
+move owners. GameData owns extracted Roy archives/costumes and the shared Marth
+attribute layout; Match retains fighter state and source callbacks. API, scalar,
+batch, extraction, validation and viewer registries consume the admission.
+Replace only the unsupported-kind boundary with these source owners; no copied
+move logic or replay-specific behavior. Review the 128 MiB shared data reserve,
+four-Roy pool bounds, all five costumes and the network-console capture default.
 
 Pending replay rules and the decision/experiment log are under ignored
 `reports/triage/pr_sequence_20260920/`; consolidate stable validation policy

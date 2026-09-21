@@ -70,6 +70,7 @@ static int supported_character(uint8_t character) {
          character == MSL_CHARACTER_YOUNG_LINK ||
          character == MSL_CHARACTER_JIGGLYPUFF || character == MSL_CHARACTER_LUIGI ||
          character == MSL_CHARACTER_MARTH ||
+         character == MSL_CHARACTER_ROY ||
          character == MSL_CHARACTER_ZELDA || character == MSL_CHARACTER_FALCO;
 }
 

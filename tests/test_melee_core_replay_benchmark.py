@@ -56,6 +56,29 @@ def test_native_preprocessor_writes_packed_benchmark_case(tmp_path: Path) -> Non
     assert _cached_frame_count(output) == frame_count
 
 
+@pytest.mark.parametrize("major,platform,patched", [
+    (2, "network", False),
+    (2, "dolphin", True),
+    (8, "network", True),
+])
+def test_network_transport_preserves_scene_capabilities(
+    tmp_path: Path, major: int, platform: str, patched: bool
+) -> None:
+    if not NATIVE.is_file() or not STARTER_REPLAY.is_file():
+        pytest.skip("melee core benchmark preprocessing artifacts are unavailable")
+    output = tmp_path / "profile.mslrpb"
+    with replay_path_for_peppi(STARTER_REPLAY) as path:
+        game = _read_slippi(str(path), False)
+        start = dict(game.start)
+        start["scene"] = {**start["scene"], "major": major}
+        metadata = {**game.metadata, "playedOn": platform}
+        load_native().write_benchmark_case(game.frames, start, metadata, str(output))
+    config = output.read_bytes()[24:]
+    # Offscreen damage, DeadUpFall and Whispy fix capabilities are separate
+    # from the transport that wrote metadata. Scene 8 already selects them.
+    assert [config[26], config[27], config[34]] == [patched] * 3
+
+
 @pytest.mark.parametrize("profile,extended,classic", [
     ("retail", False, True),
     ("dolphin-legacy", True, False),

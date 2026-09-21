@@ -61,6 +61,7 @@ def test_live_viewer_supported_domain_and_assets() -> None:
         6: "Link",
         20: "Young Link",
         18: "Marth",
+        26: "Roy",
         19: "Zelda",
         22: "Falco",
     }

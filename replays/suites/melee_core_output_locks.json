@@ -4256,6 +4256,258 @@
       }
     },
     {
+      "replay": "replays/validation/roy/d20-33-network_donkey_kong_20260113T183707.slpz",
+      "expected": {
+        "native": {
+          "frames": 6534,
+          "actual_output_fingerprint": "fe8da7715ee2c806"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/d20-36_luigi_CC9E0000F940_20260224T235350.slpz",
+      "expected": {
+        "native": {
+          "frames": 16828,
+          "actual_output_fingerprint": "08a6ca965688dff8"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/d20-36_luigi_CC9E0000F940_20260224T235844.slpz",
+      "expected": {
+        "native": {
+          "frames": 8776,
+          "actual_output_fingerprint": "ab28f6b78f7b869d"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/d20-36_roy_CC9E0000F940_20260224T234600.slpz",
+      "expected": {
+        "native": {
+          "frames": 11195,
+          "actual_output_fingerprint": "82ec7ef47b5ac16f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/d20-36_roy_CC9E0000F940_20260224T234936.slpz",
+      "expected": {
+        "native": {
+          "frames": 13867,
+          "actual_output_fingerprint": "fc19acbac587fd4f"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_ice_climbers_20250512T211155.slpz",
+      "expected": {
+        "native": {
+          "frames": 13728,
+          "actual_output_fingerprint": "9f19b29d86201b28"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_link_20230708T234539.slpz",
+      "expected": {
+        "native": {
+          "frames": 14446,
+          "actual_output_fingerprint": "cceb45e21fb76c93"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_zelda_20250106T144302.slpz",
+      "expected": {
+        "native": {
+          "frames": 9045,
+          "actual_output_fingerprint": "7b68927dfe57acb2"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_zelda_20250331T223833.slpz",
+      "expected": {
+        "native": {
+          "frames": 9459,
+          "actual_output_fingerprint": "6de4b8f4c73cddbc"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_zelda_20250927T181825.slpz",
+      "expected": {
+        "native": {
+          "frames": 6814,
+          "actual_output_fingerprint": "83f988c1f7d83a0e"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_zelda_20250927T183931.slpz",
+      "expected": {
+        "native": {
+          "frames": 11802,
+          "actual_output_fingerprint": "6165678ce8108485"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/greg_zelda_20260109T190519.slpz",
+      "expected": {
+        "native": {
+          "frames": 13822,
+          "actual_output_fingerprint": "e0f80cb644640fcc"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260801T155509.slpz",
+      "expected": {
+        "native": {
+          "frames": 12062,
+          "actual_output_fingerprint": "737c48b4cd529ef3"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260801T155840.slpz",
+      "expected": {
+        "native": {
+          "frames": 14572,
+          "actual_output_fingerprint": "527ee7a7c72b3fbc"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260809T113747.slpz",
+      "expected": {
+        "native": {
+          "frames": 10911,
+          "actual_output_fingerprint": "1dc9629e27801275"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260809T114057.slpz",
+      "expected": {
+        "native": {
+          "frames": 8392,
+          "actual_output_fingerprint": "ade5f5077bc43ed7"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260828T160938.slpz",
+      "expected": {
+        "native": {
+          "frames": 10067,
+          "actual_output_fingerprint": "a51398b686b665e9"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260828T161240.slpz",
+      "expected": {
+        "native": {
+          "frames": 6949,
+          "actual_output_fingerprint": "d8a3432a7090a5e4"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260916T132440.slpz",
+      "expected": {
+        "native": {
+          "frames": 11174,
+          "actual_output_fingerprint": "7bcdf860e3854d3c"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260916T132759.slpz",
+      "expected": {
+        "native": {
+          "frames": 9190,
+          "actual_output_fingerprint": "0215692b28ff19be"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260916T182706.slpz",
+      "expected": {
+        "native": {
+          "frames": 10152,
+          "actual_output_fingerprint": "fb79479345b8574d"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260916T183009.slpz",
+      "expected": {
+        "native": {
+          "frames": 11547,
+          "actual_output_fingerprint": "6df6f46e63346910"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_20260916T183336.slpz",
+      "expected": {
+        "native": {
+          "frames": 7246,
+          "actual_output_fingerprint": "cb059cdc3c23175b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_fox_cpu_20260919T171221.slpz",
+      "expected": {
+        "native": {
+          "frames": 16364,
+          "actual_output_fingerprint": "c48c809ab1c7a6b0"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/mainline_ice_climbers_20260916T113946.slpz",
+      "expected": {
+        "native": {
+          "frames": 9440,
+          "actual_output_fingerprint": "4ba34d3d152a1ea9"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/yeti-472_falco_CC9E001024A5_20260319T073154.slpz",
+      "expected": {
+        "native": {
+          "frames": 9753,
+          "actual_output_fingerprint": "7fb734e537cd3d96"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/yeti-472_sheik_CC9E001024A5_20260319T075905.slpz",
+      "expected": {
+        "native": {
+          "frames": 10887,
+          "actual_output_fingerprint": "82ada7fe37e3e305"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/roy/yeti-473_luigi_CC9E001024A5_20260326T081109.slpz",
+      "expected": {
+        "native": {
+          "frames": 12202,
+          "actual_output_fingerprint": "3fddabdffce3e6e9"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/samus/auto-cptfalcon-2025-05_Game_20250518T000407.slpz",
       "expected": {
         "native": {
