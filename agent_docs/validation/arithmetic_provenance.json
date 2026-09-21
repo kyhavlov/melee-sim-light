@@ -1,6 +1,6 @@
 {
   "profile": "dolphin-legacy",
-  "evidence_scope": "Four July recordings from the same recorder, identified as Mainline Slippi Dolphin launched through Slippi Launcher. Historical executable/settings unavailable: infer arithmetic behavior, not a build identity. The two Mewtwo first writers were traced before resync; Game & Watch relies on the shared recorder and complete profile differential, without its own first-writer trace.",
+  "evidence_scope": "Four July recordings from the same recorder, identified as Mainline Slippi Dolphin launched through Slippi Launcher. Historical executable/settings unavailable: infer arithmetic behavior, not a build identity. The two Mewtwo first writers were traced before resync; Game & Watch relies on the shared recorder and complete profile differential, without its own first-writer trace. Three historical captures additionally retain prior source-writer evidence for the same instruction semantics; they do not share the July recorder.",
   "source_evidence": {
     "retail": "src/melee/ft/fighter.c::Fighter_procUpdate; GALE01 0x8006B9E4",
     "legacy_jit": "https://github.com/project-slippi/Ishiiruka/blob/e9d048ac6f2d77f96fcd1c0b04bc1533a7ff81e1/Source/Core/Core/PowerPC/Jit64/Jit_FloatingPoint.cpp#L294-L311",
@@ -13,7 +13,6 @@
       "sha256_slp": "2c71d691818124da7fb46e6f766b28d6d9a7e8fb5978a6a01226cab693d4d311",
       "fnmsubs_profile": "dolphin-legacy",
       "profile_evidence": "First writer operands at retail 0x8006B9E4 and strict full-game arithmetic-profile differential; historical build unknown.",
-      "sha256_slpz": "d0f41a2a5a0ba38f0169fb9aeda0e06b679f66fcfc23e00c550907168de8a6ab",
       "profile_differential": {
         "transitions": 5960,
         "retail_first_mismatch": 1000,
@@ -39,7 +38,6 @@
       "sha256_slp": "46e643c5dd64d9c028d0ba9f998b3d34afa301defd02e97a2c1d556d35657e22",
       "fnmsubs_profile": "dolphin-legacy",
       "profile_evidence": "First writer operands at retail 0x8006B9E4 and strict full-game arithmetic-profile differential; historical build unknown.",
-      "sha256_slpz": "8f67e002912dfd9bba192e2d8ff9b4a5fb15094653231081cd45c665988ba10c",
       "profile_differential": {
         "transitions": 8060,
         "retail_first_mismatch": 4041,
@@ -63,7 +61,6 @@
       "source": "/home/blewf/Slippi/Game_20260707T142746.slp",
       "replay": "replays/validation/legacy_arithmetic/gamewatch_fox_20260707T142746.slpz",
       "sha256_slp": "f88b682fb7c829c799fe5b42ac8d9b45dfc7f0846ee2182556feef151b3954bf",
-      "sha256_slpz": "59d9a35034b73faf7e97b166038259a7d081eda3f227159132847b7166b7b56d",
       "fnmsubs_profile": "dolphin-legacy",
       "profile_evidence": "Strict full-game arithmetic-profile differential (same July recorder as the Mewtwo games); historical build unknown.",
       "profile_differential": {
@@ -77,7 +74,6 @@
       "source": "/home/blewf/Slippi/Game_20260707T172242.slp",
       "replay": "replays/validation/legacy_arithmetic/gamewatch_fox_20260707T172242.slpz",
       "sha256_slp": "4b510813e7645d448b3430e7327ec30e6f851ca9e3e061e970be0731922f7b98",
-      "sha256_slpz": "b34b0213d75b8dfedde35a1ddcca5e248b16e2af77a3a941b5f468c439d12c11",
       "fnmsubs_profile": "dolphin-legacy",
       "profile_evidence": "Strict full-game arithmetic-profile differential (same July recorder as the Mewtwo games); historical build unknown.",
       "profile_differential": {
@@ -86,6 +82,45 @@
         "retail_mismatched_frames": 68,
         "legacy_mismatched_frames": 0
       }
+    },
+    {
+      "replay": "replays/validation/falcon/falcon_demo.slpz",
+      "sha256_slp": "dee1ea74695de84888817f6e3c304f38ff094a3ae65298bad34bc736eac5b0ce",
+      "fnmsubs_profile": "dolphin-legacy",
+      "profile_evidence": "All remaining rows are attack-velocity signed zero. Current retail scalar fnmsubs preserves -0 on exact cancellation, while this historical capture contains +0. The capture does not identify the original emulator/JIT floating-point settings. Keep strict zero-sign comparison and the source instruction semantics.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_80049EAC_LeftWall",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/jobj.c",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ],
+      "evidence_limit": "The prior writer investigation establishes exact-cancellation zero-sign behavior and, for doubles, its DI consequence. This infers the supported instruction semantics, not the unavailable historical build. Full native/PPC profile verification is required independently."
+    },
+    {
+      "replay": "replays/validation/peach/peach_demo_1.slpz",
+      "sha256_slp": "0be0712d0cd32ca76fd537718566204511b7118246c23d36c39683b867b9f1f7",
+      "fnmsubs_profile": "dolphin-legacy",
+      "profile_evidence": "All remaining rows are attack-velocity signed zero. Current retail scalar fnmsubs preserves -0 on exact cancellation, while this historical capture contains +0. The capture does not identify the original emulator/JIT floating-point settings. Keep strict zero-sign comparison and the source instruction semantics.",
+      "sources": [
+        "refs/melee/src/melee/it/it_2725.c::it_80272860",
+        "refs/melee/src/melee/it/items/itpeachturnip.c",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ],
+      "evidence_limit": "The prior writer investigation establishes exact-cancellation zero-sign behavior and, for doubles, its DI consequence. This infers the supported instruction semantics, not the unavailable historical build. Full native/PPC profile verification is required independently."
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260509T152622.slpz",
+      "sha256_slp": "6c31baba34d048d8a598df1c13f861823b679b2260b84faea8ab003569b3597c",
+      "fnmsubs_profile": "dolphin-legacy",
+      "profile_evidence": "331 signed-zero field differences precede the mixed numeric tail. At 5423 retail DI receives kb_y=+0 while the hosted profile receives -0; atan2 selects opposite pi branches. An equal-input +0 diagnostic removes every nonzero numeric mismatch (83 fields), leaving only sign rows. The diagnostic is removed; no output-derived rule or sign tolerance is retained.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ],
+      "evidence_limit": "The prior writer investigation establishes exact-cancellation zero-sign behavior and, for doubles, its DI consequence. This infers the supported instruction semantics, not the unavailable historical build. Full native/PPC profile verification is required independently."
     }
   ]
 }

@@ -3,623 +3,251 @@
     {
       "source": "~/Slippi/2026-09-Mainline/Game_20260919T194326.slp",
       "replay": "replays/validation/kirby/mainline_bowser_cpu_20260919T194326.slpz",
-      "sha256_slp": "b9eab14589eca47d8570a8b8195c8ede813fbbf4b0e4dcf91e170a353e785a5b",
-      "sha256_slpz": "8505cd92db104b5a4c6d651f784c82a8d7f8fcfa7cee903dd20f5866086bc7c9",
-      "played_on": "mainline dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.1",
-      "frames": 11686,
-      "cpu_players": {
-        "1": "Bowser level 6"
-      },
-      "is_frozen_ps": false
+      "sha256_slp": "b9eab14589eca47d8570a8b8195c8ede813fbbf4b0e4dcf91e170a353e785a5b"
     },
     {
       "source": "~/Slippi/2026-09-Mainline/Game_20260917T162307.slp",
       "replay": "replays/validation/kirby/mainline_ice_climbers_20260917T162307.slpz",
-      "sha256_slp": "32b4175172e7f8b97d3d65ff7118b4eb77276d8381b60756b885c336c2c11549",
-      "sha256_slpz": "adca1b85a506c6640494ce76f0f1deb55e7b6dd569fdb97ec9d464b46539ab22",
-      "played_on": "mainline dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.19.1",
-      "frames": 11765,
-      "is_frozen_ps": false
+      "sha256_slp": "32b4175172e7f8b97d3d65ff7118b4eb77276d8381b60756b885c336c2c11549"
     },
     {
       "source": "~/Slippi/2026-09-Mainline/Game_20260917T163007.slp",
       "replay": "replays/validation/kirby/mainline_game_and_watch_20260917T163007.slpz",
-      "sha256_slp": "ce8967651f98eb9529800cbb6b52930c28a1715b88646549c3141e82b160ae2c",
-      "sha256_slpz": "ad7e11571461b8e11d85b214a505fa04e8dcf8ffcb0669511b515886623d1c84",
-      "played_on": "mainline dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.19.1",
-      "frames": 124,
-      "is_frozen_ps": false
+      "sha256_slp": "ce8967651f98eb9529800cbb6b52930c28a1715b88646549c3141e82b160ae2c"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20240826T195103.slp",
       "replay": "replays/validation/kirby/greg_zelda_20240826T195103.slpz",
-      "sha256_slp": "4e04eddc33438c98fc205655565ab39fa73737bd21a1f37161de4238fc21263a",
-      "sha256_slpz": "44f91897fde8f811f4d33ab4920159dddeacaa10b8e8791664b2846dcfe76ae9",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.17.0",
-      "frames": 12561,
-      "is_frozen_ps": false
+      "sha256_slp": "4e04eddc33438c98fc205655565ab39fa73737bd21a1f37161de4238fc21263a"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20250619T225500.slp",
       "replay": "replays/validation/kirby/greg_zelda_20250619T225500.slpz",
-      "sha256_slp": "f7a7fb7741b29342f2e69e379bca42535ccc28906c23703c287770d0a5f35d24",
-      "sha256_slpz": "36675b039d404c1d87f2593d6c42814eb09149b6c6ba0ffde6af81ea33cf809b",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.18.0",
-      "frames": 8513,
-      "is_frozen_ps": false
+      "sha256_slp": "f7a7fb7741b29342f2e69e379bca42535ccc28906c23703c287770d0a5f35d24"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20260104T202356.slp",
       "replay": "replays/validation/kirby/greg_zelda_20260104T202356.slpz",
-      "sha256_slp": "d35fb8ecc03e3bd665c9eaa829ab32f6638467508361ff9b5cbff9c897da20ce",
-      "sha256_slpz": "f2e5f6eb38e719bd94aa690019eb8a4e57122d4b1ef913e63758b146f89578c9",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.19.0",
-      "frames": 14193,
-      "is_frozen_ps": false
+      "sha256_slp": "d35fb8ecc03e3bd665c9eaa829ab32f6638467508361ff9b5cbff9c897da20ce"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20250619T225728.slp",
       "replay": "replays/validation/kirby/greg_zelda_20250619T225728.slpz",
-      "sha256_slp": "c90e58f4f343f69f0739b03a05d7dbf289d30b3ac9506ae1006b44b2a0ad0269",
-      "sha256_slpz": "deb20564d3c4d8dc8d3cdd501d9ca9d7ccf6011970894da63103a5121febac5d",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.18.0",
-      "frames": 14041,
-      "is_frozen_ps": false
+      "sha256_slp": "c90e58f4f343f69f0739b03a05d7dbf289d30b3ac9506ae1006b44b2a0ad0269"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20250619T225223.slp",
       "replay": "replays/validation/kirby/greg_zelda_20250619T225223.slpz",
-      "sha256_slp": "939436dcbcbf3beee6cf7324c5444ac3683cc7b6c1f998633a1ea00a1e815a12",
-      "sha256_slpz": "6eb12412f81945ede6676d81fe10c83e158eeb2639001abb89b437f889c72c7e",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.18.0",
-      "frames": 9068,
-      "is_frozen_ps": false
+      "sha256_slp": "939436dcbcbf3beee6cf7324c5444ac3683cc7b6c1f998633a1ea00a1e815a12"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20250628T210431.slp",
       "replay": "replays/validation/kirby/greg_zelda_20250628T210431.slpz",
-      "sha256_slp": "8bb42cc92500dac4d15e4c01d1e17b03dd527b4d98217ce761bd6f40735d60c2",
-      "sha256_slpz": "904970ac2dbb1d880e062b44918257192dbc759001e24c5c815555c62b981a5a",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.18.0",
-      "frames": 8855,
-      "is_frozen_ps": false
+      "sha256_slp": "8bb42cc92500dac4d15e4c01d1e17b03dd527b4d98217ce761bd6f40735d60c2"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20240313T140759.slp",
       "replay": "replays/validation/kirby/greg_zelda_20240313T140759.slpz",
-      "sha256_slp": "ba808e9583a174bf57a7698df13ee42c6716266e92adc02ba13ecc2f2272efd4",
-      "sha256_slpz": "daac09203f902e9bdb42a45dd43ce814b74b28591b2181764417e8ff2473234a",
-      "played_on": "mainline dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.16.0",
-      "frames": 14775,
-      "is_frozen_ps": false
+      "sha256_slp": "ba808e9583a174bf57a7698df13ee42c6716266e92adc02ba13ecc2f2272efd4"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20240425T135022.slp",
       "replay": "replays/validation/kirby/greg_zelda_20240425T135022.slpz",
-      "sha256_slp": "6464a52ccebddc9468f6f189db9a05601bdb90d8f2fddfcf0548e7f5502e2c78",
-      "sha256_slpz": "1701f94b19d779855bd1093ce67d0080535357ec8584475b8a3b9696bad18a95",
-      "played_on": "mainline dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.16.0",
-      "frames": 3372,
-      "is_frozen_ps": false
+      "sha256_slp": "6464a52ccebddc9468f6f189db9a05601bdb90d8f2fddfcf0548e7f5502e2c78"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20250619T230128.slp",
       "replay": "replays/validation/kirby/greg_zelda_20250619T230128.slpz",
-      "sha256_slp": "b258ddfc5c5dbe4b83049af957c857e9fec7e7cd43fea0e82125a7112e246822",
-      "sha256_slpz": "97877fc9b098380e52e6317035d8cf22f5dfb3e5f0c3630fdb0ff9d1c47e42af",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.18.0",
-      "frames": 12830,
-      "is_frozen_ps": false
+      "sha256_slp": "b258ddfc5c5dbe4b83049af957c857e9fec7e7cd43fea0e82125a7112e246822"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20240826T194839.slp",
       "replay": "replays/validation/kirby/greg_zelda_20240826T194839.slpz",
-      "sha256_slp": "fad555203fc5021e3e0c94d1b1017310407af2f2ce995a087815ebaac8a83744",
-      "sha256_slpz": "515d857d9867201676e14189dd1057763e5fa70bdc28ae170bbfbc43e5bfeca5",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.17.0",
-      "frames": 8289,
-      "is_frozen_ps": false
+      "sha256_slp": "fad555203fc5021e3e0c94d1b1017310407af2f2ce995a087815ebaac8a83744"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20240924T224955.slp",
       "replay": "replays/validation/kirby/greg_zelda_20240924T224955.slpz",
-      "sha256_slp": "989d896c44fd3d158c5ca7fc7ca75bd658335e26d1953410c2fa8d11d285909c",
-      "sha256_slpz": "9053c216cc4a42fc38dc549bb9564d63c9298448e65f57087cf1cf238b64aa89",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.17.0",
-      "frames": 12220,
-      "is_frozen_ps": false
+      "sha256_slp": "989d896c44fd3d158c5ca7fc7ca75bd658335e26d1953410c2fa8d11d285909c"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20240826T194503.slp",
       "replay": "replays/validation/kirby/greg_zelda_20240826T194503.slpz",
-      "sha256_slp": "926d42470fd38f62cad86a4a4ab7eb2d0fef57c4ba8f89201b3de7eb76cc86a0",
-      "sha256_slpz": "3f602522e896249e9717ffca5f99b45cfd6f43a5edfc49a99a35a4b57bd15a0a",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.17.0",
-      "frames": 12314,
-      "is_frozen_ps": false
+      "sha256_slp": "926d42470fd38f62cad86a4a4ab7eb2d0fef57c4ba8f89201b3de7eb76cc86a0"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20240906T223350.slp",
       "replay": "replays/validation/kirby/greg_zelda_20240906T223350.slpz",
-      "sha256_slp": "5a15532a52bf4d6eba40970f38e414ea949db9e766cebd8ffeb3044994c4f438",
-      "sha256_slpz": "a0677dc34aa2fba11a19d05fde13562c21f62ad609dcb37ce50b10a2b0eddf8a",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.17.0",
-      "frames": 9453,
-      "is_frozen_ps": false
+      "sha256_slp": "5a15532a52bf4d6eba40970f38e414ea949db9e766cebd8ffeb3044994c4f438"
     },
     {
       "source": "~/git/exphil/replays/greg/game_and_watch/Game_20231218T204918.slp",
       "replay": "replays/validation/kirby/greg_game_and_watch_20231218T204918.slpz",
-      "sha256_slp": "5f41a510773c17043fd1ebafad214f217892dbb584806d3c21fd94ae2c89f123",
-      "sha256_slpz": "0d8e30d43ddf0a3132d388ef9d22b0026724b391622cf46a847f95c7dd9400a2",
-      "played_on": "mainline dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.16.0",
-      "frames": 9812,
-      "is_frozen_ps": false
+      "sha256_slp": "5f41a510773c17043fd1ebafad214f217892dbb584806d3c21fd94ae2c89f123"
     },
     {
       "source": "~/git/exphil/replays/d20/extracted/D20 Melee #1/2Slaw/Game_00191DDFD11F_20240917T183608.slp",
       "replay": "replays/validation/kirby/d20-1_falco_00191DDFD11F_20240917T183608.slpz",
-      "sha256_slp": "15a98b7f29fb68de025c28d524db365e0c56866a2c4b36c5694d17f74c5a47bf",
-      "sha256_slpz": "722804972ebd4c426c5d9f7240ec2fe50b6855a97df87887647141f6a99879d6",
-      "played_on": "nintendont",
-      "console_nick": ",=,e",
-      "scene_major": 2,
-      "slippi_version": "3.15.0",
-      "frames": 8300,
-      "is_frozen_ps": true
+      "sha256_slp": "15a98b7f29fb68de025c28d524db365e0c56866a2c4b36c5694d17f74c5a47bf"
     },
     {
       "source": "~/git/exphil/replays/d20/extracted/D20 Melee #37/Spikenard_d20_37/Game_001B7ABDD8A0_20260310T104926.slp",
       "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T104926.slpz",
-      "sha256_slp": "e10c1f413ae71ce9b2cd3a83cc8d538f2d2eff2205937a3f55cfb587cd462618",
-      "sha256_slpz": "69f63a0c4886a269051000152ab1ec5e4009d74900436d8bc96109f89f865443",
-      "played_on": "nintendont",
-      "console_nick": "Snocf",
-      "scene_major": 2,
-      "slippi_version": "3.15.0",
-      "frames": 7303,
-      "is_frozen_ps": true
+      "sha256_slp": "e10c1f413ae71ce9b2cd3a83cc8d538f2d2eff2205937a3f55cfb587cd462618"
     },
     {
       "source": "~/git/exphil/replays/d20/extracted/D20 Melee #37/Spikenard_d20_37/Game_001B7ABDD8A0_20260310T105148.slp",
       "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T105148.slpz",
-      "sha256_slp": "dfc004e594485964bbbc98018699265a28bb827504ebb8565114177073547365",
-      "sha256_slpz": "5280947e0e39622abe79e3d62375d6e4fe0fafffa1ff641ff8005d1f1d3da5df",
-      "played_on": "nintendont",
-      "console_nick": "Snocf",
-      "scene_major": 2,
-      "slippi_version": "3.15.0",
-      "frames": 8424,
-      "is_frozen_ps": true
+      "sha256_slp": "dfc004e594485964bbbc98018699265a28bb827504ebb8565114177073547365"
     },
     {
       "source": "~/git/exphil/replays/d20/extracted/D20 Melee #37/Spikenard_d20_37/Game_001B7ABDD8A0_20260310T105436.slp",
       "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T105436.slpz",
-      "sha256_slp": "cd45dbab44f08933560bfd697c9ff62c87fff13f106858cfaf41ab7453d4411d",
-      "sha256_slpz": "7db98122144b41a09951be40d00b8d95c49d5e21477c90b2d26c97a08eacca75",
-      "played_on": "nintendont",
-      "console_nick": "Snocf",
-      "scene_major": 2,
-      "slippi_version": "3.15.0",
-      "frames": 9682,
-      "is_frozen_ps": true
+      "sha256_slp": "cd45dbab44f08933560bfd697c9ff62c87fff13f106858cfaf41ab7453d4411d"
     },
     {
       "source": "~/git/exphil/replays/d20/extracted/D20 Melee #3/D20-3-Drew/D20-3-Drew/Game_A45C27B56C27_20241016T025123.slp",
       "replay": "replays/validation/kirby/d20-3_falco_A45C27B56C27_20241016T025123.slpz",
-      "sha256_slp": "50b6b18c1aebc880bd2f260a941a9f03b0899ceeb30307d3ff308baccfbec898",
-      "sha256_slpz": "89788e1b84f0ab5790b12405d80e00794b5da4393e1d180eab474b96d44ec5c7",
-      "played_on": "nintendont",
-      "console_nick": "YASHICHI_8",
-      "scene_major": 2,
-      "slippi_version": "3.15.0",
-      "frames": 7962,
-      "is_frozen_ps": true
+      "sha256_slp": "50b6b18c1aebc880bd2f260a941a9f03b0899ceeb30307d3ff308baccfbec898"
     },
     {
       "source": "~/git/exphil/replays/d20/extracted/D20 Melee #3/D20-3-Drew/D20-3-Drew/Game_A45C27B56C27_20241016T024513.slp",
       "replay": "replays/validation/kirby/d20-3_marth_A45C27B56C27_20241016T024513.slpz",
-      "sha256_slp": "4ef4bfde84650d629aca77ea0b9b9f9364fe8873dd195b7981fc9af9e1a2965b",
-      "sha256_slpz": "1cd4d5f8d34d5a29d4d59fc8b382f1d3566855985a9a58f3c214a0a34f51fb37",
-      "played_on": "nintendont",
-      "console_nick": "YASHICHI_8",
-      "scene_major": 2,
-      "slippi_version": "3.15.0",
-      "frames": 8283,
-      "is_frozen_ps": true
+      "sha256_slp": "4ef4bfde84650d629aca77ea0b9b9f9364fe8873dd195b7981fc9af9e1a2965b"
     },
     {
       "source": "~/git/exphil/replays/d20/extracted/D20 Melee #3/D20-3-Drew/D20-3-Drew/Game_A45C27B56C27_20241016T024203.slp",
       "replay": "replays/validation/kirby/d20-3_captain_falcon_A45C27B56C27_20241016T024203.slpz",
-      "sha256_slp": "5f2070e54eab2d4dbe2f8eec3e675c67a9cea385a0a921843faf4d3b36addcf3",
-      "sha256_slpz": "3959cc3e17dbf576dd78b2ba5b60ec8bf4159ae3c5a88772a25f091d5af37ff4",
-      "played_on": "nintendont",
-      "console_nick": "YASHICHI_8",
-      "scene_major": 2,
-      "slippi_version": "3.15.0",
-      "frames": 9737,
-      "is_frozen_ps": true
+      "sha256_slp": "5f2070e54eab2d4dbe2f8eec3e675c67a9cea385a0a921843faf4d3b36addcf3"
     },
     {
       "source": "~/git/exphil/replays/d20/extracted/D20 Melee #3/D20-3-Drew/D20-3-Drew/Game_A45C27B56C27_20241016T025418.slp",
       "replay": "replays/validation/kirby/d20-3_peach_A45C27B56C27_20241016T025418.slpz",
-      "sha256_slp": "b2507746fc8913861ee0cf40aa0eec64ad2ce7773e91ab4bfc1522d7007b669d",
-      "sha256_slpz": "546e929739cd51e9108096d86edd83a1f8886af4347c6c72232e81616e295c5f",
-      "played_on": "nintendont",
-      "console_nick": "YASHICHI_8",
-      "scene_major": 2,
-      "slippi_version": "3.15.0",
-      "frames": 7610,
-      "is_frozen_ps": true
+      "sha256_slp": "b2507746fc8913861ee0cf40aa0eec64ad2ce7773e91ab4bfc1522d7007b669d"
     },
     {
       "source": "~/git/exphil/replays/d20/extracted/D20 Melee #1/2Slaw/Game_00191DDFD11F_20240917T183839.slp",
       "replay": "replays/validation/kirby/d20-1_falco_00191DDFD11F_20240917T183839.slpz",
-      "sha256_slp": "4a0cb63d57b19d424dbaaa9ed6175f33f019e82db9999805953bf0c9ec48e9db",
-      "sha256_slpz": "33720d31fe310d042f7a77e308ca882173f185770dd713dcf02cea503bb841f6",
-      "played_on": "nintendont",
-      "console_nick": ",=,e",
-      "scene_major": 2,
-      "slippi_version": "3.15.0",
-      "frames": 11347,
-      "is_frozen_ps": true
+      "sha256_slp": "4a0cb63d57b19d424dbaaa9ed6175f33f019e82db9999805953bf0c9ec48e9db"
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T122800.slp",
       "replay": "replays/validation/kirby/scripted_mario_20260920T122800.slpz",
       "sha256_slp": "ad147a07f8420df6cf7fed50a89d1abb9a2dfaef240a113d0c1fe5d23c1e76e6",
-      "sha256_slpz": "bd06520193f51a67a884c19d831c6f6cc8c431396d20d45d9ba64771539cb038",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 4160,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "mario",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Mario copy: Fireball on the ground and in the air; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Mario copy: Fireball on the ground and in the air."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123530.slp",
       "replay": "replays/validation/kirby/scripted_luigi_20260920T123530.slpz",
       "sha256_slp": "93451dfe3026b4448ba06c0bb50b2fbe8d7b1d8790010ddbfdba208442f30a13",
-      "sha256_slpz": "ec192f0c45f47892d669c0823a02fa8662b1f085f5b11f313ae2fcc1debf0424",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 4246,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "luigi",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Luigi copy: Fireball; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Luigi copy: Fireball."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123540.slp",
       "replay": "replays/validation/kirby/scripted_doc_20260920T123540.slpz",
       "sha256_slp": "3c3927afc0853ee5057b81a7b56193a1d1cd6c9dc8f8121f89150b05955dd509",
-      "sha256_slpz": "9d4ba35cac9df56b70999f8f85425262633d1a6406a1ab81e04e9b34dcbafed2",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 4006,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "doc",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Dr. Mario copy: Megavitamin; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Dr. Mario copy: Megavitamin."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123550.slp",
       "replay": "replays/validation/kirby/scripted_link_20260920T123550.slpz",
       "sha256_slp": "73e0414f4f51c3c86e4d8efa0936639cd007acf191435d22334c3afb3424edb4",
-      "sha256_slpz": "e0d4b0d60256b8a6ac86fb4be6f23c943b0081da10e265d934ac82cb4d7bccba",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 4312,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "link",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Link copy: Bow, held and released; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Link copy: Bow, held and released."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123216.slp",
       "replay": "replays/validation/kirby/scripted_ylink_20260920T123216.slpz",
       "sha256_slp": "5b845259b409bb1626fdcc4c3ea415d7d75136f5d8d8eb80eae248cc9c3898af",
-      "sha256_slpz": "0b962669149bd2aabcc1ad49054832b607755f536975518999cacbe60508cd5b",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 4815,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "ylink",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Young Link copy: Fire Bow; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Young Link copy: Fire Bow."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123226.slp",
       "replay": "replays/validation/kirby/scripted_samus_20260920T123226.slpz",
       "sha256_slp": "5f06e8996654c53ba8401d58eec468818e04566f789d66ee09757198dbd5c107",
-      "sha256_slpz": "4f1145f34f77d16117b3bbbfe206e894cfa926aa3135ba9194eb59bd35fddc79",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 3984,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "samus",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Samus copy: Charge Shot charged and released; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Samus copy: Charge Shot charged and released."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123236.slp",
       "replay": "replays/validation/kirby/scripted_sheik_20260920T123236.slpz",
       "sha256_slp": "4b6416fb3a9484745fc8f7166ddb926f08cbf6ee4ef6dc0fe4854637e875d019",
-      "sha256_slpz": "81fdb84357ae291f905c5b4deea1b3f56438b7f805bc360189cad310356f2100",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 3993,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "sheik",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Sheik copy: Needles held and thrown; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Sheik copy: Needles held and thrown."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123607.slp",
       "replay": "replays/validation/kirby/scripted_ness_20260920T123607.slpz",
       "sha256_slp": "68ce2e31de351946733f7a531b0d8da37ed66b8fc70172e07cadb2a5f41cb029",
-      "sha256_slpz": "301604b7840147bc6a431d08cecc30db2c6222abcc364f7c2c44fdaaa5e52b25",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 4211,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "ness",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Ness copy: PK Flash; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Ness copy: PK Flash."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123343.slp",
       "replay": "replays/validation/kirby/scripted_jigglypuff_20260920T123343.slpz",
       "sha256_slp": "ed67fb775284f4d159c847e0327a83d7dd24725cf3a6ef2183ffdc3c225987c5",
-      "sha256_slpz": "eeb4dcf32ae7d27d9ee99662b2ed5029d8a8f8ab77d60d5c4a89b77224e6b439",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 3086,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "jigglypuff",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Jigglypuff copy: Rollout charged and released; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Jigglypuff copy: Rollout charged and released."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123352.slp",
       "replay": "replays/validation/kirby/scripted_mewtwo_20260920T123352.slpz",
       "sha256_slp": "7078def3eb47d2fcb1c41fdf52cf671ef673f12f3853d768f2d11e4f078e8bc5",
-      "sha256_slpz": "2bbc42b0da56e97e76080dad23e1357d77f88aa01977c71bcbd195cf3eaab07e",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 4117,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "mewtwo",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Mewtwo copy: Shadow Ball charged and released; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Mewtwo copy: Shadow Ball charged and released."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123401.slp",
       "replay": "replays/validation/kirby/scripted_dk_20260920T123401.slpz",
       "sha256_slp": "0a43169b49835256ebdb7066fa72ff88b64688f3dc2105581d59575573d21ee4",
-      "sha256_slpz": "147aa005c216a5257bb895fa70ef147f78e6aec3392bb57c49948b4671cc7a59",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 4245,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "dk",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Donkey Kong copy: Giant Punch charged and released; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Donkey Kong copy: Giant Punch charged and released."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123411.slp",
       "replay": "replays/validation/kirby/scripted_yoshi_20260920T123411.slpz",
       "sha256_slp": "89454ae75d5a496b4c8617a2cf15d8c21269b18aea380864131a3709376b562e",
-      "sha256_slpz": "383fb75c22870dc166dc452fda64ab6b81f322bbae787baed75b7c09ce29f2f5",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 3823,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "yoshi",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Yoshi copy: Egg Lay on contact; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Yoshi copy: Egg Lay on contact."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123431.slp",
       "replay": "replays/validation/kirby/scripted_ganondorf_20260920T123431.slpz",
       "sha256_slp": "7f1725b88b82387b2143cb266eed32591b09beae382d5a775de806e912a08907",
-      "sha256_slpz": "4f8dd6249926835accefc862b9c24cfc59fc2338c478665fade84982bdf21c05",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 3840,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "ganondorf",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Ganondorf copy: Warlock Punch; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Ganondorf copy: Warlock Punch."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123441.slp",
       "replay": "replays/validation/kirby/scripted_fox_20260920T123441.slpz",
       "sha256_slp": "cd6e62c4bed130d41142ccfa7b50a84f746f61694f923fb53af64c763eba450c",
-      "sha256_slpz": "0393475e98b9dd61ffdb6670fa71da58f57ebdfddaddec81bb08dacabdab10a0",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 4349,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "fox",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Fox copy: Blaster; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Fox copy: Blaster."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123452.slp",
       "replay": "replays/validation/kirby/scripted_kirby_20260920T123452.slpz",
       "sha256_slp": "43519912be3cbc44bc463fc78185e6629cae20620e921fcbbc346bf714d9aa5b",
-      "sha256_slpz": "69c2dedde1a0226cbdcf1800628bfe26d784b35ad804850986ada422bb167657",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 4231,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "kirby",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Kirby mirror: both Kirbys inhale, the other spits a star; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Kirby mirror: both Kirbys inhale, the other spits a star."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123502.slp",
       "replay": "replays/validation/kirby/scripted_moves_20260920T123502.slpz",
       "sha256_slp": "35162c8afa4461c40c5b09c741cba64e211f3c383862b27005dee9f2761d8f0a",
-      "sha256_slpz": "ccc7bf638817a07baa40fcee3f8ae83a4f3b361bb0cc70cbef64e2bbdaec1212",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 6468,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "moves",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Kirby's own Final Cutter, Hammer, Stone, dash attack around Battlefield platforms and ledges (passive Fox); swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Kirby's own Final Cutter, Hammer, Stone, dash attack around Battlefield platforms and ledges (passive Fox)."
     },
     {
       "source": "scripted headless Dolphin capture, Game_20260920T123323.slp",
       "replay": "replays/validation/kirby/scripted_pikachu_20260920T123323.slpz",
       "sha256_slp": "a13e6cb61aff9f42220454f1b27e929760b73d7449882f3858b7464564de13d1",
-      "sha256_slpz": "d4e2754d3184935b88119d86d4abc1dabc8a198289c06bf3dc29e2e5d4a57ddd",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 2,
-      "slippi_version": "3.19.0",
-      "frames": 4339,
-      "recorder": "tools/validation/record_kirby_copies.exs",
       "scenario": "pikachu",
-      "bridge": "ExPhil.Bridge.MeleePort / libmelee_ex",
-      "dolphin_binary_sha256": "b694802a4210a5b0b5b6307713fc05e7596d57e6c7b4b44ae09aa7dc70bf644c",
-      "accurate_nmsub": true,
-      "headless": true,
-      "notes": "Pikachu copy: Thunder Jolt; swallowed, fired on the ground and in the air, dropped by taunt, re-swallowed, then lost to hits and death."
+      "notes": "Pikachu copy: Thunder Jolt."
     }
   ],
   "excluded": [
@@ -665,5 +293,9 @@
     "hook_sha256": "7c98d82918ce780386fa82e1e273626e457be3a0bc8608e67537ac32bff23468",
     "dolphin_base": "893d910dcfd613fc24aa4ade908be9385df8e323",
     "asm_base": "f392bdef4143f404c7e165ae6b0227367bab6cb4"
+  },
+  "configuration": {
+    "applies_to": "recordings with a scenario",
+    "headless": true
   }
 }

@@ -3,158 +3,74 @@
     {
       "source": "~/git/exphil/replays/greg/ice_climbers/Game_20251028T201015.slp",
       "replay": "replays/validation/pichu/greg_ice_climbers_20251028T201015.slpz",
-      "sha256_slp": "a9f75a0f34dc2defe83b397a71113383f41fc4bb09f55085596d1508c6ea26e0",
-      "sha256_slpz": "115011c255e26147047e1fc9a55f4ab5994f4b55cb1db865185ab21b3e193f4d",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.19.0",
-      "frames": 12058
+      "sha256_slp": "a9f75a0f34dc2defe83b397a71113383f41fc4bb09f55085596d1508c6ea26e0"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20250603T232416_1.slp",
       "replay": "replays/validation/pichu/greg_zelda_20250603T232416.slpz",
-      "sha256_slp": "91842c495bfba28df8d50bd7cefb4b0340bdcab8e732a335735ec236afa33c75",
-      "sha256_slpz": "0bb20a1e21281bab4addec7179079b3e815299c4c3992853902ba42a39bd6d6b",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.18.0",
-      "frames": 11462
+      "sha256_slp": "91842c495bfba28df8d50bd7cefb4b0340bdcab8e732a335735ec236afa33c75"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20250323T145000.slp",
       "replay": "replays/validation/pichu/greg_zelda_20250323T145000.slpz",
-      "sha256_slp": "8d92107abb7ef7749f83f34817576c78d674baaed358f37d0f808ef2448936bb",
-      "sha256_slpz": "d00e0431f20f22ee5632eb9edebc3752ff0781c7295d253d9aa996d7683cd40e",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.18.0",
-      "frames": 146
+      "sha256_slp": "8d92107abb7ef7749f83f34817576c78d674baaed358f37d0f808ef2448936bb"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20250928T001223.slp",
       "replay": "replays/validation/pichu/greg_zelda_20250928T001223.slpz",
-      "sha256_slp": "1310e9b2fabf293bbbc4918e78e1e135385ffaf8d4ac29b097659f4e75be9ed1",
-      "sha256_slpz": "769c52bc4880bc037b181f3d9f10f1ed5f3570166508db72227836a3d4ac82c2",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.19.0",
-      "frames": 9421
+      "sha256_slp": "1310e9b2fabf293bbbc4918e78e1e135385ffaf8d4ac29b097659f4e75be9ed1"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20240826T200909.slp",
       "replay": "replays/validation/pichu/greg_zelda_20240826T200909.slpz",
-      "sha256_slp": "c1765fed0ad64a5c8fe88ef679b03d14a5fa7bee769bbdff02673330c8870a2e",
-      "sha256_slpz": "1d0f3b31b844e9b90bfb8e74e4be71b8d89d62ab38eec4e272e4ab2162f1788e",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.17.0",
-      "frames": 6142
+      "sha256_slp": "c1765fed0ad64a5c8fe88ef679b03d14a5fa7bee769bbdff02673330c8870a2e"
     },
     {
       "source": "~/git/exphil/replays/greg/zelda/Game_20240924T223949.slp",
       "replay": "replays/validation/pichu/greg_zelda_20240924T223949.slpz",
-      "sha256_slp": "1e5aa45381d6a155189adb87b5555a37935a3a263570a1435e3c39be389138c3",
-      "sha256_slpz": "016033420b95a3b8cf11937f3b92a54b911324127254ff8f95474d911035cd32",
-      "played_on": "dolphin",
-      "console_nick": null,
-      "scene_major": 8,
-      "slippi_version": "3.17.0",
-      "frames": 8734
+      "sha256_slp": "1e5aa45381d6a155189adb87b5555a37935a3a263570a1435e3c39be389138c3"
     },
     {
       "source": "~/git/exphil/replays_root/yeti/raw/Yeti Weekly #472/Schlag/Game_CC9E001024A5_20260319T081326.slp",
       "replay": "replays/validation/pichu/yeti-472_ganondorf_CC9E001024A5_20260319T081326.slpz",
-      "sha256_slp": "7be5c6cb6654cf5d2c407e1f5e5fde4cb1d24666c76213815e484e5e78afe1f9",
-      "sha256_slpz": "522ff02edee8281d52f9058c0c1d91bcaf87fcd4a1f61734ceade64adce209ee",
-      "played_on": "nintendont",
-      "console_nick": "wii",
-      "scene_major": 2,
-      "slippi_version": "3.17.0",
-      "frames": 9328
+      "sha256_slp": "7be5c6cb6654cf5d2c407e1f5e5fde4cb1d24666c76213815e484e5e78afe1f9"
     },
     {
       "source": "~/git/exphil/replays_root/yeti/raw/Yeti Weekly #472/Schlag/Game_CC9E001024A5_20260319T083212.slp",
       "replay": "replays/validation/pichu/yeti-472_captain_falcon_CC9E001024A5_20260319T083212.slpz",
-      "sha256_slp": "022a1eb08aaeddbdce537eea6d4973ce9d0ee74523e8b3a20a2022d8b7715b5e",
-      "sha256_slpz": "08181cdef13345537716ccd48a62640294ec18c5d7efdeb3a224a394c1a5e47e",
-      "played_on": "nintendont",
-      "console_nick": "wii",
-      "scene_major": 2,
-      "slippi_version": "3.17.0",
-      "frames": 11762
+      "sha256_slp": "022a1eb08aaeddbdce537eea6d4973ce9d0ee74523e8b3a20a2022d8b7715b5e"
     },
     {
       "source": "~/git/exphil/replays_root/yeti/raw/Yeti Weekly #469/Schlag/Game_CC9E001024A5_20260226T095048.slp",
       "replay": "replays/validation/pichu/yeti-469_game_and_watch_CC9E001024A5_20260226T095048.slpz",
-      "sha256_slp": "394b9b080f40b6a64c320021d95b3a90361bfed53e3fa30a2662012d12506a11",
-      "sha256_slpz": "0c13a6106e930e52af0e26ec2ef8f018a3758322f600dd2b7682cd2a8ee87c29",
-      "played_on": "nintendont",
-      "console_nick": "wii",
-      "scene_major": 2,
-      "slippi_version": "3.17.0",
-      "frames": 8213
+      "sha256_slp": "394b9b080f40b6a64c320021d95b3a90361bfed53e3fa30a2662012d12506a11"
     },
     {
       "source": "~/git/exphil/replays_root/yeti/raw/Yeti Weekly #469/Schlag/Game_CC9E001024A5_20260226T095337.slp",
       "replay": "replays/validation/pichu/yeti-469_game_and_watch_CC9E001024A5_20260226T095337.slpz",
-      "sha256_slp": "7ffc412aef54f5db69a999fee63025623c6be094807b7667dda5e4160f7739b2",
-      "sha256_slpz": "b2b8e24189b17efbb90f5f71ee3baf63857030f10a4151570b64d078aa8b5330",
-      "played_on": "nintendont",
-      "console_nick": "wii",
-      "scene_major": 2,
-      "slippi_version": "3.17.0",
-      "frames": 10043
+      "sha256_slp": "7ffc412aef54f5db69a999fee63025623c6be094807b7667dda5e4160f7739b2"
     },
     {
       "source": "~/git/exphil/replays_root/yeti/raw/Yeti Weekly #471/Schlag/Game_CC9E001024A5_20260312T074722.slp",
       "replay": "replays/validation/pichu/yeti-471_falco_CC9E001024A5_20260312T074722.slpz",
-      "sha256_slp": "ab43c233cc022e227fcbc3e45fc3ce25fc50cca1d0e33b3eca01cc155d96ce39",
-      "sha256_slpz": "c00d2b45dc5052d6b095a04e34e5154ae52f55e0f6e49289d3cf0305a514b6dd",
-      "played_on": "nintendont",
-      "console_nick": "wii",
-      "scene_major": 2,
-      "slippi_version": "3.17.0",
-      "frames": 9458
+      "sha256_slp": "ab43c233cc022e227fcbc3e45fc3ce25fc50cca1d0e33b3eca01cc155d96ce39"
     },
     {
       "source": "~/git/exphil/replays_root/yeti/raw/Yeti Weekly #473/Schlag/Game_CC9E001024A5_20260326T083655.slp",
       "replay": "replays/validation/pichu/yeti-473_fox_CC9E001024A5_20260326T083655.slpz",
-      "sha256_slp": "fd9ab1741cc1076fa50413311423e0a459abec99fd024f916edbdd060f3308dd",
-      "sha256_slpz": "5e25d1535b423d2827786550de225b6602e0d6b3a0c752d221d3e19a6b443e0c",
-      "played_on": "nintendont",
-      "console_nick": "wii",
-      "scene_major": 2,
-      "slippi_version": "3.17.0",
-      "frames": 11900
+      "sha256_slp": "fd9ab1741cc1076fa50413311423e0a459abec99fd024f916edbdd060f3308dd"
     },
     {
       "source": "~/git/exphil/replays/d20/extracted/D20 Melee #38/Spikenard_d20_38/Game_001B7ABDD8A0_20260324T121546.slp",
       "replay": "replays/validation/pichu/d20-38_ice_climbers_001B7ABDD8A0_20260324T121546.slpz",
       "sha256_slp": "f2ca0e93c0dda0286c394f2e73e33ac87f2535998b4455c5560f2347b951674b",
-      "sha256_slpz": "1e5b28d956c723fa8718998eb01e4b1cf714661ceb75e9e0cda8a099f73e80f7",
-      "played_on": "nintendont",
-      "console_nick": "Snocf",
-      "scene_major": 2,
-      "slippi_version": "3.15.0",
-      "frames": 17788,
-      "classification": "missing-raw-cstick-asdi"
+      "capture_limitation": "missing raw C-stick; excluded by the admission policy"
     },
     {
       "source": "~/git/exphil/replays/d20/extracted/D20 Melee #38/Spikenard_d20_38/Game_001B7ABDD8A0_20260324T121206.slp",
       "replay": "replays/validation/pichu/d20-38_mewtwo_001B7ABDD8A0_20260324T121206.slpz",
       "sha256_slp": "0ebbd60cbdb64454771dcf6214d4c9144d6348d41d116a036bb02963ee049b86",
-      "sha256_slpz": "f4f396af18393348fe98ec58b8e767a7d0568263d9ecdb4b8c04ce57893ab581",
-      "played_on": "nintendont",
-      "console_nick": "Snocf",
-      "scene_major": 2,
-      "slippi_version": "3.15.0",
-      "frames": 12246,
-      "classification": "missing-raw-cstick-asdi"
+      "capture_limitation": "missing raw C-stick; excluded by the admission policy"
     }
   ]
 }

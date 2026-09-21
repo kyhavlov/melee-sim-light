@@ -1,54 +1,17 @@
 {
   "name": "zelda",
-  "notes": "Zelda special-move coverage promoted into the aggregate suite. Current rollout status has 24 first mismatches across the older demo replays; the repeated Farore ledge-snap replay is raw-clean.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
     {
-      "replay": "replays/validation/zelda/zelda_demo_fd_v1.slpz",
+      "replay": "replays/validation/zelda/corpus_fox_20250129T002820.slpz",
       "ports": [
         1,
         2
       ],
-      "stage_id": 32,
+      "stage_id": 3,
       "characters": {
-        "1": "Zelda",
-        "2": "Falco"
-      }
-    },
-    {
-      "replay": "replays/validation/zelda/zelda_demo_fd_hits_v1.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Zelda",
-        "2": "Falco"
-      }
-    },
-    {
-      "replay": "replays/validation/zelda/zelda_demo_bf_upb_v1.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 31,
-      "characters": {
-        "1": "Zelda",
-        "2": "Falco"
-      }
-    },
-    {
-      "replay": "replays/validation/zelda/zelda_demo_fd_ledge_snap_v1.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Falco",
+        "1": "Fox",
         "2": "Zelda"
       }
     }

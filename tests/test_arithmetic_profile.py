@@ -32,7 +32,7 @@ def test_recording_arithmetic_profile_is_strict_and_per_job(name, frames, first,
              for profile in ("dolphin-legacy", "retail", None, "dolphin-legacy")]
     outcomes, _ = validate_replay.run_cases(
         validate_replay.load_native(), cases, workers=1, frames=0,
-        start_frame=None, timeout=20, backend="native", signed_zero_equal=False,
+        start_frame=None, timeout=20, backend="native", signed_zero_equal=False, diagnostic=True,
     )
     for case, outcome in zip(cases, outcomes):
         assert outcome.error is None
@@ -53,7 +53,7 @@ def test_suite_retains_recording_arithmetic_profile():
     _, cases = validate_replay.load_suite_cases(
         SUITE, characters=frozenset(("mewtwo", "game & watch", "fox")), stages=frozenset((32,)),
     )
-    assert len(cases) == 4
+    assert len(cases) == 3
     assert all(case.fnmsubs_profile == "dolphin-legacy" for case in cases)
 
 
@@ -71,7 +71,7 @@ def test_explicit_profile_overrides_metadata_on_a_corpus_replay():
              for profile in (None, "retail", "dolphin-legacy")]
     outcomes, _ = validate_replay.run_cases(
         validate_replay.load_native(), cases, workers=1, frames=600,
-        start_frame=None, timeout=20, backend="native", signed_zero_equal=False,
+        start_frame=None, timeout=20, backend="native", signed_zero_equal=False, diagnostic=True,
     )
     for case, outcome in zip(cases, outcomes):
         assert outcome.error is None

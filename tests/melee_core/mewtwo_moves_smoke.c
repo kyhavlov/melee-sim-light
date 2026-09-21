@@ -46,6 +46,14 @@ static Fighter* msl_test_fighter(unsigned port)
     return msl_test_match.fighters[port]->user_data;
 }
 
+static void msl_test_sample_pools(void)
+{
+    unsigned f = HSD_ObjAllocResolve(HSD_FObjGetAllocData())->used;
+    unsigned a = HSD_ObjAllocResolve(HSD_AObjGetAllocData())->used;
+    if (f > msl_test_fobj_peak) msl_test_fobj_peak = f;
+    if (a > msl_test_aobj_peak) msl_test_aobj_peak = a;
+}
+
 static int msl_test_step(const MslCoreInput* input)
 {
     size_t used = msl_test_match.memory.used;
@@ -54,10 +62,7 @@ static int msl_test_step(const MslCoreInput* input)
                               &(MslCoreStageEvents) { 0 }) == 0);
     MSL_TEST_CHECK(msl_test_match.memory.sealed && msl_test_match.memory.used == used &&
           msl_test_match.memory.allocation_count == allocations);
-    unsigned f = HSD_ObjAllocResolve(HSD_FObjGetAllocData())->used;
-    unsigned a = HSD_ObjAllocResolve(HSD_AObjGetAllocData())->used;
-    if (f > msl_test_fobj_peak) msl_test_fobj_peak = f;
-    if (a > msl_test_aobj_peak) msl_test_aobj_peak = a;
+    msl_test_sample_pools();
     return 0;
 }
 
@@ -78,6 +83,94 @@ static int msl_test_setup(unsigned players, unsigned opponent)
     msl_test_fobj_peak = msl_test_aobj_peak = 0;
     for (unsigned i = 0; i < 150; ++i) MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
     return 0;
+}
+
+static int msl_test_report_pools(const char* scenario, unsigned players)
+{
+    HSD_ObjAllocData* f = HSD_ObjAllocResolve(HSD_FObjGetAllocData());
+    HSD_ObjAllocData* a = HSD_ObjAllocResolve(HSD_AObjGetAllocData());
+    printf("%s players=%u FObj=%u/%u AObj=%u/%u\n", scenario, players,
+           msl_test_fobj_peak, f->used + f->free, msl_test_aobj_peak, a->used + a->free);
+    // Match article_pool_smoke's 20% spare-capacity requirement.
+    MSL_TEST_CHECK(msl_test_fobj_peak * 5 <= (f->used + f->free) * 4);
+    MSL_TEST_CHECK(msl_test_aobj_peak * 5 <= (a->used + a->free) * 4);
+    return 0;
+}
+
+static int msl_test_simultaneous_charge(unsigned players)
+{
+    MslCoreInput input = { 0 };
+    unsigned full = 0;
+    unsigned fired = 0;
+    MSL_TEST_CHECK(msl_test_setup(players, 16) == 0);
+    for (unsigned frame = 0; frame < 330; ++frame) {
+        memset(&input, 0, sizeof(input));
+        for (unsigned player = 0; player < players; ++player) {
+            if (frame == 0) input.p[player].buttons = PAD_BUTTON_B;
+        }
+        MSL_TEST_CHECK(msl_test_step(&input) == 0);
+        full = 0;
+        for (unsigned player = 0; player < players; ++player) {
+            Fighter* fp = msl_test_fighter(player);
+            ftMewtwoAttributes* attrs = fp->dat_attrs;
+            if (fp->motion_id == ftMt_MS_SpecialNLoopFull &&
+                fp->fv.mt.x2234_shadowBallCharge ==
+                    (int) attrs->x0_MEWTWO_SHADOWBALL_CHARGE_CYCLES &&
+                fp->fv.mt.x2230_shadowHeldGObj != NULL)
+            {
+                Item* held = fp->fv.mt.x2230_shadowHeldGObj->user_data;
+                MSL_TEST_CHECK(held->kind == It_Kind_Mewtwo_ShadowBall);
+                MSL_TEST_CHECK(held->owner == msl_test_match.fighters[player]);
+                ++full;
+            }
+        }
+        if (full == players) break;
+    }
+    MSL_TEST_CHECK(full == players);
+    for (unsigned frame = 0; frame < 60; ++frame) {
+        memset(&input, 0, sizeof(input));
+        for (unsigned player = 0; player < players; ++player) {
+            if (frame == 0) input.p[player].buttons = PAD_BUTTON_B;
+        }
+        MSL_TEST_CHECK(msl_test_step(&input) == 0);
+        for (unsigned player = 0; player < players; ++player) {
+            Fighter* fp = msl_test_fighter(player);
+            if (fp->motion_id == ftMt_MS_SpecialNEnd &&
+                fp->fv.mt.x2234_shadowBallCharge == 0 &&
+                fp->fv.mt.x2230_shadowHeldGObj == NULL)
+            {
+                fired |= 1u << player;
+            }
+        }
+    }
+    MSL_TEST_CHECK(fired == (1u << players) - 1);
+    return msl_test_report_pools("charge/release", players);
+}
+
+static int msl_test_throw_projectiles(void)
+{
+    MSL_TEST_CHECK(msl_test_setup(4, 16) == 0);
+    // Exercise the forward-throw factory with sealed pools and read-only DATs.
+    for (unsigned player = 0; player < 4; ++player) {
+        Fighter* fp = msl_test_fighter(player);
+        ftMewtwoAttributes* attrs = fp->dat_attrs;
+        Vec3 position = fp->cur_pos;
+        position.y += 10.0f;
+        for (unsigned shot = 0; shot < 5; ++shot) {
+            Item_GObj* gobj = it_802C519C(
+                msl_test_match.fighters[player], &position, It_Kind_Mewtwo_ShadowBall,
+                (int) attrs->x0_MEWTWO_SHADOWBALL_CHARGE_CYCLES,
+                0.0f, fp->facing_dir);
+            MSL_TEST_CHECK(gobj != NULL);
+            msl_test_sample_pools();
+            Item* item = gobj->user_data;
+            MSL_TEST_CHECK(item->msid == 9);
+            MSL_TEST_CHECK(item->owner == msl_test_match.fighters[player]);
+        }
+    }
+    for (unsigned frame = 0; frame < 100; ++frame)
+        MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+    return msl_test_report_pools("forward-throw burst", 4);
 }
 
 static void msl_test_place(unsigned port, float x, float y, float facing)
@@ -724,7 +817,9 @@ static int msl_test_charge_vs_stock_loss(void)
 int main(int argc, char** argv)
 {
     if (argc != 2 || msl_core_game_data_init(&msl_test_game_data, argv[1])) return 1;
-    int result = msl_test_confusion_grab(1, 0, 0) || msl_test_confusion_grab(1, 1, 0) ||
+    int result = msl_test_simultaneous_charge(2) || msl_test_simultaneous_charge(4) ||
+                 msl_test_throw_projectiles() ||
+                 msl_test_confusion_grab(1, 0, 0) || msl_test_confusion_grab(1, 1, 0) ||
                  msl_test_confusion_grab(0, 0, 0) || msl_test_confusion_grab(1, 0, 1) ||
                  msl_test_confusion_reflection(1, 0, 0) || msl_test_confusion_reflection(0, 0, 0) ||
                  msl_test_confusion_reflection(1, 1, 0) || msl_test_confusion_reflection(1, 0, 1) ||

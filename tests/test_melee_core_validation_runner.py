@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def _result(*, passed: bool = True, frames: int = 10) -> dict[str, object]:
     return {
         "pass": passed,
+        "admitted": True,
+        "diagnostic": False,
         "frames": frames,
         "total": frames,
         "matched_frames": frames if passed else frames - 1,
@@ -39,7 +41,7 @@ def _result(*, passed: bool = True, frames: int = 10) -> dict[str, object]:
     }
 
 
-def test_canonical_phase5_scope_selects_32_replays_without_a_duplicate_manifest() -> None:
+def test_canonical_fox_falco_scope_uses_the_admitted_inventory() -> None:
     suite, cases = validate_replay.load_suite_cases(
         ROOT / "replays/suites/aggregate_recent.json",
         characters=frozenset(("fox", "falco")),
@@ -47,13 +49,13 @@ def test_canonical_phase5_scope_selects_32_replays_without_a_duplicate_manifest(
     )
 
     assert suite.name == "aggregate_recent"
-    assert len(cases) == 32
+    assert len(cases) == 19
     assert Counter(case.stage_id for case in cases) == {
-        32: 16,
-        3: 4,
-        31: 3,
-        2: 3,
-        8: 4,
+        32: 11,
+        3: 1,
+        31: 1,
+        2: 2,
+        8: 2,
         28: 2,
     }
     assert all(set(case.characters) <= {"Fox", "Falco"} for case in cases)
@@ -64,26 +66,9 @@ def test_canonical_phase5_scope_selects_32_replays_without_a_duplicate_manifest(
     ] == [
         "BlondHardHippopotamus.slpz",
         "FavorableSuperficialPig.slpz",
-        "Game_20260514T181413.slpz",
-        "HungryImportantSnake.slpz",
         "PutridJoyousOryx.slpz",
     ]
 
-    classifications = validate_replay.load_classifications(
-        ROOT / "replays/suites/melee_core_classifications.json"
-    )
-    assert classifications
-    supported_replays = {
-        replay.replay
-        for replay in validate_replay.load_suite(
-            ROOT / "replays/suites/melee_core_aggregate.json"
-        ).replays
-    }
-    assert set(classifications) <= supported_replays
-    marth = classifications[
-        "replays/validation/marth/InternalPowerlessWallaby.slpz"
-    ]
-    assert marth.expected["ppc"] is marth.expected["native"]
 
 
 def test_melee_core_aggregate_filters_pending_characters_without_losing_inventory() -> None:
@@ -104,8 +89,8 @@ def test_melee_core_aggregate_filters_pending_characters_without_losing_inventor
     )
 
     assert suite.name == "melee_core_aggregate"
-    assert len(suite.replays) == 638
-    assert len(cases) == 133
+    assert len(suite.replays) == 512
+    assert len(cases) == 78
     assert all("Peach" not in case.characters for case in cases)
 
 
@@ -138,22 +123,20 @@ def test_suite_replay_execution_metadata_reaches_native_validator(
         timeout=1.0,
         backend="native",
         played_on="network",
+        diagnostic=True,
     )
 
     assert original_metadata == {"source": "legacy-capture"}
     assert captured == {"source": "legacy-capture", "playedOn": "network"}
 
 
-def test_puff_legacy_capture_profiles_are_explicit() -> None:
-    suite = validate_replay.load_suite(ROOT / "replays/suites/puff.json")
-    by_name = {Path(entry.replay).name: entry for entry in suite.replays}
-
-    diamond = by_name["diamond-diamond-78251f79d12df3bcdb1d4abe.slpz"]
-    master = by_name["master-diamond-d514ba67193e53290c8d1b83.slpz"]
-    assert diamond.played_on == "network"
-    assert diamond.ucf_cardinals_1_0_enabled is None
-    assert master.played_on == "network"
-    assert master.ucf_cardinals_1_0_enabled is False
+def test_recovered_arithmetic_profiles_are_explicit() -> None:
+    for suite_name, filename in (("falcon", "falcon_demo.slpz"),
+                                 ("peach", "peach_demo_1.slpz"),
+                                 ("doubles_recent", "Game_20260509T152622.slpz")):
+        suite = validate_replay.load_suite(ROOT / f"replays/suites/{suite_name}.json")
+        entry = next(r for r in suite.replays if Path(r.replay).name == filename)
+        assert entry.fnmsubs_profile == "dolphin-legacy"
 
 
 def test_parallel_runner_preserves_manifest_order_and_isolates_errors(
@@ -245,100 +228,33 @@ def test_suite_stdout_is_compact_and_reports_aggregate_throughput(capsys) -> Non
     assert "FAIL" in output
     assert "ERROR" in output
     assert "first=7 last=7 fields=1" in output
-    assert "pass=1 classified=0 xpass=0 fail=1 error=1 frames=20" in output
+    assert "pass=1 diagnostic=0 fail=1 error=1 frames=20" in output
     assert "aggregate_fps=400" in output
 
 
-def test_exact_classification_passes_and_drift_fails(capsys) -> None:
+def test_mismatches_and_partial_runs_cannot_count_as_exact(capsys) -> None:
     case = validate_replay.ReplayCase(Path("known.slpz"), "known.slpz")
     result = _result(passed=False)
-    compact_snapshot = validate_replay.classification_snapshot(result)
-    compact_snapshot[validate_replay.CLASSIFICATION_COMPACT_FIELD_KEY] = (
-        validate_replay.mismatch_fields_digest(
-            compact_snapshot.pop("mismatch_fields")
-        )
-    )
-    classification = validate_replay.ReplayClassification(
-        replay="known.slpz",
-        classification_id="known-owner",
-        owner="source owner",
-        rationale="bounded source-classified residual",
-        sources=("refs/melee/src/owner.c::owner",),
-        expected={"native": compact_snapshot},
-    )
     outcome = validate_replay.ReplayOutcome(case, result, None, 0.02)
-
-    assert validate_replay.print_backend_results(
-        "native",
-        [outcome],
-        workers=1,
-        wall_seconds=0.02,
-        show_timing=False,
-        classifications={case.display_path: classification},
-    )
-    output = capsys.readouterr().out
-    assert "CLASS" in output
-    assert "classified=1" in output
-
-    legacy_case = validate_replay.ReplayCase(Path("known.slpz"), "known.slp")
-    legacy_outcome = validate_replay.ReplayOutcome(legacy_case, result, None, 0.02)
-    status, _ = validate_replay._result_status(
-        "native",
-        legacy_outcome,
-        {"known.slpz": classification},
-        strict_classifications=False,
-    )
-    assert status == "classified"
-
-    result["mismatch_fingerprint"] = "fedcba9876543210"
     assert not validate_replay.print_backend_results(
-        "native",
-        [outcome],
-        workers=1,
-        wall_seconds=0.02,
-        show_timing=False,
-        classifications={case.display_path: classification},
-    )
-    assert "classification drift" in capsys.readouterr().out
+        "native", [outcome], workers=1, wall_seconds=0.02, show_timing=False)
+    assert "fail=1" in capsys.readouterr().out
+    result.update(_result())
+    result["total"] = 20
+    assert validate_replay._result_status("native", outcome) == "fail"
+    result["diagnostic"] = True
+    assert validate_replay._result_status("native", outcome) == "diagnostic"
 
 
-def test_full_replay_xpass_rejects_stale_classification(capsys) -> None:
+def test_output_locks_require_full_strict_admitted_results(tmp_path: Path) -> None:
+    import pytest
     case = validate_replay.ReplayCase(Path("known.slpz"), "known.slpz")
-    failed_result = _result(passed=False)
-    classification = validate_replay.ReplayClassification(
-        replay="known.slpz",
-        classification_id="known-owner",
-        owner="source owner",
-        rationale="bounded source-classified residual",
-        sources=("refs/melee/src/owner.c::owner",),
-        expected={"native": validate_replay.classification_snapshot(failed_result)},
-    )
-    outcome = validate_replay.ReplayOutcome(case, _result(), None, 0.02)
-
-    assert not validate_replay.print_backend_results(
-        "native",
-        [outcome],
-        workers=1,
-        wall_seconds=0.02,
-        show_timing=False,
-        classifications={case.display_path: classification},
-    )
-    assert "XPASS" in capsys.readouterr().out
-
-    partial = _result(frames=5)
-    partial["total"] = 10
-    outcome = validate_replay.ReplayOutcome(case, partial, None, 0.02)
-    assert validate_replay.print_backend_results(
-        "native",
-        [outcome],
-        workers=1,
-        wall_seconds=0.02,
-        show_timing=False,
-        classifications={case.display_path: classification},
-    )
-    output = capsys.readouterr().out
-    assert "PASS" in output
-    assert "XPASS" not in output
+    for changes in ({"admitted": False}, {"diagnostic": True}, {"pass": False}, {"total": 20}):
+        result = {**_result(), **changes}
+        outcome = validate_replay.ReplayOutcome(case, result, None, 0.02)
+        with pytest.raises(ValueError, match="cannot lock"):
+            validate_replay.write_output_locks(tmp_path / "locks.json", {}, "native", [outcome])
+    assert not (tmp_path / "locks.json").exists()
 
 
 def test_full_output_lock_rejects_behavior_drift(capsys) -> None:
@@ -375,3 +291,29 @@ def test_full_output_lock_rejects_behavior_drift(capsys) -> None:
         require_output_lock=True,
     )
     assert "output drift" in capsys.readouterr().out
+
+
+def test_scoped_aggregate_lock_update_preserves_other_admitted_cases(monkeypatch, tmp_path):
+    import json
+    names = [
+        "replays/validation/aggregate_recent/PutridJoyousOryx.slpz",
+        "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
+        "replays/validation/aggregate_recent/HungryImportantSnake.slpz",
+    ]
+    locks = {name: validate_replay.ReplayOutputLock(name, {"native": {
+        "frames": 10, "actual_output_fingerprint": "1111222233334444",
+    }}) for name in names}
+    case = validate_replay.ReplayCase(ROOT / names[0], names[0])
+    outcome = validate_replay.ReplayOutcome(case, _result(), None, 0.02)
+    path = tmp_path / "locks.json"
+    validate_replay.write_output_locks(path, locks, "native", [outcome])
+    suite = SimpleNamespace(name="melee_core_aggregate",
+                            replays=[SimpleNamespace(replay=n) for n in names[:2]])
+    monkeypatch.setattr(validate_replay, "load_suite_cases", lambda *_a, **_k: (suite, [case]))
+    monkeypatch.setattr(validate_replay, "load_native", lambda: object())
+    monkeypatch.setattr(validate_replay, "run_cases", lambda *_a, **_k: ([outcome], 0.02))
+    monkeypatch.setattr("sys.argv", ["validate_replay", "--suite", "aggregate.json",
+                                    "--characters", "Fox", "--no-build",
+                                    "--output-locks", str(path), "--write-output-locks"])
+    assert validate_replay.main() == 0
+    assert {row["replay"] for row in json.loads(path.read_text())["locks"]} == set(names[:2])

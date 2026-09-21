@@ -396,9 +396,6 @@ bool msl_ucf_suppress_spotdodge(const Fighter* fp)
         // refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF SD.asm: the float
         // rim test, then the tilt timer, then the -0.8 floor; no platform
         // check, and the timer bound is the literal 3 rather than x320.
-        // Retail-probe-verified on marth WingedGorgeousPanther frame 9793:
-        // Falco on the Stadium main floor (floor.flags 0) shields off a
-        // held-down rim press instead of spot-dodging.
         float x = msl_ucf_08_rim_lane(fp->input.lstick.x);
         float y = msl_ucf_08_rim_lane(fp->input.lstick.y);
         if (x * x + y * y < 1.0F) {

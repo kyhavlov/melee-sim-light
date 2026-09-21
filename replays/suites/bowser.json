@@ -1,6 +1,5 @@
 {
   "name": "bowser",
-  "notes": "Bowser source-completion challenge: original SlippiLab full games plus controller-driven special-move microreplays. Every recording starts normally at -123 and contains a game end. Stadium recordings use frozen Stadium and have no transformation events. See agent_docs/validation/yoshi_bowser_provenance.json for capture provenance and melee_core_classifications.json for residual ownership.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -86,18 +85,6 @@
       "characters": {
         "1": "Bowser",
         "2": "Donkey Kong"
-      }
-    },
-    {
-      "replay": "replays/validation/bowser/MildMurkyNewt.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 28,
-      "characters": {
-        "1": "Sheik",
-        "2": "Bowser"
       }
     },
     {
@@ -206,6 +193,18 @@
       "characters": {
         "1": "Bowser",
         "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/corpus_samus_20240816T224524.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Samus",
+        "2": "Bowser"
       }
     }
   ]

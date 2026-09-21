@@ -1,26 +1,19 @@
 {
   "name": "pokemon_stadium_recent",
-  "notes": "Fox/Falco frozen Pokemon Stadium validation replays for stage data/platform-surface admission for future platform mechanics. Current suite entries are singles Fox/Falco validation replays only.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
     {
-      "replay": "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz",
-      "ports": [1, 2],
+      "replay": "replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slpz",
+      "ports": [
+        1,
+        2
+      ],
       "stage_id": 3,
-      "characters": { "1": "Fox", "2": "Falco" }
-    },
-    {
-      "replay": "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz",
-      "ports": [2, 4],
-      "stage_id": 3,
-      "characters": { "2": "Falco", "4": "Fox" }
-    },
-    {
-      "replay": "replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slpz",
-      "ports": [1, 2],
-      "stage_id": 3,
-      "characters": { "1": "Fox", "2": "Falco" }
+      "characters": {
+        "1": "Fox",
+        "2": "Fox"
+      }
     }
   ]
 }

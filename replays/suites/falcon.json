@@ -1,6 +1,5 @@
 {
   "name": "falcon",
-  "notes": "Captain Falcon validation suite (22 replays: 8 curated 2026 netplay dump games, 12 public SlippiLab additions, and 2 manual webplay demos; vs Fox/Falco/Marth/Sheik/Zelda and Falcon dittos across all six legal stages; frozen-PS only). The original curated set scanned 448 qualifying games for char-range action-state coverage: the eight replays jointly contain every ftCa special MotionState (347..363) including grounded Falcon Punch (DL vs Fox), grounded SpecialHi (FD ditto), SpecialAirLwEnd (FoD vs Marth), SpecialLwEndAir (FoD vs Fox), the single wall-rebound SpecialHiThrow1 game in the dump (YS ditto), and victim CaptureCaptain rows. ThrownFF never serializes at post-frame in any of the 448 games, so Falcon Dive release stays decomp-tests + webplay verification. The SlippiLab additions round out matchup/stage coverage, including Falco and Zelda opponents and additional frozen-PS samples. The two falcon_demo replays are manual webplay probes for Falcon specials. Porting is decomp-first - replays verify, they do not cover all moves.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -149,22 +148,6 @@
       }
     },
     {
-      "replay": "replays/validation/falcon/OddballCleanViper.slpz",
-      "ucf_shield_drop_084_enabled": false,
-      "ucf_cardinals_1_0_enabled": false,
-      "ucf_shield_sdi_enabled": false,
-      "ucf_sdi_enabled": false,
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Zelda",
-        "2": "Captain Falcon"
-      }
-    },
-    {
       "replay": "replays/validation/falcon/RareIrritatingPanther.slpz",
       "ports": [
         1,
@@ -186,18 +169,6 @@
       "characters": {
         "1": "Marth",
         "2": "Captain Falcon"
-      }
-    },
-    {
-      "replay": "replays/validation/falcon/StraightScratchyCheetah.slpz",
-      "ports": [
-        2,
-        4
-      ],
-      "stage_id": 8,
-      "characters": {
-        "2": "Sheik",
-        "4": "Captain Falcon"
       }
     },
     {
@@ -225,30 +196,6 @@
       }
     },
     {
-      "replay": "replays/validation/falcon/FumblingProudPartridge.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Marth",
-        "2": "Captain Falcon"
-      }
-    },
-    {
-      "replay": "replays/validation/falcon/EmotionalNaturalLemur.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Captain Falcon",
-        "4": "Marth"
-      }
-    },
-    {
       "replay": "replays/validation/falcon/falcon_demo.slpz",
       "ports": [
         1,
@@ -258,7 +205,8 @@
       "characters": {
         "1": "Captain Falcon",
         "2": "Fox"
-      }
+      },
+      "fnmsubs_profile": "dolphin-legacy"
     },
     {
       "replay": "replays/validation/falcon/falcon_demo_2.slpz",

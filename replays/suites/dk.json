@@ -1,10 +1,9 @@
 {
  "name": "dk",
- "notes": "Donkey Kong validation suite: 27 singles across all six legal stages against Captain Falcon, Falco, Fox, Jigglypuff, Marth, Samus, Sheik; 2025-2026 Slippi, anonymized ranked, and mainline captures. Both Pokemon Stadium entries are event-verified frozen (version newer than 3.18.0 with zero stadium_transformation events over the full game); three v3.18.0 Stadium candidates stayed out because 3.18 recorders are silent on transformation events.",
  "ucf_enabled": true,
  "ucf_cardinals_1_0_enabled": true,
  "replays": [
-  {
+    {
    "replay": "replays/validation/dk/2025-10_Game_20251006T201136.slpz",
    "ports": [
     1,
@@ -16,7 +15,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/22123_Game_20250505T215606.slpz",
    "ports": [
     1,
@@ -28,19 +27,7 @@
     "2": "Fox"
    }
   },
-  {
-   "replay": "replays/validation/dk/9560_Game_20250405T084316.slpz",
-   "ports": [
-    1,
-    2
-   ],
-   "stage_id": 8,
-   "characters": {
-    "1": "Donkey Kong",
-    "2": "Sheik"
-   }
-  },
-  {
+    {
    "replay": "replays/validation/dk/auto-dk-2025-04_Game_20250408T015844.slpz",
    "ports": [
     1,
@@ -52,7 +39,7 @@
     "2": "Samus"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/auto-dk-2025-06_Game_20250628T223051.slpz",
    "ports": [
     1,
@@ -64,7 +51,7 @@
     "2": "Samus"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/auto-fox-2026-02_Game_20260214T140615.slpz",
    "ports": [
     1,
@@ -76,7 +63,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/basic-dk-2025-03_Game_20250331T001037.slpz",
    "ports": [
     1,
@@ -88,7 +75,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/basic-dk-2025-04_Game_20250427T125907.slpz",
    "ports": [
     1,
@@ -100,7 +87,7 @@
     "2": "Falco"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/gold-fox-2026-06_Game_20260607T080729.slpz",
    "ports": [
     1,
@@ -112,7 +99,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/medium-fox-2025-12_Game_20251209T204625.slpz",
    "ports": [
     1,
@@ -124,7 +111,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/medium-marth-2025-09_Game_20250904T135959.slpz",
    "ports": [
     1,
@@ -136,7 +123,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/medium-marth-2025-09_Game_20250912T002037.slpz",
    "ports": [
     1,
@@ -148,7 +135,7 @@
     "2": "Marth"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/medium-marth-2025-10_Game_20251019T192400.slpz",
    "ports": [
     1,
@@ -160,7 +147,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/medium-marth-2025-10_Game_20251025T051144.slpz",
    "ports": [
     1,
@@ -172,7 +159,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2025-02_Game_20250202T195157.slpz",
    "ports": [
     1,
@@ -184,7 +171,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2025-02_Game_20250204T170214.slpz",
    "ports": [
     1,
@@ -196,7 +183,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2025-04_Game_20250422T141746.slpz",
    "ports": [
     1,
@@ -208,7 +195,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2025-04_Game_20250422T152714.slpz",
    "ports": [
     1,
@@ -220,7 +207,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2025-07_Game_20250721T174101.slpz",
    "ports": [
     1,
@@ -232,7 +219,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2025-09_Game_20250902T030431.slpz",
    "ports": [
     1,
@@ -244,7 +231,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2025-09_Game_20250907T182723.slpz",
    "ports": [
     1,
@@ -256,7 +243,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2025-09_Game_20250921T121158.slpz",
    "ports": [
     1,
@@ -268,7 +255,7 @@
     "2": "Jigglypuff"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2025-11_Game_20251111T143029.slpz",
    "ports": [
     1,
@@ -280,7 +267,7 @@
     "2": "Captain Falcon"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2025-12_Game_20251202T152240.slpz",
    "ports": [
     1,
@@ -292,7 +279,7 @@
     "2": "Marth"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2026-01_Game_20260113T171109.slpz",
    "ports": [
     1,
@@ -304,7 +291,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2026-04_Game_20260405T024810.slpz",
    "ports": [
     1,
@@ -316,7 +303,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/dk/slippi-2026-05_Game_20260530T013525.slpz",
    "ports": [
     1,
@@ -328,5 +315,5 @@
     "2": "Fox"
    }
   }
- ]
+  ]
 }

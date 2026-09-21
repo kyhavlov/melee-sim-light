@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
-import hashlib
 import importlib.util
 import json
 import os
@@ -24,6 +23,7 @@ from tools.validation.slpz import (
     resolve_replay_path,
     set_native_unorder_events,
 )
+from tools.validation.admission import require_admissible
 from tools.validation.suite_io import ReplaySuite, display_path_under_repo, load_suite
 
 
@@ -40,7 +40,6 @@ SYSROOT = TOOLCHAIN / "usr" / "powerpc-linux-gnu"
 DEFAULT_CHARACTERS = "Mewtwo,Game & Watch,Fox,Falco,Marth,Roy,Captain Falcon,Sheik,Zelda,Jigglypuff,Peach,Luigi,Mario,Dr. Mario,Samus,Ice Climbers,Pikachu,Pichu,Kirby,Donkey Kong,Ganondorf,Yoshi,Bowser,Ness,Link,Young Link"
 DEFAULT_STAGES = "32,31,3,2,8,28"
 MAX_AUTO_WORKERS = 16
-DEFAULT_CLASSIFICATIONS = ROOT / "replays/suites/melee_core_classifications.json"
 DEFAULT_OUTPUT_LOCKS = ROOT / "replays/suites/melee_core_output_locks.json"
 
 STAGE_NAMES = {
@@ -75,16 +74,6 @@ class ReplayOutcome:
     result: dict[str, object] | None
     error: str | None
     elapsed_seconds: float
-
-
-@dataclass(frozen=True)
-class ReplayClassification:
-    replay: str
-    classification_id: str
-    owner: str
-    rationale: str
-    sources: tuple[str, ...]
-    expected: dict[str, dict[str, object]]
 
 
 @dataclass(frozen=True)
@@ -187,98 +176,11 @@ class _NativeRunnerPool:
                 raise
 
 
-CLASSIFICATION_SNAPSHOT_KEYS = (
-    "frames",
-    "matched_frames",
-    "mismatched_frames",
-    "exact_prefix_frames",
-    "strict_suffix_frames",
-    "first_mismatch_frame",
-    "last_mismatch_frame",
-    "mismatch_count",
-    "mismatch_fingerprint",
-    "mismatch_fields",
-    "render_visibility_mismatch_count",
-    "first_render_visibility_mismatch_frame",
-    "signed_zero_equal_count",
-)
-CLASSIFICATION_COMPACT_FIELD_KEY = "mismatch_fields_digest"
-
-
 @lru_cache(maxsize=1)
 def game_data_dir() -> Path:
     path = raw_dir(ROOT / "data")
     validate_raw_dir(path, verify_hashes=True)
     return path
-
-
-def load_classifications(path: Path) -> dict[str, ReplayClassification]:
-    data = json.loads(path.read_text())
-    if data.get("version") != 1:
-        raise ValueError(f"{path}: unsupported classification manifest version")
-    classifications: dict[str, ReplayClassification] = {}
-    for entry in data.get("classifications", []):
-        replay = str(entry.get("replay", ""))
-        classification_id = str(entry.get("id", ""))
-        owner = str(entry.get("owner", ""))
-        rationale = str(entry.get("rationale", ""))
-        sources = tuple(str(source) for source in entry.get("sources", []))
-        expected = entry.get("expected")
-        replay_path = Path(replay)
-        if not replay or replay_path.is_absolute() or ".." in replay_path.parts:
-            raise ValueError(f"{path}: classification replay must be repo-relative")
-        if not resolve_replay_path(ROOT / replay_path).is_file():
-            raise ValueError(f"{path}: classification replay does not exist: {replay}")
-        if not classification_id or not owner or not rationale or not sources:
-            raise ValueError(f"{path}: incomplete classification for {replay}")
-        if not isinstance(expected, dict) or not expected:
-            raise ValueError(f"{path}: classification has no backend snapshot: {replay}")
-        snapshots: dict[str, dict[str, object]] = {}
-        aliases: dict[str, str] = {}
-        for backend, snapshot in expected.items():
-            if backend not in {"native", "ppc"}:
-                raise ValueError(f"{path}: invalid classification backend for {replay}")
-            if isinstance(snapshot, str):
-                aliases[backend] = snapshot
-                continue
-            if not isinstance(snapshot, dict):
-                raise ValueError(f"{path}: invalid classification backend for {replay}")
-            snapshot_keys = set(snapshot)
-            required = set(CLASSIFICATION_SNAPSHOT_KEYS) - {"mismatch_fields"}
-            missing = required - snapshot_keys
-            detail_keys = snapshot_keys & {
-                "mismatch_fields",
-                CLASSIFICATION_COMPACT_FIELD_KEY,
-            }
-            if len(detail_keys) != 1:
-                missing.add("mismatch_fields or mismatch_fields_digest")
-            allowed = set(CLASSIFICATION_SNAPSHOT_KEYS) | {
-                CLASSIFICATION_COMPACT_FIELD_KEY
-            }
-            extra = snapshot_keys - allowed
-            if missing or extra:
-                raise ValueError(
-                    f"{path}: invalid {backend} snapshot keys for {replay}; "
-                    f"missing={sorted(missing)} extra={sorted(extra)}"
-                )
-            snapshots[backend] = snapshot
-        for backend, target in aliases.items():
-            if target == backend or target not in snapshots:
-                raise ValueError(
-                    f"{path}: invalid {backend} snapshot alias {target!r} for {replay}"
-                )
-            snapshots[backend] = snapshots[target]
-        if replay in classifications:
-            raise ValueError(f"{path}: duplicate classification replay: {replay}")
-        classifications[replay] = ReplayClassification(
-            replay=replay,
-            classification_id=classification_id,
-            owner=owner,
-            rationale=rationale,
-            sources=sources,
-            expected=snapshots,
-        )
-    return classifications
 
 
 def load_output_locks(path: Path) -> dict[str, ReplayOutputLock]:
@@ -326,6 +228,8 @@ def write_output_locks(
         if outcome.error is not None or outcome.result is None:
             raise ValueError(f"cannot lock failed replay: {outcome.case.display_path}")
         result = outcome.result
+        if not result.get("admitted") or result.get("diagnostic") or not result["pass"]:
+            raise ValueError(f"cannot lock non-strict or ineligible replay: {outcome.case.display_path}")
         if not _has_full_replay_coverage(result):
             raise ValueError(f"cannot lock partial replay: {outcome.case.display_path}")
         replay = outcome.case.display_path
@@ -348,26 +252,6 @@ def write_output_locks(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n")
     return updated
-
-
-def classification_snapshot(result: dict[str, object]) -> dict[str, object]:
-    return {key: result[key] for key in CLASSIFICATION_SNAPSHOT_KEYS}
-
-
-def mismatch_fields_digest(fields: object) -> str:
-    payload = json.dumps(fields, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(payload).hexdigest()
-
-
-def classification_matches(
-    result: dict[str, object], expected: dict[str, object]
-) -> bool:
-    actual = classification_snapshot(result)
-    if CLASSIFICATION_COMPACT_FIELD_KEY in expected:
-        actual[CLASSIFICATION_COMPACT_FIELD_KEY] = mismatch_fields_digest(
-            actual.pop("mismatch_fields")
-        )
-    return actual == expected
 
 
 def _has_full_replay_coverage(result: dict[str, object]) -> bool:
@@ -427,6 +311,7 @@ def validate_one(
     played_on: str | None = None,
     fnmsubs_profile: str | None = None,
     runner: _NativeRunner | None = None,
+    diagnostic: bool = False,
 ) -> dict[str, object]:
     # Python owns only the replay-loading boundary. The native extension consumes
     # Peppi's Arrow buffers through the Arrow C Data Interface without NumPy or
@@ -434,6 +319,8 @@ def validate_one(
     started = time.perf_counter()
     with replay_path_for_peppi(replay) as peppi_path:
         game = _read_slippi(str(peppi_path), False)
+        if not diagnostic:
+            require_admissible(game, peppi_path, played_on=played_on, fnmsubs_profile=fnmsubs_profile)
         metadata = game.metadata
         if played_on is not None:
             metadata = dict(metadata)
@@ -460,6 +347,8 @@ def validate_one(
             runner_stdin=runner.stdin_fd if runner is not None else -1,
             runner_stdout=runner.stdout_fd if runner is not None else -1,
         )
+    result["admitted"] = not diagnostic
+    result["diagnostic"] = diagnostic or signed_zero_equal or frames != 0 or start_frame is not None
     result["fnmsubs_profile"] = fnmsubs_profile or "metadata"
     result["end_to_end_seconds"] = time.perf_counter() - started
     return result
@@ -609,6 +498,7 @@ def _validate_case(
     backend: str,
     signed_zero_equal: bool,
     runner_pool: _NativeRunnerPool | None = None,
+    diagnostic: bool = False,
 ) -> ReplayOutcome:
     started = time.perf_counter()
     try:
@@ -632,6 +522,7 @@ def _validate_case(
                 played_on=case.played_on,
                 fnmsubs_profile=case.fnmsubs_profile,
                 runner=runner,
+                diagnostic=diagnostic,
             )
         except Exception:
             if runner is not None and runner_pool is not None:
@@ -661,6 +552,7 @@ def run_cases(
     timeout: float,
     backend: str,
     signed_zero_equal: bool,
+    diagnostic: bool = False,
 ) -> tuple[list[ReplayOutcome], float]:
     # Warm the manifest/hash check before workers fan out. Native workers keep
     # immutable GameData and resettable match storage alive across jobs; PPC
@@ -673,6 +565,7 @@ def run_cases(
         "timeout": timeout,
         "backend": backend,
         "signed_zero_equal": signed_zero_equal,
+        "diagnostic": diagnostic,
     }
     pool = _NativeRunnerPool(workers) if backend == "native" else None
     try:
@@ -706,40 +599,29 @@ def _case_scope(case: ReplayCase) -> str:
 def _result_status(
     backend: str,
     outcome: ReplayOutcome,
-    classifications: dict[str, ReplayClassification],
-    strict_classifications: bool,
     output_locks: dict[str, ReplayOutputLock] | None = None,
     require_output_lock: bool = False,
-) -> tuple[str, ReplayClassification | None]:
+) -> str:
     assert outcome.result is not None
     result = outcome.result
-    output_locks = output_locks or {}
-    replay_key = outcome.case.display_path
-    output_lock = output_locks.get(replay_key)
-    if output_lock is None:
-        replay_key = display_path_under_repo(outcome.case.replay, ROOT)
-        output_lock = output_locks.get(replay_key)
-    expected_output = output_lock.expected.get(backend) if output_lock is not None else None
-    if _has_full_replay_coverage(result):
-        if expected_output is None and require_output_lock:
-            return "unlocked", None
-        if expected_output is not None and (
-            int(result["frames"]) != int(expected_output["frames"])
-            or result["actual_output_fingerprint"]
-            != expected_output["actual_output_fingerprint"]
-        ):
-            return "output-drift", None
-    classification = classifications.get(outcome.case.display_path)
-    if classification is None:
-        classification = classifications.get(display_path_under_repo(outcome.case.replay, ROOT))
-    expected = classification.expected.get(backend) if classification is not None else None
-    if strict_classifications or expected is None or not _has_full_replay_coverage(result):
-        return ("pass" if bool(result["pass"]) else "fail"), classification
-    if bool(result["pass"]):
-        return "xpass", classification
-    if classification_matches(result, expected):
-        return "classified", classification
-    return "drift", classification
+    if not result["pass"]:
+        return "fail"
+    if result.get("diagnostic"):
+        return "diagnostic"
+    if not result.get("admitted") or not _has_full_replay_coverage(result):
+        return "fail"
+    locks = output_locks or {}
+    lock = locks.get(outcome.case.display_path) or locks.get(
+        display_path_under_repo(outcome.case.replay, ROOT))
+    expected = lock.expected.get(backend) if lock is not None else None
+    if expected is None and require_output_lock:
+        return "unlocked"
+    if expected is not None and (
+        result["frames"] != expected["frames"] or
+        result["actual_output_fingerprint"] != expected["actual_output_fingerprint"]
+    ):
+        return "output-drift"
+    return "pass"
 
 
 def _print_mismatch(result: dict[str, object]) -> None:
@@ -777,33 +659,21 @@ def print_backend_results(
     workers: int,
     wall_seconds: float,
     show_timing: bool,
-    classifications: dict[str, ReplayClassification] | None = None,
-    strict_classifications: bool = False,
     output_locks: dict[str, ReplayOutputLock] | None = None,
     require_output_lock: bool = False,
 ) -> bool:
-    classifications = classifications or {}
     print(f"\n[{backend}] workers={workers}")
-    passed = 0
-    classified = 0
-    xpassed = 0
-    failed = 0
-    errors = 0
+    counts = {"pass": 0, "diagnostic": 0, "fail": 0, "error": 0}
     compared_frames = 0
     runner_seconds = 0.0
     for outcome in outcomes:
         scope = _case_scope(outcome.case)
         scope_column = f" {scope:<39}" if scope else ""
         if outcome.error is not None:
-            errors += 1
-            timing = f" {outcome.elapsed_seconds:7.3f}s" if show_timing else ""
-            print(
-                f"{'ERROR':<10} {'-':>15}{timing}{scope_column} "
-                f"{outcome.case.display_path}"
-            )
+            counts["error"] += 1
+            print(f"{'ERROR':<10} {'-':>15}{scope_column} {outcome.case.display_path}")
             print(f"      {outcome.error}")
             continue
-
         assert outcome.result is not None
         result = outcome.result
         frames = int(result["frames"])
@@ -815,84 +685,27 @@ def print_backend_results(
         if show_timing:
             fps = frames / runner if runner > 0.0 else 0.0
             timing = f" {runner:7.3f}s {fps:9,.0f} fps"
-        status, classification = _result_status(
-            backend,
-            outcome,
-            classifications,
-            strict_classifications,
-            output_locks,
-            require_output_lock,
-        )
-        if status == "pass":
-            passed += 1
-            print(
-                f"{'PASS':<10} {matched:>7,}/{frames:<7,}{timing}{scope_column} "
-                f"{outcome.case.display_path}"
-            )
-        elif status == "classified":
-            assert classification is not None
-            classified += 1
-            print(
-                f"{'CLASSIFIED':<10} {matched:>7,}/{frames:<7,}{timing}{scope_column} "
-                f"{outcome.case.display_path}"
-            )
-            print(
-                f"      id={classification.classification_id} owner={classification.owner}"
-            )
+        status = _result_status(backend, outcome, output_locks, require_output_lock)
+        key = status if status in ("pass", "diagnostic") else "fail"
+        counts[key] += 1
+        print(f"{key.upper():<10} {matched:>7,}/{frames:<7,}{timing}{scope_column} "
+              f"{outcome.case.display_path}")
+        if status == "unlocked":
+            print("      missing required full-output lock")
+        elif status == "output-drift":
+            print(f"      output drift: actual={result['actual_output_fingerprint']}")
+        if key == "fail":
             _print_mismatch(result)
-        elif status == "xpass":
-            assert classification is not None
-            xpassed += 1
-            print(
-                f"{'XPASS':<10} {matched:>7,}/{frames:<7,}{timing}{scope_column} "
-                f"{outcome.case.display_path}"
-            )
-            print(f"      stale classification: {classification.classification_id}")
-        else:
-            failed += 1
-            print(
-                f"{'FAIL':<10} {matched:>7,}/{frames:<7,}{timing}{scope_column} "
-                f"{outcome.case.display_path}"
-            )
-            if status == "unlocked":
-                print("      missing required full-output lock")
-            elif status == "output-drift":
-                replay_key = outcome.case.display_path
-                lock = (output_locks or {}).get(replay_key)
-                if lock is None:
-                    lock = (output_locks or {}).get(
-                        display_path_under_repo(outcome.case.replay, ROOT)
-                    )
-                expected_output = lock.expected[backend] if lock is not None else {}
-                print(
-                    "      output drift: "
-                    f"expected={expected_output.get('actual_output_fingerprint')} "
-                    f"actual={result['actual_output_fingerprint']}"
-                )
-            elif status == "drift":
-                assert classification is not None
-                expected = classification.expected[backend]
-                print(
-                    f"      classification drift: {classification.classification_id} "
-                    f"expected_fingerprint={expected['mismatch_fingerprint']}"
-                )
-            _print_mismatch(result)
-        render_mismatches = int(result["render_visibility_mismatch_count"])
-        if render_mismatches:
-            print(
-                f"      render_visibility_diagnostic={render_mismatches:,} "
-                f"first={result['first_render_visibility_mismatch_frame']} "
-                "field=state_flags[*][4]&0x80"
-            )
-
+        if result["render_visibility_mismatch_count"]:
+            print(f"      render_visibility_diagnostic={result['render_visibility_mismatch_count']:,} "
+                  f"first={result['first_render_visibility_mismatch_frame']} "
+                  "field=state_flags[*][4]&0x80")
     aggregate_fps = compared_frames / wall_seconds if wall_seconds > 0.0 else 0.0
-    print(
-        f"[{backend}] summary: pass={passed} classified={classified} "
-        f"xpass={xpassed} fail={failed} error={errors} "
-        f"frames={compared_frames:,} wall={wall_seconds:.3f}s "
-        f"aggregate_fps={aggregate_fps:,.0f} runner_cpu={runner_seconds:.3f}s"
-    )
-    return xpassed == 0 and failed == 0 and errors == 0
+    print(f"[{backend}] summary: pass={counts['pass']} diagnostic={counts['diagnostic']} "
+          f"fail={counts['fail']} error={counts['error']} "
+          f"frames={compared_frames:,} wall={wall_seconds:.3f}s "
+          f"aggregate_fps={aggregate_fps:,.0f} runner_cpu={runner_seconds:.3f}s")
+    return counts["fail"] == 0 and counts["error"] == 0
 
 
 def main() -> int:
@@ -955,15 +768,8 @@ def main() -> int:
         help="Ignore only +0.0/-0.0 bit differences while finding the next mismatch.",
     )
     parser.add_argument(
-        "--classifications",
-        type=Path,
-        default=DEFAULT_CLASSIFICATIONS,
-        help="Exact known-mismatch manifest used for complete replay validation.",
-    )
-    parser.add_argument(
-        "--strict-classifications",
-        action="store_true",
-        help="Report every raw mismatch as FAIL without applying known classifications.",
+        "--diagnostic", action="store_true",
+        help="Inspect an ineligible capture; manual paths only, never suite acceptance or output locks.",
     )
     parser.add_argument(
         "--output-locks",
@@ -986,11 +792,12 @@ def main() -> int:
     if args.build_jobs <= 0:
         parser.error("--build-jobs must be positive")
 
+    if args.suite and (args.diagnostic or args.diagnostic_signed_zero_equal or args.frames or args.start_frame is not None):
+        parser.error("suite acceptance requires complete strict admitted replays; use manual paths for diagnostics")
+    if args.write_output_locks and (args.diagnostic or args.diagnostic_signed_zero_equal or args.frames or args.start_frame is not None):
+        parser.error("output locks require complete strict admitted replays")
+
     try:
-        classification_path = args.classifications.expanduser()
-        if not classification_path.is_absolute():
-            classification_path = ROOT / classification_path
-        classifications = load_classifications(classification_path)
         output_lock_path = args.output_locks.expanduser()
         if not output_lock_path.is_absolute():
             output_lock_path = ROOT / output_lock_path
@@ -1017,6 +824,9 @@ def main() -> int:
             cases = _manual_cases(args.replay)
         if args.fnmsubs_profile is not None:
             cases = [replace(case, fnmsubs_profile=args.fnmsubs_profile) for case in cases]
+        if args.write_output_locks and suite is not None and suite.name == "melee_core_aggregate":
+            selected = {entry.replay for entry in suite.replays}
+            output_locks = {key: lock for key, lock in output_locks.items() if key in selected}
         workers = _resolve_worker_count(args.workers, len(cases))
 
         if not args.no_build:
@@ -1036,11 +846,6 @@ def main() -> int:
         else:
             print(f"replays: {len(cases)}")
         print(
-            f"classifications: entries={len(classifications)} "
-            f"policy={'strict' if args.strict_classifications else 'exact'} "
-            f"source={display_path_under_repo(classification_path, ROOT)}"
-        )
-        print(
             f"output_locks: entries={len(output_locks)} "
             f"source={display_path_under_repo(output_lock_path, ROOT)}"
         )
@@ -1058,6 +863,7 @@ def main() -> int:
                 timeout=timeout,
                 backend=backend,
                 signed_zero_equal=args.diagnostic_signed_zero_equal,
+                diagnostic=args.diagnostic,
             )
             if args.write_output_locks:
                 output_locks = write_output_locks(
@@ -1070,8 +876,6 @@ def main() -> int:
                     workers=workers,
                     wall_seconds=wall_seconds,
                     show_timing=args.timing,
-                    classifications=classifications,
-                    strict_classifications=args.strict_classifications,
                     output_locks=output_locks,
                     require_output_lock=(
                         suite is not None

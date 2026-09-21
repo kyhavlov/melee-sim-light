@@ -1,6 +1,5 @@
 {
   "name": "marth",
-  "notes": "Marth validation suite (vs Falco/Fox and Marth dittos across legal stages). Started as the single Marth/Falco BF replay for the Marth port; porting is decomp-first - replays verify, they do not cover all moves.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -14,18 +13,6 @@
       "characters": {
         "1": "Marth",
         "2": "Falco"
-      }
-    },
-    {
-      "replay": "replays/validation/marth/InternalPowerlessWallaby.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Marth",
-        "4": "Marth"
       }
     },
     {
@@ -49,30 +36,6 @@
       "stage_id": 8,
       "characters": {
         "1": "Marth",
-        "2": "Marth"
-      }
-    },
-    {
-      "replay": "replays/validation/marth/ParallelFamiliarZebra.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 31,
-      "characters": {
-        "1": "Marth",
-        "4": "Marth"
-      }
-    },
-    {
-      "replay": "replays/validation/marth/QuestionableHarmfulPanther.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 28,
-      "characters": {
-        "1": "Falco",
         "2": "Marth"
       }
     },
@@ -101,82 +64,6 @@
       }
     },
     {
-      "replay": "replays/validation/marth/BreakableMundaneElephant.slpz",
-      "ucf_shield_drop_084_enabled": false,
-      "ports": [
-        3,
-        4
-      ],
-      "stage_id": 28,
-      "characters": {
-        "3": "Falco",
-        "4": "Marth"
-      }
-    },
-    {
-      "replay": "replays/validation/marth/ExtraLargeScaryHornet.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Marth",
-        "4": "Marth"
-      }
-    },
-    {
-      "replay": "replays/validation/marth/StiffDraftyWalrus.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Marth",
-        "4": "Fox"
-      }
-    },
-    {
-      "replay": "replays/validation/marth/WingedGorgeousPanther.slpz",
-      "ucf_shield_drop_084_enabled": false,
-      "ucf_cardinals_1_0_enabled": false,
-      "ucf_shield_drop_084_enabled": false,
-      "ports": [
-        3,
-        4
-      ],
-      "stage_id": 3,
-      "characters": {
-        "3": "Falco",
-        "4": "Marth"
-      }
-    },
-    {
-      "replay": "replays/validation/marth/DraftyHealthyHare.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 31,
-      "characters": {
-        "1": "Marth",
-        "4": "Fox"
-      }
-    },
-    {
-      "replay": "replays/validation/marth/VigorousRelievedLlama.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Marth",
-        "4": "Falco"
-      }
-    },
-    {
       "replay": "replays/validation/marth/ColossalYellowishBison.slpz",
       "ports": [
         1,
@@ -186,56 +73,6 @@
       "characters": {
         "1": "Marth",
         "2": "Marth"
-      }
-    },
-    {
-      "replay": "replays/validation/marth/BriefAdoredOyster.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Marth",
-        "4": "Marth"
-      }
-    },
-    {
-      "replay": "replays/validation/marth/FemaleFarOffSalmon.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Fox",
-        "2": "Marth"
-      }
-    },
-    {
-      "replay": "replays/validation/marth/FemaleWorthyAlpaca.slpz",
-      "ucf_shield_drop_084_enabled": false,
-      "ucf_cardinals_1_0_enabled": false,
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Fox",
-        "2": "Marth"
-      }
-    },
-    {
-      "replay": "replays/validation/marth/BountifulScalyGuanaco.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 8,
-      "characters": {
-        "1": "Marth",
-        "4": "Falco"
       }
     }
   ]

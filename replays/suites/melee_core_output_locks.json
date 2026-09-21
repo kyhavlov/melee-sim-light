@@ -34,42 +34,11 @@
       }
     },
     {
-      "replay": "replays/validation/aggregate_recent/Game_20260514T181413.slpz",
-      "expected": {
-        "native": {
-          "frames": 2723,
-          "actual_output_fingerprint": "c353d3eb63c76d45"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slpz",
       "expected": {
         "native": {
           "frames": 5510,
           "actual_output_fingerprint": "a27c49e4be637b63"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz",
-      "expected": {
-        "native": {
-          "frames": 9328,
-          "actual_output_fingerprint": "d1eaf341f089213b"
-        },
-        "ppc": {
-          "frames": 9328,
-          "actual_output_fingerprint": "d1eaf341f089213b"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/aggregate_recent/HungryImportantSnake.slpz",
-      "expected": {
-        "native": {
-          "frames": 8729,
-          "actual_output_fingerprint": "0b577f33df9e83a8"
         }
       }
     },
@@ -92,19 +61,6 @@
       }
     },
     {
-      "replay": "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
-      "expected": {
-        "native": {
-          "frames": 11980,
-          "actual_output_fingerprint": "456b58c027543154"
-        },
-        "ppc": {
-          "frames": 11980,
-          "actual_output_fingerprint": "456b58c027543154"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
       "expected": {
         "native": {
@@ -119,37 +75,6 @@
         "native": {
           "frames": 7543,
           "actual_output_fingerprint": "778552eb8e7103b2"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
-      "expected": {
-        "native": {
-          "frames": 12416,
-          "actual_output_fingerprint": "84060bd9c1604666"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz",
-      "expected": {
-        "native": {
-          "frames": 12914,
-          "actual_output_fingerprint": "b3e323d6585b7012"
-        },
-        "ppc": {
-          "frames": 12914,
-          "actual_output_fingerprint": "b3e323d6585b7012"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/battlefield_recent/LoyalDishonestWren.slpz",
-      "expected": {
-        "native": {
-          "frames": 4655,
-          "actual_output_fingerprint": "fd66e94a574bcf4c"
         }
       }
     },
@@ -204,19 +129,6 @@
         "native": {
           "frames": 15810,
           "actual_output_fingerprint": "cc7ee24bac5c1137"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/bowser/MildMurkyNewt.slpz",
-      "expected": {
-        "native": {
-          "frames": 14105,
-          "actual_output_fingerprint": "4ed352838857a9d2"
-        },
-        "ppc": {
-          "frames": 14105,
-          "actual_output_fingerprint": "4ed352838857a9d2"
         }
       }
     },
@@ -324,6 +236,19 @@
       }
     },
     {
+      "replay": "replays/validation/bowser/corpus_samus_20240816T224524.slpz",
+      "expected": {
+        "native": {
+          "frames": 12707,
+          "actual_output_fingerprint": "569e8dcb4ea18845"
+        },
+        "ppc": {
+          "frames": 12707,
+          "actual_output_fingerprint": "569e8dcb4ea18845"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
       "expected": {
         "native": {
@@ -396,19 +321,6 @@
         "ppc": {
           "frames": 12291,
           "actual_output_fingerprint": "7fc45e5a26dbf3c8"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/dk/9560_Game_20250405T084316.slpz",
-      "expected": {
-        "native": {
-          "frames": 7359,
-          "actual_output_fingerprint": "eafc481d69882a4c"
-        },
-        "ppc": {
-          "frames": 7359,
-          "actual_output_fingerprint": "eafc481d69882a4c"
         }
       }
     },
@@ -653,11 +565,11 @@
       "expected": {
         "native": {
           "frames": 9560,
-          "actual_output_fingerprint": "35aa6e0fd12fd373"
+          "actual_output_fingerprint": "0ea4138dacc18bc4"
         },
         "ppc": {
           "frames": 9560,
-          "actual_output_fingerprint": "35aa6e0fd12fd373"
+          "actual_output_fingerprint": "0ea4138dacc18bc4"
         }
       }
     },
@@ -739,15 +651,6 @@
         "native": {
           "frames": 9808,
           "actual_output_fingerprint": "22048307ff035e2c"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/doubles_recent/Game_20260704T012353.slpz",
-      "expected": {
-        "native": {
-          "frames": 9210,
-          "actual_output_fingerprint": "30f50f5919cc4d3c"
         }
       }
     },
@@ -869,28 +772,6 @@
       }
     },
     {
-      "replay": "replays/validation/falcon/EmotionalNaturalLemur.slpz",
-      "expected": {
-        "native": {
-          "frames": 9958,
-          "actual_output_fingerprint": "4ac753a2619ad64c"
-        },
-        "ppc": {
-          "frames": 9958,
-          "actual_output_fingerprint": "4ac753a2619ad64c"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/falcon/FumblingProudPartridge.slpz",
-      "expected": {
-        "native": {
-          "frames": 12659,
-          "actual_output_fingerprint": "0ddefbfd83fbc9c5"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/falcon/FumblingSaneBeaver.slpz",
       "expected": {
         "native": {
@@ -999,15 +880,6 @@
       }
     },
     {
-      "replay": "replays/validation/falcon/OddballCleanViper.slpz",
-      "expected": {
-        "native": {
-          "frames": 10006,
-          "actual_output_fingerprint": "73182c1daa60029c"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/falcon/PrettyInfiniteCapybara.slpz",
       "expected": {
         "native": {
@@ -1026,19 +898,6 @@
       }
     },
     {
-      "replay": "replays/validation/falcon/StraightScratchyCheetah.slpz",
-      "expected": {
-        "native": {
-          "frames": 7905,
-          "actual_output_fingerprint": "26cb618c793e4ade"
-        },
-        "ppc": {
-          "frames": 7905,
-          "actual_output_fingerprint": "26cb618c793e4ade"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/falcon/WrathfulIllFatedLocust.slpz",
       "expected": {
         "native": {
@@ -1052,11 +911,11 @@
       "expected": {
         "native": {
           "frames": 7402,
-          "actual_output_fingerprint": "a2feacb2a0f34e00"
+          "actual_output_fingerprint": "20c6bd4d69c0ee80"
         },
         "ppc": {
           "frames": 7402,
-          "actual_output_fingerprint": "a2feacb2a0f34e00"
+          "actual_output_fingerprint": "20c6bd4d69c0ee80"
         }
       }
     },
@@ -1092,15 +951,6 @@
       }
     },
     {
-      "replay": "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz",
-      "expected": {
-        "native": {
-          "frames": 11202,
-          "actual_output_fingerprint": "ad320e18f04c7883"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/gamewatch/Game_20260707T202455.slpz",
       "expected": {
         "native": {
@@ -1124,15 +974,6 @@
         "native": {
           "frames": 21121,
           "actual_output_fingerprint": "058075c7b8ca3920"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/gamewatch/Game_20260707T204121.slpz",
-      "expected": {
-        "native": {
-          "frames": 15465,
-          "actual_output_fingerprint": "b6ffca0bd204cdf8"
         }
       }
     },
@@ -1191,24 +1032,24 @@
       }
     },
     {
+      "replay": "replays/validation/gamewatch/corpus_falco_20241222T215237.slpz",
+      "expected": {
+        "native": {
+          "frames": 6830,
+          "actual_output_fingerprint": "9fc5944819e0bb72"
+        },
+        "ppc": {
+          "frames": 6830,
+          "actual_output_fingerprint": "9fc5944819e0bb72"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/gamewatch/judge_chef.slpz",
       "expected": {
         "native": {
           "frames": 2988,
           "actual_output_fingerprint": "6a400c8d077cc38b"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/ganon/2025-03_Game_20250309T055449.slpz",
-      "expected": {
-        "native": {
-          "frames": 6202,
-          "actual_output_fingerprint": "c9cb0eb79ab582c2"
-        },
-        "ppc": {
-          "frames": 6202,
-          "actual_output_fingerprint": "c9cb0eb79ab582c2"
         }
       }
     },
@@ -1661,29 +1502,11 @@
       }
     },
     {
-      "replay": "replays/validation/icies/gm-sheik-2026-04_Game_20260428T204324.slpz",
-      "expected": {
-        "native": {
-          "frames": 12328,
-          "actual_output_fingerprint": "103376dfb5f0f9bc"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/icies/ics-ditto-d18-2025-05_Game_20250518T163949.slpz",
       "expected": {
         "native": {
           "frames": 12335,
           "actual_output_fingerprint": "8b896a98d2627244"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/icies/master-diamond-e1f45bc846c8b64f90b35a94.slpz",
-      "expected": {
-        "native": {
-          "frames": 6460,
-          "actual_output_fingerprint": "bf6169690c0e2ea8"
         }
       }
     },
@@ -1724,15 +1547,6 @@
       }
     },
     {
-      "replay": "replays/validation/icies/platinum-platinum-83d0989d367f6d26c0df4863.slpz",
-      "expected": {
-        "native": {
-          "frames": 11243,
-          "actual_output_fingerprint": "e5850e45858aba4c"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/icies/ps-fox-2025-08_Game_20250801T213237.slpz",
       "expected": {
         "native": {
@@ -1769,114 +1583,6 @@
         "ppc": {
           "frames": 12309,
           "actual_output_fingerprint": "5c7ddb371f7bc8f4"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-1_falco_00191DDFD11F_20240917T183608.slpz",
-      "expected": {
-        "native": {
-          "frames": 8299,
-          "actual_output_fingerprint": "47db77c619698dfa"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-1_falco_00191DDFD11F_20240917T183839.slpz",
-      "expected": {
-        "native": {
-          "frames": 11346,
-          "actual_output_fingerprint": "effe827ca91b37c6"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T104926.slpz",
-      "expected": {
-        "native": {
-          "frames": 7302,
-          "actual_output_fingerprint": "8d08c08800016148"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T105148.slpz",
-      "expected": {
-        "native": {
-          "frames": 8423,
-          "actual_output_fingerprint": "f8a81a6fd49f3d44"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T105436.slpz",
-      "expected": {
-        "native": {
-          "frames": 9681,
-          "actual_output_fingerprint": "a233cda773729aa3"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-3_captain_falcon_A45C27B56C27_20241016T024203.slpz",
-      "expected": {
-        "native": {
-          "frames": 9736,
-          "actual_output_fingerprint": "5466e95f4e26cee8"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-3_falco_A45C27B56C27_20241016T025123.slpz",
-      "expected": {
-        "native": {
-          "frames": 7961,
-          "actual_output_fingerprint": "9bea2dd017ace6ac"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-3_marth_A45C27B56C27_20241016T024513.slpz",
-      "expected": {
-        "native": {
-          "frames": 8282,
-          "actual_output_fingerprint": "69849e63223ace9b"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-3_peach_A45C27B56C27_20241016T025418.slpz",
-      "expected": {
-        "native": {
-          "frames": 7609,
-          "actual_output_fingerprint": "7ea9218c6c3daa50"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/greg_game_and_watch_20231218T204918.slpz",
-      "expected": {
-        "native": {
-          "frames": 9811,
-          "actual_output_fingerprint": "9f157c093325211c"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/greg_zelda_20240313T140759.slpz",
-      "expected": {
-        "native": {
-          "frames": 14774,
-          "actual_output_fingerprint": "bfb1d39daa870a8d"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/greg_zelda_20240425T135022.slpz",
-      "expected": {
-        "native": {
-          "frames": 3371,
-          "actual_output_fingerprint": "e32a14ea057ce31e"
         }
       }
     },
@@ -2169,15 +1875,6 @@
       }
     },
     {
-      "replay": "replays/validation/legacy_arithmetic/gamewatch_fox_20260707T172242.slpz",
-      "expected": {
-        "native": {
-          "frames": 13196,
-          "actual_output_fingerprint": "f56d8284caf9f5ad"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/legacy_arithmetic/mewtwo_fox_20260702T170056.slpz",
       "expected": {
         "native": {
@@ -2219,19 +1916,6 @@
         "native": {
           "frames": 10777,
           "actual_output_fingerprint": "bc5e50330f06c9ec"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/links/18932_Game_20250611T185955.slpz",
-      "expected": {
-        "native": {
-          "frames": 11714,
-          "actual_output_fingerprint": "52df484114e5f1b5"
-        },
-        "ppc": {
-          "frames": 11714,
-          "actual_output_fingerprint": "52df484114e5f1b5"
         }
       }
     },
@@ -2439,15 +2123,6 @@
         "native": {
           "frames": 7876,
           "actual_output_fingerprint": "ac3ae00f73c1f1c0"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/links/redxlink_Game_20250318T205705.slpz",
-      "expected": {
-        "native": {
-          "frames": 10553,
-          "actual_output_fingerprint": "a6d573f8380a5524"
         }
       }
     },
@@ -2820,6 +2495,19 @@
       }
     },
     {
+      "replay": "replays/validation/luigi/corpus_yoshi_20241109T194013.slpz",
+      "expected": {
+        "native": {
+          "frames": 12369,
+          "actual_output_fingerprint": "91b65f3a7fc3e16f"
+        },
+        "ppc": {
+          "frames": 12369,
+          "actual_output_fingerprint": "91b65f3a7fc3e16f"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/luigi/diamond-luigi_Game_20260611T161130.slpz",
       "expected": {
         "native": {
@@ -2870,24 +2558,6 @@
         "native": {
           "frames": 6736,
           "actual_output_fingerprint": "9f974658d53cbf89"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/luigi/master-diamond-8a855ab88865a8fd02dd8f60.slpz",
-      "expected": {
-        "native": {
-          "frames": 12355,
-          "actual_output_fingerprint": "31e16f281f78277b"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/luigi/master-master-775e398466dfd67e2bea025b.slpz",
-      "expected": {
-        "native": {
-          "frames": 9653,
-          "actual_output_fingerprint": "4e5efba5f9bf533a"
         }
       }
     },
@@ -2982,37 +2652,6 @@
       }
     },
     {
-      "replay": "replays/validation/luigi/platinum-platinum-c20d9507b199f01838e901d0.slpz",
-      "expected": {
-        "native": {
-          "frames": 9416,
-          "actual_output_fingerprint": "0ffdd95d33950f67"
-        },
-        "ppc": {
-          "frames": 9416,
-          "actual_output_fingerprint": "0ffdd95d33950f67"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/luigi/slippi_01.07.22-09.08.23_Game_20221011T140934.slpz",
-      "expected": {
-        "native": {
-          "frames": 9583,
-          "actual_output_fingerprint": "fd314a61142d62c7"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/luigi/slippi_2024_Game_20240704T213554.slpz",
-      "expected": {
-        "native": {
-          "frames": 8101,
-          "actual_output_fingerprint": "2b0eaa1fad8dc78c"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/luigi/slippi_2024_Game_20250307T122650.slpz",
       "expected": {
         "native": {
@@ -3102,15 +2741,6 @@
       }
     },
     {
-      "replay": "replays/validation/marios/35438_Game_20250312T211113.slpz",
-      "expected": {
-        "native": {
-          "frames": 6275,
-          "actual_output_fingerprint": "c29b6b9fc872871d"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/marios/4308_Game_20250404T231356.slpz",
       "expected": {
         "native": {
@@ -3120,32 +2750,6 @@
         "ppc": {
           "frames": 6835,
           "actual_output_fingerprint": "73651ada05c058ab"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marios/6082_Game_20231226T153224.slpz",
-      "expected": {
-        "native": {
-          "frames": 8941,
-          "actual_output_fingerprint": "20f9a67c104190ee"
-        },
-        "ppc": {
-          "frames": 8941,
-          "actual_output_fingerprint": "20f9a67c104190ee"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marios/64303_master-platinum-f57bf677ef721a6e844c0398.slpz",
-      "expected": {
-        "native": {
-          "frames": 10580,
-          "actual_output_fingerprint": "bf5e5008aa7dcea9"
-        },
-        "ppc": {
-          "frames": 10580,
-          "actual_output_fingerprint": "bf5e5008aa7dcea9"
         }
       }
     },
@@ -3164,15 +2768,6 @@
         "native": {
           "frames": 12143,
           "actual_output_fingerprint": "1db3b8db4781ade1"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marios/Slippi-20220321_Game_20220322T011940.slpz",
-      "expected": {
-        "native": {
-          "frames": 8060,
-          "actual_output_fingerprint": "ca490d63f1e7a59a"
         }
       }
     },
@@ -3267,20 +2862,15 @@
       }
     },
     {
-      "replay": "replays/validation/marios/diamond-diamond-6c3bcc456c967feb1570eb68.slpz",
+      "replay": "replays/validation/marios/corpus_marth_20240831T191647.slpz",
       "expected": {
         "native": {
-          "frames": 15286,
-          "actual_output_fingerprint": "692831bb073685e0"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marios/diamond-platinum-ba31dd26e40b4c452a6665e0.slpz",
-      "expected": {
-        "native": {
-          "frames": 8515,
-          "actual_output_fingerprint": "098a2f9dad17d02e"
+          "frames": 9216,
+          "actual_output_fingerprint": "e13a19c2a5ac3119"
+        },
+        "ppc": {
+          "frames": 9216,
+          "actual_output_fingerprint": "e13a19c2a5ac3119"
         }
       }
     },
@@ -3362,15 +2952,6 @@
         "native": {
           "frames": 10294,
           "actual_output_fingerprint": "24a02ac07ce2cd76"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marios/master-diamond-2a8a128fe61a6b8aa44f372e.slpz",
-      "expected": {
-        "native": {
-          "frames": 10528,
-          "actual_output_fingerprint": "7c6aaa19c2a57922"
         }
       }
     },
@@ -3469,24 +3050,6 @@
       }
     },
     {
-      "replay": "replays/validation/marios/platinum-platinum-4aa6d15f587e02246006b7e0.slpz",
-      "expected": {
-        "native": {
-          "frames": 10188,
-          "actual_output_fingerprint": "56725e7b62031d84"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marios/ranked-anonymized_platinum-platinum-7d58208ea7f4c046a0da2ae1.slpz",
-      "expected": {
-        "native": {
-          "frames": 12462,
-          "actual_output_fingerprint": "4a3a68c428c778aa"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/marios/silver-fox-2026-06_Game_20260615T232450.slpz",
       "expected": {
         "native": {
@@ -3505,91 +3068,11 @@
       }
     },
     {
-      "replay": "replays/validation/marth/BountifulScalyGuanaco.slpz",
-      "expected": {
-        "native": {
-          "frames": 7532,
-          "actual_output_fingerprint": "4c45fe9609cc7a64"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marth/BreakableMundaneElephant.slpz",
-      "expected": {
-        "native": {
-          "frames": 10121,
-          "actual_output_fingerprint": "cc91b7562c07eb4a"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marth/BriefAdoredOyster.slpz",
-      "expected": {
-        "native": {
-          "frames": 7162,
-          "actual_output_fingerprint": "2c8830f75ea6b7ae"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/marth/ColossalYellowishBison.slpz",
       "expected": {
         "native": {
           "frames": 10613,
           "actual_output_fingerprint": "3397f6037d972e40"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marth/DraftyHealthyHare.slpz",
-      "expected": {
-        "native": {
-          "frames": 10505,
-          "actual_output_fingerprint": "66ee784c0e5575a2"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marth/ExtraLargeScaryHornet.slpz",
-      "expected": {
-        "native": {
-          "frames": 10973,
-          "actual_output_fingerprint": "d4c54f8b6e6f1c33"
-        },
-        "ppc": {
-          "frames": 10973,
-          "actual_output_fingerprint": "d4c54f8b6e6f1c33"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marth/FemaleFarOffSalmon.slpz",
-      "expected": {
-        "native": {
-          "frames": 11699,
-          "actual_output_fingerprint": "f6849feccbab5d6d"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marth/FemaleWorthyAlpaca.slpz",
-      "expected": {
-        "native": {
-          "frames": 7508,
-          "actual_output_fingerprint": "08556bc93c34b214"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marth/InternalPowerlessWallaby.slpz",
-      "expected": {
-        "native": {
-          "frames": 10165,
-          "actual_output_fingerprint": "63b2dbf63dfc353c"
-        },
-        "ppc": {
-          "frames": 10165,
-          "actual_output_fingerprint": "63b2dbf63dfc353c"
         }
       }
     },
@@ -3612,38 +3095,11 @@
       }
     },
     {
-      "replay": "replays/validation/marth/ParallelFamiliarZebra.slpz",
-      "expected": {
-        "native": {
-          "frames": 8357,
-          "actual_output_fingerprint": "638282e5a54a0d50"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marth/QuestionableHarmfulPanther.slpz",
-      "expected": {
-        "native": {
-          "frames": 9184,
-          "actual_output_fingerprint": "32d907671e3e7068"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/marth/RipeWealthySeahorse.slpz",
       "expected": {
         "native": {
           "frames": 11820,
           "actual_output_fingerprint": "cf55b515acc14345"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/marth/StiffDraftyWalrus.slpz",
-      "expected": {
-        "native": {
-          "frames": 10153,
-          "actual_output_fingerprint": "4cb26473c1692bcf"
         }
       }
     },
@@ -3657,15 +3113,6 @@
       }
     },
     {
-      "replay": "replays/validation/marth/VigorousRelievedLlama.slpz",
-      "expected": {
-        "native": {
-          "frames": 9977,
-          "actual_output_fingerprint": "70cac61aa805567a"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/marth/WellWornSmallGoshawk.slpz",
       "expected": {
         "native": {
@@ -3675,11 +3122,15 @@
       }
     },
     {
-      "replay": "replays/validation/marth/WingedGorgeousPanther.slpz",
+      "replay": "replays/validation/mewtwo/corpus_falco_20241001T022518.slpz",
       "expected": {
         "native": {
-          "frames": 10625,
-          "actual_output_fingerprint": "a2f43edd9a4b6306"
+          "frames": 3899,
+          "actual_output_fingerprint": "c32c8b2d16bc6fe7"
+        },
+        "ppc": {
+          "frames": 3899,
+          "actual_output_fingerprint": "c32c8b2d16bc6fe7"
         }
       }
     },
@@ -3832,15 +3283,6 @@
       }
     },
     {
-      "replay": "replays/validation/ness/2025-11_Game_20251124T141214.slpz",
-      "expected": {
-        "native": {
-          "frames": 19574,
-          "actual_output_fingerprint": "2ce2209400430f0f"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/ness/2026-04_Game_20260423T231823.slpz",
       "expected": {
         "native": {
@@ -3962,15 +3404,6 @@
       }
     },
     {
-      "replay": "replays/validation/ness/54459_Game_20250528T201050.slpz",
-      "expected": {
-        "native": {
-          "frames": 10811,
-          "actual_output_fingerprint": "95f564585db1bb74"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/ness/58685_Game_20250313T002950.slpz",
       "expected": {
         "native": {
@@ -4025,142 +3458,6 @@
       }
     },
     {
-      "replay": "replays/validation/peach/BareJovialChinchilla.slpz",
-      "expected": {
-        "native": {
-          "frames": 14524,
-          "actual_output_fingerprint": "756655d0bbfb8c2c"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
-      "expected": {
-        "native": {
-          "frames": 14007,
-          "actual_output_fingerprint": "b580a1081a3af657"
-        },
-        "ppc": {
-          "frames": 14007,
-          "actual_output_fingerprint": "b580a1081a3af657"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/CapitalPristineTarsier.slpz",
-      "expected": {
-        "native": {
-          "frames": 16491,
-          "actual_output_fingerprint": "1eb19aa51b90056e"
-        },
-        "ppc": {
-          "frames": 16491,
-          "actual_output_fingerprint": "1eb19aa51b90056e"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/DisgustingLivelyRaven.slpz",
-      "expected": {
-        "native": {
-          "frames": 12960,
-          "actual_output_fingerprint": "a93b73b1b5ec8a4c"
-        },
-        "ppc": {
-          "frames": 12960,
-          "actual_output_fingerprint": "a93b73b1b5ec8a4c"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/DryLimitedWoodcock.slpz",
-      "expected": {
-        "native": {
-          "frames": 10458,
-          "actual_output_fingerprint": "64c6bb20a6bf0d42"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/ExpertWorthlessFinch.slpz",
-      "expected": {
-        "native": {
-          "frames": 12032,
-          "actual_output_fingerprint": "ce0f6c8dfd333ba4"
-        },
-        "ppc": {
-          "frames": 12032,
-          "actual_output_fingerprint": "ce0f6c8dfd333ba4"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/FaintMintyShark.slpz",
-      "expected": {
-        "native": {
-          "frames": 17215,
-          "actual_output_fingerprint": "6e6b21eef7bb60ad"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/HappyGoLuckyScentedButterfly.slpz",
-      "expected": {
-        "native": {
-          "frames": 14098,
-          "actual_output_fingerprint": "e3e04befdd7eef9a"
-        },
-        "ppc": {
-          "frames": 14098,
-          "actual_output_fingerprint": "e3e04befdd7eef9a"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/HeartyStiffMallard.slpz",
-      "expected": {
-        "native": {
-          "frames": 15634,
-          "actual_output_fingerprint": "7f41b409c89018d4"
-        },
-        "ppc": {
-          "frames": 15634,
-          "actual_output_fingerprint": "7f41b409c89018d4"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/HumiliatingCreamyReindeer.slpz",
-      "expected": {
-        "native": {
-          "frames": 16501,
-          "actual_output_fingerprint": "e0f366cec73a9a5d"
-        },
-        "ppc": {
-          "frames": 16501,
-          "actual_output_fingerprint": "e0f366cec73a9a5d"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/MadeUpEnchantedStingray.slpz",
-      "expected": {
-        "native": {
-          "frames": 11073,
-          "actual_output_fingerprint": "4986d3b2395b6437"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/MarvelousLopsidedOryx.slpz",
-      "expected": {
-        "native": {
-          "frames": 16873,
-          "actual_output_fingerprint": "cb91b578aa685af9"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/peach/PerfectJollyMagpie.slpz",
       "expected": {
         "native": {
@@ -4170,59 +3467,15 @@
       }
     },
     {
-      "replay": "replays/validation/peach/ScaryFrankPorcupine.slpz",
-      "expected": {
-        "native": {
-          "frames": 26844,
-          "actual_output_fingerprint": "ea018e8ffbc9f96e"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/SmugConfusedTermite.slpz",
-      "expected": {
-        "native": {
-          "frames": 12898,
-          "actual_output_fingerprint": "d84b8ca215459828"
-        },
-        "ppc": {
-          "frames": 12898,
-          "actual_output_fingerprint": "d84b8ca215459828"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/StridentRedSandpiper.slpz",
-      "expected": {
-        "native": {
-          "frames": 11114,
-          "actual_output_fingerprint": "845bc2e2596cb0e2"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/peach/TameEmbellishedSparrow.slpz",
-      "expected": {
-        "native": {
-          "frames": 14352,
-          "actual_output_fingerprint": "df7f255689104c2a"
-        },
-        "ppc": {
-          "frames": 14352,
-          "actual_output_fingerprint": "df7f255689104c2a"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/peach/peach_demo_1.slpz",
       "expected": {
         "native": {
           "frames": 6174,
-          "actual_output_fingerprint": "e6569cfb5aa4f677"
+          "actual_output_fingerprint": "c1d8d0ee556f6977"
         },
         "ppc": {
           "frames": 6174,
-          "actual_output_fingerprint": "e6569cfb5aa4f677"
+          "actual_output_fingerprint": "c1d8d0ee556f6977"
         }
       }
     },
@@ -4236,20 +3489,15 @@
       }
     },
     {
-      "replay": "replays/validation/pichu/d20-38_ice_climbers_001B7ABDD8A0_20260324T121546.slpz",
+      "replay": "replays/validation/pichu/corpus_falco_20250120T191118.slpz",
       "expected": {
         "native": {
-          "frames": 17787,
-          "actual_output_fingerprint": "418cca39e91dc4f3"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/d20-38_mewtwo_001B7ABDD8A0_20260324T121206.slpz",
-      "expected": {
-        "native": {
-          "frames": 12245,
-          "actual_output_fingerprint": "835942be12d5e961"
+          "frames": 8866,
+          "actual_output_fingerprint": "e8c2c333f432b717"
+        },
+        "ppc": {
+          "frames": 8866,
+          "actual_output_fingerprint": "e8c2c333f432b717"
         }
       }
     },
@@ -4308,60 +3556,6 @@
       }
     },
     {
-      "replay": "replays/validation/pichu/yeti-469_game_and_watch_CC9E001024A5_20260226T095048.slpz",
-      "expected": {
-        "native": {
-          "frames": 8212,
-          "actual_output_fingerprint": "c4c36bdf512e497b"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/yeti-469_game_and_watch_CC9E001024A5_20260226T095337.slpz",
-      "expected": {
-        "native": {
-          "frames": 10042,
-          "actual_output_fingerprint": "308d844fe2c55a59"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/yeti-471_falco_CC9E001024A5_20260312T074722.slpz",
-      "expected": {
-        "native": {
-          "frames": 9457,
-          "actual_output_fingerprint": "ac4267654bad959d"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/yeti-472_captain_falcon_CC9E001024A5_20260319T083212.slpz",
-      "expected": {
-        "native": {
-          "frames": 11761,
-          "actual_output_fingerprint": "7efb7fdb9588c12d"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/yeti-472_ganondorf_CC9E001024A5_20260319T081326.slpz",
-      "expected": {
-        "native": {
-          "frames": 9327,
-          "actual_output_fingerprint": "69be96ea9b70767f"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/yeti-473_fox_CC9E001024A5_20260326T083655.slpz",
-      "expected": {
-        "native": {
-          "frames": 11899,
-          "actual_output_fingerprint": "57cc8a4c7a369f6a"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/pikachu/38531_Game_20250316T012548.slpz",
       "expected": {
         "native": {
@@ -4416,15 +3610,6 @@
       }
     },
     {
-      "replay": "replays/validation/pikachu/43799_Game_20250624T005320.slpz",
-      "expected": {
-        "native": {
-          "frames": 11067,
-          "actual_output_fingerprint": "5775446ac53b7c41"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/pikachu/44145_Game_20250707T185007.slpz",
       "expected": {
         "native": {
@@ -4466,37 +3651,6 @@
         "native": {
           "frames": 10158,
           "actual_output_fingerprint": "fa20dfd3701ebb92"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/pikachu/diamond-platinum-65468eac6defc7ae336916cb.slpz",
-      "expected": {
-        "native": {
-          "frames": 10212,
-          "actual_output_fingerprint": "6eb335b063c211ce"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/pikachu/diamond-platinum-c53c1ea834421338b65dd158.slpz",
-      "expected": {
-        "native": {
-          "frames": 3781,
-          "actual_output_fingerprint": "e2f54c823d6d6aba"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/pikachu/master-master-97beba9993588c0e724b06c2.slpz",
-      "expected": {
-        "native": {
-          "frames": 12233,
-          "actual_output_fingerprint": "17cc04c621f9b2e0"
-        },
-        "ppc": {
-          "frames": 12233,
-          "actual_output_fingerprint": "17cc04c621f9b2e0"
         }
       }
     },
@@ -4595,37 +3749,6 @@
       }
     },
     {
-      "replay": "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz",
-      "expected": {
-        "native": {
-          "frames": 13063,
-          "actual_output_fingerprint": "4a61be5082ba6202"
-        },
-        "ppc": {
-          "frames": 13063,
-          "actual_output_fingerprint": "4a61be5082ba6202"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz",
-      "expected": {
-        "native": {
-          "frames": 10404,
-          "actual_output_fingerprint": "7adce3ff7e60f733"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slpz",
-      "expected": {
-        "native": {
-          "frames": 12475,
-          "actual_output_fingerprint": "43ef09916b2da96c"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/puff/Game_20250705T002244.slpz",
       "expected": {
         "native": {
@@ -4707,28 +3830,6 @@
       }
     },
     {
-      "replay": "replays/validation/puff/diamond-diamond-78251f79d12df3bcdb1d4abe.slpz",
-      "expected": {
-        "native": {
-          "frames": 10788,
-          "actual_output_fingerprint": "49f3fb315e8dd96b"
-        },
-        "ppc": {
-          "frames": 10788,
-          "actual_output_fingerprint": "49f3fb315e8dd96b"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/puff/master-diamond-d514ba67193e53290c8d1b83.slpz",
-      "expected": {
-        "native": {
-          "frames": 10763,
-          "actual_output_fingerprint": "a4ed47eaf0eef292"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/puff/rollout_air_bf.slpz",
       "expected": {
         "native": {
@@ -4769,65 +3870,11 @@
       }
     },
     {
-      "replay": "replays/validation/roy/d20-33-network_donkey_kong_20260113T183707.slpz",
-      "expected": {
-        "native": {
-          "frames": 6534,
-          "actual_output_fingerprint": "fe8da7715ee2c806"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/roy/d20-36_luigi_CC9E0000F940_20260224T235350.slpz",
-      "expected": {
-        "native": {
-          "frames": 16828,
-          "actual_output_fingerprint": "08a6ca965688dff8"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/roy/d20-36_luigi_CC9E0000F940_20260224T235844.slpz",
-      "expected": {
-        "native": {
-          "frames": 8776,
-          "actual_output_fingerprint": "ab28f6b78f7b869d"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/roy/d20-36_roy_CC9E0000F940_20260224T234600.slpz",
-      "expected": {
-        "native": {
-          "frames": 11195,
-          "actual_output_fingerprint": "82ec7ef47b5ac16f"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/roy/d20-36_roy_CC9E0000F940_20260224T234936.slpz",
-      "expected": {
-        "native": {
-          "frames": 13867,
-          "actual_output_fingerprint": "fc19acbac587fd4f"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/roy/greg_ice_climbers_20250512T211155.slpz",
       "expected": {
         "native": {
           "frames": 13728,
           "actual_output_fingerprint": "9f19b29d86201b28"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/roy/greg_link_20230708T234539.slpz",
-      "expected": {
-        "native": {
-          "frames": 14446,
-          "actual_output_fingerprint": "cceb45e21fb76c93"
         }
       }
     },
@@ -4994,33 +4041,6 @@
       }
     },
     {
-      "replay": "replays/validation/roy/yeti-472_falco_CC9E001024A5_20260319T073154.slpz",
-      "expected": {
-        "native": {
-          "frames": 9753,
-          "actual_output_fingerprint": "7fb734e537cd3d96"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/roy/yeti-472_sheik_CC9E001024A5_20260319T075905.slpz",
-      "expected": {
-        "native": {
-          "frames": 10887,
-          "actual_output_fingerprint": "82ada7fe37e3e305"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/roy/yeti-473_luigi_CC9E001024A5_20260326T081109.slpz",
-      "expected": {
-        "native": {
-          "frames": 12202,
-          "actual_output_fingerprint": "3fddabdffce3e6e9"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/samus/auto-cptfalcon-2025-05_Game_20250518T000407.slpz",
       "expected": {
         "native": {
@@ -5071,24 +4091,6 @@
         "native": {
           "frames": 9507,
           "actual_output_fingerprint": "ba2ce47fd6909356"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/samus/diamond-platinum-3a0b5b8362dab548ac01a813.slpz",
-      "expected": {
-        "native": {
-          "frames": 6835,
-          "actual_output_fingerprint": "2518a2fda3525fda"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/samus/diamond-platinum-e9cd78b1cd4439a0f7945269.slpz",
-      "expected": {
-        "native": {
-          "frames": 12166,
-          "actual_output_fingerprint": "6a3cf6c092942969"
         }
       }
     },
@@ -5254,198 +4256,11 @@
       }
     },
     {
-      "replay": "replays/validation/sheik/AttractiveAnyClam.slpz",
-      "expected": {
-        "native": {
-          "frames": 7388,
-          "actual_output_fingerprint": "96e2b2be6edc0a75"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/BeautifulDistantWolverine.slpz",
-      "expected": {
-        "native": {
-          "frames": 7424,
-          "actual_output_fingerprint": "158ce948e2c6a40a"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/ConstantStiffOtter.slpz",
-      "expected": {
-        "native": {
-          "frames": 11721,
-          "actual_output_fingerprint": "beccfef6c9a76494"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/DrabMeanArmadillo.slpz",
-      "expected": {
-        "native": {
-          "frames": 6027,
-          "actual_output_fingerprint": "7a5336a6225405ec"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/GlaringRosyAlpaca.slpz",
-      "expected": {
-        "native": {
-          "frames": 9014,
-          "actual_output_fingerprint": "a711f801cba0902e"
-        },
-        "ppc": {
-          "frames": 9014,
-          "actual_output_fingerprint": "a711f801cba0902e"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/IcyFailingGuanaco.slpz",
-      "expected": {
-        "native": {
-          "frames": 5860,
-          "actual_output_fingerprint": "9c63372921a8853a"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/MixedAllQuetzal.slpz",
-      "expected": {
-        "native": {
-          "frames": 10665,
-          "actual_output_fingerprint": "0c200c2864de922f"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/PaleMajorEchidna.slpz",
-      "expected": {
-        "native": {
-          "frames": 10638,
-          "actual_output_fingerprint": "25bae6be80c34d48"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/RuralReasonableRat.slpz",
-      "expected": {
-        "native": {
-          "frames": 9319,
-          "actual_output_fingerprint": "9bb259b0bd613659"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/SnarlingHelplessBeaver.slpz",
-      "expected": {
-        "native": {
-          "frames": 10013,
-          "actual_output_fingerprint": "a97bfd9a0b0aa6eb"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/sheik/StiffLustrousZebra.slpz",
       "expected": {
         "native": {
           "frames": 9679,
           "actual_output_fingerprint": "9bf377b98180e177"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/TenseSameHummingbird.slpz",
-      "expected": {
-        "native": {
-          "frames": 11497,
-          "actual_output_fingerprint": "04807735dd8a645b"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/TornEnchantingGiraffe.slpz",
-      "expected": {
-        "native": {
-          "frames": 9464,
-          "actual_output_fingerprint": "e52e36a3dcbe6fa3"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/ToughOutlyingChicken.slpz",
-      "expected": {
-        "native": {
-          "frames": 11883,
-          "actual_output_fingerprint": "4b85d4ae14333704"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/UnusedLivelyLouse.slpz",
-      "expected": {
-        "native": {
-          "frames": 6200,
-          "actual_output_fingerprint": "041fb7f45394d5d5"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/UselessGlassLoris.slpz",
-      "expected": {
-        "native": {
-          "frames": 9911,
-          "actual_output_fingerprint": "293784bc788092e9"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/WavyRundownAardvark.slpz",
-      "expected": {
-        "native": {
-          "frames": 10703,
-          "actual_output_fingerprint": "ea759b064981a27e"
-        },
-        "ppc": {
-          "frames": 10703,
-          "actual_output_fingerprint": "ea759b064981a27e"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/ZestyPreciousTurtle.slpz",
-      "expected": {
-        "native": {
-          "frames": 8289,
-          "actual_output_fingerprint": "0f3225b28a93e2fe"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/sheik_demo_game.slpz",
-      "expected": {
-        "native": {
-          "frames": 8725,
-          "actual_output_fingerprint": "fc6da463eaa97b44"
-        },
-        "ppc": {
-          "frames": 8725,
-          "actual_output_fingerprint": "fc6da463eaa97b44"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/sheik/sheik_demo_game_2.slpz",
-      "expected": {
-        "native": {
-          "frames": 8434,
-          "actual_output_fingerprint": "35f3d00f153d87aa"
-        },
-        "ppc": {
-          "frames": 8434,
-          "actual_output_fingerprint": "35f3d00f153d87aa"
         }
       }
     },
@@ -5922,24 +4737,6 @@
       }
     },
     {
-      "replay": "replays/validation/yoshis_story_recent/DependentSteelGrouse.slpz",
-      "expected": {
-        "native": {
-          "frames": 344,
-          "actual_output_fingerprint": "c3a920e79f4b90e6"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.slpz",
-      "expected": {
-        "native": {
-          "frames": 5984,
-          "actual_output_fingerprint": "583da230fb1e2cba"
-        }
-      }
-    },
-    {
       "replay": "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz",
       "expected": {
         "native": {
@@ -5949,38 +4746,15 @@
       }
     },
     {
-      "replay": "replays/validation/zelda/zelda_demo_bf_upb_v1.slpz",
+      "replay": "replays/validation/zelda/corpus_fox_20250129T002820.slpz",
       "expected": {
         "native": {
-          "frames": 2696,
-          "actual_output_fingerprint": "b473de32d35c04dc"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/zelda/zelda_demo_fd_hits_v1.slpz",
-      "expected": {
-        "native": {
-          "frames": 1398,
-          "actual_output_fingerprint": "00c4604c3a630bd3"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/zelda/zelda_demo_fd_ledge_snap_v1.slpz",
-      "expected": {
-        "native": {
-          "frames": 308,
-          "actual_output_fingerprint": "8f42e72d7ecf19c9"
-        }
-      }
-    },
-    {
-      "replay": "replays/validation/zelda/zelda_demo_fd_v1.slpz",
-      "expected": {
-        "native": {
-          "frames": 4196,
-          "actual_output_fingerprint": "f009234f0eedb710"
+          "frames": 6598,
+          "actual_output_fingerprint": "6131546f932754f4"
+        },
+        "ppc": {
+          "frames": 6598,
+          "actual_output_fingerprint": "6131546f932754f4"
         }
       }
     }

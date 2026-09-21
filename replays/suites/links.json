@@ -1,10 +1,9 @@
 {
  "name": "links",
- "notes": "Link and Young Link validation suite: 60 singles across all six legal stages (five per stage for each of Link and Young Link; mirrors and Link-vs-Young-Link games cover both) against Captain Falcon, Donkey Kong, Falco, Fox, Jigglypuff, Marth, Pikachu, Samus, Sheik; 2025-2026 Slippi ranked/netplay and mainline captures. All ten Pokemon Stadium entries are event-verified frozen: the stadium_transformation stream (spec 0x41, added 3.18.0) is declared and empty over each full game (the game-start is_frozen_ps flag is only trustworthy at 3.19.0+ and is not consulted). Every capture carries populated raw analog pad lanes, so none is a 3.18-layout re-wrap.",
  "ucf_enabled": true,
  "ucf_cardinals_1_0_enabled": true,
  "replays": [
-  {
+    {
    "replay": "replays/validation/links/106_Game_20250421T233442.slpz",
    "ports": [
     1,
@@ -16,7 +15,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/12654_Game_20250424T175003.slpz",
    "ports": [
     1,
@@ -28,7 +27,7 @@
     "2": "Falco"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/15082_Game_20250314T014803.slpz",
    "ports": [
     1,
@@ -40,19 +39,7 @@
     "2": "Sheik"
    }
   },
-  {
-   "replay": "replays/validation/links/18932_Game_20250611T185955.slpz",
-   "ports": [
-    1,
-    2
-   ],
-   "stage_id": 2,
-   "characters": {
-    "1": "Link",
-    "2": "Marth"
-   }
-  },
-  {
+    {
    "replay": "replays/validation/links/2025-04_Game_20250420T082949.slpz",
    "ports": [
     1,
@@ -64,7 +51,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/2025-07_Game_20250718T231002.slpz",
    "ports": [
     1,
@@ -76,7 +63,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/2025-10_Game_20251019T201111.slpz",
    "ports": [
     1,
@@ -88,7 +75,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/27189_Game_20250213T190336.slpz",
    "ports": [
     1,
@@ -100,7 +87,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/30806_Game_20250411T002548.slpz",
    "ports": [
     1,
@@ -112,7 +99,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/30810_Game_20250418T204156.slpz",
    "ports": [
     1,
@@ -124,7 +111,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/32106_Game_20250306T003650.slpz",
    "ports": [
     1,
@@ -136,7 +123,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/auto-fox-2025-11_Game_20251116T040023.slpz",
    "ports": [
     1,
@@ -148,7 +135,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/fox-d21-ditto-v4-2026-01_Game_20260123T151205.slpz",
    "ports": [
     1,
@@ -160,7 +147,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/fox-d21-ditto-v4-2026-01_Game_20260124T084128.slpz",
    "ports": [
     1,
@@ -172,7 +159,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/fox-d21-ditto-v4-2026-03_Game_20260310T095807.slpz",
    "ports": [
     1,
@@ -184,7 +171,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/fox-d21-ditto-v4-2026-03_Game_20260310T163345.slpz",
    "ports": [
     1,
@@ -196,7 +183,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/gm-marth-2026-05_Game_20260520T123546.slpz",
    "ports": [
     1,
@@ -208,7 +195,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/master-marth-2026-05_Game_20260520T122025.slpz",
    "ports": [
     1,
@@ -220,7 +207,7 @@
     "2": "Marth"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/master-marth-2026-05_Game_20260521T071704.slpz",
    "ports": [
     1,
@@ -232,7 +219,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/medium-fox-2025-11_Game_20251126T151822.slpz",
    "ports": [
     1,
@@ -244,7 +231,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/medium-fox-2025-12_Game_20251222T221723.slpz",
    "ports": [
     1,
@@ -256,7 +243,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/plat-fox-2026-01_Game_20260122T001109.slpz",
    "ports": [
     1,
@@ -268,7 +255,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/ranked-link_Game_20250327T204821.slpz",
    "ports": [
     1,
@@ -280,7 +267,7 @@
     "2": "Samus"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/redxlink_Game_20250209T191126.slpz",
    "ports": [
     1,
@@ -292,7 +279,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/redxlink_Game_20250221T194428.slpz",
    "ports": [
     1,
@@ -304,7 +291,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/redxlink_Game_20250310T205424.slpz",
    "ports": [
     1,
@@ -316,7 +303,7 @@
     "2": "Falco"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/redxlink_Game_20250311T194015.slpz",
    "ports": [
     1,
@@ -328,19 +315,7 @@
     "2": "Link"
    }
   },
-  {
-   "replay": "replays/validation/links/redxlink_Game_20250318T205705.slpz",
-   "ports": [
-    1,
-    2
-   ],
-   "stage_id": 28,
-   "characters": {
-    "1": "Link",
-    "2": "Captain Falcon"
-   }
-  },
-  {
+    {
    "replay": "replays/validation/links/slippi-2025-01_Game_20250129T125630.slpz",
    "ports": [
     1,
@@ -352,7 +327,7 @@
     "2": "Donkey Kong"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slippi-2025-08_Game_20250805T185906.slpz",
    "ports": [
     1,
@@ -364,7 +339,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slippi-2025-08_Game_20250815T041837.slpz",
    "ports": [
     1,
@@ -376,7 +351,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slippi-2025-11_Game_20251113T141401.slpz",
    "ports": [
     1,
@@ -388,7 +363,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slippi-2026-01_Game_20260124T182615.slpz",
    "ports": [
     1,
@@ -400,7 +375,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slippi-2026-02_Game_20260204T190903.slpz",
    "ports": [
     1,
@@ -412,7 +387,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slippi-2026-04_Game_20260428T003049.slpz",
    "ports": [
     1,
@@ -424,7 +399,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slippi-games-2025-05_Game_20250519T133635.slpz",
    "ports": [
     1,
@@ -436,7 +411,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slippi-replays-2025-04_Game_20250421T113932.slpz",
    "ports": [
     1,
@@ -448,7 +423,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slippi-replays-2025-04_Game_20250421T125608.slpz",
    "ports": [
     1,
@@ -460,7 +435,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-03_Game_20250327T005129.slpz",
    "ports": [
     1,
@@ -472,7 +447,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-05_Game_20250517T214854.slpz",
    "ports": [
     1,
@@ -484,7 +459,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-05_Game_20250518T175107.slpz",
    "ports": [
     1,
@@ -496,7 +471,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-06_Game_20250620T183047.slpz",
    "ports": [
     1,
@@ -508,7 +483,7 @@
     "2": "Falco"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-06_Game_20250629T234602.slpz",
    "ports": [
     1,
@@ -520,7 +495,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-08_Game_20250818T205606.slpz",
    "ports": [
     1,
@@ -532,7 +507,7 @@
     "2": "Falco"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-09_Game_20250901T223823.slpz",
    "ports": [
     1,
@@ -544,7 +519,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-09_Game_20250914T212254.slpz",
    "ports": [
     1,
@@ -556,7 +531,7 @@
     "2": "Falco"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-09_Game_20250926T031928.slpz",
    "ports": [
     1,
@@ -568,7 +543,7 @@
     "2": "Marth"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-10_Game_20251015T232828.slpz",
    "ports": [
     1,
@@ -580,7 +555,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-10_Game_20251020T000422.slpz",
    "ports": [
     1,
@@ -592,7 +567,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-11_Game_20251119T182508.slpz",
    "ports": [
     1,
@@ -604,7 +579,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2025-12_Game_20251212T025244.slpz",
    "ports": [
     1,
@@ -616,7 +591,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2026-01_Game_20260128T184810.slpz",
    "ports": [
     1,
@@ -628,7 +603,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2026-03_Game_20260307T210845.slpz",
    "ports": [
     1,
@@ -640,7 +615,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2026-03_Game_20260312T022327.slpz",
    "ports": [
     1,
@@ -652,7 +627,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2026-03_Game_20260317T203231.slpz",
    "ports": [
     1,
@@ -664,7 +639,7 @@
     "2": "Captain Falcon"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2026-03_Game_20260330T222821.slpz",
    "ports": [
     1,
@@ -676,7 +651,7 @@
     "2": "Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2026-05_Game_20260523T120728.slpz",
    "ports": [
     1,
@@ -688,7 +663,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/slpfiles-2026-06_Game_20260607T040956.slpz",
    "ports": [
     1,
@@ -700,7 +675,7 @@
     "2": "Young Link"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/temp-7z_Game_20250401T184000.slpz",
    "ports": [
     1,
@@ -712,7 +687,7 @@
     "2": "Samus"
    }
   },
-  {
+    {
    "replay": "replays/validation/links/temp-7z_Game_20250505T223826.slpz",
    "ports": [
     1,
@@ -724,5 +699,5 @@
     "2": "Samus"
    }
   }
- ]
+  ]
 }

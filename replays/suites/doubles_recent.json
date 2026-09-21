@@ -1,6 +1,5 @@
 {
   "name": "doubles_recent",
-  "notes": "Recent 4-player Team Attack ON doubles suite. Includes the original smoke replay plus 20 recent 2-bot/2-human supported-character games from the discordbot replay pool. Remains a focused manifest and is included by the canonical melee_core_aggregate suite.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "team_attack_on": true,
@@ -19,7 +18,8 @@
         "2": "Fox",
         "3": "Falco",
         "4": "Falco"
-      }
+      },
+      "fnmsubs_profile": "dolphin-legacy"
     },
     {
       "replay": "replays/validation/doubles_recent/Game_20260704T205449.slpz",
@@ -174,22 +174,6 @@
         4
       ],
       "stage_id": 32,
-      "characters": {
-        "1": "Falco",
-        "2": "Fox",
-        "3": "Fox",
-        "4": "Sheik"
-      }
-    },
-    {
-      "replay": "replays/validation/doubles_recent/Game_20260704T012353.slpz",
-      "ports": [
-        1,
-        2,
-        3,
-        4
-      ],
-      "stage_id": 8,
       "characters": {
         "1": "Falco",
         "2": "Fox",

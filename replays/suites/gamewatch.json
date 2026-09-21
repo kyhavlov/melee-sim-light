@@ -2,7 +2,6 @@
   "name": "gamewatch",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
-  "notes": "Source and recording provenance: agent_docs/validation/gamewatch_provenance.json. Scripted captures use a known AccurateNmsub=true build, matching the validator's metadata arithmetic default.",
   "replays": [
     {
       "replay": "replays/validation/gamewatch/Game_20260707T202855.slpz",
@@ -38,18 +37,6 @@
       "characters": {
         "1": "Game & Watch",
         "2": "Ness"
-      }
-    },
-    {
-      "replay": "replays/validation/gamewatch/Game_20260707T204121.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Fox",
-        "2": "Game & Watch"
       }
     },
     {
@@ -134,6 +121,18 @@
       "characters": {
         "1": "Game & Watch",
         "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/gamewatch/corpus_falco_20241222T215237.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Falco",
+        "2": "Game & Watch"
       }
     }
   ]

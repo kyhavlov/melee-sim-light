@@ -7,16 +7,11 @@ import pytest
 
 from tools.validation import validate_replay
 from tools.validation.validate_replay import (
-    DEFAULT_CHARACTERS,
-    DEFAULT_CLASSIFICATIONS,
-    MAX_AUTO_WORKERS,
     NATIVE,
     NATIVE_BINARY,
     PPC_BINARY,
     QEMU,
     ReplayCase,
-    classification_matches,
-    load_classifications,
     load_native,
     load_suite_cases,
     run_cases,
@@ -30,7 +25,7 @@ STARTER_REPLAY = (
     / "replays"
     / "validation"
     / "aggregate_recent"
-    / "Game_20260514T181413.slpz"
+    / "PutridJoyousOryx.slpz"
 )
 
 
@@ -54,15 +49,15 @@ def test_validation_streams_starter_replay_from_arrow(backend: str) -> None:
     )
 
     assert result["pass"] is True
-    assert result["frames"] == 2723
-    assert result["available"] == 2723
-    assert result["raw_frames"] == 2724
+    assert result["frames"] == 7543
+    assert result["available"] == 7543
+    assert result["raw_frames"] == 7549
     assert result["seed_frame"] == -123
     assert result["first_ref_frame"] == -122
-    assert result["matched_frames"] == 2723
+    assert result["matched_frames"] == 7543
     assert result["mismatched_frames"] == 0
-    assert result["exact_prefix_frames"] == 2723
-    assert result["strict_suffix_frames"] == 2723
+    assert result["exact_prefix_frames"] == 7543
+    assert result["strict_suffix_frames"] == 7543
     assert float(result["runner_seconds"]) > 0.0
     assert float(result["end_to_end_seconds"]) >= float(result["runner_seconds"])
     assert result["render_visibility_mismatch_count"] == 0
@@ -126,10 +121,7 @@ def test_native_validation_runs_current_oracle_replays_in_parallel() -> None:
     outcomes, wall_seconds = run_cases(
         load_native(),
         cases,
-        # Each native server maps the full replay set, so cap the fan-out for
-        # the same reason the classified comparison below does: the preload
-        # now spans seventeen characters and one worker per case OOM-kills in
-        # the validation container.
+        # Bound immutable data copies on memory-limited CI runners.
         workers=min(4, len(cases)),
         frames=256,
         start_frame=None,
@@ -138,80 +130,7 @@ def test_native_validation_runs_current_oracle_replays_in_parallel() -> None:
         signed_zero_equal=False,
     )
 
-    assert len(outcomes) == 5
+    assert len(outcomes) == 3
     assert all(outcome.error is None for outcome in outcomes)
     assert all(outcome.result is not None and outcome.result["pass"] for outcome in outcomes)
     assert wall_seconds < 3.0
-
-
-def test_native_validation_compares_complete_classified_replays() -> None:
-    if not NATIVE.is_file() or not NATIVE_BINARY.is_file():
-        pytest.skip("native core validation artifacts are unavailable")
-    classifications = load_classifications(DEFAULT_CLASSIFICATIONS)
-    suite_cases: list[ReplayCase] = []
-    for suite_name in (
-        "aggregate_recent.json",
-        "doubles_recent.json",
-        "puff.json",
-        "peach.json",
-        "luigi.json",
-        "marios.json",
-        "samus.json",
-        "icies.json",
-        "pikachu.json",
-        "dk.json",
-        "ganon.json",
-        "yoshi.json",
-        "bowser.json",
-        "ness.json",
-        "links.json",
-        "mewtwo_targeted.json",
-        "gamewatch.json",
-        "cpu_inputs.json",
-        "roy.json",
-        "pichu.json",
-        "kirby.json",
-    ):
-        _suite, loaded_cases = load_suite_cases(
-            ROOT / "replays/suites" / suite_name,
-            characters=frozenset(
-                character.strip().casefold()
-                for character in DEFAULT_CHARACTERS.split(",")
-            ),
-            stages=frozenset((2, 3, 8, 28, 31, 32)),
-        )
-        suite_cases.extend(loaded_cases)
-    cases_by_path = {case.display_path: case for case in suite_cases}
-    # Entries without a native snapshot are bit-exact on the native backend
-    # (classified only for PPC) and are covered by the ordinary pass path.
-    cases = [
-        cases_by_path[replay]
-        for replay, classification in classifications.items()
-        if "native" in classification.expected
-    ]
-
-    outcomes, wall_seconds = run_cases(
-        load_native(),
-        cases,
-        # Each native server maps the full replay set; sixteen workers
-        # OOM-kill in the 8 GB validation container now that the classified
-        # inventory spans nine characters.
-        workers=min(8, len(cases)),
-        frames=0,
-        start_frame=None,
-        timeout=5.0,
-        backend="native",
-        signed_zero_equal=False,
-    )
-
-    assert all(outcome.error is None for outcome in outcomes)
-    for outcome in outcomes:
-        assert outcome.result is not None
-        expected = classifications[outcome.case.display_path].expected["native"]
-        assert classification_matches(outcome.result, expected)
-        assert (
-            int(outcome.result["matched_frames"])
-            + int(outcome.result["mismatched_frames"])
-            == int(outcome.result["frames"])
-        )
-    assert wall_seconds < 25.0

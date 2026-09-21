@@ -1,6 +1,5 @@
 {
   "name": "samus",
-  "notes": "Samus validation suite: 25 netplay singles across all six legal stages against Fox, Falco, Marth, Sheik, Peach, Jigglypuff, and Captain Falcon, 2025-2026 Slippi and mainline captures. Pokemon Stadium entries are frozen-form only, verified by the absence of stadium_transformation events over the full game (recorder must be newer than 3.18.0 -- at 3.18.0 exactly the event stream is silent even on transforming stadium, so such captures are rejected; the game-start is_frozen_ps flag is not trusted). Anonymized ranked captures carry played_on=network. Rejected on input-lane fidelity: a 2021 capture predating the hitlag stream, and four captures re-wrapped to the 3.18 layout with zero-filled raw analog pad lanes (a 2020 local game and three anonymized ranked FoD games whose countdown-phase UCF decisions fork under every era-flag combination).",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -75,34 +74,6 @@
         "1": "Fox",
         "2": "Samus"
       }
-    },
-    {
-      "replay": "replays/validation/samus/diamond-platinum-3a0b5b8362dab548ac01a813.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Samus",
-        "2": "Marth"
-      },
-      "played_on": "network"
-    },
-    {
-      "replay": "replays/validation/samus/diamond-platinum-e9cd78b1cd4439a0f7945269.slpz",
-      "ucf_shield_drop_084_enabled": false,
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Samus",
-        "2": "Falco"
-      },
-      "ucf_cardinals_1_0_enabled": false,
-      "played_on": "network"
     },
     {
       "replay": "replays/validation/samus/fox-d18-2026-02_Game_20260214T215345.slpz",

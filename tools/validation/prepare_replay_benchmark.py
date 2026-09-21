@@ -18,12 +18,13 @@ from tools.validation.validate_replay import (
     load_suite_cases,
     ReplayCase,
 )
+from tools.validation.admission import require_admissible
 from tools.validation.slpz import replay_path_for_peppi
 
 
 FORMAT_VERSION = 3
 # Export semantics can change without changing the tape layout.
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 DEFAULT_SUITE = ROOT / "replays/suites/melee_core_aggregate.json"
 DEFAULT_OUTPUT = ROOT / "build/melee_core/benchmark/cases.tsv"
 
@@ -85,26 +86,27 @@ def prepare(args: argparse.Namespace) -> None:
     reused = 0
     skipped_cpu = 0
     for case in cases:
-        case_path = case_dir / f"{_cache_key(case)}.mslrpb"
-        frame_count = None if args.force else _cached_frame_count(case_path)
-        if frame_count is None:
-            temporary = case_path.with_suffix(f".tmp.{os.getpid()}")
-            try:
-                with replay_path_for_peppi(case.replay) as peppi_path:
-                    game = _read_slippi(str(peppi_path), False)
-                    if any(player["type"] == "Cpu" for player in game.start["players"]):
-                        print(f"skipping CPU recording (controller-only benchmark): {case.display_path}")
-                        skipped_cpu += 1
-                        continue
+        # Admission applies even when a tape is cached: a stale export cannot
+        # bypass a changed capture rule or provenance record.
+        with replay_path_for_peppi(case.replay) as peppi_path:
+            game = _read_slippi(str(peppi_path), False)
+            require_admissible(game, peppi_path, played_on=case.played_on,
+                               fnmsubs_profile=case.fnmsubs_profile)
+            if any(player["type"] == "Cpu" for player in game.start["players"]):
+                print(f"skipping CPU recording (controller-only benchmark): {case.display_path}")
+                skipped_cpu += 1
+                continue
+            case_path = case_dir / f"{_cache_key(case)}.mslrpb"
+            frame_count = None if args.force else _cached_frame_count(case_path)
+            if frame_count is None:
+                temporary = case_path.with_suffix(f".tmp.{os.getpid()}")
+                try:
                     metadata = game.metadata
                     if case.played_on is not None:
                         metadata = dict(metadata)
                         metadata["playedOn"] = case.played_on
                     frame_count = native.write_benchmark_case(
-                        game.frames,
-                        game.start,
-                        metadata,
-                        str(temporary),
+                        game.frames, game.start, metadata, str(temporary),
                         ucf_cardinals_1_0_enabled=case.ucf_cardinals_1_0_enabled,
                         ucf_shield_sdi_enabled=case.ucf_shield_sdi_enabled,
                         ucf_sdi_enabled=case.ucf_sdi_enabled,
@@ -112,12 +114,12 @@ def prepare(args: argparse.Namespace) -> None:
                         ucf_shield_drop_084_enabled=case.ucf_shield_drop_084_enabled,
                         fnmsubs_profile=case.fnmsubs_profile,
                     )
-                os.replace(temporary, case_path)
-            finally:
-                temporary.unlink(missing_ok=True)
-            built += 1
-        else:
-            reused += 1
+                    os.replace(temporary, case_path)
+                finally:
+                    temporary.unlink(missing_ok=True)
+                built += 1
+            else:
+                reused += 1
         total_frames += frame_count
         rows.append(f"{case_path}\t{case.display_path}\n")
 

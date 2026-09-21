@@ -70,7 +70,7 @@ implementation queue.
 - Use root `Makefile` targets: `source-check`, `native-smoke`, `validation-suite`, `wasm-smoke`,
   `viewer-smoke`, and the bounded benchmark targets.
 - The full supported-domain gate is a material checkpoint, not an inner loop.
-- Bit-exact suite identities (aggregate results, classification snapshots, output locks) are
+- Bit-exact suite identities (aggregate results and output locks) are
   authoritative only from linux/amd64 GNU-toolchain builds: CI, a native Linux host, or the Linux
   container on macOS. macOS-built binaries — arm64 or the Rosetta `HOST_TARGET_ARCH=x86_64`
   profile — have no recorded bit-exact equivalence and must not record suite results.

@@ -1,6 +1,5 @@
 {
   "name": "ness",
-  "notes": "Ness validation suite: 30 singles across all six legal stages (five each) against Captain Falcon, Falco, Fox, Jigglypuff, Marth, Peach, Pikachu, Sheik, and a Ness mirror; 2025-2026 Slippi and mainline captures. All five Pokemon Stadium entries are event-verified frozen: each declares the stadium_transformation command (spec 0x41, added 3.18.0) and records zero events over the full game, so the frozen form is proven for these 3.18.0+ recorders (the game-start is_frozen_ps flag is only trustworthy at 3.19.0+ and is not consulted). Every capture carries populated raw analog pad lanes, so none is a 3.18-layout re-wrap.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -110,18 +109,6 @@
       "characters": {
         "1": "Ness",
         "2": "Captain Falcon"
-      }
-    },
-    {
-      "replay": "replays/validation/ness/2025-11_Game_20251124T141214.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Sheik",
-        "2": "Ness"
       }
     },
     {
@@ -277,18 +264,6 @@
       "stage_id": 2,
       "characters": {
         "1": "Marth",
-        "2": "Ness"
-      }
-    },
-    {
-      "replay": "replays/validation/ness/54459_Game_20250528T201050.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 31,
-      "characters": {
-        "1": "Sheik",
         "2": "Ness"
       }
     },

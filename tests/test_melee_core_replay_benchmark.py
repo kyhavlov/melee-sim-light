@@ -24,7 +24,7 @@ STARTER_REPLAY = (
     / "replays"
     / "validation"
     / "aggregate_recent"
-    / "Game_20260514T181413.slpz"
+    / "PutridJoyousOryx.slpz"
 )
 
 
@@ -80,7 +80,7 @@ def test_network_transport_preserves_scene_capabilities(
 
 
 @pytest.mark.parametrize("profile,extended,classic", [
-    ("retail", False, True),
+    ("dolphin-legacy", False, True),
     ("dolphin-legacy", True, False),
 ])
 def test_preparation_serializes_recording_capabilities(
@@ -89,9 +89,8 @@ def test_preparation_serializes_recording_capabilities(
     if not NATIVE.is_file() or not STARTER_REPLAY.is_file():
         pytest.skip("melee core benchmark preprocessing artifacts are unavailable")
     suite = tmp_path / "suite.json"
-    corpus = json.loads((ROOT / "replays/suites/aggregate_recent.json").read_text())
-    entry = next(row for row in corpus["replays"]
-                 if row["replay"] == STARTER_REPLAY.relative_to(ROOT).as_posix())
+    corpus = json.loads((ROOT / "replays/suites/legacy_arithmetic.json").read_text())
+    entry = corpus["replays"][0]
     entry.update(fnmsubs_profile=profile, ucf_shield_drop_extended_enabled=extended,
                  ucf_shield_drop_084_enabled=classic)
     suite.write_text(json.dumps({
@@ -156,3 +155,26 @@ def test_benchmark_preparation_reports_cpu_exclusions(
     prepare(args)
     assert output.read_text() == manifest
     assert "built=0 reused=1" in capsys.readouterr().out
+
+
+def test_cached_benchmark_cannot_bypass_admission(tmp_path, monkeypatch):
+    from tools.validation import prepare_replay_benchmark as benchmark
+    if not NATIVE.is_file() or not STARTER_REPLAY.is_file():
+        pytest.skip("benchmark preprocessing artifacts are unavailable")
+    corpus = json.loads((ROOT / "replays/suites/aggregate_recent.json").read_text())
+    entry = next(r for r in corpus["replays"]
+                 if r["replay"] == STARTER_REPLAY.relative_to(ROOT).as_posix())
+    suite = tmp_path / "suite.json"
+    suite.write_text(json.dumps({"name": "cache", "ucf_enabled": True,
+                                "ucf_cardinals_1_0_enabled": True, "replays": [entry]}))
+    args = argparse.Namespace(suite=suite, output=tmp_path / "cases.tsv",
+                              characters=DEFAULT_CHARACTERS, stages=DEFAULT_STAGES, force=False)
+    prepare(args)
+    assert list((tmp_path / "cases").glob("*.mslrpb"))
+
+    def reject(*_args, **_kwargs):
+        raise ValueError("ineligible capture: changed admission evidence")
+
+    monkeypatch.setattr(benchmark, "require_admissible", reject)
+    with pytest.raises(ValueError, match="changed admission evidence"):
+        prepare(args)

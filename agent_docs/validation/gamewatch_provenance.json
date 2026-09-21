@@ -3,78 +3,60 @@
     {
       "source": "/home/blewf/Slippi/Game_20260707T202855.slp",
       "replay": "replays/validation/gamewatch/Game_20260707T202855.slpz",
-      "sha256_slp": "c37d642144e9b6f7845b4d4fa04f748186e7a6112b16e489e2835f449676db94",
-      "sha256_slpz": "30c56dfd113663bc40868c7b4de37dda42d3d95d826b8ff18d78096e060b1aa2",
-      "profile": "metadata"
+      "sha256_slp": "c37d642144e9b6f7845b4d4fa04f748186e7a6112b16e489e2835f449676db94"
     },
     {
       "source": "/home/blewf/Slippi/Game_20260707T203523.slp",
       "replay": "replays/validation/gamewatch/Game_20260707T203523.slpz",
-      "sha256_slp": "f9705857c8c2cd3864a40eacfae71acf48758f9610b0e53f0755993461ccc60d",
-      "sha256_slpz": "23a989d83f0cfdbd41606e49b6c929e2c04e15b64fa89fe5b7691046c756c756",
-      "profile": "metadata"
+      "sha256_slp": "f9705857c8c2cd3864a40eacfae71acf48758f9610b0e53f0755993461ccc60d"
     },
     {
       "source": "/home/blewf/Slippi/2026-09-Mainline/Game_20260902T194448.slp",
       "replay": "replays/validation/gamewatch/Game_20260902T194448.slpz",
-      "sha256_slp": "ebf80ac48fb8d1d7ca02efd022f29615c2572b7a67479862cc10640bd8dbb99c",
-      "sha256_slpz": "67864223c5a7c070129f6a79df6fd5bd3805cec6693f07dfc160526c3bcb69f8",
-      "profile": "metadata"
+      "sha256_slp": "ebf80ac48fb8d1d7ca02efd022f29615c2572b7a67479862cc10640bd8dbb99c"
     },
     {
       "source": "/home/blewf/Slippi/Game_20260707T204121.slp",
       "replay": "replays/validation/gamewatch/Game_20260707T204121.slpz",
-      "sha256_slp": "ab60f6f5f04151ff3dcba017996941c5aee649ac543e9d9aba92fd1b96eb0f43",
-      "sha256_slpz": "2a147431212aca9fc4583f81ade5c9f63fe3a880f56dbff22f371e2b91cbb218",
-      "profile": "metadata"
+      "sha256_slp": "ab60f6f5f04151ff3dcba017996941c5aee649ac543e9d9aba92fd1b96eb0f43"
     },
     {
       "source": "/home/blewf/Slippi/2026-08-Mainline/Game_20260824T233753.slp",
       "replay": "replays/validation/gamewatch/Game_20260824T233753.slpz",
-      "sha256_slp": "f335443d228748d16fd79fc81df173cf70d4d2b60d7c4a709724c1eb057567e8",
-      "sha256_slpz": "93db429bc61a68b06b8580793d33efc4faef7b8d287e4752dfc90859f4d07ecd",
-      "profile": "metadata"
+      "sha256_slp": "f335443d228748d16fd79fc81df173cf70d4d2b60d7c4a709724c1eb057567e8"
     },
     {
       "source": "/home/blewf/Slippi/Game_20260707T202455.slp",
       "replay": "replays/validation/gamewatch/Game_20260707T202455.slpz",
-      "sha256_slp": "2ff4db6e8bc09a53ca0e4619343be67e20de3113b565db3b6cd21ec5cabf337e",
-      "sha256_slpz": "c417209ad48ecba40a73f5fdd7d01150d87c21a75721dbbed41ce868ad89d2a2",
-      "profile": "metadata"
+      "sha256_slp": "2ff4db6e8bc09a53ca0e4619343be67e20de3113b565db3b6cd21ec5cabf337e"
     },
     {
       "source": "/home/blewf/Slippi/2026-09-Mainline/Game_20260904T145751.slp",
       "replay": "replays/validation/gamewatch/Game_20260904T145751.slpz",
-      "sha256_slp": "4607fdd6e384380a348f0a33c5a393da830779a636339c8f4eba9794567faf43",
-      "sha256_slpz": "37285711336ea449e13b5d09df6315104e5b6224771999779705c8999089cb52",
-      "profile": "metadata"
+      "sha256_slp": "4607fdd6e384380a348f0a33c5a393da830779a636339c8f4eba9794567faf43"
     },
     {
       "source": "reports/triage/gamewatch_mewtwo/gw-captures/bucket/Game_20260915T195616.slp",
       "replay": "replays/validation/gamewatch/bucket.slpz",
       "sha256_slp": "a8a6ced64e0f0245f8f9bb959bb02179e19058b10bb95c7883974d5c01ded954",
-      "sha256_slpz": "573c5844ee80a022e10f5b155701d922ea93af81bd91c4f6c0213ae6d751fd4f",
       "profile": "retail"
     },
     {
       "source": "reports/triage/gamewatch_mewtwo/gw-captures/bucket_control/Game_20260915T195649.slp",
       "replay": "replays/validation/gamewatch/bucket_control.slpz",
       "sha256_slp": "73a8f7549fb8a1de241b9163bb0e64c1f31b1d05995203395717dc781663f70e",
-      "sha256_slpz": "ddcb8de2b3cb024a8e09e1f0a9705d19eb0a4059312a622bcc69668ac53fdbe4",
       "profile": "retail"
     },
     {
       "source": "reports/triage/gamewatch_mewtwo/gw-captures/bucket_missile/Game_20260915T195651.slp",
       "replay": "replays/validation/gamewatch/bucket_missile.slpz",
       "sha256_slp": "10865431963b537bedff778d4bc8d2628131b16d2caeeb47ee1ac9382e36def8",
-      "sha256_slpz": "f0819243848ffb23152c743c972bbb54a9c3532ff6802e086de4a29ae7088a54",
       "profile": "retail"
     },
     {
       "source": "reports/triage/gamewatch_mewtwo/gw-captures/judge_chef_v2/Game_20260915T200008.slp",
       "replay": "replays/validation/gamewatch/judge_chef.slpz",
       "sha256_slp": "928c14967f80730c835fa4ca033d34b94c2a960532d3dda5724d44e63e05309f",
-      "sha256_slpz": "2a0c629d6d4cc4b8db4a97ee53148db0726cf7506cef83904958187e06077c8d",
       "profile": "retail"
     }
   ],

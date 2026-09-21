@@ -1,6 +1,5 @@
 {
   "name": "luigi",
-  "notes": "Luigi validation suite: 30 curated netplay singles covering all six legal stages (five per stage) against Fox, Falco, Peach, and Luigi dittos across 2022-2026 Slippi versions, plus a local specials demo fixture vs Jigglypuff.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -173,32 +172,6 @@
       }
     },
     {
-      "replay": "replays/validation/luigi/master-diamond-8a855ab88865a8fd02dd8f60.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Luigi",
-        "2": "Fox"
-      },
-      "played_on": "network"
-    },
-    {
-      "replay": "replays/validation/luigi/master-master-775e398466dfd67e2bea025b.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Luigi",
-        "2": "Falco"
-      },
-      "played_on": "network"
-    },
-    {
       "replay": "replays/validation/luigi/medium-falco_Game_20251031T000610.slpz",
       "ports": [
         1,
@@ -319,45 +292,6 @@
       }
     },
     {
-      "replay": "replays/validation/luigi/platinum-platinum-c20d9507b199f01838e901d0.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Falco",
-        "2": "Luigi"
-      },
-      "played_on": "network"
-    },
-    {
-      "replay": "replays/validation/luigi/slippi_01.07.22-09.08.23_Game_20221011T140934.slpz",
-      "ucf_shield_drop_084_enabled": false,
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Luigi",
-        "2": "Luigi"
-      },
-      "ucf_cardinals_1_0_enabled": false
-    },
-    {
-      "replay": "replays/validation/luigi/slippi_2024_Game_20240704T213554.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Fox",
-        "2": "Luigi"
-      }
-    },
-    {
       "replay": "replays/validation/luigi/slippi_2024_Game_20250307T122650.slpz",
       "ports": [
         1,
@@ -379,6 +313,18 @@
       "characters": {
         "1": "Luigi",
         "2": "Jigglypuff"
+      }
+    },
+    {
+      "replay": "replays/validation/luigi/corpus_yoshi_20241109T194013.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Yoshi",
+        "2": "Luigi"
       }
     }
   ]

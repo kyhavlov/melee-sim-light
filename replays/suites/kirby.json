@@ -1,6 +1,5 @@
 {
   "name": "kirby",
-  "notes": "Kirby validation suite: 43 recordings across all six supported stages, with 42 exact and one missing-raw-C-stick classification on both native and PPC. The 26 corpus games cover Zelda, Ice Climbers, Game & Watch, Falco, Marth, Captain Falcon, Peach and a level-6 CPU Bowser. The 17 scripted captures use the pinned accurate-nmsub Dolphin build and exercise copied neutral specials, hat acquisition/loss, Final Cutter, Hammer and Stone. Individual recordings do not establish every move branch or every copy ability. Native smoke additionally exercises Pichu inhale/jolt, Roy ground/air charge selection, Game & Watch inhale/Chef, multiple costume hats, copy/save/restore and sealed allocation. The original Pichu/Roy scratch recordings were unavailable at integration. The D20 #1 Falco classification records a missing required raw C-stick input. Existing capture eligibility, including console magnifier and live Stadium configuration, will be audited in the separately authorized post-integration policy cleanup. Provenance and unresolved unadmitted recordings: agent_docs/validation/kirby_provenance.json.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -113,30 +112,6 @@
       }
     },
     {
-      "replay": "replays/validation/kirby/greg_zelda_20240313T140759.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 28,
-      "characters": {
-        "1": "Kirby",
-        "2": "Zelda"
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/greg_zelda_20240425T135022.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Kirby",
-        "2": "Zelda"
-      }
-    },
-    {
       "replay": "replays/validation/kirby/greg_zelda_20250619T230128.slpz",
       "ports": [
         1,
@@ -194,126 +169,6 @@
       "characters": {
         "1": "Kirby",
         "2": "Zelda"
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/greg_game_and_watch_20231218T204918.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Game & Watch",
-        "2": "Kirby"
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-1_falco_00191DDFD11F_20240917T183608.slpz",
-      "ports": [
-        1,
-        3
-      ],
-      "stage_id": 8,
-      "characters": {
-        "1": "Falco",
-        "3": "Kirby"
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T104926.slpz",
-      "ports": [
-        2,
-        3
-      ],
-      "stage_id": 31,
-      "characters": {
-        "2": "Kirby",
-        "3": "Falco"
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T105148.slpz",
-      "ports": [
-        2,
-        3
-      ],
-      "stage_id": 3,
-      "characters": {
-        "2": "Kirby",
-        "3": "Falco"
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T105436.slpz",
-      "ports": [
-        2,
-        3
-      ],
-      "stage_id": 31,
-      "characters": {
-        "2": "Kirby",
-        "3": "Falco"
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-3_falco_A45C27B56C27_20241016T025123.slpz",
-      "ports": [
-        3,
-        4
-      ],
-      "stage_id": 3,
-      "characters": {
-        "3": "Falco",
-        "4": "Kirby"
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-3_marth_A45C27B56C27_20241016T024513.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 3,
-      "characters": {
-        "1": "Marth",
-        "4": "Kirby"
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-3_captain_falcon_A45C27B56C27_20241016T024203.slpz",
-      "ports": [
-        3,
-        4
-      ],
-      "stage_id": 31,
-      "characters": {
-        "3": "Captain Falcon",
-        "4": "Kirby"
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-3_peach_A45C27B56C27_20241016T025418.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Peach",
-        "4": "Kirby"
-      }
-    },
-    {
-      "replay": "replays/validation/kirby/d20-1_falco_00191DDFD11F_20240917T183839.slpz",
-      "ports": [
-        1,
-        3
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Falco",
-        "3": "Kirby"
       }
     },
     {

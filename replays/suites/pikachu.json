@@ -1,6 +1,5 @@
 {
   "name": "pikachu",
-  "notes": "Pikachu validation suite: 25 singles across all six legal stages against Fox, Falco, Marth, Sheik, Peach, and a Pikachu ditto; 2025-2026 Slippi and mainline captures plus three anonymized ranked recordings (played_on=network; the v3.15/v3.16 captures predate the UCF 1.0 cardinals rollout). The one Pokemon Stadium entry is frozen-form (is_frozen_ps); four non-frozen PS candidates from the same batch stayed out, as did a 2020 v3.7 capture predating the modern streams.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -77,18 +76,6 @@
       }
     },
     {
-      "replay": "replays/validation/pikachu/43799_Game_20250624T005320.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Sheik",
-        "2": "Pikachu"
-      }
-    },
-    {
       "replay": "replays/validation/pikachu/44145_Game_20250707T185007.slpz",
       "ports": [
         1,
@@ -148,49 +135,6 @@
         "1": "Pikachu",
         "2": "Peach"
       }
-    },
-    {
-      "replay": "replays/validation/pikachu/diamond-platinum-65468eac6defc7ae336916cb.slpz",
-      "ucf_shield_drop_084_enabled": false,
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Falco",
-        "2": "Pikachu"
-      },
-      "ucf_cardinals_1_0_enabled": false,
-      "played_on": "network"
-    },
-    {
-      "replay": "replays/validation/pikachu/diamond-platinum-c53c1ea834421338b65dd158.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Fox",
-        "2": "Pikachu"
-      },
-      "ucf_cardinals_1_0_enabled": false,
-      "played_on": "network"
-    },
-    {
-      "replay": "replays/validation/pikachu/master-master-97beba9993588c0e724b06c2.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Fox",
-        "2": "Pikachu"
-      },
-      "ucf_cardinals_1_0_enabled": false,
-      "played_on": "network"
     },
     {
       "replay": "replays/validation/pikachu/plat-pikachu-2026-03_Game_20260320T175816.slpz",

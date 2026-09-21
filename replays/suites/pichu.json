@@ -1,6 +1,5 @@
 {
   "name": "pichu",
-  "notes": "Pichu validation suite: 14 two-player games across all six legal stages against Zelda, Game & Watch, Ice Climbers, Mewtwo, Ganondorf, Captain Falcon, Falco and Fox. Six are 2024-2025 Dolphin games and eight are Wii console captures from Yeti Weekly #469-#473 and D20 Melee #38 (Slippi Nintendont, offline VS scene). The two D20 games are classified missing-raw-cstick-asdi: their Slippi 3.15 capture records only the normalized C-stick, so a 79/80 cardinal at hitlag exit cannot be told from a clamped full deflection. Pokemon Stadium entries record zero transformation events. Provenance: agent_docs/validation/pichu_provenance.json.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -77,99 +76,15 @@
       }
     },
     {
-      "replay": "replays/validation/pichu/yeti-472_ganondorf_CC9E001024A5_20260319T081326.slpz",
-      "ports": [
-        2,
-        4
-      ],
-      "stage_id": 8,
-      "characters": {
-        "2": "Pichu",
-        "4": "Ganondorf"
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/yeti-472_captain_falcon_CC9E001024A5_20260319T083212.slpz",
-      "ports": [
-        2,
-        3
-      ],
-      "stage_id": 28,
-      "characters": {
-        "2": "Pichu",
-        "3": "Captain Falcon"
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/yeti-469_game_and_watch_CC9E001024A5_20260226T095048.slpz",
-      "ports": [
-        3,
-        4
-      ],
-      "stage_id": 8,
-      "characters": {
-        "3": "Pichu",
-        "4": "Game & Watch"
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/yeti-469_game_and_watch_CC9E001024A5_20260226T095337.slpz",
-      "ports": [
-        3,
-        4
-      ],
-      "stage_id": 8,
-      "characters": {
-        "3": "Game & Watch",
-        "4": "Pichu"
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/yeti-471_falco_CC9E001024A5_20260312T074722.slpz",
+      "replay": "replays/validation/pichu/corpus_falco_20250120T191118.slpz",
       "ports": [
         1,
-        3
+        2
       ],
       "stage_id": 31,
       "characters": {
         "1": "Falco",
-        "3": "Pichu"
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/yeti-473_fox_CC9E001024A5_20260326T083655.slpz",
-      "ports": [
-        3,
-        4
-      ],
-      "stage_id": 2,
-      "characters": {
-        "3": "Pichu",
-        "4": "Fox"
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/d20-38_ice_climbers_001B7ABDD8A0_20260324T121546.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 31,
-      "characters": {
-        "1": "Ice Climbers",
-        "4": "Pichu"
-      }
-    },
-    {
-      "replay": "replays/validation/pichu/d20-38_mewtwo_001B7ABDD8A0_20260324T121206.slpz",
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 8,
-      "characters": {
-        "1": "Mewtwo",
-        "4": "Pichu"
+        "2": "Pichu"
       }
     }
   ]

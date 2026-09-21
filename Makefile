@@ -210,7 +210,6 @@ SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/scheduler_smoke.c
 NATIVE_SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/mewtwo_moves_smoke.c \
-	$(ROOT)/tests/melee_core/mewtwo_smoke.c \
 	$(ROOT)/tests/melee_core/gamewatch_moves_smoke.c \
 	$(ROOT)/tests/melee_core/roy_moves_smoke.c \
 	$(ROOT)/tests/melee_core/pichu_moves_smoke.c \
@@ -749,7 +748,6 @@ $(eval $(call link_native_smoke,$(NATIVE_PUBLIC_API_SMOKE),$(NATIVE_OBJ_DIR)/tes
 $(eval $(call link_native_smoke,$(NATIVE_GAMEPLAY_PARTS_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/gameplay_parts_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_STAGE_LIFECYCLE_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/stage_lifecycle_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_ARTICLE_POOL_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/article_pool_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_BUILD)/mewtwo-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/mewtwo_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_BUILD)/mewtwo-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/mewtwo_moves_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_BUILD)/gamewatch-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/gamewatch_moves_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_BUILD)/roy-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/roy_moves_smoke.o))
@@ -904,8 +902,7 @@ clean:
 -include $(DEPS)
 
 .PHONY: mewtwo-smoke
-mewtwo-smoke: data-check $(NATIVE_BUILD)/mewtwo-smoke $(NATIVE_BUILD)/mewtwo-moves-smoke
-	@$(TIMEOUT) 10s "$(NATIVE_BUILD)/mewtwo-smoke" "$(DATA)"
+mewtwo-smoke: data-check $(NATIVE_BUILD)/mewtwo-moves-smoke
 	@$(TIMEOUT) 10s "$(NATIVE_BUILD)/mewtwo-moves-smoke" "$(DATA)"
 
 .PHONY: gamewatch-smoke

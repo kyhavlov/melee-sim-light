@@ -1,0 +1,1413 @@
+{
+  "version": 1,
+  "rules": {
+    "vanilla-magnifier": {
+      "description": "Require the reviewed deterministic Slippi stage-bounds offscreen patch, regardless of whether this game happened to take magnifier damage.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Online/Core/BrawlOffscreenDamage.asm",
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FBBDC",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CLASSIFIED_REPLAY_CLOSURE_2026-09-08.md"
+      ]
+    },
+    "missing-recorded-inputs": {
+      "description": "Human leaders require raw main/C-stick axes, physical buttons/triggers and processed inputs; CPU leaders require processed inputs and a valid level. Do not infer missing bytes from processed floats.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm",
+        "refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm"
+      ]
+    },
+    "unestablished-arithmetic": {
+      "description": "Only retail and source-established legacy fnmsubs semantics are supported. Historical transform/ULP captures below lack a supported established execution profile; a mismatch by itself is never grounds for exclusion.",
+      "sources": [
+        "agent_docs/validation/arithmetic_provenance.json",
+        "src/melee/ft/fighter.c::Fighter_procUpdate"
+      ]
+    },
+    "uninitialized-chain": {
+      "description": "Reject recorded Chain item 97 in its initial states before x18 is assigned, including zero-valued misc3 samples.",
+      "sources": [
+        "refs/melee/src/melee/it/items/itseakchain.c::it_802BB428",
+        "refs/melee/src/melee/it/items/itseakchain.c::it_802BC080",
+        "refs/melee/src/melee/it/items/itseakchain.c::it_802BCED4"
+      ]
+    },
+    "uninitialized-transform-lcancel": {
+      "description": "Reject the first publication of a previously sleeping Sheik/Zelda transform partner: its extended L-cancel byte has not been reset, even if it reads zero.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Recording/ExtendPlayerBlock.asm",
+        "refs/slippi-ssbm-asm/Common/Initialize Player Data/Init Player Data.asm",
+        "refs/slippi-ssbm-asm/Recording/GetLCancelStatus/ResetLCancelStatus.asm",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procMap"
+      ]
+    },
+    "unsupported-settings": {
+      "description": "Require supported NTSC fighters/stages, UCF, eight-minute, no-random-item settings and Team Attack for teams. Shared stock counts, per-player handicaps and finite positive damage ratios are supported and need not equal defaults. Unknown gameplay modifications require source review; these checks cannot prove the absence of an arbitrary unrecorded mod.",
+      "sources": [
+        "AGENTS.md",
+        "tools/validation/native.c::parse_start",
+        "refs/slippi-ssbm-asm/Recording/SendGameInfo.asm",
+        "tools/validation/native.c::build_match_config"
+      ]
+    },
+    "unfrozen-stadium": {
+      "description": "Require the recorded frozen toggle or the reviewed legacy 0x801d4578 transformation bypass. A false old toggle alone does not establish unfrozen play.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm",
+        "https://github.com/project-slippi/slippi-ssbm-asm/blob/ccb59238b750cdf4cac701832753be119489f7e6/Online/Core/PreventFileAlarms/FreezeStadium.asm",
+        "https://github.com/project-slippi/slippi-ssbm-asm/blob/d95aec7434b7e11011f4735e697e6f531022a184/Recording/SendGameInfo.asm"
+      ]
+    },
+    "incomplete-history": {
+      "description": "Require normal game-start seed -123, contiguous final frame history and a recorded Game End. Missing metadata.lastFrame is not itself missing gameplay history. No cropped or savestate-injected fixture admission.",
+      "sources": [
+        "agent_docs/VALIDATION.md",
+        "tools/validation/native.c::build_finalized_rows"
+      ]
+    }
+  },
+  "excluded": [
+    {
+      "replay": "replays/validation/aggregate_recent/Game_20260514T181413.slpz",
+      "sha256_slp": "11d9d18b2e9362d66c9d6f61d6f1f8f26f65a0a9e495f4a90a94a945b5654e8f",
+      "reasons": [
+        "incomplete-history"
+      ]
+    },
+    {
+      "replay": "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz",
+      "sha256_slp": "1cd68f69e34663a26e8cd31611e789b2931e45e46c5c5a1b7dee0b6d9eb818f4",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/aggregate_recent/HungryImportantSnake.slpz",
+      "sha256_slp": "7945e13fab96d96090f786f8f0b68dc6b9529258479cbecafc6fd1b8e2b9cbc9",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
+      "sha256_slp": "8dd97246561bd7ae9de3c551b73a668174d919584291f6909f0c196a2e704c70",
+      "reasons": [
+        "unestablished-arithmetic"
+      ],
+      "evidence": "The replay records only playedOn=dolphin, not its build or paired-single/JIT profile. Bounded current-Dolphin probes reproduce the runtime's exact thrown/root-motion and reflected-laser bits, while a 1,000-transition PPC/native comparison has an identical mismatch fingerprint. The complete residual is limited to float positions/velocities and laser-angle bytes derived from those floats; all other compared gameplay state is exact.",
+      "sources": [
+        "refs/melee/src/sysdolphin/baselib/mtx.c::PSMTXMultVec",
+        "refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced",
+        "refs/melee/src/melee/lb/lbvector.c::lbVector_Mirror",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
+      "sha256_slp": "45f32ec20d2c364f05133d507629bc12ee5eb01fc28e7c05ec44c0d337a5db01",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz",
+      "sha256_slp": "18296d6137899ddcac32f4a2b69740acd6c07bf3bf4d0c694b149a60b847394f",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/battlefield_recent/LoyalDishonestWren.slpz",
+      "sha256_slp": "3672f20751d9b1605c2c022b50156fc0d078f935569ba23bef0f7a796784eff5",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/bowser/MildMurkyNewt.slpz",
+      "sha256_slp": "54de97e422c1bc3297e5f449abb4fb8933d586d95be95ecd8ab703e84a34bc17",
+      "reasons": [
+        "uninitialized-chain"
+      ],
+      "evidence": "The ten raw item.misc3 rows belong to Sheik chain (kind 97) before its first dynamic-chain publication. Retail itSeakChain_Spawn reads x18 before assignment; the existing hosted constructor initializes this word to zero. The original allocator residue is 33. Native and PPC agree on all residual rows and every other field is exact. Preserve the existing deterministic constructor policy and the strict raw comparison; the later live x18 scalar is not masked.",
+      "sources": [
+        "src/melee/it/items/itseakchain.c::itSeakChain_Spawn",
+        "src/melee/it/items/itseakchain.c::it_802BC080",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/dk/9560_Game_20250405T084316.slpz",
+      "sha256_slp": "3ab2bac71f7c9aec95dadcdbe896d382bdeaccb54f604941c8bc616720a0a0ab",
+      "reasons": [
+        "uninitialized-chain"
+      ]
+    },
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260704T012353.slpz",
+      "sha256_slp": "6886e29ef4c691349f5f4199cfff634d30c23474696afc5744ddb48b761809cd",
+      "reasons": [
+        "uninitialized-chain"
+      ]
+    },
+    {
+      "replay": "replays/validation/falcon/EmotionalNaturalLemur.slpz",
+      "sha256_slp": "cb9371a757528237dafa85e9c37066eb36e2db0b327d914cda1d2703a73b15d9",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/falcon/FumblingProudPartridge.slpz",
+      "sha256_slp": "49a54b3cb8fa51eb1768d4c79ffaf659ad11b55373d59407e0f805984e63a41f",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/falcon/OddballCleanViper.slpz",
+      "sha256_slp": "27c887b05c3ebd11a3948b879f98bdb236bdf3a0259c640f9629e3a5dcc481ab",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/falcon/StraightScratchyCheetah.slpz",
+      "sha256_slp": "d5aa1def38e8081d8d45216b74fbe832d9cdae24e3ba04576bdd25182d425c33",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz",
+      "sha256_slp": "ad4506860d020858b1f0f48e752c09ea2f99c9c67660e68fb8044b96afeff17b",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/gamewatch/Game_20260707T204121.slpz",
+      "sha256_slp": "ab60f6f5f04151ff3dcba017996941c5aee649ac543e9d9aba92fd1b96eb0f43",
+      "reasons": [
+        "incomplete-history"
+      ]
+    },
+    {
+      "replay": "replays/validation/ganon/2025-03_Game_20250309T055449.slpz",
+      "sha256_slp": "36c6ddad6748e905c07ad32b6b162f6c0c30774340d41f117bfdf4f5eddf6ff1",
+      "reasons": [
+        "uninitialized-transform-lcancel"
+      ],
+      "evidence": "The single residual row is l_cancel=80 on Zelda's first post-transform frame (5974, Sheik SpecialLw 361 -> Zelda 356): Slippi stores L-cancel status in the repurposed PlayerData+0x25FF byte, and the freshly activated Zelda sub-fighter's block carries stale retail memory for exactly one frame until the 8006c324 reset hook first runs. The hosted per-fighter lcancel model starts at 0, gameplay lanes are untouched, and native and PPC agree bit-for-bit on the full game.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Recording/GetLCancelStatus/GetLCancelStatus.asm",
+        "refs/slippi-ssbm-asm/Recording/GetLCancelStatus/ResetLCancelStatus.asm",
+        "src/platform/slippi.c::msl_slippi_lcancel_get",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/icies/gm-sheik-2026-04_Game_20260428T204324.slpz",
+      "sha256_slp": "37b20a4f342a2008e3686ccba583e10f090b6a91d391335330a87fd979a02838",
+      "reasons": [
+        "uninitialized-chain"
+      ]
+    },
+    {
+      "replay": "replays/validation/icies/master-diamond-e1f45bc846c8b64f90b35a94.slpz",
+      "sha256_slp": "1b1c2cadac531ee28ebb38c12272d8c9160dde1feab15285704d199d02b1e6c4",
+      "reasons": [
+        "incomplete-history",
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/icies/platinum-platinum-83d0989d367f6d26c0df4863.slpz",
+      "sha256_slp": "9a51414eb25141c9f7cc05511d63369e14fde45964e92ef06c82c5bcaa34cdcc",
+      "reasons": [
+        "incomplete-history",
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/kirby/d20-1_falco_00191DDFD11F_20240917T183608.slpz",
+      "sha256_slp": "15a98b7f29fb68de025c28d524db365e0c56866a2c4b36c5694d17f74c5a47bf",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/kirby/d20-1_falco_00191DDFD11F_20240917T183839.slpz",
+      "sha256_slp": "4a0cb63d57b19d424dbaaa9ed6175f33f019e82db9999805953bf0c9ec48e9db",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ],
+      "evidence": "The 0.0375 Y offset on Falco begins at hitlag exit 6358 (hit by Kirby's copied Falco laser two frames earlier). This Slippi 3.15 console capture records the pre-injection normalized C-stick only, so raw 79 cannot be told from a radially clamped value of at least 80 that UCF cardinals would snap to 1.0; the console applied the full ASDI and the sim the 79/80 fraction. Later fighter rows inherit the displaced start. Source ASDI and cardinal injection are retained; reconstructing the input from the recorded position is excluded.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag",
+        "src/runtime/match.c::msl_ucf_apply_cardinal",
+        "refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm"
+      ]
+    },
+    {
+      "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T104926.slpz",
+      "sha256_slp": "e10c1f413ae71ce9b2cd3a83cc8d538f2d2eff2205937a3f55cfb587cd462618",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T105148.slpz",
+      "sha256_slp": "dfc004e594485964bbbc98018699265a28bb827504ebb8565114177073547365",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/kirby/d20-37_falco_001B7ABDD8A0_20260310T105436.slpz",
+      "sha256_slp": "cd45dbab44f08933560bfd697c9ff62c87fff13f106858cfaf41ab7453d4411d",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/kirby/d20-3_captain_falcon_A45C27B56C27_20241016T024203.slpz",
+      "sha256_slp": "5f2070e54eab2d4dbe2f8eec3e675c67a9cea385a0a921843faf4d3b36addcf3",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/kirby/d20-3_falco_A45C27B56C27_20241016T025123.slpz",
+      "sha256_slp": "50b6b18c1aebc880bd2f260a941a9f03b0899ceeb30307d3ff308baccfbec898",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/kirby/d20-3_marth_A45C27B56C27_20241016T024513.slpz",
+      "sha256_slp": "4ef4bfde84650d629aca77ea0b9b9f9364fe8873dd195b7981fc9af9e1a2965b",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/kirby/d20-3_peach_A45C27B56C27_20241016T025418.slpz",
+      "sha256_slp": "b2507746fc8913861ee0cf40aa0eec64ad2ce7773e91ab4bfc1522d7007b669d",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/kirby/greg_game_and_watch_20231218T204918.slpz",
+      "sha256_slp": "5f41a510773c17043fd1ebafad214f217892dbb584806d3c21fd94ae2c89f123",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20240313T140759.slpz",
+      "sha256_slp": "ba808e9583a174bf57a7698df13ee42c6716266e92adc02ba13ecc2f2272efd4",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/kirby/greg_zelda_20240425T135022.slpz",
+      "sha256_slp": "6464a52ccebddc9468f6f189db9a05601bdb90d8f2fddfcf0548e7f5502e2c78",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/legacy_arithmetic/gamewatch_fox_20260707T172242.slpz",
+      "sha256_slp": "4b510813e7645d448b3430e7327ec30e6f851ca9e3e061e970be0731922f7b98",
+      "reasons": [
+        "incomplete-history"
+      ]
+    },
+    {
+      "replay": "replays/validation/links/18932_Game_20250611T185955.slpz",
+      "sha256_slp": "e8bcc0ae25302ca28fb171f8d90a495dc3f91d20cb3e4fd0486251145bda81d3",
+      "reasons": [
+        "unestablished-arithmetic"
+      ],
+      "evidence": "At throw release 6873, native and retail it_80273B50/lb_8000B1CC produce item X 0xc13bbd02 from the same local attachment input; the capture contains 0xc13bbd00. The ten flight rows inherit this two-ULP seed. No boomerang dynamics correction or replay-position injection is justified.",
+      "sources": [
+        "refs/melee/src/melee/it/items/itlinkboomerang.c",
+        "refs/melee/src/melee/it/items/itlinkarrow.c",
+        "src/upstream_delta_ledger.tsv::canonical:link-hookshot-chain-solver-gekko-rounding",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/links/redxlink_Game_20250318T205705.slpz",
+      "sha256_slp": "9294c68fe2a040635f4b006fe59432eef581873cb1f3f593f20b1fcd7f8588cb",
+      "reasons": [
+        "incomplete-history"
+      ]
+    },
+    {
+      "replay": "replays/validation/luigi/master-diamond-8a855ab88865a8fd02dd8f60.slpz",
+      "sha256_slp": "092c01c8cc081aed898f53722ff435cfba2013e851a231cbd7634ec829551faa",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/luigi/master-master-775e398466dfd67e2bea025b.slpz",
+      "sha256_slp": "acd6fe667f754a4262971b8f2b2a52e4fedcdfbd2e80c4679e10aed6300c0cc5",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/luigi/platinum-platinum-c20d9507b199f01838e901d0.slpz",
+      "sha256_slp": "2ab2f64d17047cca5c768f97e7297089760d59a9b6b6258aa36f16464cb7978c",
+      "reasons": [
+        "missing-recorded-inputs",
+        "unestablished-arithmetic"
+      ],
+      "evidence": "All five independent seeds were arbitrated. At 2739/3644 and fireball spawns 8142/8204, retail execution matches hosted rather than recorded bits. At 990, retail and hosted damage-entry Y both equal 0x3ff857b8; recorded PreFrame Y is 0x3ff857b5, which RestoreGameFrame writes before physics. Do not fit source math to that playback replacement.",
+      "sources": [
+        "refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall",
+        "refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/luigi/slippi_01.07.22-09.08.23_Game_20221011T140934.slpz",
+      "sha256_slp": "0e178ec5a3952daa457a78ecc26b94a2d2ec304eaa8fa919556e52537b2fc1f5",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/luigi/slippi_2024_Game_20240704T213554.slpz",
+      "sha256_slp": "eace9bd7967f89ffd99e65d6b7b3b9298bb9d77042b94176bc8968c5b82c01be",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/marios/35438_Game_20250312T211113.slpz",
+      "sha256_slp": "abcbc8398cf2db86d003dfc368d20cacdaebff8c5bd7a110185a1209cd929f7b",
+      "reasons": [
+        "incomplete-history"
+      ]
+    },
+    {
+      "replay": "replays/validation/marios/6082_Game_20231226T153224.slpz",
+      "sha256_slp": "b6235cde5900f8e248e48468e5b4f7c5d2e713d013babc17cbb727bada348ed8",
+      "reasons": [
+        "missing-recorded-inputs"
+      ],
+      "evidence": "All remaining rows are attack-velocity signed zero. Current retail scalar fnmsubs preserves -0 on exact cancellation, while this historical capture contains +0. The capture does not identify the original emulator/JIT floating-point settings. Keep strict zero-sign comparison and the source instruction semantics.",
+      "sources": [
+        "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+        "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+        "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/marios/64303_master-platinum-f57bf677ef721a6e844c0398.slpz",
+      "sha256_slp": "466f097b165fdeabb1481758088f9f9ba24e8aa485423c5994169997e4eab787",
+      "reasons": [
+        "missing-recorded-inputs"
+      ],
+      "evidence": "The first 0.0375 X tail at hitlag exit 5182 comes from missing raw C-stick/cardinal information. Later fighter Y and fireball X rows inherit that displaced start. The capture provides only the pre-injection normalized stick, so deterministic reconstruction from the recorded outcome would fit an unavailable input.",
+      "sources": [
+        "refs/melee/src/melee/lb/lbspdisplay.c::lb_8001044C",
+        "refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CB40",
+        "refs/melee/extern/dolphin/src/dolphin/mtx/mtx.c::PSMTXQuat",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/marios/Slippi-20220321_Game_20220322T011940.slpz",
+      "sha256_slp": "6e0d38987b71e9c77419f15d3cbf59f77e9c9b3592d7b7e68fbc0155735230c7",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/marios/diamond-diamond-6c3bcc456c967feb1570eb68.slpz",
+      "sha256_slp": "181de586aa9ae95f3d6506ef72bcad2467eda4bacc52fd608398c9fa4a6cd6f4",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/marios/diamond-platinum-ba31dd26e40b4c452a6665e0.slpz",
+      "sha256_slp": "396f44b44bf5fab5dc9ba47a7ec97b8cb5abdb5e76bd1150d8123ed3daf33056",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/marios/master-diamond-2a8a128fe61a6b8aa44f372e.slpz",
+      "sha256_slp": "fdae53043b6a433a98458aac7f4d2c7d4e09672a9d0d46846162d346800f5491",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/marios/platinum-platinum-4aa6d15f587e02246006b7e0.slpz",
+      "sha256_slp": "fe02dd4d0bd4aef52145b31a57851a4632b5b62c71bd4832a2e980b9a58462fc",
+      "reasons": [
+        "incomplete-history",
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/marios/ranked-anonymized_platinum-platinum-7d58208ea7f4c046a0da2ae1.slpz",
+      "sha256_slp": "2eca9bad46ed0a9e8303379a74f6dd4413ba6fa6324ffa4ba8f0ab9469ab5829",
+      "reasons": [
+        "incomplete-history",
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/BountifulScalyGuanaco.slpz",
+      "sha256_slp": "e390169008c0cdbe9fc97784af1ed9e49ebde8e1aeb0cb42f9ba329ce6375e1c",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/BreakableMundaneElephant.slpz",
+      "sha256_slp": "204c0efb3ed7451cf8fc4c686376cad854c8d1dacd23f2a54f7f7a8b93dabfd3",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/BriefAdoredOyster.slpz",
+      "sha256_slp": "0e516af23104cab0cb533bf54e0c7ddbcf19f16b2c4358169869dd3fff2163b4",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/DraftyHealthyHare.slpz",
+      "sha256_slp": "66e6e6412a6c98431685ec84c92e956c20d7f5723fd90ea4130af02622663327",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/ExtraLargeScaryHornet.slpz",
+      "sha256_slp": "919d1c7ea6d86a32b52a1de69527476306eb902fc304f9620b8e7b4d992cdf97",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/FemaleFarOffSalmon.slpz",
+      "sha256_slp": "a33cc7d9d19dad4c9787c66aa8a54bdd28b44b29e9c766a7433ec8ba4cfb525b",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/FemaleWorthyAlpaca.slpz",
+      "sha256_slp": "ec89a70b1e309a07d09229cfb6e1e59a6ea5a1a01e0f84f7028d2cd2a1031753",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/InternalPowerlessWallaby.slpz",
+      "sha256_slp": "1f3bb09cd32e05fa93f80262471d2401284c1a394d4449fa5a31300dd441766d",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/ParallelFamiliarZebra.slpz",
+      "sha256_slp": "24d2eebb806e6f167d5f0f43bb6a7f3585e878ce4e3c86680564f00f3dd50878",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/QuestionableHarmfulPanther.slpz",
+      "sha256_slp": "8db777229be898827ec052ad3b69f03f4e428cdc9feb64e7d9e4ef6455423aef",
+      "reasons": [
+        "incomplete-history"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/StiffDraftyWalrus.slpz",
+      "sha256_slp": "e33aeb7c09c0129698270e9cadd8fffea444180a2d90d713d24f112a0ee7b8ab",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/VigorousRelievedLlama.slpz",
+      "sha256_slp": "088ea910c86aba94143c1d866a4db3804d15604c3a49e4fa38a8941193ccb8d9",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/marth/WingedGorgeousPanther.slpz",
+      "sha256_slp": "239a29d506661f1783fc6d112faf987eeb2e203848d8e968616f75f48d76fac3",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/ness/2025-11_Game_20251124T141214.slpz",
+      "sha256_slp": "5473bee290b30928e0d572b5df13af4b4a96d9be3798aa8b76fce088018ae4b3",
+      "reasons": [
+        "uninitialized-transform-lcancel"
+      ]
+    },
+    {
+      "replay": "replays/validation/ness/54459_Game_20250528T201050.slpz",
+      "sha256_slp": "8fc95405c7684ff6edd4fb79380746315b36edfd3bbad207ccbe869da3ad160a",
+      "reasons": [
+        "uninitialized-transform-lcancel"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/BareJovialChinchilla.slpz",
+      "sha256_slp": "fea679915ce4aa6ec808b1d7fee0d75802c5c61e967364933a85d07ce241ab6b",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/CandidThankfulCockroach.slpz",
+      "sha256_slp": "ff2897d40787afa923004ce323136bec7a551f27515aa32aee9c9eddc895cc5b",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/CapitalPristineTarsier.slpz",
+      "sha256_slp": "17436b7a62127e75aa40ec353d3aff4c45f64ba62735ec9d8cfb769bfc607e85",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/DisgustingLivelyRaven.slpz",
+      "sha256_slp": "666c681b08f666f9fbdee02b056dd6747c14e8c9aca55ae808f2906fec33102f",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/DryLimitedWoodcock.slpz",
+      "sha256_slp": "4c436a2746bf5e6140892d7825404c6be7869d754521ce1cb5a8bd6ef52a5d48",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/ExpertWorthlessFinch.slpz",
+      "sha256_slp": "8968ddb4a0881e51b95d775200a02f3e6451a3d579dd2a2da26137b9de2d8e3a",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/FaintMintyShark.slpz",
+      "sha256_slp": "cd48f118b51e2717113efe3d94363764bded3cc203aad1d7234b8844cb0730c4",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/HappyGoLuckyScentedButterfly.slpz",
+      "sha256_slp": "7ea8c15363ac681d5f643cc80b9d4225dc726f2583589512f89725f68fb70cd3",
+      "reasons": [
+        "uninitialized-transform-lcancel",
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/HeartyStiffMallard.slpz",
+      "sha256_slp": "65f73f75dcbc25c503819baa4434976f97d305a2ca7ad032dd342f9313d95ae3",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/HumiliatingCreamyReindeer.slpz",
+      "sha256_slp": "d7455a75f2e98b4dfff167f088a40c37e182dafcaaa283a328f3d20310247200",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/MadeUpEnchantedStingray.slpz",
+      "sha256_slp": "4f4dfc3a2c59c019b6aa96d16b74b2406aebd7a31fa5a18f287082fe0d3423f3",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/MarvelousLopsidedOryx.slpz",
+      "sha256_slp": "cfec917267b96ac87eedc69832db40bc09495dc7f327f8f03b03b1292c58e9ba",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/ScaryFrankPorcupine.slpz",
+      "sha256_slp": "d19007c173933bf4f7fdbf80673cd4ca38409bc4fc099f63f9b67580d8d6499c",
+      "reasons": [
+        "missing-recorded-inputs",
+        "uninitialized-chain",
+        "uninitialized-transform-lcancel"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/SmugConfusedTermite.slpz",
+      "sha256_slp": "dfc903b7675e7cb0d1b9bc526cfbd5e65be19bc6dc3f7979338f7fb2b9a4abf8",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/StridentRedSandpiper.slpz",
+      "sha256_slp": "80ef649d3fb484cb6e239a6650d1f09ed4571ee17328f09b311231a10e3754f0",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/peach/TameEmbellishedSparrow.slpz",
+      "sha256_slp": "4201f1f1208e2d4ff89c7afb27888a7db83f0c8b4930e0ae81e3d54f5fd0e044",
+      "reasons": [
+        "vanilla-magnifier"
+      ],
+      "evidence": "Only the unrecorded magnifier damage-gate boundary remains. Source camera position, animation and stage timing are complete for this replay. The recording lacks the VI/render publication phase that determines the one-percent tick. Later knockback, action and death rows inherit the percent fork; they are gameplay effects of this missing boundary, not display-only noise.",
+      "sources": [
+        "refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/pichu/d20-38_ice_climbers_001B7ABDD8A0_20260324T121546.slpz",
+      "sha256_slp": "f2ca0e93c0dda0286c394f2e73e33ac87f2535998b4455c5560f2347b951674b",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ],
+      "evidence": "The 0.0375 Y offset on Pichu begins at hitlag exit 4003 with the C-stick held straight up at the normalized 79/80. This Slippi 3.15 console capture records the pre-injection normalized C-stick only, so raw 79 cannot be told from a radially clamped value of at least 80 that UCF cardinals would snap to 1.0; the console applied the full 3.0 ASDI and the sim 2.9625. Source ASDI and cardinal injection are retained; reconstructing the input from the recorded position is excluded.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag",
+        "src/runtime/match.c::msl_ucf_apply_cardinal",
+        "refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/pichu/d20-38_mewtwo_001B7ABDD8A0_20260324T121206.slpz",
+      "sha256_slp": "0ebbd60cbdb64454771dcf6214d4c9144d6348d41d116a036bb02963ee049b86",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ],
+      "evidence": "The 0.0375 Y offset on Pichu begins at hitlag exit 3981 with the C-stick held straight up at the normalized 79/80. This Slippi 3.15 console capture records the pre-injection normalized C-stick only, so raw 79 cannot be told from a radially clamped value of at least 80 that UCF cardinals would snap to 1.0; the console applied the full 3.0 ASDI and the sim 2.9625. Source ASDI and cardinal injection are retained; reconstructing the input from the recorded position is excluded.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag",
+        "src/runtime/match.c::msl_ucf_apply_cardinal",
+        "refs/slippi-ssbm-asm/Playback/Core/RestoreGameFrame.asm",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/pichu/yeti-469_game_and_watch_CC9E001024A5_20260226T095048.slpz",
+      "sha256_slp": "394b9b080f40b6a64c320021d95b3a90361bfed53e3fa30a2662012d12506a11",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/pichu/yeti-469_game_and_watch_CC9E001024A5_20260226T095337.slpz",
+      "sha256_slp": "7ffc412aef54f5db69a999fee63025623c6be094807b7667dda5e4160f7739b2",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/pichu/yeti-471_falco_CC9E001024A5_20260312T074722.slpz",
+      "sha256_slp": "ab43c233cc022e227fcbc3e45fc3ce25fc50cca1d0e33b3eca01cc155d96ce39",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/pichu/yeti-472_captain_falcon_CC9E001024A5_20260319T083212.slpz",
+      "sha256_slp": "022a1eb08aaeddbdce537eea6d4973ce9d0ee74523e8b3a20a2022d8b7715b5e",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/pichu/yeti-472_ganondorf_CC9E001024A5_20260319T081326.slpz",
+      "sha256_slp": "7be5c6cb6654cf5d2c407e1f5e5fde4cb1d24666c76213815e484e5e78afe1f9",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/pichu/yeti-473_fox_CC9E001024A5_20260326T083655.slpz",
+      "sha256_slp": "fd9ab1741cc1076fa50413311423e0a459abec99fd024f916edbdd060f3308dd",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/pikachu/43799_Game_20250624T005320.slpz",
+      "sha256_slp": "cdfff4fd17d71d09e455b8bf627c6bec541623329e7e44419d1756df0a796021",
+      "reasons": [
+        "uninitialized-chain"
+      ]
+    },
+    {
+      "replay": "replays/validation/pikachu/diamond-platinum-65468eac6defc7ae336916cb.slpz",
+      "sha256_slp": "cb8a51b89def893e41490772f5e49a388de6eb0fcd17f6bf3ee6613d1f42d4a1",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/pikachu/diamond-platinum-c53c1ea834421338b65dd158.slpz",
+      "sha256_slp": "7d074e9d1dfcdde97f3577624ca5e47526b1511e2189b12b023d6a510a68ab3a",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/pikachu/master-master-97beba9993588c0e724b06c2.slpz",
+      "sha256_slp": "05cc8a19003f62eb0bd4b8a344be4caaf3098851a7e41dfaf6c58cf7f85b41be",
+      "reasons": [
+        "missing-recorded-inputs",
+        "unestablished-arithmetic"
+      ],
+      "evidence": "PPC and native source runtimes agree bit-for-bit. Bounded retail interpreter playback of this recording reproduces the runtime's exact blaster-muzzle transform bits (lb_8000B1CC on the RThumbNb chain, probed at frames -24 and 78 with every ancestor rotate/scale/translate/matrix word identical), while the recording carries laser spawn positions offset ~2^-16 on every flight all game: the anonymized ranked capture records Dolphin without its build or execution profile. The residual is bounded laser position/velocity intervals, angle bytes derived from those floats, and reconverging ULP-scale fighter position intervals; every discrete gameplay lane is exact and the fingerprint ends in 22 strict trailing transitions.",
+      "sources": [
+        "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint",
+        "refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C504",
+        "refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz",
+      "sha256_slp": "e8e11560d46c19d304c91adf0394c9ade7cebe06ca091721a475f3d48e6bf3f1",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz",
+      "sha256_slp": "228595526ef6513f4c25625fed9b6a344530d66e6afa45c333937ce7189d0d91",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slpz",
+      "sha256_slp": "0d9547380f084318aacbf3c5e9b922eb0b0b2138691a0f899f5995876c9ca59a",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/puff/diamond-diamond-78251f79d12df3bcdb1d4abe.slpz",
+      "sha256_slp": "11448b921adaa273ca555c297932a6149fee3693fca34e801f3648cf4d49aca9",
+      "reasons": [
+        "missing-recorded-inputs"
+      ],
+      "evidence": "The 0.0375 position tail begins on hitlag exit. SendPreFrame records normalized C-stick before UCF cardinal injection; this historical capture lacks raw C-stick bytes. Normalized 79/80 cannot distinguish raw 79 from a radially clamped value of at least 80. Source ASDI and platform arithmetic are retained; reconstructing input from the resulting position is excluded.",
+      "sources": [
+        "refs/melee/src/melee/gr/grizumi.c::grIzumi_801CBE64",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/melee/mp/mpcoll.c",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/puff/master-diamond-d514ba67193e53290c8d1b83.slpz",
+      "sha256_slp": "5abe81359388ac0a73eaaf07bea3f2460438259283b7893bedef690c27561bc4",
+      "reasons": [
+        "incomplete-history",
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/roy/d20-33-network_donkey_kong_20260113T183707.slpz",
+      "sha256_slp": "5da51d523698a1cdadcfa3d897759a165ec7e984e4038bedd61ad9f8b8f9a4b4",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/roy/d20-36_luigi_CC9E0000F940_20260224T235350.slpz",
+      "sha256_slp": "9fc5574749a6c54ef6679a43fd57d7f2009137b70d461d238fca229396709969",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/roy/d20-36_luigi_CC9E0000F940_20260224T235844.slpz",
+      "sha256_slp": "d9a7c81ca9f02cbf88e82480b91dc42b689c9a6ca15995e00bad4a647ae780c7",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/roy/d20-36_roy_CC9E0000F940_20260224T234600.slpz",
+      "sha256_slp": "69cd4206ebb167afd5b7972eb06873788e0a180e5c01bbcafcaed3421f3de4c1",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/roy/d20-36_roy_CC9E0000F940_20260224T234936.slpz",
+      "sha256_slp": "b2d79fbc98df37d7bf3248321ec5302f16758d720ef27ecdfe11d93efac68dfa",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/roy/greg_link_20230708T234539.slpz",
+      "sha256_slp": "e71a3a460fd2ee57428fc00c9faa6249a237505b97d1d274826221661c99e1a5",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/roy/yeti-472_falco_CC9E001024A5_20260319T073154.slpz",
+      "sha256_slp": "7cfcc072feeb2dd3cf7073a954ca32b05d474124fbf1239ae8f242124f7d349c",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/roy/yeti-472_sheik_CC9E001024A5_20260319T075905.slpz",
+      "sha256_slp": "0aeaef5bde7997b1b0df91fe64c8c12ba2b4bc66fee0598836d6ed711e9b8362",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/roy/yeti-473_luigi_CC9E001024A5_20260326T081109.slpz",
+      "sha256_slp": "1e3ebb1fef8d79ffef3e6caaa2899b81e2df9c066e60ce15dda2030f8e183455",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/samus/diamond-platinum-3a0b5b8362dab548ac01a813.slpz",
+      "sha256_slp": "9af882243448b400b8a80282e6c3c8a75a8e6178e4caa5f78a82a948b5cfceb2",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/samus/diamond-platinum-e9cd78b1cd4439a0f7945269.slpz",
+      "sha256_slp": "bcbc32d94b1fac2d7ab456a8224e44088791694474583ee5340e16d809227040",
+      "reasons": [
+        "missing-recorded-inputs"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/AttractiveAnyClam.slpz",
+      "sha256_slp": "300ace2b8fcac0ccba66f1e5b5cc6467d1be99c272378949c291eeac4963c661",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/BeautifulDistantWolverine.slpz",
+      "sha256_slp": "dcd8aae22d2da110f085cea096e563cb5b8acffb113f3c274367852acf88ae23",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/ConstantStiffOtter.slpz",
+      "sha256_slp": "70ecd7ce856234d2c19c86b099f365710c3c9acdf2c3c7137ba050686b015ce4",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/DrabMeanArmadillo.slpz",
+      "sha256_slp": "6c91b8ecb55f81f7d2dc42674d8c387da4c627fb072b61241fd88444ca89d448",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/GlaringRosyAlpaca.slpz",
+      "sha256_slp": "febc4709b2938835ed38acc001e7c1d117056c756ad97b063b9dd18db36e2d9a",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/IcyFailingGuanaco.slpz",
+      "sha256_slp": "6f7aba720a8bc1b85cd13e506d7b5a7c6abe1c28deba56fb5f1068b0f5bf8785",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/MixedAllQuetzal.slpz",
+      "sha256_slp": "536d5a4fd492c3bc08135f9133b265b587b3bd5d8aa672cd8f6933b46c387e8d",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/PaleMajorEchidna.slpz",
+      "sha256_slp": "47c22b9903a46363ca66a787a007385f5408bb4e46aa06ce24c2693c4319ad56",
+      "reasons": [
+        "uninitialized-chain"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/RuralReasonableRat.slpz",
+      "sha256_slp": "5839b9f4be2779b59c0ad9049caa7d4d527ee952e6ef34e07e9f161618cda353",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/SnarlingHelplessBeaver.slpz",
+      "sha256_slp": "2b708ec9d96bf08f66c6dfb15bb3e371991b6564324424083e170224793004c2",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/TenseSameHummingbird.slpz",
+      "sha256_slp": "3b2c42e1c263250c93ac6aa33f3d3f84fd2ad195fbadfa72a3f1f1220775727d",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/TornEnchantingGiraffe.slpz",
+      "sha256_slp": "659149a6f2cd95222b4990543e684e59f61e531f9720bcd3a4ee3e16dce2a367",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/ToughOutlyingChicken.slpz",
+      "sha256_slp": "61b2d51945c7d62e9693e0ba7516b401d8fed9f068183cff760f6b068e48c407",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/UnusedLivelyLouse.slpz",
+      "sha256_slp": "9fe9917feece9df291593ae54d0e54e51623ec8157b47c56f7df6edfda155e26",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/UselessGlassLoris.slpz",
+      "sha256_slp": "6ab834dbbfb00d45e726b14483698b3731e59ab5e9a52126bc37b2e4a76b01cb",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/WavyRundownAardvark.slpz",
+      "sha256_slp": "732beffbc0bfc82fbeaef75b14ce3769dad3226eff522b60eedd9285b4a3b82b",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/ZestyPreciousTurtle.slpz",
+      "sha256_slp": "e43aae45da3519b77b204b2a739e3a5054cb29d4f800f3cd68eb8bfd2a5e1735",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/sheik_demo_game.slpz",
+      "sha256_slp": "6cc665763a58978dc94dba5ae42d271c3bb0136d25712f4a028b0edfb63083c3",
+      "reasons": [
+        "uninitialized-chain"
+      ],
+      "evidence": "All remaining rows are attack-velocity signed zero. Current retail scalar fnmsubs preserves -0 on exact cancellation, while this historical capture contains +0. The capture does not identify the original emulator/JIT floating-point settings. Keep strict zero-sign comparison and the source instruction semantics.",
+      "sources": [
+        "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+        "refs/melee/src/sysdolphin/baselib/mtx.c",
+        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/sheik/sheik_demo_game_2.slpz",
+      "sha256_slp": "5a5e71f3217cc47d9966e32f613fc25eaa382e7fe7cc1f28610fcf09f3d54c42",
+      "reasons": [
+        "uninitialized-chain",
+        "uninitialized-transform-lcancel"
+      ],
+      "evidence": "Slippi records Chain x18 through a generic item byte before the source constructor assigns that field. Retail fixed-pool residue is 16 for 55 rows, while the headless runtime deterministically initializes it to zero; the field becomes exact at its first gameplay assignment. One later isolated thrown-needle historical-position byte differs by one count, followed by 3,149 exact transitions.",
+      "sources": [
+        "refs/melee/src/melee/it/items/itseakchain.c::itSeakChain_Spawn",
+        "refs/melee/src/melee/it/items/itseakchain.c::it_802BC080",
+        "refs/slippi-ssbm-asm/Recording/SendItemInfo.s::SendItemInfo",
+        "refs/melee/src/melee/it/items/itseakneedlethrown.c::itSeakneedlethrown_UnkMotion0_Anim",
+        "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/yoshis_story_recent/DependentSteelGrouse.slpz",
+      "sha256_slp": "b1cb1f41300ecf5d73c9e727843b0008346bea98d943a72f722ce990c81d4ef0",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.slpz",
+      "sha256_slp": "48d81b54965bb15779d9ff2d0571c4bb4d5233702352e248328437e3a1ff548e",
+      "reasons": [
+        "vanilla-magnifier"
+      ]
+    },
+    {
+      "replay": "replays/validation/zelda/zelda_demo_bf_upb_v1.slpz",
+      "sha256_slp": "e4b3dd78cde2295cd9920ac3b896b1eeeabe311a4841ab639418ac15ef08b784",
+      "reasons": [
+        "incomplete-history"
+      ]
+    },
+    {
+      "replay": "replays/validation/zelda/zelda_demo_fd_hits_v1.slpz",
+      "sha256_slp": "56c18d9d115f7c06f8bf829ec4ba004cea0177e6e2021236ba16200b08e79258",
+      "reasons": [
+        "incomplete-history"
+      ]
+    },
+    {
+      "replay": "replays/validation/zelda/zelda_demo_fd_ledge_snap_v1.slpz",
+      "sha256_slp": "d201c563b1c6d6b31e965872546aa567ea94d8b896630b649ecc1c3a4f62d05b",
+      "reasons": [
+        "incomplete-history"
+      ]
+    },
+    {
+      "replay": "replays/validation/zelda/zelda_demo_fd_v1.slpz",
+      "sha256_slp": "d1147093486f2e056f74eb7ffbb05a515eaaf67dc1230e39c04680ba43ae059c",
+      "reasons": [
+        "incomplete-history",
+        "uninitialized-transform-lcancel"
+      ]
+    }
+  ],
+  "coverage_replacements": [
+    {
+      "replay": "replays/validation/bowser/corpus_samus_20240816T224524.slpz",
+      "source_archive": "Player/irfan/irfan-EUdoubles Irfan.zip",
+      "source_member": "irfan-EUdoubles/Game_20240816T224524.slp",
+      "source_md5": "b98ff091a54ee8736923b5c40b17ed6f",
+      "sha256_slp": "b434e6a4a6039eef36281fc5bf8db5fb71ff51dbbcfe47eed661d4a78095573f",
+      "replaces_pair": [
+        "Bowser",
+        28
+      ]
+    },
+    {
+      "replay": "replays/validation/marios/corpus_marth_20240831T191647.slpz",
+      "source_archive": "Player/xRunRiot/2024 replays txr.zip",
+      "source_member": "2024-08/Game_20240831T191647.slp",
+      "source_md5": "44d7d66a38ea52e78ee5a88c53d25915",
+      "sha256_slp": "fdd371ef40163d52b2fda3ddce8373d22116bf0fc627f2257125a3e5da85ad69",
+      "replaces_pair": [
+        "Dr. Mario",
+        2
+      ]
+    },
+    {
+      "replay": "replays/validation/gamewatch/corpus_falco_20241222T215237.slpz",
+      "source_archive": "Player/irfan/irfan-EUdoubles Irfan.zip",
+      "source_member": "irfan-EUdoubles/Game_20241222T215237.slp",
+      "source_md5": "c633893fb3d5f76dfc09319a1da07495",
+      "sha256_slp": "c337c26c16c636e478437a03c31ed532009b3f59226a6f5f0345d8940ada08d4",
+      "replaces_pair": [
+        "Game & Watch",
+        2
+      ]
+    },
+    {
+      "replay": "replays/validation/luigi/corpus_yoshi_20241109T194013.slpz",
+      "source_archive": "Player/xRunRiot/2024 replays txr.zip",
+      "source_member": "2024-11/Game_20241109T194013.slp",
+      "source_md5": "c02b94bcde9cd02cac48b94bd6b8cb32",
+      "sha256_slp": "1e6e6b6a27c93da3ccb538e0874d21cd5652fbf513c6bbdd8d96a4e160a49c20",
+      "replaces_pair": [
+        "Luigi",
+        2
+      ]
+    },
+    {
+      "replay": "replays/validation/mewtwo/corpus_falco_20241001T022518.slpz",
+      "source_archive": "Player/irfan/irfan-EUdoubles Irfan.zip",
+      "source_member": "irfan-EUdoubles/Game_20241001T022518.slp",
+      "source_md5": "bd21e99cd19cd65706e5a5f0834a6cf4",
+      "sha256_slp": "f247aa1fed3b7128ba3376a148f3d6a180570419c40b428e2d36f4a260e100e7",
+      "replaces_pair": [
+        "Mewtwo",
+        8
+      ]
+    },
+    {
+      "replay": "replays/validation/pichu/corpus_falco_20250120T191118.slpz",
+      "source_archive": "Player/irfan/irfan-EUdoubles Irfan.zip",
+      "source_member": "irfan-EUdoubles/Game_20250120T191118.slp",
+      "source_md5": "fd1d73240b1320adddb2e37d7d33b1b0",
+      "sha256_slp": "868530033d5111065d23d76efdf37487919bf3fdb7095682bf035df029449ebd",
+      "replaces_pair": [
+        "Pichu",
+        31
+      ]
+    },
+    {
+      "replay": "replays/validation/zelda/corpus_fox_20250129T002820.slpz",
+      "source_archive": "Player/Zamu/2022-09 danielle.zip",
+      "source_member": "2025-01/Game_20250129T002820.slp",
+      "source_md5": "5a955d4312d0989b11489a154b2e3d2c",
+      "sha256_slp": "4d28ad5aba85e86a36ea4300d0cac72098583c5c4ea4d6123ddeacb4a63aece6",
+      "replaces_pair": [
+        "Zelda",
+        3
+      ],
+      "purpose": "Restore the focused Zelda suite, whose original four recordings all lacked Game End. This pair already remained covered elsewhere in the aggregate."
+    }
+  ],
+  "minimum_coverage": {
+    "Bowser": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Captain Falcon": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Donkey Kong": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Dr. Mario": [
+      2,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Falco": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Fox": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Game & Watch": [
+      2,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Ganondorf": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Ice Climbers": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Jigglypuff": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Kirby": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Link": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Luigi": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Mario": [
+      2,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Marth": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Mewtwo": [
+      8,
+      32
+    ],
+    "Ness": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Peach": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Pichu": [
+      2,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Pikachu": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Roy": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Samus": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Sheik": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Yoshi": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Young Link": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ],
+    "Zelda": [
+      2,
+      3,
+      8,
+      28,
+      31,
+      32
+    ]
+  }
+}

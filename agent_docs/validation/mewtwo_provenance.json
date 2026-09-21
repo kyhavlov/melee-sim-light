@@ -29,190 +29,43 @@
       "scenario": "reflect",
       "replay": "replays/validation/mewtwo_interactions/reflect.slpz",
       "source_recording": "reports/triage/gamewatch_mewtwo/dolphin-fixtures/reflect-probe4/Game_20260915T193127.slp",
-      "sha256_slp": "338d315ff25f2b790d64f2e4b251ea890684bc281aaa6a7614737153ff688e7f",
-      "sha256_slpz": "1b1ce18d082c8e7ca77f1792640af754dc895408512c4610808fa780e0e0aa73",
-      "start_at": "2026-09-16T00:31:27Z",
-      "last_frame": 2048,
-      "version": [
-        3,
-        19,
-        0
-      ],
-      "players": [
-        {
-          "port": "P1",
-          "character": 10,
-          "type": "Human"
-        },
-        {
-          "port": "P2",
-          "character": 20,
-          "type": "Human"
-        }
-      ],
-      "end_method": "Game"
+      "sha256_slp": "338d315ff25f2b790d64f2e4b251ea890684bc281aaa6a7614737153ff688e7f"
     },
     {
       "scenario": "reflect_control",
       "replay": "replays/validation/mewtwo_interactions/reflect_control.slpz",
       "source_recording": "reports/triage/gamewatch_mewtwo/dolphin-fixtures/reflect_control/Game_20260915T193255.slp",
-      "sha256_slp": "9d6a80177f0728e8c896c9e88ad174d9318e15f1e6b16cbb0ef373506d80224c",
-      "sha256_slpz": "636e7361ddd4dd1e095bad31ee5b005ff7163b2e629a3da11ef87752925a1c22",
-      "start_at": "2026-09-16T00:32:55Z",
-      "last_frame": 1980,
-      "version": [
-        3,
-        19,
-        0
-      ],
-      "players": [
-        {
-          "port": "P1",
-          "character": 10,
-          "type": "Human"
-        },
-        {
-          "port": "P2",
-          "character": 20,
-          "type": "Human"
-        }
-      ],
-      "end_method": "Game"
+      "sha256_slp": "9d6a80177f0728e8c896c9e88ad174d9318e15f1e6b16cbb0ef373506d80224c"
     },
     {
       "scenario": "absorb",
       "replay": "replays/validation/mewtwo_interactions/absorb.slpz",
       "source_recording": "reports/triage/gamewatch_mewtwo/dolphin-fixtures/absorb-probe/Game_20260915T193224.slp",
-      "sha256_slp": "76b3c3911214e3659a48ab82b536b4feddcbbfd8c1a533732bc6320dcc607ca2",
-      "sha256_slpz": "eb6f5746b76c4b5ee6dfbd1e188043a76d5f750d55ccd182791347a26783a5da",
-      "start_at": "2026-09-16T00:32:24Z",
-      "last_frame": 2416,
-      "version": [
-        3,
-        19,
-        0
-      ],
-      "players": [
-        {
-          "port": "P1",
-          "character": 10,
-          "type": "Human"
-        },
-        {
-          "port": "P2",
-          "character": 11,
-          "type": "Human"
-        }
-      ],
-      "end_method": "Game"
+      "sha256_slp": "76b3c3911214e3659a48ab82b536b4feddcbbfd8c1a533732bc6320dcc607ca2"
     },
     {
       "scenario": "absorb_control",
       "replay": "replays/validation/mewtwo_interactions/absorb_control.slpz",
       "source_recording": "reports/triage/gamewatch_mewtwo/dolphin-fixtures/absorb_control/Game_20260915T193255.slp",
-      "sha256_slp": "c8658df065863a80385f58b9ac958f7a915091a2713d2ff612a9f365e9b085d6",
-      "sha256_slpz": "81f152c38e0529c77b0cadcc40be2932c320cbb86ab60cae37d38524806f73fb",
-      "start_at": "2026-09-16T00:32:55Z",
-      "last_frame": 2424,
-      "version": [
-        3,
-        19,
-        0
-      ],
-      "players": [
-        {
-          "port": "P1",
-          "character": 10,
-          "type": "Human"
-        },
-        {
-          "port": "P2",
-          "character": 11,
-          "type": "Human"
-        }
-      ],
-      "end_method": "Game"
+      "sha256_slp": "c8658df065863a80385f58b9ac958f7a915091a2713d2ff612a9f365e9b085d6"
     },
     {
       "scenario": "missile",
       "replay": "replays/validation/mewtwo_interactions/missile.slpz",
       "source_recording": "reports/triage/gamewatch_mewtwo/dolphin-fixtures/missile-final/Game_20260915T193435.slp",
-      "sha256_slp": "5ac9153727b1b5d5875e57d54fafdbca47b4a6efdb6ec97f2904dbc8590538b9",
-      "sha256_slpz": "ec66e668b7cd8bd33865c832ab1dcbab9d2473473b4109df41859318142d07e9",
-      "start_at": "2026-09-16T00:34:35Z",
-      "last_frame": 2010,
-      "version": [
-        3,
-        19,
-        0
-      ],
-      "players": [
-        {
-          "port": "P1",
-          "character": 10,
-          "type": "Human"
-        },
-        {
-          "port": "P2",
-          "character": 16,
-          "type": "Human"
-        }
-      ],
-      "end_method": "Game"
+      "sha256_slp": "5ac9153727b1b5d5875e57d54fafdbca47b4a6efdb6ec97f2904dbc8590538b9"
     },
     {
       "scenario": "missile_control",
       "replay": "replays/validation/mewtwo_interactions/missile_control.slpz",
       "source_recording": "reports/triage/gamewatch_mewtwo/dolphin-fixtures/missile_control/Game_20260915T193255.slp",
-      "sha256_slp": "97cf17c1de6fa00d89ba604ce778f37d58e8c60a1049e86dbdf2cacc3463f56d",
-      "sha256_slpz": "e4866d93536deb21e09cc340dba66bf8bba21af9c0dac54ad565c7adfa349e87",
-      "start_at": "2026-09-16T00:32:55Z",
-      "last_frame": 1772,
-      "version": [
-        3,
-        19,
-        0
-      ],
-      "players": [
-        {
-          "port": "P1",
-          "character": 10,
-          "type": "Human"
-        },
-        {
-          "port": "P2",
-          "character": 16,
-          "type": "Human"
-        }
-      ],
-      "end_method": "Game"
+      "sha256_slp": "97cf17c1de6fa00d89ba604ce778f37d58e8c60a1049e86dbdf2cacc3463f56d"
     },
     {
       "scenario": "missile_early",
       "replay": "replays/validation/mewtwo_interactions/missile_early.slpz",
       "source_recording": "reports/triage/gamewatch_mewtwo/dolphin-fixtures/missile/Game_20260915T193255.slp",
-      "sha256_slp": "45fbdafe89af171bfbf8f6b33069a1ee3d9c8517469212be642ed8a25e9304d5",
-      "sha256_slpz": "b10988980adbf013ad9f98dbed6191d5926261b96a0eef42d41913cebcbcf3a6",
-      "start_at": "2026-09-16T00:32:55Z",
-      "last_frame": 1778,
-      "version": [
-        3,
-        19,
-        0
-      ],
-      "players": [
-        {
-          "port": "P1",
-          "character": 10,
-          "type": "Human"
-        },
-        {
-          "port": "P2",
-          "character": 16,
-          "type": "Human"
-        }
-      ],
-      "end_method": "Game"
+      "sha256_slp": "45fbdafe89af171bfbf8f6b33069a1ee3d9c8517469212be642ed8a25e9304d5"
     }
   ]
 }

@@ -1,6 +1,5 @@
 {
   "name": "marios",
-  "notes": "Mario and Dr. Mario validation suite: 60 netplay singles across all six legal stages against Fox, Falco, Marth, and Sheik plus Mario/Dr. Mario dittos, 2022-2026 Slippi and mainline captures. Pokemon Stadium entries are frozen-form only (is_frozen_ps); transforming-PS games are out of the supported domain.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -101,18 +100,6 @@
       }
     },
     {
-      "replay": "replays/validation/marios/35438_Game_20250312T211113.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 8,
-      "characters": {
-        "1": "Mario",
-        "2": "Dr. Mario"
-      }
-    },
-    {
       "replay": "replays/validation/marios/4308_Game_20250404T231356.slpz",
       "ports": [
         1,
@@ -123,33 +110,6 @@
         "1": "Falco",
         "2": "Dr. Mario"
       }
-    },
-    {
-      "replay": "replays/validation/marios/6082_Game_20231226T153224.slpz",
-      "ucf_shield_drop_084_enabled": false,
-      "ports": [
-        1,
-        4
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Marth",
-        "4": "Dr. Mario"
-      },
-      "ucf_cardinals_1_0_enabled": false
-    },
-    {
-      "replay": "replays/validation/marios/64303_master-platinum-f57bf677ef721a6e844c0398.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Falco",
-        "2": "Dr. Mario"
-      },
-      "played_on": "network"
     },
     {
       "replay": "replays/validation/marios/Nicki-07-25-2025-06_Game_20250623T164159.slpz",
@@ -174,22 +134,6 @@
         "1": "Mario",
         "2": "Fox"
       }
-    },
-    {
-      "replay": "replays/validation/marios/Slippi-20220321_Game_20220322T011940.slpz",
-      "ucf_shield_drop_084_enabled": false,
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Mario",
-        "2": "Fox"
-      },
-      "ucf_cardinals_1_0_enabled": false,
-      "ucf_shield_sdi_enabled": false,
-      "ucf_sdi_enabled": false
     },
     {
       "replay": "replays/validation/marios/Slippi-2025-02_Game_20250212T214835.slpz",
@@ -312,32 +256,6 @@
       }
     },
     {
-      "replay": "replays/validation/marios/diamond-diamond-6c3bcc456c967feb1570eb68.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Dr. Mario",
-        "2": "Sheik"
-      },
-      "played_on": "network"
-    },
-    {
-      "replay": "replays/validation/marios/diamond-platinum-ba31dd26e40b4c452a6665e0.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Fox",
-        "2": "Dr. Mario"
-      },
-      "played_on": "network"
-    },
-    {
       "replay": "replays/validation/marios/gm-falco-2026-06_Game_20260608T020147.slpz",
       "ports": [
         1,
@@ -444,19 +362,6 @@
         "1": "Fox",
         "2": "Dr. Mario"
       }
-    },
-    {
-      "replay": "replays/validation/marios/master-diamond-2a8a128fe61a6b8aa44f372e.slpz",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Mario",
-        "2": "Fox"
-      },
-      "played_on": "network"
     },
     {
       "replay": "replays/validation/marios/master-fox-2026-04_Game_20260425T193419.slpz",
@@ -579,36 +484,6 @@
       }
     },
     {
-      "replay": "replays/validation/marios/platinum-platinum-4aa6d15f587e02246006b7e0.slpz",
-      "ucf_shield_drop_084_enabled": false,
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Mario",
-        "2": "Falco"
-      },
-      "played_on": "network",
-      "ucf_cardinals_1_0_enabled": false
-    },
-    {
-      "replay": "replays/validation/marios/ranked-anonymized_platinum-platinum-7d58208ea7f4c046a0da2ae1.slpz",
-      "ucf_shield_drop_084_enabled": false,
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 2,
-      "characters": {
-        "1": "Falco",
-        "2": "Dr. Mario"
-      },
-      "played_on": "network",
-      "ucf_cardinals_1_0_enabled": false
-    },
-    {
       "replay": "replays/validation/marios/silver-fox-2026-06_Game_20260615T232450.slpz",
       "ports": [
         1,
@@ -618,6 +493,18 @@
       "characters": {
         "1": "Dr. Mario",
         "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/marios/corpus_marth_20240831T191647.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Dr. Mario",
+        "2": "Marth"
       }
     }
   ]

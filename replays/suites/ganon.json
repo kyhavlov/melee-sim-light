@@ -1,22 +1,9 @@
 {
  "name": "ganon",
- "notes": "Ganondorf validation suite: 30 singles across all six legal stages against Captain Falcon, Falco, Fox, Jigglypuff, Marth, Peach, Samus, Sheik; 2025-2026 Slippi, anonymized ranked, and mainline captures. All five Pokemon Stadium entries are event-verified frozen: the stadium_transformation stream (spec 0x41, added 3.18.0) is empty over each full game, and the three v3.18.0 entries additionally validate bit-exact against the frozen-only hosted Stadium model (the game-start is_frozen_ps flag is only trustworthy at 3.19.0+ and is not consulted).",
  "ucf_enabled": true,
  "ucf_cardinals_1_0_enabled": true,
  "replays": [
-  {
-   "replay": "replays/validation/ganon/2025-03_Game_20250309T055449.slpz",
-   "ports": [
-    1,
-    2
-   ],
-   "stage_id": 32,
-   "characters": {
-    "1": "Ganondorf",
-    "2": "Sheik"
-   }
-  },
-  {
+    {
    "replay": "replays/validation/ganon/24048_Game_20251122T004238.slpz",
    "ports": [
     1,
@@ -28,7 +15,7 @@
     "2": "Peach"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/24502_Game_20251220T231033.slpz",
    "ports": [
     1,
@@ -40,7 +27,7 @@
     "2": "Sheik"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/24861_Game_20250501T152400.slpz",
    "ports": [
     1,
@@ -52,7 +39,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/24891_Game_20250501T202120.slpz",
    "ports": [
     1,
@@ -64,7 +51,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/25785_Game_20250616T092626.slpz",
    "ports": [
     1,
@@ -76,7 +63,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/25827_Game_20250701T195419.slpz",
    "ports": [
     1,
@@ -88,7 +75,7 @@
     "2": "Marth"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/3173_Game_20250411T181648.slpz",
    "ports": [
     1,
@@ -100,7 +87,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/44253_Game_20250715T211256.slpz",
    "ports": [
     1,
@@ -112,7 +99,7 @@
     "2": "Falco"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/53413_Game_20250309T202842.slpz",
    "ports": [
     1,
@@ -124,7 +111,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/55606_Game_20251225T215433.slpz",
    "ports": [
     1,
@@ -136,7 +123,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/55939_Game_20250802T005712.slpz",
    "ports": [
     1,
@@ -148,7 +135,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/auto-falco-2025-06_Game_20250617T025647.slpz",
    "ports": [
     1,
@@ -160,7 +147,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/auto-falco-2026-01_Game_20260112T035248.slpz",
    "ports": [
     1,
@@ -172,7 +159,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/auto-fox-2025-05_Game_20250518T121042.slpz",
    "ports": [
     1,
@@ -184,7 +171,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/auto-ganondorf-2025-09_Game_20250920T031504.slpz",
    "ports": [
     1,
@@ -196,7 +183,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/auto-marth-2025-07_Game_20250712T212418.slpz",
    "ports": [
     1,
@@ -208,7 +195,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/basic-jigglypuff-2025-04_Game_20250426T161822.slpz",
    "ports": [
     1,
@@ -220,7 +207,7 @@
     "2": "Jigglypuff"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/fox-d18-imitation-v3-2025-04_Game_20250419T163521.slpz",
    "ports": [
     1,
@@ -232,7 +219,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/gm-falco-2026-05_Game_20260520T030317.slpz",
    "ports": [
     1,
@@ -244,7 +231,7 @@
     "2": "Falco"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/gm-fox-2025-09_Game_20250922T095115.slpz",
    "ports": [
     1,
@@ -256,7 +243,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/gm-marth-2026-04_Game_20260427T152341.slpz",
    "ports": [
     1,
@@ -268,7 +255,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/gm-sheik-2026-03_Game_20260308T033806.slpz",
    "ports": [
     1,
@@ -280,7 +267,7 @@
     "2": "Ganondorf"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/gold-fox-2026-06_Game_20260605T204805.slpz",
    "ports": [
     1,
@@ -292,7 +279,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/medium-fox-2026-01_Game_20260122T160100.slpz",
    "ports": [
     1,
@@ -304,7 +291,7 @@
     "2": "Fox"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/medium-jigglypuff-2026-05_Game_20260511T025550.slpz",
    "ports": [
     1,
@@ -316,7 +303,7 @@
     "2": "Jigglypuff"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/medium-peach-2026-01_Game_20260114T041806.slpz",
    "ports": [
     1,
@@ -328,7 +315,7 @@
     "2": "Peach"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/medium-sheik-2026-02_Game_20260218T175200.slpz",
    "ports": [
     1,
@@ -340,7 +327,7 @@
     "2": "Sheik"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/slippi-2025-11_Game_20251123T172903.slpz",
    "ports": [
     1,
@@ -352,7 +339,7 @@
     "2": "Captain Falcon"
    }
   },
-  {
+    {
    "replay": "replays/validation/ganon/temp-7z_Game_20250415T231237.slpz",
    "ports": [
     1,
@@ -364,5 +351,5 @@
     "2": "Ganondorf"
    }
   }
- ]
+  ]
 }

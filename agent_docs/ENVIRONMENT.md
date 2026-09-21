@@ -69,19 +69,15 @@ make validator
      --suite replays/suites/melee_core_aggregate.json --backend native --no-build \
      --workers N --output-locks replays/suites/melee_core_output_locks.json
    ```
-   It must reproduce the current committed aggregate's output locks and classification
-   expectations with zero failures or errors. Suite manifests and generated locks are the
+   It must reproduce the current committed aggregate's strict comparisons and output locks with zero failures or errors. Suite manifests and generated locks are the
    authority; do not use a historical work-log count as the expected roster or case total.
 4. `make ppc` then one per-suite PPC run (`VALIDATION_SUITE=replays/suites/<char>.json
    VALIDATION_BACKEND=ppc`). Per-suite PPC is the gate; aggregate-PPC lock-fails by design.
-5. `pytest tests`. Two tests assert wall-clock and per-case timeout budgets calibrated for the
-   validated container and are deselected in CI
-   (`test_native_validation_runs_current_oracle_replays_in_parallel`,
-   `test_native_validation_compares_complete_classified_replays`); on a faster host they should
-   pass, and a failure there is a budget-calibration question, not a correctness one.
+5. `pytest tests`. The parallel replay test asserts a host-dependent timing budget and is
+   deselected in hosted CI (`test_native_validation_runs_current_oracle_replays_in_parallel`).
+   Investigate its errors before distinguishing timing limits from correctness failures.
 
-Until steps 1-4 are green on the host, do not record aggregates, classification snapshots, or
-output locks from it.
+Until steps 1-4 are green on the host, do not record aggregate identities or output locks from it.
 
 ## Running the suite
 
@@ -89,7 +85,7 @@ output locks from it.
   is **16** (`tools/validation/validate_replay.py`). A box with more than 16 hardware threads needs
   an explicit `--workers` / `VALIDATION_WORKERS` to use them.
 - Each worker runs its own native server process, so memory is the real ceiling: in an 8 GB
-  container the classified-replay test OOM-killed a server at the 16-worker default and needed
+  container earlier replay tests OOM-killed a server at the 16-worker default and needed
   <=8-10. Size workers against RAM first, cores second.
 - `make validation-supported-domain` is the native aggregate; `VALIDATION_BACKEND=ppc` with a
   single-character suite is the PPC gate. `make native` does not rebuild the PPC binary — `make ppc`
@@ -100,9 +96,9 @@ output locks from it.
 
 [`performance/BASELINE.md`](performance/BASELINE.md) records its provenance host (AMD Ryzen 9 9950X3D, CPU 0 V-Cache
 CCD, Linux 6.17 x86-64, GCC 13.3.0) and the pinned `benchmark-9950x3d-*` targets. Absolute FPS from
-a different host is not comparable to the retained ledger; only same-host A/B pairs are. The
-benchmark **digests** (`8ef126a41244d514` at 256, `6f91f23e3553a090` at 512) are host-independent
-and must match anywhere. A performance commit made on a new host refreshes provenance in
+a different host is not comparable to the retained ledger; only same-host A/B pairs are. Benchmark **digests** must match for identical
+workload/configuration bytes; historical digests do not describe a changed replay corpus.
+A performance commit made on a new host refreshes provenance in
 `performance/BASELINE.md` before its numbers enter `performance/RETAINED.md`.
 
 ## macOS-only machinery (does not transfer)
