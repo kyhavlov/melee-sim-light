@@ -22,6 +22,10 @@ representation may justify revisiting the same broad subsystem.
 
 ## Files
 
+- [Kirby integration memory and profile compatibility](HISTORY.md#kirby-integration-memory-and-profile-compatibility--2026-09-20):
+  retain 128 MiB shared GameData, derive persistent hat ID capacity per fighter,
+  and repair the profiled build; bounded playback confirms matching digests.
+
 - [Replay benchmark capability export](HISTORY.md#replay-benchmark-capability-export--2026-09-20):
   correct two omitted UCF shield-drop settings and invalidate old cached tapes;
   regenerate both workloads before future A/B comparisons.

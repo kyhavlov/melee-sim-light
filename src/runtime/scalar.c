@@ -10,6 +10,7 @@
 #include "ftKirby/ftkirby.h"
 #include "ft/fighter.h"
 #include "ft/ftdata.h"
+#include "ft/ftanim.h"
 #include "ft/ftdevice.h"
 #include "ft/ftlib.h"
 #include "gr/grdatfiles.h"
@@ -75,7 +76,6 @@ enum {
     MSL_CORE_CHAR_PEACH = 9,
     MSL_CORE_CHAR_POPO = 10,
     MSL_CORE_CHAR_PIKACHU = 12,
-    MSL_CORE_CHAR_KIRBY = 4,
     MSL_CORE_CHAR_SAMUS = 13,
     MSL_CHAR_MEWTWO = 16,
     MSL_CHAR_GAMEWATCH = 24,
@@ -291,7 +291,7 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_PIKACHU;
     case MSL_CHARACTER_PICHU:
         return CKIND_PICHU;
-    case MSL_CORE_CHAR_KIRBY:
+    case MSL_CHARACTER_KIRBY:
         return CKIND_KIRBY;
     case MSL_CORE_CHAR_JIGGLYPUFF:
         return CKIND_PURIN;
@@ -646,7 +646,7 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CHAR_BOWSER &&
             config->players[i].char_id != MSL_CORE_CHAR_PIKACHU &&
             config->players[i].char_id != MSL_CHARACTER_PICHU &&
-            config->players[i].char_id != MSL_CORE_CHAR_KIRBY &&
+            config->players[i].char_id != MSL_CHARACTER_KIRBY &&
             config->players[i].char_id != MSL_CORE_CHAR_JIGGLYPUFF &&
             config->players[i].char_id != MSL_CORE_CHAR_LUIGI &&
             config->players[i].char_id != MSL_CORE_CHAR_MARTH &&
@@ -831,6 +831,33 @@ void msl_core_game_data_deinit(MslCoreGameData* game_data)
     memset(game_data, 0, sizeof(*game_data));
 }
 
+#ifdef MSL_CORE_NATIVE
+static uint32_t msl_kirby_hat_id_count(const MslCoreGameData* data,
+                                      uint8_t costume)
+{
+    uint32_t count = 0;
+    for (unsigned kind = 1; kind < FTKIND_MAX; ++kind) {
+        void* const* models = data->source.fighter.kirby_costume_hat_table[kind];
+        if (models != NULL) {
+            KirbyHatStruct* hat = data->source.fighter.kirby_copy.hats[kind - 1];
+            HSD_Joint* roots[] = {
+                models[2 * costume],
+                hat != NULL ? (HSD_Joint*) hat->hat_dynamics[2] : NULL,
+            };
+            for (unsigned root = 0; root < 2; ++root) {
+                HSD_Joint* joint = roots[root];
+                s32 depth = 0;
+                while (joint != NULL) {
+                    ++count;
+                    ftAnim_GetNextJointInTree(&joint, &depth);
+                }
+            }
+        }
+    }
+    return count;
+}
+#endif
+
 static int match_construct(MslCoreMatch* match,
                            const MslCoreGameData* game_data,
                            const MslCoreMatchConfig* config,
@@ -951,6 +978,7 @@ static int match_construct(MslCoreMatch* match,
     uint32_t ness_count = 0;
     uint32_t mewtwo_count = 0;
     uint32_t kirby_count = 0;
+    uint32_t kirby_hat_ids = 0;
     uint32_t link_count = 0;
     uint32_t sheik_count = 0;
     uint32_t ics_count = 0;
@@ -999,6 +1027,34 @@ static int match_construct(MslCoreMatch* match,
             ftData_80085820(FTKIND_SEAK, costume_id);
         } else if (kind == FTKIND_SEAK) {
             ftData_80085820(FTKIND_ZELDA, costume_id);
+        }
+    }
+    // Retail's match load runs ftLib_80087508 -> ftData_800857E0 ->
+    // ftKb_Init_UnkMotionStates5 -> Player_80031DC8(ftKb_SpecialN_800EED50)
+    // for every present kind, so each Kirby's copy archive and per-costume
+    // hat records exist before the first swallow. The hosted construction
+    // never reaches those retail loaders: the native build preloads every
+    // copy into GameData (preload_match_configuration), and the PPC oracle
+    // loads the present kinds under the same GameData binding as costumes.
+    // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_SpecialN_800EED50
+    for (i = 0; i < match->config.num_players; ++i) {
+        int j;
+        if (match->config.players[i].char_id != MSL_CHARACTER_KIRBY) {
+            continue;
+        }
+        for (j = 0; j < match->config.num_players; ++j) {
+            ftKb_SpecialN_800EED50((s32) match->config.players[j].char_id,
+                                   match->config.players[i].costume_id);
+            if (match->config.players[j].char_id == MSL_CORE_CHAR_POPO) {
+                ftKb_SpecialN_800EED50(FTKIND_NANA,
+                                       match->config.players[i].costume_id);
+            } else if (match->config.players[j].char_id == MSL_CORE_CHAR_ZELDA) {
+                ftKb_SpecialN_800EED50(FTKIND_SEAK,
+                                       match->config.players[i].costume_id);
+            } else if (match->config.players[j].char_id == MSL_CORE_CHAR_SHEIK) {
+                ftKb_SpecialN_800EED50(FTKIND_ZELDA,
+                                       match->config.players[i].costume_id);
+            }
         }
     }
     msl_core_bind_match(match);
@@ -1137,8 +1193,10 @@ static int match_construct(MslCoreMatch* match,
         if (match->config.players[i].char_id == MSL_CHAR_MEWTWO) {
             mewtwo_count += 1;
         }
-        if (match->config.players[i].char_id == MSL_CORE_CHAR_KIRBY) {
+        if (match->config.players[i].char_id == MSL_CHARACTER_KIRBY) {
             kirby_count += 1;
+            kirby_hat_ids += msl_kirby_hat_id_count(
+                game_data, match->config.players[i].costume_id);
         }
         if (match->config.players[i].char_id == MSL_CORE_CHAR_NESS) {
             ness_count += 1;
@@ -1202,30 +1260,6 @@ static int match_construct(MslCoreMatch* match,
     Item_80266FA8();
     Item_80266FCC();
     Player_80036DA4();
-#ifndef MSL_CORE_NATIVE
-    // Retail's match load runs ftLib_80087508 -> ftData_800857E0 ->
-    // ftKb_Init_UnkMotionStates5 -> Player_80031DC8(ftKb_SpecialN_800EED50)
-    // for every present kind, so each Kirby's copy archive and per-costume
-    // hat records exist before the first swallow. The hosted construction
-    // never reaches those retail loaders: the native build preloads every
-    // copy into GameData (preload_match_configuration), and the PPC oracle
-    // loads them here into the match arena for the kinds actually present.
-    // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_SpecialN_800EED50
-    for (i = 0; i < match->config.num_players; ++i) {
-        int j;
-        if (match->config.players[i].char_id != MSL_CORE_CHAR_KIRBY) {
-            continue;
-        }
-        for (j = 0; j < match->config.num_players; ++j) {
-            ftKb_SpecialN_800EED50((s32) match->config.players[j].char_id,
-                                   match->config.players[i].costume_id);
-            if (match->config.players[j].char_id == MSL_CORE_CHAR_POPO) {
-                ftKb_SpecialN_800EED50(FTKIND_NANA,
-                                       match->config.players[i].costume_id);
-            }
-        }
-    }
-#endif
     for (i = 0; i < match->config.num_players; ++i) {
         int slot = match->source_slots[i];
         // gm_16AE.c::fn_8016E2BC creates match fighters through the player
@@ -1379,7 +1413,12 @@ static int match_construct(MslCoreMatch* match,
                            256 + 128 * ness_count + 256 * samus_count +
                                32 * link_count + 32 * peach_count +
                                192 * mewtwo_count + 256 * kirby_count);
-    HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(), 128 + 32 * kirby_count);
+    // Costume-hat loaders publish every descriptor key against fighter parts;
+    // those IDs remain after a hat is replaced. Bound all preloaded costume
+    // and accessory trees per Kirby, in addition to transient hat/item IDs.
+    // ftKirby/ftkirby.c::{ftKb_SpecialN_800EF0E4,ftKb_SpecialN_800EF438}
+    HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(),
+                           128 + 32 * kirby_count + kirby_hat_ids);
     // Link and Young Link carry four RObjs each against two for every other
     // supported fighter, so four Link ports land on exactly 16 live RObjs and
     // filled the former flat 16-slot reserve to the last slot. Nothing is live
@@ -1506,7 +1545,7 @@ static int preload_match_configuration(MslCoreGameData* game_data,
         // per-costume hat models then live in GameData for every match.
         // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::
         //   {ftKb_Init_UnkMotionStates5,ftKb_SpecialN_800EED50}
-        if (char_id == MSL_CORE_CHAR_KIRBY) {
+        if (char_id == MSL_CHARACTER_KIRBY) {
             for (costume_id = 0;
                  costume_id < CostumeListsForeachCharacter[FTKIND_KIRBY].numCostumes;
                  ++costume_id)
@@ -1577,7 +1616,7 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         MSL_CORE_CHAR_POPO,
         MSL_CORE_CHAR_PIKACHU,
         MSL_CHARACTER_PICHU,
-        MSL_CORE_CHAR_KIRBY,
+        MSL_CHARACTER_KIRBY,
         MSL_CORE_CHAR_DONKEY,
         MSL_CORE_CHAR_GANONDORF,
         MSL_CHAR_YOSHI,
@@ -1610,12 +1649,12 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
     // models are resident before GameData seals (see
     // preload_match_configuration).
     for (i = 0; i < sizeof(characters) / sizeof(characters[0]); ++i) {
-        if (characters[i] == MSL_CORE_CHAR_KIRBY) {
+        if (characters[i] == MSL_CHARACTER_KIRBY) {
             continue;
         }
         if (preload_match_configuration(game_data,
                                         MSL_CORE_STAGE_FINAL_DESTINATION,
-                                        MSL_CORE_CHAR_KIRBY,
+                                        MSL_CHARACTER_KIRBY,
                                         characters[i]) != 0)
         {
             return -1;
@@ -1684,7 +1723,7 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
     // pointer-widening remaps below apply to them through the origin kind
     // (a copied Thunder Jolt otherwise sampled its widened owner pointer
     // instead of the crawl position's low bytes).
-    ItemKind kind = (ItemKind) msl_core_item_lane_origin_kind(item->kind);
+    ItemKind kind = (ItemKind) msl_item_lane_origin_kind(item->kind);
 
     // Preserve source offsets after native pointer widening. These generic
     // Slippi lanes land after pointers in the Chain, Din's Fire and Chef structs,
@@ -2446,8 +2485,6 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
             publish_render_matrices(item_gobj->hsd_obj);
             item_gobj = (Item_GObj*) item_gobj->next;
         }
-    }
-    {
         // Kirby's copy hat is a separate JObj tree that retail positions in
         // the display pass: ftKb_UnkMtxFunc0 copies the head part's world
         // matrix onto the hat root before drawing, and the copied specials

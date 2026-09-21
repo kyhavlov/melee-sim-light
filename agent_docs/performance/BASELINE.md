@@ -73,6 +73,9 @@ direction but does not claim that the 150k campaign target has been reached.
 
 ## Current memory contract
 
+The figures below belong to this throughput checkpoint. For the later full-roster
+construction census, see [Kirby integration memory](HISTORY.md#kirby-integration-memory-and-profile-compatibility--2026-09-20).
+
 The runtime census seals the ordinary stepped Match at 608,864 arena bytes and 843 allocations;
 both counts remain identical before and after gameplay. Its complete relocatable savestate is
 671,664 bytes. The simpler two-player lifecycle benchmark produces a 611,420-byte snapshot.

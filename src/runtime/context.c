@@ -42,8 +42,8 @@ _Thread_local int* msl_core_context_fighter_reference_counts;
 _Thread_local void* msl_core_context_fighter_costume_lists;
 _Thread_local void* msl_core_context_fighter_animation_data;
 _Thread_local void* msl_core_context_puff_hat_joints;
-_Thread_local void* msl_core_context_kirby_copy;
-_Thread_local void* msl_core_context_kirby_costume_hat_table;
+_Thread_local void* msl_context_kirby_copy;
+_Thread_local void* msl_context_kirby_costume_hat_table;
 #ifdef MSL_CORE_NATIVE
 _Thread_local MslNativeDatContext* msl_core_context_native_dat;
 #endif
@@ -91,8 +91,8 @@ void msl_core_bind_game_data(MslCoreGameData* game_data)
         game_data->source.fighter.animation_data;
     msl_core_context_puff_hat_joints =
         game_data->source.fighter.puff_hat_joints;
-    msl_core_context_kirby_copy = &game_data->source.fighter.kirby_copy;
-    msl_core_context_kirby_costume_hat_table =
+    msl_context_kirby_copy = &game_data->source.fighter.kirby_copy;
+    msl_context_kirby_costume_hat_table =
         game_data->source.fighter.kirby_costume_hat_table;
 #ifdef MSL_CORE_NATIVE
     msl_core_context_native_dat = &game_data->native_dat;
@@ -151,9 +151,9 @@ void msl_core_bind_match(MslCoreMatch* match)
         (void*) match->game_data->source.fighter.animation_data;
     msl_core_context_puff_hat_joints =
         (void*) match->game_data->source.fighter.puff_hat_joints;
-    msl_core_context_kirby_copy =
+    msl_context_kirby_copy =
         (void*) &match->game_data->source.fighter.kirby_copy;
-    msl_core_context_kirby_costume_hat_table =
+    msl_context_kirby_costume_hat_table =
         (void*) match->game_data->source.fighter.kirby_costume_hat_table;
 #ifdef MSL_CORE_NATIVE
     msl_core_context_native_dat =
@@ -383,7 +383,7 @@ HSD_Joint** msl_core_puff_hat_joints(void)
     return msl_core_source_game_data()->fighter.puff_hat_joints;
 }
 
-HSD_Joint* msl_core_kirby_iso_joint_take(void)
+HSD_Joint* msl_kirby_iso_joint_take(void)
 {
     MslCoreMatch* match = msl_core_try_active_match();
     MslSourceMatchState* state;
@@ -398,12 +398,12 @@ HSD_Joint* msl_core_kirby_iso_joint_take(void)
                                    state->kirby_iso_count];
 }
 
-struct ft_80459B88_t* msl_core_kirby_copy_table(void)
+struct ft_80459B88_t* msl_kirby_copy_table(void)
 {
     return &msl_core_source_game_data()->fighter.kirby_copy;
 }
 
-void** msl_core_kirby_costume_hat_table(void)
+void** msl_kirby_costume_hat_table(void)
 {
     return msl_core_source_game_data()->fighter.kirby_costume_hat_table;
 }

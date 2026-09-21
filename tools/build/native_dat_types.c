@@ -227,14 +227,20 @@ typedef struct MslDatKirbyArticles {
 // refs/melee/src/melee/ft/ftdynamics.c
 typedef struct MslDatKirbyHatDynamics {
     // ftDynamics with the two trailing pointers left raw: the hat
-    // initializers read dynamicsNum and ftDynamicBones only (and x4 through
-    // ftKb_Init_800EEB1C).
+    // initializers read dynamicsNum and ftDynamicBones only.
     int dynamicsNum;
     ArticleDynamicBones* ftDynamicBones;
     int x4;
     uintptr_t x8;
     uintptr_t x10;
 } MslDatKirbyHatDynamics;
+// PlKbCpGw.dat slot 4 is three scalar words, not an ftDynamics graph.
+// ftKb_Init_800EEB00/800EEB1C copy the colors at +4/+8 (GALE01 lwz/stw).
+typedef struct MslDatKirbyGameWatchColors {
+    float x0;
+    u32 fill;
+    u32 outline;
+} MslDatKirbyGameWatchColors;
 typedef struct MslDatKirbyHatMario {
     HSD_Joint* hat_joint;
     u32 model_num;
@@ -531,7 +537,7 @@ typedef struct MslDatKirbyHatGamewatch {
     uintptr_t d1;
     HSD_Joint* d2;
     FtPartsVisLookup* d3;
-    MslDatKirbyHatDynamics* d4;
+    MslDatKirbyGameWatchColors* d4;
     Article* d5;
     Article* d6;
 } MslDatKirbyHatGamewatch;
@@ -563,6 +569,10 @@ typedef struct MslDatGameWatchChefAttrs {
     float x4, x8, xC;
     itGamewatchchefAttrEntry entries[5];
 } MslDatGameWatchChefAttrs;
+// it_802C74D8 reads the pan's single rendering-attribute pointer.
+typedef struct MslDatKirbyChefPanAttrs {
+    void* x0;
+} MslDatKirbyChefPanAttrs;
 // PlLk.dat and PlCl.dat share one seven-slot x48_items layout: slots 0..4
 // are the bomb, boomerang, hookshot, arrow, and bow articles both OnLoads
 // register (item kinds 58..65 and 76/77); slot 5 is the milk-bottle article
@@ -718,6 +728,7 @@ void* msl_native_dat_type_roots[] = {
     (MslDatGameWatchArticles*) 0,
     (ftGameWatchAttributes*) 0,
     (MslDatGameWatchChefAttrs*) 0,
+    (MslDatKirbyChefPanAttrs*) 0,
     (itGamewatchparachuteAttributes*) 0,
     (MslDatNessArticles*) 0,
     (ftNessAttributes*) 0,

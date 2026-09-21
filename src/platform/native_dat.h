@@ -176,6 +176,7 @@ extern const MslDatType* const msl_dat_root_itMewtwoShadowball_DatAttrs;
 extern const MslDatType* const msl_dat_root_MslDatGameWatchArticles;
 extern const MslDatType* const msl_dat_root_ftGameWatchAttributes;
 extern const MslDatType* const msl_dat_root_MslDatGameWatchChefAttrs;
+extern const MslDatType* const msl_dat_root_MslDatKirbyChefPanAttrs;
 extern const MslDatType* const msl_dat_root_itGamewatchparachuteAttributes;
 extern const MslDatType* const msl_dat_root_MslDatNessArticles;
 extern const MslDatType* const msl_dat_root_ftNessAttributes;

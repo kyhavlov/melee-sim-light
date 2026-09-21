@@ -1368,7 +1368,7 @@ void ftParts_800753D4(Fighter* arg0, struct Fighter_804D6540_x0_t* arg1,
         // Kirby's copy hats with costume-specific models load their accessory
         // during play; the sealed arena hands those loads a joint from the
         // reserve made at construction (runtime/scalar.c).
-        HSD_Joint* iso = msl_core_kirby_iso_joint_take();
+        HSD_Joint* iso = msl_kirby_iso_joint_take();
         from_reserve = iso != NULL;
         if (iso == NULL) {
             iso = HSD_MemAlloc(sizeof(*iso));

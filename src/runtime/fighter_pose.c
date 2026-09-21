@@ -573,6 +573,7 @@ void msl_fighter_pose_erase_joint(HSD_JObj* joint)
     MslFighterPose* pose = active_pose();
     MslFighterPoseJoint* node = pose_joint(joint);
     uint16_t index;
+    uint16_t parent_index;
     uint16_t ancestor;
     uint16_t i;
     if (node == NULL) {
@@ -584,8 +585,9 @@ void msl_fighter_pose_erase_joint(HSD_JObj* joint)
     // node's parent, exactly as HSD_JObjRemove reparents the JObj child.
     // refs/melee/src/melee/ft/ftparts.c::ftParts_800755E8
     index = (uint16_t) (node - pose->joints);
+    parent_index = node->parent_index;
     release_joint(node);
-    for (ancestor = node->parent_index; ancestor != UINT16_MAX;
+    for (ancestor = parent_index; ancestor != UINT16_MAX;
          ancestor = pose->joints[ancestor].parent_index)
     {
         --pose->joints[ancestor].tree_count;
@@ -600,7 +602,7 @@ void msl_fighter_pose_erase_joint(HSD_JObj* joint)
     for (i = 0; i < pose->joint_count; ++i) {
         uint16_t parent = pose->joints[i].parent_index;
         if (parent == index) {
-            pose->joints[i].parent_index = node->parent_index;
+            pose->joints[i].parent_index = parent_index;
         } else if (parent != UINT16_MAX && parent > index) {
             pose->joints[i].parent_index = (uint16_t) (parent - 1);
         }

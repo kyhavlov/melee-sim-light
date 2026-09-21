@@ -80,8 +80,8 @@ extern _Thread_local int* msl_core_context_fighter_reference_counts;
 extern _Thread_local void* msl_core_context_fighter_costume_lists;
 extern _Thread_local void* msl_core_context_fighter_animation_data;
 extern _Thread_local void* msl_core_context_puff_hat_joints;
-extern _Thread_local void* msl_core_context_kirby_copy;
-extern _Thread_local void* msl_core_context_kirby_costume_hat_table;
+extern _Thread_local void* msl_context_kirby_copy;
+extern _Thread_local void* msl_context_kirby_costume_hat_table;
 extern _Thread_local MslNativeDatContext* msl_core_context_native_dat;
 #endif
 

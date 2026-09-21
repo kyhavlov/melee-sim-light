@@ -641,7 +641,7 @@
     {
       "source": "~/git/exphil/replays/d20/extracted/D20 Melee #32/D20_32_Stream/*.slp (5 games)",
       "characters": "Kirby vs various",
-      "reason": "playedOn \"network\" (console games mirrored to the launcher). Main's validator rejects that playedOn; the Roy PR's validator commit admits it as a console capture. Revisit once that lands."
+      "reason": "Console network metadata is supported after PR #27. These five source recordings were not available in the integration workspace for rerunning; no admission result is claimed."
     },
     {
       "source": "~/git/exphil/replays/erickfm_ranked/**/*.slp (15 files)",
@@ -651,7 +651,7 @@
     {
       "source": "scripted headless captures, Kirby vs Pichu and Kirby vs Roy (scratchpad rec/pichu, rec/roy)",
       "characters": "Kirby vs Pichu, Kirby vs Roy",
-      "reason": "Recorded with the same recorder; main's validator rejects Pichu and Roy until #28 and #27 land. Re-run and admit them afterwards."
+      "reason": "Roy and Pichu are supported after PRs #27/#28. These scratch recordings were not available in the integration workspace. Native source-callback smoke covers Pichu inhale/jolt and Roy ground/air charge selection; replay admission awaits the source recordings."
     }
   ],
   "recorder": "tools/validation/record_kirby_copies.exs",

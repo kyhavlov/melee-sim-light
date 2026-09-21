@@ -5,6 +5,41 @@ line. The current benchmark contract, concise retained summary, imported branch 
 architectural attempt records are indexed in [`README.md`](README.md). Forensic artifacts remain
 under ignored `reports/triage/`.
 
+## Kirby integration memory and profile compatibility — 2026-09-20
+
+PR #29 integrated onto `53ebe390` adds the final supported fighter's copy
+archives, costume hats, items and capture callbacks. The submitted 192 MiB
+GameData reserve is unnecessary: the combined 26-fighter preload uses
+114,515,944 / 134,217,728 bytes, so retain main's 128 MiB reserve. Native DAT
+uses 151,551,424 / 268,435,456 bytes. Construction's maximum Match arena remains
+2,119,308 / 3,145,728 bytes (four Peaches, Yoshi's Story), with 7,966 relocation
+records. The ordinary census step remains sealed at 1,757,132 bytes and 1,349
+allocations before and after gameplay. These are expanded-domain memory
+measurements, not a replacement throughput baseline.
+
+A valid two-Kirby/two-opponent control with different Kirby costumes exhausted
+the submitted flat HSD_ID allowance after repeated hat replacement. Source hat
+loaders register descriptor keys against fighter parts; those keys persist
+across hat removal. Count the preloaded costume/accessory descriptor trees per
+actual Kirby costume at initialization, adding that bound to the existing
+transient allowance. Repeated Mewtwo/alternate hats (Puff, Falco, Game & Watch,
+DK), clone continuation and snapshot restore now pass without runtime allocation.
+The four-Kirby special smoke reaches FObj 65/1,337 and AObj 29/410.
+
+Review also repaired a profiled-build compile error: the new hat matrix loop
+closed the timing variable's scope before its use. Keep item and hat matrix
+publication in the existing timed block. Both release benchmark and subsystem
+profile now run the same 634-human-recording manifest (four CPU captures
+explicitly skipped), resident/logical 16, 4,096 match-frames, eight warmup ticks,
+and produce digest `d732d9c97d9299c3`. This bounded run proves compatibility;
+there is no controlled throughput comparison or claimed speedup.
+
+Fresh extraction, native/PPC smoke, full native 638-case gate (609 exact,
+29 existing classifications, 6,028,589 transitions), Python tests and Wasm/viewer
+checks accompany the implementation. All 595 pre-Kirby output locks and 28
+classification records are unchanged. Scratch evidence is under
+`reports/triage/pr_sequence_20260920/pr29/`.
+
 ## Replay benchmark capability export — 2026-09-20
 
 PR #26 review found that `prepare_replay_benchmark.py` included both UCF

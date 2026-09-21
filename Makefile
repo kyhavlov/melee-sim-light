@@ -783,6 +783,8 @@ ppc-smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE)
 	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCHEDULER_SMOKE)"
 	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
 		"$(DATA)"
+	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
+		"$(DATA)" 32 4 16
 
 native-smoke: fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke pichu-smoke kirby-smoke data-check $(NATIVE_BUILD)/cpu-replay-smoke $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_STAGE_LIFECYCLE_SMOKE) $(NATIVE_RUNTIME_CENSUS)
 	@$(TIMEOUT) 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
@@ -790,6 +792,7 @@ native-smoke: fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke pichu-smoke k
 	@$(TIMEOUT) 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_SCHEDULER_SMOKE)"
 	@$(TIMEOUT) 5s "$(NATIVE_SCALAR_API_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 5s "$(NATIVE_SCALAR_API_SMOKE)" "$(DATA)" 32 4 16
 	@$(TIMEOUT) 10s "$(NATIVE_BUILD)/cpu-replay-smoke" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_CONTEXT_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_BATCH_API_SMOKE)" "$(DATA)"

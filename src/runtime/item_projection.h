@@ -44,13 +44,14 @@ enum {
     MSL_ITEM_KIND_PICHU_THUNDER = 82,
     MSL_ITEM_KIND_PICHU_TJOLT_GROUND = 91,
     MSL_ITEM_KIND_PICHU_TJOLT_AIR = 92,
-    MSL_CORE_ITEM_KIND_KIRBY_CBEAM = 50,
-    MSL_CORE_ITEM_KIND_KIRBY_HAMMER = 51,
-    MSL_CORE_ITEM_KIND_KIRBY_DROP_STAR = 52,
-    MSL_CORE_ITEM_KIND_KIRBY_SPIT_STAR = 53,
+    MSL_ITEM_KIND_KIRBY_CBEAM = 50,
+    MSL_ITEM_KIND_KIRBY_HAMMER = 51,
+    MSL_ITEM_KIND_KIRBY_DROP_STAR = 52,
+    MSL_ITEM_KIND_KIRBY_SPIT_STAR = 53,
     // Kirby's copied projectiles: It_Kind_Kirby_MarioFire .. YoshiEggLay.
-    MSL_CORE_ITEM_KIND_KIRBY_COPY_FIRST = 130,
-    MSL_CORE_ITEM_KIND_KIRBY_COPY_LAST = 157,
+    MSL_ITEM_KIND_KIRBY_COPY_FIRST = 130,
+    MSL_ITEM_KIND_KIRBY_COPY_LAST = 157,
+    MSL_ITEM_KIND_KIRBY_CHEF_PAN = 156,
     MSL_CORE_ITEM_KIND_NESS_PKFIRE = 66,
     MSL_CORE_ITEM_KIND_NESS_PKFIRE_PILLAR = 67,
     MSL_CORE_ITEM_KIND_NESS_PKFLASH = 68,
@@ -104,12 +105,12 @@ enum {
 // refs/melee/src/melee/it/{itCommonItems.h,itCharItems.h}
 // Kirby's copied projectiles run the original items' logic on the same
 // item-variable layouts, so they take the original kinds' lane rules and the
-// original kinds' source-byte remaps. Returns 0 for copy kinds without lanes.
+// original kinds' source-byte remaps. Props without an original keep their kind.
 // refs/melee/src/melee/it/it_279C.c (the Kirby copy rows)
-static inline uint16_t msl_core_item_lane_origin_kind(uint16_t kind)
+static inline uint16_t msl_item_lane_origin_kind(uint16_t kind)
 {
-    if (kind >= MSL_CORE_ITEM_KIND_KIRBY_COPY_FIRST &&
-        kind <= MSL_CORE_ITEM_KIND_KIRBY_COPY_LAST)
+    if (kind >= MSL_ITEM_KIND_KIRBY_COPY_FIRST &&
+        kind <= MSL_ITEM_KIND_KIRBY_COPY_LAST)
     {
         static const uint16_t origin[] = {
             MSL_CORE_ITEM_KIND_MARIO_FIREBALL, /* MarioFire */
@@ -138,10 +139,10 @@ static inline uint16_t msl_core_item_lane_origin_kind(uint16_t kind)
             MSL_CORE_ITEM_KIND_SHEIK_NEEDLE_HELD, /* SeakNeedleHeld */
             100 /* It_Kind_Koopa_Flame: no lane rule of its own, the default applies */, /* KoopaFlame */
             MSL_ITEM_KIND_GAMEWATCH_CHEF, /* GameWatchChef */
-            0, /* GameWatchChefPan: held prop, no gameplay lanes */
+            MSL_ITEM_KIND_KIRBY_CHEF_PAN,
             MSL_ITEM_KIND_YOSHI_EGG_LAY, /* YoshiEggLay */
         };
-        return origin[kind - MSL_CORE_ITEM_KIND_KIRBY_COPY_FIRST];
+        return origin[kind - MSL_ITEM_KIND_KIRBY_COPY_FIRST];
     }
     return kind;
 }
@@ -149,11 +150,11 @@ static inline uint16_t msl_core_item_lane_origin_kind(uint16_t kind)
 static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
                                                        uint8_t state)
 {
-    kind = msl_core_item_lane_origin_kind(kind);
-    if (kind == 0) {
-        return 0;
-    }
+    kind = msl_item_lane_origin_kind(kind);
     switch (kind) {
+    case MSL_ITEM_KIND_KIRBY_CHEF_PAN:
+        // Held prop; itkirbygamewatchchefpan.c has no gameplay misc payload.
+        return 0;
     case MSL_ITEM_KIND_MEWTWO_DISABLE:
         // itMDisable_ItemVars contains only the owner pointer. The remaining
         // Slippi samples are outside that source payload.
@@ -200,16 +201,16 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // xDE4[1..2] are presentation effect-object pointers.
         // refs/melee/src/melee/it/items/itfoxblaster.c
         return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC1;
-    case MSL_CORE_ITEM_KIND_KIRBY_CBEAM:
+    case MSL_ITEM_KIND_KIRBY_CBEAM:
         // itKirbyCutterBeam_ItemVars: angle, speed, direction and the spawn
         // position are all gameplay floats.
         // refs/melee/src/melee/it/itCharItems.h::itKirbyCutterBeam_ItemVars
         return MSL_CORE_ITEM_MISC_ALL;
-    case MSL_CORE_ITEM_KIND_KIRBY_HAMMER:
+    case MSL_ITEM_KIND_KIRBY_HAMMER:
         // itKirbyHammer_ItemVars is a single word; the rest is residue.
         return MSL_CORE_ITEM_MISC0;
-    case MSL_CORE_ITEM_KIND_KIRBY_DROP_STAR:
-    case MSL_CORE_ITEM_KIND_KIRBY_SPIT_STAR:
+    case MSL_ITEM_KIND_KIRBY_DROP_STAR:
+    case MSL_ITEM_KIND_KIRBY_SPIT_STAR:
         // Neither star unit writes xDE4; every sampled lane is residue.
         // refs/melee/src/melee/it/items/{it_2ADA.c,it_2F28.c}
         return 0;

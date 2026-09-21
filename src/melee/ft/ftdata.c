@@ -46,6 +46,7 @@
 #include "ftGameWatch/ftGw_SpecialS.h"
 #include "ftGanon/ftGn_Init.h"
 #include "ftGigaKoopa/ftGk_Init.h"
+#include "ftKirby/ftkirby.h"
 #include "ftKirby/ftkirbyspecialhi.h"
 #include "ftKoopa/ftKp_Init.h"
 #include "ftKoopa/ftKp_SpecialHi.h"
@@ -96,7 +97,6 @@
 #include "ftPeach/ftPe_SpecialN.h"
 #include "ftPeach/ftPe_SpecialS.h"
 #include "ftPichu/ftPc_Init.h"
-#include "ftKirby/ftkirby.h"
 #include "ftPikachu/ftPk_Init.h"
 #include "ftPikachu/ftPk_SpecialHi.h"
 #include "ftPikachu/ftPk_SpecialLw.h"
@@ -2002,7 +2002,6 @@ struct StringPair ftData_803C1F40[FTKIND_MAX] = {
 };
 
 Event ftData_UnkMotionStates5[FTKIND_MAX] = {
-    [FTKIND_KIRBY] = ftKb_Init_UnkMotionStates5,
     NULL, NULL, NULL, NULL, ftKb_Init_UnkMotionStates5,
     NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL,

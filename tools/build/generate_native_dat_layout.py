@@ -581,6 +581,7 @@ def main() -> None:
         "MslDatGameWatchArticles",
         "ftGameWatchAttributes",
         "MslDatGameWatchChefAttrs",
+        "MslDatKirbyChefPanAttrs",
         "itGamewatchparachuteAttributes",
         "MslDatNessArticles",
         "ftNessAttributes",

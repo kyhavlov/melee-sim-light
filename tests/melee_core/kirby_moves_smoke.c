@@ -4,6 +4,8 @@
 // copied neutral special through the Kirby item kinds. Also the four-Kirby
 // pool headroom.
 #include "runtime/scalar.h"
+#include "runtime/context.h"
+#include "runtime/savestate.h"
 #include "ft/fighter.h"
 #include "ft/ftcommon.h"
 #include "ft/types.h"
@@ -18,6 +20,8 @@
 #include <baselib/objalloc.h>
 #include <dolphin/pad.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static MslCoreGameData msl_test_game_data;
 static MslCoreMatch msl_test_match;
@@ -209,17 +213,108 @@ static int msl_test_four_kirbys(void)
     return 0;
 }
 
+static int msl_test_roy_copy(void)
+{
+    for (unsigned airborne = 0; airborne < 2; ++airborne) {
+        MslCoreInput input = { 0 };
+        int loop_seen = 0;
+        MSL_TEST_CHECK(msl_test_setup(2, 4, 26) == 0);
+        msl_test_place(0, 0, airborne ? 50 : 0, 1);
+        msl_test_place(1, 60, 0, -1);
+        ftKb_SpecialN_800F1BAC(msl_test_match.fighters[0], FTKIND_EMBLEM, false);
+        if (airborne) ftKb_SpecialAirN_Enter(msl_test_match.fighters[0]);
+        else ftKb_SpecialN_Enter(msl_test_match.fighters[0]);
+        input.p[0].buttons = PAD_BUTTON_B;
+        for (unsigned frame = 0; frame < 40; ++frame) {
+            MSL_TEST_CHECK(msl_test_step(&input) == 0);
+            int motion = msl_test_fighter(0)->motion_id;
+            loop_seen |= motion == (airborne ? ftKb_MS_FeSpecialAirNLoop
+                                            : ftKb_MS_FeSpecialNLoop);
+            MSL_TEST_CHECK(motion != ftKb_MS_MsSpecialNLoop &&
+                           motion != ftKb_MS_MsSpecialAirNLoop);
+        }
+        MSL_TEST_CHECK(loop_seen);
+    }
+    return 0;
+}
+
+static int msl_test_costume_hat_lifetime(FighterKind alternate)
+{
+    const FighterKind copies[] = { FTKIND_MEWTWO, alternate };
+    MslCoreMatchConfig config;
+    static MslCoreMatch copied;
+    MslCoreCompare continuation;
+    size_t save_size;
+    void* saved;
+    MSL_TEST_CHECK(msl_test_setup(4, 4, 16) == 0);
+    config = msl_test_match.config;
+    config.players[2].costume_id = 1;
+    config.players[3].char_id = alternate;
+    MSL_TEST_CHECK(msl_core_match_reset(&msl_test_match, &msl_test_game_data,
+                                       &config, &msl_test_neutral) == 0);
+    for (unsigned frame = 0; frame < 150; ++frame)
+        MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+    for (unsigned port = 0; port < 4; ++port) {
+        msl_test_place(port, -60 + 40 * (int) port, 0, 1);
+        if (port == 0 || port == 2)
+            ftKb_SpecialN_800F1BAC(msl_test_match.fighters[port], FTKIND_MEWTWO, false);
+    }
+    size_t used = msl_test_match.memory.used;
+    size_t allocations = msl_test_match.memory.allocation_count;
+    for (unsigned cycle = 0; cycle < 40; ++cycle) {
+        // One Kirby replaces its accessories while the other costume keeps
+        // its Mewtwo hat and seven inserted joints. Both copied fighters are
+        // present in this four-player match.
+        ftKb_SpecialN_800F5D04(msl_test_match.fighters[0], false);
+        ftKb_SpecialN_800F1BAC(msl_test_match.fighters[0], copies[cycle % 2], false);
+        MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+        MSL_TEST_CHECK(msl_test_fighter(2)->fv.kb.hat.kind == FTKIND_MEWTWO);
+    }
+    MSL_TEST_CHECK(msl_test_match.memory.used == used &&
+                   msl_test_match.memory.allocation_count == allocations);
+    save_size = msl_core_match_save_size(&msl_test_match);
+    saved = malloc(save_size);
+    MSL_TEST_CHECK(saved != NULL);
+    MSL_TEST_CHECK(msl_core_match_save(&msl_test_match, saved, save_size, NULL) == 0);
+    MSL_TEST_CHECK(msl_core_match_storage_init(&copied) == 0);
+    copied.game_data = &msl_test_game_data;
+    MSL_TEST_CHECK(msl_core_match_copy(&copied, &msl_test_match) == 0);
+    for (unsigned frame = 0; frame < 60; ++frame) {
+        MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+        MSL_TEST_CHECK(msl_core_match_step(&copied, &msl_test_neutral, copied.random_seed,
+                                         &(MslCoreStageEvents) { 0 }) == 0);
+        MSL_TEST_CHECK(memcmp(msl_core_match_output(&msl_test_match),
+                              msl_core_match_output(&copied), sizeof(continuation)) == 0);
+    }
+    continuation = *msl_core_match_output(&msl_test_match);
+    MSL_TEST_CHECK(msl_core_match_restore(&msl_test_match, saved, save_size) == 0);
+    for (unsigned frame = 0; frame < 60; ++frame)
+        MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+    MSL_TEST_CHECK(memcmp(&continuation, msl_core_match_output(&msl_test_match),
+                          sizeof(continuation)) == 0);
+    free(saved);
+    msl_core_match_destroy(&copied);
+    msl_core_bind_match(&msl_test_match);
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
-    float cutter_fox, hammer_fox, stone_fox, spit_fox, fox_copy, bowser_copy;
-    int hat_spit, hat_fox, hat_bowser;
+    float cutter_fox, hammer_fox, stone_fox, spit_fox, fox_copy, bowser_copy, pichu_copy, gamewatch_copy;
+    int hat_spit, hat_fox, hat_bowser, hat_pichu, hat_gamewatch;
     if (argc != 2 || msl_core_game_data_init(&msl_test_game_data, argv[1])) return 1;
     int result = msl_test_final_cutter(&cutter_fox) ||
                  msl_test_hammer_and_stone(&hammer_fox, &stone_fox) ||
                  msl_test_copy(1, 0, 0, &spit_fox, &hat_spit) ||
                  msl_test_copy(1, 1, It_Kind_Kirby_FoxLaser, &fox_copy, &hat_fox) ||
                  msl_test_copy(5, 1, It_Kind_Kirby_KoopaFlame, &bowser_copy, &hat_bowser) ||
-                 msl_test_four_kirbys();
+                 msl_test_copy(23, 1, It_Kind_Kirby_PichuTJolt_Ground, &pichu_copy, &hat_pichu) ||
+                 msl_test_copy(24, 1, It_Kind_Kirby_GameWatchChef, &gamewatch_copy, &hat_gamewatch) ||
+                 msl_test_roy_copy() || msl_test_four_kirbys() ||
+                 msl_test_costume_hat_lifetime(FTKIND_PURIN) ||
+                 msl_test_costume_hat_lifetime(FTKIND_FALCO) ||
+                 msl_test_costume_hat_lifetime(FTKIND_GAMEWATCH) ||
+                 msl_test_costume_hat_lifetime(FTKIND_DONKEY);
     if (result == 0) {
         // Copied Fox blaster: 11% on the Fox; copied Bowser fire breath
         // spawned from the live mouth bone (parts mask anchor 12): 20.8%

@@ -22,8 +22,8 @@ int main(int argc, char** argv)
     MslCoreMatch match;
     int i;
 
-    if (argc < 2 || argc > 4) {
-        fprintf(stderr, "usage: %s GAME_DATA [STAGE_ID [CHAR_ID]]\n", argv[0]);
+    if (argc < 2 || argc > 5) {
+        fprintf(stderr, "usage: %s GAME_DATA [STAGE_ID [CHAR_ID [OPPONENT_ID]]]\n", argv[0]);
         return 2;
     }
     memset(&config, 0, sizeof(config));
@@ -38,7 +38,9 @@ int main(int argc, char** argv)
     config.stock_count = 4;
     config.players[0].char_id =
         argc >= 4 ? (uint8_t) strtoul(argv[3], NULL, 0) : 1;
-    config.players[1].char_id = config.players[0].char_id;
+    config.players[1].char_id =
+        argc >= 5 ? (uint8_t) strtoul(argv[4], NULL, 0)
+                  : config.players[0].char_id;
 
     if (msl_core_game_data_init(&game_data, argv[1]) != 0 ||
         msl_core_match_init(&match, &game_data, &config, &previous_input) !=
@@ -62,6 +64,22 @@ int main(int argc, char** argv)
         Fighter* fp = (Fighter*) match.fighters[i]->user_data;
         if (msl_memory_context_owns(&match.memory, fp->x108_costume_joint)) {
             fprintf(stderr, "fighter %d caches its costume model in the Match arena\n", i);
+            return 1;
+        }
+    }
+    for (i = 0; i < FTKIND_MAX; ++i) {
+        const void* copy = i == 0
+                               ? (const void*) game_data.source.fighter.kirby_copy.x0
+                               : (const void*) game_data.source.fighter.kirby_copy.hats[i - 1];
+        if (copy != NULL && msl_memory_context_owns(&match.memory, copy)) {
+            fprintf(stderr, "Kirby copy %d is cached in the Match arena\n", i);
+            return 1;
+        }
+    }
+    for (i = 0; i < 5 * 12; ++i) {
+        const void* model = game_data.source.fighter.kirby_costume_hats[i / 12][i % 12];
+        if (model != NULL && msl_memory_context_owns(&match.memory, model)) {
+            fprintf(stderr, "Kirby costume model %d is cached in the Match arena\n", i);
             return 1;
         }
     }

@@ -30,6 +30,31 @@ typedef struct TopologyCheck {
 static MslCoreGameData game_data;
 static MslCoreMatch match;
 
+static int msl_test_accessory_removal(void)
+{
+    MslFighterPose* pose = &match.fighter_pose;
+    HSD_JObj root = { 0 }, accessory = { 0 }, child = { 0 };
+    uint16_t base = pose->joint_count;
+    root.child = &child;
+    child.parent = &root;
+    msl_fighter_pose_register_tree(&root);
+    root.child = &accessory;
+    accessory.parent = &root;
+    accessory.child = &child;
+    child.parent = &accessory;
+    msl_fighter_pose_insert_joint(&accessory);
+    msl_fighter_pose_erase_joint(&accessory);
+    if (pose->joint_count != base + 2 || pose->joints[base].tree_count != 2 ||
+        pose->joints[base + 1].parent_index != base ||
+        child.aobj != (HSD_AObj*) &pose->joints[base + 1] || accessory.aobj != NULL)
+    {
+        fprintf(stderr, "accessory removal did not preserve its child subtree\n");
+        return -1;
+    }
+    pose->joint_count = base;
+    return 0;
+}
+
 static uint64_t hash_byte(uint64_t hash, uint8_t value)
 {
     return (hash ^ value) * UINT64_C(1099511628211);
@@ -326,6 +351,9 @@ int main(int argc, char** argv)
     }
 
     if (match_initialized) {
+        if (msl_test_accessory_removal() != 0) {
+            return 1;
+        }
         msl_core_match_destroy(&match);
     }
     msl_core_game_data_deinit(&game_data);

@@ -1025,7 +1025,7 @@ static const struct {
     const char* symbol;
     uint8_t slot;
     const MslDatType* const* type;
-} kirby_copy_article_attrs[] = {
+} msl_kirby_copy_article_attrs[] = {
     { "ftDataKirbyCopyMario", 0, &msl_dat_root_itUnkAttributes },
     { "ftDataKirbyCopyLuigi", 0, &msl_dat_root_itUnkAttributes },
     { "ftDataKirbyCopyDrmario", 0, &msl_dat_root_itUnkAttributes },
@@ -1046,39 +1046,40 @@ static const struct {
     { "ftDataKirbyCopyKoopa", 0, &msl_dat_root_itKoopaFlame_Attributes },
     { "ftDataKirbyCopySeak", 0, &msl_dat_root_itSeakNeedleThrownAttributes },
     { "ftDataKirbyCopyGamewatch", 5, &msl_dat_root_MslDatGameWatchChefAttrs },
+    { "ftDataKirbyCopyGamewatch", 6, &msl_dat_root_MslDatKirbyChefPanAttrs },
 };
 
-static void translate_kirby_copy_article_attrs(MslNativeArchive* context,
+static void msl_translate_kirby_copy_article_attrs(MslNativeArchive* context,
                                                const char* symbol,
                                                uint32_t root, void* native)
 {
-    enum { HAT_SLOTS_SOURCE_OFFSET = 0x0C, ARTICLE_ATTRS_SOURCE_OFFSET = 0x04 };
+    enum { MSL_HAT_SLOTS_SOURCE_OFFSET = 0x0C, MSL_ARTICLE_ATTRS_SOURCE_OFFSET = 0x04 };
     Article** slots = (Article**) ((uint8_t*) native +
                                    offsetof(struct KirbyHatStruct, hat_dynamics));
     size_t i;
-    for (i = 0; i < sizeof(kirby_copy_article_attrs) /
-                        sizeof(kirby_copy_article_attrs[0]);
+    for (i = 0; i < sizeof(msl_kirby_copy_article_attrs) /
+                        sizeof(msl_kirby_copy_article_attrs[0]);
          ++i)
     {
-        uint32_t slot = kirby_copy_article_attrs[i].slot;
+        uint32_t slot = msl_kirby_copy_article_attrs[i].slot;
         uint32_t article;
         uint32_t attrs;
-        if (strcmp(kirby_copy_article_attrs[i].symbol, symbol) != 0) {
+        if (strcmp(msl_kirby_copy_article_attrs[i].symbol, symbol) != 0) {
             continue;
         }
-        article = raw_pointer(context, root + HAT_SLOTS_SOURCE_OFFSET + slot * 4);
+        article = raw_pointer(context, root + MSL_HAT_SLOTS_SOURCE_OFFSET + slot * 4);
         if (article == UINT32_MAX || slots[slot] == NULL) {
             continue;
         }
-        attrs = raw_pointer(context, article + ARTICLE_ATTRS_SOURCE_OFFSET);
+        attrs = raw_pointer(context, article + MSL_ARTICLE_ATTRS_SOURCE_OFFSET);
         if (attrs != UINT32_MAX) {
             slots[slot]->x4_specialAttributes = translate_target_count(
-                context, attrs, *kirby_copy_article_attrs[i].type, 1);
+                context, attrs, *msl_kirby_copy_article_attrs[i].type, 1);
         }
     }
 }
 
-static const MslDatType* kirby_copy_root_type(const char* symbol)
+static const MslDatType* msl_kirby_copy_root_type(const char* symbol)
 {
     static const struct {
         const char* name;
@@ -1130,7 +1131,7 @@ static const MslDatType* public_type(const char* symbol)
         // read as a KirbyHatStruct; the per-hat views in native_dat_types.c
         // type its slots.
         // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_Init_803CA9D0
-        return kirby_copy_root_type(symbol);
+        return msl_kirby_copy_root_type(symbol);
     }
     if (strcmp(symbol, "coll_data") == 0) {
         return msl_dat_root_MapCollData;
@@ -2012,9 +2013,9 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
                                           MSL_FIGHTER_ARTICLES_KIRBY);
     } else if (strncmp(symbol, "ftDataKirbyCopy", 15) == 0) {
         result = translate_target_count(context, offset,
-                                        kirby_copy_root_type(symbol), 1);
+                                        msl_kirby_copy_root_type(symbol), 1);
         if (result != NULL) {
-            translate_kirby_copy_article_attrs(context, symbol, offset, result);
+            msl_translate_kirby_copy_article_attrs(context, symbol, offset, result);
         }
     } else if (strcmp(symbol, "ftDataYoshi") == 0) {
         result = translate_fighter_public(context, offset,

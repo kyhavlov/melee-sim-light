@@ -53,18 +53,18 @@
 #include <runtime/context.h>
 #define msl_core_puff_hat_joints()                                            \
     ((HSD_Joint**) msl_core_context_puff_hat_joints)
-#define msl_core_kirby_copy_table()                                           \
-    ((struct ft_80459B88_t*) msl_core_context_kirby_copy)
-#define msl_core_kirby_costume_hat_table()                                    \
-    ((void**) msl_core_context_kirby_costume_hat_table)
+#define msl_kirby_copy_table()                                           \
+    ((struct ft_80459B88_t*) msl_context_kirby_copy)
+#define msl_kirby_costume_hat_table()                                    \
+    ((void**) msl_context_kirby_costume_hat_table)
 #else
 HSD_Joint** msl_core_puff_hat_joints(void);
-struct ft_80459B88_t* msl_core_kirby_copy_table(void);
-void** msl_core_kirby_costume_hat_table(void);
+struct ft_80459B88_t* msl_kirby_copy_table(void);
+void** msl_kirby_costume_hat_table(void);
 #endif
-HSD_Joint* msl_core_kirby_iso_joint_take(void);
+HSD_Joint* msl_kirby_iso_joint_take(void);
 #define ft_8045A1E0 (msl_core_puff_hat_joints())
-#define ft_80459B88 (*msl_core_kirby_copy_table())
+#define ft_80459B88 (*msl_kirby_copy_table())
 #else
 /* 45A1E0 */ extern HSD_Joint* ft_8045A1E0[6];
 #endif

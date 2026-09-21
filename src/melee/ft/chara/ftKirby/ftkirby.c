@@ -2452,7 +2452,7 @@ typedef struct ftKirby_UnkArrayThing {
 // loads its own copies instead of finding the first one's pointers.
 #include "ft/ft_0877.h"
 #define ftKb_Init_803C9FC8                                                    \
-    ((ftKirby_UnkArrayThing**) msl_core_kirby_costume_hat_table())
+    ((ftKirby_UnkArrayThing**) msl_kirby_costume_hat_table())
 #else
 ftKirby_UnkArrayThing ftKb_Init_803C9ED8 = { 0 };
 ftKirby_UnkArrayThing ftKb_Init_803C9F08 = { 0 };
@@ -3168,14 +3168,15 @@ void ftKb_Init_LoadSpecialAttrs(HSD_GObj* gobj)
     COPY_ATTRS(gobj, ftKb_DatAttrs);
 }
 
-void ftKb_Init_800EEB00(Fighter_GObj* gobj, ArticleDynamicBones** arg1)
+void ftKb_Init_800EEB00(Fighter_GObj* gobj, u32* arg1)
 {
-    *arg1 = ft_80459B88.hats[FTKIND_PICHU]->hat_dynamics[4]->ftDynamicBones;
+    // GALE01 800EEB10/14 copies one color word, not a host pointer.
+    *arg1 = ((u32*) ft_80459B88.hats[FTKIND_PICHU]->hat_dynamics[4])[1];
 }
 
 void ftKb_Init_800EEB1C(Fighter_GObj* gobj, s32* arg1)
 {
-    *arg1 = ft_80459B88.hats[FTKIND_PICHU]->hat_dynamics[4]->x4;
+    *arg1 = ((u32*) ft_80459B88.hats[FTKIND_PICHU]->hat_dynamics[4])[2];
 }
 
 void ftKb_Init_OnKnockbackEnter(HSD_GObj* gobj)
@@ -3377,7 +3378,7 @@ extern char ftKb_Init_804D3DAC[2];
 // ftAnim_80070200 consume, but attach to no JObj.
 // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::{
 //     ftKb_SpecialN_800EF0E4,ftKb_SpecialN_800EF438}
-static s32 ftKb_HatDObjsLoad_hosted(Fighter* fp, HSD_Joint* root,
+static s32 msl_kirby_load_hat_dobjs(Fighter* fp, HSD_Joint* root,
                                     HSD_DObj** dst, u8* part_dobj_indices,
                                     bool accessory, int line_dobjs,
                                     int line_group)
@@ -3462,7 +3463,7 @@ void ftKb_SpecialN_800EF0E4(Fighter_GObj* gobj, int arg1, u8* arg2)
     HSD_Joint* root =
         ((HSD_Joint**) ftKb_Init_803C9FC8[arg1])[fp->x619_costume_id * 2];
     ftPartsPObjSetDefaultClass();
-    fp->fv.kb.hat.x14.count = ftKb_HatDObjsLoad_hosted(
+    fp->fv.kb.hat.x14.count = msl_kirby_load_hat_dobjs(
         fp, root, fp->fv.kb.hat.x14.data, arg2, false, 0x43E, 0x44C);
     ftPartsPObjClearDefaultClass();
 }
@@ -3624,7 +3625,7 @@ void ftKb_SpecialN_800EF438(Fighter_GObj* gobj, KirbyHatStruct* hat)
     Fighter* fp = GET_FIGHTER(gobj);
     if (root != NULL) {
         ftPartsPObjSetDefaultClass();
-        fp->fv.kb.hat.x1C.count = ftKb_HatDObjsLoad_hosted(
+        fp->fv.kb.hat.x1C.count = msl_kirby_load_hat_dobjs(
             fp, root, fp->fv.kb.hat.x1C.data, NULL, true, 0x4B9, 0x4C7);
         ftPartsPObjClearDefaultClass();
     } else {
@@ -3734,7 +3735,7 @@ void ftKb_SpecialN_800EF69C(Fighter_GObj* gobj, int arg1, KirbyHatStruct* hat)
     // 0x10-byte strides reading its flag bytes raw. Index the part table and
     // name the lanes; the DObj detach branches keep their retail shape (no
     // bone carries flags_b6/flags2_b7 while the headless joint union is
-    // null, see ftKb_HatDObjsLoad_hosted).
+    // null, see msl_kirby_load_hat_dobjs).
     // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_SpecialN_800EF69C
     Fighter* fp = GET_FIGHTER(gobj);
     if (fp->fv.kb.hat.x14.data != NULL) {
