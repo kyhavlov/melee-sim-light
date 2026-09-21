@@ -4,6 +4,8 @@
 #include "runtime/match.h"
 #include "gm/gm_1601.h"
 #include "pl/player.h"
+#include "ft/types.h"
+#include "platform/memory.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,7 +18,9 @@ int main(int argc, char** argv)
     MslCoreInput previous_input;
     MslCoreInput input;
     const MslCoreCompare* output;
+    MslCoreCompare first_row;
     MslCoreMatch match;
+    int i;
 
     if (argc < 2 || argc > 4) {
         fprintf(stderr, "usage: %s GAME_DATA [STAGE_ID [CHAR_ID]]\n", argv[0]);
@@ -51,6 +55,35 @@ int main(int argc, char** argv)
         fprintf(stderr, "private scalar API produced an invalid first row\n");
         return 1;
     }
+    first_row = *output;
+
+    // Cached costume models must survive recycling the Match arena.
+    for (i = 0; i < 2; ++i) {
+        Fighter* fp = (Fighter*) match.fighters[i]->user_data;
+        if (msl_memory_context_owns(&match.memory, fp->x108_costume_joint)) {
+            fprintf(stderr, "fighter %d caches its costume model in the Match arena\n", i);
+            return 1;
+        }
+    }
+
+    // A reset with the same configuration must construct the same match:
+    // its first output row equals the fresh construction's.
+    if (msl_core_match_reset(&match, &game_data, &config, &previous_input) !=
+            0 ||
+        msl_core_match_step(&match, &input, config.frame_pre_random_seed,
+                            &(MslCoreStageEvents) { 0 }) != 0) {
+        fprintf(stderr, "same-configuration reset failed to construct\n");
+        return 1;
+    }
+    if (memcmp(msl_core_match_output(&match), &first_row, sizeof(first_row)) !=
+        0) {
+        fprintf(stderr, "same-configuration reset diverged from the fresh "
+                        "construction's first row\n");
+        return 1;
+    }
+    msl_core_bind_match(&match);
+    msl_core_bind_match_rules(&match.rules);
+
     Player_SetStocks(match.source_slots[0], 0);
     gm_80167320(match.source_slots[0], false);
     if (!match.rules.ended) {

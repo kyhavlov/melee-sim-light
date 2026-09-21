@@ -948,6 +948,30 @@ static int match_construct(MslCoreMatch* match,
     spec = stage_spec(match->config.stage_id);
     match->stage_data = spec->source;
     bind_stage_match(match);
+#ifndef MSL_CORE_NATIVE
+    // Costume models must outlive Match resets: the source loader caches
+    // them in GameData's costume table. Preload under its memory binding
+    // before Fighter_Create can allocate them from the Match arena. The PPC
+    // oracle leaves GameData unsealed; native preloads at GameData init.
+    // Fighter archives and animation banks retain their per-Match owners.
+    // refs/melee/src/melee/ft/ftlib.c::ftLib_80087508
+    // refs/melee/src/melee/ft/ftdata.c::ftData_80085820
+    msl_core_bind_game_data((MslCoreGameData*) game_data);
+    for (i = 0; i < match->config.num_players; ++i) {
+        FighterKind kind = (FighterKind) match->config.players[i].char_id;
+        int costume_id = match->config.players[i].costume_id;
+        ftData_80085820(kind, costume_id);
+        if (kind == FTKIND_POPO) {
+            ftData_80085820(FTKIND_NANA, costume_id);
+        } else if (kind == FTKIND_ZELDA) {
+            ftData_80085820(FTKIND_SEAK, costume_id);
+        } else if (kind == FTKIND_SEAK) {
+            ftData_80085820(FTKIND_ZELDA, costume_id);
+        }
+    }
+    msl_core_bind_match(match);
+    bind_stage_match(match);
+#endif
     match->frame_id = match->config.frame_id;
     for (i = 0; i < match->config.num_players; ++i) {
         int j;
