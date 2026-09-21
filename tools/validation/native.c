@@ -529,14 +529,27 @@ static int parse_metadata(PyObject* metadata, ReplayView* replay) {
     replay->freeze_dead_up_fall_physics = 1;
     replay->whispy_dead_fighter_fix = 1;
   }
-  // Mainline Slippi Dolphin's JIT implements nmsub with the retail PPC
-  // exact-zero sign, so scene-8 captures played on it need the retail
-  // fnmsubs zero. playedOn is the discriminator, not the protocol version:
-  // 3.19 "dolphin" corpus captures require the fused c - a*b zero while
-  // 3.18/3.19 "mainline dolphin" captures require the retail sign (verified
-  // by complete Fox/Falco aggregate streams against complete Luigi streams).
+  // Preserve the corpus default: scene 8 selects legacy fnmsubs in
+  // parse_start, with this Mainline override selecting retail signs.
+  // Metadata cannot identify every historical JIT's arithmetic; an explicit
+  // recording profile overrides this heuristic independently of scene.
   if (strcmp(played_on, "mainline dolphin") == 0) {
     replay->online_fnmsubs_zero = 0;
+  }
+  return 0;
+}
+
+static int msl_set_fnmsubs_profile(ReplayView* replay, const char* profile) {
+  if (profile == NULL) {
+    return 0;
+  }
+  if (strcmp(profile, "retail") == 0) {
+    replay->online_fnmsubs_zero = 0;
+  } else if (strcmp(profile, "dolphin-legacy") == 0) {
+    replay->online_fnmsubs_zero = 1;
+  } else {
+    PyErr_SetString(PyExc_ValueError, "invalid fnmsubs_profile");
+    return -1;
   }
   return 0;
 }
@@ -2409,6 +2422,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "ucf_shield_drop_084_enabled",
       "runner_stdin",
       "runner_stdout",
+      "fnmsubs_profile",
       NULL,
   };
   PyObject* frames_obj;
@@ -2431,6 +2445,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int ucf_shield_drop_084_enabled = 1;
   int runner_stdin = -1;
   int runner_stdout = -1;
+  const char* fnmsubs_profile = NULL;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -2449,12 +2464,12 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppii:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiiz:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
           &ucf_shield_drop_084_enabled,
-          &runner_stdin, &runner_stdout)) {
+          &runner_stdin, &runner_stdout, &fnmsubs_profile)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -2475,6 +2490,10 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   state.result.mismatch_fingerprint = UINT64_C(14695981039346656037);
   state.result.actual_output_fingerprint = UINT64_C(14695981039346656037);
   if (parse_start(start_obj, &replay) != 0 || parse_metadata(metadata_obj, &replay) != 0) {
+    goto done;
+  }
+
+  if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;
   }
 
@@ -2585,6 +2604,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
       "ucf_sdi_enabled",
       "ucf_shield_drop_extended_enabled",
       "ucf_shield_drop_084_enabled",
+      "fnmsubs_profile",
       NULL,
   };
   PyObject* frames_obj;
@@ -2592,6 +2612,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   PyObject* metadata_obj;
   PyObject* arrow_pair = NULL;
   const char* output_path;
+  const char* fnmsubs_profile = NULL;
   int ucf_cardinals_1_0_enabled = 1;
   int ucf_shield_sdi_enabled = 1;
   int ucf_sdi_enabled = 1;
@@ -2610,11 +2631,11 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   PyObject* result = NULL;
   (void)self;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|ppppp:write_benchmark_case", keywords,
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|pppppz:write_benchmark_case", keywords,
                                    &frames_obj, &start_obj, &metadata_obj, &output_path,
                                    &ucf_cardinals_1_0_enabled, &ucf_shield_sdi_enabled,
                                    &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
-                                   &ucf_shield_drop_084_enabled)) {
+                                   &ucf_shield_drop_084_enabled, &fnmsubs_profile)) {
     return NULL;
   }
   memset(&replay, 0, sizeof(replay));
@@ -2629,6 +2650,10 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
       goto done;
     }
   }
+  if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
+    goto done;
+  }
+
   arrow_pair = PyObject_CallMethod(frames_obj, "__arrow_c_array__", NULL);
   if (arrow_pair == NULL) {
     goto done;

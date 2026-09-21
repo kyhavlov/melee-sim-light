@@ -56,6 +56,39 @@ def test_native_preprocessor_writes_packed_benchmark_case(tmp_path: Path) -> Non
     assert _cached_frame_count(output) == frame_count
 
 
+@pytest.mark.parametrize("profile,extended,classic", [
+    ("retail", False, True),
+    ("dolphin-legacy", True, False),
+])
+def test_preparation_serializes_recording_capabilities(
+    tmp_path: Path, profile: str, extended: bool, classic: bool
+) -> None:
+    if not NATIVE.is_file() or not STARTER_REPLAY.is_file():
+        pytest.skip("melee core benchmark preprocessing artifacts are unavailable")
+    suite = tmp_path / "suite.json"
+    corpus = json.loads((ROOT / "replays/suites/aggregate_recent.json").read_text())
+    entry = next(row for row in corpus["replays"]
+                 if row["replay"] == STARTER_REPLAY.relative_to(ROOT).as_posix())
+    entry.update(fnmsubs_profile=profile, ucf_shield_drop_extended_enabled=extended,
+                 ucf_shield_drop_084_enabled=classic)
+    suite.write_text(json.dumps({
+        "name": "capabilities", "ucf_enabled": True,
+        "ucf_cardinals_1_0_enabled": True,
+        "replays": [entry],
+    }))
+    output = tmp_path / "cases.tsv"
+    args = argparse.Namespace(
+        suite=suite, output=output, characters=DEFAULT_CHARACTERS,
+        stages=DEFAULT_STAGES, force=False,
+    )
+    prepare(args)
+    tape = Path(output.read_text().splitlines()[1].split("\t")[0]).read_bytes()
+    # 24-byte benchmark header followed by packed MslCoreMatchConfig.
+    assert tape[24 + 25] == (profile == "dolphin-legacy")
+    assert tape[24 + 31] == extended
+    assert tape[24 + 32] == classic
+
+
 @pytest.mark.parametrize("include_human", [False, True])
 def test_benchmark_preparation_reports_cpu_exclusions(
     tmp_path: Path, capsys, include_human: bool

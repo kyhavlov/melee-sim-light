@@ -22,6 +22,8 @@ from tools.validation.slpz import replay_path_for_peppi
 
 
 FORMAT_VERSION = 3
+# Export semantics can change without changing the tape layout.
+CACHE_VERSION = 2
 DEFAULT_SUITE = ROOT / "replays/suites/melee_core_aggregate.json"
 DEFAULT_OUTPUT = ROOT / "build/melee_core/benchmark/cases.tsv"
 
@@ -32,6 +34,7 @@ def _cache_key(case: ReplayCase) -> str:
     identity = "\0".join(
         (
             str(FORMAT_VERSION),
+            str(CACHE_VERSION),
             str(replay.resolve()),
             str(stat.st_size),
             str(stat.st_mtime_ns),
@@ -43,6 +46,8 @@ def _cache_key(case: ReplayCase) -> str:
             str(case.played_on),
         )
     )
+    if case.fnmsubs_profile is not None:
+        identity += "\0fnmsubs=" + case.fnmsubs_profile
     return hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 
@@ -103,6 +108,9 @@ def prepare(args: argparse.Namespace) -> None:
                         ucf_cardinals_1_0_enabled=case.ucf_cardinals_1_0_enabled,
                         ucf_shield_sdi_enabled=case.ucf_shield_sdi_enabled,
                         ucf_sdi_enabled=case.ucf_sdi_enabled,
+                        ucf_shield_drop_extended_enabled=case.ucf_shield_drop_extended_enabled,
+                        ucf_shield_drop_084_enabled=case.ucf_shield_drop_084_enabled,
+                        fnmsubs_profile=case.fnmsubs_profile,
                     )
                 os.replace(temporary, case_path)
             finally:

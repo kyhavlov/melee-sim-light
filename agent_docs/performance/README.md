@@ -22,6 +22,10 @@ representation may justify revisiting the same broad subsystem.
 
 ## Files
 
+- [Replay benchmark capability export](HISTORY.md#replay-benchmark-capability-export--2026-09-20):
+  correct two omitted UCF shield-drop settings and invalidate old cached tapes;
+  regenerate both workloads before future A/B comparisons.
+
 - [Correctness completion](HISTORY.md#correctness-completion--2026-09-08):
   completed stage lifecycles, exact stationary-query recovery, and final measured
   cost of 3.74%/4.29% at resident 256/512 versus the correctness checkpoint.

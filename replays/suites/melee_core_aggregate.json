@@ -22,6 +22,7 @@
     "links.json",
     "mewtwo_targeted.json",
     "gamewatch.json",
-    "cpu_inputs.json"
+    "cpu_inputs.json",
+    "legacy_arithmetic.json"
   ]
 }

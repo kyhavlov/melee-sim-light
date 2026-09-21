@@ -1773,6 +1773,42 @@
       }
     },
     {
+      "replay": "replays/validation/legacy_arithmetic/gamewatch_fox_20260707T142746.slpz",
+      "expected": {
+        "native": {
+          "frames": 15995,
+          "actual_output_fingerprint": "9aeaac11c4094ea1"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/legacy_arithmetic/gamewatch_fox_20260707T172242.slpz",
+      "expected": {
+        "native": {
+          "frames": 13196,
+          "actual_output_fingerprint": "f56d8284caf9f5ad"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/legacy_arithmetic/mewtwo_fox_20260702T170056.slpz",
+      "expected": {
+        "native": {
+          "frames": 5960,
+          "actual_output_fingerprint": "8328ab10a75d1373"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/legacy_arithmetic/mewtwo_fox_shfair_only.slpz",
+      "expected": {
+        "native": {
+          "frames": 8060,
+          "actual_output_fingerprint": "f18497c3539a472d"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/links/106_Game_20250421T233442.slpz",
       "expected": {
         "native": {

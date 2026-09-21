@@ -6,11 +6,15 @@ Order: #30 PPC reset ownership, #26 arithmetic profiles, #27 Roy, #28 Pichu,
 #29 Kirby. Review and merge one at a time, then perform the approved replay
 admission cleanup locally without committing or pushing that final packet.
 
-Current owner: PPC scalar construction. Cached costume models belong to
-GameData, consumed by Fighter_Create and Zelda/Sheik or Nana construction.
-Fighter archives and animation banks remain per Match. Displace only lazy
-costume allocation from the Match arena; no runtime bridge or native change.
-The scalar smoke checks ownership and deterministic reconstruction on reset.
+Completed: #30 merged as `59251229` after local PPC/native reset checks and CI.
+
+Current owner: replay capture configuration. Explicit `fnmsubs_profile` maps
+onto the existing Match capability before initialization; suite loading,
+validation and benchmark export consume it. Runtime math/state and comparison
+stay unchanged. Remove obsolete fighter-admission skips and temporary arithmetic
+reports after preserving evidence in the validation guide/provenance record.
+Review also found two UCF shield-drop flags omitted at benchmark export; forward
+the existing canonical suite fields and verify the serialized configuration.
 
 Pending replay rules and the decision/experiment log are under ignored
 `reports/triage/pr_sequence_20260920/`; consolidate stable validation policy

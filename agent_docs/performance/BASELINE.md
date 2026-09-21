@@ -33,6 +33,11 @@ The instrumented profiler identifies owners; its FPS is not a throughput result.
 
 ## Benchmark contract
 
+The historical tapes below predate the
+[shield-drop capability export correction](HISTORY.md#replay-benchmark-capability-export--2026-09-20).
+Regenerate both arms with the corrected exporter for new comparisons; these
+historical digests are not identities for regenerated workloads.
+
 The benchmark packs all 366 aggregate replay cases and assigns resident lanes proportionally
 across the complete ordered corpus. Each assigned unique replay is pre-rolled by one of eight
 deterministic offsets from 200 through 900 frames; repeated batch slots copy those initialized

@@ -35,6 +35,8 @@ Instruction-level adaptations are recorded in `src/upstream_delta_ledger.tsv`.
   Judge/Chef/bucket captures, Dolphin build/settings and hashes.
 - [CPU inputs](validation/cpu_provenance.json): synced/separated Ice Climbers
   captures and the diagnostic Peach recording.
+- [Arithmetic profiles](validation/arithmetic_provenance.json): July Mewtwo and
+  Game & Watch captures, first-writer operands, profile comparisons and limits.
 
 The interaction coverage tests inspect what a recording actually contains.
 Callback smokes exercise source paths with extracted data; they are not
@@ -54,6 +56,28 @@ and original/compressed hashes. Use ordinary controller inputs and finalized
 games; do not inject positions, actions, damage or savestates into capture fixtures.
 Store new validation replays as `.slpz`; direct tooling also accepts `.slp`.
 Forensic outputs and incomplete recordings belong under ignored `reports/triage/`.
+
+## Recording arithmetic
+
+Suite entries accept `fnmsubs_profile: "retail" | "dolphin-legacy"`; the CLI
+override is `--fnmsubs-profile`. Both select the existing match capability before
+initialization. Omission retains the metadata/scene default. Those defaults are
+heuristics, not proof of the historical executable's arithmetic. Explicit
+profiles are reported in validation results and preserved in benchmark tapes
+and cache identities; they do not change comparison rules or public RL defaults.
+
+Retail `fnmsubs` negates after fused subtraction, `-(a*b-c)`. Legacy Dolphin
+JIT arithmetic can fuse `c-a*b` instead, changing the sign of an exact zero;
+a later `atan2f` can turn that sign into a different angle. The provenance record
+links both JIT implementations and the captured first-writer operands. Its
+four recordings infer arithmetic behavior, not the identity of an unavailable
+historical build. Do not select profiles by automatic retry or treat every float
+residual as a profile mismatch. Trace the owning writer and preserve the evidence.
+
+`make fnmsubs-smoke` checks cancellation, signed zeros and rounded underflow.
+`replays/suites/legacy_arithmetic.json` is in the aggregate; overriding it with
+`--fnmsubs-profile retail` reproduces the recorded negative controls. The tests
+alternate profiles on one persistent runner to check isolation between jobs.
 
 ## Recorded CPU inputs
 
