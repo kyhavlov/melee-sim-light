@@ -562,7 +562,8 @@ $(WASM_OBJ_DIR)/%.o: $(ROOT)/%.c
 
 $(WASM_OBJ_DIR)/gameplay/melee/ft/ftaction.o \
 $(WASM_OBJ_DIR)/gameplay/melee/it/itanimlist.o \
-$(WASM_OBJ_DIR)/gameplay/melee/lb/lbcommand.o: $(WASM_COMMAND_FIELDS)
+$(WASM_OBJ_DIR)/gameplay/melee/lb/lbcommand.o \
+$(WASM_OBJ_DIR)/gameplay/melee/lb/lbspdisplay.o: $(WASM_COMMAND_FIELDS)
 
 $(NATIVE_DAT_PPC_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(PPC_TYPES_TOOLCHAIN_DEP)
 	@mkdir -p "$(@D)"
