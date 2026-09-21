@@ -20,11 +20,12 @@ A few other exceptions prevent exact Slippi replay reproduction: historical roun
 missing raw inputs, and uninitialized recorded bytes. These don't represent missing gameplay mechanics
 for RL; reproducing them is either not useful or impossible with the information recorded.
 
-Benchmarks:
+Benchmarks ([details](agent_docs/performance/BASELINE.md)):
+
 | CPU | Batch size | Per-core FPS |
 | ---: | ---: | ---: |
-| AMD Ryzen 9 9950X3D | 256 | 116,598 |
-| AMD Ryzen 9 9950X3D | 512 | 120,618 |
+| AMD Ryzen 9 9950X3D | 256 | 124,142 |
+| AMD Ryzen 9 9950X3D | 512 | 120,607 |
 
 ## Quick Start
 

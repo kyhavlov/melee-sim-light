@@ -23,10 +23,9 @@
 #include <melee/lb/lb_00B0.h>
 #include <melee/lb/lbanim.h>
 #include <MSL/trigf.h>
-
-enum {
-    MSL_FIGHTER_POSE_MAGIC = 0x4D534C50,
-};
+#if defined(__AVX512F__)
+#include <immintrin.h>
+#endif
 
 static MslFighterPose* active_pose(void)
 {
@@ -94,12 +93,7 @@ static MslFighterPoseJoint* pose_joint(const HSD_JObj* joint)
         return NULL;
     }
     node = (MslFighterPoseJoint*) joint->aobj;
-    return node->magic == MSL_FIGHTER_POSE_MAGIC ? node : NULL;
-}
-
-bool msl_fighter_pose_owns_joint(const HSD_JObj* joint)
-{
-    return pose_joint(joint) != NULL;
+    return msl_fighter_pose_owns_animation(joint->aobj) ? node : NULL;
 }
 
 bool msl_fighter_pose_path(const HSD_JObj* joint, HSD_JObj** path)
@@ -281,17 +275,44 @@ void msl_fighter_pose_bind_part(HSD_JObj* joint, uint8_t part)
 }
 #endif
 
+bool msl_fighter_pose_set_mtx_dirty(HSD_JObj* root)
+{
+    MslFighterPoseJoint* node = pose_joint(root);
+    MslFighterPoseJoint* end;
+    if (node == NULL) {
+        return false;
+    }
+    // refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjSetMtxDirtySub.
+    // An already-dirty child prunes its entire subtree, even if some of
+    // its descendants have since rebuilt their matrices. The existing pose
+    // arena excludes ftParts' presentation-only cold joints.
+    root->flags |= JOBJ_MTX_DIRTY;
+    if (root->flags & JOBJ_INSTANCE) {
+        return true;
+    }
+    end = node + node->tree_count;
+    for (++node; node < end;) {
+        HSD_JObj* joint = node->joint;
+        if ((joint->flags & JOBJ_MTX_INDEP_PARENT) ||
+            HSD_JObjMtxIsDirty(joint))
+        {
+            node += node->tree_count;
+        } else {
+            joint->flags |= JOBJ_MTX_DIRTY;
+            node += joint->flags & JOBJ_INSTANCE ? node->tree_count : 1;
+        }
+    }
+    return true;
+}
+
 void msl_fighter_pose_set_root_position(HSD_JObj* root, const Vec3* position)
 {
-    MslFighterPose* pose = active_pose();
     MslFighterPoseJoint* root_node = pose_joint(root);
-    bool affected[MSL_FIGHTER_POSE_JOINT_CAPACITY];
-    uint16_t root_index;
-    uint16_t i;
+    MslFighterPoseJoint* node;
+    MslFighterPoseJoint* end;
     bool unchanged = memcmp(&root->translate, position, sizeof(*position)) == 0;
 
     HSD_ASSERT(150, root_node != NULL);
-    root_index = (uint16_t) (root_node - pose->joints);
     HSD_ASSERT(151, root_node->parent_index == UINT16_MAX);
     root->translate = *position;
     if (HSD_JObjMtxIsDirty(root)) {
@@ -300,21 +321,19 @@ void msl_fighter_pose_set_root_position(HSD_JObj* root, const Vec3* position)
     root->mtx[0][3] = position->x;
     root->mtx[1][3] = position->y;
     root->mtx[2][3] = position->z;
-    affected[root_index] = true;
-    for (i = root_index + 1; i < root_index + root_node->tree_count; ++i)
-    {
-        MslFighterPoseJoint* node = &pose->joints[i];
+    end = root_node + root_node->tree_count;
+    for (node = root_node + 1; node < end;) {
         HSD_JObj* joint = node->joint;
         int row;
         if (node->parent_index == UINT16_MAX ||
-            !affected[node->parent_index] ||
             (joint->flags & (JOBJ_USER_DEF_MTX | JOBJ_MTX_INDEP_PARENT)) ||
             node->path != NULL)
         {
-            affected[i] = false;
+            // Every descendant shares this barrier to root translation.
+            node += node->tree_count;
             continue;
         }
-        affected[i] = true;
+        ++node;
         if (HSD_JObjMtxIsDirty(joint)) {
             continue;
         }
@@ -1355,6 +1374,19 @@ static bool direct_srt_type(uint8_t type)
            type != HSD_A_J_PATH;
 }
 
+// Word offsets from HSD_JObj::rotate; used only while compiling source tracks.
+static unsigned msl_srt_field(uint8_t type)
+{
+    return type <= HSD_A_J_ROTZ ? type - HSD_A_J_ROTX
+           : type <= HSD_A_J_TRAZ ? type + 2 : type - 4;
+}
+
+_Static_assert(offsetof(HSD_JObj, scale) ==
+                   offsetof(HSD_JObj, rotate) + 4 * sizeof(float) &&
+               offsetof(HSD_JObj, translate) ==
+                   offsetof(HSD_JObj, rotate) + 7 * sizeof(float),
+               "sample fields follow canonical JObj SRT storage");
+
 static uint32_t mask_count(uint16_t mask)
 {
     return (uint32_t) __builtin_popcount((unsigned int) mask);
@@ -1427,7 +1459,7 @@ static int compact_program_values(MslFighterPosePrograms* programs)
     HSD_ASSERT(508, constant_value_count <= UINT32_MAX);
 
     constant_value_start = value_count;
-    values = malloc((size_t) (value_count + constant_value_count) *
+    values = malloc((size_t) (value_count + constant_value_count + 16) *
                     sizeof(*values));
     if (values == NULL) {
         free(values);
@@ -1436,6 +1468,8 @@ static int compact_program_values(MslFighterPosePrograms* programs)
         return -1;
     }
 
+    memset(values + value_count + constant_value_count, 0,
+           16 * sizeof(*values));
     value_count = 0;
     constant_value_count = 0;
     for (i = 0; i < programs->program_count; ++i) {
@@ -1452,6 +1486,8 @@ static int compact_program_values(MslFighterPosePrograms* programs)
                 &programs->nodes[program->node_start + node_index];
             uint32_t source_offset = node->frame_value_offset;
             if (node->value_count == 0) {
+                // A node without compiled values has no valid sampled frame.
+                node->sample_count = 0;
                 continue;
             }
             if (node->sample_stride == 0) {
@@ -1607,15 +1643,16 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
                     program->tree->tracks[track_start + track].obj_type;
                 if (!direct_srt_type(type)) {
                     node->sample_stride = 0;
-                } else if (node->type_mask & (uint16_t) (1U << type)) {
-                    node->sample_stride = 0;
-                }
-                if (type < 16) {
-                    node->type_mask |= (uint16_t) (1U << type);
+                } else {
+                    uint16_t field = (uint16_t) (1U << msl_srt_field(type));
+                    if (node->field_mask & field) {
+                        node->sample_stride = 0;
+                    }
+                    node->field_mask |= field;
                 }
             }
             if (node->sample_stride != 0) {
-                node->value_count = (uint8_t) mask_count(node->type_mask);
+                node->value_count = (uint8_t) mask_count(node->field_mask);
                 node->frame_value_offset = program->frame_value_count;
                 program->frame_value_count += node->value_count;
             }
@@ -1652,8 +1689,8 @@ int msl_fighter_pose_programs_init(MslFighterPosePrograms* programs)
                     &program->tree->tracks[node->track_start + local_track];
                 MslFighterPoseTrack track = { 0 };
                 uint16_t lower_mask =
-                    (uint16_t) (node->type_mask &
-                                ((1U << source->obj_type) - 1));
+                    (uint16_t) (node->field_mask &
+                                ((1U << msl_srt_field(source->obj_type)) - 1));
                 uint32_t slot = mask_count(lower_mask);
                 uint32_t sample;
                 init_track(&track, source);
@@ -1734,133 +1771,135 @@ static bool publish_program_sample(const MslFighterPosePrograms* programs,
     HSD_JObj* joint = node->joint;
     const float* values;
     uint16_t mask;
-    uint16_t type_mask;
+    uint16_t field_mask;
     bool wrote = false;
 
-    if (program_node->value_count == 0 ||
-        sample >= program_node->sample_count)
-    {
+    if (sample >= program_node->sample_count) {
         return false;
     }
     if (!publish) {
         return true;
     }
-    mask = program_node->type_mask;
-    type_mask = program_node->type_mask;
+    mask = program_node->field_mask;
+    field_mask = program_node->field_mask;
     if (node->program_filtered) {
-        mask &= (uint16_t) ~((1U << HSD_A_J_TRAX) |
-                            (1U << HSD_A_J_TRAY) |
-                            (1U << HSD_A_J_TRAZ));
+        mask &= (uint16_t) ~0x380;
     }
     values = &programs->values[program_node->frame_value_offset +
                                sample * program_node->sample_stride];
+#if defined(__AVX512F__)
+    {
+        // Immutable samples already follow canonical JObj field order.
+        __m512i ranks = _mm512_maskz_expand_epi32(
+            field_mask, _mm512_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7,
+                                          8, 9, 10, 11, 12, 13, 14, 15));
+        __m512 sampled = _mm512_permutexvar_ps(ranks, _mm512_loadu_ps(values));
+        __m512 magnitude = _mm512_castsi512_ps(_mm512_and_si512(
+            _mm512_castps_si512(sampled), _mm512_set1_epi32(0x7FFFFFFF)));
+        __m512 minimum = _mm512_set1_ps(1e-3F);
+        __mmask16 clamp = _mm512_mask_cmp_ps_mask(
+            field_mask & 0x070, magnitude, minimum, _CMP_LT_OQ);
+        sampled = _mm512_mask_mov_ps(sampled, clamp, minimum);
+        _mm512_mask_storeu_ps(&joint->rotate.x, mask, sampled);
+        wrote = mask != 0;
+    }
+#else
 #define PUBLISH_ROTX(value) (joint->rotate.x = (value))
-    switch (type_mask) {
-    case 0x00E:
-        PUBLISH_ROTX(values[0]);
-        joint->rotate.y = values[1];
-        joint->rotate.z = values[2];
-        wrote = true;
-        goto published;
-    case 0x004:
-        joint->rotate.y = values[0];
-        wrote = true;
-        goto published;
-    case 0x00C:
-        joint->rotate.y = values[0];
-        joint->rotate.z = values[1];
+    switch (field_mask) {
+    case 0x007:
+        memcpy(&joint->rotate.x, values, sizeof(Vec3));
         wrote = true;
         goto published;
     case 0x002:
+        joint->rotate.y = values[0];
+        wrote = true;
+        goto published;
+    case 0x006:
+        memcpy(&joint->rotate.y, values, 2 * sizeof(float));
+        wrote = true;
+        goto published;
+    case 0x001:
         PUBLISH_ROTX(values[0]);
         wrote = true;
         goto published;
-    case 0x0EE:
-        PUBLISH_ROTX(values[0]);
-        joint->rotate.y = values[1];
-        joint->rotate.z = values[2];
+    case 0x387:
+        memcpy(&joint->rotate.x, values, sizeof(Vec3));
         if (!node->program_filtered) {
-            joint->translate.x = values[3];
-            joint->translate.y = values[4];
-            joint->translate.z = values[5];
+            memcpy(&joint->translate, &values[3], sizeof(Vec3));
         }
         wrote = true;
         goto published;
-    case 0x40E:
-        PUBLISH_ROTX(values[0]);
-        joint->rotate.y = values[1];
-        joint->rotate.z = values[2];
+    case 0x047:
+        memcpy(&joint->rotate.x, values, sizeof(Vec3));
         joint->scale.z =
             fabsf_bitwise(values[3]) < 1e-3F ? 1e-3F : values[3];
         wrote = true;
         goto published;
-    case 0x006:
-        PUBLISH_ROTX(values[0]);
-        joint->rotate.y = values[1];
+    case 0x003:
+        memcpy(&joint->rotate.x, values, 2 * sizeof(float));
         wrote = true;
         goto published;
-    case 0x008:
+    case 0x004:
         joint->rotate.z = values[0];
         wrote = true;
         goto published;
-    case 0x0E0:
+    case 0x380:
         if (!node->program_filtered) {
-            joint->translate.x = values[0];
-            joint->translate.y = values[1];
-            joint->translate.z = values[2];
+            memcpy(&joint->translate, &values[0], sizeof(Vec3));
             wrote = true;
         }
         goto published;
-    case 0x00A:
+    case 0x005:
         PUBLISH_ROTX(values[0]);
         joint->rotate.z = values[1];
         wrote = true;
         goto published;
     }
 #define PUBLISH_SRT(type, target)                                             \
-    if (type_mask & (1U << (type))) {                                        \
+    if (field_mask & (1U << (type))) {                                        \
         float value = *values++;                                             \
         if (mask & (1U << (type))) {                                         \
             target = value;                                                  \
             wrote = true;                                                    \
         }                                                                    \
     }
-    if (type_mask & (1U << HSD_A_J_ROTX)) {
+    if (field_mask & (1U << 0)) {
         float value = *values++;
-        if (mask & (1U << HSD_A_J_ROTX)) {
+        if (mask & (1U << 0)) {
             PUBLISH_ROTX(value);
             wrote = true;
         }
     }
-    PUBLISH_SRT(HSD_A_J_ROTY, joint->rotate.y);
-    PUBLISH_SRT(HSD_A_J_ROTZ, joint->rotate.z);
-    PUBLISH_SRT(HSD_A_J_TRAX, joint->translate.x);
-    PUBLISH_SRT(HSD_A_J_TRAY, joint->translate.y);
-    PUBLISH_SRT(HSD_A_J_TRAZ, joint->translate.z);
-    if (type_mask & (1U << HSD_A_J_SCAX)) {
+    PUBLISH_SRT(1, joint->rotate.y);
+    PUBLISH_SRT(2, joint->rotate.z);
+    if (field_mask & (1U << 4)) {
         float value = *values++;
-        if (mask & (1U << HSD_A_J_SCAX)) {
+        if (mask & (1U << 4)) {
             joint->scale.x = fabsf_bitwise(value) < 1e-3F ? 1e-3F : value;
             wrote = true;
         }
     }
-    if (type_mask & (1U << HSD_A_J_SCAY)) {
+    if (field_mask & (1U << 5)) {
         float value = *values++;
-        if (mask & (1U << HSD_A_J_SCAY)) {
+        if (mask & (1U << 5)) {
             joint->scale.y = fabsf_bitwise(value) < 1e-3F ? 1e-3F : value;
             wrote = true;
         }
     }
-    if (type_mask & (1U << HSD_A_J_SCAZ)) {
+    if (field_mask & (1U << 6)) {
         float value = *values++;
-        if (mask & (1U << HSD_A_J_SCAZ)) {
+        if (mask & (1U << 6)) {
             joint->scale.z = fabsf_bitwise(value) < 1e-3F ? 1e-3F : value;
             wrote = true;
         }
     }
+    PUBLISH_SRT(7, joint->translate.x);
+    PUBLISH_SRT(8, joint->translate.y);
+    PUBLISH_SRT(9, joint->translate.z);
 #undef PUBLISH_SRT
 published:
 #undef PUBLISH_ROTX
+#endif
     if (wrote) {
         joint->flags |= JOBJ_MTX_DIRTY;
     }

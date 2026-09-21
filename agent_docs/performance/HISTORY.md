@@ -5,6 +5,574 @@ line. The current benchmark contract, concise retained summary, imported branch 
 architectural attempt records are indexed in [`README.md`](README.md). Forensic artifacts remain
 under ignored `reports/triage/`.
 
+## Final code recovery — 2026-09-21
+
+The requested 120,000 FPS threshold is met at both resident batch sizes. Cleanup
+is committed at `83356f34`; **Optimize exact pose and animation hot paths** includes
+the subsequent code, tests and performance evidence. The final candidate retains
+compact pose dirty/root walks, direct input and GObj field access, exact Gekko seed
+and quaternion-weight
+math, canonical field-order SRT samples, independent sample ranks with contiguous
+loads, and masked affine translation publication. No compiler, benchmark, host
+setting, input tape, gameplay semantic, Match layout or snapshot-format change
+is retained. The sample array has 64 additional initialized bytes for its wide read.
+
+Eight adjacent pairs per batch alternate the first arm across four ABBA groups.
+Every pair improves; all 32 runs are included, including the three candidate-512
+samples below 120,000 FPS. The threshold claim is the median, not a minimum.
+All task builds, tests and profiling finished before this timing series.
+
+| Batch | Control median FPS | Candidate median FPS | Median paired gain | Control / candidate cycles per frame |
+| ---: | ---: | ---: | ---: | ---: |
+| 256 | 115,097 | 124,141.5 | +8.07% | 37,289.95 / 34,573.10 |
+| 512 | 111,239 | 120,606.5 | +8.62% | 38,583.70 / 35,586.40 |
+
+| Batch | Arm | All FPS samples, in collection order |
+| ---: | --- | --- |
+| 256 | Control | 113476, 113395, 115451, 114314, 115196, 115007, 115251, 115187 |
+| 256 | Candidate | 124627, 121221, 121295, 123928, 124355, 123574, 124684, 124881 |
+| 512 | Control | 111659, 110426, 107865, 110462, 113888, 111694, 110819, 113566 |
+| 512 | Candidate | 120779, 120434, 121188, 121932, 117711, 118281, 121942, 118578 |
+
+The comparison uses the original 508 human recordings / 4,684,452 input frames,
+262,144 timed match-frames per run, eight warmup ticks, 128-frame observation and
+terminal history, CPU 0, and the unchanged GNU 13.3.0 native-release profile.
+Both digests remain `64020ea131e1b3a7` / `8ae6f774c68378ea`, with 15 / 19 resets
+in every run. All 508 tape hashes match the original inventory; ordered identity
+is `3b34be0c4f050c2ced70de120ad7468af2efbefc99fdbf932b4f865c8ad87277`.
+
+The exact final source passes source/native/PPC/API/sealed-allocation/copy/save
+checks, 127 Python tests, native and release 512-recording gates (4,721,700
+transitions each, zero diagnostics/failures/errors), Wasm parity, and viewer/browser
+smoke. Focused source and production-object proofs below cover dirty traversal,
+stationary root constraints, every unit-float quaternion input, SRT publication,
+complete immutable sample tables, and affine matrix arithmetic. Gated text matches
+the screened executable and the code used for the final sample-publication proof.
+
+Match size remains 63,848 bytes; the ordinary arena remains 1,757,132 bytes with
+1,349 allocations before/after gameplay, and its snapshot remains 1,821,108 bytes.
+The construction peak is 2,119,308 arena bytes. GameData arena usage remains
+114,515,944 bytes and native DAT usage remains 151,551,424 bytes. Compiled sample
+values are a separate shared initialization allocation: 101,434,248 logical bytes
+plus the 64-byte read tail. There is no new gameplay allocation or per-Match cache.
+
+Final benchmark SHA-256:
+`01ea4049da2add19201b29a3c4d8299dcec01304efbb4fa655412a8f1252d964`.
+Final release runtime SHA-256:
+`a0424114a4ba01d62f719fb34d83cb9246cdc6f9d703411bf2ce3601212f3554`.
+The original committed control remains
+`1861b873b4e77575c135ec7e14cbd082becc8768760b66aa356c7a40863d5f51`.
+Frozen binaries, all raw logs, per-tape hashes, source patch, gate results and
+machine-readable metrics are under `reports/triage/perf_120k_20260921/final-load/`.
+The earlier below-target checkpoints and rejected candidates remain recorded
+below; none was rerun unchanged to select a more favorable final result.
+
+## Exact pose and math recovery — 2026-09-21
+
+The next uncommitted code packet retains the preceding compact dirty owner and
+adds these deletions under the same canonical state and workload:
+
+- Root translation uses the existing pose preorder and subtree sizes instead of
+  an ephemeral 1,024-byte affected map and per-node ancestor lookups. The same
+  custom-matrix, independent-parent and path barriers prune descendants. Stationary
+  constraint invalidation and every matrix operation remain unchanged.
+- Consecutive sampled rotation/translation components use fixed-size bit copies
+  from immutable GameData into canonical JObj SRT. No values, layout or filtering
+  change. Native GObj accessors express their single field read directly, and pose
+  ownership checks consume the canonical animation tag without an outlined joint
+  accessor. Arguments still evaluate once and nullable callers retain their checks.
+- Scalar acos constructs the rounded binary32 Gekko estimate from the existing
+  32-entry tables. Its positive radicand is normal and lies in [2^-23, 1], so the
+  general double classifier and float/double conversions are unnecessary. The
+  three Newton steps, atan polynomial, exceptional path and output remain exact.
+- The existing MSL vector owner evaluates quaternion acos in groups. The general
+  blend predicate proves each input is finite and strictly between -1 and 1.
+  Register table permutations produce the same Gekko seeds with no per-lane
+  emulator calls. The existing angle scratch buffer holds cosines, then angles,
+  and expands backward into the three sine inputs. No additional scratch array,
+  persistent state, allocation or table copy is introduced.
+
+The July 23 contiguous-clear rejection still applies: the recent fused compact
+clear/dirty walk was also slower. The August 3 packed-copy and wide-acos findings
+now have new controlled evidence. Fixed tuple copies improve every adjacent pair
+in this workload; the new acos kernel deletes both the former per-lane seed calls
+and its additional gather arrays. Its two four-pair screens improve seven of eight
+pairs, with median adjacent gains of 0.42% at 256 and 0.38% at 512. All samples,
+including the first losing 512 pair, remain in the evidence.
+
+### Fully validated intermediate checkpoint
+
+This checkpoint is short of the requested 120,000 FPS at resident 512. Further
+code work continues; the measurements are retained rather than rerun for a more
+favorable absolute result. Both arms use the original 508-recording,
+4,684,452-input-frame tapes, 262,144 timed match-frames, eight warmup ticks and
+128-frame observation/terminal history on CPU 0 of the 9950X3D. Compiler, host and
+benchmark settings are unchanged. No build, tests or profiling ran during timing.
+
+Eight adjacent pairs per size alternate which arm runs first. Every pair wins.
+
+| Batch | Committed control median FPS | Candidate median FPS | Median paired gain | Control / candidate cycles per frame |
+| ---: | ---: | ---: | ---: | ---: |
+| 256 | 115,535 | 121,085.5 | +4.44% | 37,148.65 / 35,445.45 |
+| 512 | 113,890.5 | 119,420 | +4.74% | 37,685.0 / 35,939.9 |
+
+All wall-FPS samples, in collection order within each arm:
+
+| Batch | Arm | FPS samples |
+| ---: | --- | --- |
+| 256 | Control | 116251, 116217, 115618, 115452, 115352, 115202, 116216, 115184 |
+| 256 | Candidate | 121405, 121389, 121044, 120455, 120283, 121456, 121127, 120889 |
+| 512 | Control | 112681, 113879, 113586, 114098, 114341, 112937, 114225, 113902 |
+| 512 | Candidate | 118077, 119255, 119319, 119521, 119535, 119760, 119620, 119009 |
+
+Candidate benchmark SHA-256:
+`bf36226e41fb8ba73fe219aa63fa31c4a145159889e5283ccea198258ade43a5`.
+Release runtime SHA-256:
+`3a1ec032f6fe3a2c403ef5a716c5b2da32ea091dd0ab25f1e3e7338c5b18178e`.
+Control remains the verified `83356f34` ELF
+`1861b873b4e77575c135ec7e14cbd082becc8768760b66aa356c7a40863d5f51`.
+Digests remain `64020ea131e1b3a7` / `8ae6f774c68378ea`, with 15 / 19 resets.
+All 508 tape hashes still match the original inventory; ordered identity is
+`3b34be0c4f050c2ced70de120ad7468af2efbefc99fdbf932b4f865c8ad87277`.
+
+Native and release each pass 512 recordings / 4,721,700 transitions with zero
+failures, diagnostics or errors. Source/native/PPC/API checks, 127 Python tests,
+Wasm parity and viewer/browser smoke pass. The added root oracle compares 4,096
+seeded trees, including stationary positions and constraints. Seed verification
+covers all 254 normal exponents and every 15-bit interpolation cell, including
+both discarded-byte endpoints: 16,646,144 comparisons against the original
+emulator. A separate check links the actual release math objects and covers every
+binary32 encoding strictly between -1 and 1, including signed zero and subnormals.
+Together with in-place and tail checks, all 2,131,754,764 comparisons match the
+scalar result. The gated executable has the identical text section to that proof's
+screened executable.
+
+State, allocation reserves and snapshot format are unchanged. The stepped arena
+remains 1,757,132 bytes / 1,349 allocations, and the snapshot is 1,821,108 bytes.
+Shared GameData remains 114,515,944 bytes. Logs, frozen binaries, patches, proofs,
+tape hashes and all timing samples are in
+`reports/triage/perf_120k_20260921/`; this intermediate checkpoint is in `final/`.
+
+### Rejected follow-up experiments
+
+All rejected code is removed. These screens use frozen immediate parents, the
+same tapes and complete benchmark contract; they are not comparisons with older
+403-recording README figures.
+
+| Owner / proposed deletion | Controlled result and disposition |
+| --- | --- |
+| Pose and scheduler prefetch | Mixed or slower at both sizes; no prefetch remains. |
+| Empty line-range guard | About +0.3% at 256, mixed/slower at 512; removed. |
+| Signed animation word assembly | Fewer loads but all four pairs lose; restored both parsers. |
+| Construction-time scale clamping | All four pairs lose roughly 0.8–1.1%; restored original table values and runtime clamps. |
+| Fused compact quaternion clear / dirty walk | Exact source oracle and native checks, but neutral at 256 and slower/mixed at 512; removed the helper, map and caller change. |
+| Scheduler current-object field deletion | Exact self/object deletion checks; smaller context but all pairs lose 0.6–0.8%. Original field, writers and snapshot layout restored. |
+| Retained sample-index local | All pairs slower; original reload/conversion restored. |
+| Outer null-animation guard | All pairs lose 1.2–2.0%; removed. |
+| Conditional unchanged flag store | All four pairs lose; unconditional source store restored. |
+| Last-child clear iteration | +0.4–0.9% at 256 but -0.4–1.2% at 512; original recursion restored. |
+| Deferred-only scheduler cursor publication | Mutation checks include a destructor deleting the next object at the same priority. All four pairs lose 0.6–1.4%; original stores and test fixture restored. |
+| Scheduler bit-test expression | Generated bit-test instruction, but mixed/neutral; restored. |
+| Rotation tuple before mask switch | -0.2–0.4% at 256, +0.23% at 512; original dispatch restored. |
+| Scheduler epoch local | No gameplay callback writes the epoch, but 256 loses 0.4–0.8% and 512 is nearly neutral; restored. |
+| Conditional atan zero-offset removal | All 2^32 input patterns match, but the additional branch loses all four pairs; restored. |
+| Atan range-specific return paths | All 2^32 input patterns match; the larger generated body loses three of four pairs. Original atan and polynomial restored. |
+| Vector acos empty-middle range | All 2,131,754,764 unit-float checks match, but 256 loses both pairs; restored the single reduction path. |
+| Plain 16-bit last sampled frame | Same descriptor size and source/native/release clock/flag oracle pass; three of four pairs lose. Restored packed frame, tests and original snapshot layout hash. |
+| Direct physics vector clears | 256 -0.36% / +0.69%, 512 -1.17% / +0.02%; pointer/zero scaffold removal is inconclusive and removed. |
+| Integer-unit double-seed exponent | 137,577,130 exact normal/subnormal/exception comparisons pass; two of four pairs lose. Original full-width exponent arithmetic restored. |
+| Runtime packed-sample permutation | All 511 channel masks remain exact, but contiguous load plus per-lane popcount ranks/permutation loses all four pairs. Original masked expand restored. |
+| Wide fused SRT concat | 3,145,728 matrices / 37,748,736 float lanes match old production objects, including aliases. All pairs lose: 256 candidate119110/120162 vs121364/120405;512 candidate116634/116737 vs118849/116947. Original three-row fused kernel restored. |
+| Sparse rotation-only 128-bit publication | All channel/filter/edgefloat checks pass, but all four pairs lose:256 candidate121283/122183 vs122241/122260;512 candidate118037/116138 vs119751/119058. Removed branch and restored uniform vector path. |
+
+
+The later packed-load/register-expand publisher also failed to establish a gain:
+256 candidates 120630/121160 versus 121440/119582, and 512 candidates
+112915/116754 versus 116467/115391. Its separate load mask and register expansion
+are removed. The original memory expand remains the sole vector publisher.
+
+A cold layout trial put each program's constant tuples beside its frame rows,
+replacing the globally separated constant suffix. All 380,066 node records retain
+every non-offset byte and all 25,358,562 sample words match through their declared
+node/frame/channel addresses. Allocation sizes and all runtime instructions were
+unchanged. Nevertheless, all four comparisons lose: 256 candidates 117120/118370
+versus 118665/119280; 512 candidates 115207/112994 versus 115533/115939.
+The original compactor and offsets are restored. Evidence is in
+`sample-local-constants/` under the September 21 campaign. Revisit requires a
+working-set change beyond bringing these existing constant tuples closer to
+frame rows; this packing alone does not improve locality in the measured workload.
+
+The subsequent full-gate seed-conversion checkpoint retained all 32 samples in
+`final-convert/`: medians 120,485.5 / 118,464.5 FPS and adjacent gains +4.64% /
++4.55% against the same committed control. All 16 pairs win, but 512 still misses
+the target. Its benchmark is
+`53d6c1d830e0161563558b58801ed2697f27c3da057a5b7bf2427fa72e9a311b`;
+all source/native/PPC, 127 Python, 512 native/release and Wasm/viewer gates pass.
+
+A native output-transport trial serialized each unchanged 980-byte observation
+into a stack record, streamed its complete 64-byte cache lines, copied boundary
+bytes ordinarily, and fenced before return. The strategy follows the cache and
+ordering requirements in [Intel's optimization manual, section 9.4.1](https://cdrdv2-public.intel.com/821612/248966-Optimization-Reference-Manual-V1-050.pdf).
+It passes immediate complete-byte comparisons at every alignment, masked writes
+and padded strides. Both digests match, but adjacent results are +0.23% / +0.95%
+at 256 and -0.28% / -0.11% at 512. The extra record copy does not pay for cache
+allocation avoidance. The helper, temporary, intrinsics and test extension are
+removed; no streaming-store policy remains. Revisit requires evidence that output
+traffic dominates a changed producer/consumer workload.
+
+The direct GObj accessors initially had mixed marginal evidence. Ablating them
+from the complete validated candidate loses all four adjacent pairs: roughly
+1.6% at 256 and 0.8–1.1% at 512. They remain part of the candidate. No scheduler
+field, cursor, epoch, representation or snapshot-version change remains.
+
+The source input `SET_STICKS` macro now assigns the same two fields directly.
+It removes 48 pointer-address/spill/load instructions across eight callsites and
+reduces the protected function's stack frame from 184 to 56 bytes. CPU function
+calls and x-before-y stores remain in source order. Two adjacent-pair screens
+against `final-convert` improve seven of eight comparisons:
+
+| Screen | Batch | Control FPS | Candidate FPS |
+| --- | ---: | --- | --- |
+| 1 | 256 | 120495, 119340 | 121323, 121539 |
+| 1 | 512 | 117925, 119146 | 119426, 118592 |
+| 2 | 256 | 120575, 119491 | 121009, 121267 |
+| 2 | 512 | 117615, 118276 | 119772, 119401 |
+
+Both digests match. This local assignment simplification keeps all human and CPU
+input processing; the earlier whole-input specialization remains rejected.
+
+Packed SRT publication now expands its existing mask into vector registers and
+writes only the authored, unfiltered JObj fields. The initial channel-order form
+wins seven of eight adjacent pairs against direct stick stores (all four 512
+pairs win). The losing 256 pair contains 74 ms of descheduling; it remains in the
+raw result. A refinement changes the singular immutable mask and packed values
+to JObj field order, deleting runtime mask remapping and permutation. Its first
+four pairs all improve. No source track format, Match state, table size, callback
+or compiler setting changes.
+
+The field-level oracle checks all 511 nonempty masks, both filtering modes,
+publish/no-update and 32 edge/random float trials: 65,408 full-JObj comparisons
+pass in scalar native and actual production-release builds. Read-only debugger
+dumps from the frozen production executables additionally compare all 380,066
+initialized nodes and 25,358,562 binary32 values: every non-mask metadata byte is
+identical; masks have exactly the declared mapping, and values have only the
+corresponding permutation. All allocation offsets, strides and counts match.
+
+Moving scale clamps after compaction was also screened against the new vector
+owner. Unlike the earlier pre-compaction trial, it preserved constant detection
+and row placement while deleting vector abs/compare/select. Nevertheless, three
+of four pairs lose: -0.55% / -1.50% at 256 and +0.22% / -1.95% at 512. It is
+removed entirely. The retained publisher keeps the exact runtime scale clamp.
+
+The field-order repeat improves three of four pairs, for seven of eight total.
+A later mask-only admission trial was mixed at 512 (-2.06% / +0.08%) and removed.
+The rotation-only tuple bypass also loses all four pairs; it duplicates admission
+before the vector path and remains absent. Scalar value-count admission and the
+single vector publication path are restored before the complete gate.
+
+The complete SRT checkpoint passes all gates again: 127 Python tests, 512 native
+and 512 release recordings / 4,721,700 transitions per build, PPC/API/sealed
+allocation/copy/save, Wasm and browser. All 16 adjacent comparisons improve, but
+its 32-sample medians are 122,658.5 FPS at 256 and 119,851.5 at 512, still short
+of the requested target. Controls are 114,809.5 / 113,172; paired gains are +6.78%
+/ +5.90%. All raw samples and provenance remain in `final-srt/`; benchmark
+SHA-256 is `70cdb3117d8ac1d37607c763f77fa1e5dc2bf8bbe3b2ccc06bf056d449223dd5`.
+The full text section matches the field-order executable used for the complete
+table proof. Every original tape hash and all memory sizes remain unchanged.
+Further code work continues without repeating this unchanged final series.
+
+
+### Combined quaternion weights
+
+The general quaternion blend now evaluates its angle and both source weights in
+one vector-block loop. It reuses the existing acos and sincos arithmetic owners;
+the shared sincos helper still produces both results. The caller reuses the cosine
+scratch as first weights and keeps one second-weight array, deleting 3,920 bytes
+of stack arrays, the triplet expansion pass and scalar division pass. Quaternion
+sign selection, exceptional branches, fused output products and flag publication
+remain source-shaped. No persistent state or allocation changes.
+
+Two direct screens against `final-srt` improve six of eight adjacent comparisons
+(three of four at 512); the losing samples remain included:
+
+| Screen | Batch | Control FPS | Candidate FPS |
+| --- | ---: | --- | --- |
+| 1 | 256 | 120829, 120707 | 120909, 120491 |
+| 1 | 512 | 116607, 116150 | 116854, 117910 |
+| 2 | 256 | 122154, 120974 | 122986, 121916 |
+| 2 | 512 | 118466, 117420 | 116605, 117698 |
+
+The production-object oracle compares every binary32 cosine strictly inside
+(-1, 1), including signed zero and subnormals, at weight 0.375 against the prior
+vector pipeline. Random weights and all tails add coverage: 4,261,674,944 weight
+comparisons match. Native and release smoke also compare separate/in-place
+outputs, padding, six fixed weights and complete live-JObj blends against the
+scalar source function.
+
+Returning only sine from the shared helper with an optional cosine pointer
+passes the same proof but loses all four pairs (-1.83% / -0.89% at 256,
+-1.04% / -0.27% at 512). It is removed. A final quaternion temporary allowed the
+existing compiler to emit one packed multiply/FMA/store instead of four scalar
+sequences, but three of four whole-runtime pairs lose amid wider host variation.
+That production edit is also removed; its public-blend source oracle remains to
+validate the combined weight owner. The full gate passes 127 Python tests, all 512 native and release recordings
+(4,721,700 transitions each), source/PPC/API/sealed/copy/save and Wasm/viewer.
+An additional 10,747,922 comparisons verify both shared sine/cosine outputs,
+including quadrant-adjacent encodings. Every tape, allocation size and state
+layout remains unchanged. All 16 final pairs improve, but the medians are
+120,082 / 114,820.5 FPS against controls 112,757.5 / 109,707; paired gains are
++7.09% / +4.63%. The target is still missed. All 32 samples and gate results
+remain in `final-slerp/`; benchmark SHA-256 is
+`7996ed6343a96cb4732f1d40d1b0cb4e576cc6e8c585f46b29678ca16158b08c`.
+Its full text section matches the executable used for the exhaustive weight proof.
+Further code work continues without repeating this unchanged final series.
+
+
+### Sample admission and affine translation
+
+The compiled node's existing `sample_count` now means the number of valid stored
+sample frames, including zero for nodes with no compiled values. Construction
+sets that count once; publication uses its existing bounds check and removes the
+separate `value_count` admission. No descriptor size, clock, table allocation or
+decoder behavior changes. Read-only production-executable dumps verify that all
+380,066 records are identical except the count becoming zero on 92,230 empty
+nodes, and all 25,358,562 sample words remain identical. The source oracle also
+checks empty, out-of-range and no-update cases. Its isolated first screen was
+mixed, so no independent throughput gain is attributed to this admission change.
+
+The fused native SRT matrix kernel keeps the fourth lane in its vector register.
+One masked FMA replaces extracting translation, performing its scalar FMA and
+reinserting it. The other three lanes pass through unchanged; local SRT math,
+parent-scale compensation and operation order are unchanged. Existing ISA build
+settings select the instruction. The ordinary non-AVX512VL implementation keeps
+its existing scalar translation sequence.
+
+Actual before/after production objects match across 3,145,728 matrices and
+37,748,736 binary32 lanes, including signed zero, subnormals, infinities, NaNs,
+parent-scale compensation and aliases. A durable native/release smoke fixture
+additionally compares 4,096 Euler inputs through both fused entry points against
+independent `HSD_MtxSRT` followed by the scalar source concat formula. That fixture
+uses the production contract's distinct parent/output matrices; an initial extra
+alias case exposed the pre-existing non-FMA scalar implementation's lack of alias
+support. The initial failure log is retained, and alias coverage remains in the
+actual release-object proof.
+
+Two direct screens against `sample-count` improve five of eight comparisons,
+including three of four at 512. No independent 256 gain is claimed:
+
+| Screen | Batch | Control FPS | Candidate FPS |
+| --- | ---: | --- | --- |
+| 1 | 256 | 122704, 122287 | 123105, 122497 |
+| 1 | 512 | 120206, 118648 | 120633, 120269 |
+| 2 | 256 | 122617, 122913 | 122209, 122857 |
+| 2 | 512 | 119642, 116901 | 120336, 116023 |
+
+The combined admission/matrix candidate against `final-slerp` gives 256 candidates
+122453/122796 versus 123954/122614, and 512 candidates 119297/118644 versus
+118048/115963. All samples remain included. A fresh completed-owner ablation also
+keeps the combined quaternion weights: the earlier `final-srt` pipeline loses
+three of four comparisons, including both 512 pairs (117571/107495 versus
+119422/118610). The 107495 sample is retained; it is not used to claim an isolated
+marginal gain.
+
+The `final-matrix` candidate again passes all source/native/PPC/API checks,
+127 Python tests, both full 512-recording gates (4,721,700 transitions each,
+zero diagnostics/failures/errors), and Wasm/viewer/browser smoke. All memory
+sizes, the original 508 tape hashes and committed control ELF remain unchanged.
+Its gated text matches the frozen executable used for the matrix proof and
+screens. Benchmark SHA-256 is
+`bb0dfc11403a8946e621eebd48fae2c81747dfc82865b34b77982d2a0806caab`;
+release runtime SHA-256 is
+`1f2c700a4d30ff22ac2be4372d709199aa23b8296fde395b1c14e37f968811a3`.
+The predeclared final series uses eight adjacent pairs per batch against the
+original `83356f34` control, alternating the first arm across four ABBA groups.
+It finishes below target again: medians 122,579.5 /
+116,317.5 FPS against 113,885.0 / 110,297.0; median adjacent gains
+are +7.21% / +5.90%. Thirteen of sixteen pairs improve. The three losing
+pairs and all other samples remain in `final-matrix/throughput/samples.json`;
+no sample is excluded and the unchanged candidate is not rerun as a new final.
+Further code optimization continues.
+
+
+The subsequent [compact collision vertex packet](attempts/2026-09-21-compact-collision-vertices.md)
+removed immutable local-coordinate duplication and cut each mutable record from
+24 to 16 bytes. Native/release source oracles and API/save checks passed, but
+three of four comparisons lost; the 128-byte ordinary Match saving did not improve
+throughput. Its entire representation, snapshot hash change and fixture are
+removed. The record preserves the owner audit, all measurements and revisit criteria.
+
+
+### Independent sample ranks and contiguous loads
+
+The sampled SRT publisher expands constant indices 0..15 into authored field
+positions, then permutes a contiguous sample read using those ranks. Rank
+computation no longer depends on sampled memory. The generated code uses
+`vpexpandd` on the shared constant identity vector and `vpermps` on the sample
+operand. It removes the original memory-form sample expansion without the earlier
+rejected route's per-lane popcounts or masked-load count/shift work. The exact
+scale clamp, filtered field stores, dirty flags and scalar backend stay unchanged.
+
+The immutable allocation has sixteen initialized tail floats so every actual
+64-byte sample read, including the final row, stays within its allocation. Logical
+counts, offsets, strides and all sample words remain unchanged. This is required
+load storage; no alignment, arena coloring, compiler or benchmark setting changes.
+The separate shared sample allocation grows by 64 bytes; the GameData arena,
+Match state and gameplay allocation counts are unchanged.
+The field-level fixture supplies the same readable tail.
+
+Actual release smoke passes all 511 channel masks, filtering/no-update modes and
+special/random float inputs. Read-only production-executable dumps additionally
+verify all 380,066 node records and 25,358,562 logical float words byte for byte
+against `sample-count`; all 64 appended bytes are zero.
+
+Two fixed-contract screens against `final-matrix` improve seven of eight pairs,
+including all four at batch 512. The losing 256 pair remains included:
+
+| Screen | Batch | Control FPS | Candidate FPS |
+| --- | ---: | --- | --- |
+| 1 | 256 | 124730, 123345 | 125222, 124616 |
+| 1 | 512 | 120475, 120529 | 122780, 121321 |
+| 2 | 256 | 125054, 123401 | 124490, 123978 |
+| 2 | 512 | 118546, 121236 | 123199, 122196 |
+
+The complete gate and final comparison pass; both medians exceed 120,000 FPS
+as recorded above. Raw source, objects, table proof and direct paired logs are
+under `sample-expand-index/`; accepted final evidence is under `final-load/`.
+
+## Code performance recovery — 2026-09-21
+
+The uncommitted candidate after `83356f34` moves registered fighter dirty
+propagation into the existing canonical pose preorder/tree-count owner.
+`HSD_JObjSetMtxDirtySub` retains its source traversal for generic roots. The
+compact path preserves unconditional root marking, instance boundaries,
+independent-parent boundaries and the exact custom-matrix-aware dirty predicate.
+Already-dirty children prune their entire subtree even when descendants are clean.
+
+The existing ftParts cold-domain proof remains the boundary: omitted costume
+parts are absent/detached, and inserted presentation-only accessories have no
+gameplay matrix consumer. They already stay outside canonical pose animation and
+root publication, and their unused dirty bits are not published by the live pose
+walk. Explicit cold-root calls retain the generic source owner. No topology
+cache, extra state, allocation, layout change or snapshot-format change remains.
+
+The same 508-recording / 4,684,452-input-frame workload runs on CPU 0 of the
+9950X3D using unchanged GCC 13.3 strict release flags, resident/logical 256 or 512,
+262,144 timed match-frames, eight warmup ticks and 128-frame output history.
+All tapes match the original content inventory. Eight adjacent pairs per size
+alternate first arm; all 32 samples remain in the result and every pair improves.
+
+| Batch | Control median FPS | Candidate median FPS | Median paired gain | Median control / candidate cycles/frame |
+| ---: | ---: | ---: | ---: | ---: |
+| 256 | 115,082 | 116,461.0 | +1.11% | 37,294.6 / 36,853.2 |
+| 512 | 113,623 | 115,036.5 | +1.06% | 37,773.6 / 37,309.5 |
+
+All wall-FPS samples, in collection order within each arm:
+
+| Batch | Arm | FPS samples |
+| ---: | --- | --- |
+| 256 | Control | 115301, 115435, 114259, 115062, 114898, 115102, 114982, 115255 |
+| 256 | Candidate | 116487, 116052, 116727, 116435, 117160, 116161, 116893, 116392 |
+| 512 | Control | 113637, 114193, 113609, 113976, 113591, 113736, 113524, 113332 |
+| 512 | Candidate | 114819, 115266, 114765, 115214, 115302, 114859, 115385, 114712 |
+
+Digests remain `64020ea131e1b3a7` / `8ae6f774c68378ea`, with 15 / 19 resets.
+README medians round to 116,461 / 115,037 FPS. These improve the initial refresh
+below; its previous 403-recording figures are not a same-workload baseline.
+Only the adjacent paired gains are attributed to this code change.
+
+Native and release gates each pass 512 recordings / 4,721,700 transitions with
+zero diagnostics/failures/errors. Source/native/PPC checks, 127 Python tests,
+API copy/save/restore and sealed-allocation checks, Wasm parity and browser viewer
+smoke pass. A literal source-recursion oracle covers 90,112 generic and registered
+subtree cases, including custom matrices, independent parents, shared instance
+children, dirty descendants, cold roots and outside-tree sentinels. All live flags
+match. Stepped arena usage stays at 1,757,132 bytes / 1,349 allocations; storage
+and snapshot format are unchanged.
+
+Candidate benchmark SHA-256: `36b15c7c3c3f16a392c0a9bb831d7caef0519e6c4b531848e383a0e670b8dc53`.
+Release runtime SHA-256: `741798bd1cb629f3af9f5cade5602dc3b465e3cd12148b0d654e50236b8f61f2`.
+Control benchmark SHA-256:
+`1861b873b4e77575c135ec7e14cbd082becc8768760b66aa356c7a40863d5f51`.
+A clean rebuild of committed source reproduced the complete control ELF exactly.
+Ordered tape-content identity:
+`3b34be0c4f050c2ced70de120ad7468af2efbefc99fdbf932b4f865c8ad87277`.
+All logs, frozen binaries, source patches and provenance are under
+`reports/triage/perf_recovery_20260921/`; final accepted evidence is in `final/`.
+
+The initial PC profile attributed 9.14% of samples to the pose interpreter and its
+inlined work, 4.07% to scheduler dispatch and 3.51% to matrix invalidation.
+Diagnostic timings are excluded from throughput. A build audit invalidated early
+trial attribution: restoring source backups with preserved timestamps retained
+stale objects. The apparent epoch-only gain also contained a compact dirty
+prototype with an incorrect raw-bit test for custom matrices. Those binaries and
+comparisons are not acceptance evidence. The old build was preserved, the release
+rebuilt from an empty directory, and subsequent source restores refreshed timestamps.
+
+Fresh screens rejected epoch-byte storage alone (neutral), duplicate pose-admission
+removal (mixed), dirty tail recursion (slower), generic dirty child-list traversal
+(mixed), and mask-safe flag/dirty fusion (+0.59% at 256, -0.07% at 512). The final
+correct compact traversal was also compared with/without epoch-byte storage:
+its extra layout change helped 256 by about 0.42% but cost 512 about 0.14%, so it
+and its snapshot-version bump were removed. Other unretained trials covered pose
+decoder metadata, root ancestry traversal, scheduler masks and field grouping;
+the forensic worklog preserves their source and attribution caveats. No rejected
+candidate or experimental mode remains in production.
+
+## README benchmark refresh — 2026-09-21
+
+Measured `5e036b4a` with the local admission/corpus cleanup, using strict native
+release GCC 13.3 on the Ryzen 9 9950X3D, CPU 0 (96 MiB V-cache CCD), performance
+governor. No runtime or benchmark implementation changed for this measurement.
+Root targets `benchmark-9950x3d-vcache-{256,512}` used
+`BENCHMARK_MATCH_FRAMES=262144`, eight warmup ticks, true resident batches and
+128-frame observation/terminal history. Three samples per size ran sequentially
+in alternating 256/512 order; all samples are retained.
+
+| Batch | FPS samples | Median FPS | Digest | Resets |
+| ---: | --- | ---: | --- | ---: |
+| 256 | 110415, 113458, 114135 | 113458 | `64020ea131e1b3a7` | 15 |
+| 512 | 109982, 111556, 107099 | 109982 | `8ae6f774c68378ea` | 19 |
+
+The workload contains 508 human recordings / 4,684,452 input frames; four CPU
+recordings are skipped by the controller-only tape format. These medians formed
+the initial README refresh, superseded by the code-recovery measurements above.
+Its previous values used 403 recordings, so the difference is not a controlled
+runtime comparison. Digests and reset
+counts are identical within each size. `make validation-release-supported-domain`
+passes all 512 recordings / 4,721,700 transitions with zero diagnostic/fail/error.
+
+Release benchmark SHA-256:
+`1861b873b4e77575c135ec7e14cbd082becc8768760b66aa356c7a40863d5f51`.
+Ordered tape-content identity (replay path, NUL, tape SHA-256, newline):
+`3b34be0c4f050c2ced70de120ad7468af2efbefc99fdbf932b4f865c8ad87277`.
+Raw samples, host details and per-tape hashes are under
+`reports/triage/readme_benchmark_20260921/`.
+
+## Strict replay admission workload — 2026-09-20
+
+The local admission cleanup on `5e036b4a` changes the replay workload, not the
+runtime. It removes 133 ineligible recordings from all including suites, adds
+seven source-checked corpus replacements and gives three previously traced
+captures explicit legacy arithmetic profiles. The complete native gate is now
+512 exact recordings / 4,721,700 transitions with no classified-success path.
+All 502 other retained output-lock records are unchanged; the three profile
+recoveries and seven new captures have measured native/PPC locks.
+
+Benchmark preparation applies admission even to cached tapes and increments
+its cache revision to 3. The resulting controller workload has 508 recordings
+and 4,684,452 input frames; four CPU recordings are explicitly skipped because
+the controller-only tape cannot represent their processed AI inputs. Bounded
+release playback and the subsystem profile both pass at resident/logical 16,
+4,096 match-frames, eight warmup ticks and 128 observation history, producing
+`09644ea1039ba5af` in both builds. This is a compatibility check, not an A/B
+throughput result.
+
+Historical digests and FPS remain evidence for their recorded workloads. Future
+performance comparisons must freeze the same admitted manifest, profiles and
+exported config/input bytes for both arms. Do not interpret changed corpus
+selection as a speedup. Scratch evidence is under
+`reports/triage/pr_sequence_20260920/replay_cleanup/`.
+
 ## Kirby integration memory and profile compatibility — 2026-09-20
 
 PR #29 integrated onto `53ebe390` adds the final supported fighter's copy
@@ -374,6 +942,28 @@ correctness work, not as a throughput optimization. The complete optimized-relea
 310 PASS / 56 unchanged CLASSIFIED / zero XPASS/fail/error over 366 replays and 3,501,461 frames;
 source/native/PPC/Wasm gates pass. Release benchmark SHA-256:
 `8949d99cf7270be2d778e89bb934f6d07d08c95d042ba22a7174f57d671ed29b`.
+
+## Archived performance baseline — 2026-08-04
+
+The former BASELINE.md checkpoint used 366 recordings, before the September
+capability-export and strict-admission corrections. Its full contract and memory/
+profile census remain in `83356f34:agent_docs/performance/BASELINE.md`. Preserve
+its unique throughput evidence here when refreshing the current baseline.
+
+Candidate based on `02cfe013`, benchmark SHA-256
+`45b02500e300c850250385bf9c0dd6e34edd0bcb808f6019b47eebc81ede3318`, measured the same
+262,144-frame/eight-warmup/128-history shape with strict GCC 13.3 on CPU 0.
+
+| Batch | FPS samples | Cycles/frame samples | Median FPS | Digest |
+| ---: | --- | --- | ---: | --- |
+| 256 | 110485, 112253, 112767 | 38846.5, 38234.8, 38060.3 | 112253 | `bdff41cf74a54850` |
+| 512 | 106281, 106985, 110145 | 40383.1, 40117.3, 38966.4 | 106985 | `ee9d93c545aa3ef9` |
+
+Adjacent paired gains versus `02cfe013` were +3.36%/+9.80%/+11.62% at 256
+(median +9.80%) and +8.23%/+3.41%/+10.37% at 512 (median +8.23%). All arms were
+retained. Correctness was 310 PASS / 56 then-existing CLASSIFIED / zero errors
+across 3,501,461 transitions. These are historical results, not current acceptance
+rules or current-corpus performance identities.
 
 ## Canonical pose/dynamics throughput checkpoint — 2026-08-02
 

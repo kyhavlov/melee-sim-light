@@ -38,7 +38,7 @@ static s32 lb_803BA030[] = { 7, 4, 5, 6 };
 bool lb_8000B074(HSD_JObj* jobj)
 {
 #ifdef MSL_CORE_NATIVE
-    if (msl_fighter_pose_owns_joint(jobj)) {
+    if (jobj != NULL && msl_fighter_pose_owns_animation(jobj->aobj)) {
         return msl_fighter_pose_is_animating(jobj);
     }
 #endif
@@ -54,7 +54,7 @@ bool lb_8000B074(HSD_JObj* jobj)
 bool lb_8000B09C(HSD_JObj* jobj)
 {
 #ifdef MSL_CORE_NATIVE
-    if (msl_fighter_pose_owns_joint(jobj)) {
+    if (jobj != NULL && msl_fighter_pose_owns_animation(jobj->aobj)) {
         return msl_fighter_pose_tree_is_animating(jobj);
     }
 #endif
@@ -88,7 +88,7 @@ bool lb_8000B09C(HSD_JObj* jobj)
 bool lb_8000B134(HSD_JObj* jobj)
 {
 #ifdef MSL_CORE_NATIVE
-    if (msl_fighter_pose_owns_joint(jobj)) {
+    if (jobj != NULL && msl_fighter_pose_owns_animation(jobj->aobj)) {
         return msl_fighter_pose_tree_rewound(jobj);
     }
 #endif
@@ -338,7 +338,7 @@ static HSD_JObj* lbFindJObjWithAObj(HSD_JObj* jobj)
 float lbGetJObjFramerate(HSD_JObj* jobj)
 {
 #ifdef MSL_CORE_NATIVE
-    if (msl_fighter_pose_owns_joint(jobj)) {
+    if (jobj != NULL && msl_fighter_pose_owns_animation(jobj->aobj)) {
         return msl_fighter_pose_tree_rate(jobj);
     }
 #endif
@@ -352,7 +352,7 @@ float lbGetJObjFramerate(HSD_JObj* jobj)
 float lbGetJObjCurrFrame(HSD_JObj* jobj)
 {
 #ifdef MSL_CORE_NATIVE
-    if (msl_fighter_pose_owns_joint(jobj)) {
+    if (jobj != NULL && msl_fighter_pose_owns_animation(jobj->aobj)) {
         return msl_fighter_pose_tree_frame(jobj);
     }
 #endif
@@ -366,7 +366,7 @@ float lbGetJObjCurrFrame(HSD_JObj* jobj)
 float lbGetJObjEndFrame(HSD_JObj* jobj)
 {
 #ifdef MSL_CORE_NATIVE
-    if (msl_fighter_pose_owns_joint(jobj)) {
+    if (jobj != NULL && msl_fighter_pose_owns_animation(jobj->aobj)) {
         return msl_fighter_pose_tree_end(jobj);
     }
 #endif
@@ -782,9 +782,8 @@ static void msl_blend_quaternion_batch(Quaternion* first, Quaternion* second,
                                        const uint8_t* active, size_t count,
                                        float weight)
 {
-    float angles[MSL_LB_BLEND_MAX_JOINTS * 3];
-    float sin_values[MSL_LB_BLEND_MAX_JOINTS * 3];
-    float cos_values[MSL_LB_BLEND_MAX_JOINTS * 3];
+    float first_weights[MSL_LB_BLEND_MAX_JOINTS];
+    float second_weights[MSL_LB_BLEND_MAX_JOINTS];
     uint8_t general_joint[MSL_LB_BLEND_MAX_JOINTS];
     size_t general_count = 0;
     size_t i;
@@ -793,8 +792,6 @@ static void msl_blend_quaternion_batch(Quaternion* first, Quaternion* second,
         Quaternion sum;
         Quaternion dif;
         float cosom;
-        float theta;
-        size_t angle;
         if (!active[i]) {
             continue;
         }
@@ -822,30 +819,20 @@ static void msl_blend_quaternion_batch(Quaternion* first, Quaternion* second,
         if ((1.0F + cosom) > 1e-10F &&
             (1.0F - cosom) > 1e-10F)
         {
-            theta = acosf(cosom);
-            angle = general_count * 3;
             general_joint[general_count] = (uint8_t) i;
-            angles[angle + 0] = theta;
-            angles[angle + 1] = (1.0F - weight) * theta;
-            angles[angle + 2] = weight * theta;
-            ++general_count;
+            first_weights[general_count++] = cosom;
         } else {
             HSD_QuatLib_8037EF28(&first[i], &second[i], &output[i]->rotate,
                                  weight);
             msl_blend_set_flags(output[i], true);
         }
     }
-    msl_sincosf_many(angles, sin_values, cos_values,
-                     (int) general_count * 3);
+    msl_slerp_weights_many(first_weights, weight, first_weights,
+                            second_weights, (int) general_count);
     for (i = 0; i < general_count; ++i) {
         size_t joint = general_joint[i];
-        size_t angle = i * 3;
-        float sinom;
-        float sp;
-        float sq;
-        sinom = sin_values[angle + 0];
-        sp = sin_values[angle + 1] / sinom;
-        sq = sin_values[angle + 2] / sinom;
+        float sp = first_weights[i];
+        float sq = second_weights[i];
         output[joint]->rotate.x =
             __fmadds(sp, first[joint].x, sq * second[joint].x);
         output[joint]->rotate.y =

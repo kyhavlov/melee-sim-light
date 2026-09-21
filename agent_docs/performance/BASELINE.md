@@ -1,107 +1,86 @@
 # Current performance baseline
 
-This is the comparison point for production performance work. Refresh it only with the complete
-resident replay workload below, unchanged digests, and the complete correctness/API/Wasm gates.
-The instrumented profiler identifies owners; its FPS is not a throughput result.
+This is the production comparison point after strict replay admission and the
+retained pose, input and exact-math code optimizations. Historical workloads
+remain in [HISTORY.md](HISTORY.md); their absolute FPS is not a controlled
+comparison with this corpus.
 
 ## Provenance
 
-- Revision: third 150k-campaign checkpoint candidate based on `02cfe013`
-- Release benchmark SHA-256:
-  `45b02500e300c850250385bf9c0dd6e34edd0bcb808f6019b47eebc81ede3318`
-- Date: 2026-08-04
-- Host: AMD Ryzen 9 9950X3D, CPU 0 (V-Cache CCD), Linux 7.0 x86-64
-- Compiler: GCC 13.3.0, strict native release profile, `-march=native -mtune=native`
-- Runtime: source-shaped per-Match scheduler with compact gameplay-live fighter pose, exact dense
-  ordinary Figa samples, direct canonical fighter-animation spans, lazy mutable Figa decoder
-  ownership, construction-bound dynamic-hurt membership, fused exact JObj/dynamics transforms,
-  exact quaternion compiler boundaries, exact O1 fighter map collision, direct hosted scheduler
-  dispatch, source-defined Ice Climbers item projection, immutable authored-joint quaternions,
-  exact batched fighter-pose blends, frame-major compiled Figa samples, direct native motion-program
-  binding, register-generated exact wide-trig quadrant factors, duplicate input-predicate deletion,
-  exact negative-wall-query culling, a handshake-preserving Dream Land background-animation cut,
-  compact lossless pose samples, exact native general matrix concat, direct dynamics direction
-  products, exact scalar tangent sharing, direct fighter-part membership, exact stage-intersection
-  rejection, direct output publication, native exact square-root owners, a conservative ceiling
-  broad phase, a native x86 `acosf` estimate seed (retired after Bowser counterexamples; see HISTORY.md), and the 16-character merged runtime
-- Correctness: 366/366 accepted (`310 PASS`, `56 CLASSIFIED`, zero XPASS/fail/error) across
-  3,501,461 validated frames. Twenty-five obsolete raw-pointer/pool-residue classifications are
-  replaced by one genuine Whispy RNG-phase classification, a net reduction of 24, without changing
-  gameplay.
-- Source synchronization, native API/copy/save-restore and sealed-allocation smoke, optimized
-  release validation, PPC smoke, and Wasm parity are green on this exact candidate.
+- Revision: **Optimize exact pose and animation hot paths**, following `83356f34`.
+- Date: 2026-09-21.
+- Host: AMD Ryzen 9 9950X3D, CPU 0, 96 MiB V-cache CCD, Linux 7.0.0-31 x86-64.
+- Compiler: GCC 13.3.0, unchanged strict root native-release profile.
+- Governor: existing `performance` setting; host settings were not changed.
+- Candidate benchmark SHA-256: `01ea4049da2add19201b29a3c4d8299dcec01304efbb4fa655412a8f1252d964`.
+- Candidate release runtime SHA-256: `a0424114a4ba01d62f719fb34d83cb9246cdc6f9d703411bf2ce3601212f3554`.
+- Control benchmark SHA-256:
+  `1861b873b4e77575c135ec7e14cbd082becc8768760b66aa356c7a40863d5f51`.
+  A clean rebuild of committed source reproduced this entire ELF byte for byte.
 
 ## Benchmark contract
 
-The historical tapes below predate the
-[shield-drop capability export correction](HISTORY.md#replay-benchmark-capability-export--2026-09-20).
-Regenerate both arms with the corrected exporter for new comparisons; these
-historical digests are not identities for regenerated workloads.
+Both arms use the same ordered 508-human-recording manifest containing 4,684,452
+input frames. Four CPU recordings are excluded by the existing controller-only
+tape format. All 508 tape-content hashes match the pre-optimization inventory;
+ordered replay-path/tape-hash identity is
+`3b34be0c4f050c2ced70de120ad7468af2efbefc99fdbf932b4f865c8ad87277`.
 
-The benchmark packs all 366 aggregate replay cases and assigns resident lanes proportionally
-across the complete ordered corpus. Each assigned unique replay is pre-rolled by one of eight
-deterministic offsets from 200 through 900 frames; repeated batch slots copy those initialized
-Matches through the production copy API. Timed play then advances 262,144 match-frames with
-ordinary per-environment replay looping, a true resident 256/512 batch, and a caller-owned
-128-frame observation/terminal history.
+Each run uses one single-threaded resident batch, 262,144 timed match-frames,
+eight warmup ticks, and caller-owned 128-frame observation/terminal history.
+Logical and resident sizes are equal at 256 or 512. Replay assignment, pre-roll,
+copy initialization, reset behavior, input profiles, compiler flags and benchmark
+implementation are unchanged. All task builds, tests and profiling finished
+before the final timing series.
 
 ```sh
 make benchmark-9950x3d-vcache-256 BENCHMARK_MATCH_FRAMES=262144
 make benchmark-9950x3d-vcache-512 BENCHMARK_MATCH_FRAMES=262144
 ```
 
-The final exact candidate samples are:
+Eight adjacent control/candidate pairs per size alternate which arm runs first.
+Every pair improves; all 32 samples are retained. Paired gain is the median of
+the eight adjacent ratios. Both candidate medians exceed 120,000 FPS; three of
+the eight candidate-512 samples are below that threshold. These are measured
+medians, not guaranteed minimum throughput. The root README rounds to whole FPS.
 
-| Batch | Samples | Median cycles/frame | Median FPS | Digest |
-|---:|---|---:|---:|---:|
-| 256 | 3 | 38,234.8 | 112,253 | `bdff41cf74a54850` |
-| 512 | 3 | 40,117.3 | 106,985 | `ee9d93c545aa3ef9` |
+| Batch | Control median FPS | Candidate median FPS | Median paired gain | Control / candidate cycles per frame |
+| ---: | ---: | ---: | ---: | ---: |
+| 256 | 115,097 | 124,141.5 | +8.07% | 37,289.95 / 34,573.10 |
+| 512 | 111,239 | 120,606.5 | +8.62% | 38,583.70 / 35,586.40 |
 
-Raw candidate 256 cycles/frame were `38,846.5`, `38,234.8`, and `38,060.3`; corresponding wall
-throughput was `110,485`, `112,253`, and `112,767` FPS. Raw candidate 512 cycles/frame were
-`40,383.1`, `40,117.3`, and `38,966.4`; corresponding wall throughput was `106,281`, `106,985`,
-and `110,145` FPS. Three alternating pairs against frozen committed control `02cfe013` yield
-median paired throughput gains of 9.80% at resident 256 and 8.23% at resident 512. The complete
-paired gains were +3.36%/+9.80%/+11.62% and +8.23%/+3.41%/+10.37%, respectively; no arm is
-filtered. Both digests are unchanged.
+Digests are `64020ea131e1b3a7` at 256 and `8ae6f774c68378ea` at 512, with 15 and
+19 resets respectively in every run. Older 403-recording README figures use a
+different workload; the paired current-corpus results establish this code gain.
 
-Absolute FPS is lower than the preceding checkpoint's recorded host window, but the adjacent
-frozen-parent runs are lower by the same frequency/load effect: parent FPS spans 101,029--106,893
-at 256 and 98,199--103,457 at 512, and every final candidate beats its paired parent. The
-alternating ratios are therefore the checkpoint comparison; the observed candidate FPS supports
-direction but does not claim that the 150k campaign target has been reached.
+## Correctness and memory
 
-## Current memory contract
+Native and optimized-release validation each pass all 512 recordings and
+4,721,700 transitions, with zero diagnostics, failures or errors. Source/native/
+PPC checks, 127 Python tests, copy/save/restore and sealed-allocation checks,
+Wasm parity and browser viewer smoke pass. Differential source and actual
+production-object proofs cover tree pruning, stationary root constraints,
+quaternion math, every sampled channel mask, the complete immutable value table,
+and affine matrix composition; their counts and scope are in the detailed evidence.
 
-The figures below belong to this throughput checkpoint. For the later full-roster
-construction census, see [Kirby integration memory](HISTORY.md#kirby-integration-memory-and-profile-compatibility--2026-09-20).
+No Match layout, reserve or snapshot-format change is retained. The ordinary
+stepped Match remains at 1,757,132 arena bytes and 1,349 allocations before and
+after gameplay. Its snapshot is 1,821,108 bytes: 128-byte header, 63,848-byte
+Match and the arena. The construction census peaks at 2,119,308 arena bytes.
+GameData arena usage is 114,515,944 of 134,217,728 reserved bytes; native DAT storage
+uses 151,551,424 of 268,435,456 reserved bytes. Compiled sample values are a separate
+shared initialization allocation of 101,434,248 logical bytes plus 64 initialized
+tail bytes required by the new wide read. No gameplay allocation is added.
 
-The runtime census seals the ordinary stepped Match at 608,864 arena bytes and 843 allocations;
-both counts remain identical before and after gameplay. Its complete relocatable savestate is
-671,664 bytes. The simpler two-player lifecycle benchmark produces a 611,420-byte snapshot.
+The retained code reuses canonical pose topology for dirty/root propagation,
+expresses trivial field access directly, evaluates source-exact quaternion math
+in vector blocks, publishes packed SRT fields through independent ranks and a
+contiguous sample read, and keeps affine translation in its vector register.
+Generic source traversal, stationary constraint invalidation, all callbacks and
+float operation boundaries remain intact. There is no new per-Match cache or
+alternate gameplay representation.
 
-| Measure | Current |
-|---|---:|
-| Ordinary stepped arena | 608,864 B |
-| Runtime-census savestate | 671,664 B |
-| Initialization allocations | 843 |
-| Maximum reached arena | 973,328 B |
-| Maximum reached compact pose nodes | 1,016 / 1,024 |
-| Hosted fighter-dynamics pool | 10,752 B (64 nodes) |
-
-The public 128-frame observation history remains 127,488 bytes per environment and is
-caller-owned. Shared GameData owns 72,404,776 initialized arena bytes plus the native DAT arena;
-that immutable/process-wide cost is not replicated per Match. Native DAT translation appends
-302,848 immutable bytes of authored-joint quaternions. The compiled-pose program descriptors add
-26,472 process-wide bytes (eight bytes across 3,309 programs) for frame-row ownership; compiled
-sample count is unchanged. Match size, savestate size, and gameplay allocation counts are
-unchanged.
-
-## Owner-selection profile
-
-The final bounded 32,768-frame resident-512 subsystem profile reports 53,544.0 diagnostic
-cycles/frame with digest `588be8489df1a62d`. It assigns 16.93% to pose animation, 11.46% to stage
-collision, 5.48% to `Fighter_8006D9AC`, 4.32% to input/action, 3.36% to camera, 2.28% to hit
-processing, and 0.93% to contact publication. This instrumented profile is for owner selection,
-not throughput; inclusive and nested rows must not be added, and its absolute cycle count is not
-comparable to the production benchmark.
+[Detailed evidence](HISTORY.md#final-code-recovery--2026-09-21) contains all FPS
+samples, focused proofs and rejected-trial/build-audit notes. Frozen binaries,
+source patch, provenance, full gate logs and per-tape hashes are under
+`reports/triage/perf_120k_20260921/final-load/`.

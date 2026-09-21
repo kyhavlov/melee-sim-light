@@ -1,5 +1,6 @@
 #include <dolphin/mtx.h>
 
+#include <MSL/math_ppc.h>
 #include <MSL/trigf.h>
 
 #include <math.h>
@@ -29,23 +30,24 @@ static double double_from_bits(uint64_t bits)
 // observably different even for a perfectly horizontal stage line.
 // refs/melee/extern/dolphin/src/dolphin/mtx/vec.c::PSVECNormalize
 // refs/Ishiiruka/Source/Core/Common/MathUtil.cpp::ApproximateReciprocalSquareRoot
+const int32_t msl_frsqrte_base[32] = {
+    0x3ffa000, 0x3c29000, 0x38aa000, 0x3572000, 0x3279000,
+    0x2fb7000, 0x2d26000, 0x2ac0000, 0x2881000, 0x2665000,
+    0x2468000, 0x2287000, 0x20c1000, 0x1f12000, 0x1d79000,
+    0x1bf4000, 0x1a7e800, 0x17cb800, 0x1552800, 0x130c000,
+    0x10f2000, 0x0eff000, 0x0d2e000, 0x0b7c000, 0x09e5000,
+    0x0867000, 0x06ff000, 0x05ab800, 0x046a000, 0x0339800,
+    0x0218800, 0x0105800,
+};
+const int32_t msl_frsqrte_decrement[32] = {
+    0x7a4, 0x700, 0x670, 0x5f2, 0x584, 0x524, 0x4cc, 0x47e,
+    0x43a, 0x3fa, 0x3c2, 0x38e, 0x35e, 0x332, 0x30a, 0x2e6,
+    0x568, 0x4f3, 0x48d, 0x435, 0x3e7, 0x3a2, 0x365, 0x32e,
+    0x2fc, 0x2d0, 0x2a8, 0x283, 0x261, 0x243, 0x226, 0x20b,
+};
+
 static double ppc_frsqrte(double value)
 {
-    static const int32_t base[32] = {
-        0x3ffa000, 0x3c29000, 0x38aa000, 0x3572000, 0x3279000,
-        0x2fb7000, 0x2d26000, 0x2ac0000, 0x2881000, 0x2665000,
-        0x2468000, 0x2287000, 0x20c1000, 0x1f12000, 0x1d79000,
-        0x1bf4000, 0x1a7e800, 0x17cb800, 0x1552800, 0x130c000,
-        0x10f2000, 0x0eff000, 0x0d2e000, 0x0b7c000, 0x09e5000,
-        0x0867000, 0x06ff000, 0x05ab800, 0x046a000, 0x0339800,
-        0x0218800, 0x0105800,
-    };
-    static const int32_t decrement[32] = {
-        0x7a4, 0x700, 0x670, 0x5f2, 0x584, 0x524, 0x4cc, 0x47e,
-        0x43a, 0x3fa, 0x3c2, 0x38e, 0x35e, 0x332, 0x30a, 0x2e6,
-        0x568, 0x4f3, 0x48d, 0x435, 0x3e7, 0x3a2, 0x365, 0x32e,
-        0x2fc, 0x2d0, 0x2a8, 0x283, 0x261, 0x243, 0x226, 0x20b,
-    };
     const uint64_t fraction_mask = (UINT64_C(1) << 52) - UINT64_C(1);
     const uint64_t exponent_mask = UINT64_C(0x7FF) << 52;
     const uint64_t sign_mask = UINT64_C(1) << 63;
@@ -88,8 +90,8 @@ static double ppc_frsqrte(double value)
     interpolation = (uint32_t) (mantissa >> 37);
     index = interpolation / 2048U + (odd_exponent ? 16U : 0U);
     fraction =
-        (uint64_t) (base[index] -
-                    decrement[index] * (int32_t) (interpolation % 2048U))
+        (uint64_t) (msl_frsqrte_base[index] - msl_frsqrte_decrement[index] *
+                    (int32_t) (interpolation % 2048U))
         << 26;
     return double_from_bits(sign | (uint64_t) exponent | fraction);
 }
@@ -396,16 +398,20 @@ mtx_srt_concat_trig(Mtx out, Mtx parent, Vec3* scale, Vec3* translate,
         for (row = 0; row != 3; row++) {
             __m128 world =
                 _mm_mul_ps(_mm_set1_ps(parent[row][0]), local0);
-            float translate;
 
             world = _mm_fmadd_ps(_mm_set1_ps(parent[row][1]), local1,
                                  world);
             world = _mm_fmadd_ps(_mm_set1_ps(parent[row][2]), local2,
                                  world);
-            translate = fmaf(1.0F, parent[row][3],
-                             _mm_cvtss_f32(_mm_shuffle_ps(
-                                 world, world, _MM_SHUFFLE(3, 3, 3, 3))));
+#if defined(__AVX512VL__)
+            world = _mm_mask3_fmadd_ps(_mm_set1_ps(1.0F),
+                                       _mm_set1_ps(parent[row][3]), world, 8);
+#else
+            float translate = fmaf(1.0F, parent[row][3],
+                                   _mm_cvtss_f32(_mm_shuffle_ps(
+                                       world, world, _MM_SHUFFLE(3, 3, 3, 3))));
             world = _mm_insert_ps(world, _mm_set_ss(translate), 0x30);
+#endif
             _mm_storeu_ps(out[row], world);
         }
 #else

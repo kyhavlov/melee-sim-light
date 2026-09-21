@@ -572,7 +572,7 @@ void HSD_JObjAnim(HSD_JObj* jobj)
 {
     if (jobj != NULL) {
 #ifdef MSL_CORE_NATIVE
-        if (msl_fighter_pose_owns_joint(jobj)) {
+        if (msl_fighter_pose_owns_animation(jobj->aobj)) {
             msl_fighter_pose_animate_joint(jobj);
             return;
         }
@@ -630,7 +630,7 @@ void HSD_JObjAnimAll(HSD_JObj* jobj)
 {
     if (jobj != NULL) {
 #ifdef MSL_CORE_NATIVE
-        if (msl_fighter_pose_owns_joint(jobj)) {
+        if (msl_fighter_pose_owns_animation(jobj->aobj)) {
             msl_fighter_pose_animate_tree(jobj);
             return;
         }
@@ -1707,6 +1707,11 @@ void HSD_JObjSetupMatrixSub(HSD_JObj* jobj)
 
 void HSD_JObjSetMtxDirtySub(HSD_JObj* jobj)
 {
+#ifdef MSL_CORE_NATIVE
+    if (msl_fighter_pose_set_mtx_dirty(jobj)) {
+        return;
+    }
+#endif
     jobj->flags |= 0x40;
     if (!(jobj->flags & JOBJ_INSTANCE)) {
         HSD_JObj* child = jobj->child;

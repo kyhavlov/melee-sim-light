@@ -211,6 +211,14 @@ void HSD_GObj_803912E0(HSD_GObjLibInitDataType* arg0);
 void HSD_GObj_80390ED0(HSD_GObj* gobj, u32 mask);
 void HSD_GObj_80391304(HSD_GObjLibInitDataType*);
 
+#ifdef MSL_CORE_NATIVE
+// These source accessors are single field reads. Preserve one evaluation of
+// the object while removing their call layer from native gameplay consumers.
+#define HSD_GObjGetUserData(gobj) \
+    ((void*) ((HSD_GObj*) (gobj))->user_data)
+#define HSD_GObjGetHSDObj(gobj) \
+    ((void*) ((HSD_GObj*) (gobj))->hsd_obj)
+#else
 static inline void* HSD_GObjGetUserData(HSD_GObj* gobj)
 {
     return gobj->user_data;
@@ -220,6 +228,7 @@ static inline void* HSD_GObjGetHSDObj(HSD_GObj* gobj)
 {
     return gobj->hsd_obj;
 }
+#endif
 
 static inline u16 HSD_GObjGetClassifier(HSD_GObj* gobj)
 {

@@ -27,6 +27,7 @@ enum {
         MSL_FIGHTER_POSE_TRACKS_PER_PLAYER * 4,
     MSL_FIGHTER_POSE_ECB_CAPACITY = 8,
     MSL_FIGHTER_POSE_ECB_JOINT_CAPACITY = 32,
+    MSL_FIGHTER_POSE_MAGIC = 0x4D534C50,
     MSL_FIGHTER_POSE_PROGRAM_NONE = 0x1FFF,
     MSL_FIGHTER_POSE_PROGRAM_NODE_NONE = UINT32_MAX,
 };
@@ -124,7 +125,7 @@ typedef struct MslFighterPoseProgram {
 typedef struct MslFighterPoseProgramNode {
     uint32_t frame_value_offset;
     uint16_t track_start;
-    uint16_t type_mask;
+    uint16_t field_mask;
     uint16_t sample_count;
     uint16_t program_index;
     uint8_t track_count;
@@ -138,6 +139,7 @@ _Static_assert(sizeof(MslFighterPoseProgramNode) == 16,
 typedef struct MslFighterPosePrograms {
     MslFighterPoseProgram* programs;
     MslFighterPoseProgramNode* nodes;
+    // Final compiled storage has 16 initialized tail floats for wide reads.
     float* values;
     uint16_t* track_nodes;
     uint16_t* program_hash;
@@ -188,8 +190,14 @@ float msl_fighter_pose_tree_rate(HSD_JObj* root);
 float msl_fighter_pose_tree_frame(HSD_JObj* root);
 int msl_fighter_pose_tree_has_animation(HSD_JObj* root);
 float msl_fighter_pose_tree_end(HSD_JObj* root);
-bool msl_fighter_pose_owns_joint(const HSD_JObj* joint);
+static inline bool msl_fighter_pose_owns_animation(const HSD_AObj* animation)
+{
+    return animation != NULL &&
+           ((const MslFighterPoseJoint*) animation)->magic ==
+               MSL_FIGHTER_POSE_MAGIC;
+}
 bool msl_fighter_pose_path(const HSD_JObj* joint, HSD_JObj** path);
+bool msl_fighter_pose_set_mtx_dirty(HSD_JObj* root);
 void msl_fighter_pose_set_root_position(HSD_JObj* root, const Vec3* position);
 bool msl_fighter_pose_transform_point(HSD_JObj* joint, const Vec3* local,
                                       Vec3* world);

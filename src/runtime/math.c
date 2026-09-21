@@ -1,4 +1,5 @@
 #include <MSL/math.h>
+#include <MSL/math_ppc.h>
 
 #include <MetroTRK/intrinsics.h>
 
@@ -114,12 +115,37 @@ float atan2f(float y, float x)
     return y;
 }
 
+#ifdef MSL_CORE_NATIVE
+static float msl_acos_seed(float radicand)
+{
+    u32 bits = BITWISE(radicand);
+    u32 exponent = bits >> 23;
+    u32 interpolation = (bits & 0x7FFFFF) >> 8;
+    // The table selector is four fraction bits plus the inverted exponent bit.
+    u32 index = ((bits >> 19) & 31) ^ 16;
+    u32 fraction = msl_frsqrte_base[index] -
+                   msl_frsqrte_decrement[index] * (interpolation & 2047);
+    float scale;
+    float significand = (float) (s32) (fraction + 0x4000000U);
+
+    // Round the Gekko 27-bit significand to binary32, then scale by an
+    // exact power of two. Positive acos radicands are normal binary32.
+    // refs/Ishiiruka/Source/Core/Common/MathUtil.cpp::ApproximateReciprocalSquareRoot
+    BITWISE(scale) = ((328 - exponent) >> 1) << 23;
+    return significand * scale;
+}
+#endif
+
 float acosf(float x)
 {
     float result = 1.0F - x * x;
     if (result > 0) {
         float guess;
+#ifdef MSL_CORE_NATIVE
+        guess = msl_acos_seed(result);
+#else
         guess = __frsqrte(result);
+#endif
         guess = 0.5f * guess * (3.0f - guess * guess * result);
         guess = 0.5f * guess * (3.0f - guess * guess * result);
         guess = 0.5f * guess * (3.0f - guess * guess * result);
@@ -166,7 +192,7 @@ static inline float lbRefract_80022DF8(float x)
 #define BITWISE_THRESHOLD_2 0x3F9BF7EC /* = 1.218503475189209f */
 #define BITWISE_THRESHOLD_3 0x3FEF789E /* = 1.870868444442749f */
 
-static const float atanf_lookup[] = {
+const float msl_atanf_lookup[] = {
     1.0,
     -0.3333333134651184,
     0.1999988704919815,
@@ -240,7 +266,7 @@ float atanf(float x)
         {
             float offset_39;
             float offset_33;
-            lookup_ptr = &atanf_lookup[lookup_index];
+            lookup_ptr = &msl_atanf_lookup[lookup_index];
             offset_39 = lookup_ptr[39];
             offset_33 = lookup_ptr[33];
 
@@ -254,7 +280,7 @@ float atanf(float x)
 
     {
         float result_squared = result * result;
-        lookup_ptr = &atanf_lookup[lookup_index];
+        lookup_ptr = &msl_atanf_lookup[lookup_index];
 
         // clang-format off
         result = result *
@@ -264,12 +290,12 @@ float atanf(float x)
                         result_squared * (
                             result_squared * (
                                 result_squared * (
-                                    atanf_lookup[6]
-                                ) + atanf_lookup[5]
-                            ) + atanf_lookup[4]
-                        ) + atanf_lookup[3]
-                    ) + atanf_lookup[2]
-                ) + atanf_lookup[1]
+                                    msl_atanf_lookup[6]
+                                ) + msl_atanf_lookup[5]
+                            ) + msl_atanf_lookup[4]
+                        ) + msl_atanf_lookup[3]
+                    ) + msl_atanf_lookup[2]
+                ) + msl_atanf_lookup[1]
             ) + result;
         // clang-format on
 

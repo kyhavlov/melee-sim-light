@@ -1999,14 +1999,10 @@ void Fighter_UnkIncrementCounters_8006ABEC(Fighter_GObj* gobj)
     }
 }
 
-/// the stick pairs seen in input structs might make more sense as an array of
-/// 2, or a struct of 2 floats.. if it still matches.
-#define SET_STICKS(stickXPtr, stickYPtr, x, y)                                \
-    do {                                                                      \
-        float* stickX = (float*) &stickXPtr;                                  \
-        float* stickY = (float*) &stickYPtr;                                  \
-        *stickX = x;                                                          \
-        *stickY = y;                                                          \
+#define SET_STICKS(stick_x, stick_y, x, y)                                    \
+    do {                                                                     \
+        (stick_x) = (x);                                                     \
+        (stick_y) = (y);                                                     \
     } while (0)
 
 static void Fighter_Spaghetti_8006AD10_Inner1(Fighter* fp)

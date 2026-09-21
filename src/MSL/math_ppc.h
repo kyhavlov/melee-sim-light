@@ -8,6 +8,12 @@
 
 extern double __frsqrte(double);
 
+#ifdef MSL_CORE_NATIVE
+#include <stdint.h>
+extern const int32_t msl_frsqrte_base[32];
+extern const int32_t msl_frsqrte_decrement[32];
+#endif
+
 // Hosted PPC Linux supplies sqrtf through libc. The GameCube inline used a
 // hardware frsqrte seed; consequential float differences remain an explicit
 // validation item for the port rather than a duplicate libc declaration.

@@ -11,6 +11,20 @@ directly comparable when the benchmark contract changed; their marginal A/B resu
 
 ## Retained history
 
+### Pose, input and exact-math recovery
+
+- **Optimize exact pose and animation hot paths** (after `83356f34`): canonical
+  pose dirty/root walks, direct input and GObj field access, exact Gekko/quaternion
+  math, field-order SRT samples with
+  independent ranks and contiguous reads, and masked affine translation.
+- Eight adjacent pairs per batch give medians of **124,141.5 / 120,606.5 FPS**
+  at resident 256/512 and paired gains of **8.07% / 8.62%**. Every pair improves;
+  all 32 samples remain included. Compiler, host and benchmark settings are unchanged.
+- All 512 native/release recordings, 127 Python tests, source/PPC/API/save/copy
+  and Wasm/viewer gates pass. Match storage and snapshot format are unchanged;
+  the separate shared sample allocation adds one 64-byte initialized read tail.
+  [Final evidence and all rejected trials](HISTORY.md#final-code-recovery--2026-09-21).
+
 ### Stationary transformed-stage queries
 
 - Correctness-completion packet (uncommitted): preserve source collision bindings,
