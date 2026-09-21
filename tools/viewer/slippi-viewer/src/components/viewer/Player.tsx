@@ -255,15 +255,44 @@ const HIT_ELEMENT_FIRE = 1;
 const HIT_ELEMENT_ELECTRIC = 2;
 const HIT_ELEMENT_DARK = 13;
 
+const INTERNAL_PICHU = 23;
+const SELF_DAMAGE_FLASH_FRAMES = 8;
+
+// Pichu's electric moves hurt him with no hit, so nothing sets a hit element
+// or hitlag; detect the percent rising outside any hit and reuse the electric
+// tongues for a few frames.
+function recentSelfDamage(playerIndex: number, frameNumber: number, isNana: boolean): boolean {
+  for (let back = 0; back < SELF_DAMAGE_FLASH_FRAMES; back += 1) {
+    const now = getPlayerOnFrame(playerIndex, frameNumber - back);
+    const before = getPlayerOnFrame(playerIndex, frameNumber - back - 1);
+    if (now === undefined || before === undefined) return false;
+    const a = isNana ? now.nanaState : now.state;
+    const b = isNana ? before.nanaState : before.state;
+    if (a === undefined || b === undefined) return false;
+    if (a.percent > b.percent && a.hitlagRemaining === 0 && a.hitstunRemaining === 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function HitElementEffect(props: { renderData: RenderData }) {
   const state = () => props.renderData.playerState;
-  const element = createMemo(() => state().lastHitElement ?? 0);
+  const selfDamage = createMemo(
+    () =>
+      state().internalCharacterId === INTERNAL_PICHU &&
+      recentSelfDamage(state().playerIndex, state().frameNumber, state().isNana)
+  );
+  const element = createMemo(() =>
+    selfDamage() ? HIT_ELEMENT_ELECTRIC : state().lastHitElement ?? 0
+  );
   const active = createMemo(
     () =>
-      (state().hitlagRemaining > 0 || state().hitstunRemaining > 0) &&
-      (element() === HIT_ELEMENT_FIRE ||
-        element() === HIT_ELEMENT_ELECTRIC ||
-        element() === HIT_ELEMENT_DARK)
+      selfDamage() ||
+      ((state().hitlagRemaining > 0 || state().hitstunRemaining > 0) &&
+        (element() === HIT_ELEMENT_FIRE ||
+          element() === HIT_ELEMENT_ELECTRIC ||
+          element() === HIT_ELEMENT_DARK))
   );
   const x = createMemo(() => state().xPosition);
   const y = createMemo(
