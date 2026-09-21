@@ -949,18 +949,11 @@ static int match_construct(MslCoreMatch* match,
     match->stage_data = spec->source;
     bind_stage_match(match);
 #ifndef MSL_CORE_NATIVE
-    // Retail's match load (ftLib_80087508 -> ftData_80085820) brings in each
-    // present kind's costume model before Fighter_Create. The loader caches
-    // the model in the GameData-owned costume table and skips the load when
-    // the entry is set, but reached lazily from Fighter_Create it allocates
-    // from the Match arena. msl_core_match_reset recycles that arena, so the
-    // second construction dereferenced the stale cached model (the PPC
-    // scalar-api smoke walked a Fox costume's DObj chain into recycled pool
-    // memory and segfaulted). The oracle never seals its GameData arena, so
-    // load the costume models there once; Fighter_Create then finds them
-    // cached. The fighter archive list and animation bank are per Match and
-    // reload after every reset. Native translates the costumes at GameData
-    // init.
+    // Costume models must outlive Match resets: the source loader caches
+    // them in GameData's costume table. Preload under its memory binding
+    // before Fighter_Create can allocate them from the Match arena. The PPC
+    // oracle leaves GameData unsealed; native preloads at GameData init.
+    // Fighter archives and animation banks retain their per-Match owners.
     // refs/melee/src/melee/ft/ftlib.c::ftLib_80087508
     // refs/melee/src/melee/ft/ftdata.c::ftData_80085820
     msl_core_bind_game_data((MslCoreGameData*) game_data);

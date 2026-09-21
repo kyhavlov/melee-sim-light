@@ -6,7 +6,6 @@
 #include "pl/player.h"
 #include "ft/types.h"
 #include "platform/memory.h"
-#include "ft/ft_0852.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,13 +57,7 @@ int main(int argc, char** argv)
     }
     first_row = *output;
 
-    // Regression: the costume model that Fighter_Create caches in the
-    // GameData-owned costume table must not live in the Match arena. When
-    // the PPC oracle loaded it lazily there, msl_core_match_reset recycled
-    // the arena under the cached pointer and the next construction walked
-    // the costume's DObj chain into pool memory. (The fighter archive list
-    // is per Match by design and reloads after every reset.) Native
-    // translates the costume into its DAT arena at GameData init.
+    // Cached costume models must survive recycling the Match arena.
     for (i = 0; i < 2; ++i) {
         Fighter* fp = (Fighter*) match.fighters[i]->user_data;
         if (msl_memory_context_owns(&match.memory, fp->x108_costume_joint)) {
