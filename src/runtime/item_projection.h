@@ -41,6 +41,9 @@ enum {
     MSL_CORE_ITEM_KIND_PIKACHU_THUNDER = 81,
     MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_GROUND = 89,
     MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_AIR = 90,
+    MSL_ITEM_KIND_PICHU_THUNDER = 82,
+    MSL_ITEM_KIND_PICHU_TJOLT_GROUND = 91,
+    MSL_ITEM_KIND_PICHU_TJOLT_AIR = 92,
     MSL_CORE_ITEM_KIND_NESS_PKFIRE = 66,
     MSL_CORE_ITEM_KIND_NESS_PKFIRE_PILLAR = 67,
     MSL_CORE_ITEM_KIND_NESS_PKFLASH = 68,
@@ -237,6 +240,7 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         //   ::{it_802C27D4,it_802C3864}
         return 0;
     case MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_GROUND:
+    case MSL_ITEM_KIND_PICHU_TJOLT_GROUND:
         // xDD7 samples the crawl angle (constructor-written via
         // it_802B3554) and xDEB/xDEF the constructor's spawn position;
         // xDDB is a byte of the owner pointer.
@@ -244,6 +248,7 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC2 |
                MSL_CORE_ITEM_MISC3;
     case MSL_CORE_ITEM_KIND_PIKACHU_TJOLT_AIR:
+    case MSL_ITEM_KIND_PICHU_TJOLT_AIR:
         // xDD4/xDD8 are owner/sibling GObj pointers; xDE8 is the launch
         // velocity vector written by it_802B3F88 on every air entry.
         // refs/melee/src/melee/it/itCharItems.h::itPikachutJoltAir_ItemVars

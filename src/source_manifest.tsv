@@ -310,6 +310,8 @@ src/melee/it/items/itclimbersice.c	src/melee/it/items/itclimbersice.c	Matching	i
 src/melee/it/items/itclimbersblizzard.c	src/melee/it/items/itclimbersblizzard.c	Matching	icies-source-packet	compiled canonical blizzard article owner
 src/melee/it/items/itclimbersstring.c	src/melee/it/items/itclimbersstring.c	Matching	icies-source-packet	compiled canonical belay-string article owner
 src/melee/ft/chara/ftPikachu/ftPk_Init.c	src/melee/ft/chara/ftPikachu/ftPk_Init.c	Matching	pikachu-source-packet	compiled canonical Pikachu lifecycle, state registry, and data-owner callbacks
+src/melee/ft/chara/ftPichu/ftPc_Init.c	src/melee/ft/chara/ftPichu/ftPc_Init.c	Matching	pichu-source-packet	compiled canonical Pichu lifecycle, state registry (Pikachu special owners) and data-owner callbacks
+src/melee/ft/chara/ftPichu/types.h	src/melee/ft/chara/ftPichu/types.h	Matching	pichu-source-packet	Pichu fighter vars and attribute layout (item kinds at x14/x18/xDC)
 src/melee/ft/chara/ftPikachu/ftPk_SpecialN.c	src/melee/ft/chara/ftPikachu/ftPk_SpecialN.c	Matching	pikachu-source-packet	compiled canonical Thunder Jolt owner
 src/melee/ft/chara/ftPikachu/ftPk_SpecialS.c	src/melee/ft/chara/ftPikachu/ftPk_SpecialS.c	Matching	pikachu-source-packet	compiled canonical Skull Bash owner
 src/melee/ft/chara/ftPikachu/ftPk_SpecialHi.c	src/melee/ft/chara/ftPikachu/ftPk_SpecialHi.c	Matching	pikachu-source-packet	compiled canonical Quick Attack owner

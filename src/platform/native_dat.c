@@ -1035,6 +1035,7 @@ static const MslDatType* public_type(const char* symbol)
         strcmp(symbol, "ftDataDonkey") == 0 ||
         strcmp(symbol, "ftDataGanon") == 0 ||
         strcmp(symbol, "ftDataPikachu") == 0 ||
+        strcmp(symbol, "ftDataPichu") == 0 ||
         strcmp(symbol, "ftDataYoshi") == 0 ||
         strcmp(symbol, "ftDataKoopa") == 0 ||
         strcmp(symbol, "ftDataNess") == 0 ||
@@ -1855,6 +1856,14 @@ void* msl_native_archive_get_public(HSD_Archive* archive, const char* symbol)
                                           msl_dat_root_ftCaptain_DatAttrs,
                                           318, MSL_FIGHTER_ARTICLES_NONE);
     } else if (strcmp(symbol, "ftDataPikachu") == 0) {
+        result = translate_fighter_public(context, offset,
+                                          msl_dat_root_ftPikachuAttributes,
+                                          320, MSL_FIGHTER_ARTICLES_PIKACHU);
+    } else if (strcmp(symbol, "ftDataPichu") == 0) {
+        // ftPc_Init_OnLoad -> ftPk_Init_OnLoadForPichu: Pichu shares
+        // Pikachu's attribute layout and registers the same three articles
+        // (thunder, ground jolt, air jolt) under the Pichu item kinds its
+        // attribute block stores (xDC 82, x14 91, x18 92).
         result = translate_fighter_public(context, offset,
                                           msl_dat_root_ftPikachuAttributes,
                                           320, MSL_FIGHTER_ARTICLES_PIKACHU);

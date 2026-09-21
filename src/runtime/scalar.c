@@ -285,6 +285,8 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_KOOPA;
     case MSL_CORE_CHAR_PIKACHU:
         return CKIND_PIKACHU;
+    case MSL_CHARACTER_PICHU:
+        return CKIND_PICHU;
     case MSL_CORE_CHAR_JIGGLYPUFF:
         return CKIND_PURIN;
     case MSL_CORE_CHAR_LUIGI:
@@ -637,6 +639,7 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CHAR_YOSHI &&
             config->players[i].char_id != MSL_CHAR_BOWSER &&
             config->players[i].char_id != MSL_CORE_CHAR_PIKACHU &&
+            config->players[i].char_id != MSL_CHARACTER_PICHU &&
             config->players[i].char_id != MSL_CORE_CHAR_JIGGLYPUFF &&
             config->players[i].char_id != MSL_CORE_CHAR_LUIGI &&
             config->players[i].char_id != MSL_CORE_CHAR_MARTH &&
@@ -647,7 +650,7 @@ static int validate_config(MslCoreMatchConfig* config)
                     "current core supports external char_id=0 Mario, char_id=1 Fox, "
                     "char_id=2 Captain Falcon, char_id=3 Donkey Kong, "
                     "char_id=7 Sheik, char_id=9 Peach, char_id=10 Ice Climbers, "
-                    "char_id=12 Pikachu, char_id=13 Samus, "
+                    "char_id=12 Pikachu, char_id=23 Pichu, char_id=13 Samus, "
                     "char_id=6 Link, char_id=8 Ness, char_id=14 Yoshi, "
                     "char_id=16 Mewtwo, "
                     "char_id=20 Young Link, char_id=5 Bowser, "
@@ -740,6 +743,8 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
     game_data->source.fighter.costume_lists[FTKIND_PIKACHU] =
         (struct UnkCostumeList){ game_data->source.fighter.pikachu_costumes,
                                  4 };
+    game_data->source.fighter.costume_lists[FTKIND_PICHU] =
+        (struct UnkCostumeList){ game_data->source.fighter.pichu_costumes, 4 };
     game_data->source.fighter.costume_lists[FTKIND_PURIN] =
         (struct UnkCostumeList){ game_data->source.fighter.puff_costumes, 5 };
     game_data->source.fighter.costume_lists[FTKIND_LUIGI] =
@@ -1471,6 +1476,7 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         MSL_CORE_CHAR_SAMUS,
         MSL_CORE_CHAR_POPO,
         MSL_CORE_CHAR_PIKACHU,
+        MSL_CHARACTER_PICHU,
         MSL_CORE_CHAR_DONKEY,
         MSL_CORE_CHAR_GANONDORF,
         MSL_CHAR_YOSHI,
@@ -1652,7 +1658,8 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
         if (source_offset == 0x1B) {
             return 0;
         }
-    } else if (item->kind == It_Kind_Pikachu_TJolt_Ground) {
+    } else if (item->kind == It_Kind_Pikachu_TJolt_Ground ||
+               item->kind == It_Kind_Pichu_TJolt_Ground) {
         // Retail layout: +0 f32 xDD4 (crawl angle), +4 HSD_GObj* xDD8
         // (owner), +8 Item_GObj* xDDC, +C/+10 s32, +14 Vec3 xDE8 (spawn/
         // crawl position). Offset 3 samples the unshifted leading angle
@@ -1731,7 +1738,8 @@ static uint8_t item_var_source_byte(const Item* item, size_t source_offset)
         if (source_offset == 0x1B) {
             return (uint8_t) (uintptr_t) item->xDD4_itemVar.nessyoyo.x18;
         }
-    } else if (item->kind == It_Kind_Pikachu_TJolt_Air) {
+    } else if (item->kind == It_Kind_Pikachu_TJolt_Air ||
+               item->kind == It_Kind_Pichu_TJolt_Air) {
         // Retail layout: +0 HSD_GObj* xDD4 (owner), +4 Item_GObj* xDD8
         // (ground-jolt sibling), +8 pad, +14 Vec3 xDE8 (launch velocity).
         // Offsets 3/7 sample the pointer low bytes and 0x17/0x1B the

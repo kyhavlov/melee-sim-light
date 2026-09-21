@@ -36,6 +36,7 @@ CHARACTERS = {
     'popo': (10, 'Pp', 'ftDataPopo'),
     'nana': (11, 'Nn', 'ftDataNana'),
     'pikachu': (12, 'Pk', 'ftDataPikachu'),
+    'pichu': (23, 'Pc', 'ftDataPichu'),
     'samus': (13, 'Ss', 'ftDataSamus'),
     'yoshi': (14, 'Ys', 'ftDataYoshi'),
     'mewtwo': (16, 'Mt', 'ftDataMewtwo'),
@@ -61,6 +62,7 @@ SUBACTION_COUNTS = {
     22: 327,
     24: 323,
     26: 327,
+    23: 320,
     25: 318,
     5: 316,
 }

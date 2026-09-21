@@ -344,6 +344,8 @@ UnkCostumeStruct* msl_core_fighter_costumes(FighterKind kind)
         return data->fighter.yoshi_costumes;
     case FTKIND_KOOPA:
         return data->fighter.koopa_costumes;
+    case FTKIND_PICHU:
+        return data->fighter.pichu_costumes;
     case FTKIND_PIKACHU:
         return data->fighter.pikachu_costumes;
     case FTKIND_LUIGI:

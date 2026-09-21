@@ -41,6 +41,9 @@ Instruction-level adaptations are recorded in `src/upstream_delta_ledger.tsv`.
   Dolphin including a level-3 CPU Fox game, Wii console captures from D20
   Melee and Yeti Weekly, one console game mirrored over the network) with
   capture metadata and hashes.
+- [Pichu](validation/pichu_provenance.json): 14 corpus games (Dolphin and Wii
+  console captures from Yeti Weekly and D20 Melee, two of them classified
+  missing-raw-cstick-asdi) with capture metadata and hashes.
 
 The interaction coverage tests inspect what a recording actually contains.
 Callback smokes exercise source paths with extracted data; they are not
