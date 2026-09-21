@@ -521,11 +521,10 @@ static int parse_metadata(PyObject* metadata, ReplayView* replay) {
   // replay behavior. Keep those capabilities independent of the online
   // capture's fnmsubs zero-sign behavior: offline mainline Dolphin retains
   // retail zero signs.
-  // "network" is a Wii console mirrored to the launcher over the network
-  // (Slippi Nintendont with a consoleNick), not Dolphin netplay: it runs the
-  // recording codes only, so the vanilla magnifier rule applies exactly as
-  // for "nintendont". Verified by a full console Donkey Kong/Roy game whose offscreen
-  // 1% tick lands only under the vanilla rule (replays/validation/roy).
+  // Slippi Launcher's src/console/mirror_manager.ts uses SlpFileWriter for
+  // console streams; slippi-js src/node/utils/slpFile.ts writes "network".
+  // That transport tag does not establish Dolphin gameplay patches. Keep
+  // parse_start's scene defaults unless the platform below establishes them.
   // refs/slippi-ssbm-asm/README.md::Output/Netplay
   // refs/slippi-ssbm-asm/Online/Core/BrawlOffscreenDamage.asm
   if (strcmp(played_on, "dolphin") == 0 || strcmp(played_on, "mainline dolphin") == 0) {

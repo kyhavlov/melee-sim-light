@@ -82,7 +82,6 @@ enum {
     MSL_CORE_CHAR_LUIGI = 17,
     MSL_CORE_CHAR_DRMARIO = 21,
     MSL_CORE_CHAR_MARTH = 18,
-    MSL_CORE_CHAR_ROY = 26,
     MSL_CORE_CHAR_ZELDA = 19,
     MSL_CORE_CHAR_FALCO = 22,
     MSL_CORE_STICK_SCALE = 80,
@@ -296,7 +295,7 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_DRMARIO;
     case MSL_CORE_CHAR_MARTH:
         return CKIND_MARS;
-    case MSL_CORE_CHAR_ROY:
+    case MSL_CHARACTER_ROY:
         return CKIND_EMBLEM;
     case MSL_CORE_CHAR_ZELDA:
         return CKIND_ZELDA;
@@ -641,7 +640,7 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CORE_CHAR_JIGGLYPUFF &&
             config->players[i].char_id != MSL_CORE_CHAR_LUIGI &&
             config->players[i].char_id != MSL_CORE_CHAR_MARTH &&
-            config->players[i].char_id != MSL_CORE_CHAR_ROY &&
+            config->players[i].char_id != MSL_CHARACTER_ROY &&
             config->players[i].char_id != MSL_CORE_CHAR_ZELDA &&
             config->players[i].char_id != MSL_CORE_CHAR_FALCO) {
             fprintf(stderr,
@@ -1463,7 +1462,7 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
     static const uint8_t characters[] = {
         MSL_CORE_CHAR_FOX,        MSL_CORE_CHAR_FALCO,
         MSL_CORE_CHAR_MARTH,      MSL_CORE_CHAR_CAPTAIN_FALCON,
-        MSL_CORE_CHAR_ROY,
+        MSL_CHARACTER_ROY,
         MSL_CORE_CHAR_SHEIK,      MSL_CORE_CHAR_ZELDA,
         MSL_CORE_CHAR_JIGGLYPUFF, MSL_CORE_CHAR_PEACH,
         MSL_CORE_CHAR_LUIGI,

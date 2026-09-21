@@ -312,5 +312,9 @@
       },
       "notes": "Recorded by the user through the Slippi Launcher on 2026-09-19 versus a level-3 CPU Fox: full-charge Flare Blade with recoil, aerial and grounded Counter hits, all Double-Edge Dance stages, Blazer."
     }
+  ],
+  "network_metadata_sources": [
+    "https://github.com/project-slippi/slippi-launcher/blob/309e99760bea333fe6665d8d9fa06dab540ff377/src/console/mirror_manager.ts#L56-L140",
+    "https://github.com/project-slippi/slippi-js/blob/ff815345e641836a331191320c0f6eae21542a5f/src/node/utils/slpFile.ts#L285-L294"
   ]
 }
