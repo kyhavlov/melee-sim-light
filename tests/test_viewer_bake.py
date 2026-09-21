@@ -28,6 +28,7 @@ def test_baked_assets_match_manifest():
     rows = _manifest_rows()
     baked = {n: v for n, v in rows.items() if v[1].startswith('baked:')}
     assert 'mrGameAndWatch.zip' in baked
+    assert 'kirby.zip' in baked
     for name, (sha, url) in baked.items():
         path = ROOT / url[len('baked:'):]
         assert path.is_file(), path
@@ -77,3 +78,22 @@ def test_gamewatch_animation_matches_bind_translations():
             if kind in tracks:
                 value = FObjState(tracks[kind]).evaluate(0.0)
                 assert abs(value - model.joints[joint].translate[axis]) < 0.02, (joint, axis)
+
+
+@pytest.mark.skipif(not (DATA / 'PlKbNr.dat').is_file(), reason='needs extracted data/raw')
+def test_kirby_model_and_visibility_decode():
+    from bake.dat import load_dat_file
+    from bake.model import load_model
+    from bake.visibility import read_vis_tables
+
+    dat = load_dat_file(DATA / 'PlKbNr.dat')
+    model = load_model(dat, dat.roots['PlyKirby5K_Share_joint'])
+    assert len(model.joints) == 46
+    assert len(model.dobjs) == 42
+    ftdata = load_dat_file(DATA / 'PlKb.dat')
+    vis = read_vis_tables(ftdata, 'ftDataKirby')
+    assert vis.model_num == 2
+    # ftKb_Init_OnDeath selects state 0 on both models: the plain body.
+    assert vis.visible(42, [0, 0]) == {3, 4, 5, 6, 7, 18, 19}
+    # Stone hides model 1 and swaps model 0 to one of the stone shapes.
+    assert vis.visible(42, [2, -1]) == {20, 21, 22}

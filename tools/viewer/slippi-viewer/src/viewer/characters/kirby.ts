@@ -261,22 +261,22 @@ export const kirby: Character = {
     [472, "SkSpecialAirNLoop"],
     [473, "SkSpecialAirNCancel"],
     [474, "SkSpecialAirNEnd"],
-    [475, "SpecialN"], // PrSpecialNStartR (no asset)
-    [476, "SpecialN"], // PrSpecialNStartL (no asset)
+    [475, "PrSpecialNStartR"],
+    [476, "PrSpecialNStartL"],
     [477, "SpecialN"], // PrSpecialNLoop (no asset)
     [478, "SpecialN"], // PrSpecialNFull (no asset)
-    [479, "SpecialN"], // PrSpecialN1 (no asset)
+    [479, "PrSpecialN"], // PrSpecialN1
     [480, "SpecialN"], // PrSpecialNTurn (no asset)
-    [481, "SpecialN"], // PrSpecialNEndR (no asset)
-    [482, "SpecialN"], // PrSpecialNEndL (no asset)
-    [483, "SpecialN"], // PrSpecialAirNStartR (no asset)
-    [484, "SpecialN"], // PrSpecialAirNStartL (no asset)
+    [481, "PrSpecialNEndR"],
+    [482, "PrSpecialNEndL"],
+    [483, "PrSpecialAirNStartR"],
+    [484, "PrSpecialAirNStartL"],
     [485, "SpecialN"], // PrSpecialAirNLoop (no asset)
     [486, "SpecialN"], // PrSpecialAirNFull (no asset)
     [487, "SpecialN"], // PrSpecialAirN (no asset)
-    [488, "SpecialN"], // PrSpecialN0 (no asset)
-    [489, "SpecialN"], // PrSpecialAirNEndR0 (no asset)
-    [490, "SpecialN"], // PrSpecialAirNEndR1 (no asset)
+    [488, "PrSpecialN"], // PrSpecialN0
+    [489, "PrSpecialAirNEndR"], // PrSpecialAirNEndR0
+    [490, "PrSpecialAirNEndR"], // PrSpecialAirNEndR1
     [491, "SpecialN"], // PrSpecialNHit (no asset)
     [492, "MsSpecialNStart"],
     [493, "MsSpecialNLoop"],
@@ -286,16 +286,16 @@ export const kirby: Character = {
     [497, "MsSpecialAirNLoop"],
     [498, "MsSpecialAirNEnd"], // MsSpecialAirNEnd0
     [499, "MsSpecialAirNEnd"], // MsSpecialAirNEnd1
-    [500, "SpecialN"], // MtSpecialNStart (no asset)
-    [501, "SpecialN"], // MtSpecialNLoop (no asset)
+    [500, "MtSpecialNStart"],
+    [501, "MtSpecialNLoop"],
     [502, "SpecialN"], // MtSpecialNLoopFull (no asset)
-    [503, "SpecialN"], // MtSpecialNCancel (no asset)
-    [504, "SpecialN"], // MtSpecialNEnd (no asset)
-    [505, "SpecialN"], // MtSpecialAirNStart (no asset)
-    [506, "SpecialN"], // MtSpecialAirNLoop (no asset)
+    [503, "MtSpecialNCancel"],
+    [504, "MtSpecialNEnd"],
+    [505, "MtSpecialAirNStart"],
+    [506, "MtSpecialAirNLoop"],
     [507, "SpecialN"], // MtSpecialAirNLoopFull (no asset)
-    [508, "SpecialN"], // MtSpecialAirNCancel (no asset)
-    [509, "SpecialN"], // MtSpecialAirNEnd (no asset)
+    [508, "MtSpecialAirNCancel"],
+    [509, "MtSpecialAirNEnd"],
     [510, "GwSpecialN"],
     [511, "GwSpecialAirN"],
     [512, "SpecialN"], // DrSpecialN (no asset)

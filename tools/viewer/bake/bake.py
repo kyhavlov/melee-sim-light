@@ -47,6 +47,18 @@ CHARACTERS = {
             'SpecialAirLw': {5: 2}, 'SpecialAirLwCatch': {5: 2}, 'SpecialAirLwShoot': {5: 2},
         },
     ),
+    'kirby': dict(
+        kind=4, prefix='Kb', root='ftDataKirby',
+        model_root='PlyKirby5K_Share_joint',
+        # ftKb_Init_OnDeath: both models at state 0 (the plain body). Hats are
+        # separate PlKbCp* joint trees and are not baked here.
+        defaults=[0, 0],
+        # Stone (ftKb_SpecialLw2 in ftkirbyspecialn.c): model 1 hidden and
+        # model 0 on one of the five shapes from ftKb_Init_803CB4EC (2..6),
+        # chosen at random in the game; bake the first shape. The 22-frame
+        # entry flicker between Kirby and the stone is dropped.
+        overrides={'SpecialLw2': {0: 2, 1: -1}, 'SpecialAirLw2': {0: 2, 1: -1}},
+    ),
 }
 
 

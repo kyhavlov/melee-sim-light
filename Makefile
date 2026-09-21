@@ -992,3 +992,10 @@ viewer-bake-gamewatch: data-check
 		"$(PY)" -m bake.bake --character gamewatch --data "$(DATA)" \
 		--out "$(ROOT)/tools/viewer/assets/baked/mrGameAndWatch.zip"
 	@sha256sum "$(ROOT)/tools/viewer/assets/baked/mrGameAndWatch.zip"
+
+.PHONY: viewer-bake-kirby
+viewer-bake-kirby: data-check
+	@cd "$(ROOT)/tools/viewer" && MSL_BAKE_BUILD="$(BUILD_ROOT)/bake" CC="$(HOST_CC)" \
+		"$(PY)" -m bake.bake --character kirby --data "$(DATA)" \
+		--out "$(ROOT)/tools/viewer/assets/baked/kirby.zip"
+	@sha256sum "$(ROOT)/tools/viewer/assets/baked/kirby.zip"
