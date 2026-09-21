@@ -281,6 +281,8 @@ export interface PlayerState {
   readonly stocksRemaining: number;
   readonly actionStateFrameCounter: number;
   readonly animationIndex?: number;
+  /** Kirby's copy-ability hat as the copied fighter's internal id. */
+  readonly kirbyHatKind?: number;
   readonly hitstunRemaining: number;
   readonly isGrounded: boolean;
   readonly lastGroundId: number;

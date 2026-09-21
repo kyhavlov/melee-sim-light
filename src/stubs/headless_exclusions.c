@@ -187,6 +187,25 @@ void efLib_ResumeAll(HSD_GObj* gobj)
 {
     (void) gobj;
 }
+// Hosted GameData loads every effect bank eagerly at init
+// (runtime/effects.c::msl_effect_data_init), so the retail sync/async bank
+// loaders that Kirby's copy loader and the fighter data loaders call are
+// exact no-ops here. Unreferenced callers were dead-stripped before Kirby
+// made ftKb_SpecialN_800EED50 reachable from the preload.
+// refs/melee/src/melee/ef/efasync.c::{efAsync_LoadSync,efAsync_LoadAsync}
+void efAsync_LoadSync(int index)
+{
+    (void) index;
+}
+void efAsync_LoadAsync(int index)
+{
+    (void) index;
+}
+void efLib_SetFlags(HSD_GObj* gobj, s32 expire_flags)
+{
+    (void) gobj;
+    (void) expire_flags;
+}
 void efLib_SetParamAlpha(HSD_GObj* gobj, u8 alpha)
 {
     (void) gobj;
@@ -384,7 +403,3 @@ s32 lbRefract_PObjLoad(HSD_PObj* pobj, HSD_PObjDesc* desc)
     return hsdPObj.load(pobj, desc);
 }
 
-// Fighter_procMap calls this after every collision callback, but the source
-// body is entirely guarded by FTKIND_KIRBY. It is exactly empty for Fox.
-// refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_SpecialN_800F1D24
-void ftKb_SpecialN_800F1D24(Fighter_GObj* gobj) { (void) gobj; }

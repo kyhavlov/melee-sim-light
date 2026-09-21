@@ -671,8 +671,8 @@ export const itemNamesById = [
   "", // 0x31
   "Kirby's Cutter beam", // 0x32
   "Kirby's Hammer", // 0x33
-  "", // 0x34
-  "", // 0x35
+  "Kirby's Copy Star", // 0x34 (hat drop)
+  "Kirby's Spit Star", // 0x35
   "Fox's Laser", // 0x36
   "Falco's Laser", // 0x37
   "Fox's shadow", // 0x38

@@ -7,6 +7,7 @@
 #include <dolphin/os/OSAlloc.h>
 #ifdef MSL_CORE_NATIVE
 #include <runtime/relocation.h>
+#include <stdlib.h>
 
 #endif
 

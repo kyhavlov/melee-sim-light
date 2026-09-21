@@ -1210,6 +1210,19 @@ void ftAnim_80070108(Fighter* fp, Fighter_Part start, float t, float t_inv,
 void ftAnim_80070200(Fighter* fp, ftData_x8_x8* r4, CostumeTObjList* r5,
                      DObjList* r6)
 {
+#ifdef MSL_CORE_HOSTED
+    // Costume MObj/TObj animation is renderer-only: the fighter's own call
+    // (ftAnim_80070308) is omitted from Fighter_80068FC0 and the headless
+    // DAT translation nulls every HSD_Joint draw-object union, so the DObj
+    // lists this walks are empty. Kirby's per-costume copy hats
+    // (ftKb_SpecialN_800F1{0F8,168,1F0,278,4B4}) still reach it; record the
+    // empty texture list instead of searching the absent TObjs.
+    // refs/melee/src/melee/ft/ftanim.c::ftAnim_80070200
+    (void) fp;
+    (void) r6;
+    r5->n_costume_tobjs = 0;
+    r5->x5D0 = r4->xC[0];
+#else
     u32 i;
     r5->n_costume_tobjs = r4->x8;
 
@@ -1226,6 +1239,7 @@ void ftAnim_80070200(Fighter* fp, ftData_x8_x8* r4, CostumeTObjList* r5,
         }
         HSD_AObjSetRate(r5->costume_tobjs[i]->aobj, 0.0F);
     }
+#endif
 }
 
 void ftAnim_80070308(Fighter_GObj* fighter_gobj)

@@ -6,6 +6,7 @@
 // Source: refs/melee/src/sysdolphin/baselib/archive.c::HSD_ArchiveParse and
 // the public-root consumers named below.
 
+#include <stdint.h>
 #include "ef/types.h"
 #include "ft/chara/ftCaptain/types.h"
 #include "ft/chara/ftFox/types.h"
@@ -16,6 +17,8 @@
 #include "ft/chara/ftDonkey/types.h"
 #include "ft/chara/ftPeach/types.h"
 #include "ft/chara/ftPikachu/types.h"
+#include "ft/chara/ftKirby/types.h"
+#include "it/items/itkirbycutterbeam.h"
 #include "ft/chara/ftPopo/types.h"
 #include "ft/chara/ftSamus/types.h"
 #include "ft/chara/ftYoshi/types.h"
@@ -190,6 +193,354 @@ typedef Article* MslDatIceClimberArticles[3];
 // slots carry presentation graphs no ported code reaches.
 // refs/melee/src/melee/ft/chara/ftPikachu/ftPk_Init.c
 typedef Article* MslDatPikachuArticles[3];
+// PlKb.dat's ftData.x48_items leads with the four articles ftKb_Init_OnLoad
+// registers under item kinds 50..53: the Final Cutter beam, the hammer and
+// the two copy-star slots.
+// refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_Init_OnLoad
+typedef struct MslDatKirbyArticles {
+    Article* articles[4];
+    // ftKb_SpecialN_800F5898 returns x48_items[4] as the star model that
+    // ftCo_ThrownKirby attaches to a spat fighter.
+    HSD_Joint* spit_star;
+} MslDatKirbyArticles;
+
+// Kirby's copy-ability archives. ftKb_SpecialN_800EED50 stores each
+// PlKbCp*.dat root straight into ft_80459B88 and the code reads it through
+// KirbyHatStruct, whose hat_dynamics[] slots are untyped: every hat is its
+// own layout ("@todo Every hat is its own struct"). These views keep
+// KirbyHatStruct's host shape (joint, parts desc, seven pointer-sized
+// slots; Game & Watch indexes slots 5 and 6) and type each slot from the
+// code that reads it: the article registrations in
+// ftKb_SpecialN_800F16D0, the per-hat dynamics initializers in
+// ftdynamics.c (ftCo_8009D18C..ftCo_8009DB50), the accessory joints in
+// ftkirbyspecialmars.c/ftkirbyspecialiceclimber.c, the Yoshi egg anim
+// joints in ftkirbyspecialyoshi.c and the Game & Watch visibility lookup in
+// ftKb_SpecialN_800F14B4. Slots no code reads stay raw words. The five
+// hats with per-costume models (Donkey Kong, Jigglypuff, Mewtwo, Falco,
+// Game & Watch) start with a parts desc (model_num, vis_table), the
+// costume texture-animation table read as ftData_x8_x8 (count at +8, the
+// per-costume u16 index lists at +C) and a bit mask instead of a joint;
+// ftKb_SpecialN_800EF040 reads that mask through hat_dynamics[1],
+// ftAnim_80070200 the texture table through &desc.vis_table, and
+// ftKb_SpecialN_800EF438 the root joint through hat_dynamics[2].
+// refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c
+// refs/melee/src/melee/ft/ftdynamics.c
+typedef struct MslDatKirbyHatDynamics {
+    // ftDynamics with the two trailing pointers left raw: the hat
+    // initializers read dynamicsNum and ftDynamicBones only.
+    int dynamicsNum;
+    ArticleDynamicBones* ftDynamicBones;
+    int x4;
+    uintptr_t x8;
+    uintptr_t x10;
+} MslDatKirbyHatDynamics;
+// PlKbCpGw.dat slot 4 is three scalar words, not an ftDynamics graph.
+// ftKb_Init_800EEB00/800EEB1C copy the colors at +4/+8 (GALE01 lwz/stw).
+typedef struct MslDatKirbyGameWatchColors {
+    float x0;
+    u32 fill;
+    u32 outline;
+} MslDatKirbyGameWatchColors;
+typedef struct MslDatKirbyHatMario {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    uintptr_t d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatMario;
+typedef struct MslDatKirbyHatFox {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    Article* d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatFox;
+typedef struct MslDatKirbyHatCaptain {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    uintptr_t d0;
+    uintptr_t d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatCaptain;
+typedef struct MslDatKirbyHatKoopa {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    MslDatKirbyHatDynamics* d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatKoopa;
+typedef struct MslDatKirbyHatLink {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    Article* d1;
+    MslDatKirbyHatDynamics* d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatLink;
+typedef struct MslDatKirbyHatSeak {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    Article* d1;
+    MslDatKirbyHatDynamics* d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatSeak;
+typedef struct MslDatKirbyHatNess {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    Article* d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatNess;
+typedef struct MslDatKirbyHatPeach {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    Article* d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatPeach;
+typedef struct MslDatKirbyHatPopo {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    HSD_Joint* d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatPopo;
+typedef struct MslDatKirbyHatPikachu {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    Article* d1;
+    MslDatKirbyHatDynamics* d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatPikachu;
+typedef struct MslDatKirbyHatSamus {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    uintptr_t d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatSamus;
+typedef struct MslDatKirbyHatYoshi {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    HSD_Joint* d0;
+    HSD_AnimJoint* d1;
+    HSD_AnimJoint* d2;
+    HSD_AnimJoint* d3;
+    HSD_AnimJoint* d4;
+    Article* d5;
+    uintptr_t d6;
+} MslDatKirbyHatYoshi;
+typedef struct MslDatKirbyHatLuigi {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    uintptr_t d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatLuigi;
+typedef struct MslDatKirbyHatMars {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    HSD_Joint* d0;
+    MslDatKirbyHatDynamics* d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatMars;
+typedef struct MslDatKirbyHatZelda {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    MslDatKirbyHatDynamics* d0;
+    uintptr_t d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatZelda;
+typedef struct MslDatKirbyHatClink {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    Article* d1;
+    MslDatKirbyHatDynamics* d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatClink;
+typedef struct MslDatKirbyHatDrmario {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    uintptr_t d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatDrmario;
+typedef struct MslDatKirbyHatPichu {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    Article* d0;
+    Article* d1;
+    MslDatKirbyHatDynamics* d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatPichu;
+typedef struct MslDatKirbyHatGanon {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    uintptr_t d0;
+    uintptr_t d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatGanon;
+typedef struct MslDatKirbyHatEmblem {
+    HSD_Joint* hat_joint;
+    u32 model_num;
+    FtPartsVisLookup* vis_table;
+    HSD_Joint* d0;
+    MslDatKirbyHatDynamics* d1;
+    uintptr_t d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatEmblem;
+typedef struct MslDatKirbyHatDonkey {
+    uintptr_t w0;
+    u32 w1;
+    uintptr_t w2;
+    u16** d0;
+    uintptr_t d1;
+    HSD_Joint* d2;
+    uintptr_t d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatDonkey;
+typedef struct MslDatKirbyHatPurin {
+    uintptr_t w0;
+    u32 w1;
+    uintptr_t w2;
+    u16** d0;
+    uintptr_t d1;
+    HSD_Joint* d2;
+    MslDatKirbyHatDynamics* d3;
+    uintptr_t d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatPurin;
+typedef struct MslDatKirbyHatMewtwo {
+    uintptr_t w0;
+    u32 w1;
+    uintptr_t w2;
+    u16** d0;
+    uintptr_t d1;
+    HSD_Joint* d2;
+    Article* d3;
+    MslDatKirbyHatDynamics* d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatMewtwo;
+typedef struct MslDatKirbyHatFalco {
+    uintptr_t w0;
+    u32 w1;
+    uintptr_t w2;
+    u16** d0;
+    uintptr_t d1;
+    HSD_Joint* d2;
+    Article* d3;
+    Article* d4;
+    uintptr_t d5;
+    uintptr_t d6;
+} MslDatKirbyHatFalco;
+typedef struct MslDatKirbyHatGamewatch {
+    uintptr_t w0;
+    u32 w1;
+    uintptr_t w2;
+    u16** d0;
+    uintptr_t d1;
+    HSD_Joint* d2;
+    FtPartsVisLookup* d3;
+    MslDatKirbyGameWatchColors* d4;
+    Article* d5;
+    Article* d6;
+} MslDatKirbyHatGamewatch;
 // ftYs_Init_OnLoad registers three articles; ftYs_SpecialN_8012CDD4 returns
 // the fourth slot's joint graph for the captured fighter's egg accessory.
 typedef struct MslDatYoshiArticles {
@@ -218,6 +569,10 @@ typedef struct MslDatGameWatchChefAttrs {
     float x4, x8, xC;
     itGamewatchchefAttrEntry entries[5];
 } MslDatGameWatchChefAttrs;
+// it_802C74D8 reads the pan's single rendering-attribute pointer.
+typedef struct MslDatKirbyChefPanAttrs {
+    void* x0;
+} MslDatKirbyChefPanAttrs;
 // PlLk.dat and PlCl.dat share one seven-slot x48_items layout: slots 0..4
 // are the bomb, boomerang, hookshot, arrow, and bow articles both OnLoads
 // register (item kinds 58..65 and 76/77); slot 5 is the milk-bottle article
@@ -335,6 +690,35 @@ void* msl_native_dat_type_roots[] = {
     (itYoshiEggThrowAttributes*) 0,
     (StarAttrs*) 0,
     (ftPikachuAttributes*) 0,
+    (ftKb_DatAttrs*) 0,
+    (itKirbyCutterBeamAttributes*) 0,
+    (MslDatKirbyArticles*) 0,
+    (MslDatKirbyHatDynamics*) 0,
+    (MslDatKirbyHatMario*) 0,
+    (MslDatKirbyHatFox*) 0,
+    (MslDatKirbyHatCaptain*) 0,
+    (MslDatKirbyHatKoopa*) 0,
+    (MslDatKirbyHatLink*) 0,
+    (MslDatKirbyHatSeak*) 0,
+    (MslDatKirbyHatNess*) 0,
+    (MslDatKirbyHatPeach*) 0,
+    (MslDatKirbyHatPopo*) 0,
+    (MslDatKirbyHatPikachu*) 0,
+    (MslDatKirbyHatSamus*) 0,
+    (MslDatKirbyHatYoshi*) 0,
+    (MslDatKirbyHatLuigi*) 0,
+    (MslDatKirbyHatMars*) 0,
+    (MslDatKirbyHatZelda*) 0,
+    (MslDatKirbyHatClink*) 0,
+    (MslDatKirbyHatDrmario*) 0,
+    (MslDatKirbyHatPichu*) 0,
+    (MslDatKirbyHatGanon*) 0,
+    (MslDatKirbyHatEmblem*) 0,
+    (MslDatKirbyHatDonkey*) 0,
+    (MslDatKirbyHatPurin*) 0,
+    (MslDatKirbyHatMewtwo*) 0,
+    (MslDatKirbyHatFalco*) 0,
+    (MslDatKirbyHatGamewatch*) 0,
     (itPikachuthunderAttributes*) 0,
     (itPikachutJoltGroundAttributes*) 0,
     (MslDatMewtwoArticles*) 0,
@@ -344,6 +728,7 @@ void* msl_native_dat_type_roots[] = {
     (MslDatGameWatchArticles*) 0,
     (ftGameWatchAttributes*) 0,
     (MslDatGameWatchChefAttrs*) 0,
+    (MslDatKirbyChefPanAttrs*) 0,
     (itGamewatchparachuteAttributes*) 0,
     (MslDatNessArticles*) 0,
     (ftNessAttributes*) 0,

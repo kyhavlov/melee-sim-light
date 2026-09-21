@@ -46,9 +46,20 @@ typedef struct MslSourceGameData {
         UnkCostumeStruct marth_costumes[5];
         UnkCostumeStruct roy_costumes[5];
         UnkCostumeStruct pichu_costumes[4];
+        UnkCostumeStruct kirby_costumes[6];
         UnkCostumeStruct zelda_costumes[5];
         UnkCostumeStruct falco_costumes[4];
         HSD_Joint* puff_hat_joints[6];
+        /* refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ft_80459B88: the
+           copy-ability archives and hat structs, loaded at init. */
+        struct ft_80459B88_t kirby_copy;
+        /* ftkirby.c::ftKb_Init_803C9ED8..803C9F98 and the kind-indexed
+           pointer table ftKb_Init_803C9FC8: per-costume hat model records for
+           the Donkey Kong, Jigglypuff, Mewtwo, Falco and Game & Watch copies:
+           six {joint, matanim} pointer pairs per kind (retail 0x30 bytes of
+           u32, pointer-sized here). */
+        void* kirby_costume_hats[5][12];
+        void* kirby_costume_hat_table[FTKIND_MAX];
         void* common_data[23];
 #if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
         uint32_t part_flags[FTKIND_MAX][UINT8_MAX + 1];
@@ -185,6 +196,14 @@ typedef struct MslSourceMatchState {
     StageInfo stage;
     MslItemState item;
     u32 fighter_spawn_counter;
+    /* Isolated joint copies for Kirby hat accessory loads made after the
+       match arena seals (ftparts.c::ftParts_800753D4): eight per Kirby
+       (the Mewtwo copy inserts seven accessories, mask 0x7F0), taken
+       round-robin; a copy's accessories are removed before the next hat
+       loads, so the older keys are free again by the time they are reused. */
+    HSD_Joint* kirby_iso_joints[8 * 4]; /* 8 * MSL_CORE_MAX_PLAYERS */
+    u8 kirby_iso_count;
+    u8 kirby_iso_next;
     u16 attack_instance_counter;
     u16 stale_attack_instance_counter;
     MslSourceCameraState camera;

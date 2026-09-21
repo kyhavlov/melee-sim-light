@@ -15,6 +15,7 @@
 #ifdef MSL_CORE_NATIVE
 #include <platform/memory.h>
 #include <runtime/relocation.h>
+#include <stdlib.h>
 #endif
 
 void _hsdClassInfoInit(void);

@@ -1,4 +1,5 @@
 #include "ftparts.h"
+#include "ft/ft_0877.h"
 
 #include "fighter.h"
 #include "ftdata.h"
@@ -232,6 +233,15 @@ static const u8 gameplay_part_masks[FTKIND_MAX][MAX_FT_PARTS] = {
         [29] = 1, [30] = 1, [31] = 1, [37] = 1, [41] = 1, [42] = 1,
         [43] = 1, [44] = 1, [47] = 1, [48] = 1, [49] = 1, [50] = 1,
         [51] = 1, [56] = 1, [58] = 1,
+    },
+    // kirby: 32 live / 27 cold of 59 parts
+    [FTKIND_KIRBY] = {
+        [0] = 1, [1] = 1, [2] = 1, [3] = 1, [4] = 1, [5] = 1,
+        [6] = 1, [11] = 1, [12] = 1, [35] = 1, [36] = 1, [37] = 1,
+        [38] = 1, [39] = 1, [40] = 1, [41] = 1, [42] = 1, [43] = 1,
+        [44] = 1, [45] = 1, [46] = 1, [47] = 1, [48] = 1, [49] = 1,
+        [50] = 1, [51] = 1, [52] = 1, [53] = 1, [54] = 1, [55] = 1,
+        [56] = 1, [57] = 1,
     },
     // ness: 36 live / 27 cold of 63 parts
     [FTKIND_NESS] = {
@@ -1330,6 +1340,8 @@ void ftParts_800753D4(Fighter* arg0, struct Fighter_804D6540_x0_t* arg1,
     HSD_Joint* sp6C;
 #ifndef MSL_CORE_HOSTED
     HSD_Joint sp2C;
+#else
+    bool from_reserve = false;
 #endif
 
     HSD_JObj* temp_r31;
@@ -1353,7 +1365,14 @@ void ftParts_800753D4(Fighter* arg0, struct Fighter_804D6540_x0_t* arg1,
         // fighter construction; its offset identity relocates with the
         // match, and both loads share it exactly as retail's stack key does.
         // refs/melee/src/melee/ft/ftparts.c::ftParts_800753D4
-        HSD_Joint* iso = HSD_MemAlloc(sizeof(*iso));
+        // Kirby's copy hats with costume-specific models load their accessory
+        // during play; the sealed arena hands those loads a joint from the
+        // reserve made at construction (runtime/scalar.c).
+        HSD_Joint* iso = msl_kirby_iso_joint_take();
+        from_reserve = iso != NULL;
+        if (iso == NULL) {
+            iso = HSD_MemAlloc(sizeof(*iso));
+        }
         *iso = *sp6C;
         iso->next = 0;
         iso->child = 0;
@@ -1372,11 +1391,21 @@ void ftParts_800753D4(Fighter* arg0, struct Fighter_804D6540_x0_t* arg1,
     ftParts_80075304(arg1->x2, arg0->parts[arg1->x1].joint, temp_r30);
     ftParts_80075304(arg1->x2, arg0->parts[arg1->x1].x4_jobj2, temp_r31);
 #ifdef MSL_CORE_NATIVE
-    msl_fighter_pose_insert_joint(temp_r30);
-    msl_fighter_pose_insert_joint(temp_r31);
+    if (from_reserve) {
+        // Kirby's copy-hat accessories (Jigglypuff, Mewtwo, Falco) load
+        // mid-match. No gameplay owner reads their parts (the copies spawn
+        // from Kirby's own parts 0/6/12/39/44), and the pose array is shared
+        // by every player with live preorder/ECB indices, so keep them out
+        // of it like masked parts: cold in the JObj tree, never animated.
+        temp_r30->flags |= JOBJ_MSL_GAMEPLAY_COLD;
+        temp_r31->flags |= JOBJ_MSL_GAMEPLAY_COLD;
+    } else {
+        msl_fighter_pose_insert_joint(temp_r30);
+        msl_fighter_pose_insert_joint(temp_r31);
 #ifdef MSL_CORE_WASM
-    msl_fighter_pose_bind_part(temp_r30, arg1->x0);
+        msl_fighter_pose_bind_part(temp_r30, arg1->x0);
 #endif
+    }
 #endif
 
     tree_depth = arg0->parts[arg1->x1].xC;
@@ -1394,6 +1423,13 @@ void ftParts_800753D4(Fighter* arg0, struct Fighter_804D6540_x0_t* arg1,
 void ftParts_800755E8(Fighter* fp, u8* arg1)
 {
     FighterBone* bone = &fp->parts[*arg1];
+#ifdef MSL_CORE_NATIVE
+    // ftParts_800753D4 registered both accessory JObjs with the compact pose
+    // (their aobj slot holds the pose node); erase them before the HSD
+    // release would treat that node as an AObj.
+    msl_fighter_pose_erase_joint(bone->joint);
+    msl_fighter_pose_erase_joint(bone->x4_jobj2);
+#endif
     HSD_JObjRemove(bone->joint);
     HSD_JObjRemove(bone->x4_jobj2);
     bone->joint = NULL;

@@ -26,6 +26,7 @@
 #include <melee/pl/plbonuslib.h>
 #include <melee/pl/plstale.h>
 #include <math_ppc.h>
+#include <runtime/match.h>
 
 const Quaternion lbl_803B7500 = { 0, 3.1415927f, 0, 0 };
 

@@ -267,7 +267,10 @@ typedef struct MslCoreViewerPlayer {
     uint8_t combo_count;
     uint8_t last_hit_by;
     uint8_t state_flags[MSL_CORE_STATE_FLAGS_BYTES];
-    uint8_t _pad0[3];
+    // Kirby's copy-ability hat as the copied fighter kind; FTKIND_KIRBY (4)
+    // means no hat and 0xFF marks a non-Kirby fighter.
+    uint8_t kirby_hat;
+    uint8_t _pad0[2];
     uint16_t action_id;
     int16_t action_frame;
     uint16_t hitlag;

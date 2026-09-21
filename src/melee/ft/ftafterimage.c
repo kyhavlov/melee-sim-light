@@ -20,6 +20,7 @@
 #include <melee/lb/lb_00B0.h>
 #include <melee/lb/lbvector.h>
 #include <MSL/math_ppc.h>
+#include <math.h>
 
 typedef struct AfterimageVtx {
     f32 x, y, z;

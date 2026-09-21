@@ -1130,12 +1130,12 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
         character != 13 && character != 14 && character != 15 && character != 16 && character != 17 &&
         character != 24 &&
         character != 18 && character != 19 && character != 20 && character != 21 &&
-        character != 26 && character != 23 &&
+        character != 26 && character != 4 && character != 23 &&
         character != 22 && character != 25 && character != 0) {
       snprintf(error, error_size,
                "Melee core requires Mario, Fox, Captain Falcon, Donkey Kong, Ganondorf, Bowser, "
                "Link, Young Link, Sheik, Peach, Ice Climbers, Pikachu, Samus, Ness, Yoshi, "
-               "Jigglypuff, Mewtwo, Game & Watch, Luigi, Marth, Roy, Pichu, Zelda, Dr. Mario, or Falco players");
+               "Jigglypuff, Mewtwo, Game & Watch, Luigi, Marth, Roy, Pichu, Kirby, Zelda, Dr. Mario, or Falco players");
       return -1;
     }
     // Ice Climbers leader post rows carry internal kind 10 (Popo) and the

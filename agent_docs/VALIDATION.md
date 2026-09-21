@@ -44,6 +44,14 @@ Instruction-level adaptations are recorded in `src/upstream_delta_ledger.tsv`.
 - [Pichu](validation/pichu_provenance.json): 14 corpus games (Dolphin and Wii
   console captures from Yeti Weekly and D20 Melee, two of them classified
   missing-raw-cstick-asdi) with capture metadata and hashes.
+- [Kirby](validation/kirby_provenance.json): 26 corpus games (2026 Mainline
+  Dolphin including a level-6 CPU Bowser game, 2023-2026 Dolphin games, Wii
+  console captures from D20 Melee #1, #3 and #37, one classified
+  missing-raw-cstick-asdi) plus 17 scripted headless Dolphin captures covering
+  copied specials, hat acquisition/loss and Kirby's own specials around
+  Battlefield, with capture metadata, hashes, the recorder and unresolved
+  unadmitted recordings. Roy/Pichu copy recordings were unavailable at integration;
+  source-callback smoke covers those two copy owners.
 
 The interaction coverage tests inspect what a recording actually contains.
 Callback smokes exercise source paths with extracted data; they are not

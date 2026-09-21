@@ -28,6 +28,10 @@ export function PlayerHUD(props: { player: number }) {
         ].find((n) => n !== undefined && n.length > 0)
       : ""
   );
+  const hat = createMemo(() => {
+    const kind = renderData()?.playerState.kirbyHatKind;
+    return kind === undefined ? "" : ` (${characterNameByInternalId[kind]} hat)`;
+  });
 
   return (
     <>
@@ -57,7 +61,7 @@ export function PlayerHUD(props: { player: number }) {
           x={`${position().x}%`}
           y={`${position().y + 7}%`}
           text-anchor="middle"
-          textContent={name()}
+          textContent={`${name()}${hat()}`}
           fill={renderData()!.innerColor}
           stroke="black"
         />

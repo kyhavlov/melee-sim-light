@@ -16,6 +16,7 @@
 #include <string.h>
 #include <dolphin/mtx.h>
 #include <MetroTRK/intrinsics.h>
+#include <melee/ft/chara/ftCommon/ftCo_0A01.h>
 
 // Source callbacks do not carry a match argument. Bind them to the scalar
 // match selected by the private runtime API while keeping their mutable rule
@@ -48,18 +49,6 @@ static _Thread_local MslCoreMatchRules* msl_bound_match_rules;
 #define msl_respawn_reservation_character                                     \
     (msl_bound_match_rules->respawn_reservation_character)
 #define msl_ucf_pad (msl_bound_match_rules->ucf_pad)
-
-void ftKb_SpecialN_800F1F1C(Fighter_GObj* gobj, Vec3* pos)
-{
-    (void) gobj;
-    (void) pos;
-    // The shared wall/ceiling-reflect owners call this hook without a kind
-    // switch. Its source body spawns Kirby's copied-neutral-special effect
-    // only when kind == FTKIND_KIRBY, so the Fox projection is an
-    // exact no-op rather than an unresolved abort.
-    // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::
-    //     ftKb_SpecialN_800F1F1C
-}
 
 static float msl_absf(float value)
 {
@@ -610,7 +599,7 @@ int gm_8016C75C(HSD_GObj* arg0)
 // The hosted bootstrap constructs the ordinary versus scene, so the scene
 // router always reports the standard VS major mode.
 // refs/melee/src/melee/gm/gm_1A3F.c::gm_801A4310
-u8 gm_801A4310(void) { return GM_VS; }
+u8 gm_GetCurrentGameMode(void) { return GM_VS; }
 
 // refs/melee/src/melee/gm/gm_16AE.c::gm_8016B14C reports the singles rule.
 bool gm_8016B14C(void) { return !msl_is_teams; }
@@ -719,15 +708,6 @@ bool msl_core_match_is_over(void) { return msl_match_ended; }
 // refs/melee/src/melee/if/ifstatus.c::{ifStatus_802F6508,ifStatus_802F6E1C}
 void ifStatus_802F6508(int slot) { (void) slot; }
 void ifStatus_802F6E1C(int slot) { (void) slot; }
-
-// refs/melee/src/melee/ft/chara/ftKirby/ftkirbyspecialn.c. ProcessHit calls
-// this for every fighter, but its only behavior (and RNG consumption) is
-// guarded by FTKIND_KIRBY. The declared Fox/FD domain contains Fox only.
-void ftKb_SpecialN_800F5BA4(Fighter* fp) { (void) fp; }
-
-// Same Kirby-only copy-ability loss gate as 800F5BA4, used by a second
-// common damage/throw path (ftkirbyspecialn.c::ftKb_SpecialN_800F5C34).
-void ftKb_SpecialN_800F5C34(Fighter* fp) { (void) fp; }
 
 // GALE01 versus replays use the US language setting. These are the direct
 // fixed-domain projections of refs/melee/src/melee/lb/lblanguage.c; retaining

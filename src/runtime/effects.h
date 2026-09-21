@@ -13,7 +13,9 @@
 enum {
     // Banks index refs/melee/src/melee/ef/efasync.c::efAsync_DatEntries;
     // Luigi's effLuigiDataTable occupies slot 18.
-    MSL_CORE_EFFECT_BANK_CAPACITY = 19,
+    // Kirby's copy-ability banks reach id 48 (EfKbFe.dat).
+    // refs/melee/src/melee/ef/efasync.c::efAsync_DatEntries
+    MSL_CORE_EFFECT_BANK_CAPACITY = 49,
     MSL_CORE_EFFECT_QUEUE_CAPACITY = 256,
     MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY = 0x28,
     MSL_CORE_EFFECT_MODEL_START_CAPACITY = 4,

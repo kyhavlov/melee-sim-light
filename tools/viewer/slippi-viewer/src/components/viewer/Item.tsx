@@ -12,8 +12,74 @@ import { access } from "~/state/accessor";
 
 // Note: Most items coordinates and sizes are divided by 256 to convert them
 // from hitboxspace to worldspace.
+// Copy kinds whose originals already have a renderer.
+const kirbyCopyAliases: Record<string, string> = {
+  "Kirby copy Mario's Fire (B)": "Mario's fire",
+  "Kirby copy Luigi's Fire (B)": "Luigi's fire",
+  "Kirby copy Fox's Laser (B)": "Fox's Laser",
+  "Kirby copy Falco's Laser (B)": "Falco's Laser",
+  "Kirby copy Link's Arrow (B)": "Arrow",
+  "Kirby copy Young Link's Arrow (B)": "Arrow",
+  "Kirby copy Samus' Chargeshot (B)": "Samus's chargeshot",
+  "Kirby copy Sheik's Needle (thrown) (B)": "Needle(thrown)",
+  "Kirby copy Peach's Toad (B)": "Toad",
+  "Kirby copy Toad's Spore (B)": "Toad's spore",
+  "Kirby copy Dr. Mario's Capsule (B)": "Dr. Mario's capsule",
+  "Kirby copy IceClimber's IceCube (B)": "Ice(Iceclimbers)",
+  "Kirby copy Mewtwo's Shadowball (B)": "Mewtwo's Shadowball",
+  "Kirby copy PK Flash (B)": "PK Flash",
+  "Kirby copy PK Flash Explosion (B)": "PK Flash (explosion)",
+  "Kirby copy Pikachu's Thunder (B)": "Pikachu's thunder (B)",
+  "Kirby copy Pichu's Thunder (B)": "Pichu's thunder (B)",
+  "Kirby copy Bowser's Flame (B)": "Bowser's flame",
+  "Kirby copy Mr. Game & Watch's Sausage (B)": "Sausage",
+  "Kirby copy Sheik's Needle (ground) (B)": "Needle",
+  "Yoshi's Tongue?? (B)": "Kirby's Yoshi egg",
+};
+
+// Projectiles without dedicated art draw as a labeled disc: [radius, fill].
+const genericProjectiles: Record<string, [number, string]> = {
+  "Dr. Mario's capsule": [1.5, "#e8e8ff"],
+  "Ice(Iceclimbers)": [2, "#9fdcff"],
+  "Mewtwo's Shadowball": [3, "#7040c0"],
+  "PK Flash": [3, "#40e070"],
+  "PK Flash (explosion)": [8, "#40e070"],
+  "Pikachu's thunder (B)": [2, "#ffe040"],
+  "Pichu's thunder (B)": [2, "#ffe040"],
+  "Bowser's flame": [2.5, "#ff7020"],
+  "Sausage": [1.5, "#d08040"],
+  "Toad": [4, "#ff80c0"],
+  "Toad's spore": [1, "#ffc0e0"],
+  "Needle": [0.8, "#c0c0c0"],
+  "Kirby's Yoshi egg": [6, "#c0f0a0"],
+  "Kirby's Cutter beam": [3, "#f0f0f0"],
+  "Kirby's Hammer": [3, "#c08040"],
+};
+
+function GenericProjectile(props: { item: ItemUpdate; name: string }) {
+  const style = createMemo(() => genericProjectiles[props.name]);
+  return (
+    <>
+      <circle
+        cx={props.item.xPosition}
+        cy={props.item.yPosition}
+        r={style()[0]}
+        fill={style()[1]}
+        fill-opacity={0.7}
+        stroke="black"
+        stroke-width={0.3}
+      />
+    </>
+  );
+}
+
 export function Item(props: { item: ItemUpdate }) {
-  const itemName = createMemo(() => itemNamesById[props.item.typeId]);
+  // Kirby's copied projectiles are their own item kinds ("Kirby copy Fox's
+  // Laser (B)") but draw like the originals.
+  const itemName = createMemo(() => {
+    const raw = itemNamesById[props.item.typeId];
+    return raw === undefined ? undefined : kirbyCopyAliases[raw] ?? raw;
+  });
   return (
     <Switch>
       <Match when={itemName() === "Needle(thrown)"}>
@@ -48,6 +114,16 @@ export function Item(props: { item: ItemUpdate }) {
       </Match>
       <Match when={itemName() === "Samus's chargeshot"}>
         <SamusChargeshot item={props.item} />
+      </Match>
+      <Match
+        when={
+          itemName() === "Kirby's Copy Star" || itemName() === "Kirby's Spit Star"
+        }
+      >
+        <KirbyStar item={props.item} />
+      </Match>
+      <Match when={itemName() !== undefined && itemName()! in genericProjectiles}>
+        <GenericProjectile item={props.item} name={itemName()!} />
       </Match>
       <Match when={itemName() === "Shyguy (Heiho)"}>
         <FlyGuy item={props.item} />
@@ -348,6 +424,31 @@ function FalcoLaser(props: { item: ItemUpdate }) {
       </For>
     </>
   );
+}
+
+// The hat-drop star (0x34) and the spit star (0x35): a spinning five-point
+// star at the item position, sized by the item's role.
+function KirbyStar(props: { item: ItemUpdate }) {
+  const radius = createMemo(() =>
+    itemNamesById[props.item.typeId] === "Kirby's Spit Star" ? 4 : 2.5
+  );
+  const points = createMemo(() => {
+    const spin = (props.item.frameNumber * 12) % 360;
+    const outer = radius();
+    const inner = outer * 0.45;
+    const pts: string[] = [];
+    for (let i = 0; i < 10; i += 1) {
+      const r = i % 2 === 0 ? outer : inner;
+      const angle = ((spin + i * 36) * Math.PI) / 180;
+      pts.push(
+        `${props.item.xPosition + r * Math.cos(angle)},${
+          props.item.yPosition + r * Math.sin(angle)
+        }`
+      );
+    }
+    return pts.join(" ");
+  });
+  return <polygon points={points()} fill="gold" stroke="black" stroke-width={0.3} />;
 }
 
 function FlyGuy(props: { item: ItemUpdate }) {

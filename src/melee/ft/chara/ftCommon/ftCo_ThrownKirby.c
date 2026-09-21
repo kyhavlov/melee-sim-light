@@ -182,8 +182,11 @@ static inline void inlineA0(Fighter_GObj* gobj)
     if (vel_mag > fp->mv.co.thrownkirby.x4) {
         fp->self_vel.x =
             (fp->self_vel.x * (vel_mag - fp->mv.co.thrownkirby.x4)) / vel_mag;
+        // Hosted: retail reads the star gravity through mv.ca.specialhi.vel.x,
+        // which aliases mv.co.thrownkirby.x4 in the GameCube union layout;
+        // the hosted Fighter widens the union, so name the lane directly.
         fp->self_vel.y =
-            (fp->self_vel.y * (vel_mag - fp->mv.ca.specialhi.vel.x)) / vel_mag;
+            (fp->self_vel.y * (vel_mag - fp->mv.co.thrownkirby.x4)) / vel_mag;
         if (fp->self_vel.y < 0) {
             fp->facing_dir = -1;
         } else {
@@ -290,8 +293,13 @@ void ftCo_800BE494(Fighter_GObj* gobj)
         Vec2 self_vel;
         ftKb_SpecialN_800F5874(&self_vel);
         fp->self_vel.y = self_vel.y;
-        if (fp->mv.ca.specialhi.vel.y) {
-            fp->self_vel.x = fp->mv.ca.specialhi.vel.y * self_vel.x;
+        // Hosted: retail reads the star's wall-bounce direction through
+        // mv.ca.specialhi.vel.y, which aliases mv.co.thrownkirby.x8 in the
+        // GameCube union layout (fp+2348); the widened thrower_gobj pointer
+        // moves x8 to +12 here, so name the lane (the alias read x4, the
+        // decel lane, and scaled the breakout speed by 0.13).
+        if (fp->mv.co.thrownkirby.x8) {
+            fp->self_vel.x = fp->mv.co.thrownkirby.x8 * self_vel.x;
         } else {
             fp->self_vel.x = self_vel.x * (fp->self_vel.x < 0 ? -1 : +1);
         }

@@ -568,6 +568,60 @@ void msl_fighter_pose_remove_tree(HSD_JObj* root)
     }
 }
 
+void msl_fighter_pose_erase_joint(HSD_JObj* joint)
+{
+    MslFighterPose* pose = active_pose();
+    MslFighterPoseJoint* node = pose_joint(joint);
+    uint16_t index;
+    uint16_t parent_index;
+    uint16_t ancestor;
+    uint16_t i;
+    if (node == NULL) {
+        return;
+    }
+    // Inverse of msl_fighter_pose_insert_joint for an accessory that
+    // HSD_JObjRemove is about to unlink: the node leaves the preorder array
+    // while its (single) child subtree stays in place and reparents to the
+    // node's parent, exactly as HSD_JObjRemove reparents the JObj child.
+    // refs/melee/src/melee/ft/ftparts.c::ftParts_800755E8
+    index = (uint16_t) (node - pose->joints);
+    parent_index = node->parent_index;
+    release_joint(node);
+    for (ancestor = parent_index; ancestor != UINT16_MAX;
+         ancestor = pose->joints[ancestor].parent_index)
+    {
+        --pose->joints[ancestor].tree_count;
+    }
+    joint->aobj = NULL;
+    memmove(&pose->joints[index], &pose->joints[index + 1],
+            (size_t) (pose->joint_count - index - 1) * sizeof(*pose->joints));
+    --pose->joint_count;
+    for (i = index; i < pose->joint_count; ++i) {
+        pose->joints[i].joint->aobj = (HSD_AObj*) &pose->joints[i];
+    }
+    for (i = 0; i < pose->joint_count; ++i) {
+        uint16_t parent = pose->joints[i].parent_index;
+        if (parent == index) {
+            pose->joints[i].parent_index = parent_index;
+        } else if (parent != UINT16_MAX && parent > index) {
+            pose->joints[i].parent_index = (uint16_t) (parent - 1);
+        }
+    }
+    for (i = 0; i < pose->ecb_count; ++i) {
+        uint16_t j;
+        HSD_ASSERT(147, pose->ecb[i].origin != index);
+        if (pose->ecb[i].origin > index) {
+            --pose->ecb[i].origin;
+        }
+        for (j = 0; j < pose->ecb[i].joint_count; ++j) {
+            HSD_ASSERT(148, (pose->ecb[i].joints[j] & 0x7FFF) != index);
+            if ((pose->ecb[i].joints[j] & 0x7FFF) > index) {
+                --pose->ecb[i].joints[j];
+            }
+        }
+    }
+}
+
 static void compact_tracks(MslFighterPose* pose)
 {
     uint16_t order[MSL_FIGHTER_POSE_JOINT_CAPACITY];

@@ -21,9 +21,9 @@
 #include <dolphin/os/OSAlloc.h>
 
 enum {
-    // 64 MiB filled up when the fourteenth character (Donkey Kong) joined
-    // the supported roster, and 96 MiB when the twenty-fourth (Roy) did; the
-    // shared game-data arena is host memory, not a GameCube budget.
+    // The complete roster and Kirby copy preload use 114.6 MB. Shared
+    // GameData is initialized once; keep its existing 128 MiB reserve.
+    // tests/melee_core/runtime_census.c
     MSL_MEMORY_GAME_DATA_BYTES = 128 * 1024 * 1024,
     // Native supported-domain construction remains below 2.75 MiB after
     // bounded source pools and exact relocation metadata. Keep a measured

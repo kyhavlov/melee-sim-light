@@ -16,6 +16,7 @@
 #include <melee/ft/inlines.h>
 #include <melee/ft/chara/ftCommon/ftCo_Fall.h>
 #include <melee/ft/chara/ftCommon/ftCo_FallSpecial.h>
+#include <math.h>
 
 static inline void ftKp_SpecialHi_Enter_inline(Fighter_GObj* gobj)
 {

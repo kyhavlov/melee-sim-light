@@ -84,6 +84,7 @@ export const viewerPlayerOffsets = Object.freeze({
   comboCount: 10,
   lastHitBy: 11,
   stateFlags: 12,
+  kirbyHat: 17,
   actionId: 20,
   actionFrame: 22,
   hitlag: 24,

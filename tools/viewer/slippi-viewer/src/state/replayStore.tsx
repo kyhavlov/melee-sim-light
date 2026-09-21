@@ -296,7 +296,10 @@ function computeRenderData(
   const animationName =
     characterData.animationMap.get(actionName) ??
     characterData.specialsMap.get(playerState.actionStateId) ??
-    actionName;
+    actionName ??
+    // Action ids past the shared table with no per-character entry (Kirby's
+    // copy specials) draw nothing instead of throwing inside the render loop.
+    "";
   const animationFrames = animations[animationName];
   // RebirthWait calls the common wait-animation callback, which can restart/select a wait anim
   // after the AObj ends while the action-state timer continues.
