@@ -6,15 +6,16 @@ Order: #30 PPC reset ownership, #26 arithmetic profiles, #27 Roy, #28 Pichu,
 #29 Kirby. Review and merge one at a time, then perform the approved replay
 admission cleanup locally without committing or pushing that final packet.
 
-Completed: #30 `59251229`, #26 `9ce438d3`, each after local checks and fresh CI.
+Completed: #30 `59251229`, #26 `9ce438d3`, #27 `12f2522f`, each after local
+checks and fresh CI.
 
-Current owner: Roy admission through upstream `ftFe_Init` and shared `ftMs_*`
-move owners. GameData owns extracted Roy archives/costumes and the shared Marth
-attribute layout; Match retains fighter state and source callbacks. API, scalar,
-batch, extraction, validation and viewer registries consume the admission.
-Replace only the unsupported-kind boundary with these source owners; no copied
-move logic or replay-specific behavior. Review the 128 MiB shared data reserve,
-four-Roy pool bounds, all five costumes and the network-console capture default.
+Current owner: Pichu admission through upstream `ftPc_Init` and shared `ftPk_*`
+move and Pikachu item owners. GameData owns Pichu archives, four costumes and
+translated Pikachu-shaped attributes; Match owns fighter and article state.
+API, scalar, batch, extraction, validation and viewer registries consume the
+admission. Replace only the unsupported-kind boundary; retain source-authored
+recoil, item kinds and callbacks without copied move logic. Verify four-Pichu
+pool bounds and combined Roy/Pichu preload inside the existing shared reserve.
 
 Pending replay rules and the decision/experiment log are under ignored
 `reports/triage/pr_sequence_20260920/`; consolidate stable validation policy

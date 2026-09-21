@@ -65,6 +65,9 @@ static int msl_test_setup(unsigned players, unsigned first, unsigned opponent)
     config.stock_count = 4;
     for (unsigned i = 0; i < players; ++i) config.players[i].char_id = first;
     config.players[1].char_id = opponent;
+    if (players == 4) {
+        for (unsigned i = 0; i < players; ++i) config.players[i].costume_id = i;
+    }
     MSL_TEST_CHECK((msl_test_match.memory.arena == NULL
                ? msl_core_match_init(&msl_test_match, &msl_test_game_data, &config, &msl_test_neutral)
                : msl_core_match_reset(&msl_test_match, &msl_test_game_data, &config, &msl_test_neutral)) == 0);
@@ -87,16 +90,16 @@ static void msl_test_place(unsigned port, float x, float y, float facing)
 
 // Records every item kind alive during a scenario as a bitmask over the
 // kinds we care about.
-enum { SEEN_PK_THUNDER = 1, SEEN_PC_THUNDER = 2, SEEN_PK_JOLT = 4, SEEN_PC_JOLT = 8 };
+enum { MSL_SEEN_PK_THUNDER = 1, MSL_SEEN_PC_THUNDER = 2, MSL_SEEN_PK_JOLT = 4, MSL_SEEN_PC_JOLT = 8 };
 static unsigned msl_test_item_kinds(void)
 {
     unsigned seen = 0;
     for (HSD_GObj* g = HSD_GObj_Entities->items; g; g = g->next) {
         int kind = ((Item*) g->user_data)->kind;
-        if (kind == It_Kind_Pikachu_Thunder) seen |= SEEN_PK_THUNDER;
-        if (kind == It_Kind_Pichu_Thunder) seen |= SEEN_PC_THUNDER;
-        if (kind == It_Kind_Pikachu_TJolt_Ground || kind == It_Kind_Pikachu_TJolt_Air) seen |= SEEN_PK_JOLT;
-        if (kind == It_Kind_Pichu_TJolt_Ground || kind == It_Kind_Pichu_TJolt_Air) seen |= SEEN_PC_JOLT;
+        if (kind == It_Kind_Pikachu_Thunder) seen |= MSL_SEEN_PK_THUNDER;
+        if (kind == It_Kind_Pichu_Thunder) seen |= MSL_SEEN_PC_THUNDER;
+        if (kind == It_Kind_Pikachu_TJolt_Ground || kind == It_Kind_Pikachu_TJolt_Air) seen |= MSL_SEEN_PK_JOLT;
+        if (kind == It_Kind_Pichu_TJolt_Ground || kind == It_Kind_Pichu_TJolt_Air) seen |= MSL_SEEN_PC_JOLT;
     }
     return seen;
 }
@@ -118,7 +121,7 @@ static int msl_test_jolt(unsigned kind, float* self, float* fox)
     *self = msl_test_fighter(0)->dmg.x1830_percent;
     *fox = msl_test_fighter(1)->dmg.x1830_percent;
     fprintf(stderr, "jolt kind=%u seen=%#x self=%g fox=%g\n", kind, seen, *self, *fox);
-    MSL_TEST_CHECK(seen == (kind == 23 ? SEEN_PC_JOLT : SEEN_PK_JOLT));
+    MSL_TEST_CHECK(seen == (kind == 23 ? MSL_SEEN_PC_JOLT : MSL_SEEN_PK_JOLT));
     MSL_TEST_CHECK(*fox > 0);
     return 0;
 }
@@ -140,7 +143,7 @@ static int msl_test_thunder(unsigned kind, float* self)
     *self = msl_test_fighter(0)->dmg.x1830_percent;
     fprintf(stderr, "thunder kind=%u seen=%#x self=%g motion=%d\n", kind, seen, *self,
             msl_test_fighter(0)->motion_id);
-    MSL_TEST_CHECK(seen == (kind == 23 ? SEEN_PC_THUNDER : SEEN_PK_THUNDER));
+    MSL_TEST_CHECK(seen == (kind == 23 ? MSL_SEEN_PC_THUNDER : MSL_SEEN_PK_THUNDER));
     return 0;
 }
 

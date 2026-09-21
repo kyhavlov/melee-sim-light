@@ -72,7 +72,6 @@ enum {
     MSL_CORE_CHAR_PEACH = 9,
     MSL_CORE_CHAR_POPO = 10,
     MSL_CORE_CHAR_PIKACHU = 12,
-    MSL_CORE_CHAR_PICHU = 23,
     MSL_CORE_CHAR_SAMUS = 13,
     MSL_CHAR_MEWTWO = 16,
     MSL_CHAR_GAMEWATCH = 24,
@@ -286,7 +285,7 @@ static CharacterKind source_character_kind(uint8_t external_id)
         return CKIND_KOOPA;
     case MSL_CORE_CHAR_PIKACHU:
         return CKIND_PIKACHU;
-    case MSL_CORE_CHAR_PICHU:
+    case MSL_CHARACTER_PICHU:
         return CKIND_PICHU;
     case MSL_CORE_CHAR_JIGGLYPUFF:
         return CKIND_PURIN;
@@ -640,7 +639,7 @@ static int validate_config(MslCoreMatchConfig* config)
             config->players[i].char_id != MSL_CHAR_YOSHI &&
             config->players[i].char_id != MSL_CHAR_BOWSER &&
             config->players[i].char_id != MSL_CORE_CHAR_PIKACHU &&
-            config->players[i].char_id != MSL_CORE_CHAR_PICHU &&
+            config->players[i].char_id != MSL_CHARACTER_PICHU &&
             config->players[i].char_id != MSL_CORE_CHAR_JIGGLYPUFF &&
             config->players[i].char_id != MSL_CORE_CHAR_LUIGI &&
             config->players[i].char_id != MSL_CORE_CHAR_MARTH &&
@@ -1477,7 +1476,7 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         MSL_CORE_CHAR_SAMUS,
         MSL_CORE_CHAR_POPO,
         MSL_CORE_CHAR_PIKACHU,
-        MSL_CORE_CHAR_PICHU,
+        MSL_CHARACTER_PICHU,
         MSL_CORE_CHAR_DONKEY,
         MSL_CORE_CHAR_GANONDORF,
         MSL_CHAR_YOSHI,

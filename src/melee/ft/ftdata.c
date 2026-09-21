@@ -97,7 +97,6 @@
 #include "ftPeach/ftPe_SpecialN.h"
 #include "ftPeach/ftPe_SpecialS.h"
 #include "ftPichu/ftPc_Init.h"
-#include "ftPichu/ftPc_Init.h"
 #include "ftPikachu/ftPk_Init.h"
 #include "ftPikachu/ftPk_SpecialHi.h"
 #include "ftPikachu/ftPk_SpecialLw.h"

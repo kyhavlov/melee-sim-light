@@ -15,7 +15,7 @@ def test_repository_iso_contains_complete_supported_profile() -> None:
     with iso.open("rb") as source:
         profile = _profile(_disc_files(source))
         dol = _main_dol(source)
-    assert len(profile) == 226
+    assert len(profile) == 225
     assert {"PlMt.dat", "PlMtAJ.dat"} <= profile.keys()
     assert {"PlGw.dat", "PlGwAJ.dat", "PlGwNr.dat"} <= profile.keys()
     assert {"PlFe.dat", "PlFeAJ.dat", "EfFeData.dat"} <= profile.keys()
@@ -32,4 +32,4 @@ def test_configured_raw_data_profile_is_valid() -> None:
         manifest = validate_raw_dir(path, verify_hashes=False)
     except DataError as exc:
         pytest.fail(str(exc))
-    assert len(manifest["files"]) == 227
+    assert len(manifest["files"]) == 226
