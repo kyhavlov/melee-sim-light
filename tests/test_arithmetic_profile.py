@@ -8,8 +8,7 @@ from tools.validation.suite_io import load_suite
 ROOT = Path(__file__).resolve().parents[1]
 SUITE = ROOT / "replays/suites/legacy_arithmetic.json"
 FIXTURES = ROOT / "replays/validation/legacy_arithmetic"
-# A supported-roster corpus replay for the plumbing tests that do not depend
-# on Mewtwo or Game & Watch admission.
+# An independent corpus replay for the configuration plumbing tests.
 CORPUS_REPLAY = ROOT / "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz"
 
 
@@ -36,8 +35,6 @@ def test_recording_arithmetic_profile_is_strict_and_per_job(name, frames, first,
         start_frame=None, timeout=20, backend="native", signed_zero_equal=False,
     )
     for case, outcome in zip(cases, outcomes):
-        if outcome.error is not None and "Melee core requires" in str(outcome.error):
-            pytest.skip(f"validator does not admit this fighter yet: {outcome.error}")
         assert outcome.error is None
         result = outcome.result
         assert result["frames"] == frames

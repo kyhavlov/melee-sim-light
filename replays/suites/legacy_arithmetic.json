@@ -1,6 +1,6 @@
 {
   "name": "legacy_arithmetic",
-  "notes": "Recordings whose arithmetic is inferred as the legacy Dolphin JIT fused c - a*b exact-zero sign rather than retail negate-after-subtract; each declares fnmsubs_profile dolphin-legacy. See agent_docs/ARITHMETIC_PROFILES.md. Requires Mewtwo and Mr. Game & Watch admission; joins the aggregate once both are supported.",
+  "notes": "Recordings whose arithmetic is inferred as the legacy Dolphin JIT fused c - a*b exact-zero sign rather than retail negate-after-subtract; each declares fnmsubs_profile dolphin-legacy. Contract: agent_docs/VALIDATION.md. Capture hashes, operand evidence and limits: agent_docs/validation/arithmetic_provenance.json.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [

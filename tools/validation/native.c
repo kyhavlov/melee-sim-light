@@ -529,15 +529,10 @@ static int parse_metadata(PyObject* metadata, ReplayView* replay) {
     replay->freeze_dead_up_fall_physics = 1;
     replay->whispy_dead_fighter_fix = 1;
   }
-  // Mainline Slippi Dolphin's JIT implements nmsub with the retail PPC
-  // exact-zero sign, so scene-8 captures played on it need the retail
-  // fnmsubs zero. playedOn is the discriminator, not the protocol version:
-  // 3.19 "dolphin" corpus captures require the fused c - a*b zero while
-  // 3.18/3.19 "mainline dolphin" captures require the retail sign (verified
-  // by complete Fox/Falco aggregate streams against complete Luigi streams).
-  // Metadata does not identify every historical JIT's arithmetic; an
-  // explicit recording profile (msl_set_fnmsubs_profile) can select the
-  // existing capability independently of playedOn/scene.
+  // Preserve the corpus default: scene 8 selects legacy fnmsubs in
+  // parse_start, with this Mainline override selecting retail signs.
+  // Metadata cannot identify every historical JIT's arithmetic; an explicit
+  // recording profile overrides this heuristic independently of scene.
   if (strcmp(played_on, "mainline dolphin") == 0) {
     replay->online_fnmsubs_zero = 0;
   }

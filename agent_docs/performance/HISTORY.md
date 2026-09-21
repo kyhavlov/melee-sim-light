@@ -5,6 +5,30 @@ line. The current benchmark contract, concise retained summary, imported branch 
 architectural attempt records are indexed in [`README.md`](README.md). Forensic artifacts remain
 under ignored `reports/triage/`.
 
+## Replay benchmark capability export — 2026-09-20
+
+PR #26 review found that `prepare_replay_benchmark.py` included both UCF
+shield-drop capabilities in its cache key but omitted them when calling
+`write_benchmark_case`. The writer defaulted both to true. In the 553-case
+aggregate, 16 recordings disable the classic 0.84 capability, including three
+that also disable extended shield drop. Their benchmark configuration therefore
+did not match validation. Forward both fields and increment the export cache
+revision; wire layout and production runtime remain unchanged.
+
+A before/after export with both flags disabled changes only config bytes 31/32
+(tape bytes 55/56), from 1 to 0. Regression tests also cover the mixed settings
+and explicit arithmetic profiles. The full aggregate remains lock-exact with
+527 exact / 26 classified cases; all 549 pre-existing output locks are unchanged.
+The rebuilt benchmark manifest contains 551 human recordings and reports the
+two unsupported CPU tapes as exclusions.
+
+Historical paired performance measurements remain measurements of their frozen
+tapes, not proof that those tapes preserved all declared capture capabilities.
+Future A/B comparisons must export both workloads with the corrected preparer
+and verify config/input equality. Do not compare a regenerated workload's
+digest or throughput against the old tapes as though computation were equal.
+This is an export correctness correction, with no claimed runtime speedup.
+
 ## Correctness completion — 2026-09-08
 
 Checkpoint is `5f097b2a`, committed after the preceding correctness/performance
