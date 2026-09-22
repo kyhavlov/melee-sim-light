@@ -31,7 +31,7 @@ from derive_gameplay_parts_mask import CommonData, SUBACTION_COUNTS  # noqa: E40
 
 FRAMES = 201
 FTPART_TRANSN = 1  # canonical FtPart_TransN
-SKIP_PREFIXES = ('TGamewatch', 'TMewtwo', 'TKirby', 'TFox', 'TFalco')
+SKIP_PREFIXES = ('TGamewatch', 'TMewtwo', 'TKirby', 'TFox', 'TFalco', 'TEmblem', 'TPichu')
 
 CHARACTERS = {
     # name: (kind, file prefix, ftData root, model root, init selections, overrides)
@@ -59,6 +59,22 @@ CHARACTERS = {
         # chosen at random in the game; bake the first shape. The 22-frame
         # entry flicker between Kirby and the stone is dropped.
         overrides={'SpecialLw2': {0: 2, 1: -1}, 'SpecialAirLw2': {0: 2, 1: -1}},
+    ),
+    'roy': dict(
+        kind=26, prefix='Fe', root='ftDataEmblem',
+        model_root='PlyEmblem5K_Share_joint',
+        # ftFe_Init_OnDeath: models 0 and 1 at state 0, model 2 hidden; no
+        # code-driven switches elsewhere in ftEmblem/ftMars.
+        defaults=[0, 0, -1],
+        overrides={},
+    ),
+    'pichu': dict(
+        kind=23, prefix='Pc', root='ftDataPichu',
+        model_root='PlyPichu5K_Share_joint',
+        # ftPc_Init_OnDeath: model 0 shown; models 1..3 are the costume
+        # accessories, all hidden on the plain (Nr) costume.
+        defaults=[0, -1, -1, -1],
+        overrides={},
     ),
 }
 

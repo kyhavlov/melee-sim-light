@@ -1000,6 +1000,20 @@ viewer-bake-kirby: data-check
 		--out "$(ROOT)/tools/viewer/assets/baked/kirby.zip"
 	@sha256sum "$(ROOT)/tools/viewer/assets/baked/kirby.zip"
 
+.PHONY: viewer-bake-roy
+viewer-bake-roy: data-check
+	@cd "$(ROOT)/tools/viewer" && MSL_BAKE_BUILD="$(BUILD_ROOT)/bake" CC="$(HOST_CC)" \
+		"$(PY)" -m bake.bake --character roy --data "$(DATA)" \
+		--out "$(ROOT)/tools/viewer/assets/baked/roy.zip"
+	@sha256sum "$(ROOT)/tools/viewer/assets/baked/roy.zip"
+
+.PHONY: viewer-bake-pichu
+viewer-bake-pichu: data-check
+	@cd "$(ROOT)/tools/viewer" && MSL_BAKE_BUILD="$(BUILD_ROOT)/bake" CC="$(HOST_CC)" \
+		"$(PY)" -m bake.bake --character pichu --data "$(DATA)" \
+		--out "$(ROOT)/tools/viewer/assets/baked/pichu.zip"
+	@sha256sum "$(ROOT)/tools/viewer/assets/baked/pichu.zip"
+
 # One overlay zip per copy hat (kirbyHat<Xx>.zip), baked in parallel.
 .PHONY: viewer-bake-kirby-hats
 viewer-bake-kirby-hats: data-check

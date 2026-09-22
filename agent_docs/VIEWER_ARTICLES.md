@@ -227,9 +227,12 @@ viewer-bake-gamewatch` regenerates it in about two minutes.
   Judge hammer are no longer drawn; their hits are on the fighter and show through the hitbox overlay.
   The Judge number remains.
 
-- Game & Watch's mesh accessories are now baked in (see above). Other
-  fighters still use the slippilab zips; the bake needs per-character init
-  defaults and any code-driven part states before it can replace them.
+- Game & Watch, Kirby (body and copy hats), Roy and Pichu are baked from
+  the game data (see above). Other fighters still use the slippilab zips;
+  the bake needs per-character init defaults and any code-driven part
+  states before it can replace them. The slippilab zips carry a few broken
+  sliver frames (Roy Dash 9, EscapeB 31, SpecialS4Lw 51; Pichu SpecialHiEnd
+  3/7 and the air variant), which baking removes.
 - Mewtwo's Confusion spawns no item; its silhouette exists and animates.
 - Peach's idle silhouettes (Wait1..4) contain a baked cone above her head on
   the arm-raise frames. This is in the asset, not the renderer.

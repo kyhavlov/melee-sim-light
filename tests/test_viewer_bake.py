@@ -29,6 +29,8 @@ def test_baked_assets_match_manifest():
     baked = {n: v for n, v in rows.items() if v[1].startswith('baked:')}
     assert 'mrGameAndWatch.zip' in baked
     assert 'kirby.zip' in baked
+    assert 'roy.zip' in baked
+    assert 'pichu.zip' in baked
     # One overlay per baked copy hat (tools/viewer/bake KIRBY_HATS).
     assert len([n for n in baked if n.startswith('kirbyHat')]) == 22
     for name, (sha, url) in baked.items():

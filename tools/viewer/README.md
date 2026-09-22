@@ -73,6 +73,9 @@ potrace outlines), applying the fighter's model-part visibility per subaction
 frame so accessory meshes (Game & Watch's chair, key, box, flag, hammers,
 bucket) appear. Rows in `assets/character_zips.tsv` whose url is
 `baked:<repo path>` are copied from the repository instead of downloaded.
-Regenerate with `make viewer-bake-gamewatch` (needs `potrace` and a C
-compiler; NixOS: `nix-shell -p gcc gnumake potrace`) and update the row's
-sha256. `agent_docs/VIEWER_ARTICLES.md` records the format findings.
+Regenerate with `make viewer-bake-gamewatch`, `viewer-bake-kirby`,
+`viewer-bake-kirby-hats`, `viewer-bake-roy` or `viewer-bake-pichu` (needs
+`potrace` and a C compiler; `devenv shell` or
+`nix-shell -p gcc gnumake potrace`) and update the row's sha256. Baked
+characters also lose the slippilab zips' sliver frames (Roy's Dash frame 9
+vanished for a frame on every dash). `agent_docs/VIEWER_ARTICLES.md` records the format findings.
