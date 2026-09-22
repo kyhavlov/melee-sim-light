@@ -18,6 +18,15 @@ export function Players() {
               stroke-width={2}
               stroke={renderData.outerColor}
             />
+            <Show when={renderData.hatPath}>
+              <path
+                transform={renderData.transforms.join(" ")}
+                d={renderData.hatPath}
+                fill={renderData.innerColor}
+                stroke-width={2}
+                stroke={renderData.outerColor}
+              />
+            </Show>
             <Shield renderData={renderData} />
             <Shine renderData={renderData} />
             <Hitboxes renderData={renderData} />

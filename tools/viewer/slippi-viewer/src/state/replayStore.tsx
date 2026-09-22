@@ -17,7 +17,7 @@ import {
 import { ReplayData } from "~/common/types";
 import { parseReplay } from "~/parse/parser";
 // import { currentSelectionStore } from "~/state/selectionStore";
-import { CharacterAnimations, fetchAnimations } from "~/viewer/animationCache";
+import { CharacterAnimations, fetchAnimations, getKirbyHatAnimations } from "~/viewer/animationCache";
 import { animationFrameIndex } from "~/viewer/animationFrame";
 import { actionMapByInternalId } from "~/viewer/characters";
 import { Character } from "~/viewer/characters/character";
@@ -380,6 +380,16 @@ function computeRenderData(
           Number(animationPathOrFrameReference.slice("frame".length))
         ]
       : animationPathOrFrameReference;
+  // Kirby's copy hat rides the same animation and frame as the body.
+  const hatFrames =
+    playerState.kirbyHatKind === undefined
+      ? undefined
+      : getKirbyHatAnimations(playerState.kirbyHatKind)?.[animationName];
+  const hatPathOrReference = hatFrames?.[frameIndex];
+  const hatPath =
+    hatPathOrReference !== undefined && hatPathOrReference.startsWith("frame")
+      ? hatFrames?.[Number(hatPathOrReference.slice("frame".length))]
+      : hatPathOrReference;
   const rotation =
     animationName === "DamageFlyRoll"
       ? getDamageFlyRollRotation(replayState, playerState)
@@ -400,6 +410,7 @@ function computeRenderData(
     playerInputs,
     playerSettings,
     path,
+    hatPath,
     innerColor: getPlayerColor(
       replayState,
       playerUpdate.playerIndex,

@@ -29,6 +29,8 @@ def test_baked_assets_match_manifest():
     baked = {n: v for n, v in rows.items() if v[1].startswith('baked:')}
     assert 'mrGameAndWatch.zip' in baked
     assert 'kirby.zip' in baked
+    # One overlay per baked copy hat (tools/viewer/bake KIRBY_HATS).
+    assert len([n for n in baked if n.startswith('kirbyHat')]) == 22
     for name, (sha, url) in baked.items():
         path = ROOT / url[len('baked:'):]
         assert path.is_file(), path
@@ -97,3 +99,17 @@ def test_kirby_model_and_visibility_decode():
     assert vis.visible(42, [0, 0]) == {3, 4, 5, 6, 7, 18, 19}
     # Stone hides model 1 and swaps model 0 to one of the stone shapes.
     assert vis.visible(42, [2, -1]) == {20, 21, 22}
+
+
+@pytest.mark.skipif(not (DATA / 'PlKbCpFx.dat').is_file(), reason='needs extracted data/raw')
+def test_kirby_hat_trees_load():
+    from bake.bake import KIRBY_HATS, load_hat
+
+    # Every joint-tree hat carries drawable parts; the two costume swaps share
+    # Kirby's 46-joint skeleton so his animation tracks apply by index.
+    for kind, (suffix, mode) in KIRBY_HATS.items():
+        model, loaded_mode = load_hat(DATA, kind)
+        assert loaded_mode == mode
+        assert len(model.dobjs) > 0, suffix
+        if mode == 'costume':
+            assert len(model.joints) == 46, suffix

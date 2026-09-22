@@ -8,6 +8,8 @@ export interface RenderData {
 
   // main render
   path?: string;
+  // Kirby copy-hat overlay, same transform as path
+  hatPath?: string;
   innerColor: string;
   outerColor: string;
   transforms: string[];

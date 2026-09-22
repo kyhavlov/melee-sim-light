@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import struct
 import sys
 import zipfile
 from pathlib import Path
@@ -22,7 +23,7 @@ sys.path.insert(0, str(HERE.parent))
 
 from bake.anim import Pose, load_figatree, read_subactions  # noqa: E402
 from bake.dat import load_dat_file  # noqa: E402
-from bake.model import JOBJ_HIDDEN, load_model, skinned_triangles, world_matrices  # noqa: E402
+from bake.model import JOBJ_HIDDEN, load_model, mtx_srt, skinned_triangles, world_matrices  # noqa: E402
 from bake.raster import project, rasterize  # noqa: E402
 from bake.trace import trace  # noqa: E402
 from bake.visibility import read_vis_tables, simulate_script  # noqa: E402
@@ -62,6 +63,49 @@ CHARACTERS = {
 }
 
 
+# Kirby's copy hats. Twenty copies ship the hat as its own joint tree in
+# PlKbCp<Xx>.dat (root word 0); the game loads it with HSD_JObjLoadJoint and
+# every frame copies part 6's world matrix onto its root
+# (ftKb_UnkMtxFunc0), so the hat rides the head. Five copies (DK, Falco,
+# G&W, Mewtwo, Jigglypuff) replace the whole costume with PlKbNrCp<Xx>.dat;
+# only DK's and G&W's share Kirby's joint order, so the other three stay
+# unbaked.
+KIRBY_HAT_PART = 6
+KIRBY_HATS = {
+    # fighter kind: (file suffix, 'tree' | 'costume')
+    0: ('Mr', 'tree'), 1: ('Fx', 'tree'), 2: ('Ca', 'tree'), 3: ('Dk', 'costume'),
+    5: ('Kp', 'tree'), 6: ('Lk', 'tree'), 7: ('Sk', 'tree'), 8: ('Ns', 'tree'),
+    9: ('Pe', 'tree'), 10: ('Pp', 'tree'), 12: ('Pk', 'tree'), 13: ('Ss', 'tree'),
+    14: ('Ys', 'tree'), 17: ('Lg', 'tree'), 18: ('Ms', 'tree'), 19: ('Zd', 'tree'),
+    20: ('Cl', 'tree'), 21: ('Dr', 'tree'), 23: ('Pc', 'tree'), 25: ('Gn', 'tree'),
+    24: ('Gw', 'costume'), 26: ('Fe', 'tree'),
+}
+
+
+def world_matrices_rooted(model, rotation, scale, translate, root_world):
+    """World matrices for a hat tree whose root matrix is replaced by the
+    head bone's (JOBJ_USER_DEF_MTX): children hang off root_world."""
+    world = []
+    for j in model.joints:
+        if j.parent < 0:
+            world.append(root_world)
+            continue
+        local = mtx_srt(scale[j.index], rotation[j.index], translate[j.index], None)
+        world.append(world[j.parent] @ local)
+    return world
+
+
+def load_hat(data_dir: Path, kind: int):
+    suffix, mode = KIRBY_HATS[kind]
+    if mode == 'tree':
+        dat = load_dat_file(data_dir / f'PlKbCp{suffix}.dat')
+        root = next(iter(dat.roots.values()))
+        joint = struct.unpack_from('>I', dat.data, root)[0]
+        return load_model(dat, joint), mode
+    dat = load_dat_file(data_dir / f'PlKbNrCp{suffix}.dat')
+    return load_model(dat, dat.roots[f'PlyKirby{suffix}_Share_joint']), mode
+
+
 def animation_name(subaction_name: str) -> str:
     m = subaction_name.split('_ACTION_', 1)
     tail = m[1] if len(m) == 2 else subaction_name
@@ -69,8 +113,9 @@ def animation_name(subaction_name: str) -> str:
 
 
 def bake_character(name: str, data_dir: Path, out_zip: Path, only: set[str] | None = None,
-                   dump_dir: Path | None = None) -> None:
+                   dump_dir: Path | None = None, hat: int | None = None) -> None:
     spec = CHARACTERS[name]
+    hat_model, hat_mode = load_hat(data_dir, hat) if hat is not None else (None, None)
     ftdata = load_dat_file(data_dir / f'Pl{spec["prefix"]}.dat')
     model_dat = load_dat_file(data_dir / f'Pl{spec["prefix"]}Nr.dat')
     aj = (data_dir / f'Pl{spec["prefix"]}AJ.dat').read_bytes()
@@ -136,7 +181,26 @@ def bake_character(name: str, data_dir: Path, out_zip: Path, only: set[str] | No
             hidden_joints |= hidden_nodes
             visible = vis.visible(len(model.dobjs), timeline.selections[f])
             visible = {d for d in visible if model.dobjs[d].joint not in hidden_joints}
-            tris = skinned_triangles(model, world, visible)
+            if hat_model is None:
+                tris = skinned_triangles(model, world, visible)
+            elif hat_mode == 'tree':
+                hat_world = world_matrices_rooted(
+                    hat_model, [j.rotation for j in hat_model.joints],
+                    [j.scale for j in hat_model.joints], [j.translate for j in hat_model.joints],
+                    world[p2j[KIRBY_HAT_PART]])
+                hat_hidden = set()
+                for j in hat_model.joints:
+                    if j.flags & JOBJ_HIDDEN:
+                        hat_hidden |= {d for d in range(len(hat_model.dobjs)) if hat_model.dobjs[d].joint == j.index}
+                tris = skinned_triangles(hat_model, hat_world,
+                                         set(range(len(hat_model.dobjs))) - hat_hidden)
+            else:
+                # Costume swap sharing Kirby's joint order: pose the costume
+                # model with Kirby's tracks and draw it whole.
+                hat_world = world_matrices(hat_model, rot, scl, tr)
+                shown = {d for d in range(len(hat_model.dobjs))
+                         if hat_model.dobjs[d].joint not in hidden_joints}
+                tris = skinned_triangles(hat_model, hat_world, shown)
             image = rasterize(project(tris, 2, 1.0))
             if dump_dir is not None:
                 dump_dir.mkdir(parents=True, exist_ok=True)
@@ -165,11 +229,26 @@ def main() -> int:
     ap.add_argument('--data', default=str(HERE.parents[2] / 'data' / 'raw'))
     ap.add_argument('--out', required=True)
     ap.add_argument('--only', default='', help='comma-separated animation names')
+    ap.add_argument('--hat', type=int, default=None,
+                    help="bake Kirby's copy hat for this fighter kind as an overlay")
+    ap.add_argument('--all-hats', default='', metavar='DIR',
+                    help='bake every Kirby hat overlay into DIR as kirbyHat<Xx>.zip')
     ap.add_argument('--dump', default='', help='directory for per-frame PGM dumps')
     args = ap.parse_args()
+    if args.all_hats:
+        from concurrent.futures import ProcessPoolExecutor
+        out_dir = Path(args.all_hats)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        jobs = {kind: out_dir / f'kirbyHat{suffix}.zip' for kind, (suffix, _) in KIRBY_HATS.items()}
+        with ProcessPoolExecutor() as pool:
+            futures = [pool.submit(bake_character, 'kirby', Path(args.data), out, None, None, kind)
+                       for kind, out in jobs.items()]
+            for f in futures:
+                f.result()
+        return 0
     only = {s for s in args.only.split(',') if s} or None
     bake_character(args.character, Path(args.data), Path(args.out), only,
-                   Path(args.dump) if args.dump else None)
+                   Path(args.dump) if args.dump else None, args.hat)
     return 0
 
 
