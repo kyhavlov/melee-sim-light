@@ -32,7 +32,7 @@ def test_baked_assets_match_manifest():
     assert 'roy.zip' in baked
     assert 'pichu.zip' in baked
     # One overlay per baked copy hat (tools/viewer/bake KIRBY_HATS).
-    assert len([n for n in baked if n.startswith('kirbyHat')]) == 22
+    assert len([n for n in baked if n.startswith('kirbyHat')]) == 25
     for name, (sha, url) in baked.items():
         path = ROOT / url[len('baked:'):]
         assert path.is_file(), path
@@ -105,13 +105,19 @@ def test_kirby_model_and_visibility_decode():
 
 @pytest.mark.skipif(not (DATA / 'PlKbCpFx.dat').is_file(), reason='needs extracted data/raw')
 def test_kirby_hat_trees_load():
-    from bake.bake import KIRBY_HATS, load_hat
+    from bake.bake import KIRBY_HATS, costume_joint_map, load_hat
+    from derive_gameplay_parts_mask import CommonData
 
-    # Every joint-tree hat carries drawable parts; the two costume swaps share
-    # Kirby's 46-joint skeleton so his animation tracks apply by index.
+    common = CommonData(str(DATA / 'PlCo.dat'))
+    # Every hat carries drawable parts and its own vis table hides some of
+    # them; costume swaps map onto Kirby's 46 base joints by part id, with
+    # only their own accessory joints left unmapped.
+    accessory = {'Dk': 0, 'Gw': 0, 'Fc': 2, 'Mt': 7, 'Pr': 4}
     for kind, (suffix, mode) in KIRBY_HATS.items():
-        model, loaded_mode = load_hat(DATA, kind)
+        model, loaded_mode, visible = load_hat(DATA, kind)
         assert loaded_mode == mode
-        assert len(model.dobjs) > 0, suffix
+        assert 0 < len(visible) < len(model.dobjs), suffix
         if mode == 'costume':
-            assert len(model.joints) == 46, suffix
+            mapping = costume_joint_map(common, 4, model)
+            assert len(mapping) == 46 + accessory[suffix], suffix
+            assert [k for k in mapping if k is not None] == list(range(46)), suffix

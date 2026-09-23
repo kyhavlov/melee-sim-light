@@ -78,4 +78,5 @@ Regenerate with `make viewer-bake-gamewatch`, `viewer-bake-kirby`,
 `potrace` and a C compiler; `devenv shell` or
 `nix-shell -p gcc gnumake potrace`) and update the row's sha256. Baked
 characters also lose the slippilab zips' sliver frames (Roy's Dash frame 9
-vanished for a frame on every dash). `agent_docs/VIEWER_ARTICLES.md` records the format findings.
+vanished for a frame on every dash). Kirby's 25 copy hats are separate
+`kirbyHat<Xx>.zip` overlays; the viewer loads one lazily per hat kind. `agent_docs/VIEWER_ARTICLES.md` records the format findings.

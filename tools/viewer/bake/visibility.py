@@ -52,7 +52,7 @@ class VisTables:
         return (set(range(all_dobjs)) - hidden) | shown
 
 
-def _read_lookup(ftdata: Dat, lk: int, model_num: int) -> list[list[list[int]]]:
+def read_lookup(ftdata: Dat, lk: int, model_num: int) -> list[list[list[int]]]:
     models = []
     if lk:
         for i in range(model_num):
@@ -81,10 +81,10 @@ def read_vis_tables(ftdata: Dat, root_name: str, costume: int = 0,
     groups = []
     for g in range(4):
         lk = ftdata.ptr(vis_table + costume * 16 + g * 4) or ftdata.ptr(vis_table + g * 4)
-        groups.append(_read_lookup(ftdata, lk, model_num) if g != 2 else [])
+        groups.append(read_lookup(ftdata, lk, model_num) if g != 2 else [])
     if extra_item_slot is not None:
         items = ftdata.ptr(ft + 0x48)
-        groups.append(_read_lookup(ftdata, ftdata.ptr(items + extra_item_slot * 4), model_num))
+        groups.append(read_lookup(ftdata, ftdata.ptr(items + extra_item_slot * 4), model_num))
     return VisTables(model_num, groups)
 
 

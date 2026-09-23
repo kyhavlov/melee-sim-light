@@ -81,7 +81,8 @@ const kirbyHatZipByKind: Record<number, string> = {
   14: "zips/kirbyHatYs.zip", 17: "zips/kirbyHatLg.zip", 18: "zips/kirbyHatMs.zip",
   19: "zips/kirbyHatZd.zip", 20: "zips/kirbyHatCl.zip", 21: "zips/kirbyHatDr.zip",
   23: "zips/kirbyHatPc.zip", 24: "zips/kirbyHatGw.zip", 25: "zips/kirbyHatGn.zip",
-  26: "zips/kirbyHatFe.zip",
+  26: "zips/kirbyHatFe.zip", 15: "zips/kirbyHatPr.zip", 16: "zips/kirbyHatMt.zip",
+  22: "zips/kirbyHatFc.zip",
 };
 const kirbyHatCache = new Map<number, CharacterAnimations | null>();
 const [kirbyHatVersion, setKirbyHatVersion] = createSignal(0);

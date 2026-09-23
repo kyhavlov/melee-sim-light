@@ -26,8 +26,8 @@ from bake.dat import load_dat_file  # noqa: E402
 from bake.model import JOBJ_HIDDEN, load_model, mtx_srt, skinned_triangles, world_matrices  # noqa: E402
 from bake.raster import project, rasterize  # noqa: E402
 from bake.trace import trace  # noqa: E402
-from bake.visibility import read_vis_tables, simulate_script  # noqa: E402
-from derive_gameplay_parts_mask import CommonData, SUBACTION_COUNTS  # noqa: E402
+from bake.visibility import VisTables, read_lookup, read_vis_tables, simulate_script  # noqa: E402
+from derive_gameplay_parts_mask import CommonData, SUBACTION_COUNTS, u32  # noqa: E402
 
 FRAMES = 201
 FTPART_TRANSN = 1  # canonical FtPart_TransN
@@ -81,21 +81,77 @@ CHARACTERS = {
 
 # Kirby's copy hats. Twenty copies ship the hat as its own joint tree in
 # PlKbCp<Xx>.dat (root word 0); the game loads it with HSD_JObjLoadJoint and
-# every frame copies part 6's world matrix onto its root
-# (ftKb_UnkMtxFunc0), so the hat rides the head. Five copies (DK, Falco,
-# G&W, Mewtwo, Jigglypuff) replace the whole costume with PlKbNrCp<Xx>.dat;
-# only DK's and G&W's share Kirby's joint order, so the other three stay
-# unbaked.
+# every frame copies fp->parts[6]'s world matrix onto its root
+# (ftKb_UnkMtxFunc0; part 6 is the head node of Kirby's part list, not the
+# canonical FtPart id 6), so the hat rides the head. Five copies (DK, Falco,
+# G&W, Mewtwo, Jigglypuff) replace the whole costume with PlKbNrCp<Xx>.dat,
+# whose joint tree is Kirby's 59-node part list minus the other costumes'
+# accessory parts (see costume_joint_map); the costume meshes hang off the
+# root and skin to those joints.
 KIRBY_HAT_PART = 6
 KIRBY_HATS = {
     # fighter kind: (file suffix, 'tree' | 'costume')
     0: ('Mr', 'tree'), 1: ('Fx', 'tree'), 2: ('Ca', 'tree'), 3: ('Dk', 'costume'),
     5: ('Kp', 'tree'), 6: ('Lk', 'tree'), 7: ('Sk', 'tree'), 8: ('Ns', 'tree'),
     9: ('Pe', 'tree'), 10: ('Pp', 'tree'), 12: ('Pk', 'tree'), 13: ('Ss', 'tree'),
-    14: ('Ys', 'tree'), 17: ('Lg', 'tree'), 18: ('Ms', 'tree'), 19: ('Zd', 'tree'),
-    20: ('Cl', 'tree'), 21: ('Dr', 'tree'), 23: ('Pc', 'tree'), 25: ('Gn', 'tree'),
-    24: ('Gw', 'costume'), 26: ('Fe', 'tree'),
+    14: ('Ys', 'tree'), 15: ('Pr', 'costume'), 16: ('Mt', 'costume'), 17: ('Lg', 'tree'),
+    18: ('Ms', 'tree'), 19: ('Zd', 'tree'), 20: ('Cl', 'tree'), 21: ('Dr', 'tree'),
+    22: ('Fc', 'costume'), 23: ('Pc', 'tree'), 24: ('Gw', 'costume'), 25: ('Gn', 'tree'),
+    26: ('Fe', 'tree'),
 }
+
+
+def accessory_parts(common: CommonData, kind: int) -> dict[int, int]:
+    """part -> costume mode for the parts ftParts_8007506C excludes from the
+    plain skeleton (Fighter_804D6540 descriptors {part, attach, mode,
+    preorder}). Only a chain's head carries the mode; the rest attach to the
+    previous accessory part, so each part resolves through its chain."""
+    t = u32(common.data, common.excl_arr + kind * 4)
+    attach: dict[int, int] = {}
+    mode: dict[int, int] = {}
+    if t:
+        arr, cnt = u32(common.data, t), u32(common.data, t + 4)
+        for i in range(cnt):
+            part, attach_part, m, _depth = common.data[arr + i * 4:arr + i * 4 + 4]
+            attach[part], mode[part] = attach_part, m
+    descs: dict[int, int] = {}
+    for part in attach:
+        head = part
+        while mode[head] == 0:
+            head = attach[head]
+        descs[part] = mode[head]
+    return descs
+
+
+def base_joint_of_part(common: CommonData, kind: int, part: int) -> int:
+    """Model joint (preorder index of the plain costume) for fp->parts[part]."""
+    _, _, n = common.parts_table(kind)
+    descs = accessory_parts(common, kind)
+    return [p for p in range(n) if p not in descs].index(part)
+
+
+def costume_joint_map(common: CommonData, kind: int, model) -> list[int | None]:
+    """For each joint of a copy-costume model, the base (PlKbNr) joint that
+    drives it, or None for an accessory joint that keeps its bind pose.
+
+    PlCo's parts table for Kirby lists 59 nodes; ftParts_8007506C excludes
+    13 accessory parts from the plain skeleton. Each accessory descriptor
+    belongs to one costume (mode 1 Jigglypuff, 2 Mewtwo, 3 Falco), and that
+    costume's joint tree is the full list with only its own accessory parts
+    kept."""
+    _, _, n = common.parts_table(kind)
+    descs = accessory_parts(common, kind)
+    base = [p for p in range(n) if p not in descs]
+    nodes = base
+    for mode in sorted(set(descs.values())):
+        cand = [p for p in range(n) if p not in descs or descs[p] == mode]
+        if len(cand) == len(model.joints):
+            nodes = cand
+            break
+    if len(nodes) != len(model.joints):
+        raise ValueError(f'costume has {len(model.joints)} joints; no part subset matches')
+    base_index = {p: k for k, p in enumerate(base)}
+    return [base_index.get(p) for p in nodes]
 
 
 def world_matrices_rooted(model, rotation, scale, translate, root_world):
@@ -112,14 +168,34 @@ def world_matrices_rooted(model, rotation, scale, translate, root_world):
 
 
 def load_hat(data_dir: Path, kind: int):
+    """(model, mode, visible DObj indices) for a copy hat.
+
+    PlKbCp<Xx>.dat's root is the hat's KirbyHatStruct: a tree hat starts with
+    its joint, then the FtPartsDesc {model_num, vis_table}; a costume hat has
+    no joint, so the descriptor sits at the root. The vis table has the
+    fighter layout (four lookups per costume row) and ftParts_8007487C sets
+    it up for the hat's own DObj list; ftKb_UnkIntBoolFunc0 only toggles
+    groups on rare motion events, so state 0 is baked. Group 2 (metal) and the
+    second joint tree the costume hats carry for the metal box are skipped."""
     suffix, mode = KIRBY_HATS[kind]
+    dat = load_dat_file(data_dir / f'PlKbCp{suffix}.dat')
+    root = next(iter(dat.roots.values()))
     if mode == 'tree':
-        dat = load_dat_file(data_dir / f'PlKbCp{suffix}.dat')
-        root = next(iter(dat.roots.values()))
         joint = struct.unpack_from('>I', dat.data, root)[0]
-        return load_model(dat, joint), mode
-    dat = load_dat_file(data_dir / f'PlKbNrCp{suffix}.dat')
-    return load_model(dat, dat.roots[f'PlyKirby{suffix}_Share_joint']), mode
+        model = load_model(dat, joint)
+        desc = root + 4
+    else:
+        costume = load_dat_file(data_dir / f'PlKbNrCp{suffix}.dat')
+        model = load_model(costume, costume.roots[f'PlyKirby{suffix}_Share_joint'])
+        desc = root
+    model_num = dat.u32(desc)
+    vis_table = dat.ptr(desc + 4)
+    groups = []
+    for g in range(4):
+        lookup = dat.ptr(vis_table + g * 4) if vis_table else 0
+        groups.append(read_lookup(dat, lookup, model_num) if lookup and g != 2 else [])
+    visible = VisTables(model_num, groups).visible(len(model.dobjs), [0] * model_num)
+    return model, mode, visible
 
 
 def animation_name(subaction_name: str) -> str:
@@ -131,13 +207,15 @@ def animation_name(subaction_name: str) -> str:
 def bake_character(name: str, data_dir: Path, out_zip: Path, only: set[str] | None = None,
                    dump_dir: Path | None = None, hat: int | None = None) -> None:
     spec = CHARACTERS[name]
-    hat_model, hat_mode = load_hat(data_dir, hat) if hat is not None else (None, None)
+    hat_model, hat_mode, hat_visible = load_hat(data_dir, hat) if hat is not None else (None, None, None)
     ftdata = load_dat_file(data_dir / f'Pl{spec["prefix"]}.dat')
     model_dat = load_dat_file(data_dir / f'Pl{spec["prefix"]}Nr.dat')
     aj = (data_dir / f'Pl{spec["prefix"]}AJ.dat').read_bytes()
     model = load_model(model_dat, model_dat.roots[spec['model_root']])
     vis = read_vis_tables(ftdata, spec['root'], extra_item_slot=spec.get('outline_slot'))
     common = CommonData(str(data_dir / 'PlCo.dat'))
+    hat_map = costume_joint_map(common, spec['kind'], hat_model) if hat_mode == 'costume' else None
+    hat_root = base_joint_of_part(common, spec['kind'], KIRBY_HAT_PART) if hat_mode == 'tree' else None
     _, p2j, _ = common.parts_table(spec['kind'])
     transn = p2j[FTPART_TRANSN]
     subactions = read_subactions(ftdata, spec['root'], SUBACTION_COUNTS[spec['kind']])
@@ -203,19 +281,28 @@ def bake_character(name: str, data_dir: Path, out_zip: Path, only: set[str] | No
                 hat_world = world_matrices_rooted(
                     hat_model, [j.rotation for j in hat_model.joints],
                     [j.scale for j in hat_model.joints], [j.translate for j in hat_model.joints],
-                    world[p2j[KIRBY_HAT_PART]])
+                    world[hat_root])
                 hat_hidden = set()
                 for j in hat_model.joints:
                     if j.flags & JOBJ_HIDDEN:
                         hat_hidden |= {d for d in range(len(hat_model.dobjs)) if hat_model.dobjs[d].joint == j.index}
-                tris = skinned_triangles(hat_model, hat_world,
-                                         set(range(len(hat_model.dobjs))) - hat_hidden)
+                tris = skinned_triangles(hat_model, hat_world, hat_visible - hat_hidden)
             else:
-                # Costume swap sharing Kirby's joint order: pose the costume
-                # model with Kirby's tracks and draw it whole.
-                hat_world = world_matrices(hat_model, rot, scl, tr)
-                shown = {d for d in range(len(hat_model.dobjs))
-                         if hat_model.dobjs[d].joint not in hidden_joints}
+                # Costume swap: the game skins the costume meshes to Kirby's
+                # own JObjs (msl_kirby_load_hat_dobjs resolves each costume
+                # joint to a part), so mapped joints take Kirby's world
+                # matrices outright (the costume tree lacks Kirby's classical-
+                # scale flags); accessory joints hang off their parent in
+                # their bind SRT.
+                hat_world = []
+                for j, k in zip(hat_model.joints, hat_map):
+                    if k is not None:
+                        hat_world.append(world[k])
+                    else:
+                        local = mtx_srt(j.scale, j.rotation, j.translate, None)
+                        hat_world.append(hat_world[j.parent] @ local)
+                c_hidden = {i for i, k in enumerate(hat_map) if k in hidden_joints}
+                shown = {d for d in hat_visible if hat_model.dobjs[d].joint not in c_hidden}
                 tris = skinned_triangles(hat_model, hat_world, shown)
             image = rasterize(project(tris, 2, 1.0))
             if dump_dir is not None:
